@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/php-types",
+    "crates/php-runtime",
+    "crates/php-builtins",
+    "crates/php-cli",
+    "crates/phpt-runner",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["php-rust-experiment"]
+
+[workspace.dependencies]
+php-types = { path = "crates/php-types" }
+php-runtime = { path = "crates/php-runtime" }
+php-builtins = { path = "crates/php-builtins" }

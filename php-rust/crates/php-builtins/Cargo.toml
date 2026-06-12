@@ -1,0 +1,9 @@
+[package]
+name = "php-builtins"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+php-types.workspace = true
+php-runtime.workspace = true
