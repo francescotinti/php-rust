@@ -27,7 +27,7 @@ full port semantico del solo `zend_operators.c`).
 | 8 | Funzioni utente | ✅ |
 | 9 | Rendering diagnostici (warning/fatal su stdout) | ✅ |
 | 10 | Espansione builtin (count, array_*, implode/explode, substr/strpos/str_replace, sprintf/printf, abs/max/min, print_r) — **baseline 126 → 135 pass** | ✅ |
-| 11 | Chiusura Tier 1 | ⏳ |
+| 11 | Reference semantics — `$b = &$a` (11a), parametri `f(&$x)` (11b), builtin by-ref `array_push`/`sort`/`array_pop`/`array_shift` (11c) | ✅ |
 
 > Lo step 6 è stato eseguito **dopo** lo step 7 (deciso con l'utente: gli array
 > rendono il phpt-runner molto più utile, quintuplicando i test in-scope).

@@ -20,7 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
-| Unit/integration (workspace, fine step 10) | 168 (17 suite) |
+| Unit/integration (workspace, fine step 11c) | 185 (17 suite) |
 | Differential vs oracle (php-types) | 37.835 casi, 0 mismatch |
 | phpt-runner su testsuite PHP completa | 6172 file: 135 pass / 64 fail / 5973 skip (67.8% dei runnable) |
 
@@ -80,7 +80,8 @@ del differential sono state riconciliate verso il comportamento dell'oracle).
 | Step 8 (funzioni utente + Fase 4c re-import + 1 bugfix eval-order) | ~1.5h |
 | Step 9 (rendering diagnostici/fatal + skip compile-error + triage corpus + 1 fix null-offset) | ~2h |
 | Step 10 (espansione builtin: 8 gruppi TDD + ValueError/ArgumentCountError) | ~2h |
-| **Totale a fine step 10** | **~15.5h** |
+| Step 11a/b/c (reference semantics: `$b=&$a` + `f(&$x)` + builtin by-ref) | ~1.75h |
+| **Totale a fine step 11c** | **~17.25h** |
 
 ## Step 10 — espansione builtin
 
@@ -91,3 +92,23 @@ verificati contro l'oracle CLI. Baseline .phpt: **126 → 135 pass** (+9), gli 1
 test prima skippati come `builtin` ora girano. Zero divergenze D-NEW: ogni builtin
 combacia byte-per-byte. ABI di Step 5 invariata, zero modifiche all'evaluator.
 Scope-out: famiglia by-reference (`array_push`/`sort`/…), `%g`/`%G`.
+
+## Step 11 — reference semantics (a livello di variabile)
+
+Reference `&` portate in tre sotto-step TDD (+17 test, 168 → 185), tutte
+verificate contro l'oracle CLI:
+
+- **11a** `$b = &$a`: gli slot diventano `enum Binding { Value(Zval),
+  Ref(Rc<RefCell<Zval>>) }` con promozione lazy (solo quando `&` lega una
+  variabile). Read by-value con deref, write-through su tutti gli alias, `unset`
+  che rompe solo il legame. Blast radius minimo: nessun `Zval::Ref` variant,
+  ~13 access site instradati su due helper `slot_clone`/`slot_set`.
+- **11b** `function f(&$x)`: `Param.by_ref`, `enum Arg { Val, Ref }`; il caller
+  promuove la cella dell'argomento (riuso `slot_cell`) e il callee la condivide
+  tra frame. Argomento non-variabile → Error fatale (oracle 8.5).
+- **11c** builtin by-ref: ABI `BuiltinRefFn` + `enum Builtin { Value, RefFirst }`;
+  `array_push`/`sort`/`array_pop`/`array_shift` ricevono `&mut Zval` su arg0.
+
+Zero divergenze D-NEW. Scope-out (richiede `Zval::Ref` variant → step 11d):
+reference *dentro* array (`$a[0] = &$x`), `foreach (… as &$v)`, return-by-ref,
+`sort` flags ≠ SORT_REGULAR, `str_replace $count`.
