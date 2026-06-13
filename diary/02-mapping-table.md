@@ -144,6 +144,11 @@ presente nel codebase.
 
 **Sotto-suddivisione TDD step 13:** **13-1** core return-by-ref (`FnDecl.by_ref` + `ReturnRef` + `AssignRefCall` + deref contesto-valore) — TDD da `$x=1; function &f(){global $x; return $x;} $y=&f(); $y=99; echo $x;` → `99`, più elemento-via-param-byref (`99`) e contesto valore (`echo f()`→`5`, `$y=f()`→copia); **13-2** diagnostica (i due Notice via canale `diags`).
 
+**Step 13 IMPLEMENTATO (sessione 2026-06-14, TDD, zero D-NEW):** +7 test (213→220), oracle-verificato, clippy pulito.
+- **13-1 `b6c76ee`** (core): `FnDecl.by_ref` (lowering legge `func.ampersand`, rimosso il reject). Dentro una fn by-ref, `return <lvalue>` → nuovo `StmtKind::ReturnRef(Place)` che promuove il place a cella condivisa (riusa 11d/12) e ritorna `Zval::Ref(cell)`. Call-site `$y=&f()` → nuovo `ExprKind::AssignRefCall{target,call}`: `assign_ref_call` chiama **raw** (`eval_call_for_ref`, no deref) e aliasa la cella; risultato non-Ref → cella fresca. Contesto valore (`$y=f()`, `echo f()`): `eval(Call)` deref-a il risultato della user-fn. Lowering: predicato `is_returnable_lvalue` + flag `fn_by_ref` nel Lowerer. +4 test (99, 99, 5, 1).
+- **13-2 `87f676d`** (diagnostica): runtime field `fn_returns_ref` (save/restore in `call_user_fn` da `FnDecl.by_ref`). Un `StmtKind::Return` (non ReturnRef) dentro fn by-ref → Notice "Only variable references should be returned by reference" (copre `return;` e `return <nonplace>`). `assign_ref_call` → Notice "Only variables should be assigned by reference" quando il callee NON è by-ref (callee by-ref che ritorna non-place ha già emesso il suo Notice — oracle F). +3 test (canale `diags`).
+- **Scope-out confermati (D-13.7):** `static $x`, return-by-ref di proprietà (no OOP), return-by-ref in `foreach`. Bonus: il modello regge anche `$x = &$GLOBALS['y']` (da step 12) senza modifiche.
+
 ### Scope-out espliciti (oltre Tier 1)
 
 | Fuori scope | Perché | Cosa richiederebbe |
