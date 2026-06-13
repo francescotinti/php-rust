@@ -412,6 +412,14 @@ impl<'p> Evaluator<'p> {
                 };
                 return Ok(Flow::Return(v));
             }
+            StmtKind::ReturnRef(place) => {
+                // Return a *reference* to the place: promote it to a shared cell
+                // (reusing the step 11d/12 machinery) and hand the cell back as a
+                // `Zval::Ref`, which `$y = &f()` aliases (D-13.2).
+                let steps = self.resolve_steps(place)?;
+                let cell = self.ref_source_cell(place.base, &steps)?;
+                return Ok(Flow::Return(Zval::Ref(cell)));
+            }
         }
         Ok(Flow::Normal)
     }
@@ -797,6 +805,7 @@ impl<'p> Evaluator<'p> {
             }
 
             ExprKind::AssignRef { target, source } => self.assign_ref(target, source),
+            ExprKind::AssignRefCall { target, call } => self.assign_ref_call(target, call),
 
             ExprKind::AssignOp(op, slot, rhs) => {
                 let cur = self.read_var(*slot);
@@ -862,7 +871,14 @@ impl<'p> Evaluator<'p> {
                 // resolved against the declaration rather than blindly evaluated.
                 if let Some(&idx) = self.fn_index.get(&name.to_ascii_lowercase()) {
                     let argv = self.eval_call_args(idx, args)?;
-                    return self.call_user_fn(idx, argv);
+                    let result = self.call_user_fn(idx, argv)?;
+                    // A by-reference function returns a `Zval::Ref`; in this
+                    // (value) context it must be copied, not aliased — only
+                    // `$y = &f()` keeps the cell (D-13.6).
+                    return Ok(match result {
+                        Zval::Ref(cell) => cell.borrow().clone(),
+                        other => other,
+                    });
                 }
                 // A by-reference builtin (array_push/sort/...) binds its first
                 // argument's variable cell rather than a copy, so it is handled
@@ -1287,6 +1303,47 @@ impl<'p> Evaluator<'p> {
         let value = cell.borrow().clone();
         self.bind_ref_target(target.base, &tgt_steps, Rc::clone(&cell))?;
         Ok(value)
+    }
+
+    /// Bind `target` as a reference alias of the cell a by-reference function
+    /// returns (`$y = &f()`, D-13.5). The call is invoked *raw* so its
+    /// `Zval::Ref` result is aliased rather than copied. If the callee returned a
+    /// plain value (it is not by-reference, or returned a non-place), bind a
+    /// fresh cell holding that value.
+    fn assign_ref_call(&mut self, target: &Place, call: &Expr) -> Result<Zval, PhpError> {
+        let tgt_steps = self.resolve_steps(target)?;
+        let (result, callee_by_ref) = self.eval_call_for_ref(call)?;
+        let cell = match result {
+            Zval::Ref(cell) => cell,
+            other => {
+                // Aliasing a non-reference result: PHP warns only when the callee
+                // is not itself by-reference (a by-ref callee that returned a
+                // non-place already emitted its own Notice — oracle F). The Notice
+                // text is wired in step 13-2.
+                let _ = callee_by_ref;
+                Rc::new(RefCell::new(other))
+            }
+        };
+        let value = cell.borrow().clone();
+        self.bind_ref_target(target.base, &tgt_steps, Rc::clone(&cell))?;
+        Ok(value)
+    }
+
+    /// Invoke an [`ExprKind::Call`] for a by-reference binding context, returning
+    /// the *raw* result (a by-ref function's `Zval::Ref` is not dereferenced)
+    /// together with whether the callee is declared by-reference (D-13.5).
+    fn eval_call_for_ref(&mut self, call: &Expr) -> Result<(Zval, bool), PhpError> {
+        let ExprKind::Call { name, args } = &call.kind else {
+            // Lowering only builds `AssignRefCall` around a call; be defensive.
+            return Ok((self.eval(call)?, false));
+        };
+        if let Some(&idx) = self.fn_index.get(&name.to_ascii_lowercase()) {
+            let by_ref = self.funcs[idx].by_ref;
+            let argv = self.eval_call_args(idx, args)?;
+            return Ok((self.call_user_fn(idx, argv)?, by_ref));
+        }
+        // A builtin never returns by reference; evaluate the whole call by value.
+        Ok((self.eval(call)?, false))
     }
 
     /// The shared cell a reference *source* (`&$x`, `&$a[k]`) designates,

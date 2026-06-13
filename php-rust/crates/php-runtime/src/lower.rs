@@ -126,6 +126,9 @@ struct Lowerer<'f> {
     /// since PHP function names are case-insensitive).
     functions: Vec<FnDecl>,
     fn_index: HashMap<Vec<u8>, usize>,
+    /// True while lowering the body of a `function &f()`: a `return <lvalue>`
+    /// then lowers to [`StmtKind::ReturnRef`] (step 13, D-13.3).
+    fn_by_ref: bool,
 }
 
 impl<'f> Lowerer<'f> {
@@ -137,6 +140,7 @@ impl<'f> Lowerer<'f> {
             after_closing_tag: false,
             functions: Vec::new(),
             fn_index: HashMap::new(),
+            fn_by_ref: false,
         }
     }
 
@@ -299,10 +303,16 @@ impl<'f> Lowerer<'f> {
             Statement::Break(node) => StmtKind::Break(self.lower_level(node.level, line)?),
             Statement::Continue(node) => StmtKind::Continue(self.lower_level(node.level, line)?),
 
-            Statement::Return(node) => StmtKind::Return(match node.value {
-                Some(e) => Some(self.lower_expr(e)?),
-                None => None,
-            }),
+            Statement::Return(node) => match node.value {
+                // Inside a `function &f()`, `return <lvalue>` returns a reference
+                // to the place (D-13.2/D-13.3). A non-lvalue (or bare `return;`)
+                // stays a value return; the runtime emits the by-ref Notice.
+                Some(e) if self.fn_by_ref && is_returnable_lvalue(e) => {
+                    StmtKind::ReturnRef(self.lower_place(e, line)?)
+                }
+                Some(e) => StmtKind::Return(Some(self.lower_expr(e)?)),
+                None => StmtKind::Return(None),
+            },
 
             // A function declaration carries no runtime behaviour: the top-level
             // ones were already hoisted into `functions`. A declaration that was
@@ -376,18 +386,15 @@ impl<'f> Lowerer<'f> {
     fn lower_function(&mut self, func: &Function) -> Result<FnDecl, LowerError> {
         let line = self.line_of(func.span());
         let name: Box<[u8]> = func.name.value.into();
-        if func.ampersand.is_some() {
-            return Err(LowerError::Unsupported {
-                what: "function returning by reference",
-                line,
-            });
-        }
+        let by_ref = func.ampersand.is_some();
 
         // Install a fresh local overlay; the global scope stays reachable so a
         // global slot can be pre-registered from inside this body (D-12.1).
         // Save/restore the previous overlay so nested lowering nests correctly.
+        // `fn_by_ref` steers `return <lvalue>` to ReturnRef while in this body.
         let saved_locals = self.locals.replace(Scope::default());
         let saved_tag = std::mem::replace(&mut self.after_closing_tag, false);
+        let saved_by_ref = std::mem::replace(&mut self.fn_by_ref, by_ref);
 
         let inner = self.lower_function_body(func, line);
 
@@ -395,6 +402,7 @@ impl<'f> Lowerer<'f> {
         let local_scope = std::mem::replace(&mut self.locals, saved_locals)
             .expect("local scope installed for function body");
         self.after_closing_tag = saved_tag;
+        self.fn_by_ref = saved_by_ref;
 
         let (params, body) = inner?;
         Ok(FnDecl {
@@ -402,6 +410,7 @@ impl<'f> Lowerer<'f> {
             params,
             body,
             slots: local_scope.slots,
+            by_ref,
             line,
         })
     }
@@ -507,10 +516,19 @@ impl<'f> Lowerer<'f> {
                 if let AssignmentOperator::Assign(_) = a.operator {
                     if let Expression::UnaryPrefix(u) = a.rhs {
                         if let UnaryPrefixOperator::Reference(_) = u.operator {
-                            // Both sides are places: a bare variable or an array
-                            // element (step 11d-2). `lower_place` rejects anything
-                            // that is not an lvalue.
                             let target = self.lower_place(a.lhs, line)?;
+                            // `$y = &f(...)`: alias the cell a by-reference
+                            // function returns (step 13, D-13.5).
+                            if let Expression::Call(_) = u.operand {
+                                let call = Box::new(self.lower_expr(u.operand)?);
+                                return Ok(Expr {
+                                    line,
+                                    kind: ExprKind::AssignRefCall { target, call },
+                                });
+                            }
+                            // Otherwise both sides are places: a bare variable or
+                            // an array element (step 11d-2). `lower_place` rejects
+                            // anything that is not an lvalue.
                             let source = self.lower_place(u.operand, line)?;
                             return Ok(Expr {
                                 line,
@@ -907,6 +925,19 @@ fn globals_key(array: &Expression, index: &Expression) -> Option<Vec<u8>> {
     match index {
         Expression::Literal(Literal::String(s)) => s.value.map(|b| b.to_vec()),
         _ => None,
+    }
+}
+
+/// Whether `e` is a place that can be returned by reference (`return <lvalue>`
+/// in a `function &f()`, step 13). Only the lvalue shapes `lower_place` accepts
+/// as a *readable* place: a direct variable or an array access (incl.
+/// `$GLOBALS['x']`), through parentheses. `$a[]` (append) is not readable.
+fn is_returnable_lvalue(e: &Expression) -> bool {
+    match e {
+        Expression::Variable(Variable::Direct(_)) => true,
+        Expression::ArrayAccess(_) => true,
+        Expression::Parenthesized(p) => is_returnable_lvalue(p.expression),
+        _ => false,
     }
 }
 

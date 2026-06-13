@@ -50,6 +50,10 @@ pub struct FnDecl {
     /// Local variable slot names (params first, then body locals in encounter
     /// order) — the analogue of [`Program::slots`] for this function's frame.
     pub slots: Vec<Box<[u8]>>,
+    /// `function &f()` — returns by reference (step 13). A `return <lvalue>` in
+    /// the body lowers to [`StmtKind::ReturnRef`]; the call site decides whether
+    /// to alias (`$y = &f()`) or copy.
+    pub by_ref: bool,
     pub line: Line,
 }
 
@@ -138,6 +142,9 @@ pub enum StmtKind {
     Continue(u32),
     /// `return [expr];`
     Return(Option<Expr>),
+    /// `return <lvalue>;` inside a `function &f()` — returns a *reference* to the
+    /// place (its shared cell), so `$y = &f()` aliases it (step 13, D-13.2).
+    ReturnRef(Place),
     /// A lone `;`.
     Nop,
 }
@@ -203,6 +210,11 @@ pub enum ExprKind {
     /// array element (`$x = &$a[0]`, `$a[0] = &$x`, step 11d-2). After this, a
     /// write through either side is visible through the other (D-R3/D-R4/D-R12).
     AssignRef { target: Place, source: Place },
+    /// `$target = &f(...)` — bind `target` as a reference alias of the cell a
+    /// by-reference function returns (step 13, D-13.5). `call` is an
+    /// [`ExprKind::Call`]; it is invoked *raw* (its `Zval::Ref` result is not
+    /// dereferenced) so the shared cell can be aliased.
+    AssignRefCall { target: Place, call: Box<Expr> },
     /// `$x op= rhs` (compound assignment, e.g. `+=`, `.=`).
     AssignOp(BinOp, Slot, Box<Expr>),
     /// `$x ??= rhs` — assigns only if `$x` is null/undefined.

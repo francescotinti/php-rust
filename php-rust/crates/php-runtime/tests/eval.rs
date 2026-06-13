@@ -521,6 +521,49 @@ fn globals_array_at_top_level() {
 }
 
 #[test]
+fn return_by_ref_aliases_global() {
+    // `$y = &f()` on a by-ref function aliases the cell f returned, so writing
+    // through $y writes the global (oracle 99).
+    assert_eq!(
+        out("<?php $x = 1; function &f(){ global $x; return $x; } \
+             $y = &f(); $y = 99; echo $x;"),
+        "99"
+    );
+}
+
+#[test]
+fn return_by_ref_aliases_array_element() {
+    // A by-ref function returning an element of a by-ref param; aliasing the
+    // result writes back into the caller's array (oracle 99).
+    assert_eq!(
+        out("<?php function &first(&$a){ return $a[0]; } \
+             $arr = [10, 20]; $r = &first($arr); $r = 99; echo $arr[0];"),
+        "99"
+    );
+}
+
+#[test]
+fn return_by_ref_in_value_context_derefs() {
+    // Using a by-ref function's result in a value context yields a copy, not the
+    // reference (oracle 5).
+    assert_eq!(
+        out("<?php $x = 5; function &f(){ global $x; return $x; } echo f();"),
+        "5"
+    );
+}
+
+#[test]
+fn return_by_ref_assigned_by_value_copies() {
+    // `$y = f()` (no `&`) copies even though f returns by reference, so a later
+    // write to $y does not touch the global (oracle 1).
+    assert_eq!(
+        out("<?php $x = 1; function &f(){ global $x; return $x; } \
+             $y = f(); $y = 99; echo $x;"),
+        "1"
+    );
+}
+
+#[test]
 fn function_mutual_recursion() {
     // Both functions are hoisted, so even-before-odd resolution works.
     let prog = "<?php \
