@@ -144,6 +144,7 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         file: &program.file,
         globals: fresh_slots(program.slots.len()),
         locals: None,
+        fn_returns_ref: false,
         out: Vec::new(),
         rendered: Vec::new(),
         diags: Vec::new(),
@@ -192,6 +193,10 @@ struct Evaluator<'p> {
     /// the global frame *by slot* from inside a function (D-12.1).
     globals: Vec<Zval>,
     locals: Option<Vec<Zval>>,
+    /// True while the body of a `function &f()` runs: a plain `StmtKind::Return`
+    /// (i.e. a non-lvalue or bare `return;`) then raises the by-ref-return Notice
+    /// (step 13-2, D-13.4). Set/restored by `call_user_fn` like `locals`.
+    fn_returns_ref: bool,
     /// Pure program output (echo / inline HTML / builtins).
     out: Vec<u8>,
     /// The interleaved CLI stream: `out` plus diagnostics rendered at their point
@@ -406,6 +411,14 @@ impl<'p> Evaluator<'p> {
             StmtKind::Break(n) => return Ok(Flow::Break(*n)),
             StmtKind::Continue(n) => return Ok(Flow::Continue(*n)),
             StmtKind::Return(opt) => {
+                // A plain return inside a `function &f()` means the operand was a
+                // non-lvalue (or `return;`): PHP raises a Notice and falls back to
+                // returning by value (D-13.4).
+                if self.fn_returns_ref {
+                    self.diags.push(Diag::Notice(
+                        "Only variable references should be returned by reference".to_string(),
+                    ));
+                }
                 let v = match opt {
                     Some(e) => self.eval(e)?,
                     None => Zval::Null,
@@ -607,11 +620,13 @@ impl<'p> Evaluator<'p> {
         let frame = fresh_slots(f.slots.len());
         let saved_locals = self.locals.replace(frame);
         let saved_names = self.local_names.replace(f.slots.as_slice());
+        let saved_returns_ref = std::mem::replace(&mut self.fn_returns_ref, f.by_ref);
 
         let result = self.run_user_fn_body(f, argv);
 
         self.locals = saved_locals;
         self.local_names = saved_names;
+        self.fn_returns_ref = saved_returns_ref;
         result
     }
 
@@ -1318,9 +1333,12 @@ impl<'p> Evaluator<'p> {
             other => {
                 // Aliasing a non-reference result: PHP warns only when the callee
                 // is not itself by-reference (a by-ref callee that returned a
-                // non-place already emitted its own Notice — oracle F). The Notice
-                // text is wired in step 13-2.
-                let _ = callee_by_ref;
+                // non-place already emitted its own Notice — oracle F, D-13.5).
+                if !callee_by_ref {
+                    self.diags.push(Diag::Notice(
+                        "Only variables should be assigned by reference".to_string(),
+                    ));
+                }
                 Rc::new(RefCell::new(other))
             }
         };

@@ -564,6 +564,54 @@ fn return_by_ref_assigned_by_value_copies() {
 }
 
 #[test]
+fn return_by_ref_non_lvalue_notices() {
+    // A by-ref function returning a non-lvalue raises a Notice but still yields
+    // the value (oracle: Notice + 3).
+    let o = run_source(
+        b"t.php",
+        b"<?php function &f(){ return 1 + 2; } $y = &f(); echo $y;",
+    )
+    .expect("lowers");
+    assert_eq!(String::from_utf8(o.stdout).unwrap(), "3");
+    assert!(
+        o.diags.iter().any(|d| matches!(d, Diag::Notice(m)
+            if m == "Only variable references should be returned by reference")),
+        "expected return-by-ref notice, got {:?}",
+        o.diags
+    );
+}
+
+#[test]
+fn return_by_ref_bare_return_notices() {
+    // Even a bare `return;` in a by-ref function raises the same Notice.
+    let o = run_source(b"t.php", b"<?php function &f(){ return; } $y = &f();").expect("lowers");
+    assert!(
+        o.diags.iter().any(|d| matches!(d, Diag::Notice(m)
+            if m == "Only variable references should be returned by reference")),
+        "expected return-by-ref notice, got {:?}",
+        o.diags
+    );
+}
+
+#[test]
+fn assign_ref_to_non_ref_function_notices() {
+    // `$y = &f()` where f is NOT by-reference raises "Only variables should be
+    // assigned by reference" and copies the value (oracle: Notice + 5).
+    let o = run_source(
+        b"t.php",
+        b"<?php function f(){ return 5; } $y = &f(); echo $y;",
+    )
+    .expect("lowers");
+    assert_eq!(String::from_utf8(o.stdout).unwrap(), "5");
+    assert!(
+        o.diags.iter().any(|d| matches!(d, Diag::Notice(m)
+            if m == "Only variables should be assigned by reference")),
+        "expected assign-by-ref notice, got {:?}",
+        o.diags
+    );
+}
+
+#[test]
 fn function_mutual_recursion() {
     // Both functions are hoisted, so even-before-odd resolution works.
     let prog = "<?php \
