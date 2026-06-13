@@ -1,6 +1,6 @@
 # Metriche dell'esperimento
 
-> Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Aggiornato: 2026-06-13 (fine step 6).
+> Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Aggiornato: 2026-06-13 (fine step 8).
 
 ## LOC (target Rust, escluso codice di test)
 
@@ -20,24 +20,26 @@
 
 | Tipo | Conteggio |
 |---|---|
-| Unit/integration (workspace, fine step 6) | 107 (17 suite) |
+| Unit/integration (workspace, fine step 8) | 122 (17 suite) |
 | Differential vs oracle (php-types) | 37.835 casi, 0 mismatch |
-| phpt-runner su testsuite PHP completa | 6172 file: 71 pass / 1 fail / 6100 skip (98.6% dei runnable) |
+| phpt-runner su testsuite PHP completa | 6172 file: 114 pass / 2 fail / 6056 skip (98.3% dei runnable) |
 
-## phpt-runner — skip per categoria (run completo `tests/` + `Zend/tests/`)
+## phpt-runner — skip per categoria (run completo `tests/` + `Zend/tests/`, fine step 8)
 
 | Categoria | Conteggio | Significato |
 |---|---|---|
-| unsupported | 5215 | confine Tier 1 (OOP, funzioni utente, namespace, …) — atteso |
+| unsupported | 5028 | confine Tier 1 (OOP, namespace, by-ref/variadic, …) — atteso (era 5215; −187 con le funzioni utente) |
 | section | 660 | sezioni I/O/INI/SKIPIF/EXTENSIONS non modellate |
-| builtin | 88 | builtin non ancora implementato (step 10) |
+| diag-or-fatal | 176 | warning/fatal non renderizzati (step 9) |
+| builtin | 114 | builtin non ancora implementato (step 10) |
 | parse | 67 | sintassi che mago non parsa nel nostro path |
-| diag-or-fatal | 59 | warning/fatal non renderizzati (step 9) |
 | malformed | 6 | `.phpt` senza FILE/EXPECT |
 | expectregex | 4 | `--EXPECTREGEX--` non supportato |
 | expectf-%r | 1 | placeholder `%r` non supportato |
 
-L'unico **fail** è `unicode_escape.phpt` (D-NEW-4, limitazione di mago su `\u{}`).
+I 2 **fail** residui: `unicode_escape.phpt` (D-NEW-4, mago su `\u{}`) e
+`scalar_float_with_integer_default_weak.phpt` (D-NEW-6, type-hint non enforced).
+Il bug eval-order D-NEW-5 trovato dall'import è stato fixato nello stesso step.
 
 ## Differential — convergenza (step 2)
 
@@ -71,4 +73,5 @@ del differential sono state riconciliate verso il comportamento dell'oracle).
 | Step 5 (builtins registry + nucleo) | ~1h |
 | Step 7 (array + foreach/switch/match) | ~2h |
 | Step 6 (phpt-runner + Fase 4c import + 2 bugfix) | ~2.5h |
-| **Totale a fine step 6** | **~10h** |
+| Step 8 (funzioni utente + Fase 4c re-import + 1 bugfix eval-order) | ~1.5h |
+| **Totale a fine step 8** | **~11.5h** |

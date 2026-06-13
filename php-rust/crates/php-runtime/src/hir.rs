@@ -27,6 +27,38 @@ pub struct Program {
     /// `slots[i]` is the name (without leading `$`) of the variable in slot `i`.
     /// Used for `Undefined variable $name` diagnostics (D-G13).
     pub slots: Vec<Box<[u8]>>,
+    /// Top-level user-defined functions, hoisted at lowering time so a call may
+    /// precede the declaration (PHP's function hoisting). Resolved by the
+    /// evaluator's call path before the builtin registry (step 8).
+    pub functions: Vec<FnDecl>,
+}
+
+/// A lowered `function name(params) { body }`. Each declaration owns a *local*
+/// slot table independent of the script's globals: PHP functions do not see the
+/// enclosing scope (no implicit capture), so a call sets up a fresh frame sized
+/// by [`FnDecl::slots`] with the parameters occupying its leading slots.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FnDecl {
+    /// Name as written (original case); calls match it ASCII-case-insensitively.
+    pub name: Box<[u8]>,
+    /// Formal parameters, in declaration order. `params[i].slot == i`.
+    pub params: Vec<Param>,
+    pub body: Vec<Stmt>,
+    /// Local variable slot names (params first, then body locals in encounter
+    /// order) — the analogue of [`Program::slots`] for this function's frame.
+    pub slots: Vec<Box<[u8]>>,
+    pub line: Line,
+}
+
+/// One formal parameter. By-value only in step 8 (by-reference / variadic
+/// params lower to [`crate::lower::LowerError::Unsupported`]).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Param {
+    /// The local slot this parameter binds (equal to its positional index).
+    pub slot: Slot,
+    /// Default value expression, evaluated in the callee frame when the
+    /// argument is omitted. `None` makes the parameter required.
+    pub default: Option<Expr>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

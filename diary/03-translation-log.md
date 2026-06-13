@@ -2,6 +2,56 @@
 
 > Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Una entry per step.
 
+## Step 8 — Funzioni utente (dichiarazione, parametri, return, scope, ricorsione)
+
+- **Riferimento concettuale:** Zend `zend_execute.c` (ZEND_DO_FCALL, frame di
+  esecuzione), `zend_compile.c` (hoisting delle dichiarazioni top-level).
+  Tradotto come *call-frame swap* nel tree-walker, non come VM.
+- **File target:** `hir.rs` (`Program.functions`, `FnDecl`, `Param`),
+  `lower.rs` (`hoist_function`/`lower_function`/`lower_function_body`,
+  arm `Statement::Function`), `eval.rs` (`call_user_fn`/`run_user_fn_body`,
+  resoluzione user-prima-di-builtin nel `Call`).
+- **Decisioni di step (Fase 2 locale):**
+  - **D 8.1** — `Program.functions: Vec<FnDecl>`; ogni `FnDecl` possiede la
+    *propria* slot-table locale (le funzioni PHP non catturano lo scope
+    esterno). `Param { slot, default }`, con `params[i].slot == i`.
+  - **D 8.2** — **hoisting** delle dichiarazioni top-level: pre-pass su
+    `program.statements` che le registra prima di lowerare il body, così una
+    call può precedere testualmente la definizione (anche mutua ricorsione).
+    La dichiarazione produce `Ok(None)` (nessuno statement runtime).
+  - **D 8.3** — solo parametri **by-value posizionali** + default opzionali.
+    By-ref (`&$x`), variadici (`...$x`), promoted-property, redeclaration,
+    return-by-ref → `Unsupported` (SKIP motivato). Le **type hint** sono
+    accettate ma **non enforced** (nessuna coercizione / TypeError) →
+    divergenza D-NEW-6 documentata.
+  - **D 8.4** — risoluzione `Call`: prima la tabella user (case-insensitive
+    ASCII), poi il registry builtin, poi "Call to undefined function". Nuovo
+    frame per call (swap di `slots` + `names`, ripristino a fine call);
+    ricorsione sullo stack host. Argomenti extra ignorati; troppo pochi →
+    fatale `ArgumentCountError`-style.
+- **Round di iterazione AI:** 1 (compila e passa al primo tentativo dopo la
+  stesura dei test).
+- **Errori / scoperte:**
+  - [eval-order] L'import .phpt ha fatto diventare *runnable* due test che
+    prima erano skip (usano funzioni): `engine_assignExecutionOrder_005/006`.
+    Hanno scoperto un **bug reale di step 7** (classe A): `AssignPlace`
+    valutava la RHS **prima** degli indici dell'lvalue, mentre PHP valuta gli
+    offset del target da sinistra a destra *prima* della RHS. Output invertito
+    a coppie (`i5 i6 i3 i4 i1 i2` invece di `i1..i6`). Fix di 1 riga
+    (resolve-steps-first), allinea `AssignPlace` a `AssignOpPlace` che era già
+    corretto. Regressione: `eval.rs::assignment_evaluates_lvalue_offsets_before_rhs`.
+- **Test scritti:** 11 eval (declare+call, hoisting, case-insensitive, scope
+  isolato, default, extra-args, missing-arg-fatale, fattoriale, mutua
+  ricorsione, fall-off→NULL, type-hint-non-enforced) + 3 lowering (tabella
+  hoisting, by-ref/variadic unsupported, conditional-decl unsupported) + 1
+  regressione eval-order = **15 nuovi test**. Totale workspace: **122**.
+- **Baseline phpt aggiornata:** 6172 file → **114 pass / 2 fail / 6056 skip =
+  98.3% dei runnable** (116 runnable, da 72). `unsupported` scende 5215 → 5028
+  (−187). I 2 FAIL residui sono entrambi noti: `unicode_escape` (D-NEW-4, mago)
+  e `scalar_float_with_integer_default_weak` (D-NEW-6, type-hint non enforced).
+- **clippy** `--all-targets --all-features --deny=warnings`: pulito (exit 0).
+- **Tempo:** ~1.5h.
+
 ## Step 6 — phpt-runner (capability scan + import testsuite, Fase 4c)
 
 > Eseguito DOPO lo step 7 (gli array rendono il runner molto più utile: ~quintuplicano

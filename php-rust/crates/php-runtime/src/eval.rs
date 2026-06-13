@@ -15,12 +15,15 @@
 //! and interleaving onto stdout is step 9, so for now the differential corpus
 //! is curated to warning-free scripts.
 
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use php_types::{convert, dtoa, ops, Diag, Diags, Key, PhpArray, PhpStr, PhpError, Zval};
 
 use crate::builtin::{Ctx, Registry};
-use crate::hir::{BinOp, CastKind, Expr, ExprKind, Place, PlaceStep, Program, Slot, Stmt, StmtKind, UnOp};
+use crate::hir::{
+    BinOp, CastKind, Expr, ExprKind, FnDecl, Place, PlaceStep, Program, Slot, Stmt, StmtKind, UnOp,
+};
 
 /// Control-flow signal produced by executing a statement.
 enum Flow {
@@ -70,9 +73,20 @@ pub fn run(program: &Program) -> Outcome {
 
 /// Execute a lowered program, resolving function calls against `registry`.
 pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
+    // Index the hoisted user functions by ASCII-lowercased name (PHP function
+    // names are case-insensitive).
+    let fn_index: HashMap<Vec<u8>, usize> = program
+        .functions
+        .iter()
+        .enumerate()
+        .map(|(i, f)| (f.name.to_ascii_lowercase(), i))
+        .collect();
+
     let mut ev = Evaluator {
         names: &program.slots,
         reg: registry,
+        funcs: &program.functions,
+        fn_index: &fn_index,
         slots: vec![Zval::Undef; program.slots.len()],
         out: Vec::new(),
         diags: Vec::new(),
@@ -93,8 +107,13 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
 }
 
 struct Evaluator<'p> {
+    /// Slot names for the *current* frame (script globals, or a callee's locals
+    /// while a user function runs) — used only for undefined-variable warnings.
     names: &'p [Box<[u8]>],
     reg: &'p Registry,
+    /// Hoisted user functions and their name→index map (built in `run_with`).
+    funcs: &'p [FnDecl],
+    fn_index: &'p HashMap<Vec<u8>, usize>,
     slots: Vec<Zval>,
     out: Vec<u8>,
     diags: Diags,
@@ -330,6 +349,61 @@ impl<'p> Evaluator<'p> {
         Ok(Flow::Normal)
     }
 
+    // --- user functions ---
+
+    /// Invoke a hoisted user function: validate arity, set up a fresh local
+    /// frame (its own slot table and slot names), bind parameters, run the body,
+    /// then restore the caller's frame. Recursion uses the host (Rust) stack.
+    fn call_user_fn(&mut self, idx: usize, argv: Vec<Zval>) -> Result<Zval, PhpError> {
+        // `funcs` is `&'p [FnDecl]` (Copy): copying it out detaches the borrow
+        // from `self`, so the frame swap below can mutate `self.slots` freely.
+        let funcs: &'p [FnDecl] = self.funcs;
+        let f: &'p FnDecl = &funcs[idx];
+
+        let required = f.params.iter().filter(|p| p.default.is_none()).count();
+        if argv.len() < required {
+            let expected = if required == f.params.len() {
+                format!("exactly {required}")
+            } else {
+                format!("at least {required}")
+            };
+            return Err(PhpError::Error(format!(
+                "Too few arguments to function {}(), {} passed and {} expected",
+                String::from_utf8_lossy(&f.name),
+                argv.len(),
+                expected,
+            )));
+        }
+
+        let frame = vec![Zval::Undef; f.slots.len()];
+        let saved_slots = std::mem::replace(&mut self.slots, frame);
+        let saved_names = std::mem::replace(&mut self.names, f.slots.as_slice());
+
+        let result = self.run_user_fn_body(f, argv);
+
+        self.slots = saved_slots;
+        self.names = saved_names;
+        result
+    }
+
+    /// Bind parameters into the (already installed) callee frame and execute the
+    /// body. A missing argument falls back to its default, evaluated in the new
+    /// frame; falling off the end yields NULL.
+    fn run_user_fn_body(&mut self, f: &'p FnDecl, argv: Vec<Zval>) -> Result<Zval, PhpError> {
+        for (i, p) in f.params.iter().enumerate() {
+            let v = match argv.get(i) {
+                Some(v) => v.clone(),
+                // Required params are guaranteed present by the caller's check.
+                None => self.eval(p.default.as_ref().expect("required arg checked"))?,
+            };
+            self.slots[p.slot as usize] = v;
+        }
+        match self.exec_stmts(&f.body)? {
+            Flow::Return(v) => Ok(v),
+            _ => Ok(Zval::Null),
+        }
+    }
+
     // --- expressions ---
 
     fn eval(&mut self, e: &Expr) -> Result<Zval, PhpError> {
@@ -467,6 +541,12 @@ impl<'p> Evaluator<'p> {
                 for a in args {
                     argv.push(self.eval(a)?);
                 }
+                // A user-defined function shadows the builtin namespace (PHP
+                // resolves both from one function table; you cannot redefine a
+                // builtin, but a user function wins when present).
+                if let Some(&idx) = self.fn_index.get(&name.to_ascii_lowercase()) {
+                    return self.call_user_fn(idx, argv);
+                }
                 // Copy the fn pointer out so the registry borrow ends before we
                 // borrow `out`/`diags` mutably for the call context.
                 let f = match self.reg.get(name.as_ref()) {
@@ -512,8 +592,11 @@ impl<'p> Evaluator<'p> {
             }
 
             ExprKind::AssignPlace(place, rhs) => {
-                let value = self.eval(rhs)?;
+                // PHP evaluates the lvalue's offset expressions *before* the RHS
+                // (so `$a[f()][g()] = h()` runs f, g, then h). Resolve the place
+                // steps first to match — and stay consistent with AssignOpPlace.
                 let steps = self.resolve_steps(place)?;
+                let value = self.eval(rhs)?;
                 self.write_place(place.slot, &steps, value.clone())?;
                 Ok(value)
             }

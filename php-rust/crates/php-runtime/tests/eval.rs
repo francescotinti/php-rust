@@ -329,3 +329,122 @@ fn huge_integer_literal_overflows_to_inf() {
     // A literal just past i64::MAX still promotes to the right finite float.
     assert_eq!(out("<?php echo 9223372036854775808;"), "9.2233720368548E+18");
 }
+
+// --- step 8: user-defined functions ---
+
+#[test]
+fn function_declare_and_call() {
+    assert_eq!(
+        out("<?php function greet() { echo 'hi'; } greet();"),
+        "hi"
+    );
+    // A function with a single parameter and a return value.
+    assert_eq!(
+        out("<?php function sq($n) { return $n * $n; } echo sq(7);"),
+        "49"
+    );
+}
+
+#[test]
+fn function_is_hoisted_before_declaration() {
+    // PHP hoists top-level function declarations: a call may precede the body.
+    assert_eq!(
+        out("<?php echo f(); function f() { return 'ok'; }"),
+        "ok"
+    );
+}
+
+#[test]
+fn function_name_is_case_insensitive() {
+    assert_eq!(
+        out("<?php function Foo() { return 'x'; } echo FOO(); echo foo();"),
+        "xx"
+    );
+}
+
+#[test]
+fn function_local_scope_is_isolated() {
+    // The function's `$x` is a distinct slot from the caller's `$x`.
+    let prog = "<?php $x = 'outer'; function f() { $x = 'inner'; echo $x; } f(); echo $x;";
+    assert_eq!(out(prog), "innerouter");
+}
+
+#[test]
+fn function_default_parameter() {
+    assert_eq!(
+        out("<?php function inc($n, $by = 1) { return $n + $by; } echo inc(5); echo '/'; echo inc(5, 10);"),
+        "6/15"
+    );
+    // A default that is a constant expression is evaluated at call time.
+    assert_eq!(
+        out("<?php function f($a = 2 * 3) { return $a; } echo f();"),
+        "6"
+    );
+}
+
+#[test]
+fn function_extra_arguments_are_ignored() {
+    // Without a variadic, surplus positional arguments are silently dropped.
+    assert_eq!(
+        out("<?php function f($a) { return $a; } echo f(1, 2, 3);"),
+        "1"
+    );
+}
+
+#[test]
+fn function_missing_required_argument_is_fatal() {
+    let o = run_source(b"t.php", b"<?php function f($a) { return $a; } f();").expect("lowers");
+    match o.fatal {
+        Some(PhpError::Error(m)) => assert!(
+            m.contains("Too few arguments to function f()"),
+            "unexpected message: {m}"
+        ),
+        other => panic!("expected ArgumentCountError, got {other:?}"),
+    }
+}
+
+#[test]
+fn function_recursion_factorial() {
+    let prog = "<?php function fact($n) { return $n <= 1 ? 1 : $n * fact($n - 1); } echo fact(5);";
+    assert_eq!(out(prog), "120");
+}
+
+#[test]
+fn function_mutual_recursion() {
+    // Both functions are hoisted, so even-before-odd resolution works.
+    let prog = "<?php \
+        function is_even($n) { return $n == 0 ? true : is_odd($n - 1); } \
+        function is_odd($n) { return $n == 0 ? false : is_even($n - 1); } \
+        echo is_even(10) ? 'y' : 'n'; echo is_odd(7) ? 'y' : 'n';";
+    assert_eq!(out(prog), "yy");
+}
+
+#[test]
+fn function_falling_off_end_returns_null() {
+    let o = run_source(b"t.php", b"<?php function f() { $x = 1; } return f();").expect("lowers");
+    // `return f()` with no explicit return inside f yields NULL.
+    assert!(matches!(o.return_value, Zval::Null));
+}
+
+#[test]
+fn assignment_evaluates_lvalue_offsets_before_rhs() {
+    // Bug surfaced by the .phpt import (engine_assignExecutionOrder_005): the
+    // offset expressions of an assignment target run left-to-right *before* the
+    // RHS. Chained `$a[f()] = $b[g()] = h()` must print f, g, h in order.
+    let prog = "<?php \
+        function p($s) { echo $s; return 0; } \
+        $a = [[0]]; $b = [[1]]; $c = [[2]]; \
+        $a[p('1')][p('2')] = $b[p('3')][p('4')] = $c[p('5')][p('6')]; \
+        echo '='; echo $a[0][0]; echo $b[0][0];";
+    assert_eq!(out(prog), "123456=22");
+}
+
+#[test]
+fn function_type_hint_is_accepted_but_not_enforced() {
+    // Type hints lower successfully; we do not coerce or raise TypeError (step 8
+    // divergence). A string passed to an `int` hint flows through unchanged.
+    assert_eq!(
+        out("<?php function f(int $n) { return $n; } echo f('42abc');"),
+        "42abc"
+    );
+}

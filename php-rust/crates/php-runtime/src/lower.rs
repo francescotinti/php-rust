@@ -21,14 +21,14 @@ use mago_database::file::File;
 use mago_span::{HasSpan, Span};
 use mago_syntax::ast::{
     Argument, ArrayElement, AssignmentOperator, BinaryOperator, Call, Construct, Expression,
-    ForeachTarget, Identifier, Literal, LiteralInteger, MatchArm as AstMatchArm, Statement,
-    UnaryPostfixOperator, UnaryPrefixOperator, Variable,
+    ForeachTarget, Function, Identifier, Literal, LiteralInteger, MatchArm as AstMatchArm,
+    Statement, UnaryPostfixOperator, UnaryPrefixOperator, Variable,
 };
 use mago_syntax::parser::parse_file;
 
 use crate::hir::{
-    ArrayElem, BinOp, Case, CastKind, Expr, ExprKind, Line, MatchArm, Place, PlaceStep, Program,
-    Slot, Stmt, StmtKind, UnOp,
+    ArrayElem, BinOp, Case, CastKind, Expr, ExprKind, FnDecl, Line, MatchArm, Param, Place,
+    PlaceStep, Program, Slot, Stmt, StmtKind, UnOp,
 };
 
 /// Why a script could not be lowered to HIR.
@@ -70,10 +70,19 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
     }
 
     let mut low = Lowerer::new(&file);
+    // Hoist top-level function declarations first, so a call may textually
+    // precede its definition (PHP's function hoisting). Bodies are lowered here;
+    // the main pass below skips the declaration statements (they are no-ops).
+    for s in program.statements.as_slice() {
+        if let Statement::Function(func) = s {
+            low.hoist_function(func)?;
+        }
+    }
     let body = low.lower_stmts(program.statements.as_slice())?;
     Ok(Program {
         body,
         slots: low.slots,
+        functions: low.functions,
     })
 }
 
@@ -85,6 +94,10 @@ struct Lowerer<'f> {
     /// inline-HTML chunk must drop one leading newline (Zend lexer rule:
     /// `?>` consumes a single trailing `\n` / `\r\n`).
     after_closing_tag: bool,
+    /// Hoisted top-level user functions and a name→index map (ASCII-lowercased,
+    /// since PHP function names are case-insensitive).
+    functions: Vec<FnDecl>,
+    fn_index: HashMap<Vec<u8>, usize>,
 }
 
 impl<'f> Lowerer<'f> {
@@ -94,6 +107,8 @@ impl<'f> Lowerer<'f> {
             slots: Vec::new(),
             index: HashMap::new(),
             after_closing_tag: false,
+            functions: Vec::new(),
+            fn_index: HashMap::new(),
         }
     }
 
@@ -236,6 +251,20 @@ impl<'f> Lowerer<'f> {
                 None => None,
             }),
 
+            // A function declaration carries no runtime behaviour: the top-level
+            // ones were already hoisted into `functions`. A declaration that was
+            // *not* hoisted is nested inside a branch/block — PHP defines it
+            // conditionally, which is outside step 8 scope.
+            Statement::Function(func) => {
+                if self.fn_index.contains_key(&func.name.value.to_ascii_lowercase()) {
+                    return Ok(None);
+                }
+                return Err(LowerError::Unsupported {
+                    what: "conditional function declaration",
+                    line,
+                });
+            }
+
             _ => {
                 return Err(LowerError::Unsupported {
                     what: "statement",
@@ -266,6 +295,99 @@ impl<'f> Lowerer<'f> {
                 line,
             }),
         }
+    }
+
+    // --- functions ---
+
+    /// Lower a top-level function declaration and register it in the function
+    /// table. A duplicate name is a redeclaration (PHP fatal), reported as an
+    /// unsupported construct so the phpt-runner skips it rather than crashing.
+    fn hoist_function(&mut self, func: &Function) -> Result<(), LowerError> {
+        let decl = self.lower_function(func)?;
+        let key = decl.name.to_ascii_lowercase();
+        if self.fn_index.contains_key(&key) {
+            return Err(LowerError::Unsupported {
+                what: "function redeclaration",
+                line: decl.line,
+            });
+        }
+        let idx = self.functions.len();
+        self.fn_index.insert(key, idx);
+        self.functions.push(decl);
+        Ok(())
+    }
+
+    /// Lower a function body in a *fresh* local slot scope (PHP functions do not
+    /// capture the enclosing scope). The outer scope is saved and restored even
+    /// on error so the caller's slot table is never corrupted.
+    fn lower_function(&mut self, func: &Function) -> Result<FnDecl, LowerError> {
+        let line = self.line_of(func.span());
+        let name: Box<[u8]> = func.name.value.into();
+        if func.ampersand.is_some() {
+            return Err(LowerError::Unsupported {
+                what: "function returning by reference",
+                line,
+            });
+        }
+
+        let saved_slots = std::mem::take(&mut self.slots);
+        let saved_index = std::mem::take(&mut self.index);
+        let saved_tag = std::mem::replace(&mut self.after_closing_tag, false);
+
+        let inner = self.lower_function_body(func, line);
+
+        // Reclaim the function's local slots and restore the outer scope.
+        let local_slots = std::mem::replace(&mut self.slots, saved_slots);
+        self.index = saved_index;
+        self.after_closing_tag = saved_tag;
+
+        let (params, body) = inner?;
+        Ok(FnDecl {
+            name,
+            params,
+            body,
+            slots: local_slots,
+            line,
+        })
+    }
+
+    /// Bind parameters into the leading slots of the (already fresh) scope, then
+    /// lower the body. By-reference / variadic / promoted-property params are
+    /// outside step 8 scope; type hints are accepted but not enforced.
+    fn lower_function_body(
+        &mut self,
+        func: &Function,
+        line: Line,
+    ) -> Result<(Vec<Param>, Vec<Stmt>), LowerError> {
+        let mut params = Vec::new();
+        for p in func.parameter_list.parameters.iter() {
+            if p.ampersand.is_some() {
+                return Err(LowerError::Unsupported {
+                    what: "by-reference parameter",
+                    line,
+                });
+            }
+            if p.ellipsis.is_some() {
+                return Err(LowerError::Unsupported {
+                    what: "variadic parameter",
+                    line,
+                });
+            }
+            if p.is_promoted_property() {
+                return Err(LowerError::Unsupported {
+                    what: "promoted constructor property",
+                    line,
+                });
+            }
+            let slot = self.slot_for(strip_dollar(p.variable.name));
+            let default = match &p.default_value {
+                Some(d) => Some(self.lower_expr(d.value)?),
+                None => None,
+            };
+            params.push(Param { slot, default });
+        }
+        let body = self.lower_stmts(func.body.statements.as_slice())?;
+        Ok((params, body))
     }
 
     // --- expressions ---

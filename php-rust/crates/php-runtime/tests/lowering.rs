@@ -342,3 +342,46 @@ fn isset_empty_unset_lower() {
 fn parse_error_is_reported() {
     assert!(matches!(err("<?php $x = ;"), LowerError::Parse(_)));
 }
+
+// --- step 8: user-defined functions ---
+
+#[test]
+fn function_declaration_is_hoisted_into_table() {
+    let p = lower("<?php function f($a, $b = 1) { return $a + $b; } echo f(2);");
+    // The declaration produces no runtime statement; only the echo remains.
+    assert_eq!(p.body.len(), 1);
+    assert!(matches!(&p.body[0].kind, StmtKind::Echo(_)));
+    // The function is registered with its own local slot table.
+    assert_eq!(p.functions.len(), 1);
+    let f = &p.functions[0];
+    assert_eq!(&*f.name, b"f");
+    assert_eq!(f.params.len(), 2);
+    assert!(f.params[0].default.is_none());
+    assert!(f.params[1].default.is_some());
+    // Params occupy the first slots of the function's local frame.
+    assert_eq!(f.slots.len(), 2);
+    assert_eq!(&*f.slots[0], b"a");
+    assert_eq!(&*f.slots[1], b"b");
+}
+
+#[test]
+fn by_reference_and_variadic_params_are_unsupported() {
+    assert!(matches!(
+        err("<?php function f(&$a) { } f($x);"),
+        LowerError::Unsupported { .. }
+    ));
+    assert!(matches!(
+        err("<?php function f(...$a) { } f();"),
+        LowerError::Unsupported { .. }
+    ));
+}
+
+#[test]
+fn conditional_function_declaration_is_unsupported() {
+    // A function defined inside a branch is not hoisted; lowering reports it
+    // rather than silently registering it unconditionally.
+    assert!(matches!(
+        err("<?php if (true) { function f() {} }"),
+        LowerError::Unsupported { .. }
+    ));
+}

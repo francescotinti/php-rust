@@ -42,6 +42,21 @@ runnable). Le skip sono motivate per categoria (vedi `metrics.md`): la grande
 maggioranza (`unsupported`, 5215) è il confine atteso del Tier 1 (OOP, funzioni
 utente, namespace, ecc.), non difetti.
 
+## Step 8 — Scoperte dell'import .phpt (funzioni utente)
+
+L'aggiunta delle funzioni utente ha reso *runnable* +44 test. L'import ha
+trovato **1 bug reale** (classe A, fixato) e ha materializzato **1 divergenza
+di design** dichiarata nello scope di step (classe D):
+
+| # | Severità | Categoria | Comportamento | Causa | Stato |
+|---|---|---|---|---|---|
+| D-NEW-5 | media | eval-order | `$a[f()][g()] = $b[h()] = …`: gli offset dell'lvalue venivano valutati **dopo** la RHS, dando l'ordine invertito `i5 i6 i3 i4 i1 i2` invece di `i1..i6` (`engine_assignExecutionOrder_005/006`) | l'arm `AssignPlace` faceva `eval(rhs)` prima di `resolve_steps(place)`; PHP valuta gli offset del target da sinistra a destra **prima** della RHS. `AssignOpPlace` era già corretto | **FIXATO**: resolve-steps-first in `AssignPlace`; regressione `eval.rs::assignment_evaluates_lvalue_offsets_before_rhs` |
+| D-NEW-6 | bassa | type-hint | `function f(float $n)` con default intero `0` → l'oracle stampa `float(0)`, noi `int(0)` (`scalar_float_with_integer_default_weak.phpt`) | **scelta di scope step 8 (D 8.3)**: type hint accettate ma **non enforced** — niente coercizione weak-mode né TypeError. Richiede il motore di coercizione dei tipi (step futuro) | **noto/aperto** — divergenza di design dichiarata, non un bug |
+
+Risultato del run completo dopo step 8: **114 pass / 2 fail / 6056 skip**
+(98.3% dei runnable). I 2 FAIL residui sono D-NEW-4 (unicode `\u{}`, mago) e
+D-NEW-6 (type-hint non enforced) — entrambi noti e documentati.
+
 ## Divergenze attese (scope-out dichiarato in 02-mapping-table.md)
 
 Non sono bug, sono confini del Tier 1:

@@ -1,6 +1,6 @@
 --TEST--
 unsupported construct -> skip
 --FILE--
-<?php function f() { return 1; } echo f();
+<?php class C {} echo 1;
 --EXPECT--
 1
