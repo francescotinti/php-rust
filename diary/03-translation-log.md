@@ -2,6 +2,76 @@
 
 > Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Una entry per step.
 
+## Step 7 — Array end-to-end + foreach / switch / match
+
+> Step 6 (phpt-runner) deliberatamente saltato con l'utente: gli array danno più
+> sostanza e rendono il phpt-runner più utile dopo.
+
+- **Riferimento C/AST:** mago 1.30 (`mago_syntax::ast`) per il front-end — nodi
+  `Array`/`LegacyArray`/`ArrayElement`, `ArrayAccess`/`ArrayAppend`, `Construct`
+  (`isset`/`empty`), `Foreach`/`ForeachTarget`, `Switch`/`SwitchCase`, `Match`/
+  `MatchArm`, `Unset`. Semantica array da `php-types::PhpArray` (già portato dallo
+  step 1, Zend/zend_hash.c) + COW via `Rc::make_mut` (D-G2).
+- **Target:** `crates/php-runtime/src/{hir.rs, lower.rs, eval.rs}`; test
+  `php-runtime/tests/{lowering.rs, eval.rs, differential.rs}` + corpus array di
+  `php-builtins/tests/differential.rs`.
+- **HIR esteso:**
+  - `ExprKind`: `Array(Vec<ArrayElem>)`, `Index{base,index}`, `AssignPlace`/
+    `AssignOpPlace`/`AssignCoalescePlace`, `Isset(Vec<Place>)`, `Empty(Place)`,
+    `Match{subject,arms}`.
+  - `StmtKind`: `Foreach{iter,key,value,body}`, `Switch{subject,cases}`,
+    `Unset(Vec<Place>)`.
+  - Nuovi tipi: `ArrayElem{key:Option,value}`, `MatchArm{conditions,body}`
+    (conditions vuote = arm `default`), `Case{test:Option,body}`, `Place{slot,
+    steps}` + `PlaceStep::{Index,Append}` — l'**lvalue** è modellato come uno slot
+    base + catena di step (gestisce `$a[k]`, `$a[]`, e write annidati con
+    auto-vivification).
+- **Lowering:** `lower_place` generalizza il vecchio `assign_target`; una variabile
+  nuda resta sull'encoding leggero `Assign(slot,…)` (preserva i diagnostici), un
+  elemento array passa alle varianti `*Place`. `[...]` e `array(...)` lowerano
+  identici. `isset`/`empty` sono `Construct` (espressioni), `unset` è uno
+  `Statement`. Out-of-scope → `LowerError::Unsupported`: spread `...$x`, `list()`,
+  foreach `&$v` by-ref, `$a[]` in read context.
+- **Evaluator:**
+  - **COW writes:** `resolve_steps` pre-valuta le chiavi (evita conflitti di borrow),
+    poi `write_into` naviga `&mut Zval` con `Rc::make_mut` — auto-vivifica
+    `Null`/`Undef` ad array, scalare → Warning "Cannot use a scalar value as an
+    array" + no-op (sull'oracle è un *fatal* `Error`: resta debito di rendering
+    step 9). Verificata la semantica a valore: `$b=$a; $b[0]=…` non tocca `$a`.
+  - **foreach:** itera su uno **snapshot** `Vec<(Key,Zval)>` (by-value PHP: mutare
+    l'array nel body non estende l'iterazione). Key→Zval per il binding di `$k`.
+  - **switch:** match loose `==`, fall-through, `default` in qualunque posizione;
+    `break`/`continue` livello 1 escono entrambi dallo switch (lo switch conta come
+    un livello per `continue`, semantica PHP).
+  - **match:** `===` strict, arm multi-condizione, `default`; nessun match e nessun
+    default → `UnhandledMatchError` (`PhpError::Error("Unhandled match case <v>")`,
+    repr stringhe quotate come l'oracle).
+  - **isset/empty/??/??=/unset:** traversal **silenzioso** condiviso (`silent_get`):
+    chiave mancante → not set, valore `null` → isset false. Esteso `eval_isset`
+    (LHS di `??`) per `Index` ricorsivo → `$a['x'] ?? d` non emette warning
+    (verificato: 0 diags).
+  - **read `$a[k]`:** array → lookup (mancante → Warning "Undefined array key" +
+    null); string offset intero (negativi da fondo, fuori range → "" + warning);
+    altro scalare → Warning "Trying to access array offset…" + null.
+  - **coercizione chiave:** int/bool→Int, string canonicalizza (`"8"`→Int(8)),
+    null→`""`, float→trunc con Deprecated "loses precision" se frazionario,
+    array→`TypeError`.
+- **Differential vs oracle (php 8.5.7, `php -n -r`):** +20 snippet runtime (array
+  build/index/append/nested, COW, compound su elemento, foreach k/v, switch
+  fall-through/default/loose, match strict/multi/default, isset/empty/unset, `??`)
+  + 6 snippet `var_dump` array (ricorsivo/annidato/keyed/post-unset) in php-builtins.
+  Tutti byte-identici.
+- **Verifica:** `cargo test` **94/94** verde (era 79; +15 nuovi: lowering, eval,
+  differential); clippy `--all-targets --all-features --deny=warnings` pulito.
+- **Out-of-scope (debito esplicito):** string-offset **write** (`$s[0]='x'`),
+  foreach by-reference + `list()` destructuring, spread `...$x`, variable-variables,
+  incremento su elemento (`$a[k]++`), rendering fatal/warning su stdout (step 9),
+  builtin array (`count`/`array_*`/`implode`, step 10), funzioni utente (step 8).
+- **Nessuna D-NEW:** la semantica array era già coperta dal port fedele di
+  `PhpArray` (step 1, oracle-verified); il differential di step 7 ha confermato
+  parity senza scoprire nuove divergenze.
+- **Tempo:** ~2h.
+
 ## Step 5 — Builtins registry + nucleo + float shortest-roundtrip
 
 - **Riferimento C:** ext/standard (selective port, frequenza nei test);

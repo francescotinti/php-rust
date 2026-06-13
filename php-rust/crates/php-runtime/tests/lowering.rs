@@ -240,20 +240,102 @@ fn line_numbers_are_one_based() {
 }
 
 #[test]
-fn unsupported_foreach_is_reported() {
-    match err("<?php foreach ($a as $v) { echo $v; }") {
-        LowerError::Unsupported { what, .. } => assert_eq!(what, "statement"),
+fn array_literal_keyed_and_keyless() {
+    let p = lower(r#"<?php $a = [1, 'k' => 2, 3];"#);
+    match &p.body[0].kind {
+        StmtKind::Expr(Expr { kind: ExprKind::Assign(_, rhs), .. }) => match &rhs.kind {
+            ExprKind::Array(elems) => {
+                assert_eq!(elems.len(), 3);
+                assert!(elems[0].key.is_none());
+                assert!(elems[1].key.is_some());
+                assert!(elems[2].key.is_none());
+            }
+            other => panic!("got {other:?}"),
+        },
+        other => panic!("got {other:?}"),
+    }
+    // `array(...)` lowers identically to `[...]`.
+    let p = lower(r#"<?php $a = array(1, 2);"#);
+    assert!(matches!(
+        &p.body[0].kind,
+        StmtKind::Expr(Expr { kind: ExprKind::Assign(_, r), .. }) if matches!(r.kind, ExprKind::Array(_))
+    ));
+}
+
+#[test]
+fn array_element_assignment_targets() {
+    // `$a[k] = v`, `$a[] = v`, and nested writes lower to Place-based assigns.
+    let p = lower("<?php $a[0] = 1; $a[] = 2; $a['x']['y'] = 3;");
+    match &p.body[0].kind {
+        StmtKind::Expr(Expr { kind: ExprKind::AssignPlace(place, _), .. }) => {
+            assert_eq!(place.slot, 0);
+            assert!(matches!(place.steps[..], [PlaceStep::Index(_)]));
+        }
+        other => panic!("got {other:?}"),
+    }
+    match &p.body[1].kind {
+        StmtKind::Expr(Expr { kind: ExprKind::AssignPlace(place, _), .. }) => {
+            assert!(matches!(place.steps[..], [PlaceStep::Append]));
+        }
+        other => panic!("got {other:?}"),
+    }
+    match &p.body[2].kind {
+        StmtKind::Expr(Expr { kind: ExprKind::AssignPlace(place, _), .. }) => {
+            assert_eq!(place.steps.len(), 2);
+        }
         other => panic!("got {other:?}"),
     }
 }
 
 #[test]
-fn unsupported_array_element_target() {
-    // Array-element assignment targets arrive in step 7.
+fn foreach_value_and_key_value() {
+    let p = lower("<?php foreach ($a as $v) { echo $v; } foreach ($a as $k => $v) { echo $k; }");
     assert!(matches!(
-        err("<?php $a[0] = 1;"),
-        LowerError::Unsupported { what: "assignment target", .. }
+        &p.body[0].kind,
+        StmtKind::Foreach { key: None, .. }
     ));
+    assert!(matches!(
+        &p.body[1].kind,
+        StmtKind::Foreach { key: Some(_), .. }
+    ));
+}
+
+#[test]
+fn switch_and_match_lower() {
+    let p = lower("<?php switch ($x) { case 1: echo 'a'; break; default: echo 'b'; }");
+    match &p.body[0].kind {
+        StmtKind::Switch { cases, .. } => {
+            assert_eq!(cases.len(), 2);
+            assert!(cases[0].test.is_some());
+            assert!(cases[1].test.is_none());
+        }
+        other => panic!("got {other:?}"),
+    }
+    let p = lower("<?php $r = match ($x) { 1, 2 => 'a', default => 'b' };");
+    match &p.body[0].kind {
+        StmtKind::Expr(Expr { kind: ExprKind::Assign(_, rhs), .. }) => match &rhs.kind {
+            ExprKind::Match { arms, .. } => {
+                assert_eq!(arms[0].conditions.len(), 2);
+                assert!(arms[1].conditions.is_empty()); // default arm
+            }
+            other => panic!("got {other:?}"),
+        },
+        other => panic!("got {other:?}"),
+    }
+}
+
+#[test]
+fn isset_empty_unset_lower() {
+    let p = lower("<?php $b = isset($a[0]); $c = empty($a); unset($a[1]);");
+    assert!(matches!(
+        &p.body[0].kind,
+        StmtKind::Expr(Expr { kind: ExprKind::Assign(_, r), .. }) if matches!(r.kind, ExprKind::Isset(_))
+    ));
+    assert!(matches!(
+        &p.body[1].kind,
+        StmtKind::Expr(Expr { kind: ExprKind::Assign(_, r), .. }) if matches!(r.kind, ExprKind::Empty(_))
+    ));
+    assert!(matches!(&p.body[2].kind, StmtKind::Unset(_)));
 }
 
 #[test]

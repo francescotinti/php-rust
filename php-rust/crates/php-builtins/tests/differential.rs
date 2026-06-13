@@ -37,6 +37,13 @@ const CORPUS: &[&str] = &[
     "var_dump((array)5);",
     "var_dump((array)'x');",
     "var_dump((array)null);",
+    // var_dump array literals (step 7): recursive + nested + keyed
+    "var_dump([1, 'two', 3.5]);",
+    "var_dump(['a' => 1, 'b' => [2, 3]]);",
+    "var_dump([]);",
+    "var_dump(['x' => true, 'y' => null]);",
+    "var_dump([5 => 'a', 'b', 10 => 'c', 'd']);",
+    "$a = [1, 2]; $a[] = 3; unset($a[0]); var_dump($a);",
     // strlen / gettype
     "echo strlen('hello');",
     "echo strlen('');",

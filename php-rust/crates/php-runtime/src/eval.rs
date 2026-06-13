@@ -15,10 +15,12 @@
 //! and interleaving onto stdout is step 9, so for now the differential corpus
 //! is curated to warning-free scripts.
 
-use php_types::{convert, ops, Diag, Diags, Key, PhpArray, PhpStr, PhpError, Zval};
+use std::rc::Rc;
+
+use php_types::{convert, dtoa, ops, Diag, Diags, Key, PhpArray, PhpStr, PhpError, Zval};
 
 use crate::builtin::{Ctx, Registry};
-use crate::hir::{BinOp, CastKind, Expr, ExprKind, Program, Slot, Stmt, StmtKind, UnOp};
+use crate::hir::{BinOp, CastKind, Expr, ExprKind, Place, PlaceStep, Program, Slot, Stmt, StmtKind, UnOp};
 
 /// Control-flow signal produced by executing a statement.
 enum Flow {
@@ -203,6 +205,22 @@ impl<'p> Evaluator<'p> {
                 }
             }
 
+            StmtKind::Foreach {
+                iter,
+                key,
+                value,
+                body,
+            } => return self.exec_foreach(iter, *key, *value, body),
+
+            StmtKind::Switch { subject, cases } => return self.exec_switch(subject, cases),
+
+            StmtKind::Unset(places) => {
+                for p in places {
+                    let steps = self.resolve_steps(p)?;
+                    self.unset_place(p.slot, &steps);
+                }
+            }
+
             StmtKind::Break(n) => return Ok(Flow::Break(*n)),
             StmtKind::Continue(n) => return Ok(Flow::Continue(*n)),
             StmtKind::Return(opt) => {
@@ -241,6 +259,75 @@ impl<'p> Evaluator<'p> {
     fn eval_bool(&mut self, e: &Expr) -> Result<bool, PhpError> {
         let v = self.eval(e)?;
         Ok(convert::to_bool(&v, &mut self.diags))
+    }
+
+    /// `foreach`: by-value iteration over an array snapshot (so mutating the
+    /// source array in the body does not perturb the iteration — PHP's
+    /// copy-on-write `foreach` semantics for arrays).
+    fn exec_foreach(
+        &mut self,
+        iter: &Expr,
+        key: Option<Slot>,
+        value: Slot,
+        body: &[Stmt],
+    ) -> Result<Flow, PhpError> {
+        let collection = self.eval(iter)?;
+        let items: Vec<(Key, Zval)> = match collection {
+            Zval::Array(a) => a.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+            other => {
+                self.diags.push(Diag::Warning(format!(
+                    "foreach() argument must be of type array|object, {} given",
+                    php_type_name(&other)
+                )));
+                return Ok(Flow::Normal);
+            }
+        };
+        for (k, v) in items {
+            if let Some(ks) = key {
+                self.slots[ks as usize] = key_to_zval(&k);
+            }
+            self.slots[value as usize] = v;
+            match self.loop_step(body)? {
+                LoopStep::Iterate => {}
+                LoopStep::Stop => break,
+                LoopStep::Propagate(f) => return Ok(f),
+            }
+        }
+        Ok(Flow::Normal)
+    }
+
+    /// `switch`: loose-`==` matching, fall-through, and `default`. The case
+    /// expressions are evaluated in source order until one matches (PHP's scan
+    /// semantics); a `break`/`continue` at level 1 leaves the switch.
+    fn exec_switch(&mut self, subject: &Expr, cases: &[crate::hir::Case]) -> Result<Flow, PhpError> {
+        let subj = self.eval(subject)?;
+        let mut start = None;
+        for (i, c) in cases.iter().enumerate() {
+            if let Some(test) = &c.test {
+                let tv = self.eval(test)?;
+                if ops::loose_eq(&subj, &tv) {
+                    start = Some(i);
+                    break;
+                }
+            }
+        }
+        // No matching case: fall back to `default`, wherever it sits.
+        let start = match start.or_else(|| cases.iter().position(|c| c.test.is_none())) {
+            Some(s) => s,
+            None => return Ok(Flow::Normal),
+        };
+        for c in &cases[start..] {
+            match self.exec_stmts(&c.body)? {
+                Flow::Normal => {}
+                // `break`/`continue` at this level both leave the switch
+                // (a `switch` counts as one level for `continue`, per PHP).
+                Flow::Break(1) | Flow::Continue(1) => return Ok(Flow::Normal),
+                Flow::Break(n) => return Ok(Flow::Break(n - 1)),
+                Flow::Continue(n) => return Ok(Flow::Continue(n - 1)),
+                Flow::Return(v) => return Ok(Flow::Return(v)),
+            }
+        }
+        Ok(Flow::Normal)
     }
 
     // --- expressions ---
@@ -397,6 +484,104 @@ impl<'p> Evaluator<'p> {
                 };
                 f(&argv, &mut ctx)
             }
+
+            ExprKind::Array(elems) => {
+                let mut arr = PhpArray::new();
+                for el in elems {
+                    // PHP evaluates the key before the value.
+                    match &el.key {
+                        Some(ke) => {
+                            let kv = self.eval(ke)?;
+                            let key = self.coerce_key(&kv)?;
+                            let v = self.eval(&el.value)?;
+                            arr.insert(key, v);
+                        }
+                        None => {
+                            let v = self.eval(&el.value)?;
+                            arr.append(v).map_err(|_| array_occupied())?;
+                        }
+                    }
+                }
+                Ok(Zval::Array(Rc::new(arr)))
+            }
+
+            ExprKind::Index { base, index } => {
+                let b = self.eval(base)?;
+                let k = self.eval(index)?;
+                self.read_index(&b, &k, false)
+            }
+
+            ExprKind::AssignPlace(place, rhs) => {
+                let value = self.eval(rhs)?;
+                let steps = self.resolve_steps(place)?;
+                self.write_place(place.slot, &steps, value.clone())?;
+                Ok(value)
+            }
+
+            ExprKind::AssignOpPlace(op, place, rhs) => {
+                let steps = self.resolve_steps(place)?;
+                let cur = self.read_place_value(place.slot, &steps)?;
+                let rv = self.eval(rhs)?;
+                let res = self.apply_binop(*op, cur, rv)?;
+                self.write_place(place.slot, &steps, res.clone())?;
+                Ok(res)
+            }
+
+            ExprKind::AssignCoalescePlace(place, rhs) => {
+                let steps = self.resolve_steps(place)?;
+                match self.silent_get(place.slot, &steps) {
+                    Some(v) if !matches!(v, Zval::Null | Zval::Undef) => Ok(v),
+                    _ => {
+                        let value = self.eval(rhs)?;
+                        self.write_place(place.slot, &steps, value.clone())?;
+                        Ok(value)
+                    }
+                }
+            }
+
+            ExprKind::Isset(places) => {
+                for p in places {
+                    let steps = self.resolve_steps(p)?;
+                    let set = matches!(self.silent_get(p.slot, &steps), Some(v) if !matches!(v, Zval::Null | Zval::Undef));
+                    if !set {
+                        return Ok(Zval::Bool(false));
+                    }
+                }
+                Ok(Zval::Bool(true))
+            }
+
+            ExprKind::Empty(place) => {
+                let steps = self.resolve_steps(place)?;
+                let empty = match self.silent_get(place.slot, &steps) {
+                    Some(v) => !convert::is_true_silent(&v),
+                    None => true,
+                };
+                Ok(Zval::Bool(empty))
+            }
+
+            ExprKind::Match { subject, arms } => {
+                let subj = self.eval(subject)?;
+                let mut default_body = None;
+                for arm in arms {
+                    if arm.conditions.is_empty() {
+                        default_body = Some(&arm.body);
+                        continue;
+                    }
+                    for c in &arm.conditions {
+                        let cv = self.eval(c)?;
+                        if ops::identical(&subj, &cv) {
+                            return self.eval(&arm.body);
+                        }
+                    }
+                }
+                match default_body {
+                    Some(b) => self.eval(b),
+                    None => Err(PhpError::Error(format!(
+                        "Unhandled match case {}",
+                        match_case_repr(&subj)
+                    ))),
+                }
+            }
         }
     }
 
@@ -440,14 +625,22 @@ impl<'p> Evaluator<'p> {
         }
     }
 
-    /// Read a slot in an isset-like context (the LHS of `??`): an unset slot is
-    /// silently treated as NULL, with no warning.
+    /// Read an expression in an isset-like context (the LHS of `??`): unset
+    /// variables and missing array keys are silently treated as NULL, with no
+    /// warning. Other expressions evaluate normally.
     fn eval_isset(&mut self, e: &Expr) -> Result<Zval, PhpError> {
-        if let ExprKind::Var(slot) = &e.kind {
-            let v = self.slots[*slot as usize].clone();
-            return Ok(if matches!(v, Zval::Undef) { Zval::Null } else { v });
+        match &e.kind {
+            ExprKind::Var(slot) => {
+                let v = self.slots[*slot as usize].clone();
+                Ok(if matches!(v, Zval::Undef) { Zval::Null } else { v })
+            }
+            ExprKind::Index { base, index } => {
+                let b = self.eval_isset(base)?;
+                let k = self.eval(index)?;
+                self.read_index(&b, &k, true)
+            }
+            _ => self.eval(e),
         }
-        self.eval(e)
     }
 
     fn warn_undef(&mut self, slot: Slot) {
@@ -455,6 +648,310 @@ impl<'p> Evaluator<'p> {
         self.diags
             .push(Diag::Warning(format!("Undefined variable ${name}")));
     }
+
+    // --- arrays ---
+
+    /// Coerce a scalar to an array key, mirroring PHP's offset rules: int/bool
+    /// stay integral, strings canonicalize (`"8"` → `Int(8)`), null becomes the
+    /// `""` key, floats truncate (with a precision-loss deprecation), and an
+    /// array offset is a `TypeError`.
+    fn coerce_key(&mut self, v: &Zval) -> Result<Key, PhpError> {
+        Ok(match v {
+            Zval::Long(i) => Key::Int(*i),
+            Zval::Bool(b) => Key::Int(*b as i64),
+            Zval::Double(d) => {
+                if d.fract() != 0.0 {
+                    let repr = String::from_utf8_lossy(&dtoa::double_to_shortest(*d)).into_owned();
+                    self.diags.push(Diag::Deprecated(format!(
+                        "Implicit conversion from float {repr} to int loses precision"
+                    )));
+                }
+                Key::Int(convert::dval_to_lval(*d))
+            }
+            Zval::Str(s) => Key::from_zstr(s),
+            Zval::Null | Zval::Undef => Key::from_bytes(b""),
+            Zval::Array(_) => {
+                return Err(PhpError::TypeError(
+                    "Illegal offset type".to_string(),
+                ))
+            }
+        })
+    }
+
+    /// Read `base[key]`. `silent` suppresses the missing-key / wrong-type
+    /// warnings (used on the LHS of `??` and inside `isset`).
+    fn read_index(&mut self, base: &Zval, key: &Zval, silent: bool) -> Result<Zval, PhpError> {
+        match base {
+            Zval::Array(a) => {
+                let k = self.coerce_key(key)?;
+                match a.get(&k) {
+                    Some(v) => Ok(v.clone()),
+                    None => {
+                        if !silent {
+                            self.warn_undef_key(&k);
+                        }
+                        Ok(Zval::Null)
+                    }
+                }
+            }
+            Zval::Str(s) => self.read_string_offset(s, key, silent),
+            other => {
+                if !silent {
+                    self.diags.push(Diag::Warning(format!(
+                        "Trying to access array offset on value of type {}",
+                        php_type_name(other)
+                    )));
+                }
+                Ok(Zval::Null)
+            }
+        }
+    }
+
+    /// String offset read (`$s[i]`): integer index, negatives count from the
+    /// end, out-of-range yields `""` (with a warning unless `silent`).
+    fn read_string_offset(
+        &mut self,
+        s: &Rc<PhpStr>,
+        key: &Zval,
+        silent: bool,
+    ) -> Result<Zval, PhpError> {
+        if matches!(key, Zval::Array(_)) {
+            return Err(PhpError::TypeError(
+                "Cannot access offset of type array on string".to_string(),
+            ));
+        }
+        let i = convert::to_long_cast(key, &mut self.diags);
+        let len = s.len() as i64;
+        let idx = if i < 0 { len + i } else { i };
+        if idx < 0 || idx >= len {
+            if !silent {
+                self.diags
+                    .push(Diag::Warning(format!("Uninitialized string offset {i}")));
+            }
+            Ok(Zval::Str(PhpStr::new(Vec::new())))
+        } else {
+            Ok(Zval::Str(PhpStr::new(vec![s.as_bytes()[idx as usize]])))
+        }
+    }
+
+    fn warn_undef_key(&mut self, key: &Key) {
+        let msg = match key {
+            Key::Int(i) => format!("Undefined array key {i}"),
+            Key::Str(s) => format!("Undefined array key \"{}\"", String::from_utf8_lossy(s.as_bytes())),
+        };
+        self.diags.push(Diag::Warning(msg));
+    }
+
+    /// Evaluate a place's index expressions into concrete steps (keys/append),
+    /// before any mutation borrows the slot table.
+    fn resolve_steps(&mut self, place: &Place) -> Result<Vec<Step>, PhpError> {
+        let mut out = Vec::with_capacity(place.steps.len());
+        for s in &place.steps {
+            match s {
+                PlaceStep::Index(e) => {
+                    let v = self.eval(e)?;
+                    out.push(Step::Key(self.coerce_key(&v)?));
+                }
+                PlaceStep::Append => out.push(Step::Append),
+            }
+        }
+        Ok(out)
+    }
+
+    /// Write `value` to `slot` following the resolved steps, auto-vivifying
+    /// intermediate arrays and copying-on-write shared ones.
+    fn write_place(&mut self, slot: Slot, steps: &[Step], value: Zval) -> Result<(), PhpError> {
+        if steps.is_empty() {
+            self.slots[slot as usize] = value;
+            return Ok(());
+        }
+        write_into(&mut self.slots[slot as usize], steps, value, &mut self.diags)
+    }
+
+    /// Read the current value at a place (for compound assignment). Missing
+    /// keys yield NULL with a warning; the base variable is read silently
+    /// (it is about to be written / auto-vivified anyway).
+    fn read_place_value(&mut self, slot: Slot, steps: &[Step]) -> Result<Zval, PhpError> {
+        let mut cur = match &self.slots[slot as usize] {
+            Zval::Undef => Zval::Null,
+            v => v.clone(),
+        };
+        for step in steps {
+            let Step::Key(k) = step else {
+                return Ok(Zval::Null);
+            };
+            cur = self.read_index(&cur, &key_to_zval(k), false)?;
+        }
+        Ok(cur)
+    }
+
+    /// Silent traversal used by `isset` / `empty` / `??=`: returns the value at
+    /// the place if the whole path exists (value may be NULL), else `None`.
+    fn silent_get(&self, slot: Slot, steps: &[Step]) -> Option<Zval> {
+        let mut cur = match &self.slots[slot as usize] {
+            Zval::Undef => return None,
+            v => v.clone(),
+        };
+        for step in steps {
+            let Step::Key(k) = step else { return None };
+            match &cur {
+                Zval::Array(a) => match a.get(k) {
+                    Some(v) => cur = v.clone(),
+                    None => return None,
+                },
+                Zval::Str(s) => {
+                    // String offset isset: in-range integer key only.
+                    match k {
+                        Key::Int(i) => {
+                            let len = s.len() as i64;
+                            let idx = if *i < 0 { len + i } else { *i };
+                            if idx < 0 || idx >= len {
+                                return None;
+                            }
+                            cur = Zval::Str(PhpStr::new(vec![s.as_bytes()[idx as usize]]));
+                        }
+                        Key::Str(_) => return None,
+                    }
+                }
+                _ => return None,
+            }
+        }
+        Some(cur)
+    }
+
+    /// `unset($slot)` / `unset($a[k]...)`: drop a variable or array element.
+    fn unset_place(&mut self, slot: Slot, steps: &[Step]) {
+        if steps.is_empty() {
+            self.slots[slot as usize] = Zval::Undef;
+            return;
+        }
+        unset_into(&mut self.slots[slot as usize], steps);
+    }
+}
+
+/// A resolved place step: an array key, or the append marker `[]`.
+enum Step {
+    Key(Key),
+    Append,
+}
+
+/// Borrow `target` as a mutable array, auto-vivifying NULL/unset into a fresh
+/// array (copy-on-write for shared arrays). A scalar value cannot be indexed:
+/// a warning is raised and `None` returned so the caller aborts the write.
+fn ensure_array_mut<'a>(target: &'a mut Zval, diags: &mut Diags) -> Option<&'a mut PhpArray> {
+    match target {
+        Zval::Null | Zval::Undef => {
+            *target = Zval::Array(Rc::new(PhpArray::new()));
+        }
+        Zval::Array(_) => {}
+        _ => {
+            diags.push(Diag::Warning(
+                "Cannot use a scalar value as an array".to_string(),
+            ));
+            return None;
+        }
+    }
+    match target {
+        Zval::Array(rc) => Some(Rc::make_mut(rc)),
+        _ => unreachable!("target was just normalised to an array"),
+    }
+}
+
+/// Recursively write `value` into `target` following `steps`.
+fn write_into(
+    target: &mut Zval,
+    steps: &[Step],
+    value: Zval,
+    diags: &mut Diags,
+) -> Result<(), PhpError> {
+    let Some((first, rest)) = steps.split_first() else {
+        *target = value;
+        return Ok(());
+    };
+    let Some(arr) = ensure_array_mut(target, diags) else {
+        return Ok(());
+    };
+    match first {
+        Step::Key(k) => {
+            if rest.is_empty() {
+                arr.insert(k.clone(), value);
+            } else {
+                if !arr.contains_key(k) {
+                    arr.insert(k.clone(), Zval::Array(Rc::new(PhpArray::new())));
+                }
+                let child = arr.get_mut(k).expect("key just inserted");
+                write_into(child, rest, value, diags)?;
+            }
+        }
+        Step::Append => {
+            if rest.is_empty() {
+                arr.append(value).map_err(|_| array_occupied())?;
+            } else {
+                let mut child = Zval::Array(Rc::new(PhpArray::new()));
+                write_into(&mut child, rest, value, diags)?;
+                arr.append(child).map_err(|_| array_occupied())?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Recursively `unset` the element addressed by `steps`. A missing path is a
+/// silent no-op (PHP semantics).
+fn unset_into(target: &mut Zval, steps: &[Step]) {
+    let (first, rest) = match steps.split_first() {
+        Some(p) => p,
+        None => return,
+    };
+    let Step::Key(k) = first else { return };
+    if let Zval::Array(rc) = target {
+        if rest.is_empty() {
+            Rc::make_mut(rc).remove(k);
+        } else if let Some(child) = Rc::make_mut(rc).get_mut(k) {
+            unset_into(child, rest);
+        }
+    }
+}
+
+/// An array key as a `Zval` (for `foreach` key binding and place re-reads).
+fn key_to_zval(k: &Key) -> Zval {
+    match k {
+        Key::Int(i) => Zval::Long(*i),
+        Key::Str(s) => Zval::Str(Rc::clone(s)),
+    }
+}
+
+/// Lowercase type name used in runtime warning messages (distinct from
+/// `gettype`'s capitalised names).
+fn php_type_name(v: &Zval) -> &'static str {
+    match v {
+        Zval::Undef | Zval::Null => "null",
+        Zval::Bool(_) => "bool",
+        Zval::Long(_) => "int",
+        Zval::Double(_) => "float",
+        Zval::Str(_) => "string",
+        Zval::Array(_) => "array",
+    }
+}
+
+/// The subject rendering in an `UnhandledMatchError` message (PHP quotes
+/// strings, prints scalars bare).
+fn match_case_repr(v: &Zval) -> String {
+    match v {
+        Zval::Long(i) => i.to_string(),
+        Zval::Bool(true) => "true".to_string(),
+        Zval::Bool(false) => "false".to_string(),
+        Zval::Null | Zval::Undef => "NULL".to_string(),
+        Zval::Double(d) => String::from_utf8_lossy(&dtoa::double_to_shortest(*d)).into_owned(),
+        Zval::Str(s) => format!("'{}'", String::from_utf8_lossy(s.as_bytes())),
+        Zval::Array(_) => "of type array".to_string(),
+    }
+}
+
+fn array_occupied() -> PhpError {
+    PhpError::Error(
+        "Cannot add element to the array as the next element is already occupied".to_string(),
+    )
 }
 
 /// `(array)` cast: arrays pass through, null/undef become `[]`, and any scalar

@@ -188,3 +188,120 @@ fn top_level_return_value() {
     assert_eq!(o.stdout, b"hi");
     assert!(matches!(o.return_value, Zval::Long(42)));
 }
+
+// --- step 7: arrays, foreach, switch, match, isset/empty/unset ---
+
+#[test]
+fn array_build_index_and_append() {
+    assert_eq!(out("<?php $a = [10, 20, 30]; echo $a[1];"), "20");
+    assert_eq!(out("<?php $a = []; $a[] = 'x'; $a[] = 'y'; echo $a[0] . $a[1];"), "xy");
+    assert_eq!(out("<?php $a['k'] = 5; echo $a['k'];"), "5");
+    // Append after an explicit key continues from max int key + 1.
+    assert_eq!(out("<?php $a = [5 => 'a']; $a[] = 'b'; echo $a[6];"), "b");
+}
+
+#[test]
+fn array_autovivification_nested() {
+    assert_eq!(out("<?php $a['x']['y'] = 1; echo $a['x']['y'];"), "1");
+    assert_eq!(out("<?php $a[][] = 'z'; echo $a[0][0];"), "z");
+}
+
+#[test]
+fn array_copy_on_write_is_value_semantics() {
+    // Assigning an array copies it; mutating the copy must not touch the original.
+    assert_eq!(
+        out("<?php $a = [1, 2]; $b = $a; $b[0] = 99; echo $a[0]; echo '/'; echo $b[0];"),
+        "1/99"
+    );
+}
+
+#[test]
+fn compound_assign_on_element() {
+    assert_eq!(out("<?php $a = [1]; $a[0] += 4; echo $a[0];"), "5");
+    assert_eq!(out("<?php $a = ['s' => 'a']; $a['s'] .= 'bc'; echo $a['s'];"), "abc");
+}
+
+#[test]
+fn foreach_value_and_keyvalue() {
+    assert_eq!(out("<?php foreach ([1, 2, 3] as $v) { echo $v; }"), "123");
+    assert_eq!(
+        out("<?php foreach (['a' => 1, 'b' => 2] as $k => $v) { echo $k; echo $v; }"),
+        "a1b2"
+    );
+}
+
+#[test]
+fn foreach_snapshot_is_stable_under_mutation() {
+    // PHP iterates a copy: appending inside the body does not extend iteration.
+    assert_eq!(
+        out("<?php $a = [1, 2]; foreach ($a as $v) { $a[] = 9; echo $v; }"),
+        "12"
+    );
+}
+
+#[test]
+fn switch_match_and_fallthrough_and_default() {
+    assert_eq!(
+        out("<?php switch (2) { case 1: echo 'a'; break; case 2: echo 'b'; break; default: echo 'd'; }"),
+        "b"
+    );
+    // Fall-through: no break means execution continues into the next case.
+    assert_eq!(
+        out("<?php switch (1) { case 1: echo 'a'; case 2: echo 'b'; break; case 3: echo 'c'; }"),
+        "ab"
+    );
+    assert_eq!(
+        out("<?php switch (9) { case 1: echo 'a'; break; default: echo 'd'; }"),
+        "d"
+    );
+    // Loose comparison: "1" == 1.
+    assert_eq!(out("<?php switch ('1') { case 1: echo 'hit'; }"), "hit");
+}
+
+#[test]
+fn switch_break_inside_loop() {
+    // break 2 escapes both the switch and the enclosing loop.
+    assert_eq!(
+        out("<?php for ($i = 0; $i < 3; $i++) { switch ($i) { case 1: break 2; default: echo $i; } } echo 'X';"),
+        "0X"
+    );
+}
+
+#[test]
+fn match_strict_and_multi_condition() {
+    assert_eq!(out("<?php echo match (2) { 1, 2 => 'lo', 3 => 'hi' };"), "lo");
+    assert_eq!(out("<?php echo match (5) { 1 => 'a', default => 'def' };"), "def");
+    // Strict ===: the string "1" does not match the int 1.
+    assert_eq!(out("<?php echo match ('1') { 1 => 'int', '1' => 'str' };"), "str");
+}
+
+#[test]
+fn match_unhandled_is_fatal() {
+    let o = run_source(b"t.php", b"<?php echo match (5) { 1 => 'a' };").expect("lowers");
+    match o.fatal {
+        Some(PhpError::Error(m)) => assert_eq!(m, "Unhandled match case 5"),
+        other => panic!("expected UnhandledMatchError, got {other:?}"),
+    }
+}
+
+#[test]
+fn isset_empty_unset_semantics() {
+    assert_eq!(out("<?php $a = [1, 0]; echo isset($a[0]) ? 'y' : 'n';"), "y");
+    assert_eq!(out("<?php $a = [1]; echo isset($a[5]) ? 'y' : 'n';"), "n");
+    // A null element is not considered set.
+    assert_eq!(out("<?php $a = ['k' => null]; echo isset($a['k']) ? 'y' : 'n';"), "n");
+    // empty(): 0 is empty, 1 is not.
+    assert_eq!(out("<?php $a = ['z' => 0]; echo empty($a['z']) ? 'e' : 'f';"), "e");
+    assert_eq!(out("<?php $a = ['z' => 1]; echo empty($a['z']) ? 'e' : 'f';"), "f");
+    // unset removes the key.
+    assert_eq!(out("<?php $a = [1, 2]; unset($a[0]); echo isset($a[0]) ? 'y' : 'n';"), "n");
+}
+
+#[test]
+fn coalesce_on_array_element_is_silent() {
+    // `$a[k] ?? d` must not warn on a missing key, and `??=` writes when absent.
+    let o = run_source(b"t.php", b"<?php $a = []; echo $a['x'] ?? 'def';").expect("lowers");
+    assert_eq!(o.stdout, b"def");
+    assert!(o.diags.is_empty(), "expected no diags, got {:?}", o.diags);
+    assert_eq!(out("<?php $a = []; $a['x'] ??= 7; echo $a['x'];"), "7");
+}

@@ -90,6 +90,32 @@ const CORPUS: &[&str] = &[
     "echo 0 ?: 'z';",
     "echo 5 ?: 'z';",
     "$n = 10; $f = 1; for ($k = 2; $k <= $n; $k++) { $f *= $k; } echo $f;",
+    // arrays: build, index, append, nested
+    "$a = [1, 2, 3]; echo $a[0] + $a[2];",
+    "$a = []; $a[] = 'x'; $a[] = 'y'; echo $a[0]; echo $a[1];",
+    "$a = ['k' => 5, 'j' => 6]; echo $a['k'] * $a['j'];",
+    "$a = [5 => 'a']; $a[] = 'b'; echo $a[6];",
+    "$a['x']['y'] = 7; echo $a['x']['y'];",
+    "$a = [1, 2]; $b = $a; $b[0] = 99; echo $a[0]; echo '/'; echo $b[0];",
+    "$a = [1]; $a[0] += 41; echo $a[0];",
+    // foreach
+    "foreach ([1, 2, 3] as $v) { echo $v; }",
+    "foreach (['a' => 1, 'b' => 2] as $k => $v) { echo $k; echo $v; }",
+    "$s = 0; foreach ([10, 20, 30] as $v) { $s += $v; } echo $s;",
+    // switch
+    "switch (2) { case 1: echo 'a'; break; case 2: echo 'b'; break; default: echo 'd'; }",
+    "switch (1) { case 1: echo 'a'; case 2: echo 'b'; break; case 3: echo 'c'; }",
+    "switch (9) { case 1: echo 'a'; break; default: echo 'd'; }",
+    "switch ('1') { case 1: echo 'hit'; break; }",
+    // match
+    "echo match (2) { 1, 2 => 'lo', 3 => 'hi' };",
+    "echo match (5) { 1 => 'a', default => 'def' };",
+    "echo match ('1') { 1 => 'int', '1' => 'str' };",
+    // isset / empty / unset
+    "$a = [1, 0]; echo isset($a[0]) ? 'y' : 'n'; echo isset($a[9]) ? 'y' : 'n';",
+    "$a = ['z' => 0]; echo empty($a['z']) ? 'e' : 'f';",
+    "$a = [1, 2]; unset($a[0]); echo isset($a[0]) ? 'y' : 'n'; echo $a[1];",
+    "$a = []; echo $a['missing'] ?? 'def';",
 ];
 
 fn oracle_path() -> Option<String> {

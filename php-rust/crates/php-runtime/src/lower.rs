@@ -20,12 +20,16 @@ use bumpalo::Bump;
 use mago_database::file::File;
 use mago_span::{HasSpan, Span};
 use mago_syntax::ast::{
-    Argument, AssignmentOperator, BinaryOperator, Call, Expression, Identifier, Literal,
-    LiteralInteger, Statement, UnaryPostfixOperator, UnaryPrefixOperator, Variable,
+    Argument, ArrayElement, AssignmentOperator, BinaryOperator, Call, Construct, Expression,
+    ForeachTarget, Identifier, Literal, LiteralInteger, MatchArm as AstMatchArm, Statement,
+    UnaryPostfixOperator, UnaryPrefixOperator, Variable,
 };
 use mago_syntax::parser::parse_file;
 
-use crate::hir::{BinOp, CastKind, Expr, ExprKind, Line, Program, Slot, Stmt, StmtKind, UnOp};
+use crate::hir::{
+    ArrayElem, BinOp, Case, CastKind, Expr, ExprKind, Line, MatchArm, Place, PlaceStep, Program,
+    Slot, Stmt, StmtKind, UnOp,
+};
 
 /// Why a script could not be lowered to HIR.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -168,6 +172,46 @@ impl<'f> Lowerer<'f> {
                 body: self.lower_stmts(node.body.statements())?,
             },
 
+            Statement::Foreach(node) => {
+                let iter = self.lower_expr(node.expression)?;
+                let (key, value) = match &node.target {
+                    ForeachTarget::Value(v) => (None, self.foreach_slot(v.value, line)?),
+                    ForeachTarget::KeyValue(kv) => (
+                        Some(self.foreach_slot(kv.key, line)?),
+                        self.foreach_slot(kv.value, line)?,
+                    ),
+                };
+                let body = self.lower_stmts(node.body.statements())?;
+                StmtKind::Foreach {
+                    iter,
+                    key,
+                    value,
+                    body,
+                }
+            }
+
+            Statement::Switch(node) => {
+                let subject = self.lower_expr(node.expression)?;
+                let mut cases = Vec::new();
+                for c in node.body.cases() {
+                    let test = match c.expression() {
+                        Some(e) => Some(self.lower_expr(e)?),
+                        None => None,
+                    };
+                    let body = self.lower_stmts(c.statements())?;
+                    cases.push(Case { test, body });
+                }
+                StmtKind::Switch { subject, cases }
+            }
+
+            Statement::Unset(node) => {
+                let mut places = Vec::new();
+                for v in node.values.iter() {
+                    places.push(self.lower_place(v, line)?);
+                }
+                StmtKind::Unset(places)
+            }
+
             Statement::Break(node) => StmtKind::Break(self.lower_level(node.level, line)?),
             Statement::Continue(node) => StmtKind::Continue(self.lower_level(node.level, line)?),
 
@@ -264,23 +308,40 @@ impl<'f> Lowerer<'f> {
             },
 
             Expression::Assignment(a) => {
-                let slot = self.assign_target(a.lhs, line)?;
+                let place = self.lower_place(a.lhs, line)?;
                 let rhs = Box::new(self.lower_expr(a.rhs)?);
-                match a.operator {
-                    AssignmentOperator::Assign(_) => ExprKind::Assign(slot, rhs),
-                    AssignmentOperator::Coalesce(_) => ExprKind::AssignCoalesce(slot, rhs),
-                    AssignmentOperator::Addition(_) => ExprKind::AssignOp(BinOp::Add, slot, rhs),
-                    AssignmentOperator::Subtraction(_) => ExprKind::AssignOp(BinOp::Sub, slot, rhs),
-                    AssignmentOperator::Multiplication(_) => ExprKind::AssignOp(BinOp::Mul, slot, rhs),
-                    AssignmentOperator::Division(_) => ExprKind::AssignOp(BinOp::Div, slot, rhs),
-                    AssignmentOperator::Modulo(_) => ExprKind::AssignOp(BinOp::Mod, slot, rhs),
-                    AssignmentOperator::Exponentiation(_) => ExprKind::AssignOp(BinOp::Pow, slot, rhs),
-                    AssignmentOperator::Concat(_) => ExprKind::AssignOp(BinOp::Concat, slot, rhs),
-                    AssignmentOperator::BitwiseAnd(_) => ExprKind::AssignOp(BinOp::BitAnd, slot, rhs),
-                    AssignmentOperator::BitwiseOr(_) => ExprKind::AssignOp(BinOp::BitOr, slot, rhs),
-                    AssignmentOperator::BitwiseXor(_) => ExprKind::AssignOp(BinOp::BitXor, slot, rhs),
-                    AssignmentOperator::LeftShift(_) => ExprKind::AssignOp(BinOp::Shl, slot, rhs),
-                    AssignmentOperator::RightShift(_) => ExprKind::AssignOp(BinOp::Shr, slot, rhs),
+                // A bare variable keeps the slot-based encoding (lighter, and
+                // preserves the existing diagnostics path); an array element
+                // target uses the [`Place`]-based variants.
+                let op = match a.operator {
+                    AssignmentOperator::Assign(_) => None,
+                    AssignmentOperator::Coalesce(_) => Some(AssignFlavour::Coalesce),
+                    AssignmentOperator::Addition(_) => Some(AssignFlavour::Op(BinOp::Add)),
+                    AssignmentOperator::Subtraction(_) => Some(AssignFlavour::Op(BinOp::Sub)),
+                    AssignmentOperator::Multiplication(_) => Some(AssignFlavour::Op(BinOp::Mul)),
+                    AssignmentOperator::Division(_) => Some(AssignFlavour::Op(BinOp::Div)),
+                    AssignmentOperator::Modulo(_) => Some(AssignFlavour::Op(BinOp::Mod)),
+                    AssignmentOperator::Exponentiation(_) => Some(AssignFlavour::Op(BinOp::Pow)),
+                    AssignmentOperator::Concat(_) => Some(AssignFlavour::Op(BinOp::Concat)),
+                    AssignmentOperator::BitwiseAnd(_) => Some(AssignFlavour::Op(BinOp::BitAnd)),
+                    AssignmentOperator::BitwiseOr(_) => Some(AssignFlavour::Op(BinOp::BitOr)),
+                    AssignmentOperator::BitwiseXor(_) => Some(AssignFlavour::Op(BinOp::BitXor)),
+                    AssignmentOperator::LeftShift(_) => Some(AssignFlavour::Op(BinOp::Shl)),
+                    AssignmentOperator::RightShift(_) => Some(AssignFlavour::Op(BinOp::Shr)),
+                };
+                if place.steps.is_empty() {
+                    let slot = place.slot;
+                    match op {
+                        None => ExprKind::Assign(slot, rhs),
+                        Some(AssignFlavour::Coalesce) => ExprKind::AssignCoalesce(slot, rhs),
+                        Some(AssignFlavour::Op(b)) => ExprKind::AssignOp(b, slot, rhs),
+                    }
+                } else {
+                    match op {
+                        None => ExprKind::AssignPlace(place, rhs),
+                        Some(AssignFlavour::Coalesce) => ExprKind::AssignCoalescePlace(place, rhs),
+                        Some(AssignFlavour::Op(b)) => ExprKind::AssignOpPlace(b, place, rhs),
+                    }
                 }
             }
 
@@ -294,6 +355,59 @@ impl<'f> Lowerer<'f> {
             },
 
             Expression::Call(call) => self.lower_call(call, line)?,
+
+            Expression::Array(arr) => ExprKind::Array(self.lower_array_elements(arr.elements.iter(), line)?),
+            Expression::LegacyArray(arr) => {
+                ExprKind::Array(self.lower_array_elements(arr.elements.iter(), line)?)
+            }
+
+            Expression::ArrayAccess(aa) => ExprKind::Index {
+                base: Box::new(self.lower_expr(aa.array)?),
+                index: Box::new(self.lower_expr(aa.index)?),
+            },
+            // `$a[]` only has meaning as an assignment target; reading it is an error.
+            Expression::ArrayAppend(_) => {
+                return Err(LowerError::Unsupported {
+                    what: "[] in read context",
+                    line,
+                })
+            }
+
+            Expression::Construct(c) => match c {
+                Construct::Isset(is) => {
+                    let mut places = Vec::new();
+                    for v in is.values.iter() {
+                        places.push(self.lower_place(v, line)?);
+                    }
+                    ExprKind::Isset(places)
+                }
+                Construct::Empty(em) => ExprKind::Empty(self.lower_place(em.value, line)?),
+                _ => {
+                    return Err(LowerError::Unsupported {
+                        what: "language construct",
+                        line,
+                    })
+                }
+            },
+
+            Expression::Match(m) => {
+                let subject = Box::new(self.lower_expr(m.expression)?);
+                let mut arms = Vec::new();
+                for arm in m.arms.iter() {
+                    let (conditions, body) = match arm {
+                        AstMatchArm::Expression(ea) => {
+                            let mut conds = Vec::new();
+                            for c in ea.conditions.iter() {
+                                conds.push(self.lower_expr(c)?);
+                            }
+                            (conds, self.lower_expr(ea.expression)?)
+                        }
+                        AstMatchArm::Default(da) => (Vec::new(), self.lower_expr(da.expression)?),
+                    };
+                    arms.push(MatchArm { conditions, body });
+                }
+                ExprKind::Match { subject, arms }
+            }
 
             _ => {
                 return Err(LowerError::Unsupported {
@@ -431,17 +545,78 @@ impl<'f> Lowerer<'f> {
         })
     }
 
-    /// Resolve an assignment target to a slot. Only direct variables in Tier 1
-    /// (array-element and property targets arrive in step 7 / Tier 2).
-    fn assign_target(&mut self, lhs: &Expression, line: Line) -> Result<Slot, LowerError> {
+    /// Resolve an lvalue: a base variable plus a chain of index steps. `$x`
+    /// yields an empty step list; `$a[k]`, `$a[]`, and nested forms append
+    /// [`PlaceStep`]s. Property and `list()` targets stay out of Tier 1 scope.
+    fn lower_place(&mut self, lhs: &Expression, line: Line) -> Result<Place, LowerError> {
         match lhs {
-            Expression::Variable(Variable::Direct(d)) => Ok(self.slot_for(strip_dollar(d.name))),
+            Expression::Parenthesized(p) => self.lower_place(p.expression, line),
+            Expression::Variable(Variable::Direct(d)) => Ok(Place {
+                slot: self.slot_for(strip_dollar(d.name)),
+                steps: Vec::new(),
+            }),
+            Expression::ArrayAccess(aa) => {
+                let mut place = self.lower_place(aa.array, line)?;
+                place.steps.push(PlaceStep::Index(self.lower_expr(aa.index)?));
+                Ok(place)
+            }
+            Expression::ArrayAppend(ap) => {
+                let mut place = self.lower_place(ap.array, line)?;
+                place.steps.push(PlaceStep::Append);
+                Ok(place)
+            }
             _ => Err(LowerError::Unsupported {
                 what: "assignment target",
                 line,
             }),
         }
     }
+
+    /// A `foreach` key/value target: Tier 1 supports only a direct variable
+    /// (by-reference `&$v` and `list()` destructuring are deferred).
+    fn foreach_slot(&mut self, target: &Expression, line: Line) -> Result<Slot, LowerError> {
+        match target {
+            Expression::Variable(Variable::Direct(d)) => Ok(self.slot_for(strip_dollar(d.name))),
+            _ => Err(LowerError::Unsupported {
+                what: "foreach by-reference / list target",
+                line,
+            }),
+        }
+    }
+
+    /// Lower the elements of an array literal. Keyed and keyless elements are
+    /// supported; spread (`...$x`) and missing elements are deferred.
+    fn lower_array_elements<'a, I>(&mut self, it: I, line: Line) -> Result<Vec<ArrayElem>, LowerError>
+    where
+        I: Iterator<Item = &'a ArrayElement<'a>>,
+    {
+        let mut out = Vec::new();
+        for el in it {
+            match el {
+                ArrayElement::KeyValue(kv) => out.push(ArrayElem {
+                    key: Some(self.lower_expr(kv.key)?),
+                    value: self.lower_expr(kv.value)?,
+                }),
+                ArrayElement::Value(v) => out.push(ArrayElem {
+                    key: None,
+                    value: self.lower_expr(v.value)?,
+                }),
+                ArrayElement::Variadic(_) | ArrayElement::Missing(_) => {
+                    return Err(LowerError::Unsupported {
+                        what: "array spread / missing element",
+                        line,
+                    })
+                }
+            }
+        }
+        Ok(out)
+    }
+}
+
+/// The kind of compound assignment, abstracted over the lvalue encoding.
+enum AssignFlavour {
+    Coalesce,
+    Op(BinOp),
 }
 
 /// Unqualified function name: the segment after the last `\` (so `\strlen` and

@@ -67,6 +67,25 @@ pub enum StmtKind {
         step: Vec<Expr>,
         body: Vec<Stmt>,
     },
+    /// `foreach ($iter as [$key =>] $value) { body }` (by-value; by-reference
+    /// and `list()` targets are out of Tier 1 scope).
+    Foreach {
+        iter: Expr,
+        /// Slot bound to the key, when the source uses `$k => $v`.
+        key: Option<Slot>,
+        /// Slot bound to the value.
+        value: Slot,
+        body: Vec<Stmt>,
+    },
+    /// `switch ($subject) { case ...: ...; default: ...; }`. Cases are kept in
+    /// source order; fall-through and `default` placement are honoured by the
+    /// evaluator. Loose `==` matching (contrast `match`, which is strict).
+    Switch {
+        subject: Expr,
+        cases: Vec<Case>,
+    },
+    /// `unset($a, $b[k], ...);` — drops variables / array elements.
+    Unset(Vec<Place>),
     /// `break N;` — level is >= 1 (defaults to 1).
     Break(u32),
     /// `continue N;` — level is >= 1 (defaults to 1).
@@ -75,6 +94,13 @@ pub enum StmtKind {
     Return(Option<Expr>),
     /// A lone `;`.
     Nop,
+}
+
+/// One `switch` case. `test` is `None` for the `default:` case.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Case {
+    pub test: Option<Expr>,
+    pub body: Vec<Stmt>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -131,6 +157,64 @@ pub enum ExprKind {
     /// `name(args...)` — a call to a (builtin) function. The evaluator resolves
     /// `name` against its builtin registry; Tier 1 has no user functions yet.
     Call { name: Box<[u8]>, args: Vec<Expr> },
+
+    /// An array literal `[...]` / `array(...)`. Elements keep source order;
+    /// keyless elements take the next free integer index (`PhpArray::append`).
+    Array(Vec<ArrayElem>),
+
+    /// Reading `base[index]` (`$a[k]`, also a string offset read).
+    Index { base: Box<Expr>, index: Box<Expr> },
+
+    /// `place = rhs` where `place` indexes into an array (`$a[k] = v`,
+    /// `$a[] = v`, nested). Plain `$x = v` keeps the lighter [`ExprKind::Assign`].
+    AssignPlace(Place, Box<Expr>),
+    /// `place op= rhs` on an array element (e.g. `$a[k] += v`, `$a[k] .= v`).
+    AssignOpPlace(BinOp, Place, Box<Expr>),
+    /// `place ??= rhs` on an array element.
+    AssignCoalescePlace(Place, Box<Expr>),
+
+    /// `isset($a, $b[k], ...)` — true iff every place is set and non-null.
+    Isset(Vec<Place>),
+    /// `empty($place)` — true iff the place is unset or falsy (no warnings).
+    Empty(Place),
+
+    /// `match ($subject) { conds => body, ..., default => body }`. Strict `===`
+    /// matching; an arm with empty `conditions` is the `default` arm.
+    Match {
+        subject: Box<Expr>,
+        arms: Vec<MatchArm>,
+    },
+}
+
+/// One element of an array literal: an optional key plus a value.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ArrayElem {
+    pub key: Option<Expr>,
+    pub value: Expr,
+}
+
+/// One `match` arm. An empty `conditions` list marks the `default` arm.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchArm {
+    pub conditions: Vec<Expr>,
+    pub body: Expr,
+}
+
+/// An assignable / unsettable location: a base variable slot plus a chain of
+/// index steps. `$x` is `{slot, []}`; `$a[0]["k"]` is `{slot_a, [Index(0),
+/// Index("k")]}`; `$a[]` ends in [`PlaceStep::Append`] (write context only).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Place {
+    pub slot: Slot,
+    pub steps: Vec<PlaceStep>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PlaceStep {
+    /// `[expr]`
+    Index(Expr),
+    /// `[]` — append; only valid as the final step of a write target.
+    Append,
 }
 
 /// Binary operators whose semantics live in `php_types::ops`.
