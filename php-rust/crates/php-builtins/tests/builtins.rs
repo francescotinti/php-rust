@@ -479,6 +479,52 @@ fn array_push_appends_and_returns_count() {
     assert_eq!(out("<?php $a=[]; echo array_push($a,1);"), "1");
 }
 
+// --- var_dump / print_r of reference elements (step 11d-4) ---
+
+#[test]
+fn var_dump_marks_shared_reference_element() {
+    // A reference element shared with a live alias prints with an `&` marker.
+    assert_eq!(
+        out("<?php $x=5; $a=[1,2]; $a[0]=&$x; var_dump($a);"),
+        "array(2) {\n  [0]=>\n  &int(5)\n  [1]=>\n  int(2)\n}\n"
+    );
+}
+
+#[test]
+fn var_dump_no_marker_when_reference_not_shared() {
+    // After the other alias is unset the element is the sole holder of the cell,
+    // so var_dump prints it as a plain value (no `&`).
+    assert_eq!(
+        out("<?php $x=5; $a=[0]; $a[0]=&$x; unset($x); var_dump($a);"),
+        "array(1) {\n  [0]=>\n  int(5)\n}\n"
+    );
+}
+
+#[test]
+fn var_dump_marks_reference_to_array_element() {
+    assert_eq!(
+        out("<?php $x=[1,2]; $a=['k'=>0]; $a['k']=&$x; var_dump($a);"),
+        "array(1) {\n  [\"k\"]=>\n  &array(2) {\n    [0]=>\n    int(1)\n    [1]=>\n    int(2)\n  }\n}\n"
+    );
+}
+
+#[test]
+fn print_r_does_not_mark_references() {
+    // print_r is transparent: it derefs without an `&` marker.
+    assert_eq!(
+        out("<?php $x=5; $a=[1,2]; $a[0]=&$x; print_r($a);"),
+        "Array\n(\n    [0] => 5\n    [1] => 2\n)\n"
+    );
+}
+
+#[test]
+fn print_r_recurses_into_reference_to_array() {
+    assert_eq!(
+        out("<?php $x=[1,2]; $a=['k'=>0]; $a['k']=&$x; print_r($a);"),
+        "Array\n(\n    [k] => Array\n        (\n            [0] => 1\n            [1] => 2\n        )\n\n)\n"
+    );
+}
+
 #[test]
 fn array_push_on_non_array_is_type_error() {
     let err = fatal("<?php $x=5; array_push($x,1);");

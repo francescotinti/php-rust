@@ -73,6 +73,25 @@
   temporaneo tollerato).
 - **Tempo:** ~35 minuti.
 
+### 11d-4 — var_dump `&` annotation per elementi-reference
+
+- **Riferimento C:** Zend `php_var_dump` stampa `&` quando
+  `Z_ISREF && GC_REFCOUNT(ref) > 1`. Oracle: `&int(5)` per elemento condiviso,
+  **nessun** `&` dopo `unset` dell'altro alias (refcount 1), `&array(...)` per
+  ref-to-array, print_r sempre trasparente.
+- **Target:** `php-builtins/lib.rs` (`dump`: elemento `Zval::Ref` con
+  `Rc::strong_count >= 2` → prefisso `&` + deref; altrimenti deref trasparente.
+  `print_r_into`: arm `Ref` che deref-a e ricorre, niente `&`).
+- **Decisioni applicate:** D-R14 + raffinamento oracle: il marker `&` dipende da
+  `Rc::strong_count(cell) >= 2` (cella effettivamente condivisa), non dal solo
+  essere reference — `$a[0]=&$x; unset($x); var_dump($a)` stampa `int(5)` senza
+  `&`.
+- **Round di iterazione AI:** 1.
+- **Test pass al primo tentativo:** sì (5/5 nuovi; 201 totali).
+- **Test scritti:** 5 (shared `&int`, no-marker post-unset, `&array`,
+  print_r no-`&`, print_r recurse-into-ref-array).
+- **Tempo:** ~30 minuti.
+
 ## Step 11c — Builtin by-reference (`array_push`/`sort`/`array_pop`/`array_shift`)
 
 - **Riferimento C:** `ext/standard/array.c` (`php_array_push`, `php_sort`,

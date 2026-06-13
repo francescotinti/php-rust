@@ -20,7 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
-| Unit/integration (workspace, fine step 11c) | 185 (17 suite) |
+| Unit/integration (workspace, fine step 11d) | 201 (17 suite) |
 | Differential vs oracle (php-types) | 37.835 casi, 0 mismatch |
 | phpt-runner su testsuite PHP completa | 6172 file: 135 pass / 64 fail / 5973 skip (67.8% dei runnable) |
 
@@ -81,7 +81,8 @@ del differential sono state riconciliate verso il comportamento dell'oracle).
 | Step 9 (rendering diagnostici/fatal + skip compile-error + triage corpus + 1 fix null-offset) | ~2h |
 | Step 10 (espansione builtin: 8 gruppi TDD + ValueError/ArgumentCountError) | ~2h |
 | Step 11a/b/c (reference semantics: `$b=&$a` + `f(&$x)` + builtin by-ref) | ~1.75h |
-| **Totale a fine step 11c** | **~17.25h** |
+| Step 11d (element-ref + foreach-by-ref via `Zval::Ref`, 4 sotto-step) | ~2.5h |
+| **Totale a fine step 11d** | **~19.75h** |
 
 ## Step 10 — espansione builtin
 
@@ -108,7 +109,12 @@ verificate contro l'oracle CLI:
   tra frame. Argomento non-variabile → Error fatale (oracle 8.5).
 - **11c** builtin by-ref: ABI `BuiltinRefFn` + `enum Builtin { Value, RefFirst }`;
   `array_push`/`sort`/`array_pop`/`array_shift` ricevono `&mut Zval` su arg0.
+- **11d** element-ref: unificato su `Zval::Ref(Rc<RefCell<Zval>>)` (rimosso
+  `Binding`), deref-on-read (ops/convert intatti). `$x=&$a[0]`/`$a[0]=&$x`
+  (`place_cell`+`write_into` ref-aware), `foreach ($a as &$v)` (+lingering
+  gotcha `1,2,2`), var_dump `&int(5)` solo se `Rc::strong_count>=2`. +16 test
+  (185→201) in 4 sotto-step.
 
-Zero divergenze D-NEW. Scope-out (richiede `Zval::Ref` variant → step 11d):
-reference *dentro* array (`$a[0] = &$x`), `foreach (… as &$v)`, return-by-ref,
-`sort` flags ≠ SORT_REGULAR, `str_replace $count`.
+Zero divergenze D-NEW. Scope-out residuo: return-by-ref (`function &f()`),
+array-literal con elemento-ref (`[&$x]`), `sort` flags ≠ SORT_REGULAR,
+`str_replace $count`.

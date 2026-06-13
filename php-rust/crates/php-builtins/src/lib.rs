@@ -124,13 +124,22 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize) {
                     }
                 }
                 spaces(out, indent + 2);
-                dump(out, val, indent + 2);
+                // A reference element shared with at least one live alias is
+                // marked `&` (D-R14); a sole-holder reference (strong_count 1)
+                // prints as a plain value, matching PHP's var_dump.
+                match val {
+                    Zval::Ref(cell) if std::rc::Rc::strong_count(cell) >= 2 => {
+                        out.push(b'&');
+                        dump(out, &cell.borrow(), indent + 2);
+                    }
+                    _ => dump(out, val, indent + 2),
+                }
             }
             spaces(out, indent);
             out.extend_from_slice(b"}\n");
         }
-        // A top-level reference is dereferenced transparently; the `&` marker for
-        // reference *elements* inside an array is added in step 11d-4.
+        // A top-level reference is dereferenced transparently (the `&` marker
+        // only applies to reference *elements* inside a container).
         Zval::Ref(cell) => dump(out, &cell.borrow(), indent),
     }
 }
@@ -178,6 +187,8 @@ fn print_r_into(out: &mut Vec<u8>, v: &Zval, indent: usize, ctx: &mut Ctx) {
             spaces(out, indent);
             out.extend_from_slice(b")\n");
         }
+        // print_r is reference-transparent: deref and recurse, no `&` marker.
+        Zval::Ref(cell) => print_r_into(out, &cell.borrow(), indent, ctx),
         scalar => out.extend_from_slice(convert::to_zstr(scalar, ctx.diags).as_bytes()),
     }
 }
