@@ -2,6 +2,35 @@
 
 > Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Una entry per step.
 
+## Step 11a — Reference semantics a livello di variabile (`$b = &$a`)
+
+- **Riferimento C:** Zend/zend_types.h (`IS_REFERENCE`/`zend_reference`),
+  Zend `ZEND_ASSIGN_REF` / `ZVAL_MAKE_REF`. Verifica semantica contro l'oracle
+  `/tmp/php-src/sapi/cli/php` (write-through bidirezionale, ref→undef definisce
+  NULL, catena di alias, `unset` rompe solo il legame).
+- **Target:** `crates/php-runtime` — `hir.rs` (nuovo `ExprKind::AssignRef`),
+  `lower.rs` (rilevazione `$x = &$y` + `ref_var_slot`), `eval.rs`
+  (`enum Binding { Value(Zval), Ref(Rc<RefCell<Zval>>) }`, helper
+  `slot_clone`/`slot_set`, `assign_ref`, write-through in tutti i ~13 access site
+  agli slot).
+- **Decisioni applicate:** D-R1 (Binding enum, non `Zval::Ref` → blast radius
+  minimo), D-R2 (read by-value con deref), D-R3 (write-through), D-R4
+  (promozione lazy a `Ref`, undef→NULL alla creazione), D-R5 (`unset` rimpiazza
+  il binding con `Value(Undef)`, rilascia solo quel clone dell'`Rc`), D-R8
+  (write annidato via ref riusa `write_into`), D-R9 (var_dump/print_r
+  trasparenti).
+- **Round di iterazione AI:** 1 (compila e passa al primo tentativo dopo la
+  conversione degli access site; unica iterazione: 2 lint `explicit_auto_deref`
+  su `&mut *cell.borrow_mut()` inline → forma `let z = &mut *…;`).
+- **Test pass al primo tentativo:** sì (4/4 nuovi; 172 totali, +4).
+- **Divergenza intenzionale dalla mappa Fase 2:** D-R4 modellava `source` come
+  `Place`; per 11a `AssignRef { target: Slot, source: Slot }` usa due slot bare
+  (reference *dentro* array = step 11d scope-out). Promozione undef→NULL aggiunta
+  dopo conferma oracle (`$b=&$a` con `$a` indefinito → NULL, nessun warning).
+- **Test scritti:** 4 (write-through bidirezionale, ref→undef=NULL, catena
+  `$c=&$b`, `unset` rompe solo l'alias nei due versi).
+- **Tempo:** ~35 minuti.
+
 ## Step 10 — Espansione builtin per frequenza nei test
 
 - **Riferimento C:** ext/standard (array.c, string.c, formatted_print.c, math.c),

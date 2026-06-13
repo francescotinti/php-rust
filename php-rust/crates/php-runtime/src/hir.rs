@@ -175,6 +175,11 @@ pub enum ExprKind {
 
     /// `$x = rhs`.
     Assign(Slot, Box<Expr>),
+    /// `$target = &$source` — bind `target` as a reference alias of `source`
+    /// (step 11a). Both are bare variable slots; reference *into* an array
+    /// element (`$x = &$a[0]`) stays out of Tier 1 scope. After this, a write to
+    /// either slot is visible through the other (D-R3/D-R4).
+    AssignRef { target: Slot, source: Slot },
     /// `$x op= rhs` (compound assignment, e.g. `+=`, `.=`).
     AssignOp(BinOp, Slot, Box<Expr>),
     /// `$x ??= rhs` — assigns only if `$x` is null/undefined.

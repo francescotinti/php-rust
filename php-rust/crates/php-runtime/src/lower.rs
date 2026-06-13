@@ -447,6 +447,22 @@ impl<'f> Lowerer<'f> {
             },
 
             Expression::Assignment(a) => {
+                // `$target = &$source`: reference binding (step 11a). Detect it
+                // up front — `&$source` would otherwise reach the rejected
+                // reference operator. Only bare-variable targets and sources are
+                // in Tier 1 scope (`$x = &$a[0]` stays deferred).
+                if let AssignmentOperator::Assign(_) = a.operator {
+                    if let Expression::UnaryPrefix(u) = a.rhs {
+                        if let UnaryPrefixOperator::Reference(_) = u.operator {
+                            let target = self.ref_var_slot(a.lhs, line)?;
+                            let source = self.ref_var_slot(u.operand, line)?;
+                            return Ok(Expr {
+                                line,
+                                kind: ExprKind::AssignRef { target, source },
+                            });
+                        }
+                    }
+                }
                 let place = self.lower_place(a.lhs, line)?;
                 let rhs = Box::new(self.lower_expr(a.rhs)?);
                 // A bare variable keeps the slot-based encoding (lighter, and
@@ -706,6 +722,19 @@ impl<'f> Lowerer<'f> {
             }
             _ => Err(LowerError::Unsupported {
                 what: "assignment target",
+                line,
+            }),
+        }
+    }
+
+    /// Resolve a bare variable on either side of a reference binding
+    /// (`$target = &$source`) to its slot. A reference into an array element or
+    /// any non-variable is out of Tier 1 scope (step 11d).
+    fn ref_var_slot(&mut self, e: &Expression, line: Line) -> Result<Slot, LowerError> {
+        match e {
+            Expression::Variable(Variable::Direct(d)) => Ok(self.slot_for(strip_dollar(d.name))),
+            _ => Err(LowerError::Unsupported {
+                what: "reference to/from a non-variable",
                 line,
             }),
         }

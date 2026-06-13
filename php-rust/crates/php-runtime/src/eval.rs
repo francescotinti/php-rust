@@ -15,6 +15,7 @@
 //! and interleaving onto stdout is step 9, so for now the differential corpus
 //! is curated to warning-free scripts.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -25,6 +26,21 @@ use crate::hir::{
     BinOp, CastKind, Expr, ExprKind, FnDecl, Line, Place, PlaceStep, Program, Slot, Stmt, StmtKind,
     UnOp,
 };
+
+/// A variable slot's storage (D-R1, step 11a). The common case is `Value`: a
+/// plain zval with zero overhead and no behaviour change. A slot is promoted to
+/// `Ref` only when `&` binds it, mirroring Zend's lazy `IS_REFERENCE`. All
+/// aliases of one reference share the same `Rc<RefCell<Zval>>`, so a write
+/// through any of them is visible to all (write-through, D-R3).
+enum Binding {
+    Value(Zval),
+    Ref(Rc<RefCell<Zval>>),
+}
+
+/// A fresh frame of `n` independent value slots, all unset.
+fn fresh_slots(n: usize) -> Vec<Binding> {
+    (0..n).map(|_| Binding::Value(Zval::Undef)).collect()
+}
 
 /// Control-flow signal produced by executing a statement.
 enum Flow {
@@ -98,7 +114,7 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         funcs: &program.functions,
         fn_index: &fn_index,
         file: &program.file,
-        slots: vec![Zval::Undef; program.slots.len()],
+        slots: fresh_slots(program.slots.len()),
         out: Vec::new(),
         rendered: Vec::new(),
         diags: Vec::new(),
@@ -138,7 +154,7 @@ struct Evaluator<'p> {
     fn_index: &'p HashMap<Vec<u8>, usize>,
     /// Script file name, reproduced in rendered diagnostics (`... in <file>`).
     file: &'p [u8],
-    slots: Vec<Zval>,
+    slots: Vec<Binding>,
     /// Pure program output (echo / inline HTML / builtins).
     out: Vec<u8>,
     /// The interleaved CLI stream: `out` plus diagnostics rendered at their point
@@ -396,9 +412,9 @@ impl<'p> Evaluator<'p> {
         };
         for (k, v) in items {
             if let Some(ks) = key {
-                self.slots[ks as usize] = key_to_zval(&k);
+                self.slot_set(ks as usize, key_to_zval(&k));
             }
-            self.slots[value as usize] = v;
+            self.slot_set(value as usize, v);
             match self.loop_step(body)? {
                 LoopStep::Iterate => {}
                 LoopStep::Stop => break,
@@ -468,7 +484,7 @@ impl<'p> Evaluator<'p> {
             )));
         }
 
-        let frame = vec![Zval::Undef; f.slots.len()];
+        let frame = fresh_slots(f.slots.len());
         let saved_slots = std::mem::replace(&mut self.slots, frame);
         let saved_names = std::mem::replace(&mut self.names, f.slots.as_slice());
 
@@ -489,7 +505,7 @@ impl<'p> Evaluator<'p> {
                 // Required params are guaranteed present by the caller's check.
                 None => self.eval(p.default.as_ref().expect("required arg checked"))?,
             };
-            self.slots[p.slot as usize] = v;
+            self.slot_set(p.slot as usize, v);
         }
         match self.exec_stmts(&f.body)? {
             Flow::Return(v) => Ok(v),
@@ -584,23 +600,27 @@ impl<'p> Evaluator<'p> {
 
             ExprKind::Assign(slot, rhs) => {
                 let v = self.eval(rhs)?;
-                self.slots[*slot as usize] = v.clone();
+                self.slot_set(*slot as usize, v.clone());
                 Ok(v)
+            }
+
+            ExprKind::AssignRef { target, source } => {
+                Ok(self.assign_ref(*target, *source))
             }
 
             ExprKind::AssignOp(op, slot, rhs) => {
                 let cur = self.read_var(*slot);
                 let rv = self.eval(rhs)?;
                 let res = self.apply_binop(*op, cur, rv)?;
-                self.slots[*slot as usize] = res.clone();
+                self.slot_set(*slot as usize, res.clone());
                 Ok(res)
             }
 
             ExprKind::AssignCoalesce(slot, rhs) => {
-                let cur = self.slots[*slot as usize].clone();
+                let cur = self.slot_clone(*slot as usize);
                 if matches!(cur, Zval::Null | Zval::Undef) {
                     let v = self.eval(rhs)?;
-                    self.slots[*slot as usize] = v.clone();
+                    self.slot_set(*slot as usize, v.clone());
                     Ok(v)
                 } else {
                     Ok(cur)
@@ -609,21 +629,30 @@ impl<'p> Evaluator<'p> {
 
             ExprKind::IncDec { slot, inc, pre } => {
                 let idx = *slot as usize;
-                if matches!(self.slots[idx], Zval::Undef) {
+                if matches!(self.slot_clone(idx), Zval::Undef) {
                     self.warn_undef(*slot);
-                    self.slots[idx] = Zval::Null;
+                    self.slot_set(idx, Zval::Null);
                 }
-                let old = self.slots[idx].clone();
-                if *inc {
-                    ops::increment(&mut self.slots[idx], &mut self.diags)?;
-                } else {
-                    ops::decrement(&mut self.slots[idx], &mut self.diags)?;
+                let old = self.slot_clone(idx);
+                let d = &mut self.diags;
+                match &mut self.slots[idx] {
+                    Binding::Value(z) => {
+                        if *inc {
+                            ops::increment(z, d)?;
+                        } else {
+                            ops::decrement(z, d)?;
+                        }
+                    }
+                    Binding::Ref(cell) => {
+                        let z = &mut *cell.borrow_mut();
+                        if *inc {
+                            ops::increment(z, d)?;
+                        } else {
+                            ops::decrement(z, d)?;
+                        }
+                    }
                 }
-                Ok(if *pre {
-                    self.slots[idx].clone()
-                } else {
-                    old
-                })
+                Ok(if *pre { self.slot_clone(idx) } else { old })
             }
 
             ExprKind::Ternary {
@@ -814,15 +843,34 @@ impl<'p> Evaluator<'p> {
         }
     }
 
+    /// The current value held by a slot, dereferencing a reference binding
+    /// (D-R2: reads are always by value, preserving copy semantics).
+    fn slot_clone(&self, idx: usize) -> Zval {
+        match &self.slots[idx] {
+            Binding::Value(z) => z.clone(),
+            Binding::Ref(cell) => cell.borrow().clone(),
+        }
+    }
+
+    /// Write `v` into a slot. For a plain value this replaces it; for a
+    /// reference binding it writes *through* the shared cell so every alias sees
+    /// the new value (D-R3 write-through).
+    fn slot_set(&mut self, idx: usize, v: Zval) {
+        match &mut self.slots[idx] {
+            Binding::Value(z) => *z = v,
+            Binding::Ref(cell) => *cell.borrow_mut() = v,
+        }
+    }
+
     /// Read a variable slot. An unset slot raises "Undefined variable $name"
     /// and yields NULL (the runtime equivalent of HIR `Var` access).
     fn read_var(&mut self, slot: Slot) -> Zval {
-        match &self.slots[slot as usize] {
+        match self.slot_clone(slot as usize) {
             Zval::Undef => {
                 self.warn_undef(slot);
                 Zval::Null
             }
-            v => v.clone(),
+            v => v,
         }
     }
 
@@ -832,7 +880,7 @@ impl<'p> Evaluator<'p> {
     fn eval_isset(&mut self, e: &Expr) -> Result<Zval, PhpError> {
         match &e.kind {
             ExprKind::Var(slot) => {
-                let v = self.slots[*slot as usize].clone();
+                let v = self.slot_clone(*slot as usize);
                 Ok(if matches!(v, Zval::Undef) { Zval::Null } else { v })
             }
             ExprKind::Index { base, index } => {
@@ -975,19 +1023,49 @@ impl<'p> Evaluator<'p> {
     /// intermediate arrays and copying-on-write shared ones.
     fn write_place(&mut self, slot: Slot, steps: &[Step], value: Zval) -> Result<(), PhpError> {
         if steps.is_empty() {
-            self.slots[slot as usize] = value;
+            self.slot_set(slot as usize, value);
             return Ok(());
         }
-        write_into(&mut self.slots[slot as usize], steps, value, &mut self.diags)
+        let d = &mut self.diags;
+        match &mut self.slots[slot as usize] {
+            Binding::Value(z) => write_into(z, steps, value, d),
+            Binding::Ref(cell) => {
+                let z = &mut *cell.borrow_mut();
+                write_into(z, steps, value, d)
+            }
+        }
+    }
+
+    /// Bind `target` as a reference alias of `source` (`$target = &$source`,
+    /// D-R4). The source slot is promoted to a shared cell on first use (a plain
+    /// value becomes a `Ref`; binding an unset variable *defines* it as NULL, so
+    /// no later undefined-variable warning fires). Returns the aliased value, as
+    /// `$x = &$y` is an expression.
+    fn assign_ref(&mut self, target: Slot, source: Slot) -> Zval {
+        let cell = match &self.slots[source as usize] {
+            Binding::Ref(cell) => Rc::clone(cell),
+            Binding::Value(z) => {
+                let init = match z {
+                    Zval::Undef => Zval::Null,
+                    other => other.clone(),
+                };
+                let cell = Rc::new(RefCell::new(init));
+                self.slots[source as usize] = Binding::Ref(Rc::clone(&cell));
+                cell
+            }
+        };
+        let value = cell.borrow().clone();
+        self.slots[target as usize] = Binding::Ref(cell);
+        value
     }
 
     /// Read the current value at a place (for compound assignment). Missing
     /// keys yield NULL with a warning; the base variable is read silently
     /// (it is about to be written / auto-vivified anyway).
     fn read_place_value(&mut self, slot: Slot, steps: &[Step]) -> Result<Zval, PhpError> {
-        let mut cur = match &self.slots[slot as usize] {
+        let mut cur = match self.slot_clone(slot as usize) {
             Zval::Undef => Zval::Null,
-            v => v.clone(),
+            v => v,
         };
         for step in steps {
             let Step::Key(k) = step else {
@@ -1001,9 +1079,9 @@ impl<'p> Evaluator<'p> {
     /// Silent traversal used by `isset` / `empty` / `??=`: returns the value at
     /// the place if the whole path exists (value may be NULL), else `None`.
     fn silent_get(&self, slot: Slot, steps: &[Step]) -> Option<Zval> {
-        let mut cur = match &self.slots[slot as usize] {
+        let mut cur = match self.slot_clone(slot as usize) {
             Zval::Undef => return None,
-            v => v.clone(),
+            v => v,
         };
         for step in steps {
             let Step::Key(k) = step else { return None };
@@ -1035,10 +1113,19 @@ impl<'p> Evaluator<'p> {
     /// `unset($slot)` / `unset($a[k]...)`: drop a variable or array element.
     fn unset_place(&mut self, slot: Slot, steps: &[Step]) {
         if steps.is_empty() {
-            self.slots[slot as usize] = Zval::Undef;
+            // Drop *this* binding only: replacing it with a fresh value slot
+            // releases this alias's share of any reference cell, leaving other
+            // aliases untouched (D-R5).
+            self.slots[slot as usize] = Binding::Value(Zval::Undef);
             return;
         }
-        unset_into(&mut self.slots[slot as usize], steps);
+        match &mut self.slots[slot as usize] {
+            Binding::Value(z) => unset_into(z, steps),
+            Binding::Ref(cell) => {
+                let z = &mut *cell.borrow_mut();
+                unset_into(z, steps);
+            }
+        }
     }
 }
 

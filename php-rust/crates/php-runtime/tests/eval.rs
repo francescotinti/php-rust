@@ -516,6 +516,44 @@ fn rendered_null_array_offset_deprecation() {
     );
 }
 
+// --- references (step 11a): variable-level `&` binding ---
+
+#[test]
+fn reference_write_through_both_directions() {
+    // `$b = &$a` aliases the two variables: a later write to either is visible
+    // through the other (D-R3 write-through).
+    assert_eq!(out("<?php $a = 1; $b = &$a; $a = 5; echo $b;"), "5");
+    assert_eq!(out("<?php $a = 1; $b = &$a; $b = 7; echo $a;"), "7");
+}
+
+#[test]
+fn reference_to_undefined_defines_null() {
+    // Binding a reference to an undefined variable defines it as NULL with no
+    // "undefined variable" warning (oracle-verified).
+    assert_eq!(
+        out("<?php $b = &$a; echo $b === null ? 'null' : 'other';"),
+        "null"
+    );
+}
+
+#[test]
+fn reference_chain_shares_one_cell() {
+    // `$c = &$b` where `$b` is already a reference joins the same binding, so a
+    // write through `$c` reaches `$a`.
+    assert_eq!(out("<?php $a = 1; $b = &$a; $c = &$b; $c = 8; echo $a;"), "8");
+}
+
+#[test]
+fn reference_unset_breaks_only_that_alias() {
+    // `unset($b)` drops the alias but leaves the shared value intact for `$a`.
+    assert_eq!(
+        out("<?php $a = 1; $b = &$a; unset($b); $a = 9; echo $b ?? 'gone';"),
+        "gone"
+    );
+    // `unset($a)` likewise leaves `$b` holding the value.
+    assert_eq!(out("<?php $a = 1; $b = &$a; unset($a); $b = 3; echo $b;"), "3");
+}
+
 #[test]
 fn rendered_warning_then_fatal_in_order() {
     // The undefined-variable warning (line 2) renders before the fatal (line 3).
