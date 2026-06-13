@@ -433,6 +433,40 @@ fn max_single_non_array_is_type_error() {
 }
 
 #[test]
+fn print_r_scalars() {
+    assert_eq!(out("<?php print_r(42);"), "42");
+    assert_eq!(out("<?php print_r('hi');"), "hi");
+    assert_eq!(out("<?php print_r(true);"), "1");
+    assert_eq!(out("<?php print_r(false);"), "");
+    assert_eq!(out("<?php print_r(null);"), "");
+}
+
+#[test]
+fn print_r_simple_array() {
+    assert_eq!(
+        out("<?php print_r([1, 2, 3]);"),
+        "Array\n(\n    [0] => 1\n    [1] => 2\n    [2] => 3\n)\n"
+    );
+}
+
+#[test]
+fn print_r_nested_array() {
+    assert_eq!(
+        out("<?php print_r(['a' => 1, 'b' => [2, 3]]);"),
+        "Array\n(\n    [a] => 1\n    [b] => Array\n        (\n            [0] => 2\n            [1] => 3\n        )\n\n)\n"
+    );
+}
+
+#[test]
+fn print_r_return_mode() {
+    // With a truthy second argument, the output is returned, not printed.
+    assert_eq!(
+        out("<?php $s = print_r([1, 2], true); echo '[' . $s . ']';"),
+        "[Array\n(\n    [0] => 1\n    [1] => 2\n)\n]"
+    );
+}
+
+#[test]
 fn undefined_function_is_fatal_after_output() {
     let reg = registry();
     let o = run_source_with(b"t.php", b"<?php echo 'a'; nope();", &reg).expect("lowers");

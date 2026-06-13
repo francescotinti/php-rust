@@ -59,6 +59,7 @@ pub fn registry() -> Registry {
     add(b"doubleval", floatval);
     add(b"strval", strval);
     add(b"boolval", boolval);
+    add(b"print_r", print_r);
     r
 }
 
@@ -124,6 +125,49 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize) {
 
 fn spaces(out: &mut Vec<u8>, n: usize) {
     out.resize(out.len() + n, b' ');
+}
+
+/// print_r($value, $return = false). Human-readable dump; with a truthy
+/// `$return` the rendering is returned as a string instead of being printed.
+fn print_r(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let v = arg1(args, "print_r")?;
+    let want_return = matches!(args.get(1), Some(r) if convert::is_true_silent(r));
+    let mut buf = Vec::new();
+    print_r_into(&mut buf, v, 0, ctx);
+    if want_return {
+        Ok(Zval::Str(PhpStr::new(buf)))
+    } else {
+        ctx.out.extend_from_slice(&buf);
+        Ok(Zval::Bool(true))
+    }
+}
+
+/// Recursive print_r renderer. `indent` is the leading-space count of this
+/// value's `(` block (0 at the top level); nested arrays add 8.
+fn print_r_into(out: &mut Vec<u8>, v: &Zval, indent: usize, ctx: &mut Ctx) {
+    match v {
+        Zval::Array(a) => {
+            out.extend_from_slice(b"Array\n");
+            spaces(out, indent);
+            out.extend_from_slice(b"(\n");
+            for (key, val) in a.iter() {
+                spaces(out, indent + 4);
+                match key {
+                    Key::Int(i) => out.extend_from_slice(format!("[{i}] => ").as_bytes()),
+                    Key::Str(s) => {
+                        out.push(b'[');
+                        out.extend_from_slice(s.as_bytes());
+                        out.extend_from_slice(b"] => ");
+                    }
+                }
+                print_r_into(out, val, indent + 8, ctx);
+                out.push(b'\n');
+            }
+            spaces(out, indent);
+            out.extend_from_slice(b")\n");
+        }
+        scalar => out.extend_from_slice(convert::to_zstr(scalar, ctx.diags).as_bytes()),
+    }
 }
 
 // --- string / type inspection ---
