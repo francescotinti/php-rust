@@ -362,12 +362,7 @@ impl<'f> Lowerer<'f> {
     ) -> Result<(Vec<Param>, Vec<Stmt>), LowerError> {
         let mut params = Vec::new();
         for p in func.parameter_list.parameters.iter() {
-            if p.ampersand.is_some() {
-                return Err(LowerError::Unsupported {
-                    what: "by-reference parameter",
-                    line,
-                });
-            }
+            let by_ref = p.ampersand.is_some();
             if p.ellipsis.is_some() {
                 return Err(LowerError::Unsupported {
                     what: "variadic parameter",
@@ -385,7 +380,11 @@ impl<'f> Lowerer<'f> {
                 Some(d) => Some(self.lower_expr(d.value)?),
                 None => None,
             };
-            params.push(Param { slot, default });
+            params.push(Param {
+                slot,
+                default,
+                by_ref,
+            });
         }
         let body = self.lower_stmts(func.body.statements.as_slice())?;
         Ok((params, body))

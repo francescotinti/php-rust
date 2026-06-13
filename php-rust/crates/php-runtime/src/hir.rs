@@ -53,8 +53,9 @@ pub struct FnDecl {
     pub line: Line,
 }
 
-/// One formal parameter. By-value only in step 8 (by-reference / variadic
-/// params lower to [`crate::lower::LowerError::Unsupported`]).
+/// One formal parameter. By-value by default; `by_ref` marks `&$x` parameters
+/// (step 11b), which bind the caller's variable cell instead of a copy.
+/// Variadic params still lower to [`crate::lower::LowerError::Unsupported`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct Param {
     /// The local slot this parameter binds (equal to its positional index).
@@ -62,6 +63,9 @@ pub struct Param {
     /// Default value expression, evaluated in the callee frame when the
     /// argument is omitted. `None` makes the parameter required.
     pub default: Option<Expr>,
+    /// `true` for a `&$x` by-reference parameter: the matching argument must be
+    /// a variable, whose storage cell is shared with this slot for the call.
+    pub by_ref: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]

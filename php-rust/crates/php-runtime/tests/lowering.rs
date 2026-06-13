@@ -365,11 +365,16 @@ fn function_declaration_is_hoisted_into_table() {
 }
 
 #[test]
-fn by_reference_and_variadic_params_are_unsupported() {
-    assert!(matches!(
-        err("<?php function f(&$a) { } f($x);"),
-        LowerError::Unsupported { .. }
-    ));
+fn by_reference_param_lowers_with_flag() {
+    // By-reference parameters are supported from step 11b: the flag is recorded
+    // on the lowered `Param`.
+    let p = lower("<?php function f(&$a) { } f($x);");
+    assert_eq!(p.functions.len(), 1);
+    assert!(p.functions[0].params[0].by_ref);
+}
+
+#[test]
+fn variadic_params_are_unsupported() {
     assert!(matches!(
         err("<?php function f(...$a) { } f();"),
         LowerError::Unsupported { .. }

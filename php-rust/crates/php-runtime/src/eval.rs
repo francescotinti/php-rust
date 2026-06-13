@@ -42,6 +42,13 @@ fn fresh_slots(n: usize) -> Vec<Binding> {
     (0..n).map(|_| Binding::Value(Zval::Undef)).collect()
 }
 
+/// A user-function argument as bound for a call: a plain value for a by-value
+/// parameter, or a shared cell for a `&$x` by-reference parameter (D-R6).
+enum Arg {
+    Val(Zval),
+    Ref(Rc<RefCell<Zval>>),
+}
+
 /// Control-flow signal produced by executing a statement.
 enum Flow {
     /// Fell off the end normally.
@@ -463,7 +470,7 @@ impl<'p> Evaluator<'p> {
     /// Invoke a hoisted user function: validate arity, set up a fresh local
     /// frame (its own slot table and slot names), bind parameters, run the body,
     /// then restore the caller's frame. Recursion uses the host (Rust) stack.
-    fn call_user_fn(&mut self, idx: usize, argv: Vec<Zval>) -> Result<Zval, PhpError> {
+    fn call_user_fn(&mut self, idx: usize, argv: Vec<Arg>) -> Result<Zval, PhpError> {
         // `funcs` is `&'p [FnDecl]` (Copy): copying it out detaches the borrow
         // from `self`, so the frame swap below can mutate `self.slots` freely.
         let funcs: &'p [FnDecl] = self.funcs;
@@ -496,21 +503,56 @@ impl<'p> Evaluator<'p> {
     }
 
     /// Bind parameters into the (already installed) callee frame and execute the
-    /// body. A missing argument falls back to its default, evaluated in the new
-    /// frame; falling off the end yields NULL.
-    fn run_user_fn_body(&mut self, f: &'p FnDecl, argv: Vec<Zval>) -> Result<Zval, PhpError> {
+    /// body. A by-value argument installs a fresh value slot; a by-reference
+    /// argument shares the caller's cell (D-R6). A missing argument falls back to
+    /// its default, evaluated in the new frame; falling off the end yields NULL.
+    fn run_user_fn_body(&mut self, f: &'p FnDecl, argv: Vec<Arg>) -> Result<Zval, PhpError> {
         for (i, p) in f.params.iter().enumerate() {
-            let v = match argv.get(i) {
-                Some(v) => v.clone(),
+            let binding = match argv.get(i) {
+                Some(Arg::Val(v)) => Binding::Value(v.clone()),
+                Some(Arg::Ref(cell)) => Binding::Ref(Rc::clone(cell)),
                 // Required params are guaranteed present by the caller's check.
-                None => self.eval(p.default.as_ref().expect("required arg checked"))?,
+                None => {
+                    let v = self.eval(p.default.as_ref().expect("required arg checked"))?;
+                    Binding::Value(v)
+                }
             };
-            self.slot_set(p.slot as usize, v);
+            self.slots[p.slot as usize] = binding;
         }
         match self.exec_stmts(&f.body)? {
             Flow::Return(v) => Ok(v),
             _ => Ok(Zval::Null),
         }
+    }
+
+    /// Resolve a user-function call's arguments against its declaration: by-value
+    /// params evaluate normally; a `&$x` param binds the argument variable's
+    /// shared cell (promoting it). A non-variable argument to a by-ref param is
+    /// an uncaught `Error` (PHP 8.x; oracle-verified message).
+    fn eval_call_args(&mut self, idx: usize, args: &[Expr]) -> Result<Vec<Arg>, PhpError> {
+        let funcs: &'p [FnDecl] = self.funcs;
+        let f: &'p FnDecl = &funcs[idx];
+        let mut out = Vec::with_capacity(args.len());
+        for (i, a) in args.iter().enumerate() {
+            let by_ref = f.params.get(i).is_some_and(|p| p.by_ref);
+            if by_ref {
+                match &a.kind {
+                    ExprKind::Var(slot) => out.push(Arg::Ref(self.slot_cell(*slot as usize))),
+                    _ => {
+                        let p = &f.params[i];
+                        return Err(PhpError::Error(format!(
+                            "{}(): Argument #{} (${}) could not be passed by reference",
+                            String::from_utf8_lossy(&f.name),
+                            i + 1,
+                            String::from_utf8_lossy(&f.slots[p.slot as usize]),
+                        )));
+                    }
+                }
+            } else {
+                out.push(Arg::Val(self.eval(a)?));
+            }
+        }
+        Ok(out)
     }
 
     // --- expressions ---
@@ -674,18 +716,22 @@ impl<'p> Evaluator<'p> {
             }
 
             ExprKind::Call { name, args } => {
+                // A user-defined function shadows the builtin namespace (PHP
+                // resolves both from one function table; you cannot redefine a
+                // builtin, but a user function wins when present). User functions
+                // bind by-reference parameters (step 11b), so their arguments are
+                // resolved against the declaration rather than blindly evaluated.
+                if let Some(&idx) = self.fn_index.get(&name.to_ascii_lowercase()) {
+                    let argv = self.eval_call_args(idx, args)?;
+                    return self.call_user_fn(idx, argv);
+                }
+                // Builtins take all arguments by value (builtin by-ref is step
+                // 11c). Copy the fn pointer out so the registry borrow ends before
+                // we borrow `out`/`diags` mutably for the call context.
                 let mut argv = Vec::with_capacity(args.len());
                 for a in args {
                     argv.push(self.eval(a)?);
                 }
-                // A user-defined function shadows the builtin namespace (PHP
-                // resolves both from one function table; you cannot redefine a
-                // builtin, but a user function wins when present).
-                if let Some(&idx) = self.fn_index.get(&name.to_ascii_lowercase()) {
-                    return self.call_user_fn(idx, argv);
-                }
-                // Copy the fn pointer out so the registry borrow ends before we
-                // borrow `out`/`diags` mutably for the call context.
                 let f = match self.reg.get(name.as_ref()) {
                     Some(f) => *f,
                     None => {
@@ -1042,7 +1088,18 @@ impl<'p> Evaluator<'p> {
     /// no later undefined-variable warning fires). Returns the aliased value, as
     /// `$x = &$y` is an expression.
     fn assign_ref(&mut self, target: Slot, source: Slot) -> Zval {
-        let cell = match &self.slots[source as usize] {
+        let cell = self.slot_cell(source as usize);
+        let value = cell.borrow().clone();
+        self.slots[target as usize] = Binding::Ref(cell);
+        value
+    }
+
+    /// Obtain the shared cell backing a slot, promoting a plain value to a
+    /// reference on first use. Binding a reference to an unset variable *defines*
+    /// it as NULL (no later undefined-variable warning). Shared by `$x = &$y`
+    /// and by-reference argument passing (D-R4/D-R6).
+    fn slot_cell(&mut self, idx: usize) -> Rc<RefCell<Zval>> {
+        match &self.slots[idx] {
             Binding::Ref(cell) => Rc::clone(cell),
             Binding::Value(z) => {
                 let init = match z {
@@ -1050,13 +1107,10 @@ impl<'p> Evaluator<'p> {
                     other => other.clone(),
                 };
                 let cell = Rc::new(RefCell::new(init));
-                self.slots[source as usize] = Binding::Ref(Rc::clone(&cell));
+                self.slots[idx] = Binding::Ref(Rc::clone(&cell));
                 cell
             }
-        };
-        let value = cell.borrow().clone();
-        self.slots[target as usize] = Binding::Ref(cell);
-        value
+        }
     }
 
     /// Read the current value at a place (for compound assignment). Missing

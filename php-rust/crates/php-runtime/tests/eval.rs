@@ -516,6 +516,50 @@ fn rendered_null_array_offset_deprecation() {
     );
 }
 
+// --- by-reference parameters (step 11b): `function f(&$x)` ---
+
+#[test]
+fn byref_param_mutates_caller_variable() {
+    // A `&$x` parameter binds the caller's variable, so the callee's write is
+    // visible after the call returns (D-R6).
+    assert_eq!(out("<?php function inc(&$x){$x++;} $n=1; inc($n); echo $n;"), "2");
+}
+
+#[test]
+fn byref_param_defines_undefined_caller_variable() {
+    // Passing an undefined variable by reference defines it (NULL → written),
+    // with no undefined-variable warning.
+    assert_eq!(out("<?php function f(&$x){$x=10;} f($y); echo $y;"), "10");
+}
+
+#[test]
+fn byref_params_swap() {
+    // Two by-ref params let a callee swap the caller's variables.
+    assert_eq!(
+        out("<?php function swap(&$a,&$b){$t=$a;$a=$b;$b=$t;} $x=1;$y=2; swap($x,$y); echo $x; echo $y;"),
+        "21"
+    );
+}
+
+#[test]
+fn byvalue_param_leaves_caller_untouched() {
+    // The contrast case: a plain (by-value) param does not write back.
+    assert_eq!(out("<?php function g($x){$x++;} $n=1; g($n); echo $n;"), "1");
+}
+
+#[test]
+fn byref_param_nonvariable_argument_is_fatal() {
+    // PHP 8.x: passing a non-variable (here a literal) to a by-ref parameter is
+    // an uncaught Error (oracle-verified message).
+    let o = run_source(b"t.php", b"<?php function inc(&$x){$x++;} inc(5);")
+        .expect("lowers");
+    let err = o.fatal.expect("expected a fatal error");
+    assert_eq!(
+        err.message(),
+        "inc(): Argument #1 ($x) could not be passed by reference"
+    );
+}
+
 // --- references (step 11a): variable-level `&` binding ---
 
 #[test]

@@ -2,6 +2,35 @@
 
 > Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Una entry per step.
 
+## Step 11b — Parametri by-reference (`function f(&$x)`)
+
+- **Riferimento C:** Zend `ZEND_RECV` / `zend_call_function` (binding by-ref di
+  argomento), `ZEND_SEND_REF`. Oracle `/tmp/php-src/sapi/cli/php`: mutazione del
+  caller, definizione di variabile indefinita, swap a due ref, argomento
+  non-variabile → Error fatale.
+- **Target:** `crates/php-runtime` — `hir.rs` (`Param.by_ref: bool`),
+  `lower.rs` (lettura `p.ampersand`; rimossa la `LowerError` su by-ref),
+  `eval.rs` (`enum Arg { Val(Zval), Ref(Rc<RefCell<Zval>>) }`, `slot_cell`
+  estratto da `assign_ref`, `eval_call_args`, `call_user_fn`/`run_user_fn_body`
+  passano `Vec<Arg>`).
+- **Decisioni applicate:** D-R6. Il caller promuove lo slot-argomento a `Ref`
+  (riusando `slot_cell`, stessa promozione lazy di 11a) prima del frame-swap; il
+  callee installa `Binding::Ref(Rc::clone)` nello slot del parametro, così la
+  cella è condivisa tra i due frame.
+- **Round di iterazione AI:** 1 (più 1 fix di un test esistente:
+  `by_reference_and_variadic_params_are_unsupported` splittato in
+  `by_reference_param_lowers_with_flag` + `variadic_params_are_unsupported`).
+- **Test pass al primo tentativo:** sì (5/5 nuovi; 178 totali, +6 includendo lo
+  split del test di lowering).
+- **Divergenza dalla mappa Fase 2:** D-R6 prevedeva un Notice/Warning + pass
+  by-value per argomenti non-variabili; l'oracle 8.5 emette invece un **Error
+  fatale** (`f(): Argument #N ($p) could not be passed by reference`) — seguito
+  l'oracle. Argomenti by-ref complessi (`$a[0]`, proprietà) restano scope-out
+  (richiedono element-ref, step 11d): per ora solo variabili bare.
+- **Test scritti:** 5 (mutazione caller, definizione variabile indefinita, swap,
+  contrasto by-value, argomento non-variabile fatale).
+- **Tempo:** ~30 minuti.
+
 ## Step 11a — Reference semantics a livello di variabile (`$b = &$a`)
 
 - **Riferimento C:** Zend/zend_types.h (`IS_REFERENCE`/`zend_reference`),
