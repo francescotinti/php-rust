@@ -28,7 +28,7 @@ use mago_syntax::parser::parse_file;
 
 use crate::hir::{
     ArrayElem, BinOp, Case, CastKind, Expr, ExprKind, FnDecl, GlobalBinding, Line, MatchArm, Param,
-    Place, PlaceStep, Program, Slot, Stmt, StmtKind, UnOp,
+    Place, PlaceBase, PlaceStep, Program, Slot, Stmt, StmtKind, UnOp,
 };
 
 /// Why a script could not be lowered to HIR.
@@ -540,8 +540,11 @@ impl<'f> Lowerer<'f> {
                     AssignmentOperator::LeftShift(_) => Some(AssignFlavour::Op(BinOp::Shl)),
                     AssignmentOperator::RightShift(_) => Some(AssignFlavour::Op(BinOp::Shr)),
                 };
-                if place.steps.is_empty() {
-                    let slot = place.slot;
+                // A bare *local* variable keeps the lighter slot-based encoding
+                // (and the existing diagnostics path). A `$GLOBALS['x']` target
+                // has empty steps too but a global base, so it must take the
+                // Place-based variant to reach the global frame (D-12.3).
+                if let (PlaceBase::Local(slot), true) = (place.base, place.steps.is_empty()) {
                     match op {
                         None => ExprKind::Assign(slot, rhs),
                         Some(AssignFlavour::Coalesce) => ExprKind::AssignCoalesce(slot, rhs),
@@ -572,10 +575,19 @@ impl<'f> Lowerer<'f> {
                 ExprKind::Array(self.lower_array_elements(arr.elements.iter(), line)?)
             }
 
-            Expression::ArrayAccess(aa) => ExprKind::Index {
-                base: Box::new(self.lower_expr(aa.array)?),
-                index: Box::new(self.lower_expr(aa.index)?),
-            },
+            Expression::ArrayAccess(aa) => {
+                // `$GLOBALS['x']` reads as the global slot directly; a nested
+                // `$GLOBALS['x'][k]` becomes `Index { base: GlobalVar, .. }`
+                // since the inner access lowers to `GlobalVar` (D-12.3).
+                if let Some(key) = globals_key(aa.array, aa.index) {
+                    ExprKind::GlobalVar(self.globals.slot_for(&key))
+                } else {
+                    ExprKind::Index {
+                        base: Box::new(self.lower_expr(aa.array)?),
+                        index: Box::new(self.lower_expr(aa.index)?),
+                    }
+                }
+            }
             // `$a[]` only has meaning as an assignment target; reading it is an error.
             Expression::ArrayAppend(_) => {
                 return Err(LowerError::Unsupported {
@@ -763,10 +775,18 @@ impl<'f> Lowerer<'f> {
         match lhs {
             Expression::Parenthesized(p) => self.lower_place(p.expression, line),
             Expression::Variable(Variable::Direct(d)) => Ok(Place {
-                slot: self.slot_for(strip_dollar(d.name)),
+                base: PlaceBase::Local(self.slot_for(strip_dollar(d.name))),
                 steps: Vec::new(),
             }),
             Expression::ArrayAccess(aa) => {
+                // `$GLOBALS['x']` is a global base with no steps; `$GLOBALS['x'][k]`
+                // recurses so the global base carries the `[k]` step (D-12.3).
+                if let Some(key) = globals_key(aa.array, aa.index) {
+                    return Ok(Place {
+                        base: PlaceBase::Global(self.globals.slot_for(&key)),
+                        steps: Vec::new(),
+                    });
+                }
                 let mut place = self.lower_place(aa.array, line)?;
                 place.steps.push(PlaceStep::Index(self.lower_expr(aa.index)?));
                 Ok(place)
@@ -872,6 +892,24 @@ fn strip_one_newline(bytes: &[u8]) -> &[u8] {
 }
 
 /// Strip the leading `$` from a mago direct-variable name (`b"$foo"` → `b"foo"`).
+/// Recognise `$GLOBALS['constant-string']` — the superglobal indexed by a
+/// literal string — and return the decoded global variable name (step 12-3,
+/// D-12.3). A dynamic index or the whole `$GLOBALS` array yields `None`; the
+/// caller then treats `$GLOBALS` as an ordinary variable (those forms are out of
+/// step 12 scope, D-12.6).
+fn globals_key(array: &Expression, index: &Expression) -> Option<Vec<u8>> {
+    let Expression::Variable(Variable::Direct(d)) = array else {
+        return None;
+    };
+    if strip_dollar(d.name) != b"GLOBALS".as_slice() {
+        return None;
+    }
+    match index {
+        Expression::Literal(Literal::String(s)) => s.value.map(|b| b.to_vec()),
+        _ => None,
+    }
+}
+
 fn strip_dollar(name: &[u8]) -> &[u8] {
     if name.first() == Some(&b'$') {
         &name[1..]

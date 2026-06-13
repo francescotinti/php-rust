@@ -268,7 +268,7 @@ fn array_element_assignment_targets() {
     let p = lower("<?php $a[0] = 1; $a[] = 2; $a['x']['y'] = 3;");
     match &p.body[0].kind {
         StmtKind::Expr(Expr { kind: ExprKind::AssignPlace(place, _), .. }) => {
-            assert_eq!(place.slot, 0);
+            assert_eq!(place.base, PlaceBase::Local(0));
             assert!(matches!(place.steps[..], [PlaceStep::Index(_)]));
         }
         other => panic!("got {other:?}"),

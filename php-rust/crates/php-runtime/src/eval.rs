@@ -23,8 +23,8 @@ use php_types::{convert, dtoa, ops, Diag, Diags, Key, PhpArray, PhpStr, PhpError
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
 use crate::hir::{
-    BinOp, CastKind, Expr, ExprKind, FnDecl, Line, Place, PlaceStep, Program, Slot, Stmt, StmtKind,
-    UnOp,
+    BinOp, CastKind, Expr, ExprKind, FnDecl, Line, Place, PlaceBase, PlaceStep, Program, Slot, Stmt,
+    StmtKind, UnOp,
 };
 
 /// A fresh frame of `n` independent value slots, all unset.
@@ -47,6 +47,18 @@ fn fresh_slots(n: usize) -> Vec<Zval> {
 macro_rules! frame_mut {
     ($self:ident) => {
         $self.locals.as_mut().unwrap_or(&mut $self.globals)
+    };
+}
+
+/// `&mut Zval` for a place base: the active frame for a `Local` slot, the global
+/// frame for a `$GLOBALS['literal']` `Global` slot (D-12.3). A macro for the
+/// same disjoint-borrow reason as [`frame_mut!`].
+macro_rules! slot_mut {
+    ($self:ident, $base:expr) => {
+        match $base {
+            PlaceBase::Local(s) => &mut frame_mut!($self)[s as usize],
+            PlaceBase::Global(s) => &mut $self.globals[s as usize],
+        }
     };
 }
 
@@ -371,7 +383,7 @@ impl<'p> Evaluator<'p> {
             StmtKind::Unset(places) => {
                 for p in places {
                     let steps = self.resolve_steps(p)?;
-                    self.unset_place(p.slot, &steps);
+                    self.unset_place(p.base, &steps);
                 }
             }
 
@@ -718,6 +730,7 @@ impl<'p> Evaluator<'p> {
             ExprKind::Str(bytes) => Ok(Zval::Str(PhpStr::new(bytes.clone()))),
 
             ExprKind::Var(slot) => Ok(self.read_var(*slot)),
+            ExprKind::GlobalVar(slot) => Ok(self.read_global_var(*slot)),
 
             ExprKind::Binary(op, l, r) => {
                 let a = self.eval(l)?;
@@ -923,26 +936,26 @@ impl<'p> Evaluator<'p> {
                 // steps first to match — and stay consistent with AssignOpPlace.
                 let steps = self.resolve_steps(place)?;
                 let value = self.eval(rhs)?;
-                self.write_place(place.slot, &steps, value.clone())?;
+                self.write_place(place.base, &steps, value.clone())?;
                 Ok(value)
             }
 
             ExprKind::AssignOpPlace(op, place, rhs) => {
                 let steps = self.resolve_steps(place)?;
-                let cur = self.read_place_value(place.slot, &steps)?;
+                let cur = self.read_place_value(place.base, &steps)?;
                 let rv = self.eval(rhs)?;
                 let res = self.apply_binop(*op, cur, rv)?;
-                self.write_place(place.slot, &steps, res.clone())?;
+                self.write_place(place.base, &steps, res.clone())?;
                 Ok(res)
             }
 
             ExprKind::AssignCoalescePlace(place, rhs) => {
                 let steps = self.resolve_steps(place)?;
-                match self.silent_get(place.slot, &steps) {
+                match self.silent_get(place.base, &steps) {
                     Some(v) if !matches!(v, Zval::Null | Zval::Undef) => Ok(v),
                     _ => {
                         let value = self.eval(rhs)?;
-                        self.write_place(place.slot, &steps, value.clone())?;
+                        self.write_place(place.base, &steps, value.clone())?;
                         Ok(value)
                     }
                 }
@@ -951,7 +964,7 @@ impl<'p> Evaluator<'p> {
             ExprKind::Isset(places) => {
                 for p in places {
                     let steps = self.resolve_steps(p)?;
-                    let set = matches!(self.silent_get(p.slot, &steps), Some(v) if !matches!(v, Zval::Null | Zval::Undef));
+                    let set = matches!(self.silent_get(p.base, &steps), Some(v) if !matches!(v, Zval::Null | Zval::Undef));
                     if !set {
                         return Ok(Zval::Bool(false));
                     }
@@ -961,7 +974,7 @@ impl<'p> Evaluator<'p> {
 
             ExprKind::Empty(place) => {
                 let steps = self.resolve_steps(place)?;
-                let empty = match self.silent_get(place.slot, &steps) {
+                let empty = match self.silent_get(place.base, &steps) {
                     Some(v) => !convert::is_true_silent(&v),
                     None => true,
                 };
@@ -1040,6 +1053,15 @@ impl<'p> Evaluator<'p> {
         self.frame()[idx].deref_clone()
     }
 
+    /// Like [`Evaluator::slot_clone`] but for a place base: reads the active
+    /// frame for a `Local` slot, the global frame for a `Global` slot (D-12.3).
+    fn base_clone(&self, base: PlaceBase) -> Zval {
+        match base {
+            PlaceBase::Local(s) => self.frame()[s as usize].deref_clone(),
+            PlaceBase::Global(s) => self.globals[s as usize].deref_clone(),
+        }
+    }
+
     /// Write `v` into a slot. For a plain value this replaces it; for a
     /// reference it writes *through* the shared cell so every alias sees the new
     /// value (D-R3 write-through).
@@ -1071,6 +1093,10 @@ impl<'p> Evaluator<'p> {
                 let v = self.slot_clone(*slot as usize);
                 Ok(if matches!(v, Zval::Undef) { Zval::Null } else { v })
             }
+            ExprKind::GlobalVar(slot) => {
+                let v = self.globals[*slot as usize].deref_clone();
+                Ok(if matches!(v, Zval::Undef) { Zval::Null } else { v })
+            }
             ExprKind::Index { base, index } => {
                 let b = self.eval_isset(base)?;
                 let k = self.eval(index)?;
@@ -1087,6 +1113,21 @@ impl<'p> Evaluator<'p> {
         let name = String::from_utf8_lossy(&self.names()[slot as usize]);
         self.diags
             .push(Diag::Warning(format!("Undefined variable ${name}")));
+    }
+
+    /// Read a `$GLOBALS['x']` global slot. An unset global raises the distinct
+    /// "Undefined global variable $name" warning (its name lives in the global
+    /// table, not the active frame's) and yields NULL (D-12.3/D-12.5).
+    fn read_global_var(&mut self, slot: Slot) -> Zval {
+        match self.globals[slot as usize].deref_clone() {
+            Zval::Undef => {
+                let name = String::from_utf8_lossy(&self.global_names[slot as usize]);
+                self.diags
+                    .push(Diag::Warning(format!("Undefined global variable ${name}")));
+                Zval::Null
+            }
+            v => v,
+        }
     }
 
     // --- arrays ---
@@ -1211,13 +1252,17 @@ impl<'p> Evaluator<'p> {
 
     /// Write `value` to `slot` following the resolved steps, auto-vivifying
     /// intermediate arrays and copying-on-write shared ones.
-    fn write_place(&mut self, slot: Slot, steps: &[Step], value: Zval) -> Result<(), PhpError> {
+    fn write_place(&mut self, base: PlaceBase, steps: &[Step], value: Zval) -> Result<(), PhpError> {
         if steps.is_empty() {
-            self.slot_set(slot as usize, value);
+            // Write-through any reference cell, like `slot_set` (D-R3).
+            match slot_mut!(self, base) {
+                Zval::Ref(cell) => *cell.borrow_mut() = value,
+                slot => *slot = value,
+            }
             return Ok(());
         }
         let d = &mut self.diags;
-        match &mut frame_mut!(self)[slot as usize] {
+        match slot_mut!(self, base) {
             Zval::Ref(cell) => {
                 let z = &mut *cell.borrow_mut();
                 write_into(z, steps, value, d)
@@ -1238,9 +1283,9 @@ impl<'p> Evaluator<'p> {
         let src_steps = self.resolve_steps(source)?;
         // Obtain (promoting) the shared cell the source designates, then bind the
         // target to it. Reading the cell yields the expression's value.
-        let cell = self.ref_source_cell(source.slot, &src_steps)?;
+        let cell = self.ref_source_cell(source.base, &src_steps)?;
         let value = cell.borrow().clone();
-        self.bind_ref_target(target.slot, &tgt_steps, Rc::clone(&cell))?;
+        self.bind_ref_target(target.base, &tgt_steps, Rc::clone(&cell))?;
         Ok(value)
     }
 
@@ -1248,12 +1293,16 @@ impl<'p> Evaluator<'p> {
     /// promoting the location to a `Zval::Ref` on first use (D-R12). A bare
     /// variable goes through [`Evaluator::slot_cell`]; an element navigates and
     /// vivifies via [`place_cell`].
-    fn ref_source_cell(&mut self, slot: Slot, steps: &[Step]) -> Result<Rc<RefCell<Zval>>, PhpError> {
+    fn ref_source_cell(
+        &mut self,
+        base: PlaceBase,
+        steps: &[Step],
+    ) -> Result<Rc<RefCell<Zval>>, PhpError> {
         if steps.is_empty() {
-            Ok(self.slot_cell(slot as usize))
+            Ok(make_cell(slot_mut!(self, base)))
         } else {
             let d = &mut self.diags;
-            place_cell(&mut frame_mut!(self)[slot as usize], steps, d)
+            place_cell(slot_mut!(self, base), steps, d)
         }
     }
 
@@ -1262,15 +1311,15 @@ impl<'p> Evaluator<'p> {
     /// `Zval::Ref` into the place (auto-vivifying / appending as usual).
     fn bind_ref_target(
         &mut self,
-        slot: Slot,
+        base: PlaceBase,
         steps: &[Step],
         cell: Rc<RefCell<Zval>>,
     ) -> Result<(), PhpError> {
         if steps.is_empty() {
-            frame_mut!(self)[slot as usize] = Zval::Ref(cell);
+            *slot_mut!(self, base) = Zval::Ref(cell);
             Ok(())
         } else {
-            self.write_place(slot, steps, Zval::Ref(cell))
+            self.write_place(base, steps, Zval::Ref(cell))
         }
     }
 
@@ -1285,8 +1334,8 @@ impl<'p> Evaluator<'p> {
     /// Read the current value at a place (for compound assignment). Missing
     /// keys yield NULL with a warning; the base variable is read silently
     /// (it is about to be written / auto-vivified anyway).
-    fn read_place_value(&mut self, slot: Slot, steps: &[Step]) -> Result<Zval, PhpError> {
-        let mut cur = match self.slot_clone(slot as usize) {
+    fn read_place_value(&mut self, base: PlaceBase, steps: &[Step]) -> Result<Zval, PhpError> {
+        let mut cur = match self.base_clone(base) {
             Zval::Undef => Zval::Null,
             v => v,
         };
@@ -1301,8 +1350,8 @@ impl<'p> Evaluator<'p> {
 
     /// Silent traversal used by `isset` / `empty` / `??=`: returns the value at
     /// the place if the whole path exists (value may be NULL), else `None`.
-    fn silent_get(&self, slot: Slot, steps: &[Step]) -> Option<Zval> {
-        let mut cur = match self.slot_clone(slot as usize) {
+    fn silent_get(&self, base: PlaceBase, steps: &[Step]) -> Option<Zval> {
+        let mut cur = match self.base_clone(base) {
             Zval::Undef => return None,
             v => v,
         };
@@ -1334,15 +1383,15 @@ impl<'p> Evaluator<'p> {
     }
 
     /// `unset($slot)` / `unset($a[k]...)`: drop a variable or array element.
-    fn unset_place(&mut self, slot: Slot, steps: &[Step]) {
+    fn unset_place(&mut self, base: PlaceBase, steps: &[Step]) {
         if steps.is_empty() {
             // Drop *this* binding only: replacing it with a fresh value slot
             // releases this alias's share of any reference cell, leaving other
             // aliases untouched (D-R5).
-            frame_mut!(self)[slot as usize] = Zval::Undef;
+            *slot_mut!(self, base) = Zval::Undef;
             return;
         }
-        match &mut frame_mut!(self)[slot as usize] {
+        match slot_mut!(self, base) {
             Zval::Ref(cell) => {
                 let z = &mut *cell.borrow_mut();
                 unset_into(z, steps);

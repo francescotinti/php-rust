@@ -172,8 +172,12 @@ pub enum ExprKind {
     Float(f64),
     Str(Box<[u8]>),
 
-    /// `$x` — read of a resolved variable slot.
+    /// `$x` — read of a resolved (local-frame) variable slot.
     Var(Slot),
+    /// `$GLOBALS['literal']` read — a resolved *global*-frame slot, reachable
+    /// even from inside a function (step 12-3, D-12.3). `$GLOBALS['x'][k]` reads
+    /// as `Index { base: GlobalVar(x), index: k }`.
+    GlobalVar(Slot),
 
     /// Binary op with eager left-then-right operand evaluation, dispatched to
     /// `php_types::ops` by the evaluator. Excludes short-circuit and coalesce.
@@ -259,13 +263,22 @@ pub struct MatchArm {
     pub body: Expr,
 }
 
-/// An assignable / unsettable location: a base variable slot plus a chain of
-/// index steps. `$x` is `{slot, []}`; `$a[0]["k"]` is `{slot_a, [Index(0),
-/// Index("k")]}`; `$a[]` ends in [`PlaceStep::Append`] (write context only).
+/// An assignable / unsettable location: a base plus a chain of index steps.
+/// `$x` is `{Local(slot), []}`; `$a[0]["k"]` is `{Local(slot_a), [Index(0),
+/// Index("k")]}`; `$GLOBALS['x']` is `{Global(slot_x), []}`; `$a[]` ends in
+/// [`PlaceStep::Append`] (write context only).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Place {
-    pub slot: Slot,
+    pub base: PlaceBase,
     pub steps: Vec<PlaceStep>,
+}
+
+/// The base a [`Place`] is rooted at: a slot in the active local frame, or a
+/// slot in the global frame for a `$GLOBALS['literal']` target (step 12-3).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PlaceBase {
+    Local(Slot),
+    Global(Slot),
 }
 
 #[derive(Debug, Clone, PartialEq)]

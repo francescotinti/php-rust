@@ -458,6 +458,69 @@ fn global_multiple_variables() {
 }
 
 #[test]
+fn globals_array_writes_outer() {
+    // `$GLOBALS['x'] = 8` inside a function writes the global (oracle 8).
+    assert_eq!(
+        out("<?php $x = 3; function f(){ $GLOBALS['x'] = 8; } f(); echo $x;"),
+        "8"
+    );
+}
+
+#[test]
+fn globals_array_reads_outer() {
+    // Reading `$GLOBALS['x']` sees the global value (oracle 10).
+    assert_eq!(
+        out("<?php $x = 10; function f(){ echo $GLOBALS['x']; } f();"),
+        "10"
+    );
+}
+
+#[test]
+fn globals_array_creates_global() {
+    // Assigning a never-seen `$GLOBALS['n']` creates the bare global (oracle 5).
+    assert_eq!(
+        out("<?php function f(){ $GLOBALS['n'] = 5; } f(); echo $n;"),
+        "5"
+    );
+}
+
+#[test]
+fn globals_array_compound_assignment() {
+    // `$GLOBALS['x'] += 4` reads then writes the global cell (oracle 5).
+    assert_eq!(
+        out("<?php $x = 1; function f(){ $GLOBALS['x'] += 4; } f(); echo $x;"),
+        "5"
+    );
+}
+
+#[test]
+fn globals_array_nested_element_write() {
+    // `$GLOBALS['a'][0] = 9` reaches into the global array element (oracle 9).
+    assert_eq!(
+        out("<?php $a = [1, 2]; function f(){ $GLOBALS['a'][0] = 9; } f(); echo $a[0];"),
+        "9"
+    );
+}
+
+#[test]
+fn globals_array_isset_is_silent() {
+    // `isset($GLOBALS['z'])` is false with no warning for an unset global;
+    // a set global is true (oracle nY).
+    assert_eq!(
+        out("<?php $x = 1; function f(){ \
+             echo isset($GLOBALS['z']) ? 'y' : 'n'; \
+             echo isset($GLOBALS['x']) ? 'Y' : 'N'; } f();"),
+        "nY"
+    );
+}
+
+#[test]
+fn globals_array_at_top_level() {
+    // At global scope `$GLOBALS['x']` is just the variable `$x` (oracle 7).
+    assert_eq!(out("<?php $GLOBALS['x'] = 7; echo $x;"), "7");
+}
+
+#[test]
 fn function_mutual_recursion() {
     // Both functions are hoisted, so even-before-odd resolution works.
     let prog = "<?php \
