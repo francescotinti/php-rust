@@ -87,6 +87,44 @@ fn value_casts() {
     assert_eq!(out("<?php echo boolval('a') ? 't' : 'f';"), "t");
 }
 
+/// Run a snippet, returning the fatal error (panics if none was raised).
+fn fatal(src: &str) -> PhpError {
+    let reg = registry();
+    let o = run_source_with(b"t.php", src.as_bytes(), &reg).expect("lowers");
+    o.fatal.expect("expected a fatal error")
+}
+
+#[test]
+fn count_arrays() {
+    assert_eq!(out("<?php echo count([1, 2, 3]);"), "3");
+    assert_eq!(out("<?php echo count([]);"), "0");
+    assert_eq!(out("<?php echo count(['a' => 1, 'b' => 2]);"), "2");
+    // Default (COUNT_NORMAL) does not descend into nested arrays.
+    assert_eq!(out("<?php echo count([1, [2, 3], 4]);"), "3");
+}
+
+#[test]
+fn count_recursive() {
+    // mode 1 == COUNT_RECURSIVE: counts nested containers AND their elements.
+    assert_eq!(out("<?php echo count([1, [2, 3], 4], 1);"), "5");
+    assert_eq!(out("<?php echo count([[1, 2], [3, 4]], 1);"), "6");
+}
+
+#[test]
+fn count_scalar_is_type_error() {
+    match fatal("<?php count(5);") {
+        PhpError::TypeError(m) => assert_eq!(
+            m,
+            "count(): Argument #1 ($value) must be of type Countable|array, int given"
+        ),
+        other => panic!("expected TypeError, got {other:?}"),
+    }
+    match fatal("<?php count(null);") {
+        PhpError::TypeError(m) => assert!(m.contains("null given"), "message was: {m}"),
+        other => panic!("expected TypeError, got {other:?}"),
+    }
+}
+
 #[test]
 fn undefined_function_is_fatal_after_output() {
     let reg = registry();

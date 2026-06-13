@@ -9,6 +9,8 @@
 //! `*val` cast helpers. Frequency-driven expansion (implode, count, substr,
 //! sprintf, array_*) is step 10.
 
+mod array;
+
 use php_runtime::{Ctx, Registry};
 use php_types::{convert, dtoa, numstr, Key, PhpError, PhpStr, Zval};
 
@@ -18,6 +20,8 @@ pub fn registry() -> Registry {
     let mut add = |name: &[u8], f: php_runtime::BuiltinFn| {
         r.insert(name.to_vec(), f);
     };
+    add(b"count", array::count);
+    add(b"sizeof", array::count);
     add(b"var_dump", var_dump);
     add(b"strlen", strlen);
     add(b"gettype", gettype);
