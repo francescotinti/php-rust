@@ -2,6 +2,39 @@
 
 > Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Una entry per step.
 
+## Step 11c — Builtin by-reference (`array_push`/`sort`/`array_pop`/`array_shift`)
+
+- **Riferimento C:** `ext/standard/array.c` (`php_array_push`, `php_sort`,
+  `array_pop`, `array_shift`). Oracle `/tmp/php-src/sapi/cli/php`: write-through
+  sull'array del caller, conteggio di ritorno, reindicizzazione di `array_shift`
+  vs preservazione chiavi di `array_pop`, errori su arg0 mancante / non-array /
+  non-variabile.
+- **Target:** `crates/php-runtime/builtin.rs` (ABI: `BuiltinRefFn`,
+  `enum Builtin { Value, RefFirst }`, `Registry` ora mappa a `Builtin`),
+  `eval.rs` (`call_ref_builtin`: bind della cella di arg0, mirror output/diag
+  come per i builtin by-value), `crates/php-builtins/array.rs` (4 builtin +
+  helper `as_array_mut`), `lib.rs` (`add_ref`).
+- **Decisioni applicate:** D-R7 ("Opzione minima"). Scelta ABI: prima-arg
+  by-ref via `fn(&mut Zval, &[Zval], &mut Ctx)` invece di un `&mut [Arg]`
+  generico — i quattro builtin condividono "arg0 by-ref, named `$array`,
+  required", quindi l'evaluator può sollevare gli errori di famiglia
+  (`Argument #1 ($array) could not be passed by reference`,
+  `expects at least 1 argument`) senza conoscenza per-builtin. La cella di arg0
+  è promossa con lo stesso `slot_cell` di 11a/11b.
+- **Round di iterazione AI:** 1 (compila e passa al primo tentativo; nessun lint
+  introdotto).
+- **Test pass al primo tentativo:** sì (7/7 nuovi; 185 totali, +7 dal 178 di
+  11b).
+- **Divergenze/limitazioni intenzionali:** `sort` implementa solo SORT_REGULAR
+  (flag accettato ma ignorato); `array_pop` non resetta `nNextFreeElement`
+  (irrilevante finché non si rifa append dopo pop — non nei test); `str_replace
+  $count` by-ref resta scope-out (raro). Arg0 non-variabile o mancante → errori
+  oracle-verificati (Error / ArgumentCountError), superano la nota D-R7 originale
+  (Warning).
+- **Test scritti:** 7 (push+count, push type-error, sort+reindex, pop, shift,
+  shift reindex int/preserva string, pop preserva chiavi).
+- **Tempo:** ~40 minuti.
+
 ## Step 11b — Parametri by-reference (`function f(&$x)`)
 
 - **Riferimento C:** Zend `ZEND_RECV` / `zend_call_function` (binding by-ref di

@@ -19,8 +19,27 @@ pub struct Ctx<'a> {
     pub diags: &'a mut Diags,
 }
 
-/// A builtin function: positional arguments in, a value (or fatal error) out.
+/// A by-value builtin: positional arguments in, a value (or fatal error) out.
 pub type BuiltinFn = fn(&[Zval], &mut Ctx) -> Result<Zval, PhpError>;
 
+/// A builtin whose *first* argument is taken by reference (D-R7, step 11c). The
+/// evaluator binds the caller's first-argument variable and hands the builtin
+/// `&mut Zval` access to it; the remaining positional arguments arrive by value.
+/// Mutations to the first argument are visible to the caller (write-through).
+///
+/// The family modelled here (`array_push` / `sort` / `array_pop` /
+/// `array_shift`) shares a single required first parameter named `$array`, which
+/// is why the evaluator can raise the generic "Argument #1 ($array) could not be
+/// passed by reference" / "expects at least 1 argument" errors on its behalf.
+pub type BuiltinRefFn = fn(&mut Zval, &[Zval], &mut Ctx) -> Result<Zval, PhpError>;
+
+/// A registered builtin: either fully by-value, or by-reference in its first
+/// argument.
+#[derive(Clone, Copy)]
+pub enum Builtin {
+    Value(BuiltinFn),
+    RefFirst(BuiltinRefFn),
+}
+
 /// Maps a function name (bytes, as written in source) to its implementation.
-pub type Registry = HashMap<Vec<u8>, BuiltinFn>;
+pub type Registry = HashMap<Vec<u8>, Builtin>;

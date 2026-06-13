@@ -14,14 +14,14 @@ mod format;
 mod math;
 mod string;
 
-use php_runtime::{Ctx, Registry};
+use php_runtime::{Builtin, Ctx, Registry};
 use php_types::{convert, dtoa, numstr, Key, PhpError, PhpStr, Zval};
 
 /// Build the Tier 1 builtin registry.
 pub fn registry() -> Registry {
     let mut r = Registry::new();
     let mut add = |name: &[u8], f: php_runtime::BuiltinFn| {
-        r.insert(name.to_vec(), f);
+        r.insert(name.to_vec(), Builtin::Value(f));
     };
     add(b"count", array::count);
     add(b"sizeof", array::count);
@@ -60,6 +60,15 @@ pub fn registry() -> Registry {
     add(b"strval", strval);
     add(b"boolval", boolval);
     add(b"print_r", print_r);
+    // By-reference builtins (step 11c): their first argument binds the caller's
+    // variable cell (D-R7).
+    let mut add_ref = |name: &[u8], f: php_runtime::BuiltinRefFn| {
+        r.insert(name.to_vec(), Builtin::RefFirst(f));
+    };
+    add_ref(b"array_push", array::array_push);
+    add_ref(b"sort", array::sort);
+    add_ref(b"array_pop", array::array_pop);
+    add_ref(b"array_shift", array::array_shift);
     r
 }
 

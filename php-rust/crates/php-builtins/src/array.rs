@@ -160,3 +160,86 @@ pub fn array_merge(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     }
     Ok(Zval::Array(Rc::new(out)))
 }
+
+// --- by-reference builtins (step 11c) ---
+//
+// These receive the caller's first-argument variable as `&mut Zval` (D-R7); the
+// evaluator handles the binding and the missing / non-variable first-argument
+// errors, so each only needs to validate that the bound value is an array.
+
+/// `array_push(array &$array, mixed ...$values): int` — append each value to the
+/// referenced array and return its new element count.
+pub fn array_push(arr: &mut Zval, values: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let rc = as_array_mut(arr, "array_push")?;
+    let a = Rc::make_mut(rc);
+    for v in values {
+        a.append(v.clone()).map_err(|_| {
+            PhpError::Error(
+                "Cannot add element to the array as the next element is already occupied"
+                    .to_string(),
+            )
+        })?;
+    }
+    Ok(Zval::Long(a.len() as i64))
+}
+
+/// `sort(array &$array, int $flags = SORT_REGULAR): true` — sort the values in
+/// place with the default (SORT_REGULAR) comparison and reindex from 0, dropping
+/// the original keys. `$flags` is accepted but not honoured (Tier 1 scope).
+pub fn sort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let rc = as_array_mut(arr, "sort")?;
+    let mut vals: Vec<Zval> = rc.iter().map(|(_, v)| v.clone()).collect();
+    vals.sort_by(|a, b| ops::compare(a, b).cmp(&0));
+    let mut out = PhpArray::new();
+    for v in vals {
+        let _ = out.append(v);
+    }
+    *arr = Zval::Array(Rc::new(out));
+    Ok(Zval::Bool(true))
+}
+
+/// `array_pop(array &$array): mixed` — remove and return the last element
+/// (keys of the remaining elements are left unchanged); NULL on an empty array.
+pub fn array_pop(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let rc = as_array_mut(arr, "array_pop")?;
+    let last_key = rc.iter().last().map(|(k, _)| k.clone());
+    match last_key {
+        Some(k) => Ok(Rc::make_mut(rc).remove(&k).unwrap_or(Zval::Null)),
+        None => Ok(Zval::Null),
+    }
+}
+
+/// `array_shift(array &$array): mixed` — remove and return the first element,
+/// reindexing the remaining integer keys from 0 (string keys are preserved);
+/// NULL on an empty array.
+pub fn array_shift(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let rc = as_array_mut(arr, "array_shift")?;
+    let mut iter = rc.iter();
+    let Some((_, first_val)) = iter.next() else {
+        return Ok(Zval::Null);
+    };
+    let shifted = first_val.clone();
+    let mut out = PhpArray::new();
+    for (key, val) in iter {
+        match key {
+            Key::Int(_) => {
+                let _ = out.append(val.clone());
+            }
+            Key::Str(_) => out.insert(key.clone(), val.clone()),
+        }
+    }
+    *arr = Zval::Array(Rc::new(out));
+    Ok(shifted)
+}
+
+/// Borrow a by-reference first argument as an array, or raise the shared
+/// `Argument #1 ($array) must be of type array, {type} given` TypeError.
+fn as_array_mut<'a>(arr: &'a mut Zval, fname: &str) -> Result<&'a mut Rc<PhpArray>, PhpError> {
+    match arr {
+        Zval::Array(rc) => Ok(rc),
+        other => Err(PhpError::TypeError(format!(
+            "{fname}(): Argument #1 ($array) must be of type array, {} given",
+            other.error_type_name()
+        ))),
+    }
+}

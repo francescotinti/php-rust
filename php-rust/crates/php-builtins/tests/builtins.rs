@@ -466,6 +466,78 @@ fn print_r_return_mode() {
     );
 }
 
+// --- by-reference array builtins (step 11c) ---
+
+#[test]
+fn array_push_appends_and_returns_count() {
+    // Mutates the caller's array by reference and returns the new element count.
+    assert_eq!(
+        out("<?php $a=[1,2]; $n=array_push($a,3,4); echo $n; echo '|'; echo implode(',',$a);"),
+        "4|1,2,3,4"
+    );
+    // Pushing onto an empty array.
+    assert_eq!(out("<?php $a=[]; echo array_push($a,1);"), "1");
+}
+
+#[test]
+fn array_push_on_non_array_is_type_error() {
+    let err = fatal("<?php $x=5; array_push($x,1);");
+    match err {
+        PhpError::TypeError(m) => assert_eq!(
+            m,
+            "array_push(): Argument #1 ($array) must be of type array, int given"
+        ),
+        other => panic!("expected TypeError, got {other:?}"),
+    }
+}
+
+#[test]
+fn sort_orders_values_and_reindexes() {
+    assert_eq!(out("<?php $a=[3,1,2]; sort($a); echo implode(',',$a);"), "1,2,3");
+    // String keys are dropped and values reindexed from 0.
+    assert_eq!(
+        out("<?php $a=['b'=>2,'a'=>1]; sort($a); echo implode(',',$a);"),
+        "1,2"
+    );
+}
+
+#[test]
+fn array_pop_removes_last_and_returns_it() {
+    assert_eq!(
+        out("<?php $a=[1,2,3]; $x=array_pop($a); echo $x; echo '|'; echo implode(',',$a); echo '|'; echo count($a);"),
+        "3|1,2|2"
+    );
+    // Popping an empty array yields NULL and leaves it empty.
+    assert_eq!(out("<?php $a=[]; var_dump(array_pop($a));"), "NULL\n");
+}
+
+#[test]
+fn array_shift_removes_first_and_reindexes() {
+    assert_eq!(
+        out("<?php $a=[1,2,3]; $x=array_shift($a); echo $x; echo '|'; echo implode(',',$a);"),
+        "1|2,3"
+    );
+    assert_eq!(out("<?php $a=[]; var_dump(array_shift($a));"), "NULL\n");
+}
+
+#[test]
+fn array_shift_reindexes_int_keys_preserves_string_keys() {
+    // The remaining integer keys renumber from 0; string keys are kept as-is.
+    assert_eq!(
+        out("<?php $a=['x'=>1,7=>2,'y'=>3]; array_shift($a); echo implode(',',array_keys($a));"),
+        "0,y"
+    );
+}
+
+#[test]
+fn array_pop_preserves_remaining_keys() {
+    // array_pop does not reindex: the survivors keep their original keys.
+    assert_eq!(
+        out("<?php $a=[5=>10,2=>20]; array_pop($a); echo implode(',',array_keys($a));"),
+        "5"
+    );
+}
+
 #[test]
 fn undefined_function_is_fatal_after_output() {
     let reg = registry();

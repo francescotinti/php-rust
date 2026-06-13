@@ -14,6 +14,6 @@ pub mod eval;
 pub mod hir;
 pub mod lower;
 
-pub use builtin::{BuiltinFn, Ctx, Registry};
+pub use builtin::{Builtin, BuiltinFn, BuiltinRefFn, Ctx, Registry};
 pub use eval::{run, run_source, run_source_with, run_with, Outcome};
 pub use lower::{lower_source, LowerError};

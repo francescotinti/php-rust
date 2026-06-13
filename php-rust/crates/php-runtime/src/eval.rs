@@ -21,7 +21,7 @@ use std::rc::Rc;
 
 use php_types::{convert, dtoa, ops, Diag, Diags, Key, PhpArray, PhpStr, PhpError, Zval};
 
-use crate::builtin::{Ctx, Registry};
+use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
 use crate::hir::{
     BinOp, CastKind, Expr, ExprKind, FnDecl, Line, Place, PlaceStep, Program, Slot, Stmt, StmtKind,
     UnOp,
@@ -555,6 +555,53 @@ impl<'p> Evaluator<'p> {
         Ok(out)
     }
 
+    /// Invoke a by-reference builtin (step 11c). Its first argument must be a
+    /// variable: that variable's storage cell is bound and handed to the builtin
+    /// as `&mut Zval`, so the builtin's mutation writes through to the caller.
+    /// The remaining arguments are evaluated by value. A missing or non-variable
+    /// first argument raises the shared `$array`-family errors (oracle-verified).
+    fn call_ref_builtin(
+        &mut self,
+        f: BuiltinRefFn,
+        name: &[u8],
+        args: &[Expr],
+    ) -> Result<Zval, PhpError> {
+        let Some((first, rest_exprs)) = args.split_first() else {
+            return Err(PhpError::ArgumentCountError(format!(
+                "{}() expects at least 1 argument, 0 given",
+                String::from_utf8_lossy(name)
+            )));
+        };
+        let ExprKind::Var(slot) = first.kind else {
+            return Err(PhpError::Error(format!(
+                "{}(): Argument #1 ($array) could not be passed by reference",
+                String::from_utf8_lossy(name)
+            )));
+        };
+        // Evaluate the by-value tail before binding the cell (binding a variable
+        // has no side effect, so this preserves left-to-right argument order).
+        let mut rest = Vec::with_capacity(rest_exprs.len());
+        for a in rest_exprs {
+            rest.push(self.eval(a)?);
+        }
+        let cell = self.slot_cell(slot as usize);
+        let mut guard = cell.borrow_mut();
+        let target = &mut *guard;
+        // Like value builtins: flush pending diagnostics, run, mirror fresh
+        // output into `rendered`, then flush the builtin's own diagnostics.
+        self.flush_diags();
+        let pre = self.out.len();
+        let mut ctx = Ctx {
+            out: &mut self.out,
+            diags: &mut self.diags,
+        };
+        let res = f(target, &rest, &mut ctx);
+        let produced = self.out[pre..].to_vec();
+        self.rendered.extend_from_slice(&produced);
+        self.flush_diags();
+        res
+    }
+
     // --- expressions ---
 
     /// Evaluate `e`, stamping its line for any diagnostics it raises and flushing
@@ -725,15 +772,22 @@ impl<'p> Evaluator<'p> {
                     let argv = self.eval_call_args(idx, args)?;
                     return self.call_user_fn(idx, argv);
                 }
-                // Builtins take all arguments by value (builtin by-ref is step
-                // 11c). Copy the fn pointer out so the registry borrow ends before
-                // we borrow `out`/`diags` mutably for the call context.
+                // A by-reference builtin (array_push/sort/...) binds its first
+                // argument's variable cell rather than a copy, so it is handled
+                // before the arguments are evaluated by value (step 11c).
+                if let Some(Builtin::RefFirst(f)) = self.reg.get(name.as_ref()).copied() {
+                    return self.call_ref_builtin(f, name, args);
+                }
+                // Builtins otherwise take all arguments by value. Copy the fn
+                // pointer out so the registry borrow ends before we borrow
+                // `out`/`diags` mutably for the call context.
                 let mut argv = Vec::with_capacity(args.len());
                 for a in args {
                     argv.push(self.eval(a)?);
                 }
                 let f = match self.reg.get(name.as_ref()) {
-                    Some(f) => *f,
+                    Some(Builtin::Value(f)) => *f,
+                    Some(Builtin::RefFirst(_)) => unreachable!("handled above"),
                     None => {
                         return Err(PhpError::Error(format!(
                             "Call to undefined function {}()",
