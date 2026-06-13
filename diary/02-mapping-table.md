@@ -85,21 +85,41 @@ presente nel codebase.
 | **D-R8** | Scrittura annidata via reference (`$ref[0] = 1`) | `write_place`/`unset_place` (`eval.rs:976,1036`) ottengono `&mut Zval` dallo slot tramite l'helper di D-R2: per `Ref(cell)` usano `&mut *cell.borrow_mut()` passato a `write_into`. `write_into` resta invariato (lavora su `&mut Zval`). | Riusa tutta la logica CoW/auto-vivify esistente. |
 | **D-R9** | var_dump / print_r | Le reference a livello di variabile sono **trasparenti**: si deref-a e si stampa il valore (PHP non annota `&` per le reference top-level). Nessun cambio a `dump`/`print_r_into`. | Mantiene il blast radius minimo. L'annotazione `&` compare solo per reference *dentro* array/oggetti → vedi scope-out. |
 
-### Scope-out espliciti (sotto-step futuri)
+### Step 11d — Element-level references via `Zval::Ref` (design pass, sessione 2026-06-13)
 
-| Fuori scope (per ora) | Perché | Cosa richiederebbe |
+> Brainstorming (architettura) → decisioni utente: **unificare** su `Zval::Ref`
+> (rimuovere `Binding`); scope = **foreach-by-ref + element-&**, defer
+> return-by-ref. Semantiche tutte verificate contro l'oracle
+> `/tmp/php-src/sapi/cli/php` (foreach-by-ref `[1,2,3]→[10,20,30]`, lingering
+> gotcha `1,2,2`, `$x=&$a[0]`, `$a[0]=&$x`, `&int(5)` in var_dump, ref-collapse,
+> ref-survives-copy).
+
+| ID | Tema | Decisione | Razionale |
+|---|---|---|---|
+| **D-R10** | Rappresentazione (unificata) | Aggiungo `Zval::Ref(Rc<RefCell<Zval>>)`. **Invariante**: l'interno non è mai un `Ref` (ref-to-ref collassa; `slot_cell` riusa la cella esistente). **Rimuovo `enum Binding`**: gli slot tornano `Vec<Zval>`, una variabile-reference contiene `Zval::Ref(cell)`. Helper 11a/b/c rimappati su `Zval`: `slot_clone`→`deref_clone`, `slot_set`→write-through se `Ref`, `slot_cell`→promuove/clona la cella, `&mut Zval` (IncDec/`write_into`)→`&mut *c.borrow_mut()`. | Fedele a Zend (un solo IS_REFERENCE), rimuove un caso speciale. Scartato additivo (Binding+Zval::Ref) per non avere due rappresentazioni della stessa cosa. |
+| **D-R11** | Deref-on-read (contenimento) | Nuovo `Zval::deref_clone(&self) -> Zval`. Un `Ref` esiste solo come slot/elemento e si dereferenzia appena materializzato. Siti (~9): `read_index`, snapshot `foreach` by-value, `var_dump`, `print_r`, builtin che leggono *valori* d'array (implode/in_array/array_values/array_merge/sort). | **`ops.rs`/`convert.rs` non cambiano** — non ricevono mai un `Ref` (zero rischio sui 37.835 differential). |
+| **D-R12** | Element-& assignment | `AssignRef { target, source }` generalizza `Slot`→`enum { Var(Slot), Elem(Place) }` su entrambi i lati. `$x=&$a[0]`: promuovo l'elemento a `Ref(cell)` in-place (CoW), lego `$x` a clone della cella. `$a[0]=&$x`: scrivo `Ref(cella di $x)` nel place. lower.rs abbassa entrambi i lati come `Place`. | Riusa `slot_cell` + `write_into`. |
+| **D-R13** | foreach-by-ref | `StmtKind::Foreach` guadagna `by_ref: bool`; lower accetta `&` sul value-target. eval: iterabile = variabile con array; snapshot delle **chiavi**; per ogni chiave promuovo `$a[k]` a `Ref(cell)` e lego il loop-var a `Ref(clone(cell))`. **Niente auto-unset** → lingering gotcha emerge naturalmente. | Mutazione propaga alla sorgente; fedele a PHP. |
+| **D-R14** | var_dump / print_r | var_dump: elemento `Ref` → prefisso `&` + deref dell'interno. print_r: deref trasparente (NESSUN `&`, verificato oracle). Ref top-level restano trasparenti (D-R9). | Solo var_dump annota le reference *dentro* container. |
+| **D-R15** | Cicli | `$a[0]=&$a` crea un ciclo; `Rc<RefCell>` lo leak-a. Accettato (D-G6, nessun GC ciclico Tier 1), documentato. | Coerente con la scelta `Rc` senza weak/GC. |
+
+**Scope-out di 11d:** return-by-ref (`function &f()`), array-literal con elemento-ref (`[&$x]`), foreach-by-ref su non-lvalue.
+
+**Sotto-suddivisione TDD 11d:** **11d-1** `Zval::Ref` + rimozione `Binding` + deref (refactor a parità di comportamento: i 185 test restano verdi); **11d-2** element-& (`$x=&$a[0]`, `$a[0]=&$x`); **11d-3** foreach-by-ref (+ lingering gotcha); **11d-4** var_dump `&` annotation.
+
+### Scope-out espliciti (oltre Tier 1)
+
+| Fuori scope | Perché | Cosa richiederebbe |
 |---|---|---|
-| Reference **dentro** array (`$arr[0] = &$x`) | Una cella-reference dovrebbe vivere come elemento di `PhpArray`, quindi servirebbe `Zval::Ref` (variant), con blast radius su ops/convert/dump/builtin. | Promuovere `Ref` a variant di `Zval` + deref pervasivo + annotazione `&` in var_dump/print_r. |
-| `foreach ($a as &$v)` | Idem: gli elementi dell'array iterato devono diventare reference (`lower.rs:720`). | Dipende dal punto sopra. |
-| Return by-reference (`function &f()`) | Raro nel corpus Tier 1 (`lower.rs:329`). | Modello di reference già pronto + propagazione nel return. |
-| GC ciclico | Con reference **solo a livello di variabile** non si creano cicli (`$a=&$b;$b=&$a;` condividono una cella, nessun ciclo). Il rischio leak-on-cycle arriva **solo** con le reference dentro container (sopra). Coerente con D-G6. | `Rc` → ciclo possibile solo via element-ref; allora servirà GC o weak. |
+| Return by-reference (`function &f()`) | Raro nel corpus Tier 1 (`lower.rs:329`). | Modello di reference già pronto (D-R10) + propagazione nel return path. |
+| GC ciclico | Con element-ref i cicli diventano possibili (`$a[0]=&$a`); leak accettato (D-R15/D-G6). | `Rc` → servirebbe weak/cycle-collector. |
 
 ### Suddivisione in sotto-step (proposta per la sessione dedicata)
 
-- **11a** — `Slot` enum + read/write-through + `$b = &$a` + `unset` (D-R1..R5, D-R8, D-R9). TDD da `$b=&$a; $a=5; echo $b;` → `5`.
-- **11b** — parametri by-ref `f(&$x)` (D-R6). TDD da `function inc(&$x){$x++;} $n=1; inc($n); echo $n;` → `2`.
-- **11c** — builtin by-ref: `array_push`, poi `sort`/`array_pop`/`array_shift` (D-R7).
-- **11d** *(opzionale, separato)* — element-ref / foreach-by-ref (richiede `Zval::Ref`).
+- **11a** ✅ (`cb403bc`) — `Binding` enum + read/write-through + `$b = &$a` + `unset` (D-R1..R5, D-R8, D-R9).
+- **11b** ✅ (`06ddf17`) — parametri by-ref `f(&$x)` (D-R6).
+- **11c** ✅ (`81ae800`) — builtin by-ref: `array_push`/`sort`/`array_pop`/`array_shift` (D-R7).
+- **11d** ⏳ (design sopra) — element-ref + foreach-by-ref via `Zval::Ref` (D-R10..R15), 4 sotto-step TDD.
 
 ### Primo move della sessione dedicata
 
