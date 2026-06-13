@@ -2,6 +2,29 @@
 
 > Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Una entry per step.
 
+## Step 11d — Element-level references via `Zval::Ref`
+
+### 11d-1 — variante `Zval::Ref` + rimozione `Binding` + deref-on-read (refactor a parità)
+
+- **Riferimento C:** Zend `IS_REFERENCE`/`zend_reference`; deref pervasivo
+  (`Z_DEREF`). Nessuna nuova semantica osservabile — i 185 test esistenti (incluse
+  le reference 11a/b/c) fanno da guardia.
+- **Target:** `php-types/zval.rs` (variante `Ref(Rc<RefCell<Zval>>)` +
+  `deref_clone`/`is_ref`), `ops.rs`/`convert.rs` (arm `Ref` deref-recurse nei
+  funnel: `try_to_number`/`try_to_long`/`bw_not`/`increment`/`decrement`/
+  `to_bool`/`is_true_silent`/`to_long_cast`/`to_double`/`to_zstr`; `compare`
+  deref all'entry), `php-runtime/eval.rs` (rimosso `enum Binding`, slot =
+  `Vec<Zval>`, helper `slot_clone`/`slot_set`/`slot_cell` su `Zval`,
+  read_index/foreach deref elementi), `php-builtins` (var_dump deref arm).
+- **Decisioni applicate:** D-R10 (unificazione: una sola rappresentazione
+  `Zval::Ref`, invariante no-ref-to-ref), D-R11 (deref-on-read: `ops.rs`/
+  `convert.rs` non ricevono mai un `Ref` a runtime — i 37.835 differential
+  restano intatti; gli arm `Ref` sono difensivi/deref-ricorsivi).
+- **Round di iterazione AI:** 1 (il compilatore E0004 ha guidato l'esaustività:
+  ~14 arm in php-types, 4 in eval.rs, 1 in builtins, 1 nel test differential).
+- **Test pass al primo tentativo:** sì (185/185 invariati — parità confermata).
+- **Tempo:** ~45 minuti.
+
 ## Step 11c — Builtin by-reference (`array_push`/`sort`/`array_pop`/`array_shift`)
 
 - **Riferimento C:** `ext/standard/array.c` (`php_array_push`, `php_sort`,

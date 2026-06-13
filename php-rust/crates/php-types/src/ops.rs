@@ -54,6 +54,9 @@ fn try_to_number(v: &Zval, diags: &mut Diags) -> Option<Num> {
             None => None,
         },
         Zval::Array(_) => None,
+        // A reference is converted as its target (deref-on-read should make this
+        // unreachable, but recursing keeps the op correct if one slips through).
+        Zval::Ref(c) => try_to_number(&c.borrow(), diags),
     }
 }
 
@@ -98,6 +101,7 @@ fn try_to_long(v: &Zval, diags: &mut Diags) -> Option<i64> {
             }
         }
         Zval::Array(_) => None,
+        Zval::Ref(c) => try_to_long(&c.borrow(), diags),
     }
 }
 
@@ -333,6 +337,7 @@ pub fn bw_not(a: &Zval, diags: &mut Diags) -> OpResult {
         ))),
         Zval::Long(l) => Ok(Zval::Long(!l)),
         Zval::Double(d) => Ok(Zval::Long(!dval_to_lval_safe(*d, diags))),
+        Zval::Ref(c) => bw_not(&c.borrow(), diags),
         // zend_zval_value_name: bools spell out their value (oracle: ~true).
         _ => Err(PhpError::TypeError(format!(
             "Cannot perform bitwise not on {}",
@@ -488,8 +493,10 @@ fn type_lt_true(v: &Zval) -> bool {
 
 /// zend_compare (zend_operators.c:2306-2470), minus objects/resources/refs.
 pub fn compare(a: &Zval, b: &Zval) -> i32 {
-    let mut oa = a.clone();
-    let mut ob = b.clone();
+    // Follow references up front (D-R11): the rest of the routine, and the
+    // recursive `compare_arrays` call, then only ever see plain values.
+    let mut oa = a.deref_clone();
+    let mut ob = b.deref_clone();
     let mut converted = false;
     loop {
         match (&oa, &ob) {
@@ -662,6 +669,10 @@ pub fn identical(a: &Zval, b: &Zval) -> bool {
                 .zip(r.iter())
                 .all(|((k1, v1), (k2, v2))| keys_identical(k1, k2) && identical(v1, v2))
         }
+        // Identity follows references on either side (also covers reference
+        // elements inside arrays via the recursive call above).
+        (Zval::Ref(c), _) => identical(&c.borrow(), b),
+        (_, Zval::Ref(c)) => identical(a, &c.borrow()),
         _ => false,
     }
 }
@@ -712,6 +723,10 @@ pub fn increment(v: &mut Zval, diags: &mut Diags) -> Result<(), PhpError> {
         }
         Zval::Array(_) => {
             return Err(PhpError::TypeError("Cannot increment array".to_string()));
+        }
+        Zval::Ref(cell) => {
+            let inner = &mut *cell.borrow_mut();
+            return increment(inner, diags);
         }
     }
     Ok(())
@@ -827,6 +842,10 @@ pub fn decrement(v: &mut Zval, diags: &mut Diags) -> Result<(), PhpError> {
         }
         Zval::Array(_) => {
             return Err(PhpError::TypeError("Cannot decrement array".to_string()));
+        }
+        Zval::Ref(cell) => {
+            let inner = &mut *cell.borrow_mut();
+            return decrement(inner, diags);
         }
     }
     Ok(())

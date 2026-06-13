@@ -28,6 +28,7 @@ pub fn to_bool(v: &Zval, diags: &mut Diags) -> bool {
             !(b.is_empty() || b == b"0")
         }
         Zval::Array(a) => !a.is_empty(),
+        Zval::Ref(c) => to_bool(&c.borrow(), diags),
     }
 }
 
@@ -45,6 +46,7 @@ pub fn is_true_silent(v: &Zval) -> bool {
             !(b.is_empty() || b == b"0")
         }
         Zval::Array(a) => !a.is_empty(),
+        Zval::Ref(c) => is_true_silent(&c.borrow()),
     }
 }
 
@@ -136,6 +138,7 @@ pub fn to_long_cast(v: &Zval, diags: &mut Diags) -> i64 {
             None => 0,
         },
         Zval::Array(a) => !a.is_empty() as i64,
+        Zval::Ref(c) => to_long_cast(&c.borrow(), diags),
     }
 }
 
@@ -154,6 +157,7 @@ pub fn to_double(v: &Zval) -> f64 {
             None => 0.0,
         },
         Zval::Array(a) => !a.is_empty() as i64 as f64,
+        Zval::Ref(c) => to_double(&c.borrow()),
     }
 }
 
@@ -173,6 +177,7 @@ pub fn to_zstr(v: &Zval, diags: &mut Diags) -> ZStr {
             diags.push(Diag::Warning("Array to string conversion".to_string()));
             PhpStr::from_str("Array")
         }
+        Zval::Ref(c) => to_zstr(&c.borrow(), diags),
     }
 }
 

@@ -27,19 +27,15 @@ use crate::hir::{
     UnOp,
 };
 
-/// A variable slot's storage (D-R1, step 11a). The common case is `Value`: a
-/// plain zval with zero overhead and no behaviour change. A slot is promoted to
-/// `Ref` only when `&` binds it, mirroring Zend's lazy `IS_REFERENCE`. All
-/// aliases of one reference share the same `Rc<RefCell<Zval>>`, so a write
-/// through any of them is visible to all (write-through, D-R3).
-enum Binding {
-    Value(Zval),
-    Ref(Rc<RefCell<Zval>>),
-}
-
 /// A fresh frame of `n` independent value slots, all unset.
-fn fresh_slots(n: usize) -> Vec<Binding> {
-    (0..n).map(|_| Binding::Value(Zval::Undef)).collect()
+///
+/// A slot is a plain [`Zval`]; a reference is a `Zval::Ref` holding a shared
+/// `Rc<RefCell<Zval>>` (step 11d unified the slot-level binding of steps 11a–c
+/// with element-level references onto the single `Zval::Ref` representation,
+/// D-R10). All aliases of one reference share the cell, so a write through any
+/// of them is visible to all (write-through, D-R3).
+fn fresh_slots(n: usize) -> Vec<Zval> {
+    vec![Zval::Undef; n]
 }
 
 /// A user-function argument as bound for a call: a plain value for a by-value
@@ -161,7 +157,7 @@ struct Evaluator<'p> {
     fn_index: &'p HashMap<Vec<u8>, usize>,
     /// Script file name, reproduced in rendered diagnostics (`... in <file>`).
     file: &'p [u8],
-    slots: Vec<Binding>,
+    slots: Vec<Zval>,
     /// Pure program output (echo / inline HTML / builtins).
     out: Vec<u8>,
     /// The interleaved CLI stream: `out` plus diagnostics rendered at their point
@@ -408,7 +404,8 @@ impl<'p> Evaluator<'p> {
     ) -> Result<Flow, PhpError> {
         let collection = self.eval(iter)?;
         let items: Vec<(Key, Zval)> = match collection {
-            Zval::Array(a) => a.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+            // By-value iteration derefs reference elements (D-R11).
+            Zval::Array(a) => a.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect(),
             other => {
                 self.diags.push(Diag::Warning(format!(
                     "foreach() argument must be of type array|object, {} given",
@@ -509,13 +506,10 @@ impl<'p> Evaluator<'p> {
     fn run_user_fn_body(&mut self, f: &'p FnDecl, argv: Vec<Arg>) -> Result<Zval, PhpError> {
         for (i, p) in f.params.iter().enumerate() {
             let binding = match argv.get(i) {
-                Some(Arg::Val(v)) => Binding::Value(v.clone()),
-                Some(Arg::Ref(cell)) => Binding::Ref(Rc::clone(cell)),
+                Some(Arg::Val(v)) => v.clone(),
+                Some(Arg::Ref(cell)) => Zval::Ref(Rc::clone(cell)),
                 // Required params are guaranteed present by the caller's check.
-                None => {
-                    let v = self.eval(p.default.as_ref().expect("required arg checked"))?;
-                    Binding::Value(v)
-                }
+                None => self.eval(p.default.as_ref().expect("required arg checked"))?,
             };
             self.slots[p.slot as usize] = binding;
         }
@@ -723,23 +717,14 @@ impl<'p> Evaluator<'p> {
                     self.slot_set(idx, Zval::Null);
                 }
                 let old = self.slot_clone(idx);
+                // `increment`/`decrement` follow a `Zval::Ref` themselves, so the
+                // mutation writes through any alias without a separate match here.
                 let d = &mut self.diags;
-                match &mut self.slots[idx] {
-                    Binding::Value(z) => {
-                        if *inc {
-                            ops::increment(z, d)?;
-                        } else {
-                            ops::decrement(z, d)?;
-                        }
-                    }
-                    Binding::Ref(cell) => {
-                        let z = &mut *cell.borrow_mut();
-                        if *inc {
-                            ops::increment(z, d)?;
-                        } else {
-                            ops::decrement(z, d)?;
-                        }
-                    }
+                let target = &mut self.slots[idx];
+                if *inc {
+                    ops::increment(target, d)?;
+                } else {
+                    ops::decrement(target, d)?;
                 }
                 Ok(if *pre { self.slot_clone(idx) } else { old })
             }
@@ -943,22 +928,19 @@ impl<'p> Evaluator<'p> {
         }
     }
 
-    /// The current value held by a slot, dereferencing a reference binding
-    /// (D-R2: reads are always by value, preserving copy semantics).
+    /// The current value held by a slot, dereferencing a reference (D-R2: reads
+    /// are always by value, preserving copy semantics).
     fn slot_clone(&self, idx: usize) -> Zval {
-        match &self.slots[idx] {
-            Binding::Value(z) => z.clone(),
-            Binding::Ref(cell) => cell.borrow().clone(),
-        }
+        self.slots[idx].deref_clone()
     }
 
     /// Write `v` into a slot. For a plain value this replaces it; for a
-    /// reference binding it writes *through* the shared cell so every alias sees
-    /// the new value (D-R3 write-through).
+    /// reference it writes *through* the shared cell so every alias sees the new
+    /// value (D-R3 write-through).
     fn slot_set(&mut self, idx: usize, v: Zval) {
         match &mut self.slots[idx] {
-            Binding::Value(z) => *z = v,
-            Binding::Ref(cell) => *cell.borrow_mut() = v,
+            Zval::Ref(cell) => *cell.borrow_mut() = v,
+            slot => *slot = v,
         }
     }
 
@@ -1036,6 +1018,7 @@ impl<'p> Evaluator<'p> {
                     "Illegal offset type".to_string(),
                 ))
             }
+            Zval::Ref(c) => return self.coerce_key(&c.borrow()),
         })
     }
 
@@ -1046,7 +1029,8 @@ impl<'p> Evaluator<'p> {
             Zval::Array(a) => {
                 let k = self.coerce_key(key)?;
                 match a.get(&k) {
-                    Some(v) => Ok(v.clone()),
+                    // Deref a reference element (D-R11): a normal read is by value.
+                    Some(v) => Ok(v.deref_clone()),
                     None => {
                         if !silent {
                             self.warn_undef_key(&k);
@@ -1128,11 +1112,11 @@ impl<'p> Evaluator<'p> {
         }
         let d = &mut self.diags;
         match &mut self.slots[slot as usize] {
-            Binding::Value(z) => write_into(z, steps, value, d),
-            Binding::Ref(cell) => {
+            Zval::Ref(cell) => {
                 let z = &mut *cell.borrow_mut();
                 write_into(z, steps, value, d)
             }
+            other => write_into(other, steps, value, d),
         }
     }
 
@@ -1144,7 +1128,7 @@ impl<'p> Evaluator<'p> {
     fn assign_ref(&mut self, target: Slot, source: Slot) -> Zval {
         let cell = self.slot_cell(source as usize);
         let value = cell.borrow().clone();
-        self.slots[target as usize] = Binding::Ref(cell);
+        self.slots[target as usize] = Zval::Ref(cell);
         value
     }
 
@@ -1154,14 +1138,14 @@ impl<'p> Evaluator<'p> {
     /// and by-reference argument passing (D-R4/D-R6).
     fn slot_cell(&mut self, idx: usize) -> Rc<RefCell<Zval>> {
         match &self.slots[idx] {
-            Binding::Ref(cell) => Rc::clone(cell),
-            Binding::Value(z) => {
+            Zval::Ref(cell) => Rc::clone(cell),
+            z => {
                 let init = match z {
                     Zval::Undef => Zval::Null,
                     other => other.clone(),
                 };
                 let cell = Rc::new(RefCell::new(init));
-                self.slots[idx] = Binding::Ref(Rc::clone(&cell));
+                self.slots[idx] = Zval::Ref(Rc::clone(&cell));
                 cell
             }
         }
@@ -1224,15 +1208,15 @@ impl<'p> Evaluator<'p> {
             // Drop *this* binding only: replacing it with a fresh value slot
             // releases this alias's share of any reference cell, leaving other
             // aliases untouched (D-R5).
-            self.slots[slot as usize] = Binding::Value(Zval::Undef);
+            self.slots[slot as usize] = Zval::Undef;
             return;
         }
         match &mut self.slots[slot as usize] {
-            Binding::Value(z) => unset_into(z, steps),
-            Binding::Ref(cell) => {
+            Zval::Ref(cell) => {
                 let z = &mut *cell.borrow_mut();
                 unset_into(z, steps);
             }
+            other => unset_into(other, steps),
         }
     }
 }
@@ -1356,6 +1340,7 @@ fn coerce_key_silent(v: &Zval) -> Option<Key> {
         Zval::Str(s) => Some(Key::from_zstr(s)),
         Zval::Null | Zval::Undef => Some(Key::from_bytes(b"")),
         Zval::Array(_) => None,
+        Zval::Ref(c) => coerce_key_silent(&c.borrow()),
     }
 }
 
@@ -1393,6 +1378,7 @@ fn php_type_name(v: &Zval) -> &'static str {
         Zval::Double(_) => "float",
         Zval::Str(_) => "string",
         Zval::Array(_) => "array",
+        Zval::Ref(c) => php_type_name(&c.borrow()),
     }
 }
 
@@ -1407,6 +1393,7 @@ fn match_case_repr(v: &Zval) -> String {
         Zval::Double(d) => String::from_utf8_lossy(&dtoa::double_to_shortest(*d)).into_owned(),
         Zval::Str(s) => format!("'{}'", String::from_utf8_lossy(s.as_bytes())),
         Zval::Array(_) => "of type array".to_string(),
+        Zval::Ref(c) => match_case_repr(&c.borrow()),
     }
 }
 

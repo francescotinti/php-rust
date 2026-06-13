@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::{PhpArray, PhpStr};
@@ -20,11 +21,34 @@ pub enum Zval {
     Double(f64),
     Str(Rc<PhpStr>),
     Array(Rc<PhpArray>),
+    /// A PHP reference (`IS_REFERENCE`, step 11d): a shared, mutable cell that
+    /// any number of variables / array elements can alias. Writing through any
+    /// alias is visible to all. **Invariant:** the inner value is never itself a
+    /// `Ref` (PHP collapses reference-to-reference). Consumers materialise the
+    /// underlying value with [`Zval::deref_clone`]; only `var_dump` inspects the
+    /// `Ref` wrapper directly (to print the `&` marker for container elements).
+    Ref(Rc<RefCell<Zval>>),
 }
 
 impl Zval {
     pub fn str_from(s: &str) -> Zval {
         Zval::Str(PhpStr::from_str(s))
+    }
+
+    /// The underlying value, following a reference (D-R11). A non-reference is
+    /// cloned as-is; a `Ref` yields a clone of its current cell contents. By the
+    /// no-ref-to-ref invariant this never returns a `Ref`.
+    pub fn deref_clone(&self) -> Zval {
+        match self {
+            Zval::Ref(cell) => cell.borrow().clone(),
+            v => v.clone(),
+        }
+    }
+
+    /// Whether this value is a reference wrapper (used by `var_dump` to emit the
+    /// `&` marker on container elements).
+    pub fn is_ref(&self) -> bool {
+        matches!(self, Zval::Ref(_))
     }
 
     /// Type name as reported by gettype().
@@ -36,6 +60,7 @@ impl Zval {
             Zval::Double(_) => "double",
             Zval::Str(_) => "string",
             Zval::Array(_) => "array",
+            Zval::Ref(cell) => cell.borrow().gettype(),
         }
     }
 
@@ -48,6 +73,7 @@ impl Zval {
             Zval::Double(_) => "float",
             Zval::Str(_) => "string",
             Zval::Array(_) => "array",
+            Zval::Ref(cell) => cell.borrow().error_type_name(),
         }
     }
 }

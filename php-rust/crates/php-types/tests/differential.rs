@@ -175,6 +175,8 @@ fn var_dump(v: &Zval, level: usize, out: &mut String) {
             }
             writeln!(out, "{pad}}}").unwrap();
         }
+        // The differential corpus exercises only scalar/array ops, never refs.
+        Zval::Ref(_) => unreachable!("differential corpus produces no references"),
     }
 }
 

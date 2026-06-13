@@ -129,6 +129,9 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize) {
             spaces(out, indent);
             out.extend_from_slice(b"}\n");
         }
+        // A top-level reference is dereferenced transparently; the `&` marker for
+        // reference *elements* inside an array is added in step 11d-4.
+        Zval::Ref(cell) => dump(out, &cell.borrow(), indent),
     }
 }
 
