@@ -200,6 +200,70 @@ fn array_merge_non_array_is_type_error() {
 }
 
 #[test]
+fn implode_joins() {
+    assert_eq!(out("<?php echo implode(',', [1, 2, 3]);"), "1,2,3");
+    assert_eq!(out("<?php echo implode([1, 2, 3]);"), "123"); // glue defaults to ""
+    // Each element is string-coerced: true->"1", null->"", 2.5->"2.5".
+    assert_eq!(out("<?php echo implode('-', [1, 'a', true, null, 2.5]);"), "1-a-1--2.5");
+    assert_eq!(out("<?php echo implode(',', []);"), "");
+}
+
+#[test]
+fn implode_array_separator_is_type_error() {
+    // The legacy implode($array, $glue) order was removed in PHP 8.
+    match fatal("<?php implode([1, 2], '-');") {
+        PhpError::TypeError(m) => assert_eq!(
+            m,
+            "implode(): Argument #1 ($separator) must be of type string, array given"
+        ),
+        other => panic!("expected TypeError, got {other:?}"),
+    }
+}
+
+#[test]
+fn explode_splits() {
+    assert_eq!(
+        out("<?php var_dump(explode(',', 'a,b,c'));"),
+        "array(3) {\n  [0]=>\n  string(1) \"a\"\n  [1]=>\n  string(1) \"b\"\n  [2]=>\n  string(1) \"c\"\n}\n"
+    );
+    // No separator occurrence: single-element array holding the whole string.
+    assert_eq!(
+        out("<?php var_dump(explode(',', 'abc'));"),
+        "array(1) {\n  [0]=>\n  string(3) \"abc\"\n}\n"
+    );
+    // Multichar separator.
+    assert_eq!(
+        out("<?php echo implode('|', explode('::', 'a::b::c'));"),
+        "a|b|c"
+    );
+}
+
+#[test]
+fn explode_limit() {
+    // Positive limit: last element holds the unsplit remainder.
+    assert_eq!(
+        out("<?php var_dump(explode(',', 'a,b,c,d', 2));"),
+        "array(2) {\n  [0]=>\n  string(1) \"a\"\n  [1]=>\n  string(5) \"b,c,d\"\n}\n"
+    );
+    // limit 0 behaves like 1: whole string.
+    assert_eq!(out("<?php echo implode('|', explode(',', 'a,b,c', 0));"), "a,b,c");
+    // Negative limit drops |limit| trailing pieces.
+    assert_eq!(out("<?php echo implode('|', explode(',', 'a,b,c,d', -1));"), "a|b|c");
+    assert_eq!(out("<?php echo count(explode(',', 'a,b,c', -5));"), "0");
+}
+
+#[test]
+fn explode_empty_separator_is_value_error() {
+    match fatal("<?php explode('', 'abc');") {
+        PhpError::ValueError(m) => assert_eq!(
+            m,
+            "explode(): Argument #1 ($separator) must not be empty"
+        ),
+        other => panic!("expected ValueError, got {other:?}"),
+    }
+}
+
+#[test]
 fn undefined_function_is_fatal_after_output() {
     let reg = registry();
     let o = run_source_with(b"t.php", b"<?php echo 'a'; nope();", &reg).expect("lowers");

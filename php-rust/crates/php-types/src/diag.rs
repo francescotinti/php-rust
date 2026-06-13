@@ -34,6 +34,7 @@ pub enum PhpError {
     /// The base `Error` class (e.g. "Call to undefined function f()").
     Error(String),
     TypeError(String),
+    ValueError(String),
     DivisionByZeroError(&'static str),
     ArithmeticError(&'static str),
 }
@@ -43,6 +44,7 @@ impl PhpError {
         match self {
             PhpError::Error(_) => "Error",
             PhpError::TypeError(_) => "TypeError",
+            PhpError::ValueError(_) => "ValueError",
             PhpError::DivisionByZeroError(_) => "DivisionByZeroError",
             PhpError::ArithmeticError(_) => "ArithmeticError",
         }
@@ -52,6 +54,7 @@ impl PhpError {
         match self {
             PhpError::Error(m) => m,
             PhpError::TypeError(m) => m,
+            PhpError::ValueError(m) => m,
             PhpError::DivisionByZeroError(m) => m,
             PhpError::ArithmeticError(m) => m,
         }

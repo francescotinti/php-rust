@@ -10,6 +10,7 @@
 //! sprintf, array_*) is step 10.
 
 mod array;
+mod string;
 
 use php_runtime::{Ctx, Registry};
 use php_types::{convert, dtoa, numstr, Key, PhpError, PhpStr, Zval};
@@ -26,6 +27,9 @@ pub fn registry() -> Registry {
     add(b"array_values", array::array_values);
     add(b"in_array", array::in_array);
     add(b"array_merge", array::array_merge);
+    add(b"implode", string::implode);
+    add(b"join", string::implode);
+    add(b"explode", string::explode);
     add(b"var_dump", var_dump);
     add(b"strlen", strlen);
     add(b"gettype", gettype);
