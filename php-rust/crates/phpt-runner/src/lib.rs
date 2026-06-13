@@ -9,10 +9,15 @@
 //! else becomes a *motivated SKIP* with a category, exactly as the lowering
 //! bridge anticipated (see `php_runtime::lower`).
 //!
+//! Since step 9 the evaluator renders diagnostics and uncaught fatals inline
+//! (`Outcome::rendered`), so tests that expect warnings/notices/fatals are now
+//! run and compared rather than skipped; only an undefined-function call still
+//! skips (as a missing-builtin scope gap).
+//!
 //! The point of this honesty: the only [`Status::Fail`] outcome is a genuine
 //! output divergence on a script we fully support — the valuable signal. Scope
-//! gaps (unsupported syntax, missing builtins, unrendered diagnostics — step 9)
-//! are counted and labelled, never silently passed or falsely failed.
+//! gaps (unsupported syntax, missing builtins) are counted and labelled, never
+//! silently passed or falsely failed.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -139,44 +144,38 @@ pub fn run_phpt(src: &[u8], reg: &Registry) -> TestResult {
         };
     }
 
-    // Run it.
+    // Run it. The script's name doubles as the path PHP prints in diagnostics
+    // (`... in test.phpt on line N`); EXPECTF `%s` placeholders absorb it.
     let outcome = match run_source_with(b"test.phpt", source, reg) {
         Ok(o) => o,
         Err(e) => return TestResult::skip("parse", format!("lower error: {e}")),
     };
 
-    // A builtin we have not implemented yet is a scope gap, not a defect.
+    // A builtin we have not implemented yet is a scope gap, not a defect: a
+    // "Call to undefined function" fatal means missing coverage. Every other
+    // fatal is rendered onto the stream (step 9) and compared like normal output.
     if let Some(err) = &outcome.fatal {
         let msg = err.message();
         if msg.starts_with("Call to undefined function") {
             return TestResult::skip("builtin", msg.to_string());
         }
-        // Any other fatal: we do not render fatals onto stdout yet (step 9), so
-        // we cannot fairly compare. Skip rather than risk a false fail.
-        return TestResult::skip(
-            "diag-or-fatal",
-            format!("fatal not rendered (step 9): {} {msg}", err.class_name()),
-        );
-    }
-    // Likewise, unrendered warnings/notices/deprecations would desynchronise the
-    // output comparison; defer those tests to step 9.
-    if !outcome.diags.is_empty() {
-        return TestResult::skip(
-            "diag-or-fatal",
-            format!("{} diagnostic(s) not rendered (step 9)", outcome.diags.len()),
-        );
     }
 
-    // Clean run: compare.
-    let got = normalize(&String::from_utf8_lossy(&outcome.stdout));
+    // Compare the rendered stream: program output with diagnostics and any
+    // uncaught fatal interleaved exactly as PHP's CLI prints them (step 9).
+    let got = normalize(&String::from_utf8_lossy(&outcome.rendered));
     let want = normalize(wanted);
 
-    // If the expectation itself contains diagnostic output (which we collect but
-    // do not yet render onto stdout — step 9), comparison is unfair: skip.
-    if expects_diagnostic(&want) {
+    // Compile-time diagnostics are out of scope: our front-end (mago) parses,
+    // and we never run the engine's compile-time validation (attribute targets,
+    // illegal type declarations, parser strictness). When the expectation is such
+    // an error — a `Parse error:` or a non-`Uncaught` `Fatal error:` — and we did
+    // not produce one, the test exercises a capability we do not model; skip it
+    // honestly rather than counting a false divergence.
+    if expects_compile_error(&want) && !is_engine_fatal(&got) {
         return TestResult::skip(
-            "diag-or-fatal",
-            "expectation contains diagnostics not rendered (step 9)".to_string(),
+            "compile-error",
+            "compile-time diagnostic not modelled".to_string(),
         );
     }
 
@@ -212,20 +211,20 @@ fn normalize(s: &str) -> String {
     s.replace("\r\n", "\n").trim().to_string()
 }
 
-/// Does the expected output contain a PHP diagnostic header? Until step 9 we
-/// route warnings/notices/deprecations/fatals to a side channel rather than
-/// stdout, so any test expecting them is out of scope.
-fn expects_diagnostic(want: &str) -> bool {
-    const MARKERS: &[&str] = &[
-        "Warning: ",
-        "Deprecated: ",
-        "Notice: ",
-        "Fatal error: ",
-        "Parse error: ",
-        "Strict Standards: ",
-    ];
-    want.lines()
-        .any(|l| MARKERS.iter().any(|m| l.trim_start().starts_with(m)))
+/// Does the expectation lead with a compile-time engine error (a `Parse error:`
+/// or a non-thrown `Fatal error:`)? Thrown exceptions print `Fatal error:
+/// Uncaught …` and are *not* compile-time — those we do model and compare.
+fn expects_compile_error(want: &str) -> bool {
+    let w = want.trim_start();
+    w.starts_with("Parse error:")
+        || (w.starts_with("Fatal error:") && !w.starts_with("Fatal error: Uncaught"))
+}
+
+/// Did our own output lead with an engine-level fatal/parse error? If so we can
+/// fairly compare it against the expectation instead of skipping.
+fn is_engine_fatal(got: &str) -> bool {
+    let g = got.trim_start();
+    g.starts_with("Parse error:") || g.starts_with("Fatal error:")
 }
 
 fn truncate(s: &str, max: usize) -> String {

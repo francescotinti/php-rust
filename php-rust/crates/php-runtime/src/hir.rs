@@ -24,6 +24,9 @@ pub type Slot = u32;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
     pub body: Vec<Stmt>,
+    /// The script's file name, as passed to [`crate::lower_source`]. Reproduced
+    /// verbatim in rendered diagnostics (`... in <file> on line N`, step 9).
+    pub file: Box<[u8]>,
     /// `slots[i]` is the name (without leading `$`) of the variable in slot `i`.
     /// Used for `Undefined variable $name` diagnostics (D-G13).
     pub slots: Vec<Box<[u8]>>,

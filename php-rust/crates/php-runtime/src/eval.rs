@@ -22,7 +22,8 @@ use php_types::{convert, dtoa, ops, Diag, Diags, Key, PhpArray, PhpStr, PhpError
 
 use crate::builtin::{Ctx, Registry};
 use crate::hir::{
-    BinOp, CastKind, Expr, ExprKind, FnDecl, Place, PlaceStep, Program, Slot, Stmt, StmtKind, UnOp,
+    BinOp, CastKind, Expr, ExprKind, FnDecl, Line, Place, PlaceStep, Program, Slot, Stmt, StmtKind,
+    UnOp,
 };
 
 /// Control-flow signal produced by executing a statement.
@@ -40,11 +41,20 @@ enum Flow {
 /// The result of running a script.
 #[derive(Debug)]
 pub struct Outcome {
-    /// Bytes written by `echo` / inline HTML, in order.
+    /// Bytes written by `echo` / inline HTML / builtins, in order. This is the
+    /// *pure* program output: diagnostics are not interleaved here (use
+    /// [`Outcome::rendered`] for that).
     pub stdout: Vec<u8>,
-    /// Non-fatal diagnostics raised during execution (rendering is step 9).
+    /// The CLI-faithful output stream (step 9): `stdout` with diagnostics and an
+    /// uncaught fatal rendered *inline at their point of occurrence*, exactly as
+    /// PHP's CLI SAPI emits them under `display_errors=1, html_errors=0`. This is
+    /// the stream a `.phpt` `--EXPECT(F)--` section is compared against.
+    pub rendered: Vec<u8>,
+    /// Non-fatal diagnostics raised during execution, in order (side channel for
+    /// fine-grained assertions; also rendered into [`Outcome::rendered`]).
     pub diags: Diags,
-    /// An uncaught fatal error that aborted execution, if any.
+    /// An uncaught fatal error that aborted execution, if any (also rendered at
+    /// the tail of [`Outcome::rendered`]).
     pub fatal: Option<PhpError>,
     /// Top-level `return` value (NULL if the script ran to completion).
     pub return_value: Zval,
@@ -87,9 +97,13 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         reg: registry,
         funcs: &program.functions,
         fn_index: &fn_index,
+        file: &program.file,
         slots: vec![Zval::Undef; program.slots.len()],
         out: Vec::new(),
+        rendered: Vec::new(),
         diags: Vec::new(),
+        diags_rendered: 0,
+        cur_line: 1,
     };
 
     let (fatal, return_value) = match ev.exec_stmts(&program.body) {
@@ -98,8 +112,16 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         Err(e) => (Some(e), Zval::Null),
     };
 
+    // Render any diagnostics still staged (defensive; statement/expression exits
+    // already flush), then the uncaught fatal at the tail of the stream.
+    ev.flush_diags();
+    if let Some(err) = &fatal {
+        ev.render_fatal(err);
+    }
+
     Outcome {
         stdout: ev.out,
+        rendered: ev.rendered,
         diags: ev.diags,
         fatal,
         return_value,
@@ -114,9 +136,24 @@ struct Evaluator<'p> {
     /// Hoisted user functions and their name→index map (built in `run_with`).
     funcs: &'p [FnDecl],
     fn_index: &'p HashMap<Vec<u8>, usize>,
+    /// Script file name, reproduced in rendered diagnostics (`... in <file>`).
+    file: &'p [u8],
     slots: Vec<Zval>,
+    /// Pure program output (echo / inline HTML / builtins).
     out: Vec<u8>,
+    /// The interleaved CLI stream: `out` plus diagnostics rendered at their point
+    /// of occurrence. Built incrementally alongside `out` (see `emit`).
+    rendered: Vec<u8>,
+    /// All diagnostics raised, in order (the side channel). Leaf functions in
+    /// `php_types` push here; `flush_diags` renders the not-yet-rendered tail
+    /// into `rendered`, tracked by `diags_rendered`.
     diags: Diags,
+    diags_rendered: usize,
+    /// 1-based source line of the node currently executing, stamped onto every
+    /// rendered diagnostic and the uncaught-fatal location. Updated at the top of
+    /// `eval` / `exec_stmt`; on the error path it is intentionally *not* restored,
+    /// so it still points at the throwing node when the fatal is rendered.
+    cur_line: Line,
 }
 
 /// What a loop should do after running its body once.
@@ -130,6 +167,50 @@ enum LoopStep {
 }
 
 impl<'p> Evaluator<'p> {
+    // --- diagnostic rendering (step 9) ---
+
+    /// Append `bytes` to the program output, first flushing any pending
+    /// diagnostics so they land *before* the output they precede (PHP renders a
+    /// diagnostic at the moment it is raised, ahead of the value being printed).
+    fn emit(&mut self, bytes: &[u8]) {
+        self.flush_diags();
+        self.out.extend_from_slice(bytes);
+        self.rendered.extend_from_slice(bytes);
+    }
+
+    /// Render every diagnostic raised since the last flush into `rendered`,
+    /// stamped with the current line and file:
+    /// `\n{Severity}: {message} in {file} on line {N}\n` (`main/main.c:1493`).
+    fn flush_diags(&mut self) {
+        while self.diags_rendered < self.diags.len() {
+            let d = &self.diags[self.diags_rendered];
+            let header = format!("\n{}: {} in ", d.severity(), d.message());
+            self.rendered.extend_from_slice(header.as_bytes());
+            self.rendered.extend_from_slice(self.file);
+            let tail = format!(" on line {}\n", self.cur_line);
+            self.rendered.extend_from_slice(tail.as_bytes());
+            self.diags_rendered += 1;
+        }
+    }
+
+    /// Render an uncaught fatal at the tail of `rendered`, matching the CLI
+    /// display of an uncaught throwable (`Zend/zend_exceptions.c:756`). The stack
+    /// trace is the top-level `#0 {main}` form; frames for fatals thrown inside
+    /// user calls are not modelled (step 9 scope).
+    fn render_fatal(&mut self, err: &PhpError) {
+        let file = String::from_utf8_lossy(self.file);
+        let block = format!(
+            "\nFatal error: Uncaught {}: {} in {}:{}\nStack trace:\n#0 {{main}}\n  thrown in {} on line {}\n",
+            err.class_name(),
+            err.message(),
+            file,
+            self.cur_line,
+            file,
+            self.cur_line,
+        );
+        self.rendered.extend_from_slice(block.as_bytes());
+    }
+
     // --- statements ---
 
     fn exec_stmts(&mut self, stmts: &[Stmt]) -> Result<Flow, PhpError> {
@@ -142,17 +223,29 @@ impl<'p> Evaluator<'p> {
         Ok(Flow::Normal)
     }
 
+    /// Set the current line for diagnostics, run the statement, then flush any
+    /// diagnostics it staged. On the error path `cur_line` is left pointing at the
+    /// throwing node (see the field doc) for the fatal renderer.
     fn exec_stmt(&mut self, stmt: &Stmt) -> Result<Flow, PhpError> {
+        self.cur_line = stmt.line;
+        let r = self.exec_stmt_inner(stmt);
+        self.flush_diags();
+        r
+    }
+
+    fn exec_stmt_inner(&mut self, stmt: &Stmt) -> Result<Flow, PhpError> {
         match &stmt.kind {
             StmtKind::Nop => {}
 
-            StmtKind::InlineHtml(bytes) => self.out.extend_from_slice(bytes),
+            StmtKind::InlineHtml(bytes) => self.emit(bytes),
 
             StmtKind::Echo(values) => {
                 for e in values {
                     let z = self.eval(e)?;
                     let s = convert::to_zstr(&z, &mut self.diags);
-                    self.out.extend_from_slice(s.as_bytes());
+                    // `emit` flushes the (possible) array-to-string warning ahead
+                    // of the converted bytes, matching PHP's ordering.
+                    self.emit(s.as_bytes());
                 }
             }
 
@@ -406,7 +499,22 @@ impl<'p> Evaluator<'p> {
 
     // --- expressions ---
 
+    /// Evaluate `e`, stamping its line for any diagnostics it raises and flushing
+    /// them into `rendered` before the value flows to its consumer. On success the
+    /// enclosing line is restored; on the error path it is kept at the throwing
+    /// node so the top-level fatal renderer reports the right location.
     fn eval(&mut self, e: &Expr) -> Result<Zval, PhpError> {
+        let prev = self.cur_line;
+        self.cur_line = e.line;
+        let r = self.eval_inner(e);
+        self.flush_diags();
+        if r.is_ok() {
+            self.cur_line = prev;
+        }
+        r
+    }
+
+    fn eval_inner(&mut self, e: &Expr) -> Result<Zval, PhpError> {
         match &e.kind {
             ExprKind::Null => Ok(Zval::Null),
             ExprKind::Bool(b) => Ok(Zval::Bool(*b)),
@@ -558,11 +666,21 @@ impl<'p> Evaluator<'p> {
                         )))
                     }
                 };
+                // A builtin writes straight to `out` and may stage diagnostics.
+                // Flush anything pending first, run it, then mirror its fresh
+                // output into `rendered` and flush its own diagnostics after it
+                // (builtins emit output then warn, never the reverse).
+                self.flush_diags();
+                let pre = self.out.len();
                 let mut ctx = Ctx {
                     out: &mut self.out,
                     diags: &mut self.diags,
                 };
-                f(&argv, &mut ctx)
+                let res = f(&argv, &mut ctx);
+                let produced = self.out[pre..].to_vec();
+                self.rendered.extend_from_slice(&produced);
+                self.flush_diags();
+                res
             }
 
             ExprKind::Array(elems) => {
@@ -755,7 +873,16 @@ impl<'p> Evaluator<'p> {
                 Key::Int(convert::dval_to_lval(*d))
             }
             Zval::Str(s) => Key::from_zstr(s),
-            Zval::Null | Zval::Undef => Key::from_bytes(b""),
+            Zval::Null | Zval::Undef => {
+                // PHP 8.1+: using null as an array offset is deprecated; it still
+                // resolves to the empty-string key. (The `??`/`isset` paths go
+                // through `coalesce_index`, which stays silent — step 9 scope.)
+                self.diags.push(Diag::Deprecated(
+                    "Using null as an array offset is deprecated, use an empty string instead"
+                        .to_string(),
+                ));
+                Key::from_bytes(b"")
+            }
             Zval::Array(_) => {
                 return Err(PhpError::TypeError(
                     "Illegal offset type".to_string(),

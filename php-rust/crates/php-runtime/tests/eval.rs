@@ -448,3 +448,82 @@ fn function_type_hint_is_accepted_but_not_enforced() {
         "42abc"
     );
 }
+
+// --- step 9: diagnostic & fatal rendering (interleaved onto the CLI stream) ---
+
+/// Run a script and return its `rendered` (CLI-faithful) stream as a string.
+fn rendered(src: &str) -> String {
+    let o = run_source(b"t.php", src.as_bytes()).expect("lowers");
+    String::from_utf8(o.rendered).expect("utf8")
+}
+
+#[test]
+fn rendered_clean_script_equals_stdout() {
+    let o = run_source(b"t.php", b"<?php echo 'hi'; echo 1 + 2;").expect("lowers");
+    assert_eq!(o.rendered, o.stdout);
+    assert_eq!(o.rendered, b"hi3");
+}
+
+#[test]
+fn rendered_warning_is_interleaved_at_point_of_occurrence() {
+    // echo "a"; (l2) echo $undef; (l3) echo "b"; (l4) — the warning lands
+    // between "a" and "b", carrying line 3, with a leading + trailing newline.
+    let src = "<?php\necho 'a';\necho $undef;\necho 'b';\n";
+    assert_eq!(
+        rendered(src),
+        "a\nWarning: Undefined variable $undef in t.php on line 3\nb"
+    );
+}
+
+#[test]
+fn rendered_undefined_array_key_carries_its_line() {
+    let src = "<?php\n$a = [1];\necho $a[5];\n";
+    assert_eq!(
+        rendered(src),
+        "\nWarning: Undefined array key 5 in t.php on line 3\n"
+    );
+}
+
+#[test]
+fn rendered_array_to_string_warning_precedes_the_text() {
+    // The "Array to string conversion" warning is emitted before the literal
+    // "Array" that the conversion yields.
+    let src = "<?php\n$a = [1, 2];\necho $a;\n";
+    assert_eq!(
+        rendered(src),
+        "\nWarning: Array to string conversion in t.php on line 3\nArray"
+    );
+}
+
+#[test]
+fn rendered_fatal_appended_after_partial_output() {
+    let src = "<?php\necho 'before';\n$x = 1 % 0;\necho 'after';\n";
+    assert_eq!(
+        rendered(src),
+        "before\nFatal error: Uncaught DivisionByZeroError: Modulo by zero in t.php:3\n\
+         Stack trace:\n#0 {main}\n  thrown in t.php on line 3\n"
+    );
+}
+
+#[test]
+fn rendered_null_array_offset_deprecation() {
+    // Using null as an array offset is deprecated (PHP 8.1+); the key resolves to
+    // the empty string, so the write still lands and is read back.
+    let src = "<?php\n$a = [];\n$a[null] = 'v';\necho $a[''];\n";
+    assert_eq!(
+        rendered(src),
+        "\nDeprecated: Using null as an array offset is deprecated, use an empty string instead in t.php on line 3\nv"
+    );
+}
+
+#[test]
+fn rendered_warning_then_fatal_in_order() {
+    // The undefined-variable warning (line 2) renders before the fatal (line 3).
+    let src = "<?php\necho $undef;\n$x = 5 / 0;\n";
+    assert_eq!(
+        rendered(src),
+        "\nWarning: Undefined variable $undef in t.php on line 2\n\
+         \nFatal error: Uncaught DivisionByZeroError: Division by zero in t.php:3\n\
+         Stack trace:\n#0 {main}\n  thrown in t.php on line 3\n"
+    );
+}

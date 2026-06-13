@@ -81,6 +81,7 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
     let body = low.lower_stmts(program.statements.as_slice())?;
     Ok(Program {
         body,
+        file: name.into(),
         slots: low.slots,
         functions: low.functions,
     })

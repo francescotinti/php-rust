@@ -67,13 +67,28 @@ fn undefined_builtin_is_skipped_not_failed() {
 }
 
 #[test]
-fn expected_diagnostic_is_skipped() {
-    // We collect diagnostics but do not render them onto stdout yet (step 9):
-    // a test expecting a warning is out of scope rather than a failure.
+fn expected_diagnostic_is_rendered_and_matched() {
+    // Step 9: a warning is rendered inline and compared. EXPECTF's `%s` absorbs
+    // the file path, so a faithful diagnostic now PASSES rather than skipping.
+    let src = "--TEST--\nt\n--FILE--\n<?php echo $x;\n--EXPECTF--\n\nWarning: Undefined variable $x in %s on line 1\n";
+    let (st, _cat) = status(src);
+    assert_eq!(st, Status::Pass);
+}
+
+#[test]
+fn missing_expected_diagnostic_now_fails() {
+    // A test that expects a warning the script never raises is a real divergence
+    // (no longer hidden behind a step-9 skip).
     let src = "--TEST--\nt\n--FILE--\n<?php echo 1;\n--EXPECT--\nWarning: something in x on line 1\n1\n";
-    let (st, cat) = status(src);
-    assert_eq!(st, Status::Skip);
-    assert_eq!(cat, "diag-or-fatal");
+    assert_eq!(status(src).0, Status::Fail);
+}
+
+#[test]
+fn uncaught_fatal_is_rendered_and_matched() {
+    // An uncaught DivisionByZeroError renders the full CLI fatal block.
+    let src = "--TEST--\nt\n--FILE--\n<?php $x = 1 % 0;\n--EXPECTF--\n\nFatal error: Uncaught DivisionByZeroError: Modulo by zero in %s:1\nStack trace:\n#0 {main}\n  thrown in %s on line 1\n";
+    let (st, _cat) = status(src);
+    assert_eq!(st, Status::Pass);
 }
 
 #[test]

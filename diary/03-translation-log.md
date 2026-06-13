@@ -2,6 +2,92 @@
 
 > Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Una entry per step.
 
+## Step 9 — Rendering dei diagnostici e dei fatal (interleaved sullo stdout)
+
+- **Riferimento C:** `main/main.c:1493` (formato `%s: %s in %s on line %d`),
+  `Zend/zend_exceptions.c:756` (display di un throwable uncaught).
+- **Target:** `crates/php-types/src/diag.rs`, `crates/php-runtime/src/{hir,lower,eval}.rs`,
+  `crates/phpt-runner/src/lib.rs`.
+- **Round di iterazione AI:** 1 (più triage del corpus + 1 fix Classe A).
+- **Test pass al primo tentativo:** sì (7 nuovi test `rendered_*` + 3 nel runner).
+
+### Modello scelto: rendering al punto di occorrenza, non collezione
+
+Fino a step 8 i diagnostici erano *raccolti* in `Outcome.diags` (side channel) e
+mai resi su stdout; il phpt-runner skippava ogni test che ne attendesse
+(`diag-or-fatal`, ~176 file). PHP invece interleava il diagnostico **nel byte
+stream di stdout, nel momento esatto in cui viene sollevato** (verificato con
+`od -c` sull'oracle: `\nWarning: {msg} in {file} on line {N}\n`, newline iniziale
+e finale; il fatal uncaught chiude lo stream con il blocco
+`\nFatal error: Uncaught {Class}: {msg} in {file}:{line}\nStack trace:\n#0 {main}\n  thrown in {file} on line {N}\n`).
+
+Per renderlo fedelmente serve sapere la **linea** di ogni operazione: l'HIR già
+porta `line` su ogni `Stmt`/`Expr` (predisposto a step 3), quindi non è servito
+alcun cambiamento al front-end se non aggiungere `Program.file` (il nome
+sorgente) per la parte `in <file>`.
+
+**Scelta additiva (non distruttiva):** invece di mutare `Outcome.stdout` (che
+avrebbe rotto i ~6 test che asseriscono stdout puro + `diags`/`fatal`), ho
+aggiunto un nuovo campo `Outcome.rendered`: lo stream CLI-fedele = `stdout` con
+diagnostici e fatal interleaved. `stdout`/`diags`/`fatal` restano invariati come
+side channel per le asserzioni fine-grained; il phpt-runner confronta contro
+`rendered`. Tutti i 122 test preesistenti restano verdi.
+
+### Meccanica (eval.rs)
+
+- `Evaluator` guadagna `file`, `cur_line`, `rendered`, e un watermark
+  `diags_rendered` (quanti `diags` sono già stati resi).
+- `eval` è ora un wrapper attorno a `eval_inner` che (a) stampa `cur_line =
+  e.line`, (b) esegue, (c) `flush_diags()` rende i diag di *questo* livello
+  stampati con `e.line` (i sotto-eval hanno già reso i propri). Sul ramo `Err`
+  **non** ripristina `cur_line`, così quando il fatal risale al top punta ancora
+  alla riga che l'ha lanciato.
+- `exec_stmt` analogamente imposta `cur_line = stmt.line` e flush a fine.
+- `emit(bytes)` = `flush_diags()` poi scrive su `out` **e** `rendered`: garantisce
+  che un warning sia reso *prima* dei byte che lo seguono (es. `echo [1]` →
+  `\nWarning: Array to string conversion …\nArray`).
+- Path builtin: flush prima, esegui (scrive su `out` via `Ctx`), copia la coda
+  fresca di `out` in `rendered`, flush dopo (output-poi-diagnostici).
+- `flush_diags()` rende `\n{severity}: {message} in {file} on line {cur_line}\n`;
+  `render_fatal()` aggiunge il blocco uncaught in coda a `rendered`.
+
+### phpt-runner
+
+- Rimossi gli skip `diag-or-fatal` e la funzione `expects_diagnostic`; il
+  confronto ora è contro `outcome.rendered`. Resta lo skip `builtin` per
+  "Call to undefined function" (scope gap reale, non difetto).
+- **Nuovo skip `compile-error`**: l'EXPECT che inizia con `Parse error:` o un
+  `Fatal error:` *non*-`Uncaught` è una diagnostica **compile-time** del motore
+  (validazione attributi/tipi, strictness del parser) che non modelliamo (mago fa
+  da front-end). Se non produciamo un fatal corrispondente, skip onesto invece di
+  un falso fail. Sposta **104** file da fail→skip motivato.
+
+### Fix Classe A trovato dal corpus
+
+- **null come array offset**: PHP 8.1+ emette `Deprecated: Using null as an array
+  offset is deprecated, use an empty string instead` (la chiave resta `""`).
+  Mancava in `coerce_key`. Aggiunto (read/write/array-literal); le varianti
+  `isset`/`??` passano per `coalesce_index` (free fn silenziosa) e restano fuori
+  scope. Regressione: `eval.rs::rendered_null_array_offset_deprecation`.
+
+### Risultato sul corpus completo (tests/ + Zend/, 6172 file)
+
+| | pass | fail | skip | runnable | pass-rate |
+|---|---|---|---|---|---|
+| fine step 8 | 114 | 2 | 6056 | 116 | 98.3% |
+| **fine step 9** | **126** | **62** | **5984** | **188** | **67.0%** |
+
+I diag-test sono ora *runnable* (+72 netti): **+12 pass** (11 diag + 1 null-offset)
+e **62 fail** che il corpus ora **espone onestamente** invece di nascondere. Il
+crollo del pass-rate è atteso e voluto: prima quei 176 file erano skippati, ora
+sono confrontati. La triage dei 62 è in `04-divergences.md` (quasi tutti scope
+gap di feature non implementate, non difetti di rendering).
+
+- **Test:** 131 totali (da 122: +6 `rendered_*` in eval, +1 null-offset, +3 nel
+  runner, −1 test obsoleto rimpiazzato). Clippy `--all-targets --all-features
+  --deny=warnings` pulito.
+- **Tempo:** ~2h (incluse verifica oracle byte-level e triage del corpus).
+
 ## Step 8 — Funzioni utente (dichiarazione, parametri, return, scope, ricorsione)
 
 - **Riferimento concettuale:** Zend `zend_execute.c` (ZEND_DO_FCALL, frame di

@@ -8,6 +8,25 @@ pub enum Diag {
     Notice(String),
 }
 
+impl Diag {
+    /// The severity label PHP prints before the message (`main/main.c:1480`,
+    /// `error_type_to_string`): e.g. `Warning`, `Deprecated`, `Notice`.
+    pub fn severity(&self) -> &'static str {
+        match self {
+            Diag::Warning(_) => "Warning",
+            Diag::Deprecated(_) => "Deprecated",
+            Diag::Notice(_) => "Notice",
+        }
+    }
+
+    /// The bare diagnostic text (no severity, no location).
+    pub fn message(&self) -> &str {
+        match self {
+            Diag::Warning(m) | Diag::Deprecated(m) | Diag::Notice(m) => m,
+        }
+    }
+}
+
 /// Fatal (throwable) errors raised by operators. Uncaught display format:
 /// Zend/zend_exceptions.c:756.
 #[derive(Debug, Clone, PartialEq, Eq)]

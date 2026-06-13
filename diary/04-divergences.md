@@ -57,6 +57,45 @@ Risultato del run completo dopo step 8: **114 pass / 2 fail / 6056 skip**
 (98.3% dei runnable). I 2 FAIL residui sono D-NEW-4 (unicode `\u{}`, mago) e
 D-NEW-6 (type-hint non enforced) — entrambi noti e documentati.
 
+## Step 9 — Triage dei fail esposti dal rendering dei diagnostici
+
+Rendere i diagnostici su stdout (vedi `03`) ha reso *runnable* i ~176 file prima
+skippati come `diag-or-fatal`. Esito sul corpus completo: **126 pass / 62 fail**
+(da 114/2). I 62 fail sono il segnale: divergenze che prima erano nascoste. La
+triage li classifica — quasi tutti **scope gap di feature non implementate**, non
+difetti del rendering (che è verificato dai 7 test `rendered_*`).
+
+Prima della triage ho aggiunto **104 skip `compile-error`**: EXPECT che iniziano
+con `Parse error:` o `Fatal error:` non-`Uncaught` sono diagnostiche compile-time
+del motore (validazione attributi/tipi, strictness parser) che non modelliamo —
+mago fa da front-end e accetta codice che il compilatore PHP rifiuta. Skip onesto
+(capability scan), non fail.
+
+Breakdown dei 62 fail residui (Classe B/scope salvo dove indicato):
+
+| # fail | Gruppo | Causa | Classe | Stato |
+|---|---|---|---|---|
+| 13 | output divergence varia | mix (offset stringa, ordini, builtin parziali) | B | aperto/scope |
+| 12 | deprecation da attributi / funzioni interne | `#[\Deprecated]`, `Function X() is deprecated`, nullable implicito — richiede attributi + segnatura builtin | B | scope (step OOP/builtin) |
+| 10 | enforcement tipi (return/param) | `Return value must be of type …` — famiglia **D-NEW-6** (type hint accettate, non enforced) | D (dichiarata) | noto/aperto |
+| 9 | diagnostica mancante (altre feature) | output vuoto vs warning atteso da feature non presenti | B | scope |
+| 6 | altre deprecation | es. `case` seguito da `;`, parametri opzionali prima dei richiesti | B | scope |
+| 6 | warning su offset stringa (write/illegal) | `Illegal string offset`, `Cannot use a scalar value as an array` su write | B | scope |
+| 3 | superglobale `$GLOBALS` | trattata come variabile non definita → cascata di fatal | B | scope (superglobali non modellate) |
+| 2 | `ArgumentCountError` + frame annidati | usiamo `PhpError::Error` con messaggio diverso; lo stack trace di un fatal lanciato *dentro* una call mostra i frame (`#0 file(line): f(...)`), noi rendiamo solo `#0 {main}` | A (modeling) | noto — vedi D-NEW-7 |
+| 1 | precisione `float→int` nel warning | `serialize_precision=-1` (17 cifre) vs nostro shortest: `-9.223372036860776E+18` vs `-9.2233720368608E+18` | A (minore) | noto — vedi D-NEW-8 |
+
+Nuove divergenze catalogate:
+
+| # | Severità | Categoria | Comportamento | Causa | Stato |
+|---|---|---|---|---|---|
+| D-NEW-7 | bassa | fatal/stack-trace | un fatal lanciato dentro una funzione utente rende `#0 {main}` invece dei frame (`#0 %s(%d): f(...)`); inoltre `Too few arguments` usa classe `Error` invece di `ArgumentCountError` e wording diverso | step 9 modella solo il fatal top-level (`#0 {main}`); i frame richiedono uno stack di call esplicito nell'evaluator | **noto/aperto** — scope di un futuro step su eccezioni/stack |
+| D-NEW-8 | molto bassa | float/precisione | il messaggio "The float … is not representable as an int" usa la rappresentazione *shortest* invece delle 17 cifre di `serialize_precision=-1` | il warning riusa `dtoa::double_to_shortest`; PHP qui formatta con precisione piena | **noto/aperto** — 1 solo test (`bug27354`) |
+
+Fix Classe A applicato in step 9 (era nei missing-deprecated): **null come array
+offset** → `Deprecated: Using null as an array offset is deprecated …` aggiunto a
+`coerce_key`. +1 pass; regressione `rendered_null_array_offset_deprecation`.
+
 ## Divergenze attese (scope-out dichiarato in 02-mapping-table.md)
 
 Non sono bug, sono confini del Tier 1:
