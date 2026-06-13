@@ -2,6 +2,48 @@
 
 > Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Una entry per step.
 
+## Step 10 — Espansione builtin per frequenza nei test
+
+- **Riferimento C:** ext/standard (array.c, string.c, formatted_print.c, math.c),
+  Zend/zend_operators.c (compare/identical per max/min/in_array).
+- **Target:** crates/php-builtins (nuovi moduli `array.rs`, `string.rs`,
+  `format.rs`, `math.rs`; `print_r` accanto a `var_dump` in `lib.rs`).
+- **Builtin aggiunti (8 commit TDD-isolati, uno per gruppo):**
+  - `count`/`sizeof` (incl. `COUNT_RECURSIVE`, TypeError sugli scalari PHP 8)
+  - `array_keys` (con `$search`/`$strict`) / `array_values`
+  - `in_array` / `array_merge`
+  - `implode`/`join` / `explode` (limit ±, multichar)
+  - `substr` / `strpos` / `str_replace` (search/replace scalari o array)
+  - `sprintf`/`printf` (d/i u f/F e/E s x/X o b c %%, flag `- + 0 '<c>`,
+    width, `.precision`, posizionale `%N$`)
+  - `abs` / `max` / `min`
+  - `print_r` (scalari + array ricorsivo, modalità `$return`)
+- **Decisioni applicate:** ABI builtin di Step 5 invariata (`fn(&[Zval], &mut Ctx)`),
+  zero modifiche all'evaluator. Coercizioni via `convert::*`, confronti via `ops::*`.
+- **Estensioni a php-types (additive, nessuna regressione):**
+  - `PhpError::ValueError` — `explode("")`, `strpos` offset fuori range, `max([])`
+  - `PhpError::ArgumentCountError` — `sprintf`/`max` con troppi pochi argomenti
+  - Entrambe renderizzate via `class_name()`/`message()` esistenti.
+- **Round di iterazione AI:** 1 per gruppo (tutti i test verdi al primo run dopo
+  RED; unica eccezione il test `printf` riscritto perché usava interpolazione
+  `"$n"` non ancora lowered — bug del test, non del builtin).
+- **Test pass al primo tentativo:** sì (ogni gruppo verificato prima contro
+  l'oracle `/tmp/php-src/sapi/cli/php`, poi TDD RED→GREEN).
+- **Scope-out espliciti (debito):**
+  - `array_push` e la famiglia by-reference (`sort`, `array_pop`, `array_shift`):
+    l'ABI passa gli argomenti per valore e il lowerer rifiuta i parametri `&$x`
+    (`lower.rs:367`). Richiede uno step dedicato alle reference.
+  - `sprintf` `%g`/`%G` (forma shortest diverge da PHP, raro nel corpus).
+  - `str_replace` `$count` by-ref (4° parametro).
+- **Divergenze nuove (D-NEW):** nessuna. Ogni builtin combacia byte-per-byte
+  con l'oracle in tutti i casi testati.
+- **Test scritti:** 44 nuovi test funzionali (totale workspace 131 → 168).
+- **Baseline .phpt (corpus completo `Zend/tests` + `tests`, 6172 file):**
+  pass 126 → **135** (+9), fail 62 → 64, skip-`builtin` 114 → 103 (gli 11 test
+  prima non-eseguibili ora girano: 9 verdi, 2 falliscono su gap *non*-builtin —
+  `$GLOBALS` e scrittura su string-offset, ora raggiungibili). Nessuna regressione.
+- **Tempo:** ~2h.
+
 ## Step 9 — Rendering dei diagnostici e dei fatal (interleaved sullo stdout)
 
 - **Riferimento C:** `main/main.c:1493` (formato `%s: %s in %s on line %d`),

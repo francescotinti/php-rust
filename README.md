@@ -24,9 +24,10 @@ full port semantico del solo `zend_operators.c`).
 | 5 | Builtins nucleo + `var_dump` | ✅ |
 | 7 | Array end-to-end + `foreach` / `switch` / `match` | ✅ |
 | 6 | `phpt-runner` (capability scan + import testsuite) — **6172 file, 98.6% dei runnable** | ✅ |
-| 8 | Funzioni utente | ⏳ |
-| 9 | Rendering diagnostici (warning/fatal su stdout) | ⏳ |
-| 10–11 | Espansione builtin, chiusura Tier 1 | ⏳ |
+| 8 | Funzioni utente | ✅ |
+| 9 | Rendering diagnostici (warning/fatal su stdout) | ✅ |
+| 10 | Espansione builtin (count, array_*, implode/explode, substr/strpos/str_replace, sprintf/printf, abs/max/min, print_r) — **baseline 126 → 135 pass** | ✅ |
+| 11 | Chiusura Tier 1 | ⏳ |
 
 > Lo step 6 è stato eseguito **dopo** lo step 7 (deciso con l'utente: gli array
 > rendono il phpt-runner molto più utile, quintuplicando i test in-scope).

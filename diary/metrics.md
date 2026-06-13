@@ -1,6 +1,6 @@
 # Metriche dell'esperimento
 
-> Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Aggiornato: 2026-06-13 (fine step 8).
+> Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Aggiornato: 2026-06-13 (fine step 10).
 
 ## LOC (target Rust, escluso codice di test)
 
@@ -20,17 +20,17 @@
 
 | Tipo | Conteggio |
 |---|---|
-| Unit/integration (workspace, fine step 9) | 131 (17 suite) |
+| Unit/integration (workspace, fine step 10) | 168 (17 suite) |
 | Differential vs oracle (php-types) | 37.835 casi, 0 mismatch |
-| phpt-runner su testsuite PHP completa | 6172 file: 126 pass / 62 fail / 5984 skip (67.0% dei runnable) |
+| phpt-runner su testsuite PHP completa | 6172 file: 135 pass / 64 fail / 5973 skip (67.8% dei runnable) |
 
-## phpt-runner — skip per categoria (run completo `tests/` + `Zend/tests/`, fine step 9)
+## phpt-runner — skip per categoria (run completo `tests/` + `Zend/tests/`, fine step 10)
 
 | Categoria | Conteggio | Significato |
 |---|---|---|
 | unsupported | 5028 | confine Tier 1 (OOP, namespace, by-ref/variadic, …) — atteso |
 | section | 660 | sezioni I/O/INI/SKIPIF/EXTENSIONS non modellate |
-| builtin | 114 | builtin non ancora implementato (step 10) |
+| builtin | 103 | builtin non ancora implementato (era 114; −11 sbloccati a step 10) |
 | compile-error | 104 | diagnostica compile-time del motore (validazione attributi/tipi, strictness parser) non modellata — **nuova** in step 9 |
 | parse | 67 | sintassi che mago non parsa nel nostro path |
 | malformed | 6 | `.phpt` senza FILE/EXPECT |
@@ -79,4 +79,15 @@ del differential sono state riconciliate verso il comportamento dell'oracle).
 | Step 6 (phpt-runner + Fase 4c import + 2 bugfix) | ~2.5h |
 | Step 8 (funzioni utente + Fase 4c re-import + 1 bugfix eval-order) | ~1.5h |
 | Step 9 (rendering diagnostici/fatal + skip compile-error + triage corpus + 1 fix null-offset) | ~2h |
-| **Totale a fine step 9** | **~13.5h** |
+| Step 10 (espansione builtin: 8 gruppi TDD + ValueError/ArgumentCountError) | ~2h |
+| **Totale a fine step 10** | **~15.5h** |
+
+## Step 10 — espansione builtin
+
+18 builtin nuovi (count/sizeof, array_keys, array_values, in_array, array_merge,
+implode/join, explode, substr, strpos, str_replace, sprintf, printf, abs, max,
+min, print_r) in 8 commit TDD-isolati, +44 test funzionali (131 → 168), tutti
+verificati contro l'oracle CLI. Baseline .phpt: **126 → 135 pass** (+9), gli 11
+test prima skippati come `builtin` ora girano. Zero divergenze D-NEW: ogni builtin
+combacia byte-per-byte. ABI di Step 5 invariata, zero modifiche all'evaluator.
+Scope-out: famiglia by-reference (`array_push`/`sort`/…), `%g`/`%G`.
