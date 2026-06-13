@@ -2,6 +2,53 @@
 
 > Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Una entry per step.
 
+## Step 4 — Evaluator tree-walking (v1)
+
+- **Riferimento C:** sostituzione architetturale di `zend_execute.c` + VM generata
+  (D-G9): tree-walk su HIR con `match`, NON opcode. La semantica dei valori è
+  delegata a `php-types::ops`/`convert` (D-G11, l'unico modulo portato fedele).
+- **Target:** `crates/php-runtime/src/eval.rs` (+ `lib.rs`); test
+  `tests/eval.rs` (24) e `tests/differential.rs` (corpus 66 vs oracle).
+- **Decisioni applicate:** D-G9 (evaluator tree-walk), D-G11 (dispatch a ops),
+  D-G13 (diagnostica raccolta in `Outcome.diags`), D-G15 (exit/return: `Outcome`
+  porta `return_value` per il `return` top-level e `fatal` per PhpError uncaught).
+- **Architettura evaluator:**
+  - store a slot: `Vec<Zval>` indicizzato per slot (HIR), init a `Undef`.
+  - `enum Flow { Normal, Break(u32), Continue(u32), Return(Zval) }` per la
+    propagazione del controllo; helper `loop_step` traduce il segnale al livello
+    del loop corrente (Break/Continue N decrementano e propagano).
+  - output bufferizzato (`Vec<u8>`), diagnostici raccolti (`Diags`), errori
+    fatali via `?` che risalgono a `run()` → `Outcome.fatal`.
+  - API: `run(&Program) -> Outcome`, `run_source(name, src) -> Result<Outcome, LowerError>`.
+- **Dettagli di semantica (verificati col differential):**
+  - `echo` usa `to_zstr` (implicito, precision=14): `0.1+0.2` → `0.3`.
+  - lettura di variabile non definita → Warning "Undefined variable $x" + NULL;
+    `??` e `??=` leggono in modalità isset-like (nessun warning).
+  - `&&`/`||` short-circuit (RHS non valutato), `xor` non short-circuit.
+  - `>`/`>=` mappati a `smaller(b,a)`/`smaller_or_equal(b,a)`; `<=>` → `compare`.
+  - unario `+` = `1 * v` (stessa superficie TypeError della coercizione numerica).
+  - inc/dec: post ritorna il vecchio valore, pre il nuovo; `Undef` → warning + NULL
+    prima dell'incremento.
+- **Differential vs oracle (php 8.5.7 CLI, `php -n -r`):** 66/66 snippet
+  byte-per-byte identici (aritmetica, formato float, bitwise, concat/coercion,
+  comparazioni, cast, assegnamenti, if/while/do-while/for, break 2/continue,
+  ternario, fattoriale 10!).
+- **Scoperta che valida il differential:** `$x='a'; $x++;` → valore `b` corretto,
+  ma in 8.5 l'oracle stampa "Deprecated: Increment on non-numeric string..." su
+  stdout (display_errors). Il mio evaluator **cattura** il `Diag::Deprecated`
+  (test dedicato) ma non lo renderizza ancora → confine esplicito verso lo
+  step 9 (fedeltà diagnostica). Rimosso dal corpus "warning-free".
+- **Errori incontrati:**
+  - [test] due aspettative errate (non bug del codice): `'10' < '9'` è
+    confronto **numerico** (10<9 = false), e il caso string-increment non è
+    warning-free. Codice corretto, test corretti.
+- **Verifica:** `cargo test` 69/69 verde; `clippy --workspace --all-targets
+  --deny=warnings` pulito.
+- **Out-of-scope (debito esplicito):** rendering/interleaving dei diagnostici su
+  stdout (step 9), array end-to-end + foreach/switch (step 7), funzioni utente
+  (step 8), builtin + var_dump (step 5/10).
+- **Tempo:** ~1h.
+
 ## Step 3 — Bridge mago → HIR
 
 - **Riferimento C:** nessuno (sostituzione architetturale, D-G8 + D-G9: il lexer
