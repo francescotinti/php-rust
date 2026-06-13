@@ -1,11 +1,17 @@
-//! Core PHP value types: byte strings, zval, ordered arrays.
+//! Core PHP value types and operator semantics.
 //!
 //! Semantics reference: PHP 8.5.7 C source (see diary/01-semantic-model.md).
 
 mod array;
+pub mod convert;
+mod diag;
+pub mod dtoa;
+pub mod numstr;
+pub mod ops;
 mod zstr;
 mod zval;
 
 pub use array::{ArrayAppendError, Key, PhpArray};
+pub use diag::{Diag, Diags, PhpError};
 pub use zstr::{PhpStr, ZStr};
 pub use zval::Zval;
