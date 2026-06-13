@@ -157,6 +157,49 @@ fn array_values_reindexes() {
 }
 
 #[test]
+fn in_array_loose_and_strict() {
+    assert_eq!(out("<?php var_dump(in_array('1', [1, 2, 3]));"), "bool(true)\n");
+    assert_eq!(out("<?php var_dump(in_array('1', [1, 2, 3], true));"), "bool(false)\n");
+    assert_eq!(out("<?php var_dump(in_array(2, [1, 2, 3], true));"), "bool(true)\n");
+    assert_eq!(out("<?php var_dump(in_array(9, [1, 2, 3]));"), "bool(false)\n");
+}
+
+#[test]
+fn in_array_non_array_haystack_is_type_error() {
+    match fatal("<?php in_array(1, 'x');") {
+        PhpError::TypeError(m) => assert_eq!(
+            m,
+            "in_array(): Argument #2 ($haystack) must be of type array, string given"
+        ),
+        other => panic!("expected TypeError, got {other:?}"),
+    }
+}
+
+#[test]
+fn array_merge_reindexes_ints_overwrites_strings() {
+    assert_eq!(
+        out("<?php var_dump(array_merge([1, 2], ['a' => 3, 4], ['a' => 9]));"),
+        "array(4) {\n  [0]=>\n  int(1)\n  [1]=>\n  int(2)\n  [\"a\"]=>\n  int(9)\n  [2]=>\n  int(4)\n}\n"
+    );
+    assert_eq!(
+        out("<?php var_dump(array_merge([5 => 'a'], [10 => 'b']));"),
+        "array(2) {\n  [0]=>\n  string(1) \"a\"\n  [1]=>\n  string(1) \"b\"\n}\n"
+    );
+    assert_eq!(out("<?php var_dump(array_merge());"), "array(0) {\n}\n");
+}
+
+#[test]
+fn array_merge_non_array_is_type_error() {
+    match fatal("<?php array_merge([1], 'x');") {
+        PhpError::TypeError(m) => assert_eq!(
+            m,
+            "array_merge(): Argument #2 must be of type array, string given"
+        ),
+        other => panic!("expected TypeError, got {other:?}"),
+    }
+}
+
+#[test]
 fn undefined_function_is_fatal_after_output() {
     let reg = registry();
     let o = run_source_with(b"t.php", b"<?php echo 'a'; nope();", &reg).expect("lowers");

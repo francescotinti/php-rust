@@ -104,3 +104,59 @@ pub fn array_values(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let arr = arr_arg(args, "array_values")?;
     Ok(into_list(arr.iter().map(|(_, v)| v.clone())))
 }
+
+/// in_array($needle, $haystack[, $strict]): whether `$needle` is a value of
+/// `$haystack`. Loose comparison by default, identical when `$strict` truthy.
+pub fn in_array(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let needle = args.first().ok_or_else(|| {
+        PhpError::Error("in_array() expects at least 2 arguments, 0 given".to_string())
+    })?;
+    let haystack = match args.get(1) {
+        Some(Zval::Array(a)) => a,
+        Some(other) => {
+            return Err(PhpError::TypeError(format!(
+                "in_array(): Argument #2 ($haystack) must be of type array, {} given",
+                other.error_type_name()
+            )))
+        }
+        None => {
+            return Err(PhpError::Error(
+                "in_array() expects at least 2 arguments, 1 given".to_string(),
+            ))
+        }
+    };
+    let strict = matches!(args.get(2), Some(v) if convert::is_true_silent(v));
+    let found = haystack.iter().any(|(_, v)| {
+        if strict {
+            ops::identical(v, needle)
+        } else {
+            ops::loose_eq(v, needle)
+        }
+    });
+    Ok(Zval::Bool(found))
+}
+
+/// array_merge(...$arrays): concatenate arrays. Integer keys are renumbered
+/// sequentially (append), string keys are kept with later values overwriting
+/// earlier ones. Zero arguments yields an empty array.
+pub fn array_merge(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let mut out = PhpArray::new();
+    for (i, arg) in args.iter().enumerate() {
+        let Zval::Array(a) = arg else {
+            return Err(PhpError::TypeError(format!(
+                "array_merge(): Argument #{} must be of type array, {} given",
+                i + 1,
+                arg.error_type_name()
+            )));
+        };
+        for (k, v) in a.iter() {
+            match k {
+                Key::Int(_) => {
+                    let _ = out.append(v.clone());
+                }
+                Key::Str(_) => out.insert(k.clone(), v.clone()),
+            }
+        }
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
