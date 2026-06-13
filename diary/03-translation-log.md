@@ -2,6 +2,61 @@
 
 > Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Una entry per step.
 
+## Step 6 — phpt-runner (capability scan + import testsuite, Fase 4c)
+
+> Eseguito DOPO lo step 7 (gli array rendono il runner molto più utile: ~quintuplicano
+> i test in-scope). Questo è lo step "Fase 4c — import original testsuite" della
+> metodologia, materializzato come **tool ri-eseguibile** invece che come conversione
+> one-shot.
+
+- **Target:** nuovo crate `crates/phpt-runner` (lib + bin). Dipende da `php-runtime`
+  + `php-builtins` + `regex`. Niente copia della testsuite in repo (licenza PHP):
+  il runner punta a `/tmp/php-src` a runtime; le fixture committate sono scritte da noi.
+- **Architettura:**
+  - `parse_sections`: split del formato `.phpt` (`--NAME--` header `[A-Z_]+`).
+  - **Capability scan** (il cuore, mantiene la promessa del doc-comment di `lower.rs`):
+    si prova a `lower_source` il `--FILE--`; `LowerError::Unsupported{what,line}` →
+    SKIP categorizzato, `Parse` → SKIP. Poi si esegue con `run_source_with(registry)`.
+  - **Honest classification**: l'unico **FAIL** è una divergenza di output su uno
+    script *clean* (no diag, no fatal). Scope-gap → SKIP con categoria:
+    `unsupported` (lowering), `section` (sezioni non modellate: SKIPIF/EXTENSIONS/
+    INI/POST/GET/STDIN/ARGS/…), `builtin` ("Call to undefined function"),
+    `diag-or-fatal` (warning/fatal non renderizzati su stdout — step 9; include
+    l'euristica "l'EXPECT contiene `Warning:`/`Deprecated:`/… → skip"), `parse`,
+    `expectregex`, `expectf-%r`, `malformed`.
+  - **Matcher**: `--EXPECT--` esatto (CRLF→LF + trim); `--EXPECTF--` → regex
+    (`%d %s %S %a %A %w %i %x %f %c %e`, fedele a run-tests.php); `--EXPECTREGEX--`
+    e `%r` → skip.
+  - **CLI** (`phpt-runner [--list-fails] <path>...`): walk ricorsivo (skip dei
+    dotfile `._*` AppleDouble macOS), summary con breakdown skip-by-category e
+    pass-rate dei runnable; exit code ≠ 0 sse c'è un FAIL. Il lavoro gira su un
+    **thread con stack da 1 GiB**: il front-end recursive-descent (mago) e il
+    tree-walker ricorsivo overfloano lo stack di default su test patologici
+    (es. `Zend/tests/bug64660.phpt`, migliaia di `[` annidate) — ora gestiti.
+- **Run completo (`tests/` + `Zend/tests/`, 6172 file):** **71 pass, 1 fail,
+  6100 skip → 98.6% dei runnable (71/72)**. Breakdown skip: unsupported 5215,
+  section 660, builtin 88, parse 67, diag-or-fatal 59, malformed 6, expectregex 4,
+  expectf-%r 1.
+- **Bug reali trovati dall'import (classe A, fixati qui — vedi `04-divergences.md`):**
+  - **D-NEW-2 (bug #69889):** `??` su offset di stringa restituiva `""`/char errato
+    invece di "not set" → fix `coalesce_index`/`coerce_key_silent`/`string_offset_silent`
+    in `eval.rs` (path `??` separato da quello di `isset()`-construct, che era già corretto).
+  - **D-NEW-3 (bug #74947):** literale intero gigante → `~1.8e19` (valore clampato da
+    mago a `u64::MAX`) invece di `INF` → fix `lower_int` ri-parsa il testo decimale grezzo.
+  - **D-NEW-4 (classe D, ereditata):** mago 1.30 non decodifica `\u{...}` nelle stringhe
+    doppie → unico FAIL residuo, documentato (non correggibile a valle).
+- **Fix collaterale (corretto inline, fedele al lexer Zend):** `?>` mangia un singolo
+  newline (`\n`/`\r\n`) dell'inline-HTML che segue → `lower.rs::strip_one_newline` +
+  flag `after_closing_tag` (sblocca tutti i test con `?>\n…`, es. bug44654).
+- **Verifica:** `cargo test` **107/107** verde (era 94; +11 phpt-runner: parser,
+  matcher, le 6 regole di classificazione, walker su fixtures + 2 regressioni dei bug);
+  clippy `--all-targets --all-features --deny=warnings` pulito.
+- **Out-of-scope (debito):** rendering diagnostici (step 9, sblocca ~60 test
+  `diag-or-fatal` + l'euristica diventa esatta); `--EXPECTREGEX--`/`%r`; sezioni
+  I/O/INI; decodifica `\u{}` (a monte in mago); guard di ricorsione esplicito
+  (oggi mitigato dallo stack da 1 GiB).
+- **Tempo:** ~2.5h.
+
 ## Step 7 — Array end-to-end + foreach / switch / match
 
 > Step 6 (phpt-runner) deliberatamente saltato con l'utente: gli array danno più

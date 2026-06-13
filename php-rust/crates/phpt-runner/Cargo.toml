@@ -4,4 +4,16 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[lib]
+name = "phpt_runner"
+path = "src/lib.rs"
+
+[[bin]]
+name = "phpt-runner"
+path = "src/main.rs"
+
 [dependencies]
+php-types.workspace = true
+php-runtime.workspace = true
+php-builtins.workspace = true
+regex = "1"

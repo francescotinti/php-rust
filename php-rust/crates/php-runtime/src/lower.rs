@@ -81,6 +81,10 @@ struct Lowerer<'f> {
     file: &'f File,
     slots: Vec<Box<[u8]>>,
     index: HashMap<Vec<u8>, Slot>,
+    /// True when the previous statement was a `?>` closing tag, so the next
+    /// inline-HTML chunk must drop one leading newline (Zend lexer rule:
+    /// `?>` consumes a single trailing `\n` / `\r\n`).
+    after_closing_tag: bool,
 }
 
 impl<'f> Lowerer<'f> {
@@ -89,6 +93,7 @@ impl<'f> Lowerer<'f> {
             file,
             slots: Vec::new(),
             index: HashMap::new(),
+            after_closing_tag: false,
         }
     }
 
@@ -124,10 +129,21 @@ impl<'f> Lowerer<'f> {
     fn lower_stmt(&mut self, stmt: &Statement) -> Result<Option<Stmt>, LowerError> {
         let line = self.line_of(stmt.span());
         let kind = match stmt {
-            // `<?php` / `?>` markers carry no runtime behaviour.
-            Statement::OpeningTag(_) | Statement::ClosingTag(_) => return Ok(None),
+            // `?>` consumes one trailing newline of the inline chunk that follows.
+            Statement::ClosingTag(_) => {
+                self.after_closing_tag = true;
+                return Ok(None);
+            }
+            // `<?php` carries no runtime behaviour.
+            Statement::OpeningTag(_) => return Ok(None),
 
-            Statement::Inline(inline) => StmtKind::InlineHtml(inline.value.into()),
+            Statement::Inline(inline) => {
+                let mut bytes: &[u8] = inline.value;
+                if std::mem::take(&mut self.after_closing_tag) {
+                    bytes = strip_one_newline(bytes);
+                }
+                StmtKind::InlineHtml(bytes.into())
+            }
             Statement::Noop(_) => StmtKind::Nop,
 
             Statement::Echo(echo) => StmtKind::Echo(self.lower_expr_list(echo.values.iter())?),
@@ -634,6 +650,17 @@ fn function_name<'a>(id: &Identifier<'a>) -> &'a [u8] {
     }
 }
 
+/// Drop a single leading newline (`\r\n` or `\n`) — the byte `?>` swallows.
+fn strip_one_newline(bytes: &[u8]) -> &[u8] {
+    if let Some(rest) = bytes.strip_prefix(b"\r\n") {
+        rest
+    } else if let Some(rest) = bytes.strip_prefix(b"\n") {
+        rest
+    } else {
+        bytes
+    }
+}
+
 /// Strip the leading `$` from a mago direct-variable name (`b"$foo"` → `b"foo"`).
 fn strip_dollar(name: &[u8]) -> &[u8] {
     if name.first() == Some(&b'$') {
@@ -644,26 +671,32 @@ fn strip_dollar(name: &[u8]) -> &[u8] {
 }
 
 /// PHP integer literal → HIR. Values exceeding `i64::MAX` promote to float,
-/// matching PHP's lexer (`0x...`, decimal, etc. all overflow to double).
+/// matching PHP's lexer. A literal too large even for `u64` (mago clamps its
+/// `value` to `u64::MAX`) is re-parsed from its own decimal text, so a
+/// several-hundred-digit literal becomes `INF` exactly as PHP does (bug #74947)
+/// rather than the clamped `~1.8e19`.
 fn lower_int(lit: &LiteralInteger, line: Line) -> Result<ExprKind, LowerError> {
-    match lit.value {
-        Some(v) if v <= i64::MAX as u64 => Ok(ExprKind::Int(v as i64)),
-        Some(v) => Ok(ExprKind::Float(v as f64)),
-        None => {
-            // Beyond u64: PHP still promotes to float. Re-parse the decimal digits.
-            let raw = std::str::from_utf8(lit.raw).map_err(|_| LowerError::Unsupported {
-                what: "integer literal",
-                line,
-            })?;
-            let cleaned: String = raw.chars().filter(|c| *c != '_').collect();
-            cleaned
-                .parse::<f64>()
-                .map(ExprKind::Float)
-                .map_err(|_| LowerError::Unsupported {
-                    what: "integer literal overflow",
-                    line,
-                })
+    if let Some(v) = lit.value {
+        if v <= i64::MAX as u64 {
+            return Ok(ExprKind::Int(v as i64));
         }
+    }
+    // Overflows i64: promote to float by parsing the literal's own text (decimal
+    // only — hex/oct/bin overflow falls back to mago's value).
+    let raw = std::str::from_utf8(lit.raw).map_err(|_| LowerError::Unsupported {
+        what: "integer literal",
+        line,
+    })?;
+    let cleaned: String = raw.chars().filter(|c| *c != '_').collect();
+    if let Ok(f) = cleaned.parse::<f64>() {
+        return Ok(ExprKind::Float(f));
+    }
+    match lit.value {
+        Some(v) => Ok(ExprKind::Float(v as f64)),
+        None => Err(LowerError::Unsupported {
+            what: "integer literal overflow",
+            line,
+        }),
     }
 }
 

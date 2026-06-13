@@ -1,6 +1,6 @@
 # Metriche dell'esperimento
 
-> Generato con assistenza AI (Claude Fable 5). Aggiornato: 2026-06-13 (fine step 2).
+> Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Aggiornato: 2026-06-13 (fine step 6).
 
 ## LOC (target Rust, escluso codice di test)
 
@@ -20,8 +20,24 @@
 
 | Tipo | Conteggio |
 |---|---|
-| Unit/integration (php-types) | 24 |
-| Differential vs oracle | 37.835 casi, 0 mismatch |
+| Unit/integration (workspace, fine step 6) | 107 (17 suite) |
+| Differential vs oracle (php-types) | 37.835 casi, 0 mismatch |
+| phpt-runner su testsuite PHP completa | 6172 file: 71 pass / 1 fail / 6100 skip (98.6% dei runnable) |
+
+## phpt-runner — skip per categoria (run completo `tests/` + `Zend/tests/`)
+
+| Categoria | Conteggio | Significato |
+|---|---|---|
+| unsupported | 5215 | confine Tier 1 (OOP, funzioni utente, namespace, …) — atteso |
+| section | 660 | sezioni I/O/INI/SKIPIF/EXTENSIONS non modellate |
+| builtin | 88 | builtin non ancora implementato (step 10) |
+| parse | 67 | sintassi che mago non parsa nel nostro path |
+| diag-or-fatal | 59 | warning/fatal non renderizzati (step 9) |
+| malformed | 6 | `.phpt` senza FILE/EXPECT |
+| expectregex | 4 | `--EXPECTREGEX--` non supportato |
+| expectf-%r | 1 | placeholder `%r` non supportato |
+
+L'unico **fail** è `unicode_escape.phpt` (D-NEW-4, limitazione di mago su `\u{}`).
 
 ## Differential — convergenza (step 2)
 
@@ -50,4 +66,9 @@ del differential sono state riconciliate verso il comportamento dell'oracle).
 | Phase 0 + Fase 1 + Fase 2 (diary) | ~1.5h |
 | Step 1 (php-types core) | ~0.5h |
 | Step 2 (operatori + oracle build + differential) | ~2.5h |
-| **Totale a fine step 2** | **~4.5h** |
+| Step 3 (bridge mago→HIR) | ~0.5h |
+| Step 4 (evaluator tree-walking) | ~1h |
+| Step 5 (builtins registry + nucleo) | ~1h |
+| Step 7 (array + foreach/switch/match) | ~2h |
+| Step 6 (phpt-runner + Fase 4c import + 2 bugfix) | ~2.5h |
+| **Totale a fine step 6** | **~10h** |

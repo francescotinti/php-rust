@@ -637,7 +637,10 @@ impl<'p> Evaluator<'p> {
             ExprKind::Index { base, index } => {
                 let b = self.eval_isset(base)?;
                 let k = self.eval(index)?;
-                self.read_index(&b, &k, true)
+                // Silent: an unset offset yields NULL so `??` falls through —
+                // unlike a normal read, an out-of-range *string* offset is NOT
+                // the empty string here (bug #69889).
+                Ok(coalesce_index(&b, &k))
             }
             _ => self.eval(e),
         }
@@ -910,6 +913,60 @@ fn unset_into(target: &mut Zval, steps: &[Step]) {
         } else if let Some(child) = Rc::make_mut(rc).get_mut(k) {
             unset_into(child, rest);
         }
+    }
+}
+
+/// Silent `base[key]` read for the LHS of `??`: returns NULL when the offset is
+/// not set, so the coalesce falls through. No warnings, no empty-string for an
+/// out-of-range string offset (bug #69889). Mirrors PHP's `isset`-style rules.
+fn coalesce_index(base: &Zval, key: &Zval) -> Zval {
+    match base {
+        Zval::Array(a) => match coerce_key_silent(key) {
+            Some(k) => a.get(&k).cloned().unwrap_or(Zval::Null),
+            None => Zval::Null,
+        },
+        Zval::Str(s) => match string_offset_silent(key) {
+            Some(i) => {
+                let len = s.len() as i64;
+                let idx = if i < 0 { len + i } else { i };
+                if idx < 0 || idx >= len {
+                    Zval::Null
+                } else {
+                    Zval::Str(PhpStr::new(vec![s.as_bytes()[idx as usize]]))
+                }
+            }
+            None => Zval::Null,
+        },
+        _ => Zval::Null,
+    }
+}
+
+/// Coerce a value to an array key without diagnostics (for silent contexts).
+/// An array offset is illegal → `None` (treated as not-set).
+fn coerce_key_silent(v: &Zval) -> Option<Key> {
+    match v {
+        Zval::Long(i) => Some(Key::Int(*i)),
+        Zval::Bool(b) => Some(Key::Int(*b as i64)),
+        Zval::Double(d) => Some(Key::Int(convert::dval_to_lval(*d))),
+        Zval::Str(s) => Some(Key::from_zstr(s)),
+        Zval::Null | Zval::Undef => Some(Key::from_bytes(b"")),
+        Zval::Array(_) => None,
+    }
+}
+
+/// The integer offset of a string subscript in a silent context, or `None` when
+/// the key is not a valid (integer-like) string offset — a non-numeric string
+/// key is *not set*, so `isset`/`??` see it as absent.
+fn string_offset_silent(v: &Zval) -> Option<i64> {
+    match v {
+        Zval::Long(i) => Some(*i),
+        Zval::Bool(b) => Some(*b as i64),
+        Zval::Double(d) => Some(convert::dval_to_lval(*d)),
+        Zval::Str(s) => match Key::from_bytes(s.as_bytes()) {
+            Key::Int(i) => Some(i),
+            Key::Str(_) => None,
+        },
+        _ => None,
     }
 }
 

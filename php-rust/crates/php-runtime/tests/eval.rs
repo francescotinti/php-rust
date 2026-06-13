@@ -305,3 +305,27 @@ fn coalesce_on_array_element_is_silent() {
     assert!(o.diags.is_empty(), "expected no diags, got {:?}", o.diags);
     assert_eq!(out("<?php $a = []; $a['x'] ??= 7; echo $a['x'];"), "7");
 }
+
+// --- step 6 regressions: bugs surfaced by the .phpt import ---
+
+#[test]
+fn coalesce_on_string_offset() {
+    // Bug #69889: `??` on string offsets must treat out-of-range / non-integer
+    // offsets as unset (fall through), not as the empty string / coerced char.
+    assert_eq!(out(r#"<?php $s = "test"; echo $s[0] ?? "d";"#), "t");
+    assert_eq!(out(r#"<?php $s = "test"; echo $s[5] ?? "d";"#), "d");
+    assert_eq!(out(r#"<?php $s = "test"; echo $s["str"] ?? "d";"#), "d");
+    // Negative offset in range still resolves.
+    assert_eq!(out(r#"<?php $s = "test"; echo $s[-1] ?? "d";"#), "t");
+}
+
+#[test]
+fn huge_integer_literal_overflows_to_inf() {
+    // Bug #74947: a literal too large even for u64 promotes to float → INF,
+    // not the u64-clamped ~1.8e19.
+    let big = "2".to_string() + &"0".repeat(320);
+    assert_eq!(out(&format!("<?php echo {big};")), "INF");
+    assert_eq!(out(&format!("<?php echo -{big};")), "-INF");
+    // A literal just past i64::MAX still promotes to the right finite float.
+    assert_eq!(out("<?php echo 9223372036854775808;"), "9.2233720368548E+18");
+}
