@@ -11,6 +11,7 @@
 
 mod array;
 mod format;
+mod math;
 mod string;
 
 use php_runtime::{Ctx, Registry};
@@ -36,6 +37,9 @@ pub fn registry() -> Registry {
     add(b"str_replace", string::str_replace);
     add(b"sprintf", format::sprintf);
     add(b"printf", format::printf);
+    add(b"abs", math::abs);
+    add(b"max", math::max);
+    add(b"min", math::min);
     add(b"var_dump", var_dump);
     add(b"strlen", strlen);
     add(b"gettype", gettype);

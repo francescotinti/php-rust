@@ -369,6 +369,70 @@ fn sprintf_missing_arg_is_argument_count_error() {
 }
 
 #[test]
+fn abs_numbers_and_strings() {
+    assert_eq!(out("<?php var_dump(abs(-5));"), "int(5)\n");
+    assert_eq!(out("<?php var_dump(abs(-5.5));"), "float(5.5)\n");
+    assert_eq!(out("<?php var_dump(abs('-7'));"), "int(7)\n"); // numeric string -> int
+    assert_eq!(out("<?php var_dump(abs('-3.5'));"), "float(3.5)\n");
+    assert_eq!(out("<?php var_dump(abs(5));"), "int(5)\n");
+}
+
+#[test]
+fn abs_non_numeric_is_type_error() {
+    match fatal("<?php abs('abc');") {
+        PhpError::TypeError(m) => assert_eq!(
+            m,
+            "abs(): Argument #1 ($num) must be of type int|float, string given"
+        ),
+        other => panic!("expected TypeError, got {other:?}"),
+    }
+}
+
+#[test]
+fn max_and_min() {
+    assert_eq!(out("<?php var_dump(max(1, 5, 3));"), "int(5)\n");
+    assert_eq!(out("<?php var_dump(max([1, 5, 3]));"), "int(5)\n");
+    assert_eq!(out("<?php var_dump(min(4, 2, 8));"), "int(2)\n");
+    assert_eq!(out("<?php var_dump(min([3, '1', 2]));"), "string(1) \"1\"\n");
+    assert_eq!(out("<?php var_dump(max(1, 1.5));"), "float(1.5)\n");
+    // Returned value keeps its original type; comparison is loose (numeric).
+    assert_eq!(out("<?php var_dump(max(1, '10', 2));"), "string(2) \"10\"\n");
+    assert_eq!(out("<?php var_dump(max('apple', 'banana'));"), "string(6) \"banana\"\n");
+}
+
+#[test]
+fn max_empty_array_is_value_error() {
+    match fatal("<?php max([]);") {
+        PhpError::ValueError(m) => assert_eq!(
+            m,
+            "max(): Argument #1 ($value) must contain at least one element"
+        ),
+        other => panic!("expected ValueError, got {other:?}"),
+    }
+}
+
+#[test]
+fn max_no_args_is_argument_count_error() {
+    match fatal("<?php max();") {
+        PhpError::ArgumentCountError(m) => {
+            assert_eq!(m, "max() expects at least 1 argument, 0 given")
+        }
+        other => panic!("expected ArgumentCountError, got {other:?}"),
+    }
+}
+
+#[test]
+fn max_single_non_array_is_type_error() {
+    match fatal("<?php max(5);") {
+        PhpError::TypeError(m) => assert_eq!(
+            m,
+            "max(): Argument #1 ($value) must be of type array, int given"
+        ),
+        other => panic!("expected TypeError, got {other:?}"),
+    }
+}
+
+#[test]
 fn undefined_function_is_fatal_after_output() {
     let reg = registry();
     let o = run_source_with(b"t.php", b"<?php echo 'a'; nope();", &reg).expect("lowers");
