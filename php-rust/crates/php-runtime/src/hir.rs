@@ -127,6 +127,10 @@ pub enum ExprKind {
         then: Option<Box<Expr>>,
         otherwise: Box<Expr>,
     },
+
+    /// `name(args...)` — a call to a (builtin) function. The evaluator resolves
+    /// `name` against its builtin registry; Tier 1 has no user functions yet.
+    Call { name: Box<[u8]>, args: Vec<Expr> },
 }
 
 /// Binary operators whose semantics live in `php_types::ops`.

@@ -9,9 +9,11 @@
 //! This crate owns the AST→HIR boundary so the rest of the runtime never sees
 //! mago's arena-bound types.
 
+pub mod builtin;
 pub mod eval;
 pub mod hir;
 pub mod lower;
 
-pub use eval::{run, run_source, Outcome};
+pub use builtin::{BuiltinFn, Ctx, Registry};
+pub use eval::{run, run_source, run_source_with, run_with, Outcome};
 pub use lower::{lower_source, LowerError};

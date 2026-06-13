@@ -2,6 +2,46 @@
 
 > Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Una entry per step.
 
+## Step 5 — Builtins registry + nucleo + float shortest-roundtrip
+
+- **Riferimento C:** ext/standard (selective port, frequenza nei test);
+  `php_var_dump` (ext/standard/var.c) per il formato; `zend_gcvt` mode 0
+  (serialize_precision=-1) per i float di var_dump.
+- **Target:** `crates/php-builtins/src/lib.rs` (funzioni + `registry()`),
+  `crates/php-runtime/src/builtin.rs` (ABI), + Call in hir/lower/eval;
+  test `php-builtins/tests/{builtins.rs, differential.rs}`.
+- **Decisioni applicate:** D-G16 (trait/registry builtin), risolto il vincolo di
+  dipendenza: **il grafo è php-builtins → php-runtime** (non viceversa), quindi:
+  - php-runtime definisce l'**ABI**: `Ctx { out, diags }`, `BuiltinFn = fn(&[Zval],
+    &mut Ctx) -> Result<Zval, PhpError>`, `Registry = HashMap<Vec<u8>, BuiltinFn>`;
+    l'evaluator tiene `&Registry` **iniettata** (`run_with`/`run_source_with`;
+    `run`/`run_source` usano registry vuota → retro-compatibili).
+  - php-builtins implementa le funzioni + `registry()`; i test end-to-end vivono
+    qui (vede sia runtime che builtins).
+- **HIR/lowering esteso:** `ExprKind::Call { name, args }`; lowering accetta solo
+  `FunctionCall` con callee `Identifier` e argomenti **posizionali** (no
+  named/variadic → Unsupported); `function_name` risolve all'ultimo segmento dopo
+  `\` (Tier 1 senza namespace). Metodi/static/dynamic call → Unsupported.
+- **Builtins (nucleo):** `var_dump` (variadico, ricorsivo su array, formato
+  esatto), `strlen`, `gettype`, `is_int/integer/long`, `is_float/double`,
+  `is_string`, `is_bool`, `is_null`, `is_array`, `is_scalar`, `is_numeric`,
+  `intval`, `floatval/doubleval`, `strval`, `boolval`.
+- **php-types esteso (additivo):** `PhpError::Error(String)` per la classe base
+  `Error` (es. "Call to undefined function f()"); differential 37.835 invariato.
+- **Float formatting:** `dtoa::double_to_shortest` (mode 0, serialize_precision=-1)
+  **già presente e oracle-verified** dallo step 2 → riusato per var_dump. Nessun
+  nuovo codice di formattazione necessario.
+- **Differential vs oracle (php 8.5.7, `php -n -r`):** 34/34 snippet byte-identici,
+  inclusi `var_dump` di INF/-INF/NAN/-0.0/`0.1+0.2`/`1/3`/`1e20`, array via
+  `(array)` cast, `is_*`, `gettype`, cast `*val`.
+- **Verifica:** `cargo test` 79/79 verde (10 nuovi php-builtins); clippy
+  `--workspace --all-targets --deny=warnings` pulito.
+- **Out-of-scope (debito):** array literali + foreach (step 7, ora gli array si
+  costruiscono solo via `(array)` cast), funzioni utente (step 8), rendering
+  diagnostici (step 9), espansione builtin per frequenza — implode/count/substr/
+  sprintf/array_* (step 10), arity-error con messaggio PHP esatto.
+- **Tempo:** ~1h.
+
 ## Step 4 — Evaluator tree-walking (v1)
 
 - **Riferimento C:** sostituzione architetturale di `zend_execute.c` + VM generata

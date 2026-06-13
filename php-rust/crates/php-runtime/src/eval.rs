@@ -17,6 +17,7 @@
 
 use php_types::{convert, ops, Diag, Diags, Key, PhpArray, PhpStr, PhpError, Zval};
 
+use crate::builtin::{Ctx, Registry};
 use crate::hir::{BinOp, CastKind, Expr, ExprKind, Program, Slot, Stmt, StmtKind, UnOp};
 
 /// Control-flow signal produced by executing a statement.
@@ -44,16 +45,32 @@ pub struct Outcome {
     pub return_value: Zval,
 }
 
-/// Lower `source` and run it. Convenience wrapper over [`run`].
+/// Lower `source` and run it with no builtins. Convenience wrapper over [`run`].
 pub fn run_source(name: &[u8], source: &[u8]) -> Result<Outcome, crate::LowerError> {
     let program = crate::lower_source(name, source)?;
     Ok(run(&program))
 }
 
-/// Execute a lowered program.
+/// Lower `source` and run it with the given builtin registry.
+pub fn run_source_with(
+    name: &[u8],
+    source: &[u8],
+    registry: &Registry,
+) -> Result<Outcome, crate::LowerError> {
+    let program = crate::lower_source(name, source)?;
+    Ok(run_with(&program, registry))
+}
+
+/// Execute a lowered program with no builtins registered.
 pub fn run(program: &Program) -> Outcome {
+    run_with(program, &Registry::new())
+}
+
+/// Execute a lowered program, resolving function calls against `registry`.
+pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
     let mut ev = Evaluator {
         names: &program.slots,
+        reg: registry,
         slots: vec![Zval::Undef; program.slots.len()],
         out: Vec::new(),
         diags: Vec::new(),
@@ -75,6 +92,7 @@ pub fn run(program: &Program) -> Outcome {
 
 struct Evaluator<'p> {
     names: &'p [Box<[u8]>],
+    reg: &'p Registry,
     slots: Vec<Zval>,
     out: Vec<u8>,
     diags: Diags,
@@ -355,6 +373,29 @@ impl<'p> Evaluator<'p> {
                 } else {
                     self.eval(otherwise)
                 }
+            }
+
+            ExprKind::Call { name, args } => {
+                let mut argv = Vec::with_capacity(args.len());
+                for a in args {
+                    argv.push(self.eval(a)?);
+                }
+                // Copy the fn pointer out so the registry borrow ends before we
+                // borrow `out`/`diags` mutably for the call context.
+                let f = match self.reg.get(name.as_ref()) {
+                    Some(f) => *f,
+                    None => {
+                        return Err(PhpError::Error(format!(
+                            "Call to undefined function {}()",
+                            String::from_utf8_lossy(name)
+                        )))
+                    }
+                };
+                let mut ctx = Ctx {
+                    out: &mut self.out,
+                    diags: &mut self.diags,
+                };
+                f(&argv, &mut ctx)
             }
         }
     }

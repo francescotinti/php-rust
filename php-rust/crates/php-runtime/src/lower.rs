@@ -20,8 +20,8 @@ use bumpalo::Bump;
 use mago_database::file::File;
 use mago_span::{HasSpan, Span};
 use mago_syntax::ast::{
-    AssignmentOperator, BinaryOperator, Expression, Literal, LiteralInteger, Statement,
-    UnaryPostfixOperator, UnaryPrefixOperator, Variable,
+    Argument, AssignmentOperator, BinaryOperator, Call, Expression, Identifier, Literal,
+    LiteralInteger, Statement, UnaryPostfixOperator, UnaryPrefixOperator, Variable,
 };
 use mago_syntax::parser::parse_file;
 
@@ -293,6 +293,8 @@ impl<'f> Lowerer<'f> {
                 otherwise: Box::new(self.lower_expr(c.r#else)?),
             },
 
+            Expression::Call(call) => self.lower_call(call, line)?,
+
             _ => {
                 return Err(LowerError::Unsupported {
                     what: "expression",
@@ -387,6 +389,48 @@ impl<'f> Lowerer<'f> {
         }
     }
 
+    /// Lower a call. Tier 1 supports only direct calls to a named function with
+    /// positional arguments (builtins); methods, static calls, dynamic callees,
+    /// and named/variadic arguments are deferred.
+    fn lower_call(&mut self, call: &Call, line: Line) -> Result<ExprKind, LowerError> {
+        let fc = match call {
+            Call::Function(fc) => fc,
+            _ => {
+                return Err(LowerError::Unsupported {
+                    what: "method/static call",
+                    line,
+                })
+            }
+        };
+        let name = match fc.function {
+            Expression::Identifier(id) => function_name(id),
+            _ => {
+                return Err(LowerError::Unsupported {
+                    what: "dynamic function call",
+                    line,
+                })
+            }
+        };
+        let mut args = Vec::new();
+        for arg in fc.argument_list.arguments.iter() {
+            match arg {
+                Argument::Positional(p) if p.ellipsis.is_none() => {
+                    args.push(self.lower_expr(p.value)?);
+                }
+                _ => {
+                    return Err(LowerError::Unsupported {
+                        what: "named or variadic argument",
+                        line,
+                    })
+                }
+            }
+        }
+        Ok(ExprKind::Call {
+            name: name.into(),
+            args,
+        })
+    }
+
     /// Resolve an assignment target to a slot. Only direct variables in Tier 1
     /// (array-element and property targets arrive in step 7 / Tier 2).
     fn assign_target(&mut self, lhs: &Expression, line: Line) -> Result<Slot, LowerError> {
@@ -397,6 +441,21 @@ impl<'f> Lowerer<'f> {
                 line,
             }),
         }
+    }
+}
+
+/// Unqualified function name: the segment after the last `\` (so `\strlen` and
+/// `Foo\strlen` both resolve to `strlen`). Tier 1 has no namespaces, so this is
+/// a faithful-enough resolution for global/builtin calls.
+fn function_name<'a>(id: &Identifier<'a>) -> &'a [u8] {
+    let raw = match id {
+        Identifier::Local(l) => l.value,
+        Identifier::Qualified(q) => q.value,
+        Identifier::FullyQualified(f) => f.value,
+    };
+    match raw.iter().rposition(|&b| b == b'\\') {
+        Some(i) => &raw[i + 1..],
+        None => raw,
     }
 }
 
