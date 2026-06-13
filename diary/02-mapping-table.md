@@ -128,6 +128,33 @@ presente nel codebase.
 - **12-3 `da509fb`** (`$GLOBALS['literal']`): `Place.slot`→`Place.base: PlaceBase{Local|Global}`; nuovo `ExprKind::GlobalVar(Slot)` per le letture. Lowering riconosce `$GLOBALS['stringa-literal']` (`globals_key`), pre-registra lo slot globale → `$GLOBALS['n']=5` crea il bare global. Fast-path assegnazione bare-var gated su base `Local`. Eval: macro `slot_mut!` + `base_clone` instradano i 6 place-helper (write_place/read_place_value/silent_get/unset_place/ref_source_cell/bind_ref_target) al frame globale per base `Global`. Lettura di `$GLOBALS['undef']` → warning distinto "Undefined global variable $name"; `isset($GLOBALS['z'])` falso silenzioso. +7 test (8, 10, 5, 5, 9, nY, 7).
 - **Scope-out confermati (D-12.6):** `$GLOBALS[$dynamic]`, `$GLOBALS` come array intero (`count`/`foreach`/passaggio), globali engine — richiedono overflow `HashMap` runtime. Bonus emerso: `$x = &$GLOBALS['y']` funziona gratis (ref_source_cell base-aware).
 
+### Step 14 — type-hint enforcement (scalari, weak mode) (design pass, sessione 2026-06-14)
+
+> Chiude D-NEW-6 (step 8: hint accettati ma non enforced). L'utente ha scelto type-hint enforcement come prossimo step. Semantiche verificate sull'oracle PHP 8.5.7 (weak mode, default). **Coercion param è più stretta del cast `(int)`**: `f(int $x); f("12abc")` → **TypeError** (non `12`); solo stringhe numeriche ben formate coercono. Risultati chiave: `int<-"123"`=123, `int<-3.0`=3 (no dep), `int<-3.7`=Deprecated "Implicit conversion from float 3.7…"+3, `int<-"1.5"`=Deprecated "…from float-string \"1.5\"…"+1, `int<-"1.0"`=1 (no dep), `int<-true`=1, `int<-null`=TypeError, `int<-[1]`=TypeError; `float<-"1e3"`=1000.0, `float<-"abc"`=TypeError; `string<-42`="42", `string<-true`="1"; `bool<-0`=false, `bool<-"x"`=true; `?int<-null`=NULL; return `:int` coerce uguale ma messaggio diverso. Messaggi: arg = `f(): Argument #1 ($x) must be of type int, string given, called in <file> on line <L> and defined in <file>:<DL>`; nullable mostra `?int`; return = `f(): Return value must be of type int, string returned in <file>:<DL>`.
+
+| ID | Tema | Decisione | Razionale |
+|---|---|---|---|
+| **D-14.1** | Scope | Enforcement SOLO dei 4 hint scalari (`int`/`float`/`string`/`bool`) + nullable `?T`, in **weak mode** (default). Ogni altro hint (array/iterable/object/callable/nome-classe/union/intersection/mixed/void/self/…) → nessuna enforcement (accettato as-is = comportamento attuale). | I fail D-NEW-6 sono quasi tutti coercizione scalare. Union/classi/strict richiedono molto più lavoro (e OOP). |
+| **D-14.2** | Rappresentazione | `enum ScalarType { Int, Float, String, Bool }`, `struct TypeHint { kind: ScalarType, nullable: bool }`. `Param.hint: Option<TypeHint>`, `FnDecl.ret_hint: Option<TypeHint>`. Lowering mappa `Hint::Integer/Float/String/Bool` e `Hint::Nullable(inner-scalare)`; ogni altro Hint → `None`. | HIR-level; un `None` significa "non enforced" (uniforma scope-out e hint assenti). |
+| **D-14.3** | Motore coercizione (weak) | `Evaluator::coerce_to_hint(value, &TypeHint) -> Result<Zval, GivenType>` (Err porta il nome-tipo PHP del valore per il messaggio). Regole sotto. Riusa `numstr::parse_numeric_ex(s,false)` (rifiuta `trailing`), `convert::{dval_to_lval_safe,to_double,to_zstr,to_bool}`. `null`→ok solo se `nullable`; array/object→sempre Err. | Le primitive numeriche/convert esistono già da step 10; il motore è orchestrazione. |
+| **D-14.4** | Param TypeError | In `run_user_fn_body`, dopo aver calcolato il binding by-value (NON per `Arg::Ref` né per i default), applica `coerce_to_hint`. Err → `PhpError::TypeError("{fn}(): Argument #{n} (${pname}) must be of type {hint}, {given} given, called in {file} on line {callline} and defined in {file}:{defline}")`. `callline = self.cur_line` (linea della call, già impostata quando si valuta il `Call`); `pname = f.slots[param.slot]`; `defline = f.line`. | La coercizione avviene al bind, prima del corpo. |
+| **D-14.5** | Return TypeError | In `run_user_fn_body`, dopo `exec_stmts`, se `ret_hint` Some coerce il valore di ritorno (by-value). Err → `"{fn}(): Return value must be of type {hint}, {given} returned in {file}:{defline}"` (formato diverso: no "called in", suffisso "returned in F:DL"). | Solo by-value; un `function &f(): int` con return-by-ref resta scope-out. |
+| **D-14.6** | Diagnostica deprecation | float→int con frazione → Deprecated "Implicit conversion from float {repr} to int loses precision" (riusa `dval_to_lval_safe`). float-string→int con frazione → Deprecated "Implicit conversion from float-string \"{orig}\" to int loses precision" (messaggio custom: "float-string" + stringa originale quotata). | Verificato: `3.0`/`"1.0"` NON deprecano, `3.7`/`"1.5"` sì. |
+| **D-14.7** | Scope-out | `declare(strict_types=1)`, hint union/intersection/classe/object/array/iterable/callable/mixed/void/self/parent/static, param variadici tipati (già unsupported), coercizione su param by-ref. | Richiedono strict-mode engine, OOP, o sono rari. |
+
+**Tabella coercizione weak (target ← sorgente):**
+
+| target | Long | Double | Bool | Str (numerica ben formata) | Str (non num.) | Null | Array |
+|---|---|---|---|---|---|---|---|
+| **int** | as-is | frac==0→trunc; else Dep+trunc | 0/1 | int→val; float→(frac==0→val; else Dep-float-string+trunc) | **Err** | Err* | Err |
+| **float** | →f64 | as-is | 0.0/1.0 | →f64 | Err | Err* | Err |
+| **string** | to_zstr | to_zstr | "1"/"" | as-is | as-is | Err* | Err |
+| **bool** | to_bool | to_bool | as-is | to_bool | to_bool | Err* | Err |
+
+(*) `null` con `nullable=true` → resta `Null` (ok). Nome-tipo per "{given}": Long→`int`, Double→`float`, Str→`string`, Bool→`bool`, Null→`null`, Array→`array`.
+
+**Sotto-suddivisione TDD step 14:** **14-1** rappresentazione (`TypeHint`/`ScalarType` + lowering) + motore coercizione param (successi int/float/string/bool/nullable) + Param TypeError; **14-2** deprecation float→int (float e float-string) + return type enforcement.
+
 ### Step 13 — return-by-reference (`function &f()`) (design pass, sessione 2026-06-14)
 
 > Dialogo → l'utente ha scelto return-by-ref come prossimo step (piccolo, il modello `Zval::Ref` è pronto da 11d/12). Semantiche verificate sull'oracle PHP 8.5.7: `function &f(){ global $x; return $x; } $y=&f(); $y=99;` → global a `99`; `$y=f()`/`echo f()` (contesto valore) → **copia** (`1`/`5`); `return <non-lvalue>` o `return;` in fn by-ref → Notice "Only variable references should be returned by reference" + valore (NULL per bare return); `$y=&normalfn()` (fn NON by-ref) → Notice "Only variables should be assigned by reference" + valore; `$y=&byref_fn_che_ritorna_nonplace()` → **solo** il Notice interno (no outer).
