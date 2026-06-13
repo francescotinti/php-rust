@@ -264,6 +264,55 @@ fn explode_empty_separator_is_value_error() {
 }
 
 #[test]
+fn substr_offsets_and_lengths() {
+    assert_eq!(out("<?php echo substr('hello', 1, 3);"), "ell");
+    assert_eq!(out("<?php echo substr('hello', -2);"), "lo");
+    assert_eq!(out("<?php echo substr('hello', 1, -1);"), "ell");
+    assert_eq!(out("<?php var_dump(substr('hello', 10));"), "string(0) \"\"\n");
+    assert_eq!(out("<?php echo substr('hello', -10);"), "hello");
+    assert_eq!(out("<?php var_dump(substr('hello', 2, 0));"), "string(0) \"\"\n");
+    assert_eq!(out("<?php var_dump(substr('hello', 1, -10));"), "string(0) \"\"\n");
+}
+
+#[test]
+fn strpos_finds_and_misses() {
+    assert_eq!(out("<?php var_dump(strpos('hello world', 'o'));"), "int(4)\n");
+    assert_eq!(out("<?php var_dump(strpos('hello world', 'o', 5));"), "int(7)\n");
+    assert_eq!(out("<?php var_dump(strpos('hello', 'z'));"), "bool(false)\n");
+    assert_eq!(out("<?php var_dump(strpos('hello world', 'o', -5));"), "int(7)\n");
+    assert_eq!(out("<?php var_dump(strpos('abc', ''));"), "int(0)\n");
+}
+
+#[test]
+fn strpos_offset_out_of_range_is_value_error() {
+    match fatal("<?php strpos('abc', 'a', 10);") {
+        PhpError::ValueError(m) => assert_eq!(
+            m,
+            "strpos(): Argument #3 ($offset) must be contained in argument #1 ($haystack)"
+        ),
+        other => panic!("expected ValueError, got {other:?}"),
+    }
+}
+
+#[test]
+fn str_replace_scalar_and_arrays() {
+    assert_eq!(out("<?php echo str_replace('o', '0', 'foobar');"), "f00bar");
+    // Array search + array replace, applied element-wise and sequentially.
+    assert_eq!(out("<?php echo str_replace(['a', 'b'], ['1', '2'], 'abc');"), "12c");
+    assert_eq!(out("<?php echo str_replace(['a', 'b'], ['b', 'c'], 'a');"), "c");
+    // Array search + scalar replace: same replacement for each search term.
+    assert_eq!(out("<?php echo str_replace(['a', 'b'], 'X', 'abc');"), "XXc");
+}
+
+#[test]
+fn str_replace_array_subject_returns_array() {
+    assert_eq!(
+        out("<?php var_dump(str_replace('a', 'X', ['abc', 'aaa']));"),
+        "array(2) {\n  [0]=>\n  string(3) \"Xbc\"\n  [1]=>\n  string(3) \"XXX\"\n}\n"
+    );
+}
+
+#[test]
 fn undefined_function_is_fatal_after_output() {
     let reg = registry();
     let o = run_source_with(b"t.php", b"<?php echo 'a'; nope();", &reg).expect("lowers");

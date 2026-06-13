@@ -30,6 +30,9 @@ pub fn registry() -> Registry {
     add(b"implode", string::implode);
     add(b"join", string::implode);
     add(b"explode", string::explode);
+    add(b"substr", string::substr);
+    add(b"strpos", string::strpos);
+    add(b"str_replace", string::str_replace);
     add(b"var_dump", var_dump);
     add(b"strlen", strlen);
     add(b"gettype", gettype);
