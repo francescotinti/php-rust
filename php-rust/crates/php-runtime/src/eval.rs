@@ -340,8 +340,9 @@ impl<'p> Evaluator<'p> {
                 iter,
                 key,
                 value,
+                by_ref,
                 body,
-            } => return self.exec_foreach(iter, *key, *value, body),
+            } => return self.exec_foreach(iter, *key, *value, *by_ref, body),
 
             StmtKind::Switch { subject, cases } => return self.exec_switch(subject, cases),
 
@@ -400,12 +401,23 @@ impl<'p> Evaluator<'p> {
         iter: &Expr,
         key: Option<Slot>,
         value: Slot,
+        by_ref: bool,
         body: &[Stmt],
     ) -> Result<Flow, PhpError> {
+        // A by-reference loop binds each element of the *source variable* in
+        // place (step 11d-3). Over a non-variable it would have nothing to write
+        // back to, so it degrades to by-value iteration (PHP tolerates this).
+        if by_ref {
+            if let ExprKind::Var(slot) = iter.kind {
+                return self.exec_foreach_by_ref(slot, key, value, body);
+            }
+        }
         let collection = self.eval(iter)?;
+        // Snapshot raw element clones: a plain value is frozen for the loop, but a
+        // reference element keeps sharing its cell, so its value is read live at
+        // bind time (this is what makes the lingering-reference gotcha work).
         let items: Vec<(Key, Zval)> = match collection {
-            // By-value iteration derefs reference elements (D-R11).
-            Zval::Array(a) => a.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect(),
+            Zval::Array(a) => a.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
             other => {
                 self.diags.push(Diag::Warning(format!(
                     "foreach() argument must be of type array|object, {} given",
@@ -418,7 +430,49 @@ impl<'p> Evaluator<'p> {
             if let Some(ks) = key {
                 self.slot_set(ks as usize, key_to_zval(&k));
             }
-            self.slot_set(value as usize, v);
+            self.slot_set(value as usize, v.deref_clone());
+            match self.loop_step(body)? {
+                LoopStep::Iterate => {}
+                LoopStep::Stop => break,
+                LoopStep::Propagate(f) => return Ok(f),
+            }
+        }
+        Ok(Flow::Normal)
+    }
+
+    /// `foreach ($var as [$k =>] &$value)`: bind each element of the source
+    /// variable's array by reference (D-R13). The keys are snapshotted once; each
+    /// element is promoted to a `Zval::Ref` and the value slot aliases its cell,
+    /// so body writes land in the array. The value slot is intentionally *not*
+    /// reset afterwards — it lingers as a reference to the last element (the PHP
+    /// gotcha, oracle-verified).
+    fn exec_foreach_by_ref(
+        &mut self,
+        slot: Slot,
+        key: Option<Slot>,
+        value: Slot,
+        body: &[Stmt],
+    ) -> Result<Flow, PhpError> {
+        let keys: Vec<Key> = match self.slot_clone(slot as usize) {
+            Zval::Array(a) => a.iter().map(|(k, _)| k.clone()).collect(),
+            other => {
+                self.diags.push(Diag::Warning(format!(
+                    "foreach() argument must be of type array|object, {} given",
+                    php_type_name(&other)
+                )));
+                return Ok(Flow::Normal);
+            }
+        };
+        for k in keys {
+            let step = [Step::Key(k.clone())];
+            let cell = {
+                let d = &mut self.diags;
+                place_cell(&mut self.slots[slot as usize], &step, d)?
+            };
+            if let Some(ks) = key {
+                self.slot_set(ks as usize, key_to_zval(&k));
+            }
+            self.slots[value as usize] = Zval::Ref(Rc::clone(&cell));
             match self.loop_step(body)? {
                 LoopStep::Iterate => {}
                 LoopStep::Stop => break,

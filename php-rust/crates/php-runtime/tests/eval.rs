@@ -516,6 +516,43 @@ fn rendered_null_array_offset_deprecation() {
     );
 }
 
+// --- foreach by reference (step 11d-3): `foreach ($a as &$v)` ---
+
+#[test]
+fn foreach_by_ref_mutates_source_array() {
+    // `&$v` aliases each element, so the body's writes land in the source array.
+    assert_eq!(
+        out("<?php $a=[1,2,3]; foreach($a as &$v){$v*=10;} unset($v); echo $a[0]; echo $a[1]; echo $a[2];"),
+        "102030"
+    );
+}
+
+#[test]
+fn foreach_by_ref_lingering_reference_gotcha() {
+    // After a by-ref loop without unset, `$v` still references the last element;
+    // a following by-value loop writes through it (the classic PHP gotcha).
+    assert_eq!(
+        out("<?php $a=[1,2,3]; foreach($a as &$v){} foreach($a as $v){} echo $a[0]; echo $a[1]; echo $a[2];"),
+        "122"
+    );
+}
+
+#[test]
+fn foreach_by_ref_with_key() {
+    // The key stays by value while `&$v` is by reference.
+    assert_eq!(
+        out("<?php $a=['x'=>1,'y'=>2]; foreach($a as $k=>&$v){$v=$k;} unset($v); echo $a['x']; echo $a['y'];"),
+        "xy"
+    );
+}
+
+#[test]
+fn foreach_by_ref_over_temporary_is_tolerated() {
+    // PHP permits `foreach (expr as &$v)` over a non-lvalue; the mutations are
+    // simply lost. We must not error.
+    assert_eq!(out("<?php foreach([1,2,3] as &$v){$v*=2;} echo 'ok';"), "ok");
+}
+
 // --- element-level references (step 11d-2): `$x = &$a[0]`, `$a[0] = &$x` ---
 
 #[test]

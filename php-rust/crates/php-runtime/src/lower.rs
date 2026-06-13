@@ -206,11 +206,11 @@ impl<'f> Lowerer<'f> {
 
             Statement::Foreach(node) => {
                 let iter = self.lower_expr(node.expression)?;
-                let (key, value) = match &node.target {
-                    ForeachTarget::Value(v) => (None, self.foreach_slot(v.value, line)?),
+                let (key, (value, by_ref)) = match &node.target {
+                    ForeachTarget::Value(v) => (None, self.foreach_value_slot(v.value, line)?),
                     ForeachTarget::KeyValue(kv) => (
                         Some(self.foreach_slot(kv.key, line)?),
-                        self.foreach_slot(kv.value, line)?,
+                        self.foreach_value_slot(kv.value, line)?,
                     ),
                 };
                 let body = self.lower_stmts(node.body.statements())?;
@@ -218,6 +218,7 @@ impl<'f> Lowerer<'f> {
                     iter,
                     key,
                     value,
+                    by_ref,
                     body,
                 }
             }
@@ -730,15 +731,30 @@ impl<'f> Lowerer<'f> {
     }
 
     /// A `foreach` key/value target: Tier 1 supports only a direct variable
-    /// (by-reference `&$v` and `list()` destructuring are deferred).
+    /// (`list()` destructuring is deferred).
     fn foreach_slot(&mut self, target: &Expression, line: Line) -> Result<Slot, LowerError> {
         match target {
             Expression::Variable(Variable::Direct(d)) => Ok(self.slot_for(strip_dollar(d.name))),
             _ => Err(LowerError::Unsupported {
-                what: "foreach by-reference / list target",
+                what: "foreach list target",
                 line,
             }),
         }
+    }
+
+    /// A `foreach` *value* target, which may be by reference (`&$v`, step 11d-3).
+    /// Returns the bound slot plus whether the binding is by reference.
+    fn foreach_value_slot(
+        &mut self,
+        target: &Expression,
+        line: Line,
+    ) -> Result<(Slot, bool), LowerError> {
+        if let Expression::UnaryPrefix(u) = target {
+            if let UnaryPrefixOperator::Reference(_) = u.operator {
+                return Ok((self.foreach_slot(u.operand, line)?, true));
+            }
+        }
+        Ok((self.foreach_slot(target, line)?, false))
     }
 
     /// Lower the elements of an array literal. Keyed and keyless elements are

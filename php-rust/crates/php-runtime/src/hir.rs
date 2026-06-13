@@ -106,14 +106,17 @@ pub enum StmtKind {
         step: Vec<Expr>,
         body: Vec<Stmt>,
     },
-    /// `foreach ($iter as [$key =>] $value) { body }` (by-value; by-reference
-    /// and `list()` targets are out of Tier 1 scope).
+    /// `foreach ($iter as [$key =>] $value) { body }`. By value by default; with
+    /// `&$value` (step 11d-3) each element is bound by reference, so body writes
+    /// land in the source array. `list()` targets stay out of Tier 1 scope.
     Foreach {
         iter: Expr,
         /// Slot bound to the key, when the source uses `$k => $v`.
         key: Option<Slot>,
         /// Slot bound to the value.
         value: Slot,
+        /// `true` for `foreach (… as &$value)`: bind each element by reference.
+        by_ref: bool,
         body: Vec<Stmt>,
     },
     /// `switch ($subject) { case ...: ...; default: ...; }`. Cases are kept in

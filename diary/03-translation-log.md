@@ -50,6 +50,29 @@
   write-through, unset-elem-ref).
 - **Tempo:** ~40 minuti.
 
+### 11d-3 — foreach-by-ref (`foreach ($a as &$v)`)
+
+- **Riferimento C:** Zend `ZEND_FE_FETCH_R`/`_RW` (by-ref fetch promuove
+  l'elemento a reference). Oracle: mutazione sorgente, **lingering ref gotcha**
+  (`1,2,2`), key+by-ref, foreach-by-ref su array temporaneo (tollerato).
+- **Target:** `hir.rs` (`Foreach.by_ref: bool`), `lower.rs`
+  (`foreach_value_slot` rileva `&` sul value-target), `eval.rs`
+  (`exec_foreach_by_ref`: snapshot delle chiavi, `place_cell` promuove ogni
+  elemento a `Ref`, value slot = alias; **niente unset finale** → lingering).
+- **Decisioni applicate:** D-R13. Insight chiave: il foreach **by-value**
+  ora snapshotta i **clone raw** degli elementi (non deref) e deref-a al bind →
+  un elemento-ref condivide la cella e viene letto *live*, ed è ciò che fa
+  funzionare il gotcha (`1,2,2`). I valori plain restano congelati (semantica
+  snapshot invariata). Builtin come `implode` deref-ano gli elementi-ref
+  gratis via `convert::to_zstr` (arm Ref di 11d-1) — nessuna modifica per-builtin.
+- **Round di iterazione AI:** 1.
+- **Test pass al primo tentativo:** sì (4/4 nuovi; 196 totali).
+- **Limitazione:** by-ref su non-lvalue (`foreach([1,2,3] as &$v)`) degrada a
+  by-value (mutazioni perse, nessun errore) — coerente con l'oracle.
+- **Test scritti:** 4 (mutazione sorgente, lingering gotcha, key+by-ref,
+  temporaneo tollerato).
+- **Tempo:** ~35 minuti.
+
 ## Step 11c — Builtin by-reference (`array_push`/`sort`/`array_pop`/`array_shift`)
 
 - **Riferimento C:** `ext/standard/array.c` (`php_array_push`, `php_sort`,
