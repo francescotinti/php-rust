@@ -22,6 +22,8 @@ pub fn registry() -> Registry {
     };
     add(b"count", array::count);
     add(b"sizeof", array::count);
+    add(b"array_keys", array::array_keys);
+    add(b"array_values", array::array_values);
     add(b"var_dump", var_dump);
     add(b"strlen", strlen);
     add(b"gettype", gettype);

@@ -126,6 +126,37 @@ fn count_scalar_is_type_error() {
 }
 
 #[test]
+fn array_keys_all() {
+    assert_eq!(
+        out("<?php var_dump(array_keys(['a' => 1, 'b' => 2, 7 => 3]));"),
+        "array(3) {\n  [0]=>\n  string(1) \"a\"\n  [1]=>\n  string(1) \"b\"\n  [2]=>\n  int(7)\n}\n"
+    );
+    assert_eq!(out("<?php var_dump(array_keys([]));"), "array(0) {\n}\n");
+}
+
+#[test]
+fn array_keys_with_search() {
+    // Loose search returns positions of matching values, reindexed.
+    assert_eq!(
+        out("<?php var_dump(array_keys([1, 2, 1, 3, 1], 1));"),
+        "array(3) {\n  [0]=>\n  int(0)\n  [1]=>\n  int(2)\n  [2]=>\n  int(4)\n}\n"
+    );
+    // Strict search: only the int 1 matches (not "1" or true).
+    assert_eq!(
+        out("<?php var_dump(array_keys(['1', 1, true], 1, true));"),
+        "array(1) {\n  [0]=>\n  int(1)\n}\n"
+    );
+}
+
+#[test]
+fn array_values_reindexes() {
+    assert_eq!(
+        out("<?php var_dump(array_values(['a' => 10, 5 => 20, 'c' => 30]));"),
+        "array(3) {\n  [0]=>\n  int(10)\n  [1]=>\n  int(20)\n  [2]=>\n  int(30)\n}\n"
+    );
+}
+
+#[test]
 fn undefined_function_is_fatal_after_output() {
     let reg = registry();
     let o = run_source_with(b"t.php", b"<?php echo 'a'; nope();", &reg).expect("lowers");

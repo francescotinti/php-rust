@@ -1,7 +1,18 @@
 //! Array builtins (plan step 10): count, array_keys, array_values, ...
 
+use std::rc::Rc;
+
 use php_runtime::Ctx;
-use php_types::{convert, PhpArray, PhpError, Zval};
+use php_types::{convert, ops, Key, PhpArray, PhpError, Zval};
+
+/// A `Key` as the `Zval` array_keys/foreach expose it: ints stay ints,
+/// string keys become strings.
+fn key_to_zval(key: &Key) -> Zval {
+    match key {
+        Key::Int(i) => Zval::Long(*i),
+        Key::Str(s) => Zval::Str(Rc::clone(s)),
+    }
+}
 
 /// count($value, $mode = COUNT_NORMAL).
 ///
@@ -39,4 +50,57 @@ fn count_recursive(arr: &PhpArray) -> usize {
         }
     }
     n
+}
+
+/// Wrap an iterator of values into a fresh 0-indexed array (list).
+fn into_list(vals: impl IntoIterator<Item = Zval>) -> Zval {
+    let mut out = PhpArray::new();
+    for v in vals {
+        // append on a fresh array only fails past i64::MAX entries.
+        let _ = out.append(v);
+    }
+    Zval::Array(Rc::new(out))
+}
+
+/// First positional argument, required to be an array, else a `TypeError`
+/// matching PHP's "Argument #1 ($array) must be of type array, X given".
+fn arr_arg<'a>(args: &'a [Zval], fname: &str) -> Result<&'a PhpArray, PhpError> {
+    match args.first() {
+        Some(Zval::Array(a)) => Ok(a),
+        Some(other) => Err(PhpError::TypeError(format!(
+            "{fname}(): Argument #1 ($array) must be of type array, {} given",
+            other.error_type_name()
+        ))),
+        None => Err(PhpError::Error(format!(
+            "{fname}() expects at least 1 argument, 0 given"
+        ))),
+    }
+}
+
+/// array_keys($array, [$search, [$strict]]).
+///
+/// With no search value, returns every key. With a search value, returns only
+/// the keys whose value matches — loosely by default, identically if `$strict`.
+pub fn array_keys(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let arr = arr_arg(args, "array_keys")?;
+    match args.get(1) {
+        None => Ok(into_list(arr.iter().map(|(k, _)| key_to_zval(k)))),
+        Some(search) => {
+            let strict = matches!(args.get(2), Some(v) if convert::is_true_silent(v));
+            let matches = arr.iter().filter(|(_, v)| {
+                if strict {
+                    ops::identical(v, search)
+                } else {
+                    ops::loose_eq(v, search)
+                }
+            });
+            Ok(into_list(matches.map(|(k, _)| key_to_zval(k))))
+        }
+    }
+}
+
+/// array_values($array): the values reindexed 0..n as a list.
+pub fn array_values(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let arr = arr_arg(args, "array_values")?;
+    Ok(into_list(arr.iter().map(|(_, v)| v.clone())))
 }
