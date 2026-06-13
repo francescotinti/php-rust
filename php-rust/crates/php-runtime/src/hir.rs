@@ -128,6 +128,10 @@ pub enum StmtKind {
     },
     /// `unset($a, $b[k], ...);` — drops variables / array elements.
     Unset(Vec<Place>),
+    /// `global $a, $b;` — alias each named global cell into the local frame
+    /// (step 12-2, D-12.2). Each binding records the local slot to install the
+    /// alias into and the global slot it aliases.
+    Global(Vec<GlobalBinding>),
     /// `break N;` — level is >= 1 (defaults to 1).
     Break(u32),
     /// `continue N;` — level is >= 1 (defaults to 1).
@@ -136,6 +140,14 @@ pub enum StmtKind {
     Return(Option<Expr>),
     /// A lone `;`.
     Nop,
+}
+
+/// One `global $x;` binding: the local-frame slot the alias is installed into,
+/// and the global-frame slot it aliases (step 12-2, D-12.2).
+#[derive(Debug, Clone, PartialEq)]
+pub struct GlobalBinding {
+    pub local: Slot,
+    pub global: Slot,
 }
 
 /// One `switch` case. `test` is `None` for the `default:` case.

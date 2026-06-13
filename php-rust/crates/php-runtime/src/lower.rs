@@ -27,8 +27,8 @@ use mago_syntax::ast::{
 use mago_syntax::parser::parse_file;
 
 use crate::hir::{
-    ArrayElem, BinOp, Case, CastKind, Expr, ExprKind, FnDecl, Line, MatchArm, Param, Place,
-    PlaceStep, Program, Slot, Stmt, StmtKind, UnOp,
+    ArrayElem, BinOp, Case, CastKind, Expr, ExprKind, FnDecl, GlobalBinding, Line, MatchArm, Param,
+    Place, PlaceStep, Program, Slot, Stmt, StmtKind, UnOp,
 };
 
 /// Why a script could not be lowered to HIR.
@@ -271,6 +271,29 @@ impl<'f> Lowerer<'f> {
                     places.push(self.lower_place(v, line)?);
                 }
                 StmtKind::Unset(places)
+            }
+
+            Statement::Global(node) => {
+                let mut bindings = Vec::new();
+                for v in node.variables.iter() {
+                    let name = match v {
+                        Variable::Direct(d) => strip_dollar(d.name),
+                        // `global $$x` (variable-variable) needs runtime name
+                        // resolution — outside step 12 scope (D-12.6).
+                        _ => {
+                            return Err(LowerError::Unsupported {
+                                what: "variable-variable in `global`",
+                                line,
+                            })
+                        }
+                    };
+                    // Local-frame slot for the alias, plus a (pre-registered)
+                    // global-frame slot for the cell it aliases (D-12.2/D-12.4).
+                    let local = self.slot_for(name);
+                    let global = self.globals.slot_for(name);
+                    bindings.push(GlobalBinding { local, global });
+                }
+                StmtKind::Global(bindings)
             }
 
             Statement::Break(node) => StmtKind::Break(self.lower_level(node.level, line)?),

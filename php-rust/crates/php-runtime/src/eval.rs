@@ -375,6 +375,22 @@ impl<'p> Evaluator<'p> {
                 }
             }
 
+            StmtKind::Global(bindings) => {
+                // At global scope the named variable *is* the global, so `global`
+                // is a no-op (no separate local frame to alias into). Inside a
+                // function, alias each global cell into the local slot via a
+                // shared `Zval::Ref`, promoting the global to a cell on first use
+                // — this reuses the step 11d reference machinery (D-12.2). An
+                // undefined global is promoted to a NULL cell, so a later write
+                // through the alias *creates* the global (D-12.4).
+                if self.locals.is_some() {
+                    for b in bindings {
+                        let cell = make_cell(&mut self.globals[b.global as usize]);
+                        frame_mut!(self)[b.local as usize] = Zval::Ref(cell);
+                    }
+                }
+            }
+
             StmtKind::Break(n) => return Ok(Flow::Break(*n)),
             StmtKind::Continue(n) => return Ok(Flow::Continue(*n)),
             StmtKind::Return(opt) => {

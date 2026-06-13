@@ -410,6 +410,54 @@ fn function_recursion_factorial() {
 }
 
 #[test]
+fn global_reads_and_writes_outer() {
+    // `global $x` aliases the global cell; a write through it is visible outside
+    // (step 12-2, oracle 9).
+    assert_eq!(
+        out("<?php $x = 5; function f(){ global $x; $x = 9; } f(); echo $x;"),
+        "9"
+    );
+}
+
+#[test]
+fn global_reads_existing_value() {
+    // Reading through `global` sees the current global value (oracle 42).
+    assert_eq!(
+        out("<?php $x = 42; function f(){ global $x; echo $x; } f();"),
+        "42"
+    );
+}
+
+#[test]
+fn global_creates_global_from_function() {
+    // A global declared & assigned only inside a function still exists at the top
+    // level afterwards (oracle 7).
+    assert_eq!(
+        out("<?php function f(){ global $x; $x = 7; } f(); echo $x;"),
+        "7"
+    );
+}
+
+#[test]
+fn global_persists_across_calls() {
+    // The alias targets one shared cell, so repeated calls accumulate (oracle 3).
+    assert_eq!(
+        out("<?php $x = 1; function f(){ global $x; $x++; } f(); f(); echo $x;"),
+        "3"
+    );
+}
+
+#[test]
+fn global_multiple_variables() {
+    // `global $a, $b;` aliases each named global in one statement (oracle 3_99).
+    assert_eq!(
+        out("<?php $a = 1; $b = 2; function f(){ global $a, $b; $a = $a + $b; $b = 99; } \
+             f(); echo $a; echo '_'; echo $b;"),
+        "3_99"
+    );
+}
+
+#[test]
 fn function_mutual_recursion() {
     // Both functions are hoisted, so even-before-odd resolution works.
     let prog = "<?php \
