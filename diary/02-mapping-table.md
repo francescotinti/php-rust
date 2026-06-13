@@ -128,11 +128,28 @@ presente nel codebase.
 - **12-3 `da509fb`** (`$GLOBALS['literal']`): `Place.slot`→`Place.base: PlaceBase{Local|Global}`; nuovo `ExprKind::GlobalVar(Slot)` per le letture. Lowering riconosce `$GLOBALS['stringa-literal']` (`globals_key`), pre-registra lo slot globale → `$GLOBALS['n']=5` crea il bare global. Fast-path assegnazione bare-var gated su base `Local`. Eval: macro `slot_mut!` + `base_clone` instradano i 6 place-helper (write_place/read_place_value/silent_get/unset_place/ref_source_cell/bind_ref_target) al frame globale per base `Global`. Lettura di `$GLOBALS['undef']` → warning distinto "Undefined global variable $name"; `isset($GLOBALS['z'])` falso silenzioso. +7 test (8, 10, 5, 5, 9, nY, 7).
 - **Scope-out confermati (D-12.6):** `$GLOBALS[$dynamic]`, `$GLOBALS` come array intero (`count`/`foreach`/passaggio), globali engine — richiedono overflow `HashMap` runtime. Bonus emerso: `$x = &$GLOBALS['y']` funziona gratis (ref_source_cell base-aware).
 
+### Step 13 — return-by-reference (`function &f()`) (design pass, sessione 2026-06-14)
+
+> Dialogo → l'utente ha scelto return-by-ref come prossimo step (piccolo, il modello `Zval::Ref` è pronto da 11d/12). Semantiche verificate sull'oracle PHP 8.5.7: `function &f(){ global $x; return $x; } $y=&f(); $y=99;` → global a `99`; `$y=f()`/`echo f()` (contesto valore) → **copia** (`1`/`5`); `return <non-lvalue>` o `return;` in fn by-ref → Notice "Only variable references should be returned by reference" + valore (NULL per bare return); `$y=&normalfn()` (fn NON by-ref) → Notice "Only variables should be assigned by reference" + valore; `$y=&byref_fn_che_ritorna_nonplace()` → **solo** il Notice interno (no outer).
+
+| ID | Tema | Decisione | Razionale |
+|---|---|---|---|
+| **D-13.1** | Accettare la sintassi | `FnDecl.by_ref: bool` (lowering legge `func.ampersand`); rimosso il reject "function returning by reference" in `lower.rs`. | Prerequisito; il flag serve anche al call-site per decidere il Notice outer. |
+| **D-13.2** | Return di un place | Nuovo `StmtKind::ReturnRef(Place)`. Eval: `ref_source_cell(place.base, steps)` → `Flow::Return(Zval::Ref(cell))`. | Riusa interamente la macchina cell di 11d/12 (`make_cell`/`place_cell`): un return-by-ref *è* la promozione del place a cella condivisa. |
+| **D-13.3** | Quando abbassare a ReturnRef | Lowerer flag `fn_by_ref` (settato in `lower_function`). `return <expr>` → se `fn_by_ref` && `<expr>` è lvalue (`Variable::Direct` / `ArrayAccess` / `Parenthesized`) → `ReturnRef(lower_place)`; altrimenti `Return(lower_expr)`. | La detection lvalue va fatta a lowering (ha `lower_place`); il runtime riceve già la forma giusta. |
+| **D-13.4** | Notice "Only variable references…" | Runtime field `fn_returns_ref: bool` (save/restore in `call_user_fn` come `locals`). Un `StmtKind::Return` (NON ReturnRef) eseguito con `fn_returns_ref==true` emette il Notice. | Copre in un colpo `return;` e `return <nonplace>` dentro una fn by-ref (entrambi non sono `ReturnRef`). |
+| **D-13.5** | Call-site `$y = &f()` | Nuovo `ExprKind::AssignRefCall { target: Place, call: Box<Expr> }`. Lowering: nel ramo `&`-rhs esistente, se `u.operand` è una `Call` → `AssignRefCall` invece di `AssignRef`. Eval: chiama **raw** (no deref); `Zval::Ref(cell)` → bind target alla cella; valore → se il callee NON è by-ref emette "Only variables should be assigned by reference", poi bind a cella fresca col valore. | Un call non è un `Place`: variante dedicata, lascia intatto l'`AssignRef` di 11d. Il flag `by_ref` del callee (via `fn_index`) decide l'outer Notice (oracle F: solo inner se callee by-ref). |
+| **D-13.6** | Contesto valore | `eval(ExprKind::Call)` deref-a il risultato della user-fn (`Zval::Ref` → copia). I builtin non ritornano mai `Ref`. | `$y=f()`/`echo f()` devono copiare; solo `$y=&f()` (AssignRefCall) prende la cella raw. |
+| **D-13.7** | Scope-out | `static $x` (feature separata, serve per i contatori), return-by-ref di proprietà (no OOP), return-by-ref dentro `foreach`. | Fuori Tier 1 corrente; i due casi-test (global, elemento via param by-ref) non li richiedono. |
+
+**Sotto-suddivisione TDD step 13:** **13-1** core return-by-ref (`FnDecl.by_ref` + `ReturnRef` + `AssignRefCall` + deref contesto-valore) — TDD da `$x=1; function &f(){global $x; return $x;} $y=&f(); $y=99; echo $x;` → `99`, più elemento-via-param-byref (`99`) e contesto valore (`echo f()`→`5`, `$y=f()`→copia); **13-2** diagnostica (i due Notice via canale `diags`).
+
 ### Scope-out espliciti (oltre Tier 1)
 
 | Fuori scope | Perché | Cosa richiederebbe |
 |---|---|---|
-| Return by-reference (`function &f()`) | Raro nel corpus Tier 1 (`lower.rs:329`). | Modello di reference già pronto (D-R10) + propagazione nel return path. |
+| Return by-reference (`function &f()`) | ~~Raro nel corpus Tier 1~~ **→ implementato in step 13** (vedi sezione Step 13). | — |
+| `static $x` in funzione | Stato persistente cross-call; serve per i contatori return-by-ref. | Slot persistente per (funzione, nome), inizializzato una volta. |
 | GC ciclico | Con element-ref i cicli diventano possibili (`$a[0]=&$a`); leak accettato (D-R15/D-G6). | `Rc` → servirebbe weak/cycle-collector. |
 
 ### Suddivisione in sotto-step (proposta per la sessione dedicata)
