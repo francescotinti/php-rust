@@ -82,15 +82,42 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
     Ok(Program {
         body,
         file: name.into(),
-        slots: low.slots,
+        slots: low.globals.slots,
         functions: low.functions,
     })
 }
 
-struct Lowerer<'f> {
-    file: &'f File,
+/// A name→slot scope: the script globals, or one function's locals. Holds the
+/// slot *names* (positional, reproduced into `Program`/`FnDecl.slots`) and the
+/// reverse index for stable resolution.
+#[derive(Default)]
+struct Scope {
     slots: Vec<Box<[u8]>>,
     index: HashMap<Vec<u8>, Slot>,
+}
+
+impl Scope {
+    /// Resolve `$name` (without the leading `$`) to a stable slot in this scope,
+    /// allocating one on first sight.
+    fn slot_for(&mut self, name: &[u8]) -> Slot {
+        if let Some(&s) = self.index.get(name) {
+            return s;
+        }
+        let s = self.slots.len() as Slot;
+        self.slots.push(name.into());
+        self.index.insert(name.to_vec(), s);
+        s
+    }
+}
+
+struct Lowerer<'f> {
+    file: &'f File,
+    /// The global scope (always present) and the active function-local overlay
+    /// (`Some` while a function body is lowered). `slot_for` resolves against the
+    /// active scope; the globals stay reachable so a global slot can be
+    /// pre-registered from inside a function (D-12.1).
+    globals: Scope,
+    locals: Option<Scope>,
     /// True when the previous statement was a `?>` closing tag, so the next
     /// inline-HTML chunk must drop one leading newline (Zend lexer rule:
     /// `?>` consumes a single trailing `\n` / `\r\n`).
@@ -105,8 +132,8 @@ impl<'f> Lowerer<'f> {
     fn new(file: &'f File) -> Self {
         Lowerer {
             file,
-            slots: Vec::new(),
-            index: HashMap::new(),
+            globals: Scope::default(),
+            locals: None,
             after_closing_tag: false,
             functions: Vec::new(),
             fn_index: HashMap::new(),
@@ -118,15 +145,16 @@ impl<'f> Lowerer<'f> {
         self.file.line_number(span.start.offset) + 1
     }
 
-    /// Resolve `$name` (name given *without* the leading `$`) to a stable slot.
+    /// The active scope: the function-local overlay while a body is lowered,
+    /// otherwise the script globals (D-12.1).
+    fn scope_mut(&mut self) -> &mut Scope {
+        self.locals.as_mut().unwrap_or(&mut self.globals)
+    }
+
+    /// Resolve `$name` (name given *without* the leading `$`) to a stable slot in
+    /// the active scope.
     fn slot_for(&mut self, name: &[u8]) -> Slot {
-        if let Some(&s) = self.index.get(name) {
-            return s;
-        }
-        let s = self.slots.len() as Slot;
-        self.slots.push(name.into());
-        self.index.insert(name.to_vec(), s);
-        s
+        self.scope_mut().slot_for(name)
     }
 
     // --- statements ---
@@ -332,15 +360,17 @@ impl<'f> Lowerer<'f> {
             });
         }
 
-        let saved_slots = std::mem::take(&mut self.slots);
-        let saved_index = std::mem::take(&mut self.index);
+        // Install a fresh local overlay; the global scope stays reachable so a
+        // global slot can be pre-registered from inside this body (D-12.1).
+        // Save/restore the previous overlay so nested lowering nests correctly.
+        let saved_locals = self.locals.replace(Scope::default());
         let saved_tag = std::mem::replace(&mut self.after_closing_tag, false);
 
         let inner = self.lower_function_body(func, line);
 
-        // Reclaim the function's local slots and restore the outer scope.
-        let local_slots = std::mem::replace(&mut self.slots, saved_slots);
-        self.index = saved_index;
+        // Reclaim the function's local scope and restore the outer one.
+        let local_scope = std::mem::replace(&mut self.locals, saved_locals)
+            .expect("local scope installed for function body");
         self.after_closing_tag = saved_tag;
 
         let (params, body) = inner?;
@@ -348,7 +378,7 @@ impl<'f> Lowerer<'f> {
             name,
             params,
             body,
-            slots: local_slots,
+            slots: local_scope.slots,
             line,
         })
     }

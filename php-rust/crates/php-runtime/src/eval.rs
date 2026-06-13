@@ -38,6 +38,18 @@ fn fresh_slots(n: usize) -> Vec<Zval> {
     vec![Zval::Undef; n]
 }
 
+/// Mutable view of the *active* frame's value slots: the callee's locals while a
+/// user function runs, otherwise the script globals (D-12.1). Deliberately a
+/// macro, not a method: it expands to a borrow that touches only the `locals`
+/// and `globals` fields, so sibling fields (notably `diags`) stay independently
+/// borrowable at the call site — a `frame_mut(&mut self)` method would borrow
+/// *all* of `self` and conflict with a concurrently-held `&mut self.diags`.
+macro_rules! frame_mut {
+    ($self:ident) => {
+        $self.locals.as_mut().unwrap_or(&mut $self.globals)
+    };
+}
+
 /// A user-function argument as bound for a call: a plain value for a by-value
 /// parameter, or a shared cell for a `&$x` by-reference parameter (D-R6).
 enum Arg {
@@ -112,12 +124,14 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         .collect();
 
     let mut ev = Evaluator {
-        names: &program.slots,
+        global_names: &program.slots,
+        local_names: None,
         reg: registry,
         funcs: &program.functions,
         fn_index: &fn_index,
         file: &program.file,
-        slots: fresh_slots(program.slots.len()),
+        globals: fresh_slots(program.slots.len()),
+        locals: None,
         out: Vec::new(),
         rendered: Vec::new(),
         diags: Vec::new(),
@@ -148,16 +162,24 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
 }
 
 struct Evaluator<'p> {
-    /// Slot names for the *current* frame (script globals, or a callee's locals
-    /// while a user function runs) — used only for undefined-variable warnings.
-    names: &'p [Box<[u8]>],
+    /// Slot names for the global frame and (while a user function runs) the
+    /// callee's local frame — used only for undefined-variable warnings. The
+    /// active set is chosen by [`Evaluator::names`] (D-12.1).
+    global_names: &'p [Box<[u8]>],
+    local_names: Option<&'p [Box<[u8]>]>,
     reg: &'p Registry,
     /// Hoisted user functions and their name→index map (built in `run_with`).
     funcs: &'p [FnDecl],
     fn_index: &'p HashMap<Vec<u8>, usize>,
     /// Script file name, reproduced in rendered diagnostics (`... in <file>`).
     file: &'p [u8],
-    slots: Vec<Zval>,
+    /// The script-global frame (always present) and the active local overlay
+    /// (`Some` while a user function runs). The active frame is reached by
+    /// [`frame_mut!`] / [`Evaluator::frame`]; this is the only structural change
+    /// of step 12-1 and the mechanism that lets `global $x` / `$GLOBALS` reach
+    /// the global frame *by slot* from inside a function (D-12.1).
+    globals: Vec<Zval>,
+    locals: Option<Vec<Zval>>,
     /// Pure program output (echo / inline HTML / builtins).
     out: Vec<u8>,
     /// The interleaved CLI stream: `out` plus diagnostics rendered at their point
@@ -467,12 +489,12 @@ impl<'p> Evaluator<'p> {
             let step = [Step::Key(k.clone())];
             let cell = {
                 let d = &mut self.diags;
-                place_cell(&mut self.slots[slot as usize], &step, d)?
+                place_cell(&mut frame_mut!(self)[slot as usize], &step, d)?
             };
             if let Some(ks) = key {
                 self.slot_set(ks as usize, key_to_zval(&k));
             }
-            self.slots[value as usize] = Zval::Ref(Rc::clone(&cell));
+            frame_mut!(self)[value as usize] = Zval::Ref(Rc::clone(&cell));
             match self.loop_step(body)? {
                 LoopStep::Iterate => {}
                 LoopStep::Stop => break,
@@ -523,7 +545,8 @@ impl<'p> Evaluator<'p> {
     /// then restore the caller's frame. Recursion uses the host (Rust) stack.
     fn call_user_fn(&mut self, idx: usize, argv: Vec<Arg>) -> Result<Zval, PhpError> {
         // `funcs` is `&'p [FnDecl]` (Copy): copying it out detaches the borrow
-        // from `self`, so the frame swap below can mutate `self.slots` freely.
+        // from `self`, so installing the local overlay below can mutate the
+        // active frame freely.
         let funcs: &'p [FnDecl] = self.funcs;
         let f: &'p FnDecl = &funcs[idx];
 
@@ -542,14 +565,17 @@ impl<'p> Evaluator<'p> {
             )));
         }
 
+        // Install the callee's local frame as the overlay; the global frame
+        // stays put so `global $x` / `$GLOBALS` can reach it by slot (D-12.1).
+        // Saving and restoring the previous overlay makes nested calls nest.
         let frame = fresh_slots(f.slots.len());
-        let saved_slots = std::mem::replace(&mut self.slots, frame);
-        let saved_names = std::mem::replace(&mut self.names, f.slots.as_slice());
+        let saved_locals = self.locals.replace(frame);
+        let saved_names = self.local_names.replace(f.slots.as_slice());
 
         let result = self.run_user_fn_body(f, argv);
 
-        self.slots = saved_slots;
-        self.names = saved_names;
+        self.locals = saved_locals;
+        self.local_names = saved_names;
         result
     }
 
@@ -565,7 +591,7 @@ impl<'p> Evaluator<'p> {
                 // Required params are guaranteed present by the caller's check.
                 None => self.eval(p.default.as_ref().expect("required arg checked"))?,
             };
-            self.slots[p.slot as usize] = binding;
+            frame_mut!(self)[p.slot as usize] = binding;
         }
         match self.exec_stmts(&f.body)? {
             Flow::Return(v) => Ok(v),
@@ -772,7 +798,7 @@ impl<'p> Evaluator<'p> {
                 // `increment`/`decrement` follow a `Zval::Ref` themselves, so the
                 // mutation writes through any alias without a separate match here.
                 let d = &mut self.diags;
-                let target = &mut self.slots[idx];
+                let target = &mut frame_mut!(self)[idx];
                 if *inc {
                     ops::increment(target, d)?;
                 } else {
@@ -980,17 +1006,29 @@ impl<'p> Evaluator<'p> {
         }
     }
 
+    /// Read-only view of the active frame's value slots (see [`frame_mut!`]).
+    fn frame(&self) -> &[Zval] {
+        self.locals.as_deref().unwrap_or(&self.globals)
+    }
+
+    /// Slot names for the active frame (callee locals while a user function
+    /// runs, else the script globals). The references are `'p`-lived, so this
+    /// borrows nothing of `self` (D-12.1).
+    fn names(&self) -> &'p [Box<[u8]>] {
+        self.local_names.unwrap_or(self.global_names)
+    }
+
     /// The current value held by a slot, dereferencing a reference (D-R2: reads
     /// are always by value, preserving copy semantics).
     fn slot_clone(&self, idx: usize) -> Zval {
-        self.slots[idx].deref_clone()
+        self.frame()[idx].deref_clone()
     }
 
     /// Write `v` into a slot. For a plain value this replaces it; for a
     /// reference it writes *through* the shared cell so every alias sees the new
     /// value (D-R3 write-through).
     fn slot_set(&mut self, idx: usize, v: Zval) {
-        match &mut self.slots[idx] {
+        match &mut frame_mut!(self)[idx] {
             Zval::Ref(cell) => *cell.borrow_mut() = v,
             slot => *slot = v,
         }
@@ -1030,7 +1068,7 @@ impl<'p> Evaluator<'p> {
     }
 
     fn warn_undef(&mut self, slot: Slot) {
-        let name = String::from_utf8_lossy(&self.names[slot as usize]);
+        let name = String::from_utf8_lossy(&self.names()[slot as usize]);
         self.diags
             .push(Diag::Warning(format!("Undefined variable ${name}")));
     }
@@ -1163,7 +1201,7 @@ impl<'p> Evaluator<'p> {
             return Ok(());
         }
         let d = &mut self.diags;
-        match &mut self.slots[slot as usize] {
+        match &mut frame_mut!(self)[slot as usize] {
             Zval::Ref(cell) => {
                 let z = &mut *cell.borrow_mut();
                 write_into(z, steps, value, d)
@@ -1199,7 +1237,7 @@ impl<'p> Evaluator<'p> {
             Ok(self.slot_cell(slot as usize))
         } else {
             let d = &mut self.diags;
-            place_cell(&mut self.slots[slot as usize], steps, d)
+            place_cell(&mut frame_mut!(self)[slot as usize], steps, d)
         }
     }
 
@@ -1213,7 +1251,7 @@ impl<'p> Evaluator<'p> {
         cell: Rc<RefCell<Zval>>,
     ) -> Result<(), PhpError> {
         if steps.is_empty() {
-            self.slots[slot as usize] = Zval::Ref(cell);
+            frame_mut!(self)[slot as usize] = Zval::Ref(cell);
             Ok(())
         } else {
             self.write_place(slot, steps, Zval::Ref(cell))
@@ -1225,7 +1263,7 @@ impl<'p> Evaluator<'p> {
     /// it as NULL (no later undefined-variable warning). Shared by `$x = &$y`
     /// and by-reference argument passing (D-R4/D-R6).
     fn slot_cell(&mut self, idx: usize) -> Rc<RefCell<Zval>> {
-        make_cell(&mut self.slots[idx])
+        make_cell(&mut frame_mut!(self)[idx])
     }
 
     /// Read the current value at a place (for compound assignment). Missing
@@ -1285,10 +1323,10 @@ impl<'p> Evaluator<'p> {
             // Drop *this* binding only: replacing it with a fresh value slot
             // releases this alias's share of any reference cell, leaving other
             // aliases untouched (D-R5).
-            self.slots[slot as usize] = Zval::Undef;
+            frame_mut!(self)[slot as usize] = Zval::Undef;
             return;
         }
-        match &mut self.slots[slot as usize] {
+        match &mut frame_mut!(self)[slot as usize] {
             Zval::Ref(cell) => {
                 let z = &mut *cell.borrow_mut();
                 unset_into(z, steps);
