@@ -10,6 +10,7 @@
 //! sprintf, array_*) is step 10.
 
 mod array;
+mod format;
 mod string;
 
 use php_runtime::{Ctx, Registry};
@@ -33,6 +34,8 @@ pub fn registry() -> Registry {
     add(b"substr", string::substr);
     add(b"strpos", string::strpos);
     add(b"str_replace", string::str_replace);
+    add(b"sprintf", format::sprintf);
+    add(b"printf", format::printf);
     add(b"var_dump", var_dump);
     add(b"strlen", strlen);
     add(b"gettype", gettype);

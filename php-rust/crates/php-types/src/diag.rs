@@ -35,6 +35,8 @@ pub enum PhpError {
     Error(String),
     TypeError(String),
     ValueError(String),
+    /// Subclass of TypeError; the class name is still "ArgumentCountError".
+    ArgumentCountError(String),
     DivisionByZeroError(&'static str),
     ArithmeticError(&'static str),
 }
@@ -45,6 +47,7 @@ impl PhpError {
             PhpError::Error(_) => "Error",
             PhpError::TypeError(_) => "TypeError",
             PhpError::ValueError(_) => "ValueError",
+            PhpError::ArgumentCountError(_) => "ArgumentCountError",
             PhpError::DivisionByZeroError(_) => "DivisionByZeroError",
             PhpError::ArithmeticError(_) => "ArithmeticError",
         }
@@ -55,6 +58,7 @@ impl PhpError {
             PhpError::Error(m) => m,
             PhpError::TypeError(m) => m,
             PhpError::ValueError(m) => m,
+            PhpError::ArgumentCountError(m) => m,
             PhpError::DivisionByZeroError(m) => m,
             PhpError::ArithmeticError(m) => m,
         }

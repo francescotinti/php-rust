@@ -313,6 +313,62 @@ fn str_replace_array_subject_returns_array() {
 }
 
 #[test]
+fn sprintf_integers() {
+    assert_eq!(out("<?php echo sprintf('%d', 42);"), "42");
+    assert_eq!(out("<?php echo sprintf('[%5d]', 42);"), "[   42]");
+    assert_eq!(out("<?php echo sprintf('[%05d]', 42);"), "[00042]");
+    assert_eq!(out("<?php echo sprintf('[%-5d]', 42);"), "[42   ]");
+    assert_eq!(out("<?php echo sprintf('%+d %+d', 5, -5);"), "+5 -5");
+    assert_eq!(out("<?php echo sprintf('%d', 3.9);"), "3"); // float truncates
+    assert_eq!(out("<?php echo sprintf('%u', -1);"), "18446744073709551615");
+}
+
+#[test]
+fn sprintf_strings_and_padding() {
+    assert_eq!(out("<?php echo sprintf('[%10s]', 'hi');"), "[        hi]");
+    assert_eq!(out("<?php echo sprintf('[%-10s]', 'hi');"), "[hi        ]");
+    assert_eq!(out("<?php echo sprintf('[%.3s]', 'hello');"), "[hel]");
+    assert_eq!(out("<?php echo sprintf(\"[%'*10d]\", 42);"), "[********42]");
+    assert_eq!(out("<?php echo sprintf('100%%');"), "100%");
+}
+
+#[test]
+fn sprintf_floats() {
+    assert_eq!(out("<?php echo sprintf('%f', 3.14159);"), "3.141590");
+    assert_eq!(out("<?php echo sprintf('%.2f', 3.14159);"), "3.14");
+    assert_eq!(out("<?php echo sprintf('[%08.2f]', 3.14159);"), "[00003.14]");
+    assert_eq!(out("<?php echo sprintf('[%+08.2f]', -3.1);"), "[-0003.10]");
+    // PHP exponent has a sign and no leading zeros: e+4, not e+04.
+    assert_eq!(out("<?php echo sprintf('%e', 12345.678);"), "1.234568e+4");
+}
+
+#[test]
+fn sprintf_bases_and_char() {
+    assert_eq!(out("<?php echo sprintf('%x|%X|%o|%b', 255, 255, 8, 5);"), "ff|FF|10|101");
+    assert_eq!(out("<?php echo sprintf('%c', 65);"), "A");
+}
+
+#[test]
+fn sprintf_positional() {
+    assert_eq!(out("<?php echo sprintf('%2$s %1$s', 'a', 'b');"), "b a");
+}
+
+#[test]
+fn printf_writes_and_returns_length() {
+    assert_eq!(out("<?php $n = printf('ab%d', 7); echo '|' . $n;"), "ab7|3");
+}
+
+#[test]
+fn sprintf_missing_arg_is_argument_count_error() {
+    match fatal("<?php sprintf('%d %d', 1);") {
+        PhpError::ArgumentCountError(m) => {
+            assert_eq!(m, "3 arguments are required, 2 given")
+        }
+        other => panic!("expected ArgumentCountError, got {other:?}"),
+    }
+}
+
+#[test]
 fn undefined_function_is_fatal_after_output() {
     let reg = registry();
     let o = run_source_with(b"t.php", b"<?php echo 'a'; nope();", &reg).expect("lowers");
