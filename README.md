@@ -19,16 +19,29 @@ full port semantico del solo `zend_operators.c`).
 | 0 | Scaffolding workspace + diary + Phase 0 reconnaissance | ✅ |
 | 1 | `php-types`: `PhpStr`, `Zval`, `PhpArray` | ✅ |
 | 2 | Operatori + conversioni (`zend_operators.c`) + **differential 37.835 casi, 0 mismatch** | ✅ |
-| 3 | Bridge mago → HIR | ⏳ |
-| 4 | Evaluator (echo, variabili, controllo di flusso) | ⏳ |
-| 5 | Builtins nucleo + `var_dump` | ⏳ |
-| 6 | `phpt-runner` + prima baseline su `Zend/tests` | ⏳ |
-| 7–11 | array end-to-end, foreach, funzioni utente, diagnostica, chiusura Tier 1 | ⏳ |
+| 3 | Bridge mago → HIR | ✅ |
+| 4 | Evaluator (echo, variabili, controllo di flusso) | ✅ |
+| 5 | Builtins nucleo + `var_dump` | ✅ |
+| 7 | Array end-to-end + `foreach` / `switch` / `match` | ✅ |
+| 6 | `phpt-runner` (capability scan + import testsuite) — **6172 file, 98.6% dei runnable** | ✅ |
+| 8 | Funzioni utente | ⏳ |
+| 9 | Rendering diagnostici (warning/fatal su stdout) | ⏳ |
+| 10–11 | Espansione builtin, chiusura Tier 1 | ⏳ |
+
+> Lo step 6 è stato eseguito **dopo** lo step 7 (deciso con l'utente: gli array
+> rendono il phpt-runner molto più utile, quintuplicando i test in-scope).
 
 **Risultato chiave (step 2)**: il porting di `zend_operators.c` — type juggling,
 confronti PHP 8, formattazione float, increment Perl-style, bitwise su stringhe — è
 verificato **byte-per-byte** contro un binario PHP 8.5.7 compilato dal sorgente, su
 37.835 casi (47 valori × 47 × 17 operatori binari + 6 unari), diagnostica inclusa.
+
+**Risultato chiave (step 6)**: il `phpt-runner` esegue un **capability scan** della
+testsuite ufficiale (`tests/` + `Zend/tests/`, 6172 file): fa girare i test in-scope
+e categorizza i fuori-scope come SKIP motivati (l'unico FAIL è una divergenza di
+output reale). Baseline attuale: **71 pass / 1 fail / 6100 skip = 98.6% dei runnable**.
+L'import ha scoperto e fatto fixare 2 bug reali (`??` su offset di stringa #69889,
+literale intero gigante → `INF` #74947) e 1 divergenza ereditata da mago (`\u{}`).
 
 ## Perché Rust semplifica Zend
 
@@ -47,10 +60,10 @@ verificato **byte-per-byte** contro un binario PHP 8.5.7 compilato dal sorgente,
 ```
 php-rust/crates/
   php-types      Zval / PhpStr / PhpArray + operatori (zero dep interne)
-  php-runtime    HIR, lowering da mago, evaluator        (in arrivo)
-  php-builtins   trait Builtin + funzioni                (in arrivo)
-  php-cli        binario `phpr`                           (in arrivo)
-  phpt-runner    harness .phpt + differential             (in arrivo)
+  php-runtime    HIR, lowering da mago, evaluator tree-walk
+  php-builtins   registry + 19 builtin (var_dump, is_*, *val, strlen, …)
+  php-cli        binario `phpr`                           (scheletro)
+  phpt-runner    runner .phpt + capability scan (bin + lib)
 diary/           00-reconnaissance … 99-conclusions + metrics
 ```
 
@@ -66,6 +79,16 @@ PHP_ORACLE=/path/to/php cargo test -p php-types --test differential
 
 Il differential si auto-salta con un messaggio se l'oracle non è disponibile.
 
+### phpt-runner
+
+Esegue i `.phpt` ufficiali attraverso l'evaluator, con capability scan e
+classificazione PASS/FAIL/SKIP (l'unico FAIL è una divergenza di output reale):
+
+```bash
+cargo run -p phpt-runner -- /path/to/php-src/tests /path/to/php-src/Zend/tests
+cargo run -p phpt-runner -- --list-fails <path>   # mostra i diff dei fail
+```
+
 ## Diario
 
 Il deliverable principale dell'esperimento è il **diario metodologico** in `diary/`,
@@ -74,5 +97,5 @@ non solo il codice: decisioni (`02-mapping-table.md`), log per step
 
 ---
 
-*Generato con assistenza AI (Claude Fable 5). Codice e commenti tecnici in inglese,
-diario in italiano.*
+*Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Codice e commenti tecnici
+in inglese, diario in italiano.*
