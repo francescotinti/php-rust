@@ -25,6 +25,31 @@
 - **Test pass al primo tentativo:** sì (185/185 invariati — parità confermata).
 - **Tempo:** ~45 minuti.
 
+### 11d-2 — element-& assignment (`$x = &$a[0]`, `$a[0] = &$x`)
+
+- **Riferimento C:** Zend `ZVAL_MAKE_REF` su elemento di HashTable; deref-on-read
+  (`Z_DEREF`) sulle letture. Oracle: ref-to-elem, vivify, elem=&var, append-ref,
+  nested, write-through di elemento-ref già esistente, unset-elem-ref.
+- **Target:** `hir.rs` (`AssignRef` ora `{ target: Place, source: Place }`),
+  `lower.rs` (entrambi i lati via `lower_place`; rimosso `ref_var_slot`),
+  `eval.rs` (`assign_ref`/`ref_source_cell`/`bind_ref_target`; nuovi free fn
+  `make_cell` + `place_cell`; `slot_cell` ora = `make_cell(slot)`; **`write_into`
+  ristrutturata**: deref-through di un target `Ref` in cima + scrittura nel
+  child esistente al leaf → write-through di elementi-ref).
+- **Decisioni applicate:** D-R12 (element-ref). `place_cell` naviga + vivifica
+  (elemento mancante → NULL) + promuove a `Ref`; bind del target riusa
+  `write_place(Zval::Ref(cell))`. Il caso "write-through di `$a[0]=v` quando
+  `$a[0]` è già ref" cade fuori dalla nuova `write_into`.
+- **Round di iterazione AI:** 1 (1 fix E0382: catch-all in `make_cell` spostava
+  il `&mut` → match su `&*target`).
+- **Test pass al primo tentativo:** sì (7/7 nuovi; 192 totali).
+- **Divergenza/limitazione:** base scalare (`$a=5; $x=&$a[0]`) → cella detached
+  (no crash) dopo il warning di `ensure_array_mut`; var_dump `&` annotation è
+  11d-4 (per ora deref trasparente).
+- **Test scritti:** 7 (ref-to-elem, vivify, elem=&var, append-ref, nested,
+  write-through, unset-elem-ref).
+- **Tempo:** ~40 minuti.
+
 ## Step 11c — Builtin by-reference (`array_push`/`sort`/`array_pop`/`array_shift`)
 
 - **Riferimento C:** `ext/standard/array.c` (`php_array_push`, `php_sort`,

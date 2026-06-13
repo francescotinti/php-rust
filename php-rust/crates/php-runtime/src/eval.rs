@@ -687,9 +687,7 @@ impl<'p> Evaluator<'p> {
                 Ok(v)
             }
 
-            ExprKind::AssignRef { target, source } => {
-                Ok(self.assign_ref(*target, *source))
-            }
+            ExprKind::AssignRef { target, source } => self.assign_ref(target, source),
 
             ExprKind::AssignOp(op, slot, rhs) => {
                 let cur = self.read_var(*slot);
@@ -1125,11 +1123,47 @@ impl<'p> Evaluator<'p> {
     /// value becomes a `Ref`; binding an unset variable *defines* it as NULL, so
     /// no later undefined-variable warning fires). Returns the aliased value, as
     /// `$x = &$y` is an expression.
-    fn assign_ref(&mut self, target: Slot, source: Slot) -> Zval {
-        let cell = self.slot_cell(source as usize);
+    fn assign_ref(&mut self, target: &Place, source: &Place) -> Result<Zval, PhpError> {
+        // PHP evaluates the lvalue's index expressions before the RHS; resolve
+        // the target's steps first, then the source's, for the same ordering.
+        let tgt_steps = self.resolve_steps(target)?;
+        let src_steps = self.resolve_steps(source)?;
+        // Obtain (promoting) the shared cell the source designates, then bind the
+        // target to it. Reading the cell yields the expression's value.
+        let cell = self.ref_source_cell(source.slot, &src_steps)?;
         let value = cell.borrow().clone();
-        self.slots[target as usize] = Zval::Ref(cell);
-        value
+        self.bind_ref_target(target.slot, &tgt_steps, Rc::clone(&cell))?;
+        Ok(value)
+    }
+
+    /// The shared cell a reference *source* (`&$x`, `&$a[k]`) designates,
+    /// promoting the location to a `Zval::Ref` on first use (D-R12). A bare
+    /// variable goes through [`Evaluator::slot_cell`]; an element navigates and
+    /// vivifies via [`place_cell`].
+    fn ref_source_cell(&mut self, slot: Slot, steps: &[Step]) -> Result<Rc<RefCell<Zval>>, PhpError> {
+        if steps.is_empty() {
+            Ok(self.slot_cell(slot as usize))
+        } else {
+            let d = &mut self.diags;
+            place_cell(&mut self.slots[slot as usize], steps, d)
+        }
+    }
+
+    /// Bind a reference *target* (`$x = …`, `$a[k] = …`, `$a[] = …`) to `cell`:
+    /// a bare variable replaces its slot with `Zval::Ref`; an element writes the
+    /// `Zval::Ref` into the place (auto-vivifying / appending as usual).
+    fn bind_ref_target(
+        &mut self,
+        slot: Slot,
+        steps: &[Step],
+        cell: Rc<RefCell<Zval>>,
+    ) -> Result<(), PhpError> {
+        if steps.is_empty() {
+            self.slots[slot as usize] = Zval::Ref(cell);
+            Ok(())
+        } else {
+            self.write_place(slot, steps, Zval::Ref(cell))
+        }
     }
 
     /// Obtain the shared cell backing a slot, promoting a plain value to a
@@ -1137,18 +1171,7 @@ impl<'p> Evaluator<'p> {
     /// it as NULL (no later undefined-variable warning). Shared by `$x = &$y`
     /// and by-reference argument passing (D-R4/D-R6).
     fn slot_cell(&mut self, idx: usize) -> Rc<RefCell<Zval>> {
-        match &self.slots[idx] {
-            Zval::Ref(cell) => Rc::clone(cell),
-            z => {
-                let init = match z {
-                    Zval::Undef => Zval::Null,
-                    other => other.clone(),
-                };
-                let cell = Rc::new(RefCell::new(init));
-                self.slots[idx] = Zval::Ref(Rc::clone(&cell));
-                cell
-            }
-        }
+        make_cell(&mut self.slots[idx])
     }
 
     /// Read the current value at a place (for compound assignment). Missing
@@ -1256,6 +1279,14 @@ fn write_into(
     value: Zval,
     diags: &mut Diags,
 ) -> Result<(), PhpError> {
+    // A reference target is written *through* its cell: descend into the
+    // referenced value, whether for the final write (empty `steps`) or to keep
+    // navigating (D-R3/D-R11). This makes `$a[0] = v` write through an alias
+    // when `$a[0]` is a reference element.
+    if let Zval::Ref(cell) = target {
+        let inner = &mut *cell.borrow_mut();
+        return write_into(inner, steps, value, diags);
+    }
     let Some((first, rest)) = steps.split_first() else {
         *target = value;
         return Ok(());
@@ -1266,7 +1297,12 @@ fn write_into(
     match first {
         Step::Key(k) => {
             if rest.is_empty() {
-                arr.insert(k.clone(), value);
+                // Overwrite a plain element, but write *through* an existing
+                // reference element (the recursive call's top-of-fn deref).
+                match arr.get_mut(k) {
+                    Some(child) => write_into(child, rest, value, diags)?,
+                    None => arr.insert(k.clone(), value),
+                }
             } else {
                 if !arr.contains_key(k) {
                     arr.insert(k.clone(), Zval::Array(Rc::new(PhpArray::new())));
@@ -1286,6 +1322,54 @@ fn write_into(
         }
     }
     Ok(())
+}
+
+/// Promote `target` to a reference and return its shared cell. An existing
+/// reference yields a clone of its cell; a plain value is wrapped (an unset slot
+/// becomes a defined NULL first). The element/slot analogue of Zend's
+/// `ZVAL_MAKE_REF` (D-R12).
+fn make_cell(target: &mut Zval) -> Rc<RefCell<Zval>> {
+    if let Zval::Ref(cell) = target {
+        return Rc::clone(cell);
+    }
+    let init = match &*target {
+        Zval::Undef => Zval::Null,
+        other => other.clone(),
+    };
+    let cell = Rc::new(RefCell::new(init));
+    *target = Zval::Ref(Rc::clone(&cell));
+    cell
+}
+
+/// Navigate `steps` from `target`, auto-vivifying missing elements as NULL, and
+/// promote the addressed location to a reference, returning its shared cell
+/// (used by `$x = &$a[k]…`). A reference encountered along the path is followed
+/// into its cell; a scalar base that cannot be indexed yields a detached cell so
+/// the caller does not crash (the `ensure_array_mut` warning already fired).
+fn place_cell(
+    target: &mut Zval,
+    steps: &[Step],
+    diags: &mut Diags,
+) -> Result<Rc<RefCell<Zval>>, PhpError> {
+    let Some((first, rest)) = steps.split_first() else {
+        return Ok(make_cell(target));
+    };
+    if let Zval::Ref(cell) = target {
+        let inner = &mut *cell.borrow_mut();
+        return place_cell(inner, steps, diags);
+    }
+    let Some(arr) = ensure_array_mut(target, diags) else {
+        return Ok(Rc::new(RefCell::new(Zval::Null)));
+    };
+    let Step::Key(k) = first else {
+        // `&$a[]` is not a valid reference source; treat defensively.
+        return Ok(Rc::new(RefCell::new(Zval::Null)));
+    };
+    if !arr.contains_key(k) {
+        arr.insert(k.clone(), Zval::Null);
+    }
+    let child = arr.get_mut(k).expect("key just inserted");
+    place_cell(child, rest, diags)
 }
 
 /// Recursively `unset` the element addressed by `steps`. A missing path is a

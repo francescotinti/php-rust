@@ -453,8 +453,11 @@ impl<'f> Lowerer<'f> {
                 if let AssignmentOperator::Assign(_) = a.operator {
                     if let Expression::UnaryPrefix(u) = a.rhs {
                         if let UnaryPrefixOperator::Reference(_) = u.operator {
-                            let target = self.ref_var_slot(a.lhs, line)?;
-                            let source = self.ref_var_slot(u.operand, line)?;
+                            // Both sides are places: a bare variable or an array
+                            // element (step 11d-2). `lower_place` rejects anything
+                            // that is not an lvalue.
+                            let target = self.lower_place(a.lhs, line)?;
+                            let source = self.lower_place(u.operand, line)?;
                             return Ok(Expr {
                                 line,
                                 kind: ExprKind::AssignRef { target, source },
@@ -721,19 +724,6 @@ impl<'f> Lowerer<'f> {
             }
             _ => Err(LowerError::Unsupported {
                 what: "assignment target",
-                line,
-            }),
-        }
-    }
-
-    /// Resolve a bare variable on either side of a reference binding
-    /// (`$target = &$source`) to its slot. A reference into an array element or
-    /// any non-variable is out of Tier 1 scope (step 11d).
-    fn ref_var_slot(&mut self, e: &Expression, line: Line) -> Result<Slot, LowerError> {
-        match e {
-            Expression::Variable(Variable::Direct(d)) => Ok(self.slot_for(strip_dollar(d.name))),
-            _ => Err(LowerError::Unsupported {
-                what: "reference to/from a non-variable",
                 line,
             }),
         }

@@ -516,6 +516,54 @@ fn rendered_null_array_offset_deprecation() {
     );
 }
 
+// --- element-level references (step 11d-2): `$x = &$a[0]`, `$a[0] = &$x` ---
+
+#[test]
+fn ref_to_array_element_aliases_it() {
+    // `$x = &$a[i]` aliases the element; writing $x writes the element.
+    assert_eq!(out("<?php $a=[1,2]; $x=&$a[1]; $x=99; echo $a[1];"), "99");
+}
+
+#[test]
+fn ref_to_array_element_vivifies() {
+    // Binding a reference to a missing element creates it (as NULL, then written).
+    assert_eq!(out("<?php $a=[]; $x=&$a['k']; $x=5; echo $a['k'];"), "5");
+}
+
+#[test]
+fn array_element_ref_to_variable() {
+    // `$a[0] = &$x` makes the element alias the variable.
+    assert_eq!(out("<?php $x=5; $a=[1,2]; $a[0]=&$x; $x=9; echo $a[0];"), "9");
+}
+
+#[test]
+fn array_append_ref_to_variable() {
+    // `$a[] = &$x` appends a reference element.
+    assert_eq!(out("<?php $x=7; $a=[]; $a[]=&$x; $x=8; echo $a[0];"), "8");
+}
+
+#[test]
+fn ref_to_nested_array_element() {
+    assert_eq!(out("<?php $a=[[1]]; $x=&$a[0][0]; $x=9; echo $a[0][0];"), "9");
+}
+
+#[test]
+fn write_through_existing_ref_element() {
+    // Writing `$a[0]` when it is already a reference element writes through the
+    // shared cell, so an alias of that element sees the new value.
+    assert_eq!(out("<?php $a=[1,2,3]; $b=&$a[0]; $a[0]=50; echo $b;"), "50");
+}
+
+#[test]
+fn unset_ref_element_keeps_alias_value() {
+    // `unset($a[0])` drops the element, but an alias of it keeps the value
+    // through the shared cell (oracle: "gone1").
+    assert_eq!(
+        out("<?php $a=[1,2]; $x=&$a[0]; unset($a[0]); echo isset($a[0])?'set':'gone'; echo $x;"),
+        "gone1"
+    );
+}
+
 // --- by-reference parameters (step 11b): `function f(&$x)` ---
 
 #[test]
