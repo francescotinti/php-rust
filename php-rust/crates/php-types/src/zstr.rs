@@ -21,6 +21,7 @@ impl PhpStr {
         })
     }
 
+    #[allow(clippy::should_implement_trait)] // infallible byte view, not FromStr
     pub fn from_str(s: &str) -> ZStr {
         Self::new(s.as_bytes().to_vec())
     }

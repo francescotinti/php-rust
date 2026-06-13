@@ -1,6 +1,61 @@
 # Fase 3 — Translation log
 
-> Generato con assistenza AI (Claude Fable 5). Una entry per step.
+> Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Una entry per step.
+
+## Step 3 — Bridge mago → HIR
+
+- **Riferimento C:** nessuno (sostituzione architetturale, D-G8 + D-G9: il lexer
+  re2c + parser Bison + `zend_ast` + `zend_compile.c` sono rimpiazzati da mago +
+  lowering, non tradotti riga-per-riga).
+- **Target:** `crates/php-runtime`: `hir.rs` (tipi HIR owned), `lower.rs`
+  (bridge), `lib.rs`; `tests/lowering.rs` (20 smoke test).
+- **Front-end scelto:** `mago-syntax` 1.30.0 (+ `mago-database`, `mago-span`,
+  `bumpalo`). Strategia A — Adapter.
+- **Decisioni applicate:** D-G8 (mago come front-end + bridge isolato),
+  D-G9 (AST→HIR con slot variabili risolti + span→line), D-G13 (`slots[]`
+  porta il nome per la diagnostica "Undefined variable $x").
+- **Round di iterazione AI:** 1 (più 1 fix di test — vedi sotto).
+- **Test pass al primo tentativo:** 19/20 (il 20° era un *test errato*, non codice).
+- **Scoperte sull'API di mago (verificate leggendo il sorgente nel registry, non
+  solo docs.rs):**
+  - mago 1.30 NON ha interner: l'AST è arena-allocato (`bumpalo::Bump`,
+    lifetime `'arena`) e il testo è inline come `&'arena [u8]` (nomi di
+    variabile includono il `$`). → l'HIR deve essere **owned** per sopravvivere
+    all'arena (coerente con D-G10: processo residente tiene l'HIR in memoria).
+  - Entry point: `parse_file(&arena, &file) -> &Program`; errori in
+    `program.errors` (parsing error-recovering, mai panica), non in un `Result`.
+  - `Position` ha solo `offset: u32`; la linea si ottiene da
+    `File::line_number(offset)` (0-based → +1 per PHP).
+  - `IfBody`/`WhileBody`/`ForBody` espongono helper (`statements()`,
+    `else_if_clauses()`, `else_statements()`) che astraggono la forma a graffe
+    da quella `:`/`endif` — usati per lowering uniforme di entrambe.
+  - `mago-syntax` 1.30 richiede **rustc ≥ 1.96**: toolchain bumpata da 1.90 → 1.96
+    (`rustup update stable`). Lint clippy 1.96 più severi → 5 fix triviali di
+    stile in php-types (nessun cambio di semantica; differential 37.835 invariato).
+- **Decisioni di lowering (registrate qui, non nuove D-G):**
+  - Slot: ogni `$nome` *diretto* distinto → slot stabile in ordine di incontro;
+    `$$x`/`${expr}` (variable-variables) → `Unsupported`.
+  - Overflow di letterale intero (> i64::MAX) → promosso a `Float` come fa il
+    lexer PHP.
+  - `( expr )` è trasparente (nessun nodo HIR dedicato).
+  - `&&`/`and` → `And`, `||`/`or` → `Or`, `xor` → `Xor`, `??` → `Coalesce`
+    (short-circuit gestito dall'evaluator allo step 4); resto via `map_binop`.
+  - **Scope-out esplicito** (non droppato in silenzio → `LowerError::Unsupported`,
+    diventerà SKIP motivato nel phpt-runner): foreach/switch/match (step 7),
+    funzioni/classi/try (step 8/Tier 2), target di assegnazione non-variabile
+    (`$a[0]=`, step 7), `@`, `&`, instanceof, cast object/unset/void.
+- **Test scritti:** 20 (echo singolo/multiplo, slot create+reuse, aritmetica +
+  precedenza delegata a mago, overflow→float, if/elseif/else, if senza graffe,
+  while, for con `$i++`, do-while, ternario pieno+corto, &&/||/??, compound
+  assign, cast+unari, break/continue con livello, inline HTML, linea 1-based,
+  foreach unsupported, target array unsupported, parse error).
+- **Errori incontrati:**
+  - [test] `while(1){break 2;}`: il corpo a graffe è un `Block`, quindi il
+    `Break` è un livello più sotto — il test assumeva `body[0] == Break`; HIR
+    corretto, test corretto.
+- **Verifica:** `cargo test` 44/44 verde (20 nuovi + 24 php-types);
+  `cargo clippy --workspace --all-targets -- --deny=warnings` pulito.
+- **Tempo:** ~1h (gran parte: ricognizione API mago + lettura sorgente registry).
 
 ## Step 2 — Operatori e conversioni + oracle + differential
 

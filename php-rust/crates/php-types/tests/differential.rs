@@ -12,7 +12,7 @@ use std::rc::Rc;
 use php_types::convert::{to_bool, to_zstr_cast};
 use php_types::dtoa::double_to_shortest;
 use php_types::ops;
-use php_types::{Diag, Diags, Key, PhpArray, PhpError, PhpStr, Zval};
+use php_types::{Diag, Diags, Key, PhpArray, PhpError, Zval};
 
 fn oracle() -> Option<String> {
     let path = std::env::var("PHP_ORACLE").unwrap_or_else(|_| "/tmp/php-src/sapi/cli/php".into());

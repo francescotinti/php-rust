@@ -6,3 +6,7 @@ license.workspace = true
 
 [dependencies]
 php-types.workspace = true
+mago-syntax = "1.30"
+mago-database = "1.30"
+mago-span = "1.30"
+bumpalo = "3"

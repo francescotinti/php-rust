@@ -122,7 +122,7 @@ impl PhpArray {
         }
         if let Key::Int(i) = key {
             if i >= self.next_free {
-                self.next_free = i.checked_add(1).unwrap_or(i64::MAX);
+                self.next_free = i.saturating_add(1);
             }
         }
         let pos = self.entries.len() as u32;

@@ -86,9 +86,7 @@ fn assemble(neg: bool, digits: &[u8], decpt: i32, ndigit: i32) -> Vec<u8> {
         // 0.00ddd
         out.push(b'0');
         out.push(b'.');
-        for _ in 0..(-decpt) {
-            out.push(b'0');
-        }
+        out.resize(out.len() + (-decpt) as usize, b'0');
         out.extend_from_slice(digits);
     } else {
         // ddd[.ddd] with zero padding up to the decimal point.
@@ -98,9 +96,7 @@ fn assemble(neg: bool, digits: &[u8], decpt: i32, ndigit: i32) -> Vec<u8> {
             out.push(b'0');
         }
         out.extend_from_slice(&digits[..int_part]);
-        for _ in int_part..decpt {
-            out.push(b'0');
-        }
+        out.resize(out.len() + (decpt - int_part), b'0');
         if digits.len() > decpt {
             out.push(b'.');
             out.extend_from_slice(&digits[decpt..]);

@@ -1,0 +1,15 @@
+//! PHP runtime: HIR, the mago→HIR lowering bridge, and (later) the evaluator.
+//!
+//! Architecture (see plan / diary 02-mapping-table, D-G8/D-G9):
+//!
+//! ```text
+//! PHP source ──mago──► AST ──lower──► HIR ──► evaluator (tree-walk)
+//! ```
+//!
+//! This crate owns the AST→HIR boundary so the rest of the runtime never sees
+//! mago's arena-bound types.
+
+pub mod hir;
+pub mod lower;
+
+pub use lower::{lower_source, LowerError};

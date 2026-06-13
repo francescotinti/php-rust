@@ -165,12 +165,12 @@ pub fn mul(a: &Zval, b: &Zval, diags: &mut Diags) -> OpResult {
 pub fn div(a: &Zval, b: &Zval, diags: &mut Diags) -> OpResult {
     let (x, y) = binop_nums(a, b, "/", diags)?;
     // Division by zero throws for both int and float divisors (PHP 8).
-    match y {
-        Num::Long(0) => return Err(PhpError::DivisionByZeroError("Division by zero")),
-        Num::Double(d) if d == 0.0 => {
-            return Err(PhpError::DivisionByZeroError("Division by zero"))
-        }
-        _ => {}
+    let divisor_is_zero = match y {
+        Num::Long(n) => n == 0,
+        Num::Double(d) => d == 0.0,
+    };
+    if divisor_is_zero {
+        return Err(PhpError::DivisionByZeroError("Division by zero"));
     }
     Ok(match (x, y) {
         (Num::Long(l), Num::Long(r)) => {
