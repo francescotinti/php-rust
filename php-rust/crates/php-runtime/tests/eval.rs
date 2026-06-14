@@ -2996,3 +2996,86 @@ fn object_identity_handle_semantics() {
         "yn"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Step 23-2 — backed enum
+// ---------------------------------------------------------------------------
+
+const STATUS: &str = "enum Status: string { case Active = 'A'; case Inactive = 'I'; } ";
+const SIZE: &str = "enum Size: int { case Small = 1; case Large = 3; } ";
+
+#[test]
+fn enum_backed_value_string() {
+    assert_eq!(out(&format!("<?php {STATUS} echo Status::Active->value;")), "A");
+}
+
+#[test]
+fn enum_backed_value_int() {
+    assert_eq!(out(&format!("<?php {SIZE} echo Size::Large->value;")), "3");
+}
+
+#[test]
+fn enum_instanceof_backedenum() {
+    // A backed case is both UnitEnum and BackedEnum; a pure case is not BackedEnum.
+    assert_eq!(
+        out(&format!(
+            "<?php {STATUS}{SUIT} echo Status::Active instanceof BackedEnum ? 'y' : 'n'; \
+             echo Status::Active instanceof UnitEnum ? 'y' : 'n'; \
+             echo Suit::Hearts instanceof BackedEnum ? 'y' : 'n';"
+        )),
+        "yyn"
+    );
+}
+
+#[test]
+fn enum_from_hit_string_and_int() {
+    assert_eq!(
+        out(&format!(
+            "<?php {STATUS}{SIZE} echo Status::from('I') === Status::Inactive ? 'y' : 'n'; \
+             echo Size::from(3) === Size::Large ? 'y' : 'n';"
+        )),
+        "yy"
+    );
+}
+
+#[test]
+fn enum_tryfrom_hit_and_miss() {
+    assert_eq!(
+        out(&format!(
+            "<?php {STATUS} echo Status::tryFrom('A') === Status::Active ? 'y' : 'n'; \
+             echo Status::tryFrom('X') === null ? 'y' : 'n';"
+        )),
+        "yy"
+    );
+}
+
+#[test]
+fn enum_from_miss_throws_valueerror_string() {
+    assert_eq!(
+        out(&format!(
+            "<?php {STATUS} try {{ Status::from('X'); }} catch (\\ValueError $e) {{ echo $e->getMessage(); }}"
+        )),
+        "\"X\" is not a valid backing value for enum Status"
+    );
+}
+
+#[test]
+fn enum_from_miss_throws_valueerror_int() {
+    assert_eq!(
+        out(&format!(
+            "<?php {SIZE} try {{ Size::from(9); }} catch (\\ValueError $e) {{ echo $e->getMessage(); }}"
+        )),
+        "9 is not a valid backing value for enum Size"
+    );
+}
+
+#[test]
+fn enum_from_undefined_on_pure_enum() {
+    // Pure enums have no from()/tryFrom(); calling one is an undefined-method error.
+    let o = run_source(
+        b"t.php",
+        b"<?php enum Suit { case Hearts; } Suit::from('x');",
+    )
+    .expect("lowers");
+    assert!(matches!(o.fatal, Some(PhpError::Error(_))), "expected error, got {:?}", o.fatal);
+}

@@ -1668,6 +1668,48 @@ impl<'p> Evaluator<'p> {
         Ok(Zval::Object(rc))
     }
 
+    /// `BackedEnum::from($v)` / `BackedEnum::tryFrom($v)` (step 23, D-23.6). Scans
+    /// the cases for one whose backing `value` is identical (`===`) to `$v` and
+    /// returns its singleton. `from` raises a catchable `ValueError` on no match;
+    /// `tryFrom` returns `null`.
+    fn enum_from(
+        &mut self,
+        cid: ClassId,
+        arg: Option<&Zval>,
+        try_from: bool,
+    ) -> Result<Zval, PhpError> {
+        let arg = arg.cloned().unwrap_or(Zval::Null);
+        let names: Vec<Vec<u8>> = self.classes[cid]
+            .enum_cases
+            .iter()
+            .map(|c| c.name.to_vec())
+            .collect();
+        for n in &names {
+            let case = self.eval_enum_case(cid, n)?;
+            let hit = matches!(&case, Zval::Object(o)
+                if o.borrow().props.get(b"value").is_some_and(|v| ops::identical(v, &arg)));
+            if hit {
+                return Ok(case);
+            }
+        }
+        if try_from {
+            return Ok(Zval::Null);
+        }
+        // PHP quotes a string backing value but not an integer one.
+        let repr = match &arg {
+            Zval::Str(s) => format!("\"{}\"", String::from_utf8_lossy(s.as_bytes())),
+            Zval::Long(l) => l.to_string(),
+            other => {
+                let z = convert::to_zstr(other, &mut self.diags);
+                String::from_utf8_lossy(z.as_bytes()).into_owned()
+            }
+        };
+        Err(PhpError::ValueError(format!(
+            "{repr} is not a valid backing value for enum {}",
+            String::from_utf8_lossy(&self.classes[cid].name)
+        )))
+    }
+
     /// The persistent cell backing a `static` property, resolving the declaring
     /// class up the chain and lazily initialising from the declared default on
     /// first access (step 19-4, D-19.14). Enforces visibility.
@@ -1987,6 +2029,17 @@ impl<'p> Evaluator<'p> {
             }
         }
         let start = self.resolve_class_ref(class)?;
+        // Enum built-in static methods (step 23, D-23.6). `from`/`tryFrom` exist
+        // only on backed enums; they are reserved names, so they shadow user
+        // resolution. On a pure enum they fall through to "undefined method".
+        if self.classes[start].is_enum && self.classes[start].enum_backing.is_some() {
+            if method.eq_ignore_ascii_case(b"from") {
+                return self.enum_from(start, argv.first(), false);
+            }
+            if method.eq_ignore_ascii_case(b"tryFrom") {
+                return self.enum_from(start, argv.first(), true);
+            }
+        }
         match self.resolve_method(start, method) {
             Some((defc, m)) if self.visible_from(m.visibility, defc) => {
                 let forwarding = !matches!(class, ClassRef::Named(_));
