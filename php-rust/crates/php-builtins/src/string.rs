@@ -346,6 +346,100 @@ pub fn ucwords(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Str(PhpStr::new(b)))
 }
 
+/// str_repeat($string, $times): `$times` copies. Negative is a `ValueError`.
+pub fn str_repeat(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = convert::to_zstr(
+        args.first().ok_or_else(|| {
+            PhpError::Error("str_repeat() expects exactly 2 arguments, 0 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let times = convert::to_long_cast(
+        args.get(1).ok_or_else(|| {
+            PhpError::Error("str_repeat() expects exactly 2 arguments, 1 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    if times < 0 {
+        return Err(PhpError::ValueError(
+            "str_repeat(): Argument #2 ($times) must be greater than or equal to 0".to_string(),
+        ));
+    }
+    Ok(Zval::Str(PhpStr::new(s.as_bytes().repeat(times as usize))))
+}
+
+/// str_pad($string, $length, $pad_string = " ", $pad_type = STR_PAD_RIGHT).
+///
+/// `$pad_type`: 0 = left, 1 = right (default), 2 = both (extra char on the
+/// right). A length <= the input length returns it unchanged; an empty pad
+/// string is a `ValueError`.
+pub fn str_pad(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = convert::to_zstr(
+        args.first().ok_or_else(|| {
+            PhpError::Error("str_pad() expects at least 2 arguments, 0 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let s = s.as_bytes();
+    let length = convert::to_long_cast(
+        args.get(1).ok_or_else(|| {
+            PhpError::Error("str_pad() expects at least 2 arguments, 1 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let pad = match args.get(2) {
+        Some(v) => convert::to_zstr(v, ctx.diags).as_bytes().to_vec(),
+        None => b" ".to_vec(),
+    };
+    let pad_type = match args.get(3) {
+        Some(v) => convert::to_long_cast(v, ctx.diags),
+        None => 1,
+    };
+
+    if length <= s.len() as i64 {
+        return Ok(Zval::Str(PhpStr::new(s.to_vec())));
+    }
+    if pad.is_empty() {
+        return Err(PhpError::ValueError(
+            "str_pad(): Argument #3 ($pad_string) must not be empty".to_string(),
+        ));
+    }
+    let total = (length as usize) - s.len();
+    let (left, right) = match pad_type {
+        0 => (total, 0),         // STR_PAD_LEFT
+        2 => (total / 2, total - total / 2), // STR_PAD_BOTH (extra on the right)
+        _ => (0, total),         // STR_PAD_RIGHT (default)
+    };
+    let mut out = Vec::with_capacity(length as usize);
+    out.extend(pad.iter().cycle().take(left));
+    out.extend_from_slice(s);
+    out.extend(pad.iter().cycle().take(right));
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
+/// chr($codepoint): a single byte, `$codepoint` reduced modulo 256.
+pub fn chr(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let n = convert::to_long_cast(
+        args.first().ok_or_else(|| {
+            PhpError::Error("chr() expects exactly 1 argument, 0 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let byte = n.rem_euclid(256) as u8;
+    Ok(Zval::Str(PhpStr::new(vec![byte])))
+}
+
+/// ord($character): the value of the first byte (0 for an empty string).
+pub fn ord(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = convert::to_zstr(
+        args.first().ok_or_else(|| {
+            PhpError::Error("ord() expects exactly 1 argument, 0 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    Ok(Zval::Long(s.as_bytes().first().copied().unwrap_or(0) as i64))
+}
+
 /// First byte index of `needle` in `hay`. Empty needle matches at 0.
 fn find_sub(hay: &[u8], needle: &[u8]) -> Option<usize> {
     if needle.is_empty() {

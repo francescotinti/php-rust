@@ -604,6 +604,56 @@ fn ucfirst_lcfirst_ucwords() {
     assert_eq!(out("<?php echo ucwords(\"a\tb\nc\");"), "A\tB\nC");
 }
 
+// --- step 17-2: string build (repeat/pad/chr/ord) ---
+
+#[test]
+fn str_repeat_repeats() {
+    assert_eq!(out("<?php echo str_repeat('ab', 3);"), "ababab");
+    assert_eq!(out("<?php var_dump(str_repeat('x', 0));"), "string(0) \"\"\n");
+    assert_eq!(out("<?php echo str_repeat('-', 5);"), "-----");
+}
+
+#[test]
+fn str_repeat_negative_is_value_error() {
+    match fatal("<?php str_repeat('ab', -1);") {
+        PhpError::ValueError(m) => assert_eq!(
+            m,
+            "str_repeat(): Argument #2 ($times) must be greater than or equal to 0"
+        ),
+        other => panic!("expected ValueError, got {other:?}"),
+    }
+}
+
+#[test]
+fn str_pad_types() {
+    // Named constants aren't lowered yet, so use the literal values:
+    // STR_PAD_LEFT=0, STR_PAD_RIGHT=1 (default), STR_PAD_BOTH=2.
+    // Default: pad on the right; length <= strlen returns input unchanged.
+    assert_eq!(out("<?php var_dump(str_pad('x', 1));"), "string(1) \"x\"\n");
+    assert_eq!(out("<?php echo str_pad('5', 4, '0', 0);"), "0005");
+    assert_eq!(out("<?php echo str_pad('5', 6, '-=', 2);"), "-=5-=-");
+    assert_eq!(out("<?php echo str_pad('5', 4);"), "5   ");
+}
+
+#[test]
+fn str_pad_empty_pad_is_value_error() {
+    match fatal("<?php str_pad('x', 5, '');") {
+        PhpError::ValueError(m) => assert_eq!(
+            m,
+            "str_pad(): Argument #3 ($pad_string) must not be empty"
+        ),
+        other => panic!("expected ValueError, got {other:?}"),
+    }
+}
+
+#[test]
+fn chr_and_ord() {
+    assert_eq!(out("<?php echo chr(65);"), "A");
+    assert_eq!(out("<?php var_dump(chr(321));"), "string(1) \"A\"\n"); // 321 % 256 == 65
+    assert_eq!(out("<?php var_dump(ord('A'));"), "int(65)\n");
+    assert_eq!(out("<?php var_dump(ord('AB'));"), "int(65)\n"); // first byte
+}
+
 #[test]
 fn undefined_function_is_fatal_after_output() {
     let reg = registry();
