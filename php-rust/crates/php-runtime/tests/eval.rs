@@ -2785,3 +2785,64 @@ fn magic_set_writes_real_property_under_guard() {
         "7:0"
     );
 }
+
+// --- step 22-3: __call / __callStatic ---
+
+#[test]
+fn magic_call_undefined_method() {
+    assert_eq!(
+        out("<?php class C { function __call($n,$a){ return $n . '/' . $a[0] . $a[1]; } } \
+             $c = new C(); echo $c->foo('x','y');"),
+        "foo/xy"
+    );
+}
+
+#[test]
+fn magic_call_for_inaccessible_private_method() {
+    assert_eq!(
+        out("<?php class C { private function sec(){ return 'D'; } \
+             function __call($n,$a){ return 'C:' . $n; } } \
+             $c = new C(); echo $c->sec();"),
+        "C:sec"
+    );
+}
+
+#[test]
+fn magic_call_not_used_for_accessible_method() {
+    assert_eq!(
+        out("<?php class C { function pub(){ return 'P'; } \
+             function __call($n,$a){ return 'C'; } } \
+             $c = new C(); echo $c->pub();"),
+        "P"
+    );
+}
+
+#[test]
+fn magic_call_not_used_for_private_from_inside() {
+    assert_eq!(
+        out("<?php class C { private function p(){ return 'P'; } \
+             function __call($n,$a){ return 'C'; } \
+             function go(){ return $this->p(); } } \
+             $c = new C(); echo $c->go();"),
+        "P"
+    );
+}
+
+#[test]
+fn magic_callstatic_undefined_method() {
+    assert_eq!(
+        out("<?php class C { static function __callStatic($n,$a){ return 'S:' . $n . ':' . $a[0]; } } \
+             echo C::foo(9);"),
+        "S:foo:9"
+    );
+}
+
+#[test]
+fn magic_callstatic_for_inaccessible_private_static() {
+    assert_eq!(
+        out("<?php class C { private static function s(){ return 'D'; } \
+             static function __callStatic($n,$a){ return 'CS:' . $n; } } \
+             echo C::s();"),
+        "CS:s"
+    );
+}

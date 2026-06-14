@@ -1823,8 +1823,20 @@ impl<'p> Evaluator<'p> {
         }
     }
 
-    /// Invoke `$obj->method(argv)` (step 19, D-19.7): resolve the method up the
-    /// chain, enforce visibility, then run it with `$this` bound to the receiver.
+    /// Pack call arguments into a 0-indexed list array, the second argument of
+    /// `__call`/`__callStatic` (step 22, D-22.5).
+    fn pack_args(&self, argv: Vec<Zval>) -> Zval {
+        let mut arr = PhpArray::new();
+        for v in argv {
+            let _ = arr.append(v);
+        }
+        Zval::Array(Rc::new(arr))
+    }
+
+    /// Invoke `$obj->method(argv)` (step 19, D-19.7; step 22 `__call`): resolve
+    /// the method up the chain, enforce visibility, then run it with `$this`
+    /// bound to the receiver. A method missing or inaccessible from the current
+    /// scope routes to `__call($method, $args)` if defined.
     fn call_method(&mut self, recv: Zval, method: &[u8], argv: Vec<Zval>) -> Result<Zval, PhpError> {
         let cid = match &recv {
             Zval::Object(o) => o.borrow().class_id as usize,
@@ -1836,19 +1848,31 @@ impl<'p> Evaluator<'p> {
                 )))
             }
         };
-        let (defc, m) = match self.resolve_method(cid, method) {
-            Some(found) => found,
-            None => {
-                return Err(PhpError::Error(format!(
-                    "Call to undefined method {}::{}()",
-                    String::from_utf8_lossy(&self.classes[cid].name),
-                    String::from_utf8_lossy(method)
-                )))
+        match self.resolve_method(cid, method) {
+            Some((defc, m)) if self.visible_from(m.visibility, defc) => {
+                // An instance call's LSB class is the object's actual class.
+                self.invoke_method(Some(recv), defc, cid, m, method, argv)
             }
-        };
-        self.check_method_access(defc, m, method)?;
-        // An instance call's LSB class is the object's actual (most-derived) one.
-        self.invoke_method(Some(recv), defc, cid, m, method, argv)
+            found => {
+                if let Some((cdefc, cm)) = self.resolve_method(cid, b"__call") {
+                    let args = self.pack_args(argv);
+                    let name = Zval::Str(PhpStr::new(method.to_vec()));
+                    return self.invoke_method(Some(recv), cdefc, cid, cm, b"__call", vec![name, args]);
+                }
+                match found {
+                    // Found but inaccessible and no __call: the visibility error.
+                    Some((defc, m)) => {
+                        self.check_method_access(defc, m, method)?;
+                        unreachable!("check_method_access errors when not visible")
+                    }
+                    None => Err(PhpError::Error(format!(
+                        "Call to undefined method {}::{}()",
+                        String::from_utf8_lossy(&self.classes[cid].name),
+                        String::from_utf8_lossy(method)
+                    ))),
+                }
+            }
+        }
     }
 
     /// Dispatch `Class::m()` / `self::m()` / `parent::m()` / `static::m()` (step
@@ -1869,34 +1893,50 @@ impl<'p> Evaluator<'p> {
             }
         }
         let start = self.resolve_class_ref(class)?;
-        let (defc, m) = match self.resolve_method(start, method) {
-            Some(found) => found,
-            None => {
-                return Err(PhpError::Error(format!(
-                    "Call to undefined method {}::{}()",
-                    String::from_utf8_lossy(&self.classes[start].name),
-                    String::from_utf8_lossy(method)
-                )))
+        match self.resolve_method(start, method) {
+            Some((defc, m)) if self.visible_from(m.visibility, defc) => {
+                let forwarding = !matches!(class, ClassRef::Named(_));
+                // LSB class: forwarding calls preserve the caller's, a named call
+                // rebinds it to the named class.
+                let static_class = if forwarding {
+                    self.cur_static_class.unwrap_or(start)
+                } else {
+                    start
+                };
+                // `$this` is kept for a forwarding call, or for a named call to a
+                // class in the current object's hierarchy (`ParentName::m()`).
+                let this = match &self.cur_this {
+                    Some(t @ Zval::Object(o))
+                        if forwarding
+                            || self.class_is_a(o.borrow().class_id as usize, start) =>
+                    {
+                        Some(t.clone())
+                    }
+                    _ => None,
+                };
+                self.invoke_method(this, defc, static_class, m, method, argv)
             }
-        };
-        self.check_method_access(defc, m, method)?;
-        let forwarding = !matches!(class, ClassRef::Named(_));
-        // LSB class: forwarding calls preserve the caller's, a named call rebinds
-        // it to the named class.
-        let static_class = if forwarding {
-            self.cur_static_class.unwrap_or(start)
-        } else {
-            start
-        };
-        // `$this` is kept for a forwarding call, or for a named call to a class in
-        // the current object's hierarchy (`ParentName::m()` from an instance).
-        let this = match &self.cur_this {
-            Some(t @ Zval::Object(o)) if forwarding || self.class_is_a(o.borrow().class_id as usize, start) => {
-                Some(t.clone())
+            found => {
+                // Missing or inaccessible → `__callStatic($method, $args)` if
+                // defined (step 22, D-22.3). It runs without `$this`.
+                if let Some((cdefc, cm)) = self.resolve_method(start, b"__callStatic") {
+                    let args = self.pack_args(argv);
+                    let name = Zval::Str(PhpStr::new(method.to_vec()));
+                    return self.invoke_method(None, cdefc, start, cm, b"__callStatic", vec![name, args]);
+                }
+                match found {
+                    Some((defc, m)) => {
+                        self.check_method_access(defc, m, method)?;
+                        unreachable!("check_method_access errors when not visible")
+                    }
+                    None => Err(PhpError::Error(format!(
+                        "Call to undefined method {}::{}()",
+                        String::from_utf8_lossy(&self.classes[start].name),
+                        String::from_utf8_lossy(method)
+                    ))),
+                }
             }
-            _ => None,
-        };
-        self.invoke_method(this, defc, static_class, m, method, argv)
+        }
     }
 
     /// Enforce method visibility against the current class context (step 19-3).
