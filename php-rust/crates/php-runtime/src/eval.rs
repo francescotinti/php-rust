@@ -350,15 +350,31 @@ impl<'p> Evaluator<'p> {
     /// trace is the top-level `#0 {main}` form; frames for fatals thrown inside
     /// user calls are not modelled (step 9 scope).
     fn render_fatal(&mut self, err: &PhpError) {
-        let file = String::from_utf8_lossy(self.file);
+        let file = String::from_utf8_lossy(self.file).into_owned();
+        // A user-`throw`n object carries its own class, message and creation line
+        // (step 20); an engine error uses its variant name and the current line.
+        let (class, message, line) = match err {
+            PhpError::Thrown(Zval::Object(o)) => {
+                let b = o.borrow();
+                let class = String::from_utf8_lossy(b.class_name.as_bytes()).into_owned();
+                let message = match b.props.get(b"message") {
+                    Some(Zval::Str(s)) => String::from_utf8_lossy(s.as_bytes()).into_owned(),
+                    _ => String::new(),
+                };
+                let line = match b.props.get(b"line") {
+                    Some(Zval::Long(n)) => *n,
+                    _ => self.cur_line as i64,
+                };
+                (class, message, line)
+            }
+            other => (
+                other.class_name().to_string(),
+                other.message().to_string(),
+                self.cur_line as i64,
+            ),
+        };
         let block = format!(
-            "\nFatal error: Uncaught {}: {} in {}:{}\nStack trace:\n#0 {{main}}\n  thrown in {} on line {}\n",
-            err.class_name(),
-            err.message(),
-            file,
-            self.cur_line,
-            file,
-            self.cur_line,
+            "\nFatal error: Uncaught {class}: {message} in {file}:{line}\nStack trace:\n#0 {{main}}\n  thrown in {file} on line {line}\n",
         );
         self.rendered.extend_from_slice(block.as_bytes());
     }
@@ -546,8 +562,64 @@ impl<'p> Evaluator<'p> {
                 let cell = self.ref_source_cell(place.base, &steps)?;
                 return Ok(Flow::Return(Zval::Ref(cell)));
             }
+
+            StmtKind::Try {
+                body,
+                catches,
+                finally,
+            } => {
+                // Run the protected body; a thrown exception (`Err(Thrown)`) is
+                // offered to the catch clauses. Any other control flow (return /
+                // break / continue) — or an uncaught throw — is carried in
+                // `outcome` and resumes *after* `finally` runs.
+                let outcome = match self.exec_stmts(body) {
+                    Err(e) => self.handle_thrown(e, catches),
+                    flow => flow,
+                };
+                if finally.is_empty() {
+                    return outcome;
+                }
+                // `finally` always runs. Its own control flow (a return / throw /
+                // break inside it) overrides the try/catch outcome; otherwise the
+                // outcome (value, propagating signal, or re-thrown error) wins.
+                match self.exec_stmts(finally)? {
+                    Flow::Normal => return outcome,
+                    other => return Ok(other),
+                }
+            }
         }
         Ok(Flow::Normal)
+    }
+
+    /// Offer a thrown exception to a `try`'s catch clauses (step 20). The first
+    /// clause whose type matches by `instanceof` runs (binding `$e` if named);
+    /// an unmatched throw — or a non-`Thrown` engine error in 20-1 — propagates.
+    fn handle_thrown(
+        &mut self,
+        e: PhpError,
+        catches: &[crate::hir::CatchClause],
+    ) -> Result<Flow, PhpError> {
+        let obj = match e {
+            PhpError::Thrown(v) => v,
+            other => return Err(other),
+        };
+        let obj_cid = match &obj {
+            Zval::Object(o) => o.borrow().class_id as usize,
+            _ => return Err(PhpError::Thrown(obj)),
+        };
+        for c in catches {
+            for tname in &c.types {
+                if let Some(&tid) = self.class_index.get(&tname.to_ascii_lowercase()) {
+                    if self.is_instance_of(obj_cid, tid) {
+                        if let Some(slot) = c.var {
+                            self.slot_set(slot as usize, obj.clone());
+                        }
+                        return self.exec_stmts(&c.body);
+                    }
+                }
+            }
+        }
+        Err(PhpError::Thrown(obj))
     }
 
     /// Run a loop body once and translate its control-flow signal relative to
@@ -1369,6 +1441,17 @@ impl<'p> Evaluator<'p> {
             info,
         };
         let value = Zval::Object(Rc::new(RefCell::new(obj)));
+        // A Throwable records its creation site (`getLine`/`getFile`) at `new`
+        // time, before the constructor runs (step 20). PHP sets these from the
+        // engine, not from `Exception::__construct`.
+        if self.is_throwable(cid) {
+            if let Zval::Object(o) = &value {
+                let create_line = self.cur_line as i64;
+                let mut b = o.borrow_mut();
+                b.props.set(b"line", Zval::Long(create_line));
+                b.props.set(b"file", Zval::Str(PhpStr::new(self.file.to_vec())));
+            }
+        }
         // Run the constructor (inherited if not overridden); its mutations write
         // through the shared `Rc`, so they show in the returned value. The new
         // instance's class is its own LSB class.
@@ -2466,6 +2549,14 @@ impl<'p> Evaluator<'p> {
                 };
                 Ok(Zval::Bool(result))
             }
+
+            // `throw <expr>` (step 20): evaluate the operand and unwind with
+            // `PhpError::Thrown`, which propagates through every `?` until a
+            // matching `catch` (or the top, where it renders as an uncaught fatal).
+            ExprKind::Throw(e) => {
+                let v = self.eval(e)?.deref_clone();
+                Err(PhpError::Thrown(v))
+            }
         }
     }
 
@@ -2485,6 +2576,16 @@ impl<'p> Evaluator<'p> {
             cur = classes[c].parent;
         }
         false
+    }
+
+    /// Whether `cid` is a `Throwable` (step 20): used to stamp `line`/`file` on
+    /// exception instances at `new` time. The prelude guarantees `Throwable`
+    /// exists, so the lookup is normally `Some`.
+    fn is_throwable(&self, cid: ClassId) -> bool {
+        match self.class_index.get(b"throwable".as_slice()) {
+            Some(&tid) => self.is_instance_of(cid, tid),
+            None => false,
+        }
     }
 
     /// Whether interface `i` is, or transitively extends, `target` (step 19-5).

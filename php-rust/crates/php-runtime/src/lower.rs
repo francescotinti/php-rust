@@ -75,6 +75,14 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
     }
 
     let mut low = Lowerer::new(&file, name);
+    // Seed the built-in exception hierarchy (Throwable/Exception/Error + the SPL
+    // subclasses) at the front of the class table (ids 0..N), before any user
+    // class is hoisted (step 20). This makes `extends Exception`, `instanceof`,
+    // `new RuntimeException(...)`, property init and `parent::__construct` reuse
+    // the whole step-19 class machinery with no special-casing.
+    let (pclasses, pindex) = lower_prelude();
+    low.classes = pclasses;
+    low.class_index = pindex;
     // Hoist top-level function declarations first, so a call may textually
     // precede its definition (PHP's function hoisting). Bodies are lowered here;
     // the main pass below skips the declaration statements (they are no-ops).
@@ -97,6 +105,94 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
         strict: low.strict,
         classes: low.classes,
     })
+}
+
+/// The built-in throwable hierarchy, authored in PHP and lowered once into the
+/// front of every program's class table (step 20). Mirrors PHP's core/SPL
+/// classes closely enough for catch-matching, the accessors, and `instanceof`.
+/// `getTrace`/`getTraceAsString` are stubs (no real stack trace is modelled);
+/// `file`/`line` are filled in by the evaluator at `new` time, not here.
+const PRELUDE_SRC: &[u8] = br##"<?php
+interface Throwable {}
+class Exception implements Throwable {
+    protected $message = "";
+    protected $code = 0;
+    protected $file = "";
+    protected $line = 0;
+    private $previous = null;
+    public function __construct($message = "", $code = 0, $previous = null) {
+        $this->message = $message;
+        $this->code = $code;
+        $this->previous = $previous;
+    }
+    public function getMessage() { return $this->message; }
+    public function getCode() { return $this->code; }
+    public function getPrevious() { return $this->previous; }
+    public function getLine() { return $this->line; }
+    public function getFile() { return $this->file; }
+    public function getTrace() { return []; }
+    public function getTraceAsString() { return "#0 {main}"; }
+    public function __toString() { return $this->message; }
+}
+class Error implements Throwable {
+    protected $message = "";
+    protected $code = 0;
+    protected $file = "";
+    protected $line = 0;
+    private $previous = null;
+    public function __construct($message = "", $code = 0, $previous = null) {
+        $this->message = $message;
+        $this->code = $code;
+        $this->previous = $previous;
+    }
+    public function getMessage() { return $this->message; }
+    public function getCode() { return $this->code; }
+    public function getPrevious() { return $this->previous; }
+    public function getLine() { return $this->line; }
+    public function getFile() { return $this->file; }
+    public function getTrace() { return []; }
+    public function getTraceAsString() { return "#0 {main}"; }
+    public function __toString() { return $this->message; }
+}
+class ErrorException extends Exception {}
+class LogicException extends Exception {}
+class BadFunctionCallException extends LogicException {}
+class BadMethodCallException extends BadFunctionCallException {}
+class DomainException extends LogicException {}
+class InvalidArgumentException extends LogicException {}
+class LengthException extends LogicException {}
+class OutOfRangeException extends LogicException {}
+class RuntimeException extends Exception {}
+class OutOfBoundsException extends RuntimeException {}
+class OverflowException extends RuntimeException {}
+class RangeException extends RuntimeException {}
+class UnderflowException extends RuntimeException {}
+class UnexpectedValueException extends RuntimeException {}
+class JsonException extends Exception {}
+class TypeError extends Error {}
+class ArgumentCountError extends TypeError {}
+class ValueError extends Error {}
+class ArithmeticError extends Error {}
+class DivisionByZeroError extends ArithmeticError {}
+class UnhandledMatchError extends Error {}
+"##;
+
+/// Lower [`PRELUDE_SRC`] with a throwaway [`Lowerer`] and return its owned class
+/// table + name→id index (step 20). The prelude has no functions/closures/
+/// statics, so only the class table needs to be carried over.
+fn lower_prelude() -> (Vec<ClassDecl>, HashMap<Vec<u8>, usize>) {
+    let arena = Bump::new();
+    let file = File::ephemeral(Cow::Borrowed(b"prelude".as_slice()), Cow::Borrowed(PRELUDE_SRC));
+    let program = parse_file(&arena, &file);
+    debug_assert!(
+        !program.has_errors(),
+        "exception prelude failed to parse: {:?}",
+        program.errors
+    );
+    let mut low = Lowerer::new(&file, b"prelude");
+    low.hoist_classes(program.statements.as_slice())
+        .expect("exception prelude must lower");
+    (low.classes, low.class_index)
 }
 
 /// A name→slot scope: the script globals, or one function's locals. Holds the
@@ -441,6 +537,37 @@ impl<'f> Lowerer<'f> {
                 });
             }
 
+            // `try { } catch (T $e) { } finally { }` (step 20). Each catch's type
+            // hint is a single class or a `A | B` union (collected to names); its
+            // variable is optional (`catch (T)`); finally is optional.
+            Statement::Try(node) => {
+                let body = self.lower_stmts(node.block.statements.as_slice())?;
+                let mut catches = Vec::with_capacity(node.catch_clauses.len());
+                for c in node.catch_clauses.iter() {
+                    let mut types = Vec::new();
+                    collect_catch_types(&c.hint, line, &mut types)?;
+                    let var = c
+                        .variable
+                        .as_ref()
+                        .map(|d| self.slot_for(strip_dollar(d.name)));
+                    let cbody = self.lower_stmts(c.block.statements.as_slice())?;
+                    catches.push(crate::hir::CatchClause {
+                        types,
+                        var,
+                        body: cbody,
+                    });
+                }
+                let finally = match &node.finally_clause {
+                    Some(f) => self.lower_stmts(f.block.statements.as_slice())?,
+                    None => Vec::new(),
+                };
+                StmtKind::Try {
+                    body,
+                    catches,
+                    finally,
+                }
+            }
+
             _ => {
                 return Err(LowerError::Unsupported {
                     what: "statement",
@@ -521,8 +648,11 @@ impl<'f> Lowerer<'f> {
                 });
             }
             // One entry per `pending` slot, pushed below in the same order, so the
-            // index equals the eventual position in `self.classes`.
-            self.class_index.insert(key, pending.len());
+            // index equals the eventual position in `self.classes`. Offset by the
+            // current table length so user classes follow the injected built-in
+            // exception prelude (step 20), keeping their ids contiguous after it.
+            self.class_index
+                .insert(key, self.classes.len() + pending.len());
             pending.push(match s {
                 Statement::Class(c) => Pending::Class(c),
                 Statement::Interface(i) => Pending::Interface(i),
@@ -1222,6 +1352,10 @@ impl<'f> Lowerer<'f> {
             // arrive in later sub-steps.
             Expression::Instantiation(inst) => self.lower_instantiation(inst, line)?,
 
+            // `throw <expr>` (step 20). Valid as a statement or, in PHP 8, an
+            // expression (`$x ?? throw new …`); both reach here.
+            Expression::Throw(t) => ExprKind::Throw(Box::new(self.lower_expr(t.exception)?)),
+
             // `$obj->prop` (step 19, D-19.8). Static / class-constant accesses are
             // later sub-steps.
             Expression::Access(access) => self.lower_access(access, line)?,
@@ -1706,6 +1840,30 @@ enum AssignFlavour {
 /// Unqualified function name: the segment after the last `\` (so `\strlen` and
 /// `Foo\strlen` both resolve to `strlen`). Tier 1 has no namespaces, so this is
 /// a faithful-enough resolution for global/builtin calls.
+/// Collect the class names of a `catch` type hint (step 20): a single
+/// `Identifier`, or a `A | B` union (recursively). Any other hint shape in catch
+/// position is outside scope.
+fn collect_catch_types(
+    hint: &Hint,
+    line: Line,
+    out: &mut Vec<Box<[u8]>>,
+) -> Result<(), LowerError> {
+    match hint {
+        Hint::Identifier(id) => {
+            out.push(function_name(id).into());
+            Ok(())
+        }
+        Hint::Union(u) => {
+            collect_catch_types(u.left, line, out)?;
+            collect_catch_types(u.right, line, out)
+        }
+        _ => Err(LowerError::Unsupported {
+            what: "catch type",
+            line,
+        }),
+    }
+}
+
 fn function_name<'a>(id: &Identifier<'a>) -> &'a [u8] {
     let raw = match id {
         Identifier::Local(l) => l.value,

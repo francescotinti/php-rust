@@ -2081,3 +2081,102 @@ fn oop_closure_from_callable_string() {
         "42"
     );
 }
+
+// --- step 20-1: exceptions — throw, try/catch, hierarchy, accessors ---
+
+#[test]
+fn exc_basic_try_catch() {
+    assert_eq!(
+        out("<?php try { throw new Exception('boom'); } catch (Exception $e) { echo $e->getMessage(); }"),
+        "boom"
+    );
+}
+
+#[test]
+fn exc_get_code_default_and_set() {
+    assert_eq!(
+        out("<?php try { throw new Exception('m', 42); } catch (Exception $e) { echo $e->getMessage().'|'.$e->getCode(); }"),
+        "m|42"
+    );
+    assert_eq!(
+        out("<?php try { throw new Exception('x'); } catch (Exception $e) { echo $e->getCode(); }"),
+        "0"
+    );
+}
+
+#[test]
+fn exc_default_message_empty() {
+    assert_eq!(
+        out("<?php try { throw new Exception(); } catch (Exception $e) { echo '['.$e->getMessage().']'; }"),
+        "[]"
+    );
+}
+
+#[test]
+fn exc_error_not_caught_by_exception() {
+    // TypeError is-a Error, not Exception: the first catch is skipped.
+    assert_eq!(
+        out("<?php try { throw new TypeError('t'); } catch (Exception $e) { echo 'E'; } catch (Error $e) { echo 'Err:'.$e->getMessage(); }"),
+        "Err:t"
+    );
+}
+
+#[test]
+fn exc_throwable_catches_all() {
+    assert_eq!(
+        out("<?php try { throw new RuntimeException('r'); } catch (Throwable $e) { echo $e->getMessage(); }"),
+        "r"
+    );
+}
+
+#[test]
+fn exc_hierarchy_instanceof() {
+    assert_eq!(
+        out("<?php $e = new RuntimeException('x'); echo ($e instanceof Exception)?'1':'0'; echo ($e instanceof Throwable)?'1':'0';"),
+        "11"
+    );
+    assert_eq!(
+        out("<?php echo (new InvalidArgumentException('x') instanceof LogicException)?'1':'0';"),
+        "1"
+    );
+}
+
+#[test]
+fn exc_multi_catch() {
+    assert_eq!(
+        out("<?php try { throw new InvalidArgumentException('i'); } catch (LogicException | RuntimeException $e) { echo $e->getMessage(); }"),
+        "i"
+    );
+}
+
+#[test]
+fn exc_catch_without_variable() {
+    assert_eq!(
+        out("<?php try { throw new Exception('x'); } catch (Exception) { echo 'caught'; }"),
+        "caught"
+    );
+}
+
+#[test]
+fn exc_propagates_across_function_call() {
+    assert_eq!(
+        out("<?php function g(){ throw new RuntimeException('deep'); } try { g(); } catch (RuntimeException $e) { echo 'c:'.$e->getMessage(); }"),
+        "c:deep"
+    );
+}
+
+#[test]
+fn exc_uncaught_renders_fatal() {
+    let o = run_source(b"t.php", b"<?php throw new Exception('nope');").expect("lowers");
+    assert!(matches!(o.fatal, Some(PhpError::Thrown(_))), "fatal: {:?}", o.fatal);
+    assert_eq!(
+        String::from_utf8(o.rendered).unwrap(),
+        "\nFatal error: Uncaught Exception: nope in t.php:1\nStack trace:\n#0 {main}\n  thrown in t.php on line 1\n"
+    );
+}
+
+#[test]
+fn exc_get_line_is_creation_line() {
+    let src = "<?php\ntry {\n  throw new Exception('x');\n} catch (Exception $e) { echo $e->getLine(); }";
+    assert_eq!(out(src), "3");
+}

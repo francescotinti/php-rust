@@ -325,8 +325,28 @@ pub enum StmtKind {
     /// `return <lvalue>;` inside a `function &f()` — returns a *reference* to the
     /// place (its shared cell), so `$y = &f()` aliases it (step 13, D-13.2).
     ReturnRef(Place),
+    /// `try { body } catch (T $e) { } ... finally { }` (step 20). On a thrown
+    /// exception the first `catch` whose type matches (by `instanceof`) runs;
+    /// `finally` runs unconditionally afterwards and its own control flow (a
+    /// `return`/`throw`/`break` inside it) overrides the try/catch outcome. An
+    /// empty `finally` means the clause was absent.
+    Try {
+        body: Vec<Stmt>,
+        catches: Vec<CatchClause>,
+        finally: Vec<Stmt>,
+    },
     /// A lone `;`.
     Nop,
+}
+
+/// One `catch (T1 | T2 $e) { body }` clause (step 20). `types` are the caught
+/// class names (a multi-catch `A | B` lists both); `var` is the bound slot, or
+/// `None` for the variable-less `catch (T)` form (PHP 8).
+#[derive(Debug, Clone, PartialEq)]
+pub struct CatchClause {
+    pub types: Vec<Box<[u8]>>,
+    pub var: Option<Slot>,
+    pub body: Vec<Stmt>,
 }
 
 /// One `global $x;` binding: the local-frame slot the alias is installed into,
@@ -539,6 +559,12 @@ pub enum ExprKind {
     /// whose class is `class`, a subclass, or an implemented interface
     /// (transitively). A non-object, or an unknown class, yields `false`.
     InstanceOf { expr: Box<Expr>, class: ClassRef },
+
+    /// `throw <expr>` as an expression (step 20). Evaluates the operand (which
+    /// must be a Throwable object) and unwinds with `PhpError::Thrown`. PHP 8
+    /// allows `throw` in expression position (`$x ?? throw new …`); a statement
+    /// `throw e;` lowers to an [`StmtKind::Expr`] wrapping this.
+    Throw(Box<Expr>),
 }
 
 /// The flavour of a static-property assignment (step 19-4).

@@ -27,9 +27,13 @@ impl Diag {
     }
 }
 
-/// Fatal (throwable) errors raised by operators. Uncaught display format:
-/// Zend/zend_exceptions.c:756.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Fatal (throwable) errors raised by operators, plus user `throw` (step 20).
+/// Uncaught display format: Zend/zend_exceptions.c:756.
+///
+/// `PartialEq`/`Eq` are intentionally not derived: the [`PhpError::Thrown`]
+/// payload is a [`Zval`], which is not comparable (it carries `f64`). Nothing in
+/// the tree compares `PhpError` values directly.
+#[derive(Debug, Clone)]
 pub enum PhpError {
     /// The base `Error` class (e.g. "Call to undefined function f()").
     Error(String),
@@ -39,9 +43,17 @@ pub enum PhpError {
     ArgumentCountError(String),
     DivisionByZeroError(&'static str),
     ArithmeticError(&'static str),
+    /// A user-`throw`n object unwinding the stack (step 20). Carries the thrown
+    /// [`Zval::Object`]; caught by a matching `catch`, otherwise rendered as an
+    /// uncaught fatal. The class name / message come from the object itself, so
+    /// the `class_name`/`message` accessors return sentinels for this variant.
+    Thrown(crate::Zval),
 }
 
 impl PhpError {
+    /// The throwable class name, for the engine-error variants. [`PhpError::Thrown`]
+    /// returns a sentinel — the real class is read from the object at the render
+    /// site (`Evaluator::render_fatal`), never through here.
     pub fn class_name(&self) -> &'static str {
         match self {
             PhpError::Error(_) => "Error",
@@ -50,6 +62,7 @@ impl PhpError {
             PhpError::ArgumentCountError(_) => "ArgumentCountError",
             PhpError::DivisionByZeroError(_) => "DivisionByZeroError",
             PhpError::ArithmeticError(_) => "ArithmeticError",
+            PhpError::Thrown(_) => "Exception",
         }
     }
 
@@ -61,6 +74,7 @@ impl PhpError {
             PhpError::ArgumentCountError(m) => m,
             PhpError::DivisionByZeroError(m) => m,
             PhpError::ArithmeticError(m) => m,
+            PhpError::Thrown(_) => "",
         }
     }
 }
