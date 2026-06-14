@@ -20,7 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
-| Unit/integration (workspace, fine step 16) | 244 (17 suite) |
+| Unit/integration (workspace, fine step 17) | 264 (17 suite) |
 | Differential vs oracle (php-types) | 37.835 casi, 0 mismatch |
 | phpt-runner su testsuite PHP completa | 6172 file: 135 pass / 64 fail / 5973 skip (67.8% dei runnable) |
 
@@ -87,7 +87,8 @@ del differential sono state riconciliate verso il comportamento dell'oracle).
 | Step 14 (type-hint enforcement scalare weak: coercion engine + TypeError + deprecation + return/default, 2 sotto-step; chiude D-NEW-6) | ~1.75h |
 | Step 15 (static variables: StaticVar + store persistente Rc<RefCell> + init-once, 1 sotto-step) | ~0.75h |
 | Step 16 (`declare(strict_types=1)`: parsing declare + flag strict + coerce_strict int→float widening, 1 sotto-step) | ~0.75h |
-| **Totale a fine step 16** | **~26h** |
+| Step 17 (espansione builtin per frequenza: 24 fn pure in 5 gruppi TDD — case/build/trim/math/array) | ~1.25h |
+| **Totale a fine step 17** | **~27h** |
 
 ## Step 10 — espansione builtin
 
@@ -98,6 +99,22 @@ verificati contro l'oracle CLI. Baseline .phpt: **126 → 135 pass** (+9), gli 1
 test prima skippati come `builtin` ora girano. Zero divergenze D-NEW: ogni builtin
 combacia byte-per-byte. ABI di Step 5 invariata, zero modifiche all'evaluator.
 Scope-out: famiglia by-reference (`array_push`/`sort`/…), `%g`/`%G`.
+
+## Step 17 — espansione builtin per frequenza (gruppi)
+
+24 builtin nuovi (pure, by-value) in 5 commit TDD-isolati, +20 test (244 → 264),
+ognuno verificato byte-per-byte contro l'oracle CLI. ABI invariata, zero
+modifiche all'evaluator, clippy pulito, zero D-NEW.
+
+- **case**: strtoupper, strtolower, ucfirst, lcfirst, ucwords (ASCII-only).
+- **build**: str_repeat, str_pad, chr, ord.
+- **trim**: trim, ltrim, rtrim (charlist + range `c1..c2`).
+- **math**: intdiv, pow, sqrt, floor, ceil, round.
+- **array**: range, array_slice, array_reverse, array_unique, array_sum.
+
+Builtin registrati totali: ~41 → ~65. Scope-out: Deprecation 8.5 chr/ord,
+array_map/array_filter (richiedono closures), costanti named (`STR_PAD_*`,
+`PHP_INT_MIN`: i test usano i valori literali), mb_*.
 
 ## Step 11 — reference semantics (a livello di variabile)
 
