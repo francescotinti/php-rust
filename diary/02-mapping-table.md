@@ -349,3 +349,73 @@ infallibile `to_zstr` emette invece un Warning + placeholder (edge non testato,
 rivedere con OOP). **Terza divergenza var_dump (corpus):** PHP aggiunge `["static"]`
 con le variabili catturate per le closure con `use`/arrow — omessa (richiede
 recursion-guard per `use(&$f)`); dettaglio in `diary/metrics.md` § Step 18.
+
+---
+
+# Step 19 — OOP / classi (design pass)
+
+Il blocco più grande di `unsupported` nel corpus (~5028 casi). Scope **Full Tier-1**
+deciso col Decider (2026-06-14): classi, proprietà (default + visibility), metodi,
+`__construct`, `$this`, `new`, semantica **handle**, read/write proprietà,
+**ereditarietà** (`extends`/`parent::`/`self::`), **membri static**, **costanti di
+classe**, **`instanceof`/interfaces**, **abstract/final**, **`__toString`**,
+**`Closure::bind`/`bindTo`/`fromCallable`** + static closures, var_dump/print_r esatto
+con **recursion-guard** (retro-sblocca anche `["static"]` delle closure dello step 18).
+**Eccezioni (`try/catch/finally`/`throw` + Exception/Error) = step 20 separato**
+(control-flow a sé, riusa le classi di qui).
+
+Semantica oracle-verificata 8.5.7 (`php -n -r`): assegnare un oggetto copia
+l'**handle** (mutazioni condivise, contrasta gli array COW); `var_dump` →
+`object(C)#N (k) { ["p"]=>…, ["p":protected]=>…, ["p":"C":private]=>… }`; `gettype`
+→ `"object"`; `$p instanceof C` → bool; proprietà non dichiarate sono dinamiche
+(deprecation 8.2, ma supportate); `new C` senza `()` legale; `$this` fuori da metodo
+→ Error; accesso a proprietà private/protected dall'esterno → Error.
+
+## Decisioni (D-19.x)
+
+| ID | Costrutto | Scelta Rust | Razionale |
+|---|---|---|---|
+| D-19.1 | Valore oggetto | **`Zval::Object(Rc<RefCell<Object>>)`** | Semantica handle: clone condivide l'`Rc`, mutazione via `RefCell` visibile a tutti. NON `Rc::make_mut` (≠ array COW). `gettype`→`"object"`, `error_type_name`→nome classe. |
+| D-19.2 | Struct oggetto | `Object { class: ClassId, props: Props, id: u32 }` dove `Props` è una **mappa ordinata `Box<[u8]>→Zval`** (riusa il pattern `PhpArray`: Vec di entry + index, ordine di inserzione per var_dump) | Le proprietà PHP conservano l'ordine di dichiarazione/assegnazione; var_dump lo riflette. Oggetti = poche prop → struttura leggera. |
+| D-19.3 | Class table | **`Program.classes: Vec<ClassDecl>`** hoisted al lowering (come `functions`/`closures`) + `name→ClassId` a runtime (case-insensitive) | Le classi sono visibili prima della decl (hoisting PHP, salvo `extends` di classe condizionale → scope-out). `ClassId = usize`. |
+| D-19.4 | ClassDecl | `{ name, parent: Option<ClassId>, interfaces: Vec<ClassId>, props: Vec<PropDecl>, static_props: Vec<…>, methods: Vec<MethodDecl>, consts: Vec<(name,Expr)>, is_abstract, is_interface }` | Risoluzione `extends`/`implements` per nome→id al lowering (forward-ref ok: 2-pass). |
+| D-19.5 | Metodo | `MethodDecl { fdecl: FnDecl, name, vis: Visibility, is_static, is_abstract, is_final, defining_class: ClassId }` con **slot riservato per `$this`** nel frame del metodo | Riusa interamente `FnDecl`/`run_user_fn_body`. `$this` è una var normale: il lowerer pre-registra lo slot `this` nello scope del metodo e lo memorizza; il dispatch lo lega all'handle. |
+| D-19.6 | `new C(args)` | nuovo **`ExprKind::New { class: ClassRef, args: Vec<Expr> }`**; crea `Object` con prop default valutate per-istanza, poi chiama `__construct` se esiste | Default = `Expr` valutati al `new` (literali / `self::CONST`). `ClassRef` = nome literal (Tier-1) o `new $var`/`self`/`static` (D-19.16). |
+| D-19.7 | Method call | nuovo **`ExprKind::MethodCall { object, method, args }`** (e `NullSafe`); risolve il metodo risalendo la catena `parent`, installa frame, lega `$this`, esegue | `$obj->m()`. Dispatch = `call_method(obj, class_start, name, argv)`. Metodo assente → `__call` (scope-out) o Error. |
+| D-19.8 | Property read | **`ExprKind::PropGet { object, name }`** (+ `NullSafe`); legge dalla mappa prop dell'oggetto (no risalita: le prop ereditate sono già materializzate nell'istanza) | `$obj->p`, `$this->p`. Prop assente → Warning "Undefined property" + Null. Nome dinamico `$obj->$n` → scope-out parziale (literal-first). |
+| D-19.9 | Property write | estendere **`PlaceStep` con `Prop(Box<[u8]>)`**; `place_cell`/`write_into`/navigazione entrano nel `RefCell` dell'oggetto (condiviso, **niente write-back COW**) | `$obj->p = v`, `$this->p = v`, compound/`++`/`??=`, `$obj->arr[] = v`, nested `$a->b->c`. Punto più delicato → gruppo 19-2 isolato. Prop inesistente in write → creata (dinamica). |
+| D-19.10 | Ereditarietà | `extends` unico (PHP single-inheritance); prop ereditate copiate nella decl figlia al lowering (flatten), metodi risolti a runtime risalendo `parent` | Flatten prop = istanza self-contenuta; metodi via catena per supportare override + `parent::`. |
+| D-19.11 | `parent::` / `self::` | `self` = classe **definente** il metodo corrente; `parent` = il suo `parent`; risolti via contesto runtime (`cur_class`/`cur_static_class`) | `parent::__construct()`, `self::method()`, `self::CONST`. |
+| D-19.12 | `static::` (LSB) | late static binding minimale: `cur_static_class` = classe dell'oggetto/chiamata reale, propagata nelle call | `new static()`, `static::method()`. |
+| D-19.13 | Visibility | enum `Visibility {Public, Protected, Private}`; **enforcement** all'accesso esterno (Error PHP-esatto); usata da var_dump (`:protected`, `:"C":private`) | Default `public`. Accesso da metodo della stessa classe (o discendente per protected) consentito. |
+| D-19.14 | Static members | `static_props: Vec<(name, vis, cell: Rc<RefCell<Zval>>)>` per-classe nel runtime (persistono per il run, init una volta); `Class::$p`, `static::$p`, `self::$p` | Riusa il pattern `statics` dello step 15 (cella persistente). |
+| D-19.15 | Class constants | `Class::CONST`, `self::CONST`, `parent::CONST`; tabella `consts` per-classe, valutate lazy/al primo accesso, risalita per ereditarietà | Default di prop possono riferirle (D-19.6). |
+| D-19.16 | `instanceof` | operatore: `$x instanceof C` true se la classe di `$x` è `C`, un suo antenato, o un'interfaccia implementata (transitiva) | Mago: `instanceof` come binary/op dedicato → nuovo `ExprKind` o `BinOp`. |
+| D-19.17 | interfaces / abstract / final | `interface` = ClassDecl con `is_interface` (solo costanti + metodi astratti); `implements` riempie `interfaces`; `abstract class`/`abstract function` non istanziabili/da implementare; `final` non overridabile/estendibile (enforcement) | Le interfacce partecipano a `instanceof`. |
+| D-19.18 | `__toString` | object→string (echo, `.`, `(string)`, sprintf `%s`) chiama `__toString` se definito, altrimenti **Error** "Object of class C could not be converted to string" | Sostituisce il placeholder/Warning del funnel `to_zstr` (debito step 18 chiuso). Richiede che `to_zstr` possa rientrare nell'evaluator → gestito a livello evaluator, non in `convert.rs`. |
+| D-19.19 | `Closure::bind`/`bindTo`/`fromCallable` + static closures | `Closure` acquisisce `bound_this: Option<Zval::Object>` + `scope: Option<ClassId>`; `$this` dentro la closure legato; `static function(){}` = nessun bind | Chiude lo scope-out dello step 18. `fromCallable` = wrap di callable in Closure. |
+| D-19.20 | var_dump/print_r + recursion-guard | formato 8.5 esatto con annotazioni visibility + **guardia di ricorsione generale** (`*RECURSION*`) su oggetti/array già in corso di dump | Retro-sblocca `["static"]` delle closure catturanti (step 18). Set di puntatori "in-progress" durante il dump. |
+
+## Gruppi TDD
+
+- **19-1** Infra: `Zval::Object(Rc<RefCell<Object>>)` + `Object`/`Props` + `Program.classes`/`ClassDecl`/`MethodDecl` + lowering `class` (prop+metodi, hoisted, 2-pass) + `new C(args)` (`ExprKind::New`) + `__construct` + `$this` + `$obj->m()` (`ExprKind::MethodCall`) + prop read (`ExprKind::PropGet`) + `gettype`/`error_type_name`. Arm `Zval::Object` non-esaustivi in `ops`/`convert`/`zval`/var_dump.
+- **19-2** Write-path proprietà: `PlaceStep::Prop` + `$obj->p = v`/`$this->p = v` + compound/`++`/`??=` + `$obj->arr[] = v` + nested `$a->b->c` + `isset`/`empty`/`unset` su proprietà.
+- **19-3** Ereditarietà: `extends`, risoluzione metodi su catena, `parent::m()`, prop ereditate (flatten), `self::`, enforcement visibility public/protected/private.
+- **19-4** Static + costanti: `static $prop`/`Class::$p`/`static::$p`/`self::$p`, `static::` LSB, `Class::m()` (static call), `const`, `Class::CONST`/`self::CONST`/`parent::CONST`.
+- **19-5** `instanceof` + interfaces + abstract/final: `interface`/`implements`, `instanceof` transitivo, abstract non istanziabile, final non overridabile.
+- **19-6** Magic `__toString` (object→string nei vari contesti) + `Closure::bind`/`bindTo`/`fromCallable` + static closures.
+- **19-7** var_dump/print_r esatto per oggetti + recursion-guard generale (+ `["static"]` closure) + docs/metrics + validazione corpus.
+
+## Scope-out (debito esplicito → futuri step)
+
+`try/catch/finally`/`throw` + gerarchia Exception/Error built-in (**step 20**);
+generators/`yield`, fibers; **traits** (`use` dentro classe); **enum** (puro/backed);
+**anonymous class** (`new class {}`); namespace + `::class`; magic dinamici
+`__get`/`__set`/`__isset`/`__unset`/`__call`/`__callStatic`/`__invoke`; `readonly`
+enforcement; property hooks 8.4; clone/`__clone`; nomi membro dinamici complessi
+(`$obj->{$expr}`, `$obj->$$x`); `Stringable`/`ArrayAccess`/`Iterator`/`Countable`
+(interfacce magiche); `::class` su istanza; `get_class`/`get_object_vars`/altri
+builtin di reflection (valutare a parte); covarianza/contravarianza tipi; GC ciclico
+(handle + prop creano cicli → leak accettato come gli element-ref, D-R15).
+
+## STATO: design pass (implementazione 19-1..19-7 in corso)
