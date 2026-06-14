@@ -1932,3 +1932,81 @@ fn oop_class_constant_name() {
         "Foo"
     );
 }
+
+// --- Step 19-5: instanceof, interfaces, abstract ---
+
+#[test]
+fn oop_instanceof_class_and_parent() {
+    assert_eq!(
+        out(
+            "<?php class A {} class B extends A {} $b = new B; \
+             echo ($b instanceof B) ? '1' : '0'; \
+             echo ($b instanceof A) ? '1' : '0'; \
+             echo ($b instanceof C) ? '1' : '0';"
+        ),
+        "110"
+    );
+}
+
+#[test]
+fn oop_instanceof_interface() {
+    assert_eq!(
+        out(
+            "<?php interface I {} class C implements I {} $c = new C; \
+             echo ($c instanceof I) ? 'y' : 'n';"
+        ),
+        "y"
+    );
+}
+
+#[test]
+fn oop_instanceof_transitive_interface() {
+    assert_eq!(
+        out(
+            "<?php interface A {} interface B extends A {} class C implements B {} \
+             echo ((new C) instanceof A) ? 'y' : 'n';"
+        ),
+        "y"
+    );
+}
+
+#[test]
+fn oop_interface_const_and_implemented_method() {
+    assert_eq!(
+        out(
+            "<?php interface Shape { const SIDES = 4; function area(); } \
+             class Sq implements Shape { public $s = 2; function area() { return $this->s * $this->s; } } \
+             $q = new Sq; echo $q->area(), '-', Shape::SIDES, '-', ($q instanceof Shape ? 'y' : 'n');"
+        ),
+        "4-4-y"
+    );
+}
+
+#[test]
+fn oop_abstract_method_with_concrete_subclass() {
+    assert_eq!(
+        out(
+            "<?php abstract class A { abstract function f(); function g() { return $this->f() + 1; } } \
+             class B extends A { function f() { return 10; } } echo (new B)->g();"
+        ),
+        "11"
+    );
+}
+
+#[test]
+fn oop_cannot_instantiate_abstract_class() {
+    let o = run_source(b"t.php", b"<?php abstract class A {} $a = new A;").expect("lowers");
+    match o.fatal {
+        Some(PhpError::Error(m)) => assert_eq!(m, "Cannot instantiate abstract class A"),
+        other => panic!("expected abstract-instantiate fatal, got {other:?}"),
+    }
+}
+
+#[test]
+fn oop_cannot_instantiate_interface() {
+    let o = run_source(b"t.php", b"<?php interface I {} $i = new I;").expect("lowers");
+    match o.fatal {
+        Some(PhpError::Error(m)) => assert_eq!(m, "Cannot instantiate interface I"),
+        other => panic!("expected interface-instantiate fatal, got {other:?}"),
+    }
+}

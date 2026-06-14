@@ -1222,6 +1222,18 @@ impl<'p> Evaluator<'p> {
     /// inherited property set, then run `__construct` (resolved up the chain).
     fn eval_new(&mut self, class: &ClassRef, args: &[Expr]) -> Result<Zval, PhpError> {
         let cid = self.resolve_class_ref(class)?;
+        // An abstract class or interface cannot be instantiated (step 19-5).
+        if self.classes[cid].is_abstract {
+            let what = if self.classes[cid].is_interface {
+                "interface"
+            } else {
+                "abstract class"
+            };
+            return Err(PhpError::Error(format!(
+                "Cannot instantiate {what} {}",
+                String::from_utf8_lossy(&self.classes[cid].name)
+            )));
+        }
         let class_name = PhpStr::new(self.classes[cid].name.to_vec());
         let props = self.collect_props(cid)?;
         let id = self.next_id();
@@ -2261,7 +2273,48 @@ impl<'p> Evaluator<'p> {
                 }
                 Ok(if *pre { cell.borrow().deref_clone() } else { old })
             }
+
+            ExprKind::InstanceOf { expr, class } => {
+                let v = self.eval(expr)?.deref_clone();
+                let result = match &v {
+                    Zval::Object(o) => match self.resolve_class_ref(class) {
+                        Ok(target) => self.is_instance_of(o.borrow().class_id as usize, target),
+                        // An unknown class on the RHS is simply not matched (PHP
+                        // does not error here under the CLI without autoloading).
+                        Err(_) => false,
+                    },
+                    _ => false,
+                };
+                Ok(Zval::Bool(result))
+            }
         }
+    }
+
+    /// Whether an object of `class_id` is an instance of `target` (step 19-5,
+    /// D-19.16): the class itself, any ancestor, or any implemented interface,
+    /// transitively through interface inheritance.
+    fn is_instance_of(&self, class_id: ClassId, target: ClassId) -> bool {
+        let classes: &'p [ClassDecl] = self.classes;
+        let mut cur = Some(class_id);
+        while let Some(c) = cur {
+            if c == target {
+                return true;
+            }
+            if classes[c].interfaces.iter().any(|&i| self.iface_is_a(i, target)) {
+                return true;
+            }
+            cur = classes[c].parent;
+        }
+        false
+    }
+
+    /// Whether interface `i` is, or transitively extends, `target` (step 19-5).
+    fn iface_is_a(&self, i: ClassId, target: ClassId) -> bool {
+        if i == target {
+            return true;
+        }
+        let classes: &'p [ClassDecl] = self.classes;
+        classes[i].interfaces.iter().any(|&p| self.iface_is_a(p, target))
     }
 
     fn apply_binop(&mut self, op: BinOp, a: Zval, b: Zval) -> Result<Zval, PhpError> {

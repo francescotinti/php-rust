@@ -76,6 +76,14 @@ pub struct ClassDecl {
     /// 19-3, D-19.10). `None` for a root class. Properties and methods are
     /// resolved by walking this chain at runtime, not flattened at lowering.
     pub parent: Option<ClassId>,
+    /// Implemented interfaces (`implements`), or for an interface its extended
+    /// interfaces — resolved to [`ClassId`]s at lowering (step 19-5, D-19.16/17).
+    /// `instanceof` checks them transitively.
+    pub interfaces: Vec<ClassId>,
+    /// `abstract class` / `interface` — cannot be instantiated (step 19-5).
+    pub is_abstract: bool,
+    /// `interface` declaration (vs `class`), step 19-5.
+    pub is_interface: bool,
     /// Instance properties *declared on this class* (not the inherited ones), in
     /// declaration order. The full instance layout is parent-first, assembled at
     /// `new` time (D-19.10).
@@ -520,6 +528,11 @@ pub enum ExprKind {
         inc: bool,
         pre: bool,
     },
+
+    /// `$x instanceof Class` (step 19-5, D-19.16): true if the value is an object
+    /// whose class is `class`, a subclass, or an implemented interface
+    /// (transitively). A non-object, or an unknown class, yields `false`.
+    InstanceOf { expr: Box<Expr>, class: ClassRef },
 }
 
 /// The flavour of a static-property assignment (step 19-4).

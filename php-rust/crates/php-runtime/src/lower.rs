@@ -23,8 +23,8 @@ use mago_syntax::ast::{
     Access, Argument, ArrayElement, ArrowFunction, AssignmentOperator, BinaryOperator, Call,
     Class, ClassLikeConstantSelector, ClassLikeMember, ClassLikeMemberSelector, Closure, Construct,
     DeclareBody, Expression, Extends, ForeachTarget, Function, FunctionLikeParameterList, Hint,
-    Identifier, Instantiation, Literal, LiteralInteger, MatchArm as AstMatchArm, Method, MethodBody,
-    Modifier, Node, PartialApplication, Property, PropertyItem, Statement, StaticItem,
+    Identifier, Instantiation, Interface, Literal, LiteralInteger, MatchArm as AstMatchArm, Method,
+    MethodBody, Modifier, Node, PartialApplication, Property, PropertyItem, Statement, StaticItem,
     UnaryPostfixOperator, UnaryPrefixOperator, Variable,
 };
 use mago_syntax::parser::parse_file;
@@ -431,6 +431,15 @@ impl<'f> Lowerer<'f> {
                     line,
                 });
             }
+            Statement::Interface(iface) => {
+                if self.class_index.contains_key(&iface.name.value.to_ascii_lowercase()) {
+                    return Ok(None);
+                }
+                return Err(LowerError::Unsupported {
+                    what: "conditional interface declaration",
+                    line,
+                });
+            }
 
             _ => {
                 return Err(LowerError::Unsupported {
@@ -491,27 +500,101 @@ impl<'f> Lowerer<'f> {
     /// declared later), then lower each body now that all names resolve
     /// (D-19.3).
     fn hoist_classes(&mut self, stmts: &[Statement]) -> Result<(), LowerError> {
-        let mut pending: Vec<&Class> = Vec::new();
-        for s in stmts {
-            if let Statement::Class(class) = s {
-                let key = class.name.value.to_ascii_lowercase();
-                if self.class_index.contains_key(&key) {
-                    return Err(LowerError::Unsupported {
-                        what: "class redeclaration",
-                        line: self.line_of(class.span()),
-                    });
-                }
-                // One class per `pending` slot, pushed below in this same order,
-                // so the index equals the eventual position in `self.classes`.
-                self.class_index.insert(key, pending.len());
-                pending.push(class);
-            }
+        // Both classes and interfaces share one table, so a class can implement
+        // an interface declared later and vice versa (step 19-5).
+        enum Pending<'a> {
+            Class(&'a Class<'a>),
+            Interface(&'a Interface<'a>),
         }
-        for class in pending {
-            let decl = self.lower_class(class)?;
+        let mut pending: Vec<Pending> = Vec::new();
+        for s in stmts {
+            let (name, span) = match s {
+                Statement::Class(c) => (c.name.value, c.span()),
+                Statement::Interface(i) => (i.name.value, i.span()),
+                _ => continue,
+            };
+            let key = name.to_ascii_lowercase();
+            if self.class_index.contains_key(&key) {
+                return Err(LowerError::Unsupported {
+                    what: "class/interface redeclaration",
+                    line: self.line_of(span),
+                });
+            }
+            // One entry per `pending` slot, pushed below in the same order, so the
+            // index equals the eventual position in `self.classes`.
+            self.class_index.insert(key, pending.len());
+            pending.push(match s {
+                Statement::Class(c) => Pending::Class(c),
+                Statement::Interface(i) => Pending::Interface(i),
+                _ => unreachable!(),
+            });
+        }
+        for p in pending {
+            let decl = match p {
+                Pending::Class(c) => self.lower_class(c)?,
+                Pending::Interface(i) => self.lower_interface(i)?,
+            };
             self.classes.push(decl);
         }
         Ok(())
+    }
+
+    /// Resolve a list of interface names (`implements`/interface `extends`) to
+    /// their class ids (step 19-5). Unknown interfaces are out of scope.
+    fn resolve_interfaces(&self, names: &[&[u8]], line: Line) -> Result<Vec<usize>, LowerError> {
+        let mut out = Vec::new();
+        for n in names {
+            match self.class_index.get(&n.to_ascii_lowercase()) {
+                Some(&i) => out.push(i),
+                None => {
+                    return Err(LowerError::Unsupported {
+                        what: "implements/extends undefined interface",
+                        line,
+                    })
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Lower an `interface I extends A, B { const ...; function ...; }` (step
+    /// 19-5). Interfaces carry constants and (abstract) method signatures; the
+    /// method bodies are absent, so only constants are materialised.
+    fn lower_interface(&mut self, iface: &Interface) -> Result<ClassDecl, LowerError> {
+        let line = self.line_of(iface.span());
+        let interfaces = match &iface.extends {
+            Some(ext) => {
+                let names: Vec<&[u8]> = ext.types.iter().map(function_name).collect();
+                self.resolve_interfaces(&names, line)?
+            }
+            None => Vec::new(),
+        };
+        let mut consts = Vec::new();
+        for member in iface.members.iter() {
+            match member {
+                ClassLikeMember::Constant(c) => self.lower_class_const(c, &mut consts)?,
+                // Interface methods are signatures only (abstract) — no body to run.
+                ClassLikeMember::Method(_) => {}
+                _ => {
+                    return Err(LowerError::Unsupported {
+                        what: "interface member",
+                        line,
+                    })
+                }
+            }
+        }
+        Ok(ClassDecl {
+            name: iface.name.value.into(),
+            parent: None,
+            interfaces,
+            is_abstract: true,
+            is_interface: true,
+            props: Vec::new(),
+            static_props: Vec::new(),
+            consts,
+            methods: Vec::new(),
+            line,
+        })
     }
 
     /// Lower one `class Name { ... }` into a [`ClassDecl`] (step 19-1). Only
@@ -520,13 +603,6 @@ impl<'f> Lowerer<'f> {
     /// sub-steps and lower to [`LowerError::Unsupported`] for now.
     fn lower_class(&mut self, class: &Class) -> Result<ClassDecl, LowerError> {
         let line = self.line_of(class.span());
-        // `implements` (interfaces) is step 19-5; only single `extends` here.
-        if class.implements.is_some() {
-            return Err(LowerError::Unsupported {
-                what: "interface implementation",
-                line,
-            });
-        }
         // Resolve `extends ParentName` to the parent's class id (registered in
         // pass 1 of `hoist_classes`, so forward references work, D-19.10).
         let parent = match &class.extends {
@@ -544,6 +620,15 @@ impl<'f> Lowerer<'f> {
             }
             None => None,
         };
+        // Resolve `implements I, J` to interface ids (step 19-5).
+        let interfaces = match &class.implements {
+            Some(imp) => {
+                let names: Vec<&[u8]> = imp.types.iter().map(function_name).collect();
+                self.resolve_interfaces(&names, line)?
+            }
+            None => Vec::new(),
+        };
+        let is_abstract = class.modifiers.iter().any(|m| m.is_abstract());
         let name: Box<[u8]> = class.name.value.into();
         let mut props = Vec::new();
         let mut static_props = Vec::new();
@@ -554,6 +639,9 @@ impl<'f> Lowerer<'f> {
                 ClassLikeMember::Property(p) => {
                     self.lower_property(p, &mut props, &mut static_props, line)?
                 }
+                // An abstract method is a signature only — no body to run, so it
+                // is not materialised (a concrete subclass supplies the impl).
+                ClassLikeMember::Method(m) if matches!(m.body, MethodBody::Abstract(_)) => {}
                 ClassLikeMember::Method(m) => methods.push(self.lower_method(m, line)?),
                 ClassLikeMember::Constant(c) => self.lower_class_const(c, &mut consts)?,
                 _ => {
@@ -567,6 +655,9 @@ impl<'f> Lowerer<'f> {
         Ok(ClassDecl {
             name,
             parent,
+            interfaces,
+            is_abstract,
+            is_interface: false,
             props,
             static_props,
             consts,
@@ -994,6 +1085,16 @@ impl<'f> Lowerer<'f> {
             }
 
             Expression::Binary(b) => {
+                // `instanceof`'s RHS is a *class* reference, not a value, so it is
+                // handled before the operands are lowered as expressions (19-5).
+                if let BinaryOperator::Instanceof(_) = b.operator {
+                    let expr = Box::new(self.lower_expr(b.lhs)?);
+                    let class = class_ref_of(b.rhs, line)?;
+                    return Ok(Expr {
+                        line,
+                        kind: ExprKind::InstanceOf { expr, class },
+                    });
+                }
                 let l = Box::new(self.lower_expr(b.lhs)?);
                 let r = Box::new(self.lower_expr(b.rhs)?);
                 match b.operator {
@@ -1001,12 +1102,7 @@ impl<'f> Lowerer<'f> {
                     BinaryOperator::Or(_) | BinaryOperator::LowOr(_) => ExprKind::Or(l, r),
                     BinaryOperator::LowXor(_) => ExprKind::Xor(l, r),
                     BinaryOperator::NullCoalesce(_) => ExprKind::Coalesce(l, r),
-                    BinaryOperator::Instanceof(_) => {
-                        return Err(LowerError::Unsupported {
-                            what: "instanceof",
-                            line,
-                        })
-                    }
+                    BinaryOperator::Instanceof(_) => unreachable!("handled above"),
                     other => ExprKind::Binary(map_binop(other), l, r),
                 }
             }
