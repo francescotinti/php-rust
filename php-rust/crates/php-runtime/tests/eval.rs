@@ -2180,3 +2180,67 @@ fn exc_get_line_is_creation_line() {
     let src = "<?php\ntry {\n  throw new Exception('x');\n} catch (Exception $e) { echo $e->getLine(); }";
     assert_eq!(out(src), "3");
 }
+
+// --- step 20-2: finally ---
+
+#[test]
+fn exc_finally_order_with_catch() {
+    assert_eq!(
+        out("<?php try { echo 't'; throw new Exception('e'); } catch (Exception $e) { echo 'c'; } finally { echo 'f'; } echo 'after';"),
+        "tcfafter"
+    );
+}
+
+#[test]
+fn exc_finally_without_exception() {
+    assert_eq!(out("<?php try { echo 't'; } finally { echo 'f'; } echo 'a';"), "tfa");
+}
+
+#[test]
+fn exc_finally_runs_on_return() {
+    assert_eq!(
+        out("<?php function f(){ try { return 't'; } finally { echo 'f'; } } echo f();"),
+        "ft"
+    );
+}
+
+#[test]
+fn exc_finally_overrides_return() {
+    assert_eq!(
+        out("<?php function f(){ try { return 'try'; } finally { return 'fin'; } } echo f();"),
+        "fin"
+    );
+}
+
+#[test]
+fn exc_finally_runs_then_rethrows() {
+    assert_eq!(
+        out("<?php try { try { throw new Exception('inner'); } finally { echo 'F'; } } catch (Exception $e) { echo 'C:'.$e->getMessage(); }"),
+        "FC:inner"
+    );
+}
+
+#[test]
+fn exc_finally_with_break_in_loop() {
+    assert_eq!(
+        out("<?php for($i=0;$i<3;$i++){ try { if($i==1) break; echo $i; } finally { echo 'f'; } }"),
+        "0ff"
+    );
+}
+
+#[test]
+fn exc_finally_with_continue_in_loop() {
+    assert_eq!(
+        out("<?php for($i=0;$i<3;$i++){ try { if($i==1) continue; echo $i; } finally { echo 'f'; } }"),
+        "0ff2f"
+    );
+}
+
+#[test]
+fn exc_finally_overrides_thrown_with_return() {
+    // A `return` in finally swallows an in-flight exception (PHP semantics).
+    assert_eq!(
+        out("<?php function f(){ try { throw new Exception('x'); } finally { return 'ok'; } } echo f();"),
+        "ok"
+    );
+}
