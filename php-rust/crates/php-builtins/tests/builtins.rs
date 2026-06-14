@@ -972,3 +972,36 @@ fn print_r_closure_with_params() {
              [$x] => <required>\n        )\n\n)\n"
     );
 }
+
+// --- step 21-5: var_dump / print_r of trait-flattened properties ---
+
+#[test]
+fn var_dump_trait_props_after_own() {
+    // PHP lists the class's own properties first, then trait-supplied ones, with
+    // the trait property's visibility annotation preserved.
+    assert_eq!(
+        out("<?php trait T { public $a = 1; protected $b = 2; public static $s = 9; } \
+             class C { use T; public $c = 3; } var_dump(new C());"),
+        "object(C)#1 (3) {\n  [\"c\"]=>\n  int(3)\n  [\"a\"]=>\n  int(1)\n  \
+         [\"b\":protected]=>\n  int(2)\n}\n"
+    );
+}
+
+#[test]
+fn var_dump_nested_trait_prop_order() {
+    // Own first, then this trait's own, then the nested trait's: c, b, a.
+    assert_eq!(
+        out("<?php trait A { public $a = 1; } trait B { use A; public $b = 2; } \
+             class C { use B; public $c = 3; } var_dump(new C());"),
+        "object(C)#1 (3) {\n  [\"c\"]=>\n  int(3)\n  [\"b\"]=>\n  int(2)\n  \
+         [\"a\"]=>\n  int(1)\n}\n"
+    );
+}
+
+#[test]
+fn print_r_trait_props() {
+    assert_eq!(
+        out("<?php trait T { public $a = 1; } class C { use T; public $c = 3; } print_r(new C());"),
+        "C Object\n(\n    [c] => 3\n    [a] => 1\n)\n"
+    );
+}

@@ -645,3 +645,58 @@ lowerate genericamente). Niente trait con proprietà tipizzate enforced.
   (D-21.11); `instanceof T` → false (D-21.10).
 - **21-5 var_dump/print_r + corpus + docs**: dump prop trait come prop consumer;
   validazione `Zend/tests/traits`; docs + memory.
+
+## Step 21 — TRAITS (IMPLEMENTATO)
+
+> Generato con assistenza AI (Claude Opus 4.8, 1M context). 5 gruppi TDD, +25 test
+> (408→433), clippy pulito, ZERO modifiche all'evaluator (eccetto il rendering dei
+> compile-fatal). Commit: design `7ee593f`, 21-1 `1548f87`, 21-2 `ebdae79`,
+> 21-3 `933b19a`, 21-4 `266e7be`, 21-5 (questo).
+
+**Architettura confermata = flatten-at-lowering.** `Lowerer.traits:
+HashMap<Vec<u8>, LoweredTrait>` (i trait NON entrano in `Program.classes`).
+`lower_traits` (raccolta AST) → `resolve_trait` (memoizzato, cycle-guard, risolve
+i `use` annidati prima del flatten) → `flatten_into` (copia i membri nei vec del
+consumer). `lower_class` gestisce `ClassLikeMember::TraitUse`. Tutta la macchina
+step-19 (resolve_method, static_prop_cell keyed `(ClassId,name)`,
+self/static/new static, visibility, var_dump con visibility) riusata intatta.
+
+**Gruppi:**
+- **21-1** core flatten: metodi+prop istanza; `$this`/get_class→consumer;
+  precedenza classe>trait (D-21.4) e trait>parent (D-21.3); multi-trait disgiunti.
+- **21-2** static+const: static prop **per-consumer** (1,2,1) gratis dal keying;
+  `self::`/`static::`/`new static`; trait const; abstract presente ma soddisfatto.
+- **21-3** conflict resolution: `insteadof` (D-21.6); `as` alias + cambio
+  visibility con/senza rename (D-21.7, helper `find_trait_method`); collisione →
+  `LowerError::Fatal` reso byte-esatto da `compile_fatal_outcome` (D-21.5).
+- **21-4** nested transitivo (D-21.8); cross-trait `$this->other()`;
+  abstract non implementato → fatal sing/plur con lista `C::f, C::g` (D-21.11,
+  helper `abstract_unimplemented_fatal`); `instanceof T`→false gratis (D-21.10,
+  trait non in class table + instanceof su nome ignoto già `false`).
+- **21-5** var_dump/print_r + corpus.
+
+**SCOPERTA ordine prop (corretta in 21-5):** PHP elenca **prima le prop proprie
+del consumer, poi quelle del trait** (e ricorsivamente: own → nested-trait), NON
+in ordine testuale del `use`. Es. `class C { use T; public $c; }` con `T{$a,$b}`
+→ dump `c, a, b`. Corretto invertendo la concatenazione in `resolve_trait` e
+`lower_class` (own.extend(trait) invece di trait.extend(own)).
+
+**Validazione corpus** `Zend/tests/traits`: **42 pass / 38 fail / 136 skip**
+(216 tot; prima ~tutti skip:unsupported "class member"). Pass-rate runnable 52.5%.
+Fail categorizzati:
+- **Classe B (corpus stale, noi corretti vs binario):** `conflict001/003`,
+  `language011`, vari `error_*` — il nostro fatal di collisione è **byte-identico
+  al binario 8.5.7** (incluso `\nStack trace:\n#0 {main}\n`), ma l'EXPECTF del
+  `.phpt` **omette** lo stack-trace. Verificato eseguendo l'oracle reale.
+- **Scope-out (feature adiacenti):** `static_004`/`trait_type_errors` →
+  `__callStatic`/magic methods (backlog separato); `constant_004..021` → accesso
+  diretto a costante di trait + costanti incompatibili; `property003..008` →
+  proprietà con default incompatibili tra trait (noi "first-wins", D-21 scope-out).
+- **Type-error qualification:** messaggi `C::test1()` (qualificato) vs nostro
+  `test1()` per metodi trait-flattenati con type hint — minore, scope-out.
+
+**Scope-out riepilogo:** magic methods (`__callStatic`/`__get`/…); accesso
+diretto `Trait::CONST`/`Trait::$static`; fatal "incompatible property/constant
+definition" (teniamo first-wins); abstract soddisfatto SOLO da metodo concreto
+ereditato dal parent (non camminiamo la catena per il check); type-error message
+non qualificato col nome classe per metodi trait.

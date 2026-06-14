@@ -797,20 +797,21 @@ impl<'f> Lowerer<'f> {
             &mut abstract_methods,
             line,
         )?;
-        // Own members come last so the trait's own declarations win over inherited
-        // ones; trait members keep their (declaration) order in front for layout.
-        t_methods.extend(methods);
-        t_props.extend(props);
-        t_static.extend(static_props);
-        t_consts.extend(consts);
+        // The trait's own members come first; members pulled in from nested
+        // traits follow (PHP lists own properties before inherited-via-trait
+        // ones). Precedence is already enforced inside flatten_into.
+        methods.extend(t_methods);
+        props.extend(t_props);
+        static_props.extend(t_static);
+        consts.extend(t_consts);
         in_progress.remove(key);
         self.traits.insert(
             key.to_vec(),
             LoweredTrait {
-                methods: t_methods,
-                props: t_props,
-                static_props: t_static,
-                consts: t_consts,
+                methods,
+                props,
+                static_props,
+                consts,
                 abstract_methods,
             },
         );
@@ -1125,8 +1126,9 @@ impl<'f> Lowerer<'f> {
             }
         }
         // Flatten any `use TraitName;` members into this class (step 21). The
-        // class's own declarations take precedence; trait members are placed in
-        // front so the instance layout / dump order matches PHP's (`use` first).
+        // class's own declarations take precedence and come first; trait members
+        // follow, so the instance layout / dump order matches PHP's (own props
+        // before trait props).
         if !uses.is_empty() {
             let (own_m, own_p, own_s, own_c) =
                 member_name_sets(&methods, &props, &static_props, &consts);
@@ -1142,14 +1144,10 @@ impl<'f> Lowerer<'f> {
                 &mut abstract_req,
                 line,
             )?;
-            t_methods.extend(methods);
-            methods = t_methods;
-            t_props.extend(props);
-            props = t_props;
-            t_static.extend(static_props);
-            static_props = t_static;
-            t_consts.extend(consts);
-            consts = t_consts;
+            methods.extend(t_methods);
+            props.extend(t_props);
+            static_props.extend(t_static);
+            consts.extend(t_consts);
         }
         // A concrete class must implement every abstract method it carries (own or
         // trait-supplied); otherwise PHP fatals at link time (D-21.11). Abstract
