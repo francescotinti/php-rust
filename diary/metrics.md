@@ -20,6 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 29) | 568 |
 | Unit/integration (workspace, fine step 28) | 545 |
 | Unit/integration (workspace, fine step 24) | 512 |
 | Unit/integration (workspace, fine step 23) | 497 |
@@ -358,3 +359,58 @@ ritornano. `render_fatal` usa il `traceString` catturato per il blocco uncaught.
 Validato byte-esatto contro l'oracle (EXPECTF `.phpt` nested-trace = pass).
 +4 test (541→545). Scope-out: cattura argomenti reali (args sempre `[]`), frame
 include/require e closure, trace per errori engine fuori da una call.
+
+## Step 29 — espansione builtin data-driven + `(object)` cast
+
+Pattern collaudato degli step 10/17: builtin **PURI** (ABI `fn(&[Zval], &mut
+Ctx)` invariata, **ZERO modifiche all'evaluator**), TDD-isolato per gruppo,
+ognuno oracle-verificato byte-per-byte. +23 test totali (545→568), clippy
+pulito. Quattro sotto-step.
+
+- **29-1 string** (`crates/php-builtins/src/string.rs`, +7): `strrev`,
+  `str_contains`/`str_starts_with`/`str_ends_with` (byte-oriented; needle vuoto
+  sempre trovato), `str_split` (chunk≥1, stringa vuota→array vuoto PHP 8.2+,
+  chunk<1→ValueError), `substr_count` (non-overlapping; needle vuoto→ValueError),
+  `number_format`. `number_format` usa **arrotondamento decimale half-away** sulla
+  rappresentazione shortest round-trip (`format!("{:e}")` → cifre intere/frac,
+  carry propagato a mano) per matchare PHP 8.4+ (`2.675→2.68`, dove il naïve
+  float darebbe `2.67`); grouping a tre, separatori custom, soppressione del
+  segno su `-0`. Scope-out: `substr_count` offset/length, non-finiti, multibyte.
+
+- **29-2 array puri** (`crates/php-builtins/src/array.rs`, +10):
+  `array_key_exists`/`key_exists` (null-aware, ≠ isset), `array_search`
+  (loose/strict, ritorna la chiave o false), `array_fill` (chiavi consecutive
+  anche con start negativo, count<0→ValueError), `array_flip` (solo valori
+  int|string diventano chiavi), `array_combine` (length-mismatch→ValueError),
+  `array_pad` (left/right; chiavi int rinumerate, string preservate),
+  `array_product` (fold numerico da 1; vuoto→1), `array_key_first`/`_last`
+  (null su vuoto), `array_diff`/`array_intersect` (confronto per stringa, chiavi
+  preservate, variadici). Helper nuovo `zval_to_key` (regole chiave PHP).
+  Scope-out: `array_diff_key/assoc`, `*_udiff/uintersect`, `array_walk/splice`
+  (by-ref → step dedicato).
+
+- **29-3 `(object)` cast** (HIR + lowerer + evaluator, +4): aggiunta variante
+  `CastKind::Object`; `P::ObjectCast` ora lowera (prima `Unsupported`). In eval
+  `object_cast`: array→stdClass (chiavi stringificate, numeriche→`"1"`),
+  oggetto→identità (stessa istanza), null→stdClass vuoto, scalare→singola
+  proprietà `scalar`. Riusa `make_stdclass` (già con created-tracking per
+  `__destruct`). `(unset)`/`(void)` restano `Unsupported`.
+
+- **29-4 fix D-NEW interpolazione** (`lower.rs`, +1): il **corpus** ha scoperto
+  che i segmenti literal di una stringa interpolata (`CompositeString` →
+  `StringPart::Literal`, valore grezzo da mago) venivano emessi **non
+  unescaped** — `echo "x $v\n"` stampava un backslash-n letterale. Lo step 25
+  trattava solo le parti di interpolazione. Fix: `unescape_double_quoted()`
+  processa il set di escape double-quoted (`\n \r \t \v \f \e \\ \$ \"`, `\x..`
+  hex, `\u{..}` codepoint, `\0..\777` ottale) su ogni segmento literal. I
+  literal non interpolati (`Literal::String`) arrivano già unescaped da mago e
+  restano intatti.
+
+**Corpus** (`ext/standard/tests/{strings,array}`, batch mirato sulle nuove
+funzioni): ogni funzione è byte-corretta. Le `_basic` di `strrev`/`array_fill`
+divergono **solo** sul valore heredoc (`"Hello\n"` vs `"Hello"`): la **coda
+newline dell'heredoc non viene strippata** — bug pre-esistente (era 25),
+catalogato come **D-NEW differito** allo step heredoc/nowdoc del backlog, NON di
+competenza dello step 29. `array_search.phpt` diverge per l'encoding placeholder
+del byte NUL in EXPECTF (artefatto dell'harness, non un bug). Quindi 1 D-NEW
+trovato+fixato (29-4) e 1 D-NEW trovato+differito (heredoc trailing newline).

@@ -134,6 +134,23 @@ Fail residui (scope-out dichiarato, vedi Step 23 in `02-mapping-table.md`):
   WeakMap.
 - **stack-trace frames** (1): `enum_in_stack_trace` (vedi D-NEW-7).
 
+## Step 29 — Scoperte (espansione builtin)
+
+Corpus mirato `ext/standard/tests/{strings,array}` sulle nuove funzioni: ogni
+builtin dello step è byte-corretto. L'esecuzione ha però fatto **diventare
+runnable** test prima skippati (le funzioni non esistevano), esponendo due
+divergenze pre-esistenti del subsystem stringhe — **generali, non
+builtin-specifiche**:
+
+| ID | Severità | Categoria | Divergenza | Causa | Stato |
+|---|---|---|---|---|---|
+| D-NEW-14 | media | stringhe/interpolazione | gli escape (`\n` `\t` `\$` `\\` `\x..` `\0..` `\u{..}`) nei segmenti **literal** di una stringa interpolata venivano emessi grezzi (`echo "x $v\n"` stampava un backslash-n) | step 25 lowerava `CompositeString` ma usava `StringPart::Literal.value` (raw da mago) senza unescaping | **FIXATO** (29-4): `unescape_double_quoted()` in `lower.rs` processa il set double-quoted su ogni literal; i literal non interpolati arrivano già unescaped da mago. Regressione `interp_processes_escapes_in_literals` |
+| D-NEW-15 | media | stringhe/heredoc | il corpo di un heredoc conserva la **newline finale** prima del marker di chiusura (`"Hello\n"` invece di `"Hello"`); causa residua dei diff `strrev_basic`/`array_fill_basic` | lowering heredoc (era 25) non strippa la newline terminale | **DIFFERITO** allo step heredoc/nowdoc del backlog (insieme alla gestione indentation PHP 7.3+); non di competenza dello step 29 |
+
+Non-bug catalogato: `array_search.phpt` diverge perché la EXPECTF codifica il
+byte NUL nella chiave come placeholder (`a%0b`) mentre l'output reale ha il NUL
+— artefatto del rendering dell'harness, non una divergenza del porting.
+
 ## Divergenze attese (scope-out dichiarato in 02-mapping-table.md)
 
 Non sono bug, sono confini del Tier 1:
