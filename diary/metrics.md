@@ -20,7 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
-| Unit/integration (workspace, fine step 14) | 230 (17 suite) |
+| Unit/integration (workspace, fine step 15) | 236 (17 suite) |
 | Differential vs oracle (php-types) | 37.835 casi, 0 mismatch |
 | phpt-runner su testsuite PHP completa | 6172 file: 135 pass / 64 fail / 5973 skip (67.8% dei runnable) |
 
@@ -85,7 +85,8 @@ del differential sono state riconciliate verso il comportamento dell'oracle).
 | Step 12 (`global $x` + `$GLOBALS['literal']`: frame overlay + Zval::Ref alias + Place.base, 3 sotto-step) | ~1.75h |
 | Step 13 (return-by-reference `function &f()`: ReturnRef + AssignRefCall + 2 Notice, 2 sotto-step) | ~1.25h |
 | Step 14 (type-hint enforcement scalare weak: coercion engine + TypeError + deprecation + return/default, 2 sotto-step; chiude D-NEW-6) | ~1.75h |
-| **Totale a fine step 14** | **~24.5h** |
+| Step 15 (static variables: StaticVar + store persistente Rc<RefCell> + init-once, 1 sotto-step) | ~0.75h |
+| **Totale a fine step 15** | **~25.25h** |
 
 ## Step 10 — espansione builtin
 
