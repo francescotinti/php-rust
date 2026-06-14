@@ -3330,3 +3330,106 @@ fn destruct_inherited_from_parent() {
         "endd"
     );
 }
+
+// --- Step 24-3: immediate __destruct on refcount-zero ---
+
+#[test]
+fn destruct_on_unset() {
+    assert_eq!(
+        out(
+            "<?php class A { function __destruct(){ echo 'dtor'; } } \
+             $a=new A(); echo 'before'; unset($a); echo 'after';"
+        ),
+        "beforedtorafter"
+    );
+}
+
+#[test]
+fn destruct_on_reassign() {
+    // The old object is released when the variable is reassigned: its destructor
+    // runs at that statement, the new object's at shutdown.
+    assert_eq!(
+        out(
+            "<?php class A { public $n; function __construct($n){$this->n=$n;} \
+             function __destruct(){ echo 'd' . $this->n; } } \
+             $a=new A(1); $a=new A(2); echo 'end';"
+        ),
+        "d1endd2"
+    );
+}
+
+#[test]
+fn destruct_shared_ref_waits_for_last() {
+    // Two handles to one object: the destructor runs only when the *last* one is
+    // released.
+    assert_eq!(
+        out(
+            "<?php class A { function __destruct(){ echo 'dtor'; } } \
+             $a=new A(); $b=$a; unset($a); echo 'mid'; unset($b); echo 'end';"
+        ),
+        "middtorend"
+    );
+}
+
+#[test]
+fn destruct_temp_expression() {
+    // An object with no binding is released at the end of its statement.
+    assert_eq!(
+        out(
+            "<?php class A { public $n; function __construct($n){$this->n=$n;} \
+             function __destruct(){ echo 'd' . $this->n; } } \
+             new A(1); echo 'end';"
+        ),
+        "d1end"
+    );
+}
+
+#[test]
+fn destruct_function_local_scope_exit() {
+    // A local that goes out of scope when the function returns is destructed then.
+    assert_eq!(
+        out(
+            "<?php class A { function __destruct(){ echo 'dtor'; } } \
+             function f(){ $x=new A(); echo 'infn'; } f(); echo 'end';"
+        ),
+        "infndtorend"
+    );
+}
+
+#[test]
+fn destruct_transitive_array_release() {
+    // Unsetting the array that holds the only reference frees the object too.
+    assert_eq!(
+        out(
+            "<?php class A { function __destruct(){ echo 'dtor'; } } \
+             $arr=[new A()]; echo 'before'; unset($arr); echo 'after';"
+        ),
+        "beforedtorafter"
+    );
+}
+
+#[test]
+fn destruct_cascade_through_property() {
+    // Releasing a container runs its destructor first, then cascades to the
+    // object held only by its property.
+    assert_eq!(
+        out(
+            "<?php class A { function __destruct(){ echo 'A'; } } \
+             class B { public $a; function __destruct(){ echo 'B'; } } \
+             $b=new B(); $b->a=new A(); unset($b); echo '|end';"
+        ),
+        "BA|end"
+    );
+}
+
+#[test]
+fn destruct_reassign_chain() {
+    assert_eq!(
+        out(
+            "<?php class A { public $n; function __construct($n){$this->n=$n;} \
+             function __destruct(){ echo 'd' . $this->n; } } \
+             $a=new A(1); $a=new A(2); $a=new A(3); echo '|';"
+        ),
+        "d1d2|d3"
+    );
+}

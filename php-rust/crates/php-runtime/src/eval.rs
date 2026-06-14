@@ -17,7 +17,7 @@
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 
 use php_types::{
     convert, dtoa, numstr, ops, Closure, ClosureInfo, ClosureParam, ClosureRender, Diag, Diags,
@@ -310,13 +310,15 @@ struct Evaluator<'p> {
     /// first `E::Case` access materialises the object; every later access returns
     /// the same `Rc`, giving `===`/`match` identity (step 23, D-23.2).
     enum_cache: HashMap<(ClassId, Vec<u8>), Rc<RefCell<Object>>>,
-    /// Weak handles to every object created via `new`, in creation order, so the
-    /// end-of-script shutdown can run `__destruct` on those still alive (step
-    /// 24-2). Weak, so tracking does not itself keep objects alive — only objects
-    /// still user-reachable at the end upgrade successfully.
-    created: Vec<Weak<RefCell<Object>>>,
+    /// Strong handles to every live object created via `new`, in creation order.
+    /// The extra strong ref is what lets the destruction sweep detect
+    /// unreachability: when an object's `Rc::strong_count` falls to 1, only this
+    /// tracking ref remains, so the program can no longer reach it and its
+    /// `__destruct` is due (step 24-2/24-3). Objects are removed as they are
+    /// destructed (sweep) or at shutdown.
+    created: Vec<Rc<RefCell<Object>>>,
     /// Object handles whose `__destruct` has already run, guarding against a
-    /// double call during shutdown (step 24-2).
+    /// double call (step 24-2).
     destructed: HashSet<u32>,
     /// Active magic-accessor guards, keyed by (object handle, accessor kind,
     /// property name). While a guard is present, a nested access of the same
@@ -450,6 +452,14 @@ impl<'p> Evaluator<'p> {
             match self.exec_stmt(s)? {
                 Flow::Normal => {}
                 other => return Ok(other),
+            }
+            // Immediate destruction sweep at global-scope statement boundaries
+            // (step 24-3): objects that just became unreachable (a discarded
+            // temporary, an overwritten or unset variable, a returned-from local)
+            // get their `__destruct` now. Destructor bodies run with a local
+            // frame, so the `locals.is_none()` gate keeps this from re-entering.
+            if self.locals.is_none() {
+                self.sweep_destructors();
             }
         }
         Ok(Flow::Normal)
@@ -1578,10 +1588,10 @@ impl<'p> Evaluator<'p> {
             info,
         };
         let value = Zval::Object(Rc::new(RefCell::new(obj)));
-        // Track the new instance (weakly) for the end-of-script `__destruct`
-        // shutdown (step 24-2).
+        // Track the new instance for `__destruct` (step 24-2/24-3): an extra
+        // strong ref whose presence is later used to detect unreachability.
         if let Zval::Object(o) = &value {
-            self.created.push(Rc::downgrade(o));
+            self.created.push(o.clone());
         }
         // A Throwable records its creation site (`getLine`/`getFile`) at `new`
         // time, before the constructor runs (step 20). PHP sets these from the
@@ -1604,30 +1614,57 @@ impl<'p> Evaluator<'p> {
         Ok(value)
     }
 
+    /// Run `__destruct` on object `o` exactly once, if it declares one. The
+    /// caller is responsible for having removed `o` from `created` already.
+    fn run_one_destructor(&mut self, o: &Rc<RefCell<Object>>) {
+        let (cid, id) = {
+            let b = o.borrow();
+            (b.class_id as usize, b.id)
+        };
+        if self.destructed.contains(&id) {
+            return;
+        }
+        if let Some((defc, m)) = self.resolve_method(cid, b"__destruct") {
+            self.destructed.insert(id);
+            let value = Zval::Object(o.clone());
+            // A destructor that throws is swallowed: its unwinding would otherwise
+            // abort the remaining destructors. PHP turns it into a shutdown fatal;
+            // refining that is future work.
+            let _ = self.invoke_method(Some(value), defc, cid, m, b"__destruct", Vec::new());
+            self.flush_diags();
+        }
+    }
+
+    /// Mid-script destruction sweep (step 24-3): release every tracked object the
+    /// program can no longer reach (`Rc::strong_count == 1`, i.e. only the
+    /// tracking ref remains), most-recently-created first. Running one destructor
+    /// or dropping a destructor-less object may make another unreachable
+    /// (transitively, e.g. an object held only by a now-freed array), so the scan
+    /// repeats until a fixpoint. Called at global-scope statement boundaries;
+    /// destructor bodies run with a local frame, so the `locals.is_none()` gate at
+    /// the call site keeps this from re-entering.
+    fn sweep_destructors(&mut self) {
+        loop {
+            let idx = self
+                .created
+                .iter()
+                .rposition(|o| Rc::strong_count(o) == 1);
+            let Some(i) = idx else { break };
+            let o = self.created.remove(i);
+            self.run_one_destructor(&o);
+            // `o` drops here, possibly releasing another tracked object.
+        }
+    }
+
     /// End-of-script shutdown (step 24-2): invoke `__destruct` on every object
-    /// still reachable at the end of the run, in reverse creation order (PHP
-    /// shutdown is LIFO). Objects already collected mid-script (their `Weak` no
-    /// longer upgrades) are skipped; immediate destruction on `unset`/scope exit
-    /// is a later step. A destructor that throws is swallowed here (its unwinding
-    /// would otherwise abort the remaining destructors); refining that is future
-    /// work.
+    /// still tracked at the end of the run, in reverse creation order (PHP
+    /// shutdown is LIFO). These are the objects still reachable when the script
+    /// ends (e.g. held by globals); mid-script releases were already handled by
+    /// [`Evaluator::sweep_destructors`].
     fn run_destructors(&mut self) {
-        let live: Vec<Rc<RefCell<Object>>> =
-            self.created.iter().rev().filter_map(Weak::upgrade).collect();
-        for o in live {
-            let (cid, id) = {
-                let b = o.borrow();
-                (b.class_id as usize, b.id)
-            };
-            if self.destructed.contains(&id) {
-                continue;
-            }
-            if let Some((defc, m)) = self.resolve_method(cid, b"__destruct") {
-                self.destructed.insert(id);
-                let value = Zval::Object(o.clone());
-                let _ = self.invoke_method(Some(value), defc, cid, m, b"__destruct", Vec::new());
-                self.flush_diags();
-            }
+        let survivors: Vec<Rc<RefCell<Object>>> = std::mem::take(&mut self.created);
+        for o in survivors.into_iter().rev() {
+            self.run_one_destructor(&o);
         }
     }
 
