@@ -1226,14 +1226,22 @@ impl<'f> Lowerer<'f> {
         line: Line,
     ) -> Result<ExprKind, LowerError> {
         match operand {
-            Expression::Variable(Variable::Direct(d)) => Ok(ExprKind::IncDec {
-                slot: self.slot_for(strip_dollar(d.name)),
+            // A bare local keeps the lighter slot-based encoding (and its
+            // string/null increment diagnostics). `$this` is not a slot, so it
+            // falls through to the place form below.
+            Expression::Variable(Variable::Direct(d)) if strip_dollar(d.name) != b"this" => {
+                Ok(ExprKind::IncDec {
+                    slot: self.slot_for(strip_dollar(d.name)),
+                    inc,
+                    pre,
+                })
+            }
+            // An array element / object property target (step 19-2): reuse the
+            // place machinery. `lower_place` rejects non-lvalues.
+            _ => Ok(ExprKind::IncDecPlace {
+                place: self.lower_place(operand, line)?,
                 inc,
                 pre,
-            }),
-            _ => Err(LowerError::Unsupported {
-                what: "increment/decrement of non-variable",
-                line,
             }),
         }
     }

@@ -1658,3 +1658,75 @@ fn oop_this_outside_method_is_fatal() {
         other => panic!("expected $this fatal, got {other:?}"),
     }
 }
+
+// --- Step 19-2: full property write-path (compound, inc/dec, ??=, array, nested) ---
+
+#[test]
+fn oop_prop_compound_add() {
+    assert_eq!(
+        out("<?php class C { public $n = 10; } $c = new C; $c->n += 5; echo $c->n;"),
+        "15"
+    );
+}
+
+#[test]
+fn oop_prop_inc_dec() {
+    assert_eq!(
+        out("<?php class C { public $n = 0; } $c = new C; $c->n++; ++$c->n; echo $c->n;"),
+        "2"
+    );
+}
+
+#[test]
+fn oop_prop_concat_assign() {
+    assert_eq!(
+        out("<?php class C { public $s = 'a'; } $c = new C; $c->s .= 'bc'; echo $c->s;"),
+        "abc"
+    );
+}
+
+#[test]
+fn oop_prop_coalesce_assign() {
+    assert_eq!(
+        out("<?php class C { public $x = null; } $c = new C; $c->x ??= 7; echo $c->x;"),
+        "7"
+    );
+}
+
+#[test]
+fn oop_prop_array_push_and_read() {
+    assert_eq!(
+        out(
+            "<?php class C { public $a = []; } $c = new C; \
+             $c->a[] = 1; $c->a[] = 2; $c->a[5] = 9; echo $c->a[0], $c->a[1], $c->a[5];"
+        ),
+        "129"
+    );
+}
+
+#[test]
+fn oop_nested_object_property_write() {
+    assert_eq!(
+        out(
+            "<?php class B { public $v = 0; } class A { public $b; } \
+             $a = new A; $a->b = new B; $a->b->v = 42; echo $a->b->v;"
+        ),
+        "42"
+    );
+}
+
+#[test]
+fn oop_isset_empty_unset_property() {
+    assert_eq!(
+        out(
+            "<?php class C { public $x = 5; public $y = null; } $c = new C; \
+             echo isset($c->x) ? 'A' : 'a'; \
+             echo isset($c->y) ? 'B' : 'b'; \
+             echo isset($c->z) ? 'C' : 'c'; \
+             echo empty($c->x) ? 'D' : 'd'; \
+             unset($c->x); \
+             echo isset($c->x) ? 'E' : 'e';"
+        ),
+        "Abcde"
+    );
+}

@@ -356,6 +356,9 @@ pub enum ExprKind {
     AssignCoalesce(Slot, Box<Expr>),
     /// `++$x` / `--$x` / `$x++` / `$x--` on a variable slot.
     IncDec { slot: Slot, inc: bool, pre: bool },
+    /// `++`/`--` on a place that is not a bare local: an array element
+    /// (`$a[k]++`) or an object property (`$o->n++`, `$this->n++`), step 19-2.
+    IncDecPlace { place: Place, inc: bool, pre: bool },
 
     /// `cond ? then : otherwise` (`then` is `None` for the `?:` shorthand).
     Ternary {

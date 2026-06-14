@@ -1602,6 +1602,22 @@ impl<'p> Evaluator<'p> {
                 Ok(if *pre { self.slot_clone(idx) } else { old })
             }
 
+            ExprKind::IncDecPlace { place, inc, pre } => {
+                let steps = self.resolve_steps(place)?;
+                let mut val = match self.read_place_value(place.base, &steps)? {
+                    Zval::Undef => Zval::Null,
+                    v => v,
+                };
+                let old = val.clone();
+                if *inc {
+                    ops::increment(&mut val, &mut self.diags)?;
+                } else {
+                    ops::decrement(&mut val, &mut self.diags)?;
+                }
+                self.write_place(place.base, &steps, val.clone())?;
+                Ok(if *pre { val } else { old })
+            }
+
             ExprKind::Ternary {
                 cond,
                 then,
@@ -2235,10 +2251,11 @@ impl<'p> Evaluator<'p> {
             v => v,
         };
         for step in steps {
-            let Step::Key(k) = step else {
-                return Ok(Zval::Null);
+            cur = match step {
+                Step::Key(k) => self.read_index(&cur, &key_to_zval(k), false)?,
+                Step::Prop(name) => self.read_property(&cur, name)?,
+                Step::Append => return Ok(Zval::Null),
             };
-            cur = self.read_index(&cur, &key_to_zval(k), false)?;
         }
         Ok(cur)
     }
@@ -2251,27 +2268,41 @@ impl<'p> Evaluator<'p> {
             v => v,
         };
         for step in steps {
-            let Step::Key(k) = step else { return None };
-            match &cur {
-                Zval::Array(a) => match a.get(k) {
-                    Some(v) => cur = v.clone(),
-                    None => return None,
-                },
-                Zval::Str(s) => {
-                    // String offset isset: in-range integer key only.
-                    match k {
-                        Key::Int(i) => {
-                            let len = s.len() as i64;
-                            let idx = if *i < 0 { len + i } else { *i };
-                            if idx < 0 || idx >= len {
-                                return None;
+            match step {
+                Step::Key(k) => match &cur {
+                    Zval::Array(a) => match a.get(k) {
+                        Some(v) => cur = v.clone(),
+                        None => return None,
+                    },
+                    Zval::Str(s) => {
+                        // String offset isset: in-range integer key only.
+                        match k {
+                            Key::Int(i) => {
+                                let len = s.len() as i64;
+                                let idx = if *i < 0 { len + i } else { *i };
+                                if idx < 0 || idx >= len {
+                                    return None;
+                                }
+                                cur = Zval::Str(PhpStr::new(vec![s.as_bytes()[idx as usize]]));
                             }
-                            cur = Zval::Str(PhpStr::new(vec![s.as_bytes()[idx as usize]]));
+                            Key::Str(_) => return None,
                         }
-                        Key::Str(_) => return None,
+                    }
+                    _ => return None,
+                },
+                // `isset($o->prop)` is true iff the property exists and is
+                // non-null (the caller checks non-null), step 19-2.
+                Step::Prop(name) => {
+                    let next = match &cur {
+                        Zval::Object(o) => o.borrow().props.get(name).map(Zval::deref_clone),
+                        _ => return None,
+                    };
+                    match next {
+                        Some(v) => cur = v,
+                        None => return None,
                     }
                 }
-                _ => return None,
+                Step::Append => return None,
             }
         }
         Some(cur)
@@ -2475,13 +2506,29 @@ fn unset_into(target: &mut Zval, steps: &[Step]) {
         Some(p) => p,
         None => return,
     };
-    let Step::Key(k) = first else { return };
-    if let Zval::Array(rc) = target {
-        if rest.is_empty() {
-            Rc::make_mut(rc).remove(k);
-        } else if let Some(child) = Rc::make_mut(rc).get_mut(k) {
-            unset_into(child, rest);
+    match first {
+        Step::Key(k) => {
+            if let Zval::Array(rc) = target {
+                if rest.is_empty() {
+                    Rc::make_mut(rc).remove(k);
+                } else if let Some(child) = Rc::make_mut(rc).get_mut(k) {
+                    unset_into(child, rest);
+                }
+            }
         }
+        // `unset($o->prop)` removes the property from the shared object in place
+        // (step 19-2).
+        Step::Prop(name) => {
+            if let Zval::Object(o) = target {
+                let mut obj = o.borrow_mut();
+                if rest.is_empty() {
+                    obj.props.remove(name);
+                } else if let Some(child) = obj.props.get_mut(name) {
+                    unset_into(child, rest);
+                }
+            }
+        }
+        Step::Append => {}
     }
 }
 
