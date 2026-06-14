@@ -1,6 +1,6 @@
 # Metriche dell'esperimento
 
-> Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Aggiornato: 2026-06-13 (fine step 10).
+> Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Aggiornato: 2026-06-14 (fine step 23).
 
 ## LOC (target Rust, escluso codice di test)
 
@@ -20,6 +20,10 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 23) | 497 |
+| Unit/integration (workspace, fine step 22) | 462 |
+| Unit/integration (workspace, fine step 21) | 433 |
+| Unit/integration (workspace, fine step 20) | 408 |
 | Unit/integration (workspace, fine step 19) | 377 (17 suite) |
 | Unit/integration (workspace, fine step 18) | 323 (17 suite) |
 | Unit/integration (workspace, fine step 17) | 264 (17 suite) |
@@ -241,3 +245,26 @@ verificate contro l'oracle CLI:
 Zero divergenze D-NEW. Scope-out residuo: return-by-ref (`function &f()`),
 array-literal con elemento-ref (`[&$x]`), `sort` flags ≠ SORT_REGULAR,
 `str_replace $count`.
+
+## Step 23 — enum (pure + backed)
+
+5 sotto-step TDD (+35 test, 462 → 497), clippy pulito. L'enum riusa `ClassDecl`
+(`is_enum`/`enum_backing`/`enum_cases`); i case sono oggetti singleton interned
+(`Evaluator.enum_cache`), così `===`/`match` funzionano per identità.
+
+| Sotto-step | Contenuto | Test |
+|---|---|---|
+| 23-1 | enum puro: lowering, case singleton, `->name`, `instanceof`, `::class`, no-instantiate (+ fix object `===`) | 8 |
+| 23-2 | backed `:int`/`:string`: `->value`, `from`/`tryFrom`, `BackedEnum`, `ValueError` | 7 |
+| 23-3 | `cases()` + metodi/costanti utente (`$this`=case, `match($this)`, `self::Case`) | 6 |
+| 23-4 | `var_dump`/`print_r` + fix corpus (object `==`, costanti d'interfaccia) | 9 |
+| 23-5 | immutabilità case: readonly / no-dynamic / no-unset | 4 |
+
+**3 D-NEW (gap generali pre-esistenti, non enum-specifici):** D-NEW-11 object
+`===` (mai implementato), D-NEW-12 object `==`, D-NEW-13 ereditarietà costanti
+d'interfaccia. Dettaglio in `04-divergences.md`.
+
+**Validazione corpus:** `/tmp/php-src/Zend/tests/enum` **43 pass / 18 fail / 91
+skip** (152 tot, 70.5% dei runnable) — prima dello step 23 ~tutti skip
+"unsupported". Fail residui: by-ref readonly, operatori d'ordine fra oggetti,
+validazioni compile-time, Reflection*/SPL/WeakMap, stack-trace frames.
