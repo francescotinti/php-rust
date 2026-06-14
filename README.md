@@ -14,6 +14,8 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
+**Steps 0–28 completati · 545 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+
 | Step | Contenuto | Stato |
 |---|---|---|
 | 0 | Scaffolding workspace + diary + Phase 0 reconnaissance | ✅ |
@@ -28,6 +30,23 @@ full port semantico del solo `zend_operators.c`).
 | 9 | Rendering diagnostici (warning/fatal su stdout) | ✅ |
 | 10 | Espansione builtin (count, array_*, implode/explode, substr/strpos/str_replace, sprintf/printf, abs/max/min, print_r) — **baseline 126 → 135 pass** | ✅ |
 | 11 | Reference semantics — `$b = &$a` (11a), parametri `f(&$x)` (11b), builtin by-ref `array_push`/`sort`/`array_pop`/`array_shift` (11c), element-ref + `foreach as &$v` via `Zval::Ref` (11d) | ✅ |
+| 12 | `global $x` + `$GLOBALS['literal']` (frame overlay globale/locale) | ✅ |
+| 13 | Return-by-reference `function &f()` | ✅ |
+| 14 | Type-hint enforcement scalare *weak* (+ `TypeError` byte-esatto) | ✅ |
+| 15 | Variabili `static` (persistenza cross-call) | ✅ |
+| 16 | `declare(strict_types=1)` | ✅ |
+| 17 | Espansione builtin per frequenza (case/build/trim/math/array — ~24 funzioni) | ✅ |
+| 18 | Closures & callables — `use`, arrow `fn`, first-class `f(...)`, `array_map`/`filter`/`usort`, costanti engine | ✅ |
+| 19 | OOP/classi — `new`, `$this`, ereditarietà, visibility, static + LSB, interfacce, abstract, `instanceof`, `__toString`, closure bind, `var_dump`/`print_r` oggetti | ✅ |
+| 20 | Eccezioni — `try`/`catch`/`finally`/`throw` + gerarchia `Throwable` (prelude PHP) | ✅ |
+| 21 | Traits (flatten-at-lowering, `insteadof`/`as`, collisioni → Fatal) | ✅ |
+| 22 | Magic methods — `__get`/`__set`/`__isset`/`__unset`/`__call`/`__callStatic`/`__invoke` | ✅ |
+| 23 | Enum (pure + backed) — case singleton, `from`/`tryFrom`/`cases`, `UnitEnum`/`BackedEnum` | ✅ |
+| 24 | `Stringable` auto-interface + `__destruct` (shutdown LIFO + sweep refcount-zero immediato) | ✅ |
+| 25 | Interpolazione stringhe — `"$x"`, `"$a[k]"`, `"$o->p"`, `"{$expr}"` | ✅ |
+| 26 | `json_encode` / `json_decode` (assoc array + `stdClass`, flag PRETTY/UNESCAPED_*) | ✅ |
+| 27 | Regex `preg_*` — `match`/`match_all`/`replace`/`replace_callback`/`split`/`quote` (crate `regex`) | ✅ |
+| 28 | Stack-trace frame reali — `getTrace`/`getTraceAsString` + render uncaught con frame | ✅ |
 
 > Lo step 6 è stato eseguito **dopo** lo step 7 (deciso con l'utente: gli array
 > rendono il phpt-runner molto più utile, quintuplicando i test in-scope).
@@ -60,9 +79,12 @@ literale intero gigante → `INF` #74947) e 1 divergenza ereditata da mago (`\u{
 
 ```
 php-rust/crates/
-  php-types      Zval / PhpStr / PhpArray + operatori (zero dep interne)
-  php-runtime    HIR, lowering da mago, evaluator tree-walk
-  php-builtins   registry + 19 builtin (var_dump, is_*, *val, strlen, …)
+  php-types      Zval / PhpStr / PhpArray / Object + operatori (zero dep interne)
+  php-runtime    HIR, lowering da mago, evaluator tree-walk (OOP, eccezioni,
+                 enum, closure, __destruct, interpolazione; json_decode +
+                 preg_* intercettati; stack-trace)
+  php-builtins   registry ~65 builtin (var_dump/print_r, array_*, string,
+                 sprintf, math, json_encode, …)
   php-cli        binario `phpr`                           (scheletro)
   phpt-runner    runner .phpt + capability scan (bin + lib)
 diary/           00-reconnaissance … 99-conclusions + metrics
