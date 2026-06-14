@@ -545,7 +545,7 @@ impl<'p> Evaluator<'p> {
                 for p in places {
                     let steps = self.resolve_steps(p)?;
                     self.check_first_prop_write(p.base, &steps, MagicAccess::Unset, b"__unset")?;
-                    self.unset_place(p.base, &steps);
+                    self.unset_place(p.base, &steps)?;
                 }
             }
 
@@ -1713,6 +1713,61 @@ impl<'p> Evaluator<'p> {
         Some((defc, obj_cid, oid, m))
     }
 
+    /// If `__isset` applies to `name` on `o` (property missing/inaccessible,
+    /// method present, not guarded), invoke it under a guard and return its
+    /// boolean result; `None` means no magic (caller does the direct check),
+    /// step 22, D-22.1.
+    fn magic_isset_bool(
+        &mut self,
+        o: &Rc<RefCell<Object>>,
+        name: &[u8],
+    ) -> Option<Result<bool, PhpError>> {
+        let (defc, obj_cid, oid, m) = self.magic_prop_method(o, name, MagicAccess::Isset, b"__isset")?;
+        let key = (oid, MagicAccess::Isset, name.to_vec());
+        self.magic_guard.insert(key.clone());
+        let recv = Zval::Object(Rc::clone(o));
+        let arg = Zval::Str(PhpStr::new(name.to_vec()));
+        let r = self.invoke_method(Some(recv), defc, obj_cid, m, b"__isset", vec![arg]);
+        self.magic_guard.remove(&key);
+        Some(r.map(|v| convert::is_true_silent(&v)))
+    }
+
+    /// `isset()` truth for a resolved place (step 22): a single trailing property
+    /// on an object routes to `__isset`; anything else uses the silent traversal.
+    fn place_isset(&mut self, base: PlaceBase, steps: &[Step]) -> Result<bool, PhpError> {
+        if let [Step::Prop(name)] = steps {
+            if let Zval::Object(o) = self.base_clone(base) {
+                if let Some(r) = self.magic_isset_bool(&o, name) {
+                    return r;
+                }
+            }
+        }
+        Ok(matches!(
+            self.silent_get(base, steps),
+            Some(v) if !matches!(v, Zval::Null | Zval::Undef)
+        ))
+    }
+
+    /// `empty()` truth for a resolved place (step 22): a magic property is
+    /// `__isset` then (if set) `__get`, mirroring PHP.
+    fn place_empty(&mut self, base: PlaceBase, steps: &[Step]) -> Result<bool, PhpError> {
+        if let [Step::Prop(name)] = steps {
+            if let Zval::Object(o) = self.base_clone(base) {
+                if let Some(r) = self.magic_isset_bool(&o, name) {
+                    if !r? {
+                        return Ok(true);
+                    }
+                    let v = self.read_property(&Zval::Object(o), name)?;
+                    return Ok(!convert::is_true_silent(&v));
+                }
+            }
+        }
+        Ok(match self.silent_get(base, steps) {
+            Some(v) => !convert::is_true_silent(&v),
+            None => true,
+        })
+    }
+
     /// Read property `name` from a value (step 19, D-19.8; step 22 `__get`).
     /// Enforces visibility on a declared property; a missing or inaccessible
     /// property routes to `__get` if defined, else warns and yields NULL.
@@ -2584,6 +2639,21 @@ impl<'p> Evaluator<'p> {
 
             ExprKind::AssignCoalescePlace(place, rhs) => {
                 let steps = self.resolve_steps(place)?;
+                // Magic property: `__isset` decides, then `__get` (existing) or
+                // `__set` (new), step 22, D-22.6.
+                if let [Step::Prop(name)] = steps.as_slice() {
+                    if let Zval::Object(o) = self.base_clone(place.base) {
+                        if let Some(r) = self.magic_isset_bool(&o, name) {
+                            return if r? {
+                                self.read_property(&Zval::Object(o), name)
+                            } else {
+                                let value = self.eval(rhs)?;
+                                self.write_place(place.base, &steps, value.clone())?;
+                                Ok(value)
+                            };
+                        }
+                    }
+                }
                 self.check_first_prop_write(place.base, &steps, MagicAccess::Set, b"__set")?;
                 match self.silent_get(place.base, &steps) {
                     Some(v) if !matches!(v, Zval::Null | Zval::Undef) => Ok(v),
@@ -2598,8 +2668,7 @@ impl<'p> Evaluator<'p> {
             ExprKind::Isset(places) => {
                 for p in places {
                     let steps = self.resolve_steps(p)?;
-                    let set = matches!(self.silent_get(p.base, &steps), Some(v) if !matches!(v, Zval::Null | Zval::Undef));
-                    if !set {
+                    if !self.place_isset(p.base, &steps)? {
                         return Ok(Zval::Bool(false));
                     }
                 }
@@ -2608,10 +2677,7 @@ impl<'p> Evaluator<'p> {
 
             ExprKind::Empty(place) => {
                 let steps = self.resolve_steps(place)?;
-                let empty = match self.silent_get(place.base, &steps) {
-                    Some(v) => !convert::is_true_silent(&v),
-                    None => true,
-                };
+                let empty = self.place_empty(place.base, &steps)?;
                 Ok(Zval::Bool(empty))
             }
 
@@ -2921,6 +2987,36 @@ impl<'p> Evaluator<'p> {
                 // unlike a normal read, an out-of-range *string* offset is NOT
                 // the empty string here (bug #69889).
                 Ok(coalesce_index(&b, &k))
+            }
+            // `$o->p ??` / `$o->p ?? d`: a magic property is `__isset` then (only
+            // if set) `__get`; a plain property is read silently — no undefined
+            // warning, unlike a normal read (step 22, D-22.6).
+            ExprKind::PropGet {
+                object,
+                name,
+                nullsafe,
+            } => {
+                let recv = self.eval_isset(object)?.deref_clone();
+                if matches!(recv, Zval::Null | Zval::Undef) {
+                    return Ok(Zval::Null);
+                }
+                if let Zval::Object(o) = &recv {
+                    if let Some(r) = self.magic_isset_bool(o, name) {
+                        return if r? {
+                            self.read_property(&recv, name)
+                        } else {
+                            Ok(Zval::Null)
+                        };
+                    }
+                    return Ok(o
+                        .borrow()
+                        .props
+                        .get(name)
+                        .map(Zval::deref_clone)
+                        .unwrap_or(Zval::Null));
+                }
+                let _ = nullsafe;
+                Ok(Zval::Null)
             }
             _ => self.eval(e),
         }
@@ -3283,14 +3379,31 @@ impl<'p> Evaluator<'p> {
         Some(cur)
     }
 
-    /// `unset($slot)` / `unset($a[k]...)`: drop a variable or array element.
-    fn unset_place(&mut self, base: PlaceBase, steps: &[Step]) {
+    /// `unset($slot)` / `unset($a[k]...)`: drop a variable or array element. A
+    /// single trailing property on an object whose property is missing or
+    /// inaccessible routes to `__unset` (step 22, D-22.1).
+    fn unset_place(&mut self, base: PlaceBase, steps: &[Step]) -> Result<(), PhpError> {
         if steps.is_empty() {
             // Drop *this* binding only: replacing it with a fresh value slot
             // releases this alias's share of any reference cell, leaving other
             // aliases untouched (D-R5).
             *slot_mut!(self, base) = Zval::Undef;
-            return;
+            return Ok(());
+        }
+        if let [Step::Prop(name)] = steps {
+            let recv = self.base_clone(base);
+            if let Zval::Object(o) = &recv {
+                if let Some((defc, obj_cid, oid, m)) =
+                    self.magic_prop_method(o, name, MagicAccess::Unset, b"__unset")
+                {
+                    let key = (oid, MagicAccess::Unset, name.to_vec());
+                    self.magic_guard.insert(key.clone());
+                    let arg = Zval::Str(PhpStr::new(name.to_vec()));
+                    let r = self.invoke_method(Some(recv.clone()), defc, obj_cid, m, b"__unset", vec![arg]);
+                    self.magic_guard.remove(&key);
+                    return r.map(|_| ());
+                }
+            }
         }
         match slot_mut!(self, base) {
             Zval::Ref(cell) => {
@@ -3299,6 +3412,7 @@ impl<'p> Evaluator<'p> {
             }
             other => unset_into(other, steps),
         }
+        Ok(())
     }
 }
 

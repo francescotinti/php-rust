@@ -2661,6 +2661,118 @@ fn magic_get_recursion_guard_same_property() {
     );
 }
 
+// --- step 22-2: __isset / __unset / coalesce ---
+
+#[test]
+fn magic_isset_basic() {
+    assert_eq!(
+        out("<?php class C { private $d = ['has' => 1]; \
+             function __isset($n){ return isset($this->d[$n]); } } \
+             $c = new C(); echo isset($c->has) ? '1' : '0'; echo isset($c->no) ? '1' : '0';"),
+        "10"
+    );
+}
+
+#[test]
+fn magic_isset_does_not_call_get() {
+    // Bare isset() only triggers __isset, never __get.
+    assert_eq!(
+        out("<?php class C { function __isset($n){ return true; } \
+             function __get($n){ echo 'GET'; return 1; } } \
+             $c = new C(); echo isset($c->x) ? '1' : '0';"),
+        "1"
+    );
+}
+
+#[test]
+fn magic_empty_uses_isset_then_get() {
+    assert_eq!(
+        out("<?php class C { private $d = ['z' => 0, 'v' => 5]; \
+             function __isset($n){ return isset($this->d[$n]); } \
+             function __get($n){ return $this->d[$n]; } } \
+             $c = new C(); echo empty($c->z) ? '1' : '0'; echo empty($c->v) ? '1' : '0'; \
+             echo empty($c->missing) ? '1' : '0';"),
+        "101"
+    );
+}
+
+#[test]
+fn magic_coalesce_read() {
+    assert_eq!(
+        out("<?php class C { private $d = ['a' => 'A']; \
+             function __isset($n){ return isset($this->d[$n]); } \
+             function __get($n){ return $this->d[$n]; } } \
+             $c = new C(); echo ($c->a ?? 'D'); echo ($c->b ?? 'D');"),
+        "AD"
+    );
+}
+
+#[test]
+fn magic_coalesce_does_not_get_when_unset() {
+    assert_eq!(
+        out("<?php class C { function __isset($n){ return false; } \
+             function __get($n){ echo 'G'; return 1; } } \
+             $c = new C(); echo ($c->x ?? 'D');"),
+        "D"
+    );
+}
+
+#[test]
+fn magic_coalesce_assign_existing_does_not_set() {
+    assert_eq!(
+        out("<?php class C { public $log = ''; private $d = ['a' => 'A']; \
+             function __isset($n){ return isset($this->d[$n]); } \
+             function __get($n){ return $this->d[$n]; } \
+             function __set($n,$v){ $this->log = 'SET'; } } \
+             $c = new C(); $c->a ??= 'X'; \
+             echo $c->log === '' ? 'noset' : 'set'; echo ':'; echo $c->a;"),
+        "noset:A"
+    );
+}
+
+#[test]
+fn magic_coalesce_assign_missing_sets() {
+    assert_eq!(
+        out("<?php class C { private $d = []; \
+             function __isset($n){ return isset($this->d[$n]); } \
+             function __get($n){ return $this->d[$n] ?? null; } \
+             function __set($n,$v){ $this->d[$n] = $v; } } \
+             $c = new C(); $c->x ??= 'NEW'; echo $c->x;"),
+        "NEW"
+    );
+}
+
+#[test]
+fn magic_unset_basic() {
+    assert_eq!(
+        out("<?php class C { public $log = ''; private $d = ['a' => 1]; \
+             function __isset($n){ return isset($this->d[$n]); } \
+             function __unset($n){ $this->log = 'U:' . $n; unset($this->d[$n]); } } \
+             $c = new C(); unset($c->a); echo $c->log; echo isset($c->a) ? '1' : '0';"),
+        "U:a0"
+    );
+}
+
+#[test]
+fn magic_unset_for_inaccessible_private() {
+    assert_eq!(
+        out("<?php class C { private $secret = 1; public $log = ''; \
+             function __unset($n){ $this->log = 'U:' . $n; } } \
+             $c = new C(); unset($c->secret); echo $c->log;"),
+        "U:secret"
+    );
+}
+
+#[test]
+fn magic_isset_recursion_guard() {
+    // isset($this->foo) inside __isset('foo') bypasses magic → direct (absent).
+    assert_eq!(
+        out("<?php class C { function __isset($n){ return isset($this->foo); } } \
+             $c = new C(); echo isset($c->foo) ? '1' : '0';"),
+        "0"
+    );
+}
+
 #[test]
 fn magic_set_writes_real_property_under_guard() {
     // __set writing the *same* property name creates the real property directly
