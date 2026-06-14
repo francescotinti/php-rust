@@ -137,6 +137,8 @@ class Exception implements Throwable {
     protected $file = "";
     protected $line = 0;
     private $previous = null;
+    private $trace = [];
+    private $traceString = "#0 {main}";
     public function __construct($message = "", $code = 0, $previous = null) {
         $this->message = $message;
         $this->code = $code;
@@ -147,8 +149,8 @@ class Exception implements Throwable {
     public function getPrevious() { return $this->previous; }
     public function getLine() { return $this->line; }
     public function getFile() { return $this->file; }
-    public function getTrace() { return []; }
-    public function getTraceAsString() { return "#0 {main}"; }
+    public function getTrace() { return $this->trace; }
+    public function getTraceAsString() { return $this->traceString; }
     public function __toString() { return $this->message; }
 }
 class Error implements Throwable {
@@ -157,6 +159,8 @@ class Error implements Throwable {
     protected $file = "";
     protected $line = 0;
     private $previous = null;
+    private $trace = [];
+    private $traceString = "#0 {main}";
     public function __construct($message = "", $code = 0, $previous = null) {
         $this->message = $message;
         $this->code = $code;
@@ -167,8 +171,8 @@ class Error implements Throwable {
     public function getPrevious() { return $this->previous; }
     public function getLine() { return $this->line; }
     public function getFile() { return $this->file; }
-    public function getTrace() { return []; }
-    public function getTraceAsString() { return "#0 {main}"; }
+    public function getTrace() { return $this->trace; }
+    public function getTraceAsString() { return $this->traceString; }
     public function __toString() { return $this->message; }
 }
 class ErrorException extends Exception {}

@@ -50,6 +50,17 @@ const HIGHER_ORDER_BUILTINS: &[&[u8]] = &[
     b"preg_quote",
 ];
 
+/// One entry of the runtime call stack (step 28). `line` is the *call site*
+/// (where this function was invoked from), `function` its name, and `class`/
+/// `is_static` describe a method (`Class->m` / `Class::m`) versus a free
+/// function (`class: None`).
+struct CallFrame {
+    class: Option<Vec<u8>>,
+    function: Vec<u8>,
+    is_static: bool,
+    line: i64,
+}
+
 /// A fresh frame of `n` independent value slots, all unset.
 ///
 /// A slot is a plain [`Zval`]; a reference is a `Zval::Ref` holding a shared
@@ -228,6 +239,7 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         enum_cache: HashMap::new(),
         created: Vec::new(),
         destructed: HashSet::new(),
+        call_stack: Vec::new(),
         magic_guard: HashSet::new(),
         file: &program.file,
         globals: fresh_slots(program.slots.len()),
@@ -327,6 +339,12 @@ struct Evaluator<'p> {
     /// Object handles whose `__destruct` has already run, guarding against a
     /// double call (step 24-2).
     destructed: HashSet<u32>,
+    /// Active call stack (step 28): one frame per user function / method
+    /// currently executing, recording the call-site line and the callee's
+    /// display name. Snapshotted into a Throwable's `trace`/`traceString` at
+    /// construction so getTrace / getTraceAsString / the uncaught renderer show
+    /// real frames.
+    call_stack: Vec<CallFrame>,
     /// Active magic-accessor guards, keyed by (object handle, accessor kind,
     /// property name). While a guard is present, a nested access of the same
     /// kind to the same property bypasses the magic method (step 22, D-22.4).
@@ -426,7 +444,7 @@ impl<'p> Evaluator<'p> {
         let file = String::from_utf8_lossy(self.file).into_owned();
         // A user-`throw`n object carries its own class, message and creation line
         // (step 20); an engine error uses its variant name and the current line.
-        let (class, message, line) = match err {
+        let (class, message, line, trace) = match err {
             PhpError::Thrown(Zval::Object(o)) => {
                 let b = o.borrow();
                 let class = String::from_utf8_lossy(b.class_name.as_bytes()).into_owned();
@@ -438,16 +456,22 @@ impl<'p> Evaluator<'p> {
                     Some(Zval::Long(n)) => *n,
                     _ => self.cur_line as i64,
                 };
-                (class, message, line)
+                // Real frames captured at construction (step 28).
+                let trace = match b.props.get(b"traceString") {
+                    Some(Zval::Str(s)) => String::from_utf8_lossy(s.as_bytes()).into_owned(),
+                    _ => "#0 {main}".to_string(),
+                };
+                (class, message, line, trace)
             }
             other => (
                 other.class_name().to_string(),
                 other.message().to_string(),
                 self.cur_line as i64,
+                "#0 {main}".to_string(),
             ),
         };
         let block = format!(
-            "\nFatal error: Uncaught {class}: {message} in {file}:{line}\nStack trace:\n#0 {{main}}\n  thrown in {file} on line {line}\n",
+            "\nFatal error: Uncaught {class}: {message} in {file}:{line}\nStack trace:\n{trace}\n  thrown in {file} on line {line}\n",
         );
         self.rendered.extend_from_slice(block.as_bytes());
     }
@@ -733,6 +757,7 @@ impl<'p> Evaluator<'p> {
             id,
             info,
         })));
+        let (trace, trace_string) = self.capture_trace();
         if let Zval::Object(o) = &value {
             let mut b = o.borrow_mut();
             b.props
@@ -740,8 +765,45 @@ impl<'p> Evaluator<'p> {
             b.props.set(b"line", Zval::Long(self.cur_line as i64));
             b.props
                 .set(b"file", Zval::Str(PhpStr::new(self.file.to_vec())));
+            b.props.set(b"trace", trace);
+            b.props
+                .set(b"traceString", Zval::Str(PhpStr::new(trace_string)));
         }
         Ok(value)
+    }
+
+    /// Snapshot the current call stack as a Throwable's `(trace array, trace
+    /// string)` (step 28). Frames are innermost-first; the final line is
+    /// `#N {main}`. The array mirrors PHP's `getTrace()` shape (file / line /
+    /// function / class / type / empty args).
+    fn capture_trace(&self) -> (Zval, Vec<u8>) {
+        let file = self.file;
+        let mut arr = PhpArray::new();
+        let mut s: Vec<u8> = Vec::new();
+        for (i, frame) in self.call_stack.iter().rev().enumerate() {
+            s.extend_from_slice(format!("#{i} ").as_bytes());
+            s.extend_from_slice(file);
+            s.extend_from_slice(format!("({}): ", frame.line).as_bytes());
+            s.extend_from_slice(&frame_display(frame));
+            s.extend_from_slice(b"()\n");
+
+            let mut fr = PhpArray::new();
+            fr.insert(Key::from_bytes(b"file"), Zval::Str(PhpStr::new(file.to_vec())));
+            fr.insert(Key::from_bytes(b"line"), Zval::Long(frame.line));
+            fr.insert(
+                Key::from_bytes(b"function"),
+                Zval::Str(PhpStr::new(frame.function.clone())),
+            );
+            if let Some(class) = &frame.class {
+                fr.insert(Key::from_bytes(b"class"), Zval::Str(PhpStr::new(class.clone())));
+                let ty: &[u8] = if frame.is_static { b"::" } else { b"->" };
+                fr.insert(Key::from_bytes(b"type"), Zval::Str(PhpStr::new(ty.to_vec())));
+            }
+            fr.insert(Key::from_bytes(b"args"), Zval::Array(Rc::new(PhpArray::new())));
+            let _ = arr.append(Zval::Array(Rc::new(fr)));
+        }
+        s.extend_from_slice(format!("#{} {{main}}", self.call_stack.len()).as_bytes());
+        (Zval::Array(Rc::new(arr)), s)
     }
 
     /// Run a loop body once and translate its control-flow signal relative to
@@ -929,7 +991,16 @@ impl<'p> Evaluator<'p> {
         let saved_names = self.local_names.replace(f.slots.as_slice());
         let saved_returns_ref = std::mem::replace(&mut self.fn_returns_ref, f.by_ref);
 
+        // Record a stack frame for the duration of the body (step 28); the
+        // call-site line is the line currently executing in the caller.
+        self.call_stack.push(CallFrame {
+            class: None,
+            function: f.name.to_vec(),
+            is_static: false,
+            line: self.cur_line as i64,
+        });
         let result = self.run_user_fn_body(f, argv);
+        self.call_stack.pop();
 
         self.locals = saved_locals;
         self.local_names = saved_names;
@@ -1604,11 +1675,16 @@ impl<'p> Evaluator<'p> {
         // time, before the constructor runs (step 20). PHP sets these from the
         // engine, not from `Exception::__construct`.
         if self.is_throwable(cid) {
+            // Capture the trace at construction (step 28), before the constructor
+            // runs — PHP snapshots the stack at `new`, not at `throw`.
+            let (trace, trace_string) = self.capture_trace();
             if let Zval::Object(o) = &value {
                 let create_line = self.cur_line as i64;
                 let mut b = o.borrow_mut();
                 b.props.set(b"line", Zval::Long(create_line));
                 b.props.set(b"file", Zval::Str(PhpStr::new(self.file.to_vec())));
+                b.props.set(b"trace", trace);
+                b.props.set(b"traceString", Zval::Str(PhpStr::new(trace_string)));
             }
         }
         // Run the constructor (inherited if not overridden); its mutations write
@@ -2297,6 +2373,15 @@ impl<'p> Evaluator<'p> {
             )));
         }
 
+        // Record a method stack frame for the body (step 28): `Class->m` for an
+        // instance call, `Class::m` for a static one. Push before `this` moves.
+        self.call_stack.push(CallFrame {
+            class: Some(self.classes[static_class].name.to_vec()),
+            function: method.to_vec(),
+            is_static: this.is_none(),
+            line: self.cur_line as i64,
+        });
+
         let frame = fresh_slots(f.slots.len());
         let saved_locals = self.locals.replace(frame);
         let saved_names = self.local_names.replace(f.slots.as_slice());
@@ -2314,6 +2399,7 @@ impl<'p> Evaluator<'p> {
         self.cur_this = saved_this;
         self.cur_class = saved_class;
         self.cur_static_class = saved_static;
+        self.call_stack.pop();
         result.map(|r| match r {
             Zval::Ref(cell) => cell.borrow().clone(),
             other => other,
@@ -4224,6 +4310,18 @@ fn place_cell(
 /// Build a PHP `$matches`-style array from regex captures: index 0 is the whole
 /// match, index n the n-th group, with unmatched groups as empty strings
 /// (step 27, numeric groups only).
+/// The `Class->method` / `Class::method` / `function` display name of a stack
+/// frame (step 28).
+fn frame_display(frame: &CallFrame) -> Vec<u8> {
+    let mut d = Vec::new();
+    if let Some(class) = &frame.class {
+        d.extend_from_slice(class);
+        d.extend_from_slice(if frame.is_static { b"::" } else { b"->" });
+    }
+    d.extend_from_slice(&frame.function);
+    d
+}
+
 fn captures_array(caps: &regex::Captures) -> Zval {
     let mut arr = PhpArray::new();
     for i in 0..caps.len() {

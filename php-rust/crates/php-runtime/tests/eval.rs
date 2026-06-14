@@ -3570,3 +3570,48 @@ fn preg_replace_callback_basic() {
         "a2b4"
     );
 }
+
+// --- Step 28: real stack-trace frames ---
+
+#[test]
+fn trace_string_nested_functions() {
+    let src = "<?php\n\
+        function a() { b(); }\n\
+        function b() { try { throw new Exception('x'); } catch (Exception $e) { echo $e->getTraceAsString(); } }\n\
+        a();\n";
+    assert_eq!(out(src), "#0 t.php(2): b()\n#1 t.php(4): a()\n#2 {main}");
+}
+
+#[test]
+fn trace_string_method() {
+    let src = "<?php\n\
+        class C {\n\
+        function m() { throw new Exception('z'); }\n\
+        }\n\
+        $c = new C();\n\
+        try { $c->m(); } catch (Exception $e) { echo $e->getTraceAsString(); }\n";
+    assert_eq!(out(src), "#0 t.php(6): C->m()\n#1 {main}");
+}
+
+#[test]
+fn get_trace_array_fields() {
+    let src = "<?php\n\
+        function a() { b(); }\n\
+        function b() { try { throw new Exception('x'); } catch (Exception $e) { \
+            $t = $e->getTrace(); echo $t[0]['function'], '@', $t[0]['line'], '|', $t[1]['function'], '@', $t[1]['line']; } }\n\
+        a();\n";
+    assert_eq!(out(src), "b@2|a@4");
+}
+
+#[test]
+fn uncaught_render_includes_frames() {
+    let src = "<?php\n\
+        function a() { b(); }\n\
+        function b() { throw new Exception('boom'); }\n\
+        a();\n";
+    let r = rendered(src);
+    assert!(
+        r.contains("Stack trace:\n#0 t.php(2): b()\n#1 t.php(4): a()\n#2 {main}\n  thrown in t.php on line 3"),
+        "rendered was:\n{r}"
+    );
+}
