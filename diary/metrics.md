@@ -20,6 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 28) | 545 |
 | Unit/integration (workspace, fine step 24) | 512 |
 | Unit/integration (workspace, fine step 23) | 497 |
 | Unit/integration (workspace, fine step 22) | 462 |
@@ -308,3 +309,52 @@ funzione sono finalizzati al boundary global racchiudente, non per statement
 interno); oggetti creati durante lo sweep di shutdown non ri-finalizzati;
 check di firma/visibilità sulla chiamata esplicita a `__destruct()`;
 `implements Stringable` senza `__toString` non è un errore compile-time da noi.
+
+## Step 25 — string interpolation
+
+`Expression::CompositeString` (prima `Unsupported`) lowerata a una catena di
+concatenazioni seeded con stringa vuota (forza il risultato a stringa). Parti:
+literal, simple (`$x`/`$a[k]`/`$o->p`), braced (`{$e}`). `Concat` onora già
+`__toString`. La chiave bareword `$a[k]` è riscritta da mago a `Identifier`
+(segnale presente solo in interpolazione) → mappata a chiave stringa. +8 test
+(512→520). Scope-out: `${name}` deprecato, heredoc indentation, backtick.
+
+## Step 26 — json_encode / json_decode
+
+`json_encode` builtin puro (php-builtins/src/json.rs): scalari, array (list →
+array JSON, assoc/sparse → oggetto con chiavi stringa), oggetti (prop pubbliche).
+Float con formato shortest-roundtrip (serialize_precision=-1) ed esponente
+minuscolo; float non-finiti e UTF-8 invalido → `false`. Flag `JSON_PRETTY_PRINT`,
+`JSON_UNESCAPED_SLASHES`, `JSON_UNESCAPED_UNICODE` (default: escape di `/` e
+non-ASCII con `\uXXXX` + surrogate pair). `json_decode` intercettato nel
+valutatore (deve costruire `stdClass`): parser recursive-descent in
+php-runtime/src/json.rs; `assoc=true` → array, default → `stdClass`; JSON invalido
+→ `null`. +10 test (520→530). Scope-out: `JSON_THROW_ON_ERROR`, depth, altri
+flag, `JsonSerializable`, `json_last_error`.
+
+## Step 27 — preg_* (regex)
+
+Modulo `preg` (php-runtime/src/preg.rs) traduce i pattern PCRE delimitati
+(`/body/flags`, delimitatori `(){}[]<>`) al crate `regex`; flag i/m/s/x mappati.
+Backreference/lookaround non supportati dal motore → il pattern non compila e la
+funzione ritorna `false`/`null` (scope-out documentato). Sei funzioni
+intercettate nel valutatore (preg_match/match_all hanno `$matches` come 3° arg
+by-ref; replace_callback ha una callable): `preg_match`, `preg_match_all`
+(PREG_PATTERN_ORDER), `preg_replace` (backref `$1`/`${1}`/`\1` tradotti),
+`preg_replace_callback`, `preg_split`, `preg_quote`. +11 test (530→541).
+Scope-out: pattern/subject array, gruppi nominati, flag PREG_*, limit/count,
+subject non-UTF-8 (match lossy), testo esatto del warning di compilazione PCRE.
+
+## Step 28 — stack-trace frames reali
+
+Call stack runtime (`Evaluator.call_stack`): `call_user_fn`/`invoke_method`
+pushano un frame (nome callee + classe/tipo + linea del call-site) per la durata
+del body. Alla costruzione di un Throwable (`eval_new` + `synthesize_throwable`)
+lo stack è snapshottato via `capture_trace` che costruisce sia l'array di
+`getTrace()` (file/line/function/class/type/args-vuoti, innermost-first) sia la
+stringa di `getTraceAsString()` (`#0 file(line): Class->m() … #N {main}`). Il
+prelude Exception/Error porta `$trace`/`$traceString` privati; i getter li
+ritornano. `render_fatal` usa il `traceString` catturato per il blocco uncaught.
+Validato byte-esatto contro l'oracle (EXPECTF `.phpt` nested-trace = pass).
++4 test (541→545). Scope-out: cattura argomenti reali (args sempre `[]`), frame
+include/require e closure, trace per errori engine fuori da una call.
