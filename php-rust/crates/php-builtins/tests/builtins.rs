@@ -1055,3 +1055,80 @@ fn print_r_enum_backed() {
         "Size Enum:int\n(\n    [name] => Big\n    [value] => 9\n)\n"
     );
 }
+
+// --- Step 26: json_encode / json_decode ---
+
+#[test]
+fn json_encode_scalars() {
+    assert_eq!(out("<?php echo json_encode(42);"), "42");
+    assert_eq!(out("<?php echo json_encode(true), json_encode(false), json_encode(null);"), "truefalsenull");
+    assert_eq!(out("<?php echo json_encode(1.5), '|', json_encode(1.0), '|', json_encode(0.1);"), "1.5|1|0.1");
+}
+
+#[test]
+fn json_encode_string_escaping() {
+    assert_eq!(out("<?php echo json_encode(\"a\\\"b/c\\n\");"), "\"a\\\"b\\/c\\n\"");
+    assert_eq!(out("<?php echo json_encode('a/b', JSON_UNESCAPED_SLASHES);"), "\"a/b\"");
+}
+
+#[test]
+fn json_encode_unicode() {
+    // é = U+00E9 -> é by default, raw with JSON_UNESCAPED_UNICODE.
+    assert_eq!(out("<?php echo json_encode(\"é\");"), "\"\\u00e9\"");
+    assert_eq!(out("<?php echo json_encode(\"é\", JSON_UNESCAPED_UNICODE);"), "\"é\"");
+}
+
+#[test]
+fn json_encode_arrays() {
+    assert_eq!(out("<?php echo json_encode([1,2,3]);"), "[1,2,3]");
+    assert_eq!(out("<?php echo json_encode([]);"), "[]");
+    assert_eq!(out("<?php echo json_encode(['a'=>1,'b'=>[2,3]]);"), "{\"a\":1,\"b\":[2,3]}");
+    assert_eq!(out("<?php echo json_encode([0=>'x',2=>'y']);"), "{\"0\":\"x\",\"2\":\"y\"}");
+}
+
+#[test]
+fn json_encode_object_public_props() {
+    assert_eq!(
+        out("<?php class C { public $x=1; public $y='z'; private $h=9; } echo json_encode(new C);"),
+        "{\"x\":1,\"y\":\"z\"}"
+    );
+}
+
+#[test]
+fn json_encode_pretty_print() {
+    assert_eq!(
+        out("<?php echo json_encode(['x'=>1], JSON_PRETTY_PRINT);"),
+        "{\n    \"x\": 1\n}"
+    );
+}
+
+#[test]
+fn json_decode_assoc_arrays() {
+    assert_eq!(out("<?php $v=json_decode('{\"a\":1,\"b\":[2,3]}', true); echo $v['a'], '|', $v['b'][1];"), "1|3");
+    assert_eq!(out("<?php $v=json_decode('[1,\"x\",true,null]', true); echo $v[0], $v[1], ($v[2]?'T':'F'), gettype($v[3]);"), "1xTNULL");
+}
+
+#[test]
+fn json_decode_scalars_and_errors() {
+    assert_eq!(out("<?php $v=json_decode('\"hi\"'); echo $v, '|', gettype($v);"), "hi|string");
+    assert_eq!(out("<?php $v=json_decode('3.14'); echo $v, '|', gettype($v);"), "3.14|double");
+    assert_eq!(out("<?php var_dump(json_decode('null'));"), "NULL\n");
+    assert_eq!(out("<?php var_dump(json_decode('not json'));"), "NULL\n");
+}
+
+#[test]
+fn json_decode_default_stdclass() {
+    assert_eq!(
+        out("<?php $o=json_decode('{\"a\":1,\"b\":\"z\"}'); echo get_class($o), '|', $o->a, $o->b;"),
+        "stdClass|1z"
+    );
+}
+
+#[test]
+fn json_encode_pretty_nested() {
+    // Matches PHP 8.5.7 byte-for-byte (4-space indent per depth).
+    assert_eq!(
+        out("<?php echo json_encode([1,2,['a'=>3]], JSON_PRETTY_PRINT);"),
+        "[\n    1,\n    2,\n    {\n        \"a\": 3\n    }\n]"
+    );
+}

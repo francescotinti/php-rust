@@ -11,6 +11,7 @@
 
 mod array;
 mod format;
+mod json;
 mod math;
 mod string;
 
@@ -29,6 +30,7 @@ pub fn registry() -> Registry {
     };
     add(b"count", array::count);
     add(b"sizeof", array::count);
+    add(b"json_encode", json::json_encode);
     add(b"array_keys", array::array_keys);
     add(b"array_values", array::array_values);
     add(b"in_array", array::in_array);

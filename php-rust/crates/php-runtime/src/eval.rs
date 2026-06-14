@@ -41,6 +41,7 @@ const HIGHER_ORDER_BUILTINS: &[&[u8]] = &[
     b"array_map",
     b"array_filter",
     b"usort",
+    b"json_decode",
 ];
 
 /// A fresh frame of `n` independent value slots, all unset.
@@ -2328,8 +2329,88 @@ impl<'p> Evaluator<'p> {
             b"array_map" => Some(self.ho_array_map(args)),
             b"array_filter" => Some(self.ho_array_filter(args)),
             b"usort" => Some(self.ho_usort(args)),
+            b"json_decode" => Some(self.ho_json_decode(args)),
             _ => None,
         }
+    }
+
+    /// `json_decode($json, $assoc = false, ...)` (step 26). Intercepted here
+    /// because the default mode builds `stdClass` objects, which needs the class
+    /// table. Returns `null` on a parse error (JSON_THROW_ON_ERROR is a
+    /// scope-out). Objects become arrays when `$assoc` is true, `stdClass`
+    /// otherwise; the `depth`/`flags` arguments are ignored.
+    fn ho_json_decode(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        let Some(first) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "json_decode() expects at least 1 argument, 0 given".to_string(),
+            ));
+        };
+        let arg0 = self.eval(first)?.deref_clone();
+        let json = self.stringify(&arg0)?;
+        let assoc = match args.get(1) {
+            Some(e) => {
+                let v = self.eval(e)?.deref_clone();
+                convert::to_bool(&v, &mut self.diags)
+            }
+            None => false,
+        };
+        match crate::json::parse(json.as_bytes()) {
+            Some(j) => Ok(self.json_to_zval(&j, assoc)),
+            None => Ok(Zval::Null),
+        }
+    }
+
+    /// Convert a parsed [`crate::json::Json`] tree into a `Zval` (step 26).
+    fn json_to_zval(&mut self, j: &crate::json::Json, assoc: bool) -> Zval {
+        use crate::json::Json;
+        match j {
+            Json::Null => Zval::Null,
+            Json::Bool(b) => Zval::Bool(*b),
+            Json::Long(n) => Zval::Long(*n),
+            Json::Double(d) => Zval::Double(*d),
+            Json::Str(s) => Zval::Str(PhpStr::new(s.clone())),
+            Json::Array(items) => {
+                let mut arr = PhpArray::new();
+                for item in items {
+                    let v = self.json_to_zval(item, assoc);
+                    let _ = arr.append(v);
+                }
+                Zval::Array(Rc::new(arr))
+            }
+            Json::Object(entries) => {
+                let fields: Vec<(Vec<u8>, Zval)> = entries
+                    .iter()
+                    .map(|(k, v)| (k.clone(), self.json_to_zval(v, assoc)))
+                    .collect();
+                if assoc {
+                    let mut arr = PhpArray::new();
+                    for (k, v) in fields {
+                        arr.insert(Key::from_bytes(&k), v);
+                    }
+                    Zval::Array(Rc::new(arr))
+                } else {
+                    self.make_stdclass(fields)
+                }
+            }
+        }
+    }
+
+    /// Build a fresh `stdClass` with the given dynamic properties (step 26).
+    fn make_stdclass(&mut self, fields: Vec<(Vec<u8>, Zval)>) -> Zval {
+        let cid = self.class_index[b"stdclass".as_slice()];
+        let class_name = PhpStr::new(self.classes[cid].name.to_vec());
+        let mut props = Props::new();
+        for (k, v) in fields {
+            props.set(&k, v);
+        }
+        let info = self.class_shape(cid);
+        let id = self.next_id();
+        let obj = Object { class_id: cid as u32, class_name, props, id, info };
+        let value = Zval::Object(Rc::new(RefCell::new(obj)));
+        if let Zval::Object(o) = &value {
+            self.created.push(o.clone());
+        }
+        value
     }
 
     /// Class-introspection builtins the evaluator answers directly because they

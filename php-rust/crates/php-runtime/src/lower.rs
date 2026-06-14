@@ -2617,6 +2617,12 @@ fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"ARRAY_FILTER_USE_BOTH" => ExprKind::Int(1),
         b"COUNT_NORMAL" => ExprKind::Int(0),
         b"COUNT_RECURSIVE" => ExprKind::Int(1),
+        // json_encode / json_decode flags (step 26).
+        b"JSON_UNESCAPED_SLASHES" => ExprKind::Int(64),
+        b"JSON_PRETTY_PRINT" => ExprKind::Int(128),
+        b"JSON_UNESCAPED_UNICODE" => ExprKind::Int(256),
+        b"JSON_THROW_ON_ERROR" => ExprKind::Int(4_194_304),
+        b"JSON_ERROR_NONE" => ExprKind::Int(0),
         // sort flags.
         b"SORT_REGULAR" => ExprKind::Int(0),
         b"SORT_NUMERIC" => ExprKind::Int(1),

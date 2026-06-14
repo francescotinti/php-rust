@@ -12,6 +12,7 @@
 pub mod builtin;
 pub mod eval;
 pub mod hir;
+pub mod json;
 pub mod lower;
 
 pub use builtin::{Builtin, BuiltinFn, BuiltinRefFn, Ctx, Registry};
