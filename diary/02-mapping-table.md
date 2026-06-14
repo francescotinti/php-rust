@@ -283,3 +283,55 @@ precision=14, serialize_precision=-1), opcache/JIT, ZTS.
    non patch a mago. Accettato?
 3. Ordine warning vs output bufferizzato: assumiamo stdout unbuffered interleaved
    (CLI default). Se i .phpt rivelano differenze, si adegua.
+
+---
+
+# Step 18 — Closures / callables (design pass)
+
+Prima feature di "funzioni come valori": funzioni anonime (`function() use(...) {}`),
+arrow function (`fn() => expr`), chiamata dinamica (`$f()`, `$a['k']()`, IIFE), callable
+stringa (`$f = 'strlen'; $f(...)`), e i builtin higher-order **array_map / array_filter /
+usort** (+ `is_callable`, `call_user_func[_array]`). Sblocca lo scope-out di step 10/17.
+Inclusi tutti e 4 gli extra opzionali (var_dump esatto, first-class callable `strlen(...)`,
+`call_user_func_array`, modi di `array_filter` → richiedono **ConstFetch**).
+
+Semantica oracle-verificata 8.5.7 (`php -n -r`): `use($x)` cattura **by value alla
+definizione**; `use(&$x)` by-ref; `fn()=>` auto-cattura **by value** (transitivo per arrow
+annidate); `gettype` → `"object"`; var_dump/print_r → `Closure Object` con `name`/`file`/`line`;
+dispatch `$f()`: Closure→invoca, stringa→user-fn poi builtin altrimenti `Call to undefined
+function nope()`, altro→`Value of type int is not callable`; array_map preserva le chiavi
+(single) e reindicizza (multi-array); array_filter senza callback = truthy, con callback
+preserva le chiavi; usort in-place by-ref, reindicizza 0..n, ritorna `true`; troppi pochi
+argomenti a una closure → `ArgumentCountError` fatale.
+
+## Decisioni (D-18.x)
+
+| ID | Costrutto | Scelta Rust | Razionale |
+|---|---|---|---|
+| D-18.1 | Valore closure | **`Zval::Closure(Rc<Closure>)`** variante dedicata (NO oggetto OOP) | Niente OOP ancora; anti-priming GoF (enum tipizzato > gerarchia). `gettype`→`"object"`, `error_type_name`→`"Closure"`. |
+| D-18.2 | Storage funzioni anonime | tabella piatta **`Program.closures: Vec<FnDecl>`** + `ExprKind::Closure{fn_idx, captures}` | Riusa l'intera macchina `FnDecl`/`run_user_fn_body`. Annidamento → tabella piatta, `fn_idx` flat. Il valore `Closure` porta `captures: Vec<(u32 dst_slot, Zval)>` (auto-contenuto: nessun parallel-array col FnDecl). |
+| D-18.3 | Cattura `use($a, &$b)` | by-val: `deref_clone` dello slot padre alla **creazione** (undef→Warning+Null); by-ref: condivide la cella (`Zval::Ref`) | Snapshot at-definition è la semantica PHP. Lo slot padre è risolto nello scope **chiamante** prima di installare lo scope della closure. |
+| D-18.4 | Arrow `fn()=>expr` | auto-cattura **by value** dei free var presenti nello scope chiusura tramite **AST walk** ∩ slot già esistenti nello scope padre; body = `return <expr>` | Distingue var del padre (catturate) da nuovi local (write interni). Euristica "lo slot esiste già nel padre" ≈ semantica PHP at-definition; var usata-ma-non-ancora-definita → Null+Warning (raro, documentato). |
+| D-18.5 | Chiamata dinamica | nuovo **`ExprKind::CallDynamic{callee, args}`**; metodo `call_value(&Zval, argv)` dispatcha Closure / stringa / errore | Copre `$f()`, `$a['k']()`, IIFE `(function(){})()`. Argomenti **by value** (by-ref ai dynamic call = scope-out). |
+| D-18.6 | Builtin higher-order | **intercettati nell'evaluator** (non nella registry): array_map, array_filter, usort, is_callable, call_user_func[_array] | L'ABI builtin `fn(&[Zval],&mut Ctx)` non ha accesso all'evaluator per invocare la callback; infilare `&mut Evaluator` in `Ctx` litiga col borrow checker. Idiomatico: metodi dell'evaluator. `usort` prende arg0 by-ref (come `sort`). Bonus: funzionano anche con registry vuota → testabili in `eval.rs`. |
+| D-18.7 | `ConstFetch` costanti named | arm di lowering `Expression::ConstantAccess` → sostituzione literal da **tabella costanti engine** (ARRAY_FILTER_USE_KEY=2/USE_BOTH=1, STR_PAD_LEFT/RIGHT/BOTH, PHP_INT_MAX/MIN/SIZE, PHP_FLOAT_*, PHP_EOL, SORT_*, COUNT_*, M_PI, true/false/null) | Sblocca i modi di `array_filter` e retro-sblocca l'ergonomia di TUTTI i builtin con flag (step 17). Backlog #3. Costante sconosciuta → resta Unsupported (no const utente). |
+| D-18.8 | Type hint `callable` | accettato, **non enforced** (lower→`None`) | Coerente con D-14.1 (hint non scalari → nessuna coercizione). Funziona già "gratis". |
+| D-18.9 | var_dump/print_r closure | formato 8.5 esatto `object(Closure)#N (3){name,file,line}` / `Closure Object(...)`; contatore object-id | Extra richiesto. `name` = `{closure:<file>:<line>}`. |
+| D-18.10 | First-class callable `strlen(...)` | produce una `Closure` che incapsula un **nome** (`ClosureKind::Named`) | Extra richiesto (sugar 8.1). var_dump mostra `object(Closure)`. |
+
+## Gruppi TDD
+
+- **18-1**: infra `Zval::Closure` + `function(){} use(...)` (by-val/by-ref) + `$f()` (`CallDynamic`/`call_value`/`call_closure`) + IIFE + `gettype`="object". Arm `Zval::Closure` nei funnel `ops`/`convert`/`zval` (non esaustivi).
+- **18-2**: arrow function + free-var walk + cattura by-value (incl. annidate).
+- **18-3**: callable stringa + `is_callable` + `call_user_func` + `call_user_func_array` + conferma hint `callable`.
+- **18-4**: `ConstFetch` + tabella costanti engine.
+- **18-5**: `array_map` (single/multi/chiavi) + `array_filter` (con/senza callback + modi via ConstFetch) + `usort`.
+- **18-6**: first-class callable `strlen(...)`.
+- **18-7**: var_dump/print_r esatto per closure + docs/metrics.
+
+## Scope-out (debito esplicito)
+
+`Closure::bind`/`bindTo`/`call`/`fromCallable` e static closures (richiedono `$this`/OOP);
+argomenti by-ref ai dynamic call (`$f(&$x)`); string-call di un builtin by-ref (`$f='sort'; $f($a)`);
+spread `...$args` negli argomenti; callable array `[$obj,'m']`/`['Cls','m']` (OOP);
+cattura by-value di var del padre usata-ma-non-ancora-definita testualmente (→ Null+Warning).
