@@ -719,6 +719,71 @@ fn sqrt_floor_ceil_round() {
     assert_eq!(out("<?php var_dump(round(1234.5, -2));"), "float(1200)\n");
 }
 
+// --- step 17-5: array (range/slice/reverse/unique/sum) ---
+
+#[test]
+fn range_int_char_and_step() {
+    assert_eq!(out("<?php echo implode(',', range(1, 5));"), "1,2,3,4,5");
+    assert_eq!(out("<?php echo implode(',', range(5, 1));"), "5,4,3,2,1"); // auto descending
+    assert_eq!(out("<?php echo implode(',', range(5, 1, 2));"), "5,3,1");
+    assert_eq!(out("<?php echo implode(',', range('a', 'e'));"), "a,b,c,d,e");
+    // Float step makes a float range.
+    assert_eq!(out("<?php var_dump(range(0, 1, 0.5));"), "array(3) {\n  [0]=>\n  float(0)\n  [1]=>\n  float(0.5)\n  [2]=>\n  float(1)\n}\n");
+}
+
+#[test]
+fn range_step_errors() {
+    match fatal("<?php range(1, 5, 0);") {
+        PhpError::ValueError(m) => assert_eq!(m, "range(): Argument #3 ($step) cannot be 0"),
+        other => panic!("expected ValueError, got {other:?}"),
+    }
+    match fatal("<?php range(1, 5, -1);") {
+        PhpError::ValueError(m) => assert_eq!(
+            m,
+            "range(): Argument #3 ($step) must be greater than 0 for increasing ranges"
+        ),
+        other => panic!("expected ValueError, got {other:?}"),
+    }
+}
+
+#[test]
+fn array_slice_offset_length_preserve() {
+    assert_eq!(out("<?php echo implode(',', array_slice([10,20,30,40], 1, 2));"), "20,30");
+    // Negative offset from the end; default reindexes int keys.
+    assert_eq!(out("<?php echo implode(',', array_slice([10,20,30,40], -2));"), "30,40");
+    // preserve_keys keeps original int keys.
+    assert_eq!(
+        out("<?php var_dump(array_slice([10,20,30], 1, null, true));"),
+        "array(2) {\n  [1]=>\n  int(20)\n  [2]=>\n  int(30)\n}\n"
+    );
+}
+
+#[test]
+fn array_reverse_and_preserve() {
+    assert_eq!(out("<?php echo implode(',', array_reverse([1,2,3]));"), "3,2,1");
+    assert_eq!(
+        out("<?php var_dump(array_reverse(['a'=>1, 2, 3], true));"),
+        "array(3) {\n  [1]=>\n  int(3)\n  [0]=>\n  int(2)\n  [\"a\"]=>\n  int(1)\n}\n"
+    );
+}
+
+#[test]
+fn array_unique_keeps_first_and_keys() {
+    // SORT_STRING: 1 and "1" compare equal, first kept; keys preserved.
+    assert_eq!(
+        out("<?php var_dump(array_unique([1, '1', 2, 2, 3]));"),
+        "array(3) {\n  [0]=>\n  int(1)\n  [2]=>\n  int(2)\n  [4]=>\n  int(3)\n}\n"
+    );
+}
+
+#[test]
+fn array_sum_int_and_float() {
+    assert_eq!(out("<?php var_dump(array_sum([1, 2, 3]));"), "int(6)\n");
+    assert_eq!(out("<?php var_dump(array_sum([1.5, 2]));"), "float(3.5)\n");
+    assert_eq!(out("<?php var_dump(array_sum([]));"), "int(0)\n");
+    assert_eq!(out("<?php var_dump(array_sum(['1', '2', 3]));"), "int(6)\n");
+}
+
 #[test]
 fn undefined_function_is_fatal_after_output() {
     let reg = registry();

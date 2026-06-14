@@ -29,6 +29,11 @@ pub fn registry() -> Registry {
     add(b"array_values", array::array_values);
     add(b"in_array", array::in_array);
     add(b"array_merge", array::array_merge);
+    add(b"range", array::range);
+    add(b"array_slice", array::array_slice);
+    add(b"array_reverse", array::array_reverse);
+    add(b"array_unique", array::array_unique);
+    add(b"array_sum", array::array_sum);
     add(b"implode", string::implode);
     add(b"join", string::implode);
     add(b"explode", string::explode);

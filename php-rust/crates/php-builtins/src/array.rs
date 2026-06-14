@@ -3,6 +3,7 @@
 use std::rc::Rc;
 
 use php_runtime::Ctx;
+use php_types::numstr::{parse_numeric_ex, Num};
 use php_types::{convert, ops, Key, PhpArray, PhpError, Zval};
 
 /// A `Key` as the `Zval` array_keys/foreach expose it: ints stay ints,
@@ -230,6 +231,210 @@ pub fn array_shift(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zva
     }
     *arr = Zval::Array(Rc::new(out));
     Ok(shifted)
+}
+
+// --- step 17-5: range / slice / reverse / unique / sum ---
+
+/// A numeric value coerced for `range`: `(value, is_float)`. `is_float` is set
+/// for genuine floats (so a float start/end/step makes a float range).
+fn range_num(v: &Zval) -> Option<(f64, bool)> {
+    match v {
+        Zval::Long(n) => Some((*n as f64, false)),
+        Zval::Double(d) => Some((*d, true)),
+        Zval::Bool(b) => Some((*b as i64 as f64, false)),
+        Zval::Str(s) => match parse_numeric_ex(s.as_bytes(), false) {
+            Some(info) if !info.trailing => Some(match info.num {
+                Num::Long(n) => (n as f64, false),
+                Num::Double(d) => (d, true),
+            }),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// range($start, $end, $step = 1): an array of values from `$start` to `$end`.
+///
+/// Numeric (int/float) or single-character mode is auto-detected; the result is
+/// a float range if any of start/end/step is a float. Direction follows
+/// start vs end; `$step` 0 is a `ValueError`, and a negative step on an
+/// increasing range is a `ValueError`.
+pub fn range(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let start = args.first().ok_or_else(|| {
+        PhpError::Error("range() expects at least 2 arguments, 0 given".to_string())
+    })?;
+    let end = args.get(1).ok_or_else(|| {
+        PhpError::Error("range() expects at least 2 arguments, 1 given".to_string())
+    })?;
+
+    // Signed step (default 1). `cannot be 0` and the increasing-range checks use
+    // the sign; magnitude drives generation.
+    let (step_val, step_float) = match args.get(2) {
+        Some(v) => range_num(v).unwrap_or((1.0, false)),
+        None => (1.0, false),
+    };
+    if step_val == 0.0 {
+        return Err(PhpError::ValueError(
+            "range(): Argument #3 ($step) cannot be 0".to_string(),
+        ));
+    }
+
+    // Character mode: both bounds are non-numeric strings (use their first byte).
+    let char_mode = matches!(start, Zval::Str(_))
+        && matches!(end, Zval::Str(_))
+        && range_num(start).is_none()
+        && range_num(end).is_none();
+
+    if char_mode {
+        let lo = byte0(start);
+        let hi = byte0(end);
+        let step = step_val.abs().max(1.0) as i64;
+        let mut out = PhpArray::new();
+        emit_int_range(&mut out, lo as i64, hi as i64, step, |n| {
+            Zval::Str(php_types::PhpStr::new(vec![n as u8]))
+        });
+        return Ok(Zval::Array(Rc::new(out)));
+    }
+
+    let (start_f, sf) = range_num(start).unwrap_or((0.0, false));
+    let (end_f, ef) = range_num(end).unwrap_or((0.0, false));
+    let is_float = sf || ef || step_float;
+
+    let increasing = start_f <= end_f;
+    if increasing && step_val < 0.0 {
+        return Err(PhpError::ValueError(
+            "range(): Argument #3 ($step) must be greater than 0 for increasing ranges".to_string(),
+        ));
+    }
+    let step = step_val.abs();
+
+    let mut out = PhpArray::new();
+    if is_float {
+        // Count-based generation avoids floating-point drift past the endpoint.
+        let n = ((end_f - start_f).abs() / step + 1e-9).floor() as i64;
+        for i in 0..=n {
+            let val = if increasing {
+                start_f + i as f64 * step
+            } else {
+                start_f - i as f64 * step
+            };
+            let _ = out.append(Zval::Double(val));
+        }
+    } else {
+        emit_int_range(&mut out, start_f as i64, end_f as i64, step as i64, Zval::Long);
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// First byte of a string `Zval` (0 if empty / not a string).
+fn byte0(v: &Zval) -> u8 {
+    match v {
+        Zval::Str(s) => s.as_bytes().first().copied().unwrap_or(0),
+        _ => 0,
+    }
+}
+
+/// Append `lo..=hi` (either direction) by `step` (>= 1), mapping each integer
+/// through `make`.
+fn emit_int_range(out: &mut PhpArray, lo: i64, hi: i64, step: i64, make: impl Fn(i64) -> Zval) {
+    let step = step.max(1);
+    if lo <= hi {
+        let mut cur = lo;
+        while cur <= hi {
+            let _ = out.append(make(cur));
+            cur += step;
+        }
+    } else {
+        let mut cur = lo;
+        while cur >= hi {
+            let _ = out.append(make(cur));
+            cur -= step;
+        }
+    }
+}
+
+/// array_slice($array, $offset, $length = null, $preserve_keys = false).
+pub fn array_slice(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let arr = arr_arg(args, "array_slice")?;
+    let entries: Vec<(Key, Zval)> = arr.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    let len = entries.len() as i64;
+    let offset = match args.get(1) {
+        Some(v) => convert::to_long_cast(v, ctx.diags),
+        None => 0,
+    };
+    let start = if offset < 0 {
+        (len + offset).max(0)
+    } else {
+        offset.min(len)
+    };
+    let end = match args.get(2) {
+        None | Some(Zval::Null) => len,
+        Some(v) => {
+            let length = convert::to_long_cast(v, ctx.diags);
+            if length < 0 {
+                (len + length).max(start)
+            } else {
+                (start + length).min(len)
+            }
+        }
+    };
+    let preserve = matches!(args.get(3), Some(v) if convert::is_true_silent(v));
+    let mut out = PhpArray::new();
+    for (k, v) in entries.into_iter().take(end as usize).skip(start as usize) {
+        push_entry(&mut out, k, v, preserve);
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// array_reverse($array, $preserve_keys = false).
+pub fn array_reverse(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let arr = arr_arg(args, "array_reverse")?;
+    let preserve = matches!(args.get(1), Some(v) if convert::is_true_silent(v));
+    let entries: Vec<(Key, Zval)> = arr.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    let mut out = PhpArray::new();
+    for (k, v) in entries.into_iter().rev() {
+        push_entry(&mut out, k, v, preserve);
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// Push `(k, v)` honouring `preserve`: when false, integer keys reindex
+/// (append) while string keys are kept; when true, every key is kept verbatim.
+fn push_entry(out: &mut PhpArray, k: Key, v: Zval, preserve: bool) {
+    match (&k, preserve) {
+        (Key::Int(_), false) => {
+            let _ = out.append(v);
+        }
+        _ => out.insert(k, v),
+    }
+}
+
+/// array_unique($array, $flags = SORT_STRING): keep the first occurrence of each
+/// distinct value (compared as a string), preserving keys and order.
+pub fn array_unique(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let arr = arr_arg(args, "array_unique")?;
+    let entries: Vec<(Key, Zval)> = arr.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    let mut seen: Vec<Vec<u8>> = Vec::new();
+    let mut out = PhpArray::new();
+    for (k, v) in entries {
+        let repr = convert::to_zstr(&v, ctx.diags).as_bytes().to_vec();
+        if !seen.contains(&repr) {
+            seen.push(repr);
+            out.insert(k, v);
+        }
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// array_sum($array): the sum of the values (int unless a float is involved;
+/// the empty array sums to int(0)).
+pub fn array_sum(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let arr = arr_arg(args, "array_sum")?;
+    let mut acc = Zval::Long(0);
+    for (_, v) in arr.iter() {
+        acc = ops::add(&acc, v, ctx.diags)?;
+    }
+    Ok(acc)
 }
 
 /// Borrow a by-reference first argument as an array, or raise the shared
