@@ -29,6 +29,12 @@ use crate::hir::{
     Program, ScalarType, Slot, Stmt, StmtKind, TypeHint, UnOp,
 };
 
+/// Builtins the evaluator implements directly because they invoke a callback
+/// (step 18, D-18.6). They are dispatched ahead of the registry and are treated
+/// as callable names by `is_callable`. (`array_map`/`array_filter`/`usort` join
+/// this list in step 18-5.)
+const HIGHER_ORDER_BUILTINS: &[&[u8]] = &[b"is_callable", b"call_user_func", b"call_user_func_array"];
+
 /// A fresh frame of `n` independent value slots, all unset.
 ///
 /// A slot is a plain [`Zval`]; a reference is a `Zval::Ref` holding a shared
@@ -953,6 +959,88 @@ impl<'p> Evaluator<'p> {
         })
     }
 
+    /// Dispatch a higher-order builtin that the evaluator implements directly
+    /// (step 18, D-18.6). Returns `None` for a name we do not intercept, so the
+    /// caller falls through to the ordinary registry lookup.
+    fn dispatch_higher_order(
+        &mut self,
+        name: &[u8],
+        args: &[Expr],
+    ) -> Option<Result<Zval, PhpError>> {
+        match name {
+            b"is_callable" => Some(self.ho_is_callable(args)),
+            b"call_user_func" => Some(self.ho_call_user_func(args)),
+            b"call_user_func_array" => Some(self.ho_call_user_func_array(args)),
+            _ => None,
+        }
+    }
+
+    /// Whether a function *name* resolves to something callable: a user function,
+    /// a registered builtin, or a higher-order builtin the evaluator intercepts.
+    fn is_name_callable(&self, name: &[u8]) -> bool {
+        self.fn_index.contains_key(&name.to_ascii_lowercase())
+            || self.reg.contains_key(name)
+            || HIGHER_ORDER_BUILTINS.contains(&name)
+    }
+
+    /// `is_callable($value)` (step 18). Closures are callable; a string is
+    /// callable iff it names a function; everything else (arrays/OOP callables
+    /// are a scope-out) is not.
+    fn ho_is_callable(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        let Some(first) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "is_callable() expects at least 1 argument, 0 given".to_string(),
+            ));
+        };
+        let v = self.eval(first)?.deref_clone();
+        let callable = match &v {
+            Zval::Closure(_) => true,
+            Zval::Str(s) => self.is_name_callable(s.as_bytes()),
+            _ => false,
+        };
+        Ok(Zval::Bool(callable))
+    }
+
+    /// `call_user_func($callable, ...$args)` (step 18): the remaining arguments
+    /// are forwarded by value to the callable.
+    fn ho_call_user_func(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        let Some((callee_expr, rest)) = args.split_first() else {
+            return Err(PhpError::ArgumentCountError(
+                "call_user_func() expects at least 1 argument, 0 given".to_string(),
+            ));
+        };
+        let callee = self.eval(callee_expr)?.deref_clone();
+        let mut argv = Vec::with_capacity(rest.len());
+        for a in rest {
+            argv.push(self.eval(a)?);
+        }
+        self.call_value(callee, argv)
+    }
+
+    /// `call_user_func_array($callable, $args)` (step 18): the second argument is
+    /// an array whose *values* become the positional arguments (string-keyed
+    /// named arguments are a scope-out).
+    fn ho_call_user_func_array(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        if args.len() < 2 {
+            return Err(PhpError::ArgumentCountError(format!(
+                "call_user_func_array() expects exactly 2 arguments, {} given",
+                args.len()
+            )));
+        }
+        let callee = self.eval(&args[0])?.deref_clone();
+        let arr = self.eval(&args[1])?.deref_clone();
+        let argv: Vec<Zval> = match arr {
+            Zval::Array(a) => a.iter().map(|(_, v)| v.deref_clone()).collect(),
+            other => {
+                return Err(PhpError::TypeError(format!(
+                    "call_user_func_array(): Argument #2 ($args) must be of type array, {} given",
+                    other.error_type_name()
+                )))
+            }
+        };
+        self.call_value(callee, argv)
+    }
+
     // --- expressions ---
 
     /// Evaluate `e`, stamping its line for any diagnostics it raises and flushing
@@ -1120,6 +1208,12 @@ impl<'p> Evaluator<'p> {
                         Zval::Ref(cell) => cell.borrow().clone(),
                         other => other,
                     });
+                }
+                // Higher-order builtins need to invoke a callback, so they are
+                // run by the evaluator itself rather than the (pure) registry
+                // (step 18, D-18.6). They take precedence over the registry.
+                if let Some(res) = self.dispatch_higher_order(name, args) {
+                    return res;
                 }
                 // A by-reference builtin (array_push/sort/...) binds its first
                 // argument's variable cell rather than a copy, so it is handled

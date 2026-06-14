@@ -805,3 +805,21 @@ fn closure_gettype_is_object() {
     assert_eq!(out("<?php $f = function(){}; echo gettype($f);"), "object");
     assert_eq!(out("<?php $f = function($x){ return $x; }; echo gettype($f);"), "object");
 }
+
+// --- step 18-3: string callables / call_user_func / is_callable on builtins ---
+
+#[test]
+fn string_callable_to_builtin() {
+    assert_eq!(out("<?php $f = 'strlen'; echo $f('hello');"), "5");
+}
+
+#[test]
+fn call_user_func_to_builtin() {
+    assert_eq!(out("<?php echo call_user_func('strlen', 'abcd');"), "4");
+}
+
+#[test]
+fn is_callable_builtin_name() {
+    assert_eq!(out("<?php echo is_callable('strlen') ? 'y' : 'n';"), "y");
+    assert_eq!(out("<?php echo is_callable('definitely_not_a_fn') ? 'y' : 'n';"), "n");
+}

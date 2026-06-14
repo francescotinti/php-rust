@@ -1333,3 +1333,61 @@ fn arrow_returns_closure_that_captures() {
         "105"
     );
 }
+
+// --- step 18-3: string callables, is_callable, call_user_func[_array] ---
+
+#[test]
+fn string_callable_to_user_function() {
+    assert_eq!(
+        out("<?php function inc($x){ return $x + 1; } $f = 'inc'; echo $f(5);"),
+        "6"
+    );
+}
+
+#[test]
+fn call_user_func_with_closure() {
+    assert_eq!(out("<?php echo call_user_func(fn($x) => $x * 2, 21);"), "42");
+}
+
+#[test]
+fn call_user_func_with_user_function_name() {
+    assert_eq!(
+        out("<?php function dbl($x){ return $x * 2; } echo call_user_func('dbl', 21);"),
+        "42"
+    );
+}
+
+#[test]
+fn call_user_func_array_with_closure() {
+    assert_eq!(
+        out("<?php echo call_user_func_array(fn($a, $b) => $a + $b, [3, 4]);"),
+        "7"
+    );
+}
+
+#[test]
+fn is_callable_closure_and_non_callable() {
+    assert_eq!(out("<?php echo is_callable(fn() => 1) ? 'y' : 'n';"), "y");
+    assert_eq!(
+        out("<?php $f = function(){}; echo is_callable($f) ? 'y' : 'n';"),
+        "y"
+    );
+    assert_eq!(out("<?php echo is_callable(5) ? 'y' : 'n';"), "n");
+    assert_eq!(out("<?php echo is_callable('nope_xyz') ? 'y' : 'n';"), "n");
+}
+
+#[test]
+fn is_callable_user_function_name() {
+    assert_eq!(
+        out("<?php function foo(){} echo is_callable('foo') ? 'y' : 'n';"),
+        "y"
+    );
+}
+
+#[test]
+fn callable_type_hint_accepts_closure() {
+    assert_eq!(
+        out("<?php function apply(callable $f, $v){ return $f($v); } echo apply(fn($x) => $x * 3, 4);"),
+        "12"
+    );
+}
