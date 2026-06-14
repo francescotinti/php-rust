@@ -2448,6 +2448,14 @@ impl<'p> Evaluator<'p> {
         }
     }
 
+    /// Evaluate an optional `preg_*` flags argument to an int (0 when absent).
+    fn preg_flags(&mut self, arg: Option<&Expr>) -> Result<i64, PhpError> {
+        match arg {
+            Some(e) => Ok(convert::to_long_cast(&self.eval(e)?.deref_clone(), &mut self.diags)),
+            None => Ok(0),
+        }
+    }
+
     /// `preg_match($pattern, $subject, &$matches = null)` (step 27): returns 1 on
     /// a match, 0 on none, `false` on a bad pattern. `$matches[0]` is the whole
     /// match, `$matches[n]` the n-th group (numeric groups only).
@@ -2462,9 +2470,10 @@ impl<'p> Evaluator<'p> {
         let Some(re) = crate::preg::compile(&pat) else {
             return Ok(Zval::Bool(false));
         };
+        let flags = self.preg_flags(args.get(3))?;
         let subj = String::from_utf8_lossy(&subject);
         let (ret, matches) = match re.captures(&subj) {
-            Some(caps) => (1, captures_array(&caps)),
+            Some(caps) => (1, captures_array(&re, &caps, flags)),
             None => (0, Zval::Array(Rc::new(PhpArray::new()))),
         };
         if let Some(out) = args.get(2) {
@@ -2487,21 +2496,42 @@ impl<'p> Evaluator<'p> {
         let Some(re) = crate::preg::compile(&pat) else {
             return Ok(Zval::Bool(false));
         };
+        let flags = self.preg_flags(args.get(3))?;
         let subj = String::from_utf8_lossy(&subject);
-        let ngroups = re.captures_len();
-        let mut cols: Vec<PhpArray> = (0..ngroups).map(|_| PhpArray::new()).collect();
+        let offset = flags & PREG_OFFSET_CAPTURE != 0;
+        let as_null = flags & PREG_UNMATCHED_AS_NULL != 0;
         let mut count: i64 = 0;
-        for caps in re.captures_iter(&subj) {
-            count += 1;
-            for (g, col) in cols.iter_mut().enumerate() {
-                let s = caps.get(g).map(|m| m.as_str()).unwrap_or("");
-                let _ = col.append(Zval::Str(PhpStr::new(s.as_bytes().to_vec())));
+
+        let outer = if flags & PREG_SET_ORDER != 0 {
+            // One entry per match, each a full $matches array.
+            let mut outer = PhpArray::new();
+            for caps in re.captures_iter(&subj) {
+                count += 1;
+                let _ = outer.append(captures_array(&re, &caps, flags));
             }
-        }
-        let mut outer = PhpArray::new();
-        for col in cols {
-            let _ = outer.append(Zval::Array(Rc::new(col)));
-        }
+            outer
+        } else {
+            // PREG_PATTERN_ORDER: one column per group (with named keys), each
+            // the array of that group's value across all matches.
+            let ngroups = re.captures_len();
+            let names: Vec<Option<&str>> = re.capture_names().collect();
+            let mut cols: Vec<PhpArray> = (0..ngroups).map(|_| PhpArray::new()).collect();
+            for caps in re.captures_iter(&subj) {
+                count += 1;
+                for (g, col) in cols.iter_mut().enumerate() {
+                    let _ = col.append(capture_value(caps.get(g), offset, as_null));
+                }
+            }
+            let mut outer = PhpArray::new();
+            for (g, col) in cols.into_iter().enumerate() {
+                let col_z = Zval::Array(Rc::new(col));
+                if let Some(Some(name)) = names.get(g) {
+                    outer.insert(Key::from_bytes(name.as_bytes()), col_z.clone());
+                }
+                outer.insert(Key::Int(g as i64), col_z);
+            }
+            outer
+        };
         if let Some(out) = args.get(2) {
             self.write_out_param(out, Zval::Array(Rc::new(outer)));
         }
@@ -2553,7 +2583,7 @@ impl<'p> Evaluator<'p> {
             .captures_iter(&subj)
             .map(|caps| {
                 let m0 = caps.get(0).unwrap();
-                (m0.start(), m0.end(), captures_array(&caps))
+                (m0.start(), m0.end(), captures_array(&re, &caps, 0))
             })
             .collect();
         for (start, end, match_arr) in hits {
@@ -2577,14 +2607,50 @@ impl<'p> Evaluator<'p> {
         }
         let pat = self.preg_str(&args[0])?;
         let subject = self.preg_str(&args[1])?;
+        let limit = match args.get(2) {
+            Some(e) => convert::to_long_cast(&self.eval(e)?.deref_clone(), &mut self.diags),
+            None => -1,
+        };
+        let flags = self.preg_flags(args.get(3))?;
         let Some(re) = crate::preg::compile(&pat) else {
             return Ok(Zval::Bool(false));
         };
-        let subj = String::from_utf8_lossy(&subject);
+        let no_empty = flags & 1 != 0;
+        let delim_capture = flags & 2 != 0;
+        let offset_capture = flags & 4 != 0;
+        let subj = String::from_utf8_lossy(&subject).into_owned();
         let mut arr = PhpArray::new();
-        for part in re.split(&subj) {
-            let _ = arr.append(Zval::Str(PhpStr::new(part.as_bytes().to_vec())));
+        let mut last = 0usize;
+        // A positive limit caps the piece count; the last piece keeps the rest.
+        let push = |arr: &mut PhpArray, text: &str, off: usize| {
+            if no_empty && text.is_empty() {
+                return;
+            }
+            if offset_capture {
+                let _ = arr.append(offset_pair(
+                    Zval::Str(PhpStr::new(text.as_bytes().to_vec())),
+                    off as i64,
+                ));
+            } else {
+                let _ = arr.append(Zval::Str(PhpStr::new(text.as_bytes().to_vec())));
+            }
+        };
+        for (idx, caps) in re.captures_iter(&subj).enumerate() {
+            let m0 = caps.get(0).unwrap();
+            if limit > 0 && idx as i64 + 1 >= limit {
+                break;
+            }
+            push(&mut arr, &subj[last..m0.start()], last);
+            if delim_capture {
+                for g in 1..caps.len() {
+                    if let Some(mm) = caps.get(g) {
+                        push(&mut arr, mm.as_str(), mm.start());
+                    }
+                }
+            }
+            last = m0.end();
         }
+        push(&mut arr, &subj[last..], last);
         Ok(Zval::Array(Rc::new(arr)))
     }
 
@@ -4347,13 +4413,74 @@ fn frame_display(frame: &CallFrame) -> Vec<u8> {
     d
 }
 
-fn captures_array(caps: &regex::Captures) -> Zval {
+/// `PREG_OFFSET_CAPTURE`.
+const PREG_OFFSET_CAPTURE: i64 = 256;
+/// `PREG_UNMATCHED_AS_NULL`.
+const PREG_UNMATCHED_AS_NULL: i64 = 512;
+/// `PREG_SET_ORDER`.
+const PREG_SET_ORDER: i64 = 2;
+
+/// Build one match's `$matches` array. Named groups are emitted as the name key
+/// immediately followed by their numeric index (PHP order). With
+/// `PREG_OFFSET_CAPTURE` each value becomes a `[string, byte-offset]` pair; with
+/// `PREG_UNMATCHED_AS_NULL` unmatched groups are `null` and every group is kept,
+/// otherwise trailing unmatched groups are dropped.
+fn captures_array(re: &regex::Regex, caps: &regex::Captures, flags: i64) -> Zval {
+    let offset = flags & PREG_OFFSET_CAPTURE != 0;
+    let as_null = flags & PREG_UNMATCHED_AS_NULL != 0;
+    let names: Vec<Option<&str>> = re.capture_names().collect();
+    let limit = if as_null {
+        caps.len().saturating_sub(1)
+    } else {
+        (0..caps.len())
+            .rev()
+            .find(|&i| caps.get(i).is_some())
+            .unwrap_or(0)
+    };
     let mut arr = PhpArray::new();
-    for i in 0..caps.len() {
-        let s = caps.get(i).map(|m| m.as_str()).unwrap_or("");
-        let _ = arr.append(Zval::Str(PhpStr::new(s.as_bytes().to_vec())));
+    for i in 0..=limit {
+        let val = capture_value(caps.get(i), offset, as_null);
+        if let Some(Some(name)) = names.get(i) {
+            arr.insert(Key::from_bytes(name.as_bytes()), val.clone());
+        }
+        arr.insert(Key::Int(i as i64), val);
     }
     Zval::Array(Rc::new(arr))
+}
+
+/// A single capture group's value, honouring `PREG_OFFSET_CAPTURE` /
+/// `PREG_UNMATCHED_AS_NULL`.
+fn capture_value(m: Option<regex::Match>, offset: bool, as_null: bool) -> Zval {
+    match m {
+        Some(mm) => {
+            let s = Zval::Str(PhpStr::new(mm.as_str().as_bytes().to_vec()));
+            if offset {
+                offset_pair(s, mm.start() as i64)
+            } else {
+                s
+            }
+        }
+        None => {
+            let base = if as_null {
+                Zval::Null
+            } else {
+                Zval::Str(PhpStr::new(Vec::new()))
+            };
+            if offset {
+                offset_pair(base, -1)
+            } else {
+                base
+            }
+        }
+    }
+}
+
+/// `[value, offset]` pair for `PREG_OFFSET_CAPTURE`.
+fn offset_pair(value: Zval, off: i64) -> Zval {
+    let mut a = PhpArray::new();
+    let _ = a.append(value);
+    let _ = a.append(Zval::Long(off));
+    Zval::Array(Rc::new(a))
 }
 
 fn unset_into(target: &mut Zval, steps: &[Step]) {

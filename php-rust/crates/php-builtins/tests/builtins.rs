@@ -1359,3 +1359,63 @@ fn object_cast_object_is_identity() {
         "bool(true)\n"
     );
 }
+
+// --- Step 31: preg named groups + PREG_* flags -----------------------------
+
+#[test]
+fn preg_match_named_groups() {
+    // Named groups appear as the name key followed by the numeric index.
+    assert_eq!(
+        out("<?php preg_match('/(?<y>\\d{4})-(?<m>\\d{2})/', '2026-06', $mm); var_dump($mm);"),
+        "array(5) {\n  [0]=>\n  string(7) \"2026-06\"\n  [\"y\"]=>\n  string(4) \"2026\"\n  [1]=>\n  string(4) \"2026\"\n  [\"m\"]=>\n  string(2) \"06\"\n  [2]=>\n  string(2) \"06\"\n}\n"
+    );
+}
+
+#[test]
+fn preg_match_offset_capture() {
+    assert_eq!(
+        out("<?php preg_match('/(\\d+)/', 'ab123cd', $mm, PREG_OFFSET_CAPTURE); echo $mm[0][0], '@', $mm[0][1];"),
+        "123@2"
+    );
+}
+
+#[test]
+fn preg_match_trailing_unmatched_omitted() {
+    // An unmatched trailing group is dropped from $matches by default.
+    assert_eq!(
+        out("<?php preg_match('/(a)(b)?/', 'a', $mm); echo count($mm), '|', isset($mm[2]) ? 'Y' : 'N';"),
+        "2|N"
+    );
+}
+
+#[test]
+fn preg_match_unmatched_as_null() {
+    assert_eq!(
+        out("<?php preg_match('/(a)(b)?/', 'a', $mm, PREG_UNMATCHED_AS_NULL); var_dump($mm[2]);"),
+        "NULL\n"
+    );
+}
+
+#[test]
+fn preg_match_all_set_order() {
+    assert_eq!(
+        out("<?php preg_match_all('/(\\w)(\\d)/', 'a1b2', $mm, PREG_SET_ORDER); echo $mm[0][0], $mm[0][1], $mm[0][2], '/', $mm[1][0], $mm[1][1], $mm[1][2];"),
+        "a1a1/b2b2"
+    );
+}
+
+#[test]
+fn preg_split_no_empty() {
+    assert_eq!(
+        out("<?php $r = preg_split('/,/', 'a,,b', -1, PREG_SPLIT_NO_EMPTY); echo count($r), ':', $r[0], $r[1];"),
+        "2:ab"
+    );
+}
+
+#[test]
+fn preg_split_delim_capture() {
+    assert_eq!(
+        out("<?php $r = preg_split('/(,)/', 'a,b', -1, PREG_SPLIT_DELIM_CAPTURE); echo implode('|', $r);"),
+        "a|,|b"
+    );
+}

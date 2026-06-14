@@ -2840,6 +2840,14 @@ fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"JSON_UNESCAPED_UNICODE" => ExprKind::Int(256),
         b"JSON_THROW_ON_ERROR" => ExprKind::Int(4_194_304),
         b"JSON_ERROR_NONE" => ExprKind::Int(0),
+        // preg flags (step 31).
+        b"PREG_PATTERN_ORDER" => ExprKind::Int(1),
+        b"PREG_SET_ORDER" => ExprKind::Int(2),
+        b"PREG_OFFSET_CAPTURE" => ExprKind::Int(256),
+        b"PREG_UNMATCHED_AS_NULL" => ExprKind::Int(512),
+        b"PREG_SPLIT_NO_EMPTY" => ExprKind::Int(1),
+        b"PREG_SPLIT_DELIM_CAPTURE" => ExprKind::Int(2),
+        b"PREG_SPLIT_OFFSET_CAPTURE" => ExprKind::Int(4),
         // sort flags.
         b"SORT_REGULAR" => ExprKind::Int(0),
         b"SORT_NUMERIC" => ExprKind::Int(1),
