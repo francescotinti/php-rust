@@ -153,6 +153,17 @@ riciclati (closure effimere numerano più alto di PHP); first-class callable di 
 builtin senza array `parameter` (manca la signature → P differisce di 1);
 `uasort`/`uksort`/`array_walk`/`array_reduce`; user `const`/`define()`.
 
+**Divergenza var_dump catturanti (scoperta dal corpus, debito noto):** PHP 8.5
+aggiunge una pseudo-proprietà `["static"]` con l'array delle variabili catturate
+(`use`/arrow) — es. `object(Closure)#N (4){ name, file, line, static }`. La nostra
+var_dump mostra solo `(3)` (name/file/line) per le closure catturanti. Ometterla è
+deliberato: renderla richiede un recursion-guard in `dump` (una closure che cattura
+sé stessa per riferimento — `use(&$f)` — andrebbe in loop infinito; PHP stampa
+`*RECURSION*`). Rivedere insieme al recursion-tracking generale di var_dump.
+Validazione corpus: `Zend/tests/closures` ora gira (6 pass / 5 fail / 124 skip;
+i 5 fail sono `["static"]` mancante o il nome-file sintetico `test.phpt` del
+harness, non regressioni) — prima dello step 18 erano tutti skip "unsupported".
+
 ## Step 11 — reference semantics (a livello di variabile)
 
 Reference `&` portate in tre sotto-step TDD (+17 test, 168 → 185), tutte

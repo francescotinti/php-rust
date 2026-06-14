@@ -346,4 +346,6 @@ Tutti e 7 i gruppi TDD shippati come da design (design `d9c6fed`; 18-1 `9a556ff`
 D-18.8 confermata "gratis": il hint `callable` lowering→`None` passa il valore senza
 enforcement. Object→string di una closure: PHP fa un fatal `Error`, il funnel
 infallibile `to_zstr` emette invece un Warning + placeholder (edge non testato,
-rivedere con OOP).
+rivedere con OOP). **Terza divergenza var_dump (corpus):** PHP aggiunge `["static"]`
+con le variabili catturate per le closure con `use`/arrow — omessa (richiede
+recursion-guard per `use(&$f)`); dettaglio in `diary/metrics.md` § Step 18.
