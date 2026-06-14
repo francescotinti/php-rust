@@ -16,7 +16,7 @@
 //! is curated to warning-free scripts.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use php_types::{
@@ -218,6 +218,7 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         cur_static_class: None,
         static_props: HashMap::new(),
         class_shapes: HashMap::new(),
+        magic_guard: HashSet::new(),
         file: &program.file,
         globals: fresh_slots(program.slots.len()),
         locals: None,
@@ -297,6 +298,10 @@ struct Evaluator<'p> {
     /// Cache of per-class property-visibility shapes for object dumping, built on
     /// first instantiation and shared by all instances (step 19-7, D-19.20).
     class_shapes: HashMap<ClassId, Rc<ObjectInfo>>,
+    /// Active magic-accessor guards, keyed by (object handle, accessor kind,
+    /// property name). While a guard is present, a nested access of the same
+    /// kind to the same property bypasses the magic method (step 22, D-22.4).
+    magic_guard: HashSet<(u32, MagicAccess, Vec<u8>)>,
     /// Script file name, reproduced in rendered diagnostics (`... in <file>`).
     file: &'p [u8],
     /// The script-global frame (always present) and the active local overlay
@@ -333,6 +338,18 @@ struct Evaluator<'p> {
     /// `eval` / `exec_stmt`; on the error path it is intentionally *not* restored,
     /// so it still points at the throwing node when the fatal is rendered.
     cur_line: Line,
+}
+
+/// Which magic property accessor is currently running for an object/property,
+/// used to suppress re-entry (step 22, D-22.4). Mirrors Zend's per-property
+/// guard bits: `$this->p` inside `__get('p')` hits the real property, not a
+/// nested `__get`, but a nested `__set('p')` is still allowed.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum MagicAccess {
+    Get,
+    Set,
+    Isset,
+    Unset,
 }
 
 /// What a loop should do after running its body once.
@@ -527,7 +544,7 @@ impl<'p> Evaluator<'p> {
             StmtKind::Unset(places) => {
                 for p in places {
                     let steps = self.resolve_steps(p)?;
-                    self.check_first_prop_write(p.base, &steps)?;
+                    self.check_first_prop_write(p.base, &steps, MagicAccess::Unset, b"__unset")?;
                     self.unset_place(p.base, &steps);
                 }
             }
@@ -1437,10 +1454,22 @@ impl<'p> Evaluator<'p> {
 
     /// If the first place step is a property, enforce its visibility against the
     /// object the base designates (write/unset contexts), step 19-3. Deeper
-    /// properties in a chain are not checked (19-3 simplification).
-    fn check_first_prop_write(&self, base: PlaceBase, steps: &[Step]) -> Result<(), PhpError> {
+    /// properties in a chain are not checked (19-3 simplification). When a magic
+    /// accessor (`__set`/`__unset`) will handle a missing-or-inaccessible
+    /// property, the visibility error is suppressed so the magic call can run
+    /// (step 22, D-22.2).
+    fn check_first_prop_write(
+        &self,
+        base: PlaceBase,
+        steps: &[Step],
+        kind: MagicAccess,
+        magic_name: &[u8],
+    ) -> Result<(), PhpError> {
         if let Some(Step::Prop(name)) = steps.first() {
             if let Zval::Object(o) = self.base_clone(base) {
+                if self.magic_prop_method(&o, name, kind, magic_name).is_some() {
+                    return Ok(());
+                }
                 let cid = o.borrow().class_id as usize;
                 return self.check_prop_access(cid, name);
             }
@@ -1652,12 +1681,61 @@ impl<'p> Evaluator<'p> {
         }
     }
 
-    /// Read property `name` from a value (step 19, D-19.8). Enforces visibility on
-    /// a declared property; a missing property or non-object receiver warns and
-    /// yields NULL, matching PHP.
+    /// Decide whether a magic property accessor of `kind` (`__get`/`__set`/…)
+    /// should run for `name` on object `o` instead of direct access (step 22,
+    /// D-22.2/D-22.4). A magic call applies when the property is missing or not
+    /// visible from the current scope, the class defines the accessor, and no
+    /// same-kind guard is already active. Returns `(defining class, object class,
+    /// object handle, method)` to invoke, or `None` for direct access.
+    fn magic_prop_method(
+        &self,
+        o: &Rc<RefCell<Object>>,
+        name: &[u8],
+        kind: MagicAccess,
+        magic_name: &[u8],
+    ) -> Option<(ClassId, ClassId, u32, &'p MethodDecl)> {
+        let (obj_cid, oid, present, accessible) = {
+            let obj = o.borrow();
+            let cid = obj.class_id as usize;
+            let accessible = match self.resolve_prop_decl(cid, name) {
+                Some((vis, dc)) => self.visible_from(vis, dc),
+                None => true,
+            };
+            (cid, obj.id, obj.props.contains(name), accessible)
+        };
+        if present && accessible {
+            return None;
+        }
+        if self.magic_guard.contains(&(oid, kind, name.to_vec())) {
+            return None;
+        }
+        let (defc, m) = self.resolve_method(obj_cid, magic_name)?;
+        Some((defc, obj_cid, oid, m))
+    }
+
+    /// Read property `name` from a value (step 19, D-19.8; step 22 `__get`).
+    /// Enforces visibility on a declared property; a missing or inaccessible
+    /// property routes to `__get` if defined, else warns and yields NULL.
     fn read_property(&mut self, recv: &Zval, name: &[u8]) -> Result<Zval, PhpError> {
         match recv {
             Zval::Object(o) => {
+                if let Some((defc, obj_cid, oid, m)) =
+                    self.magic_prop_method(o, name, MagicAccess::Get, b"__get")
+                {
+                    let key = (oid, MagicAccess::Get, name.to_vec());
+                    self.magic_guard.insert(key.clone());
+                    let arg = Zval::Str(PhpStr::new(name.to_vec()));
+                    let r = self.invoke_method(
+                        Some(recv.clone()),
+                        defc,
+                        obj_cid,
+                        m,
+                        b"__get",
+                        vec![arg],
+                    );
+                    self.magic_guard.remove(&key);
+                    return r;
+                }
                 let cid = o.borrow().class_id as usize;
                 self.check_prop_access(cid, name)?;
                 let obj = o.borrow();
@@ -2326,7 +2404,7 @@ impl<'p> Evaluator<'p> {
 
             ExprKind::IncDecPlace { place, inc, pre } => {
                 let steps = self.resolve_steps(place)?;
-                self.check_first_prop_write(place.base, &steps)?;
+                self.check_first_prop_write(place.base, &steps, MagicAccess::Set, b"__set")?;
                 let mut val = match self.read_place_value(place.base, &steps)? {
                     Zval::Undef => Zval::Null,
                     v => v,
@@ -2488,7 +2566,7 @@ impl<'p> Evaluator<'p> {
                 // (so `$a[f()][g()] = h()` runs f, g, then h). Resolve the place
                 // steps first to match — and stay consistent with AssignOpPlace.
                 let steps = self.resolve_steps(place)?;
-                self.check_first_prop_write(place.base, &steps)?;
+                self.check_first_prop_write(place.base, &steps, MagicAccess::Set, b"__set")?;
                 let value = self.eval(rhs)?;
                 self.write_place(place.base, &steps, value.clone())?;
                 Ok(value)
@@ -2496,7 +2574,7 @@ impl<'p> Evaluator<'p> {
 
             ExprKind::AssignOpPlace(op, place, rhs) => {
                 let steps = self.resolve_steps(place)?;
-                self.check_first_prop_write(place.base, &steps)?;
+                self.check_first_prop_write(place.base, &steps, MagicAccess::Set, b"__set")?;
                 let cur = self.read_place_value(place.base, &steps)?;
                 let rv = self.eval(rhs)?;
                 let res = self.apply_binop(*op, cur, rv)?;
@@ -2506,7 +2584,7 @@ impl<'p> Evaluator<'p> {
 
             ExprKind::AssignCoalescePlace(place, rhs) => {
                 let steps = self.resolve_steps(place)?;
-                self.check_first_prop_write(place.base, &steps)?;
+                self.check_first_prop_write(place.base, &steps, MagicAccess::Set, b"__set")?;
                 match self.silent_get(place.base, &steps) {
                     Some(v) if !matches!(v, Zval::Null | Zval::Undef) => Ok(v),
                     _ => {
@@ -2999,6 +3077,23 @@ impl<'p> Evaluator<'p> {
             return Err(PhpError::Error(
                 "Using $this when not in object context".to_string(),
             ));
+        }
+        // Magic `__set` for a single trailing property write on an object whose
+        // property is missing or inaccessible (step 22, D-22.1/D-22.2).
+        if let [Step::Prop(name)] = steps {
+            let recv = self.base_clone(base);
+            if let Zval::Object(o) = &recv {
+                if let Some((defc, obj_cid, oid, m)) =
+                    self.magic_prop_method(o, name, MagicAccess::Set, b"__set")
+                {
+                    let key = (oid, MagicAccess::Set, name.to_vec());
+                    self.magic_guard.insert(key.clone());
+                    let argv = vec![Zval::Str(PhpStr::new(name.to_vec())), value];
+                    let r = self.invoke_method(Some(recv.clone()), defc, obj_cid, m, b"__set", argv);
+                    self.magic_guard.remove(&key);
+                    return r.map(|_| ());
+                }
+            }
         }
         if steps.is_empty() {
             // Write-through any reference cell, like `slot_set` (D-R3).

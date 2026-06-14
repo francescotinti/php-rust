@@ -2590,3 +2590,86 @@ fn trait_is_not_a_type_for_instanceof() {
         "n"
     );
 }
+
+// --- step 22-1: __get / __set ---
+
+#[test]
+fn magic_set_then_get() {
+    // __set doubles the stored value, so the output distinguishes the magic path
+    // from a plain dynamic property (which would echo 5).
+    assert_eq!(
+        out("<?php class C { private $d = []; \
+             function __get($n){ return $this->d[$n] ?? null; } \
+             function __set($n,$v){ $this->d[$n] = $v * 2; } } \
+             $c = new C(); $c->foo = 5; echo $c->foo;"),
+        "10"
+    );
+}
+
+#[test]
+fn magic_get_not_called_for_accessible_existing_prop() {
+    // A real, accessible property is read directly — no __get.
+    assert_eq!(
+        out("<?php class C { public $real = 'R'; \
+             function __get($n){ return 'magic'; } } \
+             $c = new C(); echo $c->real;"),
+        "R"
+    );
+}
+
+#[test]
+fn magic_get_for_inaccessible_private_from_outside() {
+    // A private property read from outside the class routes to __get.
+    assert_eq!(
+        out("<?php class C { private $secret = 'hidden'; \
+             function __get($n){ return 'g:' . $n; } } \
+             $c = new C(); echo $c->secret;"),
+        "g:secret"
+    );
+}
+
+#[test]
+fn magic_set_for_inaccessible_private_from_outside() {
+    assert_eq!(
+        out("<?php class C { private $secret = 'hidden'; public $log = ''; \
+             function __set($n,$v){ $this->log = $n . '=' . $v; } } \
+             $c = new C(); $c->secret = 'x'; echo $c->log;"),
+        "secret=x"
+    );
+}
+
+#[test]
+fn magic_compound_assign_uses_get_then_set() {
+    assert_eq!(
+        out("<?php class C { private $d = ['n' => 10]; \
+             function __get($k){ return $this->d[$k]; } \
+             function __set($k,$v){ $this->d[$k] = $v; } } \
+             $c = new C(); $c->n += 5; echo $c->n;"),
+        "15"
+    );
+}
+
+#[test]
+fn magic_get_recursion_guard_same_property() {
+    // Inside __get('foo'), reading $this->foo (same name) bypasses the magic
+    // method and hits the (missing) real property → null, no infinite loop.
+    assert_eq!(
+        out("<?php class C { \
+             function __get($n){ return $this->foo === null ? 'guarded' : 'x'; } } \
+             $c = new C(); echo $c->foo;"),
+        "guarded"
+    );
+}
+
+#[test]
+fn magic_set_writes_real_property_under_guard() {
+    // __set writing the *same* property name creates the real property directly
+    // (guard active), so a subsequent read sees it without re-entering __get.
+    assert_eq!(
+        out("<?php class C { public $hits = 0; \
+             function __get($n){ $this->hits++; return 99; } \
+             function __set($n,$v){ $this->foo = $v; } } \
+             $c = new C(); $c->foo = 7; echo $c->foo, ':', $c->hits;"),
+        "7:0"
+    );
+}
