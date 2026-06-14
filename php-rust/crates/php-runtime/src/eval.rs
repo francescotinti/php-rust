@@ -27,8 +27,8 @@ use php_types::{
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
 use crate::hir::{
     BinOp, Capture, CastKind, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, Line,
-    MethodDecl, Param, Place, PlaceBase, PlaceStep, Program, ScalarType, Slot, Stmt, StmtKind,
-    TypeHint, UnOp, Visibility,
+    MethodDecl, Param, Place, PlaceBase, PlaceStep, Program, ScalarType, Slot, StaticAssignOp,
+    Stmt, StmtKind, TypeHint, UnOp, Visibility,
 };
 
 /// Builtins the evaluator implements directly because they invoke a callback
@@ -188,6 +188,8 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         class_index: &class_index,
         cur_this: None,
         cur_class: None,
+        cur_static_class: None,
+        static_props: HashMap::new(),
         file: &program.file,
         globals: fresh_slots(program.slots.len()),
         locals: None,
@@ -255,6 +257,15 @@ struct Evaluator<'p> {
     /// referent of `self::` and the base for `parent::`, and the access context
     /// for private/protected visibility checks. Saved/restored per method call.
     cur_class: Option<ClassId>,
+    /// The late-static-binding class (step 19-4, D-19.12): the referent of
+    /// `static::` / `new static`. For an instance call it is the object's actual
+    /// (most-derived) class; forwarding calls (`self`/`parent`/`static`) preserve
+    /// it. Saved/restored per method call.
+    cur_static_class: Option<ClassId>,
+    /// Persistent storage for `static` properties, keyed by (declaring class id,
+    /// property name); lazily initialised from the declared default on first
+    /// access and shared for the whole run (step 19-4, D-19.14).
+    static_props: HashMap<(ClassId, Vec<u8>), Rc<RefCell<Zval>>>,
     /// Script file name, reproduced in rendered diagnostics (`... in <file>`).
     file: &'p [u8],
     /// The script-global frame (always present) and the active local overlay
@@ -1174,19 +1185,43 @@ impl<'p> Evaluator<'p> {
         Ok(())
     }
 
-    /// Evaluate `new ClassName(args)` (step 19, D-19.6): resolve the class, build
-    /// an instance with the full (inherited) property set initialised to defaults,
-    /// then run `__construct` (resolved up the chain) if one exists.
-    fn eval_new(&mut self, class: &[u8], args: &[Expr]) -> Result<Zval, PhpError> {
-        let cid = match self.class_index.get(&class.to_ascii_lowercase()) {
-            Some(&i) => i,
-            None => {
-                return Err(PhpError::Error(format!(
-                    "Class \"{}\" not found",
-                    String::from_utf8_lossy(class)
-                )))
-            }
-        };
+    /// Resolve a [`ClassRef`] to a class id in the current context (step 19-4):
+    /// a named class via the class table, `self`/`parent` via the defining class,
+    /// `static` via the late-static-binding class.
+    fn resolve_class_ref(&self, class: &ClassRef) -> Result<ClassId, PhpError> {
+        match class {
+            ClassRef::Named(name) => self
+                .class_index
+                .get(&name.to_ascii_lowercase())
+                .copied()
+                .ok_or_else(|| {
+                    PhpError::Error(format!(
+                        "Class \"{}\" not found",
+                        String::from_utf8_lossy(name)
+                    ))
+                }),
+            ClassRef::SelfClass => self
+                .cur_class
+                .ok_or_else(|| PhpError::Error("Cannot use \"self\" outside class context".into())),
+            ClassRef::Parent => self
+                .cur_class
+                .and_then(|c| self.classes[c].parent)
+                .ok_or_else(|| {
+                    PhpError::Error(
+                        "Cannot use \"parent\" when current class scope has no parent".into(),
+                    )
+                }),
+            ClassRef::Static => self.cur_static_class.ok_or_else(|| {
+                PhpError::Error("Cannot use \"static\" outside class context".into())
+            }),
+        }
+    }
+
+    /// Evaluate `new ClassRef(args)` (step 19, D-19.6/D-19.12): resolve the class
+    /// (including `self`/`static` late binding), build an instance with the full
+    /// inherited property set, then run `__construct` (resolved up the chain).
+    fn eval_new(&mut self, class: &ClassRef, args: &[Expr]) -> Result<Zval, PhpError> {
+        let cid = self.resolve_class_ref(class)?;
         let class_name = PhpStr::new(self.classes[cid].name.to_vec());
         let props = self.collect_props(cid)?;
         let id = self.next_id();
@@ -1198,12 +1233,106 @@ impl<'p> Evaluator<'p> {
         };
         let value = Zval::Object(Rc::new(RefCell::new(obj)));
         // Run the constructor (inherited if not overridden); its mutations write
-        // through the shared `Rc`, so they show in the returned value.
+        // through the shared `Rc`, so they show in the returned value. The new
+        // instance's class is its own LSB class.
         if let Some((defc, m)) = self.resolve_method(cid, b"__construct") {
             let argv = self.eval_value_args(args)?;
-            self.invoke_method(Some(value.clone()), defc, m, b"__construct", argv)?;
+            self.invoke_method(Some(value.clone()), defc, cid, m, b"__construct", argv)?;
         }
         Ok(value)
+    }
+
+    /// Resolve and evaluate a class constant `Class::NAME` (step 19-4, D-19.15),
+    /// or the special `Class::class` (the class name string). The constant's
+    /// value expression is evaluated in its *declaring* class's context.
+    fn eval_class_const(&mut self, class: &ClassRef, name: &[u8]) -> Result<Zval, PhpError> {
+        let cid = self.resolve_class_ref(class)?;
+        if name.eq_ignore_ascii_case(b"class") {
+            return Ok(Zval::Str(PhpStr::new(self.classes[cid].name.to_vec())));
+        }
+        // Walk the chain for the constant's declaring class + value expression.
+        let classes: &'p [ClassDecl] = self.classes;
+        let mut c = Some(cid);
+        let mut found: Option<(ClassId, &'p Expr)> = None;
+        while let Some(x) = c {
+            if let Some(k) = classes[x].consts.iter().find(|k| k.name.as_ref() == name) {
+                found = Some((x, &k.value));
+                break;
+            }
+            c = classes[x].parent;
+        }
+        let (decl_class, expr) = found.ok_or_else(|| {
+            PhpError::Error(format!(
+                "Undefined constant {}::{}",
+                String::from_utf8_lossy(&self.classes[cid].name),
+                String::from_utf8_lossy(name)
+            ))
+        })?;
+        // Evaluate in the declaring class's context so a `self::OTHER` inside the
+        // constant resolves correctly.
+        let saved_class = self.cur_class.replace(decl_class);
+        let result = self.eval(expr);
+        self.cur_class = saved_class;
+        result
+    }
+
+    /// The persistent cell backing a `static` property, resolving the declaring
+    /// class up the chain and lazily initialising from the declared default on
+    /// first access (step 19-4, D-19.14). Enforces visibility.
+    fn static_prop_cell(
+        &mut self,
+        class: &ClassRef,
+        name: &[u8],
+    ) -> Result<Rc<RefCell<Zval>>, PhpError> {
+        let cid = self.resolve_class_ref(class)?;
+        let classes: &'p [ClassDecl] = self.classes;
+        let mut c = Some(cid);
+        let mut decl: Option<(ClassId, &'p crate::hir::StaticPropDecl)> = None;
+        while let Some(x) = c {
+            if let Some(p) = classes[x].static_props.iter().find(|p| p.name.as_ref() == name) {
+                decl = Some((x, p));
+                break;
+            }
+            c = classes[x].parent;
+        }
+        let (decl_class, pd) = decl.ok_or_else(|| {
+            PhpError::Error(format!(
+                "Access to undeclared static property {}::${}",
+                String::from_utf8_lossy(&self.classes[cid].name),
+                String::from_utf8_lossy(name)
+            ))
+        })?;
+        // Visibility against the current class context.
+        if !self.visible_from(pd.visibility, decl_class) {
+            let kind = if matches!(pd.visibility, Visibility::Private) {
+                "private"
+            } else {
+                "protected"
+            };
+            return Err(PhpError::Error(format!(
+                "Cannot access {kind} property {}::${}",
+                String::from_utf8_lossy(&self.classes[decl_class].name),
+                String::from_utf8_lossy(name)
+            )));
+        }
+        let key = (decl_class, name.to_vec());
+        if let Some(cell) = self.static_props.get(&key) {
+            return Ok(Rc::clone(cell));
+        }
+        // First access: initialise from the default (evaluated in the declaring
+        // class's context), then store.
+        let init = match &pd.default {
+            Some(e) => {
+                let saved = self.cur_class.replace(decl_class);
+                let v = self.eval(e);
+                self.cur_class = saved;
+                v?
+            }
+            None => Zval::Null,
+        };
+        let cell = Rc::new(RefCell::new(init));
+        self.static_props.insert(key, Rc::clone(&cell));
+        Ok(cell)
     }
 
     /// Read property `name` from a value (step 19, D-19.8). Enforces visibility on
@@ -1268,30 +1397,21 @@ impl<'p> Evaluator<'p> {
             }
         };
         self.check_method_access(defc, m, method)?;
-        self.invoke_method(Some(recv), defc, m, method, argv)
+        // An instance call's LSB class is the object's actual (most-derived) one.
+        self.invoke_method(Some(recv), defc, cid, m, method, argv)
     }
 
-    /// Dispatch a `self::method()` / `parent::method()` call (step 19-3): resolve
-    /// the starting class from the current method's context, find the method up
-    /// the chain, and invoke it keeping the current `$this`.
+    /// Dispatch `Class::m()` / `self::m()` / `parent::m()` / `static::m()` (step
+    /// 19-3/19-4). The starting class comes from the reference; `self`/`parent`/
+    /// `static` are *forwarding* (keep `$this` and the caller's LSB class), while
+    /// a named class sets the LSB class to itself.
     fn call_static(
         &mut self,
         class: &ClassRef,
         method: &[u8],
         argv: Vec<Zval>,
     ) -> Result<Zval, PhpError> {
-        let start = match class {
-            ClassRef::SelfClass => self.cur_class,
-            ClassRef::Parent => self.cur_class.and_then(|c| self.classes[c].parent),
-        };
-        let start = start.ok_or_else(|| {
-            PhpError::Error(match class {
-                ClassRef::SelfClass => "Cannot use \"self\" outside class context".to_string(),
-                ClassRef::Parent => {
-                    "Cannot use \"parent\" when current class scope has no parent".to_string()
-                }
-            })
-        })?;
+        let start = self.resolve_class_ref(class)?;
         let (defc, m) = match self.resolve_method(start, method) {
             Some(found) => found,
             None => {
@@ -1302,9 +1422,24 @@ impl<'p> Evaluator<'p> {
                 )))
             }
         };
-        // `self::`/`parent::` run in the current instance context (keep `$this`).
-        let this = self.cur_this.clone();
-        self.invoke_method(this, defc, m, method, argv)
+        self.check_method_access(defc, m, method)?;
+        let forwarding = !matches!(class, ClassRef::Named(_));
+        // LSB class: forwarding calls preserve the caller's, a named call rebinds
+        // it to the named class.
+        let static_class = if forwarding {
+            self.cur_static_class.unwrap_or(start)
+        } else {
+            start
+        };
+        // `$this` is kept for a forwarding call, or for a named call to a class in
+        // the current object's hierarchy (`ParentName::m()` from an instance).
+        let this = match &self.cur_this {
+            Some(t @ Zval::Object(o)) if forwarding || self.class_is_a(o.borrow().class_id as usize, start) => {
+                Some(t.clone())
+            }
+            _ => None,
+        };
+        self.invoke_method(this, defc, static_class, m, method, argv)
     }
 
     /// Enforce method visibility against the current class context (step 19-3).
@@ -1342,6 +1477,7 @@ impl<'p> Evaluator<'p> {
         &mut self,
         this: Option<Zval>,
         defining_class: ClassId,
+        static_class: ClassId,
         m: &'p MethodDecl,
         method: &[u8],
         argv: Vec<Zval>,
@@ -1369,6 +1505,7 @@ impl<'p> Evaluator<'p> {
         let saved_returns_ref = std::mem::replace(&mut self.fn_returns_ref, f.by_ref);
         let saved_this = std::mem::replace(&mut self.cur_this, this);
         let saved_class = self.cur_class.replace(defining_class);
+        let saved_static = self.cur_static_class.replace(static_class);
 
         let args: Vec<Arg> = argv.into_iter().map(Arg::Val).collect();
         let result = self.run_user_fn_body(f, args);
@@ -1378,6 +1515,7 @@ impl<'p> Evaluator<'p> {
         self.fn_returns_ref = saved_returns_ref;
         self.cur_this = saved_this;
         self.cur_class = saved_class;
+        self.cur_static_class = saved_static;
         result.map(|r| match r {
             Zval::Ref(cell) => cell.borrow().clone(),
             other => other,
@@ -2062,6 +2200,66 @@ impl<'p> Evaluator<'p> {
             } => {
                 let argv = self.eval_value_args(args)?;
                 self.call_static(class, method, argv)
+            }
+
+            ExprKind::ClassConst { class, name } => self.eval_class_const(class, name),
+
+            ExprKind::StaticProp { class, name } => {
+                let cell = self.static_prop_cell(class, name)?;
+                let v = cell.borrow().deref_clone();
+                Ok(v)
+            }
+
+            ExprKind::StaticPropAssign {
+                class,
+                name,
+                op,
+                rhs,
+            } => {
+                let cell = self.static_prop_cell(class, name)?;
+                match op {
+                    StaticAssignOp::Plain => {
+                        let v = self.eval(rhs)?;
+                        *cell.borrow_mut() = v.clone();
+                        Ok(v)
+                    }
+                    StaticAssignOp::Coalesce => {
+                        let cur = cell.borrow().deref_clone();
+                        if matches!(cur, Zval::Null | Zval::Undef) {
+                            let v = self.eval(rhs)?;
+                            *cell.borrow_mut() = v.clone();
+                            Ok(v)
+                        } else {
+                            Ok(cur)
+                        }
+                    }
+                    StaticAssignOp::Op(b) => {
+                        let cur = cell.borrow().deref_clone();
+                        let rv = self.eval(rhs)?;
+                        let res = self.apply_binop(*b, cur, rv)?;
+                        *cell.borrow_mut() = res.clone();
+                        Ok(res)
+                    }
+                }
+            }
+
+            ExprKind::StaticPropIncDec {
+                class,
+                name,
+                inc,
+                pre,
+            } => {
+                let cell = self.static_prop_cell(class, name)?;
+                let old = cell.borrow().deref_clone();
+                {
+                    let mut guard = cell.borrow_mut();
+                    if *inc {
+                        ops::increment(&mut guard, &mut self.diags)?;
+                    } else {
+                        ops::decrement(&mut guard, &mut self.diags)?;
+                    }
+                }
+                Ok(if *pre { cell.borrow().deref_clone() } else { old })
             }
         }
     }

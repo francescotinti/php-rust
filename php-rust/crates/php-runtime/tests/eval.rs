@@ -1836,3 +1836,99 @@ fn oop_private_method_from_outside_is_fatal() {
         other => panic!("expected private-method fatal, got {other:?}"),
     }
 }
+
+// --- Step 19-4: class constants, static properties, static calls, LSB ---
+
+#[test]
+fn oop_class_constant_and_self_const() {
+    assert_eq!(
+        out("<?php class C { const FOO = 42; const BAR = self::FOO + 1; } echo C::FOO, '-', C::BAR;"),
+        "42-43"
+    );
+}
+
+#[test]
+fn oop_constant_inheritance() {
+    assert_eq!(
+        out("<?php class A { const X = 7; } class B extends A {} echo B::X;"),
+        "7"
+    );
+}
+
+#[test]
+fn oop_self_const_in_method() {
+    assert_eq!(
+        out("<?php class C { const N = 5; function f() { return self::N; } } echo (new C)->f();"),
+        "5"
+    );
+}
+
+#[test]
+fn oop_static_property_via_static_method() {
+    assert_eq!(
+        out(
+            "<?php class C { public static $n = 0; static function inc() { self::$n++; } } \
+             C::inc(); C::inc(); echo C::$n;"
+        ),
+        "2"
+    );
+}
+
+#[test]
+fn oop_static_property_direct_compound() {
+    assert_eq!(
+        out("<?php class C { public static $n = 10; } C::$n += 5; echo C::$n;"),
+        "15"
+    );
+}
+
+#[test]
+fn oop_static_method_call() {
+    assert_eq!(
+        out("<?php class C { static function hi() { return 'hi'; } } echo C::hi();"),
+        "hi"
+    );
+}
+
+#[test]
+fn oop_shared_static_property_across_instances() {
+    assert_eq!(
+        out(
+            "<?php class C { public static $c = 0; function __construct() { self::$c++; } } \
+             new C; new C; echo C::$c;"
+        ),
+        "2"
+    );
+}
+
+#[test]
+fn oop_new_static_late_static_binding() {
+    // `new static()` in a parent method creates the *called* class's instance.
+    assert_eq!(
+        out(
+            "<?php class A { static function make() { return new static(); } function tag() { return 'A'; } } \
+             class B extends A { function tag() { return 'B'; } } echo B::make()->tag();"
+        ),
+        "B"
+    );
+}
+
+#[test]
+fn oop_static_call_late_static_binding() {
+    // `static::who()` dispatches on the called class (B), unlike `self::`.
+    assert_eq!(
+        out(
+            "<?php class A { static function who() { return 'A'; } static function call() { return static::who(); } } \
+             class B extends A { static function who() { return 'B'; } } echo B::call();"
+        ),
+        "B"
+    );
+}
+
+#[test]
+fn oop_class_constant_name() {
+    assert_eq!(
+        out("<?php class Foo {} echo Foo::class;"),
+        "Foo"
+    );
+}

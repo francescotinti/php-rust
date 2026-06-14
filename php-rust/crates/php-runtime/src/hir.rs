@@ -80,19 +80,50 @@ pub struct ClassDecl {
     /// declaration order. The full instance layout is parent-first, assembled at
     /// `new` time (D-19.10).
     pub props: Vec<PropDecl>,
+    /// `static` properties declared on this class (step 19-4, D-19.14). Storage
+    /// is per-declaring-class and persists for the run; subclasses share the
+    /// inherited cell unless they redeclare.
+    pub static_props: Vec<StaticPropDecl>,
+    /// Class constants declared on this class (step 19-4, D-19.15). Resolved up
+    /// the chain; values are constant expressions evaluated in the declaring
+    /// class's context.
+    pub consts: Vec<ClassConstDecl>,
     /// Methods declared on this class, in declaration order. Resolved by name
     /// (case-insensitive), walking the parent chain for inheritance.
     pub methods: Vec<MethodDecl>,
     pub line: Line,
 }
 
-/// How a `::`-qualified static/self reference names its class (step 19-3/19-4).
+/// One `static $p = default;` declaration (step 19-4, D-19.14).
+#[derive(Debug, Clone, PartialEq)]
+pub struct StaticPropDecl {
+    /// Name without the leading `$`.
+    pub name: Box<[u8]>,
+    pub visibility: Visibility,
+    pub default: Option<Expr>,
+}
+
+/// One `const NAME = expr;` declaration (step 19-4, D-19.15).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClassConstDecl {
+    pub name: Box<[u8]>,
+    pub value: Expr,
+}
+
+/// How a `::`-qualified reference (call, constant, static property, `new`) names
+/// its class (step 19-3/19-4).
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClassRef {
+    /// A named class (`Foo::`, `new Foo`), resolved against the class table at
+    /// runtime so an unknown class is a runtime fatal (matching PHP).
+    Named(Box<[u8]>),
     /// `self::` — the class that *defines* the running method.
     SelfClass,
     /// `parent::` — the parent of the class that defines the running method.
     Parent,
+    /// `static::` / `new static` — the late-static-binding class (the runtime
+    /// "called" class), step 19-4, D-19.12.
+    Static,
 }
 
 /// One declared instance property (step 19). `default` is evaluated per instance
@@ -429,10 +460,10 @@ pub enum ExprKind {
         arms: Vec<MatchArm>,
     },
 
-    /// `new ClassName(args...)` (step 19, D-19.6). Creates an instance with its
-    /// declared properties initialised to their defaults, then runs `__construct`
-    /// if the class defines one. Tier-1 resolves `class` as a literal name.
-    New { class: Box<[u8]>, args: Vec<Expr> },
+    /// `new ClassName(args...)` / `new self` / `new static` (step 19, D-19.6).
+    /// Creates an instance with its declared properties initialised to their
+    /// defaults, then runs `__construct` if the class defines one.
+    New { class: ClassRef, args: Vec<Expr> },
 
     /// `$obj->method(args...)` instance method call (step 19, D-19.7). `nullsafe`
     /// marks the `?->` form: a null receiver short-circuits to NULL instead of
@@ -457,15 +488,49 @@ pub enum ExprKind {
     /// object context".
     This,
 
-    /// `self::method(args)` / `parent::method(args)` (step 19-3, D-19.11): a call
-    /// resolved against the *defining* class (or its parent) of the running
-    /// method, keeping the current `$this`. Named-class and `static::` static
-    /// calls arrive in 19-4.
+    /// `Class::method(args)` / `self::` / `parent::` / `static::` call (step
+    /// 19-3/19-4). Resolved against the named/self/parent/LSB class; keeps the
+    /// current `$this` for forwarding (self/parent/static) calls.
     StaticCall {
         class: ClassRef,
         method: Box<[u8]>,
         args: Vec<Expr>,
     },
+
+    /// `Class::CONST` / `self::CONST` / `parent::CONST` / `static::CONST`, and the
+    /// special `Class::class` (which yields the class name string), step 19-4,
+    /// D-19.15.
+    ClassConst { class: ClassRef, name: Box<[u8]> },
+
+    /// `Class::$prop` static-property read (step 19-4, D-19.14).
+    StaticProp { class: ClassRef, name: Box<[u8]> },
+
+    /// `Class::$prop = rhs` / `+= ` / `??=` static-property assignment.
+    StaticPropAssign {
+        class: ClassRef,
+        name: Box<[u8]>,
+        op: StaticAssignOp,
+        rhs: Box<Expr>,
+    },
+
+    /// `Class::$prop++` / `--` (pre/post) static-property inc/dec.
+    StaticPropIncDec {
+        class: ClassRef,
+        name: Box<[u8]>,
+        inc: bool,
+        pre: bool,
+    },
+}
+
+/// The flavour of a static-property assignment (step 19-4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StaticAssignOp {
+    /// `=`
+    Plain,
+    /// `op=` (e.g. `+=`, `.=`)
+    Op(BinOp),
+    /// `??=`
+    Coalesce,
 }
 
 /// One element of an array literal: an optional key plus a value.

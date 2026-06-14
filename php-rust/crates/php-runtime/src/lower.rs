@@ -21,18 +21,19 @@ use mago_database::file::File;
 use mago_span::{HasSpan, Span};
 use mago_syntax::ast::{
     Access, Argument, ArrayElement, ArrowFunction, AssignmentOperator, BinaryOperator, Call,
-    Class, ClassLikeMember, ClassLikeMemberSelector, Closure, Construct, DeclareBody, Expression,
-    Extends, ForeachTarget, Function, FunctionLikeParameterList, Hint, Identifier, Instantiation,
-    Literal, LiteralInteger, MatchArm as AstMatchArm, Method, MethodBody, Modifier, Node,
-    PartialApplication, Property, PropertyItem, Statement, StaticItem, UnaryPostfixOperator,
-    UnaryPrefixOperator, Variable,
+    Class, ClassLikeConstantSelector, ClassLikeMember, ClassLikeMemberSelector, Closure, Construct,
+    DeclareBody, Expression, Extends, ForeachTarget, Function, FunctionLikeParameterList, Hint,
+    Identifier, Instantiation, Literal, LiteralInteger, MatchArm as AstMatchArm, Method, MethodBody,
+    Modifier, Node, PartialApplication, Property, PropertyItem, Statement, StaticItem,
+    UnaryPostfixOperator, UnaryPrefixOperator, Variable,
 };
 use mago_syntax::parser::parse_file;
 
 use crate::hir::{
     ArrayElem, BinOp, Capture, Case, CastKind, ClassDecl, ClassRef, Expr, ExprKind, FnDecl,
     GlobalBinding, Line, MatchArm, MethodDecl, Param, Place, PlaceBase, PlaceStep, Program,
-    PropDecl, ScalarType, Slot, StaticBinding, Stmt, StmtKind, TypeHint, UnOp, Visibility,
+    PropDecl, ScalarType, Slot, StaticAssignOp, StaticBinding, Stmt, StmtKind, TypeHint, UnOp,
+    Visibility,
 };
 
 /// Why a script could not be lowered to HIR.
@@ -545,11 +546,16 @@ impl<'f> Lowerer<'f> {
         };
         let name: Box<[u8]> = class.name.value.into();
         let mut props = Vec::new();
+        let mut static_props = Vec::new();
+        let mut consts = Vec::new();
         let mut methods = Vec::new();
         for member in class.members.iter() {
             match member {
-                ClassLikeMember::Property(p) => self.lower_property(p, &mut props, line)?,
+                ClassLikeMember::Property(p) => {
+                    self.lower_property(p, &mut props, &mut static_props, line)?
+                }
                 ClassLikeMember::Method(m) => methods.push(self.lower_method(m, line)?),
+                ClassLikeMember::Constant(c) => self.lower_class_const(c, &mut consts)?,
                 _ => {
                     return Err(LowerError::Unsupported {
                         what: "class member",
@@ -562,18 +568,38 @@ impl<'f> Lowerer<'f> {
             name,
             parent,
             props,
+            static_props,
+            consts,
             methods,
             line,
         })
     }
 
-    /// Lower a plain instance-property declaration into one [`PropDecl`] per
-    /// item (`public $a = 1, $b;`). Hooked and static properties are out of 19-1
-    /// scope.
+    /// Lower a `const A = 1, B = 2;` declaration into one [`ClassConstDecl`] per
+    /// item (step 19-4). Visibility modifiers (7.1+) are accepted but not
+    /// enforced.
+    fn lower_class_const(
+        &mut self,
+        konst: &mago_syntax::ast::ClassLikeConstant,
+        out: &mut Vec<crate::hir::ClassConstDecl>,
+    ) -> Result<(), LowerError> {
+        for item in konst.items.iter() {
+            out.push(crate::hir::ClassConstDecl {
+                name: item.name.value.into(),
+                value: self.lower_expr(item.value)?,
+            });
+        }
+        Ok(())
+    }
+
+    /// Lower a property declaration into one entry per item (`public $a = 1, $b;`),
+    /// routing `static` properties to `static_out` and instance properties to
+    /// `out` (step 19-1/19-4). Hooked properties remain out of scope.
     fn lower_property(
         &mut self,
         prop: &Property,
         out: &mut Vec<PropDecl>,
+        static_out: &mut Vec<crate::hir::StaticPropDecl>,
         line: Line,
     ) -> Result<(), LowerError> {
         let plain = match prop {
@@ -585,23 +611,27 @@ impl<'f> Lowerer<'f> {
                 })
             }
         };
-        if plain.modifiers.iter().any(|m| m.is_static()) {
-            return Err(LowerError::Unsupported {
-                what: "static property",
-                line,
-            });
-        }
+        let is_static = plain.modifiers.iter().any(|m| m.is_static());
         let visibility = visibility_of(plain.modifiers.iter());
         for item in plain.items.iter() {
             let (var, default) = match item {
                 PropertyItem::Abstract(a) => (&a.variable, None),
                 PropertyItem::Concrete(c) => (&c.variable, Some(self.lower_expr(c.value)?)),
             };
-            out.push(PropDecl {
-                name: strip_dollar(var.name).into(),
-                visibility,
-                default,
-            });
+            let name: Box<[u8]> = strip_dollar(var.name).into();
+            if is_static {
+                static_out.push(crate::hir::StaticPropDecl {
+                    name,
+                    visibility,
+                    default,
+                });
+            } else {
+                out.push(PropDecl {
+                    name,
+                    visibility,
+                    default,
+                });
+            }
         }
         Ok(())
     }
@@ -613,12 +643,6 @@ impl<'f> Lowerer<'f> {
     fn lower_method(&mut self, method: &Method, class_line: Line) -> Result<MethodDecl, LowerError> {
         let line = self.line_of(method.span());
         let is_static = method.modifiers.iter().any(|m| m.is_static());
-        if is_static {
-            return Err(LowerError::Unsupported {
-                what: "static method",
-                line,
-            });
-        }
         let body = match &method.body {
             MethodBody::Concrete(block) => block,
             MethodBody::Abstract(_) => {
@@ -1022,6 +1046,24 @@ impl<'f> Lowerer<'f> {
                         }
                     }
                 }
+                // `Class::$p = …` / `+= ` / `??=` — static-property assignment is
+                // not a `Place` (it roots at a per-class cell, not a slot), so it
+                // gets dedicated nodes (step 19-4, D-19.14).
+                if let Expression::Access(Access::StaticProperty(sp)) = a.lhs {
+                    let class = class_ref_of(sp.class, line)?;
+                    let name: Box<[u8]> = static_prop_name(&sp.property, line)?.into();
+                    let rhs = Box::new(self.lower_expr(a.rhs)?);
+                    let op = static_assign_op(&a.operator);
+                    return Ok(Expr {
+                        line,
+                        kind: ExprKind::StaticPropAssign {
+                            class,
+                            name,
+                            op,
+                            rhs,
+                        },
+                    });
+                }
                 let place = self.lower_place(a.lhs, line)?;
                 let rhs = Box::new(self.lower_expr(a.rhs)?);
                 // A bare variable keeps the slot-based encoding (lighter, and
@@ -1255,6 +1297,13 @@ impl<'f> Lowerer<'f> {
                     pre,
                 })
             }
+            // `Class::$p++` — static-property inc/dec (step 19-4), its own node.
+            Expression::Access(Access::StaticProperty(sp)) => Ok(ExprKind::StaticPropIncDec {
+                class: class_ref_of(sp.class, line)?,
+                name: static_prop_name(&sp.property, line)?.into(),
+                inc,
+                pre,
+            }),
             // An array element / object property target (step 19-2): reuse the
             // place machinery. `lower_place` rejects non-lvalues.
             _ => Ok(ExprKind::IncDecPlace {
@@ -1294,10 +1343,9 @@ impl<'f> Lowerer<'f> {
                     nullsafe: true,
                 });
             }
-            // `self::m()` / `parent::m()` (step 19-3); named-class and `static::`
-            // static calls are step 19-4.
+            // `Class::m()` / `self::m()` / `parent::m()` / `static::m()`.
             Call::StaticMethod(sm) => {
-                let class = static_class_ref(sm.class, line)?;
+                let class = class_ref_of(sm.class, line)?;
                 let method = member_name(&sm.method, line)?;
                 let args = self.lower_positional_args(&sm.argument_list, line)?;
                 return Ok(ExprKind::StaticCall {
@@ -1331,23 +1379,12 @@ impl<'f> Lowerer<'f> {
         inst: &Instantiation,
         line: Line,
     ) -> Result<ExprKind, LowerError> {
-        let class = match inst.class {
-            Expression::Identifier(id) => function_name(id),
-            _ => {
-                return Err(LowerError::Unsupported {
-                    what: "dynamic class instantiation",
-                    line,
-                })
-            }
-        };
+        let class = class_ref_of(inst.class, line)?;
         let args = match &inst.argument_list {
             Some(list) => self.lower_positional_args(list, line)?,
             None => Vec::new(),
         };
-        Ok(ExprKind::New {
-            class: class.into(),
-            args,
-        })
+        Ok(ExprKind::New { class, args })
     }
 
     /// Lower `$obj->prop` / `$obj?->prop` reads (step 19, D-19.8). Static-property
@@ -1364,10 +1401,30 @@ impl<'f> Lowerer<'f> {
                 name: member_name(&p.property, line)?.into(),
                 nullsafe: true,
             }),
-            Access::StaticProperty(_) | Access::ClassConstant(_) => {
-                Err(LowerError::Unsupported {
-                    what: "static member access",
-                    line,
+            // `Class::CONST` / `self::CONST` / `Class::class` (step 19-4).
+            Access::ClassConstant(cc) => {
+                let class = class_ref_of(cc.class, line)?;
+                let name = match &cc.constant {
+                    ClassLikeConstantSelector::Identifier(id) => id.value,
+                    _ => {
+                        return Err(LowerError::Unsupported {
+                            what: "dynamic class constant name",
+                            line,
+                        })
+                    }
+                };
+                Ok(ExprKind::ClassConst {
+                    class,
+                    name: name.into(),
+                })
+            }
+            // `Class::$prop` static-property read (step 19-4).
+            Access::StaticProperty(sp) => {
+                let class = class_ref_of(sp.class, line)?;
+                let name = static_prop_name(&sp.property, line)?;
+                Ok(ExprKind::StaticProp {
+                    class,
+                    name: name.into(),
                 })
             }
         }
@@ -1584,15 +1641,49 @@ fn parent_name<'a>(ext: &Extends<'a>, line: Line) -> Result<&'a [u8], LowerError
     }
 }
 
+/// Map an assignment operator to the static-property assignment flavour (19-4).
+fn static_assign_op(op: &AssignmentOperator) -> StaticAssignOp {
+    match op {
+        AssignmentOperator::Assign(_) => StaticAssignOp::Plain,
+        AssignmentOperator::Coalesce(_) => StaticAssignOp::Coalesce,
+        AssignmentOperator::Addition(_) => StaticAssignOp::Op(BinOp::Add),
+        AssignmentOperator::Subtraction(_) => StaticAssignOp::Op(BinOp::Sub),
+        AssignmentOperator::Multiplication(_) => StaticAssignOp::Op(BinOp::Mul),
+        AssignmentOperator::Division(_) => StaticAssignOp::Op(BinOp::Div),
+        AssignmentOperator::Modulo(_) => StaticAssignOp::Op(BinOp::Mod),
+        AssignmentOperator::Exponentiation(_) => StaticAssignOp::Op(BinOp::Pow),
+        AssignmentOperator::Concat(_) => StaticAssignOp::Op(BinOp::Concat),
+        AssignmentOperator::BitwiseAnd(_) => StaticAssignOp::Op(BinOp::BitAnd),
+        AssignmentOperator::BitwiseOr(_) => StaticAssignOp::Op(BinOp::BitOr),
+        AssignmentOperator::BitwiseXor(_) => StaticAssignOp::Op(BinOp::BitXor),
+        AssignmentOperator::LeftShift(_) => StaticAssignOp::Op(BinOp::Shl),
+        AssignmentOperator::RightShift(_) => StaticAssignOp::Op(BinOp::Shr),
+    }
+}
+
+/// The name of a static property selector `::$name` (without the `$`), step
+/// 19-4. Only a direct variable is supported (dynamic `::$$x` stays out).
+fn static_prop_name<'a>(var: &Variable<'a>, line: Line) -> Result<&'a [u8], LowerError> {
+    match var {
+        Variable::Direct(d) => Ok(strip_dollar(d.name)),
+        _ => Err(LowerError::Unsupported {
+            what: "dynamic static property name",
+            line,
+        }),
+    }
+}
+
 /// Classify the class side of a `::` static call. 19-3 handles `self`/`parent`;
 /// named classes and `static::` (late static binding) are step 19-4.
-fn static_class_ref(class: &Expression, line: Line) -> Result<ClassRef, LowerError> {
+fn class_ref_of(class: &Expression, line: Line) -> Result<ClassRef, LowerError> {
     match class {
         Expression::Self_(_) => Ok(ClassRef::SelfClass),
         Expression::Parent(_) => Ok(ClassRef::Parent),
-        // Named class (`Foo::m()`) and `static::` (late static binding) → 19-4.
+        Expression::Static(_) => Ok(ClassRef::Static),
+        Expression::Identifier(id) => Ok(ClassRef::Named(function_name(id).into())),
+        // A dynamic class reference (`$cls::m()`, `new $cls`) stays out of scope.
         _ => Err(LowerError::Unsupported {
-            what: "named or static:: static call",
+            what: "dynamic class reference",
             line,
         }),
     }
