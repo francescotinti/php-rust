@@ -42,6 +42,12 @@ const HIGHER_ORDER_BUILTINS: &[&[u8]] = &[
     b"array_filter",
     b"usort",
     b"json_decode",
+    b"preg_match",
+    b"preg_match_all",
+    b"preg_replace",
+    b"preg_replace_callback",
+    b"preg_split",
+    b"preg_quote",
 ];
 
 /// A fresh frame of `n` independent value slots, all unset.
@@ -2330,8 +2336,185 @@ impl<'p> Evaluator<'p> {
             b"array_filter" => Some(self.ho_array_filter(args)),
             b"usort" => Some(self.ho_usort(args)),
             b"json_decode" => Some(self.ho_json_decode(args)),
+            b"preg_match" => Some(self.ho_preg_match(args)),
+            b"preg_match_all" => Some(self.ho_preg_match_all(args)),
+            b"preg_replace" => Some(self.ho_preg_replace(args)),
+            b"preg_replace_callback" => Some(self.ho_preg_replace_callback(args)),
+            b"preg_split" => Some(self.ho_preg_split(args)),
+            b"preg_quote" => Some(self.ho_preg_quote(args)),
             _ => None,
         }
+    }
+
+    /// Evaluate an argument and coerce it to a byte string (used by `preg_*` for
+    /// the pattern and subject).
+    fn preg_str(&mut self, e: &Expr) -> Result<Vec<u8>, PhpError> {
+        let v = self.eval(e)?.deref_clone();
+        Ok(self.stringify(&v)?.as_bytes().to_vec())
+    }
+
+    /// Write `value` to a plain-variable out-parameter (e.g. the `$matches` of
+    /// `preg_match`). Only bare variables are supported as out-params; any other
+    /// expression is silently ignored (step 27 scope-out).
+    fn write_out_param(&mut self, target: &Expr, value: Zval) {
+        if let ExprKind::Var(slot) = &target.kind {
+            self.slot_set(*slot as usize, value);
+        }
+    }
+
+    /// `preg_match($pattern, $subject, &$matches = null)` (step 27): returns 1 on
+    /// a match, 0 on none, `false` on a bad pattern. `$matches[0]` is the whole
+    /// match, `$matches[n]` the n-th group (numeric groups only).
+    fn ho_preg_match(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        if args.len() < 2 {
+            return Err(PhpError::ArgumentCountError(
+                "preg_match() expects at least 2 arguments".to_string(),
+            ));
+        }
+        let pat = self.preg_str(&args[0])?;
+        let subject = self.preg_str(&args[1])?;
+        let Some(re) = crate::preg::compile(&pat) else {
+            return Ok(Zval::Bool(false));
+        };
+        let subj = String::from_utf8_lossy(&subject);
+        let (ret, matches) = match re.captures(&subj) {
+            Some(caps) => (1, captures_array(&caps)),
+            None => (0, Zval::Array(Rc::new(PhpArray::new()))),
+        };
+        if let Some(out) = args.get(2) {
+            self.write_out_param(out, matches);
+        }
+        Ok(Zval::Long(ret))
+    }
+
+    /// `preg_match_all($pattern, $subject, &$matches = null)` (step 27): default
+    /// PREG_PATTERN_ORDER — `$matches[g]` is the array of group `g`'s text across
+    /// all matches. Returns the match count, or `false` on a bad pattern.
+    fn ho_preg_match_all(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        if args.len() < 2 {
+            return Err(PhpError::ArgumentCountError(
+                "preg_match_all() expects at least 2 arguments".to_string(),
+            ));
+        }
+        let pat = self.preg_str(&args[0])?;
+        let subject = self.preg_str(&args[1])?;
+        let Some(re) = crate::preg::compile(&pat) else {
+            return Ok(Zval::Bool(false));
+        };
+        let subj = String::from_utf8_lossy(&subject);
+        let ngroups = re.captures_len();
+        let mut cols: Vec<PhpArray> = (0..ngroups).map(|_| PhpArray::new()).collect();
+        let mut count: i64 = 0;
+        for caps in re.captures_iter(&subj) {
+            count += 1;
+            for (g, col) in cols.iter_mut().enumerate() {
+                let s = caps.get(g).map(|m| m.as_str()).unwrap_or("");
+                let _ = col.append(Zval::Str(PhpStr::new(s.as_bytes().to_vec())));
+            }
+        }
+        let mut outer = PhpArray::new();
+        for col in cols {
+            let _ = outer.append(Zval::Array(Rc::new(col)));
+        }
+        if let Some(out) = args.get(2) {
+            self.write_out_param(out, Zval::Array(Rc::new(outer)));
+        }
+        Ok(Zval::Long(count))
+    }
+
+    /// `preg_replace($pattern, $replacement, $subject)` (step 27): backreferences
+    /// `$1` / `${1}` / `\1` in the replacement are honoured. Returns `null` on a
+    /// bad pattern. Array patterns/subjects are a scope-out.
+    fn ho_preg_replace(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        if args.len() < 3 {
+            return Err(PhpError::ArgumentCountError(
+                "preg_replace() expects at least 3 arguments".to_string(),
+            ));
+        }
+        let pat = self.preg_str(&args[0])?;
+        let repl = self.preg_str(&args[1])?;
+        let subject = self.preg_str(&args[2])?;
+        let Some(re) = crate::preg::compile(&pat) else {
+            return Ok(Zval::Null);
+        };
+        let repl = String::from_utf8_lossy(&crate::preg::translate_replacement(&repl)).into_owned();
+        let subj = String::from_utf8_lossy(&subject);
+        let result = re.replace_all(&subj, repl.as_str());
+        Ok(Zval::Str(PhpStr::new(result.as_bytes().to_vec())))
+    }
+
+    /// `preg_replace_callback($pattern, $callback, $subject)` (step 27): the
+    /// callback receives the match array and returns each replacement.
+    fn ho_preg_replace_callback(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        if args.len() < 3 {
+            return Err(PhpError::ArgumentCountError(
+                "preg_replace_callback() expects at least 3 arguments".to_string(),
+            ));
+        }
+        let pat = self.preg_str(&args[0])?;
+        let callback = self.eval(&args[1])?.deref_clone();
+        let subject = self.preg_str(&args[2])?;
+        let Some(re) = crate::preg::compile(&pat) else {
+            return Ok(Zval::Null);
+        };
+        let subj = String::from_utf8_lossy(&subject).into_owned();
+        let bytes = subj.as_bytes();
+        let mut out: Vec<u8> = Vec::new();
+        let mut last = 0usize;
+        // Collect (range, match-array) first so the regex borrow of `subj` ends
+        // before we call back into the evaluator.
+        let hits: Vec<(usize, usize, Zval)> = re
+            .captures_iter(&subj)
+            .map(|caps| {
+                let m0 = caps.get(0).unwrap();
+                (m0.start(), m0.end(), captures_array(&caps))
+            })
+            .collect();
+        for (start, end, match_arr) in hits {
+            out.extend_from_slice(&bytes[last..start]);
+            let ret = self.call_value(callback.clone(), vec![match_arr])?;
+            let rs = self.stringify(&ret.deref_clone())?;
+            out.extend_from_slice(rs.as_bytes());
+            last = end;
+        }
+        out.extend_from_slice(&bytes[last..]);
+        Ok(Zval::Str(PhpStr::new(out)))
+    }
+
+    /// `preg_split($pattern, $subject)` (step 27): split on matches. Returns
+    /// `false` on a bad pattern.
+    fn ho_preg_split(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        if args.len() < 2 {
+            return Err(PhpError::ArgumentCountError(
+                "preg_split() expects at least 2 arguments".to_string(),
+            ));
+        }
+        let pat = self.preg_str(&args[0])?;
+        let subject = self.preg_str(&args[1])?;
+        let Some(re) = crate::preg::compile(&pat) else {
+            return Ok(Zval::Bool(false));
+        };
+        let subj = String::from_utf8_lossy(&subject);
+        let mut arr = PhpArray::new();
+        for part in re.split(&subj) {
+            let _ = arr.append(Zval::Str(PhpStr::new(part.as_bytes().to_vec())));
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// `preg_quote($str, $delimiter = null)` (step 27).
+    fn ho_preg_quote(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        let Some(first) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "preg_quote() expects at least 1 argument, 0 given".to_string(),
+            ));
+        };
+        let s = self.preg_str(first)?;
+        let delim = match args.get(1) {
+            Some(e) => self.preg_str(e)?.first().copied(),
+            None => None,
+        };
+        Ok(Zval::Str(PhpStr::new(crate::preg::quote(&s, delim))))
     }
 
     /// `json_decode($json, $assoc = false, ...)` (step 26). Intercepted here
@@ -4038,6 +4221,18 @@ fn place_cell(
 
 /// Recursively `unset` the element addressed by `steps`. A missing path is a
 /// silent no-op (PHP semantics).
+/// Build a PHP `$matches`-style array from regex captures: index 0 is the whole
+/// match, index n the n-th group, with unmatched groups as empty strings
+/// (step 27, numeric groups only).
+fn captures_array(caps: &regex::Captures) -> Zval {
+    let mut arr = PhpArray::new();
+    for i in 0..caps.len() {
+        let s = caps.get(i).map(|m| m.as_str()).unwrap_or("");
+        let _ = arr.append(Zval::Str(PhpStr::new(s.as_bytes().to_vec())));
+    }
+    Zval::Array(Rc::new(arr))
+}
+
 fn unset_into(target: &mut Zval, steps: &[Step]) {
     let (first, rest) = match steps.split_first() {
         Some(p) => p,

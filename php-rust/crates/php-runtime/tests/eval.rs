@@ -3501,3 +3501,72 @@ fn interp_multiple_parts_and_literals() {
         "[A-B]"
     );
 }
+
+// --- Step 27: preg_* regular expressions ---
+
+#[test]
+fn preg_match_captures() {
+    assert_eq!(
+        out(r#"<?php preg_match('/(\d+)-(\d+)/', 'ab 12-34 cd', $m); echo $m[0], '/', $m[1], '/', $m[2];"#),
+        "12-34/12/34"
+    );
+}
+
+#[test]
+fn preg_match_return_value() {
+    assert_eq!(out(r#"<?php echo preg_match('/x/', 'axb'), preg_match('/z/', 'axb');"#), "10");
+}
+
+#[test]
+fn preg_match_no_match_empties_matches() {
+    assert_eq!(
+        out(r#"<?php preg_match('/z/', 'abc', $m); echo empty($m) ? 'E' : 'N';"#),
+        "E"
+    );
+}
+
+#[test]
+fn preg_match_bad_pattern_returns_false() {
+    assert_eq!(out(r#"<?php echo (preg_match('/[/', 'x') === false) ? 'F' : 'T';"#), "F");
+}
+
+#[test]
+fn preg_replace_simple() {
+    assert_eq!(out(r#"<?php echo preg_replace('/\d+/', '#', 'a1b22c333');"#), "a#b#c#");
+}
+
+#[test]
+fn preg_replace_backreferences() {
+    assert_eq!(out(r#"<?php echo preg_replace('/(\w)(\w)/', '$2$1', 'abcd');"#), "badc");
+}
+
+#[test]
+fn preg_replace_case_insensitive_flag() {
+    assert_eq!(out(r#"<?php echo preg_replace('/a/i', 'X', 'AaA');"#), "XXX");
+}
+
+#[test]
+fn preg_split_basic() {
+    assert_eq!(out(r#"<?php $p = preg_split('/,/', 'a,b,c'); echo $p[0], $p[1], $p[2];"#), "abc");
+}
+
+#[test]
+fn preg_quote_escapes_metachars() {
+    assert_eq!(out(r#"<?php echo preg_quote('a.b*c');"#), "a\\.b\\*c");
+}
+
+#[test]
+fn preg_match_all_pattern_order() {
+    assert_eq!(
+        out(r#"<?php $n = preg_match_all('/\d/', 'a1b2c3', $all); echo $n, '|', $all[0][0], $all[0][1], $all[0][2];"#),
+        "3|123"
+    );
+}
+
+#[test]
+fn preg_replace_callback_basic() {
+    assert_eq!(
+        out(r#"<?php echo preg_replace_callback('/\d/', function($m){ return $m[0] * 2; }, 'a1b2');"#),
+        "a2b4"
+    );
+}
