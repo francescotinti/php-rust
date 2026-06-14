@@ -25,7 +25,8 @@ use mago_syntax::ast::{
     DeclareBody, Expression, Extends, ForeachTarget, Function, FunctionLikeParameterList, Hint,
     Identifier, Instantiation, Interface, Literal, LiteralInteger, MatchArm as AstMatchArm, Method,
     MethodBody, Modifier, Node, PartialApplication, Property, PropertyItem, Statement, StaticItem,
-    Trait, TraitUse, UnaryPostfixOperator, UnaryPrefixOperator, Variable,
+    Trait, TraitUse, TraitUseAdaptation, TraitUseMethodReference, TraitUseSpecification,
+    UnaryPostfixOperator, UnaryPrefixOperator, Variable,
 };
 use mago_syntax::parser::parse_file;
 
@@ -43,6 +44,11 @@ pub enum LowerError {
     Parse(String),
     /// A construct that is valid PHP but outside the current Tier 1 scope.
     Unsupported { what: &'static str, line: Line },
+    /// A program that PHP *compiles* but rejects with a `Fatal error:` at link
+    /// time — e.g. an unresolved trait-method collision (step 21, D-21.5). Unlike
+    /// `Unsupported`, this is faithful PHP behaviour: `run_source` turns it into
+    /// an [`Outcome`](crate::Outcome) whose `rendered` stream carries the fatal.
+    Fatal { message: String, line: Line },
 }
 
 impl std::fmt::Display for LowerError {
@@ -52,6 +58,7 @@ impl std::fmt::Display for LowerError {
             LowerError::Unsupported { what, line } => {
                 write!(f, "unsupported construct ({what}) on line {line}")
             }
+            LowerError::Fatal { message, line } => write!(f, "{message} on line {line}"),
         }
     }
 }
@@ -784,6 +791,7 @@ impl<'f> Lowerer<'f> {
         let mut t_consts = Vec::new();
         self.flatten_into(
             &uses,
+            t.name.value,
             (&own_m, &own_p, &own_s, &own_c),
             (&mut t_methods, &mut t_props, &mut t_static, &mut t_consts),
             &mut abstract_methods,
@@ -809,15 +817,16 @@ impl<'f> Lowerer<'f> {
         Ok(())
     }
 
-    /// Copy the members of every trait named in `uses` into the four `out` vecs,
-    /// skipping any name the consumer already declares (`own_*`, precedence
-    /// D-21.4) or that an earlier trait in this list already supplied (first
-    /// wins; true conflict detection + `insteadof`/`as` arrive in 21-3). Reads
+    /// Copy the members of every trait named in `uses` into the four `out` vecs.
+    /// Honours `insteadof`/`as` adaptations (D-21.6/7), gives the consumer's own
+    /// declarations precedence (`own_*`, D-21.4), and raises the PHP collision
+    /// fatal when two traits supply the same method unresolved (D-21.5). Reads
     /// `self.traits`, which the caller has ensured is fully resolved.
     #[allow(clippy::type_complexity)]
     fn flatten_into(
         &self,
         uses: &[&TraitUse],
+        consumer_name: &[u8],
         own: (
             &HashSet<Vec<u8>>,
             &HashSet<Vec<u8>>,
@@ -835,21 +844,87 @@ impl<'f> Lowerer<'f> {
     ) -> Result<(), LowerError> {
         let (own_m, own_p, own_s, own_c) = own;
         let (methods, props, static_props, consts) = out;
-        let mut seen_m = own_m.clone();
+
+        // --- collect adaptations across all `use` clauses ---
+        // (trait_lc, method_lc) excluded by an `insteadof` (the losers).
+        let mut excluded: HashSet<(Vec<u8>, Vec<u8>)> = HashSet::new();
+        // `T::m as [vis] alias;` / `m as [vis] alias;` requests, applied last.
+        struct Alias {
+            trait_lc: Option<Vec<u8>>,
+            method_lc: Vec<u8>,
+            alias: Option<Box<[u8]>>,
+            vis: Option<Visibility>,
+        }
+        let mut aliases: Vec<Alias> = Vec::new();
+        for u in uses {
+            if let TraitUseSpecification::Concrete(spec) = &u.specification {
+                for ad in spec.adaptations.iter() {
+                    match ad {
+                        TraitUseAdaptation::Precedence(p) => {
+                            let m_lc = p.method_reference.method_name.value.to_ascii_lowercase();
+                            for loser in p.trait_names.iter() {
+                                excluded
+                                    .insert((function_name(loser).to_ascii_lowercase(), m_lc.clone()));
+                            }
+                        }
+                        TraitUseAdaptation::Alias(a) => {
+                            let (trait_lc, method_lc) = match &a.method_reference {
+                                TraitUseMethodReference::Absolute(abs) => (
+                                    Some(function_name(&abs.trait_name).to_ascii_lowercase()),
+                                    abs.method_name.value.to_ascii_lowercase(),
+                                ),
+                                TraitUseMethodReference::Identifier(id) => {
+                                    (None, id.value.to_ascii_lowercase())
+                                }
+                            };
+                            aliases.push(Alias {
+                                trait_lc,
+                                method_lc,
+                                alias: a.alias.as_ref().map(|id| id.value.into()),
+                                vis: a.visibility.as_ref().map(visibility_of_modifier),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- flatten members, applying exclusions + collision detection ---
+        let mut from_trait: HashMap<Vec<u8>, (Box<[u8]>, Box<[u8]>)> = HashMap::new();
         let mut seen_p = own_p.clone();
         let mut seen_s = own_s.clone();
         let mut seen_c = own_c.clone();
         for u in uses {
             for tn in u.trait_names.iter() {
                 let tkey = function_name(tn).to_ascii_lowercase();
+                let torig: Box<[u8]> = function_name(tn).into();
                 let lt = self.traits.get(&tkey).ok_or(LowerError::Unsupported {
                     what: "use of undefined trait",
                     line,
                 })?;
                 for m in &lt.methods {
-                    if seen_m.insert(m.decl.name.to_ascii_lowercase()) {
-                        methods.push(m.clone());
+                    let m_lc = m.decl.name.to_ascii_lowercase();
+                    // `insteadof` loser, or the consumer overrides it → drop.
+                    if excluded.contains(&(tkey.clone(), m_lc.clone())) || own_m.contains(&m_lc) {
+                        continue;
                     }
+                    if let Some((a_trait, a_method)) = from_trait.get(&m_lc) {
+                        return Err(LowerError::Fatal {
+                            message: format!(
+                                "Trait method {}::{} has not been applied as {}::{}, \
+                                 because of collision with {}::{}",
+                                String::from_utf8_lossy(&torig),
+                                String::from_utf8_lossy(&m.decl.name),
+                                String::from_utf8_lossy(consumer_name),
+                                String::from_utf8_lossy(&m.decl.name),
+                                String::from_utf8_lossy(a_trait),
+                                String::from_utf8_lossy(a_method),
+                            ),
+                            line,
+                        });
+                    }
+                    from_trait.insert(m_lc, (torig.clone(), m.decl.name.clone()));
+                    methods.push(m.clone());
                 }
                 for p in &lt.props {
                     if seen_p.insert(p.name.to_ascii_lowercase()) {
@@ -869,7 +944,64 @@ impl<'f> Lowerer<'f> {
                 abstract_methods.extend(lt.abstract_methods.iter().cloned());
             }
         }
+
+        // --- apply `as` aliases (sourced straight from the trait table) ---
+        for a in &aliases {
+            let src = self.find_trait_method(uses, a.trait_lc.as_deref(), &a.method_lc);
+            let mut src = src.ok_or(LowerError::Unsupported {
+                what: "trait alias of unknown method",
+                line,
+            })?;
+            match &a.alias {
+                Some(new_name) => {
+                    src.decl.name = new_name.clone();
+                    if let Some(v) = a.vis {
+                        src.visibility = v;
+                    }
+                    methods.retain(|m| !m.decl.name.eq_ignore_ascii_case(new_name));
+                    methods.push(src);
+                }
+                None => {
+                    if let Some(v) = a.vis {
+                        if let Some(m) = methods
+                            .iter_mut()
+                            .find(|m| m.decl.name.to_ascii_lowercase() == a.method_lc)
+                        {
+                            m.visibility = v;
+                        }
+                    }
+                }
+            }
+        }
         Ok(())
+    }
+
+    /// Find a trait method to alias: from a named trait if `trait_lc` is given,
+    /// else the first match among the `uses` traits (step 21-3, `as`).
+    fn find_trait_method(
+        &self,
+        uses: &[&TraitUse],
+        trait_lc: Option<&[u8]>,
+        method_lc: &[u8],
+    ) -> Option<MethodDecl> {
+        let pick = |lt: &LoweredTrait| {
+            lt.methods
+                .iter()
+                .find(|m| m.decl.name.to_ascii_lowercase() == method_lc)
+                .cloned()
+        };
+        if let Some(tl) = trait_lc {
+            return self.traits.get(tl).and_then(pick);
+        }
+        for u in uses {
+            for tn in u.trait_names.iter() {
+                let tkey = function_name(tn).to_ascii_lowercase();
+                if let Some(found) = self.traits.get(&tkey).and_then(pick) {
+                    return Some(found);
+                }
+            }
+        }
+        None
     }
 
     /// Resolve a list of interface names (`implements`/interface `extends`) to
@@ -1000,6 +1132,7 @@ impl<'f> Lowerer<'f> {
             let mut _abstract: Vec<Box<[u8]>> = Vec::new();
             self.flatten_into(
                 &uses,
+                &name,
                 (&own_m, &own_p, &own_s, &own_c),
                 (&mut t_methods, &mut t_props, &mut t_static, &mut t_consts),
                 &mut _abstract,
@@ -2221,6 +2354,15 @@ fn visibility_of<'a>(modifiers: impl Iterator<Item = &'a Modifier<'a>>) -> Visib
         }
     }
     Visibility::Public
+}
+
+/// Map a single visibility modifier (from a trait `as` adaptation) to [`Visibility`].
+fn visibility_of_modifier(m: &Modifier) -> Visibility {
+    match m {
+        Modifier::Protected(_) => Visibility::Protected,
+        Modifier::Private(_) => Visibility::Private,
+        _ => Visibility::Public,
+    }
 }
 
 /// Resolve a bare constant name to its literal HIR value (step 18, D-18.7).

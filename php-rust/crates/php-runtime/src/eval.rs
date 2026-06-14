@@ -128,8 +128,13 @@ pub struct Outcome {
 
 /// Lower `source` and run it with no builtins. Convenience wrapper over [`run`].
 pub fn run_source(name: &[u8], source: &[u8]) -> Result<Outcome, crate::LowerError> {
-    let program = crate::lower_source(name, source)?;
-    Ok(run(&program))
+    match crate::lower_source(name, source) {
+        Ok(program) => Ok(run(&program)),
+        Err(crate::LowerError::Fatal { message, line }) => {
+            Ok(compile_fatal_outcome(name, &message, line))
+        }
+        Err(e) => Err(e),
+    }
 }
 
 /// Lower `source` and run it with the given builtin registry.
@@ -138,8 +143,30 @@ pub fn run_source_with(
     source: &[u8],
     registry: &Registry,
 ) -> Result<Outcome, crate::LowerError> {
-    let program = crate::lower_source(name, source)?;
-    Ok(run_with(&program, registry))
+    match crate::lower_source(name, source) {
+        Ok(program) => Ok(run_with(&program, registry)),
+        Err(crate::LowerError::Fatal { message, line }) => {
+            Ok(compile_fatal_outcome(name, &message, line))
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// Build the [`Outcome`] for a compile-time `Fatal error:` (step 21). PHP renders
+/// these like a runtime fatal but without the "Uncaught" prefix or "thrown in"
+/// tail: `\nFatal error: <msg> in <file> on line <line>\nStack trace:\n#0 {main}\n`.
+fn compile_fatal_outcome(file: &[u8], message: &str, line: crate::hir::Line) -> Outcome {
+    let file_s = String::from_utf8_lossy(file);
+    let rendered = format!(
+        "\nFatal error: {message} in {file_s} on line {line}\nStack trace:\n#0 {{main}}\n"
+    );
+    Outcome {
+        stdout: Vec::new(),
+        rendered: rendered.into_bytes(),
+        diags: Vec::new(),
+        fatal: Some(PhpError::Error(message.to_string())),
+        return_value: Zval::Null,
+    }
 }
 
 /// Execute a lowered program with no builtins registered.

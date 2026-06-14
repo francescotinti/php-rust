@@ -2473,3 +2473,63 @@ fn trait_mixed_instance_and_static_members() {
         "tt2"
     );
 }
+
+// --- step 21-3: conflict resolution (insteadof / as / collision) ---
+
+#[test]
+fn trait_insteadof_and_as_alias() {
+    assert_eq!(
+        out("<?php trait A { public function say(){ return 'A'; } } \
+             trait B { public function say(){ return 'B'; } } \
+             class C { use A, B { A::say insteadof B; B::say as sayB; } } \
+             $c = new C(); echo $c->say(), $c->sayB();"),
+        "AB"
+    );
+}
+
+#[test]
+fn trait_unresolved_collision_is_compile_fatal() {
+    let src = "<?php\ntrait A { public function say(){ return 'A'; } }\n\
+               trait B { public function say(){ return 'B'; } }\n\
+               class C { use A, B; }\necho (new C())->say();\n";
+    assert_eq!(
+        rendered(src),
+        "\nFatal error: Trait method B::say has not been applied as C::say, \
+         because of collision with A::say in t.php on line 4\n\
+         Stack trace:\n#0 {main}\n"
+    );
+}
+
+#[test]
+fn trait_as_alias_with_rename_callable_internally() {
+    // `f as protected g;` exposes `g` (protected) callable from inside the class.
+    assert_eq!(
+        out("<?php trait T { public function f(){ return 'f'; } } \
+             class C { use T { f as protected g; } public function call(){ return $this->g(); } } \
+             echo (new C())->call();"),
+        "f"
+    );
+}
+
+#[test]
+fn trait_as_protected_rename_blocks_external_call() {
+    let src = "<?php\ntrait T { public function f(){ return 'f'; } }\n\
+               class C { use T { f as protected g; } }\n$c = new C();\necho $c->g();\n";
+    assert_eq!(
+        rendered(src),
+        "\nFatal error: Uncaught Error: Call to protected method C::g() from global scope \
+         in t.php:5\nStack trace:\n#0 {main}\n  thrown in t.php on line 5\n"
+    );
+}
+
+#[test]
+fn trait_as_visibility_only_no_rename() {
+    // `f as protected;` keeps the name but changes visibility.
+    let src = "<?php\ntrait T { public function f(){ return 'f'; } }\n\
+               class C { use T { f as protected; } }\n$c = new C();\necho $c->f();\n";
+    assert_eq!(
+        rendered(src),
+        "\nFatal error: Uncaught Error: Call to protected method C::f() from global scope \
+         in t.php:5\nStack trace:\n#0 {main}\n  thrown in t.php on line 5\n"
+    );
+}

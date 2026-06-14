@@ -134,14 +134,21 @@ pub fn run_phpt(src: &[u8], reg: &Registry) -> TestResult {
     // Capability scan: can the front-end even lower it?
     let source = file.as_bytes();
     if let Err(e) = php_runtime::lower_source(b"test.phpt", source) {
-        return match e {
+        match e {
             LowerError::Unsupported { what, line } => {
-                TestResult::skip("unsupported", format!("{what} (line {line})"))
+                return TestResult::skip("unsupported", format!("{what} (line {line})"))
             }
             LowerError::Parse(_) => {
-                TestResult::skip("parse", "mago could not parse (out-of-scope syntax)".to_string())
+                return TestResult::skip(
+                    "parse",
+                    "mago could not parse (out-of-scope syntax)".to_string(),
+                )
             }
-        };
+            // A compile-time fatal (e.g. trait collision, step 21) is faithful PHP
+            // behaviour, not a coverage gap: fall through and run it so the fatal
+            // is rendered onto the stream and compared like normal output.
+            LowerError::Fatal { .. } => {}
+        }
     }
 
     // Run it. The script's name doubles as the path PHP prints in diagnostics
