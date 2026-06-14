@@ -335,3 +335,15 @@ argomenti a una closure → `ArgumentCountError` fatale.
 argomenti by-ref ai dynamic call (`$f(&$x)`); string-call di un builtin by-ref (`$f='sort'; $f($a)`);
 spread `...$args` negli argomenti; callable array `[$obj,'m']`/`['Cls','m']` (OOP);
 cattura by-value di var del padre usata-ma-non-ancora-definita testualmente (→ Null+Warning).
+
+## STATO: IMPLEMENTATO (7 gruppi, +59 test 264→323, clippy pulito, zero D-NEW)
+
+Tutti e 7 i gruppi TDD shippati come da design (design `d9c6fed`; 18-1 `9a556ff`,
+18-2 `a899bd1`, 18-3 `f8a7a26`, 18-4 `c30263e`, 18-5 `15c2197`, 18-6 `cef7e5f`,
+18-7 `732e6b7`). Nessuna D-decisione riaperta. Note di implementazione in
+`diary/metrics.md` § "Step 18". Due divergenze note documentate nello scope-out di
+18-7 (object-id non riciclati; first-class callable di builtin senza `parameter[]`).
+D-18.8 confermata "gratis": il hint `callable` lowering→`None` passa il valore senza
+enforcement. Object→string di una closure: PHP fa un fatal `Error`, il funnel
+infallibile `to_zstr` emette invece un Warning + placeholder (edge non testato,
+rivedere con OOP).

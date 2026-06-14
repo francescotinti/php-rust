@@ -20,6 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 18) | 323 (17 suite) |
 | Unit/integration (workspace, fine step 17) | 264 (17 suite) |
 | Differential vs oracle (php-types) | 37.835 casi, 0 mismatch |
 | phpt-runner su testsuite PHP completa | 6172 file: 135 pass / 64 fail / 5973 skip (67.8% dei runnable) |
@@ -88,7 +89,8 @@ del differential sono state riconciliate verso il comportamento dell'oracle).
 | Step 15 (static variables: StaticVar + store persistente Rc<RefCell> + init-once, 1 sotto-step) | ~0.75h |
 | Step 16 (`declare(strict_types=1)`: parsing declare + flag strict + coerce_strict int→float widening, 1 sotto-step) | ~0.75h |
 | Step 17 (espansione builtin per frequenza: 24 fn pure in 5 gruppi TDD — case/build/trim/math/array) | ~1.25h |
-| **Totale a fine step 17** | **~27h** |
+| Step 18 (closures/callables: 7 gruppi TDD — infra+use, arrow, is_callable/call_user_func, ConstFetch, array_map/filter/usort, first-class callable, var_dump esatto) | ~3h |
+| **Totale a fine step 18** | **~30h** |
 
 ## Step 10 — espansione builtin
 
@@ -115,6 +117,41 @@ modifiche all'evaluator, clippy pulito, zero D-NEW.
 Builtin registrati totali: ~41 → ~65. Scope-out: Deprecation 8.5 chr/ord,
 array_map/array_filter (richiedono closures), costanti named (`STR_PAD_*`,
 `PHP_INT_MIN`: i test usano i valori literali), mb_*.
+
+## Step 18 — closures / callables
+
+Prima feature di "funzioni come valori", 7 gruppi TDD (+59 test, 264 → 323),
+clippy pulito, zero D-NEW. Tutta la semantica oracle-verificata su 8.5.7.
+
+- **18-1**: `Zval::Closure(Rc<Closure>)` (variante dedicata, no OOP); tabella piatta
+  `Program.closures` + `ExprKind::Closure{fn_idx, captures}`; `function() use($a,&$b){}`
+  (cattura by-value snapshot / by-ref via cella); chiamata dinamica `$f()` /
+  `$a['k']()` / IIFE (`ExprKind::CallDynamic` + `call_value`/`call_closure`/`call_named`);
+  `gettype`="object". Arm `Closure` nei funnel ops/convert/zval (object→scalar edge).
+- **18-2**: arrow `fn()=>expr` con auto-cattura by-value (analisi free-var via
+  `Node::children()` ∩ slot del padre); cattura transitiva per arrow annidate.
+- **18-3**: builtin higher-order intercettati nell'evaluator (no registry):
+  `is_callable`, `call_user_func`, `call_user_func_array`; callable stringa e hint
+  `callable` (accettato/non-enforced) già funzionanti da 18-1.
+- **18-4**: `ConstFetch` (`Expression::ConstantAccess`) + tabella costanti engine
+  (PHP_INT_*, PHP_FLOAT_*, STR_PAD_*, ARRAY_FILTER_USE_*, SORT_*, COUNT_*, M_*,
+  PHP_EOL, …). Sblocca i modi di array_filter e retro-sblocca l'ergonomia dei
+  builtin con flag (step 17). Chiude backlog #3.
+- **18-5**: `array_map` (single preserva chiavi / multi reindicizza / null=zip),
+  `array_filter` (truthy / callback + modi USE_KEY/USE_BOTH), `usort` (by-ref arg0,
+  merge sort stabile guidato dalla callback, reindex, ritorna true).
+- **18-6**: first-class callable `name(...)` (`Expression::PartialApplication`) →
+  closure `Named` che incapsula il nome.
+- **18-7**: var_dump/print_r esatti — `object(Closure)#N (P) { name/file/line |
+  function, parameter[] <required>/<optional> }` con contatore object-id e metadati
+  di render embedded (`Rc<ClosureInfo>`).
+
+Scope-out (debito): `Closure::bind/bindTo/call/fromCallable` + static closures
+(OOP/`$this`); argomenti by-ref ai dynamic call; string-call di builtin by-ref;
+spread `...$args`; callable array `[$o,'m']`/`['C','m']` (OOP); object-id non
+riciclati (closure effimere numerano più alto di PHP); first-class callable di un
+builtin senza array `parameter` (manca la signature → P differisce di 1);
+`uasort`/`uksort`/`array_walk`/`array_reduce`; user `const`/`define()`.
 
 ## Step 11 — reference semantics (a livello di variabile)
 
