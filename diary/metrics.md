@@ -20,6 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 30) | 575 |
 | Unit/integration (workspace, fine step 29) | 567 |
 | Unit/integration (workspace, fine step 28) | 545 |
 | Unit/integration (workspace, fine step 24) | 512 |
@@ -414,3 +415,32 @@ catalogato come **D-NEW differito** allo step heredoc/nowdoc del backlog, NON di
 competenza dello step 29. `array_search.phpt` diverge per l'encoding placeholder
 del byte NUL in EXPECTF (artefatto dell'harness, non un bug). Quindi 1 D-NEW
 trovato+fixato (29-4) e 1 D-NEW trovato+differito (heredoc trailing newline).
+
+## Step 30 — heredoc / nowdoc (chiude D-NEW-15)
+
+mago restituisce heredoc/nowdoc come `CompositeString::Document` con il corpo
+**grezzo** (niente dedent, niente strip della newline finale) più
+l'indentazione del marker di chiusura (`DocumentIndentation`
+None/Whitespace(n)/Tab(n)/Mixed) e il `DocumentKind` (Heredoc/Nowdoc). Nuovo
+`lower_document()` replica il lexer PHP:
+1. **dedent** — toglie l'indentazione del marker dall'inizio di ogni riga del
+   corpo (flexible heredoc/nowdoc PHP 7.3+), tracciando `at_line_start`
+   attraverso i segmenti literal/interpolati (l'indent è sempre literal);
+2. **strip newline finale** — rimuove l'unica newline prima del marker;
+3. **heredoc**: interpola le parti + processa gli escape, MA `\"` resta letterale
+   (le doppie virgolette non sono speciali in un heredoc) →
+   `unescape_double_quoted` ha ora il flag `process_quote` (true per
+   double-quoted, false per heredoc);
+4. **nowdoc**: ogni byte verbatim (niente interpolazione, niente escape).
+
+Instradare `Document` fuori da `lower_interpolation` corregge **en passant** la
+regressione del 29-4 (i corpi nowdoc venivano erroneamente unescapati: `\t`→TAB
+reale). **+8 test (567→575)**, clippy pulito.
+
+**Corpus**: `strrev_basic`/`array_fill_basic` ora **passano** (batch
+string+array 5/5 = 100%); `Zend/tests/heredoc_nowdoc` 7 pass / 0 fail / 58 skip
+(100% dei runnable; gli skip sono feature di linguaggio non correlate o test di
+compile-error intenzionali). **D-NEW-15 chiuso.** Scope-out: i casi di
+parse-error PHP (indent tab+spazi misti, righe meno indentate del marker) non
+sono modellati (dedent lenient); backtick/shell-exec invariati.
+
