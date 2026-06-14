@@ -788,3 +788,72 @@ skip** (157 tot). Pass-rate runnable **47.5%** (era 42.5% prima dei 2 fix 22-5).
 **Scope-out riepilogo step 22:** `__destruct`, `Stringable` auto-impl,
 validazione firma magic method, `&__get` by-ref, indirect modification di prop
 overloaded multi-livello (`$o->magic[] = v`), reference a prop overloaded.
+
+## Step 23 — ENUM (design pass)
+
+PHP 8.1 `enum` (pure + backed). mago espone `Statement::Enum` con
+`Enum { name, backing_type_hint: Option<EnumBackingTypeHint{hint}>, implements,
+members: Sequence<ClassLikeMember> }`. I membri riusano `ClassLikeMember`:
+`EnumCase`, `Method`, `Constant`, `TraitUse` — quindi il lowering di un enum è
+quasi identico a quello di una classe, più la gestione dei `case`.
+
+`EnumCase.item` è `Unit(name)` oppure `Backed{name, value: Expression}`.
+
+### Decisioni step 23
+
+- **D-23.1 — Enum riusa `ClassDecl`.** Come `is_interface`, aggiungo
+  `is_enum: bool`, `enum_backing: Option<EnumBacking>` (`Int`|`Str`) e
+  `enum_cases: Vec<EnumCaseDecl{ name, value: Option<Expr> }>` a `ClassDecl`.
+  Tutta la macchina OOP (resolve_method, instanceof, class const, static call,
+  $this) viene riusata.
+- **D-23.2 — Case = oggetto singleton interned.** Cache nell'`Evaluator`:
+  `enum_cache: HashMap<(ClassId, Vec<u8>), Rc<RefCell<Object>>>`. Il primo
+  accesso a `E::Case` materializza l'oggetto (props sintetiche), i successivi
+  ritornano lo **stesso** `Rc`. Garantisce identità per `===`/`match`.
+- **D-23.3 — Object identity in `===` (FIX gap pre-esistente).**
+  `ops::identical` non aveva arm `Object` → due oggetti erano sempre `!==`
+  (mai testato finora). Aggiungo `(Object(l), Object(r)) => Rc::ptr_eq(l, r)`:
+  semantica handle PHP corretta (assegnazione oggetto condivide l'`Rc`) e
+  prerequisito per gli enum. Catalogato come **D-NEW** in 04-divergences.
+- **D-23.4 — Props sintetiche read-only.** Pure: `name` (string). Backed:
+  `name` + `value` (Long|Str). Accessibili via `->name`/`->value`. Sono props
+  normali nell'`Object` (interned una volta), niente setter.
+- **D-23.5 — `var_dump`/`print_r` formato enum.** `enum(Suit::Hearts)` (anche i
+  backed: niente value nel dump, confermato da oracle). Flag `is_enum_case: bool`
+  su `ObjectInfo`; `print_r` → `Suit Enum ( [name] => Hearts [value] => ... )`
+  (da validare con oracle in 23-4).
+- **D-23.6 — Metodi built-in.** `E::cases()` (tutti, lista dei singleton in
+  ordine di dichiarazione); `E::from($v)`/`E::tryFrom($v)` (solo backed):
+  `from` → ValueError se assente, `tryFrom` → null. Special-case in
+  `call_static` quando `is_enum` (prima della risoluzione metodi utente).
+- **D-23.7 — Interfacce prelude `UnitEnum`/`BackedEnum`.** Aggiunte vuote al
+  PRELUDE. `lower_enum` aggiunge `UnitEnum` agli `interfaces` di ogni enum, e
+  `BackedEnum` per i backed → `instanceof UnitEnum/BackedEnum` via la macchina
+  esistente. `implements` utente concatenato.
+- **D-23.8 — Metodi/costanti utente.** Lowerati come per le classi; dentro un
+  metodo `$this` è il case (oggetto). `const X = self::Case` risolto via il
+  normale eval delle class-const (i case sono accessibili come const-like).
+- **D-23.9 — `new E()` → Error** "Cannot instantiate enum E" in `eval_new`.
+- **D-23.10 — Backing dal `Hint`.** Solo `int`/`string`. I valori dei case
+  devono essere literal int/string coerenti col backing (validazione lieve);
+  store come `Zval::Long`/`Zval::Str`.
+- **D-23.11 — `E::class`** già funziona (branch `class` in `eval_class_const`).
+
+### Scope-out step 23
+- Enum che implementano interfacce con metodi reali oltre ai marker (oltre il
+  semplice `instanceof`): `implements` registrato ma non si verifica conformità.
+- Reflection sugli enum, enum negli attributi, `enum_exists()`.
+- Proprietà dichiarate dentro un enum (PHP: fatal "Enums may not include
+  properties") — le rifiutiamo/ignoriamo, non emettiamo il fatal esatto.
+- Costanti enum che referenziano case in contesti complessi oltre `self::Case`.
+
+### Piano TDD (4 gruppi)
+- **23-1 pure enum core**: dichiarazione; `Suit::Hearts` singleton; `->name`;
+  `===`/`!==` e `match` per identità (incl. fix object `===` in `ops`);
+  `instanceof Suit`; `instanceof UnitEnum`; `Suit::class`; `new Suit()` → Error.
+- **23-2 backed enum**: `: string`/`: int`; `->value`; `from`/`tryFrom`;
+  `instanceof BackedEnum`; ValueError su `from` mancante; `tryFrom` → null.
+- **23-3 cases() + metodi/costanti**: `Suit::cases()`; metodo d'istanza con
+  `$this` + `match($this)`; metodo statico; `const` enum; `self::Case`.
+- **23-4 var_dump/print_r + corpus**: formato `enum(...)`; print_r; validazione
+  corpus `Zend/tests/enum*`; fix eventuali (D-NEW).
