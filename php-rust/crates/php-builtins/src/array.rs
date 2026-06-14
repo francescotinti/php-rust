@@ -448,3 +448,288 @@ fn as_array_mut<'a>(arr: &'a mut Zval, fname: &str) -> Result<&'a mut Rc<PhpArra
         ))),
     }
 }
+
+// --- Step 29-2: pure array builtins ----------------------------------------
+
+/// Coerce a value to an array key with PHP's rules (int|bool|float -> int key;
+/// null -> "" key; numeric strings normalize).
+fn zval_to_key(v: &Zval, ctx: &mut Ctx) -> Key {
+    match v {
+        Zval::Long(i) => Key::Int(*i),
+        Zval::Bool(b) => Key::Int(*b as i64),
+        Zval::Double(d) => Key::Int(*d as i64),
+        Zval::Null => Key::Str(php_types::PhpStr::new(Vec::new())),
+        Zval::Str(s) => Key::from_zstr(s),
+        other => Key::from_bytes(convert::to_zstr(other, ctx.diags).as_bytes()),
+    }
+}
+
+/// array_key_exists($key, $array): true even when the value is null (unlike
+/// `isset`).
+pub fn array_key_exists(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let key = args.first().ok_or_else(|| {
+        PhpError::Error("array_key_exists() expects exactly 2 arguments, 0 given".to_string())
+    })?;
+    let arr = match args.get(1) {
+        Some(Zval::Array(a)) => a,
+        Some(other) => {
+            return Err(PhpError::TypeError(format!(
+                "array_key_exists(): Argument #2 ($array) must be of type array, {} given",
+                other.error_type_name()
+            )))
+        }
+        None => {
+            return Err(PhpError::Error(
+                "array_key_exists() expects exactly 2 arguments, 1 given".to_string(),
+            ))
+        }
+    };
+    let k = zval_to_key(key, ctx);
+    Ok(Zval::Bool(arr.contains_key(&k)))
+}
+
+/// array_search($needle, $haystack, $strict = false): the key of the first
+/// match, or false. Loose comparison by default.
+pub fn array_search(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let needle = args.first().ok_or_else(|| {
+        PhpError::Error("array_search() expects at least 2 arguments, 0 given".to_string())
+    })?;
+    let arr = match args.get(1) {
+        Some(Zval::Array(a)) => a,
+        Some(other) => {
+            return Err(PhpError::TypeError(format!(
+                "array_search(): Argument #2 ($haystack) must be of type array, {} given",
+                other.error_type_name()
+            )))
+        }
+        None => {
+            return Err(PhpError::Error(
+                "array_search() expects at least 2 arguments, 1 given".to_string(),
+            ))
+        }
+    };
+    let strict = matches!(args.get(2), Some(v) if convert::is_true_silent(v));
+    for (k, v) in arr.iter() {
+        let hit = if strict {
+            ops::identical(v, needle)
+        } else {
+            ops::loose_eq(v, needle)
+        };
+        if hit {
+            return Ok(key_to_zval(k));
+        }
+    }
+    Ok(Zval::Bool(false))
+}
+
+/// array_fill($start, $count, $value): `$count` copies keyed `$start`,
+/// `$start+1`, ... (consecutive, PHP 8). A negative count is a `ValueError`.
+pub fn array_fill(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let start = convert::to_long_cast(
+        args.first().ok_or_else(|| {
+            PhpError::Error("array_fill() expects exactly 3 arguments, 0 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let count = convert::to_long_cast(
+        args.get(1).ok_or_else(|| {
+            PhpError::Error("array_fill() expects exactly 3 arguments, 1 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let value = args.get(2).ok_or_else(|| {
+        PhpError::Error("array_fill() expects exactly 3 arguments, 2 given".to_string())
+    })?;
+    if count < 0 {
+        return Err(PhpError::ValueError(
+            "array_fill(): Argument #2 ($count) must be greater than or equal to 0".to_string(),
+        ));
+    }
+    let mut out = PhpArray::new();
+    for i in 0..count {
+        out.insert(Key::Int(start + i), value.clone());
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// array_flip($array): swap keys and values. Only int|string values become
+/// keys; others are skipped.
+pub fn array_flip(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let arr = arr_arg(args, "array_flip")?;
+    let mut out = PhpArray::new();
+    for (k, v) in arr.iter() {
+        let new_key = match v {
+            Zval::Long(i) => Key::Int(*i),
+            Zval::Str(s) => Key::from_zstr(s),
+            _ => continue,
+        };
+        out.insert(new_key, key_to_zval(k));
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// array_combine($keys, $values): zip into an array. The two arrays must have
+/// the same length, else a `ValueError`.
+pub fn array_combine(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let keys = arr_nth(args, 0, "array_combine", "keys")?;
+    let values = arr_nth(args, 1, "array_combine", "values")?;
+    if keys.len() != values.len() {
+        return Err(PhpError::ValueError(
+            "array_combine(): Argument #1 ($keys) and argument #2 ($values) must have the same number of elements".to_string(),
+        ));
+    }
+    let mut out = PhpArray::new();
+    for ((_, kv), (_, vv)) in keys.iter().zip(values.iter()) {
+        let key = zval_to_key(kv, ctx);
+        out.insert(key, vv.clone());
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// array_pad($array, $size, $value): pad to abs($size) elements with $value, on
+/// the right for positive size, on the left for negative. Integer keys are
+/// renumbered; string keys are preserved.
+pub fn array_pad(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let arr = arr_arg(args, "array_pad")?;
+    let size = convert::to_long_cast(
+        args.get(1).ok_or_else(|| {
+            PhpError::Error("array_pad() expects exactly 3 arguments, 1 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let value = args.get(2).ok_or_else(|| {
+        PhpError::Error("array_pad() expects exactly 3 arguments, 2 given".to_string())
+    })?;
+    let len = arr.len() as i64;
+    let target = size.unsigned_abs() as usize;
+    let pad_count = target.saturating_sub(arr.len());
+
+    let mut out = PhpArray::new();
+    let push_orig = |out: &mut PhpArray, arr: &PhpArray| {
+        for (k, v) in arr.iter() {
+            match k {
+                Key::Str(_) => out.insert(k.clone(), v.clone()),
+                Key::Int(_) => {
+                    let _ = out.append(v.clone());
+                }
+            }
+        }
+    };
+    if pad_count == 0 || target <= len as usize {
+        push_orig(&mut out, arr);
+    } else if size < 0 {
+        for _ in 0..pad_count {
+            let _ = out.append(value.clone());
+        }
+        push_orig(&mut out, arr);
+    } else {
+        push_orig(&mut out, arr);
+        for _ in 0..pad_count {
+            let _ = out.append(value.clone());
+        }
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// array_product($array): product of the elements (numeric-coerced). The empty
+/// array yields 1.
+pub fn array_product(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let arr = arr_arg(args, "array_product")?;
+    let mut acc = Zval::Long(1);
+    for (_, v) in arr.iter() {
+        acc = ops::mul(&acc, v, ctx.diags)?;
+    }
+    Ok(acc)
+}
+
+/// array_key_first($array) / array_key_last($array): the first/last key, or
+/// null for an empty array.
+pub fn array_key_first(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let arr = arr_arg(args, "array_key_first")?;
+    Ok(arr.iter().next().map(|(k, _)| key_to_zval(k)).unwrap_or(Zval::Null))
+}
+
+pub fn array_key_last(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let arr = arr_arg(args, "array_key_last")?;
+    Ok(arr.iter().last().map(|(k, _)| key_to_zval(k)).unwrap_or(Zval::Null))
+}
+
+/// array_diff($array, ...$excludes): elements of $array (keys preserved) whose
+/// string form is absent from every other array.
+pub fn array_diff(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let base = arr_arg(args, "array_diff")?;
+    let others = string_sets(&args[1..], ctx, "array_diff")?;
+    let mut out = PhpArray::new();
+    for (k, v) in base.iter() {
+        let s = convert::to_zstr(v, ctx.diags).as_bytes().to_vec();
+        if !others.iter().any(|set| set.contains(&s)) {
+            out.insert(k.clone(), v.clone());
+        }
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// array_intersect($array, ...$others): elements of $array (keys preserved)
+/// whose string form is present in every other array.
+pub fn array_intersect(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let base = arr_arg(args, "array_intersect")?;
+    let others = string_sets(&args[1..], ctx, "array_intersect")?;
+    let mut out = PhpArray::new();
+    for (k, v) in base.iter() {
+        let s = convert::to_zstr(v, ctx.diags).as_bytes().to_vec();
+        if others.iter().all(|set| set.contains(&s)) {
+            out.insert(k.clone(), v.clone());
+        }
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// Collect the trailing array arguments as sets of string-coerced values.
+fn string_sets(
+    args: &[Zval],
+    ctx: &mut Ctx,
+    fname: &str,
+) -> Result<Vec<std::collections::HashSet<Vec<u8>>>, PhpError> {
+    let mut sets = Vec::with_capacity(args.len());
+    for (i, a) in args.iter().enumerate() {
+        match a {
+            Zval::Array(arr) => {
+                let set = arr
+                    .iter()
+                    .map(|(_, v)| convert::to_zstr(v, ctx.diags).as_bytes().to_vec())
+                    .collect();
+                sets.push(set);
+            }
+            other => {
+                return Err(PhpError::TypeError(format!(
+                    "{fname}(): Argument #{} must be of type array, {} given",
+                    i + 2,
+                    other.error_type_name()
+                )))
+            }
+        }
+    }
+    Ok(sets)
+}
+
+/// Positional array argument `idx` (named `pname`), else a `TypeError`.
+fn arr_nth<'a>(
+    args: &'a [Zval],
+    idx: usize,
+    fname: &str,
+    pname: &str,
+) -> Result<&'a PhpArray, PhpError> {
+    match args.get(idx) {
+        Some(Zval::Array(a)) => Ok(a),
+        Some(other) => Err(PhpError::TypeError(format!(
+            "{fname}(): Argument #{} (${pname}) must be of type array, {} given",
+            idx + 1,
+            other.error_type_name()
+        ))),
+        None => Err(PhpError::Error(format!(
+            "{fname}() expects at least {} arguments, {} given",
+            idx + 1,
+            args.len()
+        ))),
+    }
+}

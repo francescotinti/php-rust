@@ -40,6 +40,18 @@ pub fn registry() -> Registry {
     add(b"array_reverse", array::array_reverse);
     add(b"array_unique", array::array_unique);
     add(b"array_sum", array::array_sum);
+    add(b"array_key_exists", array::array_key_exists);
+    add(b"key_exists", array::array_key_exists);
+    add(b"array_search", array::array_search);
+    add(b"array_fill", array::array_fill);
+    add(b"array_flip", array::array_flip);
+    add(b"array_combine", array::array_combine);
+    add(b"array_pad", array::array_pad);
+    add(b"array_product", array::array_product);
+    add(b"array_key_first", array::array_key_first);
+    add(b"array_key_last", array::array_key_last);
+    add(b"array_diff", array::array_diff);
+    add(b"array_intersect", array::array_intersect);
     add(b"implode", string::implode);
     add(b"join", string::implode);
     add(b"explode", string::explode);

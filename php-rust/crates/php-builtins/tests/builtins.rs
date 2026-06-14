@@ -1209,3 +1209,118 @@ fn number_format_cases() {
     assert_eq!(out("<?php echo number_format(-0.01, 0);"), "0");
     assert_eq!(out("<?php echo number_format(-0.5, 0);"), "-1");
 }
+
+// --- Step 29-2: pure array builtins ----------------------------------------
+
+#[test]
+fn array_key_exists_cases() {
+    assert_eq!(out("<?php var_dump(array_key_exists(0, [1, 2]));"), "bool(true)\n");
+    assert_eq!(out("<?php var_dump(array_key_exists(5, [1, 2]));"), "bool(false)\n");
+    // Unlike isset(), a null value still counts as an existing key.
+    assert_eq!(out("<?php var_dump(array_key_exists('a', ['a' => null]));"), "bool(true)\n");
+    assert_eq!(out("<?php var_dump(array_key_exists('a', ['b' => 1]));"), "bool(false)\n");
+}
+
+#[test]
+fn array_search_cases() {
+    // Loose by default: "1" matches int 1.
+    assert_eq!(out("<?php var_dump(array_search('1', [0, 1, 2]));"), "int(1)\n");
+    // Strict mode rejects the cross-type match.
+    assert_eq!(out("<?php var_dump(array_search('1', [0, 1, 2], true));"), "bool(false)\n");
+    assert_eq!(out("<?php var_dump(array_search('z', [0, 1, 2]));"), "bool(false)\n");
+    // String keys come back as strings.
+    assert_eq!(out("<?php var_dump(array_search(2, ['a' => 1, 'b' => 2]));"), "string(1) \"b\"\n");
+}
+
+#[test]
+fn array_fill_cases() {
+    assert_eq!(out("<?php echo implode(',', array_fill(5, 3, 'x'));"), "x,x,x");
+    assert_eq!(
+        out("<?php echo implode(',', array_keys(array_fill(5, 3, 'x')));"),
+        "5,6,7"
+    );
+    // PHP 8: a negative start index increments consecutively.
+    assert_eq!(
+        out("<?php echo implode(',', array_keys(array_fill(-3, 3, 0)));"),
+        "-3,-2,-1"
+    );
+}
+
+#[test]
+fn array_flip_cases() {
+    assert_eq!(
+        out("<?php $r = array_flip(['a' => 1, 'b' => 2]); echo $r[1], $r[2];"),
+        "ab"
+    );
+    // Int values stay int keys; the new value is the old key.
+    assert_eq!(
+        out("<?php $r = array_flip([0 => 'x', 1 => 5]); echo $r['x'], '|', $r[5];"),
+        "0|1"
+    );
+}
+
+#[test]
+fn array_combine_cases() {
+    assert_eq!(
+        out("<?php $r = array_combine(['a', 'b'], [1, 2]); echo $r['a'], $r['b'];"),
+        "12"
+    );
+    assert_eq!(out("<?php var_dump(array_combine([], []));"), "array(0) {\n}\n");
+    match fatal("<?php array_combine(['a'], [1, 2]);") {
+        PhpError::ValueError(m) => assert!(m.contains("same number of elements"), "{m}"),
+        other => panic!("expected ValueError, got {other:?}"),
+    }
+}
+
+#[test]
+fn array_pad_cases() {
+    assert_eq!(out("<?php echo implode(',', array_pad([1, 2], 4, 0));"), "1,2,0,0");
+    assert_eq!(out("<?php echo implode(',', array_pad([1, 2], -4, 0));"), "0,0,1,2");
+    // Size <= length returns the input unchanged.
+    assert_eq!(out("<?php echo implode(',', array_pad([1, 2], 1, 0));"), "1,2");
+}
+
+#[test]
+fn array_product_cases() {
+    assert_eq!(out("<?php echo array_product([2, 3, 4]);"), "24");
+    assert_eq!(out("<?php echo array_product([]);"), "1");
+    assert_eq!(out("<?php echo array_product([2, 2.5]);"), "5");
+    assert_eq!(out("<?php echo array_product(['2', '3']);"), "6");
+}
+
+#[test]
+fn array_key_first_last_cases() {
+    assert_eq!(out("<?php var_dump(array_key_first(['x' => 1, 'y' => 2]));"), "string(1) \"x\"\n");
+    assert_eq!(out("<?php var_dump(array_key_last([5, 6, 7]));"), "int(2)\n");
+    assert_eq!(out("<?php var_dump(array_key_first([]));"), "NULL\n");
+    assert_eq!(out("<?php var_dump(array_key_last([]));"), "NULL\n");
+}
+
+#[test]
+fn array_diff_cases() {
+    // Keys are preserved; comparison is by string value.
+    assert_eq!(
+        out("<?php echo implode(',', array_diff([1, 2, 3, 4], [2, 4]));"),
+        "1,3"
+    );
+    assert_eq!(
+        out("<?php echo implode(',', array_keys(array_diff([1, 2, 3, 4], [2, 4])));"),
+        "0,2"
+    );
+    // String "2" removes int 2 (string comparison).
+    assert_eq!(out("<?php echo implode(',', array_diff([1, 2, 3], ['2']));"), "1,3");
+    // Multiple exclusion arrays.
+    assert_eq!(out("<?php echo implode(',', array_diff([1, 2, 3, 4], [2], [4]));"), "1,3");
+}
+
+#[test]
+fn array_intersect_cases() {
+    assert_eq!(
+        out("<?php echo implode(',', array_intersect([1, 2, 3, 4], [2, 4, 6]));"),
+        "2,4"
+    );
+    assert_eq!(
+        out("<?php echo implode(',', array_keys(array_intersect([1, 2, 3, 4], [2, 4, 6])));"),
+        "1,3"
+    );
+}
