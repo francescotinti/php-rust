@@ -3194,3 +3194,49 @@ fn class_inherits_interface_constants() {
         "100"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Step 23-5 — enum case immutability (readonly props, no dynamic, no unset)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn enum_modify_existing_prop_is_readonly_error() {
+    assert_eq!(
+        out(&format!(
+            "<?php {SUIT} $h = Suit::Hearts; try {{ $h->name = 'x'; }} catch (\\Error $e) {{ echo $e->getMessage(); }}"
+        )),
+        "Cannot modify readonly property Suit::$name"
+    );
+}
+
+#[test]
+fn enum_create_dynamic_prop_error() {
+    assert_eq!(
+        out(&format!(
+            "<?php {SUIT} $h = Suit::Hearts; try {{ $h->value = 1; }} catch (\\Error $e) {{ echo $e->getMessage(); }}"
+        )),
+        "Cannot create dynamic property Suit::$value"
+    );
+}
+
+#[test]
+fn enum_backed_modify_value_is_readonly_error() {
+    assert_eq!(
+        out(&format!(
+            "<?php {STATUS} $a = Status::Active; \
+             try {{ $a->value = 'Z'; }} catch (\\Error $e) {{ echo $e->getMessage(); }} \
+             try {{ $a->other = 1; }} catch (\\Error $e) {{ echo '|', $e->getMessage(); }}"
+        )),
+        "Cannot modify readonly property Status::$value|Cannot create dynamic property Status::$other"
+    );
+}
+
+#[test]
+fn enum_unset_prop_is_readonly_error() {
+    assert_eq!(
+        out(&format!(
+            "<?php {SUIT} $h = Suit::Hearts; try {{ unset($h->name); }} catch (\\Error $e) {{ echo $e->getMessage(); }}"
+        )),
+        "Cannot unset readonly property Suit::$name"
+    );
+}

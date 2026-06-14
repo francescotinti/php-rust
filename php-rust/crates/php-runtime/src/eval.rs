@@ -3658,6 +3658,16 @@ impl<'p> Evaluator<'p> {
                     self.magic_guard.remove(&key);
                     return r.map(|_| ());
                 }
+                // An enum case property is readonly — it cannot be unset
+                // (step 23, D-23.4).
+                if o.borrow().info.is_enum_case {
+                    let b = o.borrow();
+                    return Err(PhpError::Error(format!(
+                        "Cannot unset readonly property {}::${}",
+                        String::from_utf8_lossy(b.class_name.as_bytes()),
+                        String::from_utf8_lossy(name)
+                    )));
+                }
             }
         }
         match slot_mut!(self, base) {
@@ -3727,6 +3737,17 @@ fn write_into(
         match target {
             Zval::Object(o) => {
                 let mut obj = o.borrow_mut();
+                // An enum case is immutable: every property is readonly and no
+                // dynamic property may be created on it (step 23, D-23.4).
+                if obj.info.is_enum_case {
+                    let cls = String::from_utf8_lossy(obj.class_name.as_bytes()).into_owned();
+                    let prop = String::from_utf8_lossy(name).into_owned();
+                    return Err(PhpError::Error(if obj.props.contains(name) {
+                        format!("Cannot modify readonly property {cls}::${prop}")
+                    } else {
+                        format!("Cannot create dynamic property {cls}::${prop}")
+                    }));
+                }
                 if rest.is_empty() {
                     obj.props.set(name, value);
                 } else {
