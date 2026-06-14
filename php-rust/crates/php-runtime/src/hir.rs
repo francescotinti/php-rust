@@ -38,6 +38,9 @@ pub struct Program {
     /// (each gets a unique id). The evaluator sizes its persistent static store
     /// to this (step 15, D-15.2).
     pub static_count: usize,
+    /// `declare(strict_types=1)` is in effect — scalar type hints are enforced
+    /// without coercion (step 16, D-16.1).
+    pub strict: bool,
 }
 
 /// A lowered `function name(params) { body }`. Each declaration owns a *local*

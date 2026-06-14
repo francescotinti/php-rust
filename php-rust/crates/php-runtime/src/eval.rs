@@ -146,6 +146,7 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         locals: None,
         fn_returns_ref: false,
         statics: vec![None; program.static_count],
+        strict: program.strict,
         out: Vec::new(),
         rendered: Vec::new(),
         diags: Vec::new(),
@@ -203,6 +204,9 @@ struct Evaluator<'p> {
     /// run, giving `static $x` its persistence and cross-recursion sharing
     /// (step 15, D-15.1).
     statics: Vec<Option<Rc<RefCell<Zval>>>>,
+    /// `declare(strict_types=1)` in effect: scalar hints are enforced without
+    /// coercion (only `int`→`float` widening), step 16.
+    strict: bool,
     /// Pure program output (echo / inline HTML / builtins).
     out: Vec<u8>,
     /// The interleaved CLI stream: `out` plus diagnostics rendered at their point
@@ -657,6 +661,7 @@ impl<'p> Evaluator<'p> {
     /// argument shares the caller's cell (D-R6). A missing argument falls back to
     /// its default, evaluated in the new frame; falling off the end yields NULL.
     fn run_user_fn_body(&mut self, f: &'p FnDecl, argv: Vec<Arg>) -> Result<Zval, PhpError> {
+        let strict = self.strict;
         for (i, p) in f.params.iter().enumerate() {
             let binding = match argv.get(i) {
                 // A by-value argument is coerced to the parameter's scalar hint
@@ -665,7 +670,7 @@ impl<'p> Evaluator<'p> {
                 Some(Arg::Val(v)) => {
                     let val = v.clone();
                     match &p.hint {
-                        Some(hint) => match coerce_to_hint(val, hint, &mut self.diags) {
+                        Some(hint) => match coerce_to_hint(val, hint, &mut self.diags, strict) {
                             Ok(c) => c,
                             Err(given) => return Err(self.arg_type_error(f, i, p, hint, given)),
                         },
@@ -680,7 +685,9 @@ impl<'p> Evaluator<'p> {
                 None => {
                     let v = self.eval(p.default.as_ref().expect("required arg checked"))?;
                     match &p.hint {
-                        Some(hint) => coerce_to_hint(v.clone(), hint, &mut self.diags).unwrap_or(v),
+                        Some(hint) => {
+                            coerce_to_hint(v.clone(), hint, &mut self.diags, strict).unwrap_or(v)
+                        }
                         None => v,
                     }
                 }
@@ -695,7 +702,7 @@ impl<'p> Evaluator<'p> {
         // function returns a `Zval::Ref` to alias, so its return type stays
         // unenforced here (scope-out, D-14.5/D-13.7).
         match &f.ret_hint {
-            Some(hint) if !f.by_ref => match coerce_to_hint(ret, hint, &mut self.diags) {
+            Some(hint) if !f.by_ref => match coerce_to_hint(ret, hint, &mut self.diags, strict) {
                 Ok(v) => Ok(v),
                 Err(given) => Err(self.return_type_error(f, hint, given)),
             },
@@ -1777,11 +1784,16 @@ fn key_to_zval(k: &Key) -> Zval {
 /// (step 14). On success returns the coerced value (emitting the lossy-float
 /// deprecations along the way); on failure returns the PHP type name of `value`
 /// for the TypeError message. `null` satisfies a nullable hint verbatim.
-fn coerce_to_hint(value: Zval, hint: &TypeHint, diags: &mut Diags) -> Result<Zval, &'static str> {
+fn coerce_to_hint(
+    value: Zval,
+    hint: &TypeHint,
+    diags: &mut Diags,
+    strict: bool,
+) -> Result<Zval, &'static str> {
     // Follow a reference to its value first (defensive; bound args are plain).
     if let Zval::Ref(c) = &value {
         let inner = c.borrow().clone();
-        return coerce_to_hint(inner, hint, diags);
+        return coerce_to_hint(inner, hint, diags, strict);
     }
     if matches!(value, Zval::Null | Zval::Undef) {
         return if hint.nullable {
@@ -1791,6 +1803,9 @@ fn coerce_to_hint(value: Zval, hint: &TypeHint, diags: &mut Diags) -> Result<Zva
         };
     }
     let given = php_type_name(&value);
+    if strict {
+        return coerce_strict(value, hint).ok_or(given);
+    }
     match hint.kind {
         ScalarType::Int => coerce_to_int(value, diags),
         ScalarType::Float => coerce_to_float(value),
@@ -1798,6 +1813,21 @@ fn coerce_to_hint(value: Zval, hint: &TypeHint, diags: &mut Diags) -> Result<Zva
         ScalarType::Bool => coerce_to_bool(value, diags),
     }
     .ok_or(given)
+}
+
+/// Strict-mode (`declare(strict_types=1)`) scalar check: the value's type must
+/// match the hint exactly, with the single exception of `int` → `float`
+/// widening. No coercion, no deprecations (step 16, D-16.3).
+fn coerce_strict(value: Zval, hint: &TypeHint) -> Option<Zval> {
+    match (hint.kind, &value) {
+        (ScalarType::Int, Zval::Long(_))
+        | (ScalarType::Float, Zval::Double(_))
+        | (ScalarType::String, Zval::Str(_))
+        | (ScalarType::Bool, Zval::Bool(_)) => Some(value),
+        // The one widening allowed in strict mode.
+        (ScalarType::Float, Zval::Long(l)) => Some(Zval::Double(*l as f64)),
+        _ => None,
+    }
 }
 
 /// Weak coercion to `int`: numeric strings must be *well formed* (stricter than

@@ -20,9 +20,10 @@ use bumpalo::Bump;
 use mago_database::file::File;
 use mago_span::{HasSpan, Span};
 use mago_syntax::ast::{
-    Argument, ArrayElement, AssignmentOperator, BinaryOperator, Call, Construct, Expression,
-    ForeachTarget, Function, Hint, Identifier, Literal, LiteralInteger, MatchArm as AstMatchArm,
-    Statement, StaticItem, UnaryPostfixOperator, UnaryPrefixOperator, Variable,
+    Argument, ArrayElement, AssignmentOperator, BinaryOperator, Call, Construct, DeclareBody,
+    Expression, ForeachTarget, Function, Hint, Identifier, Literal, LiteralInteger,
+    MatchArm as AstMatchArm, Statement, StaticItem, UnaryPostfixOperator, UnaryPrefixOperator,
+    Variable,
 };
 use mago_syntax::parser::parse_file;
 
@@ -86,6 +87,7 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
         slots: low.globals.slots,
         functions: low.functions,
         static_count: low.static_count,
+        strict: low.strict,
     })
 }
 
@@ -134,6 +136,8 @@ struct Lowerer<'f> {
     /// Running count of `static` declarations seen; each gets a unique id into
     /// the evaluator's persistent static store (step 15, D-15.3).
     static_count: usize,
+    /// Set by `declare(strict_types=1)` — copied into `Program.strict` (step 16).
+    strict: bool,
 }
 
 impl<'f> Lowerer<'f> {
@@ -147,6 +151,7 @@ impl<'f> Lowerer<'f> {
             fn_index: HashMap::new(),
             fn_by_ref: false,
             static_count: 0,
+            strict: false,
         }
     }
 
@@ -304,6 +309,29 @@ impl<'f> Lowerer<'f> {
                     bindings.push(GlobalBinding { local, global });
                 }
                 StmtKind::Global(bindings)
+            }
+
+            Statement::Declare(node) => {
+                // Pick up `strict_types=N`; other directives (ticks/encoding) have
+                // no observable effect in this runtime (D-16.1).
+                for item in node.items.iter() {
+                    if item.name.value.eq_ignore_ascii_case(b"strict_types") {
+                        if let Expression::Literal(Literal::Integer(i)) = item.value {
+                            self.strict = i.value == Some(1);
+                        }
+                    }
+                }
+                // `declare(...);` carries the following statement as its body (for
+                // `strict_types` that is the `;` → a no-op); lower it through.
+                match &node.body {
+                    DeclareBody::Statement(s) => return self.lower_stmt(s),
+                    DeclareBody::ColonDelimited(_) => {
+                        return Err(LowerError::Unsupported {
+                            what: "declare block body",
+                            line,
+                        })
+                    }
+                }
             }
 
             Statement::Static(node) => {

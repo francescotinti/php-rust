@@ -739,6 +739,98 @@ fn static_var_multiple_items() {
 }
 
 #[test]
+fn strict_types_accepts_exact_type() {
+    // Under strict_types an exactly-typed argument passes unchanged.
+    assert_eq!(
+        out("<?php declare(strict_types=1); function f(int $x){ echo $x; } f(5);"),
+        "5"
+    );
+}
+
+#[test]
+fn strict_types_widens_int_to_float() {
+    // The one implicit conversion allowed in strict mode: int → float widening.
+    assert_eq!(
+        out("<?php declare(strict_types=1); function f(float $x){ echo $x === 5.0 ? 'Y' : 'N'; } f(5);"),
+        "Y"
+    );
+}
+
+#[test]
+fn strict_types_nullable_accepts_null() {
+    assert_eq!(
+        out("<?php declare(strict_types=1); function f(?int $x){ echo $x === null ? 'Y' : 'N'; } f(null);"),
+        "Y"
+    );
+}
+
+#[test]
+fn strict_types_rejects_coercible_string() {
+    // A numeric string is rejected in strict mode (no coercion), unlike weak.
+    let o = run_source(
+        b"t.php",
+        b"<?php declare(strict_types=1); function f(int $x){} f('5');",
+    )
+    .expect("lowers");
+    assert!(
+        matches!(&o.fatal, Some(PhpError::TypeError(m)) if m.contains("must be of type int, string given")),
+        "got {:?}",
+        o.fatal
+    );
+}
+
+#[test]
+fn strict_types_rejects_float_to_int() {
+    let o = run_source(
+        b"t.php",
+        b"<?php declare(strict_types=1); function f(int $x){} f(5.0);",
+    )
+    .expect("lowers");
+    assert!(
+        matches!(&o.fatal, Some(PhpError::TypeError(m)) if m.contains("must be of type int, float given")),
+        "got {:?}",
+        o.fatal
+    );
+}
+
+#[test]
+fn strict_types_rejects_int_to_string() {
+    let o = run_source(
+        b"t.php",
+        b"<?php declare(strict_types=1); function f(string $x){} f(5);",
+    )
+    .expect("lowers");
+    assert!(
+        matches!(&o.fatal, Some(PhpError::TypeError(m)) if m.contains("must be of type string, int given")),
+        "got {:?}",
+        o.fatal
+    );
+}
+
+#[test]
+fn strict_types_return_value_is_strict() {
+    let o = run_source(
+        b"t.php",
+        b"<?php declare(strict_types=1); function f(): int { return 'x'; } f();",
+    )
+    .expect("lowers");
+    assert!(
+        matches!(&o.fatal, Some(PhpError::TypeError(m)) if m.contains("Return value must be of type int, string returned")),
+        "got {:?}",
+        o.fatal
+    );
+}
+
+#[test]
+fn strict_types_zero_is_weak() {
+    // `declare(strict_types=0)` is the default weak mode: coercion still happens.
+    assert_eq!(
+        out("<?php declare(strict_types=0); function f(int $x){ echo $x === 5 ? 'Y' : 'N'; } f('5');"),
+        "Y"
+    );
+}
+
+#[test]
 fn function_mutual_recursion() {
     // Both functions are hoisted, so even-before-odd resolution works.
     let prog = "<?php \
