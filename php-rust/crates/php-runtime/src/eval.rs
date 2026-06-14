@@ -31,9 +31,15 @@ use crate::hir::{
 
 /// Builtins the evaluator implements directly because they invoke a callback
 /// (step 18, D-18.6). They are dispatched ahead of the registry and are treated
-/// as callable names by `is_callable`. (`array_map`/`array_filter`/`usort` join
-/// this list in step 18-5.)
-const HIGHER_ORDER_BUILTINS: &[&[u8]] = &[b"is_callable", b"call_user_func", b"call_user_func_array"];
+/// as callable names by `is_callable`.
+const HIGHER_ORDER_BUILTINS: &[&[u8]] = &[
+    b"is_callable",
+    b"call_user_func",
+    b"call_user_func_array",
+    b"array_map",
+    b"array_filter",
+    b"usort",
+];
 
 /// A fresh frame of `n` independent value slots, all unset.
 ///
@@ -971,6 +977,9 @@ impl<'p> Evaluator<'p> {
             b"is_callable" => Some(self.ho_is_callable(args)),
             b"call_user_func" => Some(self.ho_call_user_func(args)),
             b"call_user_func_array" => Some(self.ho_call_user_func_array(args)),
+            b"array_map" => Some(self.ho_array_map(args)),
+            b"array_filter" => Some(self.ho_array_filter(args)),
+            b"usort" => Some(self.ho_usort(args)),
             _ => None,
         }
     }
@@ -1039,6 +1048,200 @@ impl<'p> Evaluator<'p> {
             }
         };
         self.call_value(callee, argv)
+    }
+
+    /// `array_map($callback, ...$arrays)` (step 18, D-18.6). With a single array
+    /// the keys are preserved; with several arrays the result is re-indexed and
+    /// the callback receives one element from each (missing tails are NULL). A
+    /// NULL callback zips the arrays (single array → identity).
+    fn ho_array_map(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        if args.len() < 2 {
+            return Err(PhpError::ArgumentCountError(format!(
+                "array_map() expects at least 2 arguments, {} given",
+                args.len()
+            )));
+        }
+        let cb = self.eval(&args[0])?.deref_clone();
+        let null_cb = matches!(cb, Zval::Null);
+        let mut arrays = Vec::with_capacity(args.len() - 1);
+        for (i, a) in args[1..].iter().enumerate() {
+            match self.eval(a)?.deref_clone() {
+                Zval::Array(arr) => arrays.push(arr),
+                other => {
+                    return Err(PhpError::TypeError(format!(
+                        "array_map(): Argument #{} must be of type array, {} given",
+                        i + 2,
+                        other.error_type_name()
+                    )))
+                }
+            }
+        }
+
+        let mut out = PhpArray::new();
+        if arrays.len() == 1 {
+            // Single array: preserve keys.
+            let entries: Vec<(Key, Zval)> =
+                arrays[0].iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect();
+            for (k, v) in entries {
+                let mapped = if null_cb {
+                    v
+                } else {
+                    self.call_value(cb.clone(), vec![v])?
+                };
+                out.insert(k, mapped);
+            }
+        } else {
+            // Several arrays: re-index 0..max, one element from each per row.
+            let cols: Vec<Vec<Zval>> = arrays
+                .iter()
+                .map(|a| a.iter().map(|(_, v)| v.deref_clone()).collect())
+                .collect();
+            let max = cols.iter().map(|c| c.len()).max().unwrap_or(0);
+            for i in 0..max {
+                let row: Vec<Zval> = cols
+                    .iter()
+                    .map(|c| c.get(i).cloned().unwrap_or(Zval::Null))
+                    .collect();
+                let val = if null_cb {
+                    let mut tuple = PhpArray::new();
+                    for v in row {
+                        let _ = tuple.append(v);
+                    }
+                    Zval::Array(Rc::new(tuple))
+                } else {
+                    self.call_value(cb.clone(), row)?
+                };
+                let _ = out.append(val);
+            }
+        }
+        Ok(Zval::Array(Rc::new(out)))
+    }
+
+    /// `array_filter($array, $callback?, $mode = 0)` (step 18, D-18.6). Keys are
+    /// always preserved. With no callback, truthy values are kept; otherwise the
+    /// callback receives the value (mode 0), the key (`ARRAY_FILTER_USE_KEY`), or
+    /// `(value, key)` (`ARRAY_FILTER_USE_BOTH`).
+    fn ho_array_filter(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        let Some(first) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "array_filter() expects at least 1 argument, 0 given".to_string(),
+            ));
+        };
+        let arr = match self.eval(first)?.deref_clone() {
+            Zval::Array(a) => a,
+            other => {
+                return Err(PhpError::TypeError(format!(
+                    "array_filter(): Argument #1 ($array) must be of type array, {} given",
+                    other.error_type_name()
+                )))
+            }
+        };
+        let cb = match args.get(1) {
+            Some(a) => match self.eval(a)?.deref_clone() {
+                Zval::Null => None,
+                v => Some(v),
+            },
+            None => None,
+        };
+        let mode = match args.get(2) {
+            Some(a) => {
+                let v = self.eval(a)?.deref_clone();
+                convert::to_long_cast(&v, &mut self.diags)
+            }
+            None => 0,
+        };
+
+        let entries: Vec<(Key, Zval)> =
+            arr.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect();
+        let mut out = PhpArray::new();
+        for (k, v) in entries {
+            let keep = match &cb {
+                None => convert::to_bool(&v, &mut self.diags),
+                Some(c) => {
+                    let call_args = match mode {
+                        2 => vec![key_to_zval(&k)],
+                        1 => vec![v.clone(), key_to_zval(&k)],
+                        _ => vec![v.clone()],
+                    };
+                    let r = self.call_value(c.clone(), call_args)?;
+                    convert::to_bool(&r, &mut self.diags)
+                }
+            };
+            if keep {
+                out.insert(k, v);
+            }
+        }
+        Ok(Zval::Array(Rc::new(out)))
+    }
+
+    /// `usort(&$array, $callback)` (step 18, D-18.6): sort the array's values in
+    /// place by the comparator, re-index 0..n, and return `true`. The first
+    /// argument is taken by reference (like `sort`); the comparator returns an
+    /// int (`$a <=> $b`-style).
+    fn ho_usort(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        let (Some(arr_expr), Some(cmp_expr)) = (args.first(), args.get(1)) else {
+            return Err(PhpError::ArgumentCountError(format!(
+                "usort() expects exactly 2 arguments, {} given",
+                args.len()
+            )));
+        };
+        let ExprKind::Var(slot) = arr_expr.kind else {
+            return Err(PhpError::Error(
+                "usort(): Argument #1 ($array) could not be passed by reference".to_string(),
+            ));
+        };
+        let cmp = self.eval(cmp_expr)?.deref_clone();
+        let cell = self.slot_cell(slot as usize);
+        let values: Vec<Zval> = match &*cell.borrow() {
+            Zval::Array(a) => a.iter().map(|(_, v)| v.deref_clone()).collect(),
+            other => {
+                return Err(PhpError::TypeError(format!(
+                    "usort(): Argument #1 ($array) must be of type array, {} given",
+                    other.error_type_name()
+                )))
+            }
+        };
+
+        let sorted = self.merge_sort_with(&cmp, values)?;
+        let mut out = PhpArray::new();
+        for v in sorted {
+            let _ = out.append(v);
+        }
+        *cell.borrow_mut() = Zval::Array(Rc::new(out));
+        Ok(Zval::Bool(true))
+    }
+
+    /// Stable merge sort driven by a PHP comparator callback (used by `usort`).
+    /// Stability matches PHP 8's sort guarantee; the comparator's return value is
+    /// cast to an int (`<= 0` keeps the left element first).
+    fn merge_sort_with(&mut self, cmp: &Zval, mut vals: Vec<Zval>) -> Result<Vec<Zval>, PhpError> {
+        let n = vals.len();
+        if n <= 1 {
+            return Ok(vals);
+        }
+        let right = vals.split_off(n / 2);
+        let left = self.merge_sort_with(cmp, vals)?;
+        let right = self.merge_sort_with(cmp, right)?;
+        let mut merged = Vec::with_capacity(n);
+        let (mut i, mut j) = (0, 0);
+        while i < left.len() && j < right.len() {
+            if self.compare_with_callback(cmp, &left[i], &right[j])? <= 0 {
+                merged.push(left[i].clone());
+                i += 1;
+            } else {
+                merged.push(right[j].clone());
+                j += 1;
+            }
+        }
+        merged.extend_from_slice(&left[i..]);
+        merged.extend_from_slice(&right[j..]);
+        Ok(merged)
+    }
+
+    /// Invoke a sort comparator and reduce its result to an int (step 18).
+    fn compare_with_callback(&mut self, cmp: &Zval, a: &Zval, b: &Zval) -> Result<i64, PhpError> {
+        let r = self.call_value(cmp.clone(), vec![a.clone(), b.clone()])?;
+        Ok(convert::to_long_cast(&r, &mut self.diags))
     }
 
     // --- expressions ---

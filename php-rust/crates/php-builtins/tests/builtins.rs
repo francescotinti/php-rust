@@ -832,3 +832,22 @@ fn str_pad_with_named_flag_constant() {
     assert_eq!(out("<?php echo str_pad('5', 3, '0', STR_PAD_LEFT);"), "005");
     assert_eq!(out("<?php echo str_pad('5', 3, '0', STR_PAD_BOTH);"), "050");
 }
+
+// --- step 18-5: higher-order builtins with string-builtin callables ---
+
+#[test]
+fn array_map_with_builtin_string_callable() {
+    assert_eq!(
+        out("<?php echo implode(',', array_map('strtoupper', ['a', 'b', 'c']));"),
+        "A,B,C"
+    );
+}
+
+#[test]
+fn array_filter_with_builtin_string_callable() {
+    // Keep only non-empty strings via strlen as the predicate.
+    assert_eq!(
+        out("<?php $r = array_filter(['', 'x', '', 'yz'], 'strlen'); echo $r[1], $r[3];"),
+        "xyz"
+    );
+}

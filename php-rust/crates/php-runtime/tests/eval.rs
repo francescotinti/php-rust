@@ -1440,3 +1440,101 @@ fn unknown_constant_is_unsupported() {
     // User-defined constants are not lowered yet: the script becomes a SKIP.
     assert!(run_source(b"t.php", b"<?php echo NOPE_UNDEFINED_CONST;").is_err());
 }
+
+// --- step 18-5: array_map / array_filter / usort ---
+
+#[test]
+fn array_map_single_array() {
+    assert_eq!(
+        out("<?php $r = array_map(fn($x) => $x * 2, [1, 2, 3]); echo $r[0], $r[1], $r[2];"),
+        "246"
+    );
+}
+
+#[test]
+fn array_map_preserves_string_keys() {
+    assert_eq!(
+        out("<?php $r = array_map(fn($x) => $x + 1, ['a' => 1, 'b' => 2]); echo $r['a'], $r['b'];"),
+        "23"
+    );
+}
+
+#[test]
+fn array_map_multiple_arrays_reindexes() {
+    assert_eq!(
+        out("<?php $r = array_map(fn($a, $b) => $a + $b, [1, 2], [10, 20]); echo $r[0], '|', $r[1];"),
+        "11|22"
+    );
+}
+
+#[test]
+fn array_map_null_callback_zips() {
+    assert_eq!(
+        out("<?php $r = array_map(null, [1, 2], [3, 4]); echo $r[0][0], $r[0][1], $r[1][0], $r[1][1];"),
+        "1324"
+    );
+}
+
+#[test]
+fn array_filter_with_callback_preserves_keys() {
+    assert_eq!(
+        out("<?php $r = array_filter([1, 2, 3, 4], fn($x) => $x % 2 == 0); echo $r[1], $r[3];"),
+        "24"
+    );
+}
+
+#[test]
+fn array_filter_no_callback_keeps_truthy() {
+    assert_eq!(
+        out("<?php $r = array_filter([0, 1, '', 2, null, 3]); echo $r[1], $r[3], $r[5];"),
+        "123"
+    );
+}
+
+#[test]
+fn array_filter_use_key_mode() {
+    assert_eq!(
+        out(
+            "<?php $r = array_filter(['a' => 1, 'b' => 2, 'c' => 3], \
+             fn($k) => $k !== 'b', ARRAY_FILTER_USE_KEY); \
+             echo $r['a'], $r['c'], isset($r['b']) ? 'set' : 'unset';"
+        ),
+        "13unset"
+    );
+}
+
+#[test]
+fn array_filter_use_both_mode() {
+    assert_eq!(
+        out(
+            "<?php $r = array_filter(['a' => 1, 'b' => 2], \
+             fn($v, $k) => $v > 1 && $k === 'b', ARRAY_FILTER_USE_BOTH); \
+             echo $r['b'], isset($r['a']) ? 'set' : 'unset';"
+        ),
+        "2unset"
+    );
+}
+
+#[test]
+fn usort_ascending_and_return_value() {
+    assert_eq!(
+        out("<?php $a = [3, 1, 2]; $ok = usort($a, fn($x, $y) => $x <=> $y); echo $a[0], $a[1], $a[2], $ok ? 'y' : 'n';"),
+        "123y"
+    );
+}
+
+#[test]
+fn usort_descending() {
+    assert_eq!(
+        out("<?php $a = [1, 2, 3]; usort($a, fn($x, $y) => $y <=> $x); echo $a[0], $a[1], $a[2];"),
+        "321"
+    );
+}
+
+#[test]
+fn usort_reindexes_keys() {
+    assert_eq!(
+        out("<?php $a = ['x' => 3, 'y' => 1]; usort($a, fn($p, $q) => $p <=> $q); echo $a[0], $a[1];"),
+        "13"
+    );
+}
