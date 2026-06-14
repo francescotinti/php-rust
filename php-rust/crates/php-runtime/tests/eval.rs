@@ -2406,3 +2406,70 @@ fn trait_multiple_disjoint_members_merge() {
         "ab"
     );
 }
+
+// --- step 21-2: traits with static props, constants, self/static ---
+
+#[test]
+fn trait_static_prop_is_per_consuming_class() {
+    // Each class using the trait gets its OWN static-property cell.
+    assert_eq!(
+        out("<?php trait Counter { public static int $n = 0; \
+             public static function next(): int { return ++self::$n; } } \
+             class A { use Counter; } class B { use Counter; } \
+             echo A::next(), A::next(), B::next();"),
+        "121"
+    );
+}
+
+#[test]
+fn trait_static_kw_in_trait_method() {
+    // `static::` from a flattened method resolves to the consuming class.
+    assert_eq!(
+        out("<?php trait T { public static int $count = 0; \
+             public static function inc(){ static::$count++; } } \
+             class C { use T; } C::inc(); C::inc(); echo C::$count;"),
+        "2"
+    );
+}
+
+#[test]
+fn trait_constant_is_flattened() {
+    assert_eq!(
+        out("<?php trait T { const FOO = 42; } class C { use T; } echo C::FOO;"),
+        "42"
+    );
+}
+
+#[test]
+fn trait_new_static_in_trait_method() {
+    // late static binding: `new static()` builds the consuming class.
+    assert_eq!(
+        out("<?php trait T { public static function create(){ return new static(); } } \
+             class C { use T; } echo get_class(C::create());"),
+        "C"
+    );
+}
+
+#[test]
+fn trait_abstract_method_satisfied_by_class() {
+    // An abstract method in the trait is fulfilled by the consumer; the trait's
+    // concrete method calls it via $this.
+    assert_eq!(
+        out("<?php trait T { abstract public function name(): string; \
+             public function greet(){ return 'Hi ' . $this->name(); } } \
+             class C { use T; public function name(): string { return 'C'; } } \
+             echo (new C())->greet();"),
+        "Hi C"
+    );
+}
+
+#[test]
+fn trait_mixed_instance_and_static_members() {
+    assert_eq!(
+        out("<?php trait T { public $tag = 't'; public static int $seen = 0; \
+             public function mark(){ self::$seen++; return $this->tag; } } \
+             class C { use T; } $c = new C(); \
+             echo $c->mark(), $c->mark(), C::$seen;"),
+        "tt2"
+    );
+}
