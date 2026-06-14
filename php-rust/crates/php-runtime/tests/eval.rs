@@ -2010,3 +2010,74 @@ fn oop_cannot_instantiate_interface() {
         other => panic!("expected interface-instantiate fatal, got {other:?}"),
     }
 }
+
+// --- Step 19-6: __toString, closure $this binding, static closures ---
+
+#[test]
+fn oop_to_string_in_echo_concat_cast() {
+    assert_eq!(
+        out(
+            "<?php class M { public $v; function __construct($v) { $this->v = $v; } \
+             function __toString() { return 'M(' . $this->v . ')'; } } \
+             $m = new M(5); echo $m, ' ', $m . '!', ' ', (string)$m;"
+        ),
+        "M(5) M(5)! M(5)"
+    );
+}
+
+#[test]
+fn oop_to_string_missing_is_fatal() {
+    let o = run_source(b"t.php", b"<?php class A {} echo new A;").expect("lowers");
+    match o.fatal {
+        Some(PhpError::Error(m)) => {
+            assert_eq!(m, "Object of class A could not be converted to string")
+        }
+        other => panic!("expected to-string fatal, got {other:?}"),
+    }
+}
+
+#[test]
+fn oop_closure_in_method_binds_this() {
+    assert_eq!(
+        out(
+            "<?php class C { public $v = 7; function make() { return function() { return $this->v; }; } } \
+             $f = (new C)->make(); echo $f();"
+        ),
+        "7"
+    );
+}
+
+#[test]
+fn oop_static_closure_has_no_this() {
+    assert_eq!(out("<?php $f = static function() { return 42; }; echo $f();"), "42");
+}
+
+#[test]
+fn oop_closure_bindto() {
+    assert_eq!(
+        out(
+            "<?php class C { public $v = 9; } \
+             $f = function() { return $this->v; }; $g = $f->bindTo(new C); echo $g();"
+        ),
+        "9"
+    );
+}
+
+#[test]
+fn oop_closure_bind_static() {
+    assert_eq!(
+        out(
+            "<?php class C { public $v = 3; } \
+             $f = function() { return $this->v; }; $g = Closure::bind($f, new C); echo $g();"
+        ),
+        "3"
+    );
+}
+
+#[test]
+fn oop_closure_from_callable_string() {
+    assert_eq!(
+        out("<?php function dbl($x) { return $x * 2; } $f = Closure::fromCallable('dbl'); echo $f(21);"),
+        "42"
+    );
+}

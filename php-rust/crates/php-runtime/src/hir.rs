@@ -428,8 +428,14 @@ pub enum ExprKind {
 
     /// A closure / arrow-function expression (step 18, D-18.2). `fn_idx` selects
     /// the lowered body from [`Program::closures`]; `captures` are evaluated in
-    /// the active frame to produce the [`php_types::Closure`] value.
-    Closure { fn_idx: usize, captures: Vec<Capture> },
+    /// the active frame to produce the [`php_types::Closure`] value. `bind_this`
+    /// is true for an ordinary (non-`static`) closure, which captures the current
+    /// `$this` at creation (step 19-6, D-19.19).
+    Closure {
+        fn_idx: usize,
+        captures: Vec<Capture>,
+        bind_this: bool,
+    },
 
     /// A first-class callable `name(...)` (step 18-6, D-18.10): produces a
     /// closure value wrapping the function name.

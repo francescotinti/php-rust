@@ -53,6 +53,10 @@ pub struct Closure {
     /// D-18.10): the value wraps a function *name* and `fn_idx`/`captures` are
     /// unused. `None` for an ordinary anonymous/arrow closure.
     pub named: Option<Rc<PhpStr>>,
+    /// The bound `$this` (step 19-6, D-19.19): captured at creation for a
+    /// non-static closure defined in a method, or set by `bindTo`/`Closure::bind`.
+    /// `None` for a static closure, a top-level closure, or a first-class callable.
+    pub bound_this: Option<Zval>,
     /// Per-instance object handle, shown as `#N` by `var_dump` (step 18-7).
     pub id: u32,
     /// Shared render metadata for `var_dump` / `print_r` (step 18-7, D-18.9).

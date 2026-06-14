@@ -390,7 +390,9 @@ impl<'p> Evaluator<'p> {
             StmtKind::Echo(values) => {
                 for e in values {
                     let z = self.eval(e)?;
-                    let s = convert::to_zstr(&z, &mut self.diags);
+                    // `__toString` is honoured for objects (step 19-6); other
+                    // values use the ordinary string funnel.
+                    let s = self.stringify(&z)?;
                     // `emit` flushes the (possible) array-to-string warning ahead
                     // of the converted bytes, matching PHP's ordering.
                     self.emit(s.as_bytes());
@@ -1036,6 +1038,9 @@ impl<'p> Evaluator<'p> {
         let saved_locals = self.locals.replace(frame);
         let saved_names = self.local_names.replace(f.slots.as_slice());
         let saved_returns_ref = std::mem::replace(&mut self.fn_returns_ref, f.by_ref);
+        // Install the closure's bound `$this` (step 19-6); a static / top-level
+        // closure carries `None`, so `$this` inside it is the usual fatal.
+        let saved_this = std::mem::replace(&mut self.cur_this, cl.bound_this.clone());
 
         // Bind captured variables into their closure-frame slots before params.
         for (slot, val) in &cl.captures {
@@ -1048,10 +1053,89 @@ impl<'p> Evaluator<'p> {
         self.locals = saved_locals;
         self.local_names = saved_names;
         self.fn_returns_ref = saved_returns_ref;
+        self.cur_this = saved_this;
         result.map(|r| match r {
             Zval::Ref(cell) => cell.borrow().clone(),
             other => other,
         })
+    }
+
+    /// Build a copy of a closure with a new bound `$this` (step 19-6, D-19.19),
+    /// assigning it a fresh object handle.
+    fn rebind_closure(&mut self, cl: &Closure, bound_this: Option<Zval>) -> Zval {
+        Zval::Closure(Rc::new(Closure {
+            fn_idx: cl.fn_idx,
+            captures: cl.captures.clone(),
+            named: cl.named.clone(),
+            bound_this,
+            id: self.next_id(),
+            info: Rc::clone(&cl.info),
+        }))
+    }
+
+    /// Built-in methods on a closure value (`$c->bindTo(...)`, `$c->call(...)`),
+    /// step 19-6, D-19.19.
+    fn closure_method(
+        &mut self,
+        cl: &Closure,
+        method: &[u8],
+        argv: Vec<Zval>,
+    ) -> Result<Zval, PhpError> {
+        if method.eq_ignore_ascii_case(b"bindTo") {
+            let new_this = closure_this_arg(argv.into_iter().next());
+            Ok(self.rebind_closure(cl, new_this))
+        } else if method.eq_ignore_ascii_case(b"call") {
+            // `$c->call($newThis, ...args)`: bind then invoke immediately.
+            let mut it = argv.into_iter();
+            let new_this = closure_this_arg(it.next());
+            let rest: Vec<Zval> = it.collect();
+            let bound = self.rebind_closure(cl, new_this);
+            self.call_value(bound, rest)
+        } else {
+            Err(PhpError::Error(format!(
+                "Call to undefined method Closure::{}()",
+                String::from_utf8_lossy(method)
+            )))
+        }
+    }
+
+    /// Static methods on the `Closure` class (`Closure::bind`,
+    /// `Closure::fromCallable`), step 19-6, D-19.19.
+    fn closure_static(&mut self, method: &[u8], argv: Vec<Zval>) -> Result<Zval, PhpError> {
+        if method.eq_ignore_ascii_case(b"bind") {
+            let mut it = argv.into_iter();
+            let target = it.next().map(|v| v.deref_clone());
+            let new_this = closure_this_arg(it.next());
+            match target {
+                Some(Zval::Closure(cl)) => Ok(self.rebind_closure(&cl, new_this)),
+                _ => Err(PhpError::Error(
+                    "Closure::bind(): Argument #1 ($closure) must be of type Closure".to_string(),
+                )),
+            }
+        } else if method.eq_ignore_ascii_case(b"fromCallable") {
+            match argv.into_iter().next().map(|v| v.deref_clone()) {
+                Some(Zval::Closure(cl)) => Ok(Zval::Closure(cl)),
+                Some(Zval::Str(s)) => {
+                    let info = self.first_class_info(s.as_bytes());
+                    Ok(Zval::Closure(Rc::new(Closure {
+                        fn_idx: 0,
+                        captures: Vec::new(),
+                        named: Some(s),
+                        bound_this: None,
+                        id: self.next_id(),
+                        info,
+                    })))
+                }
+                _ => Err(PhpError::Error(
+                    "Closure::fromCallable(): Argument #1 ($callback) is not callable".to_string(),
+                )),
+            }
+        } else {
+            Err(PhpError::Error(format!(
+                "Call to undefined method Closure::{}()",
+                String::from_utf8_lossy(method)
+            )))
+        }
     }
 
     // --- objects (step 19) ---
@@ -1347,6 +1431,35 @@ impl<'p> Evaluator<'p> {
         Ok(cell)
     }
 
+    /// Convert a value to a string, honouring `__toString` on objects (step 19-6,
+    /// D-19.18). A non-object goes through the ordinary `to_zstr` funnel; an
+    /// object without `__toString` is the fatal PHP raises (the placeholder the
+    /// infallible funnel emits is thereby avoided for the contexts that route
+    /// through here: echo, concat, `(string)`).
+    fn stringify(&mut self, v: &Zval) -> Result<Rc<PhpStr>, PhpError> {
+        let v = v.deref_clone();
+        match &v {
+            Zval::Object(o) => {
+                let cid = o.borrow().class_id as usize;
+                match self.resolve_method(cid, b"__toString") {
+                    Some((defc, m)) => {
+                        let r =
+                            self.invoke_method(Some(v.clone()), defc, cid, m, b"__toString", vec![])?;
+                        Ok(convert::to_zstr(&r, &mut self.diags))
+                    }
+                    None => {
+                        let name =
+                            String::from_utf8_lossy(o.borrow().class_name.as_bytes()).into_owned();
+                        Err(PhpError::Error(format!(
+                            "Object of class {name} could not be converted to string"
+                        )))
+                    }
+                }
+            }
+            other => Ok(convert::to_zstr(other, &mut self.diags)),
+        }
+    }
+
     /// Read property `name` from a value (step 19, D-19.8). Enforces visibility on
     /// a declared property; a missing property or non-object receiver warns and
     /// yields NULL, matching PHP.
@@ -1423,6 +1536,13 @@ impl<'p> Evaluator<'p> {
         method: &[u8],
         argv: Vec<Zval>,
     ) -> Result<Zval, PhpError> {
+        // `Closure::bind(...)` / `Closure::fromCallable(...)` are built-in (the
+        // engine `Closure` class is not in the user class table), step 19-6.
+        if let ClassRef::Named(n) = class {
+            if n.eq_ignore_ascii_case(b"Closure") {
+                return self.closure_static(method, argv);
+            }
+        }
         let start = self.resolve_class_ref(class)?;
         let (defc, m) = match self.resolve_method(start, method) {
             Some(found) => found,
@@ -1893,6 +2013,11 @@ impl<'p> Evaluator<'p> {
                 Ok(match kind {
                     CastKind::Int => Zval::Long(convert::to_long_cast(&v, &mut self.diags)),
                     CastKind::Float => Zval::Double(convert::to_double(&v)),
+                    // `(string)$obj` honours `__toString` (step 19-6); other values
+                    // use the cast funnel (which warns on NaN).
+                    CastKind::String if matches!(v, Zval::Object(_)) => {
+                        Zval::Str(self.stringify(&v)?)
+                    }
                     CastKind::String => Zval::Str(convert::to_zstr_cast(&v, &mut self.diags)),
                     CastKind::Bool => Zval::Bool(convert::to_bool(&v, &mut self.diags)),
                     CastKind::Array => array_cast(v),
@@ -2032,12 +2157,19 @@ impl<'p> Evaluator<'p> {
 
             // A closure / arrow expression: snapshot its captures in the active
             // frame and build the `Zval::Closure` value (step 18, D-18.2/D-18.3).
-            ExprKind::Closure { fn_idx, captures } => {
+            ExprKind::Closure {
+                fn_idx,
+                captures,
+                bind_this,
+            } => {
                 let bound = self.bind_captures(captures);
+                // A non-static closure captures the current `$this` (step 19-6).
+                let bound_this = if *bind_this { self.cur_this.clone() } else { None };
                 Ok(Zval::Closure(Rc::new(Closure {
                     fn_idx: *fn_idx,
                     captures: bound,
                     named: None,
+                    bound_this,
                     id: self.next_id(),
                     info: Rc::clone(&self.closure_info[*fn_idx]),
                 })))
@@ -2050,6 +2182,7 @@ impl<'p> Evaluator<'p> {
                     fn_idx: 0,
                     captures: Vec::new(),
                     named: Some(PhpStr::new(name.to_vec())),
+                    bound_this: None,
                     id: self.next_id(),
                     info,
                 })))
@@ -2183,6 +2316,11 @@ impl<'p> Evaluator<'p> {
                     return Ok(Zval::Null);
                 }
                 let argv = self.eval_value_args(args)?;
+                // Methods on a closure value (`$c->bindTo(...)`) are built-in
+                // (step 19-6), not user-class dispatch.
+                if let Zval::Closure(cl) = &recv {
+                    return self.closure_method(cl, method, argv);
+                }
                 self.call_method(recv, method, argv)
             }
 
@@ -2318,6 +2456,14 @@ impl<'p> Evaluator<'p> {
     }
 
     fn apply_binop(&mut self, op: BinOp, a: Zval, b: Zval) -> Result<Zval, PhpError> {
+        // String concatenation honours `__toString` on object operands (step
+        // 19-6); `ops::concat` (in `php_types`) cannot reach the evaluator.
+        if matches!(op, BinOp::Concat) && (matches!(a, Zval::Object(_)) || matches!(b, Zval::Object(_)))
+        {
+            let mut out = self.stringify(&a)?.as_bytes().to_vec();
+            out.extend_from_slice(self.stringify(&b)?.as_bytes());
+            return Ok(Zval::Str(PhpStr::new(out)));
+        }
         let d = &mut self.diags;
         match op {
             BinOp::Add => ops::add(&a, &b, d),
@@ -2897,6 +3043,15 @@ fn write_into(
         }
     }
     Ok(())
+}
+
+/// Normalise the `$newThis` argument of `bindTo`/`bind`/`call` (step 19-6): an
+/// object binds, `null` (or anything else) clears the binding.
+fn closure_this_arg(v: Option<Zval>) -> Option<Zval> {
+    match v.map(|v| v.deref_clone()) {
+        Some(o @ Zval::Object(_)) => Some(o),
+        _ => None,
+    }
 }
 
 /// Promote `target` to a reference and return its shared cell. An existing

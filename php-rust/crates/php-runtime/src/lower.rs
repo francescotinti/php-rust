@@ -881,12 +881,8 @@ impl<'f> Lowerer<'f> {
     /// scope *before* the fresh closure scope is installed; the closure body then
     /// runs in its own slot frame like a function (no implicit capture).
     fn lower_closure(&mut self, closure: &Closure, line: Line) -> Result<ExprKind, LowerError> {
-        if closure.r#static.is_some() {
-            return Err(LowerError::Unsupported {
-                what: "static closure",
-                line,
-            });
-        }
+        // A `static function(){}` does not bind `$this` (step 19-6, D-19.19).
+        let bind_this = closure.r#static.is_none();
         let by_ref = closure.ampersand.is_some();
 
         // 1. Resolve each `use` variable's slot in the *enclosing* scope (the one
@@ -931,7 +927,11 @@ impl<'f> Lowerer<'f> {
             .as_ref()
             .and_then(|r| lower_hint(&r.hint));
         let fn_idx = self.push_closure(params, body, local_scope.slots, by_ref, ret_hint, line);
-        Ok(ExprKind::Closure { fn_idx, captures })
+        Ok(ExprKind::Closure {
+            fn_idx,
+            captures,
+            bind_this,
+        })
     }
 
     /// Append a lowered closure body to the flat table and return its index. The
@@ -1041,7 +1041,13 @@ impl<'f> Lowerer<'f> {
             .as_ref()
             .and_then(|r| lower_hint(&r.hint));
         let fn_idx = self.push_closure(params, body, local_scope.slots, false, ret_hint, line);
-        Ok(ExprKind::Closure { fn_idx, captures })
+        // An arrow function is never `static` here (rejected above), so it binds
+        // `$this` like an ordinary closure (step 19-6).
+        Ok(ExprKind::Closure {
+            fn_idx,
+            captures,
+            bind_this: true,
+        })
     }
 
     // --- expressions ---
