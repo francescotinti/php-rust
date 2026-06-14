@@ -1391,3 +1391,52 @@ fn callable_type_hint_accepts_closure() {
         "12"
     );
 }
+
+// --- step 18-4: named engine constants (ConstFetch) ---
+
+#[test]
+fn const_php_int_limits() {
+    assert_eq!(out("<?php echo PHP_INT_MAX;"), "9223372036854775807");
+    assert_eq!(out("<?php echo PHP_INT_MIN;"), "-9223372036854775808");
+    assert_eq!(out("<?php echo PHP_INT_SIZE;"), "8");
+}
+
+#[test]
+fn const_str_pad_flags() {
+    assert_eq!(
+        out("<?php echo STR_PAD_LEFT, '|', STR_PAD_RIGHT, '|', STR_PAD_BOTH;"),
+        "0|1|2"
+    );
+}
+
+#[test]
+fn const_array_filter_and_sort_flags() {
+    assert_eq!(
+        out("<?php echo ARRAY_FILTER_USE_KEY, '|', ARRAY_FILTER_USE_BOTH;"),
+        "2|1"
+    );
+    assert_eq!(out("<?php echo SORT_STRING, SORT_FLAG_CASE;"), "28");
+    assert_eq!(out("<?php echo COUNT_RECURSIVE;"), "1");
+}
+
+#[test]
+fn const_php_eol_is_newline() {
+    assert_eq!(out("<?php echo PHP_EOL === \"\\n\" ? 'y' : 'n';"), "y");
+}
+
+#[test]
+fn const_math_pi() {
+    assert_eq!(out("<?php echo M_PI > 3.14 && M_PI < 3.15 ? 'y' : 'n';"), "y");
+}
+
+#[test]
+fn const_true_false_null_case_insensitive() {
+    assert_eq!(out("<?php echo TRUE === true ? 'a' : 'b';"), "a");
+    assert_eq!(out("<?php echo NULL === null ? 'a' : 'b';"), "a");
+}
+
+#[test]
+fn unknown_constant_is_unsupported() {
+    // User-defined constants are not lowered yet: the script becomes a SKIP.
+    assert!(run_source(b"t.php", b"<?php echo NOPE_UNDEFINED_CONST;").is_err());
+}

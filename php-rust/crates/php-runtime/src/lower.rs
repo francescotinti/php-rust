@@ -855,6 +855,19 @@ impl<'f> Lowerer<'f> {
             Expression::Closure(closure) => self.lower_closure(closure, line)?,
             Expression::ArrowFunction(af) => self.lower_arrow_function(af, line)?,
 
+            // A bare `NAME` constant: only the known engine constants are
+            // resolved (to a literal at lowering time, D-18.7); user-defined
+            // constants stay unsupported (the script becomes a SKIP).
+            Expression::ConstantAccess(ca) => match resolve_constant(function_name(&ca.name)) {
+                Some(kind) => kind,
+                None => {
+                    return Err(LowerError::Unsupported {
+                        what: "named constant",
+                        line,
+                    })
+                }
+            },
+
             Expression::Array(arr) => ExprKind::Array(self.lower_array_elements(arr.elements.iter(), line)?),
             Expression::LegacyArray(arr) => {
                 ExprKind::Array(self.lower_array_elements(arr.elements.iter(), line)?)
@@ -1175,6 +1188,72 @@ fn function_name<'a>(id: &Identifier<'a>) -> &'a [u8] {
         Some(i) => &raw[i + 1..],
         None => raw,
     }
+}
+
+/// Resolve a bare constant name to its literal HIR value (step 18, D-18.7).
+/// Only engine constants are known; `true`/`false`/`null` are case-insensitive,
+/// every other name is case-sensitive (PHP constants are). `None` for an unknown
+/// (user-defined) constant — the caller turns that into an Unsupported SKIP.
+fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
+    match name.to_ascii_lowercase().as_slice() {
+        b"true" => return Some(ExprKind::Bool(true)),
+        b"false" => return Some(ExprKind::Bool(false)),
+        b"null" => return Some(ExprKind::Null),
+        _ => {}
+    }
+    let str_lit = |s: &[u8]| ExprKind::Str(s.to_vec().into_boxed_slice());
+    Some(match name {
+        // Integer limits / sizes.
+        b"PHP_INT_MAX" => ExprKind::Int(i64::MAX),
+        b"PHP_INT_MIN" => ExprKind::Int(i64::MIN),
+        b"PHP_INT_SIZE" => ExprKind::Int(8),
+        b"PHP_FLOAT_DIG" => ExprKind::Int(15),
+        // Float limits.
+        b"PHP_FLOAT_EPSILON" => ExprKind::Float(f64::EPSILON),
+        b"PHP_FLOAT_MAX" => ExprKind::Float(f64::MAX),
+        b"PHP_FLOAT_MIN" => ExprKind::Float(f64::MIN_POSITIVE),
+        b"NAN" => ExprKind::Float(f64::NAN),
+        b"INF" => ExprKind::Float(f64::INFINITY),
+        // Versions / platform.
+        b"PHP_EOL" => str_lit(b"\n"),
+        b"PHP_VERSION" => str_lit(b"8.5.7"),
+        b"PHP_MAJOR_VERSION" => ExprKind::Int(8),
+        b"PHP_MINOR_VERSION" => ExprKind::Int(5),
+        b"PHP_RELEASE_VERSION" => ExprKind::Int(7),
+        b"PHP_VERSION_ID" => ExprKind::Int(80507),
+        // str_pad / array_filter / count flags.
+        b"STR_PAD_RIGHT" => ExprKind::Int(1),
+        b"STR_PAD_LEFT" => ExprKind::Int(0),
+        b"STR_PAD_BOTH" => ExprKind::Int(2),
+        b"ARRAY_FILTER_USE_KEY" => ExprKind::Int(2),
+        b"ARRAY_FILTER_USE_BOTH" => ExprKind::Int(1),
+        b"COUNT_NORMAL" => ExprKind::Int(0),
+        b"COUNT_RECURSIVE" => ExprKind::Int(1),
+        // sort flags.
+        b"SORT_REGULAR" => ExprKind::Int(0),
+        b"SORT_NUMERIC" => ExprKind::Int(1),
+        b"SORT_STRING" => ExprKind::Int(2),
+        b"SORT_DESC" => ExprKind::Int(3),
+        b"SORT_ASC" => ExprKind::Int(4),
+        b"SORT_LOCALE_STRING" => ExprKind::Int(5),
+        b"SORT_NATURAL" => ExprKind::Int(6),
+        b"SORT_FLAG_CASE" => ExprKind::Int(8),
+        // Math.
+        b"M_PI" => ExprKind::Float(std::f64::consts::PI),
+        b"M_E" => ExprKind::Float(std::f64::consts::E),
+        b"M_SQRT2" => ExprKind::Float(std::f64::consts::SQRT_2),
+        b"M_SQRT1_2" => ExprKind::Float(std::f64::consts::FRAC_1_SQRT_2),
+        b"M_SQRT3" => ExprKind::Float(1.732_050_807_568_877_2),
+        b"M_PI_2" => ExprKind::Float(std::f64::consts::FRAC_PI_2),
+        b"M_PI_4" => ExprKind::Float(std::f64::consts::FRAC_PI_4),
+        b"M_2_PI" => ExprKind::Float(std::f64::consts::FRAC_2_PI),
+        b"M_LN2" => ExprKind::Float(std::f64::consts::LN_2),
+        b"M_LN10" => ExprKind::Float(std::f64::consts::LN_10),
+        b"M_LOG2E" => ExprKind::Float(std::f64::consts::LOG2_E),
+        b"M_LOG10E" => ExprKind::Float(std::f64::consts::LOG10_E),
+        b"M_EULER" => ExprKind::Float(0.577_215_664_901_532_9),
+        _ => return None,
+    })
 }
 
 /// Collect the names (with leading `$`) of every direct variable reachable from

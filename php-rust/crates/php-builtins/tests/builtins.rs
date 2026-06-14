@@ -823,3 +823,12 @@ fn is_callable_builtin_name() {
     assert_eq!(out("<?php echo is_callable('strlen') ? 'y' : 'n';"), "y");
     assert_eq!(out("<?php echo is_callable('definitely_not_a_fn') ? 'y' : 'n';"), "n");
 }
+
+// --- step 18-4: engine constants make flag-taking builtins ergonomic ---
+
+#[test]
+fn str_pad_with_named_flag_constant() {
+    // STR_PAD_LEFT now resolves, so the natural call works (step 17 unlock).
+    assert_eq!(out("<?php echo str_pad('5', 3, '0', STR_PAD_LEFT);"), "005");
+    assert_eq!(out("<?php echo str_pad('5', 3, '0', STR_PAD_BOTH);"), "050");
+}
