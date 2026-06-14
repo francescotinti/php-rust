@@ -700,4 +700,5 @@ pub enum CastKind {
     String,
     Bool,
     Array,
+    Object,
 }

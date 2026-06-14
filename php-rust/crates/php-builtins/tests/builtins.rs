@@ -1324,3 +1324,38 @@ fn array_intersect_cases() {
         "1,3"
     );
 }
+
+// --- Step 29-3: (object) cast ----------------------------------------------
+
+#[test]
+fn object_cast_from_array() {
+    assert_eq!(out("<?php $o = (object)['a' => 1, 'b' => 2]; echo $o->a, $o->b;"), "12");
+    assert_eq!(out("<?php echo get_class((object)['a' => 1]);"), "stdClass");
+}
+
+#[test]
+fn object_cast_numeric_keys_var_dump() {
+    // Numeric array keys become string property names.
+    assert_eq!(
+        out("<?php var_dump((object)[1 => 'x', 2 => 'y']);"),
+        "object(stdClass)#1 (2) {\n  [\"1\"]=>\n  string(1) \"x\"\n  [\"2\"]=>\n  string(1) \"y\"\n}\n"
+    );
+}
+
+#[test]
+fn object_cast_scalar_and_null() {
+    // A scalar becomes a single "scalar" property.
+    assert_eq!(out("<?php $o = (object)42; echo $o->scalar;"), "42");
+    assert_eq!(out("<?php $o = (object)'hi'; echo $o->scalar;"), "hi");
+    // null becomes an empty stdClass.
+    assert_eq!(out("<?php echo get_class((object)null);"), "stdClass");
+    assert_eq!(out("<?php var_dump((object)null);"), "object(stdClass)#1 (0) {\n}\n");
+}
+
+#[test]
+fn object_cast_object_is_identity() {
+    assert_eq!(
+        out("<?php $a = new stdClass; $a->x = 5; $b = (object)$a; var_dump($a === $b);"),
+        "bool(true)\n"
+    );
+}

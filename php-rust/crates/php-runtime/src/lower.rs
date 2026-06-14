@@ -2055,9 +2055,10 @@ impl<'f> Lowerer<'f> {
             P::StringCast(..) | P::BinaryCast(..) => cast(CastKind::String, self)?,
             P::BoolCast(..) | P::BooleanCast(..) => cast(CastKind::Bool, self)?,
             P::ArrayCast(..) => cast(CastKind::Array, self)?,
-            P::ObjectCast(..) | P::UnsetCast(..) | P::VoidCast(..) => {
+            P::ObjectCast(..) => cast(CastKind::Object, self)?,
+            P::UnsetCast(..) | P::VoidCast(..) => {
                 return Err(LowerError::Unsupported {
-                    what: "object/unset/void cast",
+                    what: "unset/void cast",
                     line,
                 })
             }

@@ -2665,6 +2665,30 @@ impl<'p> Evaluator<'p> {
     }
 
     /// Build a fresh `stdClass` with the given dynamic properties (step 26).
+    /// `(object)$v`: arrays map each entry to a property (key stringified),
+    /// objects pass through unchanged, null yields an empty stdClass, and any
+    /// scalar becomes a single `scalar` property.
+    fn object_cast(&mut self, v: Zval) -> Zval {
+        match v {
+            Zval::Object(_) => v,
+            Zval::Array(a) => {
+                let fields = a
+                    .iter()
+                    .map(|(k, val)| {
+                        let name = match k {
+                            Key::Int(i) => i.to_string().into_bytes(),
+                            Key::Str(s) => s.as_bytes().to_vec(),
+                        };
+                        (name, val.clone())
+                    })
+                    .collect();
+                self.make_stdclass(fields)
+            }
+            Zval::Null => self.make_stdclass(Vec::new()),
+            scalar => self.make_stdclass(vec![(b"scalar".to_vec(), scalar)]),
+        }
+    }
+
     fn make_stdclass(&mut self, fields: Vec<(Vec<u8>, Zval)>) -> Zval {
         let cid = self.class_index[b"stdclass".as_slice()];
         let class_name = PhpStr::new(self.classes[cid].name.to_vec());
@@ -3096,6 +3120,7 @@ impl<'p> Evaluator<'p> {
                     CastKind::String => Zval::Str(convert::to_zstr_cast(&v, &mut self.diags)),
                     CastKind::Bool => Zval::Bool(convert::to_bool(&v, &mut self.diags)),
                     CastKind::Array => array_cast(v),
+                    CastKind::Object => self.object_cast(v),
                 })
             }
 
