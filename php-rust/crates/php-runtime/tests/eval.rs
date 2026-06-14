@@ -3281,3 +3281,52 @@ fn stringable_inherited_tostring() {
         "1"
     );
 }
+
+// --- Step 24-2: __destruct end-of-script shutdown ---
+
+#[test]
+fn destruct_runs_at_end_of_script() {
+    // Destructors of objects alive at the end run after the script body, in
+    // reverse creation order (PHP shutdown is LIFO).
+    assert_eq!(
+        out(
+            "<?php class A { public $n; function __construct($n){$this->n=$n;} \
+             function __destruct(){ echo 'd' . $this->n; } } \
+             $a=new A(1); $b=new A(2); $c=new A(3); echo 'end';"
+        ),
+        "endd3d2d1"
+    );
+}
+
+#[test]
+fn destruct_object_in_array_survives() {
+    assert_eq!(
+        out(
+            "<?php class A { function __destruct(){ echo 'dtor'; } } \
+             $arr=[new A()]; echo 'end';"
+        ),
+        "enddtor"
+    );
+}
+
+#[test]
+fn destruct_object_as_property_survives() {
+    assert_eq!(
+        out(
+            "<?php class H { public $x; } class A { function __destruct(){ echo 'dtor'; } } \
+             $h=new H(); $h->x=new A(); echo 'end';"
+        ),
+        "enddtor"
+    );
+}
+
+#[test]
+fn destruct_inherited_from_parent() {
+    assert_eq!(
+        out(
+            "<?php class P { function __destruct(){ echo 'd'; } } class Q extends P {} \
+             $q=new Q(); echo 'end';"
+        ),
+        "endd"
+    );
+}

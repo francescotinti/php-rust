@@ -17,7 +17,7 @@
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use php_types::{
     convert, dtoa, numstr, ops, Closure, ClosureInfo, ClosureParam, ClosureRender, Diag, Diags,
@@ -219,6 +219,8 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         static_props: HashMap::new(),
         class_shapes: HashMap::new(),
         enum_cache: HashMap::new(),
+        created: Vec::new(),
+        destructed: HashSet::new(),
         magic_guard: HashSet::new(),
         file: &program.file,
         globals: fresh_slots(program.slots.len()),
@@ -245,6 +247,11 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
     if let Some(err) = &fatal {
         ev.render_fatal(err);
     }
+
+    // Shutdown sequence (step 24-2): run `__destruct` on every object still
+    // reachable at the end of the script. PHP runs these after the body (and
+    // after an uncaught fatal is printed), in reverse creation order.
+    ev.run_destructors();
 
     Outcome {
         stdout: ev.out,
@@ -303,6 +310,14 @@ struct Evaluator<'p> {
     /// first `E::Case` access materialises the object; every later access returns
     /// the same `Rc`, giving `===`/`match` identity (step 23, D-23.2).
     enum_cache: HashMap<(ClassId, Vec<u8>), Rc<RefCell<Object>>>,
+    /// Weak handles to every object created via `new`, in creation order, so the
+    /// end-of-script shutdown can run `__destruct` on those still alive (step
+    /// 24-2). Weak, so tracking does not itself keep objects alive — only objects
+    /// still user-reachable at the end upgrade successfully.
+    created: Vec<Weak<RefCell<Object>>>,
+    /// Object handles whose `__destruct` has already run, guarding against a
+    /// double call during shutdown (step 24-2).
+    destructed: HashSet<u32>,
     /// Active magic-accessor guards, keyed by (object handle, accessor kind,
     /// property name). While a guard is present, a nested access of the same
     /// kind to the same property bypasses the magic method (step 22, D-22.4).
@@ -1563,6 +1578,11 @@ impl<'p> Evaluator<'p> {
             info,
         };
         let value = Zval::Object(Rc::new(RefCell::new(obj)));
+        // Track the new instance (weakly) for the end-of-script `__destruct`
+        // shutdown (step 24-2).
+        if let Zval::Object(o) = &value {
+            self.created.push(Rc::downgrade(o));
+        }
         // A Throwable records its creation site (`getLine`/`getFile`) at `new`
         // time, before the constructor runs (step 20). PHP sets these from the
         // engine, not from `Exception::__construct`.
@@ -1582,6 +1602,33 @@ impl<'p> Evaluator<'p> {
             self.invoke_method(Some(value.clone()), defc, cid, m, b"__construct", argv)?;
         }
         Ok(value)
+    }
+
+    /// End-of-script shutdown (step 24-2): invoke `__destruct` on every object
+    /// still reachable at the end of the run, in reverse creation order (PHP
+    /// shutdown is LIFO). Objects already collected mid-script (their `Weak` no
+    /// longer upgrades) are skipped; immediate destruction on `unset`/scope exit
+    /// is a later step. A destructor that throws is swallowed here (its unwinding
+    /// would otherwise abort the remaining destructors); refining that is future
+    /// work.
+    fn run_destructors(&mut self) {
+        let live: Vec<Rc<RefCell<Object>>> =
+            self.created.iter().rev().filter_map(Weak::upgrade).collect();
+        for o in live {
+            let (cid, id) = {
+                let b = o.borrow();
+                (b.class_id as usize, b.id)
+            };
+            if self.destructed.contains(&id) {
+                continue;
+            }
+            if let Some((defc, m)) = self.resolve_method(cid, b"__destruct") {
+                self.destructed.insert(id);
+                let value = Zval::Object(o.clone());
+                let _ = self.invoke_method(Some(value), defc, cid, m, b"__destruct", Vec::new());
+                self.flush_diags();
+            }
+        }
     }
 
     /// Resolve and evaluate a class constant `Class::NAME` (step 19-4, D-19.15),
