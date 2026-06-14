@@ -538,3 +538,208 @@ fn split_all<'a>(s: &'a [u8], sep: &[u8]) -> Vec<&'a [u8]> {
     parts.push(&s[start..]);
     parts
 }
+
+// --- Step 29-1: pure string builtins ---------------------------------------
+
+/// strrev($string): reverse the bytes (byte-oriented, like PHP).
+pub fn strrev(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let mut b = str_arg(args, ctx, "strrev")?;
+    b.reverse();
+    Ok(Zval::Str(PhpStr::new(b)))
+}
+
+/// Coerce positional arg `idx` (named `pname`) to bytes for a 2-string builtin.
+fn str_at(args: &[Zval], ctx: &mut Ctx, idx: usize, fname: &str, expected: usize) -> Result<Vec<u8>, PhpError> {
+    let v = args.get(idx).ok_or_else(|| {
+        PhpError::Error(format!(
+            "{fname}() expects exactly {expected} arguments, {} given",
+            args.len()
+        ))
+    })?;
+    Ok(convert::to_zstr(v, ctx.diags).as_bytes().to_vec())
+}
+
+/// str_contains($haystack, $needle): an empty needle is always found.
+pub fn str_contains(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let haystack = str_at(args, ctx, 0, "str_contains", 2)?;
+    let needle = str_at(args, ctx, 1, "str_contains", 2)?;
+    let found = needle.is_empty() || find_sub(&haystack, &needle).is_some();
+    Ok(Zval::Bool(found))
+}
+
+/// str_starts_with($haystack, $needle).
+pub fn str_starts_with(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let haystack = str_at(args, ctx, 0, "str_starts_with", 2)?;
+    let needle = str_at(args, ctx, 1, "str_starts_with", 2)?;
+    Ok(Zval::Bool(haystack.starts_with(&needle[..])))
+}
+
+/// str_ends_with($haystack, $needle).
+pub fn str_ends_with(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let haystack = str_at(args, ctx, 0, "str_ends_with", 2)?;
+    let needle = str_at(args, ctx, 1, "str_ends_with", 2)?;
+    Ok(Zval::Bool(haystack.ends_with(&needle[..])))
+}
+
+/// str_split($string, $length = 1): split into `$length`-byte chunks. An empty
+/// string yields an empty array (PHP 8.2+); a length < 1 is a `ValueError`.
+pub fn str_split(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = str_arg(args, ctx, "str_split")?;
+    let length = match args.get(1) {
+        Some(v) => convert::to_long_cast(v, ctx.diags),
+        None => 1,
+    };
+    if length < 1 {
+        return Err(PhpError::ValueError(
+            "str_split(): Argument #2 ($length) must be greater than 0".to_string(),
+        ));
+    }
+    let length = length as usize;
+    let mut out = PhpArray::new();
+    for chunk in s.chunks(length) {
+        let _ = out.append(Zval::Str(PhpStr::new(chunk.to_vec())));
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// substr_count($haystack, $needle): count non-overlapping occurrences. An
+/// empty needle is a `ValueError`.
+pub fn substr_count(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let haystack = str_at(args, ctx, 0, "substr_count", 2)?;
+    let needle = str_at(args, ctx, 1, "substr_count", 2)?;
+    if needle.is_empty() {
+        return Err(PhpError::ValueError(
+            "substr_count(): Argument #2 ($needle) must not be empty".to_string(),
+        ));
+    }
+    let mut count = 0i64;
+    let mut from = 0usize;
+    while let Some(pos) = find_sub(&haystack[from..], &needle) {
+        count += 1;
+        from += pos + needle.len();
+    }
+    Ok(Zval::Long(count))
+}
+
+/// number_format($num, $decimals = 0, $dec_sep = ".", $thousands_sep = ",").
+///
+/// PHP rounds half away from zero on the *decimal* value the user wrote (so
+/// 2.675 -> 2.68, not the binary-truncated 2.67), then groups the integer part
+/// in threes. A result that rounds to zero never carries a minus sign.
+pub fn number_format(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let num = convert::to_double(args.first().ok_or_else(|| {
+        PhpError::Error("number_format() expects at least 1 argument, 0 given".to_string())
+    })?);
+    let decimals = match args.get(1) {
+        Some(v) => convert::to_long_cast(v, ctx.diags).max(0) as usize,
+        None => 0,
+    };
+    let dec_sep = match args.get(2) {
+        Some(v) => convert::to_zstr(v, ctx.diags).as_bytes().to_vec(),
+        None => b".".to_vec(),
+    };
+    let thousands_sep = match args.get(3) {
+        Some(v) => convert::to_zstr(v, ctx.diags).as_bytes().to_vec(),
+        None => b",".to_vec(),
+    };
+
+    let (mut negative, int_digits, frac_digits) = round_decimal(num, decimals);
+    // -0 prints without a sign.
+    if int_digits.iter().all(|&d| d == b'0') && frac_digits.iter().all(|&d| d == b'0') {
+        negative = false;
+    }
+
+    let mut out = Vec::new();
+    if negative {
+        out.push(b'-');
+    }
+    // Group the integer part in threes from the right.
+    let n = int_digits.len();
+    for (i, d) in int_digits.iter().enumerate() {
+        if i > 0 && (n - i) % 3 == 0 {
+            out.extend_from_slice(&thousands_sep);
+        }
+        out.push(*d);
+    }
+    if decimals > 0 {
+        out.extend_from_slice(&dec_sep);
+        out.extend_from_slice(&frac_digits);
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
+/// Round `value` to `decimals` fractional places (half away from zero) working
+/// on its shortest round-trip decimal expansion. Returns `(negative, integer
+/// digits, fractional digits)` with the fractional part padded to `decimals`.
+fn round_decimal(value: f64, decimals: usize) -> (bool, Vec<u8>, Vec<u8>) {
+    if !value.is_finite() {
+        return (false, b"0".to_vec(), vec![b'0'; decimals]);
+    }
+    let negative = value.is_sign_negative() && value != 0.0;
+    // Shortest decimal expansion of |value| as integer + fractional digit runs.
+    let (mut int_digits, mut frac_digits) = decimal_parts(value.abs());
+
+    if frac_digits.len() > decimals {
+        let round_up = frac_digits[decimals] >= b'5';
+        frac_digits.truncate(decimals);
+        if round_up {
+            // Propagate the carry through the fractional then integer digits.
+            let mut carry = true;
+            for d in frac_digits.iter_mut().rev() {
+                if !carry {
+                    break;
+                }
+                if *d == b'9' {
+                    *d = b'0';
+                } else {
+                    *d += 1;
+                    carry = false;
+                }
+            }
+            if carry {
+                for d in int_digits.iter_mut().rev() {
+                    if *d == b'9' {
+                        *d = b'0';
+                    } else {
+                        *d += 1;
+                        carry = false;
+                        break;
+                    }
+                }
+                if carry {
+                    int_digits.insert(0, b'1');
+                }
+            }
+        }
+    } else {
+        while frac_digits.len() < decimals {
+            frac_digits.push(b'0');
+        }
+    }
+    (negative, int_digits, frac_digits)
+}
+
+/// |v| as (integer digits, fractional digits) from its shortest round-trip
+/// representation. Never uses scientific notation in the output.
+fn decimal_parts(v: f64) -> (Vec<u8>, Vec<u8>) {
+    debug_assert!(v >= 0.0 && v.is_finite());
+    // `{:e}` gives `mantissa e exp`; reposition the point at exp+1.
+    let s = format!("{v:e}");
+    let (mant, exp) = s.split_once('e').expect("exp format");
+    let exp: i32 = exp.parse().expect("exp int");
+    let all: Vec<u8> = mant.bytes().filter(|b| *b != b'.').collect();
+    let point = exp + 1; // number of integer digits
+    let (int_digits, frac_digits) = if point <= 0 {
+        let mut frac = vec![b'0'; (-point) as usize];
+        frac.extend_from_slice(&all);
+        (vec![b'0'], frac)
+    } else if (point as usize) >= all.len() {
+        let mut int = all.clone();
+        int.extend(std::iter::repeat_n(b'0', point as usize - all.len()));
+        (int, Vec::new())
+    } else {
+        let p = point as usize;
+        (all[..p].to_vec(), all[p..].to_vec())
+    };
+    (int_digits, frac_digits)
+}

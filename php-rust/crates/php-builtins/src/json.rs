@@ -80,7 +80,7 @@ fn is_list(a: &PhpArray) -> bool {
 }
 
 fn encode_array(a: &PhpArray, flags: i64, depth: usize, out: &mut Vec<u8>) -> Result<(), ()> {
-    if a.len() == 0 {
+    if a.is_empty() {
         out.extend_from_slice(b"[]");
         return Ok(());
     }

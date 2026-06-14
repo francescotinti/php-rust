@@ -58,6 +58,13 @@ pub fn registry() -> Registry {
     add(b"trim", string::trim);
     add(b"ltrim", string::ltrim);
     add(b"rtrim", string::rtrim);
+    add(b"strrev", string::strrev);
+    add(b"str_contains", string::str_contains);
+    add(b"str_starts_with", string::str_starts_with);
+    add(b"str_ends_with", string::str_ends_with);
+    add(b"str_split", string::str_split);
+    add(b"substr_count", string::substr_count);
+    add(b"number_format", string::number_format);
     add(b"sprintf", format::sprintf);
     add(b"printf", format::printf);
     add(b"abs", math::abs);

@@ -1132,3 +1132,80 @@ fn json_encode_pretty_nested() {
         "[\n    1,\n    2,\n    {\n        \"a\": 3\n    }\n]"
     );
 }
+
+// --- Step 29-1: pure string builtins ---------------------------------------
+
+#[test]
+fn strrev_reverses_bytes() {
+    assert_eq!(out("<?php echo strrev('Hello');"), "olleH");
+    assert_eq!(out("<?php echo strrev('');"), "");
+    assert_eq!(out("<?php echo strrev('a');"), "a");
+}
+
+#[test]
+fn str_contains_cases() {
+    assert_eq!(out("<?php var_dump(str_contains('abc', 'b'));"), "bool(true)\n");
+    assert_eq!(out("<?php var_dump(str_contains('abc', 'x'));"), "bool(false)\n");
+    // Empty needle is always found (PHP 8 semantics).
+    assert_eq!(out("<?php var_dump(str_contains('abc', ''));"), "bool(true)\n");
+}
+
+#[test]
+fn str_starts_and_ends_with_cases() {
+    assert_eq!(out("<?php var_dump(str_starts_with('abc.php', 'abc'));"), "bool(true)\n");
+    assert_eq!(out("<?php var_dump(str_starts_with('abc.php', 'php'));"), "bool(false)\n");
+    assert_eq!(out("<?php var_dump(str_starts_with('abc', ''));"), "bool(true)\n");
+    assert_eq!(out("<?php var_dump(str_ends_with('abc.php', '.php'));"), "bool(true)\n");
+    assert_eq!(out("<?php var_dump(str_ends_with('abc.php', 'abc'));"), "bool(false)\n");
+    assert_eq!(out("<?php var_dump(str_ends_with('abc', ''));"), "bool(true)\n");
+}
+
+#[test]
+fn str_split_cases() {
+    assert_eq!(
+        out("<?php echo implode('|', str_split('abcde'));"),
+        "a|b|c|d|e"
+    );
+    assert_eq!(
+        out("<?php echo implode('|', str_split('abcde', 2));"),
+        "ab|cd|e"
+    );
+    // chunk longer than the input yields a single element.
+    assert_eq!(out("<?php echo implode('|', str_split('ab', 5));"), "ab");
+    // Empty string yields an empty array (PHP 8.2+).
+    assert_eq!(out("<?php var_dump(str_split(''));"), "array(0) {\n}\n");
+}
+
+#[test]
+fn str_split_non_positive_length_is_value_error() {
+    match fatal("<?php str_split('ab', 0);") {
+        PhpError::ValueError(m) => {
+            assert_eq!(m, "str_split(): Argument #2 ($length) must be greater than 0");
+        }
+        other => panic!("expected ValueError, got {other:?}"),
+    }
+}
+
+#[test]
+fn substr_count_cases() {
+    assert_eq!(out("<?php echo substr_count('hello world hello', 'hello');"), "2");
+    // Non-overlapping match.
+    assert_eq!(out("<?php echo substr_count('aaa', 'aa');"), "1");
+    assert_eq!(out("<?php echo substr_count('abc', 'x');"), "0");
+}
+
+#[test]
+fn number_format_cases() {
+    assert_eq!(out("<?php echo number_format(1234567.891);"), "1,234,568");
+    assert_eq!(out("<?php echo number_format(1234567.891, 2);"), "1,234,567.89");
+    assert_eq!(out("<?php echo number_format(1234567.891, 2, ',', '.');"), "1.234.567,89");
+    assert_eq!(out("<?php echo number_format(-1234.5678, 2);"), "-1,234.57");
+    assert_eq!(out("<?php echo number_format(1000, 2);"), "1,000.00");
+    assert_eq!(out("<?php echo number_format(0, 2);"), "0.00");
+    // Round half away from zero.
+    assert_eq!(out("<?php echo number_format(2.5);"), "3");
+    assert_eq!(out("<?php echo number_format(0.5);"), "1");
+    // Rounded-to-zero result drops the negative sign.
+    assert_eq!(out("<?php echo number_format(-0.01, 0);"), "0");
+    assert_eq!(out("<?php echo number_format(-0.5, 0);"), "-1");
+}
