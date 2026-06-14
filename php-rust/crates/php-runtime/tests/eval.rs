@@ -3511,6 +3511,60 @@ fn interp_processes_escapes_in_literals() {
     assert_eq!(out(r#"<?php $v="W"; echo "$v\x41\101";"#), "WAA");
 }
 
+// --- Step 30: heredoc / nowdoc ---
+
+#[test]
+fn heredoc_strips_trailing_newline() {
+    let src = "<?php $h = <<<EOD\nHello, world\nEOD;\necho '[', $h, ']';";
+    assert_eq!(out(src), "[Hello, world]");
+}
+
+#[test]
+fn heredoc_keeps_internal_newlines() {
+    let src = "<?php $h = <<<EOD\nline1\nline2\nEOD;\necho $h;";
+    assert_eq!(out(src), "line1\nline2");
+}
+
+#[test]
+fn heredoc_interpolates_and_unescapes() {
+    // \t in a heredoc body IS processed (unlike nowdoc); $n interpolates.
+    let src = "<?php $n=\"W\"; $h = <<<EOD\nhi $n\\tend\nEOD;\necho $h;";
+    assert_eq!(out(src), "hi W\tend");
+}
+
+#[test]
+fn heredoc_backslash_quote_is_literal() {
+    // Heredoc does NOT process \" (double quotes are literal); keeps \".
+    let src = "<?php $h = <<<EOD\na\\\"b\nEOD;\necho $h;";
+    assert_eq!(out(src), "a\\\"b");
+}
+
+#[test]
+fn nowdoc_is_literal() {
+    // Nowdoc: no interpolation, no escape processing.
+    let src = "<?php $n=\"W\"; $h = <<<'EOD'\nhi $n\\tend\nEOD;\necho $h;";
+    assert_eq!(out(src), "hi $n\\tend");
+}
+
+#[test]
+fn heredoc_flexible_dedent() {
+    // Closing marker indented 4 spaces -> strip 4 leading ws from each line.
+    let src = "<?php $h = <<<EOD\n    line1\n      line2\n    EOD;\necho $h;";
+    assert_eq!(out(src), "line1\n  line2");
+}
+
+#[test]
+fn nowdoc_flexible_dedent() {
+    let src = "<?php $h = <<<'EOD'\n        a\n          b\n        EOD;\necho $h;";
+    assert_eq!(out(src), "a\n  b");
+}
+
+#[test]
+fn heredoc_empty_body() {
+    let src = "<?php $h = <<<EOD\nEOD;\necho '[', $h, ']';";
+    assert_eq!(out(src), "[]");
+}
+
 // --- Step 27: preg_* regular expressions ---
 
 #[test]

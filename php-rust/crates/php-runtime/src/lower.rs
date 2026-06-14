@@ -23,7 +23,8 @@ use mago_syntax::ast::{
     Access, Argument, ArrayElement, ArrowFunction, AssignmentOperator, BinaryOperator, Call,
     Class, ClassLikeConstantSelector, ClassLikeMember, ClassLikeMemberSelector, Closure,
     CompositeString, Construct,
-    DeclareBody, Enum, EnumCaseItem, Expression, Extends, ForeachTarget, Function,
+    DeclareBody, DocumentIndentation, DocumentKind, DocumentString, Enum, EnumCaseItem,
+    Expression, Extends, ForeachTarget, Function,
     FunctionLikeParameterList, Hint,
     Identifier, Instantiation, Interface, Literal, LiteralInteger, MatchArm as AstMatchArm, Method,
     MethodBody, Modifier, Node, PartialApplication, Property, PropertyItem, Statement, StaticItem,
@@ -1973,6 +1974,9 @@ impl<'f> Lowerer<'f> {
                 ExprKind::Match { subject, arms }
             }
 
+            Expression::CompositeString(CompositeString::Document(doc)) => {
+                self.lower_document(doc, line)?
+            }
             Expression::CompositeString(cs) => self.lower_interpolation(cs, line)?,
 
             _ => {
@@ -2002,10 +2006,93 @@ impl<'f> Lowerer<'f> {
             let piece = match part {
                 StringPart::Literal(l) => Expr {
                     line,
-                    kind: ExprKind::Str(unescape_double_quoted(l.value).into()),
+                    // Double-quoted strings process `\"` -> `"`.
+                    kind: ExprKind::Str(unescape_double_quoted(l.value, true).into()),
                 },
                 StringPart::Expression(e) => self.lower_expr(e)?,
                 StringPart::BracedExpression(b) => self.lower_expr(b.expression)?,
+            };
+            acc = Expr {
+                line,
+                kind: ExprKind::Binary(BinOp::Concat, Box::new(acc), Box::new(piece)),
+            };
+        }
+        Ok(acc.kind)
+    }
+
+    /// Lower a heredoc/nowdoc (`<<<EOD` / `<<<'EOD'`). mago hands the raw body
+    /// back (no dedent, no trailing-newline strip), exposing the closing
+    /// marker's indentation separately, so we replicate the lexer here:
+    ///   1. strip the marker's indentation from the start of every body line;
+    ///   2. drop the final newline before the closing marker;
+    ///   3. heredoc only: interpolate parts and process escapes (but `\"` stays
+    ///      literal — double quotes are not special in a heredoc); nowdoc keeps
+    ///      every byte verbatim (no interpolation, no escapes).
+    fn lower_document(
+        &mut self,
+        doc: &DocumentString,
+        line: Line,
+    ) -> Result<ExprKind, LowerError> {
+        let indent = match doc.indentation {
+            DocumentIndentation::None => 0,
+            DocumentIndentation::Whitespace(n) | DocumentIndentation::Tab(n) => n,
+            DocumentIndentation::Mixed(a, b) => a + b,
+        };
+        let heredoc = matches!(doc.kind, DocumentKind::Heredoc);
+
+        // Dedent literal segments (tracking line starts across the sequence),
+        // remembering which produced segment is the last literal so we can drop
+        // its trailing newline once the full body is known.
+        enum Seg<'a> {
+            Lit(Vec<u8>),
+            Dyn(&'a Expression<'a>),
+        }
+        let mut segs: Vec<Seg> = Vec::new();
+        let mut at_line_start = true;
+        let mut last_lit: Option<usize> = None;
+        for part in doc.parts.iter() {
+            match part {
+                StringPart::Literal(l) => {
+                    let (bytes, next_start) = dedent_literal(l.value, indent, at_line_start);
+                    at_line_start = next_start;
+                    last_lit = Some(segs.len());
+                    segs.push(Seg::Lit(bytes));
+                }
+                StringPart::Expression(e) => {
+                    at_line_start = false;
+                    segs.push(Seg::Dyn(e));
+                }
+                StringPart::BracedExpression(b) => {
+                    at_line_start = false;
+                    segs.push(Seg::Dyn(b.expression));
+                }
+            }
+        }
+        // Drop the single trailing newline (the separator before the marker).
+        if let Some(idx) = last_lit {
+            if let Seg::Lit(bytes) = &mut segs[idx] {
+                if bytes.last() == Some(&b'\n') {
+                    bytes.pop();
+                    if bytes.last() == Some(&b'\r') {
+                        bytes.pop();
+                    }
+                }
+            }
+        }
+
+        // Concatenate, seeded with "" to force a string result.
+        let mut acc = Expr { line, kind: ExprKind::Str(Default::default()) };
+        for seg in segs {
+            let piece = match seg {
+                Seg::Lit(bytes) => {
+                    let value = if heredoc {
+                        unescape_double_quoted(&bytes, false)
+                    } else {
+                        bytes
+                    };
+                    Expr { line, kind: ExprKind::Str(value.into()) }
+                }
+                Seg::Dyn(e) => self.lower_expr(e)?,
             };
             acc = Expr {
                 line,
@@ -2412,7 +2499,10 @@ enum AssignFlavour {
 /// interpolated string (mago hands these back raw). Mirrors the lexer rules:
 /// `\n \r \t \v \f \e \\ \$ \"`, `\x..` hex (1-2), `\u{..}` codepoint, and
 /// `\0..\777` octal (1-3). An unknown `\X` keeps the backslash and X.
-fn unescape_double_quoted(raw: &[u8]) -> Vec<u8> {
+///
+/// `process_quote` is true for double-quoted strings (`\"` -> `"`) and false in
+/// a heredoc, where double quotes are literal so `\"` stays `\"`.
+fn unescape_double_quoted(raw: &[u8], process_quote: bool) -> Vec<u8> {
     let mut out = Vec::with_capacity(raw.len());
     let mut i = 0;
     while i < raw.len() {
@@ -2431,7 +2521,7 @@ fn unescape_double_quoted(raw: &[u8]) -> Vec<u8> {
             b'e' => { out.push(0x1B); i += 2; }
             b'\\' => { out.push(b'\\'); i += 2; }
             b'$' => { out.push(b'$'); i += 2; }
-            b'"' => { out.push(b'"'); i += 2; }
+            b'"' if process_quote => { out.push(b'"'); i += 2; }
             b'x' => {
                 let mut j = i + 2;
                 let mut val = 0u32;
@@ -2492,6 +2582,39 @@ fn unescape_double_quoted(raw: &[u8]) -> Vec<u8> {
         }
     }
     out
+}
+
+/// Strip up to `indent` leading whitespace (space/tab) characters from each
+/// line of a heredoc/nowdoc literal segment, mirroring PHP 7.3+ flexible
+/// dedent. `at_line_start` says whether the segment begins a fresh line (i.e.
+/// the previous byte emitted was a newline or it is the very first segment);
+/// the returned flag carries that state to the next segment.
+fn dedent_literal(lit: &[u8], indent: usize, mut at_line_start: bool) -> (Vec<u8>, bool) {
+    if indent == 0 {
+        return (lit.to_vec(), lit.last() == Some(&b'\n'));
+    }
+    let mut out = Vec::with_capacity(lit.len());
+    let mut i = 0;
+    while i < lit.len() {
+        if at_line_start {
+            let mut skipped = 0;
+            while skipped < indent && i < lit.len() && (lit[i] == b' ' || lit[i] == b'\t') {
+                i += 1;
+                skipped += 1;
+            }
+            at_line_start = false;
+            if i >= lit.len() {
+                break;
+            }
+        }
+        let b = lit[i];
+        out.push(b);
+        i += 1;
+        if b == b'\n' {
+            at_line_start = true;
+        }
+    }
+    (out, at_line_start)
 }
 
 fn collect_catch_types(
