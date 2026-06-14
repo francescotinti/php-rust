@@ -44,6 +44,9 @@ pub fn registry() -> Registry {
     add(b"str_pad", string::str_pad);
     add(b"chr", string::chr);
     add(b"ord", string::ord);
+    add(b"trim", string::trim);
+    add(b"ltrim", string::ltrim);
+    add(b"rtrim", string::rtrim);
     add(b"sprintf", format::sprintf);
     add(b"printf", format::printf);
     add(b"abs", math::abs);

@@ -440,6 +440,76 @@ pub fn ord(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Long(s.as_bytes().first().copied().unwrap_or(0) as i64))
 }
 
+/// Default trim character set: " \t\n\r\0\x0B".
+const TRIM_DEFAULT: &[u8] = b" \t\n\r\0\x0b";
+
+/// Build the 256-entry membership mask for a trim charlist. A `a..b` triple
+/// expands to the inclusive byte range, matching PHP's `php_charmask`.
+fn trim_mask(chars: &[u8]) -> [bool; 256] {
+    let mut mask = [false; 256];
+    let mut i = 0;
+    while i < chars.len() {
+        // `c1..c2` range form: needs a fourth byte at i+3 with ".." between.
+        if i + 3 < chars.len() && chars[i + 1] == b'.' && chars[i + 2] == b'.' {
+            let lo = chars[i];
+            let hi = chars[i + 3];
+            if lo <= hi {
+                for b in lo..=hi {
+                    mask[b as usize] = true;
+                }
+                i += 4;
+                continue;
+            }
+        }
+        mask[chars[i] as usize] = true;
+        i += 1;
+    }
+    mask
+}
+
+/// Shared trim driver. `left`/`right` select which ends are stripped.
+fn do_trim(args: &[Zval], ctx: &mut Ctx, fname: &str, left: bool, right: bool) -> Result<Zval, PhpError> {
+    let s = convert::to_zstr(
+        args.first()
+            .ok_or_else(|| PhpError::Error(format!("{fname}() expects at least 1 argument, 0 given")))?,
+        ctx.diags,
+    );
+    let bytes = s.as_bytes();
+    let chars = match args.get(1) {
+        Some(v) => convert::to_zstr(v, ctx.diags).as_bytes().to_vec(),
+        None => TRIM_DEFAULT.to_vec(),
+    };
+    let mask = trim_mask(&chars);
+    let mut start = 0;
+    let mut end = bytes.len();
+    if left {
+        while start < end && mask[bytes[start] as usize] {
+            start += 1;
+        }
+    }
+    if right {
+        while end > start && mask[bytes[end - 1] as usize] {
+            end -= 1;
+        }
+    }
+    Ok(Zval::Str(PhpStr::new(bytes[start..end].to_vec())))
+}
+
+/// trim($string[, $characters]): strip the charlist from both ends.
+pub fn trim(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    do_trim(args, ctx, "trim", true, true)
+}
+
+/// ltrim($string[, $characters]): strip the charlist from the left.
+pub fn ltrim(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    do_trim(args, ctx, "ltrim", true, false)
+}
+
+/// rtrim($string[, $characters]): strip the charlist from the right.
+pub fn rtrim(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    do_trim(args, ctx, "rtrim", false, true)
+}
+
 /// First byte index of `needle` in `hay`. Empty needle matches at 0.
 fn find_sub(hay: &[u8], needle: &[u8]) -> Option<usize> {
     if needle.is_empty() {

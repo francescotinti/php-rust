@@ -654,6 +654,24 @@ fn chr_and_ord() {
     assert_eq!(out("<?php var_dump(ord('AB'));"), "int(65)\n"); // first byte
 }
 
+// --- step 17-3: trim / ltrim / rtrim ---
+
+#[test]
+fn trim_default_whitespace() {
+    assert_eq!(out("<?php var_dump(trim(\"  hi \n\"));"), "string(2) \"hi\"\n");
+    assert_eq!(out("<?php var_dump(ltrim('  hi  '));"), "string(4) \"hi  \"\n");
+    assert_eq!(out("<?php var_dump(rtrim('  hi  '));"), "string(4) \"  hi\"\n");
+    assert_eq!(out("<?php var_dump(trim(\"\\t\\n x \\0\"));"), "string(1) \"x\"\n");
+}
+
+#[test]
+fn trim_custom_charlist() {
+    assert_eq!(out("<?php echo trim('xxhixx', 'x');"), "hi");
+    assert_eq!(out("<?php echo trim('[hi]', '[]');"), "hi");
+    // A range expands to the inclusive byte interval (PHP feature, not literal).
+    assert_eq!(out("<?php echo trim('a1b2c', 'a..c');"), "1b2");
+}
+
 #[test]
 fn undefined_function_is_fatal_after_output() {
     let reg = registry();
