@@ -593,33 +593,74 @@ impl<'p> Evaluator<'p> {
 
     /// Offer a thrown exception to a `try`'s catch clauses (step 20). The first
     /// clause whose type matches by `instanceof` runs (binding `$e` if named);
-    /// an unmatched throw — or a non-`Thrown` engine error in 20-1 — propagates.
+    /// an unmatched throw propagates.
+    ///
+    /// Both user `throw`n objects and engine errors are catchable: an engine
+    /// error (`PhpError::TypeError`, `DivisionByZeroError`, …) is resolved to its
+    /// matching prelude class by name, and a Throwable object is *synthesized*
+    /// (with its message) only if a clause actually binds it (step 20-3).
     fn handle_thrown(
         &mut self,
         e: PhpError,
         catches: &[crate::hir::CatchClause],
     ) -> Result<Flow, PhpError> {
-        let obj = match e {
-            PhpError::Thrown(v) => v,
-            other => return Err(other),
-        };
-        let obj_cid = match &obj {
-            Zval::Object(o) => o.borrow().class_id as usize,
-            _ => return Err(PhpError::Thrown(obj)),
+        // The class id of the in-flight throwable: the object's own class for a
+        // user throw, or the prelude class named by an engine error.
+        let obj_cid = match &e {
+            PhpError::Thrown(Zval::Object(o)) => o.borrow().class_id as usize,
+            PhpError::Thrown(_) => return Err(e),
+            engine => match self
+                .class_index
+                .get(engine.class_name().to_ascii_lowercase().as_bytes())
+            {
+                Some(&cid) => cid,
+                None => return Err(e),
+            },
         };
         for c in catches {
             for tname in &c.types {
                 if let Some(&tid) = self.class_index.get(&tname.to_ascii_lowercase()) {
                     if self.is_instance_of(obj_cid, tid) {
                         if let Some(slot) = c.var {
-                            self.slot_set(slot as usize, obj.clone());
+                            let obj = match &e {
+                                PhpError::Thrown(v) => v.clone(),
+                                engine => self.synthesize_throwable(obj_cid, engine.message())?,
+                            };
+                            self.slot_set(slot as usize, obj);
                         }
                         return self.exec_stmts(&c.body);
                     }
                 }
             }
         }
-        Err(PhpError::Thrown(obj))
+        Err(e)
+    }
+
+    /// Build a Throwable object of `class_id` carrying `message` (step 20-3), used
+    /// to materialise an engine error (`TypeError`, `DivisionByZeroError`, …) when
+    /// a `catch` binds it. Mirrors `eval_new`'s instance layout but sets the
+    /// message/line/file directly instead of running a constructor.
+    fn synthesize_throwable(&mut self, class_id: ClassId, message: &str) -> Result<Zval, PhpError> {
+        let class_name = PhpStr::new(self.classes[class_id].name.to_vec());
+        let props = self.collect_props(class_id)?;
+        let info = self.class_shape(class_id);
+        let id = self.next_id();
+        let value = Zval::Object(Rc::new(RefCell::new(Object {
+            class_id: class_id as u32,
+            class_name,
+            props,
+            id,
+            info,
+        })));
+        if let Zval::Object(o) = &value {
+            let mut b = o.borrow_mut();
+            b.props
+                .set(b"message", Zval::Str(PhpStr::new(message.as_bytes().to_vec())));
+            b.props.set(b"line", Zval::Long(self.cur_line as i64));
+            b.props
+                .set(b"file", Zval::Str(PhpStr::new(self.file.to_vec())));
+        }
+        Ok(value)
     }
 
     /// Run a loop body once and translate its control-flow signal relative to

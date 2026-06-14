@@ -2244,3 +2244,65 @@ fn exc_finally_overrides_thrown_with_return() {
         "ok"
     );
 }
+
+// --- step 20-3: engine errors catchable, user subclasses, previous, throw-expr ---
+
+#[test]
+fn exc_engine_division_by_zero_catchable() {
+    assert_eq!(
+        out("<?php try { $x = 1 % 0; } catch (DivisionByZeroError $e) { echo $e->getMessage(); }"),
+        "Modulo by zero"
+    );
+    assert_eq!(
+        out("<?php try { $x = 5 / 0; } catch (DivisionByZeroError $e) { echo $e->getMessage(); }"),
+        "Division by zero"
+    );
+}
+
+#[test]
+fn exc_engine_error_caught_as_throwable() {
+    assert_eq!(
+        out("<?php try { $x = 5 / 0; } catch (Throwable $e) { echo 'caught'; }"),
+        "caught"
+    );
+}
+
+#[test]
+fn exc_engine_type_error_catchable() {
+    assert_eq!(
+        out("<?php function f(int $x){ return $x; } try { f([]); } catch (TypeError $e) { echo 'T'; }"),
+        "T"
+    );
+}
+
+#[test]
+fn exc_user_subclass_caught_by_parent() {
+    assert_eq!(
+        out("<?php class MyExc extends Exception {} try { throw new MyExc('c'); } catch (Exception $e) { echo $e->getMessage(); }"),
+        "c"
+    );
+}
+
+#[test]
+fn exc_user_subclass_parent_construct() {
+    assert_eq!(
+        out("<?php class MyExc extends Exception { public function __construct() { parent::__construct('fixed'); } } try { throw new MyExc(); } catch (MyExc $e) { echo $e->getMessage(); }"),
+        "fixed"
+    );
+}
+
+#[test]
+fn exc_get_previous_chain() {
+    assert_eq!(
+        out("<?php try { try { throw new Exception('inner'); } catch (Exception $e) { throw new RuntimeException('outer', 0, $e); } } catch (Exception $e) { echo $e->getMessage().'<-'.$e->getPrevious()->getMessage(); }"),
+        "outer<-inner"
+    );
+}
+
+#[test]
+fn exc_throw_expression() {
+    assert_eq!(
+        out("<?php function f($x){ return $x ?: throw new RuntimeException('empty'); } try { echo f(0); } catch (RuntimeException $e) { echo $e->getMessage(); }"),
+        "empty"
+    );
+}
