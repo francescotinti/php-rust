@@ -652,7 +652,16 @@ impl<'p> Evaluator<'p> {
                 }
                 Some(Arg::Ref(cell)) => Zval::Ref(Rc::clone(cell)),
                 // Required params are guaranteed present by the caller's check.
-                None => self.eval(p.default.as_ref().expect("required arg checked"))?,
+                // A default is coerced to the hint too (`float $n = 0` → 0.0,
+                // D-NEW-6); a valid constant default always coerces, so on the
+                // unreachable failure we keep the evaluated value.
+                None => {
+                    let v = self.eval(p.default.as_ref().expect("required arg checked"))?;
+                    match &p.hint {
+                        Some(hint) => coerce_to_hint(v.clone(), hint, &mut self.diags).unwrap_or(v),
+                        None => v,
+                    }
+                }
             };
             frame_mut!(self)[p.slot as usize] = binding;
         }

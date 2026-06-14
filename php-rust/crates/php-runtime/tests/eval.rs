@@ -649,6 +649,13 @@ fn exact_float_to_int_param_no_deprecation() {
 }
 
 #[test]
+fn default_value_is_coerced_to_hint() {
+    // The D-NEW-6 case: an int default on a `float` parameter is coerced to
+    // float when the default is used (oracle: float(0)).
+    assert_eq!(out("<?php function f(float $n = 0){ echo $n === 0.0 ? 'Y' : 'N'; } f();"), "Y");
+}
+
+#[test]
 fn return_type_hint_coerces() {
     // A scalar return type coerces the returned value (weak), proven by `===`.
     assert_eq!(out("<?php function f(): int { return '5'; } echo f() === 5 ? 'Y' : 'N';"), "Y");

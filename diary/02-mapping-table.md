@@ -155,6 +155,12 @@ presente nel codebase.
 
 **Sotto-suddivisione TDD step 14:** **14-1** rappresentazione (`TypeHint`/`ScalarType` + lowering) + motore coercizione param (successi int/float/string/bool/nullable) + Param TypeError; **14-2** deprecation float→int (float e float-string) + return type enforcement.
 
+**Step 14 IMPLEMENTATO (sessione 2026-06-14, TDD, chiude D-NEW-6):** +11 test (220→230 net, -1 test obsoleto sostituito), oracle-verificato, clippy pulito.
+- **14-1 `8dd9331`**: nuovi tipi HIR `ScalarType{Int,Float,String,Bool}` + `TypeHint{kind,nullable}` con `display_name()`. `Param.hint` + `FnDecl.ret_hint` via `lower_hint` (mappa `Hint::Integer/Float/String/Bool` + `Nullable` scalare; ogni altro → `None`). Motore `coerce_to_hint` + `coerce_to_{int,float,string,bool}` (free fn in eval.rs) applicano la coercizione weak al bind by-value in `run_user_fn_body`; più stretta del cast `(int)` (solo stringhe numeriche ben formate, riusa `numstr::parse_numeric_ex(s,false)`). Fallimento → `arg_type_error` con messaggio PHP esatto. Sostituito il test "hint accettati ma non enforced". +5 test.
+- **14-2 `7b4e5a1`**: return type coercion (in `run_user_fn_body` dopo `exec_stmts`, skip se `by_ref`) + `return_type_error` (formato "Return value must be of type … returned in F:DL"). Deprecation float→int (riusa `dval_to_lval_safe`) e float-string→int (messaggio custom "float-string") già cablate in 14-1, qui testate. +5 test.
+- **Default coercion (chiude D-NEW-6 completamente):** anche i default sono coercizzati (`float $n = 0` → `float(0)`). +1 test. 
+- **Scope-out confermati (D-14.7):** `declare(strict_types=1)`, hint union/intersection/classe/array/iterable/mixed/void, param variadici tipati, coercizione su param by-ref.
+
 ### Step 13 — return-by-reference (`function &f()`) (design pass, sessione 2026-06-14)
 
 > Dialogo → l'utente ha scelto return-by-ref come prossimo step (piccolo, il modello `Zval::Ref` è pronto da 11d/12). Semantiche verificate sull'oracle PHP 8.5.7: `function &f(){ global $x; return $x; } $y=&f(); $y=99;` → global a `99`; `$y=f()`/`echo f()` (contesto valore) → **copia** (`1`/`5`); `return <non-lvalue>` o `return;` in fn by-ref → Notice "Only variable references should be returned by reference" + valore (NULL per bare return); `$y=&normalfn()` (fn NON by-ref) → Notice "Only variables should be assigned by reference" + valore; `$y=&byref_fn_che_ritorna_nonplace()` → **solo** il Notice interno (no outer).
