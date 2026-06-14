@@ -20,7 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
-| Unit/integration (workspace, fine step 29) | 568 |
+| Unit/integration (workspace, fine step 29) | 567 |
 | Unit/integration (workspace, fine step 28) | 545 |
 | Unit/integration (workspace, fine step 24) | 512 |
 | Unit/integration (workspace, fine step 23) | 497 |
@@ -364,7 +364,7 @@ include/require e closure, trace per errori engine fuori da una call.
 
 Pattern collaudato degli step 10/17: builtin **PURI** (ABI `fn(&[Zval], &mut
 Ctx)` invariata, **ZERO modifiche all'evaluator**), TDD-isolato per gruppo,
-ognuno oracle-verificato byte-per-byte. +23 test totali (545→568), clippy
+ognuno oracle-verificato byte-per-byte. +22 test totali (545→567), clippy
 pulito. Quattro sotto-step.
 
 - **29-1 string** (`crates/php-builtins/src/string.rs`, +7): `strrev`,
