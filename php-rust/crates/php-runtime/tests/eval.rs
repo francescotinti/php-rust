@@ -2306,3 +2306,41 @@ fn exc_throw_expression() {
         "empty"
     );
 }
+
+// --- step 20 coda: stdClass, get_class, get_parent_class ---
+
+#[test]
+fn exc_get_class_object_and_this() {
+    assert_eq!(out("<?php class C{} echo get_class(new C);"), "C");
+    assert_eq!(
+        out("<?php class C{ function n(){ return get_class($this); } } echo (new C)->n();"),
+        "C"
+    );
+}
+
+#[test]
+fn exc_get_class_on_exception() {
+    assert_eq!(
+        out("<?php try { throw new RuntimeException('x'); } catch (Exception $e) { echo get_class($e); }"),
+        "RuntimeException"
+    );
+}
+
+#[test]
+fn exc_get_parent_class_string_and_object() {
+    assert_eq!(out("<?php class A{} class B extends A{} echo get_parent_class('B');"), "A");
+    assert_eq!(out("<?php echo get_parent_class(new RuntimeException('x'));"), "Exception");
+}
+
+#[test]
+fn exc_get_parent_class_none_is_false() {
+    assert_eq!(
+        out("<?php class A{} echo get_parent_class(new A) === false ? 'f' : 'x';"),
+        "f"
+    );
+}
+
+#[test]
+fn stdclass_dynamic_property() {
+    assert_eq!(out("<?php $o = new stdClass; $o->x = 5; echo $o->x;"), "5");
+}

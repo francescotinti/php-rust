@@ -107,12 +107,14 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
     })
 }
 
-/// The built-in throwable hierarchy, authored in PHP and lowered once into the
-/// front of every program's class table (step 20). Mirrors PHP's core/SPL
-/// classes closely enough for catch-matching, the accessors, and `instanceof`.
+/// The built-in classes, authored in PHP and lowered once into the front of
+/// every program's class table (step 20): `stdClass` plus the throwable
+/// hierarchy. Mirrors PHP's core/SPL classes closely enough for catch-matching,
+/// the accessors, and `instanceof`.
 /// `getTrace`/`getTraceAsString` are stubs (no real stack trace is modelled);
 /// `file`/`line` are filled in by the evaluator at `new` time, not here.
 const PRELUDE_SRC: &[u8] = br##"<?php
+class stdClass {}
 interface Throwable {}
 class Exception implements Throwable {
     protected $message = "";

@@ -563,3 +563,11 @@ TDD, **+26 test (377→403)**, clippy pulito, zero D-NEW. 3 gruppi:
 skip** (179; prima ~tutti skip:unsupported). Fail residui = scope-out: stack-trace con
 frame reali (`#0 foo(...)`; noi `#0 {main}`), foreach su oggetti/Generator, `stdClass`
 non nel prelude, magic methods.
+
+### Step 20 coda (rifiniture, stesso step)
+- `stdClass` aggiunto al prelude (`new stdClass` + dynamic props già supportate dallo store oggetti).
+- `get_class([$obj])` / `get_parent_class([$obj|$class])` come builtin **intercettati**
+  nell'evaluator (`dispatch_class_introspection`, leggono `$this`/class table): get_class
+  no-arg usa `$this`, non-oggetto → TypeError; get_parent_class senza parent → `false`.
+- +5 test (403→408), clippy pulito. (Corpus invariato: i fail residui dipendono dagli
+  stack-trace con frame reali, non da queste classi/builtin.)

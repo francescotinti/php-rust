@@ -1838,6 +1838,67 @@ impl<'p> Evaluator<'p> {
         }
     }
 
+    /// Class-introspection builtins the evaluator answers directly because they
+    /// read the current object / class table rather than a pure value (step 20
+    /// coda). Returns `None` for a name we do not intercept.
+    fn dispatch_class_introspection(
+        &mut self,
+        name: &[u8],
+        args: &[Expr],
+    ) -> Option<Result<Zval, PhpError>> {
+        match name {
+            b"get_class" => Some(self.ci_get_class(args)),
+            b"get_parent_class" => Some(self.ci_get_parent_class(args)),
+            _ => None,
+        }
+    }
+
+    /// `get_class($object)` — the object's class name; with no argument, the
+    /// class of the current `$this` (a fatal Error outside object context, PHP 8).
+    fn ci_get_class(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        let v = match args.first() {
+            Some(e) => self.eval(e)?.deref_clone(),
+            None => match &self.cur_this {
+                Some(t) => t.clone(),
+                None => {
+                    return Err(PhpError::Error(
+                        "get_class() without arguments must be called from within a class"
+                            .to_string(),
+                    ))
+                }
+            },
+        };
+        match &v {
+            Zval::Object(o) => Ok(Zval::Str(PhpStr::new(o.borrow().class_name.as_bytes().to_vec()))),
+            Zval::Closure(_) => Ok(Zval::Str(PhpStr::new(b"Closure".to_vec()))),
+            other => Err(PhpError::TypeError(format!(
+                "get_class(): Argument #1 ($object) must be of type object, {} given",
+                other.error_type_name()
+            ))),
+        }
+    }
+
+    /// `get_parent_class([$object|$class])` — the parent class name, or `false`
+    /// when there is none (or the target cannot be resolved). With no argument it
+    /// uses the current class context.
+    fn ci_get_parent_class(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        let cid: Option<ClassId> = match args.first() {
+            Some(e) => match self.eval(e)?.deref_clone() {
+                Zval::Object(o) => Some(o.borrow().class_id as usize),
+                Zval::Str(s) => self
+                    .class_index
+                    .get(&s.as_bytes().to_ascii_lowercase())
+                    .copied(),
+                _ => None,
+            },
+            None => self.cur_class,
+        };
+        match cid.and_then(|c| self.classes[c].parent) {
+            Some(p) => Ok(Zval::Str(PhpStr::new(self.classes[p].name.to_vec()))),
+            None => Ok(Zval::Bool(false)),
+        }
+    }
+
     /// Whether a function *name* resolves to something callable: a user function,
     /// a registered builtin, or a higher-order builtin the evaluator intercepts.
     fn is_name_callable(&self, name: &[u8]) -> bool {
@@ -2292,6 +2353,11 @@ impl<'p> Evaluator<'p> {
                 // run by the evaluator itself rather than the (pure) registry
                 // (step 18, D-18.6). They take precedence over the registry.
                 if let Some(res) = self.dispatch_higher_order(name, args) {
+                    return res;
+                }
+                // Class-introspection builtins read the current object / class
+                // table, so the evaluator answers them directly (step 20 coda).
+                if let Some(res) = self.dispatch_class_introspection(name, args) {
                     return res;
                 }
                 // A by-reference builtin (array_push/sort/...) binds its first
