@@ -14,7 +14,7 @@
 //! phpt-runner's capability scan (step 6) turns these into motivated SKIPs.
 
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use bumpalo::Bump;
 use mago_database::file::File;
@@ -25,7 +25,7 @@ use mago_syntax::ast::{
     DeclareBody, Expression, Extends, ForeachTarget, Function, FunctionLikeParameterList, Hint,
     Identifier, Instantiation, Interface, Literal, LiteralInteger, MatchArm as AstMatchArm, Method,
     MethodBody, Modifier, Node, PartialApplication, Property, PropertyItem, Statement, StaticItem,
-    UnaryPostfixOperator, UnaryPrefixOperator, Variable,
+    Trait, TraitUse, UnaryPostfixOperator, UnaryPrefixOperator, Variable,
 };
 use mago_syntax::parser::parse_file;
 
@@ -93,6 +93,9 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
             low.hoist_function(func)?;
         }
     }
+    // Lower traits before classes, so a class's `use T` finds T fully resolved
+    // (step 21). Traits stay in the Lowerer; they never enter the class table.
+    low.lower_traits(program.statements.as_slice())?;
     low.hoist_classes(program.statements.as_slice())?;
     let body = low.lower_stmts(program.statements.as_slice())?;
     Ok(Program {
@@ -265,6 +268,24 @@ struct Lowerer<'f> {
     /// names are case-insensitive), step 19.
     classes: Vec<ClassDecl>,
     class_index: HashMap<Vec<u8>, usize>,
+    /// Lowered traits, keyed by ASCII-lowercased name (step 21). Held only in the
+    /// Lowerer — traits are not types and never enter `Program.classes`. Each
+    /// entry is fully resolved (nested `use` already flattened), so a consuming
+    /// class copies the members verbatim into its own [`ClassDecl`] (D-21.1/2/8).
+    traits: HashMap<Vec<u8>, LoweredTrait>,
+}
+
+/// A trait whose members have been lowered and whose own `use` clauses have been
+/// flattened in (step 21). Copied member-by-member into each consuming class so
+/// the step-19 runtime machinery is reused with no evaluator changes.
+struct LoweredTrait {
+    methods: Vec<MethodDecl>,
+    props: Vec<PropDecl>,
+    static_props: Vec<crate::hir::StaticPropDecl>,
+    consts: Vec<crate::hir::ClassConstDecl>,
+    /// Names of `abstract` methods the trait requires the consumer to implement
+    /// (D-21.11; enforcement arrives in 21-4).
+    abstract_methods: Vec<Box<[u8]>>,
 }
 
 impl<'f> Lowerer<'f> {
@@ -283,6 +304,7 @@ impl<'f> Lowerer<'f> {
             strict: false,
             classes: Vec::new(),
             class_index: HashMap::new(),
+            traits: HashMap::new(),
         }
     }
 
@@ -538,6 +560,10 @@ impl<'f> Lowerer<'f> {
                     line,
                 });
             }
+            // A trait declaration carries no runtime behaviour: the top-level
+            // ones were lowered into `self.traits` and flattened into their
+            // consumers at lowering time (step 21).
+            Statement::Trait(_) => return Ok(None),
 
             // `try { } catch (T $e) { } finally { }` (step 20). Each catch's type
             // hint is a single class or a `A | B` union (collected to names); its
@@ -671,6 +697,181 @@ impl<'f> Lowerer<'f> {
         Ok(())
     }
 
+    /// Lower every top-level `trait T { ... }` into [`Lowerer::traits`] (step 21).
+    /// Each is resolved on demand (so a trait may `use` another declared later)
+    /// with a cycle guard; nested `use` clauses are flattened in (D-21.8).
+    fn lower_traits(&mut self, stmts: &[Statement]) -> Result<(), LowerError> {
+        let mut asts: HashMap<Vec<u8>, &Trait> = HashMap::new();
+        for s in stmts {
+            if let Statement::Trait(t) = s {
+                let key = t.name.value.to_ascii_lowercase();
+                if self.class_index.contains_key(&key) || asts.contains_key(&key) {
+                    return Err(LowerError::Unsupported {
+                        what: "trait redeclaration",
+                        line: self.line_of(t.span()),
+                    });
+                }
+                asts.insert(key, t);
+            }
+        }
+        let mut in_progress: HashSet<Vec<u8>> = HashSet::new();
+        let names: Vec<Vec<u8>> = asts.keys().cloned().collect();
+        for n in names {
+            self.resolve_trait(&n, &asts, &mut in_progress)?;
+        }
+        Ok(())
+    }
+
+    /// Lower one trait into [`Lowerer::traits`], memoised. Resolves the trait's
+    /// own `use` clauses first (so nested members are present), then flattens
+    /// them in with the trait's own members taking precedence (step 21).
+    fn resolve_trait(
+        &mut self,
+        key: &[u8],
+        asts: &HashMap<Vec<u8>, &Trait>,
+        in_progress: &mut HashSet<Vec<u8>>,
+    ) -> Result<(), LowerError> {
+        if self.traits.contains_key(key) {
+            return Ok(());
+        }
+        let t = *asts.get(key).ok_or(LowerError::Unsupported {
+            what: "use of undefined trait",
+            line: 0,
+        })?;
+        let line = self.line_of(t.span());
+        if !in_progress.insert(key.to_vec()) {
+            return Err(LowerError::Unsupported {
+                what: "circular trait use",
+                line,
+            });
+        }
+        let mut methods = Vec::new();
+        let mut props = Vec::new();
+        let mut static_props = Vec::new();
+        let mut consts = Vec::new();
+        let mut abstract_methods: Vec<Box<[u8]>> = Vec::new();
+        let mut uses: Vec<&TraitUse> = Vec::new();
+        for member in t.members.iter() {
+            match member {
+                ClassLikeMember::Property(p) => {
+                    self.lower_property(p, &mut props, &mut static_props, line)?
+                }
+                ClassLikeMember::Method(m) if matches!(m.body, MethodBody::Abstract(_)) => {
+                    abstract_methods.push(m.name.value.into())
+                }
+                ClassLikeMember::Method(m) => methods.push(self.lower_method(m, line)?),
+                ClassLikeMember::Constant(c) => self.lower_class_const(c, &mut consts)?,
+                ClassLikeMember::TraitUse(u) => uses.push(u),
+                _ => {
+                    return Err(LowerError::Unsupported {
+                        what: "trait member",
+                        line,
+                    })
+                }
+            }
+        }
+        // Resolve any nested traits before flattening their members in.
+        for u in &uses {
+            for tn in u.trait_names.iter() {
+                let nk = function_name(tn).to_ascii_lowercase();
+                self.resolve_trait(&nk, asts, in_progress)?;
+            }
+        }
+        let (own_m, own_p, own_s, own_c) = member_name_sets(&methods, &props, &static_props, &consts);
+        let mut t_methods = Vec::new();
+        let mut t_props = Vec::new();
+        let mut t_static = Vec::new();
+        let mut t_consts = Vec::new();
+        self.flatten_into(
+            &uses,
+            (&own_m, &own_p, &own_s, &own_c),
+            (&mut t_methods, &mut t_props, &mut t_static, &mut t_consts),
+            &mut abstract_methods,
+            line,
+        )?;
+        // Own members come last so the trait's own declarations win over inherited
+        // ones; trait members keep their (declaration) order in front for layout.
+        t_methods.extend(methods);
+        t_props.extend(props);
+        t_static.extend(static_props);
+        t_consts.extend(consts);
+        in_progress.remove(key);
+        self.traits.insert(
+            key.to_vec(),
+            LoweredTrait {
+                methods: t_methods,
+                props: t_props,
+                static_props: t_static,
+                consts: t_consts,
+                abstract_methods,
+            },
+        );
+        Ok(())
+    }
+
+    /// Copy the members of every trait named in `uses` into the four `out` vecs,
+    /// skipping any name the consumer already declares (`own_*`, precedence
+    /// D-21.4) or that an earlier trait in this list already supplied (first
+    /// wins; true conflict detection + `insteadof`/`as` arrive in 21-3). Reads
+    /// `self.traits`, which the caller has ensured is fully resolved.
+    #[allow(clippy::type_complexity)]
+    fn flatten_into(
+        &self,
+        uses: &[&TraitUse],
+        own: (
+            &HashSet<Vec<u8>>,
+            &HashSet<Vec<u8>>,
+            &HashSet<Vec<u8>>,
+            &HashSet<Vec<u8>>,
+        ),
+        out: (
+            &mut Vec<MethodDecl>,
+            &mut Vec<PropDecl>,
+            &mut Vec<crate::hir::StaticPropDecl>,
+            &mut Vec<crate::hir::ClassConstDecl>,
+        ),
+        abstract_methods: &mut Vec<Box<[u8]>>,
+        line: Line,
+    ) -> Result<(), LowerError> {
+        let (own_m, own_p, own_s, own_c) = own;
+        let (methods, props, static_props, consts) = out;
+        let mut seen_m = own_m.clone();
+        let mut seen_p = own_p.clone();
+        let mut seen_s = own_s.clone();
+        let mut seen_c = own_c.clone();
+        for u in uses {
+            for tn in u.trait_names.iter() {
+                let tkey = function_name(tn).to_ascii_lowercase();
+                let lt = self.traits.get(&tkey).ok_or(LowerError::Unsupported {
+                    what: "use of undefined trait",
+                    line,
+                })?;
+                for m in &lt.methods {
+                    if seen_m.insert(m.decl.name.to_ascii_lowercase()) {
+                        methods.push(m.clone());
+                    }
+                }
+                for p in &lt.props {
+                    if seen_p.insert(p.name.to_ascii_lowercase()) {
+                        props.push(p.clone());
+                    }
+                }
+                for s in &lt.static_props {
+                    if seen_s.insert(s.name.to_ascii_lowercase()) {
+                        static_props.push(s.clone());
+                    }
+                }
+                for c in &lt.consts {
+                    if seen_c.insert(c.name.to_ascii_lowercase()) {
+                        consts.push(c.clone());
+                    }
+                }
+                abstract_methods.extend(lt.abstract_methods.iter().cloned());
+            }
+        }
+        Ok(())
+    }
+
     /// Resolve a list of interface names (`implements`/interface `extends`) to
     /// their class ids (step 19-5). Unknown interfaces are out of scope.
     fn resolve_interfaces(&self, names: &[&[u8]], line: Line) -> Result<Vec<usize>, LowerError> {
@@ -766,6 +967,7 @@ impl<'f> Lowerer<'f> {
         let mut static_props = Vec::new();
         let mut consts = Vec::new();
         let mut methods = Vec::new();
+        let mut uses: Vec<&TraitUse> = Vec::new();
         for member in class.members.iter() {
             match member {
                 ClassLikeMember::Property(p) => {
@@ -776,6 +978,7 @@ impl<'f> Lowerer<'f> {
                 ClassLikeMember::Method(m) if matches!(m.body, MethodBody::Abstract(_)) => {}
                 ClassLikeMember::Method(m) => methods.push(self.lower_method(m, line)?),
                 ClassLikeMember::Constant(c) => self.lower_class_const(c, &mut consts)?,
+                ClassLikeMember::TraitUse(u) => uses.push(u),
                 _ => {
                     return Err(LowerError::Unsupported {
                         what: "class member",
@@ -783,6 +986,33 @@ impl<'f> Lowerer<'f> {
                     })
                 }
             }
+        }
+        // Flatten any `use TraitName;` members into this class (step 21). The
+        // class's own declarations take precedence; trait members are placed in
+        // front so the instance layout / dump order matches PHP's (`use` first).
+        if !uses.is_empty() {
+            let (own_m, own_p, own_s, own_c) =
+                member_name_sets(&methods, &props, &static_props, &consts);
+            let mut t_methods = Vec::new();
+            let mut t_props = Vec::new();
+            let mut t_static = Vec::new();
+            let mut t_consts = Vec::new();
+            let mut _abstract: Vec<Box<[u8]>> = Vec::new();
+            self.flatten_into(
+                &uses,
+                (&own_m, &own_p, &own_s, &own_c),
+                (&mut t_methods, &mut t_props, &mut t_static, &mut t_consts),
+                &mut _abstract,
+                line,
+            )?;
+            t_methods.extend(methods);
+            methods = t_methods;
+            t_props.extend(props);
+            props = t_props;
+            t_static.extend(static_props);
+            static_props = t_static;
+            t_consts.extend(consts);
+            consts = t_consts;
         }
         Ok(ClassDecl {
             name,
@@ -1864,6 +2094,34 @@ fn collect_catch_types(
             line,
         }),
     }
+}
+
+/// ASCII-lowercased name sets for a member group — used to give a class/trait's
+/// own declarations precedence over flattened trait members (step 21, D-21.4).
+#[allow(clippy::type_complexity)]
+fn member_name_sets(
+    methods: &[MethodDecl],
+    props: &[PropDecl],
+    static_props: &[crate::hir::StaticPropDecl],
+    consts: &[crate::hir::ClassConstDecl],
+) -> (
+    HashSet<Vec<u8>>,
+    HashSet<Vec<u8>>,
+    HashSet<Vec<u8>>,
+    HashSet<Vec<u8>>,
+) {
+    (
+        methods
+            .iter()
+            .map(|m| m.decl.name.to_ascii_lowercase())
+            .collect(),
+        props.iter().map(|p| p.name.to_ascii_lowercase()).collect(),
+        static_props
+            .iter()
+            .map(|p| p.name.to_ascii_lowercase())
+            .collect(),
+        consts.iter().map(|c| c.name.to_ascii_lowercase()).collect(),
+    )
 }
 
 fn function_name<'a>(id: &Identifier<'a>) -> &'a [u8] {

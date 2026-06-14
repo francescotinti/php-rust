@@ -2344,3 +2344,65 @@ fn exc_get_parent_class_none_is_false() {
 fn stdclass_dynamic_property() {
     assert_eq!(out("<?php $o = new stdClass; $o->x = 5; echo $o->x;"), "5");
 }
+
+// --- step 21-1: traits, core flatten ---
+
+#[test]
+fn trait_basic_flatten_method_and_prop() {
+    assert_eq!(
+        out("<?php trait T { public function hello(){ return 'hi'; } public $x = 5; } \
+             class C { use T; } $c = new C(); echo $c->hello(), $c->x;"),
+        "hi5"
+    );
+}
+
+#[test]
+fn trait_method_reads_this_property() {
+    // A trait method operates on the consuming object's properties.
+    assert_eq!(
+        out("<?php trait T { public function dbl(){ return $this->n * 2; } } \
+             class C { use T; public $n = 21; } $c = new C(); echo $c->dbl();"),
+        "42"
+    );
+}
+
+#[test]
+fn trait_get_class_in_method_is_consumer() {
+    // `$this` in a flattened method is the consuming class, so get_class returns it.
+    assert_eq!(
+        out("<?php trait T { public function who(){ return get_class($this); } } \
+             class C { use T; } echo (new C())->who();"),
+        "C"
+    );
+}
+
+#[test]
+fn trait_class_method_overrides_trait() {
+    // A method declared on the class takes precedence over the trait's.
+    assert_eq!(
+        out("<?php trait T { public function f(){ return 'trait'; } } \
+             class C { use T; public function f(){ return 'class'; } } echo (new C())->f();"),
+        "class"
+    );
+}
+
+#[test]
+fn trait_method_overrides_inherited_parent_method() {
+    // The flattened trait method is the class's own, so it wins over the parent's.
+    assert_eq!(
+        out("<?php class P { public function f(){ return 'parent'; } } \
+             trait T { public function f(){ return 'trait'; } } \
+             class C extends P { use T; } echo (new C())->f();"),
+        "trait"
+    );
+}
+
+#[test]
+fn trait_multiple_disjoint_members_merge() {
+    assert_eq!(
+        out("<?php trait A { public function a(){ return 'a'; } } \
+             trait B { public function b(){ return 'b'; } } \
+             class C { use A, B; } $c = new C(); echo $c->a(), $c->b();"),
+        "ab"
+    );
+}

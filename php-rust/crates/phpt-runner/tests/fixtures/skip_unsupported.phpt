@@ -1,6 +1,6 @@
 --TEST--
 unsupported construct -> skip
 --FILE--
-<?php trait T {} echo 1;
+<?php enum E {} echo 1;
 --EXPECT--
 1
