@@ -2533,3 +2533,60 @@ fn trait_as_visibility_only_no_rename() {
          in t.php:5\nStack trace:\n#0 {main}\n  thrown in t.php on line 5\n"
     );
 }
+
+// --- step 21-4: nested traits, abstract requirement, instanceof ---
+
+#[test]
+fn trait_using_trait_is_flattened_transitively() {
+    assert_eq!(
+        out("<?php trait A { public function a(){ return 'a'; } } \
+             trait B { use A; public function b(){ return 'b' . $this->a(); } } \
+             class C { use B; } $c = new C(); echo $c->a(), $c->b();"),
+        "aba"
+    );
+}
+
+#[test]
+fn trait_cross_trait_method_call() {
+    // A method in one trait calls a method supplied by another trait on the
+    // same consumer (both flattened into the class).
+    assert_eq!(
+        out("<?php trait A { public function a(){ return $this->b() . 'A'; } } \
+             trait B { public function b(){ return 'B'; } } \
+             class C { use A, B; } echo (new C())->a();"),
+        "BA"
+    );
+}
+
+#[test]
+fn trait_abstract_unimplemented_is_compile_fatal() {
+    let src = "<?php\ntrait T { abstract public function f(): string; }\n\
+               class C { use T; }\nnew C();\n";
+    assert_eq!(
+        rendered(src),
+        "\nFatal error: Class C contains 1 abstract method and must therefore be declared \
+         abstract or implement the remaining method (C::f) in t.php on line 3\n\
+         Stack trace:\n#0 {main}\n"
+    );
+}
+
+#[test]
+fn trait_two_abstract_unimplemented_plural_fatal() {
+    let src = "<?php\ntrait T { abstract public function f(): string; abstract public function g(): int; }\n\
+               class C { use T; }\nnew C();\n";
+    assert_eq!(
+        rendered(src),
+        "\nFatal error: Class C contains 2 abstract methods and must therefore be declared \
+         abstract or implement the remaining methods (C::f, C::g) in t.php on line 3\n\
+         Stack trace:\n#0 {main}\n"
+    );
+}
+
+#[test]
+fn trait_is_not_a_type_for_instanceof() {
+    assert_eq!(
+        out("<?php trait T {} class C { use T; } \
+             echo (new C()) instanceof T ? 'y' : 'n';"),
+        "n"
+    );
+}

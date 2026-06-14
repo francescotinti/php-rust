@@ -1100,14 +1100,19 @@ impl<'f> Lowerer<'f> {
         let mut consts = Vec::new();
         let mut methods = Vec::new();
         let mut uses: Vec<&TraitUse> = Vec::new();
+        // Names of abstract methods this class must implement (its own, plus any
+        // pulled in from traits during flattening), step 21-4 / D-21.11.
+        let mut abstract_req: Vec<Box<[u8]>> = Vec::new();
         for member in class.members.iter() {
             match member {
                 ClassLikeMember::Property(p) => {
                     self.lower_property(p, &mut props, &mut static_props, line)?
                 }
-                // An abstract method is a signature only — no body to run, so it
-                // is not materialised (a concrete subclass supplies the impl).
-                ClassLikeMember::Method(m) if matches!(m.body, MethodBody::Abstract(_)) => {}
+                // An abstract method is a signature only — no body to run. A
+                // concrete subclass / consumer must supply the implementation.
+                ClassLikeMember::Method(m) if matches!(m.body, MethodBody::Abstract(_)) => {
+                    abstract_req.push(m.name.value.into())
+                }
                 ClassLikeMember::Method(m) => methods.push(self.lower_method(m, line)?),
                 ClassLikeMember::Constant(c) => self.lower_class_const(c, &mut consts)?,
                 ClassLikeMember::TraitUse(u) => uses.push(u),
@@ -1129,13 +1134,12 @@ impl<'f> Lowerer<'f> {
             let mut t_props = Vec::new();
             let mut t_static = Vec::new();
             let mut t_consts = Vec::new();
-            let mut _abstract: Vec<Box<[u8]>> = Vec::new();
             self.flatten_into(
                 &uses,
                 &name,
                 (&own_m, &own_p, &own_s, &own_c),
                 (&mut t_methods, &mut t_props, &mut t_static, &mut t_consts),
-                &mut _abstract,
+                &mut abstract_req,
                 line,
             )?;
             t_methods.extend(methods);
@@ -1146,6 +1150,24 @@ impl<'f> Lowerer<'f> {
             static_props = t_static;
             t_consts.extend(consts);
             consts = t_consts;
+        }
+        // A concrete class must implement every abstract method it carries (own or
+        // trait-supplied); otherwise PHP fatals at link time (D-21.11). Abstract
+        // classes and interfaces legitimately leave them open.
+        if !is_abstract {
+            let mut missing: Vec<&[u8]> = Vec::new();
+            for req in &abstract_req {
+                let req_lc = req.to_ascii_lowercase();
+                if methods.iter().any(|m| m.decl.name.to_ascii_lowercase() == req_lc) {
+                    continue;
+                }
+                if !missing.iter().any(|m| m.eq_ignore_ascii_case(req)) {
+                    missing.push(req);
+                }
+            }
+            if !missing.is_empty() {
+                return Err(abstract_unimplemented_fatal(&name, &missing, line));
+            }
         }
         Ok(ClassDecl {
             name,
@@ -2354,6 +2376,27 @@ fn visibility_of<'a>(modifiers: impl Iterator<Item = &'a Modifier<'a>>) -> Visib
         }
     }
     Visibility::Public
+}
+
+/// Build the PHP link-time fatal for a concrete class that leaves abstract
+/// methods unimplemented (step 21-4, D-21.11). Singular/plural and the
+/// `Class::method` list match PHP's wording byte-for-byte.
+fn abstract_unimplemented_fatal(class: &[u8], missing: &[&[u8]], line: Line) -> LowerError {
+    let cname = String::from_utf8_lossy(class);
+    let n = missing.len();
+    let word = if n == 1 { "method" } else { "methods" };
+    let list = missing
+        .iter()
+        .map(|m| format!("{}::{}", cname, String::from_utf8_lossy(m)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    LowerError::Fatal {
+        message: format!(
+            "Class {cname} contains {n} abstract {word} and must therefore be \
+             declared abstract or implement the remaining {word} ({list})"
+        ),
+        line,
+    }
 }
 
 /// Map a single visibility modifier (from a trait `as` adaptation) to [`Visibility`].
