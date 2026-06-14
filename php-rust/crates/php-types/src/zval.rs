@@ -48,6 +48,39 @@ pub struct Closure {
     /// D-18.10): the value wraps a function *name* and `fn_idx`/`captures` are
     /// unused. `None` for an ordinary anonymous/arrow closure.
     pub named: Option<Rc<PhpStr>>,
+    /// Per-instance object handle, shown as `#N` by `var_dump` (step 18-7).
+    pub id: u32,
+    /// Shared render metadata for `var_dump` / `print_r` (step 18-7, D-18.9).
+    pub info: Rc<ClosureInfo>,
+}
+
+/// What `var_dump` / `print_r` print for a closure value (step 18-7, D-18.9).
+#[derive(Clone, Debug)]
+pub struct ClosureInfo {
+    pub kind: ClosureRender,
+    /// Formal parameters, in order, for the trailing `parameter` pseudo-property
+    /// (omitted entirely when empty, matching PHP).
+    pub params: Vec<ClosureParam>,
+}
+
+/// The header form of a dumped closure: an ordinary closure shows
+/// `name`/`file`/`line`; a first-class callable shows a single `function`.
+#[derive(Clone, Debug)]
+pub enum ClosureRender {
+    Closure {
+        name: Rc<PhpStr>,
+        file: Rc<PhpStr>,
+        line: u32,
+    },
+    Function(Rc<PhpStr>),
+}
+
+/// One formal parameter as rendered by `var_dump` (`["$x"] => "<required>"`).
+#[derive(Clone, Debug)]
+pub struct ClosureParam {
+    /// Parameter name *without* the leading `$`.
+    pub name: Box<[u8]>,
+    pub optional: bool,
 }
 
 impl Zval {

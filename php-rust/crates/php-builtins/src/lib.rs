@@ -14,8 +14,10 @@ mod format;
 mod math;
 mod string;
 
+use std::rc::Rc;
+
 use php_runtime::{Builtin, Ctx, Registry};
-use php_types::{convert, dtoa, numstr, Key, PhpError, PhpStr, Zval};
+use php_types::{convert, dtoa, numstr, Closure, ClosureRender, Key, PhpArray, PhpError, PhpStr, Zval};
 
 /// Build the Tier 1 builtin registry.
 pub fn registry() -> Registry {
@@ -164,10 +166,55 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize) {
         // A top-level reference is dereferenced transparently (the `&` marker
         // only applies to reference *elements* inside a container).
         Zval::Ref(cell) => dump(out, &cell.borrow(), indent),
-        // Step 18-1 placeholder: the exact `object(Closure)#N (3){...}` format
-        // is implemented in step 18-7.
-        Zval::Closure(_) => out.extend_from_slice(b"object(Closure)\n"),
+        // A closure dumps as a `Closure` object with its name/file/line (or the
+        // wrapped `function`) plus a `parameter` pseudo-property (step 18-7).
+        Zval::Closure(c) => {
+            let props = closure_properties(c);
+            out.extend_from_slice(
+                format!("object(Closure)#{} ({}) {{\n", c.id, props.len()).as_bytes(),
+            );
+            for (k, val) in &props {
+                spaces(out, indent + 2);
+                out.extend_from_slice(b"[\"");
+                out.extend_from_slice(k);
+                out.extend_from_slice(b"\"]=>\n");
+                spaces(out, indent + 2);
+                dump(out, val, indent + 2);
+            }
+            spaces(out, indent);
+            out.extend_from_slice(b"}\n");
+        }
     }
+}
+
+/// The `var_dump`/`print_r` pseudo-properties of a closure, in PHP's order
+/// (step 18-7, D-18.9): `name`/`file`/`line` for an anonymous/arrow closure or a
+/// single `function` for a first-class callable, then a `parameter` array iff
+/// the closure has any parameters.
+fn closure_properties(c: &Closure) -> Vec<(Vec<u8>, Zval)> {
+    let mut props: Vec<(Vec<u8>, Zval)> = Vec::new();
+    match &c.info.kind {
+        ClosureRender::Closure { name, file, line } => {
+            props.push((b"name".to_vec(), Zval::Str(Rc::clone(name))));
+            props.push((b"file".to_vec(), Zval::Str(Rc::clone(file))));
+            props.push((b"line".to_vec(), Zval::Long(*line as i64)));
+        }
+        ClosureRender::Function(name) => {
+            props.push((b"function".to_vec(), Zval::Str(Rc::clone(name))));
+        }
+    }
+    if !c.info.params.is_empty() {
+        let mut parr = PhpArray::new();
+        for p in &c.info.params {
+            let mut key = Vec::with_capacity(p.name.len() + 1);
+            key.push(b'$');
+            key.extend_from_slice(&p.name);
+            let marker = if p.optional { "<optional>" } else { "<required>" };
+            parr.insert(Key::from_bytes(&key), Zval::str_from(marker));
+        }
+        props.push((b"parameter".to_vec(), Zval::Array(Rc::new(parr))));
+    }
+    props
 }
 
 fn spaces(out: &mut Vec<u8>, n: usize) {
@@ -215,6 +262,24 @@ fn print_r_into(out: &mut Vec<u8>, v: &Zval, indent: usize, ctx: &mut Ctx) {
         }
         // print_r is reference-transparent: deref and recurse, no `&` marker.
         Zval::Ref(cell) => print_r_into(out, &cell.borrow(), indent, ctx),
+        // A closure prints as a `Closure Object` with the same pseudo-properties
+        // var_dump uses (step 18-7).
+        Zval::Closure(c) => {
+            let props = closure_properties(c);
+            out.extend_from_slice(b"Closure Object\n");
+            spaces(out, indent);
+            out.extend_from_slice(b"(\n");
+            for (k, val) in &props {
+                spaces(out, indent + 4);
+                out.push(b'[');
+                out.extend_from_slice(k);
+                out.extend_from_slice(b"] => ");
+                print_r_into(out, val, indent + 8, ctx);
+                out.push(b'\n');
+            }
+            spaces(out, indent);
+            out.extend_from_slice(b")\n");
+        }
         scalar => out.extend_from_slice(convert::to_zstr(scalar, ctx.diags).as_bytes()),
     }
 }

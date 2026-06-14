@@ -867,3 +867,61 @@ fn first_class_callable_in_array_map() {
         "A,B,C"
     );
 }
+
+// --- step 18-7: exact closure var_dump / print_r format ---
+
+#[test]
+fn var_dump_closure_no_params() {
+    assert_eq!(
+        out("<?php $f = function(){}; var_dump($f);"),
+        "object(Closure)#1 (3) {\n  \
+           [\"name\"]=>\n  string(17) \"{closure:t.php:1}\"\n  \
+           [\"file\"]=>\n  string(5) \"t.php\"\n  \
+           [\"line\"]=>\n  int(1)\n}\n"
+    );
+}
+
+#[test]
+fn var_dump_closure_with_params() {
+    assert_eq!(
+        out("<?php $f = function($x, $y = 1){ return $x; }; var_dump($f);"),
+        "object(Closure)#1 (4) {\n  \
+           [\"name\"]=>\n  string(17) \"{closure:t.php:1}\"\n  \
+           [\"file\"]=>\n  string(5) \"t.php\"\n  \
+           [\"line\"]=>\n  int(1)\n  \
+           [\"parameter\"]=>\n  array(2) {\n    \
+             [\"$x\"]=>\n    string(10) \"<required>\"\n    \
+             [\"$y\"]=>\n    string(10) \"<optional>\"\n  }\n}\n"
+    );
+}
+
+#[test]
+fn var_dump_first_class_callable() {
+    assert_eq!(
+        out("<?php function dbl($x){ return $x * 2; } $f = dbl(...); var_dump($f);"),
+        "object(Closure)#1 (2) {\n  \
+           [\"function\"]=>\n  string(3) \"dbl\"\n  \
+           [\"parameter\"]=>\n  array(1) {\n    \
+             [\"$x\"]=>\n    string(10) \"<required>\"\n  }\n}\n"
+    );
+}
+
+#[test]
+fn var_dump_object_ids_increment_for_live_closures() {
+    let s = out("<?php $a = function(){}; $b = function(){}; var_dump($a); var_dump($b);");
+    assert!(s.contains("object(Closure)#1 "), "{s}");
+    assert!(s.contains("object(Closure)#2 "), "{s}");
+}
+
+#[test]
+fn print_r_closure_with_params() {
+    assert_eq!(
+        out("<?php $f = function($x){}; print_r($f);"),
+        "Closure Object\n(\n    \
+           [name] => {closure:t.php:1}\n    \
+           [file] => t.php\n    \
+           [line] => 1\n    \
+           [parameter] => Array\n        (\n            \
+             [$x] => <required>\n        )\n\n)\n"
+    );
+}

@@ -20,7 +20,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use php_types::{
-    convert, dtoa, numstr, ops, Closure, Diag, Diags, Key, PhpArray, PhpError, PhpStr, Zval,
+    convert, dtoa, numstr, ops, Closure, ClosureInfo, ClosureParam, ClosureRender, Diag, Diags,
+    Key, PhpArray, PhpError, PhpStr, Zval,
 };
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
@@ -149,12 +150,22 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         .map(|(i, f)| (f.name.to_ascii_lowercase(), i))
         .collect();
 
+    // Precompute the render metadata (name/file/line + parameters) for each
+    // closure body once; created values share it via `Rc` (step 18-7).
+    let closure_info: Vec<Rc<ClosureInfo>> = program
+        .closures
+        .iter()
+        .map(|f| Rc::new(closure_info_for(f, &program.file)))
+        .collect();
+
     let mut ev = Evaluator {
         global_names: &program.slots,
         local_names: None,
         reg: registry,
         funcs: &program.functions,
         closures: &program.closures,
+        closure_info,
+        next_object_id: 1,
         fn_index: &fn_index,
         file: &program.file,
         globals: fresh_slots(program.slots.len()),
@@ -203,6 +214,13 @@ struct Evaluator<'p> {
     /// Anonymous/arrow function bodies, selected by a closure value's `fn_idx`
     /// (step 18, D-18.2).
     closures: &'p [FnDecl],
+    /// Per-closure-body render metadata for `var_dump`/`print_r`, precomputed
+    /// once and shared (cloned by `Rc`) into each created value (step 18-7).
+    closure_info: Vec<Rc<ClosureInfo>>,
+    /// Next object handle assigned to a created closure (the `#N` in `var_dump`).
+    /// Monotonic — handles are not recycled when a closure is freed, so dumps of
+    /// short-lived closures may number higher than PHP's (step 18-7 scope-out).
+    next_object_id: u32,
     fn_index: &'p HashMap<Vec<u8>, usize>,
     /// Script file name, reproduced in rendered diagnostics (`... in <file>`).
     file: &'p [u8],
@@ -860,6 +878,28 @@ impl<'p> Evaluator<'p> {
         res
     }
 
+    /// Allocate the next monotonic object handle (the `#N` in `var_dump`).
+    fn next_id(&mut self) -> u32 {
+        let id = self.next_object_id;
+        self.next_object_id += 1;
+        id
+    }
+
+    /// Build the render metadata for a first-class callable `name(...)`: the
+    /// parameters are known only when it wraps a user function; a builtin target
+    /// has no signature available, so its parameter list is empty (step 18-7
+    /// scope-out).
+    fn first_class_info(&self, name: &[u8]) -> Rc<ClosureInfo> {
+        let params = match self.fn_index.get(&name.to_ascii_lowercase()) {
+            Some(&idx) => closure_params_for(&self.funcs[idx]),
+            None => Vec::new(),
+        };
+        Rc::new(ClosureInfo {
+            kind: ClosureRender::Function(PhpStr::new(name.to_vec())),
+            params,
+        })
+    }
+
     /// Snapshot a closure's captured variables in the *active* frame (step 18,
     /// D-18.3): a by-value `use($x)` reads (and warns on undefined) the value; a
     /// by-reference `use(&$x)` shares the variable's cell as a `Zval::Ref`.
@@ -1456,15 +1496,22 @@ impl<'p> Evaluator<'p> {
                     fn_idx: *fn_idx,
                     captures: bound,
                     named: None,
+                    id: self.next_id(),
+                    info: Rc::clone(&self.closure_info[*fn_idx]),
                 })))
             }
 
             // A first-class callable `name(...)` — a closure wrapping a name.
-            ExprKind::FirstClassCallable(name) => Ok(Zval::Closure(Rc::new(Closure {
-                fn_idx: 0,
-                captures: Vec::new(),
-                named: Some(PhpStr::new(name.to_vec())),
-            }))),
+            ExprKind::FirstClassCallable(name) => {
+                let info = self.first_class_info(name);
+                Ok(Zval::Closure(Rc::new(Closure {
+                    fn_idx: 0,
+                    captures: Vec::new(),
+                    named: Some(PhpStr::new(name.to_vec())),
+                    id: self.next_id(),
+                    info,
+                })))
+            }
 
             // A dynamic call `$f(...)` dispatched on the callee value (step 18,
             // D-18.5). Arguments are evaluated by value (left to right).
@@ -2352,6 +2399,32 @@ fn coerce_to_bool(value: Zval, diags: &mut Diags) -> Option<Zval> {
         }
         _ => None,
     }
+}
+
+/// Render metadata for an anonymous/arrow closure body (step 18-7): its
+/// `{closure:file:line}` name, the program file, the definition line, and the
+/// parameter descriptors.
+fn closure_info_for(f: &FnDecl, file: &[u8]) -> ClosureInfo {
+    ClosureInfo {
+        kind: ClosureRender::Closure {
+            name: PhpStr::new(f.name.to_vec()),
+            file: PhpStr::new(file.to_vec()),
+            line: f.line,
+        },
+        params: closure_params_for(f),
+    }
+}
+
+/// The parameter descriptors of a function/closure body: each name (without the
+/// leading `$`) and whether it is optional (has a default), in order (step 18-7).
+fn closure_params_for(f: &FnDecl) -> Vec<ClosureParam> {
+    f.params
+        .iter()
+        .map(|p| ClosureParam {
+            name: f.slots[p.slot as usize].clone(),
+            optional: p.default.is_some(),
+        })
+        .collect()
 }
 
 fn php_type_name(v: &Zval) -> &'static str {
