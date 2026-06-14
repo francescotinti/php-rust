@@ -1761,6 +1761,25 @@ impl<'p> Evaluator<'p> {
         ))
     }
 
+    /// The value of `name` on `o` for a *silent* context — `empty()`, `??`,
+    /// `??=` after `__isset` returned true (step 22): `__get` if defined, else
+    /// the present value or NULL, raising no undefined-property warning
+    /// (bug #44899).
+    fn prop_value_silent(&mut self, o: &Rc<RefCell<Object>>, name: &[u8]) -> Result<Zval, PhpError> {
+        if let Some((defc, obj_cid, oid, m)) =
+            self.magic_prop_method(o, name, MagicAccess::Get, b"__get")
+        {
+            let key = (oid, MagicAccess::Get, name.to_vec());
+            self.magic_guard.insert(key.clone());
+            let recv = Zval::Object(Rc::clone(o));
+            let arg = Zval::Str(PhpStr::new(name.to_vec()));
+            let r = self.invoke_method(Some(recv), defc, obj_cid, m, b"__get", vec![arg]);
+            self.magic_guard.remove(&key);
+            return r;
+        }
+        Ok(o.borrow().props.get(name).map(Zval::deref_clone).unwrap_or(Zval::Null))
+    }
+
     /// `empty()` truth for a resolved place (step 22): a magic property is
     /// `__isset` then (if set) `__get`, mirroring PHP.
     fn place_empty(&mut self, base: PlaceBase, steps: &[Step]) -> Result<bool, PhpError> {
@@ -1770,7 +1789,7 @@ impl<'p> Evaluator<'p> {
                     if !r? {
                         return Ok(true);
                     }
-                    let v = self.read_property(&Zval::Object(o), name)?;
+                    let v = self.prop_value_silent(&o, name)?;
                     return Ok(!convert::is_true_silent(&v));
                 }
             }
@@ -1930,8 +1949,31 @@ impl<'p> Evaluator<'p> {
                 self.invoke_method(this, defc, static_class, m, method, argv)
             }
             found => {
-                // Missing or inaccessible → `__callStatic($method, $args)` if
-                // defined (step 22, D-22.3). It runs without `$this`.
+                // Missing or inaccessible. In object context (a usable `$this`,
+                // e.g. `parent::priv()` from a method) it routes to `__call` on
+                // `$this`; otherwise to `__callStatic` (step 22, D-22.3,
+                // bug #53826).
+                let forwarding = !matches!(class, ClassRef::Named(_));
+                let this_obj = match &self.cur_this {
+                    Some(t @ Zval::Object(o))
+                        if forwarding
+                            || self.class_is_a(o.borrow().class_id as usize, start) =>
+                    {
+                        Some(t.clone())
+                    }
+                    _ => None,
+                };
+                if let Some(this) = this_obj {
+                    let ocid = match &this {
+                        Zval::Object(o) => o.borrow().class_id as usize,
+                        _ => unreachable!("matched Zval::Object above"),
+                    };
+                    if let Some((cdefc, cm)) = self.resolve_method(ocid, b"__call") {
+                        let args = self.pack_args(argv);
+                        let name = Zval::Str(PhpStr::new(method.to_vec()));
+                        return self.invoke_method(Some(this), cdefc, ocid, cm, b"__call", vec![name, args]);
+                    }
+                }
                 if let Some((cdefc, cm)) = self.resolve_method(start, b"__callStatic") {
                     let args = self.pack_args(argv);
                     let name = Zval::Str(PhpStr::new(method.to_vec()));
@@ -2703,7 +2745,7 @@ impl<'p> Evaluator<'p> {
                     if let Zval::Object(o) = self.base_clone(place.base) {
                         if let Some(r) = self.magic_isset_bool(&o, name) {
                             return if r? {
-                                self.read_property(&Zval::Object(o), name)
+                                self.prop_value_silent(&o, name)
                             } else {
                                 let value = self.eval(rhs)?;
                                 self.write_place(place.base, &steps, value.clone())?;
@@ -3061,7 +3103,7 @@ impl<'p> Evaluator<'p> {
                 if let Zval::Object(o) = &recv {
                     if let Some(r) = self.magic_isset_bool(o, name) {
                         return if r? {
-                            self.read_property(&recv, name)
+                            self.prop_value_silent(o, name)
                         } else {
                             Ok(Zval::Null)
                         };

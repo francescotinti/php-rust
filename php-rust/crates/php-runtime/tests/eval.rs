@@ -2878,6 +2878,33 @@ fn magic_invoke_is_callable() {
 }
 
 #[test]
+fn magic_empty_silent_when_isset_true_no_get() {
+    // bug #44899: empty() with __isset true but no __get reads the value
+    // silently — no "Undefined property" warning.
+    assert_eq!(
+        rendered(
+            "<?php class C { private $d = ['foo' => '']; \
+             function __isset($n){ return isset($this->d[$n]); } } \
+             $c = new C(); echo empty($c->foo) ? 'E' : 'N';"
+        ),
+        "E"
+    );
+}
+
+#[test]
+fn magic_call_via_parent_in_object_context() {
+    // bug #53826: an inaccessible/undefined parent:: call inside a method has
+    // $this, so it routes to __call (instance), not __callStatic.
+    assert_eq!(
+        out("<?php class A { public function __call($m,$a){ return 'call:' . $m; } \
+             public static function __callStatic($m,$a){ return 'static:' . $m; } } \
+             class B extends A { public function go(){ return parent::missing(); } } \
+             echo (new B())->go();"),
+        "call:missing"
+    );
+}
+
+#[test]
 fn magic_invoke_object_without_invoke_not_callable() {
     let o = run_source(
         b"t.php",

@@ -739,3 +739,52 @@ metodi del `ClassDecl`, risolti via `resolve_method`).
   fuori; static ignoto; args come array; `__call` dentro scope = diretto.
 - **22-4 `__invoke`**: `$obj(...)` via `CallDynamic`; `call_user_func($obj)`;
   `is_callable($obj)`=true; `array_map($obj,…)`.
+
+## Step 22 — MAGIC METHODS (IMPLEMENTATO)
+
+Spedito in 5 commit (22-1 → 22-5). Infra: `enum MagicAccess{Get,Set,Isset,
+Unset}` + `magic_guard: HashSet<(u32 id_oggetto, MagicAccess, Vec<u8>)>`;
+helper `magic_prop_method` (decide magic-vs-diretto: prop mancante o non
+visibile + metodo presente + non guardato), `magic_isset_bool`, `place_isset`/
+`place_empty`, `prop_value_silent`, `pack_args`. `__toString` era già 19-6.
+
+- **22-1** `__get` in `read_property`, `__set` in `write_place` (solo `[Prop]`
+  finale); `check_first_prop_write` reso magic-aware. 7 test.
+- **22-2** `__isset`/`__unset`; `place_isset`/`place_empty`; arm `PropGet`
+  dedicato in `eval_isset` (silent, `??`); `unset_place` → `Result`. 10 test.
+- **22-3** `__call`/`__callStatic` (trigger: non risolto O non visibile); args
+  in array lista. 6 test.
+- **22-4** `__invoke` in `call_value` + `is_callable`. 4 test.
+- **22-5** corpus + 2 fix (vedi D-NEW sotto). 2 test. **29 test totali**, 462
+  suite totale.
+
+**Validazione corpus** `Zend/tests/magic_methods`: **19 pass / 21 fail / 117
+skip** (157 tot). Pass-rate runnable **47.5%** (era 42.5% prima dei 2 fix 22-5).
+
+**2 fix da corpus (D-NEW):**
+- **D-NEW (bug #44899):** `empty($o->p)` con `__isset`→true ma **senza** `__get`
+  deve leggere il valore **in silenzio** (no warning "Undefined property").
+  Prima usavo `read_property` (che avvisa); ora `prop_value_silent` (chiama
+  `__get` se c'è, altrimenti valore presente o NULL silenzioso). Esteso anche a
+  `??` e `??=`.
+- **D-NEW (bug #53826):** `parent::priv()` (o metodo ignoto) dentro un metodo ha
+  `$this` → instrada a `__call` (magic d'istanza), **non** `__callStatic`. Solo
+  in assenza di `$this` (chiamata statica pura) si usa `__callStatic`. Fix in
+  `call_static`: controllo `cur_this` compatibile prima di scegliere il magic.
+
+**Fail residui categorizzati (scope-out, feature adiacenti):**
+- `__destruct` non implementato (4): bug29368_2, bug43175, bug72177, dtor_scope.
+- `Stringable` auto-interface PHP 8 (3): interface_with_tostring,
+  stringable_automatic_implementation, stringable_trait.
+- validazione firma/return dei magic method (3): bug26166 (`__toString` deve
+  ritornare string), magic_methods_008 (`__set` abstract+private), magic_methods_
+  009 (`__callStatic` non public/static) — fatal/warning che non emettiamo.
+- `&__get` by-reference (1): bug70223.
+- reference dentro prop overloaded `&$o->p` (1): bug52879.
+- differenze formato `var_dump`/`print_r` su oggetti + edge `__get`/`__set` che
+  lancia (≈9): bug32660/36214/37667/38624/39775/48248/72177_2/72813,
+  call_static_006.
+
+**Scope-out riepilogo step 22:** `__destruct`, `Stringable` auto-impl,
+validazione firma magic method, `&__get` by-ref, indirect modification di prop
+overloaded multi-livello (`$o->magic[] = v`), reference a prop overloaded.

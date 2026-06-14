@@ -96,6 +96,21 @@ Fix Classe A applicato in step 9 (era nei missing-deprecated): **null come array
 offset** → `Deprecated: Using null as an array offset is deprecated …` aggiunto a
 `coerce_key`. +1 pass; regressione `rendered_null_array_offset_deprecation`.
 
+## Step 22 — Scoperte dall'import .phpt (magic methods)
+
+Corpus `Zend/tests/magic_methods`: 19 pass / 21 fail / 117 skip (47.5% runnable).
+Due bug reali (Classe A) trovati e fixati durante la curation:
+
+| ID | Severità | Categoria | Divergenza | Causa | Stato |
+|---|---|---|---|---|---|
+| D-NEW-9 | media | magic/empty | `empty($o->p)` con `__isset`→true ma **senza** `__get` emetteva un warning "Undefined property" (bug #44899); l'oracle è silenzioso e il warning compare solo sulla lettura normale successiva | `place_empty` leggeva il valore via `read_property` (che avvisa) invece che in contesto silent | **FIXATO**: helper `prop_value_silent` (chiama `__get` se c'è, altrimenti valore presente/NULL silenzioso), esteso a `empty`/`??`/`??=`; regressione `magic_empty_silent_when_isset_true_no_get` |
+| D-NEW-10 | media | magic/dispatch | `parent::priv()` (o metodo ignoto) dentro un metodo instradava a `__callStatic` invece di `__call` (bug #53826) | `call_static` sceglieva sempre `__callStatic` sul fallback, ignorando la presenza di `$this` | **FIXATO**: in object-context (cur_this compatibile) instrada a `__call` d'istanza, `__callStatic` solo senza `$this`; regressione `magic_call_via_parent_in_object_context` |
+
+Fail residui = feature adiacenti (scope-out): `__destruct`, `Stringable`
+auto-interface, validazione firma/return dei magic method, `&__get` by-ref,
+reference dentro prop overloaded, differenze `var_dump`/`print_r`. Dettaglio in
+`02-mapping-table.md` (Step 22 IMPLEMENTATO).
+
 ## Divergenze attese (scope-out dichiarato in 02-mapping-table.md)
 
 Non sono bug, sono confini del Tier 1:
