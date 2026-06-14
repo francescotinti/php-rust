@@ -32,6 +32,19 @@ fn var_dump_is_variadic() {
 }
 
 #[test]
+fn var_dump_object_public_props() {
+    // Step 19-1: public-property objects dump in the exact 8.5 form.
+    assert_eq!(
+        out(
+            "<?php class Point { public $x = 0; public $y = 0; \
+             function __construct($x, $y) { $this->x = $x; $this->y = $y; } } \
+             var_dump(new Point(3, 4));"
+        ),
+        "object(Point)#1 (2) {\n  [\"x\"]=>\n  int(3)\n  [\"y\"]=>\n  int(4)\n}\n"
+    );
+}
+
+#[test]
 fn var_dump_array() {
     // (array) cast is the only way to build an array in Tier 1 so far.
     assert_eq!(

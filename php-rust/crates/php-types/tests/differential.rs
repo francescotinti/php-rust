@@ -179,6 +179,7 @@ fn var_dump(v: &Zval, level: usize, out: &mut String) {
         // or closures.
         Zval::Ref(_) => unreachable!("differential corpus produces no references"),
         Zval::Closure(_) => unreachable!("differential corpus produces no closures"),
+        Zval::Object(_) => unreachable!("differential corpus produces no objects"),
     }
 }
 

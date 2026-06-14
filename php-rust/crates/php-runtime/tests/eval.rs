@@ -1567,3 +1567,94 @@ fn first_class_callable_is_callable() {
         "y"
     );
 }
+
+// --- Step 19-1: OOP infrastructure (classes, new, $this, methods, properties) ---
+
+#[test]
+fn oop_method_call_basic() {
+    assert_eq!(
+        out("<?php class A { function m() { return 5; } } $a = new A; echo $a->m();"),
+        "5"
+    );
+}
+
+#[test]
+fn oop_new_with_args_and_constructor() {
+    assert_eq!(
+        out(
+            "<?php class Point { public $x; public $y; \
+             function __construct($x, $y) { $this->x = $x; $this->y = $y; } \
+             function dist() { return $this->x + $this->y; } } \
+             $p = new Point(3, 4); echo $p->dist();"
+        ),
+        "7"
+    );
+}
+
+#[test]
+fn oop_new_without_parens() {
+    assert_eq!(
+        out("<?php class A { function m() { return 9; } } $a = new A; echo $a->m();"),
+        "9"
+    );
+}
+
+#[test]
+fn oop_object_handle_semantics() {
+    // Assigning an object copies the *handle*: both variables see the mutation.
+    assert_eq!(
+        out(
+            "<?php class C { public $x = 1; } \
+             $p = new C; $q = $p; $q->x = 99; echo $p->x;"
+        ),
+        "99"
+    );
+}
+
+#[test]
+fn oop_property_default_value() {
+    assert_eq!(
+        out("<?php class A { public $n = 5; } $a = new A; echo $a->n;"),
+        "5"
+    );
+}
+
+#[test]
+fn oop_method_calls_method_via_this() {
+    assert_eq!(
+        out(
+            "<?php class A { function a() { return $this->b() + 1; } \
+             function b() { return 10; } } echo (new A)->a();"
+        ),
+        "11"
+    );
+}
+
+#[test]
+fn oop_property_read_and_write_via_this() {
+    assert_eq!(
+        out(
+            "<?php class Counter { public $n = 0; \
+             function inc() { $this->n = $this->n + 1; } \
+             function get() { return $this->n; } } \
+             $c = new Counter; $c->inc(); $c->inc(); echo $c->get();"
+        ),
+        "2"
+    );
+}
+
+#[test]
+fn oop_undefined_property_warns_and_yields_null() {
+    let o = run_source(b"t.php", b"<?php class A {} $a = new A; echo $a->nope ?? 'x';").expect("lowers");
+    assert!(o.fatal.is_none());
+    assert_eq!(String::from_utf8(o.stdout).unwrap(), "x");
+}
+
+#[test]
+fn oop_this_outside_method_is_fatal() {
+    let o = run_source(b"t.php", b"<?php echo $this->x;").expect("lowers");
+    match o.fatal {
+        Some(PhpError::Error(m)) => assert_eq!(m, "Using $this when not in object context"),
+        other => panic!("expected $this fatal, got {other:?}"),
+    }
+}

@@ -7,11 +7,13 @@ pub mod convert;
 mod diag;
 pub mod dtoa;
 pub mod numstr;
+mod object;
 pub mod ops;
 mod zstr;
 mod zval;
 
 pub use array::{ArrayAppendError, Key, PhpArray};
 pub use diag::{Diag, Diags, PhpError};
+pub use object::{Object, Props};
 pub use zstr::{PhpStr, ZStr};
 pub use zval::{Closure, ClosureInfo, ClosureParam, ClosureRender, Zval};

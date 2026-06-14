@@ -44,9 +44,9 @@ fn expectf_wildcards_match() {
 
 #[test]
 fn unsupported_construct_is_skipped() {
-    // A class declaration is still out of scope (step 8 added functions, not
-    // OOP) → motivated skip.
-    let (st, cat) = status("--TEST--\nt\n--FILE--\n<?php class C {} echo 1;\n--EXPECT--\n1\n");
+    // Classes are supported as of step 19, so use a `trait` — still out of scope
+    // — as the motivated-skip example.
+    let (st, cat) = status("--TEST--\nt\n--FILE--\n<?php trait T {} echo 1;\n--EXPECT--\n1\n");
     assert_eq!(st, Status::Skip);
     assert_eq!(cat, "unsupported");
 }

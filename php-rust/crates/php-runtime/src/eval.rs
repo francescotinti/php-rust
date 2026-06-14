@@ -21,13 +21,13 @@ use std::rc::Rc;
 
 use php_types::{
     convert, dtoa, numstr, ops, Closure, ClosureInfo, ClosureParam, ClosureRender, Diag, Diags,
-    Key, PhpArray, PhpError, PhpStr, Zval,
+    Key, Object, PhpArray, PhpError, PhpStr, Props, Zval,
 };
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
 use crate::hir::{
-    BinOp, Capture, CastKind, Expr, ExprKind, FnDecl, Line, Param, Place, PlaceBase, PlaceStep,
-    Program, ScalarType, Slot, Stmt, StmtKind, TypeHint, UnOp,
+    BinOp, Capture, CastKind, ClassDecl, Expr, ExprKind, FnDecl, Line, MethodDecl, Param, Place,
+    PlaceBase, PlaceStep, Program, ScalarType, Slot, Stmt, StmtKind, TypeHint, UnOp,
 };
 
 /// Builtins the evaluator implements directly because they invoke a callback
@@ -73,6 +73,13 @@ macro_rules! slot_mut {
         match $base {
             PlaceBase::Local(s) => &mut frame_mut!($self)[s as usize],
             PlaceBase::Global(s) => &mut $self.globals[s as usize],
+            // `$this` as a write base (`$this->x = …`): the current object handle
+            // (step 19, D-19.9). Callers guard the no-`$this` case before reaching
+            // here, so the unwrap is sound.
+            PlaceBase::This => $self
+                .cur_this
+                .as_mut()
+                .expect("$this in write context guarded by caller"),
         }
     };
 }
@@ -158,6 +165,15 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         .map(|f| Rc::new(closure_info_for(f, &program.file)))
         .collect();
 
+    // Index classes by ASCII-lowercased name (PHP class names are
+    // case-insensitive), step 19.
+    let class_index: HashMap<Vec<u8>, usize> = program
+        .classes
+        .iter()
+        .enumerate()
+        .map(|(i, c)| (c.name.to_ascii_lowercase(), i))
+        .collect();
+
     let mut ev = Evaluator {
         global_names: &program.slots,
         local_names: None,
@@ -167,6 +183,9 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         closure_info,
         next_object_id: 1,
         fn_index: &fn_index,
+        classes: &program.classes,
+        class_index: &class_index,
+        cur_this: None,
         file: &program.file,
         globals: fresh_slots(program.slots.len()),
         locals: None,
@@ -222,6 +241,14 @@ struct Evaluator<'p> {
     /// short-lived closures may number higher than PHP's (step 18-7 scope-out).
     next_object_id: u32,
     fn_index: &'p HashMap<Vec<u8>, usize>,
+    /// User classes and their name→index map (step 19, D-19.3). A `new` / method
+    /// dispatch resolves a class against `class_index`.
+    classes: &'p [ClassDecl],
+    class_index: &'p HashMap<Vec<u8>, usize>,
+    /// The current object while a method body runs (`$this`, D-19.5). `None` at
+    /// top level / inside a free function; reading `$this` then is a fatal Error.
+    /// Saved and restored around each method call like `locals`.
+    cur_this: Option<Zval>,
     /// Script file name, reproduced in rendered diagnostics (`... in <file>`).
     file: &'p [u8],
     /// The script-global frame (always present) and the active local overlay
@@ -1009,6 +1036,160 @@ impl<'p> Evaluator<'p> {
         })
     }
 
+    // --- objects (step 19) ---
+
+    /// Evaluate a call's arguments by value into a flat vector (step 19). Shared
+    /// by method calls and constructor dispatch.
+    fn eval_value_args(&mut self, args: &[Expr]) -> Result<Vec<Zval>, PhpError> {
+        let mut out = Vec::with_capacity(args.len());
+        for a in args {
+            out.push(self.eval(a)?);
+        }
+        Ok(out)
+    }
+
+    /// Evaluate `new ClassName(args)` (step 19, D-19.6): resolve the class, build
+    /// an instance with its declared properties initialised to their defaults,
+    /// then run `__construct` if the class defines one.
+    fn eval_new(&mut self, class: &[u8], args: &[Expr]) -> Result<Zval, PhpError> {
+        let cid = match self.class_index.get(&class.to_ascii_lowercase()) {
+            Some(&i) => i,
+            None => {
+                return Err(PhpError::Error(format!(
+                    "Class \"{}\" not found",
+                    String::from_utf8_lossy(class)
+                )))
+            }
+        };
+        // `classes` is `&'p [..]` (Copy), so the borrow detaches from `self` and
+        // we can evaluate default expressions (which need `&mut self`) freely.
+        let cdecl: &'p ClassDecl = &self.classes[cid];
+        let class_name = PhpStr::new(cdecl.name.to_vec());
+        let mut props = Props::new();
+        for p in &cdecl.props {
+            // Property defaults are constant expressions in PHP; evaluating them
+            // in the current frame is harmless (literals touch no slots / $this).
+            let v = match &p.default {
+                Some(e) => self.eval(e)?,
+                None => Zval::Null,
+            };
+            props.set(&p.name, v);
+        }
+        let id = self.next_id();
+        let obj = Object {
+            class_id: cid as u32,
+            class_name,
+            props,
+            id,
+        };
+        let value = Zval::Object(Rc::new(RefCell::new(obj)));
+        // Run the constructor (mutations write through the shared `Rc`, so they
+        // are visible in the returned value). Arguments are evaluated only when a
+        // constructor exists to receive them.
+        if find_method(cdecl, b"__construct").is_some() {
+            let argv = self.eval_value_args(args)?;
+            self.call_method(value.clone(), b"__construct", argv)?;
+        }
+        Ok(value)
+    }
+
+    /// Read property `name` from a value (step 19, D-19.8). A missing property or
+    /// a non-object receiver warns and yields NULL, matching PHP.
+    fn read_property(&mut self, recv: &Zval, name: &[u8]) -> Result<Zval, PhpError> {
+        match recv {
+            Zval::Object(o) => {
+                let obj = o.borrow();
+                if let Some(v) = obj.props.get(name) {
+                    return Ok(v.deref_clone());
+                }
+                let cls = String::from_utf8_lossy(obj.class_name.as_bytes()).into_owned();
+                drop(obj);
+                let prop = String::from_utf8_lossy(name).into_owned();
+                self.diags.push(Diag::Warning(format!(
+                    "Undefined property: {cls}::${prop}"
+                )));
+                Ok(Zval::Null)
+            }
+            Zval::Null | Zval::Undef => {
+                let prop = String::from_utf8_lossy(name).into_owned();
+                self.diags.push(Diag::Warning(format!(
+                    "Attempt to read property \"{prop}\" on null"
+                )));
+                Ok(Zval::Null)
+            }
+            other => {
+                let prop = String::from_utf8_lossy(name).into_owned();
+                self.diags.push(Diag::Warning(format!(
+                    "Attempt to read property \"{prop}\" on {}",
+                    other.error_type_name()
+                )));
+                Ok(Zval::Null)
+            }
+        }
+    }
+
+    /// Invoke `$obj->method(argv)` (step 19, D-19.7): resolve the method on the
+    /// receiver's class, install a fresh frame with `$this` bound to the
+    /// receiver, and run the body via the shared [`Evaluator::run_user_fn_body`].
+    fn call_method(&mut self, recv: Zval, method: &[u8], argv: Vec<Zval>) -> Result<Zval, PhpError> {
+        let cid = match &recv {
+            Zval::Object(o) => o.borrow().class_id as usize,
+            other => {
+                return Err(PhpError::Error(format!(
+                    "Call to a member function {}() on {}",
+                    String::from_utf8_lossy(method),
+                    other.error_type_name()
+                )))
+            }
+        };
+        let cdecl: &'p ClassDecl = &self.classes[cid];
+        let m: &'p MethodDecl = match find_method(cdecl, method) {
+            Some(m) => m,
+            None => {
+                return Err(PhpError::Error(format!(
+                    "Call to undefined method {}::{}()",
+                    String::from_utf8_lossy(&cdecl.name),
+                    String::from_utf8_lossy(method)
+                )))
+            }
+        };
+        let f: &'p FnDecl = &m.decl;
+
+        let required = f.params.iter().filter(|p| p.default.is_none()).count();
+        if argv.len() < required {
+            let expected = if required == f.params.len() {
+                format!("exactly {required}")
+            } else {
+                format!("at least {required}")
+            };
+            return Err(PhpError::Error(format!(
+                "Too few arguments to function {}::{}(), {} passed and {} expected",
+                String::from_utf8_lossy(&cdecl.name),
+                String::from_utf8_lossy(&f.name),
+                argv.len(),
+                expected,
+            )));
+        }
+
+        let frame = fresh_slots(f.slots.len());
+        let saved_locals = self.locals.replace(frame);
+        let saved_names = self.local_names.replace(f.slots.as_slice());
+        let saved_returns_ref = std::mem::replace(&mut self.fn_returns_ref, f.by_ref);
+        let saved_this = self.cur_this.replace(recv);
+
+        let args: Vec<Arg> = argv.into_iter().map(Arg::Val).collect();
+        let result = self.run_user_fn_body(f, args);
+
+        self.locals = saved_locals;
+        self.local_names = saved_names;
+        self.fn_returns_ref = saved_returns_ref;
+        self.cur_this = saved_this;
+        result.map(|r| match r {
+            Zval::Ref(cell) => cell.borrow().clone(),
+            other => other,
+        })
+    }
+
     /// Dispatch a higher-order builtin that the evaluator implements directly
     /// (step 18, D-18.6). Returns `None` for a name we do not intercept, so the
     /// caller falls through to the ordinary registry lookup.
@@ -1624,6 +1805,41 @@ impl<'p> Evaluator<'p> {
                     ))),
                 }
             }
+
+            ExprKind::New { class, args } => self.eval_new(class, args),
+
+            ExprKind::MethodCall {
+                object,
+                method,
+                args,
+                nullsafe,
+            } => {
+                let recv = self.eval(object)?.deref_clone();
+                if *nullsafe && matches!(recv, Zval::Null | Zval::Undef) {
+                    return Ok(Zval::Null);
+                }
+                let argv = self.eval_value_args(args)?;
+                self.call_method(recv, method, argv)
+            }
+
+            ExprKind::PropGet {
+                object,
+                name,
+                nullsafe,
+            } => {
+                let recv = self.eval(object)?.deref_clone();
+                if *nullsafe && matches!(recv, Zval::Null | Zval::Undef) {
+                    return Ok(Zval::Null);
+                }
+                self.read_property(&recv, name)
+            }
+
+            ExprKind::This => match &self.cur_this {
+                Some(obj) => Ok(obj.clone()),
+                None => Err(PhpError::Error(
+                    "Using $this when not in object context".to_string(),
+                )),
+            },
         }
     }
 
@@ -1679,6 +1895,13 @@ impl<'p> Evaluator<'p> {
         match base {
             PlaceBase::Local(s) => self.frame()[s as usize].deref_clone(),
             PlaceBase::Global(s) => self.globals[s as usize].deref_clone(),
+            // `$this`-rooted place: the current object, or NULL outside a method
+            // (the write path's guard turns that into the proper fatal first).
+            PlaceBase::This => self
+                .cur_this
+                .as_ref()
+                .map(Zval::deref_clone)
+                .unwrap_or(Zval::Null),
         }
     }
 
@@ -1780,7 +2003,7 @@ impl<'p> Evaluator<'p> {
                 ));
                 Key::from_bytes(b"")
             }
-            Zval::Array(_) | Zval::Closure(_) => {
+            Zval::Array(_) | Zval::Closure(_) | Zval::Object(_) => {
                 return Err(PhpError::TypeError(
                     "Illegal offset type".to_string(),
                 ))
@@ -1865,6 +2088,7 @@ impl<'p> Evaluator<'p> {
                     out.push(Step::Key(self.coerce_key(&v)?));
                 }
                 PlaceStep::Append => out.push(Step::Append),
+                PlaceStep::Prop(name) => out.push(Step::Prop(name.clone())),
             }
         }
         Ok(out)
@@ -1873,6 +2097,13 @@ impl<'p> Evaluator<'p> {
     /// Write `value` to `slot` following the resolved steps, auto-vivifying
     /// intermediate arrays and copying-on-write shared ones.
     fn write_place(&mut self, base: PlaceBase, steps: &[Step], value: Zval) -> Result<(), PhpError> {
+        // A `$this`-rooted write outside any method is the same fatal as reading
+        // `$this` there (step 19, D-19.5).
+        if base == PlaceBase::This && self.cur_this.is_none() {
+            return Err(PhpError::Error(
+                "Using $this when not in object context".to_string(),
+            ));
+        }
         if steps.is_empty() {
             // Write-through any reference cell, like `slot_set` (D-R3).
             match slot_mut!(self, base) {
@@ -2065,10 +2296,12 @@ impl<'p> Evaluator<'p> {
     }
 }
 
-/// A resolved place step: an array key, or the append marker `[]`.
+/// A resolved place step: an array key, the append marker `[]`, or an object
+/// property name (`->prop`, step 19, D-19.9).
 enum Step {
     Key(Key),
     Append,
+    Prop(Box<[u8]>),
 }
 
 /// Borrow `target` as a mutable array, auto-vivifying NULL/unset into a fresh
@@ -2112,6 +2345,35 @@ fn write_into(
         *target = value;
         return Ok(());
     };
+    // A property step navigates into a shared object in place (step 19, D-19.9):
+    // unlike arrays there is no copy-on-write write-back, since all handles share
+    // the same `Rc<RefCell<Object>>`.
+    if let Step::Prop(name) = first {
+        match target {
+            Zval::Object(o) => {
+                let mut obj = o.borrow_mut();
+                if rest.is_empty() {
+                    obj.props.set(name, value);
+                } else {
+                    if !obj.props.contains(name) {
+                        obj.props.set(name, Zval::Array(Rc::new(PhpArray::new())));
+                    }
+                    let child = obj.props.get_mut(name).expect("property just inserted");
+                    write_into(child, rest, value, diags)?;
+                }
+            }
+            // Assigning a property on a non-object: PHP warns and discards the
+            // write (the null-vivification edge is deferred to 19-2).
+            other => {
+                diags.push(Diag::Warning(format!(
+                    "Attempt to assign property \"{}\" on {}",
+                    String::from_utf8_lossy(name),
+                    other.error_type_name()
+                )));
+            }
+        }
+        return Ok(());
+    }
     let Some(arr) = ensure_array_mut(target, diags) else {
         return Ok(());
     };
@@ -2132,6 +2394,9 @@ fn write_into(
                 write_into(child, rest, value, diags)?;
             }
         }
+        // A property step is handled before `ensure_array_mut` above (objects are
+        // navigated in place, not as arrays), so it never reaches here.
+        Step::Prop(_) => unreachable!("property step handled before array navigation"),
         Step::Append => {
             if rest.is_empty() {
                 arr.append(value).map_err(|_| array_occupied())?;
@@ -2143,6 +2408,16 @@ fn write_into(
         }
     }
     Ok(())
+}
+
+/// Find a method by name (ASCII-case-insensitive) on a class (step 19). 19-1 has
+/// no inheritance, so only the class's own methods are searched; the parent-chain
+/// walk arrives in 19-3.
+fn find_method<'a>(cdecl: &'a ClassDecl, name: &[u8]) -> Option<&'a MethodDecl> {
+    cdecl
+        .methods
+        .iter()
+        .find(|m| m.decl.name.eq_ignore_ascii_case(name))
 }
 
 /// Promote `target` to a reference and return its shared cell. An existing
@@ -2244,7 +2519,7 @@ fn coerce_key_silent(v: &Zval) -> Option<Key> {
         Zval::Double(d) => Some(Key::Int(convert::dval_to_lval(*d))),
         Zval::Str(s) => Some(Key::from_zstr(s)),
         Zval::Null | Zval::Undef => Some(Key::from_bytes(b"")),
-        Zval::Array(_) | Zval::Closure(_) => None,
+        Zval::Array(_) | Zval::Closure(_) | Zval::Object(_) => None,
         Zval::Ref(c) => coerce_key_silent(&c.borrow()),
     }
 }
@@ -2435,7 +2710,7 @@ fn php_type_name(v: &Zval) -> &'static str {
         Zval::Double(_) => "float",
         Zval::Str(_) => "string",
         Zval::Array(_) => "array",
-        Zval::Closure(_) => "object",
+        Zval::Closure(_) | Zval::Object(_) => "object",
         Zval::Ref(c) => php_type_name(&c.borrow()),
     }
 }
@@ -2452,6 +2727,10 @@ fn match_case_repr(v: &Zval) -> String {
         Zval::Str(s) => format!("'{}'", String::from_utf8_lossy(s.as_bytes())),
         Zval::Array(_) => "of type array".to_string(),
         Zval::Closure(_) => "of type Closure".to_string(),
+        Zval::Object(o) => format!(
+            "of type {}",
+            String::from_utf8_lossy(o.borrow().class_name.as_bytes())
+        ),
         Zval::Ref(c) => match_case_repr(&c.borrow()),
     }
 }

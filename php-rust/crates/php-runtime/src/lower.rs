@@ -20,17 +20,19 @@ use bumpalo::Bump;
 use mago_database::file::File;
 use mago_span::{HasSpan, Span};
 use mago_syntax::ast::{
-    Argument, ArrayElement, ArrowFunction, AssignmentOperator, BinaryOperator, Call, Closure,
-    Construct, DeclareBody, Expression, ForeachTarget, Function, FunctionLikeParameterList, Hint,
-    Identifier, Literal, LiteralInteger, MatchArm as AstMatchArm, Node, PartialApplication,
-    Statement, StaticItem, UnaryPostfixOperator, UnaryPrefixOperator, Variable,
+    Access, Argument, ArrayElement, ArrowFunction, AssignmentOperator, BinaryOperator, Call,
+    Class, ClassLikeMember, ClassLikeMemberSelector, Closure, Construct, DeclareBody, Expression,
+    ForeachTarget, Function, FunctionLikeParameterList, Hint, Identifier, Instantiation, Literal,
+    LiteralInteger, MatchArm as AstMatchArm, Method, MethodBody, Modifier, Node, PartialApplication,
+    Property, PropertyItem, Statement, StaticItem, UnaryPostfixOperator, UnaryPrefixOperator,
+    Variable,
 };
 use mago_syntax::parser::parse_file;
 
 use crate::hir::{
-    ArrayElem, BinOp, Capture, Case, CastKind, Expr, ExprKind, FnDecl, GlobalBinding, Line,
-    MatchArm, Param, Place, PlaceBase, PlaceStep, Program, ScalarType, Slot, StaticBinding, Stmt,
-    StmtKind, TypeHint, UnOp,
+    ArrayElem, BinOp, Capture, Case, CastKind, ClassDecl, Expr, ExprKind, FnDecl, GlobalBinding,
+    Line, MatchArm, MethodDecl, Param, Place, PlaceBase, PlaceStep, Program, PropDecl, ScalarType,
+    Slot, StaticBinding, Stmt, StmtKind, TypeHint, UnOp, Visibility,
 };
 
 /// Why a script could not be lowered to HIR.
@@ -75,11 +77,14 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
     // Hoist top-level function declarations first, so a call may textually
     // precede its definition (PHP's function hoisting). Bodies are lowered here;
     // the main pass below skips the declaration statements (they are no-ops).
+    // Classes are hoisted in two passes (names first, then bodies) so a method
+    // body / `extends` may reference a class declared later (step 19, D-19.3).
     for s in program.statements.as_slice() {
         if let Statement::Function(func) = s {
             low.hoist_function(func)?;
         }
     }
+    low.hoist_classes(program.statements.as_slice())?;
     let body = low.lower_stmts(program.statements.as_slice())?;
     Ok(Program {
         body,
@@ -89,6 +94,7 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
         closures: low.closures,
         static_count: low.static_count,
         strict: low.strict,
+        classes: low.classes,
     })
 }
 
@@ -156,6 +162,10 @@ struct Lowerer<'f> {
     static_count: usize,
     /// Set by `declare(strict_types=1)` — copied into `Program.strict` (step 16).
     strict: bool,
+    /// Hoisted user classes and a name→index map (ASCII-lowercased; PHP class
+    /// names are case-insensitive), step 19.
+    classes: Vec<ClassDecl>,
+    class_index: HashMap<Vec<u8>, usize>,
 }
 
 impl<'f> Lowerer<'f> {
@@ -172,6 +182,8 @@ impl<'f> Lowerer<'f> {
             fn_by_ref: false,
             static_count: 0,
             strict: false,
+            classes: Vec::new(),
+            class_index: HashMap::new(),
         }
     }
 
@@ -405,6 +417,20 @@ impl<'f> Lowerer<'f> {
                 });
             }
 
+            // A class declaration carries no runtime behaviour: the top-level
+            // ones were already hoisted into `classes` (step 19, D-19.3). A class
+            // nested inside a branch/block is a conditional declaration, outside
+            // Tier-1 scope.
+            Statement::Class(class) => {
+                if self.class_index.contains_key(&class.name.value.to_ascii_lowercase()) {
+                    return Ok(None);
+                }
+                return Err(LowerError::Unsupported {
+                    what: "conditional class declaration",
+                    line,
+                });
+            }
+
             _ => {
                 return Err(LowerError::Unsupported {
                     what: "statement",
@@ -455,6 +481,173 @@ impl<'f> Lowerer<'f> {
         self.fn_index.insert(key, idx);
         self.functions.push(decl);
         Ok(())
+    }
+
+    // --- classes (step 19) ---
+
+    /// Hoist top-level class declarations in two passes: first reserve every
+    /// class name → index (so a method body / `new` can reference a class
+    /// declared later), then lower each body now that all names resolve
+    /// (D-19.3).
+    fn hoist_classes(&mut self, stmts: &[Statement]) -> Result<(), LowerError> {
+        let mut pending: Vec<&Class> = Vec::new();
+        for s in stmts {
+            if let Statement::Class(class) = s {
+                let key = class.name.value.to_ascii_lowercase();
+                if self.class_index.contains_key(&key) {
+                    return Err(LowerError::Unsupported {
+                        what: "class redeclaration",
+                        line: self.line_of(class.span()),
+                    });
+                }
+                // One class per `pending` slot, pushed below in this same order,
+                // so the index equals the eventual position in `self.classes`.
+                self.class_index.insert(key, pending.len());
+                pending.push(class);
+            }
+        }
+        for class in pending {
+            let decl = self.lower_class(class)?;
+            self.classes.push(decl);
+        }
+        Ok(())
+    }
+
+    /// Lower one `class Name { ... }` into a [`ClassDecl`] (step 19-1). Only
+    /// instance properties and methods are in 19-1 scope; `extends`/`implements`,
+    /// static members, constants, and other member kinds arrive in later
+    /// sub-steps and lower to [`LowerError::Unsupported`] for now.
+    fn lower_class(&mut self, class: &Class) -> Result<ClassDecl, LowerError> {
+        let line = self.line_of(class.span());
+        if class.extends.is_some() || class.implements.is_some() {
+            return Err(LowerError::Unsupported {
+                what: "class inheritance",
+                line,
+            });
+        }
+        let name: Box<[u8]> = class.name.value.into();
+        let mut props = Vec::new();
+        let mut methods = Vec::new();
+        for member in class.members.iter() {
+            match member {
+                ClassLikeMember::Property(p) => self.lower_property(p, &mut props, line)?,
+                ClassLikeMember::Method(m) => methods.push(self.lower_method(m, line)?),
+                _ => {
+                    return Err(LowerError::Unsupported {
+                        what: "class member",
+                        line,
+                    })
+                }
+            }
+        }
+        Ok(ClassDecl {
+            name,
+            props,
+            methods,
+            line,
+        })
+    }
+
+    /// Lower a plain instance-property declaration into one [`PropDecl`] per
+    /// item (`public $a = 1, $b;`). Hooked and static properties are out of 19-1
+    /// scope.
+    fn lower_property(
+        &mut self,
+        prop: &Property,
+        out: &mut Vec<PropDecl>,
+        line: Line,
+    ) -> Result<(), LowerError> {
+        let plain = match prop {
+            Property::Plain(p) => p,
+            Property::Hooked(_) => {
+                return Err(LowerError::Unsupported {
+                    what: "property hooks",
+                    line,
+                })
+            }
+        };
+        if plain.modifiers.iter().any(|m| m.is_static()) {
+            return Err(LowerError::Unsupported {
+                what: "static property",
+                line,
+            });
+        }
+        let visibility = visibility_of(plain.modifiers.iter());
+        for item in plain.items.iter() {
+            let (var, default) = match item {
+                PropertyItem::Abstract(a) => (&a.variable, None),
+                PropertyItem::Concrete(c) => (&c.variable, Some(self.lower_expr(c.value)?)),
+            };
+            out.push(PropDecl {
+                name: strip_dollar(var.name).into(),
+                visibility,
+                default,
+            });
+        }
+        Ok(())
+    }
+
+    /// Lower one method into a [`MethodDecl`] wrapping an ordinary [`FnDecl`]
+    /// (step 19-1, D-19.5). The body is lowered in a fresh local scope just like
+    /// a free function; `$this` is read via [`ExprKind::This`], not a slot.
+    /// Static and abstract methods are deferred to later sub-steps.
+    fn lower_method(&mut self, method: &Method, class_line: Line) -> Result<MethodDecl, LowerError> {
+        let line = self.line_of(method.span());
+        let is_static = method.modifiers.iter().any(|m| m.is_static());
+        if is_static {
+            return Err(LowerError::Unsupported {
+                what: "static method",
+                line,
+            });
+        }
+        let body = match &method.body {
+            MethodBody::Concrete(block) => block,
+            MethodBody::Abstract(_) => {
+                return Err(LowerError::Unsupported {
+                    what: "abstract method",
+                    line,
+                })
+            }
+        };
+        let visibility = visibility_of(method.modifiers.iter());
+        let by_ref = method.ampersand.is_some();
+        let name: Box<[u8]> = method.name.value.into();
+
+        // Fresh local overlay, like `lower_function` (methods do not capture).
+        let saved_locals = self.locals.replace(Scope::default());
+        let saved_tag = std::mem::replace(&mut self.after_closing_tag, false);
+        let saved_by_ref = std::mem::replace(&mut self.fn_by_ref, by_ref);
+
+        let inner = (|| {
+            let params = self.lower_params(&method.parameter_list, line)?;
+            let body = self.lower_stmts(body.statements.as_slice())?;
+            Ok::<_, LowerError>((params, body))
+        })();
+
+        let local_scope = std::mem::replace(&mut self.locals, saved_locals)
+            .expect("local scope installed for method body");
+        self.after_closing_tag = saved_tag;
+        self.fn_by_ref = saved_by_ref;
+
+        let (params, body) = inner?;
+        let ret_hint = method
+            .return_type_hint
+            .as_ref()
+            .and_then(|r| lower_hint(&r.hint));
+        let _ = class_line;
+        Ok(MethodDecl {
+            visibility,
+            is_static,
+            decl: FnDecl {
+                name,
+                params,
+                body,
+                slots: local_scope.slots,
+                by_ref,
+                ret_hint,
+                line,
+            },
+        })
     }
 
     /// Lower a function body in a *fresh* local slot scope (PHP functions do not
@@ -740,7 +933,16 @@ impl<'f> Lowerer<'f> {
         let kind = match e {
             Expression::Literal(lit) => self.lower_literal(lit, line)?,
 
-            Expression::Variable(Variable::Direct(d)) => ExprKind::Var(self.slot_for(strip_dollar(d.name))),
+            Expression::Variable(Variable::Direct(d)) => {
+                let name = strip_dollar(d.name);
+                // `$this` is not a slot: it reads from the evaluator's current
+                // object context (step 19, D-19.5).
+                if name == b"this" {
+                    ExprKind::This
+                } else {
+                    ExprKind::Var(self.slot_for(name))
+                }
+            }
             Expression::Variable(_) => {
                 return Err(LowerError::Unsupported {
                     what: "variable variable",
@@ -851,6 +1053,15 @@ impl<'f> Lowerer<'f> {
             },
 
             Expression::Call(call) => self.lower_call(call, line)?,
+
+            // `new ClassName(args)` (step 19, D-19.6). Tier-1 resolves the class
+            // as a literal identifier; `new $var` / `new self` / `new static`
+            // arrive in later sub-steps.
+            Expression::Instantiation(inst) => self.lower_instantiation(inst, line)?,
+
+            // `$obj->prop` (step 19, D-19.8). Static / class-constant accesses are
+            // later sub-steps.
+            Expression::Access(access) => self.lower_access(access, line)?,
 
             Expression::Closure(closure) => self.lower_closure(closure, line)?,
             Expression::ArrowFunction(af) => self.lower_arrow_function(af, line)?,
@@ -1033,9 +1244,33 @@ impl<'f> Lowerer<'f> {
     fn lower_call(&mut self, call: &Call, line: Line) -> Result<ExprKind, LowerError> {
         let fc = match call {
             Call::Function(fc) => fc,
-            _ => {
+            // `$obj->method(args)` instance call (step 19, D-19.7).
+            Call::Method(mc) => {
+                let object = Box::new(self.lower_expr(mc.object)?);
+                let method = member_name(&mc.method, line)?;
+                let args = self.lower_positional_args(&mc.argument_list, line)?;
+                return Ok(ExprKind::MethodCall {
+                    object,
+                    method: method.into(),
+                    args,
+                    nullsafe: false,
+                });
+            }
+            Call::NullSafeMethod(mc) => {
+                let object = Box::new(self.lower_expr(mc.object)?);
+                let method = member_name(&mc.method, line)?;
+                let args = self.lower_positional_args(&mc.argument_list, line)?;
+                return Ok(ExprKind::MethodCall {
+                    object,
+                    method: method.into(),
+                    args,
+                    nullsafe: true,
+                });
+            }
+            // `Class::method(args)` — static call, step 19-4.
+            Call::StaticMethod(_) => {
                 return Err(LowerError::Unsupported {
-                    what: "method/static call",
+                    what: "static method call",
                     line,
                 })
             }
@@ -1055,6 +1290,55 @@ impl<'f> Lowerer<'f> {
             name: name.into(),
             args,
         })
+    }
+
+    /// Lower `new ClassName(args)` (step 19, D-19.6). Only a literal class name is
+    /// in 19-1 scope; a dynamic / `self` / `static` class lowers to unsupported.
+    fn lower_instantiation(
+        &mut self,
+        inst: &Instantiation,
+        line: Line,
+    ) -> Result<ExprKind, LowerError> {
+        let class = match inst.class {
+            Expression::Identifier(id) => function_name(id),
+            _ => {
+                return Err(LowerError::Unsupported {
+                    what: "dynamic class instantiation",
+                    line,
+                })
+            }
+        };
+        let args = match &inst.argument_list {
+            Some(list) => self.lower_positional_args(list, line)?,
+            None => Vec::new(),
+        };
+        Ok(ExprKind::New {
+            class: class.into(),
+            args,
+        })
+    }
+
+    /// Lower `$obj->prop` / `$obj?->prop` reads (step 19, D-19.8). Static-property
+    /// and class-constant accesses (`::`) are later sub-steps.
+    fn lower_access(&mut self, access: &Access, line: Line) -> Result<ExprKind, LowerError> {
+        match access {
+            Access::Property(p) => Ok(ExprKind::PropGet {
+                object: Box::new(self.lower_expr(p.object)?),
+                name: member_name(&p.property, line)?.into(),
+                nullsafe: false,
+            }),
+            Access::NullSafeProperty(p) => Ok(ExprKind::PropGet {
+                object: Box::new(self.lower_expr(p.object)?),
+                name: member_name(&p.property, line)?.into(),
+                nullsafe: true,
+            }),
+            Access::StaticProperty(_) | Access::ClassConstant(_) => {
+                Err(LowerError::Unsupported {
+                    what: "static member access",
+                    line,
+                })
+            }
+        }
     }
 
     /// Lower a first-class callable `name(...)` (step 18-6, D-18.10). Only the
@@ -1117,10 +1401,18 @@ impl<'f> Lowerer<'f> {
     fn lower_place(&mut self, lhs: &Expression, line: Line) -> Result<Place, LowerError> {
         match lhs {
             Expression::Parenthesized(p) => self.lower_place(p.expression, line),
-            Expression::Variable(Variable::Direct(d)) => Ok(Place {
-                base: PlaceBase::Local(self.slot_for(strip_dollar(d.name))),
-                steps: Vec::new(),
-            }),
+            Expression::Variable(Variable::Direct(d)) => {
+                let name = strip_dollar(d.name);
+                let base = if name == b"this" {
+                    PlaceBase::This
+                } else {
+                    PlaceBase::Local(self.slot_for(name))
+                };
+                Ok(Place {
+                    base,
+                    steps: Vec::new(),
+                })
+            }
             Expression::ArrayAccess(aa) => {
                 // `$GLOBALS['x']` is a global base with no steps; `$GLOBALS['x'][k]`
                 // recurses so the global base carries the `[k]` step (D-12.3).
@@ -1137,6 +1429,18 @@ impl<'f> Lowerer<'f> {
             Expression::ArrayAppend(ap) => {
                 let mut place = self.lower_place(ap.array, line)?;
                 place.steps.push(PlaceStep::Append);
+                Ok(place)
+            }
+            // `$obj->prop = ...`, `$this->prop = ...` — a property write target
+            // (step 19, D-19.9). The base is the object-bearing expression; a
+            // `Prop` step navigates into it. Property writes whose base is not a
+            // place (e.g. `(new C)->x = 1`) are rare and stay unsupported via the
+            // base's own `lower_place`.
+            Expression::Access(Access::Property(p)) => {
+                let mut place = self.lower_place(p.object, line)?;
+                place
+                    .steps
+                    .push(PlaceStep::Prop(member_name(&p.property, line)?.into()));
                 Ok(place)
             }
             _ => Err(LowerError::Unsupported {
@@ -1221,6 +1525,33 @@ fn function_name<'a>(id: &Identifier<'a>) -> &'a [u8] {
         Some(i) => &raw[i + 1..],
         None => raw,
     }
+}
+
+/// The textual name of a member selector (`->name`, method/property). Tier-1
+/// supports only the static-identifier form; a dynamic selector (`$obj->$n`,
+/// `$obj->{expr}`) is out of 19-1 scope (step 19).
+fn member_name<'a>(sel: &ClassLikeMemberSelector<'a>, line: Line) -> Result<&'a [u8], LowerError> {
+    match sel {
+        ClassLikeMemberSelector::Identifier(id) => Ok(id.value),
+        _ => Err(LowerError::Unsupported {
+            what: "dynamic member name",
+            line,
+        }),
+    }
+}
+
+/// The visibility declared by a modifier list, defaulting to `Public` when none
+/// is written (step 19, D-19.13).
+fn visibility_of<'a>(modifiers: impl Iterator<Item = &'a Modifier<'a>>) -> Visibility {
+    for m in modifiers {
+        match m {
+            Modifier::Public(_) => return Visibility::Public,
+            Modifier::Protected(_) => return Visibility::Protected,
+            Modifier::Private(_) => return Visibility::Private,
+            _ => {}
+        }
+    }
+    Visibility::Public
 }
 
 /// Resolve a bare constant name to its literal HIR value (step 18, D-18.7).

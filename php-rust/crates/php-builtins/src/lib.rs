@@ -184,6 +184,25 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize) {
             spaces(out, indent);
             out.extend_from_slice(b"}\n");
         }
+        // A class instance (step 19-1): `object(C)#N (k) { ["prop"]=> value … }`.
+        // Visibility annotations (`:protected` / `:"C":private`) and the general
+        // recursion guard are added in step 19-7; 19-1 renders public form.
+        Zval::Object(o) => {
+            let obj = o.borrow();
+            out.extend_from_slice(b"object(");
+            out.extend_from_slice(obj.class_name.as_bytes());
+            out.extend_from_slice(format!(")#{} ({}) {{\n", obj.id, obj.props.len()).as_bytes());
+            for (k, val) in obj.props.iter() {
+                spaces(out, indent + 2);
+                out.extend_from_slice(b"[\"");
+                out.extend_from_slice(k);
+                out.extend_from_slice(b"\"]=>\n");
+                spaces(out, indent + 2);
+                dump(out, val, indent + 2);
+            }
+            spaces(out, indent);
+            out.extend_from_slice(b"}\n");
+        }
     }
 }
 

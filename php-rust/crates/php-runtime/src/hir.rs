@@ -45,6 +45,61 @@ pub struct Program {
     /// `declare(strict_types=1)` is in effect — scalar type hints are enforced
     /// without coercion (step 16, D-16.1).
     pub strict: bool,
+    /// User-defined classes, hoisted at lowering time so a `new`/method call may
+    /// precede the declaration (PHP's class hoisting for unconditional decls).
+    /// An [`ExprKind::New`] / method dispatch resolves a class by name against
+    /// this table (step 19, D-19.3).
+    pub classes: Vec<ClassDecl>,
+}
+
+/// Index into [`Program::classes`] (step 19, D-19.3).
+pub type ClassId = usize;
+
+/// Member visibility (step 19, D-19.13). Defaults to `Public`. Used both for
+/// access enforcement and for `var_dump`'s `:protected` / `:"C":private`
+/// annotations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Visibility {
+    Public,
+    Protected,
+    Private,
+}
+
+/// A lowered `class Name { props; methods }` (step 19, D-19.4). Inheritance,
+/// interfaces, static members and constants are layered on in later sub-steps;
+/// 19-1 carries only instance properties and methods.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClassDecl {
+    /// Name as written (original case); resolved ASCII-case-insensitively.
+    pub name: Box<[u8]>,
+    /// Instance properties, in declaration order (var_dump order).
+    pub props: Vec<PropDecl>,
+    /// Methods, in declaration order. Resolved by name (case-insensitive).
+    pub methods: Vec<MethodDecl>,
+    pub line: Line,
+}
+
+/// One declared instance property (step 19). `default` is evaluated per instance
+/// at `new` time (D-19.6); `None` means the property initialises to NULL.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PropDecl {
+    /// Property name, without the leading `$`.
+    pub name: Box<[u8]>,
+    pub visibility: Visibility,
+    pub default: Option<Expr>,
+}
+
+/// One method (step 19, D-19.5). Wraps an ordinary [`FnDecl`] (so method calls
+/// reuse the whole function-frame machinery) plus the slot its body binds `$this`
+/// to and the OOP modifiers.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MethodDecl {
+    pub visibility: Visibility,
+    pub is_static: bool,
+    /// Name / parameters / body / local slots — exactly as a free function.
+    /// `$this` is *not* a slot: it lowers to [`ExprKind::This`] and is read from
+    /// the evaluator's current-object context (D-19.5).
+    pub decl: FnDecl,
 }
 
 /// A lowered `function name(params) { body }`. Each declaration owns a *local*
@@ -354,6 +409,34 @@ pub enum ExprKind {
         subject: Box<Expr>,
         arms: Vec<MatchArm>,
     },
+
+    /// `new ClassName(args...)` (step 19, D-19.6). Creates an instance with its
+    /// declared properties initialised to their defaults, then runs `__construct`
+    /// if the class defines one. Tier-1 resolves `class` as a literal name.
+    New { class: Box<[u8]>, args: Vec<Expr> },
+
+    /// `$obj->method(args...)` instance method call (step 19, D-19.7). `nullsafe`
+    /// marks the `?->` form: a null receiver short-circuits to NULL instead of
+    /// erroring.
+    MethodCall {
+        object: Box<Expr>,
+        method: Box<[u8]>,
+        args: Vec<Expr>,
+        nullsafe: bool,
+    },
+
+    /// `$obj->prop` property read (step 19, D-19.8). A missing property warns and
+    /// yields NULL. `nullsafe` marks `?->`.
+    PropGet {
+        object: Box<Expr>,
+        name: Box<[u8]>,
+        nullsafe: bool,
+    },
+
+    /// `$this` (step 19, D-19.5): the current object inside a method. Outside any
+    /// method context the evaluator raises the fatal "Using $this when not in
+    /// object context".
+    This,
 }
 
 /// One element of an array literal: an optional key plus a value.
@@ -386,6 +469,9 @@ pub struct Place {
 pub enum PlaceBase {
     Local(Slot),
     Global(Slot),
+    /// `$this` as the root of a property write target (`$this->x = …`), step 19.
+    /// Resolved against the evaluator's current-object context, not a slot.
+    This,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -394,6 +480,10 @@ pub enum PlaceStep {
     Index(Expr),
     /// `[]` — append; only valid as the final step of a write target.
     Append,
+    /// `->prop` — navigate into an object's property (step 19, D-19.9). Unlike
+    /// array steps, this enters the shared `Rc<RefCell<Object>>` in place (no
+    /// copy-on-write write-back). A missing property is created on write.
+    Prop(Box<[u8]>),
 }
 
 /// Binary operators whose semantics live in `php_types::ops`.

@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::{PhpArray, PhpStr};
+use crate::{Object, PhpArray, PhpStr};
 
 /// A PHP value. Mirrors the observable semantics of `zval`
 /// (Zend/zend_types.h:355-380, type tags :620-631).
@@ -33,6 +33,11 @@ pub enum Zval {
     /// as a dedicated variant. The body lives in the evaluator's closure table
     /// (selected by [`Closure::fn_idx`]); `gettype` reports `"object"`.
     Closure(Rc<Closure>),
+    /// A user-defined class instance (`Zval::Object`, step 19, D-19.1). Handle
+    /// semantics: the shared `Rc<RefCell<Object>>` means `$q = $p` aliases the
+    /// same instance and writes through any handle are visible to all (unlike the
+    /// copy-on-write `Array`). `gettype` reports `"object"`.
+    Object(Rc<RefCell<Object>>),
 }
 
 /// A lowered-and-captured closure value (step 18). `fn_idx` selects the body
@@ -114,7 +119,7 @@ impl Zval {
             Zval::Str(_) => "string",
             Zval::Array(_) => "array",
             Zval::Ref(cell) => cell.borrow().gettype(),
-            Zval::Closure(_) => "object",
+            Zval::Closure(_) | Zval::Object(_) => "object",
         }
     }
 
@@ -129,6 +134,11 @@ impl Zval {
             Zval::Array(_) => "array",
             Zval::Ref(cell) => cell.borrow().error_type_name(),
             Zval::Closure(_) => "Closure",
+            // PHP uses the actual class name here; this funnel returns a
+            // `&'static str`, so we render the generic name and let the evaluator
+            // (which has the class table) build class-specific messages where it
+            // matters (step 19-1 simplification; refine if the corpus needs it).
+            Zval::Object(_) => "object",
         }
     }
 }

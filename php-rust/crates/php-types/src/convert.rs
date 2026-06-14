@@ -29,8 +29,8 @@ pub fn to_bool(v: &Zval, diags: &mut Diags) -> bool {
         }
         Zval::Array(a) => !a.is_empty(),
         Zval::Ref(c) => to_bool(&c.borrow(), diags),
-        // An object (closure) is always truthy (step 18).
-        Zval::Closure(_) => true,
+        // An object (closure or class instance) is always truthy (step 18/19).
+        Zval::Closure(_) | Zval::Object(_) => true,
     }
 }
 
@@ -49,7 +49,7 @@ pub fn is_true_silent(v: &Zval) -> bool {
         }
         Zval::Array(a) => !a.is_empty(),
         Zval::Ref(c) => is_true_silent(&c.borrow()),
-        Zval::Closure(_) => true,
+        Zval::Closure(_) | Zval::Object(_) => true,
     }
 }
 
@@ -142,9 +142,9 @@ pub fn to_long_cast(v: &Zval, diags: &mut Diags) -> i64 {
         },
         Zval::Array(a) => !a.is_empty() as i64,
         Zval::Ref(c) => to_long_cast(&c.borrow(), diags),
-        // Object → int: objects are truthy, yielding 1 (step 18; PHP also warns,
-        // an edge case not yet modelled).
-        Zval::Closure(_) => 1,
+        // Object → int: objects are truthy, yielding 1 (step 18/19; PHP also
+        // warns, an edge case not yet modelled).
+        Zval::Closure(_) | Zval::Object(_) => 1,
     }
 }
 
@@ -164,7 +164,7 @@ pub fn to_double(v: &Zval) -> f64 {
         },
         Zval::Array(a) => !a.is_empty() as i64 as f64,
         Zval::Ref(c) => to_double(&c.borrow()),
-        Zval::Closure(_) => 1.0,
+        Zval::Closure(_) | Zval::Object(_) => 1.0,
     }
 }
 
@@ -193,6 +193,18 @@ pub fn to_zstr(v: &Zval, diags: &mut Diags) -> ZStr {
                 "Object of class Closure could not be converted to string".to_string(),
             ));
             PhpStr::from_str("Closure")
+        }
+        // A class instance with `__toString` is converted by the evaluator before
+        // reaching this funnel (step 19-6); reaching here means no `__toString`,
+        // which PHP makes a fatal `Error`. This infallible funnel cannot, so it
+        // warns with the real class name and yields a placeholder (D-19.18).
+        Zval::Object(o) => {
+            let name = o.borrow().class_name.as_bytes().to_vec();
+            let class = String::from_utf8_lossy(&name).into_owned();
+            diags.push(Diag::Warning(format!(
+                "Object of class {class} could not be converted to string"
+            )));
+            PhpStr::from_str(&class)
         }
     }
 }
