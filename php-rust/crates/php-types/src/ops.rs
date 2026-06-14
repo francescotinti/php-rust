@@ -628,6 +628,24 @@ pub fn loose_eq(a: &Zval, b: &Zval) -> bool {
         (Zval::Long(l), Zval::Double(r)) => *l as f64 == *r,
         (Zval::Double(l), Zval::Long(r)) => *l == *r as f64,
         (Zval::Str(l), Zval::Str(r)) => smart_streq(l, r),
+        // Two objects are loosely equal iff they are the same instance, or share
+        // the same class and every property is loosely equal (PHP object `==`).
+        // For enum case singletons this reduces to identity (step 23).
+        (Zval::Object(l), Zval::Object(r)) => {
+            if Rc::ptr_eq(l, r) {
+                return true;
+            }
+            let (lb, rb) = (l.borrow(), r.borrow());
+            lb.class_id == rb.class_id
+                && lb.props.len() == rb.props.len()
+                && lb
+                    .props
+                    .iter()
+                    .zip(rb.props.iter())
+                    .all(|((k1, v1), (k2, v2))| k1 == k2 && loose_eq(v1, v2))
+        }
+        (Zval::Ref(c), _) => loose_eq(&c.borrow(), b),
+        (_, Zval::Ref(c)) => loose_eq(a, &c.borrow()),
         _ => compare(a, b) == 0,
     }
 }

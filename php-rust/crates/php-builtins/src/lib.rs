@@ -206,6 +206,20 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
             }
             seen.push(ptr);
             let obj = o.borrow();
+            // An enum case renders as `enum(Name::Case)` (step 23, D-23.5); the
+            // backing value is intentionally not shown.
+            if obj.info.is_enum_case {
+                out.extend_from_slice(b"enum(");
+                out.extend_from_slice(obj.class_name.as_bytes());
+                out.extend_from_slice(b"::");
+                if let Some(Zval::Str(s)) = obj.props.get(b"name") {
+                    out.extend_from_slice(s.as_bytes());
+                }
+                out.extend_from_slice(b")\n");
+                drop(obj);
+                seen.pop();
+                return;
+            }
             out.extend_from_slice(b"object(");
             out.extend_from_slice(obj.class_name.as_bytes());
             out.extend_from_slice(format!(")#{} ({}) {{\n", obj.id, obj.props.len()).as_bytes());
@@ -340,7 +354,20 @@ fn print_r_into(out: &mut Vec<u8>, v: &Zval, indent: usize, ctx: &mut Ctx, seen:
             let ptr = Rc::as_ptr(o) as usize;
             let obj = o.borrow();
             out.extend_from_slice(obj.class_name.as_bytes());
-            out.extend_from_slice(b" Object\n");
+            // An enum case prints `C Enum` / `C Enum:int` / `C Enum:string`
+            // instead of `C Object`; its properties render as usual (step 23,
+            // D-23.5).
+            if obj.info.is_enum_case {
+                out.extend_from_slice(b" Enum");
+                match obj.props.get(b"value") {
+                    Some(Zval::Long(_)) => out.extend_from_slice(b":int"),
+                    Some(Zval::Str(_)) => out.extend_from_slice(b":string"),
+                    _ => {}
+                }
+                out.push(b'\n');
+            } else {
+                out.extend_from_slice(b" Object\n");
+            }
             spaces(out, indent);
             out.extend_from_slice(b"(\n");
             if seen.contains(&ptr) {

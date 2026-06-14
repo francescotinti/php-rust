@@ -1599,18 +1599,10 @@ impl<'p> Evaluator<'p> {
         {
             return self.eval_enum_case(cid, name);
         }
-        // Walk the chain for the constant's declaring class + value expression.
-        let classes: &'p [ClassDecl] = self.classes;
-        let mut c = Some(cid);
-        let mut found: Option<(ClassId, &'p Expr)> = None;
-        while let Some(x) = c {
-            if let Some(k) = classes[x].consts.iter().find(|k| k.name.as_ref() == name) {
-                found = Some((x, &k.value));
-                break;
-            }
-            c = classes[x].parent;
-        }
-        let (decl_class, expr) = found.ok_or_else(|| {
+        // Resolve the constant through the parent chain *and* implemented
+        // interfaces (interface constants are inherited too — gh7821, also a
+        // general class gap surfaced by enums in step 23).
+        let (decl_class, expr) = self.find_class_const(cid, name).ok_or_else(|| {
             PhpError::Error(format!(
                 "Undefined constant {}::{}",
                 String::from_utf8_lossy(&self.classes[cid].name),
@@ -1623,6 +1615,32 @@ impl<'p> Evaluator<'p> {
         let result = self.eval(expr);
         self.cur_class = saved_class;
         result
+    }
+
+    /// Find a class constant by name, searching the class's own constants, then
+    /// its parent chain, then (transitively) its implemented interfaces. Returns
+    /// the declaring class id and the value expression (step 23 / gh7821).
+    fn find_class_const(&self, cid: ClassId, name: &[u8]) -> Option<(ClassId, &'p Expr)> {
+        let classes: &'p [ClassDecl] = self.classes;
+        // Own constants + parent chain take precedence.
+        let mut c = Some(cid);
+        while let Some(x) = c {
+            if let Some(k) = classes[x].consts.iter().find(|k| k.name.as_ref() == name) {
+                return Some((x, &k.value));
+            }
+            c = classes[x].parent;
+        }
+        // Then interfaces of the class and its ancestors (transitively).
+        let mut c = Some(cid);
+        while let Some(x) = c {
+            for &i in &classes[x].interfaces {
+                if let Some(r) = self.find_class_const(i, name) {
+                    return Some(r);
+                }
+            }
+            c = classes[x].parent;
+        }
+        None
     }
 
     /// Return the interned singleton object for enum case `E::name`, creating it

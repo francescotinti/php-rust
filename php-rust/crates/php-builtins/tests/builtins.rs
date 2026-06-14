@@ -1005,3 +1005,53 @@ fn print_r_trait_props() {
         "C Object\n(\n    [c] => 3\n    [a] => 1\n)\n"
     );
 }
+
+// --- step 23: enum var_dump / print_r ---
+
+#[test]
+fn var_dump_enum_pure() {
+    assert_eq!(
+        out("<?php enum Suit { case Hearts; } var_dump(Suit::Hearts);"),
+        "enum(Suit::Hearts)\n"
+    );
+}
+
+#[test]
+fn var_dump_enum_backed_hides_value() {
+    assert_eq!(
+        out("<?php enum Status: string { case Active = 'A'; } var_dump(Status::Active);"),
+        "enum(Status::Active)\n"
+    );
+    assert_eq!(
+        out("<?php enum Size: int { case Big = 9; } var_dump(Size::Big);"),
+        "enum(Size::Big)\n"
+    );
+}
+
+#[test]
+fn var_dump_enum_in_array() {
+    assert_eq!(
+        out("<?php enum Suit { case Hearts; case Spades; } var_dump([Suit::Hearts, Suit::Spades]);"),
+        "array(2) {\n  [0]=>\n  enum(Suit::Hearts)\n  [1]=>\n  enum(Suit::Spades)\n}\n"
+    );
+}
+
+#[test]
+fn print_r_enum_pure() {
+    assert_eq!(
+        out("<?php enum Suit { case Hearts; } print_r(Suit::Hearts);"),
+        "Suit Enum\n(\n    [name] => Hearts\n)\n"
+    );
+}
+
+#[test]
+fn print_r_enum_backed() {
+    assert_eq!(
+        out("<?php enum Status: string { case Active = 'A'; } print_r(Status::Active);"),
+        "Status Enum:string\n(\n    [name] => Active\n    [value] => A\n)\n"
+    );
+    assert_eq!(
+        out("<?php enum Size: int { case Big = 9; } print_r(Size::Big);"),
+        "Size Enum:int\n(\n    [name] => Big\n    [value] => 9\n)\n"
+    );
+}

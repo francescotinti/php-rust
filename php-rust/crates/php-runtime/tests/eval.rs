@@ -3150,3 +3150,47 @@ fn enum_method_calls_self_const_and_case() {
         "Spades!"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Step 23-4 — corpus fixes: loose == on objects/enums, interface constants
+// ---------------------------------------------------------------------------
+
+#[test]
+fn enum_loose_equals_is_identity() {
+    assert_eq!(
+        out(&format!(
+            "<?php {SUIT} echo Suit::Hearts == Suit::Hearts ? 'y' : 'n'; \
+             echo Suit::Hearts == Suit::Spades ? 'y' : 'n';"
+        )),
+        "yn"
+    );
+}
+
+#[test]
+fn object_loose_equals_same_class_and_props() {
+    assert_eq!(
+        out("<?php class P { public $x; function __construct($x){ $this->x = $x; } } \
+             echo (new P(1)) == (new P(1)) ? 'y' : 'n'; \
+             echo (new P(1)) == (new P(2)) ? 'y' : 'n';"),
+        "yn"
+    );
+}
+
+#[test]
+fn enum_inherits_interface_constants() {
+    // gh7821: interface constants are inherited; case values may reference them.
+    assert_eq!(
+        out("<?php interface I { const A = 'A'; const B = 'B'; } \
+             enum E: string implements I { case C = I::A; case D = self::B; } \
+             echo E::A, E::B, E::C->value, E::D->value;"),
+        "ABAB"
+    );
+}
+
+#[test]
+fn class_inherits_interface_constants() {
+    assert_eq!(
+        out("<?php interface HasMax { const MAX = 100; } class C implements HasMax {} echo C::MAX;"),
+        "100"
+    );
+}
