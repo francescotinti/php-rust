@@ -111,6 +111,29 @@ auto-interface, validazione firma/return dei magic method, `&__get` by-ref,
 reference dentro prop overloaded, differenze `var_dump`/`print_r`. Dettaglio in
 `02-mapping-table.md` (Step 22 IMPLEMENTATO).
 
+## Step 23 — Scoperte (enum)
+
+Corpus `Zend/tests/enum`: 43 pass / 18 fail / 91 skip (70.5% runnable). Tre
+gap pre-esistenti — **generali, non enum-specifici** — emersi e fixati durante
+l'implementazione degli enum:
+
+| ID | Severità | Categoria | Divergenza | Causa | Stato |
+|---|---|---|---|---|---|
+| D-NEW-11 | alta | oggetti/identità | `$a === $b` fra due oggetti ritornava **sempre** `false` (anche `$a === $a`); mai testato finora | `ops::identical` non aveva arm `Object` → cadeva su `_ => false` | **FIXATO**: arm `(Object,Object) => Rc::ptr_eq` (semantica handle PHP); prerequisito per `===`/`match` sugli enum singleton; regressione `object_identity_handle_semantics` |
+| D-NEW-12 | media | oggetti/uguaglianza | `$a == $b` fra oggetti cadeva su `compare()` (conversione scalare errata) invece della semantica PHP "stessa classe + props loosely-equal" | `ops::loose_eq` non aveva arm `Object` | **FIXATO**: arm `Object` (stessa istanza, o stessa classe + ogni prop `==`); per i case enum si riduce all'identità; regressioni `object_loose_equals_same_class_and_props`, `enum_loose_equals_is_identity` |
+| D-NEW-13 | media | costanti/interfacce | `C::CONST` ereditata da `implements I` non si risolveva ("Undefined constant"); gh7821 | `eval_class_const` camminava solo la catena `parent`, non le interfacce | **FIXATO**: `find_class_const` cerca own→parent→interfacce (transitivo); regressioni `enum_inherits_interface_constants`, `class_inherits_interface_constants` |
+
+Fail residui (scope-out dichiarato, vedi Step 23 in `02-mapping-table.md`):
+- **by-ref readonly** (3): `no-pass/return/through-references` → "Cannot
+  indirectly modify readonly property" (path by-reference non intercettato).
+- **comparison.phpt**: operatori d'ordine `</>/<=/>=` fra oggetti (feature
+  generale di confronto oggetti, non implementata).
+- **validazione compile-time** (4): duplicate backing value, case type vs
+  backing mismatch, `from()` argument TypeError, class type-hint enforcement.
+- **dipendenti da subsystem assenti** (8): Reflection*, SplObjectStorage,
+  WeakMap.
+- **stack-trace frames** (1): `enum_in_stack_trace` (vedi D-NEW-7).
+
 ## Divergenze attese (scope-out dichiarato in 02-mapping-table.md)
 
 Non sono bug, sono confini del Tier 1:

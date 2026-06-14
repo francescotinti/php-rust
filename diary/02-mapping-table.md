@@ -857,3 +857,41 @@ quasi identico a quello di una classe, più la gestione dei `case`.
   `$this` + `match($this)`; metodo statico; `const` enum; `self::Case`.
 - **23-4 var_dump/print_r + corpus**: formato `enum(...)`; print_r; validazione
   corpus `Zend/tests/enum*`; fix eventuali (D-NEW).
+
+## Step 23 — ENUM (IMPLEMENTATO)
+
+Spedito in 5 commit (23-1 → 23-5). Infra: `ClassDecl` esteso (`is_enum`,
+`enum_backing: Option<EnumBacking{Int,Str}>`, `enum_cases: Vec<EnumCaseDecl>`);
+`Evaluator.enum_cache: HashMap<(ClassId, Vec<u8>), Rc<RefCell<Object>>>` per
+l'interning dei case singleton; `ObjectInfo.is_enum_case` per il rendering.
+mago `Statement::Enum` (membri `EnumCase`/`Method`/`Constant`/`TraitUse`) viene
+lowerato quasi come una classe (`lower_enum`).
+
+- **23-1** lowering `Statement::Enum` (+hoist, +conditional reject); `E::Case`
+  → singleton interned in `eval_class_const`/`eval_enum_case` con prop sintetica
+  `name`; `instanceof` via `UnitEnum`/`BackedEnum` nel PRELUDE; `new E()` →
+  Error. **Fix D-NEW-11**: object `===` (arm `Object` in `ops::identical`,
+  prima sempre falso). 8 test.
+- **23-2** backed enum: prop `value`; `from`/`tryFrom` in `call_static`
+  (riservati, solo backed); `ValueError` catchable su `from` mancante
+  (`"X"` quotato per string, nudo per int); `instanceof BackedEnum`. 7 test.
+- **23-3** `E::cases()` (lista singleton in ordine); confermato funzionante via
+  macchina OOP riusata: metodi d'istanza con `$this`=case + `match($this)`,
+  metodi statici, costanti, `const = self::Case`. 6 test.
+- **23-4** `var_dump` → `enum(Name::Case)`; `print_r` → `Name Enum[:int|:string]`.
+  **Fix D-NEW-12** (loose `==` oggetti) e **D-NEW-13** (costanti d'interfaccia
+  ereditate, `find_class_const`). 9 test.
+- **23-5** immutabilità case: prop readonly ("Cannot modify readonly property"),
+  no dynamic ("Cannot create dynamic property"), no unset ("Cannot unset
+  readonly property") in `write_into`/`unset_place`. 4 test. **34 test totali**,
+  suite 497.
+
+**Validazione corpus** `Zend/tests/enum`: **43 pass / 18 fail / 91 skip** (152
+tot). Pass-rate runnable **70.5%** (era 62.3% prima di 23-5).
+
+**Scope-out riepilogo step 23:** modifica readonly indiretta/by-ref (`Cannot
+indirectly modify…`), operatori d'ordine `</>/<=/>=` fra oggetti, validazioni
+compile-time (duplicate backing value, case-type vs backing mismatch, `from()`
+argument TypeError), enforcement degli object type-hint sui parametri,
+dipendenze da Reflection*/SplObjectStorage/WeakMap, stack-trace frames. Dettaglio
+divergenze D-NEW-11/12/13 in `04-divergences.md`.
