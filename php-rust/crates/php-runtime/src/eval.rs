@@ -656,10 +656,34 @@ impl<'p> Evaluator<'p> {
             };
             frame_mut!(self)[p.slot as usize] = binding;
         }
-        match self.exec_stmts(&f.body)? {
-            Flow::Return(v) => Ok(v),
-            _ => Ok(Zval::Null),
+        let ret = match self.exec_stmts(&f.body)? {
+            Flow::Return(v) => v,
+            _ => Zval::Null,
+        };
+        // Coerce the return value to a scalar return type (weak). A by-reference
+        // function returns a `Zval::Ref` to alias, so its return type stays
+        // unenforced here (scope-out, D-14.5/D-13.7).
+        match &f.ret_hint {
+            Some(hint) if !f.by_ref => match coerce_to_hint(ret, hint, &mut self.diags) {
+                Ok(v) => Ok(v),
+                Err(given) => Err(self.return_type_error(f, hint, given)),
+            },
+            _ => Ok(ret),
         }
+    }
+
+    /// Build the uncaught `TypeError` for a return value that failed scalar
+    /// coercion (D-14.5). The message format differs from the argument one: no
+    /// call site, suffix `returned in <file>:<defline>`.
+    fn return_type_error(&self, f: &FnDecl, hint: &TypeHint, given: &str) -> PhpError {
+        PhpError::TypeError(format!(
+            "{}(): Return value must be of type {}, {} returned in {}:{}",
+            String::from_utf8_lossy(&f.name),
+            hint.display_name(),
+            given,
+            String::from_utf8_lossy(self.file),
+            f.line,
+        ))
     }
 
     /// Build the uncaught `TypeError` for an argument that failed scalar

@@ -612,6 +612,67 @@ fn assign_ref_to_non_ref_function_notices() {
 }
 
 #[test]
+fn float_to_int_param_deprecation() {
+    // A lossy float → int coercion deprecates (oracle: "...from float 3.7...").
+    let o = run_source(b"t.php", b"<?php function f(int $x){} f(3.7);").expect("lowers");
+    assert!(o.fatal.is_none(), "unexpected fatal: {:?}", o.fatal);
+    assert!(
+        o.diags.iter().any(|d| matches!(d, Diag::Deprecated(m)
+            if m == "Implicit conversion from float 3.7 to int loses precision")),
+        "got {:?}",
+        o.diags
+    );
+}
+
+#[test]
+fn float_string_to_int_param_deprecation() {
+    // A lossy numeric float-string → int coercion deprecates with the distinct
+    // "float-string" wording (oracle).
+    let o = run_source(b"t.php", b"<?php function f(int $x){} f('1.5');").expect("lowers");
+    assert!(
+        o.diags.iter().any(|d| matches!(d, Diag::Deprecated(m)
+            if m == "Implicit conversion from float-string \"1.5\" to int loses precision")),
+        "got {:?}",
+        o.diags
+    );
+}
+
+#[test]
+fn exact_float_to_int_param_no_deprecation() {
+    // 3.0 and "1.0" convert without precision loss, so no deprecation fires.
+    let o = run_source(b"t.php", b"<?php function f(int $x){} f(3.0); f('1.0');").expect("lowers");
+    assert!(
+        !o.diags.iter().any(|d| matches!(d, Diag::Deprecated(_))),
+        "unexpected deprecation: {:?}",
+        o.diags
+    );
+}
+
+#[test]
+fn return_type_hint_coerces() {
+    // A scalar return type coerces the returned value (weak), proven by `===`.
+    assert_eq!(out("<?php function f(): int { return '5'; } echo f() === 5 ? 'Y' : 'N';"), "Y");
+    assert_eq!(
+        out("<?php function f(): string { return 42; } echo f() === '42' ? 'Y' : 'N';"),
+        "Y"
+    );
+}
+
+#[test]
+fn return_type_hint_error_message() {
+    // A non-coercible return value raises a TypeError with PHP's return-value
+    // message (distinct format from the argument one).
+    let o = run_source(b"t.php", b"<?php function f(): int { return 'x'; } f();").expect("lowers");
+    match &o.fatal {
+        Some(PhpError::TypeError(m)) => assert_eq!(
+            m,
+            "f(): Return value must be of type int, string returned in t.php:1"
+        ),
+        other => panic!("expected TypeError, got {other:?}"),
+    }
+}
+
+#[test]
 fn function_mutual_recursion() {
     // Both functions are hoisted, so even-before-odd resolution works.
     let prog = "<?php \
