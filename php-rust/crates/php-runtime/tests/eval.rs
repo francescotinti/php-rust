@@ -2846,3 +2846,46 @@ fn magic_callstatic_for_inaccessible_private_static() {
         "CS:s"
     );
 }
+
+// --- step 22-4: __invoke ---
+
+#[test]
+fn magic_invoke_object_as_function() {
+    assert_eq!(
+        out("<?php class C { function __invoke($x){ return $x * 2; } } \
+             $c = new C(); echo $c(21);"),
+        "42"
+    );
+}
+
+#[test]
+fn magic_invoke_via_call_user_func() {
+    assert_eq!(
+        out("<?php class C { function __invoke($x){ return 'i:' . $x; } } \
+             echo call_user_func(new C(), 'z');"),
+        "i:z"
+    );
+}
+
+#[test]
+fn magic_invoke_is_callable() {
+    assert_eq!(
+        out("<?php class C { function __invoke(){ return 1; } } class D {} \
+             echo is_callable(new C()) ? '1' : '0'; \
+             echo is_callable(new D()) ? '1' : '0';"),
+        "10"
+    );
+}
+
+#[test]
+fn magic_invoke_object_without_invoke_not_callable() {
+    let o = run_source(
+        b"t.php",
+        b"<?php class C {} $c = new C(); $c();",
+    )
+    .expect("lowers");
+    match o.fatal {
+        Some(PhpError::Error(msg)) => assert_eq!(msg, "Object of type C is not callable"),
+        other => panic!("expected not-callable Error, got {other:?}"),
+    }
+}

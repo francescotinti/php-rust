@@ -1139,6 +1139,19 @@ impl<'p> Evaluator<'p> {
                 let inner = cell.borrow().clone();
                 self.call_value(inner, argv)
             }
+            // An object is callable iff it defines `__invoke` (step 22, D-22.7).
+            Zval::Object(ref o) => {
+                let cid = o.borrow().class_id as usize;
+                match self.resolve_method(cid, b"__invoke") {
+                    Some((defc, m)) => {
+                        self.invoke_method(Some(callee.clone()), defc, cid, m, b"__invoke", argv)
+                    }
+                    None => Err(PhpError::Error(format!(
+                        "Object of type {} is not callable",
+                        String::from_utf8_lossy(&self.classes[cid].name)
+                    ))),
+                }
+            }
             other => Err(PhpError::Error(format!(
                 "Value of type {} is not callable",
                 other.error_type_name()
@@ -2120,6 +2133,11 @@ impl<'p> Evaluator<'p> {
         let callable = match &v {
             Zval::Closure(_) => true,
             Zval::Str(s) => self.is_name_callable(s.as_bytes()),
+            // An object is callable iff it defines `__invoke` (step 22, D-22.7).
+            Zval::Object(o) => {
+                let cid = o.borrow().class_id as usize;
+                self.resolve_method(cid, b"__invoke").is_some()
+            }
             _ => false,
         };
         Ok(Zval::Bool(callable))
