@@ -3433,3 +3433,71 @@ fn destruct_reassign_chain() {
         "d1d2|d3"
     );
 }
+
+// --- Step 25: double-quoted string interpolation ---
+
+#[test]
+fn interp_simple_variable() {
+    assert_eq!(out(r#"<?php $x="W"; echo "hi $x!";"#), "hi W!");
+}
+
+#[test]
+fn interp_forces_string_type() {
+    // Interpolation always yields a string, even for a lone int variable.
+    assert_eq!(
+        out(r#"<?php $x=5; $y="$x"; echo ($y === "5") ? 'T' : 'F';"#),
+        "T"
+    );
+}
+
+#[test]
+fn interp_array_bareword_key() {
+    assert_eq!(
+        out(r#"<?php $a=['k'=>'V']; echo "x $a[k] y";"#),
+        "x V y"
+    );
+}
+
+#[test]
+fn interp_array_int_and_var_key() {
+    assert_eq!(
+        out(r#"<?php $a=[0=>'Z']; $i=0; echo "$a[0]/$a[$i]";"#),
+        "Z/Z"
+    );
+}
+
+#[test]
+fn interp_property_access() {
+    assert_eq!(
+        out(r#"<?php class C { public $p="P"; } $o=new C; echo "v $o->p!";"#),
+        "v P!"
+    );
+}
+
+#[test]
+fn interp_braced_complex() {
+    assert_eq!(
+        out(
+            r#"<?php $x="W"; $a=['k'=>'V']; class C { public $p="P"; } $o=new C; echo "{$x}{$a['k']}{$o->p}";"#
+        ),
+        "WVP"
+    );
+}
+
+#[test]
+fn interp_braced_object_tostring() {
+    assert_eq!(
+        out(
+            r#"<?php class C { function __toString(){ return "S"; } } $o=new C; echo "v {$o}.";"#
+        ),
+        "v S."
+    );
+}
+
+#[test]
+fn interp_multiple_parts_and_literals() {
+    assert_eq!(
+        out(r#"<?php $a="A"; $b="B"; echo "[$a-$b]";"#),
+        "[A-B]"
+    );
+}

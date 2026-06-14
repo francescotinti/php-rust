@@ -21,13 +21,14 @@ use mago_database::file::File;
 use mago_span::{HasSpan, Span};
 use mago_syntax::ast::{
     Access, Argument, ArrayElement, ArrowFunction, AssignmentOperator, BinaryOperator, Call,
-    Class, ClassLikeConstantSelector, ClassLikeMember, ClassLikeMemberSelector, Closure, Construct,
+    Class, ClassLikeConstantSelector, ClassLikeMember, ClassLikeMemberSelector, Closure,
+    CompositeString, Construct,
     DeclareBody, Enum, EnumCaseItem, Expression, Extends, ForeachTarget, Function,
     FunctionLikeParameterList, Hint,
     Identifier, Instantiation, Interface, Literal, LiteralInteger, MatchArm as AstMatchArm, Method,
     MethodBody, Modifier, Node, PartialApplication, Property, PropertyItem, Statement, StaticItem,
-    Trait, TraitUse, TraitUseAdaptation, TraitUseMethodReference, TraitUseSpecification,
-    UnaryPostfixOperator, UnaryPrefixOperator, Variable,
+    StringPart, Trait, TraitUse, TraitUseAdaptation, TraitUseMethodReference,
+    TraitUseSpecification, UnaryPostfixOperator, UnaryPrefixOperator, Variable,
 };
 use mago_syntax::parser::parse_file;
 
@@ -1908,9 +1909,19 @@ impl<'f> Lowerer<'f> {
                 if let Some(key) = globals_key(aa.array, aa.index) {
                     ExprKind::GlobalVar(self.globals.slot_for(&key))
                 } else {
+                    let index = match aa.index {
+                        // A bare identifier as an array index only arises from
+                        // string interpolation (`"$a[k]"`), where mago rewrites
+                        // the unquoted key to an identifier; it is a string key,
+                        // not a constant (step 25).
+                        Expression::Identifier(id) => {
+                            Expr { line, kind: ExprKind::Str(function_name(id).into()) }
+                        }
+                        other => self.lower_expr(other)?,
+                    };
                     ExprKind::Index {
                         base: Box::new(self.lower_expr(aa.array)?),
-                        index: Box::new(self.lower_expr(aa.index)?),
+                        index: Box::new(index),
                     }
                 }
             }
@@ -1958,6 +1969,8 @@ impl<'f> Lowerer<'f> {
                 ExprKind::Match { subject, arms }
             }
 
+            Expression::CompositeString(cs) => self.lower_interpolation(cs, line)?,
+
             _ => {
                 return Err(LowerError::Unsupported {
                     what: "expression",
@@ -1966,6 +1979,33 @@ impl<'f> Lowerer<'f> {
             }
         };
         Ok(Expr { line, kind })
+    }
+
+    /// Lower a double-quoted / heredoc interpolated string (step 25) to a chain
+    /// of string concatenations. Each part is a literal chunk, a simple
+    /// interpolation (`$x`, `$a[k]`, `$o->p`), or a braced expression (`{$e}`).
+    /// Seeding with an empty string forces the whole result to a string even
+    /// when it is a single interpolated value (e.g. `"$n"` for an int `$n`):
+    /// `"" . x` has the same string-coercion semantics as `(string) x`, and
+    /// `Concat` already honours `__toString` on objects (step 19-6).
+    fn lower_interpolation(
+        &mut self,
+        cs: &CompositeString,
+        line: Line,
+    ) -> Result<ExprKind, LowerError> {
+        let mut acc = Expr { line, kind: ExprKind::Str(Default::default()) };
+        for part in cs.parts().iter() {
+            let piece = match part {
+                StringPart::Literal(l) => Expr { line, kind: ExprKind::Str(l.value.into()) },
+                StringPart::Expression(e) => self.lower_expr(e)?,
+                StringPart::BracedExpression(b) => self.lower_expr(b.expression)?,
+            };
+            acc = Expr {
+                line,
+                kind: ExprKind::Binary(BinOp::Concat, Box::new(acc), Box::new(piece)),
+            };
+        }
+        Ok(acc.kind)
     }
 
     fn lower_literal(&self, lit: &Literal, line: Line) -> Result<ExprKind, LowerError> {
