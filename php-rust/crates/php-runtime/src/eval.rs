@@ -26,8 +26,9 @@ use php_types::{
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
 use crate::hir::{
-    BinOp, Capture, CastKind, ClassDecl, Expr, ExprKind, FnDecl, Line, MethodDecl, Param, Place,
-    PlaceBase, PlaceStep, Program, ScalarType, Slot, Stmt, StmtKind, TypeHint, UnOp,
+    BinOp, Capture, CastKind, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, Line,
+    MethodDecl, Param, Place, PlaceBase, PlaceStep, Program, ScalarType, Slot, Stmt, StmtKind,
+    TypeHint, UnOp, Visibility,
 };
 
 /// Builtins the evaluator implements directly because they invoke a callback
@@ -186,6 +187,7 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         classes: &program.classes,
         class_index: &class_index,
         cur_this: None,
+        cur_class: None,
         file: &program.file,
         globals: fresh_slots(program.slots.len()),
         locals: None,
@@ -249,6 +251,10 @@ struct Evaluator<'p> {
     /// top level / inside a free function; reading `$this` then is a fatal Error.
     /// Saved and restored around each method call like `locals`.
     cur_this: Option<Zval>,
+    /// The class that *defines* the running method (step 19-3, D-19.11): the
+    /// referent of `self::` and the base for `parent::`, and the access context
+    /// for private/protected visibility checks. Saved/restored per method call.
+    cur_class: Option<ClassId>,
     /// Script file name, reproduced in rendered diagnostics (`... in <file>`).
     file: &'p [u8],
     /// The script-global frame (always present) and the active local overlay
@@ -461,6 +467,7 @@ impl<'p> Evaluator<'p> {
             StmtKind::Unset(places) => {
                 for p in places {
                     let steps = self.resolve_steps(p)?;
+                    self.check_first_prop_write(p.base, &steps)?;
                     self.unset_place(p.base, &steps);
                 }
             }
@@ -1048,9 +1055,128 @@ impl<'p> Evaluator<'p> {
         Ok(out)
     }
 
+    /// Resolve a method by name, walking the inheritance chain child→ancestor
+    /// (step 19-3, D-19.10). Returns the *defining* class id and the method.
+    fn resolve_method(&self, start: ClassId, name: &[u8]) -> Option<(ClassId, &'p MethodDecl)> {
+        let classes: &'p [ClassDecl] = self.classes;
+        let mut cid = Some(start);
+        while let Some(c) = cid {
+            if let Some(m) = classes[c]
+                .methods
+                .iter()
+                .find(|m| m.decl.name.eq_ignore_ascii_case(name))
+            {
+                return Some((c, m));
+            }
+            cid = classes[c].parent;
+        }
+        None
+    }
+
+    /// Assemble an instance's property map: parent declarations first, then each
+    /// subclass, so the layout order is root→leaf and a redeclared property keeps
+    /// its inherited position with the subclass's default (step 19-3, D-19.10).
+    fn collect_props(&mut self, cid: ClassId) -> Result<Props, PhpError> {
+        let classes: &'p [ClassDecl] = self.classes;
+        let mut chain = Vec::new();
+        let mut c = Some(cid);
+        while let Some(x) = c {
+            chain.push(x);
+            c = classes[x].parent;
+        }
+        chain.reverse();
+        let mut props = Props::new();
+        for &x in &chain {
+            for p in &classes[x].props {
+                let v = match &p.default {
+                    Some(e) => self.eval(e)?,
+                    None => Zval::Null,
+                };
+                props.set(&p.name, v);
+            }
+        }
+        Ok(props)
+    }
+
+    /// The visibility and *declaring* class of a declared property, found by
+    /// walking the chain child→ancestor. `None` for a dynamic/undeclared property
+    /// (which is effectively public), step 19-3, D-19.13.
+    fn resolve_prop_decl(&self, class_id: ClassId, name: &[u8]) -> Option<(Visibility, ClassId)> {
+        let classes: &'p [ClassDecl] = self.classes;
+        let mut cid = Some(class_id);
+        while let Some(c) = cid {
+            if let Some(p) = classes[c].props.iter().find(|p| p.name.as_ref() == name) {
+                return Some((p.visibility, c));
+            }
+            cid = classes[c].parent;
+        }
+        None
+    }
+
+    /// Whether `a` is `b` or descends from it (used for protected access checks).
+    fn class_is_a(&self, a: ClassId, b: ClassId) -> bool {
+        let classes: &'p [ClassDecl] = self.classes;
+        let mut cur = Some(a);
+        while let Some(c) = cur {
+            if c == b {
+                return true;
+            }
+            cur = classes[c].parent;
+        }
+        false
+    }
+
+    /// Whether the given visibility, declared on `decl_class`, is accessible from
+    /// the current class context (`self.cur_class`), step 19-3, D-19.13.
+    fn visible_from(&self, vis: Visibility, decl_class: ClassId) -> bool {
+        match vis {
+            Visibility::Public => true,
+            Visibility::Private => self.cur_class == Some(decl_class),
+            // Protected: accessible from anywhere in the same hierarchy.
+            Visibility::Protected => matches!(
+                self.cur_class,
+                Some(cc) if self.class_is_a(cc, decl_class) || self.class_is_a(decl_class, cc)
+            ),
+        }
+    }
+
+    /// Enforce property visibility for an access on `class_id`. A dynamic /
+    /// undeclared property is always accessible (public).
+    fn check_prop_access(&self, class_id: ClassId, name: &[u8]) -> Result<(), PhpError> {
+        let Some((vis, decl_class)) = self.resolve_prop_decl(class_id, name) else {
+            return Ok(());
+        };
+        if self.visible_from(vis, decl_class) {
+            return Ok(());
+        }
+        let kind = if matches!(vis, Visibility::Private) {
+            "private"
+        } else {
+            "protected"
+        };
+        Err(PhpError::Error(format!(
+            "Cannot access {kind} property {}::${}",
+            String::from_utf8_lossy(&self.classes[decl_class].name),
+            String::from_utf8_lossy(name)
+        )))
+    }
+
+    /// If the first place step is a property, enforce its visibility against the
+    /// object the base designates (write/unset contexts), step 19-3. Deeper
+    /// properties in a chain are not checked (19-3 simplification).
+    fn check_first_prop_write(&self, base: PlaceBase, steps: &[Step]) -> Result<(), PhpError> {
+        if let Some(Step::Prop(name)) = steps.first() {
+            if let Zval::Object(o) = self.base_clone(base) {
+                let cid = o.borrow().class_id as usize;
+                return self.check_prop_access(cid, name);
+            }
+        }
+        Ok(())
+    }
+
     /// Evaluate `new ClassName(args)` (step 19, D-19.6): resolve the class, build
-    /// an instance with its declared properties initialised to their defaults,
-    /// then run `__construct` if the class defines one.
+    /// an instance with the full (inherited) property set initialised to defaults,
+    /// then run `__construct` (resolved up the chain) if one exists.
     fn eval_new(&mut self, class: &[u8], args: &[Expr]) -> Result<Zval, PhpError> {
         let cid = match self.class_index.get(&class.to_ascii_lowercase()) {
             Some(&i) => i,
@@ -1061,20 +1187,8 @@ impl<'p> Evaluator<'p> {
                 )))
             }
         };
-        // `classes` is `&'p [..]` (Copy), so the borrow detaches from `self` and
-        // we can evaluate default expressions (which need `&mut self`) freely.
-        let cdecl: &'p ClassDecl = &self.classes[cid];
-        let class_name = PhpStr::new(cdecl.name.to_vec());
-        let mut props = Props::new();
-        for p in &cdecl.props {
-            // Property defaults are constant expressions in PHP; evaluating them
-            // in the current frame is harmless (literals touch no slots / $this).
-            let v = match &p.default {
-                Some(e) => self.eval(e)?,
-                None => Zval::Null,
-            };
-            props.set(&p.name, v);
-        }
+        let class_name = PhpStr::new(self.classes[cid].name.to_vec());
+        let props = self.collect_props(cid)?;
         let id = self.next_id();
         let obj = Object {
             class_id: cid as u32,
@@ -1083,21 +1197,23 @@ impl<'p> Evaluator<'p> {
             id,
         };
         let value = Zval::Object(Rc::new(RefCell::new(obj)));
-        // Run the constructor (mutations write through the shared `Rc`, so they
-        // are visible in the returned value). Arguments are evaluated only when a
-        // constructor exists to receive them.
-        if find_method(cdecl, b"__construct").is_some() {
+        // Run the constructor (inherited if not overridden); its mutations write
+        // through the shared `Rc`, so they show in the returned value.
+        if let Some((defc, m)) = self.resolve_method(cid, b"__construct") {
             let argv = self.eval_value_args(args)?;
-            self.call_method(value.clone(), b"__construct", argv)?;
+            self.invoke_method(Some(value.clone()), defc, m, b"__construct", argv)?;
         }
         Ok(value)
     }
 
-    /// Read property `name` from a value (step 19, D-19.8). A missing property or
-    /// a non-object receiver warns and yields NULL, matching PHP.
+    /// Read property `name` from a value (step 19, D-19.8). Enforces visibility on
+    /// a declared property; a missing property or non-object receiver warns and
+    /// yields NULL, matching PHP.
     fn read_property(&mut self, recv: &Zval, name: &[u8]) -> Result<Zval, PhpError> {
         match recv {
             Zval::Object(o) => {
+                let cid = o.borrow().class_id as usize;
+                self.check_prop_access(cid, name)?;
                 let obj = o.borrow();
                 if let Some(v) = obj.props.get(name) {
                     return Ok(v.deref_clone());
@@ -1128,9 +1244,8 @@ impl<'p> Evaluator<'p> {
         }
     }
 
-    /// Invoke `$obj->method(argv)` (step 19, D-19.7): resolve the method on the
-    /// receiver's class, install a fresh frame with `$this` bound to the
-    /// receiver, and run the body via the shared [`Evaluator::run_user_fn_body`].
+    /// Invoke `$obj->method(argv)` (step 19, D-19.7): resolve the method up the
+    /// chain, enforce visibility, then run it with `$this` bound to the receiver.
     fn call_method(&mut self, recv: Zval, method: &[u8], argv: Vec<Zval>) -> Result<Zval, PhpError> {
         let cid = match &recv {
             Zval::Object(o) => o.borrow().class_id as usize,
@@ -1142,19 +1257,96 @@ impl<'p> Evaluator<'p> {
                 )))
             }
         };
-        let cdecl: &'p ClassDecl = &self.classes[cid];
-        let m: &'p MethodDecl = match find_method(cdecl, method) {
-            Some(m) => m,
+        let (defc, m) = match self.resolve_method(cid, method) {
+            Some(found) => found,
             None => {
                 return Err(PhpError::Error(format!(
                     "Call to undefined method {}::{}()",
-                    String::from_utf8_lossy(&cdecl.name),
+                    String::from_utf8_lossy(&self.classes[cid].name),
                     String::from_utf8_lossy(method)
                 )))
             }
         };
-        let f: &'p FnDecl = &m.decl;
+        self.check_method_access(defc, m, method)?;
+        self.invoke_method(Some(recv), defc, m, method, argv)
+    }
 
+    /// Dispatch a `self::method()` / `parent::method()` call (step 19-3): resolve
+    /// the starting class from the current method's context, find the method up
+    /// the chain, and invoke it keeping the current `$this`.
+    fn call_static(
+        &mut self,
+        class: &ClassRef,
+        method: &[u8],
+        argv: Vec<Zval>,
+    ) -> Result<Zval, PhpError> {
+        let start = match class {
+            ClassRef::SelfClass => self.cur_class,
+            ClassRef::Parent => self.cur_class.and_then(|c| self.classes[c].parent),
+        };
+        let start = start.ok_or_else(|| {
+            PhpError::Error(match class {
+                ClassRef::SelfClass => "Cannot use \"self\" outside class context".to_string(),
+                ClassRef::Parent => {
+                    "Cannot use \"parent\" when current class scope has no parent".to_string()
+                }
+            })
+        })?;
+        let (defc, m) = match self.resolve_method(start, method) {
+            Some(found) => found,
+            None => {
+                return Err(PhpError::Error(format!(
+                    "Call to undefined method {}::{}()",
+                    String::from_utf8_lossy(&self.classes[start].name),
+                    String::from_utf8_lossy(method)
+                )))
+            }
+        };
+        // `self::`/`parent::` run in the current instance context (keep `$this`).
+        let this = self.cur_this.clone();
+        self.invoke_method(this, defc, m, method, argv)
+    }
+
+    /// Enforce method visibility against the current class context (step 19-3).
+    fn check_method_access(
+        &self,
+        defining_class: ClassId,
+        m: &MethodDecl,
+        method: &[u8],
+    ) -> Result<(), PhpError> {
+        if self.visible_from(m.visibility, defining_class) {
+            return Ok(());
+        }
+        let kind = if matches!(m.visibility, Visibility::Private) {
+            "private"
+        } else {
+            "protected"
+        };
+        Err(PhpError::Error(format!(
+            "Call to {kind} method {}::{}() from {}",
+            String::from_utf8_lossy(&self.classes[defining_class].name),
+            String::from_utf8_lossy(method),
+            match self.cur_class {
+                Some(c) => format!(
+                    "scope {}",
+                    String::from_utf8_lossy(&self.classes[c].name)
+                ),
+                None => "global scope".to_string(),
+            }
+        )))
+    }
+
+    /// Shared method-frame setup (step 19): bind `$this` and the defining class,
+    /// check arity, bind parameters, run the body, then restore the saved context.
+    fn invoke_method(
+        &mut self,
+        this: Option<Zval>,
+        defining_class: ClassId,
+        m: &'p MethodDecl,
+        method: &[u8],
+        argv: Vec<Zval>,
+    ) -> Result<Zval, PhpError> {
+        let f: &'p FnDecl = &m.decl;
         let required = f.params.iter().filter(|p| p.default.is_none()).count();
         if argv.len() < required {
             let expected = if required == f.params.len() {
@@ -1164,8 +1356,8 @@ impl<'p> Evaluator<'p> {
             };
             return Err(PhpError::Error(format!(
                 "Too few arguments to function {}::{}(), {} passed and {} expected",
-                String::from_utf8_lossy(&cdecl.name),
-                String::from_utf8_lossy(&f.name),
+                String::from_utf8_lossy(&self.classes[defining_class].name),
+                String::from_utf8_lossy(method),
                 argv.len(),
                 expected,
             )));
@@ -1175,7 +1367,8 @@ impl<'p> Evaluator<'p> {
         let saved_locals = self.locals.replace(frame);
         let saved_names = self.local_names.replace(f.slots.as_slice());
         let saved_returns_ref = std::mem::replace(&mut self.fn_returns_ref, f.by_ref);
-        let saved_this = self.cur_this.replace(recv);
+        let saved_this = std::mem::replace(&mut self.cur_this, this);
+        let saved_class = self.cur_class.replace(defining_class);
 
         let args: Vec<Arg> = argv.into_iter().map(Arg::Val).collect();
         let result = self.run_user_fn_body(f, args);
@@ -1184,6 +1377,7 @@ impl<'p> Evaluator<'p> {
         self.local_names = saved_names;
         self.fn_returns_ref = saved_returns_ref;
         self.cur_this = saved_this;
+        self.cur_class = saved_class;
         result.map(|r| match r {
             Zval::Ref(cell) => cell.borrow().clone(),
             other => other,
@@ -1604,6 +1798,7 @@ impl<'p> Evaluator<'p> {
 
             ExprKind::IncDecPlace { place, inc, pre } => {
                 let steps = self.resolve_steps(place)?;
+                self.check_first_prop_write(place.base, &steps)?;
                 let mut val = match self.read_place_value(place.base, &steps)? {
                     Zval::Undef => Zval::Null,
                     v => v,
@@ -1752,6 +1947,7 @@ impl<'p> Evaluator<'p> {
                 // (so `$a[f()][g()] = h()` runs f, g, then h). Resolve the place
                 // steps first to match — and stay consistent with AssignOpPlace.
                 let steps = self.resolve_steps(place)?;
+                self.check_first_prop_write(place.base, &steps)?;
                 let value = self.eval(rhs)?;
                 self.write_place(place.base, &steps, value.clone())?;
                 Ok(value)
@@ -1759,6 +1955,7 @@ impl<'p> Evaluator<'p> {
 
             ExprKind::AssignOpPlace(op, place, rhs) => {
                 let steps = self.resolve_steps(place)?;
+                self.check_first_prop_write(place.base, &steps)?;
                 let cur = self.read_place_value(place.base, &steps)?;
                 let rv = self.eval(rhs)?;
                 let res = self.apply_binop(*op, cur, rv)?;
@@ -1768,6 +1965,7 @@ impl<'p> Evaluator<'p> {
 
             ExprKind::AssignCoalescePlace(place, rhs) => {
                 let steps = self.resolve_steps(place)?;
+                self.check_first_prop_write(place.base, &steps)?;
                 match self.silent_get(place.base, &steps) {
                     Some(v) if !matches!(v, Zval::Null | Zval::Undef) => Ok(v),
                     _ => {
@@ -1856,6 +2054,15 @@ impl<'p> Evaluator<'p> {
                     "Using $this when not in object context".to_string(),
                 )),
             },
+
+            ExprKind::StaticCall {
+                class,
+                method,
+                args,
+            } => {
+                let argv = self.eval_value_args(args)?;
+                self.call_static(class, method, argv)
+            }
         }
     }
 
@@ -2439,16 +2646,6 @@ fn write_into(
         }
     }
     Ok(())
-}
-
-/// Find a method by name (ASCII-case-insensitive) on a class (step 19). 19-1 has
-/// no inheritance, so only the class's own methods are searched; the parent-chain
-/// walk arrives in 19-3.
-fn find_method<'a>(cdecl: &'a ClassDecl, name: &[u8]) -> Option<&'a MethodDecl> {
-    cdecl
-        .methods
-        .iter()
-        .find(|m| m.decl.name.eq_ignore_ascii_case(name))
 }
 
 /// Promote `target` to a reference and return its shared cell. An existing

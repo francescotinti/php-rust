@@ -1730,3 +1730,109 @@ fn oop_isset_empty_unset_property() {
         "Abcde"
     );
 }
+
+// --- Step 19-3: inheritance, parent::/self::, visibility ---
+
+#[test]
+fn oop_inherited_method() {
+    assert_eq!(
+        out("<?php class A { function hi() { return 'A'; } } class B extends A {} echo (new B)->hi();"),
+        "A"
+    );
+}
+
+#[test]
+fn oop_method_override() {
+    assert_eq!(
+        out(
+            "<?php class A { function hi() { return 'A'; } } \
+             class B extends A { function hi() { return 'B'; } } echo (new B)->hi();"
+        ),
+        "B"
+    );
+}
+
+#[test]
+fn oop_parent_call() {
+    assert_eq!(
+        out(
+            "<?php class A { function hi() { return 'A'; } } \
+             class B extends A { function hi() { return parent::hi() . 'B'; } } echo (new B)->hi();"
+        ),
+        "AB"
+    );
+}
+
+#[test]
+fn oop_self_resolves_to_defining_class() {
+    // `self::who()` binds to the class that *defines* the method (A), not the
+    // runtime class (B) — that distinction is late static binding (`static::`).
+    assert_eq!(
+        out(
+            "<?php class A { function who() { return 'A'; } function call() { return self::who(); } } \
+             class B extends A { function who() { return 'B'; } } echo (new B)->call();"
+        ),
+        "A"
+    );
+}
+
+#[test]
+fn oop_parent_constructor_chain() {
+    assert_eq!(
+        out(
+            "<?php class A { public $x; function __construct($x) { $this->x = $x; } } \
+             class B extends A { public $y; \
+             function __construct($x, $y) { parent::__construct($x); $this->y = $y; } } \
+             $b = new B(1, 2); echo $b->x, $b->y;"
+        ),
+        "12"
+    );
+}
+
+#[test]
+fn oop_inherited_constructor() {
+    // A subclass with no constructor inherits the parent's.
+    assert_eq!(
+        out(
+            "<?php class A { public $x; function __construct($x) { $this->x = $x; } } \
+             class B extends A {} $b = new B(7); echo $b->x;"
+        ),
+        "7"
+    );
+}
+
+#[test]
+fn oop_private_property_from_outside_is_fatal() {
+    let o = run_source(b"t.php", b"<?php class A { private $s = 1; } $a = new A; echo $a->s;")
+        .expect("lowers");
+    match o.fatal {
+        Some(PhpError::Error(m)) => assert_eq!(m, "Cannot access private property A::$s"),
+        other => panic!("expected private-access fatal, got {other:?}"),
+    }
+}
+
+#[test]
+fn oop_protected_property_accessible_from_subclass() {
+    assert_eq!(
+        out(
+            "<?php class A { protected $p = 9; } \
+             class B extends A { function get() { return $this->p; } } echo (new B)->get();"
+        ),
+        "9"
+    );
+}
+
+#[test]
+fn oop_private_method_from_outside_is_fatal() {
+    let o = run_source(
+        b"t.php",
+        b"<?php class A { private function s() { return 1; } } $a = new A; echo $a->s();",
+    )
+    .expect("lowers");
+    match o.fatal {
+        Some(PhpError::Error(m)) => {
+            assert_eq!(m, "Call to private method A::s() from global scope")
+        }
+        other => panic!("expected private-method fatal, got {other:?}"),
+    }
+}

@@ -72,11 +72,27 @@ pub enum Visibility {
 pub struct ClassDecl {
     /// Name as written (original case); resolved ASCII-case-insensitively.
     pub name: Box<[u8]>,
-    /// Instance properties, in declaration order (var_dump order).
+    /// Superclass (`extends`), resolved to its [`ClassId`] at lowering (step
+    /// 19-3, D-19.10). `None` for a root class. Properties and methods are
+    /// resolved by walking this chain at runtime, not flattened at lowering.
+    pub parent: Option<ClassId>,
+    /// Instance properties *declared on this class* (not the inherited ones), in
+    /// declaration order. The full instance layout is parent-first, assembled at
+    /// `new` time (D-19.10).
     pub props: Vec<PropDecl>,
-    /// Methods, in declaration order. Resolved by name (case-insensitive).
+    /// Methods declared on this class, in declaration order. Resolved by name
+    /// (case-insensitive), walking the parent chain for inheritance.
     pub methods: Vec<MethodDecl>,
     pub line: Line,
+}
+
+/// How a `::`-qualified static/self reference names its class (step 19-3/19-4).
+#[derive(Debug, Clone, PartialEq)]
+pub enum ClassRef {
+    /// `self::` — the class that *defines* the running method.
+    SelfClass,
+    /// `parent::` — the parent of the class that defines the running method.
+    Parent,
 }
 
 /// One declared instance property (step 19). `default` is evaluated per instance
@@ -440,6 +456,16 @@ pub enum ExprKind {
     /// method context the evaluator raises the fatal "Using $this when not in
     /// object context".
     This,
+
+    /// `self::method(args)` / `parent::method(args)` (step 19-3, D-19.11): a call
+    /// resolved against the *defining* class (or its parent) of the running
+    /// method, keeping the current `$this`. Named-class and `static::` static
+    /// calls arrive in 19-4.
+    StaticCall {
+        class: ClassRef,
+        method: Box<[u8]>,
+        args: Vec<Expr>,
+    },
 }
 
 /// One element of an array literal: an optional key plus a value.

@@ -22,17 +22,17 @@ use mago_span::{HasSpan, Span};
 use mago_syntax::ast::{
     Access, Argument, ArrayElement, ArrowFunction, AssignmentOperator, BinaryOperator, Call,
     Class, ClassLikeMember, ClassLikeMemberSelector, Closure, Construct, DeclareBody, Expression,
-    ForeachTarget, Function, FunctionLikeParameterList, Hint, Identifier, Instantiation, Literal,
-    LiteralInteger, MatchArm as AstMatchArm, Method, MethodBody, Modifier, Node, PartialApplication,
-    Property, PropertyItem, Statement, StaticItem, UnaryPostfixOperator, UnaryPrefixOperator,
-    Variable,
+    Extends, ForeachTarget, Function, FunctionLikeParameterList, Hint, Identifier, Instantiation,
+    Literal, LiteralInteger, MatchArm as AstMatchArm, Method, MethodBody, Modifier, Node,
+    PartialApplication, Property, PropertyItem, Statement, StaticItem, UnaryPostfixOperator,
+    UnaryPrefixOperator, Variable,
 };
 use mago_syntax::parser::parse_file;
 
 use crate::hir::{
-    ArrayElem, BinOp, Capture, Case, CastKind, ClassDecl, Expr, ExprKind, FnDecl, GlobalBinding,
-    Line, MatchArm, MethodDecl, Param, Place, PlaceBase, PlaceStep, Program, PropDecl, ScalarType,
-    Slot, StaticBinding, Stmt, StmtKind, TypeHint, UnOp, Visibility,
+    ArrayElem, BinOp, Capture, Case, CastKind, ClassDecl, ClassRef, Expr, ExprKind, FnDecl,
+    GlobalBinding, Line, MatchArm, MethodDecl, Param, Place, PlaceBase, PlaceStep, Program,
+    PropDecl, ScalarType, Slot, StaticBinding, Stmt, StmtKind, TypeHint, UnOp, Visibility,
 };
 
 /// Why a script could not be lowered to HIR.
@@ -519,12 +519,30 @@ impl<'f> Lowerer<'f> {
     /// sub-steps and lower to [`LowerError::Unsupported`] for now.
     fn lower_class(&mut self, class: &Class) -> Result<ClassDecl, LowerError> {
         let line = self.line_of(class.span());
-        if class.extends.is_some() || class.implements.is_some() {
+        // `implements` (interfaces) is step 19-5; only single `extends` here.
+        if class.implements.is_some() {
             return Err(LowerError::Unsupported {
-                what: "class inheritance",
+                what: "interface implementation",
                 line,
             });
         }
+        // Resolve `extends ParentName` to the parent's class id (registered in
+        // pass 1 of `hoist_classes`, so forward references work, D-19.10).
+        let parent = match &class.extends {
+            Some(ext) => {
+                let pname = parent_name(ext, line)?;
+                match self.class_index.get(&pname.to_ascii_lowercase()) {
+                    Some(&i) => Some(i),
+                    None => {
+                        return Err(LowerError::Unsupported {
+                            what: "extends undefined class",
+                            line,
+                        })
+                    }
+                }
+            }
+            None => None,
+        };
         let name: Box<[u8]> = class.name.value.into();
         let mut props = Vec::new();
         let mut methods = Vec::new();
@@ -542,6 +560,7 @@ impl<'f> Lowerer<'f> {
         }
         Ok(ClassDecl {
             name,
+            parent,
             props,
             methods,
             line,
@@ -1275,12 +1294,17 @@ impl<'f> Lowerer<'f> {
                     nullsafe: true,
                 });
             }
-            // `Class::method(args)` — static call, step 19-4.
-            Call::StaticMethod(_) => {
-                return Err(LowerError::Unsupported {
-                    what: "static method call",
-                    line,
-                })
+            // `self::m()` / `parent::m()` (step 19-3); named-class and `static::`
+            // static calls are step 19-4.
+            Call::StaticMethod(sm) => {
+                let class = static_class_ref(sm.class, line)?;
+                let method = member_name(&sm.method, line)?;
+                let args = self.lower_positional_args(&sm.argument_list, line)?;
+                return Ok(ExprKind::StaticCall {
+                    class,
+                    method: method.into(),
+                    args,
+                });
             }
         };
         // A non-identifier callee (`$f(...)`, `$a['k'](...)`, an IIFE) is a
@@ -1543,6 +1567,32 @@ fn member_name<'a>(sel: &ClassLikeMemberSelector<'a>, line: Line) -> Result<&'a 
         ClassLikeMemberSelector::Identifier(id) => Ok(id.value),
         _ => Err(LowerError::Unsupported {
             what: "dynamic member name",
+            line,
+        }),
+    }
+}
+
+/// The single parent class name in an `extends` clause (PHP classes are
+/// single-inheritance, so only the first type matters), step 19-3.
+fn parent_name<'a>(ext: &Extends<'a>, line: Line) -> Result<&'a [u8], LowerError> {
+    match ext.types.iter().next() {
+        Some(id) => Ok(function_name(id)),
+        None => Err(LowerError::Unsupported {
+            what: "empty extends clause",
+            line,
+        }),
+    }
+}
+
+/// Classify the class side of a `::` static call. 19-3 handles `self`/`parent`;
+/// named classes and `static::` (late static binding) are step 19-4.
+fn static_class_ref(class: &Expression, line: Line) -> Result<ClassRef, LowerError> {
+    match class {
+        Expression::Self_(_) => Ok(ClassRef::SelfClass),
+        Expression::Parent(_) => Ok(ClassRef::Parent),
+        // Named class (`Foo::m()`) and `static::` (late static binding) → 19-4.
+        _ => Err(LowerError::Unsupported {
+            what: "named or static:: static call",
             line,
         }),
     }
