@@ -20,6 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 24) | 512 |
 | Unit/integration (workspace, fine step 23) | 497 |
 | Unit/integration (workspace, fine step 22) | 462 |
 | Unit/integration (workspace, fine step 21) | 433 |
@@ -268,3 +269,42 @@ d'interfaccia. Dettaglio in `04-divergences.md`.
 skip** (152 tot, 70.5% dei runnable) — prima dello step 23 ~tutti skip
 "unsupported". Fail residui: by-ref readonly, operatori d'ordine fra oggetti,
 validazioni compile-time, Reflection*/SPL/WeakMap, stack-trace frames.
+
+## Step 24 — Stringable + __destruct
+
+3 sotto-step TDD (+15 test, 497 → 512), clippy pulito, **zero D-NEW**. Tutto
+intercettato nei punti esistenti (instanceof, dispatch di `new`, boundary di
+statement); nessuna modifica all'HIR/lowerer salvo una riga di PRELUDE.
+
+| Sotto-step | Contenuto | Test |
+|---|---|---|
+| 24-1 | **Stringable** auto-interface: `interface Stringable {}` nel PRELUDE; `is_instance_of` special-case → true se la classe ha `__toString` risolvibile (auto-impl PHP 8), `implements` esplicito gratis | 3 |
+| 24-2 | **__destruct** shutdown: tracking degli oggetti creati (`Evaluator.created`), `run_destructors` a fine script in ordine LIFO, dopo il fatal eventuale | 4 |
+| 24-3 | **__destruct** refcount-zero immediato: tracking passato a `Rc` forti, sweep ai boundary di statement global-scope (`Rc::strong_count==1` ⇒ irraggiungibile), loop a fixpoint per il rilascio transitivo | 8 |
+
+**Meccanismo 24-3:** un oggetto il cui unico `Rc` forte residuo è quello di
+tracking non è più raggiungibile dal programma → `__destruct` dovuto. Lo sweep
+gira ai boundary di statement con `locals.is_none()` (i corpi dei dtor girano
+con un frame locale, quindi niente rientranza). Copre `unset`, riassegnazione,
+temporanei scartati, uscita di scope di funzione e rilascio transitivo
+(array/proprietà che teneva l'ultimo riferimento). A fine script
+`run_destructors` finalizza i sopravvissuti (tenuti dai global), ordine LIFO.
+
+**Validazione corpus:** `/tmp/php-src/Zend/tests/magic_methods` **18 pass / 22
+fail / 117 skip** (45% dei runnable). I 4 test mirati (`bug29368_2`, `bug43175`,
+`bug72177`, `dtor_scope`) falliscono solo su feature fuori scope (Reflection*,
+`array_push` by-ref su non-lvalue), non sul `__destruct`. `tests/classes`
+**`factory_and_singleton_002`** conferma il timing: la nostra sequenza
+interlacciata "Destruct x"/"Destruct y" combacia byte-per-byte con PHP (diverge
+solo sul Warning di visibilità per la chiamata esplicita a `__destruct()`
+protetto). Stringable: `stringable_automatic_implementation` produce il primo
+`var_dump(... instanceof Stringable)` = `bool(true)` corretto, fallisce solo
+sul `ReflectionClass` successivo.
+
+**Scope-out (debito esplicito):** eccezione lanciata dentro un `__destruct`
+(PHP la trasforma in fatal di shutdown; noi la inghiottiamo); timing
+intra-statement dentro funzioni (i temporanei per-iterazione di un loop in
+funzione sono finalizzati al boundary global racchiudente, non per statement
+interno); oggetti creati durante lo sweep di shutdown non ri-finalizzati;
+check di firma/visibilità sulla chiamata esplicita a `__destruct()`;
+`implements Stringable` senza `__toString` non è un errore compile-time da noi.
