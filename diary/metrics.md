@@ -20,6 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 19) | 377 (17 suite) |
 | Unit/integration (workspace, fine step 18) | 323 (17 suite) |
 | Unit/integration (workspace, fine step 17) | 264 (17 suite) |
 | Differential vs oracle (php-types) | 37.835 casi, 0 mismatch |
@@ -90,6 +91,7 @@ del differential sono state riconciliate verso il comportamento dell'oracle).
 | Step 16 (`declare(strict_types=1)`: parsing declare + flag strict + coerce_strict int→float widening, 1 sotto-step) | ~0.75h |
 | Step 17 (espansione builtin per frequenza: 24 fn pure in 5 gruppi TDD — case/build/trim/math/array) | ~1.25h |
 | Step 18 (closures/callables: 7 gruppi TDD — infra+use, arrow, is_callable/call_user_func, ConstFetch, array_map/filter/usort, first-class callable, var_dump esatto) | ~3h |
+| Step 19 (OOP/classi: 7 gruppi TDD — infra, write-path prop, ereditarietà+visibility, static+costanti+LSB, instanceof+interfacce+abstract, __toString+closure-bind, var_dump+recursion) | ~5h |
 | **Totale a fine step 18** | **~30h** |
 
 ## Step 10 — espansione builtin
@@ -163,6 +165,57 @@ sé stessa per riferimento — `use(&$f)` — andrebbe in loop infinito; PHP sta
 Validazione corpus: `Zend/tests/closures` ora gira (6 pass / 5 fail / 124 skip;
 i 5 fail sono `["static"]` mancante o il nome-file sintetico `test.phpt` del
 harness, non regressioni) — prima dello step 18 erano tutti skip "unsupported".
+
+## Step 19 — OOP / classi
+
+Il blocco più grande del corpus, 7 gruppi TDD (+54 test, 323 → 377), clippy pulito,
+zero D-NEW. Semantica oracle-verificata su 8.5.7. Dettaglio completo in
+`diary/02-mapping-table.md` § "Step 19 — OOP / classi (design pass)".
+
+- **19-1** infra: `Zval::Object(Rc<RefCell<Object>>)` con **semantica handle**
+  (clone condivide l'`Rc`, mutazioni visibili a tutti — contrasta l'array COW); nuovo
+  modulo php-types `object` (`Object`+`Props` mappa ordinata); class table
+  `Program.classes`/`ClassDecl`/`MethodDecl`; lowering classe 2-pass (nomi poi corpi);
+  `new C(args)`; `__construct`; `$this`=`ExprKind::This` (no slot, letto da `cur_this`);
+  `$obj->m()`=`ExprKind::MethodCall`; prop read=`ExprKind::PropGet`; write semplice via
+  `PlaceStep::Prop` (entra nel `RefCell`, niente write-back COW); arm `Object` in tutti
+  i funnel ops/convert/var_dump.
+- **19-2** write-path proprietà completo: compound (`$o->n+=`), inc/dec
+  (`ExprKind::IncDecPlace`, copre gratis anche `$a[k]++`), `??=`, `$o->arr[]`, nested
+  `$a->b->c`, isset/empty/unset.
+- **19-3** ereditarietà: `extends` (parent risolto a `ClassId`), risoluzione metodi
+  child→ancestor (override + costruttore ereditato), prop flatten parent-first;
+  `parent::`/`self::`=`ExprKind::StaticCall`+`ClassRef` (self = classe **definente**,
+  no LSB); enforcement visibility public/protected/private su read+write+metodi
+  (messaggi fatal esatti).
+- **19-4** static + costanti + LSB: costanti di classe (`Class::C`/`self::C`/`::class`,
+  valutate nel contesto della classe dichiarante); static props (cella persistente
+  per-declaring-class in HashMap, `Class::$p` read/write/compound/incdec); static
+  method call `Class::m()`; **late static binding** (`cur_static_class`, `new static`,
+  `static::m()`, forwarding self/parent/static vs rebind per Named).
+- **19-5** instanceof + interfacce + abstract: `ExprKind::InstanceOf` (transitivo su
+  catena + interfacce + interface-extends); `interface`/`implements` (tabella classi
+  condivisa, `is_interface`); abstract class/interface non istanziabili (fatal
+  runtime); metodi abstract = solo firma (skip al lowering).
+- **19-6** `__toString` + closure binding: helper `stringify` in echo/concat
+  (intercettato in `apply_binop`)/`(string)` — chiude il debito step-18 di `to_zstr`;
+  `Closure.bound_this` con cattura `$this` alla creazione (closure/arrow non-static,
+  `static fn` no-bind); `bindTo`/`call`/`Closure::bind`/`fromCallable`.
+- **19-7** var_dump/print_r esatti: annotazioni visibility (`["p":protected]`,
+  `["p":"C":private]`; print_r `[p:C:private]`) via `ObjectInfo`/`PropVis` portati nel
+  valore (shape per-classe cache); **recursion-guard generale** (`*RECURSION*`) su
+  oggetti e array (fixa anche un loop latente su array auto-referenziali).
+
+**Validazione corpus:** `/tmp/php-src/tests/classes` ora **57 pass / 45 fail / 181
+skip** (102 runnable) — prima dello step 19 erano ~tutti skip "unsupported". I fail
+residui sono feature fuori Tier-1 (deprecation dynamic-prop, magic dinamici, typed
+properties, ecc.).
+
+**Scope-out / debito:** `final` enforcement (fatal *compile-time*, formato diverso);
+`closure instanceof Closure`; scope-binding closure per private; sprintf `%s`
+`__toString`; closure `["static"]` in var_dump; `__get`/`__set`/`__call`; traits;
+enum; anonymous class; nomi membro dinamici. **Eccezioni = step 20** (riusano queste
+classi).
 
 ## Step 11 — reference semantics (a livello di variabile)
 

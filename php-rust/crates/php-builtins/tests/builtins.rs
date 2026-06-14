@@ -45,6 +45,40 @@ fn var_dump_object_public_props() {
 }
 
 #[test]
+fn var_dump_object_visibility() {
+    // Step 19-7: protected and private annotations (private shows declaring class).
+    assert_eq!(
+        out("<?php class A { public $a = 1; protected $b = 2; private $c = 3; } var_dump(new A);"),
+        "object(A)#1 (3) {\n  [\"a\"]=>\n  int(1)\n  [\"b\":protected]=>\n  int(2)\n  [\"c\":\"A\":private]=>\n  int(3)\n}\n"
+    );
+}
+
+#[test]
+fn var_dump_inherited_private_declaring_class() {
+    // A private property inherited from A is annotated with A as declaring class.
+    assert_eq!(
+        out("<?php class A { private $x = 1; } class B extends A { public $y = 2; } var_dump(new B);"),
+        "object(B)#1 (2) {\n  [\"x\":\"A\":private]=>\n  int(1)\n  [\"y\"]=>\n  int(2)\n}\n"
+    );
+}
+
+#[test]
+fn var_dump_object_recursion() {
+    assert_eq!(
+        out("<?php class A { public $self; } $a = new A; $a->self = $a; var_dump($a);"),
+        "object(A)#1 (1) {\n  [\"self\"]=>\n  *RECURSION*\n}\n"
+    );
+}
+
+#[test]
+fn print_r_object_visibility() {
+    assert_eq!(
+        out("<?php class A { public $a = 1; protected $b = 2; private $c = 3; } print_r(new A);"),
+        "A Object\n(\n    [a] => 1\n    [b:protected] => 2\n    [c:A:private] => 3\n)\n"
+    );
+}
+
+#[test]
 fn var_dump_array() {
     // (array) cast is the only way to build an array in Tier 1 so far.
     assert_eq!(

@@ -418,4 +418,47 @@ enforcement; property hooks 8.4; clone/`__clone`; nomi membro dinamici complessi
 builtin di reflection (valutare a parte); covarianza/contravarianza tipi; GC ciclico
 (handle + prop creano cicli → leak accettato come gli element-ref, D-R15).
 
-## STATO: design pass (implementazione 19-1..19-7 in corso)
+## STATO: IMPLEMENTATO (7 gruppi, +54 test 323→377, clippy pulito, zero D-NEW)
+
+Tutti e 7 i gruppi shippati come da design (design `43379f1`; 19-1 `92b8360`,
+19-2 `ba0c2e4`, 19-3 `1b628cd`, 19-4 `bae3c7a`, 19-5 `1e07a13`, 19-6 `5d59ba3`,
+19-7 = questo commit docs). Nessuna D-decisione riaperta.
+
+- **19-1**: `Zval::Object(Rc<RefCell<Object>>)` (handle semantics) + `Object`/`Props`
+  (php-types) + `Program.classes`/`ClassDecl`/`MethodDecl` + lowering classe (2-pass
+  hoist) + `new` + `__construct` + `$this`=`ExprKind::This` + `$obj->m()` + prop read
+  + write semplice (`PlaceStep::Prop`).
+- **19-2**: write-path completo proprietà (compound, `++`=`IncDecPlace` che copre anche
+  `$a[k]++`, `??=`, `$o->arr[]`, nested, isset/empty/unset).
+- **19-3**: ereditarietà (`extends`, risoluzione metodi su catena, override, prop
+  flatten parent-first), `parent::`/`self::` (=`ExprKind::StaticCall`+`ClassRef`,
+  `cur_class`), enforcement visibility public/protected/private (read+write+metodi).
+- **19-4**: costanti di classe (`Class::C`/`self::C`/`::class`), static props
+  (cella persistente per-declaring-class, `Class::$p` read/write/compound/incdec),
+  static method call, **late static binding** (`cur_static_class`, `new static`,
+  `static::m()`, forwarding self/parent/static).
+- **19-5**: `instanceof` (=`ExprKind::InstanceOf`, transitivo su catena+interfacce),
+  `interface`/`implements`, abstract non istanziabile (fatal runtime), metodi
+  abstract = solo firma (skip al lowering).
+- **19-6**: `__toString` (helper `stringify` in echo/concat/`(string)`; chiude il
+  debito step-18 di `to_zstr`), closure bind `$this` (`Closure.bound_this`,
+  cattura alla creazione per closure/arrow non-static; `static fn` no-bind),
+  `bindTo`/`call`/`Closure::bind`/`fromCallable`.
+- **19-7**: var_dump/print_r esatti per oggetti con annotazioni visibility
+  (`["p":protected]`, `["p":"C":private]`; print_r `[p:C:private]`) via
+  `ObjectInfo`/`PropVis` portati nel valore (shape per-classe cache); **recursion
+  guard generale** (`*RECURSION*`) su oggetti e array (fixa anche un loop latente
+  su array auto-referenziali).
+
+**Validazione corpus:** `/tmp/php-src/tests/classes` ora **57 pass / 45 fail / 181
+skip** (102 runnable; prima dello step 19 erano ~tutti skip "unsupported").
+
+**Scope-out (debito esplicito → futuri step):** `final` enforcement (extend/override
+= fatal *compile-time* con formato diverso da "Uncaught"); `closure instanceof
+Closure` (le closure non sono object table-backed); scope binding delle closure per
+accesso a private (solo `$this` è legato); sprintf `%s` `__toString` (il builtin non
+può rientrare nell'evaluator); closure `["static"]` in var_dump (il recursion-guard
+ora c'è, ma le var catturate non sono ancora esposte); `__get`/`__set`/`__call` e gli
+altri magic dinamici; traits; enum; anonymous class; nomi membro dinamici
+(`$o->$n`); dynamic-prop deprecation 8.2; covarianza tipi. Eccezioni (`try/catch`/
+`throw` + Exception/Error) = **step 20**.

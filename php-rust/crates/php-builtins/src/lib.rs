@@ -17,7 +17,9 @@ mod string;
 use std::rc::Rc;
 
 use php_runtime::{Builtin, Ctx, Registry};
-use php_types::{convert, dtoa, numstr, Closure, ClosureRender, Key, PhpArray, PhpError, PhpStr, Zval};
+use php_types::{
+    convert, dtoa, numstr, Closure, ClosureRender, Key, PhpArray, PhpError, PhpStr, PropVis, Zval,
+};
 
 /// Build the Tier 1 builtin registry.
 pub fn registry() -> Registry {
@@ -112,14 +114,17 @@ fn var_dump(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         ));
     }
     for v in args {
-        dump(ctx.out, v, 0);
+        let mut seen = Vec::new();
+        dump(ctx.out, v, 0, &mut seen);
     }
     Ok(Zval::Null)
 }
 
 /// Recursive var_dump formatter. `indent` is the leading-space count for this
-/// value's own block; nested array entries indent by a further 2.
-fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize) {
+/// value's own block; nested entries indent by a further 2. `seen` holds the
+/// addresses of containers currently being dumped, so a value that refers back
+/// into its own subtree prints `*RECURSION*` instead of looping (step 19-7).
+fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
     match v {
         Zval::Undef | Zval::Null => out.extend_from_slice(b"NULL\n"),
         Zval::Bool(true) => out.extend_from_slice(b"bool(true)\n"),
@@ -137,6 +142,12 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize) {
             out.extend_from_slice(b"\"\n");
         }
         Zval::Array(a) => {
+            let ptr = Rc::as_ptr(a) as usize;
+            if seen.contains(&ptr) {
+                out.extend_from_slice(b"*RECURSION*\n");
+                return;
+            }
+            seen.push(ptr);
             out.extend_from_slice(format!("array({}) {{\n", a.len()).as_bytes());
             for (key, val) in a.iter() {
                 spaces(out, indent + 2);
@@ -155,17 +166,18 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize) {
                 match val {
                     Zval::Ref(cell) if std::rc::Rc::strong_count(cell) >= 2 => {
                         out.push(b'&');
-                        dump(out, &cell.borrow(), indent + 2);
+                        dump(out, &cell.borrow(), indent + 2, seen);
                     }
-                    _ => dump(out, val, indent + 2),
+                    _ => dump(out, val, indent + 2, seen),
                 }
             }
+            seen.pop();
             spaces(out, indent);
             out.extend_from_slice(b"}\n");
         }
         // A top-level reference is dereferenced transparently (the `&` marker
         // only applies to reference *elements* inside a container).
-        Zval::Ref(cell) => dump(out, &cell.borrow(), indent),
+        Zval::Ref(cell) => dump(out, &cell.borrow(), indent, seen),
         // A closure dumps as a `Closure` object with its name/file/line (or the
         // wrapped `function`) plus a `parameter` pseudo-property (step 18-7).
         Zval::Closure(c) => {
@@ -179,15 +191,20 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize) {
                 out.extend_from_slice(k);
                 out.extend_from_slice(b"\"]=>\n");
                 spaces(out, indent + 2);
-                dump(out, val, indent + 2);
+                dump(out, val, indent + 2, seen);
             }
             spaces(out, indent);
             out.extend_from_slice(b"}\n");
         }
-        // A class instance (step 19-1): `object(C)#N (k) { ["prop"]=> value … }`.
-        // Visibility annotations (`:protected` / `:"C":private`) and the general
-        // recursion guard are added in step 19-7; 19-1 renders public form.
+        // A class instance (step 19-7): `object(C)#N (k) { ["p"]=>…,
+        // ["p":protected]=>…, ["p":"C":private]=>… }`, with a recursion guard.
         Zval::Object(o) => {
+            let ptr = Rc::as_ptr(o) as usize;
+            if seen.contains(&ptr) {
+                out.extend_from_slice(b"*RECURSION*\n");
+                return;
+            }
+            seen.push(ptr);
             let obj = o.borrow();
             out.extend_from_slice(b"object(");
             out.extend_from_slice(obj.class_name.as_bytes());
@@ -196,10 +213,20 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize) {
                 spaces(out, indent + 2);
                 out.extend_from_slice(b"[\"");
                 out.extend_from_slice(k);
-                out.extend_from_slice(b"\"]=>\n");
+                match obj.info.vis_of(k) {
+                    PropVis::Public => out.extend_from_slice(b"\"]=>\n"),
+                    PropVis::Protected => out.extend_from_slice(b"\":protected]=>\n"),
+                    PropVis::Private(cls) => {
+                        out.extend_from_slice(b"\":\"");
+                        out.extend_from_slice(cls.as_bytes());
+                        out.extend_from_slice(b"\":private]=>\n");
+                    }
+                }
                 spaces(out, indent + 2);
-                dump(out, val, indent + 2);
+                dump(out, val, indent + 2, seen);
             }
+            drop(obj);
+            seen.pop();
             spaces(out, indent);
             out.extend_from_slice(b"}\n");
         }
@@ -246,7 +273,8 @@ fn print_r(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let v = arg1(args, "print_r")?;
     let want_return = matches!(args.get(1), Some(r) if convert::is_true_silent(r));
     let mut buf = Vec::new();
-    print_r_into(&mut buf, v, 0, ctx);
+    let mut seen = Vec::new();
+    print_r_into(&mut buf, v, 0, ctx, &mut seen);
     if want_return {
         Ok(Zval::Str(PhpStr::new(buf)))
     } else {
@@ -257,12 +285,18 @@ fn print_r(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 
 /// Recursive print_r renderer. `indent` is the leading-space count of this
 /// value's `(` block (0 at the top level); nested arrays add 8.
-fn print_r_into(out: &mut Vec<u8>, v: &Zval, indent: usize, ctx: &mut Ctx) {
+fn print_r_into(out: &mut Vec<u8>, v: &Zval, indent: usize, ctx: &mut Ctx, seen: &mut Vec<usize>) {
     match v {
         Zval::Array(a) => {
+            let ptr = Rc::as_ptr(a) as usize;
             out.extend_from_slice(b"Array\n");
             spaces(out, indent);
             out.extend_from_slice(b"(\n");
+            if seen.contains(&ptr) {
+                out.extend_from_slice(b" *RECURSION*");
+                return;
+            }
+            seen.push(ptr);
             for (key, val) in a.iter() {
                 spaces(out, indent + 4);
                 match key {
@@ -273,14 +307,15 @@ fn print_r_into(out: &mut Vec<u8>, v: &Zval, indent: usize, ctx: &mut Ctx) {
                         out.extend_from_slice(b"] => ");
                     }
                 }
-                print_r_into(out, val, indent + 8, ctx);
+                print_r_into(out, val, indent + 8, ctx, seen);
                 out.push(b'\n');
             }
+            seen.pop();
             spaces(out, indent);
             out.extend_from_slice(b")\n");
         }
         // print_r is reference-transparent: deref and recurse, no `&` marker.
-        Zval::Ref(cell) => print_r_into(out, &cell.borrow(), indent, ctx),
+        Zval::Ref(cell) => print_r_into(out, &cell.borrow(), indent, ctx, seen),
         // A closure prints as a `Closure Object` with the same pseudo-properties
         // var_dump uses (step 18-7).
         Zval::Closure(c) => {
@@ -293,9 +328,44 @@ fn print_r_into(out: &mut Vec<u8>, v: &Zval, indent: usize, ctx: &mut Ctx) {
                 out.push(b'[');
                 out.extend_from_slice(k);
                 out.extend_from_slice(b"] => ");
-                print_r_into(out, val, indent + 8, ctx);
+                print_r_into(out, val, indent + 8, ctx, seen);
                 out.push(b'\n');
             }
+            spaces(out, indent);
+            out.extend_from_slice(b")\n");
+        }
+        // A class instance (step 19-7): `C Object ( [p] => …, [p:protected] => …,
+        // [p:C:private] => … )`, with a recursion guard.
+        Zval::Object(o) => {
+            let ptr = Rc::as_ptr(o) as usize;
+            let obj = o.borrow();
+            out.extend_from_slice(obj.class_name.as_bytes());
+            out.extend_from_slice(b" Object\n");
+            spaces(out, indent);
+            out.extend_from_slice(b"(\n");
+            if seen.contains(&ptr) {
+                out.extend_from_slice(b" *RECURSION*");
+                return;
+            }
+            seen.push(ptr);
+            for (k, val) in obj.props.iter() {
+                spaces(out, indent + 4);
+                out.push(b'[');
+                out.extend_from_slice(k);
+                match obj.info.vis_of(k) {
+                    PropVis::Public => {}
+                    PropVis::Protected => out.extend_from_slice(b":protected"),
+                    PropVis::Private(cls) => {
+                        out.push(b':');
+                        out.extend_from_slice(cls.as_bytes());
+                        out.extend_from_slice(b":private");
+                    }
+                }
+                out.extend_from_slice(b"] => ");
+                print_r_into(out, val, indent + 8, ctx, seen);
+                out.push(b'\n');
+            }
+            seen.pop();
             spaces(out, indent);
             out.extend_from_slice(b")\n");
         }

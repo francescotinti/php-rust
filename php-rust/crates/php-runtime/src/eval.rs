@@ -21,7 +21,7 @@ use std::rc::Rc;
 
 use php_types::{
     convert, dtoa, numstr, ops, Closure, ClosureInfo, ClosureParam, ClosureRender, Diag, Diags,
-    Key, Object, PhpArray, PhpError, PhpStr, Props, Zval,
+    Key, Object, ObjectInfo, PhpArray, PhpError, PhpStr, PropVis, Props, Zval,
 };
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
@@ -190,6 +190,7 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         cur_class: None,
         cur_static_class: None,
         static_props: HashMap::new(),
+        class_shapes: HashMap::new(),
         file: &program.file,
         globals: fresh_slots(program.slots.len()),
         locals: None,
@@ -266,6 +267,9 @@ struct Evaluator<'p> {
     /// property name); lazily initialised from the declared default on first
     /// access and shared for the whole run (step 19-4, D-19.14).
     static_props: HashMap<(ClassId, Vec<u8>), Rc<RefCell<Zval>>>,
+    /// Cache of per-class property-visibility shapes for object dumping, built on
+    /// first instantiation and shared by all instances (step 19-7, D-19.20).
+    class_shapes: HashMap<ClassId, Rc<ObjectInfo>>,
     /// Script file name, reproduced in rendered diagnostics (`... in <file>`).
     file: &'p [u8],
     /// The script-global frame (always present) and the active local overlay
@@ -1193,6 +1197,41 @@ impl<'p> Evaluator<'p> {
         Ok(props)
     }
 
+    /// Build (and cache) a class's property-visibility shape for object dumping
+    /// (step 19-7, D-19.20): declared properties in root→leaf order, a redeclared
+    /// property taking the most-derived visibility.
+    fn class_shape(&mut self, cid: ClassId) -> Rc<ObjectInfo> {
+        if let Some(s) = self.class_shapes.get(&cid) {
+            return Rc::clone(s);
+        }
+        let classes: &'p [ClassDecl] = self.classes;
+        let mut chain = Vec::new();
+        let mut c = Some(cid);
+        while let Some(x) = c {
+            chain.push(x);
+            c = classes[x].parent;
+        }
+        chain.reverse();
+        let mut entries: Vec<(Box<[u8]>, PropVis)> = Vec::new();
+        for &x in &chain {
+            let cname = PhpStr::new(classes[x].name.to_vec());
+            for p in &classes[x].props {
+                let vis = match p.visibility {
+                    Visibility::Public => PropVis::Public,
+                    Visibility::Protected => PropVis::Protected,
+                    Visibility::Private => PropVis::Private(Rc::clone(&cname)),
+                };
+                match entries.iter_mut().find(|(k, _)| k.as_ref() == p.name.as_ref()) {
+                    Some(e) => e.1 = vis,
+                    None => entries.push((p.name.clone(), vis)),
+                }
+            }
+        }
+        let info = Rc::new(ObjectInfo::from_entries(entries));
+        self.class_shapes.insert(cid, Rc::clone(&info));
+        info
+    }
+
     /// The visibility and *declaring* class of a declared property, found by
     /// walking the chain child→ancestor. `None` for a dynamic/undeclared property
     /// (which is effectively public), step 19-3, D-19.13.
@@ -1320,12 +1359,14 @@ impl<'p> Evaluator<'p> {
         }
         let class_name = PhpStr::new(self.classes[cid].name.to_vec());
         let props = self.collect_props(cid)?;
+        let info = self.class_shape(cid);
         let id = self.next_id();
         let obj = Object {
             class_id: cid as u32,
             class_name,
             props,
             id,
+            info,
         };
         let value = Zval::Object(Rc::new(RefCell::new(obj)));
         // Run the constructor (inherited if not overridden); its mutations write

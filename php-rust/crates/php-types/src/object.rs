@@ -23,6 +23,44 @@ pub struct Object {
     pub props: Props,
     /// Object handle (`#N` in `var_dump`), assigned monotonically at creation.
     pub id: u32,
+    /// Per-class render metadata (declared-property visibility) so `var_dump` /
+    /// `print_r` can annotate `:protected` / `:"C":private` without the class
+    /// table (step 19-7, D-19.20). Shared (`Rc`) by all instances of a class.
+    pub info: Rc<ObjectInfo>,
+}
+
+/// Visibility of a declared property as rendered by `var_dump` / `print_r`
+/// (step 19-7). A dynamic (undeclared) property is treated as `Public`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PropVis {
+    Public,
+    Protected,
+    /// `private`, carrying the *declaring* class name (var_dump prints it).
+    Private(Rc<PhpStr>),
+}
+
+/// Per-class property-visibility table for object dumping (step 19-7, D-19.20).
+#[derive(Debug, Default)]
+pub struct ObjectInfo {
+    /// Declared property name → visibility, in declaration order. Dynamic
+    /// properties are absent and default to `Public`.
+    entries: Vec<(Box<[u8]>, PropVis)>,
+}
+
+impl ObjectInfo {
+    pub fn from_entries(entries: Vec<(Box<[u8]>, PropVis)>) -> Self {
+        ObjectInfo { entries }
+    }
+
+    /// The visibility of property `name`, defaulting to `Public` for a dynamic
+    /// (undeclared) property.
+    pub fn vis_of(&self, name: &[u8]) -> PropVis {
+        self.entries
+            .iter()
+            .find(|(k, _)| k.as_ref() == name)
+            .map(|(_, v)| v.clone())
+            .unwrap_or(PropVis::Public)
+    }
 }
 
 /// An insertion-ordered, string-keyed property map. Objects typically have only
