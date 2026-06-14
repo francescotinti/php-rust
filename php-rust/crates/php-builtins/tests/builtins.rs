@@ -584,6 +584,26 @@ fn array_pop_preserves_remaining_keys() {
     );
 }
 
+// --- step 17-1: string case ---
+
+#[test]
+fn strtoupper_strtolower_ascii_only() {
+    assert_eq!(out("<?php echo strtoupper('Hello, World! 123');"), "HELLO, WORLD! 123");
+    assert_eq!(out("<?php echo strtolower('Hello, WORLD!');"), "hello, world!");
+    // Bytes >= 0x80 are left untouched (ASCII-only, C locale).
+    assert_eq!(out("<?php var_dump(strtoupper('héllo'));"), "string(6) \"HéLLO\"\n");
+    assert_eq!(out("<?php echo strtoupper('');"), "");
+}
+
+#[test]
+fn ucfirst_lcfirst_ucwords() {
+    assert_eq!(out("<?php echo ucfirst('hello');"), "Hello");
+    assert_eq!(out("<?php var_dump(ucfirst(''));"), "string(0) \"\"\n");
+    assert_eq!(out("<?php echo lcfirst('Hello');"), "hello");
+    assert_eq!(out("<?php echo ucwords('hello world foo');"), "Hello World Foo");
+    assert_eq!(out("<?php echo ucwords(\"a\tb\nc\");"), "A\tB\nC");
+}
+
 #[test]
 fn undefined_function_is_fatal_after_output() {
     let reg = registry();

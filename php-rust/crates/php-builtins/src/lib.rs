@@ -35,6 +35,11 @@ pub fn registry() -> Registry {
     add(b"substr", string::substr);
     add(b"strpos", string::strpos);
     add(b"str_replace", string::str_replace);
+    add(b"strtoupper", string::strtoupper);
+    add(b"strtolower", string::strtolower);
+    add(b"ucfirst", string::ucfirst);
+    add(b"lcfirst", string::lcfirst);
+    add(b"ucwords", string::ucwords);
     add(b"sprintf", format::sprintf);
     add(b"printf", format::printf);
     add(b"abs", math::abs);

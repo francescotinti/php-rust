@@ -288,6 +288,64 @@ fn replace_all(s: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
     out
 }
 
+/// Sole `&str` argument coerced to bytes, or an `ArgumentCountError`-style fatal.
+fn str_arg(args: &[Zval], ctx: &mut Ctx, fname: &str) -> Result<Vec<u8>, PhpError> {
+    let v = args
+        .first()
+        .ok_or_else(|| PhpError::Error(format!("{fname}() expects exactly 1 argument, 0 given")))?;
+    Ok(convert::to_zstr(v, ctx.diags).as_bytes().to_vec())
+}
+
+/// strtoupper($string): ASCII-only uppercasing (C locale); bytes >= 0x80 intact.
+pub fn strtoupper(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let mut b = str_arg(args, ctx, "strtoupper")?;
+    b.make_ascii_uppercase();
+    Ok(Zval::Str(PhpStr::new(b)))
+}
+
+/// strtolower($string): ASCII-only lowercasing (C locale); bytes >= 0x80 intact.
+pub fn strtolower(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let mut b = str_arg(args, ctx, "strtolower")?;
+    b.make_ascii_lowercase();
+    Ok(Zval::Str(PhpStr::new(b)))
+}
+
+/// ucfirst($string): uppercase the first byte only.
+pub fn ucfirst(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let mut b = str_arg(args, ctx, "ucfirst")?;
+    if let Some(first) = b.first_mut() {
+        first.make_ascii_uppercase();
+    }
+    Ok(Zval::Str(PhpStr::new(b)))
+}
+
+/// lcfirst($string): lowercase the first byte only.
+pub fn lcfirst(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let mut b = str_arg(args, ctx, "lcfirst")?;
+    if let Some(first) = b.first_mut() {
+        first.make_ascii_lowercase();
+    }
+    Ok(Zval::Str(PhpStr::new(b)))
+}
+
+/// ucwords($string[, $delimiters]): uppercase the first byte and every byte that
+/// follows a delimiter. Default delimiters are " \t\r\n\f\v".
+pub fn ucwords(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let mut b = str_arg(args, ctx, "ucwords")?;
+    let delims: Vec<u8> = match args.get(1) {
+        Some(v) => convert::to_zstr(v, ctx.diags).as_bytes().to_vec(),
+        None => b" \t\r\n\x0c\x0b".to_vec(),
+    };
+    let mut at_word_start = true;
+    for byte in b.iter_mut() {
+        if at_word_start {
+            byte.make_ascii_uppercase();
+        }
+        at_word_start = delims.contains(byte);
+    }
+    Ok(Zval::Str(PhpStr::new(b)))
+}
+
 /// First byte index of `needle` in `hay`. Empty needle matches at 0.
 fn find_sub(hay: &[u8], needle: &[u8]) -> Option<usize> {
     if needle.is_empty() {
