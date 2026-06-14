@@ -642,12 +642,71 @@ fn assignment_evaluates_lvalue_offsets_before_rhs() {
 }
 
 #[test]
-fn function_type_hint_is_accepted_but_not_enforced() {
-    // Type hints lower successfully; we do not coerce or raise TypeError (step 8
-    // divergence). A string passed to an `int` hint flows through unchanged.
-    assert_eq!(
-        out("<?php function f(int $n) { return $n; } echo f('42abc');"),
-        "42abc"
+fn scalar_hint_coerces_int_float_string_bool() {
+    // Weak-mode scalar coercion of arguments to the parameter's declared type
+    // (step 14, oracle-verified). Strict `===` proves the coerced *type*, not
+    // just the value.
+    assert_eq!(out("<?php function f(int $x){ echo $x === 123 ? 'Y' : 'N'; } f('123');"), "Y");
+    assert_eq!(out("<?php function f(int $x){ echo $x === 1 ? 'Y' : 'N'; } f(true);"), "Y");
+    assert_eq!(out("<?php function f(float $x){ echo $x === 7.0 ? 'Y' : 'N'; } f(7);"), "Y");
+    assert_eq!(out("<?php function f(float $x){ echo $x === 1000.0 ? 'Y' : 'N'; } f('1e3');"), "Y");
+    assert_eq!(out("<?php function f(string $x){ echo $x === '42' ? 'Y' : 'N'; } f(42);"), "Y");
+    assert_eq!(out("<?php function f(string $x){ echo $x === '1' ? 'Y' : 'N'; } f(true);"), "Y");
+    assert_eq!(out("<?php function f(bool $x){ echo $x === false ? 'Y' : 'N'; } f(0);"), "Y");
+    assert_eq!(out("<?php function f(bool $x){ echo $x === true ? 'Y' : 'N'; } f('x');"), "Y");
+}
+
+#[test]
+fn nullable_scalar_hint() {
+    // `?int` accepts null verbatim, and still coerces a non-null argument.
+    assert_eq!(out("<?php function f(?int $x){ echo $x === null ? 'Y' : 'N'; } f(null);"), "Y");
+    assert_eq!(out("<?php function f(?int $x){ echo $x === 5 ? 'Y' : 'N'; } f('5');"), "Y");
+}
+
+#[test]
+fn scalar_hint_type_error_message() {
+    // A non-coercible argument raises a TypeError with PHP's exact message
+    // (oracle-verified; "Command line code" becomes the test file name).
+    let o = run_source(
+        b"t.php",
+        b"<?php function f(int $x){ return $x; } f('abc');",
+    )
+    .expect("lowers");
+    match &o.fatal {
+        Some(PhpError::TypeError(m)) => assert_eq!(
+            m,
+            "f(): Argument #1 ($x) must be of type int, string given, \
+             called in t.php on line 1 and defined in t.php:1"
+        ),
+        other => panic!("expected TypeError, got {other:?}"),
+    }
+}
+
+#[test]
+fn scalar_hint_type_error_null_and_array() {
+    // null and array report their PHP type names in the message.
+    let o = run_source(b"t.php", b"<?php function f(int $x){} f(null);").expect("lowers");
+    assert!(
+        matches!(&o.fatal, Some(PhpError::TypeError(m)) if m.contains("must be of type int, null given")),
+        "got {:?}",
+        o.fatal
+    );
+    let o = run_source(b"t.php", b"<?php function f(int $x){} f([1]);").expect("lowers");
+    assert!(
+        matches!(&o.fatal, Some(PhpError::TypeError(m)) if m.contains("must be of type int, array given")),
+        "got {:?}",
+        o.fatal
+    );
+}
+
+#[test]
+fn nullable_hint_type_error_shows_question_mark() {
+    // The nullable hint is rendered with its `?` in the error message.
+    let o = run_source(b"t.php", b"<?php function f(?int $x){} f('z');").expect("lowers");
+    assert!(
+        matches!(&o.fatal, Some(PhpError::TypeError(m)) if m.contains("must be of type ?int, string given")),
+        "got {:?}",
+        o.fatal
     );
 }
 

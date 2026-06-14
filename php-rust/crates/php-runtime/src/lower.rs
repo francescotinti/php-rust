@@ -21,14 +21,14 @@ use mago_database::file::File;
 use mago_span::{HasSpan, Span};
 use mago_syntax::ast::{
     Argument, ArrayElement, AssignmentOperator, BinaryOperator, Call, Construct, Expression,
-    ForeachTarget, Function, Identifier, Literal, LiteralInteger, MatchArm as AstMatchArm,
+    ForeachTarget, Function, Hint, Identifier, Literal, LiteralInteger, MatchArm as AstMatchArm,
     Statement, UnaryPostfixOperator, UnaryPrefixOperator, Variable,
 };
 use mago_syntax::parser::parse_file;
 
 use crate::hir::{
     ArrayElem, BinOp, Case, CastKind, Expr, ExprKind, FnDecl, GlobalBinding, Line, MatchArm, Param,
-    Place, PlaceBase, PlaceStep, Program, Slot, Stmt, StmtKind, UnOp,
+    Place, PlaceBase, PlaceStep, Program, ScalarType, Slot, Stmt, StmtKind, TypeHint, UnOp,
 };
 
 /// Why a script could not be lowered to HIR.
@@ -405,12 +405,17 @@ impl<'f> Lowerer<'f> {
         self.fn_by_ref = saved_by_ref;
 
         let (params, body) = inner?;
+        let ret_hint = func
+            .return_type_hint
+            .as_ref()
+            .and_then(|r| lower_hint(&r.hint));
         Ok(FnDecl {
             name,
             params,
             body,
             slots: local_scope.slots,
             by_ref,
+            ret_hint,
             line,
         })
     }
@@ -447,6 +452,7 @@ impl<'f> Lowerer<'f> {
                 slot,
                 default,
                 by_ref,
+                hint: p.hint.as_ref().and_then(lower_hint),
             });
         }
         let body = self.lower_stmts(func.body.statements.as_slice())?;
@@ -939,6 +945,31 @@ fn is_returnable_lvalue(e: &Expression) -> bool {
         Expression::Parenthesized(p) => is_returnable_lvalue(p.expression),
         _ => false,
     }
+}
+
+/// Map an AST type hint to an enforced [`TypeHint`], or `None` for any hint that
+/// step 14 does not enforce (class, union, array, mixed, …). Only the four
+/// scalar hints and their nullable forms are enforced (D-14.1/D-14.2).
+fn lower_hint(hint: &Hint) -> Option<TypeHint> {
+    let scalar = match hint {
+        Hint::Integer(_) => ScalarType::Int,
+        Hint::Float(_) => ScalarType::Float,
+        Hint::String(_) => ScalarType::String,
+        Hint::Bool(_) => ScalarType::Bool,
+        Hint::Nullable(n) => {
+            // `?int` etc.: enforce only when the inner hint is itself scalar.
+            let inner = lower_hint(n.hint)?;
+            return Some(TypeHint {
+                nullable: true,
+                ..inner
+            });
+        }
+        _ => return None,
+    };
+    Some(TypeHint {
+        kind: scalar,
+        nullable: false,
+    })
 }
 
 fn strip_dollar(name: &[u8]) -> &[u8] {

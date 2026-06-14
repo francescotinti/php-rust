@@ -54,6 +54,9 @@ pub struct FnDecl {
     /// the body lowers to [`StmtKind::ReturnRef`]; the call site decides whether
     /// to alias (`$y = &f()`) or copy.
     pub by_ref: bool,
+    /// Declared scalar return type hint, enforced (weak mode) on the returned
+    /// value (step 14). `None` for absent or non-scalar return types.
+    pub ret_hint: Option<TypeHint>,
     pub line: Line,
 }
 
@@ -70,6 +73,45 @@ pub struct Param {
     /// `true` for a `&$x` by-reference parameter: the matching argument must be
     /// a variable, whose storage cell is shared with this slot for the call.
     pub by_ref: bool,
+    /// Declared scalar type hint, enforced (weak mode) on the bound argument
+    /// (step 14). `None` for an absent or non-scalar hint (no enforcement).
+    pub hint: Option<TypeHint>,
+}
+
+/// The four coercible scalar type hints enforced in step 14.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScalarType {
+    Int,
+    Float,
+    String,
+    Bool,
+}
+
+/// A scalar type hint, optionally nullable (`?int`). Only these are enforced;
+/// every other hint (class, union, array, mixed, …) lowers to `None` (step 14,
+/// D-14.1/D-14.2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TypeHint {
+    pub kind: ScalarType,
+    pub nullable: bool,
+}
+
+impl TypeHint {
+    /// The hint as written, for diagnostics: `int`, `float`, `string`, `bool`,
+    /// with a leading `?` when nullable.
+    pub fn display_name(&self) -> String {
+        let base = match self.kind {
+            ScalarType::Int => "int",
+            ScalarType::Float => "float",
+            ScalarType::String => "string",
+            ScalarType::Bool => "bool",
+        };
+        if self.nullable {
+            format!("?{base}")
+        } else {
+            base.to_string()
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

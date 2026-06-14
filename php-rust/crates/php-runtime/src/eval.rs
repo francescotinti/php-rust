@@ -19,12 +19,12 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use php_types::{convert, dtoa, ops, Diag, Diags, Key, PhpArray, PhpStr, PhpError, Zval};
+use php_types::{convert, dtoa, numstr, ops, Diag, Diags, Key, PhpArray, PhpStr, PhpError, Zval};
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
 use crate::hir::{
-    BinOp, CastKind, Expr, ExprKind, FnDecl, Line, Place, PlaceBase, PlaceStep, Program, Slot, Stmt,
-    StmtKind, UnOp,
+    BinOp, CastKind, Expr, ExprKind, FnDecl, Line, Param, Place, PlaceBase, PlaceStep, Program,
+    ScalarType, Slot, Stmt, StmtKind, TypeHint, UnOp,
 };
 
 /// A fresh frame of `n` independent value slots, all unset.
@@ -637,7 +637,19 @@ impl<'p> Evaluator<'p> {
     fn run_user_fn_body(&mut self, f: &'p FnDecl, argv: Vec<Arg>) -> Result<Zval, PhpError> {
         for (i, p) in f.params.iter().enumerate() {
             let binding = match argv.get(i) {
-                Some(Arg::Val(v)) => v.clone(),
+                // A by-value argument is coerced to the parameter's scalar hint
+                // under weak typing; a failure is an uncaught TypeError (D-14.4).
+                // By-reference arguments and defaults are bound as-is.
+                Some(Arg::Val(v)) => {
+                    let val = v.clone();
+                    match &p.hint {
+                        Some(hint) => match coerce_to_hint(val, hint, &mut self.diags) {
+                            Ok(c) => c,
+                            Err(given) => return Err(self.arg_type_error(f, i, p, hint, given)),
+                        },
+                        None => val,
+                    }
+                }
                 Some(Arg::Ref(cell)) => Zval::Ref(Rc::clone(cell)),
                 // Required params are guaranteed present by the caller's check.
                 None => self.eval(p.default.as_ref().expect("required arg checked"))?,
@@ -648,6 +660,26 @@ impl<'p> Evaluator<'p> {
             Flow::Return(v) => Ok(v),
             _ => Ok(Zval::Null),
         }
+    }
+
+    /// Build the uncaught `TypeError` for an argument that failed scalar
+    /// coercion, matching PHP's exact message (D-14.4). `cur_line` is the call
+    /// site's line; `f.line` is the definition line.
+    fn arg_type_error(&self, f: &FnDecl, i: usize, p: &Param, hint: &TypeHint, given: &str) -> PhpError {
+        let file = String::from_utf8_lossy(self.file);
+        PhpError::TypeError(format!(
+            "{}(): Argument #{} (${}) must be of type {}, {} given, \
+             called in {} on line {} and defined in {}:{}",
+            String::from_utf8_lossy(&f.name),
+            i + 1,
+            String::from_utf8_lossy(&f.slots[p.slot as usize]),
+            hint.display_name(),
+            given,
+            file,
+            self.cur_line,
+            file,
+            f.line,
+        ))
     }
 
     /// Resolve a user-function call's arguments against its declaration: by-value
@@ -1686,6 +1718,109 @@ fn key_to_zval(k: &Key) -> Zval {
 
 /// Lowercase type name used in runtime warning messages (distinct from
 /// `gettype`'s capitalised names).
+/// Coerce `value` to scalar type `hint` under PHP's *weak* typing rules
+/// (step 14). On success returns the coerced value (emitting the lossy-float
+/// deprecations along the way); on failure returns the PHP type name of `value`
+/// for the TypeError message. `null` satisfies a nullable hint verbatim.
+fn coerce_to_hint(value: Zval, hint: &TypeHint, diags: &mut Diags) -> Result<Zval, &'static str> {
+    // Follow a reference to its value first (defensive; bound args are plain).
+    if let Zval::Ref(c) = &value {
+        let inner = c.borrow().clone();
+        return coerce_to_hint(inner, hint, diags);
+    }
+    if matches!(value, Zval::Null | Zval::Undef) {
+        return if hint.nullable {
+            Ok(Zval::Null)
+        } else {
+            Err("null")
+        };
+    }
+    let given = php_type_name(&value);
+    match hint.kind {
+        ScalarType::Int => coerce_to_int(value, diags),
+        ScalarType::Float => coerce_to_float(value),
+        ScalarType::String => coerce_to_string(value, diags),
+        ScalarType::Bool => coerce_to_bool(value, diags),
+    }
+    .ok_or(given)
+}
+
+/// Weak coercion to `int`: numeric strings must be *well formed* (stricter than
+/// the `(int)` cast — `"12abc"` fails). A float / float-string that loses
+/// precision emits a deprecation (D-14.6). `None` means a type error.
+fn coerce_to_int(value: Zval, diags: &mut Diags) -> Option<Zval> {
+    match value {
+        Zval::Long(_) => Some(value),
+        Zval::Bool(b) => Some(Zval::Long(b as i64)),
+        Zval::Double(d) => Some(Zval::Long(convert::dval_to_lval_safe(d, diags))),
+        Zval::Str(ref s) => {
+            let info = numstr::parse_numeric_ex(s.as_bytes(), false)?;
+            if info.trailing {
+                return None;
+            }
+            match info.num {
+                numstr::Num::Long(l) => Some(Zval::Long(l)),
+                numstr::Num::Double(d) => {
+                    let l = convert::dval_to_lval(d);
+                    if !convert::is_long_compatible(d, l) {
+                        diags.push(Diag::Deprecated(format!(
+                            "Implicit conversion from float-string \"{}\" to int loses precision",
+                            String::from_utf8_lossy(s.as_bytes())
+                        )));
+                    }
+                    Some(Zval::Long(l))
+                }
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Weak coercion to `float`: numeric strings (incl. scientific) convert; others
+/// are a type error.
+fn coerce_to_float(value: Zval) -> Option<Zval> {
+    match value {
+        Zval::Double(_) => Some(value),
+        Zval::Long(l) => Some(Zval::Double(l as f64)),
+        Zval::Bool(b) => Some(Zval::Double(b as i64 as f64)),
+        Zval::Str(ref s) => {
+            let info = numstr::parse_numeric_ex(s.as_bytes(), false)?;
+            if info.trailing {
+                return None;
+            }
+            Some(Zval::Double(match info.num {
+                numstr::Num::Long(l) => l as f64,
+                numstr::Num::Double(d) => d,
+            }))
+        }
+        _ => None,
+    }
+}
+
+/// Weak coercion to `string`: any scalar stringifies; array / object are a type
+/// error.
+fn coerce_to_string(value: Zval, diags: &mut Diags) -> Option<Zval> {
+    match value {
+        Zval::Str(_) => Some(value),
+        Zval::Long(_) | Zval::Double(_) | Zval::Bool(_) => {
+            Some(Zval::Str(convert::to_zstr(&value, diags)))
+        }
+        _ => None,
+    }
+}
+
+/// Weak coercion to `bool`: any scalar converts; array / object are a type
+/// error.
+fn coerce_to_bool(value: Zval, diags: &mut Diags) -> Option<Zval> {
+    match value {
+        Zval::Bool(_) => Some(value),
+        Zval::Long(_) | Zval::Double(_) | Zval::Str(_) => {
+            Some(Zval::Bool(convert::to_bool(&value, diags)))
+        }
+        _ => None,
+    }
+}
+
 fn php_type_name(v: &Zval) -> &'static str {
     match v {
         Zval::Undef | Zval::Null => "null",
