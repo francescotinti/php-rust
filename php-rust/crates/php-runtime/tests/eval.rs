@@ -3502,6 +3502,15 @@ fn interp_multiple_parts_and_literals() {
     );
 }
 
+#[test]
+fn interp_processes_escapes_in_literals() {
+    // Step 29-4 (D-NEW): escape sequences in the literal parts of an
+    // interpolated string must be unescaped (\t, \n, \$, \\), not emitted raw.
+    assert_eq!(out(r#"<?php $v="W"; echo "x\t$v\n\$z\\end";"#), "x\tW\n$z\\end");
+    // \x hex and octal escapes.
+    assert_eq!(out(r#"<?php $v="W"; echo "$v\x41\101";"#), "WAA");
+}
+
 // --- Step 27: preg_* regular expressions ---
 
 #[test]

@@ -2000,7 +2000,10 @@ impl<'f> Lowerer<'f> {
         let mut acc = Expr { line, kind: ExprKind::Str(Default::default()) };
         for part in cs.parts().iter() {
             let piece = match part {
-                StringPart::Literal(l) => Expr { line, kind: ExprKind::Str(l.value.into()) },
+                StringPart::Literal(l) => Expr {
+                    line,
+                    kind: ExprKind::Str(unescape_double_quoted(l.value).into()),
+                },
                 StringPart::Expression(e) => self.lower_expr(e)?,
                 StringPart::BracedExpression(b) => self.lower_expr(b.expression)?,
             };
@@ -2405,6 +2408,92 @@ enum AssignFlavour {
 /// Collect the class names of a `catch` type hint (step 20): a single
 /// `Identifier`, or a `A | B` union (recursively). Any other hint shape in catch
 /// position is outside scope.
+/// Process PHP double-quoted escape sequences in the literal segment of an
+/// interpolated string (mago hands these back raw). Mirrors the lexer rules:
+/// `\n \r \t \v \f \e \\ \$ \"`, `\x..` hex (1-2), `\u{..}` codepoint, and
+/// `\0..\777` octal (1-3). An unknown `\X` keeps the backslash and X.
+fn unescape_double_quoted(raw: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(raw.len());
+    let mut i = 0;
+    while i < raw.len() {
+        if raw[i] != b'\\' || i + 1 >= raw.len() {
+            out.push(raw[i]);
+            i += 1;
+            continue;
+        }
+        let c = raw[i + 1];
+        match c {
+            b'n' => { out.push(b'\n'); i += 2; }
+            b'r' => { out.push(b'\r'); i += 2; }
+            b't' => { out.push(b'\t'); i += 2; }
+            b'v' => { out.push(0x0B); i += 2; }
+            b'f' => { out.push(0x0C); i += 2; }
+            b'e' => { out.push(0x1B); i += 2; }
+            b'\\' => { out.push(b'\\'); i += 2; }
+            b'$' => { out.push(b'$'); i += 2; }
+            b'"' => { out.push(b'"'); i += 2; }
+            b'x' => {
+                let mut j = i + 2;
+                let mut val = 0u32;
+                let mut n = 0;
+                while n < 2 && j < raw.len() && raw[j].is_ascii_hexdigit() {
+                    val = val * 16 + (raw[j] as char).to_digit(16).unwrap();
+                    j += 1;
+                    n += 1;
+                }
+                if n == 0 {
+                    out.push(b'\\');
+                    out.push(b'x');
+                    i += 2;
+                } else {
+                    out.push(val as u8);
+                    i = j;
+                }
+            }
+            b'u' if i + 2 < raw.len() && raw[i + 2] == b'{' => {
+                let mut j = i + 3;
+                let mut val = 0u32;
+                let mut n = 0;
+                while j < raw.len() && raw[j].is_ascii_hexdigit() {
+                    val = val * 16 + (raw[j] as char).to_digit(16).unwrap();
+                    j += 1;
+                    n += 1;
+                }
+                if n > 0 && j < raw.len() && raw[j] == b'}' {
+                    if let Some(ch) = char::from_u32(val) {
+                        let mut buf = [0u8; 4];
+                        out.extend_from_slice(ch.encode_utf8(&mut buf).as_bytes());
+                    }
+                    i = j + 1;
+                } else {
+                    out.push(b'\\');
+                    out.push(b'u');
+                    i += 2;
+                }
+            }
+            b'0'..=b'7' => {
+                let mut j = i + 1;
+                let mut val = 0u32;
+                let mut n = 0;
+                while n < 3 && j < raw.len() && (b'0'..=b'7').contains(&raw[j]) {
+                    val = val * 8 + (raw[j] - b'0') as u32;
+                    j += 1;
+                    n += 1;
+                }
+                out.push(val as u8);
+                i = j;
+            }
+            _ => {
+                // Unknown escape: PHP keeps the backslash and the character.
+                out.push(b'\\');
+                out.push(c);
+                i += 2;
+            }
+        }
+    }
+    out
+}
+
 fn collect_catch_types(
     hint: &Hint,
     line: Line,
