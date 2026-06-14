@@ -3079,3 +3079,74 @@ fn enum_from_undefined_on_pure_enum() {
     .expect("lowers");
     assert!(matches!(o.fatal, Some(PhpError::Error(_))), "expected error, got {:?}", o.fatal);
 }
+
+// ---------------------------------------------------------------------------
+// Step 23-3 — cases() + user methods / constants
+// ---------------------------------------------------------------------------
+
+#[test]
+fn enum_cases_returns_all_in_order() {
+    assert_eq!(
+        out(&format!(
+            "<?php {SUIT} $cs = Suit::cases(); $n = 0; foreach ($cs as $c) {{ echo $c->name; $n++; }} echo $n;"
+        )),
+        "HeartsDiamondsClubsSpades4"
+    );
+}
+
+#[test]
+fn enum_cases_yields_singletons() {
+    assert_eq!(
+        out(&format!("<?php {SUIT} echo Suit::cases()[0] === Suit::Hearts ? 'y' : 'n';")),
+        "y"
+    );
+}
+
+#[test]
+fn enum_instance_method_with_this_match() {
+    assert_eq!(
+        out(
+            "<?php enum Suit { case Hearts; case Spades; \
+             public function color(): string { return match($this) { \
+               Suit::Hearts => 'Red', Suit::Spades => 'Black', }; } } \
+             echo Suit::Hearts->color(), Suit::Spades->color();"
+        ),
+        "RedBlack"
+    );
+}
+
+#[test]
+fn enum_static_method() {
+    assert_eq!(
+        out(
+            "<?php enum Suit { case Hearts; \
+             public static function default(): Suit { return Suit::Hearts; } } \
+             echo Suit::default()->name;"
+        ),
+        "Hearts"
+    );
+}
+
+#[test]
+fn enum_constant_referencing_self_case() {
+    assert_eq!(
+        out(
+            "<?php enum Status: string { case Active = 'A'; case Inactive = 'I'; \
+             const DEFAULT = self::Active; } \
+             echo Status::DEFAULT->value; echo Status::DEFAULT === Status::Active ? 'y' : 'n';"
+        ),
+        "Ay"
+    );
+}
+
+#[test]
+fn enum_method_calls_self_const_and_case() {
+    assert_eq!(
+        out(
+            "<?php enum Suit { case Hearts; case Spades; \
+             public function label(): string { return $this->name . '!'; } } \
+             echo Suit::Spades->label();"
+        ),
+        "Spades!"
+    );
+}

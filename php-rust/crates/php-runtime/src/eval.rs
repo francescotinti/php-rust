@@ -1668,6 +1668,22 @@ impl<'p> Evaluator<'p> {
         Ok(Zval::Object(rc))
     }
 
+    /// `E::cases()` (step 23, D-23.6): a sequential array of every case singleton
+    /// in declaration order. Works on pure and backed enums alike.
+    fn enum_cases(&mut self, cid: ClassId) -> Result<Zval, PhpError> {
+        let names: Vec<Vec<u8>> = self.classes[cid]
+            .enum_cases
+            .iter()
+            .map(|c| c.name.to_vec())
+            .collect();
+        let mut arr = PhpArray::new();
+        for n in &names {
+            let case = self.eval_enum_case(cid, n)?;
+            let _ = arr.append(case);
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
     /// `BackedEnum::from($v)` / `BackedEnum::tryFrom($v)` (step 23, D-23.6). Scans
     /// the cases for one whose backing `value` is identical (`===`) to `$v` and
     /// returns its singleton. `from` raises a catchable `ValueError` on no match;
@@ -2029,15 +2045,21 @@ impl<'p> Evaluator<'p> {
             }
         }
         let start = self.resolve_class_ref(class)?;
-        // Enum built-in static methods (step 23, D-23.6). `from`/`tryFrom` exist
-        // only on backed enums; they are reserved names, so they shadow user
-        // resolution. On a pure enum they fall through to "undefined method".
-        if self.classes[start].is_enum && self.classes[start].enum_backing.is_some() {
-            if method.eq_ignore_ascii_case(b"from") {
-                return self.enum_from(start, argv.first(), false);
+        // Enum built-in static methods (step 23, D-23.6). They are reserved names,
+        // so they shadow user resolution. `cases` exists on every enum;
+        // `from`/`tryFrom` only on backed ones (on a pure enum they fall through
+        // to "undefined method").
+        if self.classes[start].is_enum {
+            if method.eq_ignore_ascii_case(b"cases") {
+                return self.enum_cases(start);
             }
-            if method.eq_ignore_ascii_case(b"tryFrom") {
-                return self.enum_from(start, argv.first(), true);
+            if self.classes[start].enum_backing.is_some() {
+                if method.eq_ignore_ascii_case(b"from") {
+                    return self.enum_from(start, argv.first(), false);
+                }
+                if method.eq_ignore_ascii_case(b"tryFrom") {
+                    return self.enum_from(start, argv.first(), true);
+                }
             }
         }
         match self.resolve_method(start, method) {
