@@ -141,6 +141,8 @@ presente nel codebase.
 
 **Sotto-suddivisione TDD step 16:** un solo sotto-step: parsing `declare` + flag strict + `coerce_strict`. Test: strict int←int ok, int←"5" fail, float←int widen ok, int←5.0 fail, string←int fail, ?int←null ok, return strict fail, + weak ancora coerce (regressione).
 
+**Step 16 IMPLEMENTATO (sessione 2026-06-14, TDD, zero D-NEW) — commit `43ee473`:** +8 test (236→244), oracle-verificato, clippy pulito. Nuovo arm `Statement::Declare` (estrae `strict_types` → `Program.strict`; **fixa anche il fatto che `declare` prima era Unsupported**); `Evaluator.strict`. `coerce_to_hint` guadagna il parametro `strict`; `coerce_strict` richiede tipo esatto con unica eccezione `int→float` widening (niente coercizione/deprecation). Mismatch → stesso `TypeError` del weak. Applicato a param/default/return via la pipeline di step 14. `strict_types=0` → weak. Chiude lo scope-out strict_types di step 14. Scope-out residuo (D-16.4): strict per-call-site cross-file, `declare` colon-form, ticks/encoding reali.
+
 ### Step 15 — static variables (`static $x = init;`) (design pass, sessione 2026-06-14)
 
 > L'utente ha scelto static vars dopo type-hint. Semantiche verificate sull'oracle PHP 8.5.7: `function f(){ static $n=0; $n++; echo $n; } f();f();f();` → `123` (init una volta, persiste cross-call); `static $a;` (no init) → `NULL` poi persiste; ricorsione `function f($d){ static $n=0; $n++; if($d>0) f($d-1); return $n; } f(3)` → `4` (cella **condivisa** tra i frame ricorsivi); isolamento per-funzione (`f`→1, `g`→101, `f`→2 = `11012`); init **non-costante** consentita (`static $x = strlen("ab")` → `2`, valutata alla prima call); `static $a, $b=5` multipli.
