@@ -462,3 +462,82 @@ ora c'è, ma le var catturate non sono ancora esposte); `__get`/`__set`/`__call`
 altri magic dinamici; traits; enum; anonymous class; nomi membro dinamici
 (`$o->$n`); dynamic-prop deprecation 8.2; covarianza tipi. Eccezioni (`try/catch`/
 `throw` + Exception/Error) = **step 20**.
+
+---
+
+## Step 20 — Eccezioni (`try`/`catch`/`finally` + `throw` + gerarchia Throwable) — DESIGN PASS
+
+**Obiettivo:** control-flow di unwinding che riusa interamente le classi dello step
+19. `throw <expr>`, `try { } catch (T $e) { } finally { }`, gerarchia built-in
+`Throwable`/`Exception`/`Error` + sottoclassi SPL, accessor (`getMessage`/`getCode`/
+`getPrevious`/`getLine`/`getFile`/`getTrace`/`getTraceAsString`), rendering "Uncaught".
+
+### Oracle recon (PHP 8.5.7, `php -n -r`) — fatti verificati
+- `getCode()` default `int(0)`; `getMessage()` default `string(0) ""`.
+- `__construct(message="", code=0, previous=null)`; `getPrevious()` ritorna la prev.
+- Ordine `finally`: `try`→`catch`→`finally`→codice dopo (es. `tcfafter`).
+- `finally` con `return` **sovrascrive** il `return`/`throw` del try (`fin` vince).
+- `finally` gira anche se il try ritorna (`return "t"` in fn → stampa `f` poi `t`).
+- Gerarchia: `Error` NON è preso da `catch (Exception)`; `Throwable` prende tutto.
+  `RuntimeException`/`InvalidArgumentException` → `instanceof Exception`+`Throwable`;
+  `InvalidArgumentException instanceof LogicException` = true.
+- Multi-catch `catch (A | B $e)`; catch senza variabile `catch (Exception)`.
+- `throw` come **espressione** (`$x ?: throw new …`).
+- Eccezione non catturata (exit 255):
+  `\nFatal error: Uncaught <Class>: <msg> in <file>:<line>\nStack trace:\n#0 {main}\n  thrown in <file> on line <line>\n`
+  La `<line>` è la linea di **creazione** (`new`), recuperabile via `getLine()`.
+- Errori engine catturabili: `TypeError`/`DivisionByZeroError`/… sono Throwable.
+- `var_dump` di un'eccezione espone 7 prop interne (message/string/code/file/line/
+  trace/previous) con annotazioni `:protected` e `:"Exception":private` → **fuori
+  scope step 20** (richiede le pseudo-prop interne `string`/`trace`; debito).
+
+### Architettura (riusa step 19)
+- **Classi built-in via PRELUDE PHP.** Un sorgente PHP statico (`PRELUDE_SRC` in
+  `lower.rs`) definisce `interface Throwable`, `Exception`/`Error` (props
+  `message`/`code`/`file`/`line` protected, `previous` private; `__construct` +
+  accessor con corpi HIR reali) e le sottoclassi SPL (`LogicException`/
+  `RuntimeException` + figlie, `TypeError`/`ValueError`/`ArithmeticError`/
+  `DivisionByZeroError`/`ArgumentCountError`/`ErrorException`/`UnhandledMatchError`).
+  Lowerato con un `Lowerer` usa-e-getta; le `ClassDecl` **owned** risultanti sono
+  iniettate in testa a `Program.classes` (ids 0..N) PRIMA dell'hoisting delle classi
+  utente. Così `extends Exception`, `instanceof`, `resolve_class_ref`, `collect_props`
+  (init prop), `class_shape` (var_dump) e `parent::__construct` funzionano GRATIS con
+  la macchina dello step 19 — zero dispatch speciale per i metodi.
+- **Unwinding via `PhpError::Thrown(Zval)`.** Nuova variante che trasporta l'oggetto
+  lanciato; si propaga da sola attraverso ogni `?` in `eval` (espressioni) ed
+  `exec_stmt` (statement) — copre throw in profondità (throw-expr, throw dentro
+  metodo/funzione). `PhpError` perde i derive `PartialEq, Eq` (Zval non è Eq: ha f64);
+  nessuno li usava. `class_name()`/`message()` restano totali (sentinel per `Thrown`,
+  mai usati su quel ramo: il rendering lo gestisce a parte).
+- **HIR.** `StmtKind::Try { body, catches: Vec<CatchClause>, finally: Vec<Stmt> }`
+  (`finally` vuoto = assente); `struct CatchClause { types: Vec<Box<[u8]>>, var:
+  Option<Slot>, body }`; `ExprKind::Throw(Box<Expr>)`.
+- **Lowering.** `Statement::Try` → estrae `block`/`catch_clauses`/`finally_clause`;
+  ogni catch: `hint` (Identifier o `Union` → lista nomi), `variable` → slot opzionale.
+  `Expression::Throw` → `ExprKind::Throw`.
+- **Eval.** `exec_stmt` Try: esegue body; su `Err(Thrown)` prova i catch per
+  `is_instance_of(obj_class, type_id)` (riusa step 19-5); lega `$e`, esegue il body del
+  catch. `finally` gira SEMPRE (anche su `Err`/`Flow` non-Normal): se finally esce
+  Normal propaga l'esito di try/catch, altrimenti il control-flow di finally vince.
+  `ExprKind::Throw` → `Err(PhpError::Thrown(obj))`. `eval_new`: per gli oggetti
+  Throwable setta `line` (linea del `new`) e `file` PRIMA del costruttore.
+- **Rendering.** `render_fatal` ramo `Thrown`: classe da `obj.class_name`, msg/line da
+  prop `message`/`line`.
+- **20-3:** errori engine (`PhpError::TypeError(..)` ecc.) resi catturabili —
+  al catch-site un errore non-`Thrown` è confrontato per `class_name` contro la
+  gerarchia e, se preso, sintetizzato in un oggetto della classe corrispondente.
+  Uncaught invariato (i 377 test restano verdi).
+
+### Gruppi TDD
+- **20-1:** prelude + throw stmt/expr + try/catch (single/multi/no-var) + accessor +
+  uncaught rendering.
+- **20-2:** finally (normal/return/throw/break + finally-overrides).
+- **20-3:** engine errors catturabili + sottoclassi utente/`parent::__construct` +
+  catene `getPrevious` + validazione corpus `Zend/tests/exceptions`.
+
+### Scope-out (debito → futuri step)
+`var_dump`/`print_r` esatto delle eccezioni (pseudo-prop interne `string`/`trace`);
+stack-trace reale con frame (resta `#0 {main}`); `getTrace()` = `[]`;
+`set_exception_handler`/`set_error_handler`; `finally` con eccezione che ne maschera
+un'altra in modo annidato oltre il caso base; coercizione scalare dei param di
+`__construct` (lasciati untyped); `DesiredException::__construct` con typed `?Throwable`.
