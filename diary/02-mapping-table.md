@@ -541,3 +541,25 @@ stack-trace reale con frame (resta `#0 {main}`); `getTrace()` = `[]`;
 `set_exception_handler`/`set_error_handler`; `finally` con eccezione che ne maschera
 un'altra in modo annidato oltre il caso base; coercizione scalare dei param di
 `__construct` (lasciati untyped); `DesiredException::__construct` con typed `?Throwable`.
+
+### Step 20 IMPLEMENTATO (20-1 `7d575fd`, 20-2 `f12a2e5`, 20-3 `7d5e350`)
+TDD, **+26 test (377→403)**, clippy pulito, zero D-NEW. 3 gruppi:
+- **20-1** prelude (`PRELUDE_SRC` in lower.rs, lowerato da un `Lowerer` usa-e-getta,
+  classi owned iniettate in testa a `Program.classes`; fix `hoist_classes` per
+  offsettare gli id su `self.classes.len()`); `PhpError::Thrown(Zval)` (persi i derive
+  `PartialEq/Eq`); `StmtKind::Try`+`CatchClause`, `ExprKind::Throw`; `handle_thrown`
+  (match per `is_instance_of`, single/multi/no-var); `eval_new` setta `line`/`file`
+  sui Throwable; `render_fatal` ramo `Thrown`. accessor (getMessage/Code/Previous/
+  Line/File) = corpi HIR reali del prelude.
+- **20-2** finally: la logica era già nel Try arm di 20-1 (finally gira sempre; il suo
+  control-flow sovrascrive l'esito di try/catch). 8 test oracle (order, return,
+  override, rethrow, break/continue in loop, return-inghiotte-throw).
+- **20-3** errori engine catturabili (`handle_thrown` risolve `class_name()`→classe
+  prelude e `synthesize_throwable` materializza l'oggetto solo se un catch lo lega);
+  sottoclassi utente + `parent::__construct` + catene `getPrevious` + throw-espressione
+  (tutto gratis da prelude+step19).
+
+**Validazione corpus** `Zend/tests/{exceptions,throw,try}`: **36 pass / 52 fail / 91
+skip** (179; prima ~tutti skip:unsupported). Fail residui = scope-out: stack-trace con
+frame reali (`#0 foo(...)`; noi `#0 {main}`), foreach su oggetti/Generator, `stdClass`
+non nel prelude, magic methods.
