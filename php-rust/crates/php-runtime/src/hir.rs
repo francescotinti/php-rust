@@ -34,6 +34,10 @@ pub struct Program {
     /// precede the declaration (PHP's function hoisting). Resolved by the
     /// evaluator's call path before the builtin registry (step 8).
     pub functions: Vec<FnDecl>,
+    /// Anonymous functions and arrow functions, lowered into one flat table
+    /// (step 18, D-18.2). A [`ExprKind::Closure`] selects its body by index;
+    /// closures nest by appending to this same vector.
+    pub closures: Vec<FnDecl>,
     /// Total number of `static` variable declarations across the whole program
     /// (each gets a unique id). The evaluator sizes its persistent static store
     /// to this (step 15, D-15.2).
@@ -83,6 +87,20 @@ pub struct Param {
     /// Declared scalar type hint, enforced (weak mode) on the bound argument
     /// (step 14). `None` for an absent or non-scalar hint (no enforcement).
     pub hint: Option<TypeHint>,
+}
+
+/// One captured variable of a closure (step 18, D-18.3). At closure *creation*
+/// the evaluator reads `src` in the active (enclosing) frame and binds the
+/// resulting value into the closure's `dst` slot when the closure is later
+/// called. `by_ref` selects `use(&$x)` semantics (share the cell) over `use($x)`
+/// / arrow auto-capture (snapshot the value).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Capture {
+    /// Slot in the enclosing frame to read at creation time.
+    pub src: Slot,
+    /// Slot in the closure's own frame to bind at call time.
+    pub dst: Slot,
+    pub by_ref: bool,
 }
 
 /// The four coercible scalar type hints enforced in step 14.
@@ -294,6 +312,17 @@ pub enum ExprKind {
     /// `name(args...)` — a call to a (builtin) function. The evaluator resolves
     /// `name` against its builtin registry; Tier 1 has no user functions yet.
     Call { name: Box<[u8]>, args: Vec<Expr> },
+
+    /// A closure / arrow-function expression (step 18, D-18.2). `fn_idx` selects
+    /// the lowered body from [`Program::closures`]; `captures` are evaluated in
+    /// the active frame to produce the [`php_types::Closure`] value.
+    Closure { fn_idx: usize, captures: Vec<Capture> },
+
+    /// A dynamic call `callee(args...)` where the callee is a runtime value
+    /// (step 18, D-18.5): `$f()`, `$a['k']()`, an immediately-invoked closure
+    /// `(function(){})()`. Arguments are evaluated by value; the evaluator
+    /// dispatches on the callee value (closure / string name).
+    CallDynamic { callee: Box<Expr>, args: Vec<Expr> },
 
     /// An array literal `[...]` / `array(...)`. Elements keep source order;
     /// keyless elements take the next free integer index (`PhpArray::append`).

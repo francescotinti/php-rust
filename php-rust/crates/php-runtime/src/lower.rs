@@ -20,17 +20,17 @@ use bumpalo::Bump;
 use mago_database::file::File;
 use mago_span::{HasSpan, Span};
 use mago_syntax::ast::{
-    Argument, ArrayElement, AssignmentOperator, BinaryOperator, Call, Construct, DeclareBody,
-    Expression, ForeachTarget, Function, Hint, Identifier, Literal, LiteralInteger,
-    MatchArm as AstMatchArm, Statement, StaticItem, UnaryPostfixOperator, UnaryPrefixOperator,
-    Variable,
+    Argument, ArrayElement, AssignmentOperator, BinaryOperator, Call, Closure, Construct,
+    DeclareBody, Expression, ForeachTarget, Function, FunctionLikeParameterList, Hint, Identifier,
+    Literal, LiteralInteger, MatchArm as AstMatchArm, Statement, StaticItem, UnaryPostfixOperator,
+    UnaryPrefixOperator, Variable,
 };
 use mago_syntax::parser::parse_file;
 
 use crate::hir::{
-    ArrayElem, BinOp, Case, CastKind, Expr, ExprKind, FnDecl, GlobalBinding, Line, MatchArm, Param,
-    Place, PlaceBase, PlaceStep, Program, ScalarType, Slot, StaticBinding, Stmt, StmtKind, TypeHint,
-    UnOp,
+    ArrayElem, BinOp, Capture, Case, CastKind, Expr, ExprKind, FnDecl, GlobalBinding, Line,
+    MatchArm, Param, Place, PlaceBase, PlaceStep, Program, ScalarType, Slot, StaticBinding, Stmt,
+    StmtKind, TypeHint, UnOp,
 };
 
 /// Why a script could not be lowered to HIR.
@@ -71,7 +71,7 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
         return Err(LowerError::Parse(msg));
     }
 
-    let mut low = Lowerer::new(&file);
+    let mut low = Lowerer::new(&file, name);
     // Hoist top-level function declarations first, so a call may textually
     // precede its definition (PHP's function hoisting). Bodies are lowered here;
     // the main pass below skips the declaration statements (they are no-ops).
@@ -86,6 +86,7 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
         file: name.into(),
         slots: low.globals.slots,
         functions: low.functions,
+        closures: low.closures,
         static_count: low.static_count,
         strict: low.strict,
     })
@@ -114,6 +115,10 @@ impl Scope {
     }
 }
 
+/// The three products of lowering a closure body: parameters, lexical captures,
+/// and the lowered statement list (step 18).
+type LoweredClosure = (Vec<Param>, Vec<Capture>, Vec<Stmt>);
+
 struct Lowerer<'f> {
     file: &'f File,
     /// The global scope (always present) and the active function-local overlay
@@ -130,6 +135,12 @@ struct Lowerer<'f> {
     /// since PHP function names are case-insensitive).
     functions: Vec<FnDecl>,
     fn_index: HashMap<Vec<u8>, usize>,
+    /// Anonymous/arrow function bodies, in one flat table (step 18, D-18.2). An
+    /// [`ExprKind::Closure`] indexes into this by position.
+    closures: Vec<FnDecl>,
+    /// The program file name, used to synthesize the `{closure:file:line}` name
+    /// PHP gives anonymous functions (step 18).
+    prog_name: Box<[u8]>,
     /// True while lowering the body of a `function &f()`: a `return <lvalue>`
     /// then lowers to [`StmtKind::ReturnRef`] (step 13, D-13.3).
     fn_by_ref: bool,
@@ -141,7 +152,7 @@ struct Lowerer<'f> {
 }
 
 impl<'f> Lowerer<'f> {
-    fn new(file: &'f File) -> Self {
+    fn new(file: &'f File, prog_name: &[u8]) -> Self {
         Lowerer {
             file,
             globals: Scope::default(),
@@ -149,6 +160,8 @@ impl<'f> Lowerer<'f> {
             after_closing_tag: false,
             functions: Vec::new(),
             fn_index: HashMap::new(),
+            closures: Vec::new(),
+            prog_name: prog_name.into(),
             fn_by_ref: false,
             static_count: 0,
             strict: false,
@@ -479,8 +492,21 @@ impl<'f> Lowerer<'f> {
         func: &Function,
         line: Line,
     ) -> Result<(Vec<Param>, Vec<Stmt>), LowerError> {
+        let params = self.lower_params(&func.parameter_list, line)?;
+        let body = self.lower_stmts(func.body.statements.as_slice())?;
+        Ok((params, body))
+    }
+
+    /// Lower a parameter list into the leading slots of the active scope. Shared
+    /// by named functions and closures (step 18). By-reference / variadic /
+    /// promoted-property params follow the same rules as `lower_function_body`.
+    fn lower_params(
+        &mut self,
+        plist: &FunctionLikeParameterList,
+        line: Line,
+    ) -> Result<Vec<Param>, LowerError> {
         let mut params = Vec::new();
-        for p in func.parameter_list.parameters.iter() {
+        for p in plist.parameters.iter() {
             let by_ref = p.ampersand.is_some();
             if p.ellipsis.is_some() {
                 return Err(LowerError::Unsupported {
@@ -506,8 +532,97 @@ impl<'f> Lowerer<'f> {
                 hint: p.hint.as_ref().and_then(lower_hint),
             });
         }
-        let body = self.lower_stmts(func.body.statements.as_slice())?;
-        Ok((params, body))
+        Ok(params)
+    }
+
+    /// Lower an anonymous function `function (params) use (...) { body }` into a
+    /// flat-table entry plus an [`ExprKind::Closure`] that captures the `use`
+    /// variables (step 18, D-18.2/D-18.3). Captures are resolved in the enclosing
+    /// scope *before* the fresh closure scope is installed; the closure body then
+    /// runs in its own slot frame like a function (no implicit capture).
+    fn lower_closure(&mut self, closure: &Closure, line: Line) -> Result<ExprKind, LowerError> {
+        if closure.r#static.is_some() {
+            return Err(LowerError::Unsupported {
+                what: "static closure",
+                line,
+            });
+        }
+        let by_ref = closure.ampersand.is_some();
+
+        // 1. Resolve each `use` variable's slot in the *enclosing* scope (the one
+        //    active now), recording whether it is captured by value or reference.
+        let mut use_specs: Vec<(Box<[u8]>, Slot, bool)> = Vec::new();
+        if let Some(use_clause) = &closure.use_clause {
+            for u in use_clause.variables.iter() {
+                let name = strip_dollar(u.variable.name);
+                let src = self.slot_for(name);
+                use_specs.push((name.into(), src, u.ampersand.is_some()));
+            }
+        }
+
+        // 2. Install a fresh local scope and lower params + use-vars + body in it.
+        let saved_locals = self.locals.replace(Scope::default());
+        let saved_tag = std::mem::replace(&mut self.after_closing_tag, false);
+        let saved_by_ref = std::mem::replace(&mut self.fn_by_ref, by_ref);
+
+        let inner = (|| -> Result<LoweredClosure, LowerError> {
+            let params = self.lower_params(&closure.parameter_list, line)?;
+            let mut captures = Vec::with_capacity(use_specs.len());
+            for (name, src, cap_by_ref) in &use_specs {
+                let dst = self.slot_for(name);
+                captures.push(Capture {
+                    src: *src,
+                    dst,
+                    by_ref: *cap_by_ref,
+                });
+            }
+            let body = self.lower_stmts(closure.body.statements.as_slice())?;
+            Ok((params, captures, body))
+        })();
+
+        let local_scope = std::mem::replace(&mut self.locals, saved_locals)
+            .expect("local scope installed for closure body");
+        self.after_closing_tag = saved_tag;
+        self.fn_by_ref = saved_by_ref;
+
+        let (params, captures, body) = inner?;
+        let ret_hint = closure
+            .return_type_hint
+            .as_ref()
+            .and_then(|r| lower_hint(&r.hint));
+        let fn_idx = self.push_closure(params, body, local_scope.slots, by_ref, ret_hint, line);
+        Ok(ExprKind::Closure { fn_idx, captures })
+    }
+
+    /// Append a lowered closure body to the flat table and return its index. The
+    /// `FnDecl.name` is the PHP `{closure:file:line}` synthetic name (step 18).
+    fn push_closure(
+        &mut self,
+        params: Vec<Param>,
+        body: Vec<Stmt>,
+        slots: Vec<Box<[u8]>>,
+        by_ref: bool,
+        ret_hint: Option<TypeHint>,
+        line: Line,
+    ) -> usize {
+        let name = format!(
+            "{{closure:{}:{}}}",
+            String::from_utf8_lossy(&self.prog_name),
+            line
+        )
+        .into_bytes()
+        .into_boxed_slice();
+        let idx = self.closures.len();
+        self.closures.push(FnDecl {
+            name,
+            params,
+            body,
+            slots,
+            by_ref,
+            ret_hint,
+            line,
+        });
+        idx
     }
 
     // --- expressions ---
@@ -644,6 +759,8 @@ impl<'f> Lowerer<'f> {
             },
 
             Expression::Call(call) => self.lower_call(call, line)?,
+
+            Expression::Closure(closure) => self.lower_closure(closure, line)?,
 
             Expression::Array(arr) => ExprKind::Array(self.lower_array_elements(arr.elements.iter(), line)?),
             Expression::LegacyArray(arr) => {
@@ -814,17 +931,32 @@ impl<'f> Lowerer<'f> {
                 })
             }
         };
+        // A non-identifier callee (`$f(...)`, `$a['k'](...)`, an IIFE) is a
+        // dynamic call dispatched on the runtime callee value (step 18, D-18.5).
         let name = match fc.function {
             Expression::Identifier(id) => function_name(id),
-            _ => {
-                return Err(LowerError::Unsupported {
-                    what: "dynamic function call",
-                    line,
-                })
+            other => {
+                let callee = Box::new(self.lower_expr(other)?);
+                let args = self.lower_positional_args(&fc.argument_list, line)?;
+                return Ok(ExprKind::CallDynamic { callee, args });
             }
         };
+        let args = self.lower_positional_args(&fc.argument_list, line)?;
+        Ok(ExprKind::Call {
+            name: name.into(),
+            args,
+        })
+    }
+
+    /// Lower a call's argument list, accepting only plain positional arguments
+    /// (named / variadic-spread arguments stay out of scope).
+    fn lower_positional_args(
+        &mut self,
+        list: &mago_syntax::ast::ArgumentList,
+        line: Line,
+    ) -> Result<Vec<Expr>, LowerError> {
         let mut args = Vec::new();
-        for arg in fc.argument_list.arguments.iter() {
+        for arg in list.arguments.iter() {
             match arg {
                 Argument::Positional(p) if p.ellipsis.is_none() => {
                     args.push(self.lower_expr(p.value)?);
@@ -837,10 +969,7 @@ impl<'f> Lowerer<'f> {
                 }
             }
         }
-        Ok(ExprKind::Call {
-            name: name.into(),
-            args,
-        })
+        Ok(args)
     }
 
     /// Resolve an lvalue: a base variable plus a chain of index steps. `$x`

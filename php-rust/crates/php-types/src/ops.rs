@@ -54,6 +54,9 @@ fn try_to_number(v: &Zval, diags: &mut Diags) -> Option<Num> {
             None => None,
         },
         Zval::Array(_) => None,
+        // A closure has no numeric value: the caller raises the op's TypeError
+        // ("Unsupported operand types: ... Closure ...", step 18).
+        Zval::Closure(_) => None,
         // A reference is converted as its target (deref-on-read should make this
         // unreachable, but recursing keeps the op correct if one slips through).
         Zval::Ref(c) => try_to_number(&c.borrow(), diags),
@@ -101,6 +104,7 @@ fn try_to_long(v: &Zval, diags: &mut Diags) -> Option<i64> {
             }
         }
         Zval::Array(_) => None,
+        Zval::Closure(_) => None,
         Zval::Ref(c) => try_to_long(&c.borrow(), diags),
     }
 }
@@ -724,6 +728,9 @@ pub fn increment(v: &mut Zval, diags: &mut Diags) -> Result<(), PhpError> {
         Zval::Array(_) => {
             return Err(PhpError::TypeError("Cannot increment array".to_string()));
         }
+        Zval::Closure(_) => {
+            return Err(PhpError::TypeError("Cannot increment Closure".to_string()));
+        }
         Zval::Ref(cell) => {
             let inner = &mut *cell.borrow_mut();
             return increment(inner, diags);
@@ -842,6 +849,9 @@ pub fn decrement(v: &mut Zval, diags: &mut Diags) -> Result<(), PhpError> {
         }
         Zval::Array(_) => {
             return Err(PhpError::TypeError("Cannot decrement array".to_string()));
+        }
+        Zval::Closure(_) => {
+            return Err(PhpError::TypeError("Cannot decrement Closure".to_string()));
         }
         Zval::Ref(cell) => {
             let inner = &mut *cell.borrow_mut();

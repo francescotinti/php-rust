@@ -28,6 +28,22 @@ pub enum Zval {
     /// underlying value with [`Zval::deref_clone`]; only `var_dump` inspects the
     /// `Ref` wrapper directly (to print the `&` marker for container elements).
     Ref(Rc<RefCell<Zval>>),
+    /// A closure / callable value (`Zval::Closure`, step 18, D-18.1). PHP
+    /// closures are objects (`instanceof Closure`); with no OOP yet we model them
+    /// as a dedicated variant. The body lives in the evaluator's closure table
+    /// (selected by [`Closure::fn_idx`]); `gettype` reports `"object"`.
+    Closure(Rc<Closure>),
+}
+
+/// A lowered-and-captured closure value (step 18). `fn_idx` selects the body
+/// (`FnDecl`) from the evaluator's flat closure table (D-18.2); `captures` are
+/// the `(dst-slot, value)` bindings snapshotted at *creation* time — a `use($x)`
+/// by-value capture holds a plain clone, a `use(&$x)` by-reference capture holds
+/// a `Zval::Ref` to the shared cell (D-18.3).
+#[derive(Clone, Debug)]
+pub struct Closure {
+    pub fn_idx: usize,
+    pub captures: Vec<(u32, Zval)>,
 }
 
 impl Zval {
@@ -61,6 +77,7 @@ impl Zval {
             Zval::Str(_) => "string",
             Zval::Array(_) => "array",
             Zval::Ref(cell) => cell.borrow().gettype(),
+            Zval::Closure(_) => "object",
         }
     }
 
@@ -74,6 +91,7 @@ impl Zval {
             Zval::Str(_) => "string",
             Zval::Array(_) => "array",
             Zval::Ref(cell) => cell.borrow().error_type_name(),
+            Zval::Closure(_) => "Closure",
         }
     }
 }

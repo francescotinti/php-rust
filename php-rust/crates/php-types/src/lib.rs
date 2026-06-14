@@ -14,4 +14,4 @@ mod zval;
 pub use array::{ArrayAppendError, Key, PhpArray};
 pub use diag::{Diag, Diags, PhpError};
 pub use zstr::{PhpStr, ZStr};
-pub use zval::Zval;
+pub use zval::{Closure, Zval};

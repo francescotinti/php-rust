@@ -19,12 +19,14 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use php_types::{convert, dtoa, numstr, ops, Diag, Diags, Key, PhpArray, PhpStr, PhpError, Zval};
+use php_types::{
+    convert, dtoa, numstr, ops, Closure, Diag, Diags, Key, PhpArray, PhpError, PhpStr, Zval,
+};
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
 use crate::hir::{
-    BinOp, CastKind, Expr, ExprKind, FnDecl, Line, Param, Place, PlaceBase, PlaceStep, Program,
-    ScalarType, Slot, Stmt, StmtKind, TypeHint, UnOp,
+    BinOp, Capture, CastKind, Expr, ExprKind, FnDecl, Line, Param, Place, PlaceBase, PlaceStep,
+    Program, ScalarType, Slot, Stmt, StmtKind, TypeHint, UnOp,
 };
 
 /// A fresh frame of `n` independent value slots, all unset.
@@ -140,6 +142,7 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         local_names: None,
         reg: registry,
         funcs: &program.functions,
+        closures: &program.closures,
         fn_index: &fn_index,
         file: &program.file,
         globals: fresh_slots(program.slots.len()),
@@ -185,6 +188,9 @@ struct Evaluator<'p> {
     reg: &'p Registry,
     /// Hoisted user functions and their name→index map (built in `run_with`).
     funcs: &'p [FnDecl],
+    /// Anonymous/arrow function bodies, selected by a closure value's `fn_idx`
+    /// (step 18, D-18.2).
+    closures: &'p [FnDecl],
     fn_index: &'p HashMap<Vec<u8>, usize>,
     /// Script file name, reproduced in rendered diagnostics (`... in <file>`).
     file: &'p [u8],
@@ -821,6 +827,132 @@ impl<'p> Evaluator<'p> {
         res
     }
 
+    /// Run a by-value builtin, mirroring its fresh stdout into `rendered` and
+    /// flushing its diagnostics, exactly like the `Call` dispatch path. Shared by
+    /// direct calls and dynamic string-callable dispatch (step 18).
+    fn dispatch_value_builtin(
+        &mut self,
+        f: crate::builtin::BuiltinFn,
+        argv: &[Zval],
+    ) -> Result<Zval, PhpError> {
+        self.flush_diags();
+        let pre = self.out.len();
+        let mut ctx = Ctx {
+            out: &mut self.out,
+            diags: &mut self.diags,
+        };
+        let res = f(argv, &mut ctx);
+        let produced = self.out[pre..].to_vec();
+        self.rendered.extend_from_slice(&produced);
+        self.flush_diags();
+        res
+    }
+
+    /// Snapshot a closure's captured variables in the *active* frame (step 18,
+    /// D-18.3): a by-value `use($x)` reads (and warns on undefined) the value; a
+    /// by-reference `use(&$x)` shares the variable's cell as a `Zval::Ref`.
+    fn bind_captures(&mut self, captures: &[Capture]) -> Vec<(u32, Zval)> {
+        let mut out = Vec::with_capacity(captures.len());
+        for cap in captures {
+            let val = if cap.by_ref {
+                Zval::Ref(self.slot_cell(cap.src as usize))
+            } else {
+                self.read_var(cap.src)
+            };
+            out.push((cap.dst, val));
+        }
+        out
+    }
+
+    /// Invoke a runtime callable value (step 18, D-18.5): a closure runs its
+    /// lowered body; a string names a user function or builtin; anything else is
+    /// an uncaught `Error` ("Value of type X is not callable").
+    fn call_value(&mut self, callee: Zval, argv: Vec<Zval>) -> Result<Zval, PhpError> {
+        match callee {
+            Zval::Closure(cl) => self.call_closure(&cl, argv),
+            Zval::Str(s) => self.call_named(s.as_bytes(), argv),
+            Zval::Ref(cell) => {
+                let inner = cell.borrow().clone();
+                self.call_value(inner, argv)
+            }
+            other => Err(PhpError::Error(format!(
+                "Value of type {} is not callable",
+                other.error_type_name()
+            ))),
+        }
+    }
+
+    /// Dispatch a string callable to a user function (shadows builtins) or a
+    /// by-value builtin. Arguments arrive by value (by-reference parameters in a
+    /// dynamic string call are a scope-out, D-18.5).
+    fn call_named(&mut self, name: &[u8], argv: Vec<Zval>) -> Result<Zval, PhpError> {
+        if let Some(&idx) = self.fn_index.get(&name.to_ascii_lowercase()) {
+            let args: Vec<Arg> = argv.into_iter().map(Arg::Val).collect();
+            let result = self.call_user_fn(idx, args)?;
+            return Ok(match result {
+                Zval::Ref(cell) => cell.borrow().clone(),
+                other => other,
+            });
+        }
+        match self.reg.get(name).copied() {
+            Some(Builtin::Value(f)) => self.dispatch_value_builtin(f, &argv),
+            // String-calling a by-reference builtin (sort/array_push/…) is a
+            // documented scope-out (it needs a variable, not a value).
+            Some(Builtin::RefFirst(_)) => Err(PhpError::Error(format!(
+                "{}(): cannot be called dynamically with a by-value argument",
+                String::from_utf8_lossy(name)
+            ))),
+            None => Err(PhpError::Error(format!(
+                "Call to undefined function {}()",
+                String::from_utf8_lossy(name)
+            ))),
+        }
+    }
+
+    /// Invoke a closure value: install its frame, bind the captured variables
+    /// into their slots, then bind parameters and run the body via the shared
+    /// [`Evaluator::run_user_fn_body`] (step 18, D-18.2).
+    fn call_closure(&mut self, cl: &Closure, argv: Vec<Zval>) -> Result<Zval, PhpError> {
+        let closures: &'p [FnDecl] = self.closures;
+        let f: &'p FnDecl = &closures[cl.fn_idx];
+
+        let required = f.params.iter().filter(|p| p.default.is_none()).count();
+        if argv.len() < required {
+            let expected = if required == f.params.len() {
+                format!("exactly {required}")
+            } else {
+                format!("at least {required}")
+            };
+            return Err(PhpError::Error(format!(
+                "Too few arguments to function {}(), {} passed and {} expected",
+                String::from_utf8_lossy(&f.name),
+                argv.len(),
+                expected,
+            )));
+        }
+
+        let frame = fresh_slots(f.slots.len());
+        let saved_locals = self.locals.replace(frame);
+        let saved_names = self.local_names.replace(f.slots.as_slice());
+        let saved_returns_ref = std::mem::replace(&mut self.fn_returns_ref, f.by_ref);
+
+        // Bind captured variables into their closure-frame slots before params.
+        for (slot, val) in &cl.captures {
+            frame_mut!(self)[*slot as usize] = val.clone();
+        }
+
+        let args: Vec<Arg> = argv.into_iter().map(Arg::Val).collect();
+        let result = self.run_user_fn_body(f, args);
+
+        self.locals = saved_locals;
+        self.local_names = saved_names;
+        self.fn_returns_ref = saved_returns_ref;
+        result.map(|r| match r {
+            Zval::Ref(cell) => cell.borrow().clone(),
+            other => other,
+        })
+    }
+
     // --- expressions ---
 
     /// Evaluate `e`, stamping its line for any diagnostics it raises and flushing
@@ -1012,21 +1144,28 @@ impl<'p> Evaluator<'p> {
                         )))
                     }
                 };
-                // A builtin writes straight to `out` and may stage diagnostics.
-                // Flush anything pending first, run it, then mirror its fresh
-                // output into `rendered` and flush its own diagnostics after it
-                // (builtins emit output then warn, never the reverse).
-                self.flush_diags();
-                let pre = self.out.len();
-                let mut ctx = Ctx {
-                    out: &mut self.out,
-                    diags: &mut self.diags,
-                };
-                let res = f(&argv, &mut ctx);
-                let produced = self.out[pre..].to_vec();
-                self.rendered.extend_from_slice(&produced);
-                self.flush_diags();
-                res
+                self.dispatch_value_builtin(f, &argv)
+            }
+
+            // A closure / arrow expression: snapshot its captures in the active
+            // frame and build the `Zval::Closure` value (step 18, D-18.2/D-18.3).
+            ExprKind::Closure { fn_idx, captures } => {
+                let bound = self.bind_captures(captures);
+                Ok(Zval::Closure(Rc::new(Closure {
+                    fn_idx: *fn_idx,
+                    captures: bound,
+                })))
+            }
+
+            // A dynamic call `$f(...)` dispatched on the callee value (step 18,
+            // D-18.5). Arguments are evaluated by value (left to right).
+            ExprKind::CallDynamic { callee, args } => {
+                let c = self.eval(callee)?.deref_clone();
+                let mut argv = Vec::with_capacity(args.len());
+                for a in args {
+                    argv.push(self.eval(a)?);
+                }
+                self.call_value(c, argv)
             }
 
             ExprKind::Array(elems) => {
@@ -1285,7 +1424,7 @@ impl<'p> Evaluator<'p> {
                 ));
                 Key::from_bytes(b"")
             }
-            Zval::Array(_) => {
+            Zval::Array(_) | Zval::Closure(_) => {
                 return Err(PhpError::TypeError(
                     "Illegal offset type".to_string(),
                 ))
@@ -1749,7 +1888,7 @@ fn coerce_key_silent(v: &Zval) -> Option<Key> {
         Zval::Double(d) => Some(Key::Int(convert::dval_to_lval(*d))),
         Zval::Str(s) => Some(Key::from_zstr(s)),
         Zval::Null | Zval::Undef => Some(Key::from_bytes(b"")),
-        Zval::Array(_) => None,
+        Zval::Array(_) | Zval::Closure(_) => None,
         Zval::Ref(c) => coerce_key_silent(&c.borrow()),
     }
 }
@@ -1914,6 +2053,7 @@ fn php_type_name(v: &Zval) -> &'static str {
         Zval::Double(_) => "float",
         Zval::Str(_) => "string",
         Zval::Array(_) => "array",
+        Zval::Closure(_) => "object",
         Zval::Ref(c) => php_type_name(&c.borrow()),
     }
 }
@@ -1929,6 +2069,7 @@ fn match_case_repr(v: &Zval) -> String {
         Zval::Double(d) => String::from_utf8_lossy(&dtoa::double_to_shortest(*d)).into_owned(),
         Zval::Str(s) => format!("'{}'", String::from_utf8_lossy(s.as_bytes())),
         Zval::Array(_) => "of type array".to_string(),
+        Zval::Closure(_) => "of type Closure".to_string(),
         Zval::Ref(c) => match_case_repr(&c.borrow()),
     }
 }

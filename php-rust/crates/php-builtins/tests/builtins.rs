@@ -797,3 +797,11 @@ fn undefined_function_is_fatal_after_output() {
         other => panic!("expected undefined-function Error, got {other:?}"),
     }
 }
+
+// --- step 18-1: closure gettype (needs the real registry) ---
+
+#[test]
+fn closure_gettype_is_object() {
+    assert_eq!(out("<?php $f = function(){}; echo gettype($f);"), "object");
+    assert_eq!(out("<?php $f = function($x){ return $x; }; echo gettype($f);"), "object");
+}

@@ -29,6 +29,8 @@ pub fn to_bool(v: &Zval, diags: &mut Diags) -> bool {
         }
         Zval::Array(a) => !a.is_empty(),
         Zval::Ref(c) => to_bool(&c.borrow(), diags),
+        // An object (closure) is always truthy (step 18).
+        Zval::Closure(_) => true,
     }
 }
 
@@ -47,6 +49,7 @@ pub fn is_true_silent(v: &Zval) -> bool {
         }
         Zval::Array(a) => !a.is_empty(),
         Zval::Ref(c) => is_true_silent(&c.borrow()),
+        Zval::Closure(_) => true,
     }
 }
 
@@ -139,6 +142,9 @@ pub fn to_long_cast(v: &Zval, diags: &mut Diags) -> i64 {
         },
         Zval::Array(a) => !a.is_empty() as i64,
         Zval::Ref(c) => to_long_cast(&c.borrow(), diags),
+        // Object → int: objects are truthy, yielding 1 (step 18; PHP also warns,
+        // an edge case not yet modelled).
+        Zval::Closure(_) => 1,
     }
 }
 
@@ -158,6 +164,7 @@ pub fn to_double(v: &Zval) -> f64 {
         },
         Zval::Array(a) => !a.is_empty() as i64 as f64,
         Zval::Ref(c) => to_double(&c.borrow()),
+        Zval::Closure(_) => 1.0,
     }
 }
 
@@ -178,6 +185,15 @@ pub fn to_zstr(v: &Zval, diags: &mut Diags) -> ZStr {
             PhpStr::from_str("Array")
         }
         Zval::Ref(c) => to_zstr(&c.borrow(), diags),
+        // PHP actually raises a fatal `Error: Object of class Closure could not
+        // be converted to string`; this infallible funnel cannot, so it warns
+        // and yields a placeholder (step 18 scope-out, revisit with OOP).
+        Zval::Closure(_) => {
+            diags.push(Diag::Warning(
+                "Object of class Closure could not be converted to string".to_string(),
+            ));
+            PhpStr::from_str("Closure")
+        }
     }
 }
 

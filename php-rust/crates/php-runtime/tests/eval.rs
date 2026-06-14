@@ -1174,3 +1174,112 @@ fn rendered_warning_then_fatal_in_order() {
          Stack trace:\n#0 {main}\n  thrown in t.php on line 3\n"
     );
 }
+
+// --- step 18-1: closures, use captures, dynamic calls ---
+
+#[test]
+fn closure_basic_call() {
+    assert_eq!(out("<?php $f = function(){ return 42; }; echo $f();"), "42");
+    assert_eq!(
+        out("<?php $f = function($a, $b){ return $a + $b; }; echo $f(3, 4);"),
+        "7"
+    );
+}
+
+#[test]
+fn closure_default_parameter() {
+    assert_eq!(
+        out("<?php $f = function($a, $b = 10){ return $a + $b; }; echo $f(5);"),
+        "15"
+    );
+}
+
+#[test]
+fn closure_use_by_value_captures_at_definition() {
+    // A by-value `use` snapshots the variable at definition; a later write to the
+    // outer variable does not change what the closure sees.
+    assert_eq!(
+        out("<?php $x = 10; $f = function() use ($x) { return $x; }; $x = 20; echo $f();"),
+        "10"
+    );
+}
+
+#[test]
+fn closure_use_by_reference_sees_later_writes() {
+    assert_eq!(
+        out("<?php $x = 10; $f = function() use (&$x) { return $x; }; $x = 20; echo $f();"),
+        "20"
+    );
+}
+
+#[test]
+fn closure_use_by_reference_writes_through() {
+    // Writing the captured reference inside the closure is visible outside.
+    assert_eq!(
+        out("<?php $x = 1; $f = function() use (&$x) { $x = 99; }; $f(); echo $x;"),
+        "99"
+    );
+}
+
+#[test]
+fn closure_immediately_invoked() {
+    assert_eq!(out("<?php echo (function($x){ return $x * 2; })(21);"), "42");
+}
+
+#[test]
+fn closure_stored_in_array_and_called() {
+    assert_eq!(
+        out(r#"<?php $a = ["f" => function($x){ return $x + 1; }]; echo $a["f"](9);"#),
+        "10"
+    );
+}
+
+#[test]
+fn closure_nested_capture_chain() {
+    // A closure that returns a closure capturing the outer parameter by value.
+    assert_eq!(
+        out(
+            "<?php $mk = function($n){ return function($x) use ($n) { return $x + $n; }; }; \
+             $add5 = $mk(5); echo $add5(10);"
+        ),
+        "15"
+    );
+}
+
+#[test]
+fn closure_does_not_capture_implicitly() {
+    // A plain `function` does NOT see the enclosing scope without `use`.
+    let o = run_source(
+        b"t.php",
+        b"<?php $x = 5; $f = function(){ return $x; }; echo $f();",
+    )
+    .expect("lowers");
+    // `$x` inside is undefined -> NULL, echoes nothing; a warning is raised.
+    assert_eq!(String::from_utf8(o.stdout).unwrap(), "");
+    assert!(o.fatal.is_none());
+}
+
+#[test]
+fn dynamic_call_on_non_callable_is_fatal() {
+    let o = run_source(b"t.php", b"<?php $f = 5; $f();").expect("lowers");
+    match o.fatal {
+        Some(PhpError::Error(m)) => assert_eq!(m, "Value of type int is not callable"),
+        other => panic!("expected Error, got {other:?}"),
+    }
+}
+
+#[test]
+fn closure_too_few_arguments_is_fatal() {
+    let o = run_source(
+        b"t.php",
+        b"<?php $f = function($a, $b){ return $a + $b; }; $f(1);",
+    )
+    .expect("lowers");
+    match o.fatal {
+        Some(PhpError::Error(m)) => {
+            assert!(m.contains("Too few arguments"), "{m}");
+            assert!(m.contains("{closure"), "{m}");
+        }
+        other => panic!("expected Error, got {other:?}"),
+    }
+}

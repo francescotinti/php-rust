@@ -164,6 +164,9 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize) {
         // A top-level reference is dereferenced transparently (the `&` marker
         // only applies to reference *elements* inside a container).
         Zval::Ref(cell) => dump(out, &cell.borrow(), indent),
+        // Step 18-1 placeholder: the exact `object(Closure)#N (3){...}` format
+        // is implemented in step 18-7.
+        Zval::Closure(_) => out.extend_from_slice(b"object(Closure)\n"),
     }
 }
 
