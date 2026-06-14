@@ -20,10 +20,10 @@ use bumpalo::Bump;
 use mago_database::file::File;
 use mago_span::{HasSpan, Span};
 use mago_syntax::ast::{
-    Argument, ArrayElement, AssignmentOperator, BinaryOperator, Call, Closure, Construct,
-    DeclareBody, Expression, ForeachTarget, Function, FunctionLikeParameterList, Hint, Identifier,
-    Literal, LiteralInteger, MatchArm as AstMatchArm, Statement, StaticItem, UnaryPostfixOperator,
-    UnaryPrefixOperator, Variable,
+    Argument, ArrayElement, ArrowFunction, AssignmentOperator, BinaryOperator, Call, Closure,
+    Construct, DeclareBody, Expression, ForeachTarget, Function, FunctionLikeParameterList, Hint,
+    Identifier, Literal, LiteralInteger, MatchArm as AstMatchArm, Node, Statement, StaticItem,
+    UnaryPostfixOperator, UnaryPrefixOperator, Variable,
 };
 use mago_syntax::parser::parse_file;
 
@@ -113,6 +113,13 @@ impl Scope {
         self.index.insert(name.to_vec(), s);
         s
     }
+
+    /// Resolve `$name` only if it already has a slot (no allocation). Used by
+    /// arrow-function capture analysis to decide whether a free variable refers
+    /// to an enclosing-scope variable (step 18, D-18.4).
+    fn get(&self, name: &[u8]) -> Option<Slot> {
+        self.index.get(name).copied()
+    }
 }
 
 /// The three products of lowering a closure body: parameters, lexical captures,
@@ -183,6 +190,12 @@ impl<'f> Lowerer<'f> {
     /// the active scope.
     fn slot_for(&mut self, name: &[u8]) -> Slot {
         self.scope_mut().slot_for(name)
+    }
+
+    /// Resolve `$name` in the active (enclosing) scope *without* allocating a
+    /// slot — `None` if the name is not already bound there (step 18, D-18.4).
+    fn enclosing_slot(&self, name: &[u8]) -> Option<Slot> {
+        self.locals.as_ref().unwrap_or(&self.globals).get(name)
     }
 
     // --- statements ---
@@ -625,6 +638,85 @@ impl<'f> Lowerer<'f> {
         idx
     }
 
+    /// Lower an arrow function `fn (params) => expr` (step 18, D-18.4). Unlike a
+    /// `function`, an arrow *implicitly* captures by value every enclosing-scope
+    /// variable used in its body. Free variables are discovered by walking the
+    /// body AST and keeping those that already have a slot in the enclosing scope
+    /// (excluding the arrow's own parameters); the body lowers to `return expr`.
+    fn lower_arrow_function(
+        &mut self,
+        af: &ArrowFunction,
+        line: Line,
+    ) -> Result<ExprKind, LowerError> {
+        if af.r#static.is_some() {
+            return Err(LowerError::Unsupported {
+                what: "static arrow function",
+                line,
+            });
+        }
+        if af.ampersand.is_some() {
+            return Err(LowerError::Unsupported {
+                what: "by-reference arrow function",
+                line,
+            });
+        }
+
+        // Collect free variables of the body, then keep those that name an
+        // enclosing-scope variable and are not the arrow's own parameters.
+        let mut param_names: HashMap<&[u8], ()> = HashMap::new();
+        for p in af.parameter_list.parameters.iter() {
+            param_names.insert(strip_dollar(p.variable.name), ());
+        }
+        let mut used: Vec<&[u8]> = Vec::new();
+        collect_direct_vars(af.expression, &mut used);
+        let mut use_specs: Vec<(Box<[u8]>, Slot)> = Vec::new();
+        for raw in used {
+            let name = strip_dollar(raw);
+            if param_names.contains_key(name) {
+                continue;
+            }
+            if let Some(src) = self.enclosing_slot(name) {
+                use_specs.push((name.into(), src));
+            }
+        }
+
+        let saved_locals = self.locals.replace(Scope::default());
+        let saved_tag = std::mem::replace(&mut self.after_closing_tag, false);
+        let saved_by_ref = std::mem::replace(&mut self.fn_by_ref, false);
+
+        let inner = (|| -> Result<LoweredClosure, LowerError> {
+            let params = self.lower_params(&af.parameter_list, line)?;
+            let mut captures = Vec::with_capacity(use_specs.len());
+            for (name, src) in &use_specs {
+                let dst = self.slot_for(name);
+                captures.push(Capture {
+                    src: *src,
+                    dst,
+                    by_ref: false,
+                });
+            }
+            let body_expr = self.lower_expr(af.expression)?;
+            let body = vec![Stmt {
+                line,
+                kind: StmtKind::Return(Some(body_expr)),
+            }];
+            Ok((params, captures, body))
+        })();
+
+        let local_scope = std::mem::replace(&mut self.locals, saved_locals)
+            .expect("local scope installed for arrow body");
+        self.after_closing_tag = saved_tag;
+        self.fn_by_ref = saved_by_ref;
+
+        let (params, captures, body) = inner?;
+        let ret_hint = af
+            .return_type_hint
+            .as_ref()
+            .and_then(|r| lower_hint(&r.hint));
+        let fn_idx = self.push_closure(params, body, local_scope.slots, false, ret_hint, line);
+        Ok(ExprKind::Closure { fn_idx, captures })
+    }
+
     // --- expressions ---
 
     fn lower_expr_list<'a, I>(&mut self, it: I) -> Result<Vec<Expr>, LowerError>
@@ -761,6 +853,7 @@ impl<'f> Lowerer<'f> {
             Expression::Call(call) => self.lower_call(call, line)?,
 
             Expression::Closure(closure) => self.lower_closure(closure, line)?,
+            Expression::ArrowFunction(af) => self.lower_arrow_function(af, line)?,
 
             Expression::Array(arr) => ExprKind::Array(self.lower_array_elements(arr.elements.iter(), line)?),
             Expression::LegacyArray(arr) => {
@@ -1081,6 +1174,25 @@ fn function_name<'a>(id: &Identifier<'a>) -> &'a [u8] {
     match raw.iter().rposition(|&b| b == b'\\') {
         Some(i) => &raw[i + 1..],
         None => raw,
+    }
+}
+
+/// Collect the names (with leading `$`) of every direct variable reachable from
+/// `expr`, used to discover an arrow function's free variables (step 18, D-18.4).
+///
+/// The walk descends into nested closures/arrows too. Over-collecting is safe:
+/// a captured-but-unused value is bound into an unused slot and never observed,
+/// while a variable a nested closure references via `use` must be available in
+/// the arrow's frame — so seeing it here is exactly what makes that work.
+fn collect_direct_vars<'a>(expr: &'a Expression<'a>, out: &mut Vec<&'a [u8]>) {
+    let mut stack: Vec<Node<'a, 'a>> = vec![Node::Expression(expr)];
+    while let Some(node) = stack.pop() {
+        if let Node::DirectVariable(d) = node {
+            if !out.contains(&d.name) {
+                out.push(d.name);
+            }
+        }
+        stack.extend(node.children());
     }
 }
 

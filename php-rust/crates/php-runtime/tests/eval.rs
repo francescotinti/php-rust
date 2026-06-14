@@ -1283,3 +1283,53 @@ fn closure_too_few_arguments_is_fatal() {
         other => panic!("expected Error, got {other:?}"),
     }
 }
+
+// --- step 18-2: arrow functions ---
+
+#[test]
+fn arrow_basic() {
+    assert_eq!(out("<?php $f = fn($x) => $x * 2; echo $f(21);"), "42");
+    assert_eq!(out("<?php $f = fn($a, $b) => $a + $b; echo $f(3, 4);"), "7");
+}
+
+#[test]
+fn arrow_auto_captures_by_value() {
+    // `fn` auto-captures `$a` by value at definition; the later write to `$a`
+    // does not change what the arrow sees.
+    assert_eq!(
+        out("<?php $a = 5; $f = fn($y) => $a + $y; $a = 100; echo $f(3);"),
+        "8"
+    );
+}
+
+#[test]
+fn arrow_captures_with_no_params() {
+    assert_eq!(out("<?php $x = 7; $f = fn() => $x; echo $f();"), "7");
+}
+
+#[test]
+fn arrow_immediately_invoked() {
+    assert_eq!(out("<?php echo (fn($x) => $x + 1)(9);"), "10");
+}
+
+#[test]
+fn arrow_nested_capture_is_transitive() {
+    // The outer arrow must capture `$a`/`$b` so the inner arrow can see them.
+    assert_eq!(
+        out("<?php $a = 1; $b = 2; $f = fn() => fn() => $a + $b; echo $f()();"),
+        "3"
+    );
+}
+
+#[test]
+fn arrow_returns_closure_that_captures() {
+    // An arrow whose body is a `function () use (...)` — the closure captures
+    // from the arrow's frame (so the arrow must capture from its enclosing one).
+    assert_eq!(
+        out(
+            "<?php $mk = fn($n) => function($x) use ($n) { return $x + $n; }; \
+             $add5 = $mk(5); echo $add5(100);"
+        ),
+        "105"
+    );
+}
