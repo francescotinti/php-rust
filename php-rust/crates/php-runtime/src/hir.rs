@@ -318,6 +318,10 @@ pub enum ExprKind {
     /// the active frame to produce the [`php_types::Closure`] value.
     Closure { fn_idx: usize, captures: Vec<Capture> },
 
+    /// A first-class callable `name(...)` (step 18-6, D-18.10): produces a
+    /// closure value wrapping the function name.
+    FirstClassCallable(Box<[u8]>),
+
     /// A dynamic call `callee(args...)` where the callee is a runtime value
     /// (step 18, D-18.5): `$f()`, `$a['k']()`, an immediately-invoked closure
     /// `(function(){})()`. Arguments are evaluated by value; the evaluator

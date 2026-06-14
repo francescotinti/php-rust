@@ -22,8 +22,8 @@ use mago_span::{HasSpan, Span};
 use mago_syntax::ast::{
     Argument, ArrayElement, ArrowFunction, AssignmentOperator, BinaryOperator, Call, Closure,
     Construct, DeclareBody, Expression, ForeachTarget, Function, FunctionLikeParameterList, Hint,
-    Identifier, Literal, LiteralInteger, MatchArm as AstMatchArm, Node, Statement, StaticItem,
-    UnaryPostfixOperator, UnaryPrefixOperator, Variable,
+    Identifier, Literal, LiteralInteger, MatchArm as AstMatchArm, Node, PartialApplication,
+    Statement, StaticItem, UnaryPostfixOperator, UnaryPrefixOperator, Variable,
 };
 use mago_syntax::parser::parse_file;
 
@@ -855,6 +855,9 @@ impl<'f> Lowerer<'f> {
             Expression::Closure(closure) => self.lower_closure(closure, line)?,
             Expression::ArrowFunction(af) => self.lower_arrow_function(af, line)?,
 
+            // A first-class callable `name(...)` (step 18-6, D-18.10).
+            Expression::PartialApplication(pa) => self.lower_partial_application(pa, line)?,
+
             // A bare `NAME` constant: only the known engine constants are
             // resolved (to a literal at lowering time, D-18.7); user-defined
             // constants stay unsupported (the script becomes a SKIP).
@@ -1052,6 +1055,36 @@ impl<'f> Lowerer<'f> {
             name: name.into(),
             args,
         })
+    }
+
+    /// Lower a first-class callable `name(...)` (step 18-6, D-18.10). Only the
+    /// plain function form with the `(...)` placeholder is supported; method /
+    /// static-method first-class callables and partial applications with real
+    /// placeholders stay unsupported (OOP / scope-out).
+    fn lower_partial_application(
+        &mut self,
+        pa: &PartialApplication,
+        line: Line,
+    ) -> Result<ExprKind, LowerError> {
+        let func = match pa {
+            PartialApplication::Function(f) if f.argument_list.is_first_class_callable() => f,
+            _ => {
+                return Err(LowerError::Unsupported {
+                    what: "partial application",
+                    line,
+                })
+            }
+        };
+        let name = match func.function {
+            Expression::Identifier(id) => function_name(id),
+            _ => {
+                return Err(LowerError::Unsupported {
+                    what: "dynamic first-class callable",
+                    line,
+                })
+            }
+        };
+        Ok(ExprKind::FirstClassCallable(name.into()))
     }
 
     /// Lower a call's argument list, accepting only plain positional arguments

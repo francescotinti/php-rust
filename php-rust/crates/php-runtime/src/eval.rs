@@ -881,7 +881,11 @@ impl<'p> Evaluator<'p> {
     /// an uncaught `Error` ("Value of type X is not callable").
     fn call_value(&mut self, callee: Zval, argv: Vec<Zval>) -> Result<Zval, PhpError> {
         match callee {
-            Zval::Closure(cl) => self.call_closure(&cl, argv),
+            Zval::Closure(cl) => match &cl.named {
+                // A first-class callable dispatches like a string callable.
+                Some(name) => self.call_named(name.as_bytes(), argv),
+                None => self.call_closure(&cl, argv),
+            },
             Zval::Str(s) => self.call_named(s.as_bytes(), argv),
             Zval::Ref(cell) => {
                 let inner = cell.borrow().clone();
@@ -1451,8 +1455,16 @@ impl<'p> Evaluator<'p> {
                 Ok(Zval::Closure(Rc::new(Closure {
                     fn_idx: *fn_idx,
                     captures: bound,
+                    named: None,
                 })))
             }
+
+            // A first-class callable `name(...)` — a closure wrapping a name.
+            ExprKind::FirstClassCallable(name) => Ok(Zval::Closure(Rc::new(Closure {
+                fn_idx: 0,
+                captures: Vec::new(),
+                named: Some(PhpStr::new(name.to_vec())),
+            }))),
 
             // A dynamic call `$f(...)` dispatched on the callee value (step 18,
             // D-18.5). Arguments are evaluated by value (left to right).

@@ -1538,3 +1538,32 @@ fn usort_reindexes_keys() {
         "13"
     );
 }
+
+// --- step 18-6: first-class callable syntax f(...) ---
+
+#[test]
+fn first_class_callable_user_function() {
+    assert_eq!(
+        out("<?php function dbl($x){ return $x * 2; } $f = dbl(...); echo $f(21);"),
+        "42"
+    );
+}
+
+#[test]
+fn first_class_callable_in_usort() {
+    assert_eq!(
+        out(
+            "<?php function cmp($a, $b){ return $a <=> $b; } \
+             $a = [3, 1, 2]; usort($a, cmp(...)); echo $a[0], $a[1], $a[2];"
+        ),
+        "123"
+    );
+}
+
+#[test]
+fn first_class_callable_is_callable() {
+    assert_eq!(
+        out("<?php function foo(){} echo is_callable(foo(...)) ? 'y' : 'n';"),
+        "y"
+    );
+}

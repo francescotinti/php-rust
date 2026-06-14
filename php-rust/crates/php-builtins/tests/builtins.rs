@@ -851,3 +851,19 @@ fn array_filter_with_builtin_string_callable() {
         "xyz"
     );
 }
+
+// --- step 18-6: first-class callable of a builtin ---
+
+#[test]
+fn first_class_callable_builtin() {
+    assert_eq!(out("<?php $f = strlen(...); echo $f('hello');"), "5");
+    assert_eq!(out("<?php echo gettype(strlen(...));"), "object");
+}
+
+#[test]
+fn first_class_callable_in_array_map() {
+    assert_eq!(
+        out("<?php echo implode(',', array_map(strtoupper(...), ['a', 'b', 'c']));"),
+        "A,B,C"
+    );
+}

@@ -44,6 +44,10 @@ pub enum Zval {
 pub struct Closure {
     pub fn_idx: usize,
     pub captures: Vec<(u32, Zval)>,
+    /// `Some(name)` for a first-class callable such as `strlen(...)` (step 18-6,
+    /// D-18.10): the value wraps a function *name* and `fn_idx`/`captures` are
+    /// unused. `None` for an ordinary anonymous/arrow closure.
+    pub named: Option<Rc<PhpStr>>,
 }
 
 impl Zval {
