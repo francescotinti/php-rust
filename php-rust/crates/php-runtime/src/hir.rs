@@ -99,7 +99,37 @@ pub struct ClassDecl {
     /// Methods declared on this class, in declaration order. Resolved by name
     /// (case-insensitive), walking the parent chain for inheritance.
     pub methods: Vec<MethodDecl>,
+    /// `enum` declaration (vs `class`/`interface`), step 23. When set, `parent`
+    /// is `None`, `props`/`static_props` are empty, and the cases live in
+    /// `enum_cases`. The whole OOP machinery (methods, consts, instanceof,
+    /// static calls, `$this`) is reused.
+    pub is_enum: bool,
+    /// For a backed enum (`enum E: string`/`: int`), the backing scalar type.
+    /// `None` for a pure enum or a non-enum class (step 23, D-23.10).
+    pub enum_backing: Option<EnumBacking>,
+    /// The `case` members of an enum, in declaration order (step 23, D-23.1).
+    /// Empty for non-enums.
+    pub enum_cases: Vec<EnumCaseDecl>,
     pub line: Line,
+}
+
+/// Backing scalar type of a backed enum (step 23, D-23.10).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EnumBacking {
+    Int,
+    Str,
+}
+
+/// One `case Name;` (pure) or `case Name = expr;` (backed) of an enum
+/// (step 23, D-23.1/D-23.4).
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumCaseDecl {
+    /// Case name (becomes the synthetic `->name` property and the `::Name`
+    /// constant-like accessor).
+    pub name: Box<[u8]>,
+    /// Backing value expression for a backed enum (`None` for a pure case).
+    /// Evaluated once when the case singleton is first materialised.
+    pub value: Option<Expr>,
 }
 
 /// One `static $p = default;` declaration (step 19-4, D-19.14).

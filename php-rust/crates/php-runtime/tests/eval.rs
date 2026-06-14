@@ -2916,3 +2916,83 @@ fn magic_invoke_object_without_invoke_not_callable() {
         other => panic!("expected not-callable Error, got {other:?}"),
     }
 }
+
+// ---------------------------------------------------------------------------
+// Step 23-1 — pure enum core
+// ---------------------------------------------------------------------------
+
+const SUIT: &str = "enum Suit { case Hearts; case Diamonds; case Clubs; case Spades; } ";
+
+#[test]
+fn enum_case_name() {
+    assert_eq!(
+        out(&format!("<?php {SUIT} echo Suit::Hearts->name;")),
+        "Hearts"
+    );
+}
+
+#[test]
+fn enum_case_singleton_identity() {
+    assert_eq!(
+        out(&format!("<?php {SUIT} echo Suit::Hearts === Suit::Hearts ? 'y' : 'n';")),
+        "y"
+    );
+}
+
+#[test]
+fn enum_distinct_cases_not_identical() {
+    assert_eq!(
+        out(&format!(
+            "<?php {SUIT} echo Suit::Hearts === Suit::Spades ? 'y' : 'n'; echo Suit::Hearts !== Suit::Spades ? 'y' : 'n';"
+        )),
+        "ny"
+    );
+}
+
+#[test]
+fn enum_match_on_case() {
+    assert_eq!(
+        out(&format!(
+            "<?php {SUIT} $x = Suit::Clubs; echo match($x) {{ Suit::Hearts, Suit::Diamonds => 'red', Suit::Clubs, Suit::Spades => 'black', }};"
+        )),
+        "black"
+    );
+}
+
+#[test]
+fn enum_instanceof_self_and_unitenum() {
+    assert_eq!(
+        out(&format!(
+            "<?php {SUIT} $x = Suit::Hearts; echo $x instanceof Suit ? 'y' : 'n'; echo $x instanceof UnitEnum ? 'y' : 'n';"
+        )),
+        "yy"
+    );
+}
+
+#[test]
+fn enum_class_constant() {
+    assert_eq!(out(&format!("<?php {SUIT} echo Suit::class;")), "Suit");
+}
+
+#[test]
+fn enum_cannot_instantiate() {
+    let o = run_source(
+        b"t.php",
+        b"<?php enum Suit { case Hearts; } $x = new Suit();",
+    )
+    .expect("lowers");
+    match o.fatal {
+        Some(PhpError::Error(msg)) => assert_eq!(msg, "Cannot instantiate enum Suit"),
+        other => panic!("expected cannot-instantiate Error, got {other:?}"),
+    }
+}
+
+#[test]
+fn object_identity_handle_semantics() {
+    // D-23.3: object === follows handle identity (shared Rc), distinct instances differ.
+    assert_eq!(
+        out("<?php class C {} $a = new C(); $b = $a; $c = new C(); \
+             echo $a === $b ? 'y' : 'n'; echo $a === $c ? 'y' : 'n';"),
+        "yn"
+    );
+}

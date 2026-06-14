@@ -1,6 +1,6 @@
 --TEST--
 unsupported construct -> skip
 --FILE--
-<?php enum E {} echo 1;
+<?php function f(...$a){} echo 1;
 --EXPECT--
 1

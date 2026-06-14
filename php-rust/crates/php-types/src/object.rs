@@ -45,11 +45,21 @@ pub struct ObjectInfo {
     /// Declared property name → visibility, in declaration order. Dynamic
     /// properties are absent and default to `Public`.
     entries: Vec<(Box<[u8]>, PropVis)>,
+    /// `true` when this instance is an enum case singleton, so `var_dump` /
+    /// `print_r` render it as `enum(Name::Case)` rather than `object(...)`
+    /// (step 23, D-23.5).
+    pub is_enum_case: bool,
 }
 
 impl ObjectInfo {
     pub fn from_entries(entries: Vec<(Box<[u8]>, PropVis)>) -> Self {
-        ObjectInfo { entries }
+        ObjectInfo { entries, is_enum_case: false }
+    }
+
+    /// `ObjectInfo` for an enum case singleton (step 23, D-23.5). The synthetic
+    /// `name`/`value` properties are public.
+    pub fn enum_case(entries: Vec<(Box<[u8]>, PropVis)>) -> Self {
+        ObjectInfo { entries, is_enum_case: true }
     }
 
     /// The visibility of property `name`, defaulting to `Public` for a dynamic

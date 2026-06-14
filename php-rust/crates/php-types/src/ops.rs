@@ -673,6 +673,10 @@ pub fn identical(a: &Zval, b: &Zval) -> bool {
                 .zip(r.iter())
                 .all(|((k1, v1), (k2, v2))| keys_identical(k1, k2) && identical(v1, v2))
         }
+        // Objects have handle identity: `$a === $b` iff they are the same
+        // instance (object assignment shares the `Rc`). Enum cases are interned
+        // singletons, so this also gives `E::Case === E::Case` (step 23, D-23.3).
+        (Zval::Object(l), Zval::Object(r)) => Rc::ptr_eq(l, r),
         // Identity follows references on either side (also covers reference
         // elements inside arrays via the recursive call above).
         (Zval::Ref(c), _) => identical(&c.borrow(), b),

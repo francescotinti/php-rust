@@ -218,6 +218,7 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         cur_static_class: None,
         static_props: HashMap::new(),
         class_shapes: HashMap::new(),
+        enum_cache: HashMap::new(),
         magic_guard: HashSet::new(),
         file: &program.file,
         globals: fresh_slots(program.slots.len()),
@@ -298,6 +299,10 @@ struct Evaluator<'p> {
     /// Cache of per-class property-visibility shapes for object dumping, built on
     /// first instantiation and shared by all instances (step 19-7, D-19.20).
     class_shapes: HashMap<ClassId, Rc<ObjectInfo>>,
+    /// Interned enum case singletons, keyed by (enum class id, case name). The
+    /// first `E::Case` access materialises the object; every later access returns
+    /// the same `Rc`, giving `===`/`match` identity (step 23, D-23.2).
+    enum_cache: HashMap<(ClassId, Vec<u8>), Rc<RefCell<Object>>>,
     /// Active magic-accessor guards, keyed by (object handle, accessor kind,
     /// property name). While a guard is present, a nested access of the same
     /// kind to the same property bypasses the magic method (step 22, D-22.4).
@@ -1527,6 +1532,13 @@ impl<'p> Evaluator<'p> {
     /// inherited property set, then run `__construct` (resolved up the chain).
     fn eval_new(&mut self, class: &ClassRef, args: &[Expr]) -> Result<Zval, PhpError> {
         let cid = self.resolve_class_ref(class)?;
+        // An enum has no constructor and cannot be instantiated (step 23, D-23.9).
+        if self.classes[cid].is_enum {
+            return Err(PhpError::Error(format!(
+                "Cannot instantiate enum {}",
+                String::from_utf8_lossy(&self.classes[cid].name)
+            )));
+        }
         // An abstract class or interface cannot be instantiated (step 19-5).
         if self.classes[cid].is_abstract {
             let what = if self.classes[cid].is_interface {
@@ -1580,6 +1592,13 @@ impl<'p> Evaluator<'p> {
         if name.eq_ignore_ascii_case(b"class") {
             return Ok(Zval::Str(PhpStr::new(self.classes[cid].name.to_vec())));
         }
+        // An enum case (`E::Case`) is matched case-sensitively before user
+        // constants, and resolves to the interned singleton (step 23, D-23.2).
+        if self.classes[cid].is_enum
+            && self.classes[cid].enum_cases.iter().any(|c| c.name.as_ref() == name)
+        {
+            return self.eval_enum_case(cid, name);
+        }
         // Walk the chain for the constant's declaring class + value expression.
         let classes: &'p [ClassDecl] = self.classes;
         let mut c = Some(cid);
@@ -1604,6 +1623,49 @@ impl<'p> Evaluator<'p> {
         let result = self.eval(expr);
         self.cur_class = saved_class;
         result
+    }
+
+    /// Return the interned singleton object for enum case `E::name`, creating it
+    /// on first access (step 23, D-23.2/D-23.4). The case is guaranteed to exist
+    /// (the caller checked). Synthesises the read-only `name` (and, for a backed
+    /// enum, `value`) properties; the object carries the enum's class id so the
+    /// whole OOP machinery (`instanceof`, method dispatch, `$this`) applies.
+    fn eval_enum_case(&mut self, cid: ClassId, name: &[u8]) -> Result<Zval, PhpError> {
+        let key = (cid, name.to_vec());
+        if let Some(o) = self.enum_cache.get(&key) {
+            return Ok(Zval::Object(Rc::clone(o)));
+        }
+        let classes: &'p [ClassDecl] = self.classes;
+        let case = classes[cid]
+            .enum_cases
+            .iter()
+            .find(|c| c.name.as_ref() == name)
+            .expect("caller verified the case exists");
+        let mut props = Props::new();
+        let mut entries: Vec<(Box<[u8]>, PropVis)> =
+            vec![(Box::from(&b"name"[..]), PropVis::Public)];
+        props.set(b"name", Zval::Str(PhpStr::new(name.to_vec())));
+        if let Some(expr) = &case.value {
+            // The backing value is a compile-time literal of the declared type
+            // (PHP rejects a mismatch at link time), so it is stored as-is once,
+            // when the singleton is first materialised (step 23, D-23.4/D-23.10).
+            let saved = self.cur_class.replace(cid);
+            let value = self.eval(expr);
+            self.cur_class = saved;
+            props.set(b"value", value?);
+            entries.push((Box::from(&b"value"[..]), PropVis::Public));
+        }
+        let id = self.next_id();
+        let obj = Object {
+            class_id: cid as u32,
+            class_name: PhpStr::new(classes[cid].name.to_vec()),
+            props,
+            id,
+            info: Rc::new(ObjectInfo::enum_case(entries)),
+        };
+        let rc = Rc::new(RefCell::new(obj));
+        self.enum_cache.insert(key, Rc::clone(&rc));
+        Ok(Zval::Object(rc))
     }
 
     /// The persistent cell backing a `static` property, resolving the declaring

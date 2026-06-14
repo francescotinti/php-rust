@@ -22,7 +22,8 @@ use mago_span::{HasSpan, Span};
 use mago_syntax::ast::{
     Access, Argument, ArrayElement, ArrowFunction, AssignmentOperator, BinaryOperator, Call,
     Class, ClassLikeConstantSelector, ClassLikeMember, ClassLikeMemberSelector, Closure, Construct,
-    DeclareBody, Expression, Extends, ForeachTarget, Function, FunctionLikeParameterList, Hint,
+    DeclareBody, Enum, EnumCaseItem, Expression, Extends, ForeachTarget, Function,
+    FunctionLikeParameterList, Hint,
     Identifier, Instantiation, Interface, Literal, LiteralInteger, MatchArm as AstMatchArm, Method,
     MethodBody, Modifier, Node, PartialApplication, Property, PropertyItem, Statement, StaticItem,
     Trait, TraitUse, TraitUseAdaptation, TraitUseMethodReference, TraitUseSpecification,
@@ -125,6 +126,8 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
 /// `file`/`line` are filled in by the evaluator at `new` time, not here.
 const PRELUDE_SRC: &[u8] = br##"<?php
 class stdClass {}
+interface UnitEnum {}
+interface BackedEnum extends UnitEnum {}
 interface Throwable {}
 class Exception implements Throwable {
     protected $message = "";
@@ -567,6 +570,15 @@ impl<'f> Lowerer<'f> {
                     line,
                 });
             }
+            Statement::Enum(en) => {
+                if self.class_index.contains_key(&en.name.value.to_ascii_lowercase()) {
+                    return Ok(None);
+                }
+                return Err(LowerError::Unsupported {
+                    what: "conditional enum declaration",
+                    line,
+                });
+            }
             // A trait declaration carries no runtime behaviour: the top-level
             // ones were lowered into `self.traits` and flattened into their
             // consumers at lowering time (step 21).
@@ -667,12 +679,14 @@ impl<'f> Lowerer<'f> {
         enum Pending<'a> {
             Class(&'a Class<'a>),
             Interface(&'a Interface<'a>),
+            Enum(&'a Enum<'a>),
         }
         let mut pending: Vec<Pending> = Vec::new();
         for s in stmts {
             let (name, span) = match s {
                 Statement::Class(c) => (c.name.value, c.span()),
                 Statement::Interface(i) => (i.name.value, i.span()),
+                Statement::Enum(e) => (e.name.value, e.span()),
                 _ => continue,
             };
             let key = name.to_ascii_lowercase();
@@ -691,6 +705,7 @@ impl<'f> Lowerer<'f> {
             pending.push(match s {
                 Statement::Class(c) => Pending::Class(c),
                 Statement::Interface(i) => Pending::Interface(i),
+                Statement::Enum(e) => Pending::Enum(e),
                 _ => unreachable!(),
             });
         }
@@ -698,6 +713,7 @@ impl<'f> Lowerer<'f> {
             let decl = match p {
                 Pending::Class(c) => self.lower_class(c)?,
                 Pending::Interface(i) => self.lower_interface(i)?,
+                Pending::Enum(e) => self.lower_enum(e)?,
             };
             self.classes.push(decl);
         }
@@ -1059,6 +1075,9 @@ impl<'f> Lowerer<'f> {
             static_props: Vec::new(),
             consts,
             methods: Vec::new(),
+            is_enum: false,
+            enum_backing: None,
+            enum_cases: Vec::new(),
             line,
         })
     }
@@ -1177,6 +1196,118 @@ impl<'f> Lowerer<'f> {
             static_props,
             consts,
             methods,
+            is_enum: false,
+            enum_backing: None,
+            enum_cases: Vec::new(),
+            line,
+        })
+    }
+
+    /// Lower one `enum E [: int|string] { case ...; methods; consts }` into a
+    /// [`ClassDecl`] with `is_enum = true` (step 23, D-23.1). Cases go to
+    /// `enum_cases`; methods/constants/trait-uses reuse the class machinery.
+    /// Every enum implements `UnitEnum` (backed ones also `BackedEnum`, D-23.7).
+    fn lower_enum(&mut self, en: &Enum) -> Result<ClassDecl, LowerError> {
+        let line = self.line_of(en.span());
+        let name: Box<[u8]> = en.name.value.into();
+        // Backing type (`: int` / `: string`), if any (D-23.10).
+        let enum_backing = match &en.backing_type_hint {
+            Some(bt) => Some(match &bt.hint {
+                Hint::Integer(_) => crate::hir::EnumBacking::Int,
+                Hint::String(_) => crate::hir::EnumBacking::Str,
+                _ => {
+                    return Err(LowerError::Unsupported {
+                        what: "enum backing type (only int/string)",
+                        line,
+                    })
+                }
+            }),
+            None => None,
+        };
+        // Marker interfaces (D-23.7) + any user `implements`.
+        let mut iface_names: Vec<&[u8]> = vec![b"UnitEnum"];
+        if enum_backing.is_some() {
+            iface_names.push(b"BackedEnum");
+        }
+        if let Some(imp) = &en.implements {
+            iface_names.extend(imp.types.iter().map(function_name));
+        }
+        let interfaces = self.resolve_interfaces(&iface_names, line)?;
+
+        let mut consts = Vec::new();
+        let mut methods = Vec::new();
+        let mut enum_cases = Vec::new();
+        let mut uses: Vec<&TraitUse> = Vec::new();
+        let mut abstract_req: Vec<Box<[u8]>> = Vec::new();
+        for member in en.members.iter() {
+            match member {
+                ClassLikeMember::EnumCase(c) => {
+                    let (case_name, value) = match &c.item {
+                        EnumCaseItem::Unit(u) => (u.name.value, None),
+                        EnumCaseItem::Backed(b) => {
+                            (b.name.value, Some(self.lower_expr(b.value)?))
+                        }
+                    };
+                    enum_cases.push(crate::hir::EnumCaseDecl {
+                        name: case_name.into(),
+                        value,
+                    });
+                }
+                ClassLikeMember::Method(m) if matches!(m.body, MethodBody::Abstract(_)) => {
+                    abstract_req.push(m.name.value.into())
+                }
+                ClassLikeMember::Method(m) => methods.push(self.lower_method(m, line)?),
+                ClassLikeMember::Constant(c) => self.lower_class_const(c, &mut consts)?,
+                ClassLikeMember::TraitUse(u) => uses.push(u),
+                // Enums may not declare properties (PHP fatal); we reject them.
+                ClassLikeMember::Property(_) => {
+                    return Err(LowerError::Unsupported {
+                        what: "property in enum",
+                        line,
+                    })
+                }
+            }
+        }
+        if !uses.is_empty() {
+            let props: Vec<crate::hir::PropDecl> = Vec::new();
+            let static_props: Vec<crate::hir::StaticPropDecl> = Vec::new();
+            let (own_m, own_p, own_s, own_c) =
+                member_name_sets(&methods, &props, &static_props, &consts);
+            let mut t_methods = Vec::new();
+            let mut t_props = Vec::new();
+            let mut t_static = Vec::new();
+            let mut t_consts = Vec::new();
+            self.flatten_into(
+                &uses,
+                &name,
+                (&own_m, &own_p, &own_s, &own_c),
+                (&mut t_methods, &mut t_props, &mut t_static, &mut t_consts),
+                &mut abstract_req,
+                line,
+            )?;
+            methods.extend(t_methods);
+            consts.extend(t_consts);
+            // Traits used by an enum cannot contribute (static) properties.
+            if !t_props.is_empty() || !t_static.is_empty() {
+                return Err(LowerError::Unsupported {
+                    what: "trait with properties used in enum",
+                    line,
+                });
+            }
+        }
+        Ok(ClassDecl {
+            name,
+            parent: None,
+            interfaces,
+            is_abstract: false,
+            is_interface: false,
+            props: Vec::new(),
+            static_props: Vec::new(),
+            consts,
+            methods,
+            is_enum: true,
+            enum_backing,
+            enum_cases,
             line,
         })
     }
