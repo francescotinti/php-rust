@@ -571,3 +571,77 @@ non nel prelude, magic methods.
   no-arg usa `$this`, non-oggetto → TypeError; get_parent_class senza parent → `false`.
 - +5 test (403→408), clippy pulito. (Corpus invariato: i fail residui dipendono dagli
   stack-trace con frame reali, non da queste classi/builtin.)
+
+## Step 21 — TRAITS (DESIGN PASS)
+
+> Generato con assistenza AI (Claude Opus 4.8, 1M context). Oracle: PHP 8.5.7
+> (`/tmp/php-src/sapi/cli/php -n`). Strategia legacy-port: full-port semantica,
+> verificata byte-per-byte contro l'oracle.
+
+### Architettura: FLATTEN-AT-LOWERING, zero modifiche all'evaluator
+
+Scoperta chiave dalla recon dell'infrastruttura step 19: il lowering **non
+appiattisce** metodi/prop nelle classi — li tiene per-classe e cammina la catena
+`parent` a runtime (`resolve_method`, `instance_props`, `static_prop_cell`). I
+trait in PHP sono **copy-paste semantico** (i membri del trait diventano membri
+del consumer come se fossero dichiarati lì). Quindi la mossa giusta è: lowerare i
+trait in una tabella interna del Lowerer e **copiare i loro membri dentro il
+`ClassDecl` del consumer** al momento del lowering. Tutta la macchina runtime
+(dispatch metodi, `$this`/`self`/`static`/`new static`, visibility, static props
+keyed `(ClassId,name)`, costanti, var_dump con visibility) si riusa **senza una
+riga nuova nell'evaluator** — stesso pattern del prelude PHP dello step 20.
+
+Conseguenze semantiche che cadono GRATIS dal flatten (tutte verificate oracle):
+- **`self`/`static`/`new static` nel metodo trait** → risolvono alla classe
+  consumer, perché il MethodDecl vive in `C.methods` e `cur_class`=C al dispatch.
+- **static prop per-consumer** (`A::inc,A::inc,B::inc`=1,2,1): la copia rende C la
+  classe *dichiarante*, e lo store è `HashMap<(decl_class,name),cell>` → celle
+  separate per ogni consumer.
+- **metodo del trait batte il metodo del parent**: il metodo flattenato è "proprio"
+  del consumer, e `resolve_method` controlla i metodi propri prima di salire al
+  parent.
+- **var_dump/print_r**: le prop del trait risultano prop *del consumer* con la loro
+  visibility → output identico a PHP senza casi speciali.
+
+### Decisioni (D-21.x)
+
+| ID | Tema | Scelta | Razionale |
+|----|------|--------|-----------|
+| D-21.1 | Storage trait | Tabella `traits: HashMap<Vec<u8>, LoweredTrait>` **interna al Lowerer**, NON in `Program.classes`. | I trait non sono tipi né istanziabili: tenerli fuori dalla class table rende `new T`/`instanceof T` falliscono/falsi senza codice speciale. |
+| D-21.2 | `Statement::Trait` | Lowerato come una classe senza inheritance: methods/props/static_props/consts + le sue stesse clausole `use` (per nesting). | Riusa `lower_method`/`lower_class_const`/prop lowering esistenti. |
+| D-21.3 | Flatten in `lower_class` | `ClassLikeMember::TraitUse` → risolvo i nomi trait, applico adattamenti, copio i membri risultanti **in testa** ai vec del consumer (prima dei membri dichiarati dalla classe). | I membri propri della classe devono vincere: li aggiungo dopo, ma escludo a monte il membro-trait omonimo (vedi D-21.4) così l'ordine serve solo per var_dump (prop trait prima, come PHP). |
+| D-21.4 | Precedenza classe>trait | Se la classe dichiara un metodo/prop con lo stesso nome di uno del trait, il membro del trait è **scartato silenziosamente** (nessun conflitto). | Semantica PHP: l'override esplicito della classe non è una collisione. |
+| D-21.5 | Collisione tra trait | Due trait nello stesso `use` con metodo omonimo, non risolto da `insteadof` → **Fatal**: `Trait method B::say has not been applied as C::say, because of collision with A::say`. | Messaggio oracle esatto. Emesso come errore di lowering→fatal rendered. |
+| D-21.6 | `insteadof` | `A::m insteadof B, C;` → tieni `A::m`, escludi `m` da B e C. | `TraitUsePrecedenceAdaptation{method_reference:A::m, trait_names:[B,C]}`. |
+| D-21.7 | `as` alias | `T::m as [vis] alias;` → aggiungi un metodo extra di nome `alias` (clone di `T::m`) con visibility eventualmente modificata. `T::m as vis;` (senza alias) → cambia solo la visibility del metodo `m` flattenato. | `TraitUseAliasAdaptation{method_reference, visibility:Option<Modifier>, alias:Option<Ident>}`. Verificato: `f as protected` blocca la chiamata esterna con `Call to protected method C::f() from global scope`. |
+| D-21.8 | Trait usa trait | `trait B { use A; }` → risoluzione **transitiva** con memoizzazione: prima di flattenare B in C, B ha già i membri di A appiattiti dentro di sé. | Ricorsione su `traits` map; cache del set risolto per evitare ri-lavoro/cicli. |
+| D-21.9 | static props/consts | Copiati come `StaticPropDecl`/`ClassConstDecl` propri del consumer. | static keyed per decl-class → per-consumer; const flat (i trait non hanno catena). |
+| D-21.10 | `instanceof T` (trait) | `false`, nessun errore. | I trait non sono in class table; instanceof su nome ignoto è già `false` (da verificare/forzare). |
+| D-21.11 | abstract nel trait | Metodo `abstract` nel trait → raccolgo i nomi richiesti; se il consumer concreto non li implementa (né classe né altro trait) → **Fatal**: `Class C contains N abstract method(s) and must therefore be declared abstract or implement the remaining methods (C::f)`. | Richiede tracciare i nomi abstract (oggi droppati a lower.rs:776). Aggiunta minima. |
+
+### Conflitti prop incompatibili / trait const override
+
+**Scope-out v1** (debito esplicito): conflitto di proprietà con default *diversi* tra
+due trait (PHP: Fatal in alcuni casi, warning in altri) → terremo "ultimo vince"
+o "primo vince" documentato; props con stesso nome+default identico mergiano senza
+errore (caso comune). Niente `abstract`/`final` su trait const, niente
+`__CLASS__`/`__TRAIT__` magic constant nei metodi trait (constant non ancora
+lowerate genericamente). Niente trait con proprietà tipizzate enforced.
+
+### Modifiche HIR previste
+- **Nessun nuovo nodo runtime.** Eventuale aggiunta: `ClassDecl.abstract_methods:
+  Vec<Box<[u8]>>` (o un check fatto interamente a lowering) per D-21.11.
+
+### Piano TDD (gruppi)
+- **21-1 Core flatten**: `Statement::Trait` + `use T;` singolo → metodi + prop
+  istanza flattenati; `$this` nel metodo trait → consumer; classe override trait
+  (D-21.4); trait override parent (D-21.3).
+- **21-2 Multi-trait + static + const**: `use A, B;` membri disgiunti; static prop
+  per-consumer; trait const (8.2); metodi statici + `self::`/`static::`/`new static`.
+- **21-3 Conflict resolution**: collisione → Fatal (D-21.5, msg esatto);
+  `insteadof` (D-21.6); `as` alias + cambio visibility con/senza rename (D-21.7).
+- **21-4 Nested + abstract + instanceof**: trait-usa-trait transitivo (D-21.8),
+  cross-trait `$this->other()`; abstract richiesto non implementato → Fatal
+  (D-21.11); `instanceof T` → false (D-21.10).
+- **21-5 var_dump/print_r + corpus + docs**: dump prop trait come prop consumer;
+  validazione `Zend/tests/traits`; docs + memory.
