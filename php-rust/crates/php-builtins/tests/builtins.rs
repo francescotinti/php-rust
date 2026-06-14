@@ -672,6 +672,53 @@ fn trim_custom_charlist() {
     assert_eq!(out("<?php echo trim('a1b2c', 'a..c');"), "1b2");
 }
 
+// --- step 17-4: math (intdiv/pow/sqrt/floor/ceil/round) ---
+
+#[test]
+fn intdiv_truncates_toward_zero() {
+    assert_eq!(out("<?php var_dump(intdiv(7, 2));"), "int(3)\n");
+    assert_eq!(out("<?php var_dump(intdiv(-7, 2));"), "int(-3)\n");
+    assert_eq!(out("<?php var_dump(intdiv(7, -2));"), "int(-3)\n");
+}
+
+#[test]
+fn intdiv_by_zero_is_division_error() {
+    match fatal("<?php intdiv(1, 0);") {
+        PhpError::DivisionByZeroError(m) => assert_eq!(m, "Division by zero"),
+        other => panic!("expected DivisionByZeroError, got {other:?}"),
+    }
+}
+
+#[test]
+fn intdiv_min_by_neg_one_is_arithmetic_error() {
+    // PHP_INT_MIN isn't a lowered constant yet; build it as i64::MIN.
+    match fatal("<?php intdiv(-9223372036854775807 - 1, -1);") {
+        PhpError::ArithmeticError(m) => {
+            assert_eq!(m, "Division of PHP_INT_MIN by -1 is not an integer")
+        }
+        other => panic!("expected ArithmeticError, got {other:?}"),
+    }
+}
+
+#[test]
+fn pow_int_and_float() {
+    assert_eq!(out("<?php var_dump(pow(2, 3));"), "int(8)\n");
+    assert_eq!(out("<?php var_dump(pow(2, 10));"), "int(1024)\n");
+    assert_eq!(out("<?php var_dump(pow(2, -1));"), "float(0.5)\n"); // negative exp -> float
+    assert_eq!(out("<?php var_dump(pow(2, 0.5));"), "float(1.4142135623730951)\n");
+    assert_eq!(out("<?php var_dump(pow(-2, 3));"), "int(-8)\n");
+}
+
+#[test]
+fn sqrt_floor_ceil_round() {
+    assert_eq!(out("<?php var_dump(sqrt(16));"), "float(4)\n");
+    assert_eq!(out("<?php var_dump(floor(4.7));"), "float(4)\n");
+    assert_eq!(out("<?php var_dump(ceil(4.2));"), "float(5)\n");
+    assert_eq!(out("<?php var_dump(round(3.14159, 2));"), "float(3.14)\n");
+    assert_eq!(out("<?php var_dump(round(2.5));"), "float(3)\n"); // half away from zero
+    assert_eq!(out("<?php var_dump(round(1234.5, -2));"), "float(1200)\n");
+}
+
 #[test]
 fn undefined_function_is_fatal_after_output() {
     let reg = registry();

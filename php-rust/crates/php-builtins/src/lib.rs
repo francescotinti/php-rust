@@ -52,6 +52,12 @@ pub fn registry() -> Registry {
     add(b"abs", math::abs);
     add(b"max", math::max);
     add(b"min", math::min);
+    add(b"intdiv", math::intdiv);
+    add(b"pow", math::pow);
+    add(b"sqrt", math::sqrt);
+    add(b"floor", math::floor);
+    add(b"ceil", math::ceil);
+    add(b"round", math::round);
     add(b"var_dump", var_dump);
     add(b"strlen", strlen);
     add(b"gettype", gettype);
