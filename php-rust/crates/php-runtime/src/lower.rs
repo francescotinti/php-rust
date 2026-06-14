@@ -22,13 +22,14 @@ use mago_span::{HasSpan, Span};
 use mago_syntax::ast::{
     Argument, ArrayElement, AssignmentOperator, BinaryOperator, Call, Construct, Expression,
     ForeachTarget, Function, Hint, Identifier, Literal, LiteralInteger, MatchArm as AstMatchArm,
-    Statement, UnaryPostfixOperator, UnaryPrefixOperator, Variable,
+    Statement, StaticItem, UnaryPostfixOperator, UnaryPrefixOperator, Variable,
 };
 use mago_syntax::parser::parse_file;
 
 use crate::hir::{
     ArrayElem, BinOp, Case, CastKind, Expr, ExprKind, FnDecl, GlobalBinding, Line, MatchArm, Param,
-    Place, PlaceBase, PlaceStep, Program, ScalarType, Slot, Stmt, StmtKind, TypeHint, UnOp,
+    Place, PlaceBase, PlaceStep, Program, ScalarType, Slot, StaticBinding, Stmt, StmtKind, TypeHint,
+    UnOp,
 };
 
 /// Why a script could not be lowered to HIR.
@@ -84,6 +85,7 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
         file: name.into(),
         slots: low.globals.slots,
         functions: low.functions,
+        static_count: low.static_count,
     })
 }
 
@@ -129,6 +131,9 @@ struct Lowerer<'f> {
     /// True while lowering the body of a `function &f()`: a `return <lvalue>`
     /// then lowers to [`StmtKind::ReturnRef`] (step 13, D-13.3).
     fn_by_ref: bool,
+    /// Running count of `static` declarations seen; each gets a unique id into
+    /// the evaluator's persistent static store (step 15, D-15.3).
+    static_count: usize,
 }
 
 impl<'f> Lowerer<'f> {
@@ -141,6 +146,7 @@ impl<'f> Lowerer<'f> {
             functions: Vec::new(),
             fn_index: HashMap::new(),
             fn_by_ref: false,
+            static_count: 0,
         }
     }
 
@@ -298,6 +304,23 @@ impl<'f> Lowerer<'f> {
                     bindings.push(GlobalBinding { local, global });
                 }
                 StmtKind::Global(bindings)
+            }
+
+            Statement::Static(node) => {
+                let mut bindings = Vec::new();
+                for item in node.items.iter() {
+                    let (var, init) = match item {
+                        StaticItem::Abstract(a) => (&a.variable, None),
+                        StaticItem::Concrete(c) => {
+                            (&c.variable, Some(self.lower_expr(c.value)?))
+                        }
+                    };
+                    let slot = self.slot_for(strip_dollar(var.name));
+                    let id = self.static_count;
+                    self.static_count += 1;
+                    bindings.push(StaticBinding { slot, id, init });
+                }
+                StmtKind::StaticVar(bindings)
             }
 
             Statement::Break(node) => StmtKind::Break(self.lower_level(node.level, line)?),

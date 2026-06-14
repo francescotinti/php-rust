@@ -34,6 +34,10 @@ pub struct Program {
     /// precede the declaration (PHP's function hoisting). Resolved by the
     /// evaluator's call path before the builtin registry (step 8).
     pub functions: Vec<FnDecl>,
+    /// Total number of `static` variable declarations across the whole program
+    /// (each gets a unique id). The evaluator sizes its persistent static store
+    /// to this (step 15, D-15.2).
+    pub static_count: usize,
 }
 
 /// A lowered `function name(params) { body }`. Each declaration owns a *local*
@@ -178,6 +182,9 @@ pub enum StmtKind {
     /// (step 12-2, D-12.2). Each binding records the local slot to install the
     /// alias into and the global slot it aliases.
     Global(Vec<GlobalBinding>),
+    /// `static $a = init, $b;` — alias each local slot to a persistent cell that
+    /// survives across calls, initialised once on first execution (step 15).
+    StaticVar(Vec<StaticBinding>),
     /// `break N;` — level is >= 1 (defaults to 1).
     Break(u32),
     /// `continue N;` — level is >= 1 (defaults to 1).
@@ -197,6 +204,16 @@ pub enum StmtKind {
 pub struct GlobalBinding {
     pub local: Slot,
     pub global: Slot,
+}
+
+/// One `static $x = init;` binding (step 15, D-15.2): the local slot to alias,
+/// a program-unique `id` into the evaluator's persistent static store, and the
+/// optional one-time initializer (`None` for `static $x;`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct StaticBinding {
+    pub slot: Slot,
+    pub id: usize,
+    pub init: Option<Expr>,
 }
 
 /// One `switch` case. `test` is `None` for the `default:` case.

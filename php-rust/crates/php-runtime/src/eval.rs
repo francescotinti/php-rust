@@ -145,6 +145,7 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         globals: fresh_slots(program.slots.len()),
         locals: None,
         fn_returns_ref: false,
+        statics: vec![None; program.static_count],
         out: Vec::new(),
         rendered: Vec::new(),
         diags: Vec::new(),
@@ -197,6 +198,11 @@ struct Evaluator<'p> {
     /// (i.e. a non-lvalue or bare `return;`) then raises the by-ref-return Notice
     /// (step 13-2, D-13.4). Set/restored by `call_user_fn` like `locals`.
     fn_returns_ref: bool,
+    /// Persistent `static` variable cells, indexed by each declaration's unique
+    /// id; `None` until first initialised. Survives across calls for the whole
+    /// run, giving `static $x` its persistence and cross-recursion sharing
+    /// (step 15, D-15.1).
+    statics: Vec<Option<Rc<RefCell<Zval>>>>,
     /// Pure program output (echo / inline HTML / builtins).
     out: Vec<u8>,
     /// The interleaved CLI stream: `out` plus diagnostics rendered at their point
@@ -405,6 +411,22 @@ impl<'p> Evaluator<'p> {
                         let cell = make_cell(&mut self.globals[b.global as usize]);
                         frame_mut!(self)[b.local as usize] = Zval::Ref(cell);
                     }
+                }
+            }
+
+            StmtKind::StaticVar(bindings) => {
+                // Alias each local slot to its persistent cell, creating and
+                // initialising the cell on the first execution only (D-15.4).
+                for b in bindings {
+                    if self.statics[b.id].is_none() {
+                        let init = match &b.init {
+                            Some(e) => self.eval(e)?,
+                            None => Zval::Null,
+                        };
+                        self.statics[b.id] = Some(Rc::new(RefCell::new(init)));
+                    }
+                    let cell = Rc::clone(self.statics[b.id].as_ref().unwrap());
+                    frame_mut!(self)[b.slot as usize] = Zval::Ref(cell);
                 }
             }
 

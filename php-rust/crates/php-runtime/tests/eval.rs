@@ -680,6 +680,65 @@ fn return_type_hint_error_message() {
 }
 
 #[test]
+fn static_var_accumulates_across_calls() {
+    // `static $n` is initialised once and persists across calls (oracle 123).
+    assert_eq!(
+        out("<?php function f(){ static $n = 0; echo ++$n; } f(); f(); f();"),
+        "123"
+    );
+}
+
+#[test]
+fn static_var_shared_across_recursion() {
+    // The static cell is shared by every recursive frame (oracle 4).
+    assert_eq!(
+        out("<?php function f($d){ static $n = 0; $n++; if ($d > 0) f($d - 1); return $n; } \
+             echo f(3);"),
+        "4"
+    );
+}
+
+#[test]
+fn static_var_is_per_function() {
+    // Each function has its own static storage (oracle 11012).
+    assert_eq!(
+        out("<?php function f(){ static $n = 0; echo ++$n; } \
+             function g(){ static $n = 100; echo ++$n; } \
+             f(); g(); f();"),
+        "11012"
+    );
+}
+
+#[test]
+fn static_var_without_initializer_is_null_then_persists() {
+    // `static $a;` starts as null, then keeps whatever it was set to (oracle YN).
+    assert_eq!(
+        out("<?php function f(){ static $a; echo $a === null ? 'Y' : 'N'; $a = 1; } f(); f();"),
+        "YN"
+    );
+}
+
+#[test]
+fn static_var_initializer_runs_once() {
+    // A non-constant initializer is evaluated only on the first call, so a later
+    // change to what it read does not re-run it (oracle 1111).
+    assert_eq!(
+        out("<?php $g = 10; function f(){ static $x = $GLOBALS['g'] + 1; echo $x; } \
+             f(); $GLOBALS['g'] = 99; f();"),
+        "1111"
+    );
+}
+
+#[test]
+fn static_var_multiple_items() {
+    // `static $a = 1, $b = 2;` declares several statics in one statement (oracle 35).
+    assert_eq!(
+        out("<?php function f(){ static $a = 1, $b = 2; echo $a + $b; $a++; $b++; } f(); f();"),
+        "35"
+    );
+}
+
+#[test]
 fn function_mutual_recursion() {
     // Both functions are hoisted, so even-before-odd resolution works.
     let prog = "<?php \
