@@ -700,3 +700,42 @@ diretto `Trait::CONST`/`Trait::$static`; fatal "incompatible property/constant
 definition" (teniamo first-wins); abstract soddisfatto SOLO da metodo concreto
 ereditato dal parent (non camminiamo la catena per il check); type-error message
 non qualificato col nome classe per metodi trait.
+
+## Step 22 — MAGIC METHODS (design pass)
+
+`__toString` è già fatto (19-6, D-19.18). Questo step aggiunge gli accessor
+overload: `__get`, `__set`, `__isset`, `__unset`, `__call`, `__callStatic`,
+`__invoke`. Architettura: **intercetto nei punti di dispatch già esistenti**
+dello step 19, zero modifiche all'HIR/lowerer (i magic method sono normali
+metodi del `ClassDecl`, risolti via `resolve_method`).
+
+| ID | Punto | Scelta | Razionale |
+|---|---|---|---|
+| D-22.1 | Dispatch points | `__get`→`read_property`; `__set`→`write_place` (solo step finale `[Prop]`); `__isset`→`silent_get`; `__unset`→`unset_place`; `__call`→`call_method`; `__callStatic`→`call_static`; `__invoke`→`call_value`. | Tutti i path di assegnazione passano da `write_place`/`read_place_value`, quindi `Assign`/`AssignOp`/`IncDec`/`??=` su proprietà sono coperti intercettando i due funnel + `read_property`. |
+| D-22.2 | Trigger property | Magic se la proprietà **manca** (`!props.contains`) **oppure è inaccessibile** dallo scope corrente (`resolve_prop_decl` + `visible_from`). Altrimenti accesso diretto. | Verificato su oracle: una private letta da fuori instrada a `__get`/`__set`. |
+| D-22.3 | Trigger method | `__call` se il metodo **non risolve** (`resolve_method`=None) **oppure** risolve ma **non visibile** dallo scope (`check_method_access` fallisce). Idem `__callStatic`. | Oracle: chiamare un metodo private da fuori → `__call`; da dentro la classe → diretto. |
+| D-22.4 | Recursion guard | `magic_guard: HashSet<(u32 id_oggetto, MagicAccess, Vec<u8> nome)>`. Mentre `__get`/`__set`/`__isset`/`__unset` gira per `(obj,kind,name)`, un accesso annidato alla **stessa** prop con lo **stesso** kind bypassa il magic e va al path diretto. | Replica i bit di guardia per-property di Zend; `$this->$n` dentro `__get($n)` non ricorre. Kind separati (GET/SET/ISSET/UNSET) come in Zend. |
+| D-22.5 | Firme | `__get($name)`, `__set($name,$value)`, `__isset($name)→bool`, `__unset($name)`, `__call($name,$args_array)`, `__callStatic($name,$args_array)`, `__invoke(...$args)`. Il nome è `Zval::Str`; gli args di `__call` sono un `PhpArray` lista. | Spec PHP. |
+| D-22.6 | `empty()` / `??=` | `empty($o->p)` = `!__isset` o (`__isset` true ma `__get` falsy). `$o->p ??= v` = se `!__isset` o `__get` null → `__set`. | Oracle: `empty` chiama `__isset` poi `__get`. |
+| D-22.7 | `is_callable($obj)` | true sse la classe ha `__invoke` (risolto su per la catena). `call_value(Object)` → `__invoke` con tutti gli argomenti; altrimenti Error "not callable". | `array_map($obj,…)` usa `__invoke` (passa già da `call_value`). |
+
+### Scope-out step 22
+- **Indirect modification of overloaded property**: `$o->magicProp[] = v` /
+  `$o->magicProp->x = v` quando `magicProp` è gestita da `__get`/`__set`
+  (multi-step path che non è `[Prop]` finale). PHP emette Notice e/o lavora su
+  una copia; noi lasciamo cadere al path diretto (no magic oltre il primo
+  livello). Documentato, non emulato.
+- **`__get` by-reference** (`__get` che ritorna `&`): scope-out, il nostro
+  `__get` ritorna per valore.
+- **`__set` su offset di stringa / array append via magic**: scope-out.
+
+### Piano TDD (4 gruppi)
+- **22-1 `__get`/`__set`**: read/write prop mancante; prop private inaccessibile
+  da fuori; accesso diretto quando esiste+accessibile; compound `+=` su magic
+  prop (read `__get` → write `__set`); recursion guard `$this->$n`.
+- **22-2 `__isset`/`__unset`**: `isset($o->p)` via `__isset`; `empty()` =
+  `__isset`+`__get`; `unset($o->p)` via `__unset`; `??=` via `__isset`; guard.
+- **22-3 `__call`/`__callStatic`**: metodo ignoto su istanza; metodo private da
+  fuori; static ignoto; args come array; `__call` dentro scope = diretto.
+- **22-4 `__invoke`**: `$obj(...)` via `CallDynamic`; `call_user_func($obj)`;
+  `is_callable($obj)`=true; `array_map($obj,…)`.
