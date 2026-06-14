@@ -20,6 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 31) | 582 |
 | Unit/integration (workspace, fine step 30) | 575 |
 | Unit/integration (workspace, fine step 29) | 567 |
 | Unit/integration (workspace, fine step 28) | 545 |
@@ -443,4 +444,30 @@ string+array 5/5 = 100%); `Zend/tests/heredoc_nowdoc` 7 pass / 0 fail / 58 skip
 compile-error intenzionali). **D-NEW-15 chiuso.** Scope-out: i casi di
 parse-error PHP (indent tab+spazi misti, righe meno indentate del marker) non
 sono modellati (dedent lenient); backtick/shell-exec invariati.
+
+## Step 31 — preg named groups + flag PREG_*
+
+Estende lo step 27. Costanti `PREG_*` aggiunte a `resolve_constant`
+(PATTERN_ORDER/SET_ORDER/OFFSET_CAPTURE/UNMATCHED_AS_NULL,
+SPLIT_NO_EMPTY/DELIM_CAPTURE/OFFSET_CAPTURE). `captures_array` rifatto (prende il
+`Regex` + flags):
+- **gruppi nominati** `(?<name>..)`/`(?P<name>..)` emessi come chiave-nome
+  seguita dall'indice numerico (via `re.capture_names()`), nell'ordine PHP;
+- **PREG_OFFSET_CAPTURE** → ogni valore diventa `[stringa, offset-byte]`
+  (`[_, -1]` se non matchato);
+- **PREG_UNMATCHED_AS_NULL** → gruppi non matchati = `null`, tutti i gruppi
+  tenuti; di default i gruppi trailing non matchati sono **omessi** (gli interni
+  restano `""`).
+
+`preg_match_all`: **PREG_SET_ORDER** (un `$matches` completo per match) vs default
+**PREG_PATTERN_ORDER** (colonne per-gruppo, ora con chiavi-nome + offset/null).
+`preg_split`: `$limit` rispettato, **PREG_SPLIT_NO_EMPTY** /
+**PREG_SPLIT_DELIM_CAPTURE** (delimitatori catturati reinseriti) /
+**PREG_SPLIT_OFFSET_CAPTURE** via walk manuale su `captures_iter`. **+7 test
+(575→582)**, clippy pulito. Corpus `ext/pcre/tests`: 38 pass / 45 fail / 82 skip
+(45.8% runnable; i fail sono lo scope-out di motore già dichiarato a step 27 —
+backreference/lookaround/recursion del crate `regex` vs PCRE — non le feature di
+questo step, verificate byte-esatte coi 7 test TDD). Scope-out: pattern/subject
+array, offset di ricerca (5° arg), offset su subject non-UTF-8 (lossy).
+
 
