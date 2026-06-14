@@ -128,6 +128,7 @@ const PRELUDE_SRC: &[u8] = br##"<?php
 class stdClass {}
 interface UnitEnum {}
 interface BackedEnum extends UnitEnum {}
+interface Stringable {}
 interface Throwable {}
 class Exception implements Throwable {
     protected $message = "";

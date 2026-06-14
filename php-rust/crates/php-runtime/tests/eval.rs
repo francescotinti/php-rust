@@ -3240,3 +3240,44 @@ fn enum_unset_prop_is_readonly_error() {
         "Cannot unset readonly property Suit::$name"
     );
 }
+
+// --- Step 24-1: Stringable auto-interface ---
+
+#[test]
+fn stringable_auto_implementation() {
+    // A class with __toString is automatically Stringable, without an explicit
+    // `implements` clause; a class without __toString is not.
+    assert_eq!(
+        out(
+            "<?php class A { public function __toString(): string { return 'x'; } } \
+             class B {} \
+             echo ((new A) instanceof Stringable) ? '1' : '0'; \
+             echo ((new B) instanceof Stringable) ? '1' : '0';"
+        ),
+        "10"
+    );
+}
+
+#[test]
+fn stringable_explicit_implements() {
+    assert_eq!(
+        out(
+            "<?php class C implements Stringable { public function __toString(): string { return 'c'; } } \
+             echo ((new C) instanceof Stringable) ? 'y' : 'n';"
+        ),
+        "y"
+    );
+}
+
+#[test]
+fn stringable_inherited_tostring() {
+    // __toString inherited from a parent still satisfies instanceof Stringable.
+    assert_eq!(
+        out(
+            "<?php class P { public function __toString(): string { return 'p'; } } \
+             class Q extends P {} \
+             echo ((new Q) instanceof Stringable) ? '1' : '0';"
+        ),
+        "1"
+    );
+}

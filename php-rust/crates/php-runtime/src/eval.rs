@@ -3097,6 +3097,14 @@ impl<'p> Evaluator<'p> {
     /// D-19.16): the class itself, any ancestor, or any implemented interface,
     /// transitively through interface inheritance.
     fn is_instance_of(&self, class_id: ClassId, target: ClassId) -> bool {
+        // `Stringable` is auto-implemented (step 24-1): any class with a
+        // resolvable `__toString` satisfies it, even without an explicit
+        // `implements Stringable`. PHP 8 adds this interface implicitly.
+        if self.class_index.get(b"stringable".as_slice()) == Some(&target)
+            && self.resolve_method(class_id, b"__toString").is_some()
+        {
+            return true;
+        }
         let classes: &'p [ClassDecl] = self.classes;
         let mut cur = Some(class_id);
         while let Some(c) = cur {
