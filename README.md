@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–36 completati · 657 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–37 completati · 671 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 | Step | Contenuto | Stato |
 |---|---|---|
@@ -55,6 +55,7 @@ full port semantico del solo `zend_operators.c`).
 | 34 | **DateTime/date()** — `date`/`gmdate`/`mktime`/`checkdate`/`strtotime` (subset) + OOP `DateTime`/`DateTimeImmutable`/`DateInterval` (`format`/`modify`/`add`/`sub`/`diff`/`createFromFormat`), scope UTC (crate `time`) | ✅ |
 | 35 | **API procedurale date** — `date_create`/`date_format`/`date_diff`/`date_add`/`date_sub`/`date_modify`/`date_*_set`/`date_create_from_format`/`date_interval_format`/`date_interval_create_from_date_string` (funzioni globali del prelude) + `getdate`/`localtime` (builtin puri). Infra: il prelude ora trasporta anche le funzioni globali | ✅ |
 | 36 | **preg backref/lookaround** — auto-fallback `regex`→`fancy-regex` (`enum Engine`): backref, lookaround, atomic/possessive, `(?R)`/conditional/`\K`/`\G`. Scope-out: subroutine `(?1)`, control verb `(*SKIP)`, callout. Hardening 36-3: `backtrack_limit` + stop-on-error (niente hang/panic su pattern patologici). Corpus `ext/pcre` 38→41 pass | ✅ |
+| 37 | **flag modificatori PCRE** `U` (ungreedy, `swap_greed`+`(?U)`), `A` (anchored, wrap `\A(?:…)`), `X` (no-op PCRE2), `D`/`$` (default `$` zero-width prima di `\n` finale via lookahead `(?=\n?\z)`→fancy; `D`=`\z` stretto). Corpus `ext/pcre` 41→44 pass | ✅ |
 
 > Lo step 6 è stato eseguito **dopo** lo step 7 (deciso con l'utente: gli array
 > rendono il phpt-runner molto più utile, quintuplicando i test in-scope).

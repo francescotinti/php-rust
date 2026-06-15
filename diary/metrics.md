@@ -20,6 +20,10 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 37-4) | 671 |
+| Unit/integration (workspace, fine step 37-3) | 666 |
+| Unit/integration (workspace, fine step 37-2) | 665 |
+| Unit/integration (workspace, fine step 37-1) | 662 |
 | Unit/integration (workspace, fine step 36-3) | 657 |
 | Unit/integration (workspace, fine step 36-2) | 655 |
 | Unit/integration (workspace, fine step 36-1) | 648 |
@@ -827,13 +831,56 @@ Vs step 31 (38/45/82): **+3 pass**, gli ex-fail ora verdi grazie a
 backref/lookaround. Campionati i fail residui: sono **scope-out pre-esistenti
 del motore**, NON regressioni di step 36 (i pass salgono da 38 a 41, il suite
 unit è verde):
-- **flag PCRE non implementati** `U` (ungreedy, `ungreedy.phpt`), `D`
-  (dollar-end-only, `dollar_endonly.phpt`), `A`/`X` — `compile()` li ignora;
+- **flag PCRE non implementati** `U`/`A`/`X`/`D` (poi implementati allo
+  **step 37** → `ungreedy.phpt`/`dollar_endonly.phpt` ora passano);
 - **trimming dei gruppi catturati trailing** non-partecipanti
   (`preg_match_non_capture.phpt`);
 - formattazione esatta di warning/error PCRE, NUL nei subject, edge `PREG_*`;
 - **D-36.4** `bug41638.phpt`: il pattern catastrofico ungreedy — non onorando
   `U` la nostra `.*` resta greedy → eccede il backtrack-limit → no-match (`0`),
   mentre PHP (ungreedy) matcha. Dopo 36-3 ritorna in ~200 ms invece di appendere.
-  Il suite unit gira in ~2.4 s (657 test).
+  **Risolto allo step 37-1** (onorando `U` il pattern diventa lazy → matcha PHP).
+
+
+## Step 37 — flag modificatori PCRE `U` / `A` / `X` / `D` (`$` leniency)
+
+Chiude i flag che `compile()` ignorava (step 27/31), esposti dal corpus dello
+step 36. +14 test (657→671) in 4 sotto-step, tutti commit+push, clippy pulito.
+**Decisioni Decider** (default consigliati confermati): D-37.1 `$` corretto via
+lookahead anche a costo del fast-path; D resta il flag che mantiene `\z`.
+- **37-1** (`b596018`) **`U`** PCRE_UNGREEDY: inverte la greediness di ogni
+  quantificatore (un `?` esplicito la re-inverte). `regex::RegexBuilder::swap_greed(true)`
+  + flag inline `(?U)` per fancy. **Effetto collaterale: risolve D-36.4** — il
+  pattern di `bug41638` ha il flag `U`; ora che lo onoriamo, `.*` è lazy → non è
+  più catastrofico e matcha PHP byte-per-byte (oracle: match_all→1, replace→`id=X`).
+  I 2 ex-test bug41638 aggiornati ai valori PHP corretti; 2 nuovi guard 36-3 con
+  un pattern catastrofico **senza** `U` (`/(a+)+b\1/`). +5.
+- **37-2** (`09389aa`) **`A`** PCRE_ANCHORED: match solo da offset 0. Nessuno dei
+  due engine ha uno switch portabile → si avvolge il body in `\A(?:…)` (gruppo
+  non-catturante, numerazione invariata) prima di entrambi i rami. +3 (incl. A
+  sul ramo fancy con backref). +3.
+- **37-3** (`019c5ea`) **`X`** PCRE_EXTRA: deprecato in PCRE2 (engine di PHP) →
+  **no-op** esplicito documentato (NON strippa gli spazi come `x` minuscolo). +1.
+- **37-4** (`524e748`) **`$` leniency + `D`**. Scoperta (recon oracle): il `$` di
+  default di PCRE (senza `m`/`D`) è **zero-width** e matcha a fine subject O prima
+  di un singolo `\n` finale; il `$` del crate `regex` è `\z`-only = già modalità
+  `D` → `D` era un no-op per noi e il **caso comune era sbagliato** (`/foo$/` su
+  `"foo\n"` matcha in PHP, non da noi). Fix: quando NON c'è `m` né `D`, ogni `$`
+  bare → lookahead `(?=\n?\z)` (nuovo `rewrite_dollar_anchor`, salta `\$` e `$` in
+  `[...]`, ritorna `None` tenendo il fast-path se non c'è `$`). Il lookaround non
+  ha equivalente DFA → l'auto-fallback dello step 36 instrada questi pattern a
+  fancy-regex (**D-37.1**: i pattern con `$` perdono il fast-path DFA, accettato
+  per la correttezza byte-esatta). `D` ora = mantieni `\z`; `m` = per-riga e
+  ignora `D`, come PHP. +5 (cattura zero-width, leniency, D end-only, m, `$`
+  literal in classe).
+
+#### Corpus `ext/pcre/tests` — 44 pass (era 41 dopo step 36)
+
+`phpt-runner` su tutta `ext/pcre/tests`: **44 pass / 39 fail / 82 skip / 0
+timeout** (83 runnable). Vs step 36 (41/42): **+3 pass** — `dollar_endonly.phpt`
+(via `D`/`$`), `ungreedy.phpt` (via `U`), `bug41638.phpt` (via `U`, ex-D-36.4).
+I 39 fail residui sono scope-out pre-esistenti non legati ai flag (trimming
+gruppi trailing `preg_match_non_capture`, formattazione warning/error PCRE, NUL,
+edge `PREG_*`). Nessuna regressione (i pass salgono 41→44, suite unit verde, 671
+test in ~2.3 s).
 

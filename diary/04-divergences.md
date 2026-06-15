@@ -206,7 +206,7 @@ non sono bug salvo D-36.4.
 | **control verb** `(*SKIP)`/`(*FAIL)`/`(*PRUNE)` (D-36.2) | idem `false`/`null` | match / controllo backtracking | idem |
 | **callout** `(?C1)` (D-36.2) | idem `false`/`null` | callback PCRE | idem |
 | **`preg_last_error`** (D-36.3) | sempre `PREG_NO_ERROR`; errore runtime fancy (limite backtracking) → no-match silenzioso | codici d'errore distinti | il funnel preg non propaga i codici |
-| **flag PCRE `U`/`D`/`A`/`X`** (pre-esistente, surfacing) | `compile()` li ignora → greedy/`$`/anchor di default | ungreedy / dollar-end-only / anchored / extended-strict | mai implementati (step 27); ortogonali a step 36 |
+| **flag PCRE `U`/`D`/`A`/`X`** | ~~ignorati~~ → **implementati allo step 37** | ungreedy / dollar-end-only / anchored / extra | vedi sezione Step 37 |
 | **trailing capture trimming** (pre-esistente) | gruppi trailing non-partecipanti inclusi | omessi (`preg_match_non_capture.phpt`) | dettaglio `PREG_*` da step 31 |
 
 **D-36.4 (divergenza di VALORE, ex-hang risolto in 36-3) — backtracking
@@ -222,11 +222,38 @@ erra → emette lo stesso `Err` all'infinito (loop nel nostro `filter_map`), e
 **Fix 36-3**: `captures_iter` si ferma al primo `Err`, `replace_all` usa
 `try_replacen` con fallback al testo invariato, `backtrack_limit` fissato a 1M
 esplicito. Ora il pattern **ritorna** in ~200 ms (`preg_match_all`→`0`,
-`preg_replace`→subject invariato) invece di appendere/panicare. **Resta una
-divergenza di valore** (PHP, onorando `U`, matcha; noi no-match): non modelliamo
-il flag `U` né, oltre il limite, il backtracking completo — scope-out.
+`preg_replace`→subject invariato) invece di appendere/panicare. **RISOLTO allo step 37-1**: onorando il flag `U`, `.*` diventa lazy → il pattern
+non è più catastrofico e matcha PHP byte-per-byte (`bug41638.phpt` passa). Il
+guard anti-hang 36-3 resta testato con un pattern catastrofico **senza** `U`.
 
 Corpus `ext/pcre/tests`: **41 pass / 42 fail / 82 skip / 0 timeout** (83
 runnable, dopo 36-3; prima 41/41/82 + 1 timeout `bug41638`), +3 pass vs step 31.
 I fail sono lo scope-out delle righe sopra + formattazione warning/NUL: nessuna
 regressione (i pass salgono).
+
+## Step 37 (flag PCRE U/A/X/D) — implementati; 1 nota prestazionale
+
+`compile()` ora onora i flag che ignorava. **Nessuna divergenza di correttezza
+nuova**; tutti oracle-verificati. Una sola nota (non un bug):
+
+| Flag | Implementazione | Note |
+|---|---|---|
+| **`U`** ungreedy | `regex` `swap_greed(true)` + inline `(?U)` | `?` esplicito re-inverte; risolve D-36.4 |
+| **`A`** anchored | wrap body `\A(?:…)` su entrambi gli engine | numerazione gruppi invariata |
+| **`X`** extra | no-op esplicito | deprecato in PCRE2; NON è `x` (extended) |
+| **`D`** dollar-endonly | `$` resta `\z`-stretto (= nostro default storico) | vedi D-37.1 |
+
+**D-37.1 (nota prestazionale, non divergenza).** Il `$` di default di PCRE
+(senza `m`/`D`) è zero-width e matcha a fine subject **o prima di un `\n`
+finale**; il `$` del crate `regex` è `\z`-only. Per la correttezza byte-esatta,
+quando non c'è `m`/`D` ogni `$` bare è riscritto nel lookahead `(?=\n?\z)`
+(`rewrite_dollar_anchor`, salta `\$` e `$` in `[...]`). Il lookaround non ha
+equivalente DFA → l'auto-fallback dello step 36 instrada questi pattern a
+`fancy-regex`: **i pattern con `$` (e senza `m`/`D`) perdono il fast-path DFA**.
+Accettato (Decider D-37.1): correttezza > velocità per questo esperimento; i
+pattern senza `$` o con `m`/`D` restano sul motore `regex` veloce. Limite noto
+dello scanner: un `$` dentro una classe POSIX `[[:alpha:]$]` non è gestito (caso
+rarissimo) — il `]` di `:alpha:]` chiude prematuramente la classe.
+
+Corpus `ext/pcre/tests`: **44 pass / 39 fail / 82 skip / 0 timeout**, +3 vs step
+36 (`dollar_endonly`/`ungreedy`/`bug41638`).
