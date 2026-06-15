@@ -1478,11 +1478,11 @@ impl<'p> Evaluator<'p> {
             }
             // `yield from` over a user `Traversable`/`Iterator` is a companion of
             // the (still scoped-out) generic `foreach` over objects; catalogue if
-            // the corpus needs it (step 39 scope-out).
-            other => Err(PhpError::TypeError(format!(
-                "Can only yield from arrays and Traversables, {} given",
-                php_type_name(&other)
-            ))),
+            // the corpus needs it (step 39 scope-out). The message matches PHP's
+            // exactly (Zend/zend_generators.c).
+            _ => Err(PhpError::Error(
+                "Can use \"yield from\" only with arrays and Traversables".to_string(),
+            )),
         }
     }
 
@@ -1538,6 +1538,15 @@ impl<'p> Evaluator<'p> {
             self.resume_generator(&gs_rc, value)?;
             Ok(gs_rc.borrow().cur_val.clone())
         } else if method.eq_ignore_ascii_case(b"getReturn") {
+            // PHP auto-primes here: getReturn() on a fresh generator starts it
+            // (so one whose body returns before any yield exposes its value); if
+            // it has not yet returned, that is an Error.
+            self.ensure_started(&gs_rc)?;
+            if !matches!(gs_rc.borrow().status, GenStatus::Done) {
+                return Err(PhpError::Error(
+                    "Cannot get return value of a generator that hasn't returned".to_string(),
+                ));
+            }
             Ok(gs_rc.borrow().ret.clone())
         } else {
             Err(PhpError::Error(format!(
@@ -1887,7 +1896,20 @@ impl<'p> Evaluator<'p> {
         }
 
         let args: Vec<Arg> = argv.into_iter().map(Arg::Val).collect();
-        let result = self.run_user_fn_body(f, args);
+        // A generator closure (its body contains `yield`) returns a lazy
+        // Generator just like a generator function (step 39): bind params into
+        // the frame (which already holds the captures), then hand it off.
+        let result = if f.is_generator {
+            match self.bind_params(f, args) {
+                Ok(()) => {
+                    let frame = self.locals.take().expect("closure overlay installed");
+                    Ok(self.make_generator(f, frame))
+                }
+                Err(e) => Err(e),
+            }
+        } else {
+            self.run_user_fn_body(f, args)
+        };
 
         self.locals = saved_locals;
         self.local_names = saved_names;

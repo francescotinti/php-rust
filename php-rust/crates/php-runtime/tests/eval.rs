@@ -4206,6 +4206,33 @@ fn generator_yield_from_send_forwarding() {
 }
 
 #[test]
+fn generator_closure() {
+    // A closure whose body contains `yield` is itself a generator.
+    assert_eq!(
+        out("<?php $g = function(){ yield 1; yield 2; yield 3; }; foreach($g() as $v) echo $v;"),
+        "123"
+    );
+}
+
+#[test]
+fn generator_closure_captures() {
+    // Captured variables are available in the generator body.
+    assert_eq!(
+        out("<?php $base = 10; $g = function() use ($base){ yield $base+1; yield $base+2; }; foreach($g() as $v) echo $v,' ';"),
+        "11 12 "
+    );
+}
+
+#[test]
+fn generator_get_return_auto_primes() {
+    // getReturn() on a generator that returns before any yield auto-primes it.
+    assert_eq!(
+        out("<?php function g(){ return 42; yield 24; } $g=g(); echo $g->getReturn();"),
+        "42"
+    );
+}
+
+#[test]
 fn generator_instanceof_interfaces() {
     // A Generator is a Generator/Iterator/Traversable, but not e.g. Countable.
     assert_eq!(
