@@ -4161,3 +4161,46 @@ fn generator_return_and_get_return() {
         "12|99"
     );
 }
+
+#[test]
+fn generator_yield_from_array() {
+    // `yield from` preserves delegate keys and does NOT advance the outer
+    // auto-key counter. Verified against PHP 8.5: `0:1 0:10 1:20 1:2`.
+    assert_eq!(
+        out(r#"<?php function g(){yield 1; yield from [10,20]; yield 2;} foreach(g() as $k=>$v) echo "$k:$v ";"#),
+        "0:1 0:10 1:20 1:2 "
+    );
+}
+
+#[test]
+fn generator_yield_from_string_keys() {
+    assert_eq!(
+        out(r#"<?php function g(){yield from ['x'=>1, 'y'=>2];} foreach(g() as $k=>$v) echo "$k:$v ";"#),
+        "x:1 y:2 "
+    );
+}
+
+#[test]
+fn generator_yield_from_generator_return() {
+    // Delegating to a sub-generator re-yields its pairs; the `yield from`
+    // expression evaluates to the sub-generator's return value.
+    assert_eq!(
+        out(r#"<?php
+            function inner(){ yield 1; yield 2; return 'R'; }
+            function outer(){ $r = yield from inner(); echo "r=$r;"; yield 3; }
+            foreach(outer() as $k=>$v) echo "$k:$v ";"#),
+        "0:1 1:2 r=R;0:3 "
+    );
+}
+
+#[test]
+fn generator_yield_from_send_forwarding() {
+    // send() through a `yield from` reaches the delegated sub-generator.
+    assert_eq!(
+        out(r#"<?php
+            function sub(){ $a = yield 1; echo "sa=$a;"; $b = yield 2; echo "sb=$b;"; }
+            function dele(){ yield from sub(); }
+            $d = dele(); $d->current(); $d->send('X'); $d->send('Y');"#),
+        "sa=X;sb=Y;"
+    );
+}

@@ -1416,6 +1416,71 @@ impl<'p> Evaluator<'p> {
         Ok(())
     }
 
+    /// Suspend the active generator at a `yield`, handing out `(key, value)` and
+    /// returning the value the next resume delivers (step 39). The single point
+    /// the `yield` / `yield from` arms reach the running coroutine's `Yielder`.
+    fn gen_suspend(&mut self, key: GenKey, value: Zval) -> Result<Zval, PhpError> {
+        let yptr = self.gen_yielder.ok_or_else(|| {
+            PhpError::Error("Cannot use \"yield\" outside a generator".to_string())
+        })?;
+        // SAFETY: `gen_yielder` is set by the active generator body (in
+        // `make_generator`'s coroutine) and read only while that body runs; the
+        // `Yielder` lives for the coroutine's whole lifetime.
+        let y = unsafe { &*(yptr as *const Yielder<ResumeIn, YieldOut>) };
+        let resumed = y.suspend(YieldOut { key, value });
+        Ok(resumed.sent)
+    }
+
+    /// `yield from <iterator>` (step 39-6): re-yield every element of the
+    /// delegate *verbatim* (keys preserved, the outer auto-key counter
+    /// untouched). For an array the expression evaluates to NULL; for a
+    /// sub-generator it drives it (forwarding `send()` values in) and evaluates
+    /// to its `return` value.
+    fn eval_yield_from(&mut self, iter: &Expr) -> Result<Zval, PhpError> {
+        let src = self.eval(iter)?.deref_clone();
+        match src {
+            Zval::Array(a) => {
+                let pairs: Vec<(Key, Zval)> =
+                    a.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect();
+                for (k, v) in pairs {
+                    // A sent value is discarded when delegating to an array.
+                    self.gen_suspend(GenKey::Verbatim(key_to_zval(&k)), v)?;
+                }
+                Ok(Zval::Null)
+            }
+            Zval::Generator(sub) => {
+                self.ensure_started(&sub)?;
+                loop {
+                    let (k, v, done) = {
+                        let g = sub.borrow();
+                        (
+                            g.cur_key.clone(),
+                            g.cur_val.clone(),
+                            matches!(g.status, GenStatus::Done),
+                        )
+                    };
+                    if done {
+                        break;
+                    }
+                    // Re-yield the sub-generator's current pair; forward the value
+                    // the consumer sends back into the sub-generator.
+                    let sent = self.gen_suspend(GenKey::Verbatim(k), v)?;
+                    self.resume_generator(&sub, sent)?;
+                }
+                // The `yield from` expression evaluates to the delegate's return.
+                let ret = sub.borrow().ret.clone();
+                Ok(ret)
+            }
+            // `yield from` over a user `Traversable`/`Iterator` is a companion of
+            // the (still scoped-out) generic `foreach` over objects; catalogue if
+            // the corpus needs it (step 39 scope-out).
+            other => Err(PhpError::TypeError(format!(
+                "Can only yield from arrays and Traversables, {} given",
+                php_type_name(&other)
+            ))),
+        }
+    }
+
     /// Start a generator if it has not run yet (PHP starts lazily on the first
     /// `current`/`key`/`valid`/`next`/`foreach`).
     fn ensure_started(&mut self, gs_rc: &Rc<RefCell<GenState>>) -> Result<(), PhpError> {
@@ -4331,21 +4396,11 @@ impl<'p> Evaluator<'p> {
                     Some(e) => GenKey::Keyed(self.eval(e)?),
                     None => GenKey::Auto,
                 };
-                let yptr = self.gen_yielder.ok_or_else(|| {
-                    PhpError::Error("Cannot use \"yield\" outside a generator".to_string())
-                })?;
-                // SAFETY: `gen_yielder` is set by the active generator body (in
-                // `make_generator`'s coroutine) and read only while that body
-                // runs; the `Yielder` lives for the coroutine's whole lifetime.
-                let y = unsafe { &*(yptr as *const Yielder<ResumeIn, YieldOut>) };
-                let resumed = y.suspend(YieldOut { key, value });
-                Ok(resumed.sent)
+                self.gen_suspend(key, value)
             }
 
             // `yield from <iterator>` — delegated iteration (step 39-6).
-            ExprKind::YieldFrom(_) => Err(PhpError::Error(
-                "yield from is not yet supported".to_string(),
-            )),
+            ExprKind::YieldFrom(e) => self.eval_yield_from(e),
         }
     }
 
