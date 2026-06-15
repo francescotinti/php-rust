@@ -801,3 +801,143 @@ fn arr_nth<'a>(
         ))),
     }
 }
+
+// --- Step 33: key/assoc set-ops + array_column -----------------------------
+
+/// Validate and collect the trailing array arguments as references (arrays are
+/// small, so the `*_key`/`*_assoc` variants query them directly).
+fn other_arrays<'a>(
+    args: &'a [Zval],
+    fname: &str,
+) -> Result<Vec<&'a PhpArray>, PhpError> {
+    let mut out = Vec::with_capacity(args.len());
+    for (i, a) in args.iter().enumerate() {
+        match a {
+            Zval::Array(arr) => out.push(&**arr),
+            other => {
+                return Err(PhpError::TypeError(format!(
+                    "{fname}(): Argument #{} must be of type array, {} given",
+                    i + 2,
+                    other.error_type_name()
+                )))
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// array_diff_key($array, ...$others): entries of $array whose key is absent
+/// from every other array.
+pub fn array_diff_key(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let base = arr_arg(args, "array_diff_key")?;
+    let others = other_arrays(&args[1..], "array_diff_key")?;
+    let mut out = PhpArray::new();
+    for (k, v) in base.iter() {
+        if !others.iter().any(|o| o.contains_key(k)) {
+            out.insert(k.clone(), v.clone());
+        }
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// array_intersect_key($array, ...$others): entries whose key is present in
+/// every other array.
+pub fn array_intersect_key(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let base = arr_arg(args, "array_intersect_key")?;
+    let others = other_arrays(&args[1..], "array_intersect_key")?;
+    let mut out = PhpArray::new();
+    for (k, v) in base.iter() {
+        if others.iter().all(|o| o.contains_key(k)) {
+            out.insert(k.clone(), v.clone());
+        }
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// Whether some/every other array maps `k` to the string `vs`.
+fn assoc_match(other: &PhpArray, k: &Key, vs: &[u8], ctx: &mut Ctx) -> bool {
+    other
+        .get(k)
+        .is_some_and(|ov| convert::to_zstr(ov, ctx.diags).as_bytes() == vs)
+}
+
+/// array_diff_assoc($array, ...$others): entries whose (key, value) pair (value
+/// compared as a string) is matched by no other array.
+pub fn array_diff_assoc(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let base = arr_arg(args, "array_diff_assoc")?;
+    let others = other_arrays(&args[1..], "array_diff_assoc")?;
+    let mut out = PhpArray::new();
+    for (k, v) in base.iter() {
+        let vs = convert::to_zstr(v, ctx.diags).as_bytes().to_vec();
+        if !others.iter().any(|o| assoc_match(o, k, &vs, ctx)) {
+            out.insert(k.clone(), v.clone());
+        }
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// array_intersect_assoc($array, ...$others): entries whose (key, value) pair
+/// (value compared as a string) is present in every other array.
+pub fn array_intersect_assoc(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let base = arr_arg(args, "array_intersect_assoc")?;
+    let others = other_arrays(&args[1..], "array_intersect_assoc")?;
+    let mut out = PhpArray::new();
+    for (k, v) in base.iter() {
+        let vs = convert::to_zstr(v, ctx.diags).as_bytes().to_vec();
+        if others.iter().all(|o| assoc_match(o, k, &vs, ctx)) {
+            out.insert(k.clone(), v.clone());
+        }
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// array_column($array, $column_key, $index_key = null): pluck `$column_key`
+/// from each row (a row missing it is skipped); `null` column keeps the whole
+/// row. With `$index_key` the result is keyed by that field, else sequential.
+/// Rows may be arrays or objects (public properties).
+pub fn array_column(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let rows = arr_arg(args, "array_column")?;
+    let column = args.get(1).ok_or_else(|| {
+        PhpError::Error("array_column() expects at least 2 arguments, 1 given".to_string())
+    })?;
+    let column_key = if matches!(column, Zval::Null) {
+        None
+    } else {
+        Some(zval_to_key(column, ctx))
+    };
+    let index_key = args.get(2).filter(|v| !matches!(v, Zval::Null)).map(|v| zval_to_key(v, ctx));
+
+    let mut out = PhpArray::new();
+    for (_, row) in rows.iter() {
+        let value = match &column_key {
+            Some(ck) => match row_get(row, ck) {
+                Some(v) => v,
+                None => continue, // row lacks the column
+            },
+            None => row.clone(),
+        };
+        match index_key.as_ref().and_then(|ik| row_get(row, ik)) {
+            Some(idx) => out.insert(zval_to_key(&idx, ctx), value),
+            None => {
+                let _ = out.append(value);
+            }
+        }
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// Look up a field of a row that is either an array (by key) or an object (by
+/// public property name).
+fn row_get(row: &Zval, key: &Key) -> Option<Zval> {
+    match row {
+        Zval::Array(a) => a.get(key).cloned(),
+        Zval::Object(o) => {
+            let name = match key {
+                Key::Str(s) => s.as_bytes().to_vec(),
+                Key::Int(i) => i.to_string().into_bytes(),
+            };
+            o.borrow().props.get(&name).cloned()
+        }
+        _ => None,
+    }
+}

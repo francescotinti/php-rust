@@ -52,6 +52,11 @@ pub fn registry() -> Registry {
     add(b"array_key_last", array::array_key_last);
     add(b"array_diff", array::array_diff);
     add(b"array_intersect", array::array_intersect);
+    add(b"array_diff_key", array::array_diff_key);
+    add(b"array_intersect_key", array::array_intersect_key);
+    add(b"array_diff_assoc", array::array_diff_assoc);
+    add(b"array_intersect_assoc", array::array_intersect_assoc);
+    add(b"array_column", array::array_column);
     add(b"implode", string::implode);
     add(b"join", string::implode);
     add(b"explode", string::explode);

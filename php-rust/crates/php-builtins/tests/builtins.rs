@@ -1470,3 +1470,74 @@ fn array_walk_by_value_no_change_with_extra() {
         "0:1:X 1:2:X /1,2"
     );
 }
+
+// --- Step 33: array key/assoc set-ops + array_column -----------------------
+
+#[test]
+fn array_diff_key_cases() {
+    // Keep entries whose key is absent from every other array.
+    assert_eq!(
+        out("<?php $r=array_diff_key(['a'=>1,'b'=>2,'c'=>3],['b'=>9,'c'=>9]); echo implode(',',array_keys($r)),'/',implode(',',$r);"),
+        "a/1"
+    );
+    assert_eq!(
+        out("<?php echo implode(',',array_keys(array_diff_key(['a'=>1,'b'=>2,'c'=>3,'d'=>4],['a'=>0],['c'=>0])));"),
+        "b,d"
+    );
+}
+
+#[test]
+fn array_diff_assoc_cases() {
+    // Remove an entry only when some other array has the same key AND value.
+    assert_eq!(
+        out("<?php $r=array_diff_assoc(['a'=>1,'b'=>2,'c'=>3],['a'=>1,'b'=>9]); echo implode(',',array_keys($r)),'/',implode(',',$r);"),
+        "b,c/2,3"
+    );
+    assert_eq!(
+        out("<?php $r=array_diff_assoc([1,2,3],[1,9,3]); echo implode(',',array_keys($r)),'/',implode(',',$r);"),
+        "1/2"
+    );
+}
+
+#[test]
+fn array_intersect_key_cases() {
+    assert_eq!(
+        out("<?php $r=array_intersect_key(['a'=>1,'b'=>2,'c'=>3],['a'=>9,'c'=>9]); echo implode(',',array_keys($r)),'/',implode(',',$r);"),
+        "a,c/1,3"
+    );
+    assert_eq!(
+        out("<?php echo implode(',',array_keys(array_intersect_key(['a'=>1,'b'=>2,'c'=>3],['a'=>0,'b'=>0],['b'=>0,'c'=>0])));"),
+        "b"
+    );
+}
+
+#[test]
+fn array_intersect_assoc_cases() {
+    assert_eq!(
+        out("<?php $r=array_intersect_assoc(['a'=>1,'b'=>2],['a'=>1,'b'=>9]); echo implode(',',array_keys($r)),'/',implode(',',$r);"),
+        "a/1"
+    );
+}
+
+#[test]
+fn array_column_cases() {
+    assert_eq!(
+        out("<?php $r=[['id'=>1,'name'=>'A'],['id'=>2,'name'=>'B']]; echo implode(',',array_column($r,'name'));"),
+        "A,B"
+    );
+    // With index_key the result is keyed by that column.
+    assert_eq!(
+        out("<?php $r=[['id'=>5,'name'=>'A'],['id'=>6,'name'=>'B']]; $c=array_column($r,'name','id'); echo implode(',',array_keys($c)),'/',implode(',',$c);"),
+        "5,6/A,B"
+    );
+    // A row missing the column is skipped.
+    assert_eq!(
+        out("<?php $r=[['id'=>1,'name'=>'A'],['id'=>2]]; echo implode(',',array_column($r,'name'));"),
+        "A"
+    );
+    // A null column yields whole rows keyed by index_key.
+    assert_eq!(
+        out("<?php $r=[['id'=>5,'name'=>'A']]; $c=array_column($r,null,'id'); echo $c[5]['name'];"),
+        "A"
+    );
+}
