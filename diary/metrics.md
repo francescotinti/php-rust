@@ -20,6 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 32) | 589 |
 | Unit/integration (workspace, fine step 31) | 582 |
 | Unit/integration (workspace, fine step 30) | 575 |
 | Unit/integration (workspace, fine step 29) | 567 |
@@ -469,5 +470,27 @@ SPLIT_NO_EMPTY/DELIM_CAPTURE/OFFSET_CAPTURE). `captures_array` rifatto (prende i
 backreference/lookaround/recursion del crate `regex` vs PCRE — non le feature di
 questo step, verificate byte-esatte coi 7 test TDD). Scope-out: pattern/subject
 array, offset di ricerca (5° arg), offset su subject non-UTF-8 (lossy).
+
+## Step 32 — array by-ref family (array_splice + array_walk)
+
+- **array_splice** (builtin `RefFirst`, `php-builtins/src/array.rs`): splice
+  posizionale by-reference. Offset/length negativi, length null (fino a fine),
+  `$replacement` scalare o array. Il risultato rinumera le chiavi intere ma
+  **preserva le chiavi stringa** degli elementi tenuti; ritorna gli elementi
+  rimossi (reindicizzati). Registrato con sort/array_push/pop/shift.
+- **array_walk** (intercettato nel valutatore, `php-runtime`): applica la
+  callback a ogni elemento. Nuovo `callable_first_by_ref()` ispeziona il primo
+  parametro della callback — se è `&$value` l'elemento passa attraverso una
+  cella condivisa (`Zval::Ref`) e la mutazione è **riscritta** nell'array;
+  altrimenti passa by-value (read-only). 3° arg opzionale inoltrato. Le chiavi
+  non cambiano mai.
+
+**+7 test (582→589)**, clippy pulito. Corpus `array_splice*`/`array_walk/`:
+10/15 runnable; i 5 fail sono **scope-out documentati**: primo arg lvalue
+complesso (elemento d'array — stessa limitazione bare-`$var` di usort/preg),
+var_dump di oggetti dentro l'array, sostituzione dell'array durante il walk via
+`$GLOBALS` (wart di re-entrancy PHP), reference a proprietà tipizzate. Il core
+(by-ref modify, by-value, extra arg) è verificato byte-esatto.
+
 
 
