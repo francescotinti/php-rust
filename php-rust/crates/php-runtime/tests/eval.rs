@@ -3698,6 +3698,58 @@ fn preg_split_lookahead() {
     );
 }
 
+// Features fancy-regex 0.14 turns out to support — wider than step 27's scope-out
+// note assumed. Each matches the oracle byte-for-byte (D-36 discovery).
+
+#[test]
+fn preg_match_recursion() {
+    // `(?R)` whole-pattern recursion (balanced parens). Oracle: 1 when a
+    // parenthesised group is present, 0 with no parens at all.
+    assert_eq!(
+        out(r#"<?php echo preg_match('/\((?:[^()]|(?R))*\)/', '(a(b)c)'), preg_match('/\((?:[^()]|(?R))*\)/', 'abc');"#),
+        "10"
+    );
+}
+
+#[test]
+fn preg_match_conditional() {
+    // `(?(1)yes|no)` conditional on group 1. Oracle == 1.
+    assert_eq!(out(r#"<?php echo preg_match('/(a)?(?(1)b|c)/', 'ab');"#), "1");
+}
+
+#[test]
+fn preg_match_keep_k() {
+    // `\K` resets the match start. Oracle: $m[0] == 'bar'.
+    assert_eq!(out(r#"<?php preg_match('/foo\Kbar/', 'foobar', $m); echo $m[0];"#), "bar");
+}
+
+#[test]
+fn preg_match_all_g_anchor() {
+    // `\G` anchors at the previous match end. Oracle: 3 consecutive 'a's.
+    assert_eq!(out(r#"<?php echo preg_match_all('/\Ga/', 'aaab');"#), "3");
+}
+
+// Genuine scope-out (D-36.2): neither engine compiles these, so the `preg_*`
+// function returns false/null while PHP would match. Documented, no crash.
+
+#[test]
+fn preg_scopeout_subroutine_returns_false() {
+    // `(?1)` subroutine call — oracle matches (1); we return false.
+    assert_eq!(out(r#"<?php echo (preg_match('/(a)(?1)/', 'aa') === false) ? 'F' : 'T';"#), "F");
+}
+
+#[test]
+fn preg_scopeout_control_verb_returns_false() {
+    // `(*SKIP)` backtracking control verb — oracle matches (1); we return false.
+    assert_eq!(out(r#"<?php echo (preg_match('/a(*SKIP)b/', 'ab') === false) ? 'F' : 'T';"#), "F");
+}
+
+#[test]
+fn preg_scopeout_callout_returns_false() {
+    // `(?C1)` callout — oracle matches (1); we return false.
+    assert_eq!(out(r#"<?php echo (preg_match('/a(?C1)b/', 'ab') === false) ? 'F' : 'T';"#), "F");
+}
+
 // --- Step 28: real stack-trace frames ---
 
 #[test]
