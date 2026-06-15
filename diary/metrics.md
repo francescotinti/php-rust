@@ -20,6 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 34-4) | 614 |
 | Unit/integration (workspace, fine step 34-3) | 611 |
 | Unit/integration (workspace, fine step 34-2) | 606 |
 | Unit/integration (workspace, fine step 34-1) | 601 |
@@ -584,6 +585,28 @@ Builtin PURO in `date.rs`. `strtotime($s, $base=now)`. Subset coperto:
 **Scope-out** (documentato): formati relativi testuali (`next monday`, `first
 day of next month`), assoluti esotici/locale, combinazione assoluto+relativo
 nella stessa stringa. **+5 test (606→611)**, clippy pulito.
+
+### Step 34-4 — `DateTime` core (D-DT2)
+
+**Decisione chiave**: `DateTime` è una **classe del prelude** (PHP puro in
+`lower.rs::PRELUDE_SRC`), NON una classe nativa intercettata nell'evaluator.
+Lo stato è una prop privata `$__ts` (epoch i64); i metodi delegano ai builtin
+puri già scritti (`date`/`mktime`/`strtotime`/`time`). **Zero modifiche
+all'evaluator** — riusa interamente la macchina OOP degli step 19+ (object
+handle semantics, dispatch metodi, fluent `return $this`). È la traduzione più
+idiomatica e nello spirito dell'esperimento.
+- `__construct($datetime="now")`: `now`/`""`/`null` → `time()`; altrimenti
+  `strtotime()` (throw `Exception` su parse-fail, come PHP). 
+- `format` → `date($fmt, $__ts)`; `getTimestamp`/`setTimestamp`.
+- `setDate`/`setTime`: ricompongono l'epoch via `mktime`, estraendo le
+  componenti da preservare con `date('G'|'i'|'s'|'n'|'j'|'Y')`. Mutabile
+  (modifica `$this`, alias condiviso) + fluent.
+- Nuovo builtin **`time()`** (orologio reale, non differential-tested, D-DT5).
+
+**Scope-out**: `var_dump($dateTimeObj)` diverge (PHP mostra `date`/
+`timezone_type`/`timezone`; noi una prop privata `$__ts`) — si testano i
+metodi/`format()`, non il dump dell'oggetto. **+3 test (611→614)**, clippy
+pulito.
 
 
 

@@ -1746,3 +1746,55 @@ fn strtotime_failure() {
     assert_eq!(out("<?php var_dump(strtotime('garbage nonsense',1718452845));"), "bool(false)\n");
     assert_eq!(out("<?php var_dump(strtotime('',1718452845));"), "bool(false)\n");
 }
+
+// --- Step 34-4: DateTime core -------------------------------------------------
+// DateTime is a prelude PHP class holding its epoch internally and delegating
+// to the pure date()/mktime()/strtotime() builtins. Oracle-verified.
+
+#[test]
+fn datetime_construct_and_format() {
+    assert_eq!(
+        out("<?php $d=new DateTime('2024-06-15 12:30:45'); echo $d->format('Y-m-d H:i:s');"),
+        "2024-06-15 12:30:45"
+    );
+    assert_eq!(
+        out("<?php echo (new DateTime('2024-06-15'))->getTimestamp();"),
+        "1718409600"
+    );
+    assert_eq!(
+        out("<?php $d=new DateTime('2024-06-15 12:30:45'); echo $d->getTimestamp();"),
+        "1718454645"
+    );
+}
+
+#[test]
+fn datetime_set_timestamp_date_time() {
+    assert_eq!(
+        out("<?php $d=new DateTime('2024-06-15 12:30:45'); $d->setTimestamp(1718452845); echo $d->format('Y-m-d H:i:s');"),
+        "2024-06-15 12:00:45"
+    );
+    // setDate keeps the time component.
+    assert_eq!(
+        out("<?php $d=new DateTime('2024-06-15 12:00:45'); $d->setDate(2020,1,31); echo $d->format('Y-m-d H:i:s');"),
+        "2020-01-31 12:00:45"
+    );
+    // setTime keeps the date component.
+    assert_eq!(
+        out("<?php $d=new DateTime('2020-01-31 12:00:45'); $d->setTime(8,5,9); echo $d->format('Y-m-d H:i:s');"),
+        "2020-01-31 08:05:09"
+    );
+}
+
+#[test]
+fn datetime_is_mutable_and_fluent() {
+    // Aliasing: mutating $b mutates $a (object handle semantics).
+    assert_eq!(
+        out("<?php $a=new DateTime('2024-06-15'); $b=$a; $b->setTime(1,2,3); echo $a->format('H:i:s');"),
+        "01:02:03"
+    );
+    // Setters return $this for fluent chaining.
+    assert_eq!(
+        out("<?php echo (new DateTime('2024-06-15'))->setTime(10,0,0)->format('H:i:s');"),
+        "10:00:00"
+    );
+}

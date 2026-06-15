@@ -197,6 +197,31 @@ class ValueError extends Error {}
 class ArithmeticError extends Error {}
 class DivisionByZeroError extends ArithmeticError {}
 class UnhandledMatchError extends Error {}
+class DateTime {
+    private $__ts = 0;
+    public function __construct($datetime = "now") {
+        if ($datetime === "now" || $datetime === "" || $datetime === null) {
+            $this->__ts = time();
+        } else {
+            $r = strtotime($datetime);
+            if ($r === false) {
+                throw new Exception("DateTime::__construct(): Failed to parse time string ($datetime)");
+            }
+            $this->__ts = $r;
+        }
+    }
+    public function format($format) { return date($format, $this->__ts); }
+    public function getTimestamp() { return $this->__ts; }
+    public function setTimestamp($timestamp) { $this->__ts = $timestamp; return $this; }
+    public function setDate($year, $month, $day) {
+        $this->__ts = mktime((int)date('G', $this->__ts), (int)date('i', $this->__ts), (int)date('s', $this->__ts), $month, $day, $year);
+        return $this;
+    }
+    public function setTime($hour, $minute, $second = 0) {
+        $this->__ts = mktime($hour, $minute, $second, (int)date('n', $this->__ts), (int)date('j', $this->__ts), (int)date('Y', $this->__ts));
+        return $this;
+    }
+}
 "##;
 
 /// Lower [`PRELUDE_SRC`] with a throwaway [`Lowerer`] and return its owned class

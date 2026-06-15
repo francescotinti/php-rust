@@ -401,6 +401,12 @@ fn parse_relative(s: &str, base: i64) -> Option<i64> {
     )
 }
 
+/// `time()`: the current Unix timestamp. Non-deterministic (reads the real
+/// clock); not differential-tested (D-DT5).
+pub fn time(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    Ok(Zval::Long(now_epoch()))
+}
+
 /// `strtotime(string $datetime, ?int $baseTimestamp = now)`. Supported subset
 /// (D-DT4): `@N` epoch, `now`, ISO/`Y/m/d` absolute dates with optional time,
 /// and `[+-]N unit` relative expressions. Everything else → `false`.
