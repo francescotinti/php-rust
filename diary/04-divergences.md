@@ -176,3 +176,19 @@ sezione Macro-step 34 di `metrics.md`). Non sono bug:
 Corpus `ext/date/tests`: 37 pass / 155 fail / 497 skip (192 runnable). I 155
 fail ricadono **tutti** nelle righe sopra (campionati e verificati: nessun bug
 di logica nelle funzioni implementate).
+
+## Macro-step 35 (API procedurale date) — zero D-NEW
+
+Lo step 35 implementa l'API procedurale (riga "API procedurale" sopra: ora
+**implementata** come wrapper-prelude + `getdate`/`localtime` builtin puri).
+Corpus `ext/date/tests` risalito a **46 pass / 178 fail / 465 skip** (224
+runnable, +32): le funzioni ora definite rendono *raggiungibili* test prima
+skippati, +9 passano, gli altri ricadono nelle stesse righe scope-out sopra —
+**nessuna divergenza nuova**. Due casi specifici verificati:
+
+| Test | Causa | Riga scope-out |
+|---|---|---|
+| `getdate_basic` (e variazioni) | setta `Asia/Calcutta` (+5:30), si aspetta `hours/minutes` locali; noi UTC | Timezone (D-DT3) |
+| `date_interval_create_from_date_string` su `'1 year + 1 day'` | token connettore `+` fuori dal subset `strtotime` (i 4 casi senza `+` passano) | `strtotime`/relativi (D-DT4) |
+| `date_create_basic`, `date_modify-*` | `var_dump` della rappresentazione interna degli oggetti Date* + parsing esotico nel costruttore | var_dump oggetti Date* |
+| `strftime`/`gmstrftime` | deprecate in PHP 8.1, fuori scope | (scope-out esplicito) |

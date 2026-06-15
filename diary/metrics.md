@@ -20,6 +20,10 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 35-4) | 639 |
+| Unit/integration (workspace, fine step 35-3) | 635 |
+| Unit/integration (workspace, fine step 35-2) | 632 |
+| Unit/integration (workspace, fine step 35-1) | 628 |
 | Unit/integration (workspace, fine step 34-7) | 624 |
 | Unit/integration (workspace, fine step 34-6) | 621 |
 | Unit/integration (workspace, fine step 34-5) | 617 |
@@ -682,6 +686,83 @@ campionando (nessun bug nelle funzioni implementate):
 
 I 28 test unit 34-1..34-7 sono tutti oracle-derived e passano byte-esatti.
 
+## Macro-step 35 — API procedurale date (`date_create`/`getdate`/…)
 
+Lo step 34 ha costruito l'API **OOP** (`DateTime`/`DateTimeImmutable`/
+`DateInterval` + builtin puri `date`/`mktime`/`strtotime`). Lo step 35 aggiunge
+l'**API procedurale** equivalente che PHP espone in parallelo. Decisioni Decider
+(default consigliati confermati): **D-PD1** wrapper = funzioni globali del
+prelude; **D-PD2** `getdate`/`localtime` = builtin puri; **D-PD3**
+`date_interval_create_from_date_string` via helper Rust
+`__interval_from_date_string`; **D-PD4** `date_diff $absolute` azzera `invert`.
+
+**Scoperta infra (D-PD1, più semplice del previsto)**: i call-site di funzione
+(`ExprKind::Call{name}`) e `new` (`ExprKind::New{Named(name)}`) si risolvono per
+**nome**, non per indice — il valutatore ricostruisce `fn_index` da
+`Program.functions` a runtime. Quindi mergiare le funzioni del prelude **non
+richiede alcun fix-up di indici**: basta seedare `low.functions`/`low.fn_index`
+dal prelude prima delle funzioni utente, identico al pattern delle classi
+(step 20). `lower_prelude` ora hoista anche le funzioni e ne ritorna la tabella.
+
+### Step 35-1 — infra + primi wrapper
+
+`lower_prelude` esteso (hoista classi *poi* funzioni, ritorna 4 prodotti);
+`lower` seeda `low.functions`/`fn_index` dal prelude. Primi wrapper in
+`PRELUDE_SRC`: `date_create`, `date_create_immutable`, `date_format`,
+`date_timestamp_get` (delegano all'OOP step 34). Test `lowering.rs` resi
+prelude-robust (trovano la funzione utente per nome, non per indice fisso).
+**+4 test (624→628)**, clippy pulito.
+
+### Step 35-2 — mutatori + diff
+
+Wrapper-prelude: `date_diff($base,$target,$absolute=false)` (`$absolute`
+azzera `invert`, D-PD4); `date_add`/`date_sub`/`date_modify` (inoltrano il
+ritorno del metodo → DateTime muta-e-ritorna-`$this`, DateTimeImmutable ritorna
+una nuova istanza, gratis); `date_date_set`/`date_time_set`/
+`date_timestamp_set`. **+4 test (628→632)**, clippy pulito.
+
+### Step 35-3 — createFromFormat + interval
+
+`date_create_from_format`/`date_create_immutable_from_format` (wrapper su
+`DateTime[Immutable]::createFromFormat`, arg `$timezone` ignorato);
+`date_interval_format` (su `DateInterval->format`);
+`date_interval_create_from_date_string` (D-PD3): nuovo builtin Rust
+`__interval_from_date_string` parsa una stringa relativa (`[+-]N unit …`,
+stesso subset di `strtotime`) in componenti `{y,m,d,h,i,s}` — le settimane si
+ripiegano in giorni, mesi/anni restano separati; ritorna `false` se nulla parsa.
+Refactor: estratto `accumulate_relative()` condiviso con `parse_relative`.
+**+3 test (632→635)**, clippy pulito.
+
+### Step 35-4 — getdate / localtime (D-PD2)
+
+Due builtin **puri** in `date.rs` (nessun oggetto): `getdate(?int $ts)` →
+array assoc `seconds/minutes/hours/mday/wday/mon/year/yday` + nomi pieni
+`weekday`/`month` + chiave numerica `0`=>ts, nell'ordine esatto di PHP
+(verificato con `print_r`); `localtime(?int $ts, bool $assoc=false)` → campi C
+`struct tm` `[sec,min,hour,mday,mon(0-based),year-1900,wday,yday,isdst]`
+(numerico) o chiavi `tm_*` (assoc); `isdst` sempre 0 (UTC, D-DT3). Riusano le
+tabelle `DAYS_FULL`/`MONTHS_FULL` e gli accessor del crate `time`.
+**+4 test (635→639)**, clippy pulito.
+
+#### Corpus `ext/date/tests` — 46 pass (era 37), zero bug di logica
+
+`phpt-runner` su tutta `ext/date/tests`: **46 pass / 178 fail / 465 skip**
+(224 runnable, era 192). Le funzioni procedurali ora **definite** rendono
+runnable +32 test (prima skippati "unsupported"): +9 passano (es.
+`localtime_basic`/`_variation4`/`_variation5`, `date_add_basic`,
+`date_sub_basic`), gli altri falliscono per **scope-out già dichiarati**
+(campionati, nessun bug nelle funzioni implementate):
+- **Timezone-dependent** (D-DT3): es. `getdate_basic` setta
+  `Asia/Calcutta` (+5:30) e si aspetta `hours=5`/`minutes=30`; noi UTC → 0/0.
+- **`var_dump`/`print_r` degli oggetti Date** (rappresentazione interna PHP
+  `date`/`timezone_type`/`timezone` vs la nostra prop privata `$__ts`) +
+  parsing di stringhe esotiche nel costruttore.
+- **`date_interval_create_from_date_string`** sulla stringa `'1 year + 1 day'`:
+  il token connettore `+` non è nel subset `strtotime` (D-DT4/D-PD3); i 4 casi
+  senza `+` passano.
+- **`strftime`/`gmstrftime`** (deprecate 8.1) restano skip.
+
+Zero D-NEW: nessuna divergenza nuova: i fail sono lo stesso insieme scope-out
+dello step 34, ora solo *raggiungibile* perché le funzioni esistono.
 
 
