@@ -3750,6 +3750,29 @@ fn preg_scopeout_callout_returns_false() {
     assert_eq!(out(r#"<?php echo (preg_match('/a(?C1)b/', 'ab') === false) ? 'F' : 'T';"#), "F");
 }
 
+// Step 36-3: pathological backtracking must terminate, never hang or panic.
+
+#[test]
+fn preg_match_all_catastrophic_backtracking_is_bounded() {
+    // bug41638: backref + nested quantifiers. `U` (ungreedy) is ignored by
+    // compile() so `.*` stays greedy → fancy-regex's NFA exceeds the default
+    // 1M backtrack limit. Pre-36-3 the captures_iter path LOOPED FOREVER on the
+    // same erroring position (its iterator never advances past an Err); now it
+    // stops at the first runtime error and returns 0. PHP, honouring `U`, returns
+    // 1 — the documented D-36.4 divergence. The point here is that it RETURNS.
+    let src = r##"<?php echo preg_match_all('/([\'"])((.*(\\\1)*)*)\1/sU', "repeater id='loopt' dataSrc=subject columns=2", $m);"##;
+    assert_eq!(out(src), "0");
+}
+
+#[test]
+fn preg_replace_catastrophic_backtracking_is_bounded() {
+    // Same pattern through preg_replace. fancy-regex's `replace_all` is
+    // `try_replacen(..).unwrap()` — a backtrack-limit error pre-36-3 PANICKED the
+    // interpreter. Now the error leaves the subject unchanged (D-36.3).
+    let src = r##"<?php echo preg_replace('/([\'"])((.*(\\\1)*)*)\1/sU', 'X', "repeater id='loopt' dataSrc=subject columns=2");"##;
+    assert_eq!(out(src), "repeater id='loopt' dataSrc=subject columns=2");
+}
+
 // --- Step 28: real stack-trace frames ---
 
 #[test]

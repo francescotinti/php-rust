@@ -108,25 +108,44 @@ impl Engine {
         }
     }
 
-    /// All non-overlapping matches in `text`, eagerly materialised. Runtime
-    /// errors from `fancy-regex` are skipped (D-36.3).
+    /// All non-overlapping matches in `text`, eagerly materialised.
+    ///
+    /// On a `fancy-regex` runtime error (e.g. backtrack-limit exceeded on a
+    /// pathological pattern) iteration STOPS (D-36.3 — error means "no further
+    /// matches"). Stopping is mandatory, not cosmetic: fancy-regex's iterator
+    /// does not advance its cursor past a position whose match attempt errored,
+    /// so it yields the same `Err` forever — a `filter_map(Result::ok)` would
+    /// loop without end (step 36-3, bug41638).
     pub fn captures_iter(&self, text: &str) -> Vec<Caps> {
         match self {
             Engine::Regex(r) => r.captures_iter(text).map(|c| caps_from_regex(&c)).collect(),
-            Engine::Fancy(r) => r
-                .captures_iter(text)
-                .filter_map(|c| c.ok())
-                .map(|c| caps_from_fancy(&c))
-                .collect(),
+            Engine::Fancy(r) => {
+                let mut out = Vec::new();
+                for c in r.captures_iter(text) {
+                    match c {
+                        Ok(caps) => out.push(caps_from_fancy(&caps)),
+                        Err(_) => break,
+                    }
+                }
+                out
+            }
         }
     }
 
     /// Replace every match in `text` using `repl` (already normalised to the
     /// `${n}` backreference form by [`translate_replacement`]).
+    ///
+    /// `fancy_regex::Regex::replace_all` is `try_replacen(..).unwrap()`, which
+    /// PANICS on a runtime error; the fallible form is used so a backtrack-limit
+    /// error on a pathological pattern leaves the text unchanged (D-36.3 — no
+    /// match means no replacement) instead of crashing (step 36-3).
     pub fn replace_all(&self, text: &str, repl: &str) -> String {
         match self {
             Engine::Regex(r) => r.replace_all(text, repl).into_owned(),
-            Engine::Fancy(r) => r.replace_all(text, repl).into_owned(),
+            Engine::Fancy(r) => r
+                .try_replacen(text, 0, repl)
+                .map(|c| c.into_owned())
+                .unwrap_or_else(|_| text.to_string()),
         }
     }
 }
@@ -191,7 +210,15 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
         pat.push(')');
     }
     pat.push_str(body);
-    fancy_regex::Regex::new(&pat).ok().map(Engine::Fancy)
+    // Bound backtracking explicitly at PHP's `pcre.backtrack_limit` default so a
+    // pathological pattern errors (→ no-match, D-36.3) rather than running away.
+    // This equals fancy-regex 0.14's own default, but pinning it documents the
+    // guarantee and survives a future default change (step 36-3).
+    fancy_regex::RegexBuilder::new(&pat)
+        .backtrack_limit(1_000_000)
+        .build()
+        .ok()
+        .map(Engine::Fancy)
 }
 
 /// Translate a PHP replacement string into the `regex` crate's syntax: PHP

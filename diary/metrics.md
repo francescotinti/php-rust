@@ -20,6 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 36-3) | 657 |
 | Unit/integration (workspace, fine step 36-2) | 655 |
 | Unit/integration (workspace, fine step 36-1) | 648 |
 | Unit/integration (workspace, fine step 35-4) | 639 |
@@ -800,23 +801,39 @@ lifetime di nessuno dei due backend nel valutatore. Tutte le operazioni preg
   subroutine, `(*SKIP)`/`(*FAIL)` control verb, `(?C1)` callout → `preg_*`
   ritorna `false`/`null`. **+7 test (648→655)**: 4 capability + 3 boundary di
   scope-out (ritornano false). clippy pulito.
+- **36-3** **hardening anti-hang.** Il corpus aveva esposto che `bug41638.phpt`
+  (pattern a backtracking catastrofico `(['"])((.*(\\\1)*)*)\1` con backref +
+  `U`) faceva **appendere l'interprete**. Diagnosi: il `backtrack_limit` di
+  default di fancy-regex (1M) **già limita** la singola attempt (~200 ms →
+  errore), ma `captures_iter` (path di `preg_match_all`) **non avanza il cursore
+  oltre una posizione che erra** → emette lo stesso `Err` all'infinito; il
+  vecchio `filter_map(Result::ok)` lo scartava e ciclava per sempre. In più
+  `fancy_regex::replace_all` = `try_replacen(..).unwrap()` → **panic** su
+  errore runtime. Fix: `captures_iter` si **ferma al primo `Err`** (D-36.3 ⇒
+  "nessun match ulteriore"); `replace_all` usa `try_replacen` e su errore lascia
+  il testo invariato; il `backtrack_limit` è **fissato esplicitamente a 1.000.000**
+  (default di PHP `pcre.backtrack_limit`) per documentare il bound. **+2 test
+  (655→657)**: `preg_match_all`/`preg_replace` sul pattern di bug41638 ora
+  **ritornano** (rispettivamente `0` e il subject invariato) invece di
+  appendere/panicare. clippy pulito.
 
 #### Corpus `ext/pcre/tests` — 41 pass (era 38 allo step 31)
 
-`phpt-runner` su tutta `ext/pcre/tests` (per-file, timeout 8 s): **41 pass /
-41 fail / 82 skip + 1 timeout** (83 runnable). Vs step 31 (38/45/82): **+3
-pass**, gli ex-fail ora verdi grazie a backref/lookaround. Campionati i fail
-residui: sono **scope-out pre-esistenti del motore**, NON regressioni di
-step 36 (i test passano da 38 a 41, il suite unit è verde):
+`phpt-runner` su tutta `ext/pcre/tests` (per-file, timeout via `perl -e
+'alarm N;exec'` — su macOS NON c'è `timeout`/`gtimeout`): **41 pass / 42 fail /
+82 skip / 0 timeout** (83 runnable) **dopo il fix 36-3** (prima: 41/41/82 + 1
+timeout `bug41638`, ora fail pulito = divergenza di valore D-36.4, non più hang).
+Vs step 31 (38/45/82): **+3 pass**, gli ex-fail ora verdi grazie a
+backref/lookaround. Campionati i fail residui: sono **scope-out pre-esistenti
+del motore**, NON regressioni di step 36 (i pass salgono da 38 a 41, il suite
+unit è verde):
 - **flag PCRE non implementati** `U` (ungreedy, `ungreedy.phpt`), `D`
   (dollar-end-only, `dollar_endonly.phpt`), `A`/`X` — `compile()` li ignora;
 - **trimming dei gruppi catturati trailing** non-partecipanti
   (`preg_match_non_capture.phpt`);
-- formattazione esatta di warning/error PCRE, NUL nei subject, edge `PREG_*`.
-- **1 timeout** `bug41638.phpt` (D-36.4): pattern a backtracking catastrofico
-  `(['"])((.*(\\\1)*)*)\1` con backref + `U`. `fancy-regex` (NFA) entra in
-  esplosione esponenziale dove PHP è protetto da `pcre.backtrack_limit`/JIT.
-  È una conseguenza **nuova** di step 36 (prima il pattern non compilava →
-  no-match, nessun hang): catalogato come scope-out, non modelliamo il
-  backtrack-limit. Il suite unit non ha pattern patologici (655 test in ~2.4 s).
+- formattazione esatta di warning/error PCRE, NUL nei subject, edge `PREG_*`;
+- **D-36.4** `bug41638.phpt`: il pattern catastrofico ungreedy — non onorando
+  `U` la nostra `.*` resta greedy → eccede il backtrack-limit → no-match (`0`),
+  mentre PHP (ungreedy) matcha. Dopo 36-3 ritorna in ~200 ms invece di appendere.
+  Il suite unit gira in ~2.4 s (657 test).
 

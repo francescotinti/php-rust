@@ -209,18 +209,24 @@ non sono bug salvo D-36.4.
 | **flag PCRE `U`/`D`/`A`/`X`** (pre-esistente, surfacing) | `compile()` li ignora → greedy/`$`/anchor di default | ungreedy / dollar-end-only / anchored / extended-strict | mai implementati (step 27); ortogonali a step 36 |
 | **trailing capture trimming** (pre-esistente) | gruppi trailing non-partecipanti inclusi | omessi (`preg_match_non_capture.phpt`) | dettaglio `PREG_*` da step 31 |
 
-**D-36.4 (divergenza NUOVA introdotta da step 36) — backtracking catastrofico
-non limitato.** `bug41638.phpt`: il pattern `(['"])((.*(\\\1)*)*)\1` (backref +
-quantificatori annidati + flag `U`) manda `fancy-regex` (NFA) in esplosione
-esponenziale; PHP è protetto da `pcre.backtrack_limit`/JIT e ritorna. Prima di
-step 36 quel pattern **non compilava** sul crate `regex` → no-match, nessun
-hang; ora compila sul fallback e gira a lungo. Non modelliamo il backtrack-limit
-(scope-out). Mitigazione possibile (non applicata): impostare un
-`fancy_regex::RegexBuilder::backtrack_limit()` esplicito così che il pattern
-ritorni errore → no-match (coerente con D-36.3) invece di appendere. Il suite
-unit non contiene pattern patologici (655 test in ~2.4 s); l'hang emerge solo
-sul corpus.
+**D-36.4 (divergenza di VALORE, ex-hang risolto in 36-3) — backtracking
+catastrofico.** `bug41638.phpt`: il pattern `(['"])((.*(\\\1)*)*)\1` (backref +
+quantificatori annidati + flag `U` ungreedy) su `fancy-regex` (NFA). Step 36-1
+**introdusse un hang**: prima il crate `regex` non compilava il pattern
+(no-match, nessun hang); col fallback fancy compila e — siccome non onoriamo il
+flag `U`, la `.*` resta greedy — esplode. Diagnosi 36-3: il `backtrack_limit` di
+default (1M) *già* limita la singola attempt (~200 ms → `Err`), ma
+`captures_iter` (path di `preg_match_all`) non avanza oltre una posizione che
+erra → emette lo stesso `Err` all'infinito (loop nel nostro `filter_map`), e
+`fancy replace_all` (`try_replacen().unwrap()`) **panica** sull'errore.
+**Fix 36-3**: `captures_iter` si ferma al primo `Err`, `replace_all` usa
+`try_replacen` con fallback al testo invariato, `backtrack_limit` fissato a 1M
+esplicito. Ora il pattern **ritorna** in ~200 ms (`preg_match_all`→`0`,
+`preg_replace`→subject invariato) invece di appendere/panicare. **Resta una
+divergenza di valore** (PHP, onorando `U`, matcha; noi no-match): non modelliamo
+il flag `U` né, oltre il limite, il backtracking completo — scope-out.
 
-Corpus `ext/pcre/tests`: **41 pass / 41 fail / 82 skip + 1 timeout** (83
-runnable), +3 pass vs step 31. I fail sono lo scope-out delle righe sopra +
-formattazione warning/NUL: nessuna regressione (i pass salgono).
+Corpus `ext/pcre/tests`: **41 pass / 42 fail / 82 skip / 0 timeout** (83
+runnable, dopo 36-3; prima 41/41/82 + 1 timeout `bug41638`), +3 pass vs step 31.
+I fail sono lo scope-out delle righe sopra + formattazione warning/NUL: nessuna
+regressione (i pass salgono).
