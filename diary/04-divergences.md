@@ -192,3 +192,35 @@ skippati, +9 passano, gli altri ricadono nelle stesse righe scope-out sopra —
 | `date_interval_create_from_date_string` su `'1 year + 1 day'` | token connettore `+` fuori dal subset `strtotime` (i 4 casi senza `+` passano) | `strtotime`/relativi (D-DT4) |
 | `date_create_basic`, `date_modify-*` | `var_dump` della rappresentazione interna degli oggetti Date* + parsing esotico nel costruttore | var_dump oggetti Date* |
 | `strftime`/`gmstrftime` | deprecate in PHP 8.1, fuori scope | (scope-out esplicito) |
+
+## Step 36 (preg backref/lookaround) — scope-out dichiarati + 1 divergenza nuova
+
+L'auto-fallback `regex`→`fancy-regex` (vedi `metrics.md` § Step 36) copre
+backref, lookaround, atomic/possessive group e — scoperta 36-2 — anche `(?R)`,
+conditional, `\K`, `\G`. I confini sotto sono decisi dal Decider (D-36.1..4);
+non sono bug salvo D-36.4.
+
+| Area | Comportamento nostro | PHP | Motivo |
+|---|---|---|---|
+| **subroutine** `(?1)`/`(?&name)` (D-36.2) | nessun engine compila → `preg_*` ritorna `false`/`null` | match | né `regex` né `fancy-regex` 0.14 le supportano |
+| **control verb** `(*SKIP)`/`(*FAIL)`/`(*PRUNE)` (D-36.2) | idem `false`/`null` | match / controllo backtracking | idem |
+| **callout** `(?C1)` (D-36.2) | idem `false`/`null` | callback PCRE | idem |
+| **`preg_last_error`** (D-36.3) | sempre `PREG_NO_ERROR`; errore runtime fancy (limite backtracking) → no-match silenzioso | codici d'errore distinti | il funnel preg non propaga i codici |
+| **flag PCRE `U`/`D`/`A`/`X`** (pre-esistente, surfacing) | `compile()` li ignora → greedy/`$`/anchor di default | ungreedy / dollar-end-only / anchored / extended-strict | mai implementati (step 27); ortogonali a step 36 |
+| **trailing capture trimming** (pre-esistente) | gruppi trailing non-partecipanti inclusi | omessi (`preg_match_non_capture.phpt`) | dettaglio `PREG_*` da step 31 |
+
+**D-36.4 (divergenza NUOVA introdotta da step 36) — backtracking catastrofico
+non limitato.** `bug41638.phpt`: il pattern `(['"])((.*(\\\1)*)*)\1` (backref +
+quantificatori annidati + flag `U`) manda `fancy-regex` (NFA) in esplosione
+esponenziale; PHP è protetto da `pcre.backtrack_limit`/JIT e ritorna. Prima di
+step 36 quel pattern **non compilava** sul crate `regex` → no-match, nessun
+hang; ora compila sul fallback e gira a lungo. Non modelliamo il backtrack-limit
+(scope-out). Mitigazione possibile (non applicata): impostare un
+`fancy_regex::RegexBuilder::backtrack_limit()` esplicito così che il pattern
+ritorni errore → no-match (coerente con D-36.3) invece di appendere. Il suite
+unit non contiene pattern patologici (655 test in ~2.4 s); l'hang emerge solo
+sul corpus.
+
+Corpus `ext/pcre/tests`: **41 pass / 41 fail / 82 skip + 1 timeout** (83
+runnable), +3 pass vs step 31. I fail sono lo scope-out delle righe sopra +
+formattazione warning/NUL: nessuna regressione (i pass salgono).

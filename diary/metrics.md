@@ -1,6 +1,6 @@
 # Metriche dell'esperimento
 
-> Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Aggiornato: 2026-06-14 (fine step 23).
+> Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Aggiornato: 2026-06-15 (fine step 36).
 
 ## LOC (target Rust, escluso codice di test)
 
@@ -20,6 +20,8 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 36-2) | 655 |
+| Unit/integration (workspace, fine step 36-1) | 648 |
 | Unit/integration (workspace, fine step 35-4) | 639 |
 | Unit/integration (workspace, fine step 35-3) | 635 |
 | Unit/integration (workspace, fine step 35-2) | 632 |
@@ -765,4 +767,56 @@ runnable +32 test (prima skippati "unsupported"): +9 passano (es.
 Zero D-NEW: nessuna divergenza nuova: i fail sono lo stesso insieme scope-out
 dello step 34, ora solo *raggiungibile* perché le funzioni esistono.
 
+
+## Step 36 — preg backref/lookaround (auto-fallback fancy-regex)
+
+Chiude lo scope-out motore degli step 27/31: il crate `regex` (DFA RE2-style)
+non compila backreference (`\1`) né lookaround. Pattern [[legacy-port]]
+"auto-fallback compile order": `preg.rs::compile()` ora ritorna
+`Option<Engine>` dove `enum Engine { Regex(regex::Regex), Fancy(fancy_regex::Regex) }`.
+Si prova prima `regex` (col builder per i flag `i/m/s/x`); **su errore di
+compilazione** si ripiega su `fancy-regex` (NFA con backtracking), riapplicando
+gli stessi flag come prefisso inline `(?imsx)`. Trasparente: nessun flag utente.
+Le due crate hanno `Match`/`Captures` con lifetime e firme diverse → tipi
+**neutri** `Caps`/`CapMatch` (eager-collected) che non lasciano trapelare i
+lifetime di nessuno dei due backend nel valutatore. Tutte le operazioni preg
+(`match`/`match_all` PATTERN+SET order/`replace`/`replace_callback`/`split`,
+`captures_array` con named groups + flag `PREG_*`) instradano per `Engine`.
+
+- **36-1** (`1197da4`) dep `fancy-regex 0.14`; enum `Engine` + tipi neutri;
+  `compile()` con auto-fallback; riscrittura di `captures_array`/`capture_value`
+  sui tipi neutri; errori runtime fancy (limite di backtracking) → no-match
+  (D-36.3). **+9 test (639→648)**, oracle-verificati: backref, named backref
+  (`\k<c>`), lookbehind, lookahead, negative lookahead, atomic group, backref
+  nel *pattern* di `preg_replace`, backref in `preg_match_all`, lookahead in
+  `preg_split`.
+- **36-2** (`0f5d024`) **catalogo capability + confine scope-out reale**.
+  Scoperta: `fancy-regex 0.14` copre molto più PCRE di quanto la nota di
+  scope-out dello step 27 assumesse. Provati empiricamente contro l'oracle,
+  combaciano byte-per-byte: `(?R)` ricorsione di tutto il pattern (parentesi
+  bilanciate), `(?(1)yes|no)` conditional su gruppo, `\K` reset dello start,
+  `\G` ancora al match precedente. Lo scope-out **genuino** (D-36.2) è più
+  stretto del previsto — nessuno dei due engine compila: `(?1)`/`(?&name)`
+  subroutine, `(*SKIP)`/`(*FAIL)` control verb, `(?C1)` callout → `preg_*`
+  ritorna `false`/`null`. **+7 test (648→655)**: 4 capability + 3 boundary di
+  scope-out (ritornano false). clippy pulito.
+
+#### Corpus `ext/pcre/tests` — 41 pass (era 38 allo step 31)
+
+`phpt-runner` su tutta `ext/pcre/tests` (per-file, timeout 8 s): **41 pass /
+41 fail / 82 skip + 1 timeout** (83 runnable). Vs step 31 (38/45/82): **+3
+pass**, gli ex-fail ora verdi grazie a backref/lookaround. Campionati i fail
+residui: sono **scope-out pre-esistenti del motore**, NON regressioni di
+step 36 (i test passano da 38 a 41, il suite unit è verde):
+- **flag PCRE non implementati** `U` (ungreedy, `ungreedy.phpt`), `D`
+  (dollar-end-only, `dollar_endonly.phpt`), `A`/`X` — `compile()` li ignora;
+- **trimming dei gruppi catturati trailing** non-partecipanti
+  (`preg_match_non_capture.phpt`);
+- formattazione esatta di warning/error PCRE, NUL nei subject, edge `PREG_*`.
+- **1 timeout** `bug41638.phpt` (D-36.4): pattern a backtracking catastrofico
+  `(['"])((.*(\\\1)*)*)\1` con backref + `U`. `fancy-regex` (NFA) entra in
+  esplosione esponenziale dove PHP è protetto da `pcre.backtrack_limit`/JIT.
+  È una conseguenza **nuova** di step 36 (prima il pattern non compilava →
+  no-match, nessun hang): catalogato come scope-out, non modelliamo il
+  backtrack-limit. Il suite unit non ha pattern patologici (655 test in ~2.4 s).
 
