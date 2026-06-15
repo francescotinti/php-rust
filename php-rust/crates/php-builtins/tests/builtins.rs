@@ -1798,3 +1798,54 @@ fn datetime_is_mutable_and_fluent() {
         "10:00:00"
     );
 }
+
+// --- Step 34-5: DateTimeImmutable + modify ------------------------------------
+
+#[test]
+fn datetime_modify_mutates() {
+    // DateTime::modify mutates in place and returns $this.
+    assert_eq!(
+        out("<?php $d=new DateTime('2024-06-15 12:00:00'); $r=$d->modify('+1 day'); echo $d->format('Y-m-d H:i:s'), ($r===$d?'/same':'/diff');"),
+        "2024-06-16 12:00:00/same"
+    );
+    assert_eq!(
+        out("<?php $d=new DateTime('2024-06-15 12:00:00'); $d->modify('+1 day')->modify('+2 hours'); echo $d->format('Y-m-d H:i:s');"),
+        "2024-06-16 14:00:00"
+    );
+}
+
+#[test]
+fn datetimeimmutable_returns_new() {
+    // modify returns a new instance, original unchanged.
+    assert_eq!(
+        out("<?php $a=new DateTimeImmutable('2024-01-01 00:00:00'); $b=$a->modify('+1 month'); echo $a->format('Y-m-d'),'/',$b->format('Y-m-d'),($a===$b?'/same':'/distinct');"),
+        "2024-01-01/2024-02-01/distinct"
+    );
+    // setTime/setDate/setTimestamp all return new instances.
+    assert_eq!(
+        out("<?php $a=new DateTimeImmutable('2024-01-01 00:00:00'); $b=$a->setTime(10,30,0); echo $a->format('H:i:s'),'/',$b->format('H:i:s');"),
+        "00:00:00/10:30:00"
+    );
+    assert_eq!(
+        out("<?php $a=new DateTimeImmutable('2024-01-01'); $b=$a->setDate(2030,5,20); echo $a->format('Y-m-d'),'/',$b->format('Y-m-d');"),
+        "2024-01-01/2030-05-20"
+    );
+    assert_eq!(
+        out("<?php $a=new DateTimeImmutable('2024-01-01'); $b=$a->setTimestamp(1718452845); echo $a->getTimestamp(),'/',$b->getTimestamp();"),
+        "1704067200/1718452845"
+    );
+}
+
+#[test]
+fn datetime_at_construct_and_interface() {
+    // "@N" epoch constructor.
+    assert_eq!(
+        out("<?php echo (new DateTimeImmutable('@1718452845'))->format('Y-m-d H:i:s');"),
+        "2024-06-15 12:00:45"
+    );
+    // Both classes implement DateTimeInterface.
+    assert_eq!(
+        out("<?php $d=new DateTime('2024-01-01'); $i=new DateTimeImmutable('2024-01-01'); var_dump($d instanceof DateTimeInterface, $i instanceof DateTimeInterface);"),
+        "bool(true)\nbool(true)\n"
+    );
+}

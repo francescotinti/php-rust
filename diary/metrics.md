@@ -20,6 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 34-5) | 617 |
 | Unit/integration (workspace, fine step 34-4) | 614 |
 | Unit/integration (workspace, fine step 34-3) | 611 |
 | Unit/integration (workspace, fine step 34-2) | 606 |
@@ -607,6 +608,21 @@ idiomatica e nello spirito dell'esperimento.
 `timezone_type`/`timezone`; noi una prop privata `$__ts`) — si testano i
 metodi/`format()`, non il dump dell'oggetto. **+3 test (611→614)**, clippy
 pulito.
+
+### Step 34-5 — `DateTimeImmutable` + `modify`
+
+Granularità rivista (Decider): `add`/`sub` spostati al 34-6 perché richiedono
+`DateInterval`; il 34-5 copre la distinzione **mutabile vs immutabile** via
+`modify` (che richiede solo `strtotime`).
+- `interface DateTimeInterface {}` nel prelude; `DateTime` e
+  `DateTimeImmutable` la implementano (`instanceof` corretto).
+- `DateTime::modify($mod)` → `strtotime($mod, $__ts)`, **muta** `$this` e lo
+  ritorna (fluent).
+- `DateTimeImmutable`: gemella di DateTime ma `modify`/`setTimestamp`/`setDate`/
+  `setTime` **ritornano una NUOVA istanza** (`new DateTimeImmutable("@$ts")`,
+  sfrutta il parsing `@N` dello step 34-3) e lasciano l'originale invariato.
+
+**+3 test (614→617)**, clippy pulito.
 
 
 

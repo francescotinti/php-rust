@@ -197,7 +197,8 @@ class ValueError extends Error {}
 class ArithmeticError extends Error {}
 class DivisionByZeroError extends ArithmeticError {}
 class UnhandledMatchError extends Error {}
-class DateTime {
+interface DateTimeInterface {}
+class DateTime implements DateTimeInterface {
     private $__ts = 0;
     public function __construct($datetime = "now") {
         if ($datetime === "now" || $datetime === "" || $datetime === null) {
@@ -221,6 +222,33 @@ class DateTime {
         $this->__ts = mktime($hour, $minute, $second, (int)date('n', $this->__ts), (int)date('j', $this->__ts), (int)date('Y', $this->__ts));
         return $this;
     }
+    public function modify($modifier) { $this->__ts = strtotime($modifier, $this->__ts); return $this; }
+}
+class DateTimeImmutable implements DateTimeInterface {
+    private $__ts = 0;
+    public function __construct($datetime = "now") {
+        if ($datetime === "now" || $datetime === "" || $datetime === null) {
+            $this->__ts = time();
+        } else {
+            $r = strtotime($datetime);
+            if ($r === false) {
+                throw new Exception("DateTimeImmutable::__construct(): Failed to parse time string ($datetime)");
+            }
+            $this->__ts = $r;
+        }
+    }
+    public function format($format) { return date($format, $this->__ts); }
+    public function getTimestamp() { return $this->__ts; }
+    public function setTimestamp($timestamp) { return new DateTimeImmutable("@$timestamp"); }
+    public function setDate($year, $month, $day) {
+        $ts = mktime((int)date('G', $this->__ts), (int)date('i', $this->__ts), (int)date('s', $this->__ts), $month, $day, $year);
+        return new DateTimeImmutable("@$ts");
+    }
+    public function setTime($hour, $minute, $second = 0) {
+        $ts = mktime($hour, $minute, $second, (int)date('n', $this->__ts), (int)date('j', $this->__ts), (int)date('Y', $this->__ts));
+        return new DateTimeImmutable("@$ts");
+    }
+    public function modify($modifier) { $ts = strtotime($modifier, $this->__ts); return new DateTimeImmutable("@$ts"); }
 }
 "##;
 
