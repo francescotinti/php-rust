@@ -1983,3 +1983,42 @@ fn date_default_timezone_utc_scope() {
         "12"
     );
 }
+
+// --- Step 35-1: procedural date API — infra + first wrappers ------------------
+// The procedural functions (date_create, date_format, ...) are PHP global
+// functions authored in the prelude that delegate to the step-34 OOP API. This
+// exercises the new infra: prelude global functions are merged into
+// `Program.functions` and resolved by name like any user function (D-PD1).
+
+#[test]
+fn date_create_and_format() {
+    // date_create builds a DateTime; date_format delegates to ->format().
+    assert_eq!(
+        out("<?php $d=date_create('2024-06-15 12:30:45'); echo get_class($d),'/',date_format($d,'Y-m-d H:i:s');"),
+        "DateTime/2024-06-15 12:30:45"
+    );
+}
+
+#[test]
+fn date_create_immutable_class() {
+    assert_eq!(
+        out("<?php echo get_class(date_create_immutable('2024-01-01'));"),
+        "DateTimeImmutable"
+    );
+}
+
+#[test]
+fn date_timestamp_get_proc() {
+    // Same epoch as the OOP getTimestamp() (1718454645 = 2024-06-15 12:30:45 UTC).
+    assert_eq!(
+        out("<?php echo date_timestamp_get(date_create('2024-06-15 12:30:45'));"),
+        "1718454645"
+    );
+}
+
+#[test]
+fn date_create_default_arg_is_datetime() {
+    // No argument defaults to "now"; the value is non-deterministic but the type
+    // is not (D-DT5: we only assert the class, never the instant).
+    assert_eq!(out("<?php echo get_class(date_create());"), "DateTime");
+}

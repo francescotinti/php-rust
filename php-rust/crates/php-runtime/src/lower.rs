@@ -90,9 +90,14 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
     // class is hoisted (step 20). This makes `extends Exception`, `instanceof`,
     // `new RuntimeException(...)`, property init and `parent::__construct` reuse
     // the whole step-19 class machinery with no special-casing.
-    let (pclasses, pindex) = lower_prelude();
+    let (pclasses, pindex, pfunctions, pfn_index) = lower_prelude();
     low.classes = pclasses;
     low.class_index = pindex;
+    // Seed the prelude's global functions (step 35: the procedural date API)
+    // ahead of the user's, so user functions get ids contiguous after them. Like
+    // the classes, call sites resolve by name, so no index fix-up is needed.
+    low.functions = pfunctions;
+    low.fn_index = pfn_index;
     // Hoist top-level function declarations first, so a call may textually
     // precede its definition (PHP's function hoisting). Bodies are lowered here;
     // the main pass below skips the declaration statements (they are no-ops).
@@ -320,12 +325,32 @@ class DateTimeImmutable implements DateTimeInterface {
         return $iv;
     }
 }
+
+// --- Procedural date API (step 35): thin global-function wrappers over the OOP
+// API above. PHP exposes both styles; these delegate so the two stay identical.
+function date_create($datetime = "now") { return new DateTime($datetime); }
+function date_create_immutable($datetime = "now") { return new DateTimeImmutable($datetime); }
+function date_format($object, $format) { return $object->format($format); }
+function date_timestamp_get($object) { return $object->getTimestamp(); }
 "##;
 
+/// The four owned products of lowering [`PRELUDE_SRC`]: the class table + its
+/// name→id index (step 20), and the global-function table + its name→index
+/// (step 35). Both are seeded into every real program before user declarations
+/// are hoisted, so user classes/functions get contiguous ids after them.
+type LoweredPrelude = (
+    Vec<ClassDecl>,
+    HashMap<Vec<u8>, usize>,
+    Vec<FnDecl>,
+    HashMap<Vec<u8>, usize>,
+);
+
 /// Lower [`PRELUDE_SRC`] with a throwaway [`Lowerer`] and return its owned class
-/// table + name→id index (step 20). The prelude has no functions/closures/
-/// statics, so only the class table needs to be carried over.
-fn lower_prelude() -> (Vec<ClassDecl>, HashMap<Vec<u8>, usize>) {
+/// table + name→id index (step 20) plus the global functions it declares (step
+/// 35: the procedural date API). Function/`new` call sites resolve by *name*
+/// (the evaluator rebuilds its `fn_index`/class table from `Program`), so the
+/// prelude bodies need no index fix-up after being merged in.
+fn lower_prelude() -> LoweredPrelude {
     let arena = Bump::new();
     let file = File::ephemeral(Cow::Borrowed(b"prelude".as_slice()), Cow::Borrowed(PRELUDE_SRC));
     let program = parse_file(&arena, &file);
@@ -335,9 +360,16 @@ fn lower_prelude() -> (Vec<ClassDecl>, HashMap<Vec<u8>, usize>) {
         program.errors
     );
     let mut low = Lowerer::new(&file, b"prelude");
+    // Hoist classes first (a prelude function may `new` a prelude class), then
+    // the global functions, mirroring the order in `lower`.
     low.hoist_classes(program.statements.as_slice())
         .expect("exception prelude must lower");
-    (low.classes, low.class_index)
+    for s in program.statements.as_slice() {
+        if let Statement::Function(func) = s {
+            low.hoist_function(func).expect("prelude function must lower");
+        }
+    }
+    (low.classes, low.class_index, low.functions, low.fn_index)
 }
 
 /// A name→slot scope: the script globals, or one function's locals. Holds the

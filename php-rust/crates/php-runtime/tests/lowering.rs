@@ -351,9 +351,14 @@ fn function_declaration_is_hoisted_into_table() {
     // The declaration produces no runtime statement; only the echo remains.
     assert_eq!(p.body.len(), 1);
     assert!(matches!(&p.body[0].kind, StmtKind::Echo(_)));
-    // The function is registered with its own local slot table.
-    assert_eq!(p.functions.len(), 1);
-    let f = &p.functions[0];
+    // The function is registered with its own local slot table. The prelude's
+    // global functions (step 35 procedural date API) precede the user's, so find
+    // it by name rather than by a fixed index.
+    let f = p
+        .functions
+        .iter()
+        .find(|f| &*f.name == b"f")
+        .expect("user function `f` is hoisted");
     assert_eq!(&*f.name, b"f");
     assert_eq!(f.params.len(), 2);
     assert!(f.params[0].default.is_none());
@@ -369,8 +374,14 @@ fn by_reference_param_lowers_with_flag() {
     // By-reference parameters are supported from step 11b: the flag is recorded
     // on the lowered `Param`.
     let p = lower("<?php function f(&$a) { } f($x);");
-    assert_eq!(p.functions.len(), 1);
-    assert!(p.functions[0].params[0].by_ref);
+    // Find the user function by name: the prelude's global functions (step 35)
+    // occupy the leading indices.
+    let f = p
+        .functions
+        .iter()
+        .find(|f| &*f.name == b"f")
+        .expect("user function `f` is hoisted");
+    assert!(f.params[0].by_ref);
 }
 
 #[test]
