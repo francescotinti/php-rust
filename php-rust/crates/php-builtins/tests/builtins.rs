@@ -1419,3 +1419,54 @@ fn preg_split_delim_capture() {
         "a|,|b"
     );
 }
+
+// --- Step 32: array by-ref family (array_splice / array_walk) ---------------
+
+#[test]
+fn array_splice_remove_and_replace() {
+    assert_eq!(
+        out("<?php $a=[1,2,3,4,5]; $r=array_splice($a,1,2,['x','y']); echo implode(',',$a),'/',implode(',',$r);"),
+        "1,x,y,4,5/2,3"
+    );
+}
+
+#[test]
+fn array_splice_negative_offset() {
+    assert_eq!(out("<?php $a=[1,2,3,4]; array_splice($a,-2); echo implode(',',$a);"), "1,2");
+}
+
+#[test]
+fn array_splice_insert_length_zero() {
+    assert_eq!(out("<?php $a=[1,2,3]; array_splice($a,1,0,['x']); echo implode(',',$a);"), "1,x,2,3");
+}
+
+#[test]
+fn array_splice_string_keys_preserved() {
+    // Kept string keys are preserved; replacement/int keys are renumbered.
+    assert_eq!(
+        out("<?php $a=['a'=>1,'b'=>2,'c'=>3]; array_splice($a,1,1,['z']); var_dump($a);"),
+        "array(3) {\n  [\"a\"]=>\n  int(1)\n  [0]=>\n  string(1) \"z\"\n  [\"c\"]=>\n  int(3)\n}\n"
+    );
+}
+
+#[test]
+fn array_splice_scalar_replacement() {
+    // A non-array replacement is treated as a single element.
+    assert_eq!(out("<?php $a=[1,2,3]; array_splice($a,1,1,'X'); echo implode(',',$a);"), "1,X,3");
+}
+
+#[test]
+fn array_walk_by_ref_modifies() {
+    assert_eq!(
+        out("<?php $a=[1,2,3]; array_walk($a, function(&$v,$k){ $v=$v*10+$k; }); echo implode(',',$a);"),
+        "10,21,32"
+    );
+}
+
+#[test]
+fn array_walk_by_value_no_change_with_extra() {
+    assert_eq!(
+        out("<?php $a=[1,2]; $out=''; array_walk($a, function($v,$k,$p) use (&$out){ $out.=\"$k:$v:$p \"; }, 'X'); echo $out, '/', implode(',',$a);"),
+        "0:1:X 1:2:X /1,2"
+    );
+}

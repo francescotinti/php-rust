@@ -2420,6 +2420,7 @@ impl<'p> Evaluator<'p> {
             b"call_user_func_array" => Some(self.ho_call_user_func_array(args)),
             b"array_map" => Some(self.ho_array_map(args)),
             b"array_filter" => Some(self.ho_array_filter(args)),
+            b"array_walk" => Some(self.ho_array_walk(args)),
             b"usort" => Some(self.ho_usort(args)),
             b"json_decode" => Some(self.ho_json_decode(args)),
             b"preg_match" => Some(self.ho_preg_match(args)),
@@ -2430,6 +2431,100 @@ impl<'p> Evaluator<'p> {
             b"preg_quote" => Some(self.ho_preg_quote(args)),
             _ => None,
         }
+    }
+
+    /// `array_walk(&$array, $callback, $arg = null)` (step 32): apply `$callback`
+    /// to each element. When the callback's first parameter is by-reference the
+    /// element is passed through a shared cell and the mutation is written back;
+    /// otherwise it is passed by value (read-only). Returns true. The keys are
+    /// never modified.
+    fn ho_array_walk(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        let (Some(arr_expr), Some(cb_expr)) = (args.first(), args.get(1)) else {
+            return Err(PhpError::ArgumentCountError(format!(
+                "array_walk() expects at least 2 arguments, {} given",
+                args.len()
+            )));
+        };
+        let ExprKind::Var(slot) = arr_expr.kind else {
+            return Err(PhpError::Error(
+                "array_walk(): Argument #1 ($array) could not be passed by reference".to_string(),
+            ));
+        };
+        let callback = self.eval(cb_expr)?.deref_clone();
+        let extra = match args.get(2) {
+            Some(e) => Some(self.eval(e)?.deref_clone()),
+            None => None,
+        };
+        let by_ref = self.callable_first_by_ref(&callback);
+        let cell = self.slot_cell(slot as usize);
+        let entries: Vec<(Key, Zval)> = match &*cell.borrow() {
+            Zval::Array(a) => a.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect(),
+            other => {
+                return Err(PhpError::TypeError(format!(
+                    "array_walk(): Argument #1 ($array) must be of type array, {} given",
+                    other.error_type_name()
+                )))
+            }
+        };
+
+        let mut out = PhpArray::new();
+        for (k, v) in entries {
+            let key_z = match &k {
+                Key::Int(i) => Zval::Long(*i),
+                Key::Str(s) => Zval::Str(Rc::clone(s)),
+            };
+            let new_v = if by_ref {
+                let vcell = Rc::new(RefCell::new(v));
+                let mut argv = vec![Zval::Ref(Rc::clone(&vcell)), key_z];
+                if let Some(e) = &extra {
+                    argv.push(e.clone());
+                }
+                self.call_value(callback.clone(), argv)?;
+                let updated = vcell.borrow().clone();
+                updated
+            } else {
+                let mut argv = vec![v.clone(), key_z];
+                if let Some(e) = &extra {
+                    argv.push(e.clone());
+                }
+                self.call_value(callback.clone(), argv)?;
+                v
+            };
+            out.insert(k, new_v);
+        }
+        *cell.borrow_mut() = Zval::Array(Rc::new(out));
+        Ok(Zval::Bool(true))
+    }
+
+    /// Whether a callable's first parameter is declared by-reference (`&$x`).
+    /// Used by `array_walk` to decide if element mutations propagate. Only user
+    /// closures and named user functions are inspected; anything else is false.
+    fn callable_first_by_ref(&self, callee: &Zval) -> bool {
+        match callee {
+            Zval::Closure(cl) => match &cl.named {
+                Some(name) => self.named_first_by_ref(name.as_bytes()),
+                None => self
+                    .closures
+                    .get(cl.fn_idx)
+                    .and_then(|f| f.params.first())
+                    .is_some_and(|p| p.by_ref),
+            },
+            Zval::Str(s) => self.named_first_by_ref(s.as_bytes()),
+            Zval::Ref(c) => {
+                let inner = c.borrow().clone();
+                self.callable_first_by_ref(&inner)
+            }
+            _ => false,
+        }
+    }
+
+    /// First-parameter by-reference flag of a named user function.
+    fn named_first_by_ref(&self, name: &[u8]) -> bool {
+        self.fn_index
+            .get(&name.to_ascii_lowercase())
+            .and_then(|&i| self.funcs.get(i))
+            .and_then(|f| f.params.first())
+            .is_some_and(|p| p.by_ref)
     }
 
     /// Evaluate an argument and coerce it to a byte string (used by `preg_*` for

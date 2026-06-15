@@ -449,6 +449,74 @@ fn as_array_mut<'a>(arr: &'a mut Zval, fname: &str) -> Result<&'a mut Rc<PhpArra
     }
 }
 
+/// array_splice(&$array, $offset, $length = null, $replacement = []): remove the
+/// positional slice and splice in `$replacement` (by-ref, step 32). Returns the
+/// removed elements (reindexed). Integer keys in the result are renumbered;
+/// string keys of the kept elements are preserved.
+pub fn array_splice(arr: &mut Zval, args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let rc = as_array_mut(arr, "array_splice")?;
+    let entries: Vec<(Key, Zval)> = rc.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    let len = entries.len() as i64;
+
+    let offset_raw = args
+        .first()
+        .map(|v| convert::to_long_cast(v, ctx.diags))
+        .unwrap_or(0);
+    let offset = if offset_raw < 0 {
+        (len + offset_raw).max(0)
+    } else {
+        offset_raw.min(len)
+    };
+
+    let end = match args.get(1) {
+        None | Some(Zval::Null) => len,
+        Some(v) => {
+            let l = convert::to_long_cast(v, ctx.diags);
+            if l < 0 {
+                (len + l).max(offset)
+            } else {
+                (offset + l).min(len)
+            }
+        }
+    };
+
+    let replacement: Vec<Zval> = match args.get(2) {
+        Some(Zval::Array(r)) => r.iter().map(|(_, v)| v.clone()).collect(),
+        Some(other) => vec![other.clone()],
+        None => Vec::new(),
+    };
+
+    let (offset, end) = (offset as usize, end as usize);
+    let mut removed = PhpArray::new();
+    let mut out = PhpArray::new();
+    // Elements before the cut keep their key kind (string preserved, int renumbered).
+    for (k, v) in &entries[..offset] {
+        push_kept(&mut out, k, v);
+    }
+    for v in replacement {
+        let _ = out.append(v);
+    }
+    for (k, v) in &entries[end..] {
+        push_kept(&mut out, k, v);
+    }
+    for (_, v) in &entries[offset..end] {
+        let _ = removed.append(v.clone());
+    }
+
+    *arr = Zval::Array(Rc::new(out));
+    Ok(Zval::Array(Rc::new(removed)))
+}
+
+/// Re-add a kept element: preserve a string key, renumber an integer key.
+fn push_kept(out: &mut PhpArray, k: &Key, v: &Zval) {
+    match k {
+        Key::Str(_) => out.insert(k.clone(), v.clone()),
+        Key::Int(_) => {
+            let _ = out.append(v.clone());
+        }
+    }
+}
+
 // --- Step 29-2: pure array builtins ----------------------------------------
 
 /// Coerce a value to an array key with PHP's rules (int|bool|float -> int key;
