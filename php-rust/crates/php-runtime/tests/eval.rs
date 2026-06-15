@@ -4077,3 +4077,29 @@ fn generator_key_and_valid() {
         "0:10|1:20F"
     );
 }
+
+#[test]
+fn generator_foreach_key_value() {
+    // `foreach` drives the generator: start, then current/key -> bind, body, next.
+    assert_eq!(
+        out(r#"<?php function g(){yield 1;yield 2;yield 3;} foreach(g() as $k=>$v) echo "$k:$v ";"#),
+        "0:1 1:2 2:3 "
+    );
+}
+
+#[test]
+fn generator_foreach_value_only() {
+    assert_eq!(
+        out("<?php function g(){yield 'a';yield 'b';yield 'c';} foreach(g() as $v) echo $v;"),
+        "abc"
+    );
+}
+
+#[test]
+fn generator_foreach_break() {
+    // `break` stops driving the generator early.
+    assert_eq!(
+        out("<?php function g(){yield 1;yield 2;yield 3;yield 4;} foreach(g() as $v){ if($v==3) break; echo $v; }"),
+        "12"
+    );
+}

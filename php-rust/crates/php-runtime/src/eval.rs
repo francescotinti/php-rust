@@ -982,6 +982,9 @@ impl<'p> Evaluator<'p> {
         // bind time (this is what makes the lingering-reference gotcha work).
         let items: Vec<(Key, Zval)> = match collection {
             Zval::Array(a) => a.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+            // A generator is driven live (step 39-2): unlike an array it is not
+            // snapshotted — each iteration advances it.
+            Zval::Generator(gs) => return self.foreach_generator(&gs, key, value, body),
             other => {
                 self.diags.push(Diag::Warning(format!(
                     "foreach() argument must be of type array|object, {} given",
@@ -1042,6 +1045,44 @@ impl<'p> Evaluator<'p> {
                 LoopStep::Stop => break,
                 LoopStep::Propagate(f) => return Ok(f),
             }
+        }
+        Ok(Flow::Normal)
+    }
+
+    /// `foreach ($gen as [$k =>] $v)` over a generator (step 39-2). Drives it
+    /// live — start, then on each iteration bind the current `(key, value)`, run
+    /// the body, and advance — rather than snapshotting like an array. The
+    /// generator's own key (already a `Zval`) is bound directly.
+    fn foreach_generator(
+        &mut self,
+        gs_rc: &Rc<RefCell<GenState>>,
+        key: Option<Slot>,
+        value: Slot,
+        body: &[Stmt],
+    ) -> Result<Flow, PhpError> {
+        self.ensure_started(gs_rc)?;
+        loop {
+            let (k, v, done) = {
+                let gs = gs_rc.borrow();
+                (
+                    gs.cur_key.clone(),
+                    gs.cur_val.clone(),
+                    matches!(gs.status, GenStatus::Done),
+                )
+            };
+            if done {
+                break;
+            }
+            if let Some(ks) = key {
+                self.slot_set(ks as usize, k);
+            }
+            self.slot_set(value as usize, v.deref_clone());
+            match self.loop_step(body)? {
+                LoopStep::Iterate => {}
+                LoopStep::Stop => break,
+                LoopStep::Propagate(f) => return Ok(f),
+            }
+            self.resume_generator(gs_rc, Zval::Null)?;
         }
         Ok(Flow::Normal)
     }
