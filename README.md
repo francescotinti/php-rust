@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–38 completati · 686 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–39 completati · 710 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 | Step | Contenuto | Stato |
 |---|---|---|
@@ -57,6 +57,7 @@ full port semantico del solo `zend_operators.c`).
 | 36 | **preg backref/lookaround** — auto-fallback `regex`→`fancy-regex` (`enum Engine`): backref, lookaround, atomic/possessive, `(?R)`/conditional/`\K`/`\G`. Scope-out: subroutine `(?1)`, control verb `(*SKIP)`, callout. Hardening 36-3: `backtrack_limit` + stop-on-error (niente hang/panic su pattern patologici). Corpus `ext/pcre` 38→41 pass | ✅ |
 | 37 | **flag modificatori PCRE** `U` (ungreedy, `swap_greed`+`(?U)`), `A` (anchored, wrap `\A(?:…)`), `X` (no-op PCRE2), `D`/`$` (default `$` zero-width prima di `\n` finale via lookahead `(?=\n?\z)`→fancy; `D`=`\z` stretto). Corpus `ext/pcre` 41→44 pass | ✅ |
 | 38 | **argomenti nominati** `f(c: 3, a: 1)` per funzioni/costruttori/metodi/static (riordino, default saltati, named→by-ref, errori catchable, posizionale-dopo-nominato compile-fatal) + **parametri variadic** `f(...$rest)`. `nullsafe ?->` già dallo step 19. Follow-up: spread `...$arr`, named→variadic | ✅ |
+| 39 | **generatori `yield`** — esecuzione sospendibile via coroutine stackful `corosensei` (D-GEN-1). `yield`/`yield $k=>$v`/`yield;`/`yield from` (array+sub-generatore), `send()`, `return`+`getReturn()`, Iterator (current/key/next/valid/rewind), `foreach` su Generator, instanceof Generator/Iterator/Traversable, var_dump. Closure-generator. Corpus `Zend/tests/generators` 59/110. Scope-out (D-GEN-4): `throw()`, eccezioni/finally attraverso yield, yield by-ref | ✅ |
 
 > Lo step 6 è stato eseguito **dopo** lo step 7 (deciso con l'utente: gli array
 > rendono il phpt-runner molto più utile, quintuplicando i test in-scope).

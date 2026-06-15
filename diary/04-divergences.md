@@ -278,3 +278,28 @@ I casi coperti (riordino, posizionale+nominato, default saltati, "Unknown named
 parameter $x", "Named parameter $x overwrites previous argument", "Cannot use
 positional argument after named argument" compile-fatal, costruttore, metodo,
 static) sono tutti oracle-verificati nei test unit.
+
+## Step 39 (generatori `yield`) — coperto il core; throw/by-ref/finally scope-out
+
+`yield`, `yield $k=>$v`, `yield from` (array + sub-generatore), `send()`,
+`return`/`getReturn()`, metodi Iterator, `foreach` su Generator, instanceof
+Generator/Iterator/Traversable, rewind, var_dump/print_r sono implementati e
+oracle-verificati. I confini sotto sono **scope-out dichiarati** (D-GEN-4), non
+bug; il corpus `Zend/tests/generators` (59/51/74) li espone.
+
+| Area | Comportamento nostro | PHP | Stato |
+|---|---|---|---|
+| **`Generator::throw()`** + eccezione iniettata in un `yield` | metodo assente → Error | rilancia l'eccezione dal punto di sospensione | scope-out D-GEN-4 |
+| **eccezione che attraversa `yield`/`finally`** dentro il generatore | `finally` nel generatore non interagisce con l'unwinding di sospensione | unwinding completo con esecuzione `finally` | scope-out D-GEN-4 |
+| **yield by-reference** `function &g(){ yield $x; }` | `&` ignorato (yield by-value) | l'elemento è un alias della cella | scope-out D-GEN-4 |
+| **errore resume/rewind** ("Cannot resume…/rewind…") | `PhpError::Error` (classe `Error`, fatale) | lancia un'**`Exception`** catchabile | divergenza classe (Exception vs Error): i test `errors/resume_running_*`, `generator_rewind` falliscono perché fanno `catch(Exception)` |
+| **numerazione handle oggetto** in dump con generatori | il generatore consuma `next_object_id` → gli `#N` di stdClass successivi divergono | numerazione PHP | informational (pre-esistente, vale anche per closure) |
+| **stack trace** di errori da `->next()`/`->current()` | frame `#0 {main}` (il frame `Generator->next()` interno non è tracciato) | `#0 …: Generator->next()` | fedeltà trace, scope-out |
+| **`yield from` su Iterator/Traversable user** | `Error` "Can use \"yield from\" only with arrays and Traversables" | itera l'oggetto | companion del `foreach`-su-oggetti (scope-out) |
+
+Casi coperti e oracle-verificati: auto-key (anche con chiave int esplicita che
+avanza il contatore con la regola array-append), `yield;` nudo (NULL/auto-key),
+`yield from` che preserva le chiavi senza avanzare il contatore esterno,
+getReturn del delegato, send-forwarding attraverso `yield from`, closure
+generator (con cattura `use`), getReturn auto-prime su generatore che `return`
+prima di ogni yield, rewind fatale dopo avanzamento.

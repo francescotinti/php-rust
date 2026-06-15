@@ -936,3 +936,73 @@ limite pre-esistente non specifico dei named — fail di `basic.phpt`). I casi
 by-value comuni + by-ref-variabile + variadic-positional sono coperti e
 oracle-verificati nei test unit.
 
+
+---
+
+## Step 39 — Generators (`yield`)
+
+Lo step più difficile finora: **esecuzione sospendibile** in un interprete
+tree-walking `&mut self`. Motore = `corosensei` coroutine stackful.
+
+### Decisioni (vs design `NEXT-generators.md`)
+
+- **D-GEN-1 raffinato**: si usa `corosensei::Coroutine` (NON `ScopedCoroutine`).
+  `Coroutine::new` richiede solo `'static` (non `Send`), soddisfatto possedendo
+  il corpo come `Rc<FnDecl>` (l'HIR non ha lifetime) e **cancellando il lifetime
+  dell'`Evaluator`**: il driver passa un `*mut ()` che il corpo riborrowa come
+  `Evaluator<'static>`. Evita il vincolo di scope di `ScopedCoroutine` (che non
+  si può tenere viva fra chiamate PHP indipendenti). `Coroutine` è `!Send` → OK
+  (Zval usa già `Rc`).
+- **D-GEN-2** foreach su Generator: incluso (39-2). foreach su Iterator user
+  generico = scope-out.
+- **D-GEN-3** rappresentazione: variante dedicata `Zval::Generator(Rc<RefCell<
+  GenState>>)`; il driver coroutine è type-erased dietro il trait `GenDriver`
+  (php-types non nomina mai Evaluator/corosensei).
+- **D-GEN-4** `Generator::throw()` + eccezioni-attraverso-yield + `finally` nel
+  generatore + yield by-ref = **scope-out** (catalogati in 04-divergences).
+- **D-GEN-5** confine unsafe: l'intero swap di contesto (`locals`/`cur_this`/
+  yielder) è confinato in `GenDriverImpl::resume` (lato runtime); un solo
+  riborrow `unsafe`, protetto dalla re-entrancy guard per-generatore.
+
+### Sub-step
+
+| Sub | Contenuto | Commit |
+|---|---|---|
+| 39-1 | infra + basic `yield`; Zval::Generator/GenState; corosensei; current/key/next/valid; lazy call_user_fn | `bd4a482` |
+| 39-2 | `foreach` su Generator (drive live, no snapshot) | `d918701` |
+| 39-3/4/5 | key esplicita+auto-key; `send()`; `return`+`getReturn()` (già coperti da 39-1, lock-in test) | `8bdf67b` |
+| 39-6 | `yield from` (array + sub-generatore; chiavi verbatim; getReturn delegato; send-forwarding) | `6534905` |
+| 39-7 | instanceof Generator/Iterator/Traversable; rewind fatal; var_dump/print_r `function` | `a85c292` |
+| 39-8 | fix corpus: closure-generator, getReturn auto-prime, msg yield-from | `1541ee8` |
+
+### Architettura (eval.rs)
+
+- `make_generator`: clona `FnDecl`→`Rc`, costruisce la coroutine `Coroutine<
+  ResumeIn, YieldOut, Result<Zval,PhpError>>`; il corpo setta `gen_yielder` e fa
+  `exec_stmts`. Frame iniziale = param legati (`bind_params` estratto da
+  `run_user_fn_body`).
+- `GenDriverImpl::resume`: riborrow `*mut ()`→`&mut Evaluator<'static>`,
+  swap-in del contesto generatore (salvando quello del driver), `co.resume`,
+  swap-out. La non-rientranza (guard `Running`) garantisce nessun aliasing reale
+  di `&mut Evaluator` per **lo stesso** generatore.
+- `resume_generator` (driver): take del driver fuori da GenState (rilascia il
+  borrow RefCell → re-entrant `->current()` sullo stesso gen vede `Running` →
+  Error pulito invece di panico RefCell), `driver.resume`, risoluzione auto-key.
+- Generatori annidati (`yield from` su sub-generatore): coroutine LIFO, ogni
+  resume passa `self as *mut`; due `&mut` esistono in pila ma gli accessi sono
+  temporalmente esclusivi (cooperativi).
+
+### Test e corpus
+
+- **Test unit**: 22 in `php-runtime/tests/eval.rs` (sezione Step 39) + 2 in
+  `php-builtins/tests/builtins.rs` (var_dump/print_r). Tutti oracle-verificati
+  contro PHP 8.5.7. Totale suite: **710 verdi** (era 686).
+- **Corpus `Zend/tests/generators`**: **59 pass / 51 fail / 74 skip** (184 tot,
+  53.6% dei 110 runnable). Baseline pre-39-8 era 49 pass; closure-generator +
+  getReturn auto-prime hanno recuperato +9, msg yield-from +1.
+- I 51 fail residui sono **scope-out D-GEN-4** (throw/finally/by-ref/eccezioni-
+  attraverso-yield ~25), divergenze di classe Exception-vs-Error per gli errori
+  resume/rewind (PHP lancia `Exception` catchabile, noi un `Error` fatale),
+  numerazione handle oggetto (i generatori consumano `next_object_id`), fedeltà
+  della stack trace (frame `Generator->next()` interni), e feature non-generator
+  (`get_class()` senza argomenti). **Nessun D-NEW** in scope supportato.

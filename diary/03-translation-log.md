@@ -681,3 +681,36 @@ gap di feature non implementate, non difetti di rendering).
   collisione "8"/"08", ordine post-unset/update, next_free, append-at-MAX,
   compattazione)
 - **Tempo:** ~25 minuti
+
+---
+
+## Step 39 — Generators (`yield`)
+
+- **File originale:** Zend/zend_generators.c (~1500 LOC), zend_compile.c (detezione
+  generatore), Zend/zend_execute.c (ZEND_GENERATOR_*).
+- **File target:** `php-types/src/generator.rs` (GenState/GenStatus/GenKey/GenStep/
+  GenDriver), `php-runtime/src/eval.rs` (GenDriverImpl, make_generator,
+  resume_generator, generator_method, gen_suspend, eval_yield_from,
+  foreach_generator), `php-runtime/src/hir.rs` (ExprKind::Yield/YieldFrom,
+  FnDecl.is_generator), `php-runtime/src/lower.rs` (lowering yield + flag
+  fn_saw_yield), `php-builtins/src/lib.rs` (var_dump/print_r).
+- **Motore:** `corosensei` 0.3 (`Coroutine`, non `ScopedCoroutine` — vedi metrics
+  D-GEN-1). Stackful: il `yield` sospende la ricorsione nativa di `eval()`.
+- **Round di iterazione AI:** ~1 per sub-step (8 sub-step). Build-error driven per
+  i match esaustivi su Zval (5 in convert/ops, 4 in eval, 1 in differential test).
+- **Test pass al primo tentativo:** sì per 39-2..39-7 (l'infra 39-1 li copriva);
+  39-1 al primo build verde dopo la chiusura dei match non-esaustivi.
+- **Test scritti:** 22 unit (eval.rs) + 2 (builtins) — tutti oracle-verificati.
+- **Errori incontrati:**
+  - [layering] `Zval::Generator` in php-types non può nominare Evaluator/corosensei
+    → type-erasure dietro `GenDriver` + `*mut ()`.
+  - [lifetime] `Coroutine: 'static` vs `Evaluator<'p>` → cancellazione del lifetime
+    (riborrow `Evaluator<'static>`), unsafe confinato e documentato.
+  - [borrow] driver e corpo vogliono lo stesso `&mut Evaluator` → passato via
+    `resume(*mut ())`, guard di non-rientranza per-generatore.
+  - [bug corpus] closure-generator non passava da `call_user_fn` → aggiunto branch
+    in `call_closure`. getReturn non auto-primava → `ensure_started`.
+- **Differenze idiomatiche dalla mappa Fase 2:** D-GEN-1 raffinato (Coroutine vs
+  ScopedCoroutine); swap-contesto confinato in `GenDriverImpl::resume` invece che
+  in helper sull'Evaluator (php-types resta pulito).
+- **Tempo:** sessione dedicata (lo step più complesso finora).
