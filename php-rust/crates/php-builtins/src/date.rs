@@ -629,10 +629,144 @@ pub fn __interval_format(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
     Ok(Zval::Str(PhpStr::new(out)))
 }
 
+/// Read 1..=`max` ASCII digits at `*vi`, advancing it. `None` if no digit.
+fn read_digits(val: &[u8], vi: &mut usize, max: usize) -> Option<i64> {
+    let start = *vi;
+    while *vi < val.len() && *vi - start < max && val[*vi].is_ascii_digit() {
+        *vi += 1;
+    }
+    if *vi == start {
+        return None;
+    }
+    std::str::from_utf8(&val[start..*vi]).ok()?.parse().ok()
+}
+
+/// `__date_from_format(string $format, string $value)`: parse `$value` per the
+/// `date()`-style `$format` and return the UTC epoch, or `false` on mismatch.
+/// `!` (leading) resets all fields to the Unix epoch; `|` resets the fields not
+/// yet parsed. Unparsed fields without a reset default to the current date/time
+/// (non-deterministic; D-DT5). Supported chars: `Y y m n d j H G h g i s` plus
+/// literals (with `\` escape). This is the explicit-format subset (D-DT4).
+pub fn __date_from_format(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let fmt = convert::to_zstr(args.first().unwrap_or(&Zval::Null), ctx.diags);
+    let val = convert::to_zstr(args.get(1).unwrap_or(&Zval::Null), ctx.diags);
+    let f = fmt.as_bytes();
+    let v = val.as_bytes();
+
+    let now = decompose(now_epoch()).unwrap_or((1970, 1, 1, 0, 0, 0));
+    let mut fi = 0;
+    // A leading `!` starts from the Unix epoch instead of "now".
+    let (mut yr, mut mo, mut d, mut h, mut mi, mut s) = if f.first() == Some(&b'!') {
+        fi = 1;
+        (1970i64, 1i64, 1i64, 0i64, 0i64, 0i64)
+    } else {
+        now
+    };
+    // Track which fields were explicitly parsed (for `|`).
+    let mut seen = [false; 6]; // y, mo, d, h, i, s
+    let mut vi = 0;
+
+    let result = (|| {
+        while fi < f.len() {
+            let fc = f[fi];
+            fi += 1;
+            match fc {
+                b'\\' => {
+                    let lit = *f.get(fi)?;
+                    fi += 1;
+                    if v.get(vi) == Some(&lit) {
+                        vi += 1;
+                    } else {
+                        return None;
+                    }
+                }
+                b'!' => {
+                    yr = 1970;
+                    mo = 1;
+                    d = 1;
+                    h = 0;
+                    mi = 0;
+                    s = 0;
+                    seen = [true; 6];
+                }
+                b'|' => {
+                    let epoch = [1970, 1, 1, 0, 0, 0];
+                    for (k, slot) in [&mut yr, &mut mo, &mut d, &mut h, &mut mi, &mut s]
+                        .into_iter()
+                        .enumerate()
+                    {
+                        if !seen[k] {
+                            *slot = epoch[k];
+                        }
+                    }
+                }
+                b'Y' => {
+                    yr = read_digits(v, &mut vi, 4)?;
+                    seen[0] = true;
+                }
+                b'y' => {
+                    let n = read_digits(v, &mut vi, 2)?;
+                    yr = if n < 70 { 2000 + n } else { 1900 + n };
+                    seen[0] = true;
+                }
+                b'm' | b'n' => {
+                    mo = read_digits(v, &mut vi, 2)?;
+                    seen[1] = true;
+                }
+                b'd' | b'j' => {
+                    d = read_digits(v, &mut vi, 2)?;
+                    seen[2] = true;
+                }
+                b'H' | b'G' | b'h' | b'g' => {
+                    h = read_digits(v, &mut vi, 2)?;
+                    seen[3] = true;
+                }
+                b'i' => {
+                    mi = read_digits(v, &mut vi, 2)?;
+                    seen[4] = true;
+                }
+                b's' => {
+                    s = read_digits(v, &mut vi, 2)?;
+                    seen[5] = true;
+                }
+                other => {
+                    if v.get(vi) == Some(&other) {
+                        vi += 1;
+                    } else {
+                        return None;
+                    }
+                }
+            }
+        }
+        // The whole value must be consumed.
+        if vi != v.len() {
+            return None;
+        }
+        civil_to_epoch(yr, mo, d, h, mi, s)
+    })();
+
+    Ok(match result {
+        Some(ts) => Zval::Long(ts),
+        None => Zval::Bool(false),
+    })
+}
+
 /// `time()`: the current Unix timestamp. Non-deterministic (reads the real
 /// clock); not differential-tested (D-DT5).
 pub fn time(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Long(now_epoch()))
+}
+
+/// `date_default_timezone_set(string $timezoneId)`: always returns `true`. With
+/// the UTC-only scope (D-DT3) the timezone is not actually stored — setting a
+/// non-UTC zone is a no-op, a documented divergence (formatting stays UTC).
+pub fn date_default_timezone_set(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    Ok(Zval::Bool(true))
+}
+
+/// `date_default_timezone_get()`: always `"UTC"` (D-DT3 scope).
+pub fn date_default_timezone_get(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    Ok(Zval::Str(PhpStr::new(b"UTC".to_vec())))
 }
 
 /// `strtotime(string $datetime, ?int $baseTimestamp = now)`. Supported subset

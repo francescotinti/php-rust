@@ -1925,3 +1925,61 @@ fn datetime_diff() {
         "0y0m30d"
     );
 }
+
+// --- Step 34-7: createFromFormat ----------------------------------------------
+
+#[test]
+fn datetime_create_from_format() {
+    // Full date+time is deterministic.
+    assert_eq!(
+        out("<?php echo DateTime::createFromFormat('Y-m-d H:i:s','2024-06-15 12:30:45')->format('Y-m-d H:i:s');"),
+        "2024-06-15 12:30:45"
+    );
+    // '!' resets all fields to the Unix epoch first (time → 00:00:00).
+    assert_eq!(
+        out("<?php echo DateTime::createFromFormat('!Y-m-d','2024-06-15')->format('Y-m-d H:i:s');"),
+        "2024-06-15 00:00:00"
+    );
+    // '|' resets the remaining (unparsed) fields.
+    assert_eq!(
+        out("<?php echo DateTime::createFromFormat('Y-m-d|','2024-06-15')->format('Y-m-d H:i:s');"),
+        "2024-06-15 00:00:00"
+    );
+    // 2-digit year, dot separators.
+    assert_eq!(
+        out("<?php echo DateTime::createFromFormat('!d.m.y','05.03.21')->format('Y-m-d');"),
+        "2021-03-05"
+    );
+    // single-digit-friendly chars j/n/G.
+    assert_eq!(
+        out("<?php echo DateTime::createFromFormat('!j-n-Y G:i','5-3-2024 9:07')->format('Y-m-d H:i');"),
+        "2024-03-05 09:07"
+    );
+}
+
+#[test]
+fn datetime_create_from_format_failure_and_immutable() {
+    assert_eq!(
+        out("<?php var_dump(DateTime::createFromFormat('Y-m-d','not a date'));"),
+        "bool(false)\n"
+    );
+    // The immutable variant returns a DateTimeImmutable.
+    assert_eq!(
+        out("<?php $d=DateTimeImmutable::createFromFormat('!Y-m-d','2024-06-15'); echo $d->format('Y-m-d H:i:s'),'/',get_class($d);"),
+        "2024-06-15 00:00:00/DateTimeImmutable"
+    );
+}
+
+#[test]
+fn date_default_timezone_utc_scope() {
+    // set returns true; get is always UTC (D-DT3). Setting a non-UTC zone is a
+    // documented no-op: date() keeps producing UTC.
+    assert_eq!(
+        out("<?php var_dump(date_default_timezone_set('Europe/London')); echo date_default_timezone_get();"),
+        "bool(true)\nUTC"
+    );
+    assert_eq!(
+        out("<?php date_default_timezone_set('America/Chicago'); echo date('H', 1718452845);"),
+        "12"
+    );
+}

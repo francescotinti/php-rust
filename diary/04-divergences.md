@@ -157,3 +157,22 @@ Non sono bug, sono confini del Tier 1:
 - messaggi di parse error (front-end mago ≠ Bison) → skip-list nel phpt-runner
 - path `strcoll` locale-dipendente nei confronti di stringhe
 - riferimenti, oggetti, resource negli operatori
+
+## Macro-step 34 (DateTime/date) — scope-out dichiarati
+
+Confini decisi dal Decider (D-DT1..5, vedi `NEXT-datetime-macro-step.md` e la
+sezione Macro-step 34 di `metrics.md`). Non sono bug:
+
+| Area | Comportamento nostro | PHP | Motivo |
+|---|---|---|---|
+| **Timezone** (D-DT3) | solo UTC; `e`/`T`→"UTC", `O`/`P`→"+0000"/"+00:00", `Z`→0, `I`→0; `date_default_timezone_set` no-op | tz-database completo + DST + abbreviazioni ("GMT","CET",…) | il tz-db è enorme; i test usano quasi sempre UTC |
+| **`now`/`time()`** (D-DT5) | leggono l'orologio reale (`SystemTime`) → non-deterministici | idem | non riproducibili nel differential → testati solo i path con input esplicito |
+| **`strtotime`** (D-DT4) | subset: `@N`, `now`, ISO/`Y/m/d`[+time], relativi `[+-]N unit` | parser vastissimo (relativi testuali, formati esotici, locale) | il parser completo è un sotto-progetto a sé |
+| **`createFromFormat`** | subset di format char espliciti | tutti i char + opzioni avanzate | sufficiente per l'uso comune |
+| **API procedurale** | solo OOP (`DateTime`/`DateTimeImmutable`/`DateInterval`) | anche `date_create`/`date_diff`/`date_format`/`getdate`/`localtime`/`strftime`/… | l'OOP è il cuore; il procedurale è zucchero |
+| **`DateTimeZone`** | non implementato (`getTimezone`/`getOffset`) | classe completa | dipende dal tz-db |
+| **var_dump/print_r/serialize** degli oggetti Date* | rappresentazione interna diversa (`$__ts` privato; DateInterval senza `from_string`) | `date`/`timezone_type`/`timezone`; DateInterval con `from_string` | si testano metodi e `format()`, non il dump |
+
+Corpus `ext/date/tests`: 37 pass / 155 fail / 497 skip (192 runnable). I 155
+fail ricadono **tutti** nelle righe sopra (campionati e verificati: nessun bug
+di logica nelle funzioni implementate).

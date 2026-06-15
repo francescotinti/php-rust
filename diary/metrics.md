@@ -20,6 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 34-7) | 624 |
 | Unit/integration (workspace, fine step 34-6) | 621 |
 | Unit/integration (workspace, fine step 34-5) | 617 |
 | Unit/integration (workspace, fine step 34-4) | 614 |
@@ -647,6 +648,39 @@ Mix prelude + helper builtin interni (`__interval_parse`/`__date_diff`/
   0m, 2020-02-29→2024-02-28 = 3y11m30d).
 
 **+4 test (617→621)**, clippy pulito.
+
+### Step 34-7 — `createFromFormat` + tz no-op + corpus
+
+- **`DateTime::createFromFormat`** / **`DateTimeImmutable::createFromFormat`**
+  (static, per-classe per evitare la dipendenza da `new static`): back-end Rust
+  `__date_from_format($fmt,$val)` → epoch | false. Subset di format char
+  espliciti (`Y y m n d j H G h g i s` + literali + escape `\`); `!` iniziale
+  resetta tutti i campi all'epoch Unix, `|` resetta i campi non ancora letti;
+  campi non specificati senza reset → ora corrente (non-det, D-DT5). Valore
+  interamente consumato o `false`.
+- **`date_default_timezone_set`/`get`**: `set` ritorna sempre `true`, `get`
+  sempre `"UTC"` (D-DT3). Settare una zona ≠ UTC è un **no-op documentato**
+  (sblocca molti test del corpus che iniziano con `date_default_timezone_set`).
+
+**+3 test (621→624)**, clippy pulito.
+
+#### Corpus `ext/date/tests` — 37 pass, 0 bug di logica
+
+`phpt-runner` su tutta `ext/date/tests/`: **37 pass / 155 fail / 497 skip**
+(192 runnable). I 155 fail sono **tutti scope-out già dichiarati**, verificati
+campionando (nessun bug nelle funzioni implementate):
+- **Timezone DB / DST / abbreviazioni** (D-DT3): es. `004`, `date_basic1`
+  (`T`→"GMT" a Londra d'inverno vs nostro "UTC"); il blocco UTC combacia
+  byte-esatto.
+- **API procedurale** non implementata: `date_create`, `date_diff`,
+  `date_format`, `getdate`, `localtime`, `strftime`, `date_interval_*` ecc.
+  (abbiamo solo l'API OOP).
+- **`DateTimeZone`/`getTimezone`/`getOffset`**, `getLastErrors`,
+  serializzazione, `var_dump`/`print_r` della rappresentazione esatta degli
+  oggetti (Date* e DateInterval, incl. la prop interna `from_string`), parsing
+  di stringhe con zone nominali ("CET"), formati relativi testuali.
+
+I 28 test unit 34-1..34-7 sono tutti oracle-derived e passano byte-esatti.
 
 
 

@@ -222,6 +222,11 @@ class DateTime implements DateTimeInterface {
         $this->__ts = mktime($hour, $minute, $second, (int)date('n', $this->__ts), (int)date('j', $this->__ts), (int)date('Y', $this->__ts));
         return $this;
     }
+    public static function createFromFormat($format, $datetime) {
+        $ts = __date_from_format($format, $datetime);
+        if ($ts === false) { return false; }
+        return new DateTime("@$ts");
+    }
     public function modify($modifier) { $this->__ts = strtotime($modifier, $this->__ts); return $this; }
     public function add($interval) { $this->__ts = $this->__apply($interval, 1); return $this; }
     public function sub($interval) { $this->__ts = $this->__apply($interval, -1); return $this; }
@@ -286,6 +291,11 @@ class DateTimeImmutable implements DateTimeInterface {
     }
     public function setTime($hour, $minute, $second = 0) {
         $ts = mktime($hour, $minute, $second, (int)date('n', $this->__ts), (int)date('j', $this->__ts), (int)date('Y', $this->__ts));
+        return new DateTimeImmutable("@$ts");
+    }
+    public static function createFromFormat($format, $datetime) {
+        $ts = __date_from_format($format, $datetime);
+        if ($ts === false) { return false; }
         return new DateTimeImmutable("@$ts");
     }
     public function modify($modifier) { $ts = strtotime($modifier, $this->__ts); return new DateTimeImmutable("@$ts"); }
