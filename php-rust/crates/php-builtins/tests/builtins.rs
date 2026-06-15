@@ -2131,3 +2131,40 @@ fn date_interval_create_from_date_string_proc() {
         "2024-06-25"
     );
 }
+
+// --- Step 35-4: getdate / localtime (pure builtins, D-PD2) --------------------
+// Oracle ts 1718452845 = Sat 2024-06-15 12:00:45 UTC.
+
+#[test]
+fn getdate_components() {
+    assert_eq!(
+        out("<?php $g=getdate(1718452845); echo $g['seconds'],'/',$g['minutes'],'/',$g['hours'],'/',$g['mday'],'/',$g['wday'],'/',$g['mon'],'/',$g['year'],'/',$g['yday'],'/',$g['weekday'],'/',$g['month'],'/',$g[0];"),
+        "45/0/12/15/6/6/2024/166/Saturday/June/1718452845"
+    );
+}
+
+#[test]
+fn getdate_var_dump_order() {
+    // The exact key order + the trailing numeric 0 (print_r is order-sensitive).
+    assert_eq!(
+        out("<?php print_r(getdate(1718452845));"),
+        "Array\n(\n    [seconds] => 45\n    [minutes] => 0\n    [hours] => 12\n    [mday] => 15\n    [wday] => 6\n    [mon] => 6\n    [year] => 2024\n    [yday] => 166\n    [weekday] => Saturday\n    [month] => June\n    [0] => 1718452845\n)\n"
+    );
+}
+
+#[test]
+fn localtime_numeric() {
+    // [sec,min,hour,mday,mon(0-based),year-1900,wday,yday,isdst]
+    assert_eq!(
+        out("<?php echo implode(',', localtime(1718452845));"),
+        "45,0,12,15,5,124,6,166,0"
+    );
+}
+
+#[test]
+fn localtime_associative() {
+    assert_eq!(
+        out("<?php $t=localtime(1718452845,true); echo $t['tm_sec'],'/',$t['tm_mon'],'/',$t['tm_year'],'/',$t['tm_wday'],'/',$t['tm_yday'],'/',$t['tm_isdst'];"),
+        "45/5/124/6/166/0"
+    );
+}

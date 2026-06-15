@@ -40,6 +40,8 @@ pub fn registry() -> Registry {
     add(b"time", date::time);
     add(b"date_default_timezone_set", date::date_default_timezone_set);
     add(b"date_default_timezone_get", date::date_default_timezone_get);
+    add(b"getdate", date::getdate);
+    add(b"localtime", date::localtime);
     add(b"__interval_parse", date::__interval_parse);
     add(b"__interval_from_date_string", date::__interval_from_date_string);
     add(b"__date_diff", date::__date_diff);

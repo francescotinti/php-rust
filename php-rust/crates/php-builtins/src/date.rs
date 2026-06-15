@@ -841,3 +841,74 @@ pub fn strtotime(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         None => Zval::Bool(false),
     })
 }
+
+// --- getdate / localtime (step 35-4, D-PD2) -----------------------------------
+// Pure builtins returning arrays of broken-down time components; they touch no
+// objects, so they live here rather than in the prelude.
+
+fn str_zval(s: &str) -> Zval {
+    Zval::Str(PhpStr::new(s.as_bytes().to_vec()))
+}
+
+/// `getdate(?int $timestamp = null)`: the components of `$timestamp` (default
+/// now) as an associative array, with a trailing numeric `0` => the timestamp.
+/// Key order mirrors PHP exactly.
+pub fn getdate(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let ts = match args.first() {
+        None | Some(Zval::Null) => now_epoch(),
+        Some(v) => convert::to_long_cast(v, ctx.diags),
+    };
+    let dt = OffsetDateTime::from_unix_timestamp(ts)
+        .map_err(|_| PhpError::ValueError("getdate(): timestamp out of range".to_string()))?;
+    let wday = dt.weekday().number_days_from_sunday() as usize;
+    let mon = u8::from(dt.month()) as usize;
+    let mut arr = PhpArray::new();
+    arr.insert(Key::from_bytes(b"seconds"), Zval::Long(dt.second() as i64));
+    arr.insert(Key::from_bytes(b"minutes"), Zval::Long(dt.minute() as i64));
+    arr.insert(Key::from_bytes(b"hours"), Zval::Long(dt.hour() as i64));
+    arr.insert(Key::from_bytes(b"mday"), Zval::Long(dt.day() as i64));
+    arr.insert(Key::from_bytes(b"wday"), Zval::Long(wday as i64));
+    arr.insert(Key::from_bytes(b"mon"), Zval::Long(mon as i64));
+    arr.insert(Key::from_bytes(b"year"), Zval::Long(dt.year() as i64));
+    arr.insert(Key::from_bytes(b"yday"), Zval::Long((dt.ordinal() - 1) as i64));
+    arr.insert(Key::from_bytes(b"weekday"), str_zval(DAYS_FULL[wday]));
+    arr.insert(Key::from_bytes(b"month"), str_zval(MONTHS_FULL[mon - 1]));
+    arr.insert(Key::Int(0), Zval::Long(ts));
+    Ok(Zval::Array(Rc::new(arr)))
+}
+
+/// `localtime(?int $timestamp = null, bool $associative = false)`: the C
+/// `struct tm` fields of `$timestamp`. Default is a numeric array
+/// `[sec,min,hour,mday,mon(0-based),year-1900,wday,yday,isdst]`; with
+/// `$associative=true` the same values keyed `tm_*`. `isdst` is always 0 (UTC,
+/// D-DT3).
+pub fn localtime(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let ts = match args.first() {
+        None | Some(Zval::Null) => now_epoch(),
+        Some(v) => convert::to_long_cast(v, ctx.diags),
+    };
+    let assoc = args.get(1).is_some_and(|v| convert::to_bool(v, ctx.diags));
+    let dt = OffsetDateTime::from_unix_timestamp(ts)
+        .map_err(|_| PhpError::ValueError("localtime(): timestamp out of range".to_string()))?;
+    let fields: [(&[u8], i64); 9] = [
+        (b"tm_sec", dt.second() as i64),
+        (b"tm_min", dt.minute() as i64),
+        (b"tm_hour", dt.hour() as i64),
+        (b"tm_mday", dt.day() as i64),
+        (b"tm_mon", u8::from(dt.month()) as i64 - 1),
+        (b"tm_year", dt.year() as i64 - 1900),
+        (b"tm_wday", dt.weekday().number_days_from_sunday() as i64),
+        (b"tm_yday", (dt.ordinal() - 1) as i64),
+        (b"tm_isdst", 0),
+    ];
+    let mut arr = PhpArray::new();
+    for (i, (name, val)) in fields.iter().enumerate() {
+        let key = if assoc {
+            Key::from_bytes(name)
+        } else {
+            Key::Int(i as i64)
+        };
+        arr.insert(key, Zval::Long(*val));
+    }
+    Ok(Zval::Array(Rc::new(arr)))
+}
