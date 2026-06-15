@@ -20,6 +20,8 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 38-5) | 686 |
+| Unit/integration (workspace, fine step 38-4) | 683 |
 | Unit/integration (workspace, fine step 38-3) | 682 |
 | Unit/integration (workspace, fine step 38-2) | 680 |
 | Unit/integration (workspace, fine step 38-1) | 678 |
@@ -912,14 +914,25 @@ D-38.2 named ai builtin = scope-out (la registry non ha nomi-parametro).
   metodo. Scope-out (nessuna lista parametri): closure-method, `__call`/
   `__callStatic`, enum static `from`/`tryFrom` → `unknown_named_error`. +2.
 
-#### Corpus `Zend/tests/named_params` — 4 pass / 12 fail / 17 skip (33)
+### Step 38-4 / 38-5 — follow-up named args: by-ref + variadic
 
-I 17 **skip** usano feature non ancora supportate (variadic-collection
-`function f(...$args)`, spread `f(...$arr)`, attributi con argomenti nominati);
-i 12 **fail** richiedono per lo più **named args verso parametri by-reference**
-(`function f(&$a)`): il nostro `resolve_named_args` li lega come `Arg::Val`
-(by-value), mentre PHP passa la cella — è il fail di `basic.phpt` (sezione
-SEND_REF). Questi sono i **follow-up dichiarati** (D-38.3..5), non regressioni:
-i casi by-value comuni (riordino, mix, default, errori, costruttore, metodo,
-static) sono coperti dai test unit e oracle-verificati.
+- **38-4** (`19ee04b`) **named → parametro by-ref**: `resolve_named_args` lega la
+  cella del chiamante (`Arg::Ref`) quando il nominato punta a un param `&$x` ed è
+  una variabile (mirror di `eval_call_args`). +1 (`inc(x:$n)` muta `$n`).
+- **38-5** (`3a7db3c`) **parametri variadic** `function f(...$rest)`: il lowering
+  ora li accetta (`Param.variadic`); `run_user_fn_body` lega il param variadic
+  (sempre ultimo) a un array 0-indexed che raccoglie tutti gli argomenti
+  rimanenti; i check/conteggi "required" escludono il variadic. Vale per
+  funzioni/closure/metodi (condividono `run_user_fn_body`). La **collection dei
+  nominati extra** nel variadic (chiavi stringa) è follow-up. +3.
+
+#### Corpus `Zend/tests/named_params` — 5 pass / 13 fail / 15 skip (33)
+
+Era 4/12/17 a fine 38-3; dopo 38-4/38-5: **5 pass** (+1), variadic rende runnable
++2 test (skip 17→15). I fail/skip residui richiedono i **follow-up dichiarati**:
+**spread `f(...$arr)`** (espande array→posizionali/nominati), **named→variadic
+collection**, **named-by-ref via call by-ref-return** (`id($a)` passato a `&$x`,
+limite pre-esistente non specifico dei named — fail di `basic.phpt`). I casi
+by-value comuni + by-ref-variabile + variadic-positional sono coperti e
+oracle-verificati nei test unit.
 

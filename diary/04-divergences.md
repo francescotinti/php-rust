@@ -267,8 +267,8 @@ confini sotto sono scope-out dichiarati (Decider), **non** bug; il corpus
 
 | Area | Comportamento nostro | PHP | Stato |
 |---|---|---|---|
-| **named → parametro by-ref** `f(&$a)` (D-38.3) | legato by-value (`Arg::Val`) | passa la cella per riferimento | follow-up — fail di `basic.phpt` (SEND_REF) |
-| **variadic-collection** `function f(...$args)` (D-38.4) | non supportato (lowering scarta `...`) | i nominati extra finiscono in `$args` con chiavi stringa | follow-up (17 skip del corpus) |
+| **named → parametro by-ref** `f(&$a)` (D-38.3) | **FATTO step 38-4** (variabile→cella); `id($a)` by-ref-return→by-ref param resta limite pre-esistente | passa la cella per riferimento | parziale (fail `basic.phpt` SEND_REF su by-ref-return) |
+| **parametri variadic** `function f(...$rest)` | **FATTO step 38-5** (positional collection) | raccoglie posizionali+nominati extra | named-into-variadic = follow-up |
 | **spread di chiamata** `f(...$arr)` (D-38.4) | `Unsupported` al lowering | espande l'array in argomenti (int→posizionali, string→nominati) | follow-up |
 | **named ai builtin** (D-38.2) | `Error` "named arguments to builtin … not supported" | supportati (PCRE2/Zend hanno i nomi) | scope-out (registry senza nomi) |
 | **named a closure-as-value** `$f(x:1)` | non instradato (CallDynamic) | supportato | follow-up |
