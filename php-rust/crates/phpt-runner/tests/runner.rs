@@ -44,10 +44,11 @@ fn expectf_wildcards_match() {
 
 #[test]
 fn unsupported_construct_is_skipped() {
-    // Enums are supported as of step 23, so use a variadic parameter — still out
-    // of scope — as the motivated-skip example.
-    let (st, cat) =
-        status("--TEST--\nt\n--FILE--\n<?php function f(...$a){} echo 1;\n--EXPECT--\n1\n");
+    // Variadic params are supported as of step 38-5, so use a promoted
+    // constructor property — still out of scope — as the motivated-skip example.
+    let (st, cat) = status(
+        "--TEST--\nt\n--FILE--\n<?php class C { function __construct(public int $x){} } echo 1;\n--EXPECT--\n1\n",
+    );
     assert_eq!(st, Status::Skip);
     assert_eq!(cat, "unsupported");
 }

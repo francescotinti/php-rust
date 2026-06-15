@@ -3970,6 +3970,27 @@ fn named_args_by_reference_parameter() {
 }
 
 #[test]
+fn variadic_param_collects_positional() {
+    // `...$n` collects all positional args into a 0-indexed array (step 38-5).
+    let src = r#"<?php function sum(...$n){ $t=0; foreach($n as $v) $t+=$v; return $t; } echo sum(1,2,3,4);"#;
+    assert_eq!(out(src), "10");
+}
+
+#[test]
+fn variadic_param_after_fixed() {
+    // A fixed param then `...$rest`; rest may be empty. Oracle: 1,2,3 | 9.
+    let src = r#"<?php function f($a, ...$rest){ $s = "$a"; foreach($rest as $v) $s .= ",$v"; return $s; } echo f(1,2,3), '|', f(9);"#;
+    assert_eq!(out(src), "1,2,3|9");
+}
+
+#[test]
+fn variadic_param_keys_are_sequential() {
+    // The collected array is keyed 0,1,2… Oracle: 0a1b2c.
+    let src = r#"<?php function f(...$xs){ $s=''; foreach($xs as $k=>$v) $s .= "$k$v"; return $s; } echo f('a','b','c');"#;
+    assert_eq!(out(src), "0a1b2c");
+}
+
+#[test]
 fn named_args_positional_after_named_is_compile_fatal() {
     // A positional argument after a named one is a PHP compile-time Fatal error
     // (not a catchable Error). Oracle message verified against PHP 8.5.

@@ -224,6 +224,10 @@ pub struct Param {
     /// `true` for a `&$x` by-reference parameter: the matching argument must be
     /// a variable, whose storage cell is shared with this slot for the call.
     pub by_ref: bool,
+    /// `true` for a `...$rest` variadic parameter (step 38-5): it collects every
+    /// remaining positional argument (int keys) and named argument (string keys)
+    /// into an array. Always the last parameter.
+    pub variadic: bool,
     /// Declared scalar type hint, enforced (weak mode) on the bound argument
     /// (step 14). `None` for an absent or non-scalar hint (no enforcement).
     pub hint: Option<TypeHint>,

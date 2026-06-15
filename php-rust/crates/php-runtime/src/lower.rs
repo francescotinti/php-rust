@@ -1678,12 +1678,7 @@ impl<'f> Lowerer<'f> {
         let mut params = Vec::new();
         for p in plist.parameters.iter() {
             let by_ref = p.ampersand.is_some();
-            if p.ellipsis.is_some() {
-                return Err(LowerError::Unsupported {
-                    what: "variadic parameter",
-                    line,
-                });
-            }
+            let variadic = p.ellipsis.is_some();
             if p.is_promoted_property() {
                 return Err(LowerError::Unsupported {
                     what: "promoted constructor property",
@@ -1699,6 +1694,7 @@ impl<'f> Lowerer<'f> {
                 slot,
                 default,
                 by_ref,
+                variadic,
                 hint: p.hint.as_ref().and_then(lower_hint),
             });
         }

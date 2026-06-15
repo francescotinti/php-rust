@@ -971,7 +971,11 @@ impl<'p> Evaluator<'p> {
         let funcs: &'p [FnDecl] = self.funcs;
         let f: &'p FnDecl = &funcs[idx];
 
-        let required = f.params.iter().filter(|p| p.default.is_none()).count();
+        let required = f
+            .params
+            .iter()
+            .filter(|p| p.default.is_none() && !p.variadic)
+            .count();
         // A required parameter must have a real argument at its index; named
         // arguments (step 38) can leave `Arg::Default` gaps, so the supplied
         // count is not enough — check each required slot directly.
@@ -979,7 +983,11 @@ impl<'p> Evaluator<'p> {
             .params
             .iter()
             .enumerate()
-            .any(|(i, p)| p.default.is_none() && !matches!(argv.get(i), Some(Arg::Val(_) | Arg::Ref(_))));
+            .any(|(i, p)| {
+                p.default.is_none()
+                    && !p.variadic
+                    && !matches!(argv.get(i), Some(Arg::Val(_) | Arg::Ref(_)))
+            });
         if missing_required {
             let passed = argv
                 .iter()
@@ -1030,6 +1038,21 @@ impl<'p> Evaluator<'p> {
     fn run_user_fn_body(&mut self, f: &'p FnDecl, argv: Vec<Arg>) -> Result<Zval, PhpError> {
         let strict = self.strict;
         for (i, p) in f.params.iter().enumerate() {
+            // A variadic `...$rest` (always last) collects every remaining
+            // argument into a 0-indexed array (step 38-5).
+            if p.variadic {
+                let mut arr = PhpArray::new();
+                for a in argv.iter().skip(i) {
+                    let v = match a {
+                        Arg::Val(v) => v.clone(),
+                        Arg::Ref(cell) => cell.borrow().clone(),
+                        Arg::Default => continue,
+                    };
+                    let _ = arr.append(v);
+                }
+                frame_mut!(self)[p.slot as usize] = Zval::Array(Rc::new(arr));
+                break;
+            }
             let binding = match argv.get(i) {
                 // A by-value argument is coerced to the parameter's scalar hint
                 // under weak typing; a failure is an uncaught TypeError (D-14.4).
@@ -1385,7 +1408,11 @@ impl<'p> Evaluator<'p> {
         let closures: &'p [FnDecl] = self.closures;
         let f: &'p FnDecl = &closures[cl.fn_idx];
 
-        let required = f.params.iter().filter(|p| p.default.is_none()).count();
+        let required = f
+            .params
+            .iter()
+            .filter(|p| p.default.is_none() && !p.variadic)
+            .count();
         if argv.len() < required {
             let expected = if required == f.params.len() {
                 format!("exactly {required}")
@@ -2517,14 +2544,22 @@ impl<'p> Evaluator<'p> {
         argv: Vec<Arg>,
     ) -> Result<Zval, PhpError> {
         let f: &'p FnDecl = &m.decl;
-        let required = f.params.iter().filter(|p| p.default.is_none()).count();
+        let required = f
+            .params
+            .iter()
+            .filter(|p| p.default.is_none() && !p.variadic)
+            .count();
         // A required parameter must have a real argument at its index (named args
         // can leave `Arg::Default` gaps — step 38).
         let missing_required = f
             .params
             .iter()
             .enumerate()
-            .any(|(i, p)| p.default.is_none() && !matches!(argv.get(i), Some(Arg::Val(_) | Arg::Ref(_))));
+            .any(|(i, p)| {
+                p.default.is_none()
+                    && !p.variadic
+                    && !matches!(argv.get(i), Some(Arg::Val(_) | Arg::Ref(_)))
+            });
         if missing_required {
             let passed = argv
                 .iter()

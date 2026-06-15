@@ -385,11 +385,19 @@ fn by_reference_param_lowers_with_flag() {
 }
 
 #[test]
-fn variadic_params_are_unsupported() {
-    assert!(matches!(
-        err("<?php function f(...$a) { } f();"),
-        LowerError::Unsupported { .. }
-    ));
+fn variadic_param_lowers_with_flag() {
+    // Variadic params are supported since step 38-5: the last param carries
+    // `variadic: true`.
+    let p = lower("<?php function f($a, ...$rest) { } f(1, 2, 3);");
+    // Prelude global functions are hoisted first (step 35), so find `f` by name.
+    let f = p
+        .functions
+        .iter()
+        .find(|f| f.name.as_ref() == b"f")
+        .expect("function f");
+    assert_eq!(f.params.len(), 2);
+    assert!(!f.params[0].variadic);
+    assert!(f.params[1].variadic);
 }
 
 #[test]
