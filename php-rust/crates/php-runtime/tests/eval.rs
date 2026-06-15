@@ -4204,3 +4204,39 @@ fn generator_yield_from_send_forwarding() {
         "sa=X;sb=Y;"
     );
 }
+
+#[test]
+fn generator_instanceof_interfaces() {
+    // A Generator is a Generator/Iterator/Traversable, but not e.g. Countable.
+    assert_eq!(
+        out("<?php function g(){yield 1;} $g=g(); \
+            echo ($g instanceof Generator)?'1':'0', ($g instanceof Iterator)?'1':'0', \
+            ($g instanceof Traversable)?'1':'0', ($g instanceof Countable)?'1':'0';"),
+        "1110"
+    );
+}
+
+#[test]
+fn generator_rewind_at_start_ok() {
+    // rewind() before advancing is allowed (and starts the generator).
+    assert_eq!(
+        out("<?php function g(){yield 1;yield 2;} $g=g(); $g->rewind(); echo $g->current();"),
+        "1"
+    );
+}
+
+#[test]
+fn generator_rewind_after_advance_fatals() {
+    // rewind() after the generator has advanced is a fatal.
+    let o = run_source(
+        b"t.php",
+        b"<?php function g(){yield 1;yield 2;} $g=g(); $g->next(); $g->rewind();",
+    )
+    .expect("lowers");
+    assert!(
+        matches!(&o.fatal, Some(PhpError::Error(m))
+            if m.contains("Cannot rewind a generator that was already run")),
+        "fatal was: {:?}",
+        o.fatal
+    );
+}

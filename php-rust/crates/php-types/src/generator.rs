@@ -67,7 +67,15 @@ pub trait GenDriver {
 pub struct GenState {
     /// Per-instance handle, shown as `#N` by `var_dump` (like a closure/object).
     pub id: u32,
+    /// The generator function's name (a `{closure:file:line}` synthetic name for
+    /// a closure generator). Rendered by `var_dump`/`print_r` as the `function`
+    /// pseudo-property (step 39-7).
+    pub func_name: Box<[u8]>,
     pub status: GenStatus,
+    /// `true` once the generator has been advanced past its first yielded value
+    /// (any resume while already `Suspended`). `rewind()` then becomes a fatal
+    /// ("Cannot rewind a generator that was already run"), step 39-7.
+    pub advanced: bool,
     /// Current key at the active suspension point (NULL before start / once done).
     pub cur_key: Zval,
     /// Current value at the active suspension point.

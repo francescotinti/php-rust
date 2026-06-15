@@ -1333,7 +1333,9 @@ impl<'p> Evaluator<'p> {
         self.next_object_id += 1;
         Zval::Generator(Rc::new(RefCell::new(GenState {
             id,
+            func_name: f.name.clone(),
             status: GenStatus::NotStarted,
+            advanced: false,
             cur_key: Zval::Null,
             cur_val: Zval::Null,
             ret: Zval::Null,
@@ -1362,7 +1364,10 @@ impl<'p> Evaluator<'p> {
                     ))
                 }
                 GenStatus::Done => return Ok(()),
-                _ => {}
+                // Resuming an already-suspended generator advances it past its
+                // first element, which disallows a later `rewind()` (step 39-7).
+                GenStatus::Suspended => gs.advanced = true,
+                GenStatus::NotStarted => {}
             }
             gs.status = GenStatus::Running;
             gs.driver
@@ -1514,9 +1519,14 @@ impl<'p> Evaluator<'p> {
             let done = matches!(gs_rc.borrow().status, GenStatus::Done);
             Ok(Zval::Bool(!done))
         } else if method.eq_ignore_ascii_case(b"rewind") {
-            // Starts the generator; rewinding one already advanced past its first
-            // element is a fatal in PHP (full semantics in 39-7).
+            // Starts the generator (lazily). Rewinding one already advanced past
+            // its first element is a fatal (step 39-7).
             self.ensure_started(&gs_rc)?;
+            if gs_rc.borrow().advanced {
+                return Err(PhpError::Error(
+                    "Cannot rewind a generator that was already run".to_string(),
+                ));
+            }
             Ok(Zval::Null)
         } else if method.eq_ignore_ascii_case(b"send") {
             // Resume delivering `$value` as the result of the suspended `yield`
@@ -4370,6 +4380,15 @@ impl<'p> Evaluator<'p> {
                         // An unknown class on the RHS is simply not matched (PHP
                         // does not error here under the CLI without autoloading).
                         Err(_) => false,
+                    },
+                    // A `Generator` satisfies `Generator`, `Iterator`, and
+                    // `Traversable` (the built-in interface chain), step 39-7.
+                    Zval::Generator(_) => match class {
+                        ClassRef::Named(name) => matches!(
+                            name.to_ascii_lowercase().as_slice(),
+                            b"generator" | b"iterator" | b"traversable"
+                        ),
+                        _ => false,
                     },
                     _ => false,
                 };

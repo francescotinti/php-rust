@@ -2168,3 +2168,22 @@ fn localtime_associative() {
         "45/5/124/6/166/0"
     );
 }
+
+// --- Step 39: generators ---
+
+#[test]
+fn var_dump_generator() {
+    // A Generator dumps with its `function` pseudo-property (step 39-7).
+    assert_eq!(
+        out("<?php function g(){yield 1;} var_dump(g());"),
+        "object(Generator)#1 (1) {\n  [\"function\"]=>\n  string(1) \"g\"\n}\n"
+    );
+}
+
+#[test]
+fn print_r_generator() {
+    assert_eq!(
+        out("<?php function g(){yield 1;} print_r(g());"),
+        "Generator Object\n(\n    [function] => g\n)\n"
+    );
+}

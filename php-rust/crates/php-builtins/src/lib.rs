@@ -240,10 +240,19 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
             spaces(out, indent);
             out.extend_from_slice(b"}\n");
         }
-        // A `Generator` dumps as a property-less object (step 39).
+        // A `Generator` dumps with a single `function` pseudo-property naming the
+        // generator function (step 39-7).
         Zval::Generator(g) => {
-            let id = g.borrow().id;
-            out.extend_from_slice(format!("object(Generator)#{id} (0) {{\n").as_bytes());
+            let g = g.borrow();
+            out.extend_from_slice(format!("object(Generator)#{} (1) {{\n", g.id).as_bytes());
+            spaces(out, indent + 2);
+            out.extend_from_slice(b"[\"function\"]=>\n");
+            spaces(out, indent + 2);
+            out.extend_from_slice(
+                format!("string({}) \"", g.func_name.len()).as_bytes(),
+            );
+            out.extend_from_slice(&g.func_name);
+            out.extend_from_slice(b"\"\n");
             spaces(out, indent);
             out.extend_from_slice(b"}\n");
         }
@@ -399,11 +408,16 @@ fn print_r_into(out: &mut Vec<u8>, v: &Zval, indent: usize, ctx: &mut Ctx, seen:
             spaces(out, indent);
             out.extend_from_slice(b")\n");
         }
-        // A `Generator` prints as a property-less object (step 39).
-        Zval::Generator(_) => {
+        // A `Generator` prints with its `function` pseudo-property (step 39-7).
+        Zval::Generator(g) => {
+            let g = g.borrow();
             out.extend_from_slice(b"Generator Object\n");
             spaces(out, indent);
             out.extend_from_slice(b"(\n");
+            spaces(out, indent + 4);
+            out.extend_from_slice(b"[function] => ");
+            out.extend_from_slice(&g.func_name);
+            out.push(b'\n');
             spaces(out, indent);
             out.extend_from_slice(b")\n");
         }
