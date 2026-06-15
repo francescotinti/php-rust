@@ -20,6 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 33) | 594 |
 | Unit/integration (workspace, fine step 32) | 589 |
 | Unit/integration (workspace, fine step 31) | 582 |
 | Unit/integration (workspace, fine step 30) | 575 |
@@ -491,6 +492,30 @@ complesso (elemento d'array — stessa limitazione bare-`$var` di usort/preg),
 var_dump di oggetti dentro l'array, sostituzione dell'array durante il walk via
 `$GLOBALS` (wart di re-entrancy PHP), reference a proprietà tipizzate. Il core
 (by-ref modify, by-value, extra arg) è verificato byte-esatto.
+
+## Step 33 — array key/assoc set-ops + array_column
+
+Builtin PURI (ABI invariata, ZERO modifiche evaluator), TDD, oracle-verificati.
+- **array_diff_key** / **array_intersect_key**: confronto per **chiave** (assente
+  da ogni altro / presente in ogni altro); interrogano gli altri array
+  direttamente via `contains_key` (niente `HashSet<Key>` → evita il lint
+  `mutable_key_type`).
+- **array_diff_assoc** / **array_intersect_assoc**: confronto della coppia
+  (chiave, valore-come-stringa) via helper `assoc_match`.
+- **array_column**($rows, $column, $index_key=null): estrae un campo da ogni
+  riga (riga senza il campo → saltata; column null → riga intera); `index_key`
+  ri-chiavizza il risultato. Le righe possono essere array o oggetti (prop
+  pubbliche via `Props::get`) — helper `row_get`.
+
+**+5 test (589→594)**, clippy pulito. Corpus
+`array_diff_*`/`array_intersect_*`/`array_column_*` 6/6 runnable (100%).
+
+**`mb_*` DIFFERITO**: il build dell'oracle non ha il modulo `mbstring`
+(`php -m` → solo `standard`), quindi le `mb_*` non sono validabili
+differenzialmente — e `mb_strtoupper` richiederebbe le tabelle Unicode di case
+mapping (proprio dove si annidano le divergenze). Serve un oracle con mbstring
+compilato. Catalogato nel backlog, non implementato blind.
+
 
 
 
