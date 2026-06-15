@@ -2022,3 +2022,59 @@ fn date_create_default_arg_is_datetime() {
     // is not (D-DT5: we only assert the class, never the instant).
     assert_eq!(out("<?php echo get_class(date_create());"), "DateTime");
 }
+
+// --- Step 35-2: procedural mutators + diff -----------------------------------
+
+#[test]
+fn date_diff_proc() {
+    // date_diff returns a DateInterval; reversed args flip invert.
+    assert_eq!(
+        out("<?php $d=date_diff(date_create('2024-06-20'),date_create('2024-06-15')); echo $d->days,'/',$d->invert;"),
+        "5/1"
+    );
+    // $absolute=true clears invert (D-PD4), days unchanged.
+    assert_eq!(
+        out("<?php $d=date_diff(date_create('2024-06-20'),date_create('2024-06-15'),true); echo $d->days,'/',$d->invert;"),
+        "5/0"
+    );
+}
+
+#[test]
+fn date_add_sub_proc() {
+    // date_add mutates the DateTime in place and returns it (same handle).
+    assert_eq!(
+        out("<?php $x=date_create('2024-06-15 00:00:00'); $r=date_add($x,new DateInterval('P1D')); echo ($r===$x?'same':'diff'),'/',date_format($x,'Y-m-d');"),
+        "same/2024-06-16"
+    );
+    // date_sub: P1M back from Jun 15 → May 15.
+    assert_eq!(
+        out("<?php $y=date_create('2024-06-15'); date_sub($y,new DateInterval('P1M')); echo date_format($y,'Y-m-d');"),
+        "2024-05-15"
+    );
+}
+
+#[test]
+fn date_modify_and_setters_proc() {
+    assert_eq!(
+        out("<?php $z=date_create('2024-06-15 12:00:00'); date_modify($z,'+2 hours'); echo date_format($z,'H:i:s');"),
+        "14:00:00"
+    );
+    // date_date_set + date_time_set chain on the same object.
+    assert_eq!(
+        out("<?php $w=date_create('2024-06-15 12:00:00'); date_date_set($w,2020,2,29); date_time_set($w,8,30,0); echo date_format($w,'Y-m-d H:i:s');"),
+        "2020-02-29 08:30:00"
+    );
+    assert_eq!(
+        out("<?php $w=date_create('2024-06-15'); date_timestamp_set($w,1718452845); echo date_timestamp_get($w);"),
+        "1718452845"
+    );
+}
+
+#[test]
+fn date_add_on_immutable_proc() {
+    // On DateTimeImmutable, add returns a NEW instance; date_add forwards it.
+    assert_eq!(
+        out("<?php $a=date_create_immutable('2024-01-01'); $b=date_add($a,new DateInterval('P1M')); echo date_format($a,'Y-m-d'),'/',date_format($b,'Y-m-d');"),
+        "2024-01-01/2024-02-01"
+    );
+}

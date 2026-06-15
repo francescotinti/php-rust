@@ -332,6 +332,17 @@ function date_create($datetime = "now") { return new DateTime($datetime); }
 function date_create_immutable($datetime = "now") { return new DateTimeImmutable($datetime); }
 function date_format($object, $format) { return $object->format($format); }
 function date_timestamp_get($object) { return $object->getTimestamp(); }
+function date_diff($base, $target, $absolute = false) {
+    $r = $base->diff($target);
+    if ($absolute) { $r->invert = 0; }
+    return $r;
+}
+function date_add($object, $interval) { return $object->add($interval); }
+function date_sub($object, $interval) { return $object->sub($interval); }
+function date_modify($object, $modifier) { return $object->modify($modifier); }
+function date_date_set($object, $year, $month, $day) { return $object->setDate($year, $month, $day); }
+function date_time_set($object, $hour, $minute, $second = 0) { return $object->setTime($hour, $minute, $second); }
+function date_timestamp_set($object, $timestamp) { return $object->setTimestamp($timestamp); }
 "##;
 
 /// The four owned products of lowering [`PRELUDE_SRC`]: the class table + its
