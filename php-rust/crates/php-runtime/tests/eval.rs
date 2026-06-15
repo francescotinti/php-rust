@@ -4103,3 +4103,61 @@ fn generator_foreach_break() {
         "12"
     );
 }
+
+#[test]
+fn generator_explicit_string_keys() {
+    assert_eq!(
+        out(r#"<?php function g(){yield "a"=>1; yield "b"=>2;} foreach(g() as $k=>$v) echo "$k:$v ";"#),
+        "a:1 b:2 "
+    );
+}
+
+#[test]
+fn generator_auto_key_counter() {
+    // An explicit int key `>=` the counter advances it (array-append rule); a
+    // lower one does not. Verified against PHP 8.5: `k:1 0:2 0:3 1:4`.
+    assert_eq!(
+        out(r#"<?php function g(){yield 'k'=>1; yield 2; yield 0=>3; yield 4;} foreach(g() as $k=>$v) echo "$k:$v ";"#),
+        "k:1 0:2 0:3 1:4 "
+    );
+}
+
+#[test]
+fn generator_bare_yield() {
+    // `yield;` yields NULL under the auto key (which still advances).
+    assert_eq!(
+        out("<?php function g(){yield; yield;} $g=g(); echo $g->key(),'='; $g->next(); echo $g->key();"),
+        "0=1"
+    );
+}
+
+#[test]
+fn generator_send_delivers_value() {
+    // send($v) makes the suspended `yield` expression evaluate to $v.
+    assert_eq!(
+        out("<?php function g(){ $a = yield 1; echo \"a=$a;\"; $b = yield 2; echo \"b=$b;\"; } \
+            $g=g(); $g->current(); $g->send('X'); $g->send('Y');"),
+        "a=X;b=Y;"
+    );
+}
+
+#[test]
+fn generator_send_on_unstarted_primes_then_delivers() {
+    // send() on a fresh generator runs to the first yield, then delivers the
+    // value to it. Verified against PHP 8.5.
+    assert_eq!(
+        out("<?php function g(){ $a = yield 1; echo \"sa=$a;\"; yield 2; } \
+            $g=g(); echo $g->send('Z');"),
+        "sa=Z;2"
+    );
+}
+
+#[test]
+fn generator_return_and_get_return() {
+    // `return $v` in a generator ends it; getReturn() exposes $v afterwards.
+    assert_eq!(
+        out("<?php function r(){ yield 1; yield 2; return 99; } \
+            $x=r(); foreach($x as $v) echo $v; echo '|'; echo $x->getReturn();"),
+        "12|99"
+    );
+}
