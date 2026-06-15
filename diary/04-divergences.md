@@ -257,3 +257,24 @@ rarissimo) — il `]` di `:alpha:]` chiude prematuramente la classe.
 
 Corpus `ext/pcre/tests`: **44 pass / 39 fail / 82 skip / 0 timeout**, +3 vs step
 36 (`dollar_endonly`/`ungreedy`/`bug41638`).
+
+## Step 38 (argomenti nominati) — coperto il caso comune; follow-up dichiarati
+
+`nullsafe ?->` era già completo (step 19). I named arguments by-value sono
+implementati per funzioni/costruttori/metodi/static e oracle-verificati. I
+confini sotto sono scope-out dichiarati (Decider), **non** bug; il corpus
+`Zend/tests/named_params` (4/12/17) li espone.
+
+| Area | Comportamento nostro | PHP | Stato |
+|---|---|---|---|
+| **named → parametro by-ref** `f(&$a)` (D-38.3) | legato by-value (`Arg::Val`) | passa la cella per riferimento | follow-up — fail di `basic.phpt` (SEND_REF) |
+| **variadic-collection** `function f(...$args)` (D-38.4) | non supportato (lowering scarta `...`) | i nominati extra finiscono in `$args` con chiavi stringa | follow-up (17 skip del corpus) |
+| **spread di chiamata** `f(...$arr)` (D-38.4) | `Unsupported` al lowering | espande l'array in argomenti (int→posizionali, string→nominati) | follow-up |
+| **named ai builtin** (D-38.2) | `Error` "named arguments to builtin … not supported" | supportati (PCRE2/Zend hanno i nomi) | scope-out (registry senza nomi) |
+| **named a closure-as-value** `$f(x:1)` | non instradato (CallDynamic) | supportato | follow-up |
+| **attributi con named** `#[A(x: 1)]` | attributi non supportati | — | dipende da attributes/Reflection |
+
+I casi coperti (riordino, posizionale+nominato, default saltati, "Unknown named
+parameter $x", "Named parameter $x overwrites previous argument", "Cannot use
+positional argument after named argument" compile-fatal, costruttore, metodo,
+static) sono tutti oracle-verificati nei test unit.

@@ -20,6 +20,9 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 38-3) | 682 |
+| Unit/integration (workspace, fine step 38-2) | 680 |
+| Unit/integration (workspace, fine step 38-1) | 678 |
 | Unit/integration (workspace, fine step 37-4) | 671 |
 | Unit/integration (workspace, fine step 37-3) | 666 |
 | Unit/integration (workspace, fine step 37-2) | 665 |
@@ -883,4 +886,40 @@ I 39 fail residui sono scope-out pre-esistenti non legati ai flag (trimming
 gruppi trailing `preg_match_non_capture`, formattazione warning/error PCRE, NUL,
 edge `PREG_*`). Nessuna regressione (i pass salgono 41→44, suite unit verde, 671
 test in ~2.3 s).
+
+
+## Step 38 — argomenti nominati (`nullsafe ?->` già presente dallo step 19)
+
+Scelto data-driven (vedi `NEXT-backlog-scan.md`). Scoperta entrando: **nullsafe
+`?->` era già implementato allo step 19** (HIR `nullsafe` su MethodCall/PropGet,
+short-circuit in eval) — coperto ora da un test di lock-in. Il lavoro vero è
+**named arguments**. +11 test (671→682) in 3 sotto-step, tutti commit+push,
+clippy pulito. **Decider** D-38.1 rappresentazione `args` posizionali + `named:
+Vec<(Box<[u8]>, Expr)>` (PHP vieta posizionale dopo nominato → split netto);
+D-38.2 named ai builtin = scope-out (la registry non ha nomi-parametro).
+- **38-1** (`782fd22`) funzioni utente. HIR `ExprKind::Call` + `named`; nuovo
+  `lower_args` (split posizionale/nominato; **posizionale dopo nominato =
+  compile-Fatal** "Cannot use positional argument after named argument"); enum
+  `Arg::Default` (buco lasciato dai nominati → default del parametro);
+  `resolve_named_args` piazza per nome (errori catchable "Unknown named
+  parameter $x" / "Named parameter $x overwrites previous argument"); il check
+  "too few" ora ispeziona ogni slot required invece del conteggio. +7.
+- **38-2** (`8c822a4`) costruttori. Split di `invoke_method` in wrapper
+  `Vec<Zval>` + `invoke_method_args(Vec<Arg>)` (check required gap-aware);
+  `eval_new` trasporta `named` e risolve contro i param del costruttore. +2.
+- **38-3** (`c22fb2e`) metodi + static call. `named` su MethodCall/StaticCall,
+  instradato in `call_method`/`call_static`, risolto dopo la resolution del
+  metodo. Scope-out (nessuna lista parametri): closure-method, `__call`/
+  `__callStatic`, enum static `from`/`tryFrom` → `unknown_named_error`. +2.
+
+#### Corpus `Zend/tests/named_params` — 4 pass / 12 fail / 17 skip (33)
+
+I 17 **skip** usano feature non ancora supportate (variadic-collection
+`function f(...$args)`, spread `f(...$arr)`, attributi con argomenti nominati);
+i 12 **fail** richiedono per lo più **named args verso parametri by-reference**
+(`function f(&$a)`): il nostro `resolve_named_args` li lega come `Arg::Val`
+(by-value), mentre PHP passa la cella — è il fail di `basic.phpt` (sezione
+SEND_REF). Questi sono i **follow-up dichiarati** (D-38.3..5), non regressioni:
+i casi by-value comuni (riordino, mix, default, errori, costruttore, metodo,
+static) sono coperti dai test unit e oracle-verificati.
 
