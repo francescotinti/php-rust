@@ -38,6 +38,9 @@ pub fn registry() -> Registry {
     add(b"checkdate", date::checkdate);
     add(b"strtotime", date::strtotime);
     add(b"time", date::time);
+    add(b"__interval_parse", date::__interval_parse);
+    add(b"__date_diff", date::__date_diff);
+    add(b"__interval_format", date::__interval_format);
     add(b"json_encode", json::json_encode);
     add(b"array_keys", array::array_keys);
     add(b"array_values", array::array_values);

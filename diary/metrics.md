@@ -20,6 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 34-6) | 621 |
 | Unit/integration (workspace, fine step 34-5) | 617 |
 | Unit/integration (workspace, fine step 34-4) | 614 |
 | Unit/integration (workspace, fine step 34-3) | 611 |
@@ -623,6 +624,29 @@ Granularità rivista (Decider): `add`/`sub` spostati al 34-6 perché richiedono
   sfrutta il parsing `@N` dello step 34-3) e lasciano l'originale invariato.
 
 **+3 test (614→617)**, clippy pulito.
+
+### Step 34-6 — `DateInterval` + `add`/`sub` + `diff`
+
+Mix prelude + helper builtin interni (`__interval_parse`/`__date_diff`/
+`__interval_format`, prefisso `__`, back-end della API OOP):
+- **`DateInterval`**: prelude class con prop pubbliche `y/m/d/h/i/s/f/invert/
+  days`. Costruttore → `__interval_parse(spec)` (parser ISO 8601
+  `P[nY][nM][nW][nD][T[nH][nM][nS]]` in Rust; settimane → giorni; `false` →
+  throw). `days = false` quando costruito da spec (come PHP). `format()` →
+  `__interval_format` (specifier `%y/%Y/%m/%M/.../%a/%R/%r/%%`, padding sulle
+  maiuscole, `%a`=`(unknown)` da spec).
+- **`add`/`sub`** (su DateTime e DateTimeImmutable): **PHP puro via `mktime`** —
+  somma `±componenti` (rispettando `invert`) alle componenti civili estratte con
+  `date()`; `mktime` normalizza l'overflow di calendario (mesi/anni calendar-
+  aware, jan 31 +1m → mar 2). Immutable ritorna nuova istanza.
+- **`diff`**: `__date_diff(ts1,ts2)` in Rust → `y/m/d/h/i/s/invert/days`.
+  `invert=1` se ts2<ts1; `days` = totale assoluto. Breakdown y/m/d con
+  l'**algoritmo di prestito di PHP/timelib** (presta la lunghezza del mese
+  precedente camminando la data più recente all'indietro, `base_m` decrementa a
+  ogni prestito) — verificato su 8 casi limite oracle (incl. jan31→mar1 = 30d
+  0m, 2020-02-29→2024-02-28 = 3y11m30d).
+
+**+4 test (617→621)**, clippy pulito.
 
 
 

@@ -9,8 +9,10 @@
 //! always render the UTC values. `now` (omitted timestamp) reads the real
 //! clock and is therefore not exercised by the differential tests (D-DT5).
 
+use std::rc::Rc;
+
 use php_runtime::Ctx;
-use php_types::{convert, PhpError, PhpStr, Zval};
+use php_types::{convert, Key, PhpArray, PhpError, PhpStr, Zval};
 use time::{Date, Month, OffsetDateTime};
 
 const MONTHS_FULL: [&str; 12] = [
@@ -399,6 +401,232 @@ fn parse_relative(s: &str, base: i64) -> Option<i64> {
         dt.minute() as i64 + dmi,
         dt.second() as i64 + ds,
     )
+}
+
+// --- DateInterval / diff internals (step 34-6) --------------------------------
+// These `__`-prefixed builtins back the DateInterval / DateTime::diff prelude
+// classes; user code normally uses the OOP API.
+
+/// Civil components (year, month, day, hour, minute, second) of a UTC epoch.
+fn decompose(epoch: i64) -> Option<(i64, i64, i64, i64, i64, i64)> {
+    let dt = OffsetDateTime::from_unix_timestamp(epoch).ok()?;
+    Some((
+        dt.year() as i64,
+        u8::from(dt.month()) as i64,
+        dt.day() as i64,
+        dt.hour() as i64,
+        dt.minute() as i64,
+        dt.second() as i64,
+    ))
+}
+
+/// Days in the month immediately preceding (`by`, `bm`), normalizing `bm`
+/// outside 1..=12 into the adjacent year.
+fn days_in_prev_month(mut by: i64, mut bm: i64) -> i64 {
+    bm -= 1;
+    while bm < 1 {
+        bm += 12;
+        by -= 1;
+    }
+    while bm > 12 {
+        bm -= 12;
+        by += 1;
+    }
+    days_in_month(by as i32, bm as u8) as i64
+}
+
+/// `__interval_parse(string $spec)`: parse an ISO 8601 duration
+/// `P[nY][nM][nW][nD][T[nH][nM][nS]]` into an array of components (weeks fold
+/// into days). Returns `false` on a malformed spec.
+pub fn __interval_parse(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let spec = convert::to_zstr(
+        args.first().ok_or_else(|| {
+            PhpError::Error("__interval_parse() expects 1 argument, 0 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let b = spec.as_bytes();
+    let parsed = (|| {
+        let rest = b.strip_prefix(b"P")?;
+        let (mut y, mut mo, mut d, mut h, mut i, mut s) = (0i64, 0i64, 0i64, 0i64, 0i64, 0i64);
+        let mut in_time = false;
+        let mut num: Option<i64> = None;
+        let mut saw_any = false;
+        for &c in rest {
+            if c == b'T' {
+                if num.is_some() {
+                    return None;
+                }
+                in_time = true;
+                continue;
+            }
+            if c.is_ascii_digit() {
+                num = Some(num.unwrap_or(0) * 10 + (c - b'0') as i64);
+                continue;
+            }
+            let n = num.take()?;
+            match (in_time, c) {
+                (false, b'Y') => y = n,
+                (false, b'M') => mo = n,
+                (false, b'W') => d += n * 7,
+                (false, b'D') => d += n,
+                (true, b'H') => h = n,
+                (true, b'M') => i = n,
+                (true, b'S') => s = n,
+                _ => return None,
+            }
+            saw_any = true;
+        }
+        if num.is_some() || !saw_any {
+            return None;
+        }
+        Some((y, mo, d, h, i, s))
+    })();
+    match parsed {
+        Some((y, mo, d, h, i, s)) => {
+            let mut arr = PhpArray::new();
+            arr.insert(Key::from_bytes(b"y"), Zval::Long(y));
+            arr.insert(Key::from_bytes(b"m"), Zval::Long(mo));
+            arr.insert(Key::from_bytes(b"d"), Zval::Long(d));
+            arr.insert(Key::from_bytes(b"h"), Zval::Long(h));
+            arr.insert(Key::from_bytes(b"i"), Zval::Long(i));
+            arr.insert(Key::from_bytes(b"s"), Zval::Long(s));
+            Ok(Zval::Array(Rc::new(arr)))
+        }
+        None => Ok(Zval::Bool(false)),
+    }
+}
+
+/// `__date_diff(int $ts1, int $ts2)`: the calendar difference from `$ts1` to
+/// `$ts2` as an array with `y/m/d/h/i/s/invert/days`. `invert` is 1 when
+/// `$ts2 < $ts1`; `days` is the absolute total day count. The y/m/d breakdown
+/// uses PHP's borrow algorithm (borrowing the preceding month's length, walking
+/// the later date backward).
+pub fn __date_diff(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let ts1 = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), ctx.diags);
+    let ts2 = convert::to_long_cast(args.get(1).unwrap_or(&Zval::Null), ctx.diags);
+    let invert = if ts2 < ts1 { 1 } else { 0 };
+    let (start, end) = if ts2 < ts1 { (ts2, ts1) } else { (ts1, ts2) };
+    let days = (end - start) / 86_400;
+    let (sy, smo, sd, sh, si, ss) = decompose(start).unwrap_or((0, 0, 0, 0, 0, 0));
+    let (ey, emo, ed, eh, ei, es) = decompose(end).unwrap_or((0, 0, 0, 0, 0, 0));
+    let (mut y, mut mo, mut d, mut h, mut i, mut s) =
+        (ey - sy, emo - smo, ed - sd, eh - sh, ei - si, es - ss);
+    if s < 0 {
+        s += 60;
+        i -= 1;
+    }
+    if i < 0 {
+        i += 60;
+        h -= 1;
+    }
+    if h < 0 {
+        h += 24;
+        d -= 1;
+    }
+    // Borrow whole months (the later date's preceding months) until days >= 0.
+    let (mut base_y, mut base_m) = (ey, emo);
+    while d < 0 {
+        d += days_in_prev_month(base_y, base_m);
+        mo -= 1;
+        base_m -= 1;
+        if base_m < 1 {
+            base_m += 12;
+            base_y -= 1;
+        }
+    }
+    while mo < 0 {
+        mo += 12;
+        y -= 1;
+    }
+    let mut arr = PhpArray::new();
+    arr.insert(Key::from_bytes(b"y"), Zval::Long(y));
+    arr.insert(Key::from_bytes(b"m"), Zval::Long(mo));
+    arr.insert(Key::from_bytes(b"d"), Zval::Long(d));
+    arr.insert(Key::from_bytes(b"h"), Zval::Long(h));
+    arr.insert(Key::from_bytes(b"i"), Zval::Long(i));
+    arr.insert(Key::from_bytes(b"s"), Zval::Long(s));
+    arr.insert(Key::from_bytes(b"invert"), Zval::Long(invert));
+    arr.insert(Key::from_bytes(b"days"), Zval::Long(days));
+    Ok(Zval::Array(Rc::new(arr)))
+}
+
+/// `__interval_format(DateInterval $iv, string $format)`: render a DateInterval
+/// per its `%`-specifier mini-language, reading the object's public properties.
+pub fn __interval_format(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let obj = match args.first() {
+        Some(Zval::Object(o)) => o,
+        _ => {
+            return Err(PhpError::Error(
+                "__interval_format(): argument 1 must be a DateInterval".to_string(),
+            ))
+        }
+    };
+    let fmt = convert::to_zstr(args.get(1).unwrap_or(&Zval::Null), ctx.diags);
+    let b = obj.borrow();
+    let geti = |name: &[u8]| -> i64 {
+        match b.props.get(name) {
+            Some(Zval::Long(n)) => *n,
+            _ => 0,
+        }
+    };
+    let (y, m, d, h, i, s, invert) = (
+        geti(b"y"),
+        geti(b"m"),
+        geti(b"d"),
+        geti(b"h"),
+        geti(b"i"),
+        geti(b"s"),
+        geti(b"invert"),
+    );
+    // `days` is either an int total or `false` (built from a spec).
+    let days = match b.props.get(b"days") {
+        Some(Zval::Long(n)) => Some(*n),
+        _ => None,
+    };
+    let bytes = fmt.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut idx = 0;
+    while idx < bytes.len() {
+        if bytes[idx] != b'%' || idx + 1 >= bytes.len() {
+            out.push(bytes[idx]);
+            idx += 1;
+            continue;
+        }
+        let spec = bytes[idx + 1];
+        idx += 2;
+        let push = |out: &mut Vec<u8>, s: String| out.extend_from_slice(s.as_bytes());
+        match spec {
+            b'Y' => push(&mut out, format!("{y:02}")),
+            b'y' => push(&mut out, format!("{y}")),
+            b'M' => push(&mut out, format!("{m:02}")),
+            b'm' => push(&mut out, format!("{m}")),
+            b'D' => push(&mut out, format!("{d:02}")),
+            b'd' => push(&mut out, format!("{d}")),
+            b'H' => push(&mut out, format!("{h:02}")),
+            b'h' => push(&mut out, format!("{h}")),
+            b'I' => push(&mut out, format!("{i:02}")),
+            b'i' => push(&mut out, format!("{i}")),
+            b'S' => push(&mut out, format!("{s:02}")),
+            b's' => push(&mut out, format!("{s}")),
+            b'a' => match days {
+                Some(n) => push(&mut out, format!("{n}")),
+                None => out.extend_from_slice(b"(unknown)"),
+            },
+            b'R' => out.push(if invert != 0 { b'-' } else { b'+' }),
+            b'r' => {
+                if invert != 0 {
+                    out.push(b'-');
+                }
+            }
+            b'%' => out.push(b'%'),
+            other => {
+                out.push(b'%');
+                out.push(other);
+            }
+        }
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
 }
 
 /// `time()`: the current Unix timestamp. Non-deterministic (reads the real

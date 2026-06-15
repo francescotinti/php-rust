@@ -1849,3 +1849,79 @@ fn datetime_at_construct_and_interface() {
         "bool(true)\nbool(true)\n"
     );
 }
+
+// --- Step 34-6: DateInterval + add/sub + diff ---------------------------------
+
+#[test]
+fn dateinterval_construct_and_props() {
+    assert_eq!(
+        out("<?php $iv=new DateInterval('P1Y2M3DT4H5M6S'); echo $iv->y,',',$iv->m,',',$iv->d,',',$iv->h,',',$iv->i,',',$iv->s,',',$iv->invert;"),
+        "1,2,3,4,5,6,0"
+    );
+    // days is false when built from a spec.
+    assert_eq!(out("<?php var_dump((new DateInterval('P1Y'))->days);"), "bool(false)\n");
+    // weeks fold into days.
+    assert_eq!(out("<?php echo (new DateInterval('P2W'))->d;"), "14");
+    // bad spec throws.
+    assert_eq!(
+        out("<?php try { new DateInterval('nonsense'); } catch (Exception $e) { echo 'caught'; }"),
+        "caught"
+    );
+}
+
+#[test]
+fn dateinterval_format() {
+    assert_eq!(
+        out("<?php echo (new DateInterval('P1Y2M3DT4H5M6S'))->format('%y years %m months %d days %h:%i:%s');"),
+        "1 years 2 months 3 days 4:5:6"
+    );
+    // zero-padded specifiers.
+    assert_eq!(out("<?php echo (new DateInterval('PT5M3S'))->format('%H:%I:%S');"), "00:05:03");
+    // %a is (unknown) from a spec; %R is the sign; %% is a literal percent.
+    assert_eq!(out("<?php echo (new DateInterval('P1Y'))->format('%R%a%%');"), "+(unknown)%");
+}
+
+#[test]
+fn datetime_add_sub() {
+    // add a calendar month, then subtract a year, then add time.
+    assert_eq!(
+        out("<?php $d=new DateTime('2024-01-15 10:00:00'); $d->add(new DateInterval('P1M')); echo $d->format('Y-m-d H:i:s');"),
+        "2024-02-15 10:00:00"
+    );
+    assert_eq!(
+        out("<?php $d=new DateTime('2024-02-15 10:00:00'); $d->sub(new DateInterval('P1Y')); echo $d->format('Y-m-d H:i:s');"),
+        "2023-02-15 10:00:00"
+    );
+    assert_eq!(
+        out("<?php $d=new DateTime('2023-02-15 10:00:00'); $d->add(new DateInterval('PT1H30M')); echo $d->format('Y-m-d H:i:s');"),
+        "2023-02-15 11:30:00"
+    );
+    // immutable add returns a new instance.
+    assert_eq!(
+        out("<?php $a=new DateTimeImmutable('2024-01-01'); $b=$a->add(new DateInterval('P1M')); echo $a->format('Y-m-d'),'/',$b->format('Y-m-d');"),
+        "2024-01-01/2024-02-01"
+    );
+}
+
+#[test]
+fn datetime_diff() {
+    assert_eq!(
+        out("<?php $a=new DateTime('2024-06-15'); $b=new DateTime('2024-06-20'); $d=$a->diff($b); echo $d->days,'/',$d->d,'/',$d->invert;"),
+        "5/5/0"
+    );
+    // reversed: invert flips, days stays positive.
+    assert_eq!(
+        out("<?php $a=new DateTime('2024-06-20'); $b=new DateTime('2024-06-15'); $d=$a->diff($b); echo $d->days,'/',$d->invert;"),
+        "5/1"
+    );
+    // y/m/d breakdown + total days.
+    assert_eq!(
+        out("<?php $d=(new DateTime('2020-01-15'))->diff(new DateTime('2024-03-20')); echo $d->format('%y years %m months %d days'),'/',$d->days;"),
+        "4 years 2 months 5 days/1526"
+    );
+    // borrowing edge: Jan 31 → Mar 1 is 30 days, 0 months.
+    assert_eq!(
+        out("<?php $d=(new DateTime('2024-01-31'))->diff(new DateTime('2024-03-01')); echo $d->y,'y',$d->m,'m',$d->d,'d';"),
+        "0y0m30d"
+    );
+}

@@ -223,6 +223,46 @@ class DateTime implements DateTimeInterface {
         return $this;
     }
     public function modify($modifier) { $this->__ts = strtotime($modifier, $this->__ts); return $this; }
+    public function add($interval) { $this->__ts = $this->__apply($interval, 1); return $this; }
+    public function sub($interval) { $this->__ts = $this->__apply($interval, -1); return $this; }
+    private function __apply($iv, $dir) {
+        $sign = $dir * ($iv->invert ? -1 : 1);
+        return mktime(
+            (int)date('G', $this->__ts) + $sign * $iv->h,
+            (int)date('i', $this->__ts) + $sign * $iv->i,
+            (int)date('s', $this->__ts) + $sign * $iv->s,
+            (int)date('n', $this->__ts) + $sign * $iv->m,
+            (int)date('j', $this->__ts) + $sign * $iv->d,
+            (int)date('Y', $this->__ts) + $sign * $iv->y);
+    }
+    public function diff($other) {
+        $info = __date_diff($this->__ts, $other->getTimestamp());
+        $iv = new DateInterval("PT0S");
+        $iv->y = $info['y']; $iv->m = $info['m']; $iv->d = $info['d'];
+        $iv->h = $info['h']; $iv->i = $info['i']; $iv->s = $info['s'];
+        $iv->invert = $info['invert']; $iv->days = $info['days'];
+        return $iv;
+    }
+}
+class DateInterval {
+    public $y = 0;
+    public $m = 0;
+    public $d = 0;
+    public $h = 0;
+    public $i = 0;
+    public $s = 0;
+    public $f = 0;
+    public $invert = 0;
+    public $days = false;
+    public function __construct($duration) {
+        $p = __interval_parse($duration);
+        if ($p === false) {
+            throw new Exception("DateInterval::__construct(): Unknown or bad format ($duration)");
+        }
+        $this->y = $p['y']; $this->m = $p['m']; $this->d = $p['d'];
+        $this->h = $p['h']; $this->i = $p['i']; $this->s = $p['s'];
+    }
+    public function format($format) { return __interval_format($this, $format); }
 }
 class DateTimeImmutable implements DateTimeInterface {
     private $__ts = 0;
@@ -249,6 +289,26 @@ class DateTimeImmutable implements DateTimeInterface {
         return new DateTimeImmutable("@$ts");
     }
     public function modify($modifier) { $ts = strtotime($modifier, $this->__ts); return new DateTimeImmutable("@$ts"); }
+    public function add($interval) { $ts = $this->__apply($interval, 1); return new DateTimeImmutable("@$ts"); }
+    public function sub($interval) { $ts = $this->__apply($interval, -1); return new DateTimeImmutable("@$ts"); }
+    private function __apply($iv, $dir) {
+        $sign = $dir * ($iv->invert ? -1 : 1);
+        return mktime(
+            (int)date('G', $this->__ts) + $sign * $iv->h,
+            (int)date('i', $this->__ts) + $sign * $iv->i,
+            (int)date('s', $this->__ts) + $sign * $iv->s,
+            (int)date('n', $this->__ts) + $sign * $iv->m,
+            (int)date('j', $this->__ts) + $sign * $iv->d,
+            (int)date('Y', $this->__ts) + $sign * $iv->y);
+    }
+    public function diff($other) {
+        $info = __date_diff($this->__ts, $other->getTimestamp());
+        $iv = new DateInterval("PT0S");
+        $iv->y = $info['y']; $iv->m = $info['m']; $iv->d = $info['d'];
+        $iv->h = $info['h']; $iv->i = $info['i']; $iv->s = $info['s'];
+        $iv->invert = $info['invert']; $iv->days = $info['days'];
+        return $iv;
+    }
 }
 "##;
 
