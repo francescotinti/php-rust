@@ -2609,7 +2609,7 @@ impl<'p> Evaluator<'p> {
             // PREG_PATTERN_ORDER: one column per group (with named keys), each
             // the array of that group's value across all matches.
             let ngroups = re.captures_len();
-            let names: Vec<Option<&str>> = re.capture_names().collect();
+            let names = re.capture_names();
             let mut cols: Vec<PhpArray> = (0..ngroups).map(|_| PhpArray::new()).collect();
             for caps in re.captures_iter(&subj) {
                 count += 1;
@@ -2676,9 +2676,10 @@ impl<'p> Evaluator<'p> {
         // before we call back into the evaluator.
         let hits: Vec<(usize, usize, Zval)> = re
             .captures_iter(&subj)
+            .into_iter()
             .map(|caps| {
                 let m0 = caps.get(0).unwrap();
-                (m0.start(), m0.end(), captures_array(&re, &caps, 0))
+                (m0.start, m0.end, captures_array(&re, &caps, 0))
             })
             .collect();
         for (start, end, match_arr) in hits {
@@ -2730,20 +2731,20 @@ impl<'p> Evaluator<'p> {
                 let _ = arr.append(Zval::Str(PhpStr::new(text.as_bytes().to_vec())));
             }
         };
-        for (idx, caps) in re.captures_iter(&subj).enumerate() {
+        for (idx, caps) in re.captures_iter(&subj).into_iter().enumerate() {
             let m0 = caps.get(0).unwrap();
             if limit > 0 && idx as i64 + 1 >= limit {
                 break;
             }
-            push(&mut arr, &subj[last..m0.start()], last);
+            push(&mut arr, &subj[last..m0.start], last);
             if delim_capture {
                 for g in 1..caps.len() {
                     if let Some(mm) = caps.get(g) {
-                        push(&mut arr, mm.as_str(), mm.start());
+                        push(&mut arr, mm.text.as_str(), mm.start);
                     }
                 }
             }
-            last = m0.end();
+            last = m0.end;
         }
         push(&mut arr, &subj[last..], last);
         Ok(Zval::Array(Rc::new(arr)))
@@ -4520,10 +4521,10 @@ const PREG_SET_ORDER: i64 = 2;
 /// `PREG_OFFSET_CAPTURE` each value becomes a `[string, byte-offset]` pair; with
 /// `PREG_UNMATCHED_AS_NULL` unmatched groups are `null` and every group is kept,
 /// otherwise trailing unmatched groups are dropped.
-fn captures_array(re: &regex::Regex, caps: &regex::Captures, flags: i64) -> Zval {
+fn captures_array(re: &crate::preg::Engine, caps: &crate::preg::Caps, flags: i64) -> Zval {
     let offset = flags & PREG_OFFSET_CAPTURE != 0;
     let as_null = flags & PREG_UNMATCHED_AS_NULL != 0;
-    let names: Vec<Option<&str>> = re.capture_names().collect();
+    let names = re.capture_names();
     let limit = if as_null {
         caps.len().saturating_sub(1)
     } else {
@@ -4545,12 +4546,12 @@ fn captures_array(re: &regex::Regex, caps: &regex::Captures, flags: i64) -> Zval
 
 /// A single capture group's value, honouring `PREG_OFFSET_CAPTURE` /
 /// `PREG_UNMATCHED_AS_NULL`.
-fn capture_value(m: Option<regex::Match>, offset: bool, as_null: bool) -> Zval {
+fn capture_value(m: Option<&crate::preg::CapMatch>, offset: bool, as_null: bool) -> Zval {
     match m {
         Some(mm) => {
-            let s = Zval::Str(PhpStr::new(mm.as_str().as_bytes().to_vec()));
+            let s = Zval::Str(PhpStr::new(mm.text.as_bytes().to_vec()));
             if offset {
-                offset_pair(s, mm.start() as i64)
+                offset_pair(s, mm.start as i64)
             } else {
                 s
             }

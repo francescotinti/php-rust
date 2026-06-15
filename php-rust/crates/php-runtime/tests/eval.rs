@@ -3634,6 +3634,70 @@ fn preg_replace_callback_basic() {
     );
 }
 
+// --- Step 36: preg backreferences / lookaround (fancy-regex auto-fallback) ---
+
+#[test]
+fn preg_match_backreference() {
+    // `\1` is a backreference the `regex` crate cannot compile; the engine must
+    // fall back to fancy-regex. Oracle: preg_match('/(a)\1/', 'aa') == 1.
+    assert_eq!(out(r#"<?php echo preg_match('/(a)\1/', 'aa');"#), "1");
+}
+
+#[test]
+fn preg_match_named_backreference() {
+    // `\k<c>` named backreference (fancy-regex). Oracle == 1.
+    assert_eq!(out(r#"<?php echo preg_match('/(?<c>a)\k<c>/', 'aa');"#), "1");
+}
+
+#[test]
+fn preg_match_lookbehind() {
+    // `(?<=foo)` positive lookbehind. Oracle: preg_match('/(?<=foo)bar/','foobar') == 1.
+    assert_eq!(out(r#"<?php echo preg_match('/(?<=foo)bar/', 'foobar');"#), "1");
+}
+
+#[test]
+fn preg_match_lookahead() {
+    // `(?=bar)` positive lookahead. Oracle: preg_match('/foo(?=bar)/','foobar') == 1.
+    assert_eq!(out(r#"<?php echo preg_match('/foo(?=bar)/', 'foobar');"#), "1");
+}
+
+#[test]
+fn preg_match_negative_lookahead() {
+    // `(?!bar)` negative lookahead. Oracle: preg_match('/foo(?!bar)/','foobaz') == 1.
+    assert_eq!(out(r#"<?php echo preg_match('/foo(?!bar)/', 'foobaz');"#), "1");
+}
+
+#[test]
+fn preg_match_atomic_group() {
+    // `(?>..)` atomic group. Oracle: preg_match('/a(?>bc|b)c/','abcc') == 1.
+    assert_eq!(out(r#"<?php echo preg_match('/a(?>bc|b)c/', 'abcc');"#), "1");
+}
+
+#[test]
+fn preg_replace_backreference_pattern() {
+    // Backreference in the *pattern* (not the replacement). Oracle:
+    // preg_replace('/(\w)\1/','X','aabb') == 'XX'.
+    assert_eq!(out(r#"<?php echo preg_replace('/(\w)\1/', 'X', 'aabb');"#), "XX");
+}
+
+#[test]
+fn preg_match_all_backreference() {
+    // captures_iter on the fancy engine. Oracle: 3 matches, group columns a/b/c.
+    assert_eq!(
+        out(r#"<?php $n = preg_match_all('/(\w)\1/', 'aabbcc', $m); echo $n, '|', $m[0][0], $m[0][1], $m[0][2], '|', $m[1][0], $m[1][1], $m[1][2];"#),
+        "3|aabbcc|abc"
+    );
+}
+
+#[test]
+fn preg_split_lookahead() {
+    // split on a zero-width lookahead via the fancy engine. Oracle: a / ,b / ,c.
+    assert_eq!(
+        out(r#"<?php $p = preg_split('/(?=,)/', 'a,b,c'); echo $p[0], '~', $p[1], '~', $p[2];"#),
+        "a~,b~,c"
+    );
+}
+
 // --- Step 28: real stack-trace frames ---
 
 #[test]
