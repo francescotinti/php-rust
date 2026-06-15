@@ -3944,6 +3944,24 @@ $p = new P(a:5); $q = new P(b:2, a:1); echo $p->a, '/', $p->b, '|', $q->a, '/', 
 }
 
 #[test]
+fn named_args_instance_method() {
+    // Named args to an instance method (step 38-3). Oracle: 10 - 1 = 9.
+    let src = r#"<?php
+class C { function sub($a, $b){ return $a - $b; } }
+$c = new C(); echo $c->sub(b:1, a:10);"#;
+    assert_eq!(out(src), "9");
+}
+
+#[test]
+fn named_args_static_method() {
+    // Named args to a static method. Oracle: 10 - 1 = 9.
+    let src = r#"<?php
+class C { static function sub($a, $b){ return $a - $b; } }
+echo C::sub(b:1, a:10);"#;
+    assert_eq!(out(src), "9");
+}
+
+#[test]
 fn named_args_positional_after_named_is_compile_fatal() {
     // A positional argument after a named one is a PHP compile-time Fatal error
     // (not a catchable Error). Oracle message verified against PHP 8.5.

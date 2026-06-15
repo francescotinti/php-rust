@@ -2389,22 +2389,24 @@ impl<'f> Lowerer<'f> {
             Call::Method(mc) => {
                 let object = Box::new(self.lower_expr(mc.object)?);
                 let method = member_name(&mc.method, line)?;
-                let args = self.lower_positional_args(&mc.argument_list, line)?;
+                let (args, named) = self.lower_args(&mc.argument_list, line)?;
                 return Ok(ExprKind::MethodCall {
                     object,
                     method: method.into(),
                     args,
+                    named,
                     nullsafe: false,
                 });
             }
             Call::NullSafeMethod(mc) => {
                 let object = Box::new(self.lower_expr(mc.object)?);
                 let method = member_name(&mc.method, line)?;
-                let args = self.lower_positional_args(&mc.argument_list, line)?;
+                let (args, named) = self.lower_args(&mc.argument_list, line)?;
                 return Ok(ExprKind::MethodCall {
                     object,
                     method: method.into(),
                     args,
+                    named,
                     nullsafe: true,
                 });
             }
@@ -2412,11 +2414,12 @@ impl<'f> Lowerer<'f> {
             Call::StaticMethod(sm) => {
                 let class = class_ref_of(sm.class, line)?;
                 let method = member_name(&sm.method, line)?;
-                let args = self.lower_positional_args(&sm.argument_list, line)?;
+                let (args, named) = self.lower_args(&sm.argument_list, line)?;
                 return Ok(ExprKind::StaticCall {
                     class,
                     method: method.into(),
                     args,
+                    named,
                 });
             }
         };

@@ -546,6 +546,7 @@ pub enum ExprKind {
         object: Box<Expr>,
         method: Box<[u8]>,
         args: Vec<Expr>,
+        named: Vec<(Box<[u8]>, Expr)>,
         nullsafe: bool,
     },
 
@@ -569,6 +570,7 @@ pub enum ExprKind {
         class: ClassRef,
         method: Box<[u8]>,
         args: Vec<Expr>,
+        named: Vec<(Box<[u8]>, Expr)>,
     },
 
     /// `Class::CONST` / `self::CONST` / `parent::CONST` / `static::CONST`, and the

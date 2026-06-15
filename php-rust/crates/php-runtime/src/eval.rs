@@ -1147,6 +1147,17 @@ impl<'p> Evaluator<'p> {
     /// are evaluated in the current (caller) frame, after the positional ones.
     /// An unknown name or a slot already filled raises a catchable `Error`,
     /// matching PHP's messages.
+    /// The catchable `Error` PHP raises for an unresolvable named argument; used
+    /// for the scope-out targets (closures, `__call`, enum statics) that have no
+    /// declared parameter list to bind names against (step 38).
+    fn unknown_named_error(&self, named: &[(Box<[u8]>, Expr)]) -> PhpError {
+        let name = named.first().map(|(n, _)| n.as_ref()).unwrap_or(b"");
+        PhpError::Error(format!(
+            "Unknown named parameter ${}",
+            String::from_utf8_lossy(name)
+        ))
+    }
+
     fn resolve_named_args(
         &mut self,
         f: &'p FnDecl,
@@ -2251,7 +2262,13 @@ impl<'p> Evaluator<'p> {
     /// the method up the chain, enforce visibility, then run it with `$this`
     /// bound to the receiver. A method missing or inaccessible from the current
     /// scope routes to `__call($method, $args)` if defined.
-    fn call_method(&mut self, recv: Zval, method: &[u8], argv: Vec<Zval>) -> Result<Zval, PhpError> {
+    fn call_method(
+        &mut self,
+        recv: Zval,
+        method: &[u8],
+        argv: Vec<Zval>,
+        named: &[(Box<[u8]>, Expr)],
+    ) -> Result<Zval, PhpError> {
         let cid = match &recv {
             Zval::Object(o) => o.borrow().class_id as usize,
             other => {
@@ -2265,9 +2282,21 @@ impl<'p> Evaluator<'p> {
         match self.resolve_method(cid, method) {
             Some((defc, m)) if self.visible_from(m.visibility, defc) => {
                 // An instance call's LSB class is the object's actual class.
-                self.invoke_method(Some(recv), defc, cid, m, method, argv)
+                // Named args are placed by parameter name (step 38-3).
+                let argv: Vec<Arg> = argv.into_iter().map(Arg::Val).collect();
+                let argv = if named.is_empty() {
+                    argv
+                } else {
+                    self.resolve_named_args(&m.decl, argv, named)?
+                };
+                self.invoke_method_args(Some(recv), defc, cid, m, method, argv)
             }
             found => {
+                // `__call` collects args into an array; named-arg placement does
+                // not apply to it (step 38 scope-out).
+                if !named.is_empty() {
+                    return Err(self.unknown_named_error(named));
+                }
                 if let Some((cdefc, cm)) = self.resolve_method(cid, b"__call") {
                     let args = self.pack_args(argv);
                     let name = Zval::Str(PhpStr::new(method.to_vec()));
@@ -2298,11 +2327,16 @@ impl<'p> Evaluator<'p> {
         class: &ClassRef,
         method: &[u8],
         argv: Vec<Zval>,
+        named: &[(Box<[u8]>, Expr)],
     ) -> Result<Zval, PhpError> {
         // `Closure::bind(...)` / `Closure::fromCallable(...)` are built-in (the
         // engine `Closure` class is not in the user class table), step 19-6.
+        // Named args to these / enum built-in statics are out of scope (step 38).
         if let ClassRef::Named(n) = class {
             if n.eq_ignore_ascii_case(b"Closure") {
+                if !named.is_empty() {
+                    return Err(self.unknown_named_error(named));
+                }
                 return self.closure_static(method, argv);
             }
         }
@@ -2317,9 +2351,15 @@ impl<'p> Evaluator<'p> {
             }
             if self.classes[start].enum_backing.is_some() {
                 if method.eq_ignore_ascii_case(b"from") {
+                    if !named.is_empty() {
+                        return Err(self.unknown_named_error(named));
+                    }
                     return self.enum_from(start, argv.first(), false);
                 }
                 if method.eq_ignore_ascii_case(b"tryFrom") {
+                    if !named.is_empty() {
+                        return Err(self.unknown_named_error(named));
+                    }
                     return self.enum_from(start, argv.first(), true);
                 }
             }
@@ -2345,9 +2385,19 @@ impl<'p> Evaluator<'p> {
                     }
                     _ => None,
                 };
-                self.invoke_method(this, defc, static_class, m, method, argv)
+                // Named args placed by parameter name (step 38-3).
+                let argv: Vec<Arg> = argv.into_iter().map(Arg::Val).collect();
+                let argv = if named.is_empty() {
+                    argv
+                } else {
+                    self.resolve_named_args(&m.decl, argv, named)?
+                };
+                self.invoke_method_args(this, defc, static_class, m, method, argv)
             }
             found => {
+                if !named.is_empty() {
+                    return Err(self.unknown_named_error(named));
+                }
                 // Missing or inaccessible. In object context (a usable `$this`,
                 // e.g. `parent::priv()` from a method) it routes to `__call` on
                 // `$this`; otherwise to `__callStatic` (step 22, D-22.3,
@@ -3706,6 +3756,7 @@ impl<'p> Evaluator<'p> {
                 object,
                 method,
                 args,
+                named,
                 nullsafe,
             } => {
                 let recv = self.eval(object)?.deref_clone();
@@ -3714,11 +3765,15 @@ impl<'p> Evaluator<'p> {
                 }
                 let argv = self.eval_value_args(args)?;
                 // Methods on a closure value (`$c->bindTo(...)`) are built-in
-                // (step 19-6), not user-class dispatch.
+                // (step 19-6), not user-class dispatch. Named args there are out
+                // of scope (step 38).
                 if let Zval::Closure(cl) = &recv {
+                    if !named.is_empty() {
+                        return Err(self.unknown_named_error(named));
+                    }
                     return self.closure_method(cl, method, argv);
                 }
-                self.call_method(recv, method, argv)
+                self.call_method(recv, method, argv, named)
             }
 
             ExprKind::PropGet {
@@ -3744,9 +3799,10 @@ impl<'p> Evaluator<'p> {
                 class,
                 method,
                 args,
+                named,
             } => {
                 let argv = self.eval_value_args(args)?;
-                self.call_static(class, method, argv)
+                self.call_static(class, method, argv, named)
             }
 
             ExprKind::ClassConst { class, name } => self.eval_class_const(class, name),
