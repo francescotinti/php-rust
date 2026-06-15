@@ -3750,27 +3750,64 @@ fn preg_scopeout_callout_returns_false() {
     assert_eq!(out(r#"<?php echo (preg_match('/a(?C1)b/', 'ab') === false) ? 'F' : 'T';"#), "F");
 }
 
-// Step 36-3: pathological backtracking must terminate, never hang or panic.
+// Step 36-3 / 37-1: bug41638's pattern carries the `U` flag. BEFORE step 37 we
+// ignored `U`, so `.*` stayed greedy → fancy-regex blew past the backtrack limit
+// and 36-3 kept it from hanging by returning a bounded no-match (the D-36.4
+// divergence). NOW that step 37-1 honours `U`, `.*` is lazy → the pattern is no
+// longer catastrophic and matches PHP byte-for-byte, RESOLVING D-36.4.
 
 #[test]
-fn preg_match_all_catastrophic_backtracking_is_bounded() {
-    // bug41638: backref + nested quantifiers. `U` (ungreedy) is ignored by
-    // compile() so `.*` stays greedy → fancy-regex's NFA exceeds the default
-    // 1M backtrack limit. Pre-36-3 the captures_iter path LOOPED FOREVER on the
-    // same erroring position (its iterator never advances past an Err); now it
-    // stops at the first runtime error and returns 0. PHP, honouring `U`, returns
-    // 1 — the documented D-36.4 divergence. The point here is that it RETURNS.
+fn preg_match_all_bug41638_matches_php_with_ungreedy() {
+    // Oracle (/tmp/t1.php): preg_match_all → 1.
     let src = r##"<?php echo preg_match_all('/([\'"])((.*(\\\1)*)*)\1/sU', "repeater id='loopt' dataSrc=subject columns=2", $m);"##;
+    assert_eq!(out(src), "1");
+}
+
+#[test]
+fn preg_replace_bug41638_matches_php_with_ungreedy() {
+    // Oracle (/tmp/t2.php): the 'loopt' run is replaced by X.
+    let src = r##"<?php echo preg_replace('/([\'"])((.*(\\\1)*)*)\1/sU', 'X', "repeater id='loopt' dataSrc=subject columns=2");"##;
+    assert_eq!(out(src), "repeater id=X dataSrc=subject columns=2");
+}
+
+// Step 36-3 guard with a GENUINELY catastrophic pattern (no `U` to save it):
+// greedy nested quantifiers + a backref forcing the fancy engine, with no match
+// possible. Must terminate (backtrack-limit error → bounded no-match), never
+// hang (captures_iter stop-on-Err) or panic (replace_all via try_replacen).
+
+#[test]
+fn preg_match_all_catastrophic_no_ungreedy_is_bounded() {
+    // Oracle: preg_match_all('/(a+)+b\1/', '<28 a's>') == 0.
+    let src = r#"<?php echo preg_match_all('/(a+)+b\1/', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaa', $m);"#;
     assert_eq!(out(src), "0");
 }
 
 #[test]
-fn preg_replace_catastrophic_backtracking_is_bounded() {
-    // Same pattern through preg_replace. fancy-regex's `replace_all` is
-    // `try_replacen(..).unwrap()` — a backtrack-limit error pre-36-3 PANICKED the
-    // interpreter. Now the error leaves the subject unchanged (D-36.3).
-    let src = r##"<?php echo preg_replace('/([\'"])((.*(\\\1)*)*)\1/sU', 'X', "repeater id='loopt' dataSrc=subject columns=2");"##;
-    assert_eq!(out(src), "repeater id='loopt' dataSrc=subject columns=2");
+fn preg_replace_catastrophic_no_ungreedy_is_bounded() {
+    // No match → subject returned unchanged (no panic).
+    let src = r#"<?php echo preg_replace('/(a+)+b\1/', 'X', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaa');"#;
+    assert_eq!(out(src), "aaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+}
+
+// --- Step 37: PCRE modifier flags U / A / X / D ($ leniency) ---
+
+#[test]
+fn preg_flag_ungreedy_match() {
+    // `U` swaps greediness: `.*` becomes lazy. Oracle: $m[0] == '<a>'.
+    assert_eq!(out(r#"<?php preg_match('/<.*>/U', '<a> <b>', $m); echo $m[0];"#), "<a>");
+}
+
+#[test]
+fn preg_flag_ungreedy_explicit_marker_flips_back() {
+    // Under `U`, an explicit `?` flips that quantifier back to greedy. Oracle:
+    // $m[0] == '<a> <b>'.
+    assert_eq!(out(r#"<?php preg_match('/<.*?>/U', '<a> <b>', $m); echo $m[0];"#), "<a> <b>");
+}
+
+#[test]
+fn preg_flag_ungreedy_replace() {
+    // `U` through preg_replace. Oracle: 'X X'.
+    assert_eq!(out(r#"<?php echo preg_replace('/<.*>/U', 'X', '<a> <b>');"#), "X X");
 }
 
 // --- Step 28: real stack-trace frames ---

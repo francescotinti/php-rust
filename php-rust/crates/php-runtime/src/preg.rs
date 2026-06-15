@@ -193,7 +193,14 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
                 b.ignore_whitespace(true);
                 inline.push('x');
             }
-            // u (unicode, already on), U/A/D/X and others: ignored.
+            b'U' => {
+                // PCRE_UNGREEDY: swap the greediness of every quantifier (an
+                // explicit `?` flips it back). `regex` exposes this on the
+                // builder and as the inline `(?U)` flag the fancy fallback uses.
+                b.swap_greed(true);
+                inline.push('U');
+            }
+            // u (unicode, already on), A/D/X and others: ignored.
             _ => {}
         }
     }
