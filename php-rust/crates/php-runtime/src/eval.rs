@@ -105,9 +105,12 @@ macro_rules! slot_mut {
 
 /// A user-function argument as bound for a call: a plain value for a by-value
 /// parameter, or a shared cell for a `&$x` by-reference parameter (D-R6).
+/// `Default` is a gap left by named arguments (step 38) — the parameter at this
+/// index was not supplied, so its declared default applies.
 enum Arg {
     Val(Zval),
     Ref(Rc<RefCell<Zval>>),
+    Default,
 }
 
 /// Control-flow signal produced by executing a statement.
@@ -969,7 +972,19 @@ impl<'p> Evaluator<'p> {
         let f: &'p FnDecl = &funcs[idx];
 
         let required = f.params.iter().filter(|p| p.default.is_none()).count();
-        if argv.len() < required {
+        // A required parameter must have a real argument at its index; named
+        // arguments (step 38) can leave `Arg::Default` gaps, so the supplied
+        // count is not enough — check each required slot directly.
+        let missing_required = f
+            .params
+            .iter()
+            .enumerate()
+            .any(|(i, p)| p.default.is_none() && !matches!(argv.get(i), Some(Arg::Val(_) | Arg::Ref(_))));
+        if missing_required {
+            let passed = argv
+                .iter()
+                .filter(|a| matches!(a, Arg::Val(_) | Arg::Ref(_)))
+                .count();
             let expected = if required == f.params.len() {
                 format!("exactly {required}")
             } else {
@@ -978,7 +993,7 @@ impl<'p> Evaluator<'p> {
             return Err(PhpError::Error(format!(
                 "Too few arguments to function {}(), {} passed and {} expected",
                 String::from_utf8_lossy(&f.name),
-                argv.len(),
+                passed,
                 expected,
             )));
         }
@@ -1033,8 +1048,9 @@ impl<'p> Evaluator<'p> {
                 // Required params are guaranteed present by the caller's check.
                 // A default is coerced to the hint too (`float $n = 0` → 0.0,
                 // D-NEW-6); a valid constant default always coerces, so on the
-                // unreachable failure we keep the evaluated value.
-                None => {
+                // unreachable failure we keep the evaluated value. `Arg::Default`
+                // is a gap left by named arguments (step 38) — same path as None.
+                Some(Arg::Default) | None => {
                     let v = self.eval(p.default.as_ref().expect("required arg checked"))?;
                     match &p.hint {
                         Some(hint) => {
@@ -1124,6 +1140,47 @@ impl<'p> Evaluator<'p> {
             }
         }
         Ok(out)
+    }
+
+    /// Place named arguments (step 38) into the positional `argv` by parameter
+    /// name, filling any skipped earlier slots with `Arg::Default`. Named values
+    /// are evaluated in the current (caller) frame, after the positional ones.
+    /// An unknown name or a slot already filled raises a catchable `Error`,
+    /// matching PHP's messages.
+    fn resolve_named_args(
+        &mut self,
+        idx: usize,
+        mut argv: Vec<Arg>,
+        named: &[(Box<[u8]>, Expr)],
+    ) -> Result<Vec<Arg>, PhpError> {
+        let funcs: &'p [FnDecl] = self.funcs;
+        let f: &'p FnDecl = &funcs[idx];
+        for (name, expr) in named {
+            let Some(j) = f
+                .params
+                .iter()
+                .position(|p| f.slots[p.slot as usize][..] == name[..])
+            else {
+                return Err(PhpError::Error(format!(
+                    "Unknown named parameter ${}",
+                    String::from_utf8_lossy(name)
+                )));
+            };
+            // A positional argument already occupied this slot, or a duplicate
+            // named argument targets it (an `Arg::Default` gap is not "previous").
+            if matches!(argv.get(j), Some(Arg::Val(_) | Arg::Ref(_))) {
+                return Err(PhpError::Error(format!(
+                    "Named parameter ${} overwrites previous argument",
+                    String::from_utf8_lossy(name)
+                )));
+            }
+            let v = self.eval(expr)?;
+            if argv.len() <= j {
+                argv.resize_with(j + 1, || Arg::Default);
+            }
+            argv[j] = Arg::Val(v);
+        }
+        Ok(argv)
     }
 
     /// Invoke a by-reference builtin (step 11c). Its first argument must be a
@@ -3368,7 +3425,7 @@ impl<'p> Evaluator<'p> {
                 }
             }
 
-            ExprKind::Call { name, args } => {
+            ExprKind::Call { name, args, named } => {
                 // A user-defined function shadows the builtin namespace (PHP
                 // resolves both from one function table; you cannot redefine a
                 // builtin, but a user function wins when present). User functions
@@ -3376,6 +3433,13 @@ impl<'p> Evaluator<'p> {
                 // resolved against the declaration rather than blindly evaluated.
                 if let Some(&idx) = self.fn_index.get(&name.to_ascii_lowercase()) {
                     let argv = self.eval_call_args(idx, args)?;
+                    // Named arguments (step 38) are placed by parameter name after
+                    // the positional ones.
+                    let argv = if named.is_empty() {
+                        argv
+                    } else {
+                        self.resolve_named_args(idx, argv, named)?
+                    };
                     let result = self.call_user_fn(idx, argv)?;
                     // A by-reference function returns a `Zval::Ref`; in this
                     // (value) context it must be copied, not aliased — only
@@ -3384,6 +3448,15 @@ impl<'p> Evaluator<'p> {
                         Zval::Ref(cell) => cell.borrow().clone(),
                         other => other,
                     });
+                }
+                // Named arguments to a builtin are a scope-out (step 38, D-38.2):
+                // the registry carries no parameter-name metadata. User functions
+                // are handled above.
+                if !named.is_empty() {
+                    return Err(PhpError::Error(format!(
+                        "named arguments to builtin {}() are not supported",
+                        String::from_utf8_lossy(name)
+                    )));
                 }
                 // Higher-order builtins need to invoke a callback, so they are
                 // run by the evaluator itself rather than the (pure) registry
@@ -4142,7 +4215,9 @@ impl<'p> Evaluator<'p> {
     /// the *raw* result (a by-ref function's `Zval::Ref` is not dereferenced)
     /// together with whether the callee is declared by-reference (D-13.5).
     fn eval_call_for_ref(&mut self, call: &Expr) -> Result<(Zval, bool), PhpError> {
-        let ExprKind::Call { name, args } = &call.kind else {
+        // Named arguments in a by-ref-return binding (`$y =& f(x: 1)`) are an
+        // unhandled edge here (step 38); the positional path covers the common case.
+        let ExprKind::Call { name, args, .. } = &call.kind else {
             // Lowering only builds `AssignRefCall` around a call; be defensive.
             return Ok((self.eval(call)?, false));
         };

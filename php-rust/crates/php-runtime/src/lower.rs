@@ -2430,10 +2430,11 @@ impl<'f> Lowerer<'f> {
                 return Ok(ExprKind::CallDynamic { callee, args });
             }
         };
-        let args = self.lower_positional_args(&fc.argument_list, line)?;
+        let (args, named) = self.lower_args(&fc.argument_list, line)?;
         Ok(ExprKind::Call {
             name: name.into(),
             args,
+            named,
         })
     }
 
@@ -2547,6 +2548,44 @@ impl<'f> Lowerer<'f> {
             }
         }
         Ok(args)
+    }
+
+    /// Lower a call's arguments into leading positional + trailing named (step
+    /// 38). Variadic spread (`...$a`) stays out of scope. A positional argument
+    /// after a named one is a PHP compile-time `Fatal error`, surfaced here.
+    #[allow(clippy::type_complexity)]
+    fn lower_args(
+        &mut self,
+        list: &mago_syntax::ast::ArgumentList,
+        line: Line,
+    ) -> Result<(Vec<Expr>, Vec<(Box<[u8]>, Expr)>), LowerError> {
+        let mut args = Vec::new();
+        let mut named: Vec<(Box<[u8]>, Expr)> = Vec::new();
+        for arg in list.arguments.iter() {
+            match arg {
+                Argument::Positional(p) if p.ellipsis.is_none() => {
+                    if !named.is_empty() {
+                        return Err(LowerError::Fatal {
+                            message: "Cannot use positional argument after named argument"
+                                .to_string(),
+                            line,
+                        });
+                    }
+                    args.push(self.lower_expr(p.value)?);
+                }
+                Argument::Named(n) => {
+                    named.push((n.name.value.into(), self.lower_expr(n.value)?));
+                }
+                // Variadic spread `...$a` is still out of scope.
+                _ => {
+                    return Err(LowerError::Unsupported {
+                        what: "variadic argument",
+                        line,
+                    })
+                }
+            }
+        }
+        Ok((args, named))
     }
 
     /// Resolve an lvalue: a base variable plus a chain of index steps. `$x`

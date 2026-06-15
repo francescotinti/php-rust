@@ -3875,6 +3875,69 @@ fn preg_dollar_in_char_class_is_literal() {
     assert_eq!(out(r#"<?php preg_match('/[a$]+/', 'a$a', $m); echo $m[0];"#), "a$a");
 }
 
+// --- Step 38: named arguments (nullsafe `?->` already landed in step 19) ---
+
+#[test]
+fn nullsafe_property_and_method_chain() {
+    // Lock-in for step-19 nullsafe: a null receiver short-circuits `?->` to null
+    // (no warning); a non-null receiver behaves normally. Oracle: 5|N|7|NM.
+    let src = r#"<?php
+class A { public $x = 5; public function m(){ return 7; } }
+$a = new A(); $n = null;
+echo $a?->x, "|", ($n?->x ?? 'N'), "|", $a?->m(), "|", ($n?->m() ?? 'NM');"#;
+    assert_eq!(out(src), "5|N|7|NM");
+}
+
+#[test]
+fn named_args_reorder() {
+    // All named, out of order → bound by name. Oracle: 1-2-3.
+    let src = r#"<?php function f($a,$b,$c){ return "$a-$b-$c"; } echo f(c:3, a:1, b:2);"#;
+    assert_eq!(out(src), "1-2-3");
+}
+
+#[test]
+fn named_args_mixed_positional_then_named() {
+    // Leading positional, trailing named. Oracle: 1-2-3.
+    let src = r#"<?php function f($a,$b,$c){ return "$a-$b-$c"; } echo f(1, c:3, b:2);"#;
+    assert_eq!(out(src), "1-2-3");
+}
+
+#[test]
+fn named_args_skip_to_default() {
+    // A named arg may leave an earlier defaulted param at its default. Oracle:
+    // 5/9 (b defaulted) and 1/2 (both named, reordered).
+    let src = r#"<?php function g($a,$b=9){ return "$a/$b"; } echo g(a:5), '|', g(b:2, a:1);"#;
+    assert_eq!(out(src), "5/9|1/2");
+}
+
+#[test]
+fn named_args_unknown_parameter_is_catchable_error() {
+    // Oracle: Uncaught Error "Unknown named parameter $z" (catchable).
+    let src = r#"<?php function f($a){} try { f(z:1); } catch (Error $e) { echo $e->getMessage(); }"#;
+    assert_eq!(out(src), "Unknown named parameter $z");
+}
+
+#[test]
+fn named_args_overwrite_previous_is_catchable_error() {
+    // Positional then named targeting the same param. Oracle: Error
+    // "Named parameter $a overwrites previous argument".
+    let src = r#"<?php function f($a){} try { f(1, a:2); } catch (Error $e) { echo $e->getMessage(); }"#;
+    assert_eq!(out(src), "Named parameter $a overwrites previous argument");
+}
+
+#[test]
+fn named_args_positional_after_named_is_compile_fatal() {
+    // A positional argument after a named one is a PHP compile-time Fatal error
+    // (not a catchable Error). Oracle message verified against PHP 8.5.
+    let o = run_source(b"t.php", b"<?php function f($a,$b){} f(a:1, 2);").expect("lowers");
+    match o.fatal {
+        Some(PhpError::Error(m)) => {
+            assert_eq!(m, "Cannot use positional argument after named argument")
+        }
+        other => panic!("expected compile fatal, got {other:?}"),
+    }
+}
+
 // --- Step 28: real stack-trace frames ---
 
 #[test]

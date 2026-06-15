@@ -472,9 +472,15 @@ pub enum ExprKind {
         otherwise: Box<Expr>,
     },
 
-    /// `name(args...)` — a call to a (builtin) function. The evaluator resolves
-    /// `name` against its builtin registry; Tier 1 has no user functions yet.
-    Call { name: Box<[u8]>, args: Vec<Expr> },
+    /// `name(args...)` — a call to a (builtin or user) function. `args` are the
+    /// leading positional arguments; `named` are trailing `name: value` arguments
+    /// (step 38), empty for an all-positional call. PHP forbids a positional
+    /// argument after a named one, so this split is unambiguous.
+    Call {
+        name: Box<[u8]>,
+        args: Vec<Expr>,
+        named: Vec<(Box<[u8]>, Expr)>,
+    },
 
     /// A closure / arrow-function expression (step 18, D-18.2). `fn_idx` selects
     /// the lowered body from [`Program::closures`]; `captures` are evaluated in
