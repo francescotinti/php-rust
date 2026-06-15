@@ -3810,6 +3810,27 @@ fn preg_flag_ungreedy_replace() {
     assert_eq!(out(r#"<?php echo preg_replace('/<.*>/U', 'X', '<a> <b>');"#), "X X");
 }
 
+#[test]
+fn preg_flag_anchored_matches_at_start() {
+    // `A` (PCRE_ANCHORED): match only if it starts at offset 0. Oracle: 1.
+    assert_eq!(out(r#"<?php echo preg_match('/foo/A', 'foobar');"#), "1");
+}
+
+#[test]
+fn preg_flag_anchored_rejects_mid_string() {
+    // Oracle: both 0 — `foo` not at start, `bar` not at start.
+    assert_eq!(out(r#"<?php echo preg_match('/foo/A', 'xfoobar');"#), "0");
+    assert_eq!(out(r#"<?php echo preg_match('/bar/A', 'foobar');"#), "0");
+}
+
+#[test]
+fn preg_flag_anchored_with_backref_uses_fancy() {
+    // `A` must anchor on the fancy fallback too (the backref forces fancy).
+    // Oracle: 1 at start, 0 mid-string.
+    assert_eq!(out(r#"<?php echo preg_match('/(a)\1/A', 'aa');"#), "1");
+    assert_eq!(out(r#"<?php echo preg_match('/(a)\1/A', 'xaa');"#), "0");
+}
+
 // --- Step 28: real stack-trace frames ---
 
 #[test]

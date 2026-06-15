@@ -170,10 +170,20 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
     let body = std::str::from_utf8(&pattern[1..end]).ok()?;
     let flags = &pattern[end + 1..];
 
+    // PCRE_ANCHORED (`A`): force the match to start at offset 0. Neither engine
+    // has a portable builder switch, so the body is wrapped as `\A(?:…)`. The
+    // non-capturing group keeps group numbering intact and anchors a top-level
+    // alternation as a whole.
+    let body = if flags.contains(&b'A') {
+        std::borrow::Cow::Owned(format!(r"\A(?:{body})"))
+    } else {
+        std::borrow::Cow::Borrowed(body)
+    };
+
     // First attempt: the fast `regex` engine, with flags applied via the builder.
     // The same i/m/s/x flags are accumulated as an inline `(?..)` prefix for the
     // fancy-regex fallback, which has no equivalent builder API.
-    let mut b = RegexBuilder::new(body);
+    let mut b = RegexBuilder::new(&body);
     let mut inline = String::new();
     for &f in flags {
         match f {
@@ -200,7 +210,8 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
                 b.swap_greed(true);
                 inline.push('U');
             }
-            // u (unicode, already on), A/D/X and others: ignored.
+            // u (unicode, already on), D/X and others: ignored here (A is
+            // handled above by wrapping the body).
             _ => {}
         }
     }
@@ -216,7 +227,7 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
         pat.push_str(&inline);
         pat.push(')');
     }
-    pat.push_str(body);
+    pat.push_str(&body);
     // Bound backtracking explicitly at PHP's `pcre.backtrack_limit` default so a
     // pathological pattern errors (→ no-match, D-36.3) rather than running away.
     // This equals fancy-regex 0.14's own default, but pinning it documents the
