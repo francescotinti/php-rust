@@ -1699,3 +1699,50 @@ fn checkdate_validity() {
     assert_eq!(out("<?php var_dump(checkdate(12,31,2024));"), "bool(true)\n");
     assert_eq!(out("<?php var_dump(checkdate(4,31,2024));"), "bool(false)\n");
 }
+
+// --- Step 34-3: strtotime (subset) --------------------------------------------
+// Oracle base: 1718452845 = 2024-06-15 12:00:45 UTC, passed as $baseTimestamp.
+
+#[test]
+fn strtotime_absolute() {
+    assert_eq!(out("<?php echo strtotime('2024-06-15 12:00:00',1718452845);"), "1718452800");
+    assert_eq!(out("<?php echo strtotime('2024-06-15',1718452845);"), "1718409600");
+    assert_eq!(out("<?php echo strtotime('2024/06/15',1718452845);"), "1718409600");
+    assert_eq!(out("<?php echo strtotime('2024-06-15T12:00:45',1718452845);"), "1718452845");
+}
+
+#[test]
+fn strtotime_at_and_now() {
+    assert_eq!(out("<?php echo strtotime('@1718452845',1718452845);"), "1718452845");
+    assert_eq!(out("<?php echo strtotime('@0',1718452845);"), "0");
+    assert_eq!(out("<?php echo strtotime('now',1718452845);"), "1718452845");
+}
+
+#[test]
+fn strtotime_relative_seconds_based() {
+    assert_eq!(out("<?php echo strtotime('+1 day',1718452845);"), "1718539245");
+    assert_eq!(out("<?php echo strtotime('-1 day',1718452845);"), "1718366445");
+    assert_eq!(out("<?php echo strtotime('+1 week',1718452845);"), "1719057645");
+    assert_eq!(out("<?php echo strtotime('+2 weeks',1718452845);"), "1719662445");
+    assert_eq!(out("<?php echo strtotime('+3 hours',1718452845);"), "1718463645");
+    assert_eq!(out("<?php echo strtotime('+30 minutes',1718452845);"), "1718454645");
+    assert_eq!(out("<?php echo strtotime('+10 seconds',1718452845);"), "1718452855");
+    assert_eq!(out("<?php echo strtotime('+1 day +2 hours',1718452845);"), "1718546445");
+}
+
+#[test]
+fn strtotime_relative_calendar() {
+    // month/year add use civil arithmetic (overflow normalizes like PHP).
+    assert_eq!(out("<?php echo strtotime('+1 month',1718452845);"), "1721044845");
+    assert_eq!(out("<?php echo strtotime('+2 months',1718452845);"), "1723723245");
+    assert_eq!(out("<?php echo strtotime('+1 year',1718452845);"), "1749988845");
+    assert_eq!(out("<?php echo strtotime('-1 year',1718452845);"), "1686830445");
+    // Jan 31 + 1 month → Feb 31 → March 2 (PHP does not clamp).
+    assert_eq!(out("<?php echo strtotime('+1 month',1706659200);"), "1709337600");
+}
+
+#[test]
+fn strtotime_failure() {
+    assert_eq!(out("<?php var_dump(strtotime('garbage nonsense',1718452845));"), "bool(false)\n");
+    assert_eq!(out("<?php var_dump(strtotime('',1718452845));"), "bool(false)\n");
+}

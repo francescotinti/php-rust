@@ -324,3 +324,115 @@ pub fn checkdate(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         && day <= days_in_month(year as i32, month as u8) as i64;
     Ok(Zval::Bool(ok))
 }
+
+/// Parse an absolute date string in the supported subset: `Y-m-d` or `Y/m/d`,
+/// optionally followed by ` `/`T` and `H:i[:s]`. Returns the UTC epoch.
+fn parse_absolute(s: &str) -> Option<i64> {
+    let s = s.replace('T', " ");
+    let mut parts = s.split_whitespace();
+    let date = parts.next()?;
+    let time = parts.next();
+    if parts.next().is_some() {
+        return None;
+    }
+    let sep = if date.contains('-') {
+        '-'
+    } else if date.contains('/') {
+        '/'
+    } else {
+        return None;
+    };
+    let mut d = date.split(sep);
+    let year: i64 = d.next()?.parse().ok()?;
+    let month: i64 = d.next()?.parse().ok()?;
+    let day: i64 = d.next()?.parse().ok()?;
+    if d.next().is_some() {
+        return None;
+    }
+    let (mut hour, mut min, mut sec) = (0i64, 0i64, 0i64);
+    if let Some(t) = time {
+        let mut tp = t.split(':');
+        hour = tp.next()?.parse().ok()?;
+        min = tp.next()?.parse().ok()?;
+        sec = match tp.next() {
+            Some(x) => x.parse().ok()?,
+            None => 0,
+        };
+        if tp.next().is_some() {
+            return None;
+        }
+    }
+    civil_to_epoch(year, month, day, hour, min, sec)
+}
+
+/// Apply a relative expression (`+N unit` / `-N unit`, possibly repeated) to a
+/// base epoch. Units: second(s)/sec, minute(s)/min, hour(s), day(s), week(s),
+/// month(s), year(s). `None` if any token is unrecognized.
+fn parse_relative(s: &str, base: i64) -> Option<i64> {
+    let dt = OffsetDateTime::from_unix_timestamp(base).ok()?;
+    let (mut dy, mut dmo, mut dd, mut dh, mut dmi, mut ds) = (0i64, 0i64, 0i64, 0i64, 0i64, 0i64);
+    let mut applied = false;
+    let mut tokens = s.split_whitespace().peekable();
+    while let Some(num_tok) = tokens.next() {
+        let n: i64 = num_tok.parse().ok()?;
+        let unit = tokens.next()?;
+        match unit {
+            "sec" | "secs" | "second" | "seconds" => ds += n,
+            "min" | "mins" | "minute" | "minutes" => dmi += n,
+            "hour" | "hours" => dh += n,
+            "day" | "days" => dd += n,
+            "week" | "weeks" => dd += n * 7,
+            "month" | "months" => dmo += n,
+            "year" | "years" => dy += n,
+            _ => return None,
+        }
+        applied = true;
+    }
+    if !applied {
+        return None;
+    }
+    civil_to_epoch(
+        dt.year() as i64 + dy,
+        u8::from(dt.month()) as i64 + dmo,
+        dt.day() as i64 + dd,
+        dt.hour() as i64 + dh,
+        dt.minute() as i64 + dmi,
+        dt.second() as i64 + ds,
+    )
+}
+
+/// `strtotime(string $datetime, ?int $baseTimestamp = now)`. Supported subset
+/// (D-DT4): `@N` epoch, `now`, ISO/`Y/m/d` absolute dates with optional time,
+/// and `[+-]N unit` relative expressions. Everything else → `false`.
+pub fn strtotime(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let raw = convert::to_zstr(
+        args.first().ok_or_else(|| {
+            PhpError::Error("strtotime() expects at least 1 argument, 0 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let base = match args.get(1) {
+        None | Some(Zval::Null) => now_epoch(),
+        Some(v) => convert::to_long_cast(v, ctx.diags),
+    };
+    let s = String::from_utf8_lossy(raw.as_bytes());
+    let trimmed = s.trim();
+    let lower = trimmed.to_ascii_lowercase();
+
+    let result = if trimmed.is_empty() {
+        None
+    } else if let Some(rest) = trimmed.strip_prefix('@') {
+        rest.parse::<i64>().ok()
+    } else if lower == "now" {
+        Some(base)
+    } else if let Some(ts) = parse_absolute(trimmed) {
+        Some(ts)
+    } else {
+        parse_relative(&lower, base)
+    };
+
+    Ok(match result {
+        Some(ts) => Zval::Long(ts),
+        None => Zval::Bool(false),
+    })
+}

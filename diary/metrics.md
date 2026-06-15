@@ -20,6 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 34-3) | 611 |
 | Unit/integration (workspace, fine step 34-2) | 606 |
 | Unit/integration (workspace, fine step 34-1) | 601 |
 | Unit/integration (workspace, fine step 33) | 594 |
@@ -565,6 +566,24 @@ minuto/secondo si sommano come durata in secondi sull'epoch del 1° del mese
   `days_in_month`/leap).
 
 **+5 test (601→606)**, clippy pulito.
+
+### Step 34-3 — `strtotime` (subset, D-DT4)
+
+Builtin PURO in `date.rs`. `strtotime($s, $base=now)`. Subset coperto:
+- `@N` → epoch diretto (ignora base/tz), incl. `@0`.
+- `now` → base.
+- **Assoluti**: `Y-m-d` / `Y/m/d`, con time opzionale dopo ` `/`T` (`H:i[:s]`).
+  Parser manuale (`parse_absolute`), niente dipendenza regex in php-builtins.
+- **Relativi**: `[+-]N unit` ripetibili (`+1 day +2 hours`). Unit:
+  sec/min/hour/day/week/month/year (sing/plur). `parse_relative` decompone il
+  base in componenti civili, accumula i delta e ricostruisce via
+  `civil_to_epoch` → month/year usano l'aritmetica di calendario (e l'overflow
+  normalizza come PHP: jan 31 +1 mese → 2 marzo). week = 7 giorni.
+- Token non riconosciuto / stringa vuota → `false`.
+
+**Scope-out** (documentato): formati relativi testuali (`next monday`, `first
+day of next month`), assoluti esotici/locale, combinazione assoluto+relativo
+nella stessa stringa. **+5 test (606→611)**, clippy pulito.
 
 
 

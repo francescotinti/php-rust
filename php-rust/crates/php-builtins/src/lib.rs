@@ -36,6 +36,7 @@ pub fn registry() -> Registry {
     add(b"mktime", date::mktime);
     add(b"gmmktime", date::gmmktime);
     add(b"checkdate", date::checkdate);
+    add(b"strtotime", date::strtotime);
     add(b"json_encode", json::json_encode);
     add(b"array_keys", array::array_keys);
     add(b"array_values", array::array_values);
