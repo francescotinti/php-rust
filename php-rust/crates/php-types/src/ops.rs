@@ -56,7 +56,7 @@ fn try_to_number(v: &Zval, diags: &mut Diags) -> Option<Num> {
         Zval::Array(_) => None,
         // An object (closure or instance) has no numeric value: the caller raises
         // the op's TypeError ("Unsupported operand types: ...", step 18/19).
-        Zval::Closure(_) | Zval::Object(_) => None,
+        Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) => None,
         // A reference is converted as its target (deref-on-read should make this
         // unreachable, but recursing keeps the op correct if one slips through).
         Zval::Ref(c) => try_to_number(&c.borrow(), diags),
@@ -104,7 +104,7 @@ fn try_to_long(v: &Zval, diags: &mut Diags) -> Option<i64> {
             }
         }
         Zval::Array(_) => None,
-        Zval::Closure(_) | Zval::Object(_) => None,
+        Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) => None,
         Zval::Ref(c) => try_to_long(&c.borrow(), diags),
     }
 }
@@ -753,6 +753,9 @@ pub fn increment(v: &mut Zval, diags: &mut Diags) -> Result<(), PhpError> {
         Zval::Closure(_) => {
             return Err(PhpError::TypeError("Cannot increment Closure".to_string()));
         }
+        Zval::Generator(_) => {
+            return Err(PhpError::TypeError("Cannot increment Generator".to_string()));
+        }
         Zval::Object(o) => {
             let name = String::from_utf8_lossy(o.borrow().class_name.as_bytes()).into_owned();
             return Err(PhpError::TypeError(format!("Cannot increment {name}")));
@@ -878,6 +881,9 @@ pub fn decrement(v: &mut Zval, diags: &mut Diags) -> Result<(), PhpError> {
         }
         Zval::Closure(_) => {
             return Err(PhpError::TypeError("Cannot decrement Closure".to_string()));
+        }
+        Zval::Generator(_) => {
+            return Err(PhpError::TypeError("Cannot decrement Generator".to_string()));
         }
         Zval::Object(o) => {
             let name = String::from_utf8_lossy(o.borrow().class_name.as_bytes()).into_owned();

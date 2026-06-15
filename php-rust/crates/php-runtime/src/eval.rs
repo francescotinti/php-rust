@@ -19,9 +19,12 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
+use corosensei::{Coroutine, CoroutineResult, Yielder};
+
 use php_types::{
     convert, dtoa, numstr, ops, Closure, ClosureInfo, ClosureParam, ClosureRender, Diag, Diags,
-    Key, Object, ObjectInfo, PhpArray, PhpError, PhpStr, PropVis, Props, Zval,
+    GenDriver, GenKey, GenState, GenStatus, GenStep, Key, Object, ObjectInfo, PhpArray, PhpError,
+    PhpStr, PropVis, Props, Zval,
 };
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
@@ -123,6 +126,118 @@ enum Flow {
     Continue(u32),
     /// `return expr` unwinding to the script top.
     Return(Zval),
+}
+
+// --- generators (step 39) ---
+//
+// A generator body runs inside a stackful `corosensei::Coroutine` so a `yield`
+// can suspend the evaluator's native recursion mid-`eval` and resume later. The
+// coroutine never captures `&mut Evaluator` (the borrow checker cannot see that
+// the driver and the body never touch it simultaneously); instead each `resume`
+// hands in a lifetime-erased `*mut ()` pointer that the body reborrows. See
+// [`GenDriverImpl::resume`] for the soundness argument.
+
+/// Value passed *into* the coroutine on each resume: the value the suspended
+/// `yield` expression should evaluate to (`send()` argument, NULL for `next()`),
+/// plus the lifetime-erased evaluator pointer for this resume.
+struct ResumeIn {
+    sent: Zval,
+    ev: *mut (),
+}
+
+/// Value the coroutine hands back when it suspends at a `yield`: the (still
+/// unresolved) key and the yielded value. The driver resolves the key against
+/// the generator's auto-key counter.
+struct YieldOut {
+    key: GenKey,
+    value: Zval,
+}
+
+/// The evaluator-context a generator owns between suspensions. While the
+/// coroutine is suspended these fields hold the generator's frame; they are
+/// swapped into the live [`Evaluator`] for the duration of each resume (and the
+/// driver's own frame swapped back out). Keeping them here — rather than on the
+/// suspended native stack — is what lets the single `Evaluator` serve both the
+/// driver and the generator body without losing either frame.
+struct GenCtx {
+    locals: Vec<Zval>,
+    /// Raw pointer to the generator body's slot names (`FnDecl::slots`), kept
+    /// alive by `_body`. Used only for undefined-variable diagnostics.
+    local_names: *const [Box<[u8]>],
+    cur_this: Option<Zval>,
+    cur_class: Option<ClassId>,
+    cur_static_class: Option<ClassId>,
+    fn_returns_ref: bool,
+    /// Type-erased `*const Yielder<ResumeIn, YieldOut>`, set by the body on its
+    /// first run and reachable from the `yield` arm while this generator runs.
+    gen_yielder: Option<*const ()>,
+}
+
+/// The runtime side of a generator: a stackful coroutine plus the owned body and
+/// the generator's swappable evaluator context. Erased behind [`GenDriver`] so
+/// `php-types` (where [`GenState`] lives) never names the coroutine crate or the
+/// evaluator.
+struct GenDriverImpl {
+    co: Coroutine<ResumeIn, YieldOut, Result<Zval, PhpError>>,
+    ctx: GenCtx,
+    /// Owns the body the coroutine walks and the slot names `ctx.local_names`
+    /// points into; must outlive the coroutine.
+    _body: Rc<FnDecl>,
+}
+
+impl GenDriver for GenDriverImpl {
+    fn resume(&mut self, sent: Zval, ev_erased: *mut ()) -> GenStep {
+        // SAFETY: `ev_erased` is a `*mut Evaluator` the driver just produced from
+        // a live `&mut self`; the evaluator outlives every resume (a generator
+        // cannot outlive the run that owns the program). We reborrow it as
+        // `Evaluator<'static>` — a lifetime extension that is sound because every
+        // use is synchronous within this call and the borrowed program data is
+        // never persisted past its real lifetime. The re-entrancy guard in
+        // `resume_generator` guarantees this generator is not already on the
+        // stack, so the reborrow does not alias another live `&mut Evaluator`
+        // for *this* generator.
+        let ev: &mut Evaluator<'static> = unsafe { &mut *(ev_erased as *mut Evaluator<'static>) };
+
+        // Swap the generator's frame into the evaluator, saving the driver's.
+        let saved_locals = std::mem::replace(&mut ev.locals, Some(std::mem::take(&mut self.ctx.locals)));
+        let saved_names = std::mem::replace(
+            &mut ev.local_names,
+            // SAFETY: `ctx.local_names` points into `_body` (held here), alive
+            // for the whole resume.
+            Some(unsafe { &*self.ctx.local_names }),
+        );
+        let saved_this = std::mem::replace(&mut ev.cur_this, self.ctx.cur_this.take());
+        let saved_class = std::mem::replace(&mut ev.cur_class, self.ctx.cur_class);
+        let saved_static = std::mem::replace(&mut ev.cur_static_class, self.ctx.cur_static_class);
+        let saved_ret_ref = std::mem::replace(&mut ev.fn_returns_ref, self.ctx.fn_returns_ref);
+        let saved_yielder = std::mem::replace(&mut ev.gen_yielder, self.ctx.gen_yielder);
+
+        let step = self.co.resume(ResumeIn { sent, ev: ev_erased });
+
+        // Pull the (possibly advanced) generator frame back out and restore the
+        // driver's. `local_names` is unchanged (slot names are immutable).
+        self.ctx.locals = ev.locals.take().unwrap_or_default();
+        self.ctx.cur_this = ev.cur_this.take();
+        self.ctx.cur_class = ev.cur_class;
+        self.ctx.cur_static_class = ev.cur_static_class;
+        self.ctx.fn_returns_ref = ev.fn_returns_ref;
+        self.ctx.gen_yielder = ev.gen_yielder;
+        ev.locals = saved_locals;
+        ev.local_names = saved_names;
+        ev.cur_this = saved_this;
+        ev.cur_class = saved_class;
+        ev.cur_static_class = saved_static;
+        ev.fn_returns_ref = saved_ret_ref;
+        ev.gen_yielder = saved_yielder;
+
+        match step {
+            CoroutineResult::Yield(out) => GenStep::Yielded {
+                key: out.key,
+                value: out.value,
+            },
+            CoroutineResult::Return(res) => GenStep::Returned(res),
+        }
+    }
 }
 
 /// The result of running a script.
@@ -255,6 +370,7 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         diags: Vec::new(),
         diags_rendered: 0,
         cur_line: 1,
+        gen_yielder: None,
     };
 
     let (fatal, return_value) = match ev.exec_stmts(&program.body) {
@@ -388,6 +504,11 @@ struct Evaluator<'p> {
     /// `eval` / `exec_stmt`; on the error path it is intentionally *not* restored,
     /// so it still points at the throwing node when the fatal is rendered.
     cur_line: Line,
+    /// While a generator body runs, the type-erased `*const Yielder<ResumeIn,
+    /// YieldOut>` of the active generator (step 39). The `yield` arm reborrows it
+    /// to suspend. `None` outside any generator; saved/restored per resume by
+    /// [`GenDriverImpl::resume`] (part of the swapped generator context).
+    gen_yielder: Option<*const ()>,
 }
 
 /// Which magic property accessor is currently running for an object/property,
@@ -1022,7 +1143,20 @@ impl<'p> Evaluator<'p> {
             is_static: false,
             line: self.cur_line as i64,
         });
-        let result = self.run_user_fn_body(f, argv);
+        // A generator function does not run its body on call (step 39): bind the
+        // arguments into the fresh frame, then hand that frame to a lazy
+        // `Generator` value whose body runs on demand inside a coroutine.
+        let result = if f.is_generator {
+            match self.bind_params(f, argv) {
+                Ok(()) => {
+                    let frame = self.locals.take().expect("callee overlay installed");
+                    Ok(self.make_generator(f, frame))
+                }
+                Err(e) => Err(e),
+            }
+        } else {
+            self.run_user_fn_body(f, argv)
+        };
         self.call_stack.pop();
 
         self.locals = saved_locals;
@@ -1036,6 +1170,31 @@ impl<'p> Evaluator<'p> {
     /// argument shares the caller's cell (D-R6). A missing argument falls back to
     /// its default, evaluated in the new frame; falling off the end yields NULL.
     fn run_user_fn_body(&mut self, f: &'p FnDecl, argv: Vec<Arg>) -> Result<Zval, PhpError> {
+        self.bind_params(f, argv)?;
+        let ret = match self.exec_stmts(&f.body)? {
+            Flow::Return(v) => v,
+            _ => Zval::Null,
+        };
+        // Coerce the return value to a scalar return type (weak). A by-reference
+        // function returns a `Zval::Ref` to alias, so its return type stays
+        // unenforced here (scope-out, D-14.5/D-13.7).
+        let strict = self.strict;
+        match &f.ret_hint {
+            Some(hint) if !f.by_ref => match coerce_to_hint(ret, hint, &mut self.diags, strict) {
+                Ok(v) => Ok(v),
+                Err(given) => Err(self.return_type_error(f, hint, given)),
+            },
+            _ => Ok(ret),
+        }
+    }
+
+    /// Bind a call's arguments into the (already installed) callee frame's
+    /// leading parameter slots. Shared by ordinary calls ([`run_user_fn_body`])
+    /// and generator construction ([`make_generator`]), which binds the frame but
+    /// does not run the body. By-value arguments are coerced to scalar hints
+    /// (weak); by-reference arguments share the caller's cell; gaps fall back to
+    /// defaults evaluated in the new frame.
+    fn bind_params(&mut self, f: &'p FnDecl, argv: Vec<Arg>) -> Result<(), PhpError> {
         let strict = self.strict;
         for (i, p) in f.params.iter().enumerate() {
             // A variadic `...$rest` (always last) collects every remaining
@@ -1085,19 +1244,190 @@ impl<'p> Evaluator<'p> {
             };
             frame_mut!(self)[p.slot as usize] = binding;
         }
-        let ret = match self.exec_stmts(&f.body)? {
-            Flow::Return(v) => v,
-            _ => Zval::Null,
+        Ok(())
+    }
+
+    // --- generators (step 39) ---
+
+    /// Build the lazy `Generator` value a generator function returns. The
+    /// argument-bound `frame` becomes the generator's initial locals; the body is
+    /// cloned into an `Rc` so the `'static` coroutine can own it. The body does
+    /// not run until the generator is first advanced.
+    fn make_generator(&mut self, f: &FnDecl, frame: Vec<Zval>) -> Zval {
+        let body_rc: Rc<FnDecl> = Rc::new(f.clone());
+        let names_ptr: *const [Box<[u8]>] = body_rc.slots.as_slice();
+        let ctx = GenCtx {
+            locals: frame,
+            local_names: names_ptr,
+            // A generator defined in a method keeps its `$this` / class context
+            // (captured here); a free-function generator has none.
+            cur_this: self.cur_this.clone(),
+            cur_class: self.cur_class,
+            cur_static_class: self.cur_static_class,
+            fn_returns_ref: false,
+            gen_yielder: None,
         };
-        // Coerce the return value to a scalar return type (weak). A by-reference
-        // function returns a `Zval::Ref` to alias, so its return type stays
-        // unenforced here (scope-out, D-14.5/D-13.7).
-        match &f.ret_hint {
-            Some(hint) if !f.by_ref => match coerce_to_hint(ret, hint, &mut self.diags, strict) {
-                Ok(v) => Ok(v),
-                Err(given) => Err(self.return_type_error(f, hint, given)),
+        let body_for_co = Rc::clone(&body_rc);
+        let co = Coroutine::new(
+            move |y: &Yielder<ResumeIn, YieldOut>, first: ResumeIn| -> Result<Zval, PhpError> {
+                // SAFETY: see `GenDriverImpl::resume` — `first.ev` is the live
+                // evaluator, valid for the whole body run; the reborrow as
+                // `'static` is a lifetime extension that never escapes the call.
+                let ev: &mut Evaluator<'static> =
+                    unsafe { &mut *(first.ev as *mut Evaluator<'static>) };
+                ev.gen_yielder = Some(y as *const Yielder<ResumeIn, YieldOut> as *const ());
+                match ev.exec_stmts(&body_for_co.body) {
+                    Ok(Flow::Return(v)) => Ok(v),
+                    Ok(_) => Ok(Zval::Null),
+                    Err(e) => Err(e),
+                }
             },
-            _ => Ok(ret),
+        );
+        let driver = GenDriverImpl {
+            co,
+            ctx,
+            _body: body_rc,
+        };
+        let id = self.next_object_id;
+        self.next_object_id += 1;
+        Zval::Generator(Rc::new(RefCell::new(GenState {
+            id,
+            status: GenStatus::NotStarted,
+            cur_key: Zval::Null,
+            cur_val: Zval::Null,
+            ret: Zval::Null,
+            auto_key: 0,
+            driver: Some(Box::new(driver)),
+        })))
+    }
+
+    /// Drive a generator one step: resume its coroutine with `sent` (the value
+    /// the suspended `yield` evaluates to), then record the outcome — a new
+    /// `(key, value)` (resolving the auto-key) or completion (`getReturn` value /
+    /// a propagated exception). The driver is taken out of [`GenState`] for the
+    /// duration so a re-entrant resume of the *same* generator sees `Running` and
+    /// errors cleanly (also upholding the reborrow's non-aliasing invariant).
+    fn resume_generator(
+        &mut self,
+        gs_rc: &Rc<RefCell<GenState>>,
+        sent: Zval,
+    ) -> Result<(), PhpError> {
+        let mut driver = {
+            let mut gs = gs_rc.borrow_mut();
+            match gs.status {
+                GenStatus::Running => {
+                    return Err(PhpError::Error(
+                        "Cannot resume an already running generator".to_string(),
+                    ))
+                }
+                GenStatus::Done => return Ok(()),
+                _ => {}
+            }
+            gs.status = GenStatus::Running;
+            gs.driver
+                .take()
+                .expect("driver present while generator not done")
+        };
+        // The borrow on `gs_rc` is released here, so the body may legally call
+        // back into other generators (and a re-entrant call on *this* one hits
+        // the `Running` guard above instead of a RefCell double-borrow).
+        let step = driver.resume(sent, self as *mut Self as *mut ());
+        let mut gs = gs_rc.borrow_mut();
+        match step {
+            GenStep::Yielded { key, value } => {
+                let resolved = match key {
+                    GenKey::Auto => {
+                        let k = Zval::Long(gs.auto_key);
+                        gs.auto_key += 1;
+                        k
+                    }
+                    GenKey::Keyed(z) => {
+                        // An integer key `>=` the counter advances it, mirroring
+                        // array append semantics (D-GEN auto-key).
+                        if let Zval::Long(n) = &z {
+                            if *n >= gs.auto_key {
+                                gs.auto_key = n.wrapping_add(1);
+                            }
+                        }
+                        z
+                    }
+                    // `yield from` keys are forwarded as-is and do not advance the
+                    // outer counter (step 39-6).
+                    GenKey::Verbatim(z) => z,
+                };
+                gs.cur_key = resolved;
+                gs.cur_val = value;
+                gs.status = GenStatus::Suspended;
+                gs.driver = Some(driver);
+            }
+            GenStep::Returned(res) => {
+                gs.status = GenStatus::Done;
+                gs.cur_key = Zval::Null;
+                gs.cur_val = Zval::Null;
+                // `driver` is dropped here (not stored back), unwinding/freeing the
+                // coroutine stack.
+                match res {
+                    Ok(v) => gs.ret = v,
+                    Err(e) => return Err(e),
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Start a generator if it has not run yet (PHP starts lazily on the first
+    /// `current`/`key`/`valid`/`next`/`foreach`).
+    fn ensure_started(&mut self, gs_rc: &Rc<RefCell<GenState>>) -> Result<(), PhpError> {
+        if matches!(gs_rc.borrow().status, GenStatus::NotStarted) {
+            self.resume_generator(gs_rc, Zval::Null)?;
+        }
+        Ok(())
+    }
+
+    /// Built-in methods on a `Generator` value (the `Iterator` interface plus
+    /// `send`/`getReturn`), step 39. Dispatched like [`closure_method`], ahead of
+    /// user-class method resolution.
+    fn generator_method(
+        &mut self,
+        gs_rc: Rc<RefCell<GenState>>,
+        method: &[u8],
+        argv: Vec<Zval>,
+    ) -> Result<Zval, PhpError> {
+        if method.eq_ignore_ascii_case(b"current") {
+            self.ensure_started(&gs_rc)?;
+            Ok(gs_rc.borrow().cur_val.clone())
+        } else if method.eq_ignore_ascii_case(b"key") {
+            self.ensure_started(&gs_rc)?;
+            Ok(gs_rc.borrow().cur_key.clone())
+        } else if method.eq_ignore_ascii_case(b"next") {
+            self.ensure_started(&gs_rc)?;
+            self.resume_generator(&gs_rc, Zval::Null)?;
+            Ok(Zval::Null)
+        } else if method.eq_ignore_ascii_case(b"valid") {
+            self.ensure_started(&gs_rc)?;
+            let done = matches!(gs_rc.borrow().status, GenStatus::Done);
+            Ok(Zval::Bool(!done))
+        } else if method.eq_ignore_ascii_case(b"rewind") {
+            // Starts the generator; rewinding one already advanced past its first
+            // element is a fatal in PHP (full semantics in 39-7).
+            self.ensure_started(&gs_rc)?;
+            Ok(Zval::Null)
+        } else if method.eq_ignore_ascii_case(b"send") {
+            // Resume delivering `$value` as the result of the suspended `yield`
+            // (step 39-4). An unstarted generator is primed first.
+            let value = argv.into_iter().next().unwrap_or(Zval::Null);
+            if matches!(gs_rc.borrow().status, GenStatus::NotStarted) {
+                self.resume_generator(&gs_rc, Zval::Null)?;
+            }
+            self.resume_generator(&gs_rc, value)?;
+            Ok(gs_rc.borrow().cur_val.clone())
+        } else if method.eq_ignore_ascii_case(b"getReturn") {
+            Ok(gs_rc.borrow().ret.clone())
+        } else {
+            Err(PhpError::Error(format!(
+                "Call to undefined method Generator::{}()",
+                String::from_utf8_lossy(method)
+            )))
         }
     }
 
@@ -3826,6 +4156,14 @@ impl<'p> Evaluator<'p> {
                     }
                     return self.closure_method(cl, method, argv);
                 }
+                // Methods on a `Generator` value (`->current()`, `->next()`, …)
+                // are built-in (step 39), dispatched ahead of user-class lookup.
+                if let Zval::Generator(gs) = &recv {
+                    if !named.is_empty() {
+                        return Err(self.unknown_named_error(named));
+                    }
+                    return self.generator_method(Rc::clone(gs), method, argv);
+                }
                 self.call_method(recv, method, argv, named)
             }
 
@@ -3939,6 +4277,34 @@ impl<'p> Evaluator<'p> {
                 let v = self.eval(e)?.deref_clone();
                 Err(PhpError::Thrown(v))
             }
+
+            // `yield [$k =>] [$v]` (step 39): suspend the running generator,
+            // handing out the (key, value); the expression evaluates to the value
+            // the next resume delivers (`send()` argument / NULL for `next()`).
+            ExprKind::Yield { key, value } => {
+                let value = match value {
+                    Some(e) => self.eval(e)?,
+                    None => Zval::Null,
+                };
+                let key = match key {
+                    Some(e) => GenKey::Keyed(self.eval(e)?),
+                    None => GenKey::Auto,
+                };
+                let yptr = self.gen_yielder.ok_or_else(|| {
+                    PhpError::Error("Cannot use \"yield\" outside a generator".to_string())
+                })?;
+                // SAFETY: `gen_yielder` is set by the active generator body (in
+                // `make_generator`'s coroutine) and read only while that body
+                // runs; the `Yielder` lives for the coroutine's whole lifetime.
+                let y = unsafe { &*(yptr as *const Yielder<ResumeIn, YieldOut>) };
+                let resumed = y.suspend(YieldOut { key, value });
+                Ok(resumed.sent)
+            }
+
+            // `yield from <iterator>` — delegated iteration (step 39-6).
+            ExprKind::YieldFrom(_) => Err(PhpError::Error(
+                "yield from is not yet supported".to_string(),
+            )),
         }
     }
 
@@ -4185,7 +4551,7 @@ impl<'p> Evaluator<'p> {
                 ));
                 Key::from_bytes(b"")
             }
-            Zval::Array(_) | Zval::Closure(_) | Zval::Object(_) => {
+            Zval::Array(_) | Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) => {
                 return Err(PhpError::TypeError(
                     "Illegal offset type".to_string(),
                 ))
@@ -4874,7 +5240,7 @@ fn coerce_key_silent(v: &Zval) -> Option<Key> {
         Zval::Double(d) => Some(Key::Int(convert::dval_to_lval(*d))),
         Zval::Str(s) => Some(Key::from_zstr(s)),
         Zval::Null | Zval::Undef => Some(Key::from_bytes(b"")),
-        Zval::Array(_) | Zval::Closure(_) | Zval::Object(_) => None,
+        Zval::Array(_) | Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) => None,
         Zval::Ref(c) => coerce_key_silent(&c.borrow()),
     }
 }
@@ -5065,7 +5431,7 @@ fn php_type_name(v: &Zval) -> &'static str {
         Zval::Double(_) => "float",
         Zval::Str(_) => "string",
         Zval::Array(_) => "array",
-        Zval::Closure(_) | Zval::Object(_) => "object",
+        Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) => "object",
         Zval::Ref(c) => php_type_name(&c.borrow()),
     }
 }
@@ -5086,6 +5452,7 @@ fn match_case_repr(v: &Zval) -> String {
             "of type {}",
             String::from_utf8_lossy(o.borrow().class_name.as_bytes())
         ),
+        Zval::Generator(_) => "of type Generator".to_string(),
         Zval::Ref(c) => match_case_repr(&c.borrow()),
     }
 }

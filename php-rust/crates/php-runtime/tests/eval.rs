@@ -4047,3 +4047,33 @@ fn uncaught_render_includes_frames() {
         "rendered was:\n{r}"
     );
 }
+
+// ---- Step 39: generators (yield) ----
+
+#[test]
+fn generator_basic_current_next() {
+    // Calling a generator function does not run the body; it returns a lazy
+    // Generator. current() starts it (runs to the first yield); next() advances.
+    assert_eq!(
+        out("<?php function g(){yield 1;yield 2;} $g=g(); echo $g->current(); $g->next(); echo $g->current();"),
+        "12"
+    );
+}
+
+#[test]
+fn generator_lazy_no_run_on_call() {
+    // The body must not execute until the generator is first advanced.
+    assert_eq!(
+        out("<?php function g(){echo 'body'; yield 1;} $g=g(); echo 'made'; $g->current();"),
+        "madebody"
+    );
+}
+
+#[test]
+fn generator_key_and_valid() {
+    // Auto-keys start at 0 and increment per yield; valid() is false once done.
+    assert_eq!(
+        out("<?php function g(){yield 10;yield 20;} $g=g(); echo $g->key(),':',$g->current(); $g->next(); echo '|',$g->key(),':',$g->current(); $g->next(); echo $g->valid()?'T':'F';"),
+        "0:10|1:20F"
+    );
+}

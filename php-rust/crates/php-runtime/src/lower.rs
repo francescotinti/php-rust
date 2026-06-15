@@ -29,7 +29,7 @@ use mago_syntax::ast::{
     Identifier, Instantiation, Interface, Literal, LiteralInteger, MatchArm as AstMatchArm, Method,
     MethodBody, Modifier, Node, PartialApplication, Property, PropertyItem, Statement, StaticItem,
     StringPart, Trait, TraitUse, TraitUseAdaptation, TraitUseMethodReference,
-    TraitUseSpecification, UnaryPostfixOperator, UnaryPrefixOperator, Variable,
+    TraitUseSpecification, UnaryPostfixOperator, UnaryPrefixOperator, Variable, Yield,
 };
 use mago_syntax::parser::parse_file;
 
@@ -453,6 +453,12 @@ struct Lowerer<'f> {
     /// True while lowering the body of a `function &f()`: a `return <lvalue>`
     /// then lowers to [`StmtKind::ReturnRef`] (step 13, D-13.3).
     fn_by_ref: bool,
+    /// Set when a `yield` / `yield from` is lowered in the *current* function
+    /// body, marking it a generator (step 39, [`FnDecl::is_generator`]). Saved
+    /// and restored around each function/closure body so a `yield` in a nested
+    /// closure does not leak to the enclosing function (the boundary PHP uses to
+    /// decide what a generator is).
+    fn_saw_yield: bool,
     /// Running count of `static` declarations seen; each gets a unique id into
     /// the evaluator's persistent static store (step 15, D-15.3).
     static_count: usize,
@@ -494,6 +500,7 @@ impl<'f> Lowerer<'f> {
             closures: Vec::new(),
             prog_name: prog_name.into(),
             fn_by_ref: false,
+            fn_saw_yield: false,
             static_count: 0,
             strict: false,
             classes: Vec::new(),
@@ -1581,6 +1588,7 @@ impl<'f> Lowerer<'f> {
         let saved_locals = self.locals.replace(Scope::default());
         let saved_tag = std::mem::replace(&mut self.after_closing_tag, false);
         let saved_by_ref = std::mem::replace(&mut self.fn_by_ref, by_ref);
+        let saved_saw_yield = std::mem::replace(&mut self.fn_saw_yield, false);
 
         let inner = (|| {
             let params = self.lower_params(&method.parameter_list, line)?;
@@ -1592,6 +1600,7 @@ impl<'f> Lowerer<'f> {
             .expect("local scope installed for method body");
         self.after_closing_tag = saved_tag;
         self.fn_by_ref = saved_by_ref;
+        let is_generator = std::mem::replace(&mut self.fn_saw_yield, saved_saw_yield);
 
         let (params, body) = inner?;
         let ret_hint = method
@@ -1606,6 +1615,7 @@ impl<'f> Lowerer<'f> {
                 name,
                 params,
                 body,
+                is_generator,
                 slots: local_scope.slots,
                 by_ref,
                 ret_hint,
@@ -1629,6 +1639,7 @@ impl<'f> Lowerer<'f> {
         let saved_locals = self.locals.replace(Scope::default());
         let saved_tag = std::mem::replace(&mut self.after_closing_tag, false);
         let saved_by_ref = std::mem::replace(&mut self.fn_by_ref, by_ref);
+        let saved_saw_yield = std::mem::replace(&mut self.fn_saw_yield, false);
 
         let inner = self.lower_function_body(func, line);
 
@@ -1637,6 +1648,7 @@ impl<'f> Lowerer<'f> {
             .expect("local scope installed for function body");
         self.after_closing_tag = saved_tag;
         self.fn_by_ref = saved_by_ref;
+        let is_generator = std::mem::replace(&mut self.fn_saw_yield, saved_saw_yield);
 
         let (params, body) = inner?;
         let ret_hint = func
@@ -1647,6 +1659,7 @@ impl<'f> Lowerer<'f> {
             name,
             params,
             body,
+            is_generator,
             slots: local_scope.slots,
             by_ref,
             ret_hint,
@@ -1726,6 +1739,7 @@ impl<'f> Lowerer<'f> {
         let saved_locals = self.locals.replace(Scope::default());
         let saved_tag = std::mem::replace(&mut self.after_closing_tag, false);
         let saved_by_ref = std::mem::replace(&mut self.fn_by_ref, by_ref);
+        let saved_saw_yield = std::mem::replace(&mut self.fn_saw_yield, false);
 
         let inner = (|| -> Result<LoweredClosure, LowerError> {
             let params = self.lower_params(&closure.parameter_list, line)?;
@@ -1746,13 +1760,15 @@ impl<'f> Lowerer<'f> {
             .expect("local scope installed for closure body");
         self.after_closing_tag = saved_tag;
         self.fn_by_ref = saved_by_ref;
+        let is_generator = std::mem::replace(&mut self.fn_saw_yield, saved_saw_yield);
 
         let (params, captures, body) = inner?;
         let ret_hint = closure
             .return_type_hint
             .as_ref()
             .and_then(|r| lower_hint(&r.hint));
-        let fn_idx = self.push_closure(params, body, local_scope.slots, by_ref, ret_hint, line);
+        let fn_idx =
+            self.push_closure(params, body, local_scope.slots, by_ref, ret_hint, is_generator, line);
         Ok(ExprKind::Closure {
             fn_idx,
             captures,
@@ -1769,6 +1785,7 @@ impl<'f> Lowerer<'f> {
         slots: Vec<Box<[u8]>>,
         by_ref: bool,
         ret_hint: Option<TypeHint>,
+        is_generator: bool,
         line: Line,
     ) -> usize {
         let name = format!(
@@ -1783,6 +1800,7 @@ impl<'f> Lowerer<'f> {
             name,
             params,
             body,
+            is_generator,
             slots,
             by_ref,
             ret_hint,
@@ -1836,6 +1854,7 @@ impl<'f> Lowerer<'f> {
         let saved_locals = self.locals.replace(Scope::default());
         let saved_tag = std::mem::replace(&mut self.after_closing_tag, false);
         let saved_by_ref = std::mem::replace(&mut self.fn_by_ref, false);
+        let saved_saw_yield = std::mem::replace(&mut self.fn_saw_yield, false);
 
         let inner = (|| -> Result<LoweredClosure, LowerError> {
             let params = self.lower_params(&af.parameter_list, line)?;
@@ -1860,13 +1879,15 @@ impl<'f> Lowerer<'f> {
             .expect("local scope installed for arrow body");
         self.after_closing_tag = saved_tag;
         self.fn_by_ref = saved_by_ref;
+        let is_generator = std::mem::replace(&mut self.fn_saw_yield, saved_saw_yield);
 
         let (params, captures, body) = inner?;
         let ret_hint = af
             .return_type_hint
             .as_ref()
             .and_then(|r| lower_hint(&r.hint));
-        let fn_idx = self.push_closure(params, body, local_scope.slots, false, ret_hint, line);
+        let fn_idx =
+            self.push_closure(params, body, local_scope.slots, false, ret_hint, is_generator, line);
         // An arrow function is never `static` here (rejected above), so it binds
         // `$this` like an ordinary closure (step 19-6).
         Ok(ExprKind::Closure {
@@ -2051,6 +2072,32 @@ impl<'f> Lowerer<'f> {
             // `throw <expr>` (step 20). Valid as a statement or, in PHP 8, an
             // expression (`$x ?? throw new …`); both reach here.
             Expression::Throw(t) => ExprKind::Throw(Box::new(self.lower_expr(t.exception)?)),
+
+            // `yield` / `yield $k => $v` / `yield from $it` (step 39). Marks the
+            // current function a generator via `fn_saw_yield` (read when its
+            // `FnDecl` is built). The nested `lower_expr` calls happen *before*
+            // setting the flag, so a `yield` whose operand itself contains a
+            // `yield` still flags exactly this function.
+            Expression::Yield(y) => {
+                let kind = match y {
+                    Yield::Value(v) => ExprKind::Yield {
+                        key: None,
+                        value: match &v.value {
+                            Some(e) => Some(Box::new(self.lower_expr(e)?)),
+                            None => None,
+                        },
+                    },
+                    Yield::Pair(p) => ExprKind::Yield {
+                        key: Some(Box::new(self.lower_expr(p.key)?)),
+                        value: Some(Box::new(self.lower_expr(p.value)?)),
+                    },
+                    Yield::From(fr) => {
+                        ExprKind::YieldFrom(Box::new(self.lower_expr(fr.iterator)?))
+                    }
+                };
+                self.fn_saw_yield = true;
+                kind
+            }
 
             // `$obj->prop` (step 19, D-19.8). Static / class-constant accesses are
             // later sub-steps.

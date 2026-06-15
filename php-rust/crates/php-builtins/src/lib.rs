@@ -240,6 +240,13 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
             spaces(out, indent);
             out.extend_from_slice(b"}\n");
         }
+        // A `Generator` dumps as a property-less object (step 39).
+        Zval::Generator(g) => {
+            let id = g.borrow().id;
+            out.extend_from_slice(format!("object(Generator)#{id} (0) {{\n").as_bytes());
+            spaces(out, indent);
+            out.extend_from_slice(b"}\n");
+        }
         // A class instance (step 19-7): `object(C)#N (k) { ["p"]=>…,
         // ["p":protected]=>…, ["p":"C":private]=>… }`, with a recursion guard.
         Zval::Object(o) => {
@@ -389,6 +396,14 @@ fn print_r_into(out: &mut Vec<u8>, v: &Zval, indent: usize, ctx: &mut Ctx, seen:
                 print_r_into(out, val, indent + 8, ctx, seen);
                 out.push(b'\n');
             }
+            spaces(out, indent);
+            out.extend_from_slice(b")\n");
+        }
+        // A `Generator` prints as a property-less object (step 39).
+        Zval::Generator(_) => {
+            out.extend_from_slice(b"Generator Object\n");
+            spaces(out, indent);
+            out.extend_from_slice(b"(\n");
             spaces(out, indent);
             out.extend_from_slice(b")\n");
         }

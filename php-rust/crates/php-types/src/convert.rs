@@ -30,7 +30,7 @@ pub fn to_bool(v: &Zval, diags: &mut Diags) -> bool {
         Zval::Array(a) => !a.is_empty(),
         Zval::Ref(c) => to_bool(&c.borrow(), diags),
         // An object (closure or class instance) is always truthy (step 18/19).
-        Zval::Closure(_) | Zval::Object(_) => true,
+        Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) => true,
     }
 }
 
@@ -49,7 +49,7 @@ pub fn is_true_silent(v: &Zval) -> bool {
         }
         Zval::Array(a) => !a.is_empty(),
         Zval::Ref(c) => is_true_silent(&c.borrow()),
-        Zval::Closure(_) | Zval::Object(_) => true,
+        Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) => true,
     }
 }
 
@@ -144,7 +144,7 @@ pub fn to_long_cast(v: &Zval, diags: &mut Diags) -> i64 {
         Zval::Ref(c) => to_long_cast(&c.borrow(), diags),
         // Object → int: objects are truthy, yielding 1 (step 18/19; PHP also
         // warns, an edge case not yet modelled).
-        Zval::Closure(_) | Zval::Object(_) => 1,
+        Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) => 1,
     }
 }
 
@@ -164,7 +164,7 @@ pub fn to_double(v: &Zval) -> f64 {
         },
         Zval::Array(a) => !a.is_empty() as i64 as f64,
         Zval::Ref(c) => to_double(&c.borrow()),
-        Zval::Closure(_) | Zval::Object(_) => 1.0,
+        Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) => 1.0,
     }
 }
 
@@ -193,6 +193,15 @@ pub fn to_zstr(v: &Zval, diags: &mut Diags) -> ZStr {
                 "Object of class Closure could not be converted to string".to_string(),
             ));
             PhpStr::from_str("Closure")
+        }
+        // A `Generator` has no `__toString`; PHP fatals on string conversion. This
+        // infallible funnel warns with the class name and yields a placeholder
+        // (step 39, mirroring the closure case).
+        Zval::Generator(_) => {
+            diags.push(Diag::Warning(
+                "Object of class Generator could not be converted to string".to_string(),
+            ));
+            PhpStr::from_str("Generator")
         }
         // A class instance with `__toString` is converted by the evaluator before
         // reaching this funnel (step 19-6); reaching here means no `__toString`,

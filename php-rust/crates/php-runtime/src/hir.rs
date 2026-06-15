@@ -208,6 +208,11 @@ pub struct FnDecl {
     /// Declared scalar return type hint, enforced (weak mode) on the returned
     /// value (step 14). `None` for absent or non-scalar return types.
     pub ret_hint: Option<TypeHint>,
+    /// `true` when the body contains a `yield` / `yield from` at any depth (but
+    /// not inside a nested function/closure) — the function is a *generator*
+    /// (step 39). Calling it does not run the body: it returns a `Generator`
+    /// object whose body executes lazily. Computed by a body walk at lowering.
+    pub is_generator: bool,
     pub line: Line,
 }
 
@@ -611,6 +616,23 @@ pub enum ExprKind {
     /// allows `throw` in expression position (`$x ?? throw new …`); a statement
     /// `throw e;` lowers to an [`StmtKind::Expr`] wrapping this.
     Throw(Box<Expr>),
+
+    /// `yield [$k =>] [$v]` inside a generator (step 39). Suspends the body,
+    /// surfacing `value` (NULL for a bare `yield;`) under `key` (auto-keyed when
+    /// `None`). The expression *evaluates to* the value passed to the next
+    /// `send()` (NULL for `next()`). Only valid in a function flagged
+    /// [`FnDecl::is_generator`].
+    Yield {
+        key: Option<Box<Expr>>,
+        value: Option<Box<Expr>>,
+    },
+
+    /// `yield from <iterator>` (step 39-6): delegates to an array, `Traversable`,
+    /// or another generator, re-yielding each of its `(key, value)` pairs
+    /// *verbatim* (keys preserved, the outer auto-key counter untouched). The
+    /// expression evaluates to the delegate's `return` value (NULL for a
+    /// non-generator).
+    YieldFrom(Box<Expr>),
 }
 
 /// The flavour of a static-property assignment (step 19-4).
