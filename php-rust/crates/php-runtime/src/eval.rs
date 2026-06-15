@@ -1142,11 +1142,6 @@ impl<'p> Evaluator<'p> {
         Ok(out)
     }
 
-    /// Place named arguments (step 38) into the positional `argv` by parameter
-    /// name, filling any skipped earlier slots with `Arg::Default`. Named values
-    /// are evaluated in the current (caller) frame, after the positional ones.
-    /// An unknown name or a slot already filled raises a catchable `Error`,
-    /// matching PHP's messages.
     /// The catchable `Error` PHP raises for an unresolvable named argument; used
     /// for the scope-out targets (closures, `__call`, enum statics) that have no
     /// declared parameter list to bind names against (step 38).
@@ -1158,6 +1153,12 @@ impl<'p> Evaluator<'p> {
         ))
     }
 
+    /// Place named arguments (step 38) into the positional `argv` by parameter
+    /// name, filling any skipped earlier slots with `Arg::Default`. Named values
+    /// are evaluated in the current (caller) frame, after the positional ones; a
+    /// name targeting a by-reference parameter binds the caller's variable cell
+    /// (step 38-4). An unknown name or an already-filled slot raises a catchable
+    /// `Error`, matching PHP's messages.
     fn resolve_named_args(
         &mut self,
         f: &'p FnDecl,
@@ -1183,11 +1184,28 @@ impl<'p> Evaluator<'p> {
                     String::from_utf8_lossy(name)
                 )));
             }
-            let v = self.eval(expr)?;
+            // A by-reference parameter binds the caller's variable cell when the
+            // named value is a plain variable (mirrors `eval_call_args`); a
+            // non-variable to a by-ref param is the same fatal as positionally.
+            let arg = if f.params[j].by_ref {
+                match &expr.kind {
+                    ExprKind::Var(slot) => Arg::Ref(self.slot_cell(*slot as usize)),
+                    _ => {
+                        return Err(PhpError::Error(format!(
+                            "{}(): Argument #{} (${}) could not be passed by reference",
+                            String::from_utf8_lossy(&f.name),
+                            j + 1,
+                            String::from_utf8_lossy(name),
+                        )))
+                    }
+                }
+            } else {
+                Arg::Val(self.eval(expr)?)
+            };
             if argv.len() <= j {
                 argv.resize_with(j + 1, || Arg::Default);
             }
-            argv[j] = Arg::Val(v);
+            argv[j] = arg;
         }
         Ok(argv)
     }

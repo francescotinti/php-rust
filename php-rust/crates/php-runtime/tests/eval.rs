@@ -3962,6 +3962,14 @@ echo C::sub(b:1, a:10);"#;
 }
 
 #[test]
+fn named_args_by_reference_parameter() {
+    // A named arg targeting a by-ref parameter binds the caller's variable
+    // (step 38-4). Oracle: $n becomes 6.
+    let src = r#"<?php function inc(&$x){ $x++; } $n = 5; inc(x: $n); echo $n;"#;
+    assert_eq!(out(src), "6");
+}
+
+#[test]
 fn named_args_positional_after_named_is_compile_fatal() {
     // A positional argument after a named one is a PHP compile-time Fatal error
     // (not a catchable Error). Oracle message verified against PHP 8.5.
