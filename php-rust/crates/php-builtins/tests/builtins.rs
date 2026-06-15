@@ -1541,3 +1541,113 @@ fn array_column_cases() {
         "A"
     );
 }
+
+// --- Step 34-1: date() / gmdate() core formatting -----------------------------
+// Oracle: ts 1718452845 = Sat 2024-06-15 12:00:45 UTC (date_default_timezone_set('UTC')).
+// Edge-case timestamps below are oracle-computed (mktime is step 34-2).
+
+#[test]
+fn date_day_chars() {
+    // d (zero-padded), j (no pad), D (3-letter), l (full), N (1=Mon..7=Sun),
+    // w (0=Sun..6=Sat), S (ordinal suffix).
+    assert_eq!(out("<?php echo date('d',1718452845);"), "15");
+    assert_eq!(out("<?php echo date('j',1718452845);"), "15");
+    assert_eq!(out("<?php echo date('D',1718452845);"), "Sat");
+    assert_eq!(out("<?php echo date('l',1718452845);"), "Saturday");
+    assert_eq!(out("<?php echo date('N',1718452845);"), "6");
+    assert_eq!(out("<?php echo date('w',1718452845);"), "6");
+    assert_eq!(out("<?php echo date('S',1718452845);"), "th");
+    // single-digit day: no padding for j, padding for d (2024-06-05).
+    assert_eq!(out("<?php echo date('d-j',1717545600);"), "05-5");
+    // ordinal suffixes: 1st 2nd 3rd 11th 21st 23rd.
+    assert_eq!(out("<?php echo date('jS',1717200000);"), "1st");
+    assert_eq!(out("<?php echo date('jS',1717286400);"), "2nd");
+    assert_eq!(out("<?php echo date('jS',1717372800);"), "3rd");
+    assert_eq!(out("<?php echo date('jS',1718064000);"), "11th");
+    assert_eq!(out("<?php echo date('jS',1718928000);"), "21st");
+    assert_eq!(out("<?php echo date('jS',1719100800);"), "23rd");
+}
+
+#[test]
+fn date_month_year_chars() {
+    // F (full), M (3-letter), m (zero-padded), n (no pad), t (days in month),
+    // L (leap), Y, y, o (ISO year).
+    assert_eq!(out("<?php echo date('F',1718452845);"), "June");
+    assert_eq!(out("<?php echo date('M',1718452845);"), "Jun");
+    assert_eq!(out("<?php echo date('m',1718452845);"), "06");
+    assert_eq!(out("<?php echo date('n',1718452845);"), "6");
+    assert_eq!(out("<?php echo date('t',1718452845);"), "30");
+    assert_eq!(out("<?php echo date('L',1718452845);"), "1");
+    assert_eq!(out("<?php echo date('Y',1718452845);"), "2024");
+    assert_eq!(out("<?php echo date('y',1718452845);"), "24");
+    assert_eq!(out("<?php echo date('o',1718452845);"), "2024");
+    // non-leap 2023: L=0, february 28 days; leap 2024: february 29 days.
+    assert_eq!(out("<?php echo date('L',1672531200);"), "0");
+    assert_eq!(out("<?php echo date('t',1675209600);"), "28");
+    assert_eq!(out("<?php echo date('t',1706745600);"), "29");
+}
+
+#[test]
+fn date_time_chars() {
+    // a/A (am/pm), g/G/h/H (12/24 hour), i, s, u, v.
+    assert_eq!(out("<?php echo date('a',1718452845);"), "pm");
+    assert_eq!(out("<?php echo date('A',1718452845);"), "PM");
+    assert_eq!(out("<?php echo date('g',1718452845);"), "12");
+    assert_eq!(out("<?php echo date('G',1718452845);"), "12");
+    assert_eq!(out("<?php echo date('h',1718452845);"), "12");
+    assert_eq!(out("<?php echo date('H',1718452845);"), "12");
+    assert_eq!(out("<?php echo date('i',1718452845);"), "00");
+    assert_eq!(out("<?php echo date('s',1718452845);"), "45");
+    assert_eq!(out("<?php echo date('u',1718452845);"), "000000");
+    assert_eq!(out("<?php echo date('v',1718452845);"), "000");
+    // midnight (2024-06-15 00:05:00): 12-hour shows 12, am.
+    assert_eq!(out("<?php echo date('g:G:h:H a',1718409900);"), "12:0:12:00 am");
+    // 09:00:00: AM, single-digit g/G, padded h/H.
+    assert_eq!(out("<?php echo date('g:G:h:H A',1718442000);"), "9:9:09:09 AM");
+    // 13:00:00: 12-hour 1, 24-hour 13.
+    assert_eq!(out("<?php echo date('g:G:h:H',1718456400);"), "1:13:01:13");
+}
+
+#[test]
+fn date_timezone_iso_chars() {
+    // e/T (tz name), I (dst), O/P (offset), Z (offset seconds) — UTC only.
+    assert_eq!(out("<?php echo date('e',1718452845);"), "UTC");
+    assert_eq!(out("<?php echo date('T',1718452845);"), "UTC");
+    assert_eq!(out("<?php echo date('I',1718452845);"), "0");
+    assert_eq!(out("<?php echo date('O',1718452845);"), "+0000");
+    assert_eq!(out("<?php echo date('P',1718452845);"), "+00:00");
+    assert_eq!(out("<?php echo date('Z',1718452845);"), "0");
+    assert_eq!(out("<?php echo date('B',1718452845);"), "542");
+}
+
+#[test]
+fn date_composite_and_doy_week() {
+    // c (ISO 8601), r (RFC 2822), U (timestamp), z (day of year 0-based), W (ISO week).
+    assert_eq!(out("<?php echo date('c',1718452845);"), "2024-06-15T12:00:45+00:00");
+    assert_eq!(out("<?php echo date('r',1718452845);"), "Sat, 15 Jun 2024 12:00:45 +0000");
+    assert_eq!(out("<?php echo date('U',1718452845);"), "1718452845");
+    assert_eq!(out("<?php echo date('z',1718452845);"), "166");
+    assert_eq!(out("<?php echo date('W',1718452845);"), "24");
+    // z edges (2024-01-01 and 2024-12-31).
+    assert_eq!(out("<?php echo date('z',1704067200);"), "0");
+    assert_eq!(out("<?php echo date('z',1735603200);"), "365");
+    // ISO week/year edge: 2023-01-01 is ISO week 52 of 2022.
+    assert_eq!(out("<?php echo date('W',1672531200);"), "52");
+    assert_eq!(out("<?php echo date('o',1672531200);"), "2022");
+}
+
+#[test]
+fn date_literals_and_escape() {
+    // Non-format chars pass through literally; backslash escapes the next char.
+    assert_eq!(out("<?php echo date('Y-m-d H:i:s',1718452845);"), "2024-06-15 12:00:45");
+    assert_eq!(out("<?php echo date('\\\\Y=Y',1718452845);"), "Y=2024");
+    // common combined format
+    assert_eq!(out("<?php echo date('D, d M Y',1718452845);"), "Sat, 15 Jun 2024");
+}
+
+#[test]
+fn gmdate_matches_date_in_utc() {
+    // With the default UTC tz, gmdate == date.
+    assert_eq!(out("<?php echo gmdate('Y-m-d H:i:s',1718452845);"), "2024-06-15 12:00:45");
+    assert_eq!(out("<?php echo gmdate('r',1718452845);"), "Sat, 15 Jun 2024 12:00:45 +0000");
+}

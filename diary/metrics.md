@@ -20,6 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 34-1) | 601 |
 | Unit/integration (workspace, fine step 33) | 594 |
 | Unit/integration (workspace, fine step 32) | 589 |
 | Unit/integration (workspace, fine step 31) | 582 |
@@ -515,6 +516,36 @@ Builtin PURI (ABI invariata, ZERO modifiche evaluator), TDD, oracle-verificati.
 differenzialmente — e `mb_strtoupper` richiederebbe le tabelle Unicode di case
 mapping (proprio dove si annidano le divergenze). Serve un oracle con mbstring
 compilato. Catalogato nel backlog, non implementato blind.
+
+## Macro-step 34 — DateTime / date()
+
+Design pass: `diary/NEXT-datetime-macro-step.md`. Decisioni del Decider a inizio
+sessione: **D-DT1** crate `time` 0.3 (aritmetica civile pure-Rust, Strategy A
+adapter come `regex` allo step 27); **D-DT3** scope solo UTC + offset fissi;
+**D-DT5** `now`/`time()` scope-out dai differenziali (orologio reale non
+deterministico). D-DT2 (classi native intercettate, stato in prop interna) e
+D-DT4 (subset strtotime) per i sotto-step OOP.
+
+### Step 34-1 — `date()` / `gmdate()` core formatting
+
+Builtin PURI in `php-builtins/date.rs` (ABI invariata, zero modifiche
+evaluator). Il crate `time` fornisce gli accessor di calendario
+(`OffsetDateTime::from_unix_timestamp`, `year/month/day/hour/minute/second`,
+`weekday`, `ordinal`, `iso_week`, `to_iso_week_date`); la mappatura dei format
+char PHP→byte è scritta a mano (i format char PHP ≠ quelli di `time`).
+- Coperti tutti i format char: giorno `d/j/D/l/N/w/S/z`, settimana `W`, mese
+  `F/M/m/n/t`, anno `L/o/Y/y`, ora `a/A/g/G/h/H/i/s/u/v/B`, timezone (solo UTC)
+  `e/T/I/O/P/Z`, compositi `c/r/U`.
+- Escape backslash (`\Y` → letterale `Y`), char non-format passano inalterati.
+- `gmdate` == `date` con scope UTC. `u`/`v` sempre `000000`/`000` (epoch i64,
+  niente frazioni). `B` = Swatch internet time (BMT = UTC+1).
+- `now` (ts omesso) legge l'orologio reale (`SystemTime`) → funzionante ma non
+  differential-tested (D-DT5).
+
+**+7 test (594→601)**, clippy pulito. Edge case oracle-verificati: suffissi
+ordinali (1st/2nd/3rd/11th/21st/23rd), single-digit padding, leap year (`t`/`L`
+feb 2023 vs 2024), `z` 0-based agli estremi anno, ISO week edge (2023-01-01 =
+W52/o2022), 12h vs 24h a mezzanotte/9:00/13:00.
 
 
 

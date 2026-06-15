@@ -10,6 +10,7 @@
 //! sprintf, array_*) is step 10.
 
 mod array;
+mod date;
 mod format;
 mod json;
 mod math;
@@ -30,6 +31,8 @@ pub fn registry() -> Registry {
     };
     add(b"count", array::count);
     add(b"sizeof", array::count);
+    add(b"date", date::date);
+    add(b"gmdate", date::gmdate);
     add(b"json_encode", json::json_encode);
     add(b"array_keys", array::array_keys);
     add(b"array_values", array::array_values);
