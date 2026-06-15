@@ -533,7 +533,11 @@ pub enum ExprKind {
     /// `new ClassName(args...)` / `new self` / `new static` (step 19, D-19.6).
     /// Creates an instance with its declared properties initialised to their
     /// defaults, then runs `__construct` if the class defines one.
-    New { class: ClassRef, args: Vec<Expr> },
+    New {
+        class: ClassRef,
+        args: Vec<Expr>,
+        named: Vec<(Box<[u8]>, Expr)>,
+    },
 
     /// `$obj->method(args...)` instance method call (step 19, D-19.7). `nullsafe`
     /// marks the `?->` form: a null receiver short-circuits to NULL instead of

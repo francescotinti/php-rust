@@ -1149,12 +1149,10 @@ impl<'p> Evaluator<'p> {
     /// matching PHP's messages.
     fn resolve_named_args(
         &mut self,
-        idx: usize,
+        f: &'p FnDecl,
         mut argv: Vec<Arg>,
         named: &[(Box<[u8]>, Expr)],
     ) -> Result<Vec<Arg>, PhpError> {
-        let funcs: &'p [FnDecl] = self.funcs;
-        let f: &'p FnDecl = &funcs[idx];
         for (name, expr) in named {
             let Some(j) = f
                 .params
@@ -1690,7 +1688,12 @@ impl<'p> Evaluator<'p> {
     /// Evaluate `new ClassRef(args)` (step 19, D-19.6/D-19.12): resolve the class
     /// (including `self`/`static` late binding), build an instance with the full
     /// inherited property set, then run `__construct` (resolved up the chain).
-    fn eval_new(&mut self, class: &ClassRef, args: &[Expr]) -> Result<Zval, PhpError> {
+    fn eval_new(
+        &mut self,
+        class: &ClassRef,
+        args: &[Expr],
+        named: &[(Box<[u8]>, Expr)],
+    ) -> Result<Zval, PhpError> {
         let cid = self.resolve_class_ref(class)?;
         // An enum has no constructor and cannot be instantiated (step 23, D-23.9).
         if self.classes[cid].is_enum {
@@ -1748,8 +1751,25 @@ impl<'p> Evaluator<'p> {
         // through the shared `Rc`, so they show in the returned value. The new
         // instance's class is its own LSB class.
         if let Some((defc, m)) = self.resolve_method(cid, b"__construct") {
-            let argv = self.eval_value_args(args)?;
-            self.invoke_method(Some(value.clone()), defc, cid, m, b"__construct", argv)?;
+            // Positional args, then named placed by parameter name (step 38-2).
+            let argv: Vec<Arg> = self.eval_value_args(args)?.into_iter().map(Arg::Val).collect();
+            let argv = if named.is_empty() {
+                argv
+            } else {
+                self.resolve_named_args(&m.decl, argv, named)?
+            };
+            self.invoke_method_args(Some(value.clone()), defc, cid, m, b"__construct", argv)?;
+        } else if !named.is_empty() || !args.is_empty() {
+            // No constructor: named args would have nowhere to bind. PHP ignores
+            // extra args to a default constructor, but a named arg is an Error.
+            // Keep parity with the no-ctor positional path (args ignored); a named
+            // arg to a constructor-less class is rare — treat as unknown param.
+            if let Some((name, _)) = named.first() {
+                return Err(PhpError::Error(format!(
+                    "Unknown named parameter ${}",
+                    String::from_utf8_lossy(name)
+                )));
+            }
         }
         Ok(value)
     }
@@ -2413,9 +2433,35 @@ impl<'p> Evaluator<'p> {
         method: &[u8],
         argv: Vec<Zval>,
     ) -> Result<Zval, PhpError> {
+        let argv: Vec<Arg> = argv.into_iter().map(Arg::Val).collect();
+        self.invoke_method_args(this, defining_class, static_class, m, method, argv)
+    }
+
+    /// Like [`Self::invoke_method`] but taking already-bound [`Arg`]s, so a call
+    /// site can supply named-argument placement (step 38, `Arg::Default` gaps).
+    fn invoke_method_args(
+        &mut self,
+        this: Option<Zval>,
+        defining_class: ClassId,
+        static_class: ClassId,
+        m: &'p MethodDecl,
+        method: &[u8],
+        argv: Vec<Arg>,
+    ) -> Result<Zval, PhpError> {
         let f: &'p FnDecl = &m.decl;
         let required = f.params.iter().filter(|p| p.default.is_none()).count();
-        if argv.len() < required {
+        // A required parameter must have a real argument at its index (named args
+        // can leave `Arg::Default` gaps — step 38).
+        let missing_required = f
+            .params
+            .iter()
+            .enumerate()
+            .any(|(i, p)| p.default.is_none() && !matches!(argv.get(i), Some(Arg::Val(_) | Arg::Ref(_))));
+        if missing_required {
+            let passed = argv
+                .iter()
+                .filter(|a| matches!(a, Arg::Val(_) | Arg::Ref(_)))
+                .count();
             let expected = if required == f.params.len() {
                 format!("exactly {required}")
             } else {
@@ -2425,7 +2471,7 @@ impl<'p> Evaluator<'p> {
                 "Too few arguments to function {}::{}(), {} passed and {} expected",
                 String::from_utf8_lossy(&self.classes[defining_class].name),
                 String::from_utf8_lossy(method),
-                argv.len(),
+                passed,
                 expected,
             )));
         }
@@ -2447,8 +2493,7 @@ impl<'p> Evaluator<'p> {
         let saved_class = self.cur_class.replace(defining_class);
         let saved_static = self.cur_static_class.replace(static_class);
 
-        let args: Vec<Arg> = argv.into_iter().map(Arg::Val).collect();
-        let result = self.run_user_fn_body(f, args);
+        let result = self.run_user_fn_body(f, argv);
 
         self.locals = saved_locals;
         self.local_names = saved_names;
@@ -3438,7 +3483,8 @@ impl<'p> Evaluator<'p> {
                     let argv = if named.is_empty() {
                         argv
                     } else {
-                        self.resolve_named_args(idx, argv, named)?
+                        let f: &'p FnDecl = &self.funcs[idx];
+                        self.resolve_named_args(f, argv, named)?
                     };
                     let result = self.call_user_fn(idx, argv)?;
                     // A by-reference function returns a `Zval::Ref`; in this
@@ -3654,7 +3700,7 @@ impl<'p> Evaluator<'p> {
                 }
             }
 
-            ExprKind::New { class, args } => self.eval_new(class, args),
+            ExprKind::New { class, args, named } => self.eval_new(class, args, named),
 
             ExprKind::MethodCall {
                 object,

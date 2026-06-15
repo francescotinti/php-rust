@@ -3926,6 +3926,24 @@ fn named_args_overwrite_previous_is_catchable_error() {
 }
 
 #[test]
+fn named_args_constructor_reorder() {
+    // Named args to a constructor (step 38-2). Oracle: 1,2.
+    let src = r#"<?php
+class P { public $x; public $y; function __construct($x, $y){ $this->x=$x; $this->y=$y; } }
+$p = new P(y:2, x:1); echo $p->x, ',', $p->y;"#;
+    assert_eq!(out(src), "1,2");
+}
+
+#[test]
+fn named_args_constructor_skip_to_default() {
+    // Oracle: 5/9 (b defaulted), 1/2 (both named).
+    let src = r#"<?php
+class P { public $a; public $b; function __construct($a, $b=9){ $this->a=$a; $this->b=$b; } }
+$p = new P(a:5); $q = new P(b:2, a:1); echo $p->a, '/', $p->b, '|', $q->a, '/', $q->b;"#;
+    assert_eq!(out(src), "5/9|1/2");
+}
+
+#[test]
 fn named_args_positional_after_named_is_compile_fatal() {
     // A positional argument after a named one is a PHP compile-time Fatal error
     // (not a catchable Error). Oracle message verified against PHP 8.5.

@@ -2446,11 +2446,11 @@ impl<'f> Lowerer<'f> {
         line: Line,
     ) -> Result<ExprKind, LowerError> {
         let class = class_ref_of(inst.class, line)?;
-        let args = match &inst.argument_list {
-            Some(list) => self.lower_positional_args(list, line)?,
-            None => Vec::new(),
+        let (args, named) = match &inst.argument_list {
+            Some(list) => self.lower_args(list, line)?,
+            None => (Vec::new(), Vec::new()),
         };
-        Ok(ExprKind::New { class, args })
+        Ok(ExprKind::New { class, args, named })
     }
 
     /// Lower `$obj->prop` / `$obj?->prop` reads (step 19, D-19.8). Static-property
