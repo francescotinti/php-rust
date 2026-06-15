@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–28 completati · 545 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–34 completati · 624 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 | Step | Contenuto | Stato |
 |---|---|---|
@@ -47,6 +47,12 @@ full port semantico del solo `zend_operators.c`).
 | 26 | `json_encode` / `json_decode` (assoc array + `stdClass`, flag PRETTY/UNESCAPED_*) | ✅ |
 | 27 | Regex `preg_*` — `match`/`match_all`/`replace`/`replace_callback`/`split`/`quote` (crate `regex`) | ✅ |
 | 28 | Stack-trace frame reali — `getTrace`/`getTraceAsString` + render uncaught con frame | ✅ |
+| 29 | Builtin puri string+array + cast `(object)` | ✅ |
+| 30 | Heredoc / nowdoc (`lower_document`) | ✅ |
+| 31 | `preg_*` named groups + flag `PREG_*` (OFFSET_CAPTURE, SET_ORDER, UNMATCHED_AS_NULL, SPLIT_*) | ✅ |
+| 32 | Array by-ref family — `array_splice` + `array_walk` | ✅ |
+| 33 | Array key/assoc set-ops (`array_diff_key`/`assoc`, `array_intersect_key`/`assoc`) + `array_column` | ✅ |
+| 34 | **DateTime/date()** — `date`/`gmdate`/`mktime`/`checkdate`/`strtotime` (subset) + OOP `DateTime`/`DateTimeImmutable`/`DateInterval` (`format`/`modify`/`add`/`sub`/`diff`/`createFromFormat`), scope UTC (crate `time`) | ✅ |
 
 > Lo step 6 è stato eseguito **dopo** lo step 7 (deciso con l'utente: gli array
 > rendono il phpt-runner molto più utile, quintuplicando i test in-scope).
