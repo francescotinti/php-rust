@@ -367,14 +367,16 @@ fn parse_absolute(s: &str) -> Option<i64> {
     civil_to_epoch(year, month, day, hour, min, sec)
 }
 
-/// Apply a relative expression (`+N unit` / `-N unit`, possibly repeated) to a
-/// base epoch. Units: second(s)/sec, minute(s)/min, hour(s), day(s), week(s),
-/// month(s), year(s). `None` if any token is unrecognized.
-fn parse_relative(s: &str, base: i64) -> Option<i64> {
-    let dt = OffsetDateTime::from_unix_timestamp(base).ok()?;
+/// Tokenize a relative expression (`[+-]N unit ...`, possibly repeated) into
+/// accumulated component deltas `(years, months, days, hours, minutes,
+/// seconds)`. Units: second(s)/sec, minute(s)/min, hour(s), day(s), week(s),
+/// month(s), year(s); weeks fold into days, months/years stay separate (their
+/// calendar-aware application happens in the caller). `None` if any token is
+/// unrecognized or nothing applied.
+fn accumulate_relative(s: &str) -> Option<(i64, i64, i64, i64, i64, i64)> {
     let (mut dy, mut dmo, mut dd, mut dh, mut dmi, mut ds) = (0i64, 0i64, 0i64, 0i64, 0i64, 0i64);
     let mut applied = false;
-    let mut tokens = s.split_whitespace().peekable();
+    let mut tokens = s.split_whitespace();
     while let Some(num_tok) = tokens.next() {
         let n: i64 = num_tok.parse().ok()?;
         let unit = tokens.next()?;
@@ -390,9 +392,14 @@ fn parse_relative(s: &str, base: i64) -> Option<i64> {
         }
         applied = true;
     }
-    if !applied {
-        return None;
-    }
+    applied.then_some((dy, dmo, dd, dh, dmi, ds))
+}
+
+/// Apply a relative expression (`+N unit` / `-N unit`, possibly repeated) to a
+/// base epoch, normalizing calendar overflow. `None` if it doesn't parse.
+fn parse_relative(s: &str, base: i64) -> Option<i64> {
+    let dt = OffsetDateTime::from_unix_timestamp(base).ok()?;
+    let (dy, dmo, dd, dh, dmi, ds) = accumulate_relative(s)?;
     civil_to_epoch(
         dt.year() as i64 + dy,
         u8::from(dt.month()) as i64 + dmo,
@@ -483,6 +490,36 @@ pub fn __interval_parse(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> 
         Some((y, mo, d, h, i, s))
     })();
     match parsed {
+        Some((y, mo, d, h, i, s)) => {
+            let mut arr = PhpArray::new();
+            arr.insert(Key::from_bytes(b"y"), Zval::Long(y));
+            arr.insert(Key::from_bytes(b"m"), Zval::Long(mo));
+            arr.insert(Key::from_bytes(b"d"), Zval::Long(d));
+            arr.insert(Key::from_bytes(b"h"), Zval::Long(h));
+            arr.insert(Key::from_bytes(b"i"), Zval::Long(i));
+            arr.insert(Key::from_bytes(b"s"), Zval::Long(s));
+            Ok(Zval::Array(Rc::new(arr)))
+        }
+        None => Ok(Zval::Bool(false)),
+    }
+}
+
+/// `__interval_from_date_string(string $rel)`: parse a relative expression
+/// (`[+-]N unit ...`, the same subset `strtotime` accepts) into an
+/// interval-component array `{y,m,d,h,i,s}` — weeks fold into days, months and
+/// years stay separate. Backs `date_interval_create_from_date_string` (step 35,
+/// D-PD3). Returns `false` when nothing parses.
+pub fn __interval_from_date_string(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let raw = convert::to_zstr(
+        args.first().ok_or_else(|| {
+            PhpError::Error(
+                "__interval_from_date_string() expects 1 argument, 0 given".to_string(),
+            )
+        })?,
+        ctx.diags,
+    );
+    let lower = String::from_utf8_lossy(raw.as_bytes()).trim().to_ascii_lowercase();
+    match accumulate_relative(&lower) {
         Some((y, mo, d, h, i, s)) => {
             let mut arr = PhpArray::new();
             arr.insert(Key::from_bytes(b"y"), Zval::Long(y));

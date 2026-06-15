@@ -343,6 +343,17 @@ function date_modify($object, $modifier) { return $object->modify($modifier); }
 function date_date_set($object, $year, $month, $day) { return $object->setDate($year, $month, $day); }
 function date_time_set($object, $hour, $minute, $second = 0) { return $object->setTime($hour, $minute, $second); }
 function date_timestamp_set($object, $timestamp) { return $object->setTimestamp($timestamp); }
+function date_create_from_format($format, $datetime, $timezone = null) { return DateTime::createFromFormat($format, $datetime); }
+function date_create_immutable_from_format($format, $datetime, $timezone = null) { return DateTimeImmutable::createFromFormat($format, $datetime); }
+function date_interval_format($object, $format) { return $object->format($format); }
+function date_interval_create_from_date_string($datetime) {
+    $p = __interval_from_date_string($datetime);
+    if ($p === false) { return false; }
+    $iv = new DateInterval("PT0S");
+    $iv->y = $p['y']; $iv->m = $p['m']; $iv->d = $p['d'];
+    $iv->h = $p['h']; $iv->i = $p['i']; $iv->s = $p['s'];
+    return $iv;
+}
 "##;
 
 /// The four owned products of lowering [`PRELUDE_SRC`]: the class table + its

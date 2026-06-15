@@ -2078,3 +2078,56 @@ fn date_add_on_immutable_proc() {
         "2024-01-01/2024-02-01"
     );
 }
+
+// --- Step 35-3: procedural createFromFormat + interval helpers ----------------
+
+#[test]
+fn date_create_from_format_proc() {
+    // '!' resets fields to the Unix epoch first → time is 00:00:00.
+    assert_eq!(
+        out("<?php echo date_create_from_format('!d/m/Y','15/06/2024')->format('Y-m-d H:i:s');"),
+        "2024-06-15 00:00:00"
+    );
+    // Immutable variant yields a DateTimeImmutable.
+    assert_eq!(
+        out("<?php $d=date_create_immutable_from_format('!Y-m-d','2024-06-15'); echo get_class($d),'/',$d->format('Y-m-d');"),
+        "DateTimeImmutable/2024-06-15"
+    );
+    // A non-matching value returns false.
+    assert_eq!(
+        out("<?php var_dump(date_create_from_format('Y-m-d','nope'));"),
+        "bool(false)\n"
+    );
+}
+
+#[test]
+fn date_interval_format_proc() {
+    assert_eq!(
+        out("<?php $iv=date_diff(date_create('2024-06-15'),date_create('2024-06-20')); echo date_interval_format($iv,'%d days');"),
+        "5 days"
+    );
+}
+
+#[test]
+fn date_interval_create_from_date_string_proc() {
+    // Single unit; days flag is false when built from a relative string.
+    assert_eq!(
+        out("<?php $i=date_interval_create_from_date_string('1 day'); echo $i->d,'/',$i->y,'/',$i->m,'/',$i->h,'/',$i->i,'/',$i->s; var_dump($i->days);"),
+        "1/0/0/0/0/0bool(false)\n"
+    );
+    // Weeks fold into days; multiple units accumulate.
+    assert_eq!(
+        out("<?php $i=date_interval_create_from_date_string('2 weeks 3 hours'); echo $i->d,'/',$i->h;"),
+        "14/3"
+    );
+    // Years/months stay separate (no normalization).
+    assert_eq!(
+        out("<?php $i=date_interval_create_from_date_string('1 year 2 months'); echo $i->y,'/',$i->m;"),
+        "1/2"
+    );
+    // Applying it to a date advances by the parsed amount.
+    assert_eq!(
+        out("<?php $x=date_create('2024-06-15'); date_add($x,date_interval_create_from_date_string('10 days')); echo date_format($x,'Y-m-d');"),
+        "2024-06-25"
+    );
+}
