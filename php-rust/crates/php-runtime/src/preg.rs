@@ -170,15 +170,30 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
     let body = std::str::from_utf8(&pattern[1..end]).ok()?;
     let flags = &pattern[end + 1..];
 
+    // PCRE's default `$` (no `m`, no `D`) is zero-width and matches at the end of
+    // the subject OR just before a single trailing newline. The `regex` crate's
+    // `$` is `\z`-only (absolute end), so a bare `$` is rewritten to the
+    // lookahead `(?=\n?\z)`. That has no DFA equivalent, so the auto-fallback
+    // routes such patterns to fancy-regex (D-37.1). With `D` the `$` keeps the
+    // `\z` semantics we already have; with `m` it is per-line (and PHP ignores
+    // `D` under `m`) — in both cases the rewrite is skipped.
+    let mut body: std::borrow::Cow<str> =
+        if !flags.contains(&b'm') && !flags.contains(&b'D') {
+            match rewrite_dollar_anchor(body) {
+                Some(rw) => std::borrow::Cow::Owned(rw),
+                None => std::borrow::Cow::Borrowed(body),
+            }
+        } else {
+            std::borrow::Cow::Borrowed(body)
+        };
+
     // PCRE_ANCHORED (`A`): force the match to start at offset 0. Neither engine
     // has a portable builder switch, so the body is wrapped as `\A(?:…)`. The
     // non-capturing group keeps group numbering intact and anchors a top-level
     // alternation as a whole.
-    let body = if flags.contains(&b'A') {
-        std::borrow::Cow::Owned(format!(r"\A(?:{body})"))
-    } else {
-        std::borrow::Cow::Borrowed(body)
-    };
+    if flags.contains(&b'A') {
+        body = std::borrow::Cow::Owned(format!(r"\A(?:{body})"));
+    }
 
     // First attempt: the fast `regex` engine, with flags applied via the builder.
     // The same i/m/s/x flags are accumulated as an inline `(?..)` prefix for the
@@ -290,6 +305,70 @@ pub fn translate_replacement(repl: &[u8]) -> Vec<u8> {
         }
     }
     out
+}
+
+/// Rewrite every bare `$` anchor in `body` to the zero-width lookahead
+/// `(?=\n?\z)`, reproducing PCRE's default `$` (end of subject, or just before a
+/// single trailing newline) which the `regex` crate's `\z`-only `$` cannot
+/// express. A `$` written as `\$` or appearing inside a `[...]` character class
+/// is a literal dollar and left untouched. Returns `None` when nothing was
+/// rewritten, so the caller keeps the original body (and its DFA fast path).
+fn rewrite_dollar_anchor(body: &str) -> Option<String> {
+    let b = body.as_bytes();
+    if !b.contains(&b'$') {
+        return None; // common case: no `$` at all, keep the fast path.
+    }
+    let mut out: Vec<u8> = Vec::with_capacity(b.len() + 8);
+    let mut i = 0;
+    let mut in_class = false;
+    let mut rewrote = false;
+    while i < b.len() {
+        match b[i] {
+            // Copy an escape pair verbatim (covers `\$`, `\]`, `\\`, …).
+            b'\\' => {
+                out.push(b'\\');
+                if i + 1 < b.len() {
+                    out.push(b[i + 1]);
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            b'[' if !in_class => {
+                in_class = true;
+                out.push(b'[');
+                i += 1;
+                // A leading `^` and/or `]` immediately after `[` are literal.
+                if i < b.len() && b[i] == b'^' {
+                    out.push(b'^');
+                    i += 1;
+                }
+                if i < b.len() && b[i] == b']' {
+                    out.push(b']');
+                    i += 1;
+                }
+            }
+            b']' if in_class => {
+                in_class = false;
+                out.push(b']');
+                i += 1;
+            }
+            b'$' if !in_class => {
+                out.extend_from_slice(b"(?=\\n?\\z)");
+                rewrote = true;
+                i += 1;
+            }
+            other => {
+                out.push(other);
+                i += 1;
+            }
+        }
+    }
+    if rewrote {
+        String::from_utf8(out).ok()
+    } else {
+        None
+    }
 }
 
 /// `preg_quote`: backslash-escape every PCRE metacharacter (plus an optional

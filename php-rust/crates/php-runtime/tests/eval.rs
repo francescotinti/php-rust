@@ -3840,6 +3840,41 @@ fn preg_flag_extra_x_is_noop() {
     assert_eq!(out(r#"<?php echo preg_match('/foo bar/X', 'foobar');"#), "0");
 }
 
+#[test]
+fn preg_dollar_matches_before_trailing_newline_zero_width() {
+    // PCRE default `$` (no D, no m) matches at end OR just before a single
+    // trailing \n, and is ZERO-WIDTH. Oracle: $m[0] == 'foo' (not "foo\n").
+    assert_eq!(out("<?php preg_match('/foo$/', \"foo\\n\", $m); echo $m[0];"), "foo");
+}
+
+#[test]
+fn preg_dollar_default_leniency_counts() {
+    // Oracle: 1 (trailing \n), 1 (bare), 0 (\n not final).
+    assert_eq!(out("<?php echo preg_match('/foo$/', \"foo\\n\");"), "1");
+    assert_eq!(out("<?php echo preg_match('/foo$/', 'foo');"), "1");
+    assert_eq!(out("<?php echo preg_match('/foo$/', \"foo\\nbar\");"), "0");
+}
+
+#[test]
+fn preg_dollar_endonly_D_flag() {
+    // `D` (PCRE_DOLLAR_ENDONLY): `$` only at the absolute end. Oracle: 0, 1.
+    assert_eq!(out("<?php echo preg_match('/foo$/D', \"foo\\n\");"), "0");
+    assert_eq!(out("<?php echo preg_match('/foo$/D', 'foo');"), "1");
+}
+
+#[test]
+fn preg_dollar_multiline_unaffected() {
+    // `m` → `$` per line (and D is ignored under m). Oracle: 1.
+    assert_eq!(out("<?php echo preg_match('/foo$/m', \"foo\\nbar\");"), "1");
+}
+
+#[test]
+fn preg_dollar_in_char_class_is_literal() {
+    // A `$` inside `[...]` is a literal dollar, NOT an anchor — must not be
+    // rewritten. Oracle: preg_match('/[a$]+/', 'a$a') matches 'a$a'.
+    assert_eq!(out(r#"<?php preg_match('/[a$]+/', 'a$a', $m); echo $m[0];"#), "a$a");
+}
+
 // --- Step 28: real stack-trace frames ---
 
 #[test]
