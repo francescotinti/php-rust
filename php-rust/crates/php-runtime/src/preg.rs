@@ -210,8 +210,14 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
                 b.swap_greed(true);
                 inline.push('U');
             }
-            // u (unicode, already on), D/X and others: ignored here (A is
-            // handled above by wrapping the body).
+            b'X' => {
+                // PCRE_EXTRA: deprecated in PCRE2 (PHP's engine) and a no-op.
+                // Listed explicitly so it is a documented no-op rather than an
+                // accidental fall-through; it must NOT strip whitespace (that is
+                // lowercase `x`).
+            }
+            // u (unicode, already on), D and others: ignored here (A is handled
+            // above by wrapping the body; $ leniency / D arrive in 37-4).
             _ => {}
         }
     }

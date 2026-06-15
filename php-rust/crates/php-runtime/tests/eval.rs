@@ -3831,6 +3831,15 @@ fn preg_flag_anchored_with_backref_uses_fancy() {
     assert_eq!(out(r#"<?php echo preg_match('/(a)\1/A', 'xaa');"#), "0");
 }
 
+#[test]
+fn preg_flag_extra_x_is_noop() {
+    // Uppercase `X` (PCRE_EXTRA) is deprecated in PCRE2 (PHP's engine) → no-op.
+    // It must NOT strip whitespace the way lowercase `x` does. Oracle: matches
+    // 'foo bar' literally (1), not 'foobar' (0).
+    assert_eq!(out(r#"<?php echo preg_match('/foo bar/X', 'foo bar');"#), "1");
+    assert_eq!(out(r#"<?php echo preg_match('/foo bar/X', 'foobar');"#), "0");
+}
+
 // --- Step 28: real stack-trace frames ---
 
 #[test]
