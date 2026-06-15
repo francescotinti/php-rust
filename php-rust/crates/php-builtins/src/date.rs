@@ -11,7 +11,7 @@
 
 use php_runtime::Ctx;
 use php_types::{convert, PhpError, PhpStr, Zval};
-use time::OffsetDateTime;
+use time::{Date, Month, OffsetDateTime};
 
 const MONTHS_FULL: [&str; 12] = [
     "January",
@@ -226,4 +226,101 @@ pub fn date(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// identical to `date()`.
 pub fn gmdate(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     date(args, ctx)
+}
+
+/// PHP's legacy two-digit-year fixup for `mktime`: 0..69 → 2000..2069,
+/// 70..100 → 1970..2000. Other values pass through unchanged.
+fn fixup_two_digit_year(year: i64) -> i64 {
+    if (0..=69).contains(&year) {
+        year + 2000
+    } else if (70..=100).contains(&year) {
+        year + 1900
+    } else {
+        year
+    }
+}
+
+/// Build a UTC Unix timestamp from civil components, normalizing every overflow
+/// the PHP way: out-of-range months carry into the year, then any day/hour/
+/// minute/second offset is added as a plain duration (so day 0 → previous
+/// month's last day, hour 25 → next day +1h, etc.). `None` if the resulting
+/// year is out of the representable range.
+fn civil_to_epoch(
+    year: i64,
+    month: i64,
+    day: i64,
+    hour: i64,
+    minute: i64,
+    second: i64,
+) -> Option<i64> {
+    // Normalize month into 1..=12 with a year carry.
+    let total = year.checked_mul(12)?.checked_add(month - 1)?;
+    let y = i32::try_from(total.div_euclid(12)).ok()?;
+    let m = u8::try_from(total.rem_euclid(12) + 1).ok()?;
+    let base = Date::from_calendar_date(y, Month::try_from(m).ok()?, 1)
+        .ok()?
+        .midnight()
+        .assume_utc()
+        .unix_timestamp();
+    Some(base + (day - 1) * 86_400 + hour * 3_600 + minute * 60 + second)
+}
+
+/// Nth int argument, defaulting to `default` when omitted or null.
+fn int_arg_or(args: &[Zval], i: usize, default: i64, ctx: &mut Ctx) -> i64 {
+    match args.get(i) {
+        None | Some(Zval::Null) => default,
+        Some(v) => convert::to_long_cast(v, ctx.diags),
+    }
+}
+
+/// `mktime(?int $hour, ?int $minute, ?int $second, ?int $month, ?int $day,
+/// ?int $year)`. Omitted trailing components default to the current local
+/// (UTC, D-DT3) time — those paths read the real clock and are not
+/// differential-tested (D-DT5).
+pub fn mktime(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let now = OffsetDateTime::now_utc();
+    let hour = int_arg_or(args, 0, now.hour() as i64, ctx);
+    let minute = int_arg_or(args, 1, now.minute() as i64, ctx);
+    let second = int_arg_or(args, 2, now.second() as i64, ctx);
+    let month = int_arg_or(args, 3, u8::from(now.month()) as i64, ctx);
+    let day = int_arg_or(args, 4, now.day() as i64, ctx);
+    let year = fixup_two_digit_year(int_arg_or(args, 5, now.year() as i64, ctx));
+    match civil_to_epoch(year, month, day, hour, minute, second) {
+        Some(ts) => Ok(Zval::Long(ts)),
+        None => Ok(Zval::Bool(false)),
+    }
+}
+
+/// `gmmktime(...)`. Identical to `mktime` under the UTC scope (D-DT3).
+pub fn gmmktime(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    mktime(args, ctx)
+}
+
+/// `checkdate(int $month, int $day, int $year)`: true for a valid Gregorian
+/// date with `1 <= month <= 12`, `1 <= year <= 32767`, and a day within the
+/// month's length.
+pub fn checkdate(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let month = convert::to_long_cast(
+        args.first().ok_or_else(|| {
+            PhpError::Error("checkdate() expects exactly 3 arguments, 0 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let day = convert::to_long_cast(
+        args.get(1).ok_or_else(|| {
+            PhpError::Error("checkdate() expects exactly 3 arguments, 1 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let year = convert::to_long_cast(
+        args.get(2).ok_or_else(|| {
+            PhpError::Error("checkdate() expects exactly 3 arguments, 2 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let ok = (1..=12).contains(&month)
+        && (1..=32767).contains(&year)
+        && day >= 1
+        && day <= days_in_month(year as i32, month as u8) as i64;
+    Ok(Zval::Bool(ok))
 }

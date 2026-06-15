@@ -1651,3 +1651,51 @@ fn gmdate_matches_date_in_utc() {
     assert_eq!(out("<?php echo gmdate('Y-m-d H:i:s',1718452845);"), "2024-06-15 12:00:45");
     assert_eq!(out("<?php echo gmdate('r',1718452845);"), "Sat, 15 Jun 2024 12:00:45 +0000");
 }
+
+// --- Step 34-2: mktime / gmmktime / checkdate ---------------------------------
+// Oracle: mktime(h,m,s,month,day,year), UTC. Values oracle-verified.
+
+#[test]
+fn mktime_basic() {
+    assert_eq!(out("<?php echo mktime(0,0,0,6,15,2024);"), "1718409600");
+    assert_eq!(out("<?php echo mktime(12,0,45,6,15,2024);"), "1718452845");
+    // gmmktime == mktime in UTC.
+    assert_eq!(out("<?php echo gmmktime(0,0,0,6,15,2024);"), "1718409600");
+}
+
+#[test]
+fn mktime_month_overflow() {
+    // month 13 → January next year; month 0 → December prev year; negative wraps.
+    assert_eq!(out("<?php echo mktime(0,0,0,13,1,2024);"), "1735689600");
+    assert_eq!(out("<?php echo mktime(0,0,0,0,1,2024);"), "1701388800");
+    assert_eq!(out("<?php echo mktime(0,0,0,-1,1,2024);"), "1698796800");
+}
+
+#[test]
+fn mktime_day_time_overflow() {
+    // day 32 of January → Feb 1; day 0 of March → Feb 29 (leap).
+    assert_eq!(out("<?php echo mktime(0,0,0,1,32,2024);"), "1706745600");
+    assert_eq!(out("<?php echo mktime(0,0,0,3,0,2024);"), "1709164800");
+    // hour 25 → +1 day +1h; second -1 → previous second.
+    assert_eq!(out("<?php echo mktime(25,0,0,6,15,2024);"), "1718499600");
+    assert_eq!(out("<?php echo mktime(0,0,-1,6,15,2024);"), "1718409599");
+}
+
+#[test]
+fn mktime_two_digit_year() {
+    // 0..69 → 2000..2069; 70..100 → 1970..2000.
+    assert_eq!(out("<?php echo mktime(0,0,0,1,1,24);"), "1704067200");
+    assert_eq!(out("<?php echo mktime(0,0,0,1,1,70);"), "0");
+    assert_eq!(out("<?php echo mktime(0,0,0,1,1,99);"), "915148800");
+    assert_eq!(out("<?php echo mktime(0,0,0,1,1,69);"), "3124224000");
+}
+
+#[test]
+fn checkdate_validity() {
+    assert_eq!(out("<?php var_dump(checkdate(2,29,2024));"), "bool(true)\n");
+    assert_eq!(out("<?php var_dump(checkdate(2,29,2023));"), "bool(false)\n");
+    assert_eq!(out("<?php var_dump(checkdate(13,1,2024));"), "bool(false)\n");
+    assert_eq!(out("<?php var_dump(checkdate(0,1,2024));"), "bool(false)\n");
+    assert_eq!(out("<?php var_dump(checkdate(12,31,2024));"), "bool(true)\n");
+    assert_eq!(out("<?php var_dump(checkdate(4,31,2024));"), "bool(false)\n");
+}

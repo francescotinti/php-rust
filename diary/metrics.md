@@ -20,6 +20,7 @@
 
 | Tipo | Conteggio |
 |---|---|
+| Unit/integration (workspace, fine step 34-2) | 606 |
 | Unit/integration (workspace, fine step 34-1) | 601 |
 | Unit/integration (workspace, fine step 33) | 594 |
 | Unit/integration (workspace, fine step 32) | 589 |
@@ -546,6 +547,24 @@ char PHP→byte è scritta a mano (i format char PHP ≠ quelli di `time`).
 ordinali (1st/2nd/3rd/11th/21st/23rd), single-digit padding, leap year (`t`/`L`
 feb 2023 vs 2024), `z` 0-based agli estremi anno, ISO week edge (2023-01-01 =
 W52/o2022), 12h vs 24h a mezzanotte/9:00/13:00.
+
+### Step 34-2 — `mktime` / `gmmktime` / `checkdate`
+
+Builtin PURI in `date.rs`. `mktime(h,m,s,month,day,year)` costruisce un epoch
+UTC con **normalizzazione completa degli overflow** alla maniera PHP: i mesi
+fuori range riportano sull'anno (`div_euclid`/`rem_euclid`), poi giorno/ora/
+minuto/secondo si sommano come durata in secondi sull'epoch del 1° del mese
+(così `day 0` → ultimo giorno mese precedente, `hour 25` → +1 giorno +1h,
+`second -1` → secondo precedente). Helper `civil_to_epoch`.
+- **Fixup anno a 2 cifre** (legacy PHP): 0..69 → 2000..2069, 70..100 →
+  1970..2000; altri valori invariati (`fixup_two_digit_year`, oracle-verificato).
+- Argomenti omessi → componenti dell'ora corrente (orologio reale, non
+  differential-tested, D-DT5). Overflow d'anno non rappresentabile → `false`.
+- `gmmktime` == `mktime` (scope UTC). `checkdate(month,day,year)`: valida
+  `1<=month<=12`, `1<=year<=32767`, giorno entro la lunghezza del mese (riusa
+  `days_in_month`/leap).
+
+**+5 test (601→606)**, clippy pulito.
 
 
 
