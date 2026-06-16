@@ -2187,3 +2187,174 @@ fn print_r_generator() {
         "Generator Object\n(\n    [function] => g\n)\n"
     );
 }
+
+// --- mbstring batch 1 (UTF-8 core) — mb-1: length / substr / split ---
+
+#[test]
+fn mb_strlen_counts_code_points() {
+    assert_eq!(out("<?php echo mb_strlen('città');"), "5");
+    assert_eq!(out("<?php echo mb_strlen('日本語');"), "3");
+    // e + combining acute = two code points (not one grapheme).
+    assert_eq!(out("<?php echo mb_strlen('e\u{301}');"), "2");
+    assert_eq!(out("<?php echo mb_strlen('');"), "0");
+    // Each invalid byte counts as one unit (oracle: a \xFF \xFE b == 4).
+    assert_eq!(out("<?php echo mb_strlen(\"a\\xFF\\xFEb\");"), "4");
+}
+
+#[test]
+fn mb_substr_by_code_point() {
+    assert_eq!(out("<?php echo mb_substr('日本語', 1, 1);"), "本");
+    assert_eq!(out("<?php echo mb_substr('città', -3, 2);"), "tt");
+    // Omitted length runs to the end.
+    assert_eq!(out("<?php echo mb_substr('città', 2);"), "ttà");
+    assert_eq!(out("<?php echo mb_substr('日本語', -1);"), "語");
+}
+
+#[test]
+fn mb_str_split_groups_code_points() {
+    assert_eq!(out("<?php echo implode('|', mb_str_split('abcde', 2));"), "ab|cd|e");
+    // Default length is 1.
+    assert_eq!(out("<?php echo implode('|', mb_str_split('日本語'));"), "日|本|語");
+    // Empty input yields an empty array.
+    assert_eq!(out("<?php echo count(mb_str_split(''));"), "0");
+}
+
+#[test]
+fn mb_unknown_encoding_is_value_error() {
+    match fatal("<?php mb_strlen('abc', 'NO-SUCH-ENC');") {
+        PhpError::ValueError(m) => assert_eq!(
+            m,
+            "mb_strlen(): Argument #2 ($encoding) must be a valid encoding, \"NO-SUCH-ENC\" given"
+        ),
+        other => panic!("expected ValueError, got {other:?}"),
+    }
+}
+
+// --- mb-2: case (strtoupper / strtolower / convert_case / ucfirst / lcfirst) ---
+
+#[test]
+fn mb_strtoupper_full_unicode() {
+    // ß expands to SS; accented and Greek (final sigma → Σ) map per Unicode.
+    assert_eq!(out("<?php echo mb_strtoupper('ß');"), "SS");
+    assert_eq!(out("<?php echo mb_strtoupper('café');"), "CAFÉ");
+    assert_eq!(out("<?php echo mb_strtoupper('σίσυφος');"), "ΣΊΣΥΦΟΣ");
+}
+
+#[test]
+fn mb_strtolower_full_unicode() {
+    // İ (dotted capital I) lowercases to "i" + combining dot above (two cp).
+    assert_eq!(out("<?php echo mb_strtolower('İ');"), "i\u{307}");
+    assert_eq!(out("<?php echo mb_strtolower('CAFÉ');"), "café");
+}
+
+#[test]
+fn mb_convert_case_modes() {
+    assert_eq!(out("<?php echo mb_convert_case('café', MB_CASE_UPPER);"), "CAFÉ");
+    assert_eq!(out("<?php echo mb_convert_case('CAFÉ', MB_CASE_LOWER);"), "café");
+    assert_eq!(out("<?php echo mb_convert_case('HELLO wÖRLD', MB_CASE_TITLE);"), "Hello Wörld");
+    // Digits and hyphens are word boundaries.
+    assert_eq!(out("<?php echo mb_convert_case('abc123def', MB_CASE_TITLE);"), "Abc123Def");
+    assert_eq!(out("<?php echo mb_convert_case('über-fluß', MB_CASE_TITLE);"), "Über-Fluß");
+    assert_eq!(out("<?php echo mb_convert_case('', MB_CASE_TITLE);"), "");
+}
+
+#[test]
+fn mb_convert_case_invalid_mode_is_value_error() {
+    match fatal("<?php mb_convert_case('x', 99);") {
+        PhpError::ValueError(m) => assert_eq!(
+            m,
+            "mb_convert_case(): Argument #2 ($mode) must be one of the MB_CASE_* constants"
+        ),
+        other => panic!("expected ValueError, got {other:?}"),
+    }
+}
+
+#[test]
+fn mb_ucfirst_lcfirst() {
+    assert_eq!(out("<?php echo mb_ucfirst('straße');"), "Straße");
+    // ucfirst only touches the first code point; the rest is verbatim.
+    assert_eq!(out("<?php echo mb_ucfirst('ÉLAN');"), "ÉLAN");
+    assert_eq!(out("<?php echo mb_lcfirst('ÉLAN');"), "éLAN");
+}
+
+// --- mb-3: search (strpos family / strstr family / substr_count) ---
+
+#[test]
+fn mb_strpos_code_point_offsets() {
+    assert_eq!(out("<?php echo mb_strpos('日本語日本', '本');"), "1");
+    assert_eq!(out("<?php echo mb_strpos('日本語日本', '本', 2);"), "4");
+    assert_eq!(out("<?php var_dump(mb_strpos('abc', 'z'));"), "bool(false)\n");
+    assert_eq!(out("<?php echo mb_strpos('abc', '');"), "0");
+    assert_eq!(out("<?php echo mb_strpos('ababa', 'a', -2);"), "4");
+    assert_eq!(out("<?php echo mb_stripos('HÉLLO', 'é');"), "1");
+}
+
+#[test]
+fn mb_strrpos_last_occurrence() {
+    assert_eq!(out("<?php echo mb_strrpos('日本語日本', '本');"), "4");
+    assert_eq!(out("<?php echo mb_strripos('ABABA', 'b');"), "3");
+    assert_eq!(out("<?php var_dump(mb_strrpos('abc', 'z'));"), "bool(false)\n");
+}
+
+#[test]
+fn mb_strstr_family() {
+    assert_eq!(out("<?php echo mb_strstr('foobar café', 'bar');"), "bar café");
+    assert_eq!(out("<?php echo mb_strstr('foobar', 'bar', true);"), "foo");
+    assert_eq!(out("<?php var_dump(mb_strstr('foo', 'z'));"), "bool(false)\n");
+    assert_eq!(out("<?php echo mb_stristr('Café au lait', 'CAFÉ');"), "Café au lait");
+    // strrchr uses the whole needle and the last occurrence.
+    assert_eq!(out("<?php echo mb_strrchr('a/b/c', '/');"), "/c");
+    assert_eq!(out("<?php echo mb_strrchr('a/b/c', '/b');"), "/b/c");
+    assert_eq!(out("<?php echo mb_strrichr('A.b.C', 'B');"), "b.C");
+}
+
+#[test]
+fn mb_substr_count_non_overlapping() {
+    assert_eq!(out("<?php echo mb_substr_count('ababab', 'ab');"), "3");
+    assert_eq!(out("<?php echo mb_substr_count('aaa', 'aa');"), "1");
+}
+
+// --- mb-4: ord / chr / str_pad / trim family / check_encoding ---
+
+#[test]
+fn mb_ord_and_chr() {
+    assert_eq!(out("<?php echo mb_ord('語');"), "35486");
+    assert_eq!(out("<?php echo mb_chr(26085);"), "日");
+    // Surrogates and out-of-range code points are not valid → false.
+    assert_eq!(out("<?php var_dump(mb_chr(0xD800));"), "bool(false)\n");
+    assert_eq!(out("<?php var_dump(mb_chr(0x110000));"), "bool(false)\n");
+}
+
+#[test]
+fn mb_ord_empty_is_value_error() {
+    match fatal("<?php mb_ord('');") {
+        PhpError::ValueError(m) => {
+            assert_eq!(m, "mb_ord(): Argument #1 ($string) must not be empty")
+        }
+        other => panic!("expected ValueError, got {other:?}"),
+    }
+}
+
+#[test]
+fn mb_str_pad_by_code_point() {
+    assert_eq!(out("<?php echo mb_str_pad('é', 4, '*', STR_PAD_LEFT);"), "***é");
+    assert_eq!(out("<?php echo mb_str_pad('x', 5, '-', STR_PAD_BOTH);"), "--x--");
+    // Default pad is a space, default type is STR_PAD_RIGHT.
+    assert_eq!(out("<?php echo mb_str_pad('日', 3);"), "日  ");
+    // No padding when already long enough.
+    assert_eq!(out("<?php echo mb_str_pad('abc', 2, '*');"), "abc");
+}
+
+#[test]
+fn mb_trim_family() {
+    assert_eq!(out("<?php echo mb_trim('  héllo \n');"), "héllo");
+    assert_eq!(out("<?php echo mb_trim('xxabcxx', 'x');"), "abc");
+    assert_eq!(out("<?php echo mb_rtrim('café…', '…');"), "café");
+    assert_eq!(out("<?php echo mb_ltrim('…café', '…');"), "café");
+}
+
+#[test]
+fn mb_check_encoding_utf8() {
+    assert_eq!(out("<?php var_dump(mb_check_encoding('café', 'UTF-8'));"), "bool(true)\n");
+    assert_eq!(out("<?php var_dump(mb_check_encoding(\"a\\xFF\", 'UTF-8'));"), "bool(false)\n");
+}

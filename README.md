@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–40 completati · 734 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–41 completati · 752 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 > Hardening tooling (non-funzionale): depth-guard nell'evaluator (`MAX_CALL_DEPTH`,
 > converte la ricorsione runaway in un `Error` catchable invece di un SIGABRT del
@@ -65,6 +65,7 @@ full port semantico del solo `zend_operators.c`).
 | 38 | **argomenti nominati** `f(c: 3, a: 1)` per funzioni/costruttori/metodi/static (riordino, default saltati, named→by-ref, errori catchable, posizionale-dopo-nominato compile-fatal) + **parametri variadic** `f(...$rest)`. `nullsafe ?->` già dallo step 19. Follow-up: spread `...$arr`, named→variadic | ✅ |
 | 39 | **generatori `yield`** — esecuzione sospendibile via coroutine stackful `corosensei` (D-GEN-1). `yield`/`yield $k=>$v`/`yield;`/`yield from` (array+sub-generatore), `send()`, `return`+`getReturn()`, Iterator (current/key/next/valid/rewind), `foreach` su Generator, instanceof Generator/Iterator/Traversable, var_dump. Closure-generator. Corpus `Zend/tests/generators` 59/110. Scope-out (D-GEN-4): `throw()`, eccezioni/finally attraverso yield, yield by-ref | ✅ |
 | 40 | **argument unpacking / spread** `f(...$arr)` per Call/New/MethodCall/StaticCall: chiavi int→posizionali (valore chiave ignorato), chiavi string→nominati, spread→variadic (re-keyed), Traversable/generator, `TypeError` su non-iterabile, compile-fatal posizionale-dopo-spread / spread-dopo-nominato. **named→variadic** (`...$rest` raccoglie i nominati senza match con chiave string, esplicita e da spread). Scope-out D-40.1: precedenza messaggio su input doppiamente-invalido | ✅ |
+| 41 | **mbstring batch 1** (UTF-8 code-point) — `mb_strlen`/`mb_substr`/`mb_str_split`, case (`mb_strtoupper`/`mb_strtolower`/`mb_convert_case`/`mb_ucfirst`/`mb_lcfirst`, full Unicode via std), ricerca (`mb_strpos`/`stripos`/`strrpos`/`strripos`/`mb_strstr`/`stristr`/`strrchr`/`strrichr`/`mb_substr_count`), `mb_ord`/`mb_chr`/`mb_str_pad`/`mb_trim`/`ltrim`/`rtrim`/`mb_check_encoding`. Builtin puri. Scope-out: encoding non-UTF-8 (serve `encoding_rs`), `mb_ereg*`, `mb_convert_encoding`/`detect`/`strwidth` | ✅ |
 
 > Lo step 6 è stato eseguito **dopo** lo step 7 (deciso con l'utente: gli array
 > rendono il phpt-runner molto più utile, quintuplicando i test in-scope).

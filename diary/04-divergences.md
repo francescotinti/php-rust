@@ -335,3 +335,33 @@ named-into-variadic (esplicito e da spread, chiave string preservata),
 Traversable/generator (chiavi int e string), array vuoto, TypeError su
 non-iterabile, overwrite, compile-fatals (positional-after-unpacking,
 unpacking-after-named).
+
+## Step 41 (mbstring batch 1) — UTF-8 core; divergenze su edge dichiarate
+
+23 funzioni `mb_*` stringa UTF-8 (vedi `03-translation-log.md` + `NEXT-mbstring.md`).
+18 test oracle-verificati. Comportamenti core esatti; divergenze solo su edge
+dichiarati (scope-out):
+
+| # | Caso | Comportamento Rust | PHP 8.5.7 | Stato |
+|---|---|---|---|---|
+| D-MB1 | `$encoding` non-UTF-8 *valido* (Shift-JIS, EUC, …) | `ValueError` "must be a valid encoding" | processa nell'encoding | scope-out (serve `encoding_rs`); per ENCODING SCONOSCIUTO il messaggio combacia |
+| D-MB3a | `mb_convert_case(.., TITLE)` con punteggiatura Case_Ignorable | l'apostrofo è boundary: `o'brien`→`O'Brien` | `o'brien` (apostrofo Case_Ignorable, non boundary) | scope-out (no tabelle Case_Ignorable); boundary su spazio/trattino/cifra è esatto |
+| D-MB3b | `MB_CASE_FOLD` su char con fold ≠ lowercase (es. ß) | `to_lowercase` (ß→ß) | full case-fold (ß→ss) | scope-out (approssimazione) |
+| D-MB3c | `*_SIMPLE` (mode 4-7) su char con espansione (ß) | trattati come le versioni full (ß→SS) | mapping 1:1 senza espansione (ß→ß) | scope-out (raro) |
+| D-MB-rpos | offset ≠ 0 su `mb_strrpos`/`mb_strripos` | ignorato (cerca tutta la stringa) | offset onorato | scope-out batch 1 (il default è il caso comune) |
+| D-MB-ci | ricerca case-insensitive con fold length-changing (İ, final-sigma) | fold semplice (primo char del lowercase) | fold pieno | scope-out (raro) |
+| D-MB-inv | rendering di byte UTF-8 invalidi in substr/case | byte copiati verbatim / U+FFFD per unità | sostituzione mbstring | scope-out (il CONTEGGIO/offset è corretto: `mb_strlen("a\xFF\xFEb")==4`) |
+
+Casi coperti e oracle-verificati: conteggio code-point (incl. combining +
+byte invalidi), substr/str_split (negativi, len omessa, chunk), case full-Unicode
+(`ß→SS`/`ı→I`/`İ→i̇`/final-sigma/greco), TITLE (boundary spazio/trattino/cifra),
+ucfirst/lcfirst, strpos family (offset code-point, neg, empty needle, miss→false,
+case-insensitive), strstr/strrchr family (before_needle, needle intero, last
+occurrence), substr_count non-overlapping, ord/chr (surrogate/range→false),
+str_pad (LEFT/RIGHT/BOTH, pad ciclato), trim/ltrim/rtrim (default + charlist),
+check_encoding (UTF-8 valido/invalido), `ValueError` su encoding sconosciuto /
+mode invalido / needle vuoto / stringa vuota in ord.
+
+**Corpus** `ext/mbstring/tests`: 417/420 SKIP categoria "section" (il phpt-runner
+scarta `--EXTENSIONS--`/`--SKIPIF--`/`--INI--`). NON è regressione: validazione
+via unit test. Rilassare `--EXTENSIONS--` = item tooling cross-cutting separato.

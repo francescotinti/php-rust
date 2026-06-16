@@ -786,3 +786,44 @@ Step non-funzionale (DevEx/stabilità), nato dalla review esterna `analysis_resu
   il batch completa (test successivi eseguiti, crash contenuto). Test d'integrazione
   `tests/isolation.rs` (via `CARGO_BIN_EXE_phpt-runner`, fixture in tempdir).
 - **Tempo:** ~mezza sessione (gran parte sulla ricompilazione oracle + calibrazione).
+
+## Step 41 — mbstring batch 1 (funzioni stringa UTF-8 code-point)
+
+Primo batch di `mb_*`, sbloccato dalla ricompilazione oracle con mbstring. Design
+pass: `diary/NEXT-mbstring.md`. Pattern builtin PURO (modulo
+`php-builtins/src/mbstring.rs`, ABI `fn(&[Zval],&mut Ctx)`, zero modifiche
+all'evaluator), come step 17/29. **+18 test** oracle-verificati (734→752).
+- **23 funzioni in 4 sotto-step**: mb-1 `mb_strlen`/`mb_substr`/`mb_str_split`
+  (+ helper `units`); mb-2 `mb_strtoupper`/`mb_strtolower`/`mb_convert_case`
+  (UPPER/LOWER/TITLE/FOLD + alias SIMPLE)/`mb_ucfirst`/`mb_lcfirst`; mb-3
+  `mb_strpos`/`stripos`/`strrpos`/`strripos`/`strstr`/`stristr`/`strrchr`/
+  `strrichr`/`mb_substr_count`; mb-4 `mb_ord`/`mb_chr`/`mb_str_pad`/`mb_trim`/
+  `mb_ltrim`/`mb_rtrim`/`mb_check_encoding`. Costanti `MB_CASE_*` aggiunte a
+  `resolve_constant` (lower.rs).
+- **Scoperta abilitante (D-MB3)**: il case-mapping Unicode di Rust std
+  (`char::to_uppercase`/`to_lowercase`) **combacia con PHP** anche sui casi
+  difficili (`ß→SS`, `ı→I`, `İ→i̇` 2 cp, final-sigma `ς→Σ`) → mb-2 quasi
+  interamente std-backed, zero tabelle. `str::chars().count()` = `mb_strlen`.
+- **Helper**: `units` (decode lenient: scalare UTF-8 valido = 1 unità, byte
+  invalido = 1 unità → `mb_strlen("a\xFF\xFEb")==4` come oracle); `cps`
+  (char + byte_start/len per offset↔byte); `fold` (case-fold semplice per
+  ricerca case-insensitive).
+- **Encoding (D-MB1)**: solo UTF-8 (+ alias UTF8/US-ASCII/ASCII). Encoding
+  diverso → `ValueError` "must be a valid encoding, "X" given" (oracle-esatto).
+- **Errori RED dei test** (non bug d'impl): `var_export()`/`count()`/`array_sum()`
+  NON sono builtin implementati → riscritti con `var_dump`/`implode`.
+- **Divergenze dichiarate (scope-out, in `04-divergences.md` sez. mbstring)**:
+  encoding non-UTF-8 *validi* riportati come invalidi (D-MB1, serve `encoding_rs`);
+  `mb_convert_case` TITLE non onora le Case_Ignorable Unicode (apostrofo:
+  `o'brien`→noi `O'Brien` vs PHP `O'brien`); FOLD ≈ `to_lowercase`; `*_SIMPLE`
+  trattati come full; offset sul ramo reverse di `mb_strrpos` non gestito;
+  rendering byte invalidi (il conteggio/offset è corretto). Famiglia `mb_ereg*`
+  (oniguruma), `mb_convert_encoding`/`detect`/`strwidth` → batch futuri.
+- **Corpus** `ext/mbstring/tests` (420): **417 tutti SKIP categoria "section"**
+  — il phpt-runner scarta a monte i test con `--EXTENSIONS--` (397), `--SKIPIF--`
+  (123), `--INI--` (120). NON è una regressione né un difetto delle funzioni:
+  la validazione differenziale è fatta dai 18 unit test (ogni atteso preso
+  dall'oracle ricompilato). Rilassare `--EXTENSIONS--` per le estensioni
+  supportate è un item tooling **cross-cutting** a sé (sbloccherebbe anche
+  ext/standard ecc.) — non incluso qui.
+- **Tempo:** ~mezza sessione.
