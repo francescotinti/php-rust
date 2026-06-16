@@ -4454,3 +4454,33 @@ fn generator_rewind_after_advance_fatals() {
         o.fatal
     );
 }
+
+// --- Tooling hardening: evaluator call-depth guard (prevents host SIGABRT) ---
+
+#[test]
+fn deep_recursion_yields_clean_error_not_host_crash() {
+    // Runaway recursion must surface a catchable Error (defensive depth guard),
+    // not abort the host process via a native stack overflow. Run on a large
+    // stack (like the phpt-runner's worker) so the guard fires before the native
+    // stack would overflow — on a small thread the native stack would overflow
+    // first regardless. RED state (without the guard) is a SIGABRT, which would
+    // abort the whole test binary, so it is demonstrated empirically instead.
+    // `PhpError`/`Zval` are `Rc`-based (not `Send`), so project the fatal to its
+    // message (a `String`, which is `Send`) inside the worker before returning.
+    let msg = std::thread::Builder::new()
+        .stack_size(1 << 30)
+        .spawn(|| match run_source(b"t.php", b"<?php function r($n){ return r($n + 1); } r(0);")
+            .expect("lowers")
+            .fatal
+        {
+            Some(PhpError::Error(m)) => Some(m),
+            _ => None,
+        })
+        .expect("spawn worker")
+        .join()
+        .expect("worker panicked");
+    match msg {
+        Some(m) => assert!(m.contains("call stack depth"), "unexpected message: {m}"),
+        None => panic!("expected depth-guard error, got none"),
+    }
+}

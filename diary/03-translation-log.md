@@ -752,3 +752,37 @@ gap di feature non implementate, non difetti di rendering).
 - **Differenze idiomatiche dalla mappa:** nessuna nuova D-G; riusa il binding
   step-38. `SpreadNamed` type-alias per il tipo di ritorno composto.
 - **Tempo:** ~mezza sessione.
+
+## Tooling hardening — depth-guard + phpt-runner isolation
+
+Step non-funzionale (DevEx/stabilità), nato dalla review esterna `analysis_results.md`
+(punti 1A + 3B). Nessun cambio di semantica osservabile; +2 test.
+- **Oracle**: ricompilato `/tmp/php-src` con `--enable-mbstring` (richiede oniguruma,
+  installato via `brew install oniguruma`; `pkg-config` assente → passati
+  `ONIG_CFLAGS`/`ONIG_LIBS` espliciti). Ora `mb_strlen`/`mb_strtoupper`/`mb_substr`/
+  `mb_convert_encoding` disponibili → **sblocca la validazione differential di mb_***
+  (era BLOCCATO senza oracle mbstring). Configure preservata: `--disable-all
+  --enable-cli --disable-cgi --disable-phpdbg --without-pear --enable-mbstring`.
+- **1A — depth-guard** (`eval.rs`): l'evaluator ricorre sullo stack nativo (Rust non
+  protegge da overflow) → ricorsione runaway = SIGABRT del processo host. Nuovo
+  `MAX_CALL_DEPTH = 25_000` + `guard_call_depth()` ai due ingressi che spingono un
+  frame (`call_user_fn`, `invoke_method_args`); supera la soglia → `Error` catchable
+  "Maximum call stack depth of 25000 exceeded" invece del crash. **Calibrato
+  empiricamente** sullo stack da 1 GiB del worker del runner (overflow nativo misurato
+  ~38k frame; 25k = margine ~35%, e ben oltre qualsiasi ricorsione realistica).
+  Test (`deep_recursion_yields_clean_error_not_host_crash`) gira su un thread da 1 GiB
+  (proietta il fatal a `String` perché `PhpError`/`Zval` sono `Rc`-based, non `Send`).
+  **Scope-out**: la ricorsione di **closure** non passa da quei due ingressi (path
+  proprio, non pusha `call_stack`) → non guardata da 1A; coperta da 3B. Su stack
+  piccoli l'overflow nativo può precedere il guard (presuppone un worker ampio).
+- **3B — isolamento `--isolate`** (`phpt-runner/main.rs`): flag opt-in (il path
+  in-process veloce resta default). In modalità isolata il parent enumera i `.phpt`
+  (`collect_phpt` reso `pub`) e per ognuno fa spawn di un figlio `self --run-one <path>`
+  che esegue il singolo test su un worker da 1 GiB e serializza il risultato
+  (`STATUS\tCATEGORY\n` + detail). Un figlio che muore (signal da overflow, o panic)
+  → exit non-success → registrato come **un FAIL "isolated worker crashed (signal …)"**
+  invece di abortire l'intero batch. Verificato: la ricorsione di closure (crasher
+  non coperto da 1A) senza `--isolate` dà exit 134 (batch abortito), con `--isolate`
+  il batch completa (test successivi eseguiti, crash contenuto). Test d'integrazione
+  `tests/isolation.rs` (via `CARGO_BIN_EXE_phpt-runner`, fixture in tempdir).
+- **Tempo:** ~mezza sessione (gran parte sulla ricompilazione oracle + calibrazione).

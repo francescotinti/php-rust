@@ -114,6 +114,16 @@ macro_rules! slot_mut {
 /// already evaluated by value, awaiting placement by parameter name.
 type SpreadNamed = Vec<(Box<[u8]>, Zval)>;
 
+/// Defensive ceiling on PHP call-stack depth. The evaluator recurses on the
+/// native (Rust) stack, which has no overflow protection — runaway recursion
+/// would abort the host process with SIGABRT (e.g. taking down a whole
+/// `phpt-runner` batch). This guard converts that into a clean catchable
+/// `Error` instead. It is calibrated for the `phpt-runner`'s 1 GiB worker
+/// thread (native overflow observed ~38k frames there); realistic programs
+/// never approach it. NB: on a small caller stack the native overflow can
+/// still happen first — deep-recursion safety presumes a large worker stack.
+const MAX_CALL_DEPTH: usize = 25_000;
+
 enum Arg {
     Val(Zval),
     Ref(Rc<RefCell<Zval>>),
@@ -1129,10 +1139,24 @@ impl<'p> Evaluator<'p> {
 
     // --- user functions ---
 
+    /// Reject a call that would push the PHP call stack past [`MAX_CALL_DEPTH`],
+    /// before recursing further on the native stack (see the constant's docs).
+    /// `call_stack` already tracks every active function/method frame, so its
+    /// length is the current call depth.
+    fn guard_call_depth(&self) -> Result<(), PhpError> {
+        if self.call_stack.len() >= MAX_CALL_DEPTH {
+            return Err(PhpError::Error(format!(
+                "Maximum call stack depth of {MAX_CALL_DEPTH} exceeded"
+            )));
+        }
+        Ok(())
+    }
+
     /// Invoke a hoisted user function: validate arity, set up a fresh local
     /// frame (its own slot table and slot names), bind parameters, run the body,
     /// then restore the caller's frame. Recursion uses the host (Rust) stack.
     fn call_user_fn(&mut self, idx: usize, argv: Vec<Arg>) -> Result<Zval, PhpError> {
+        self.guard_call_depth()?;
         // `funcs` is `&'p [FnDecl]` (Copy): copying it out detaches the borrow
         // from `self`, so installing the local overlay below can mutate the
         // active frame freely.
@@ -3161,6 +3185,7 @@ impl<'p> Evaluator<'p> {
         method: &[u8],
         argv: Vec<Arg>,
     ) -> Result<Zval, PhpError> {
+        self.guard_call_depth()?;
         let f: &'p FnDecl = &m.decl;
         let required = f
             .params

@@ -14,7 +14,13 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–40 completati · 733 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–40 completati · 734 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+
+> Hardening tooling (non-funzionale): depth-guard nell'evaluator (`MAX_CALL_DEPTH`,
+> converte la ricorsione runaway in un `Error` catchable invece di un SIGABRT del
+> processo) + modalità `phpt-runner --isolate` (ogni test in un sotto-processo: un
+> crash è contenuto come un FAIL, non aborta il batch). Oracle ricompilato con
+> `--enable-mbstring` → sblocca la validazione di `mb_*`.
 
 | Step | Contenuto | Stato |
 |---|---|---|

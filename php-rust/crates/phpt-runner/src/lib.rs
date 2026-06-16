@@ -318,7 +318,7 @@ fn is_hidden(p: &Path) -> bool {
 }
 
 /// Collect `.phpt` paths under `root`, sorted for deterministic output.
-fn collect_phpt(root: &Path) -> std::io::Result<Vec<PathBuf>> {
+pub fn collect_phpt(root: &Path) -> std::io::Result<Vec<PathBuf>> {
     let mut out = Vec::new();
     let mut stack = vec![root.to_path_buf()];
     while let Some(p) = stack.pop() {

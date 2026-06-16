@@ -3,14 +3,17 @@
 //! Usage:
 //!   phpt-runner <path>...        # files and/or directories (searched recursively)
 //!   phpt-runner --list-fails ... # also print each failing test's diff
+//!   phpt-runner --isolate ...    # run each test in its own child process, so a
+//!                                # crash (stack overflow / panic) is contained as
+//!                                # one FAIL instead of aborting the whole batch
 //!
 //! Exit code is non-zero iff at least one test FAILED (skips never fail the run).
 
 use std::path::Path;
-use std::process::ExitCode;
+use std::process::{Command, ExitCode};
 
 use php_builtins::registry;
-use phpt_runner::{run_path, Summary};
+use phpt_runner::{collect_phpt, run_path, run_phpt, Status, Summary};
 
 /// The recursive-descent front-end (mago) and our tree-walking evaluator both
 /// recurse on the native stack, so pathological tests — e.g. PHP's own
@@ -20,34 +23,53 @@ use phpt_runner::{run_path, Summary};
 const WORKER_STACK: usize = 1 << 30; // 1 GiB
 
 fn main() -> ExitCode {
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+
+    // Hidden child mode: run exactly one test and serialise its result, so the
+    // parent (`--isolate`) can survive a crash here as a non-zero exit status.
+    if let Some(pos) = args.iter().position(|a| a == "--run-one") {
+        let path = args.get(pos + 1).cloned();
+        return run_one_child(path);
+    }
+
+    let mut list_fails = false;
+    let mut isolate = false;
+    args.retain(|a| match a.as_str() {
+        "--list-fails" => {
+            list_fails = true;
+            false
+        }
+        "--isolate" => {
+            isolate = true;
+            false
+        }
+        _ => true,
+    });
+
+    if args.is_empty() {
+        eprintln!("usage: phpt-runner [--list-fails] [--isolate] <path>...");
+        return ExitCode::from(2);
+    }
+
+    if isolate {
+        // The parent only spawns children, so it needs no large stack itself.
+        return run_isolated(&args, list_fails);
+    }
+
+    // In-process (fast) path: run the whole job on a generous-stack worker.
     std::thread::Builder::new()
         .stack_size(WORKER_STACK)
-        .spawn(run)
+        .spawn(move || run_in_process(&args, list_fails))
         .expect("spawn worker")
         .join()
         .expect("worker panicked")
 }
 
-fn run() -> ExitCode {
-    let mut args: Vec<String> = std::env::args().skip(1).collect();
-    let mut list_fails = false;
-    args.retain(|a| {
-        if a == "--list-fails" {
-            list_fails = true;
-            false
-        } else {
-            true
-        }
-    });
-
-    if args.is_empty() {
-        eprintln!("usage: phpt-runner [--list-fails] <path>...");
-        return ExitCode::from(2);
-    }
-
+/// Run every test in-process under one big-stack worker thread (the default).
+fn run_in_process(args: &[String], list_fails: bool) -> ExitCode {
     let reg = registry();
     let mut total = Summary::default();
-    for arg in &args {
+    for arg in args {
         match run_path(Path::new(arg), &reg) {
             Ok(s) => merge(&mut total, s),
             Err(e) => {
@@ -56,8 +78,112 @@ fn run() -> ExitCode {
             }
         }
     }
-
     print_summary(&total, list_fails);
+    exit_for(&total)
+}
+
+/// Run each test in its own child process (`--run-one`). A child that exits
+/// abnormally (signal from a stack overflow, or a panic) is recorded as one
+/// FAIL with the cause, instead of aborting the whole batch (DevEx hardening).
+fn run_isolated(args: &[String], list_fails: bool) -> ExitCode {
+    let exe = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("cannot find own executable: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let mut total = Summary::default();
+    for arg in args {
+        let paths = match collect_phpt(Path::new(arg)) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("error reading {arg}: {e}");
+                return ExitCode::from(2);
+            }
+        };
+        for path in paths {
+            let out = Command::new(&exe).arg("--run-one").arg(&path).output();
+            match out {
+                // Clean run: the child serialised a result on stdout.
+                Ok(o) if o.status.success() => {
+                    let stdout = String::from_utf8_lossy(&o.stdout);
+                    let (header, detail) = match stdout.split_once('\n') {
+                        Some((h, d)) => (h, d.to_string()),
+                        None => (stdout.as_ref(), String::new()),
+                    };
+                    let mut fields = header.split('\t');
+                    match (fields.next(), fields.next()) {
+                        (Some("PASS"), _) => total.pass += 1,
+                        (Some("FAIL"), _) => {
+                            total.fail += 1;
+                            total.failures.push((path, detail));
+                        }
+                        (Some("SKIP"), Some(cat)) => {
+                            total.skip += 1;
+                            *total.skip_by_category.entry(cat.to_string()).or_insert(0) += 1;
+                        }
+                        _ => {
+                            total.fail += 1;
+                            total
+                                .failures
+                                .push((path, "isolated worker: unparseable result".to_string()));
+                        }
+                    }
+                }
+                // Abnormal exit: signal (e.g. SIGABRT from stack overflow) or panic.
+                Ok(o) => {
+                    total.fail += 1;
+                    total
+                        .failures
+                        .push((path, format!("isolated worker crashed ({})", o.status)));
+                }
+                Err(e) => {
+                    total.fail += 1;
+                    total.failures.push((path, format!("spawn failed: {e}")));
+                }
+            }
+        }
+    }
+    print_summary(&total, list_fails);
+    exit_for(&total)
+}
+
+/// Child mode: run a single test on a big-stack worker and serialise its result
+/// as `STATUS\tCATEGORY\n` followed by the (possibly multi-line) detail. A crash
+/// or panic here exits the process abnormally, which the parent detects.
+fn run_one_child(path: Option<String>) -> ExitCode {
+    let Some(path) = path else {
+        eprintln!("--run-one needs a path");
+        return ExitCode::from(2);
+    };
+    let src = match std::fs::read(&path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("read {path}: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let result = std::thread::Builder::new()
+        .stack_size(WORKER_STACK)
+        .spawn(move || {
+            let reg = registry();
+            run_phpt(&src, &reg)
+        })
+        .expect("spawn worker")
+        .join()
+        .expect("worker panicked");
+    let status = match result.status {
+        Status::Pass => "PASS",
+        Status::Fail => "FAIL",
+        Status::Skip => "SKIP",
+    };
+    println!("{status}\t{}", result.category);
+    print!("{}", result.detail);
+    ExitCode::SUCCESS
+}
+
+fn exit_for(total: &Summary) -> ExitCode {
     if total.fail == 0 {
         ExitCode::SUCCESS
     } else {
