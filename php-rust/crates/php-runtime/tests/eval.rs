@@ -3856,6 +3856,7 @@ fn preg_dollar_default_leniency_counts() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn preg_dollar_endonly_D_flag() {
     // `D` (PCRE_DOLLAR_ENDONLY): `$` only at the absolute end. Oracle: 0, 1.
     assert_eq!(out("<?php echo preg_match('/foo$/D', \"foo\\n\");"), "0");
@@ -4001,6 +4002,192 @@ fn named_args_positional_after_named_is_compile_fatal() {
         }
         other => panic!("expected compile fatal, got {other:?}"),
     }
+}
+
+// --- Step 40: argument unpacking / spread `f(...$arr)` ---
+
+#[test]
+fn spread_basic_positional() {
+    // Int-keyed array unpacked into positional params. Oracle: 1-2-3.
+    let src = r#"<?php function f($a,$b,$c){ return "$a-$b-$c"; } echo f(...[1,2,3]);"#;
+    assert_eq!(out(src), "1-2-3");
+}
+
+#[test]
+fn spread_leading_positional_then_spread() {
+    // A plain positional may precede a spread. Oracle: 1-2-3.
+    let src = r#"<?php function f($a,$b,$c){ return "$a-$b-$c"; } echo f(1, ...[2,3]);"#;
+    assert_eq!(out(src), "1-2-3");
+}
+
+#[test]
+fn spread_multiple_arrays() {
+    // Two spreads concatenate positionally. Oracle: 1-2-3.
+    let src = r#"<?php function f($a,$b,$c){ return "$a-$b-$c"; } echo f(...[1], ...[2,3]);"#;
+    assert_eq!(out(src), "1-2-3");
+}
+
+#[test]
+fn spread_into_variadic() {
+    // Unpacked int-keyed array collected by `...$args`, re-keyed 0,1,2.
+    let src = r#"<?php function f(...$n){ $s=''; foreach($n as $k=>$v) $s.="$k:$v "; return $s; } echo f(...[1,2,3]);"#;
+    assert_eq!(out(src), "0:1 1:2 2:3 ");
+}
+
+#[test]
+fn spread_string_keys_become_named() {
+    // String keys map to named parameters by name. Oracle: 1-2-3.
+    let src = r#"<?php function f($a,$b,$c){ return "$a-$b-$c"; } echo f(...['a'=>1,'b'=>2,'c'=>3]);"#;
+    assert_eq!(out(src), "1-2-3");
+}
+
+#[test]
+fn spread_partial_string_keys_use_defaults() {
+    // String keys fill named params; an omitted middle keeps its default.
+    let src = r#"<?php function f($a,$b='B',$c='C'){ return "$a-$b-$c"; } echo f(...['a'=>1,'c'=>3]);"#;
+    assert_eq!(out(src), "1-B-3");
+}
+
+#[test]
+fn spread_int_keys_ignore_key_value() {
+    // Non-sequential int keys are appended in iteration order; the key is ignored.
+    let src = r#"<?php function f($a,$b,$c){ return "$a-$b-$c"; } echo f(...[5=>'x',2=>'y',9=>'z']);"#;
+    assert_eq!(out(src), "x-y-z");
+}
+
+#[test]
+fn spread_non_array_is_typeerror() {
+    // Unpacking a scalar raises a catchable TypeError. Oracle message verified.
+    let src = r#"<?php function f($a){} try { f(...5); } catch (\TypeError $e) { echo $e->getMessage(); }"#;
+    assert_eq!(out(src), "Only arrays and Traversables can be unpacked, int given");
+}
+
+#[test]
+fn spread_unknown_named_is_error() {
+    // A string key with no matching param raises "Unknown named parameter".
+    let src = r#"<?php function f($a){} try { f(...['z'=>1]); } catch (\Error $e) { echo $e->getMessage(); }"#;
+    assert_eq!(out(src), "Unknown named parameter $z");
+}
+
+#[test]
+fn spread_empty_array() {
+    // Unpacking an empty array supplies no arguments. Oracle: 0 elems.
+    let src = r#"<?php function f(...$n){ $c=0; foreach($n as $v) $c++; return $c; } echo f(...[]);"#;
+    assert_eq!(out(src), "0");
+}
+
+#[test]
+fn spread_overwrite_previous_is_error() {
+    // A positional then a spread string key for the same slot overwrites. Oracle Error.
+    let src = r#"<?php function f($a,$b,$c){} try { f(1, ...['a'=>9,'b'=>2,'c'=>3]); } catch (\Error $e) { echo $e->getMessage(); }"#;
+    assert_eq!(out(src), "Named parameter $a overwrites previous argument");
+}
+
+#[test]
+fn spread_int_after_string_key_during_unpacking_is_error() {
+    // Within unpacking, an int key after a string key is a catchable Error.
+    let src = r#"<?php function f($x, ...$r){} try { f(1, ...['k'=>2, 0=>3]); } catch (\Error $e) { echo $e->getMessage(); }"#;
+    assert_eq!(
+        out(src),
+        "Cannot use positional argument after named argument during unpacking"
+    );
+}
+
+#[test]
+fn spread_named_after_spread() {
+    // Explicit named arguments may follow a spread. Oracle: 1-2-3.
+    let src = r#"<?php function f($a,$b,$c){ return "$a-$b-$c"; } echo f(...[1], c:3, b:2);"#;
+    assert_eq!(out(src), "1-2-3");
+}
+
+#[test]
+fn spread_traversable_generator() {
+    // A Traversable (generator) unpacks like an array; int keys → positional.
+    let src = r#"<?php
+function gen(){ yield 1; yield 2; yield 3; }
+function f(...$n){ $t=0; foreach($n as $v) $t+=$v; return $t; }
+echo f(...gen());"#;
+    assert_eq!(out(src), "6");
+}
+
+#[test]
+fn spread_generator_string_keys_become_named() {
+    // A generator yielding string keys feeds named-into-variadic.
+    let src = r#"<?php
+function gen(){ yield 'x' => 1; yield 'y' => 2; }
+function f(...$n){ $s=''; foreach($n as $k=>$v) $s.="$k:$v "; return $s; }
+echo f(...gen());"#;
+    assert_eq!(out(src), "x:1 y:2 ");
+}
+
+#[test]
+fn spread_positional_after_unpacking_is_compile_fatal() {
+    // A positional argument after a spread is a compile-time Fatal. Oracle verified.
+    let o = run_source(b"t.php", b"<?php function f($a,$b,$c){} f(...[1,2], 3);").expect("lowers");
+    match o.fatal {
+        Some(PhpError::Error(m)) => {
+            assert_eq!(m, "Cannot use positional argument after argument unpacking")
+        }
+        other => panic!("expected compile fatal, got {other:?}"),
+    }
+}
+
+#[test]
+fn spread_after_named_is_compile_fatal() {
+    // Unpacking after a named argument is a compile-time Fatal. Oracle verified.
+    let o = run_source(b"t.php", b"<?php function f($a,$b){} f(a:1, ...['b'=>2]);").expect("lowers");
+    match o.fatal {
+        Some(PhpError::Error(m)) => {
+            assert_eq!(m, "Cannot use argument unpacking after named arguments")
+        }
+        other => panic!("expected compile fatal, got {other:?}"),
+    }
+}
+
+#[test]
+fn spread_into_method_and_constructor() {
+    // Spread works for instance methods and `new` (step 40-1).
+    let src = r#"<?php
+class C {
+    public $sum;
+    function __construct($a, $b){ $this->sum = $a + $b; }
+    function diff($a, $b){ return $a - $b; }
+}
+$c = new C(...[10, 3]);
+echo $c->sum, '|', $c->diff(...[10, 3]);"#;
+    assert_eq!(out(src), "13|7");
+}
+
+#[test]
+fn spread_into_static_method() {
+    // Spread works for static method calls (step 40-1).
+    let src = r#"<?php
+class C { static function add($a, $b){ return $a + $b; } }
+echo C::add(...[4, 5]);"#;
+    assert_eq!(out(src), "9");
+}
+
+// --- Step 40-2: named-into-variadic collection ---
+
+#[test]
+fn named_into_variadic_explicit() {
+    // Explicit named args with no matching param collect into `...$args` keyed by name.
+    let src = r#"<?php function f(...$args){ $s=''; foreach($args as $k=>$v) $s.="$k:$v "; return $s; } echo f(x:1, y:2);"#;
+    assert_eq!(out(src), "x:1 y:2 ");
+}
+
+#[test]
+fn named_into_variadic_after_fixed() {
+    // A fixed param then a named arg into the variadic (string-keyed).
+    let src = r#"<?php function f($a, ...$rest){ $s="$a|"; foreach($rest as $k=>$v) $s.="$k:$v "; return $s; } echo f(1, k:2);"#;
+    assert_eq!(out(src), "1|k:2 ");
+}
+
+#[test]
+fn spread_named_into_variadic() {
+    // Spread string keys collect into the variadic by name (step 40-2).
+    let src = r#"<?php function f(...$args){ $s=''; foreach($args as $k=>$v) $s.="$k:$v "; return $s; } echo f(...['x'=>1,'y'=>2]);"#;
+    assert_eq!(out(src), "x:1 y:2 ");
 }
 
 // --- Step 28: real stack-trace frames ---

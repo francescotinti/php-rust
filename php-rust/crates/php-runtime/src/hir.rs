@@ -512,6 +512,15 @@ pub enum ExprKind {
     /// dispatches on the callee value (closure / string name).
     CallDynamic { callee: Box<Expr>, args: Vec<Expr> },
 
+    /// Argument unpacking `...$e` (step 40). Only valid as a direct element of a
+    /// call's argument list, where the evaluator expands it: int keys (and
+    /// float keys, lossily) become positional arguments in iteration order, and
+    /// string keys become named arguments. Lowering enforces the ordering rules
+    /// (no positional after a spread; no spread after a named argument); the
+    /// runtime enforces the array/Traversable type and the within-unpacking
+    /// "positional after named" rule. Appearing anywhere else is a runtime error.
+    Spread(Box<Expr>),
+
     /// An array literal `[...]` / `array(...)`. Elements keep source order;
     /// keyless elements take the next free integer index (`PhpArray::append`).
     Array(Vec<ArrayElem>),

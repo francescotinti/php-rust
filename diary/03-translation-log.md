@@ -714,3 +714,41 @@ gap di feature non implementate, non difetti di rendering).
   ScopedCoroutine); swap-contesto confinato in `GenDriverImpl::resume` invece che
   in helper sull'Evaluator (php-types resta pulito).
 - **Tempo:** sessione dedicata (lo step più complesso finora).
+
+## Step 40 — Argument unpacking / spread `f(...$arr)`
+
+- **File originale:** Zend/zend_compile.c (check compile-time
+  `zend_compile_args` — "positional after unpacking" / "unpacking after named"),
+  Zend/zend_execute.c (unpacking SPREAD + `zend_handle_named_arg` a runtime).
+- **File target:** `php-runtime/src/hir.rs` (`ExprKind::Spread`),
+  `php-runtime/src/lower.rs` (`lower_args` — wrapping spread + ordering fatals),
+  `php-runtime/src/eval.rs` (`expand_spread`, `place_named_arg`,
+  `apply_named_args`, `eval_call_args`/`eval_value_args` ridisegnati,
+  `Arg::Named`, `bind_params` variadic keyed, `reject_named`).
+- **Strategia:** estensione del modello step-38 (positional `Vec<Arg>` + named
+  trailing). Un `ExprKind::Spread(Box<Expr>)` "finto" vive solo come elemento di
+  arg-list (mai valutato dal match generico → errore). L'espansione è **two-phase**
+  (espandi → piazza), uniforme su Call/New/MethodCall/StaticCall.
+- **Round di iterazione AI:** ~1; build-error driven per i call-site della firma
+  cambiata (`eval_*_args` ora ritorna `(positional, SpreadNamed)`).
+- **Test pass al primo tentativo:** 18/20 spread + 3/3 named-into-variadic. I 2
+  fail erano **bug dei test** (usavano `count()`/`array_sum()`, builtin non
+  implementati) — riscritti con `foreach` manuale.
+- **Test scritti:** 23 (20 spread + 3 named-into-variadic), tutti oracle-verificati.
+- **Sub-step:** 40-1a lowering+compile-fatals · 40-1b runtime spread (Call) ·
+  40-1c New/Method/Static · 40-2 named-into-variadic (`Arg::Named` collezionato
+  con chiave string dalla branch variadic di `bind_params`).
+- **Errori/decisioni:**
+  - [chiavi int] il *valore* della chiave int è ignorato: appese posizionalmente
+    in ordine d'iterazione (oracle `[5=>'x',2=>'y',9=>'z']` → x,y,z).
+  - [ordering] int-key dopo string-key durante l'unpacking → `Error` catchable.
+  - [type] spread di non-array/non-Traversable → `TypeError`.
+  - [generatori] spread di Traversable iterato via `cur_key`/`cur_val` (chiave
+    `Zval::Str` → named, altrimenti posizionale).
+  - [clippy] gate `--all-features --all-targets --deny=warnings` ha fatto
+    emergere 3 lint **pre-esistenti** (step 39 `mem_replace_option_with_some` ×2,
+    step 18 `too_many_arguments` su `push_closure`, step 37 test `_D_` non
+    snake_case) — sistemati en passant (idioma `Option::replace`, `#[allow]`).
+- **Differenze idiomatiche dalla mappa:** nessuna nuova D-G; riusa il binding
+  step-38. `SpreadNamed` type-alias per il tipo di ritorno composto.
+- **Tempo:** ~mezza sessione.

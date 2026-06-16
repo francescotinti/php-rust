@@ -303,3 +303,35 @@ avanza il contatore con la regola array-append), `yield;` nudo (NULL/auto-key),
 getReturn del delegato, send-forwarding attraverso `yield from`, closure
 generator (con cattura `use`), getReturn auto-prime su generatore che `return`
 prima di ogni yield, rewind fatale dopo avanzamento.
+
+## Step 40 (spread `f(...$arr)`) — coperto il core; 1 precedence scope-out
+
+Implementato l'argument unpacking per Call/New/MethodCall/StaticCall + la
+collezione named-into-variadic (esplicita e da spread). Tutti i comportamenti
+nei test sono oracle-verificati (23 test). Una sola divergenza di **precedence**
+su input doppiamente-invalido, dichiarata scope-out:
+
+| Caso | Comportamento Rust | PHP 8.5.7 | Stato |
+|---|---|---|---|
+| `f(...['c'=>3], ...[1])` con `f` **senza** param `$c` né variadic (chiave string sconosciuta *seguita* da chiave int) | adotta il **two-phase** (espandi → piazza): l'int-dopo-named è rilevato durante l'espansione → `Error` "Cannot use positional argument after named argument during unpacking" | piazza i named **incrementalmente** → fallisce prima con `Error` "Unknown named parameter $c" | divergenza solo di **messaggio**, entrambi `Error` catchable, input contrived; scope-out D-40.1 |
+
+Razionale scope-out: PHP valuta/piazza ogni elemento unpacked incrementalmente,
+quindi l'unknown-named precede l'ordering-error. La reimplementazione two-phase
+(più semplice e uniforme tra tutte le path di chiamata) inverte la precedenza
+solo quando *entrambi* gli errori sarebbero presenti. Nei casi a errore singolo
+(`f(...['z'=>1])` → "Unknown named parameter $z"; `f(1, ...['k'=>2, 0=>3])` con
+variadic → ordering-error) i messaggi coincidono con l'oracle.
+
+Altri scope-out minori (non testati, edge rari): spread-named verso classe
+**senza costruttore** non solleva "Unknown named parameter" (gli arg posizionali
+extra sono ignorati come da default-ctor PHP); named verso il **nome** del
+parametro variadic stesso (`f(args: …)` con `function f(...$args)`) è raccolto
+come chiave `'args'` invece che trattato specialmente.
+
+Casi coperti e oracle-verificati: int→posizionale (valore chiave ignorato,
+ordine d'iterazione), string→named, default su named parziali, leading
+positional + spread, spread multipli, spread→variadic (re-keyed 0,1,2),
+named-into-variadic (esplicito e da spread, chiave string preservata),
+Traversable/generator (chiavi int e string), array vuoto, TypeError su
+non-iterabile, overwrite, compile-fatals (positional-after-unpacking,
+unpacking-after-named).

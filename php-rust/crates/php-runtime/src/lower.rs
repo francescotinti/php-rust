@@ -1778,6 +1778,7 @@ impl<'f> Lowerer<'f> {
 
     /// Append a lowered closure body to the flat table and return its index. The
     /// `FnDecl.name` is the PHP `{closure:file:line}` synthetic name (step 18).
+    #[allow(clippy::too_many_arguments)]
     fn push_closure(
         &mut self,
         params: Vec<Param>,
@@ -2607,12 +2608,38 @@ impl<'f> Lowerer<'f> {
     ) -> Result<(Vec<Expr>, Vec<(Box<[u8]>, Expr)>), LowerError> {
         let mut args = Vec::new();
         let mut named: Vec<(Box<[u8]>, Expr)> = Vec::new();
+        // Track whether a spread (`...$e`) has appeared: a plain positional after
+        // one is a compile-time Fatal, matching PHP (step 40).
+        let mut saw_spread = false;
         for arg in list.arguments.iter() {
             match arg {
-                Argument::Positional(p) if p.ellipsis.is_none() => {
+                Argument::Positional(p) if p.ellipsis.is_some() => {
+                    // A spread after a named argument is a compile-time Fatal.
+                    if !named.is_empty() {
+                        return Err(LowerError::Fatal {
+                            message: "Cannot use argument unpacking after named arguments"
+                                .to_string(),
+                            line,
+                        });
+                    }
+                    saw_spread = true;
+                    let inner = self.lower_expr(p.value)?;
+                    args.push(Expr {
+                        kind: ExprKind::Spread(Box::new(inner)),
+                        line,
+                    });
+                }
+                Argument::Positional(p) => {
                     if !named.is_empty() {
                         return Err(LowerError::Fatal {
                             message: "Cannot use positional argument after named argument"
+                                .to_string(),
+                            line,
+                        });
+                    }
+                    if saw_spread {
+                        return Err(LowerError::Fatal {
+                            message: "Cannot use positional argument after argument unpacking"
                                 .to_string(),
                             line,
                         });
@@ -2621,13 +2648,6 @@ impl<'f> Lowerer<'f> {
                 }
                 Argument::Named(n) => {
                     named.push((n.name.value.into(), self.lower_expr(n.value)?));
-                }
-                // Variadic spread `...$a` is still out of scope.
-                _ => {
-                    return Err(LowerError::Unsupported {
-                        what: "variadic argument",
-                        line,
-                    })
                 }
             }
         }

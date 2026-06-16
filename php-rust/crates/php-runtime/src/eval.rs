@@ -110,10 +110,19 @@ macro_rules! slot_mut {
 /// parameter, or a shared cell for a `&$x` by-reference parameter (D-R6).
 /// `Default` is a gap left by named arguments (step 38) — the parameter at this
 /// index was not supplied, so its declared default applies.
+/// Named arguments produced by unpacking string keys (`...['k' => v]`, step 40):
+/// already evaluated by value, awaiting placement by parameter name.
+type SpreadNamed = Vec<(Box<[u8]>, Zval)>;
+
 enum Arg {
     Val(Zval),
     Ref(Rc<RefCell<Zval>>),
     Default,
+    /// A named argument with no matching parameter, collected into a trailing
+    /// variadic `...$rest` keyed by its name (step 40-2). Only ever appended
+    /// after all positional slots, so it is seen exclusively by the variadic
+    /// branch of [`Evaluator::bind_params`].
+    Named(Box<[u8]>, Zval),
 }
 
 /// Control-flow signal produced by executing a statement.
@@ -199,13 +208,10 @@ impl GenDriver for GenDriverImpl {
         let ev: &mut Evaluator<'static> = unsafe { &mut *(ev_erased as *mut Evaluator<'static>) };
 
         // Swap the generator's frame into the evaluator, saving the driver's.
-        let saved_locals = std::mem::replace(&mut ev.locals, Some(std::mem::take(&mut self.ctx.locals)));
-        let saved_names = std::mem::replace(
-            &mut ev.local_names,
-            // SAFETY: `ctx.local_names` points into `_body` (held here), alive
-            // for the whole resume.
-            Some(unsafe { &*self.ctx.local_names }),
-        );
+        let saved_locals = ev.locals.replace(std::mem::take(&mut self.ctx.locals));
+        // SAFETY: `ctx.local_names` points into `_body` (held here), alive for
+        // the whole resume.
+        let saved_names = ev.local_names.replace(unsafe { &*self.ctx.local_names });
         let saved_this = std::mem::replace(&mut ev.cur_this, self.ctx.cur_this.take());
         let saved_class = std::mem::replace(&mut ev.cur_class, self.ctx.cur_class);
         let saved_static = std::mem::replace(&mut ev.cur_static_class, self.ctx.cur_static_class);
@@ -1243,12 +1249,20 @@ impl<'p> Evaluator<'p> {
             if p.variadic {
                 let mut arr = PhpArray::new();
                 for a in argv.iter().skip(i) {
-                    let v = match a {
-                        Arg::Val(v) => v.clone(),
-                        Arg::Ref(cell) => cell.borrow().clone(),
+                    match a {
+                        // Positional tail entries take the next free int key.
+                        Arg::Val(v) => {
+                            let _ = arr.append(v.clone());
+                        }
+                        Arg::Ref(cell) => {
+                            let _ = arr.append(cell.borrow().clone());
+                        }
+                        // A named-into-variadic entry keeps its string key (step 40-2).
+                        Arg::Named(name, v) => {
+                            arr.insert(Key::Str(PhpStr::new(name.clone())), v.clone());
+                        }
                         Arg::Default => continue,
-                    };
-                    let _ = arr.append(v);
+                    }
                 }
                 frame_mut!(self)[p.slot as usize] = Zval::Array(Rc::new(arr));
                 break;
@@ -1281,6 +1295,11 @@ impl<'p> Evaluator<'p> {
                         }
                         None => v,
                     }
+                }
+                // `Arg::Named` is only ever appended past the variadic slot, so a
+                // non-variadic parameter never sees one (step 40-2 invariant).
+                Some(Arg::Named(..)) => {
+                    unreachable!("named-into-variadic arg reached a fixed parameter slot")
                 }
             };
             frame_mut!(self)[p.slot as usize] = binding;
@@ -1594,11 +1613,29 @@ impl<'p> Evaluator<'p> {
     /// params evaluate normally; a `&$x` param binds the argument variable's
     /// shared cell (promoting it). A non-variable argument to a by-ref param is
     /// an uncaught `Error` (PHP 8.x; oracle-verified message).
-    fn eval_call_args(&mut self, idx: usize, args: &[Expr]) -> Result<Vec<Arg>, PhpError> {
+    /// Evaluate a user function's call arguments into the positional `argv` plus
+    /// the named arguments produced by unpacking string keys (step 40). Plain
+    /// positional arguments (which lowering guarantees precede any spread) honour
+    /// by-reference parameters; unpacked values are always by value.
+    fn eval_call_args(
+        &mut self,
+        idx: usize,
+        args: &[Expr],
+    ) -> Result<(Vec<Arg>, SpreadNamed), PhpError> {
         let funcs: &'p [FnDecl] = self.funcs;
         let f: &'p FnDecl = &funcs[idx];
-        let mut out = Vec::with_capacity(args.len());
-        for (i, a) in args.iter().enumerate() {
+        let mut out: Vec<Arg> = Vec::with_capacity(args.len());
+        let mut named: SpreadNamed = Vec::new();
+        for a in args {
+            if let ExprKind::Spread(inner) = &a.kind {
+                let mut pos = Vec::new();
+                self.expand_spread(inner, &mut pos, &mut named)?;
+                out.extend(pos.into_iter().map(Arg::Val));
+                continue;
+            }
+            // A plain positional binds at the next positional slot; only these
+            // (never unpacked values) may target a by-reference parameter.
+            let i = out.len();
             let by_ref = f.params.get(i).is_some_and(|p| p.by_ref);
             if by_ref {
                 match &a.kind {
@@ -1617,43 +1654,49 @@ impl<'p> Evaluator<'p> {
                 out.push(Arg::Val(self.eval(a)?));
             }
         }
-        Ok(out)
+        Ok((out, named))
     }
 
     /// The catchable `Error` PHP raises for an unresolvable named argument; used
     /// for the scope-out targets (closures, `__call`, enum statics) that have no
     /// declared parameter list to bind names against (step 38).
-    fn unknown_named_error(&self, named: &[(Box<[u8]>, Expr)]) -> PhpError {
-        let name = named.first().map(|(n, _)| n.as_ref()).unwrap_or(b"");
-        PhpError::Error(format!(
+    /// Reject any named argument — explicit (step 38) or produced by unpacking
+    /// string keys (step 40) — for a target that has no parameter list to bind
+    /// against (closures, generators, `__call`). Returns the unknown-parameter
+    /// `Error` for the first offending name, or `None` if there are none.
+    fn reject_named(
+        &self,
+        named: &[(Box<[u8]>, Expr)],
+        spread_named: &[(Box<[u8]>, Zval)],
+    ) -> Option<PhpError> {
+        let name = named
+            .first()
+            .map(|(n, _)| n.as_ref())
+            .or_else(|| spread_named.first().map(|(n, _)| n.as_ref()))?;
+        Some(PhpError::Error(format!(
             "Unknown named parameter ${}",
             String::from_utf8_lossy(name)
-        ))
+        )))
     }
 
-    /// Place named arguments (step 38) into the positional `argv` by parameter
-    /// name, filling any skipped earlier slots with `Arg::Default`. Named values
-    /// are evaluated in the current (caller) frame, after the positional ones; a
-    /// name targeting a by-reference parameter binds the caller's variable cell
-    /// (step 38-4). An unknown name or an already-filled slot raises a catchable
-    /// `Error`, matching PHP's messages.
-    fn resolve_named_args(
-        &mut self,
-        f: &'p FnDecl,
-        mut argv: Vec<Arg>,
-        named: &[(Box<[u8]>, Expr)],
-    ) -> Result<Vec<Arg>, PhpError> {
-        for (name, expr) in named {
-            let Some(j) = f
-                .params
-                .iter()
-                .position(|p| f.slots[p.slot as usize][..] == name[..])
-            else {
-                return Err(PhpError::Error(format!(
-                    "Unknown named parameter ${}",
-                    String::from_utf8_lossy(name)
-                )));
-            };
+    /// Place one already-built named argument into `argv` by parameter name
+    /// (steps 38 / 40-2). A matching non-variadic parameter takes the value at
+    /// its slot (filling earlier gaps with `Arg::Default`); an already-filled
+    /// slot is an overwrite `Error`. With no matching parameter, a trailing
+    /// variadic collects the value keyed by name ([`Arg::Named`]); otherwise the
+    /// name is an unknown-parameter `Error`. Messages match PHP.
+    fn place_named_arg(
+        &self,
+        argv: &mut Vec<Arg>,
+        f: &FnDecl,
+        name: &[u8],
+        arg: Arg,
+    ) -> Result<(), PhpError> {
+        if let Some(j) = f
+            .params
+            .iter()
+            .position(|p| !p.variadic && f.slots[p.slot as usize][..] == name[..])
+        {
             // A positional argument already occupied this slot, or a duplicate
             // named argument targets it (an `Arg::Default` gap is not "previous").
             if matches!(argv.get(j), Some(Arg::Val(_) | Arg::Ref(_))) {
@@ -1662,11 +1705,56 @@ impl<'p> Evaluator<'p> {
                     String::from_utf8_lossy(name)
                 )));
             }
+            if argv.len() <= j {
+                argv.resize_with(j + 1, || Arg::Default);
+            }
+            argv[j] = arg;
+            Ok(())
+        } else if f.params.last().is_some_and(|p| p.variadic) {
+            // No matching fixed parameter, but a trailing `...$rest` collects the
+            // named argument keyed by its name (step 40-2). A by-reference value
+            // is dereferenced — variadics collect by value.
+            let val = match arg {
+                Arg::Val(v) => v,
+                Arg::Ref(cell) => cell.borrow().clone(),
+                Arg::Default => return Ok(()),
+                Arg::Named(_, v) => v,
+            };
+            argv.push(Arg::Named(name.into(), val));
+            Ok(())
+        } else {
+            Err(PhpError::Error(format!(
+                "Unknown named parameter ${}",
+                String::from_utf8_lossy(name)
+            )))
+        }
+    }
+
+    /// Apply a call's named arguments to the positional `argv`: first the named
+    /// arguments produced by string keys during unpacking (step 40, already
+    /// evaluated, by value), then the explicit `name: value` arguments (step 38),
+    /// each evaluated in the caller frame. A name targeting a by-reference
+    /// parameter binds the caller's variable cell (step 38-4).
+    fn apply_named_args(
+        &mut self,
+        f: &'p FnDecl,
+        mut argv: Vec<Arg>,
+        spread_named: SpreadNamed,
+        named: &[(Box<[u8]>, Expr)],
+    ) -> Result<Vec<Arg>, PhpError> {
+        for (name, val) in spread_named {
+            self.place_named_arg(&mut argv, f, &name, Arg::Val(val))?;
+        }
+        for (name, expr) in named {
             // A by-reference parameter binds the caller's variable cell when the
             // named value is a plain variable (mirrors `eval_call_args`); a
             // non-variable to a by-ref param is the same fatal as positionally.
-            let arg = if f.params[j].by_ref {
-                match &expr.kind {
+            let target = f
+                .params
+                .iter()
+                .position(|p| !p.variadic && f.slots[p.slot as usize][..] == name[..]);
+            let arg = match target {
+                Some(j) if f.params[j].by_ref => match &expr.kind {
                     ExprKind::Var(slot) => Arg::Ref(self.slot_cell(*slot as usize)),
                     _ => {
                         return Err(PhpError::Error(format!(
@@ -1676,16 +1764,76 @@ impl<'p> Evaluator<'p> {
                             String::from_utf8_lossy(name),
                         )))
                     }
-                }
-            } else {
-                Arg::Val(self.eval(expr)?)
+                },
+                _ => Arg::Val(self.eval(expr)?),
             };
-            if argv.len() <= j {
-                argv.resize_with(j + 1, || Arg::Default);
-            }
-            argv[j] = arg;
+            self.place_named_arg(&mut argv, f, name, arg)?;
         }
         Ok(argv)
+    }
+
+    /// Expand one unpacked value (`...$e`, step 40) into the positional `pos`
+    /// stream and the `named` stream. Array/Traversable int keys append to
+    /// `pos` in iteration order (the key value is ignored); string keys append
+    /// to `named`. An int key after any string key already emitted during this
+    /// call's unpacking is a catchable `Error`; a non-iterable is a `TypeError`.
+    fn expand_spread(
+        &mut self,
+        inner: &Expr,
+        pos: &mut Vec<Zval>,
+        named: &mut SpreadNamed,
+    ) -> Result<(), PhpError> {
+        // A positional value produced by unpacking is rejected once any named
+        // (string-keyed) value has already been emitted, matching PHP.
+        macro_rules! push_pos {
+            ($v:expr) => {{
+                if !named.is_empty() {
+                    return Err(PhpError::Error(
+                        "Cannot use positional argument after named argument during unpacking"
+                            .to_string(),
+                    ));
+                }
+                pos.push($v);
+            }};
+        }
+        let value = self.eval(inner)?.deref_clone();
+        match value {
+            Zval::Array(arr) => {
+                for (k, v) in arr.iter() {
+                    match k {
+                        Key::Int(_) => push_pos!(v.clone()),
+                        Key::Str(s) => named.push((s.as_bytes().into(), v.clone())),
+                    }
+                }
+                Ok(())
+            }
+            Zval::Generator(gs) => {
+                self.ensure_started(&gs)?;
+                loop {
+                    let (k, v, done) = {
+                        let g = gs.borrow();
+                        (
+                            g.cur_key.clone(),
+                            g.cur_val.deref_clone(),
+                            matches!(g.status, GenStatus::Done),
+                        )
+                    };
+                    if done {
+                        break;
+                    }
+                    match k {
+                        Zval::Str(s) => named.push((s.as_bytes().into(), v)),
+                        _ => push_pos!(v),
+                    }
+                    self.resume_generator(&gs, Zval::Null)?;
+                }
+                Ok(())
+            }
+            other => Err(PhpError::TypeError(format!(
+                "Only arrays and Traversables can be unpacked, {} given",
+                other.error_type_name()
+            ))),
+        }
     }
 
     /// Invoke a by-reference builtin (step 11c). Its first argument must be a
@@ -2001,14 +2149,24 @@ impl<'p> Evaluator<'p> {
 
     // --- objects (step 19) ---
 
-    /// Evaluate a call's arguments by value into a flat vector (step 19). Shared
-    /// by method calls and constructor dispatch.
-    fn eval_value_args(&mut self, args: &[Expr]) -> Result<Vec<Zval>, PhpError> {
+    /// Evaluate a call's arguments by value into a flat positional vector plus
+    /// the named arguments produced by unpacking string keys (step 40). Shared
+    /// by method calls and constructor dispatch. Methods take all positional
+    /// arguments by value, so unpacking has no by-reference subtlety here.
+    fn eval_value_args(
+        &mut self,
+        args: &[Expr],
+    ) -> Result<(Vec<Zval>, SpreadNamed), PhpError> {
         let mut out = Vec::with_capacity(args.len());
+        let mut named: SpreadNamed = Vec::new();
         for a in args {
-            out.push(self.eval(a)?);
+            if let ExprKind::Spread(inner) = &a.kind {
+                self.expand_spread(inner, &mut out, &mut named)?;
+            } else {
+                out.push(self.eval(a)?);
+            }
         }
-        Ok(out)
+        Ok((out, named))
     }
 
     /// Resolve a method by name, walking the inheritance chain child→ancestor
@@ -2275,13 +2433,11 @@ impl<'p> Evaluator<'p> {
         // through the shared `Rc`, so they show in the returned value. The new
         // instance's class is its own LSB class.
         if let Some((defc, m)) = self.resolve_method(cid, b"__construct") {
-            // Positional args, then named placed by parameter name (step 38-2).
-            let argv: Vec<Arg> = self.eval_value_args(args)?.into_iter().map(Arg::Val).collect();
-            let argv = if named.is_empty() {
-                argv
-            } else {
-                self.resolve_named_args(&m.decl, argv, named)?
-            };
+            // Positional args (incl. unpacked, step 40), then named placed by
+            // parameter name (step 38-2).
+            let (vals, spread_named) = self.eval_value_args(args)?;
+            let argv: Vec<Arg> = vals.into_iter().map(Arg::Val).collect();
+            let argv = self.apply_named_args(&m.decl, argv, spread_named, named)?;
             self.invoke_method_args(Some(value.clone()), defc, cid, m, b"__construct", argv)?;
         } else if !named.is_empty() || !args.is_empty() {
             // No constructor: named args would have nowhere to bind. PHP ignores
@@ -2780,6 +2936,7 @@ impl<'p> Evaluator<'p> {
         recv: Zval,
         method: &[u8],
         argv: Vec<Zval>,
+        spread_named: SpreadNamed,
         named: &[(Box<[u8]>, Expr)],
     ) -> Result<Zval, PhpError> {
         let cid = match &recv {
@@ -2795,20 +2952,16 @@ impl<'p> Evaluator<'p> {
         match self.resolve_method(cid, method) {
             Some((defc, m)) if self.visible_from(m.visibility, defc) => {
                 // An instance call's LSB class is the object's actual class.
-                // Named args are placed by parameter name (step 38-3).
+                // Named args (and named unpacking) are placed by name (step 38-3 / 40).
                 let argv: Vec<Arg> = argv.into_iter().map(Arg::Val).collect();
-                let argv = if named.is_empty() {
-                    argv
-                } else {
-                    self.resolve_named_args(&m.decl, argv, named)?
-                };
+                let argv = self.apply_named_args(&m.decl, argv, spread_named, named)?;
                 self.invoke_method_args(Some(recv), defc, cid, m, method, argv)
             }
             found => {
                 // `__call` collects args into an array; named-arg placement does
-                // not apply to it (step 38 scope-out).
-                if !named.is_empty() {
-                    return Err(self.unknown_named_error(named));
+                // not apply to it (step 38 / 40 scope-out).
+                if let Some(e) = self.reject_named(named, &spread_named) {
+                    return Err(e);
                 }
                 if let Some((cdefc, cm)) = self.resolve_method(cid, b"__call") {
                     let args = self.pack_args(argv);
@@ -2840,15 +2993,16 @@ impl<'p> Evaluator<'p> {
         class: &ClassRef,
         method: &[u8],
         argv: Vec<Zval>,
+        spread_named: SpreadNamed,
         named: &[(Box<[u8]>, Expr)],
     ) -> Result<Zval, PhpError> {
         // `Closure::bind(...)` / `Closure::fromCallable(...)` are built-in (the
         // engine `Closure` class is not in the user class table), step 19-6.
-        // Named args to these / enum built-in statics are out of scope (step 38).
+        // Named args to these / enum built-in statics are out of scope (step 38 / 40).
         if let ClassRef::Named(n) = class {
             if n.eq_ignore_ascii_case(b"Closure") {
-                if !named.is_empty() {
-                    return Err(self.unknown_named_error(named));
+                if let Some(e) = self.reject_named(named, &spread_named) {
+                    return Err(e);
                 }
                 return self.closure_static(method, argv);
             }
@@ -2864,14 +3018,14 @@ impl<'p> Evaluator<'p> {
             }
             if self.classes[start].enum_backing.is_some() {
                 if method.eq_ignore_ascii_case(b"from") {
-                    if !named.is_empty() {
-                        return Err(self.unknown_named_error(named));
+                    if let Some(e) = self.reject_named(named, &spread_named) {
+                        return Err(e);
                     }
                     return self.enum_from(start, argv.first(), false);
                 }
                 if method.eq_ignore_ascii_case(b"tryFrom") {
-                    if !named.is_empty() {
-                        return Err(self.unknown_named_error(named));
+                    if let Some(e) = self.reject_named(named, &spread_named) {
+                        return Err(e);
                     }
                     return self.enum_from(start, argv.first(), true);
                 }
@@ -2898,18 +3052,14 @@ impl<'p> Evaluator<'p> {
                     }
                     _ => None,
                 };
-                // Named args placed by parameter name (step 38-3).
+                // Named args (and named unpacking) placed by name (step 38-3 / 40).
                 let argv: Vec<Arg> = argv.into_iter().map(Arg::Val).collect();
-                let argv = if named.is_empty() {
-                    argv
-                } else {
-                    self.resolve_named_args(&m.decl, argv, named)?
-                };
+                let argv = self.apply_named_args(&m.decl, argv, spread_named, named)?;
                 self.invoke_method_args(this, defc, static_class, m, method, argv)
             }
             found => {
-                if !named.is_empty() {
-                    return Err(self.unknown_named_error(named));
+                if let Some(e) = self.reject_named(named, &spread_named) {
+                    return Err(e);
                 }
                 // Missing or inaccessible. In object context (a usable `$this`,
                 // e.g. `parent::priv()` from a method) it routes to `__call` on
@@ -4048,15 +4198,12 @@ impl<'p> Evaluator<'p> {
                 // bind by-reference parameters (step 11b), so their arguments are
                 // resolved against the declaration rather than blindly evaluated.
                 if let Some(&idx) = self.fn_index.get(&name.to_ascii_lowercase()) {
-                    let argv = self.eval_call_args(idx, args)?;
-                    // Named arguments (step 38) are placed by parameter name after
-                    // the positional ones.
-                    let argv = if named.is_empty() {
-                        argv
-                    } else {
-                        let f: &'p FnDecl = &self.funcs[idx];
-                        self.resolve_named_args(f, argv, named)?
-                    };
+                    let (argv, spread_named) = self.eval_call_args(idx, args)?;
+                    // Named arguments — explicit (step 38) and from unpacking string
+                    // keys (step 40) — are placed by parameter name after the
+                    // positional ones.
+                    let f: &'p FnDecl = &self.funcs[idx];
+                    let argv = self.apply_named_args(f, argv, spread_named, named)?;
                     let result = self.call_user_fn(idx, argv)?;
                     // A by-reference function returns a `Zval::Ref`; in this
                     // (value) context it must be copied, not aliased — only
@@ -4155,6 +4302,13 @@ impl<'p> Evaluator<'p> {
                 }
                 self.call_value(c, argv)
             }
+
+            // A spread `...$e` is only meaningful as a call argument, where the
+            // dedicated argument-evaluation paths intercept it (step 40). Reaching
+            // the generic evaluator means it appeared elsewhere.
+            ExprKind::Spread(_) => Err(PhpError::Error(
+                "Cannot use spread operator outside of function call".to_string(),
+            )),
 
             ExprKind::Array(elems) => {
                 let mut arr = PhpArray::new();
@@ -4284,25 +4438,25 @@ impl<'p> Evaluator<'p> {
                 if *nullsafe && matches!(recv, Zval::Null | Zval::Undef) {
                     return Ok(Zval::Null);
                 }
-                let argv = self.eval_value_args(args)?;
+                let (argv, spread_named) = self.eval_value_args(args)?;
                 // Methods on a closure value (`$c->bindTo(...)`) are built-in
-                // (step 19-6), not user-class dispatch. Named args there are out
-                // of scope (step 38).
+                // (step 19-6), not user-class dispatch. Named args (and named
+                // unpacking) there are out of scope (step 38 / 40).
                 if let Zval::Closure(cl) = &recv {
-                    if !named.is_empty() {
-                        return Err(self.unknown_named_error(named));
+                    if let Some(e) = self.reject_named(named, &spread_named) {
+                        return Err(e);
                     }
                     return self.closure_method(cl, method, argv);
                 }
                 // Methods on a `Generator` value (`->current()`, `->next()`, …)
                 // are built-in (step 39), dispatched ahead of user-class lookup.
                 if let Zval::Generator(gs) = &recv {
-                    if !named.is_empty() {
-                        return Err(self.unknown_named_error(named));
+                    if let Some(e) = self.reject_named(named, &spread_named) {
+                        return Err(e);
                     }
                     return self.generator_method(Rc::clone(gs), method, argv);
                 }
-                self.call_method(recv, method, argv, named)
+                self.call_method(recv, method, argv, spread_named, named)
             }
 
             ExprKind::PropGet {
@@ -4330,8 +4484,8 @@ impl<'p> Evaluator<'p> {
                 args,
                 named,
             } => {
-                let argv = self.eval_value_args(args)?;
-                self.call_static(class, method, argv, named)
+                let (argv, spread_named) = self.eval_value_args(args)?;
+                self.call_static(class, method, argv, spread_named, named)
             }
 
             ExprKind::ClassConst { class, name } => self.eval_class_const(class, name),
@@ -4881,7 +5035,9 @@ impl<'p> Evaluator<'p> {
         };
         if let Some(&idx) = self.fn_index.get(&name.to_ascii_lowercase()) {
             let by_ref = self.funcs[idx].by_ref;
-            let argv = self.eval_call_args(idx, args)?;
+            let (argv, spread_named) = self.eval_call_args(idx, args)?;
+            let f: &'p FnDecl = &self.funcs[idx];
+            let argv = self.apply_named_args(f, argv, spread_named, &[])?;
             return Ok((self.call_user_fn(idx, argv)?, by_ref));
         }
         // A builtin never returns by reference; evaluate the whole call by value.
