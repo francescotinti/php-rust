@@ -2558,3 +2558,124 @@ fn mb_detect_encoding_invalid_or_empty_list_is_value_error() {
         other => panic!("expected ValueError, got {other:?}"),
     }
 }
+
+// --- step 43a: mbstring regex family (mb_ereg* / mb_split / mb_regex_*) ---
+
+#[test]
+fn mb_ereg_captures_and_named_groups() {
+    assert_eq!(
+        out("<?php mb_ereg('(\\d+)-(\\d+)', 'x12-34y', $m); echo $m[0].'|'.$m[1].'|'.$m[2];"),
+        "12-34|12|34"
+    );
+    assert_eq!(out("<?php var_dump(mb_ereg('(\\d+)-(\\d+)', 'x12-34y', $m));"), "bool(true)\n");
+    // No match: returns false and sets $regs to an empty array.
+    assert_eq!(
+        out("<?php var_dump(mb_ereg('z+', 'abc', $m)); echo '['.implode(',', $m).']';"),
+        "bool(false)\n[]"
+    );
+    // Case-insensitive variant.
+    assert_eq!(out("<?php mb_eregi('ABC', 'xxabcyy', $m); echo $m[0];"), "abc");
+    // Named group is appended by string key, alongside the numbered group.
+    assert_eq!(
+        out("<?php mb_ereg('(?<y>\\d+)', '2024', $m); echo $m[0].'|'.$m[1].'|'.$m['y'];"),
+        "2024|2024|2024"
+    );
+    // Backreference inside the pattern.
+    assert_eq!(out("<?php var_dump(mb_ereg('(a)\\1', 'aa', $m));"), "bool(true)\n");
+    // A non-participating optional group is false.
+    assert_eq!(
+        out("<?php mb_ereg('(a)(b)?', 'a', $m); var_dump($m[2]);"),
+        "bool(false)\n"
+    );
+}
+
+#[test]
+fn mb_ereg_replace_backreferences() {
+    assert_eq!(out("<?php echo mb_ereg_replace('(\\w)(\\w)', '\\2\\1', 'abcd');"), "badc");
+    assert_eq!(out("<?php echo mb_ereg_replace('(\\w)', '[\\1]', 'ab');"), "[a][b]");
+    assert_eq!(out("<?php echo mb_ereg_replace('\\w+', '<\\0>', 'hi');"), "<hi>");
+    assert_eq!(out("<?php echo mb_ereg_replace('x+', 'Y', 'axxxb');"), "aYb");
+    assert_eq!(out("<?php echo mb_eregi_replace('a', 'X', 'AaA');"), "XXX");
+}
+
+#[test]
+fn mb_ereg_replace_callback_doubles_digits() {
+    assert_eq!(
+        out("<?php echo mb_ereg_replace_callback('\\d+', fn($m) => $m[0] * 2, 'a5b10');"),
+        "a10b20"
+    );
+    // Multi-digit matches, the callback returning a built string.
+    assert_eq!(
+        out("<?php echo mb_ereg_replace_callback('\\d+', fn($m) => '[' . ($m[0] + 1) . ']', 'a1b22c333');"),
+        "a[2]b[23]c[334]"
+    );
+}
+
+#[test]
+fn mb_split_keeps_empty_fields_and_limit() {
+    assert_eq!(out("<?php echo implode('|', mb_split('\\s+', 'a  b   c'));"), "a|b|c");
+    assert_eq!(out("<?php echo implode('|', mb_split(',', 'a,b,c', 2));"), "a|b,c");
+    assert_eq!(out("<?php echo implode('|', mb_split(',', ',a,,b,'));"), "|a||b|");
+    assert_eq!(out("<?php echo implode('|', mb_split('\\d', 'abc'));"), "abc");
+}
+
+#[test]
+fn mb_ereg_match_anchored_and_posix_classes() {
+    assert_eq!(out("<?php var_dump(mb_ereg_match('\\d+', '123abc'));"), "bool(true)\n");
+    assert_eq!(out("<?php var_dump(mb_ereg_match('\\d+', 'abc'));"), "bool(false)\n");
+    // Anchored at the start: 'a' is not at the start of 'xa'.
+    assert_eq!(out("<?php var_dump(mb_ereg_match('a', 'xa'));"), "bool(false)\n");
+    // POSIX character classes work in the default (Ruby) dialect.
+    assert_eq!(out("<?php var_dump(mb_ereg_match('[[:digit:]]+', '123'));"), "bool(true)\n");
+}
+
+#[test]
+fn mb_regex_encoding_and_options_defaults() {
+    assert_eq!(out("<?php echo mb_regex_encoding();"), "UTF-8");
+    assert_eq!(out("<?php echo mb_regex_set_options();"), "pr");
+    assert_eq!(out("<?php var_dump(mb_regex_encoding('UTF-8'));"), "bool(true)\n");
+}
+
+#[test]
+fn mb_ereg_invalid_pattern_returns_false() {
+    // A compile error yields false (PHP also emits a warning, on the side channel).
+    assert_eq!(out("<?php var_dump(mb_ereg('(', 'x', $m));"), "bool(false)\n");
+}
+
+// --- step 43b: stateful search family (mb_ereg_search_*) ---
+
+#[test]
+fn mb_ereg_search_cursor_walks_matches() {
+    // Repeated search_pos walks every match as [pos, len], then returns false.
+    let src = "<?php mb_ereg_search_init('a1b2c3', '\\d'); $o = []; \
+        while (($r = mb_ereg_search_pos()) !== false) { $o[] = $r[0] . ':' . $r[1]; } \
+        echo implode(',', $o);";
+    assert_eq!(out(src), "1:1,3:1,5:1");
+    // Multi-character matches: the cursor advances past the whole match.
+    let multi = "<?php mb_ereg_search_init('xx11yy22zz', '\\d+'); $o = []; \
+        while (($r = mb_ereg_search_pos()) !== false) { $o[] = $r[0] . ',' . $r[1]; } \
+        echo implode(' ', $o);";
+    assert_eq!(out(multi), "2,2 6,2");
+}
+
+#[test]
+fn mb_ereg_search_regs_getregs_and_pos() {
+    // search() advances the cursor; getpos returns the byte offset after the match.
+    assert_eq!(
+        out("<?php mb_ereg_search_init('a1b2c3', '\\d'); var_dump(mb_ereg_search()); \
+             echo mb_ereg_search_getpos();"),
+        "bool(true)\n2"
+    );
+    // getregs returns the last successful match's $regs.
+    assert_eq!(
+        out("<?php mb_ereg_search_init('a1b2c3', '\\d'); mb_ereg_search(); \
+             $g = mb_ereg_search_getregs(); echo $g[0];"),
+        "1"
+    );
+    // setpos repositions the cursor; search_regs then matches from there.
+    assert_eq!(
+        out("<?php mb_ereg_search_init('a1b2c3', '\\d'); mb_ereg_search_setpos(4); \
+             $r = mb_ereg_search_regs(); echo $r[0];"),
+        "3"
+    );
+}

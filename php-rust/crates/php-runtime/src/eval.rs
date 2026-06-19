@@ -51,6 +51,22 @@ const HIGHER_ORDER_BUILTINS: &[&[u8]] = &[
     b"preg_replace_callback",
     b"preg_split",
     b"preg_quote",
+    b"mb_ereg",
+    b"mb_eregi",
+    b"mb_ereg_replace",
+    b"mb_eregi_replace",
+    b"mb_ereg_replace_callback",
+    b"mb_split",
+    b"mb_ereg_match",
+    b"mb_regex_encoding",
+    b"mb_regex_set_options",
+    b"mb_ereg_search_init",
+    b"mb_ereg_search",
+    b"mb_ereg_search_pos",
+    b"mb_ereg_search_regs",
+    b"mb_ereg_search_getregs",
+    b"mb_ereg_search_getpos",
+    b"mb_ereg_search_setpos",
 ];
 
 /// One entry of the runtime call stack (step 28). `line` is the *call site*
@@ -387,6 +403,7 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         diags_rendered: 0,
         cur_line: 1,
         gen_yielder: None,
+        mb_regex: crate::mbregex::MbRegexState::default(),
     };
 
     let (fatal, return_value) = match ev.exec_stmts(&program.body) {
@@ -525,6 +542,10 @@ struct Evaluator<'p> {
     /// to suspend. `None` outside any generator; saved/restored per resume by
     /// [`GenDriverImpl::resume`] (part of the swapped generator context).
     gen_yielder: Option<*const ()>,
+    /// Persistent mbregex state (step 43): the global `mb_regex_encoding` /
+    /// `mb_regex_set_options` and the `mb_ereg_search` cursor. Survives across
+    /// `mb_ereg*` calls for the whole run, since the search family is stateful.
+    mb_regex: crate::mbregex::MbRegexState,
 }
 
 /// Which magic property accessor is currently running for an object/property,
@@ -3277,6 +3298,22 @@ impl<'p> Evaluator<'p> {
             b"preg_replace_callback" => Some(self.ho_preg_replace_callback(args)),
             b"preg_split" => Some(self.ho_preg_split(args)),
             b"preg_quote" => Some(self.ho_preg_quote(args)),
+            b"mb_ereg" => Some(self.ho_mb_ereg(args, false)),
+            b"mb_eregi" => Some(self.ho_mb_ereg(args, true)),
+            b"mb_ereg_replace" => Some(self.ho_mb_ereg_replace(args, false)),
+            b"mb_eregi_replace" => Some(self.ho_mb_ereg_replace(args, true)),
+            b"mb_ereg_replace_callback" => Some(self.ho_mb_ereg_replace_callback(args)),
+            b"mb_split" => Some(self.ho_mb_split(args)),
+            b"mb_ereg_match" => Some(self.ho_mb_ereg_match(args)),
+            b"mb_regex_encoding" => Some(self.ho_mb_regex_encoding(args)),
+            b"mb_regex_set_options" => Some(self.ho_mb_regex_set_options(args)),
+            b"mb_ereg_search_init" => Some(self.ho_mb_ereg_search_init(args)),
+            b"mb_ereg_search" => Some(self.ho_mb_ereg_search(args)),
+            b"mb_ereg_search_pos" => Some(self.ho_mb_ereg_search_pos(args)),
+            b"mb_ereg_search_regs" => Some(self.ho_mb_ereg_search_regs(args)),
+            b"mb_ereg_search_getregs" => Some(self.ho_mb_ereg_search_getregs()),
+            b"mb_ereg_search_getpos" => Some(Ok(Zval::Long(self.mb_regex.search_pos as i64))),
+            b"mb_ereg_search_setpos" => Some(self.ho_mb_ereg_search_setpos(args)),
             _ => None,
         }
     }
@@ -3611,6 +3648,302 @@ impl<'p> Evaluator<'p> {
             None => None,
         };
         Ok(Zval::Str(PhpStr::new(crate::preg::quote(&s, delim))))
+    }
+
+    // --- mbstring regex family (step 43), backed by oniguruma via `mbregex`. ---
+
+    /// Compile a pattern under `opts` against the current mbregex dialect,
+    /// emitting PHP's `mbregex compile err:` warning and returning `None` on a
+    /// compile error.
+    fn mb_compile(&mut self, pat: &[u8], opts: &[u8], func: &str, ic: bool) -> Option<onig::Regex> {
+        match crate::mbregex::compile(pat, opts, ic) {
+            Ok(re) => Some(re),
+            Err(msg) => {
+                self.diags
+                    .push(Diag::Warning(format!("{func}(): mbregex compile err: {msg}")));
+                None
+            }
+        }
+    }
+
+    /// Resolve an optional `$options` argument (index `idx`) to an option string:
+    /// the argument when present and non-null, else the global mbregex options.
+    fn mb_opts_arg(&mut self, args: &[Expr], idx: usize) -> Result<Vec<u8>, PhpError> {
+        match args.get(idx) {
+            None => Ok(self.mb_regex.options.clone()),
+            Some(e) => {
+                let v = self.eval(e)?.deref_clone();
+                if matches!(v, Zval::Null) {
+                    Ok(self.mb_regex.options.clone())
+                } else {
+                    Ok(self.stringify(&v)?.as_bytes().to_vec())
+                }
+            }
+        }
+    }
+
+    /// `mb_ereg($pattern, $string, &$regs = null)` / `mb_eregi` (case-insensitive):
+    /// returns a bool (PHP 8). `$regs[0]` is the whole match, `$regs[n]` the n-th
+    /// group (a non-participating group is `false`), with named groups appended
+    /// by string key. On no match `$regs` is set to an empty array.
+    fn ho_mb_ereg(&mut self, args: &[Expr], ic: bool) -> Result<Zval, PhpError> {
+        let func = if ic { "mb_eregi" } else { "mb_ereg" };
+        if args.len() < 2 {
+            return Err(PhpError::ArgumentCountError(format!(
+                "{func}() expects at least 2 arguments, {} given",
+                args.len()
+            )));
+        }
+        let pat = self.preg_str(&args[0])?;
+        let subject = self.preg_str(&args[1])?;
+        let opts = self.mb_regex.options.clone();
+        let Some(re) = self.mb_compile(&pat, &opts, func, ic) else {
+            return Ok(Zval::Bool(false));
+        };
+        let regs = crate::mbregex::exec(&re, &subject);
+        let matched = regs.is_some();
+        if let Some(out) = args.get(2) {
+            self.write_out_param(out, regs.unwrap_or_else(|| Zval::Array(Rc::new(PhpArray::new()))));
+        }
+        Ok(Zval::Bool(matched))
+    }
+
+    /// `mb_ereg_replace($pattern, $replacement, $string[, $options])` / the `i`
+    /// variant. Backreferences `\0`..`\9` in the replacement are honoured.
+    /// Returns `false` on a bad pattern.
+    fn ho_mb_ereg_replace(&mut self, args: &[Expr], ic: bool) -> Result<Zval, PhpError> {
+        let func = if ic { "mb_eregi_replace" } else { "mb_ereg_replace" };
+        if args.len() < 3 {
+            return Err(PhpError::ArgumentCountError(format!(
+                "{func}() expects at least 3 arguments, {} given",
+                args.len()
+            )));
+        }
+        let pat = self.preg_str(&args[0])?;
+        let repl = self.preg_str(&args[1])?;
+        let subject = self.preg_str(&args[2])?;
+        let opts = self.mb_opts_arg(args, 3)?;
+        let Some(re) = self.mb_compile(&pat, &opts, func, ic) else {
+            return Ok(Zval::Bool(false));
+        };
+        Ok(Zval::Str(PhpStr::new(crate::mbregex::replace(&re, &repl, &subject))))
+    }
+
+    /// `mb_ereg_replace_callback($pattern, $callback, $string[, $options])`: the
+    /// callback receives each match's `$regs` array and returns its replacement.
+    fn ho_mb_ereg_replace_callback(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        if args.len() < 3 {
+            return Err(PhpError::ArgumentCountError(format!(
+                "mb_ereg_replace_callback() expects at least 3 arguments, {} given",
+                args.len()
+            )));
+        }
+        let pat = self.preg_str(&args[0])?;
+        let callback = self.eval(&args[1])?.deref_clone();
+        let subject = self.preg_str(&args[2])?;
+        let opts = self.mb_opts_arg(args, 3)?;
+        let Some(re) = self.mb_compile(&pat, &opts, "mb_ereg_replace_callback", false) else {
+            return Ok(Zval::Bool(false));
+        };
+        let bytes = subject.clone();
+        let mut out: Vec<u8> = Vec::new();
+        let mut last = 0usize;
+        for (start, end, regs) in crate::mbregex::find_all(&re, &subject) {
+            out.extend_from_slice(&bytes[last..start]);
+            let ret = self.call_value(callback.clone(), vec![regs])?;
+            let rs = self.stringify(&ret.deref_clone())?;
+            out.extend_from_slice(rs.as_bytes());
+            last = end;
+        }
+        out.extend_from_slice(&bytes[last..]);
+        Ok(Zval::Str(PhpStr::new(out)))
+    }
+
+    /// `mb_split($pattern, $string[, $limit])`: split on matches, keeping empty
+    /// fields. `$limit > 0` caps the piece count. Returns `false` on a bad pattern.
+    fn ho_mb_split(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        if args.len() < 2 {
+            return Err(PhpError::ArgumentCountError(format!(
+                "mb_split() expects at least 2 arguments, {} given",
+                args.len()
+            )));
+        }
+        let pat = self.preg_str(&args[0])?;
+        let subject = self.preg_str(&args[1])?;
+        let limit = match args.get(2) {
+            Some(e) => convert::to_long_cast(&self.eval(e)?.deref_clone(), &mut self.diags),
+            None => -1,
+        };
+        let opts = self.mb_regex.options.clone();
+        let Some(re) = self.mb_compile(&pat, &opts, "mb_split", false) else {
+            return Ok(Zval::Bool(false));
+        };
+        let mut arr = PhpArray::new();
+        for p in crate::mbregex::split(&re, &subject, limit) {
+            let _ = arr.append(Zval::Str(PhpStr::new(p)));
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// `mb_ereg_match($pattern, $string[, $options])`: whether the pattern matches
+    /// anchored at the start of `$string` (a prefix match, not a full match).
+    fn ho_mb_ereg_match(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        if args.len() < 2 {
+            return Err(PhpError::ArgumentCountError(format!(
+                "mb_ereg_match() expects at least 2 arguments, {} given",
+                args.len()
+            )));
+        }
+        let pat = self.preg_str(&args[0])?;
+        let subject = self.preg_str(&args[1])?;
+        let opts = self.mb_opts_arg(args, 2)?;
+        let Some(re) = self.mb_compile(&pat, &opts, "mb_ereg_match", false) else {
+            return Ok(Zval::Bool(false));
+        };
+        Ok(Zval::Bool(crate::mbregex::matches_at_start(&re, &subject)))
+    }
+
+    /// `mb_regex_encoding([$encoding])`: getter returns the current name ("UTF-8"
+    /// default); setter stores it and returns true. Only UTF-8 is effectively
+    /// supported (D-MB-ereg-enc).
+    fn ho_mb_regex_encoding(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        match args.first() {
+            None => Ok(Zval::Str(PhpStr::new(self.mb_regex.encoding.clone()))),
+            Some(e) => {
+                let v = self.eval(e)?.deref_clone();
+                if matches!(v, Zval::Null) {
+                    return Ok(Zval::Str(PhpStr::new(self.mb_regex.encoding.clone())));
+                }
+                self.mb_regex.encoding = self.stringify(&v)?.as_bytes().to_vec();
+                Ok(Zval::Bool(true))
+            }
+        }
+    }
+
+    /// `mb_regex_set_options([$options])`: getter returns the current options
+    /// ("pr" default); setter stores them and returns the previous options.
+    fn ho_mb_regex_set_options(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        let prev = self.mb_regex.options.clone();
+        match args.first() {
+            None => Ok(Zval::Str(PhpStr::new(prev))),
+            Some(e) => {
+                let v = self.eval(e)?.deref_clone();
+                if !matches!(v, Zval::Null) {
+                    self.mb_regex.options = self.stringify(&v)?.as_bytes().to_vec();
+                }
+                Ok(Zval::Str(PhpStr::new(prev)))
+            }
+        }
+    }
+
+    // --- mbregex stateful search cursor (step 43b) ---
+
+    /// Compile and store the search pattern from an optional `$pattern` argument
+    /// at `idx` (its `$options` follow at `idx + 1`); keeps the existing compiled
+    /// pattern when absent/null. Returns false on a compile error.
+    fn mb_search_set_pattern(&mut self, args: &[Expr], idx: usize) -> Result<bool, PhpError> {
+        if let Some(p) = args.get(idx) {
+            let pv = self.eval(p)?.deref_clone();
+            if !matches!(pv, Zval::Null) {
+                let pat = self.stringify(&pv)?.as_bytes().to_vec();
+                let opts = self.mb_opts_arg(args, idx + 1)?;
+                match self.mb_compile(&pat, &opts, "mb_ereg_search", false) {
+                    Some(re) => self.mb_regex.search_re = Some(re),
+                    None => return Ok(false),
+                }
+            }
+        }
+        Ok(true)
+    }
+
+    /// Run the next search from the cursor, advancing it past the match (by one
+    /// byte for a zero-width match) and recording the result for `getregs`.
+    fn mb_search_step(&mut self) -> Option<(usize, usize, Zval)> {
+        let re = self.mb_regex.search_re.take()?;
+        let subject = std::mem::take(&mut self.mb_regex.search_str);
+        let res = crate::mbregex::search_from(&re, &subject, self.mb_regex.search_pos);
+        self.mb_regex.search_re = Some(re);
+        self.mb_regex.search_str = subject;
+        if let Some((start, end, regs)) = &res {
+            self.mb_regex.search_pos = if end > start { *end } else { *end + 1 };
+            self.mb_regex.last_regs = Some(regs.clone());
+        }
+        res
+    }
+
+    /// `mb_ereg_search_init($string[, $pattern[, $options]])`: start a stateful
+    /// search over `$string`, resetting the cursor. Returns false on a bad pattern.
+    fn ho_mb_ereg_search_init(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        let Some(first) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "mb_ereg_search_init() expects at least 1 argument, 0 given".to_string(),
+            ));
+        };
+        self.mb_regex.search_str = self.preg_str(first)?;
+        self.mb_regex.search_pos = 0;
+        self.mb_regex.last_regs = None;
+        if !self.mb_search_set_pattern(args, 1)? {
+            return Ok(Zval::Bool(false));
+        }
+        Ok(Zval::Bool(true))
+    }
+
+    /// `mb_ereg_search([$pattern[, $options]])`: advance the cursor to the next
+    /// match; returns whether one was found.
+    fn ho_mb_ereg_search(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        if !self.mb_search_set_pattern(args, 0)? {
+            return Ok(Zval::Bool(false));
+        }
+        Ok(Zval::Bool(self.mb_search_step().is_some()))
+    }
+
+    /// `mb_ereg_search_pos([$pattern[, $options]])`: next match as `[pos, len]`
+    /// byte offsets, or false at the end.
+    fn ho_mb_ereg_search_pos(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        if !self.mb_search_set_pattern(args, 0)? {
+            return Ok(Zval::Bool(false));
+        }
+        match self.mb_search_step() {
+            Some((start, end, _)) => {
+                let mut arr = PhpArray::new();
+                let _ = arr.append(Zval::Long(start as i64));
+                let _ = arr.append(Zval::Long((end - start) as i64));
+                Ok(Zval::Array(Rc::new(arr)))
+            }
+            None => Ok(Zval::Bool(false)),
+        }
+    }
+
+    /// `mb_ereg_search_regs([$pattern[, $options]])`: next match's `$regs` array,
+    /// or false at the end.
+    fn ho_mb_ereg_search_regs(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        if !self.mb_search_set_pattern(args, 0)? {
+            return Ok(Zval::Bool(false));
+        }
+        match self.mb_search_step() {
+            Some((_, _, regs)) => Ok(regs),
+            None => Ok(Zval::Bool(false)),
+        }
+    }
+
+    /// `mb_ereg_search_getregs()`: the `$regs` of the last successful search, or
+    /// false if none has succeeded.
+    fn ho_mb_ereg_search_getregs(&mut self) -> Result<Zval, PhpError> {
+        Ok(self.mb_regex.last_regs.clone().unwrap_or(Zval::Bool(false)))
+    }
+
+    /// `mb_ereg_search_setpos($position)`: move the byte cursor; false if out of
+    /// range.
+    fn ho_mb_ereg_search_setpos(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        let pos = match args.first() {
+            Some(e) => convert::to_long_cast(&self.eval(e)?.deref_clone(), &mut self.diags),
+            None => 0,
+        };
+        if pos < 0 || pos as usize > self.mb_regex.search_str.len() {
+            return Ok(Zval::Bool(false));
+        }
+        self.mb_regex.search_pos = pos as usize;
+        Ok(Zval::Bool(true))
     }
 
     /// `json_decode($json, $assoc = false, ...)` (step 26). Intercepted here

@@ -16,3 +16,4 @@ fancy-regex = "0.14"
 # only `'static` (not `Send`), satisfied by owning the generator body as an
 # `Rc<FnDecl>` and reborrowing a lifetime-erased evaluator pointer.
 corosensei = "0.3"
+onig = "6.5.3"

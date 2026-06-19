@@ -868,3 +868,49 @@ Traccia C (oniguruma `mb_ereg*`/`mb_split`) rinviata a uno Step 43 dedicato
   (scope-out). **D-NEW: nessuna.**
 - **Clippy** strict gate (`--all-features --all-targets --deny=warnings`) pulito.
 - **Tempo:** ~mezza sessione.
+
+## Step 43 — mbstring batch 2B (famiglia regex `mb_ereg*`)
+
+Chiude mbstring (traccia C). **Primo step del batch che tocca il core
+dell'evaluator** (41/42 erano pure builtins): la famiglia ha stato persistente
+e out-param by-ref all'argomento #3, fuori dall'ABI builtin. Strategia **Adapter**
+(legacy-port Strategy A) su **oniguruma reale** via crate `onig 6.5.3`. **+9 test**
+oracle-verificati (760→769). ~16 funzioni.
+- **Gate 0 (build feasibility)**: `onig`/`onig_sys` compila la libreria C
+  oniguruma *bundled* via `cc` + genera i binding con `bindgen`/libclang →
+  **build pulito in ambiente** (clang presente). Nessun pkg-config richiesto.
+- **Architettura**: nuovo `php-runtime/src/mbregex.rs` (adapter `onig` confinato:
+  `MbRegexState`, `compile`, `exec`, `replace`, `split`, `find_all`,
+  `matches_at_start`, `search_from`; ritorna `Zval`/byte owned, nessun borrow
+  `onig` esce). Campo `mb_regex: MbRegexState` sull'`Evaluator` (precedente:
+  `statics`/`static_props`); le funzioni sono **higher-order builtins** in
+  `eval.rs` (mirror di `ho_preg_match` + `write_out_param`), così accedono allo
+  stato e scrivono `$regs` (arg #3). `GenCtx` è un save/restore di *sottoinsieme*
+  → `mb_regex` resta condiviso, niente scope-out per i generatori.
+- **Dialetto**: PHP mbregex usa di default **Ruby syntax + opzioni `"pr"`**
+  (`p` = MULTILINE|SINGLELINE: `.` matcha newline, `^`/`$` ancorano la stringa).
+  `parse_options` traduce la stringa opzioni PHP (i/x/m/s/p/l/n + selettori
+  syntax r/z/d/b/j/u/g/c) in `RegexOptions`+`Syntax`. Classi POSIX `[[:digit:]]`,
+  named group `(?<n>)`, backref `\1` funzionano (verificati vs oracle).
+- **43a** (stateless + stato globale): `mb_ereg`/`mb_eregi` (return **bool** PHP 8;
+  `$regs` arg #3: 0=match, 1..=gruppi con **`false`** per gruppo non
+  partecipante, named appesi per chiave stringa; no-match→false+`$regs=[]`),
+  `mb_ereg_replace`/`mb_eregi_replace` (backref `\0`-`\9`, `\\`→`\`),
+  `mb_ereg_replace_callback` (callable PHP), `mb_split` (campi vuoti preservati,
+  limite), `mb_ereg_match` (ancorato all'inizio, non full-match),
+  `mb_regex_encoding`/`mb_regex_set_options` (getter→"UTF-8"/"pr").
+- **43b** (cursore stateful): `mb_ereg_search_init/search/search_pos/search_regs/
+  search_getregs/search_getpos/search_setpos`. Cursore in byte su `MbRegexState`;
+  `mb_search_step` prende il `Regex` con `Option::take` (non è `Clone`), avanza a
+  `end` (o `end+1` per match zero-width). `regs_from_region` costruisce `$regs`
+  dalle posizioni assolute del match.
+- **Warning su pattern invalido**: `Diag::Warning "{func}(): mbregex compile err:
+  {msg}"` (messaggio oniguruma), return false. NB lo stdout dei test è `ev.out`
+  puro (i Warning vanno sul canale renderizzato) → i test vedono solo `false`.
+- **Errori RED**: nessun CLI standalone (php-cli è stub `fn main(){}`) → niente
+  spot-check via binario; la validazione differenziale resta gli unit test
+  oracle-derivati (come step 41/42) + i probe oracle manuali.
+- **Divergenze** (`04-divergences.md` sez. Step 43): D-MB-ereg-enc (UTF-8-only,
+  scope-out coerente D-MB1), D-MB-ereg-syntax (opzioni avanzate/encoding non
+  validati a fondo). **D-NEW: nessuna.**
+- **Clippy** strict gate pulito. **Tempo:** ~una sessione.

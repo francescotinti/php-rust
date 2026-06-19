@@ -399,3 +399,30 @@ liste vuote/invalide→`ValueError`).
 D-NEW: nessuna (i fail sono scelte di scope dichiarate, non bug). `bin2hex`/
 `var_export`/`mb_list_encodings` NON sono builtin implementati → i test usano
 output byte-esatti / `var_dump` / echo diretto.
+
+## Step 43 (mbstring batch 2B) — famiglia regex `mb_ereg*` via oniguruma
+
+~16 funzioni `mb_ereg*`/`mb_split`/`mb_regex_*` come adapter su oniguruma reale
+(crate `onig`). +9 test oracle-verificati. Primo step mbstring con modifiche
+all'evaluator (stato persistente + out-param arg #3). Divergenze dichiarate:
+
+| # | Caso | Comportamento Rust | PHP 8.5.7 | Stato |
+|---|---|---|---|---|
+| D-MB-ereg-enc | `mb_regex_encoding` ≠ UTF-8 | i pattern/subject sono trattati come UTF-8; il setter memorizza ma non transcodifica | mbregex nell'encoding scelto | scope-out (coerente con D-MB1) |
+| D-MB-ereg-syntax | opzioni avanzate / selettori syntax non `r`/default | `parse_options` mappa i/x/m/s/p/l/n + r/z/d/b/j/u/g/c; combinazioni esotiche non validate a fondo | tutte le opzioni mbregex | parità sui casi comuni; resto non verificato |
+| D-MB-ereg-build | dipendenza C oniguruma (vendored via `onig_sys`+`bindgen`) | compila in ambiente (clang); fallback dichiarato fancy-regex NON attivato | usa liboniguruma di sistema | parità funzionale ✓ (build C, non più pure-Rust) |
+
+Casi coperti e oracle-verificati: `mb_ereg`/`mb_eregi` (return bool, `$regs` arg
+#3 by-ref con gruppi numerati + `false` per non-partecipante + named per chiave
+stringa, no-match→false+`[]`), backref nel pattern `\1`, named group `(?<n>)`,
+`mb_ereg_replace`/`mb_eregi_replace` (backref `\0`-`\9` nel replacement),
+`mb_ereg_replace_callback` (callable, multi-match, aritmetica), `mb_split`
+(campi vuoti, limite, no-match→stringa intera), `mb_ereg_match` (ancorato
+all'inizio, classi POSIX `[[:digit:]]`, `.` matcha newline per opzione `p`),
+`mb_regex_encoding`/`mb_regex_set_options` (default "UTF-8"/"pr"), pattern
+invalido→false+Warning, e l'intera famiglia stateful `mb_ereg_search_*` (cursore
+byte, walk multi-match, getregs/getpos/setpos).
+
+D-NEW: nessuna. `bin2hex`/`var_export` non implementati → i test usano echo
+diretto / `var_dump` / `implode`. Nessun CLI standalone (`php-cli` è stub) →
+validazione differenziale via unit test oracle-derivati + probe oracle manuali.
