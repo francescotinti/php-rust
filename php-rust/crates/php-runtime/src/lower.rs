@@ -1424,11 +1424,13 @@ impl<'f> Lowerer<'f> {
             None => Vec::new(),
         };
         let mut consts = Vec::new();
+        let mut abstract_methods = Vec::new();
         for member in iface.members.iter() {
             match member {
                 ClassLikeMember::Constant(c) => self.lower_class_const(c, &mut consts)?,
-                // Interface methods are signatures only (abstract) — no body to run.
-                ClassLikeMember::Method(_) => {}
+                // Interface methods are signatures only (abstract) — no body to
+                // run, but their names are reported by `get_class_methods`.
+                ClassLikeMember::Method(m) => abstract_methods.push(m.name.value.into()),
                 _ => {
                     return Err(LowerError::Unsupported {
                         what: "interface member",
@@ -1447,6 +1449,7 @@ impl<'f> Lowerer<'f> {
             static_props: Vec::new(),
             consts,
             methods: Vec::new(),
+            abstract_methods,
             is_enum: false,
             enum_backing: None,
             enum_cases: Vec::new(),
@@ -1558,6 +1561,17 @@ impl<'f> Lowerer<'f> {
                 return Err(abstract_unimplemented_fatal(&name, &missing, line));
             }
         }
+        // Abstract methods left unimplemented (an abstract class): keep their
+        // names so `get_class_methods` reports them (step 47). A concrete class
+        // implements them all, so this is empty there.
+        let abstract_methods: Vec<Box<[u8]>> = abstract_req
+            .iter()
+            .filter(|req| {
+                let lc = req.to_ascii_lowercase();
+                !methods.iter().any(|m| m.decl.name.to_ascii_lowercase() == lc)
+            })
+            .cloned()
+            .collect();
         Ok(ClassDecl {
             name,
             parent,
@@ -1568,6 +1582,7 @@ impl<'f> Lowerer<'f> {
             static_props,
             consts,
             methods,
+            abstract_methods,
             is_enum: false,
             enum_backing: None,
             enum_cases: Vec::new(),
@@ -1677,6 +1692,9 @@ impl<'f> Lowerer<'f> {
             static_props: Vec::new(),
             consts,
             methods,
+            // Enums implement any interface methods concretely, so none are left
+            // abstract (step 47).
+            abstract_methods: Vec::new(),
             is_enum: true,
             enum_backing,
             enum_cases,

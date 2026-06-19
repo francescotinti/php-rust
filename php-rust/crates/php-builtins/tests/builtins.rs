@@ -3006,3 +3006,130 @@ fn exit_non_scalar_arg_is_type_error() {
         "exit(): Argument #1 ($status) must be of type string|int, array given"
     );
 }
+
+// --- var_export (step 47) --------------------------------------------------
+
+#[test]
+fn var_export_scalars() {
+    assert_eq!(out("<?php echo var_export(null, true);"), "NULL");
+    assert_eq!(out("<?php echo var_export(true, true);"), "true");
+    assert_eq!(out("<?php echo var_export(false, true);"), "false");
+    assert_eq!(out("<?php echo var_export(42, true);"), "42");
+    assert_eq!(out("<?php echo var_export(-7, true);"), "-7");
+}
+
+#[test]
+fn var_export_floats_always_have_point() {
+    // var_export must round-trip as a float literal: 1.0, not 1.
+    assert_eq!(out("<?php echo var_export(1.5, true);"), "1.5");
+    assert_eq!(out("<?php echo var_export(1.0, true);"), "1.0");
+    assert_eq!(out("<?php echo var_export(1e20, true);"), "1.0E+20");
+    assert_eq!(out("<?php echo var_export(INF, true);"), "INF");
+    assert_eq!(out("<?php echo var_export(NAN, true);"), "NAN");
+}
+
+#[test]
+fn var_export_strings_single_quoted() {
+    // Only `'` and `\` are escaped; other bytes are verbatim.
+    assert_eq!(out("<?php echo var_export('plain', true);"), "'plain'");
+    assert_eq!(out("<?php echo var_export(\"a'b\", true);"), "'a\\'b'");
+    // One backslash in, two out.
+    assert_eq!(out("<?php echo var_export('a\\\\b', true);"), "'a\\\\b'");
+}
+
+#[test]
+fn var_export_arrays() {
+    assert_eq!(out("<?php echo var_export([], true);"), "array (\n)");
+    assert_eq!(
+        out("<?php echo var_export([1, 2, 3], true);"),
+        "array (\n  0 => 1,\n  1 => 2,\n  2 => 3,\n)"
+    );
+    // Numeric-string key normalises to an unquoted int; string key is quoted.
+    assert_eq!(
+        out("<?php echo var_export(['7' => 'a', 'x' => 'b'], true);"),
+        "array (\n  7 => 'a',\n  'x' => 'b',\n)"
+    );
+}
+
+#[test]
+fn var_export_nested_array() {
+    // A nested array's value goes on a new line, indented one level deeper.
+    assert_eq!(
+        out("<?php echo var_export(['a' => 1, 'b' => [2, 3]], true);"),
+        "array (\n  'a' => 1,\n  'b' => \n  array (\n    0 => 2,\n    1 => 3,\n  ),\n)"
+    );
+}
+
+#[test]
+fn var_export_stdclass() {
+    // stdClass renders as a `(object) array(...)` cast, members at 3 spaces.
+    assert_eq!(
+        out("<?php $o = new stdClass; $o->x = 1; $o->y = 'z'; echo var_export($o, true);"),
+        "(object) array(\n   'x' => 1,\n   'y' => 'z',\n)"
+    );
+}
+
+#[test]
+fn var_export_user_object() {
+    // A user class renders via `__set_state`; all props by value, no markers.
+    assert_eq!(
+        out("<?php class P { public $a = 1; protected $b = 2; } echo var_export(new P, true);"),
+        "\\P::__set_state(array(\n   'a' => 1,\n   'b' => 2,\n))"
+    );
+}
+
+#[test]
+fn var_export_nul_byte_string() {
+    // A NUL byte can't live in a single-quoted literal: PHP concatenates a
+    // double-quoted `"\0"` between the single-quoted segments.
+    assert_eq!(
+        out("<?php echo var_export(\"\\0Hi\\0\", true);"),
+        "'' . \"\\0\" . 'Hi' . \"\\0\" . ''"
+    );
+}
+
+#[test]
+fn var_export_print_mode() {
+    // Without the return flag, var_export writes straight to stdout.
+    assert_eq!(out("<?php var_export([1]);"), "array (\n  0 => 1,\n)");
+}
+
+// --- get_class_methods / get_object_vars (step 47) -------------------------
+
+#[test]
+fn get_class_methods_public_from_global() {
+    // From global scope only public methods, child→parent order, by name or obj.
+    let src = "<?php class A { public function a1(){} private function ap(){} \
+               protected function aq(){} } class B extends A { public function b1(){} } ";
+    assert_eq!(out(&format!("{src} echo implode(',', get_class_methods('B'));")), "b1,a1");
+    assert_eq!(out(&format!("{src} echo implode(',', get_class_methods(new B));")), "b1,a1");
+}
+
+#[test]
+fn get_class_methods_sees_private_from_inside() {
+    // Called from within the class, private/protected are included too.
+    assert_eq!(
+        out("<?php class A { public function a1(){} private function ap(){} \
+             function d(){ return implode(',', get_class_methods($this)); } } echo (new A)->d();"),
+        "a1,ap,d"
+    );
+}
+
+#[test]
+fn get_object_vars_public_from_global() {
+    assert_eq!(
+        out("<?php class A { public $p = 1; protected $q = 2; private $r = 3; public $z = 4; } \
+             $o = new A; $s = ''; foreach (get_object_vars($o) as $k => $v) { $s .= \"$k=$v;\"; } echo $s;"),
+        "p=1;z=4;"
+    );
+}
+
+#[test]
+fn get_object_vars_all_from_inside() {
+    assert_eq!(
+        out("<?php class A { public $p = 1; protected $q = 2; private $r = 3; \
+             function d(){ $s = ''; foreach (get_object_vars($this) as $k => $v) { $s .= \"$k=$v;\"; } return $s; } } \
+             echo (new A)->d();"),
+        "p=1;q=2;r=3;"
+    );
+}

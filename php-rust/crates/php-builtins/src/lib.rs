@@ -21,7 +21,8 @@ use std::rc::Rc;
 
 use php_runtime::{Builtin, Ctx, Registry};
 use php_types::{
-    convert, dtoa, numstr, Closure, ClosureRender, Key, PhpArray, PhpError, PhpStr, PropVis, Zval,
+    convert, dtoa, numstr, Closure, ClosureRender, Diag, Diags, Key, PhpArray, PhpError, PhpStr,
+    PropVis, Zval,
 };
 
 /// Build the Tier 1 builtin registry.
@@ -141,6 +142,7 @@ pub fn registry() -> Registry {
     add(b"ceil", math::ceil);
     add(b"round", math::round);
     add(b"var_dump", var_dump);
+    add(b"var_export", var_export);
     add(b"strlen", strlen);
     add(b"gettype", gettype);
     add(b"is_int", is_int);
@@ -369,6 +371,145 @@ fn closure_properties(c: &Closure) -> Vec<(Vec<u8>, Zval)> {
 
 fn spaces(out: &mut Vec<u8>, n: usize) {
     out.resize(out.len() + n, b' ');
+}
+
+/// `var_export($value, $return = false)` (step 47). Renders a value as a
+/// PHP-parsable literal. With a truthy `$return` the rendering is returned as a
+/// string instead of being printed. A direct port of PHP's `php_var_export_ex`.
+fn var_export(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let v = arg1(args, "var_export")?;
+    let want_return = matches!(args.get(1), Some(r) if convert::is_true_silent(r));
+    let mut buf = Vec::new();
+    let mut seen = Vec::new();
+    export_into(&mut buf, v, 1, &mut seen, ctx.diags);
+    if want_return {
+        Ok(Zval::Str(PhpStr::new(buf)))
+    } else {
+        ctx.out.extend_from_slice(&buf);
+        Ok(Zval::Null)
+    }
+}
+
+/// Recursive `var_export` formatter (port of `php_var_export_ex`). `level` starts
+/// at 1; PHP's indentation is derived from it: array members indent by
+/// `(level+1)` spaces, object members by `(level+2)`, and a nested value recurses
+/// at `level+2`. The opening `array (` / closing `)` of a *nested* container
+/// (level > 1) is preceded by `(level-1)` spaces (and, for the opener, a newline).
+fn export_into(out: &mut Vec<u8>, v: &Zval, level: usize, seen: &mut Vec<usize>, diags: &mut Diags) {
+    match v {
+        Zval::Undef | Zval::Null => out.extend_from_slice(b"NULL"),
+        Zval::Bool(true) => out.extend_from_slice(b"true"),
+        Zval::Bool(false) => out.extend_from_slice(b"false"),
+        Zval::Long(n) => out.extend_from_slice(n.to_string().as_bytes()),
+        Zval::Double(d) => out.extend_from_slice(&export_float(*d)),
+        Zval::Str(s) => export_str(out, s.as_bytes()),
+        Zval::Ref(cell) => export_into(out, &cell.borrow(), level, seen, diags),
+        Zval::Array(a) => {
+            let ptr = Rc::as_ptr(a) as usize;
+            if seen.contains(&ptr) {
+                // PHP emits a Warning and `NULL` on a circular reference.
+                diags.push(Diag::Warning(
+                    "var_export does not handle circular references".to_string(),
+                ));
+                out.extend_from_slice(b"NULL");
+                return;
+            }
+            seen.push(ptr);
+            if level > 1 {
+                out.push(b'\n');
+                spaces(out, level - 1);
+            }
+            out.extend_from_slice(b"array (\n");
+            for (key, val) in a.iter() {
+                spaces(out, level + 1);
+                match key {
+                    Key::Int(i) => out.extend_from_slice(i.to_string().as_bytes()),
+                    Key::Str(s) => export_str(out, s.as_bytes()),
+                }
+                out.extend_from_slice(b" => ");
+                export_into(out, val, level + 2, seen, diags);
+                out.extend_from_slice(b",\n");
+            }
+            seen.pop();
+            spaces(out, level - 1);
+            out.push(b')');
+        }
+        Zval::Object(o) => {
+            let ptr = Rc::as_ptr(o) as usize;
+            if seen.contains(&ptr) {
+                diags.push(Diag::Warning(
+                    "var_export does not handle circular references".to_string(),
+                ));
+                out.extend_from_slice(b"NULL");
+                return;
+            }
+            seen.push(ptr);
+            let obj = o.borrow();
+            if level > 1 {
+                out.push(b'\n');
+                spaces(out, level - 1);
+            }
+            // `stdClass` renders as a cast; any other class via `__set_state`.
+            let is_std = obj.class_name.as_bytes() == b"stdClass";
+            if is_std {
+                out.extend_from_slice(b"(object) array(\n");
+            } else {
+                out.push(b'\\');
+                out.extend_from_slice(obj.class_name.as_bytes());
+                out.extend_from_slice(b"::__set_state(array(\n");
+            }
+            // All properties are exported by value, with no visibility markers.
+            for (k, val) in obj.props.iter() {
+                spaces(out, level + 2);
+                export_str(out, k);
+                out.extend_from_slice(b" => ");
+                export_into(out, val, level + 2, seen, diags);
+                out.extend_from_slice(b",\n");
+            }
+            drop(obj);
+            seen.pop();
+            spaces(out, level - 1);
+            if is_std {
+                out.push(b')');
+            } else {
+                out.extend_from_slice(b"))");
+            }
+        }
+        // Closures / generators have no `var_export` form (D-47.1 scope-out).
+        Zval::Closure(_) | Zval::Generator(_) => out.extend_from_slice(b"NULL"),
+    }
+}
+
+/// `var_export` float: shortest round-trip, but always a valid PHP float literal
+/// — if the result has no `.`/`e`/`E` and is finite, append `.0` (`1.0`, `-0.0`).
+fn export_float(d: f64) -> Vec<u8> {
+    let mut s = dtoa::double_to_shortest(d);
+    if d.is_finite() && !s.iter().any(|&b| matches!(b, b'.' | b'e' | b'E')) {
+        s.extend_from_slice(b".0");
+    }
+    s
+}
+
+/// `var_export` string: single-quoted, escaping only `'` and `\` (other bytes,
+/// including newlines, are emitted verbatim). A NUL byte cannot appear in a
+/// single-quoted literal, so PHP splits on it and joins the single-quoted
+/// segments with a double-quoted `"\0"`, e.g. `'' . "\0" . 'Hello'`.
+fn export_str(out: &mut Vec<u8>, s: &[u8]) {
+    let mut first = true;
+    for seg in s.split(|&b| b == 0) {
+        if !first {
+            out.extend_from_slice(b" . \"\\0\" . ");
+        }
+        first = false;
+        out.push(b'\'');
+        for &b in seg {
+            if b == b'\'' || b == b'\\' {
+                out.push(b'\\');
+            }
+            out.push(b);
+        }
+        out.push(b'\'');
+    }
 }
 
 /// print_r($value, $return = false). Human-readable dump; with a truthy

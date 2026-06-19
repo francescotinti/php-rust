@@ -1051,3 +1051,45 @@ oracle-verificati, clippy strict pulito.
   comunque corretto. `eval`/`include`/`require` restano `Unsupported`. Il codice
   di uscita resta su `Outcome.exit_code` (la CLI è uno stub, niente
   `process::exit`).
+
+## Step 47 — `var_export` + reflection (`get_object_vars`, `get_class_methods`)
+
+Tre builtin di introspezione/debug fra i più richiesti dal corpus. **+14 unit
+test** (799→813… al netto: workspace a 812), oracle-verificati, clippy pulito.
+
+- **`var_export`** (builtin PURO in `php-builtins/src/lib.rs`): port di
+  `php_var_export_ex`. Modalità return col 2° arg (pattern di `print_r`).
+  Indentazione esatta (membri array a `level+1`, oggetti a `level+2`,
+  prefisso/chiusura a `level-1`, ricorsione a `level+2`). Float via
+  `dtoa::double_to_shortest` + regola `.0` (sempre un literal float valido:
+  `1.0`, `-0.0`, `1.0E+20`, `INF`/`NAN`). Stringhe single-quoted, escape solo
+  `'`/`\`; un **byte NUL** non può stare in una single-quote → split su NUL e
+  join con `. "\0" .` (`'' . "\0" . 'Hi'`). `stdClass`→`(object) array(...)`,
+  user→`\Class::__set_state(array(...))` (tutte le prop by value). Riferimento
+  **circolare** → `Warning: var_export does not handle circular references` +
+  `NULL` (emesso via `ctx.diags`; `export_into` prende `&mut Diags`).
+- **`get_class_methods`/`get_object_vars`** (introspezione in `eval.rs`,
+  famiglia `dispatch_class_introspection` accanto a `get_class`): hanno bisogno
+  della class-table → non possono essere builtin puri. **Scope-aware**: filtrano
+  per `visible_from(vis, decl_class)` rispetto a `self.cur_class` → da global solo
+  `public`, da dentro la classe anche `protected`/`private`. `get_class_methods`
+  cammina la chain `parent` child→parent, ogni nome una volta (la classe più
+  derivata vince: il nome è marcato `seen` **anche se non visibile**, così un
+  metodo astratto/omonimo del genitore non "filtra" — fix scoperto da
+  `bug32296`). `get_object_vars` itera `props` con `resolve_prop_decl` per la
+  visibilità; prop dinamiche/non dichiarate = public.
+- **HIR**: nuovo campo `ClassDecl.abstract_methods: Vec<Box<[u8]>>` (i metodi
+  astratti — interfacce/`abstract` — non hanno body, quindi non erano in
+  `methods`; ora memorizzati così `get_class_methods` li riporta). Popolato nei 3
+  siti di costruzione (interface = i suoi metodi; class = gli astratti non
+  implementati; enum = vuoto). Sbloccato `get_class_methods` su interfacce
+  (corpus `get_class_methods_001/002/003`, `bug32296`, `bug43483` PASS).
+- **Corpus**: `Zend/tests/get_class_methods` 5/6 PASS (FAIL solo `bug64239_1` =
+  ordine dei metodi alias di trait, ortogonale); `ext/standard/.../general_functions`
+  var_export 7 PASS / 0 FAIL fra i runnable; `class_object` get_object_vars con
+  edge di reference-aliasing FAIL (scope-out D-47.2).
+- **Scope-out D-47.1**: un metodo `abstract protected` mai overridden e
+  interrogato da global è riportato (lo trattiamo come public); raro.
+  **D-47.2**: `get_object_vars` su proprietà-riferimento — l'aliasing fine nel
+  var_dump dell'array risultante diverge in casi limite. `var_export` di
+  closure/generator → `NULL`.

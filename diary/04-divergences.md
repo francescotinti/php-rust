@@ -496,3 +496,22 @@ Argument #1 ($status) must be of type string|int, X given"`.
 (sotto-compilazione + I/O file → step separato). Il test `exit/exit_as_function`
 resta FAIL per la sintassi first-class-callable `exit(...)` + reflection dei
 parametri Closure in `var_dump`, non per la semantica di `exit`.
+
+## Step 47 — `var_export` / `get_class_methods` / `get_object_vars`
+
+| ID | Caso | Noi | PHP | Note |
+|---|---|---|---|---|
+| **D-47.1** | `get_class_methods` su un metodo `abstract protected` mai overridden, interrogato da scope esterno | il nome è riportato (i metodi astratti sono trattati come public) | escluso (protected non visibile da fuori) | i metodi d'interfaccia sono sempre public (caso dominante, corretto); la visibilità degli `abstract` non è memorizzata — raro |
+| **D-47.2** | `get_object_vars` su una proprietà-**riferimento** | il valore è incluso, ma l'aliasing fine (marker `&` nel `var_dump` dell'array risultante) diverge in casi limite | l'elemento dell'array è esso stesso un riferimento condiviso con la proprietà | edge di semantica reference; il set di proprietà e l'ordine sono corretti |
+
+Casi **non** divergenti (parità oracle verificata): `var_export` scalari/float
+(sempre con `.`/`E`)/stringhe (escape `'`/`\`, NUL via `. "\0" .`)/array
+vuoto+nidificato+chiavi int-string/`stdClass`/user-class/modalità return/
+riferimento circolare (`Warning ... circular references`); `get_class_methods`
+public-da-global, private/protected-da-dentro, ordine child→parent, metodi
+ereditati e di interfaccia; `get_object_vars` public-da-global, tutte-da-dentro,
+ordine di dichiarazione, prop dinamiche.
+
+Il test `get_class_methods/bug64239_1` resta FAIL per l'**ordine** dei metodi
+alias di trait (`use T as Alias` — PHP mette l'alias prima dell'originale),
+dettaglio del flattening dei trait (step 21), ortogonale a `get_class_methods`.

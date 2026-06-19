@@ -4206,6 +4206,8 @@ impl<'p> Evaluator<'p> {
         match name {
             b"get_class" => Some(self.ci_get_class(args)),
             b"get_parent_class" => Some(self.ci_get_parent_class(args)),
+            b"get_class_methods" => Some(self.ci_get_class_methods(args)),
+            b"get_object_vars" => Some(self.ci_get_object_vars(args)),
             _ => None,
         }
     }
@@ -4254,6 +4256,101 @@ impl<'p> Evaluator<'p> {
             Some(p) => Ok(Zval::Str(PhpStr::new(self.classes[p].name.to_vec()))),
             None => Ok(Zval::Bool(false)),
         }
+    }
+
+    /// `get_class_methods($objectOrClassName)` (step 47): the method names of the
+    /// class, walking the inheritance chain child→parent (each method once;
+    /// child overrides win), filtered by visibility from the calling scope
+    /// (`visible_from`) — so from outside only `public` methods are returned, and
+    /// from within the class the `protected`/`private` ones too.
+    fn ci_get_class_methods(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        let cid: Option<ClassId> = match args.first() {
+            Some(e) => match self.eval(e)?.deref_clone() {
+                Zval::Object(o) => Some(o.borrow().class_id as usize),
+                Zval::Str(s) => self
+                    .class_index
+                    .get(&s.as_bytes().to_ascii_lowercase())
+                    .copied(),
+                _ => None,
+            },
+            None => {
+                return Err(PhpError::ArgumentCountError(
+                    "get_class_methods() expects exactly 1 argument, 0 given".to_string(),
+                ))
+            }
+        };
+        // An unresolved class name yields `null` (PHP raises a TypeError only for
+        // a non-string/non-object argument, which we mapped to `None` above).
+        let Some(start) = cid else {
+            return Ok(Zval::Null);
+        };
+        let classes: &'p [ClassDecl] = self.classes;
+        let mut arr = PhpArray::new();
+        let mut seen: Vec<Vec<u8>> = Vec::new();
+        let mut cur = Some(start);
+        while let Some(c) = cur {
+            for m in &classes[c].methods {
+                let lname = m.decl.name.to_ascii_lowercase();
+                if seen.contains(&lname) {
+                    continue; // a more-derived class already defined this name
+                }
+                // Mark the name as resolved by this (most-derived) class even
+                // when it is not visible, so a parent's same-named method (or an
+                // overridden abstract signature) does not leak into the result.
+                seen.push(lname);
+                if self.visible_from(m.visibility, c) {
+                    let _ = arr.append(Zval::Str(PhpStr::new(m.decl.name.to_vec())));
+                }
+            }
+            // Abstract signatures (interface / `abstract` methods). Interface
+            // methods are public; a protected `abstract` method that is never
+            // overridden and queried from outside is a minor scope-out (D-47.1).
+            for am in &classes[c].abstract_methods {
+                let lname = am.to_ascii_lowercase();
+                if seen.contains(&lname) {
+                    continue;
+                }
+                seen.push(lname);
+                let _ = arr.append(Zval::Str(PhpStr::new(am.to_vec())));
+            }
+            cur = classes[c].parent;
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// `get_object_vars($object)` (step 47): the object's properties as a
+    /// `name => value` array, filtered by visibility from the calling scope —
+    /// from outside only `public` properties, from within the class the
+    /// `protected`/`private` ones too. Dynamic (undeclared) properties are
+    /// always public. Declaration / insertion order is preserved.
+    fn ci_get_object_vars(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        let v = match args.first() {
+            Some(e) => self.eval(e)?.deref_clone(),
+            None => {
+                return Err(PhpError::ArgumentCountError(
+                    "get_object_vars() expects exactly 1 argument, 0 given".to_string(),
+                ))
+            }
+        };
+        let Zval::Object(o) = v else {
+            return Err(PhpError::TypeError(format!(
+                "get_object_vars(): Argument #1 ($object) must be of type object, {} given",
+                v.error_type_name()
+            )));
+        };
+        let obj = o.borrow();
+        let cid = obj.class_id as usize;
+        let mut arr = PhpArray::new();
+        for (name, val) in obj.props.iter() {
+            let visible = match self.resolve_prop_decl(cid, name) {
+                Some((vis, decl_class)) => self.visible_from(vis, decl_class),
+                None => true, // dynamic / undeclared property is public
+            };
+            if visible {
+                arr.insert(Key::from_bytes(name), val.clone());
+            }
+        }
+        Ok(Zval::Array(Rc::new(arr)))
     }
 
     /// Whether a function *name* resolves to something callable: a user function,

@@ -99,6 +99,10 @@ pub struct ClassDecl {
     /// Methods declared on this class, in declaration order. Resolved by name
     /// (case-insensitive), walking the parent chain for inheritance.
     pub methods: Vec<MethodDecl>,
+    /// Abstract method *signatures* declared on this class — interface methods
+    /// and `abstract` methods, which carry no body so are not in `methods`
+    /// (step 47). Kept (always public) so `get_class_methods` can report them.
+    pub abstract_methods: Vec<Box<[u8]>>,
     /// `enum` declaration (vs `class`/`interface`), step 23. When set, `parent`
     /// is `None`, `props`/`static_props` are empty, and the cases live in
     /// `enum_cases`. The whole OOP machinery (methods, consts, instanceof,
