@@ -426,3 +426,36 @@ byte, walk multi-match, getregs/getpos/setpos).
 D-NEW: nessuna. `bin2hex`/`var_export` non implementati → i test usano echo
 diretto / `var_dump` / `implode`. Nessun CLI standalone (`php-cli` è stub) →
 validazione differenziale via unit test oracle-derivati + probe oracle manuali.
+
+## Step 44 (Phase 4c) — import corpus ext/mbstring: classificazione + **2 D-NEW**
+
+Sbloccato `--EXTENSIONS--` nel phpt-runner (allowlist `core/standard/mbstring/
+pcre/json/date`), fatto girare `ext/mbstring/tests` (417): **30 pass / 37 fail /
+350 skip** (67 runnable). Il corpus reale ha trovato bug che gli unit test
+scritti a mano non vedevano — il valore canonico della Phase 4c.
+
+**3 bug CLASSE A fixati** (in-scope, con unit test, pass 27→30):
+
+| # | Caso | Prima | Ora (oracle-esatto) |
+|---|---|---|---|
+| A-44.1 | `mb_strpos/stripos/strrpos/strripos` con `$offset` ∉ `[-len,len]` | clamp silenzioso | `ValueError "Argument #3 ($offset) must be contained in argument #1 ($haystack)"` |
+| A-44.2 | `mb_detect_encoding($s, '')` (lista stringa-vuota) | "contains invalid encoding" | `ValueError "Argument #2 ($encodings) must specify at least one encoding"` |
+| A-44.3 | `mb_convert_encoding($s, to, '')` (from stringa-vuota) | defaultava a UTF-8 | `ValueError "Argument #3 ($from_encoding) must specify at least one encoding"` |
+
+**37 fail residui = scope-out già dichiarati** (non bug): non-UTF-8 encoding
+(D-MB1: EUC-JP/SJIS/cp936/UTF-16/HTML-ENTITIES/UTF7-IMAP), case FOLD/SIMPLE
+(D-MB3b/c: ß→ss), final-sigma e apostrofo Case_Ignorable in TITLE (D-MB3a),
+funzioni config non implementate (mb_internal_encoding/mb_detect_order/
+mb_substitute_character/mb_convert_kana/mb_encode_mimeheader).
+
+**2 D-NEW** (scoperte dal corpus, NON fixate — non quick, documentate):
+
+| # | Caso | Comportamento Rust | PHP 8.5.7 | Note |
+|---|---|---|---|---|
+| **D-NEW-44.1** | `mb_convert_encoding`/`mb_check_encoding` con **input array** | non supportato (warning Array-to-string / errore) | converte ricorsivamente ogni elemento dell'array | gap di feature; richiede un nuovo step (conversione ricorsiva + by-ref) |
+| **D-NEW-44.2** | `mb_convert_case(.., MB_CASE_TITLE)` su digrammi titlecase Dž/Lj/Nj (U+01C4-01CC) | usa **uppercase** (`Ǆ` U+01C4) per la prima lettera | **titlecase** (`ǅ` U+01C5) | Rust std non ha `char::to_titlecase`; servirebbe una tabella (raro); il resto di TITLE è corretto |
+
+Il "37.835 casi a 0 mismatch" è il differential OPERATORI (step 2), non il corpus
+phpt: il phpt-runner è informativo (no gate CI), quindi questi fail non rompono
+nessuna metrica green. I test che usano funzioni non implementate restano SKIP
+`builtin` (non FAIL) → i FAIL sono divergenze reali per costruzione.

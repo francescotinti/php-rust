@@ -54,11 +54,21 @@ fn unsupported_construct_is_skipped() {
 }
 
 #[test]
-fn out_of_scope_section_is_skipped() {
+fn supported_extension_section_runs() {
+    // A test gated on a modelled extension (mbstring) is executed, not skipped.
+    let (st, _) = status(
+        "--TEST--\nt\n--EXTENSIONS--\nmbstring\n--FILE--\n<?php echo mb_strlen('héllo');\n--EXPECT--\n5\n",
+    );
+    assert_eq!(st, Status::Pass);
+}
+
+#[test]
+fn unsupported_extension_section_is_skipped() {
+    // A test gated on an extension we do not model skips with the new category.
     let (st, cat) =
-        status("--TEST--\nt\n--EXTENSIONS--\njson\n--FILE--\n<?php echo 1;\n--EXPECT--\n1\n");
+        status("--TEST--\nt\n--EXTENSIONS--\nintl\n--FILE--\n<?php echo 1;\n--EXPECT--\n1\n");
     assert_eq!(st, Status::Skip);
-    assert_eq!(cat, "section");
+    assert_eq!(cat, "extension");
 }
 
 #[test]
@@ -111,7 +121,7 @@ fn closing_tag_eats_one_newline() {
 fn run_path_over_fixtures_dir() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     let summary = run_path(&dir, &registry()).expect("read fixtures");
-    // 2 pass (exact + expectf), 2 skip (unsupported fn, EXTENSIONS section).
+    // 2 pass (exact + expectf), 2 skip (unsupported construct, unsupported extension).
     assert_eq!(summary.fail, 0, "unexpected failures: {:?}", summary.failures);
     assert_eq!(summary.pass, 2, "summary: {summary:?}");
     assert_eq!(summary.skip, 2, "summary: {summary:?}");

@@ -91,14 +91,23 @@ fn find<'a>(sections: &'a [(String, String)], name: &str) -> Option<&'a str> {
     sections.iter().find(|(n, _)| n == name).map(|(_, b)| b.as_str())
 }
 
-/// Sections that imply behaviour we do not model (I/O, SAPI, ini tuning,
-/// extensions). Their presence forces a SKIP — running anyway would compare
-/// against an environment we are not reproducing.
+/// Sections that imply behaviour we do not model (I/O, SAPI, ini tuning).
+/// Their presence forces a SKIP — running anyway would compare against an
+/// environment we are not reproducing. `EXTENSIONS` is handled separately: a
+/// test gated only on extensions we *do* model is run (see [`SUPPORTED_EXTENSIONS`]).
 const UNSUPPORTED_SECTIONS: &[&str] = &[
-    "SKIPIF", "EXTENSIONS", "INI", "POST", "POST_RAW", "GET", "PUT", "COOKIE",
+    "SKIPIF", "INI", "POST", "POST_RAW", "GET", "PUT", "COOKIE",
     "STDIN", "ARGS", "ENV", "REQUEST", "CGI", "PHPDBG", "HEADERS", "XFAIL",
     "FILE_EXTERNAL", "FILEEOF",
 ];
+
+/// Extensions the interpreter substantially models, so a `--EXTENSIONS--` test
+/// requiring only these can be run instead of skipped. `core`/`standard` are the
+/// always-present built-in functions; the rest are the extensions ported by the
+/// corresponding steps (pcre: 31/36/37, json: 26, date: 34/35, mbstring: 41–43).
+/// A test requiring anything else still skips. Names are compared lowercase.
+const SUPPORTED_EXTENSIONS: &[&str] =
+    &["core", "standard", "mbstring", "pcre", "json", "date"];
 
 /// Classify and (when in scope) run a single `.phpt` source.
 pub fn run_phpt(src: &[u8], reg: &Registry) -> TestResult {
@@ -123,6 +132,18 @@ pub fn run_phpt(src: &[u8], reg: &Registry) -> TestResult {
     for (name, _) in &sections {
         if UNSUPPORTED_SECTIONS.contains(&name.as_str()) {
             return TestResult::skip("section", format!("--{name}-- section not modelled"));
+        }
+    }
+    // An extension-gated test runs only when every required extension is one we
+    // model; otherwise it would fail for missing functions, not a real divergence.
+    if let Some(exts) = find(&sections, "EXTENSIONS") {
+        for ext in exts.split_whitespace() {
+            if !SUPPORTED_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()) {
+                return TestResult::skip(
+                    "extension",
+                    format!("requires unsupported extension '{ext}'"),
+                );
+            }
         }
     }
     // `%r...%r` custom-regex placeholders need a real regex engine in the

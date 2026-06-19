@@ -1,7 +1,7 @@
 --TEST--
-out-of-scope section -> skip
+unsupported extension -> skip
 --EXTENSIONS--
-json
+intl
 --FILE--
 <?php echo 1;
 --EXPECT--

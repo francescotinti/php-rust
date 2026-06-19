@@ -914,3 +914,42 @@ oracle-verificati (760→769). ~16 funzioni.
   scope-out coerente D-MB1), D-MB-ereg-syntax (opzioni avanzate/encoding non
   validati a fondo). **D-NEW: nessuna.**
 - **Clippy** strict gate pulito. **Tempo:** ~una sessione.
+
+## Step 44 — phpt-runner `--EXTENSIONS--` relax + import corpus ext/mbstring (Phase 4c)
+
+Step **tooling + validazione** (metodologia legacy-port Phase 4c "import original
+testsuite"): finora mbstring (41/42/43) era validato SOLO da unit test scritti a
+mano, perché il phpt-runner scartava a monte ogni test con `--EXTENSIONS--`.
+Questo step lo sblocca selettivamente e fa girare il corpus reale `ext/mbstring/
+tests` contro la nostra implementazione. **+4 test** (769→773). Commit unico.
+- **Gating selettivo** (`phpt-runner/src/lib.rs`): `EXTENSIONS` rimosso da
+  `UNSUPPORTED_SECTIONS`; nuovo `SUPPORTED_EXTENSIONS` = `[core, standard,
+  mbstring, pcre, json, date]` (le estensioni che modelliamo davvero). Un test
+  gated su sole estensioni supportate ora **gira**; altrimenti SKIP categoria
+  `extension`. I test che usano funzioni non implementate restano SKIP `builtin`
+  (non FAIL) → i FAIL sono **divergenze reali**, non gap di funzioni.
+- **Sblocco**: 163 test mbstring-only diventano raggiungibili (erano 20 runnable).
+  Test runner.rs aggiornati (supported→runs, unsupported→skip `extension`),
+  fixture `skip_section.phpt` json→intl.
+- **Run corpus** (`--isolate`): 417 totali → **30 pass / 37 fail / 350 skip**
+  (350 skip = 252 section [SKIPIF/INI] + 70 builtin + 28 unsupported; 67 runnable,
+  pass-rate 44.8%).
+- **3 BUG CLASSE A trovati e FIXATI** (in `php-builtins/src/mbstring.rs`, surfacing
+  dal corpus, +3 unit test oracle-verificati): (1) `mb_strpos/stripos/strrpos/
+  strripos` con `$offset` fuori da `[-len,len]` → ora `ValueError "Argument #3
+  ($offset) must be contained in argument #1 ($haystack)"` (prima clampava
+  silenziosamente); (2) `mb_detect_encoding($s, '')` e (3) `mb_convert_encoding($s,
+  to, '')` con lista encoding stringa-vuota → ora `ValueError "...must specify at
+  least one encoding"` (`parse_enc_list` filtra le voci vuote → `''` = zero
+  encoding; convert distingue from-null=UTF-8 da from-vuoto=errore). Pass 27→30.
+- **37 fail residui = scope-out dichiarati** (non bug): ~21 encoding non-UTF-8
+  (D-MB1: EUC-JP/SJIS/cp936/UTF-16/HTML-ENTITIES/UTF7), case fold/sigma/apostrofo
+  (D-MB3a/b/c), funzioni config non implementate (mb_internal_encoding/
+  detect_order/substitute_character/convert_kana). **2 D-NEW documentati** (vedi
+  04-divergences): mb_convert_encoding/check_encoding **array input** (conversione
+  ricorsiva, gap di feature) e **mb_convert_case TITLE titlecase** (usiamo
+  uppercase: digrammi Dž/Lj/Nj U+01C4 invece di U+01C5 titlecase; Rust std non ha
+  `to_titlecase`).
+- **Headline metrics SALVE**: il "37.835 casi a 0 mismatch" è il differential
+  OPERATORI (step 2), NON il corpus phpt; il phpt-runner è uno strumento
+  informativo (no gate CI). `php-cli` resta stub. **Clippy** strict gate pulito.

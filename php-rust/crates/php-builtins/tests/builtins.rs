@@ -2559,6 +2559,54 @@ fn mb_detect_encoding_invalid_or_empty_list_is_value_error() {
     }
 }
 
+// --- step 44: class-A fixes surfaced by the ext/mbstring corpus import ---
+
+#[test]
+fn mb_strpos_offset_out_of_range_is_value_error() {
+    for (f, ci, rev) in [
+        ("mb_strpos", false, false),
+        ("mb_stripos", true, false),
+        ("mb_strrpos", false, true),
+        ("mb_strripos", true, true),
+    ] {
+        let _ = (ci, rev);
+        let src = format!("<?php {f}('f', 'bar', 3);");
+        match fatal(&src) {
+            PhpError::ValueError(m) => assert_eq!(
+                m,
+                format!("{f}(): Argument #3 ($offset) must be contained in argument #1 ($haystack)")
+            ),
+            other => panic!("expected ValueError for {f}, got {other:?}"),
+        }
+        let src = format!("<?php {f}('f', 'bar', -3);");
+        assert!(matches!(fatal(&src), PhpError::ValueError(_)), "{f} negative");
+    }
+    // An in-range offset still works.
+    assert_eq!(out("<?php echo mb_strpos('ababa', 'a', -2);"), "4");
+}
+
+#[test]
+fn mb_detect_encoding_empty_string_list_is_value_error() {
+    match fatal("<?php mb_detect_encoding('Hello', '');") {
+        PhpError::ValueError(m) => assert_eq!(
+            m,
+            "mb_detect_encoding(): Argument #2 ($encodings) must specify at least one encoding"
+        ),
+        other => panic!("expected ValueError, got {other:?}"),
+    }
+}
+
+#[test]
+fn mb_convert_encoding_empty_from_list_is_value_error() {
+    match fatal("<?php mb_convert_encoding('Hello', 'UTF-8', '');") {
+        PhpError::ValueError(m) => assert_eq!(
+            m,
+            "mb_convert_encoding(): Argument #3 ($from_encoding) must specify at least one encoding"
+        ),
+        other => panic!("expected ValueError, got {other:?}"),
+    }
+}
+
 // --- step 43a: mbstring regex family (mb_ereg* / mb_split / mb_regex_*) ---
 
 #[test]

@@ -393,8 +393,15 @@ fn strpos_impl(
     let hchars: Vec<char> = cps(hay.as_bytes()).into_iter().map(|x| x.0).collect();
     let ndl: Vec<char> = cps(needle.as_bytes()).into_iter().map(|x| x.0).collect();
     let total = hchars.len() as i64;
+    // An offset outside the haystack is a ValueError (oracle-exact), for both the
+    // forward and reverse variants.
+    if offset > total || offset < -total {
+        return Err(PhpError::ValueError(format!(
+            "{func}(): Argument #3 ($offset) must be contained in argument #1 ($haystack)"
+        )));
+    }
     let found = if reverse {
-        // Offset on the reverse search is out of scope (D-MB, batch 1): the
+        // The (in-range) offset on the reverse search is ignored (D-MB-rpos): the
         // default whole-string last-occurrence is what the corpus needs.
         rfind(&hchars, &ndl, ci)
     } else {
@@ -968,7 +975,7 @@ fn validates(codec: &Codec, bytes: &[u8]) -> bool {
 /// Parse an encoding-list argument: an array of strings or a comma-separated
 /// string. Returns the raw candidate names (trimming is done by `resolve_encoding`).
 fn parse_enc_list(v: &Zval, ctx: &mut Ctx) -> Vec<Vec<u8>> {
-    match v {
+    let names: Vec<Vec<u8>> = match v {
         Zval::Array(a) => a
             .iter()
             .map(|(_, val)| convert::to_zstr(val, ctx.diags).as_bytes().to_vec())
@@ -978,7 +985,13 @@ fn parse_enc_list(v: &Zval, ctx: &mut Ctx) -> Vec<Vec<u8>> {
             .split(|&b| b == b',')
             .map(|p| p.to_vec())
             .collect(),
-    }
+    };
+    // Drop empty/whitespace-only entries so `''` parses to zero encodings (PHP
+    // then raises "must specify at least one encoding").
+    names
+        .into_iter()
+        .filter(|n| !n.trim_ascii().is_empty())
+        .collect()
 }
 
 /// mb_convert_encoding($string, $to_encoding[, $from_encoding=null]): transcode
@@ -1002,8 +1015,15 @@ pub fn mb_convert_encoding(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpErro
     let from = match args.get(2) {
         None | Some(Zval::Null) => Codec::Utf8,
         Some(v) => {
+            let names = parse_enc_list(v, ctx);
+            if names.is_empty() {
+                return Err(PhpError::ValueError(
+                    "mb_convert_encoding(): Argument #3 ($from_encoding) must specify at least one encoding"
+                        .to_string(),
+                ));
+            }
             let mut encs = Vec::new();
-            for name in parse_enc_list(v, ctx) {
+            for name in names {
                 let e = resolve_encoding(&name).ok_or_else(|| {
                     PhpError::ValueError(format!(
                         "mb_convert_encoding(): Argument #3 ($from_encoding) contains invalid encoding \"{}\"",
@@ -1012,17 +1032,15 @@ pub fn mb_convert_encoding(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpErro
                 })?;
                 encs.push(e);
             }
-            match encs.len() {
-                0 => Codec::Utf8,
-                1 => encs.pop().unwrap().codec,
-                _ => {
-                    // Detect among the candidates (non-strict: first valid, else first).
-                    let idx = encs
-                        .iter()
-                        .position(|e| validates(&e.codec, s.as_bytes()))
-                        .unwrap_or(0);
-                    encs.into_iter().nth(idx).unwrap().codec
-                }
+            if encs.len() == 1 {
+                encs.pop().unwrap().codec
+            } else {
+                // Detect among the candidates (non-strict: first valid, else first).
+                let idx = encs
+                    .iter()
+                    .position(|e| validates(&e.codec, s.as_bytes()))
+                    .unwrap_or(0);
+                encs.into_iter().nth(idx).unwrap().codec
             }
         }
     };
