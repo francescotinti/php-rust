@@ -161,6 +161,24 @@ enum Flow {
     Continue(u32),
     /// `return expr` unwinding to the script top.
     Return(Zval),
+    /// `goto label` searching for its target (step 45). Propagates outward
+    /// through enclosing blocks/loops until an `exec_stmts` frame finds a
+    /// matching `Label`; lowering guarantees the target exists in scope and is
+    /// not inside a loop/switch, so it always resolves before escaping the
+    /// function body.
+    Goto(Box<[u8]>),
+}
+
+/// Error for a `goto` that escapes its function scope unresolved (step 45). After
+/// lowering's compile-time check this can only be the scope-out case D-45.1:
+/// jumping *into* a transparent block (`if`/`try` body/`catch`/plain block),
+/// which the tree-walking evaluator cannot land in mid-block. Raised as a
+/// catchable engine error rather than silently mis-running.
+fn unsupported_goto(label: &[u8]) -> PhpError {
+    PhpError::Error(format!(
+        "'goto' into a block is not supported (label '{}', D-45.1)",
+        String::from_utf8_lossy(label)
+    ))
 }
 
 // --- generators (step 39) ---
@@ -408,6 +426,9 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
 
     let (fatal, return_value) = match ev.exec_stmts(&program.body) {
         Ok(Flow::Return(v)) => (None, v),
+        // An unresolved `goto` at script top level is the unsupported
+        // into-transparent-block case (D-45.1); see `run_user_fn_body`.
+        Ok(Flow::Goto(label)) => (Some(unsupported_goto(&label)), Zval::Null),
         Ok(_) => (None, Zval::Null),
         Err(e) => (Some(e), Zval::Null),
     };
@@ -640,9 +661,28 @@ impl<'p> Evaluator<'p> {
     // --- statements ---
 
     fn exec_stmts(&mut self, stmts: &[Stmt]) -> Result<Flow, PhpError> {
-        for s in stmts {
-            match self.exec_stmt(s)? {
+        // Index-based loop (step 45) so a `goto` can re-enter this block at a
+        // different position. With no `goto` involved this walks the statements
+        // exactly once, top to bottom, like the original `for`.
+        let mut i = 0;
+        while i < stmts.len() {
+            match self.exec_stmt(&stmts[i])? {
                 Flow::Normal => {}
+                // A `goto` raised below: if its target label lives in *this*
+                // block, jump there and keep executing; otherwise let it bubble
+                // up to the enclosing block that owns the label.
+                Flow::Goto(label) => {
+                    match stmts
+                        .iter()
+                        .position(|s| matches!(&s.kind, StmtKind::Label(n) if **n == *label))
+                    {
+                        Some(j) => {
+                            i = j;
+                            continue;
+                        }
+                        None => return Ok(Flow::Goto(label)),
+                    }
+                }
                 other => return Ok(other),
             }
             // Immediate destruction sweep at global-scope statement boundaries
@@ -653,6 +693,7 @@ impl<'p> Evaluator<'p> {
             if self.locals.is_none() {
                 self.sweep_destructors();
             }
+            i += 1;
         }
         Ok(Flow::Normal)
     }
@@ -670,6 +711,14 @@ impl<'p> Evaluator<'p> {
     fn exec_stmt_inner(&mut self, stmt: &Stmt) -> Result<Flow, PhpError> {
         match &stmt.kind {
             StmtKind::Nop => {}
+
+            // `label:` is a pure marker — `exec_stmts` uses it as a jump target
+            // (step 45); reaching it during normal fall-through does nothing.
+            StmtKind::Label(_) => {}
+
+            // `goto label;` raises a `Goto` flow that `exec_stmts` resolves to
+            // the matching label in this or an enclosing block (step 45).
+            StmtKind::Goto(label) => return Ok(Flow::Goto(label.clone())),
 
             StmtKind::InlineHtml(bytes) => self.emit(bytes),
 
@@ -976,6 +1025,11 @@ impl<'p> Evaluator<'p> {
             Flow::Break(1) => LoopStep::Stop,
             Flow::Break(n) => LoopStep::Propagate(Flow::Break(n - 1)),
             Flow::Return(v) => LoopStep::Propagate(Flow::Return(v)),
+            // A `goto` whose label was not found in this loop body (else
+            // `exec_stmts` would have jumped) targets an enclosing scope: leave
+            // the loop and keep searching outward (step 45). Jumping *into* a
+            // loop is rejected at lowering, so this only ever exits a loop.
+            Flow::Goto(l) => LoopStep::Propagate(Flow::Goto(l)),
         })
     }
 
@@ -1153,6 +1207,10 @@ impl<'p> Evaluator<'p> {
                 Flow::Break(n) => return Ok(Flow::Break(n - 1)),
                 Flow::Continue(n) => return Ok(Flow::Continue(n - 1)),
                 Flow::Return(v) => return Ok(Flow::Return(v)),
+                // A `goto` whose label was not found inside this case body
+                // targets an enclosing scope — leave the switch (jumping *into*
+                // a switch is rejected at lowering). Step 45.
+                Flow::Goto(l) => return Ok(Flow::Goto(l)),
             }
         }
         Ok(Flow::Normal)
@@ -1265,6 +1323,12 @@ impl<'p> Evaluator<'p> {
         self.bind_params(f, argv)?;
         let ret = match self.exec_stmts(&f.body)? {
             Flow::Return(v) => v,
+            // An unresolved `goto` escaping the function body can only be the
+            // unsupported "jump *into* a transparent block" case (D-45.1):
+            // lowering already proved the label exists in scope and is not a
+            // forbidden into-loop/switch/finally jump. Surface it instead of
+            // silently returning null.
+            Flow::Goto(label) => return Err(unsupported_goto(&label)),
             _ => Zval::Null,
         };
         // Coerce the return value to a scalar return type (weak). A by-reference

@@ -13,7 +13,7 @@ use std::path::Path;
 use std::process::{Command, ExitCode};
 
 use php_builtins::registry;
-use phpt_runner::{collect_phpt, run_path, run_phpt, Status, Summary};
+use phpt_runner::{collect_phpt, php_script_name, run_path, run_phpt, Status, Summary};
 
 /// The recursive-descent front-end (mago) and our tree-walking evaluator both
 /// recurse on the native stack, so pathological tests — e.g. PHP's own
@@ -164,11 +164,12 @@ fn run_one_child(path: Option<String>) -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    let name = php_script_name(std::path::Path::new(&path));
     let result = std::thread::Builder::new()
         .stack_size(WORKER_STACK)
         .spawn(move || {
             let reg = registry();
-            run_phpt(&src, &reg)
+            run_phpt(&src, &name, &reg)
         })
         .expect("spawn worker")
         .join()

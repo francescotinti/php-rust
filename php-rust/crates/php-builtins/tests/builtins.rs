@@ -2727,3 +2727,164 @@ fn mb_ereg_search_regs_getregs_and_pos() {
         "3"
     );
 }
+
+// --- goto / labels (step 45) -----------------------------------------------
+
+/// Run a script expected to abort at *compile time* with a `Fatal error:`
+/// (undefined label, into-loop, or duplicate label). Returns the CLI-rendered
+/// stream and asserts no program output was produced (PHP detects these before
+/// running, so nothing prints).
+fn goto_fatal(src: &str) -> String {
+    let reg = registry();
+    let o = run_source_with(b"Command line code", src.as_bytes(), &reg).expect("lowers to outcome");
+    assert!(o.stdout.is_empty(), "expected no output, got {:?}", o.stdout);
+    String::from_utf8(o.rendered).expect("utf8")
+}
+
+#[test]
+fn goto_forward_skips() {
+    // Forward jump skips the statements between the goto and its label.
+    assert_eq!(out("<?php goto a; echo 'skip'; a: echo 'A';"), "A");
+    // Jumping forward over a whole block is fine (blocks are transparent).
+    assert_eq!(out("<?php goto a; if (true) { echo 'x'; } a: echo 'Y';"), "Y");
+}
+
+#[test]
+fn goto_backward_loop() {
+    // A label before the goto makes a back-edge: a hand-rolled loop.
+    assert_eq!(out("<?php $i=0; loop: echo $i; $i++; if ($i<3) goto loop;"), "012");
+    // Back-edge with the conditional jump nested inside an `if` block.
+    assert_eq!(
+        out("<?php $i=0; top: $i++; if ($i<3) { echo $i; goto top; } echo 'end';"),
+        "12end"
+    );
+}
+
+#[test]
+fn goto_out_of_loop() {
+    // `goto` may leave a loop (only jumping *in* is disallowed).
+    assert_eq!(
+        out("<?php for ($i=0;$i<5;$i++) { if ($i==2) goto done; echo $i; } done: echo '|done';"),
+        "01|done"
+    );
+    // Out of two nested loops at once.
+    assert_eq!(
+        out(
+            "<?php for ($i=0;$i<3;$i++) { for ($j=0;$j<3;$j++) { if ($j==1) goto out; \
+             echo \"$i$j \"; } } out: echo 'OUT';"
+        ),
+        "00 OUT"
+    );
+}
+
+#[test]
+fn goto_label_fallthrough_is_noop() {
+    // Reaching a label by normal fall-through does nothing.
+    assert_eq!(out("<?php echo 'a'; x: echo 'b';"), "ab");
+}
+
+#[test]
+fn goto_runs_finally_on_jump_out_of_try() {
+    // Jumping out of a `try` body runs its `finally` first, then lands on the
+    // target — the delicate case the corpus `finally_goto_*` tests exercise.
+    assert_eq!(
+        out("<?php try { echo 't'; goto done; } finally { echo 'f'; } echo 'X'; done: echo 'D';"),
+        "tfD"
+    );
+}
+
+#[test]
+fn goto_back_to_label_before_try_runs_finally() {
+    // Corpus `finally_goto_005`: the label is *before* the try; the goto inside
+    // the try body jumps out, so `finally` runs and its `return` ends the
+    // function — output is just the finally's "success".
+    assert_eq!(
+        out("<?php function f(){ label: try { goto label; } finally { echo 'success'; return; } } f();"),
+        "success"
+    );
+}
+
+#[test]
+fn goto_within_finally_is_allowed() {
+    // Corpus `finally_goto_003`: a goto and its label both inside the same
+    // `finally` block are fine (not a jump *into* the block from outside).
+    assert_eq!(
+        out("<?php function f(){ try {} finally { goto t; t: } } f(); echo 'okey';"),
+        "okey"
+    );
+}
+
+#[test]
+fn goto_into_finally_is_compile_fatal() {
+    // Corpus `finally_goto_001/002/004`: jumping into a `finally` block from
+    // outside it is a distinct compile-time fatal.
+    for src in [
+        "<?php function f(){ goto t; try {} finally { t: } } f();",
+        "<?php function f(){ try { goto t; } finally { t: } } f();",
+        "<?php function f(){ try {} finally { t: } goto t; } f();",
+    ] {
+        let r = goto_fatal(src);
+        assert!(
+            r.contains("jump into a finally block is disallowed"),
+            "got: {r}"
+        );
+    }
+}
+
+#[test]
+fn goto_into_transparent_block_is_scoped_out() {
+    // D-45.1: jumping *into* an `if`/`try`/`catch`/plain block is valid PHP
+    // (would print "x") but the tree-walker cannot land mid-block. Lowering
+    // allows it (PHP-faithful: no compile fatal), and the unresolved jump is
+    // surfaced as a deterministic runtime fatal rather than silent wrong output.
+    let r = goto_fatal("<?php goto a; if (true) { a: echo 'x'; }");
+    assert!(
+        r.contains("'goto' into a block is not supported") && r.contains("D-45.1"),
+        "got: {r}"
+    );
+}
+
+#[test]
+fn goto_is_function_scoped() {
+    // A label inside a function is reachable from a goto in the same function.
+    assert_eq!(
+        out("<?php function f(){ goto e; echo 'no'; e: echo 'yes'; } f();"),
+        "yes"
+    );
+}
+
+#[test]
+fn goto_undefined_label_is_compile_fatal() {
+    // Undefined label is caught at compile time: no output, then the fatal.
+    let r = goto_fatal("<?php echo 'X'; goto nope; echo 1;");
+    assert_eq!(
+        r,
+        "\nFatal error: 'goto' to undefined label 'nope' in Command line code on line 1\n\
+         Stack trace:\n#0 {main}\n"
+    );
+}
+
+#[test]
+fn goto_into_loop_is_compile_fatal() {
+    let r = goto_fatal("<?php goto inside; for ($i=0;$i<3;$i++) { inside: echo $i; }");
+    assert_eq!(
+        r,
+        "\nFatal error: 'goto' into loop or switch statement is disallowed \
+         in Command line code on line 1\nStack trace:\n#0 {main}\n"
+    );
+}
+
+#[test]
+fn goto_into_switch_is_compile_fatal() {
+    let r = goto_fatal("<?php goto inside; switch (1) { case 1: inside: echo 'x'; }");
+    assert!(
+        r.contains("'goto' into loop or switch statement is disallowed"),
+        "got: {r}"
+    );
+}
+
+#[test]
+fn goto_duplicate_label_is_compile_fatal() {
+    let r = goto_fatal("<?php a: echo 1; a: echo 2;");
+    assert!(r.contains("Label 'a' already defined"), "got: {r}");
+}

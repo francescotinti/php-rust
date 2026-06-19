@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–44 completati · 773 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–45 completati · 787 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 > Hardening tooling (non-funzionale): depth-guard nell'evaluator (`MAX_CALL_DEPTH`,
 > converte la ricorsione runaway in un `Error` catchable invece di un SIGABRT del
@@ -69,6 +69,7 @@ full port semantico del solo `zend_operators.c`).
 | 42 | **mbstring batch 2A** (encoding + width) — `mb_convert_encoding`/`mb_detect_encoding` via `encoding_rs` (UTF-8↔ISO-8859-1/Windows-1252/SJIS/EUC-JP/UTF-16; true Latin-1 e UTF-16 hand-rolled, substitute `?`); `mb_strwidth`/`mb_strimwidth`/`mb_strcut` via tabella EAW portata da libmbfl. Builtin puri. Scope-out: `mb_ereg*`/`mb_split` (oniguruma → step 43), `mb_list_encodings`, width su encoding ≠ UTF-8 | ✅ |
 | 43 | **mbstring batch 2B** (regex `mb_ereg*`) — adapter su **oniguruma reale** (crate `onig`): `mb_ereg`/`mb_eregi` (`$regs` by-ref), `mb_ereg_replace`/`mb_eregi_replace`/`mb_ereg_replace_callback`, `mb_split`, `mb_ereg_match`, `mb_regex_encoding`/`set_options`, e famiglia stateful `mb_ereg_search_*`. Default Ruby syntax + opzioni `pr` (classi POSIX, named group, backref). Primo step con stato persistente sull'`Evaluator` + higher-order builtins. Scope-out: encoding ≠ UTF-8 | ✅ |
 | 44 | **phpt-runner `--EXTENSIONS--` relax + import corpus mbstring** (Phase 4c) — gating selettivo (allowlist `core/standard/mbstring/pcre/json/date`) sblocca 163 test mbstring-only; run `ext/mbstring/tests` = 30 pass / 37 fail / 350 skip. **3 bug classe A fixati** (offset out-of-range su `mb_str(r)(i)pos`, lista encoding vuota su `mb_detect_encoding`/`mb_convert_encoding`). 37 fail residui = scope-out dichiarati; **2 D-NEW** (array input in `mb_convert_encoding`; titlecase digrammi in `MB_CASE_TITLE`) | ✅ |
+| 45 | **`goto` + label** — ultima feature di control-flow. `Flow::Goto` + `exec_stmts` con indice (salto same-block / propagazione out-of-block, incl. uscita da loop/`try`+`finally`); validazione compile-time (undefined / dup label, into-loop/switch, **into-finally**) via stack di barriere. Corpus `Zend/tests/*goto*` = 5 pass / 5 skip (non-goto) / 0 fail. Scope-out **D-45.1**: salto *dentro* un blocco trasparente (raro, mai nel corpus). +2 fix di fedeltà al phpt-runner (strip backtrace con `fatal_error_backtraces=Off`; nome script = path `.php` reale) | ✅ |
 
 > Lo step 6 è stato eseguito **dopo** lo step 7 (deciso con l'utente: gli array
 > rendono il phpt-runner molto più utile, quintuplicando i test in-scope).

@@ -8,7 +8,7 @@ use phpt_runner::{parse_sections, run_path, run_phpt, Status};
 
 fn status(src: &str) -> (Status, &'static str) {
     let reg = registry();
-    let r = run_phpt(src.as_bytes(), &reg);
+    let r = run_phpt(src.as_bytes(), b"test.php", &reg);
     (r.status, r.category)
 }
 

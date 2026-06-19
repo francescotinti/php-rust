@@ -374,6 +374,14 @@ pub enum StmtKind {
         catches: Vec<CatchClause>,
         finally: Vec<Stmt>,
     },
+    /// `label:` — a `goto` target (step 45). A pure marker: no-op at runtime,
+    /// used by `exec_stmts` to locate the jump destination within a block.
+    Label(Box<[u8]>),
+    /// `goto label;` — unconditional jump to the matching `Label` in the current
+    /// function scope (step 45). Validity (label exists, not jumping *into* a
+    /// loop/switch) is checked at lowering time, mirroring PHP's compile-time
+    /// fatals; at runtime it raises `Flow::Goto` which `exec_stmts` resolves.
+    Goto(Box<[u8]>),
     /// A lone `;`.
     Nop,
 }

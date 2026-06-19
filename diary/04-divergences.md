@@ -459,3 +459,23 @@ Il "37.835 casi a 0 mismatch" è il differential OPERATORI (step 2), non il corp
 phpt: il phpt-runner è informativo (no gate CI), quindi questi fail non rompono
 nessuna metrica green. I test che usano funzioni non implementate restano SKIP
 `builtin` (non FAIL) → i FAIL sono divergenze reali per costruzione.
+
+## Step 45 — `goto`
+
+| ID | Costrutto | Noi | PHP | Note |
+|---|---|---|---|---|
+| **D-45.1** | `goto` che salta **dentro** un blocco trasparente (`if`/`try`-body/`catch`/blocco nudo) | non supportato → errore di runtime deterministico `'goto' into a block is not supported (label 'X', D-45.1)` | salta a metà blocco ed esegue da lì | il valutatore tree-walking non può atterrare a metà di un `Vec<Stmt>`; raro e **mai nel corpus** (i 10 test goto fanno solo salti same-block / out-of-block). La validazione resta PHP-fedele (nessun fatal compile-time: PHP non lo vieta), e l'esecuzione non-supportata è segnalata invece di sbagliare in silenzio. Same-block e out-of-block (incl. uscita da loop/`try` col `finally`) funzionano. |
+
+Casi **non** divergenti (parità oracle verificata): forward/backward, loop
+hand-rolled, uscita da N loop annidati, label come no-op in fall-through,
+`goto`+`finally` (il finally gira prima del salto, `finally_goto_005`), goto
+function-scoped, e i 4 fatal compile-time (`'goto' to undefined label`, `Label
+'X' already defined`, `'goto' into loop or switch statement is disallowed`,
+`jump into a finally block is disallowed`).
+
+I 4 test `exit/define_goto_label_*` (SKIP `compile-error`) **non** sono una
+divergenza goto: attendono un **Parse error** perché PHP vieta una parola
+riservata (`die`/`exit`) come nome di label — strictness lessicale del parser,
+non modellata (coerente con lo scope-out generale "diagnostica compile-time del
+parser"). `finally_goto_005` resta SKIP perché usa `print` (builtin non
+implementato), non per il goto.

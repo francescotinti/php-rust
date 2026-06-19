@@ -110,7 +110,7 @@ const SUPPORTED_EXTENSIONS: &[&str] =
     &["core", "standard", "mbstring", "pcre", "json", "date"];
 
 /// Classify and (when in scope) run a single `.phpt` source.
-pub fn run_phpt(src: &[u8], reg: &Registry) -> TestResult {
+pub fn run_phpt(src: &[u8], name: &[u8], reg: &Registry) -> TestResult {
     let sections = parse_sections(src);
 
     let Some(file) = find(&sections, "FILE") else {
@@ -154,7 +154,7 @@ pub fn run_phpt(src: &[u8], reg: &Registry) -> TestResult {
 
     // Capability scan: can the front-end even lower it?
     let source = file.as_bytes();
-    if let Err(e) = php_runtime::lower_source(b"test.phpt", source) {
+    if let Err(e) = php_runtime::lower_source(name, source) {
         match e {
             LowerError::Unsupported { what, line } => {
                 return TestResult::skip("unsupported", format!("{what} (line {line})"))
@@ -173,8 +173,11 @@ pub fn run_phpt(src: &[u8], reg: &Registry) -> TestResult {
     }
 
     // Run it. The script's name doubles as the path PHP prints in diagnostics
-    // (`... in test.phpt on line N`); EXPECTF `%s` placeholders absorb it.
-    let outcome = match run_source_with(b"test.phpt", source, reg) {
+    // (`... in <name> on line N`). run-tests.php runs each test from a temp file
+    // named `<test>.php`, so `name` is the `.phpt` path with a `.php` extension;
+    // EXPECTF `%s` placeholders absorb the directory prefix, and patterns that
+    // embed the basename (e.g. `%sfinally_goto_001.php`) now line up too.
+    let outcome = match run_source_with(name, source, reg) {
         Ok(o) => o,
         Err(e) => return TestResult::skip("parse", format!("lower error: {e}")),
     };
@@ -191,8 +194,22 @@ pub fn run_phpt(src: &[u8], reg: &Registry) -> TestResult {
 
     // Compare the rendered stream: program output with diagnostics and any
     // uncaught fatal interleaved exactly as PHP's CLI prints them (step 9).
-    let got = normalize(&String::from_utf8_lossy(&outcome.rendered));
+    let mut got = normalize(&String::from_utf8_lossy(&outcome.rendered));
     let want = normalize(wanted);
+
+    // run-tests.php runs every test with `fatal_error_backtraces=Off`, so a
+    // plain `Fatal error:` prints *without* the trailing `Stack trace:\n#0
+    // {main}` our engine always appends (it mirrors PHP's default INI). When the
+    // expectation itself carries no stack trace, drop ours so the comparison is
+    // faithful to the harness the `.phpt` was authored against. Uncaught
+    // exceptions keep their trace (the expectation includes it), so this only
+    // strips the engine backtrace, never an exception's own.
+    if !want.contains("Stack trace:") {
+        if let Some(idx) = got.find("\nStack trace:") {
+            got.truncate(idx);
+            got = normalize(&got);
+        }
+    }
 
     // Compile-time diagnostics are out of scope: our front-end (mago) parses,
     // and we never run the engine's compile-time validation (attribute targets,
@@ -325,10 +342,20 @@ pub fn run_path(root: &Path, reg: &Registry) -> std::io::Result<Summary> {
     let mut summary = Summary::default();
     for path in collect_phpt(root)? {
         let src = fs::read(&path)?;
-        let result = run_phpt(&src, reg);
+        let result = run_phpt(&src, &php_script_name(&path), reg);
         summary.record(&path, &result);
     }
     Ok(summary)
+}
+
+/// The script name PHP would print in diagnostics for a `.phpt` test: its path
+/// with the extension swapped to `.php`, mirroring run-tests.php's temp file
+/// (`<test>.php`). EXPECTF patterns that embed the basename rely on this.
+pub fn php_script_name(path: &Path) -> Vec<u8> {
+    path.with_extension("php")
+        .to_string_lossy()
+        .into_owned()
+        .into_bytes()
 }
 
 /// Dotfiles, including macOS AppleDouble sidecars (`._foo.phpt`), are not tests.

@@ -953,3 +953,60 @@ tests` contro la nostra implementazione. **+4 test** (769→773). Commit unico.
 - **Headline metrics SALVE**: il "37.835 casi a 0 mismatch" è il differential
   OPERATORI (step 2), NON il corpus phpt; il phpt-runner è uno strumento
   informativo (no gate CI). `php-cli` resta stub. **Clippy** strict gate pulito.
+
+## Step 45 — `goto` + label
+
+Ultima feature di control-flow mancante. Il parser **mago la riconosce già**
+(`Statement::Goto`/`Statement::Label`) ma `lower.rs` la scartava nel catch-all
+`LowerError::Unsupported` → i 10 test `Zend/tests/*goto*` erano SKIP. **+14 unit
+test** (773→787), tutti oracle-verificati. Clippy strict pulito.
+
+- **HIR** (`hir.rs`): 2 varianti `StmtKind::Label(Box<[u8]>)` (marker no-op) e
+  `StmtKind::Goto(Box<[u8]>)`.
+- **Lowering** (`lower.rs`): 2 arm `Statement::Goto/Label` (la `LocalIdentifier.
+  value` dà i byte della label).
+- **Runtime** (`eval.rs`): nuova variante `Flow::Goto(Box<[u8]>)`. `exec_stmts`
+  rifattorizzato da `for` a **`while`+indice** così un goto può ri-entrare a un
+  indice diverso: se la label è in questo blocco salta (`i = j; continue`),
+  altrimenti **propaga su** (`return Ok(Flow::Goto)`). Il destructor-sweep tra
+  statement è preservato. `loop_step` e lo `switch` aggiungono l'arm
+  `Flow::Goto(l) => propaga` (= un goto esce naturalmente da loop/switch). `Label`
+  → no-op, `Goto` → `return Ok(Flow::Goto)`. **Try/finally**: il path generico
+  già esistente (`flow => flow` → il `finally` gira sempre, poi propaga) gestisce
+  `Flow::Goto` **senza modifiche** — un goto che esce dal `try` fa girare il
+  `finally` prima del salto (caso `finally_goto_005`), esattamente come PHP.
+- **Validazione compile-time** (`lower.rs`, `validate_goto` su ogni scope di
+  funzione: body globale + ogni `lower_function`/`lower_method`/`lower_closure`).
+  PHP rileva 3 errori **a compile time** (nessun output parziale), riprodotti come
+  `LowerError::Fatal` (reso senza output, identico all'oracle):
+  - `'goto' to undefined label 'X'`;
+  - `Label 'X' already defined`;
+  - `'goto' into loop or switch statement is disallowed` **e** (scoperto dal
+    corpus, barriera distinta) `jump into a finally block is disallowed`.
+  La legalità dell'into-jump è decisa da **stack di barriere**: ogni loop/
+  `switch`/`finally` riceve un id; un `Label`/`Goto` registra lo stack di id che
+  lo racchiude; un goto raggiunge la label sse lo stack della label è **prefisso**
+  di quello del goto (ogni barriera attorno alla label racchiude anche il goto).
+  `if`/`try`-body/`catch`/blocchi nudi sono **trasparenti** (PHP-fedele: il goto
+  può entrarci).
+- **Scope-out D-45.1**: il tree-walker non può atterrare a **metà** di un blocco
+  trasparente, quindi un goto che salta *dentro* un `if`/`try`-body/`catch`/blocco
+  (PHP-valido ma raro, mai nel corpus) non è supportato. Per non fallire in
+  silenzio, un `Flow::Goto` che sfugge al body di funzione / top-level diventa un
+  errore deterministico (`unsupported_goto`, "D-45.1"). I salti same-block e
+  out-of-block (tutti i casi del corpus + i comuni) funzionano.
+- **Corpus** `Zend/tests/*goto*` (10): **5 PASS** (finally_goto_001/002/003/004,
+  goto_in_foreach), **5 SKIP** non-goto (finally_goto_005 = `print` non
+  implementato; 4× `exit/define_goto_label_*` = **Parse error** atteso su parola
+  riservata `die`/`exit` usata come label → strictness del parser, non modellata),
+  **0 FAIL**.
+- **phpt-runner — 2 fix di fedeltà** (sbloccano 001/002/004, prima FAIL solo per
+  cosmetica dell'harness): (1) run-tests.php gira ogni test con
+  `fatal_error_backtraces=Off`, quindi un `Fatal error:` semplice **non** ha la
+  coda `Stack trace:\n#0 {main}` che il nostro engine aggiunge sempre → quando
+  l'EXPECTF non contiene `Stack trace:` la togliamo dal nostro output (gated, mai
+  tocca le eccezioni `Uncaught` che la traccia ce l'hanno per davvero; monotòno:
+  può solo trasformare falsi-FAIL in PASS). (2) Il runner ora nomina lo script
+  col **path reale `.php`** (`php_script_name`) invece dell'hardcoded `test.phpt`,
+  così gli EXPECTF che incorporano il basename (`%sfinally_goto_001.php`)
+  combaciano (run-tests usa un file temp `<test>.php`).

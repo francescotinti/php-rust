@@ -113,6 +113,10 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
     low.lower_traits(program.statements.as_slice())?;
     low.hoist_classes(program.statements.as_slice())?;
     let body = low.lower_stmts(program.statements.as_slice())?;
+    // `goto`/label validation (step 45): the top-level script body is its own
+    // function scope. Each user function / method / closure validates its own
+    // body where it is lowered (`lower_function`/`lower_method`/`lower_closure`).
+    validate_goto(&body)?;
     Ok(Program {
         body,
         file: name.into(),
@@ -123,6 +127,172 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
         strict: low.strict,
         classes: low.classes,
     })
+}
+
+/// The stack of loop/`switch`/`finally` barriers enclosing a `Label` or `Goto`,
+/// innermost last; each entry pairs a unique barrier id with its kind (step 45).
+type BarrierStack = Vec<(u32, BarrierKind)>;
+/// Map of label name → the barriers enclosing its definition (step 45).
+type LabelMap<'a> = HashMap<&'a [u8], BarrierStack>;
+/// One `goto`: its label, the barriers enclosing it, and its source line.
+type GotoSite<'a> = (&'a [u8], BarrierStack, Line);
+
+/// Enforce PHP's compile-time `goto` rules over one function scope's statement
+/// tree (step 45). `goto` is function-scoped, so the top-level script body and
+/// every function / method / closure body is validated independently.
+///
+/// PHP rejects three situations at *compile* time — before any output — which we
+/// surface as [`LowerError::Fatal`] (rendered with no partial output, exactly
+/// like the oracle):
+///   * `goto` to a label not defined in the scope → `'goto' to undefined label 'X'`;
+///   * a label defined twice → `Label 'X' already defined`;
+///   * `goto` that jumps *into* a loop or `switch` → `'goto' into loop or switch
+///     statement is disallowed`. Jumping *out of* a loop/switch is allowed, and
+///     `if` / `try` / plain blocks are transparent (verified against the oracle:
+///     a `goto` into a `try` body runs and its `finally` still fires).
+///
+/// Legality of an "into a loop/switch/finally" jump is decided by container
+/// stacks: each loop / `switch` / `finally` block gets a unique barrier id as
+/// the tree is walked, and every `Label`/`Goto` records the stack of barrier
+/// ids enclosing it. A `goto` may reach a label iff every barrier around the
+/// label also surrounds the goto — i.e. the label's barrier stack is a prefix of
+/// the goto's. `if` / `try` body / `catch` / plain blocks are *transparent*
+/// (no barrier), matching PHP: a `goto` into one of those is allowed.
+///
+/// The barrier *kind* (loop/switch vs finally) is recorded alongside the id so
+/// the right oracle message is produced: PHP distinguishes `'goto' into loop or
+/// switch statement is disallowed` from `jump into a finally block is
+/// disallowed`. When the label sits inside several barriers the goto is outside
+/// of, the innermost such barrier (the first mismatching stack entry) picks the
+/// message — the same one PHP reports.
+fn validate_goto(body: &[Stmt]) -> Result<(), LowerError> {
+    let mut labels: LabelMap = HashMap::new();
+    let mut gotos: Vec<GotoSite> = Vec::new();
+    let mut counter: u32 = 0;
+    collect_goto(body, &mut Vec::new(), &mut counter, &mut labels, &mut gotos)?;
+    for (name, gstack, line) in gotos {
+        match labels.get(name) {
+            None => {
+                return Err(LowerError::Fatal {
+                    message: format!(
+                        "'goto' to undefined label '{}'",
+                        String::from_utf8_lossy(name)
+                    ),
+                    line,
+                });
+            }
+            Some(lstack) => {
+                // Find the first barrier enclosing the label that does not also
+                // enclose the goto: that is the construct being jumped *into*.
+                let mismatch = lstack
+                    .iter()
+                    .enumerate()
+                    .find(|(i, (id, _))| gstack.get(*i).map(|(g, _)| g) != Some(id));
+                if let Some((_, (_, kind))) = mismatch {
+                    return Err(LowerError::Fatal {
+                        message: kind.message().to_string(),
+                        line,
+                    });
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The kind of construct a `goto` is forbidden from jumping *into* (step 45).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BarrierKind {
+    /// A `for`/`foreach`/`while`/`do-while`/`switch` body.
+    LoopOrSwitch,
+    /// A `finally { … }` block (rejected with its own oracle message).
+    Finally,
+}
+
+impl BarrierKind {
+    fn message(self) -> &'static str {
+        match self {
+            BarrierKind::LoopOrSwitch => "'goto' into loop or switch statement is disallowed",
+            BarrierKind::Finally => "jump into a finally block is disallowed",
+        }
+    }
+}
+
+/// Single-pass walk for [`validate_goto`]: collect every `Label` (keyed by name,
+/// rejecting duplicates) and every `Goto`, each tagged with the stack of
+/// enclosing barriers. Loops, `switch` and `finally` push a barrier; `if`,
+/// `try` body, `catch` and plain blocks are walked transparently.
+fn collect_goto<'a>(
+    stmts: &'a [Stmt],
+    stack: &mut BarrierStack,
+    counter: &mut u32,
+    labels: &mut LabelMap<'a>,
+    gotos: &mut Vec<GotoSite<'a>>,
+) -> Result<(), LowerError> {
+    for s in stmts {
+        match &s.kind {
+            StmtKind::Label(name) => {
+                if labels.insert(name, stack.clone()).is_some() {
+                    return Err(LowerError::Fatal {
+                        message: format!(
+                            "Label '{}' already defined",
+                            String::from_utf8_lossy(name)
+                        ),
+                        line: s.line,
+                    });
+                }
+            }
+            StmtKind::Goto(name) => gotos.push((name, stack.clone(), s.line)),
+            StmtKind::Block(b) => collect_goto(b, stack, counter, labels, gotos)?,
+            StmtKind::If {
+                then,
+                elseifs,
+                otherwise,
+                ..
+            } => {
+                collect_goto(then, stack, counter, labels, gotos)?;
+                for (_, b) in elseifs {
+                    collect_goto(b, stack, counter, labels, gotos)?;
+                }
+                collect_goto(otherwise, stack, counter, labels, gotos)?;
+            }
+            StmtKind::While { body, .. }
+            | StmtKind::DoWhile { body, .. }
+            | StmtKind::For { body, .. }
+            | StmtKind::Foreach { body, .. } => {
+                *counter += 1;
+                stack.push((*counter, BarrierKind::LoopOrSwitch));
+                collect_goto(body, stack, counter, labels, gotos)?;
+                stack.pop();
+            }
+            StmtKind::Switch { cases, .. } => {
+                *counter += 1;
+                stack.push((*counter, BarrierKind::LoopOrSwitch));
+                for c in cases {
+                    collect_goto(&c.body, stack, counter, labels, gotos)?;
+                }
+                stack.pop();
+            }
+            StmtKind::Try {
+                body,
+                catches,
+                finally,
+            } => {
+                // The `try` body and `catch` blocks are transparent; only the
+                // `finally` block is a barrier (PHP forbids jumping into it).
+                collect_goto(body, stack, counter, labels, gotos)?;
+                for c in catches {
+                    collect_goto(&c.body, stack, counter, labels, gotos)?;
+                }
+                *counter += 1;
+                stack.push((*counter, BarrierKind::Finally));
+                collect_goto(finally, stack, counter, labels, gotos)?;
+                stack.pop();
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 /// The built-in classes, authored in PHP and lowered once into the front of
@@ -804,6 +974,17 @@ impl<'f> Lowerer<'f> {
                     catches,
                     finally,
                 }
+            }
+
+            // `goto label;` / `label:` (step 45). Both carry a `LocalIdentifier`
+            // whose `value` is the raw label bytes. Validity (label defined, no
+            // jump into a loop/switch) is checked in a later compile-time pass
+            // over the lowered body; here we just record the marker / jump.
+            Statement::Goto(node) => {
+                StmtKind::Goto(node.label.value.to_vec().into_boxed_slice())
+            }
+            Statement::Label(node) => {
+                StmtKind::Label(node.name.value.to_vec().into_boxed_slice())
             }
 
             _ => {
@@ -1603,6 +1784,7 @@ impl<'f> Lowerer<'f> {
         let is_generator = std::mem::replace(&mut self.fn_saw_yield, saved_saw_yield);
 
         let (params, body) = inner?;
+        validate_goto(&body)?; // step 45: function-scoped goto/label check
         let ret_hint = method
             .return_type_hint
             .as_ref()
@@ -1651,6 +1833,7 @@ impl<'f> Lowerer<'f> {
         let is_generator = std::mem::replace(&mut self.fn_saw_yield, saved_saw_yield);
 
         let (params, body) = inner?;
+        validate_goto(&body)?; // step 45: function-scoped goto/label check
         let ret_hint = func
             .return_type_hint
             .as_ref()
@@ -1763,6 +1946,7 @@ impl<'f> Lowerer<'f> {
         let is_generator = std::mem::replace(&mut self.fn_saw_yield, saved_saw_yield);
 
         let (params, captures, body) = inner?;
+        validate_goto(&body)?; // step 45: function-scoped goto/label check
         let ret_hint = closure
             .return_type_hint
             .as_ref()
