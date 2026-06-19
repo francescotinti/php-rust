@@ -21,6 +21,15 @@ fn out_bytes(src: &str) -> Vec<u8> {
     o.stdout
 }
 
+/// Run a script and return `(stdout, exit_code)` — for `exit`/`die` tests where
+/// the process exit code matters (step 46).
+fn out_exit(src: &str) -> (String, Option<u8>) {
+    let reg = registry();
+    let o = run_source_with(b"t.php", src.as_bytes(), &reg).expect("lowers");
+    assert!(o.fatal.is_none(), "unexpected fatal: {:?}", o.fatal);
+    (String::from_utf8(o.stdout).expect("utf8"), o.exit_code)
+}
+
 #[test]
 fn var_dump_scalars() {
     assert_eq!(out("<?php var_dump(42);"), "int(42)\n");
@@ -2887,4 +2896,113 @@ fn goto_into_switch_is_compile_fatal() {
 fn goto_duplicate_label_is_compile_fatal() {
     let r = goto_fatal("<?php a: echo 1; a: echo 2;");
     assert!(r.contains("Label 'a' already defined"), "got: {r}");
+}
+
+// --- print / exit / die (step 46) ------------------------------------------
+
+#[test]
+fn print_emits_and_returns_one() {
+    // `print` is an expression: emits the value, evaluates to int(1).
+    assert_eq!(out("<?php print 'x';"), "x");
+    assert_eq!(out("<?php $x = print 'hi'; echo \"|$x\";"), "hi|1");
+    // Usable mid-expression: (print "a") yields 1, then 1 + 10 = 11.
+    assert_eq!(out("<?php echo (print 'a') + 10;"), "a11");
+}
+
+#[test]
+fn exit_int_sets_code_no_output() {
+    // An int argument is the process exit code; nothing extra is printed.
+    let (out, code) = out_exit("<?php echo 'a'; exit(5); echo 'b';");
+    assert_eq!(out, "a");
+    assert_eq!(code, Some(5));
+}
+
+#[test]
+fn exit_string_prints_and_code_zero() {
+    // A string argument is a message: printed, with exit code 0.
+    assert_eq!(out_exit("<?php echo 'a'; exit('msg');"), ("amsg".into(), Some(0)));
+    // Even a numeric-looking string is a message, not a code.
+    assert_eq!(out_exit("<?php exit('5');"), ("5".into(), Some(0)));
+    // `die` is an exact alias of `exit`.
+    assert_eq!(out_exit("<?php die('bye');"), ("bye".into(), Some(0)));
+}
+
+#[test]
+fn exit_bare_is_code_zero() {
+    assert_eq!(out_exit("<?php echo 'a'; exit; echo 'b';"), ("a".into(), Some(0)));
+    assert_eq!(out_exit("<?php echo 'a'; die();"), ("a".into(), Some(0)));
+}
+
+#[test]
+fn exit_code_wraps_to_byte() {
+    // PHP truncates the status to a byte: 256 → 0, -1 → 255.
+    assert_eq!(out_exit("<?php exit(256);").1, Some(0));
+    assert_eq!(out_exit("<?php exit(-1);").1, Some(255));
+    assert_eq!(out_exit("<?php exit(254);").1, Some(254));
+}
+
+#[test]
+fn exit_as_expression() {
+    // `exit`/`die` are expressions: `false or die(...)` runs the die.
+    assert_eq!(out_exit("<?php false or die('DEAD'); echo 'after';"), ("DEAD".into(), Some(0)));
+}
+
+#[test]
+fn exit_does_not_run_finally() {
+    // Unlike `return`/`throw`, `exit` does NOT run `finally` (oracle-verified).
+    assert_eq!(out_exit("<?php try { echo 't'; exit('X'); } finally { echo 'f'; }"), ("tX".into(), Some(0)));
+    assert_eq!(out_exit("<?php try { echo 't'; exit; } finally { echo 'f'; }"), ("t".into(), Some(0)));
+    // It also terminates across function boundaries.
+    assert_eq!(
+        out_exit("<?php function g(){ try { echo 't'; exit('Z'); } finally { echo 'f'; } } g(); echo 'after';"),
+        ("tZ".into(), Some(0))
+    );
+}
+
+#[test]
+fn exit_is_not_catchable() {
+    // A `catch (\Throwable)` never sees an `exit`.
+    assert_eq!(
+        out_exit("<?php try { exit('E'); } catch (\\Throwable $e) { echo 'caught'; }"),
+        ("E".into(), Some(0))
+    );
+}
+
+#[test]
+fn no_exit_leaves_code_none() {
+    // A script that runs to completion has no explicit exit code.
+    assert_eq!(out_exit("<?php echo 'done';"), ("done".into(), None));
+}
+
+#[test]
+fn exit_int_like_args_coerce_to_code() {
+    // `string|int`: bool/float/null take the int branch (exit code), not the
+    // string branch — nothing is printed.
+    assert_eq!(out_exit("<?php exit(true);"), (String::new(), Some(1)));
+    assert_eq!(out_exit("<?php exit(false);"), (String::new(), Some(0)));
+    assert_eq!(out_exit("<?php exit(1.9);"), (String::new(), Some(1)));
+    assert_eq!(out_exit("<?php exit(null);"), (String::new(), Some(0)));
+}
+
+#[test]
+fn exit_stringable_object_is_message() {
+    // An object with `__toString` joins the string branch: printed, code 0.
+    assert_eq!(
+        out_exit("<?php class S { function __toString() { return 'STR'; } } exit(new S);"),
+        ("STR".into(), Some(0))
+    );
+}
+
+#[test]
+fn exit_non_scalar_arg_is_type_error() {
+    // array / non-stringable object are outside `string|int` → TypeError
+    // (a normal catchable engine error, unlike the exit itself).
+    assert_eq!(
+        out("<?php try { exit(new stdClass); } catch (\\TypeError $e) { echo $e->getMessage(); }"),
+        "exit(): Argument #1 ($status) must be of type string|int, stdClass given"
+    );
+    assert_eq!(
+        out("<?php try { exit([]); } catch (\\TypeError $e) { echo $e->getMessage(); }"),
+        "exit(): Argument #1 ($status) must be of type string|int, array given"
+    );
 }

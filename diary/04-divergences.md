@@ -477,5 +477,22 @@ I 4 test `exit/define_goto_label_*` (SKIP `compile-error`) **non** sono una
 divergenza goto: attendono un **Parse error** perché PHP vieta una parola
 riservata (`die`/`exit`) come nome di label — strictness lessicale del parser,
 non modellata (coerente con lo scope-out generale "diagnostica compile-time del
-parser"). `finally_goto_005` resta SKIP perché usa `print` (builtin non
-implementato), non per il goto.
+parser"). `finally_goto_005` ora **PASS** (step 46 ha aggiunto `print`).
+
+## Step 46 — `print` / `exit` / `die`
+
+| ID | Costrutto | Noi | PHP | Note |
+|---|---|---|---|---|
+| **D-46.1** | `exit`/`die` con arg `float` non integrale o `null` | coerciti all'exit code corretto **senza** il Deprecated notice | emette `Deprecated: Implicit conversion from float X to int loses precision` / `Deprecated: exit(): Passing null … is deprecated` | l'exit code è corretto (`1.9`→1, `null`→0); manca solo la diagnostica Deprecated (coerente con altri notice di coercion non modellati) |
+
+Casi **non** divergenti (parità oracle verificata): `print` ritorna `int(1)` ed è
+usabile in espressione; `exit($int)` = exit code (mod 256); `exit($string)` /
+oggetto con `__toString` = messaggio + code 0; `exit;`/`die()` = code 0;
+`bool`/`int`/`float`/`null` → exit code; `exit` **non** fa girare i `finally` e
+**non** è catchable; `array` / oggetto non-stringabile → `TypeError "exit():
+Argument #1 ($status) must be of type string|int, X given"`.
+
+`eval`/`include`/`require`/`require_once`/`include_once` restano `Unsupported`
+(sotto-compilazione + I/O file → step separato). Il test `exit/exit_as_function`
+resta FAIL per la sintassi first-class-callable `exit(...)` + reflection dei
+parametri Closure in `var_dump`, non per la semantica di `exit`.

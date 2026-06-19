@@ -310,6 +310,11 @@ pub struct Outcome {
     pub fatal: Option<PhpError>,
     /// Top-level `return` value (NULL if the script ran to completion).
     pub return_value: Zval,
+    /// Process exit code from `exit`/`die` (step 46), normalised to `0..=255`.
+    /// `None` when the script ran to completion without an explicit `exit`
+    /// (PHP's implicit status 0). A real CLI SAPI would `process::exit` on this;
+    /// here it is surfaced for tests (the `php-cli` binary stays a stub).
+    pub exit_code: Option<u8>,
 }
 
 /// Lower `source` and run it with no builtins. Convenience wrapper over [`run`].
@@ -352,6 +357,7 @@ fn compile_fatal_outcome(file: &[u8], message: &str, line: crate::hir::Line) -> 
         diags: Vec::new(),
         fatal: Some(PhpError::Error(message.to_string())),
         return_value: Zval::Null,
+        exit_code: None,
     }
 }
 
@@ -424,12 +430,20 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         mb_regex: crate::mbregex::MbRegexState::default(),
     };
 
+    let mut exit_code = None;
     let (fatal, return_value) = match ev.exec_stmts(&program.body) {
         Ok(Flow::Return(v)) => (None, v),
         // An unresolved `goto` at script top level is the unsupported
         // into-transparent-block case (D-45.1); see `run_user_fn_body`.
         Ok(Flow::Goto(label)) => (Some(unsupported_goto(&label)), Zval::Null),
         Ok(_) => (None, Zval::Null),
+        // `exit`/`die` is a clean termination, not a fatal (step 46): record the
+        // process exit code and render nothing. Any message it printed is already
+        // in the output streams.
+        Err(PhpError::Exit(code)) => {
+            exit_code = Some(code);
+            (None, Zval::Null)
+        }
         Err(e) => (Some(e), Zval::Null),
     };
 
@@ -451,6 +465,7 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         diags: ev.diags,
         fatal,
         return_value,
+        exit_code,
     }
 }
 
@@ -891,6 +906,12 @@ impl<'p> Evaluator<'p> {
                     Err(e) => self.handle_thrown(e, catches),
                     flow => flow,
                 };
+                // `exit`/`die` bypasses `finally` entirely (step 46): unlike a
+                // thrown exception, a `return`, or a `break`, PHP does NOT run
+                // `finally` on the way out of an `exit`. Propagate immediately.
+                if matches!(&outcome, Err(PhpError::Exit(_))) {
+                    return outcome;
+                }
                 if finally.is_empty() {
                     return outcome;
                 }
@@ -922,6 +943,10 @@ impl<'p> Evaluator<'p> {
         // The class id of the in-flight throwable: the object's own class for a
         // user throw, or the prelude class named by an engine error.
         let obj_cid = match &e {
+            // `exit`/`die` is uncatchable (step 46): never offered to a `catch`,
+            // it just keeps unwinding. The enclosing `try` still runs `finally`
+            // on the way out (the generic `Err` path below `handle_thrown`).
+            PhpError::Exit(_) => return Err(e),
             PhpError::Thrown(Zval::Object(o)) => o.borrow().class_id as usize,
             PhpError::Thrown(_) => return Err(e),
             engine => match self
@@ -2834,6 +2859,63 @@ impl<'p> Evaluator<'p> {
         let cell = Rc::new(RefCell::new(init));
         self.static_props.insert(key, Rc::clone(&cell));
         Ok(cell)
+    }
+
+    /// Resolve the argument of `exit`/`die` to a process exit code, following
+    /// PHP's `exit(string|int $status = 0)` signature (step 46). A `string` (or
+    /// a `__toString` object) takes the string branch: it is emitted as a
+    /// message with exit code `0`. An `int`/`float`/`bool`/`null` takes the int
+    /// branch: coerced to an integer exit code (normalised to `0..=255`, nothing
+    /// printed). Anything else (`array`, a non-stringable object, …) is a
+    /// `TypeError`, matching the oracle (`exit(): Argument #1 ($status) must be
+    /// of type string|int, X given`). The float-precision / null deprecation
+    /// notices PHP emits on coercion are a declared scope-out (D-46.1).
+    fn exit_status(&mut self, v: Zval) -> Result<u8, PhpError> {
+        // Collapse a reference to its referent (the invariant forbids ref-to-ref).
+        let v = match v {
+            Zval::Ref(cell) => cell.borrow().clone(),
+            other => other,
+        };
+        match &v {
+            // A string is a message printed verbatim.
+            Zval::Str(s) => {
+                self.emit(s.as_bytes());
+                Ok(0)
+            }
+            // Scalars with a defined integer coercion become the exit code.
+            Zval::Long(_) | Zval::Double(_) | Zval::Bool(_) | Zval::Null | Zval::Undef => {
+                Ok(convert::to_long_cast(&v, &mut self.diags).rem_euclid(256) as u8)
+            }
+            // An object joins the `string` branch only if it is stringable.
+            Zval::Object(o) => {
+                let cid = o.borrow().class_id as usize;
+                if self.resolve_method(cid, b"__toString").is_some() {
+                    let s = self.stringify(&v)?;
+                    self.emit(s.as_bytes());
+                    Ok(0)
+                } else {
+                    Err(self.exit_type_error(&v))
+                }
+            }
+            // array / closure / generator: no string|int coercion → TypeError.
+            _ => Err(self.exit_type_error(&v)),
+        }
+    }
+
+    /// The `TypeError` for `exit`/`die` given a value outside `string|int`
+    /// (step 46). Objects are named by their class (`stdClass given`), other
+    /// values by their PHP type name.
+    fn exit_type_error(&self, v: &Zval) -> PhpError {
+        let given = match v {
+            Zval::Object(o) => {
+                String::from_utf8_lossy(&self.classes[o.borrow().class_id as usize].name)
+                    .into_owned()
+            }
+            other => php_type_name(other).to_string(),
+        };
+        PhpError::TypeError(format!(
+            "exit(): Argument #1 ($status) must be of type string|int, {given} given"
+        ))
     }
 
     /// Convert a value to a string, honouring `__toString` on objects (step 19-6,
@@ -4821,6 +4903,29 @@ impl<'p> Evaluator<'p> {
                 let steps = self.resolve_steps(place)?;
                 let empty = self.place_empty(place.base, &steps)?;
                 Ok(Zval::Bool(empty))
+            }
+
+            // `print expr` (step 46): emit the stringified value (honouring
+            // `__toString`, like echo), then evaluate to int(1).
+            ExprKind::Print(e) => {
+                let z = self.eval(e)?;
+                let s = self.stringify(&z)?;
+                self.emit(s.as_bytes());
+                Ok(Zval::Long(1))
+            }
+
+            // `exit`/`die [arg]` (step 46): the argument follows PHP's
+            // `string|int $status` union (see `exit_status`). Raised on the `Err`
+            // channel so it is uncatchable and bypasses `finally`.
+            ExprKind::Exit(arg) => {
+                let code = match arg {
+                    Some(e) => {
+                        let v = self.eval(e)?;
+                        self.exit_status(v)?
+                    }
+                    None => 0,
+                };
+                Err(PhpError::Exit(code))
             }
 
             ExprKind::Match { subject, arms } => {

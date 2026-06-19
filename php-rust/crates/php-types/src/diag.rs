@@ -48,6 +48,13 @@ pub enum PhpError {
     /// uncaught fatal. The class name / message come from the object itself, so
     /// the `class_name`/`message` accessors return sentinels for this variant.
     Thrown(crate::Zval),
+    /// `exit`/`die` terminating the script (step 46). NOT a throwable: it is
+    /// uncatchable (a `catch` never sees it) but `finally` blocks still run, so
+    /// it rides the `Err` channel like a throw and unwinds to the top, where
+    /// `run` turns it into a clean [`Outcome`] carrying the process exit code
+    /// (already normalised to `0..=255`). Any message argument was emitted to
+    /// stdout before this was raised.
+    Exit(u8),
 }
 
 impl PhpError {
@@ -63,6 +70,10 @@ impl PhpError {
             PhpError::DivisionByZeroError(_) => "DivisionByZeroError",
             PhpError::ArithmeticError(_) => "ArithmeticError",
             PhpError::Thrown(_) => "Exception",
+            // Not a class: `exit` is a termination signal, never matched by a
+            // `catch` (see `handle_thrown`). The sentinel keeps the accessor
+            // total; it is never read as a real class name.
+            PhpError::Exit(_) => "Exit",
         }
     }
 
@@ -75,6 +86,7 @@ impl PhpError {
             PhpError::DivisionByZeroError(m) => m,
             PhpError::ArithmeticError(m) => m,
             PhpError::Thrown(_) => "",
+            PhpError::Exit(_) => "",
         }
     }
 }

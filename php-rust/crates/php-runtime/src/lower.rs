@@ -2352,6 +2352,16 @@ impl<'f> Lowerer<'f> {
                     ExprKind::Isset(places)
                 }
                 Construct::Empty(em) => ExprKind::Empty(self.lower_place(em.value, line)?),
+                // `print expr` — an expression that emits then yields int(1).
+                Construct::Print(p) => ExprKind::Print(Box::new(self.lower_expr(p.value)?)),
+                // `exit`/`die [arg]` — `die` is an exact alias of `exit`. Both
+                // take an optional single positional argument.
+                Construct::Exit(e) => {
+                    ExprKind::Exit(self.lower_exit_arg(e.arguments.as_ref(), line)?)
+                }
+                Construct::Die(d) => {
+                    ExprKind::Exit(self.lower_exit_arg(d.arguments.as_ref(), line)?)
+                }
                 _ => {
                     return Err(LowerError::Unsupported {
                         what: "language construct",
@@ -2779,6 +2789,27 @@ impl<'f> Lowerer<'f> {
             }
         }
         Ok(args)
+    }
+
+    /// Lower the optional single argument of `exit`/`die` (step 46). PHP accepts
+    /// zero or one positional argument; we take the first positional expression
+    /// (if any) and ignore the rest. `exit`/`exit()`/`die()` → `None`.
+    fn lower_exit_arg(
+        &mut self,
+        list: Option<&mago_syntax::ast::ArgumentList>,
+        line: Line,
+    ) -> Result<Option<Box<Expr>>, LowerError> {
+        let Some(list) = list else { return Ok(None) };
+        match list.arguments.iter().next() {
+            Some(Argument::Positional(p)) => {
+                Ok(Some(Box::new(self.lower_expr(p.value)?)))
+            }
+            Some(Argument::Named(_)) => Err(LowerError::Unsupported {
+                what: "named argument to exit/die",
+                line,
+            }),
+            None => Ok(None),
+        }
     }
 
     /// Lower a call's arguments into leading positional + trailing named (step

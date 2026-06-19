@@ -1010,3 +1010,44 @@ test** (773→787), tutti oracle-verificati. Clippy strict pulito.
   col **path reale `.php`** (`php_script_name`) invece dell'hardcoded `test.phpt`,
   così gli EXPECTF che incorporano il basename (`%sfinally_goto_001.php`)
   combaciano (run-tests usa un file temp `<test>.php`).
+
+## Step 46 — costrutti di linguaggio: `print` + `exit`/`die`
+
+Tre costrutti molto comuni che cadevano nel catch-all `Construct`
+(`"language construct"`) di `lower.rs`. **+12 unit test** (787→799),
+oracle-verificati, clippy strict pulito.
+
+- **HIR** (`hir.rs`): `ExprKind::Print(Box<Expr>)` e `Exit(Option<Box<Expr>>)`
+  (entrambi *espressioni*; `print` ritorna `int(1)`, `exit`/`die` non ritornano).
+- **Lowering** (`lower.rs`): 3 arm `Construct::Print/Exit/Die` (`die` = alias
+  esatto di `exit`) + helper `lower_exit_arg` (0/1 argomento posizionale).
+- **Decisione di canale**: `exit`/`die` sono espressioni → si propagano via
+  **`Err(PhpError::Exit(u8))`**, NON via `Flow` (un'espressione non può
+  ritornare un `Flow`). Vantaggio: il `?` esistente la propaga fino al top, e
+  niente modifiche a `Flow`/`loop_step`/`switch`.
+- **Runtime** (`eval.rs`): `ExprKind::Print` → `emit(stringify) ; Long(1)`.
+  `ExprKind::Exit` → `Err(PhpError::Exit(code))`. Nuovo campo
+  `Outcome.exit_code: Option<u8>` (`None` = script completato senza `exit`); arm
+  in `run` che tratta `Err(Exit)` come terminazione pulita (NON un fatal).
+  `handle_thrown`: `Exit` passa attraverso → **non catchable** (un `catch` non lo
+  vede mai).
+- **`exit` NON fa girare i `finally`** (verificato con oracle: `try { exit; }
+  finally { … }` NON esegue il finally — a differenza di `return`/`throw`). Quindi
+  il try handler intercetta `Err(Exit)` **prima** del finally e propaga subito.
+- **Coercion `string|int $status`** (`exit_status` + `exit_type_error`,
+  oracle-verificata): `int` → exit code; `bool`/`float`/`null` → coerciti a int
+  code (`true`→1, `1.9`→1, `null`→0) via `to_long_cast`, **nessun output**;
+  `string` e oggetto con `__toString` → **messaggio** stampato, code 0; `array` o
+  oggetto non-stringabile → `TypeError "exit(): Argument #1 ($status) must be of
+  type string|int, X given"` (catchable, distinto dalla terminazione `exit`).
+  Codice normalizzato a `0..=255` (`exit(256)`→0, `exit(-1)`→255).
+- **Corpus**: `finally_goto_005` ora **PASS** (era SKIP, sbloccato da `print`);
+  `Zend/tests/exit` `die_string_cast_exception`/`define_class_members_exit_die`
+  **PASS**. Unico FAIL residuo `exit_as_function` = sintassi first-class-callable
+  `exit(...)` + reflection dei parametri Closure in `var_dump` (gap pre-esistente,
+  estraneo alla semantica di `exit`).
+- **Scope-out D-46.1**: i Deprecated notice di PHP sulla coercion (float→int
+  loses precision, null→`string|int` deprecated) non sono emessi; l'exit code è
+  comunque corretto. `eval`/`include`/`require` restano `Unsupported`. Il codice
+  di uscita resta su `Outcome.exit_code` (la CLI è uno stub, niente
+  `process::exit`).

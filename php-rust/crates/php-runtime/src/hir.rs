@@ -549,6 +549,14 @@ pub enum ExprKind {
     /// `empty($place)` — true iff the place is unset or falsy (no warnings).
     Empty(Place),
 
+    /// `print expr` (step 46) — an *expression*: emits `expr` stringified, then
+    /// evaluates to `int(1)` (so `$x = print "a"` and `(print "a") + 10` work).
+    Print(Box<Expr>),
+    /// `exit`/`die [arg]` (step 46) — terminates the script. An `int` argument
+    /// is the process exit code; any other argument is stringified and emitted
+    /// (exit code 0); no argument means code 0. Raised as `PhpError::Exit`.
+    Exit(Option<Box<Expr>>),
+
     /// `match ($subject) { conds => body, ..., default => body }`. Strict `===`
     /// matching; an arm with empty `conditions` is the `default` arm.
     Match {
