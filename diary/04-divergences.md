@@ -365,3 +365,37 @@ mode invalido / needle vuoto / stringa vuota in ord.
 **Corpus** `ext/mbstring/tests`: 417/420 SKIP categoria "section" (il phpt-runner
 scarta `--EXTENSIONS--`/`--SKIPIF--`/`--INI--`). NON è regressione: validazione
 via unit test. Rilassare `--EXTENSIONS--` = item tooling cross-cutting separato.
+
+## Step 42 (mbstring batch 2A) — encoding + width; divergenze dichiarate
+
+5 funzioni (`mb_convert_encoding`/`mb_detect_encoding` via `encoding_rs`;
+`mb_strwidth`/`mb_strimwidth`/`mb_strcut` via tabella EAW portata). +8 test
+oracle-verificati. Comportamenti core esatti; divergenze solo su scelte di
+scope dichiarate:
+
+| # | Caso | Comportamento Rust | PHP 8.5.7 | Stato |
+|---|---|---|---|---|
+| D-MB-enc-latin1 | `ISO-8859-1`/`latin1` | true Latin-1 hand-rolled (byte ↔ code point ≤0xFF; `\x80`→U+0080) | identico | parità ✓ — `encoding_rs` mapperebbe `iso-8859-1`→windows-1252 (WHATWG), deliberatamente NON usato |
+| D-MB-enc-subst | char non rappresentabile nel target (`€`→ISO-8859-1) | sostituito con `?` (0x3F) | `?` (substitute char mbfl) | parità ✓ — NON entità HTML (che `encoding_rs::encode` emetterebbe) |
+| D-MB-enc-utf16 | `UTF-16`/`UTF-16BE`/`UTF-16LE` come target | hand-rolled (`encoding_rs` non *codifica* UTF-16); `UTF-16` nudo = BE | identico | parità ✓ |
+| D-MB-enc-list | nomi encoding supportati | sottoinsieme risolvibile (UTF-8/16, ASCII, Latin1, + label `encoding_rs`); `mb_list_encodings`/`mb_encoding_aliases` non implementate | mbfl elenca ~79 nomi | scope-out (nessun driver dal corpus) |
+| D-MB-enc-htmlent | `HTML-ENTITIES`/`BASE64`/`UUENCODE`/7bit/8bit/JIS/UTF-7 | `ValueError`/`contains invalid encoding` | encoding speciali mbfl | scope-out (deprecate in 8.5) |
+| D-MB-enc-detect | `mb_detect_encoding` non-strict | primo candidato valido, else primo candidato (mai false) | euristica mbfl (best-fit per # errori) | approssimazione; tutti i casi sondati combaciano |
+| D-MB-width-eaw | `mb_strwidth` | tabella EAW portata verbatim; width=2 solo Wide/Fullwidth, 1 altrimenti (combining/ZW/control inclusi) | identico | parità ✓ — `unicode-width` (che dà 0 a combining/ZW) deliberatamente NON usato |
+| D-MB-width-enc | `$encoding` ≠ UTF-8 su `mb_strwidth`/`strimwidth`/`strcut` | `ValueError` (coerente con D-MB1) | transcodifica nell'encoding | divergenza dichiarata (le funzioni width restano UTF-8-only in questo batch) |
+| D-MB-strimwidth-neg | `width` negativo (deprecato) | nessun char preso (ritorna marker/empty) | E_DEPRECATED + calcolo | scope-out (non nel corpus) |
+
+Casi coperti e oracle-verificati: `mb_strwidth` (ASCII=1, CJK/emoji/fullwidth/
+Hangul=2, halfwidth/combining/ZWSP/ambiguous=1, byte invalidi=1 cad.);
+`mb_strimwidth` (start in code-point, marker conta verso il limite, tail che ci
+sta → no marker, marker più largo del limite → solo marker, start negativo,
+`start==len`→empty, out-of-range→`ValueError`); `mb_strcut` (offset byte, mai
+spezza un char, start arrotonda giù, length dal rounded start, oltre fine→empty);
+`mb_convert_encoding` (UTF-8↔ISO-8859-1/Windows-1252/SJIS/UTF-16BE/LE, from null,
+from-detect-list, substitute `?`, errori to/from); `mb_detect_encoding` (default
+[ASCII,UTF-8], comma-list/array, nomi canonici, strict→false, fallback non-strict,
+liste vuote/invalide→`ValueError`).
+
+D-NEW: nessuna (i fail sono scelte di scope dichiarate, non bug). `bin2hex`/
+`var_export`/`mb_list_encodings` NON sono builtin implementati → i test usano
+output byte-esatti / `var_dump` / echo diretto.

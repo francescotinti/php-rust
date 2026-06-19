@@ -827,3 +827,44 @@ all'evaluator), come step 17/29. **+18 test** oracle-verificati (734→752).
   supportate è un item tooling **cross-cutting** a sé (sbloccherebbe anche
   ext/standard ecc.) — non incluso qui.
 - **Tempo:** ~mezza sessione.
+
+## Step 42 — mbstring batch 2A (encoding + width)
+
+Secondo batch `mb_*` (traccia A encoding + traccia B width). Pattern builtin
+PURO come step 41, zero modifiche all'evaluator. **+8 test** oracle-verificati
+(752→760). Unica nuova dipendenza: `encoding_rs = "0.8.35"` (pure-Rust, no C).
+Traccia C (oniguruma `mb_ereg*`/`mb_split`) rinviata a uno Step 43 dedicato
+(richiede FFI alla libreria C, fuori dal pattern pure-Rust del batch).
+- **5 funzioni in 2 sotto-step**:
+  - **42b width** `mb_strwidth`/`mb_strimwidth`/`mb_strcut`. Tabella EAW
+    (`FIRST_DOUBLEWIDTH=0x1100` + 124 range) **portata verbatim** da
+    `ext/mbstring/libmbfl/mbfl/eaw_table.h`; `character_width()` binary-search →
+    2 se in tabella, 1 altrimenti. `mb_strcut` è **byte-oriented** (start
+    arrotonda giù al confine del char che lo contiene; length dal rounded start;
+    include solo char interi che ci stanno). `mb_strimwidth`: start in
+    **code-point**, marker conta verso il limite, out-of-range→`ValueError`.
+  - **42a encoding** `mb_convert_encoding`/`mb_detect_encoding`. `enum Codec`
+    {Ascii,Utf8,Latin1,Utf16Be,Utf16Le,Rs(&Encoding)} + `resolve_encoding`
+    (canonical PHP name per detect). `decode_bytes`/`encode_str` (substitute
+    `?`=0x3F char-per-char, NON entità HTML); `validates` per detect.
+- **Scoperte abilitanti**:
+  - **`unicode-width` è SBAGLIATO** per `mb_strwidth`: PHP/mbfl dà width 1 a
+    combining/zero-width/control (unicode-width dà 0). Solo la tabella EAW
+    portata riproduce l'oracle → zero crate width esterni.
+  - **`ISO-8859-1` ≠ `encoding_rs`**: la label WHATWG `iso-8859-1` mappa a
+    windows-1252 (`\x80`→€). PHP usa true Latin-1 (`\x80`→U+0080) → Latin1
+    hand-rolled. Idem UTF-16 (encoding_rs non *codifica* UTF-16) → hand-rolled.
+- **Encoding (D-MB1 invariato)**: le funzioni batch-1 e le width restano
+  UTF-8-only; solo `mb_convert_encoding`/`mb_detect_encoding` accettano encoding
+  arbitrari. `mb_list_encodings`/`mb_encoding_aliases` non implementate (mbfl ne
+  elenca ~79, nessun driver dal corpus).
+- **Errori RED dei test** (non bug): `bin2hex` NON è implementato → aggiunto
+  helper `out_bytes()` per asserzioni byte-esatte; risultati `mb_strcut`
+  (char interi) confrontati via echo diretto.
+- **Divergenze dichiarate** (`04-divergences.md` sez. Step 42): D-MB-enc-latin1
+  (parità), D-MB-enc-subst (parità), D-MB-enc-utf16 (parità), D-MB-enc-list
+  (scope-out), D-MB-enc-htmlent (scope-out), D-MB-enc-detect (approssimazione),
+  D-MB-width-eaw (parità), D-MB-width-enc (dichiarata), D-MB-strimwidth-neg
+  (scope-out). **D-NEW: nessuna.**
+- **Clippy** strict gate (`--all-features --all-targets --deny=warnings`) pulito.
+- **Tempo:** ~mezza sessione.

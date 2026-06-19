@@ -654,3 +654,418 @@ pub fn mb_check_encoding(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
     };
     Ok(Zval::Bool(ok))
 }
+
+// --- step 42b: display width (mb_strwidth / mb_strimwidth / mb_strcut) ---
+
+/// East-Asian-Width table ported verbatim from PHP's
+/// `ext/mbstring/libmbfl/mbfl/eaw_table.h`: inclusive code-point ranges that
+/// `mb_*` width functions render as double-width.
+const FIRST_DOUBLEWIDTH: u32 = 0x1100;
+#[rustfmt::skip]
+static EAW_TABLE: &[(u32, u32)] = &[
+    (0x1100, 0x115f), (0x231a, 0x231b), (0x2329, 0x232a), (0x23e9, 0x23ec),
+    (0x23f0, 0x23f0), (0x23f3, 0x23f3), (0x25fd, 0x25fe), (0x2614, 0x2615),
+    (0x2630, 0x2637), (0x2648, 0x2653), (0x267f, 0x267f), (0x268a, 0x268f),
+    (0x2693, 0x2693), (0x26a1, 0x26a1), (0x26aa, 0x26ab), (0x26bd, 0x26be),
+    (0x26c4, 0x26c5), (0x26ce, 0x26ce), (0x26d4, 0x26d4), (0x26ea, 0x26ea),
+    (0x26f2, 0x26f3), (0x26f5, 0x26f5), (0x26fa, 0x26fa), (0x26fd, 0x26fd),
+    (0x2705, 0x2705), (0x270a, 0x270b), (0x2728, 0x2728), (0x274c, 0x274c),
+    (0x274e, 0x274e), (0x2753, 0x2755), (0x2757, 0x2757), (0x2795, 0x2797),
+    (0x27b0, 0x27b0), (0x27bf, 0x27bf), (0x2b1b, 0x2b1c), (0x2b50, 0x2b50),
+    (0x2b55, 0x2b55), (0x2e80, 0x2e99), (0x2e9b, 0x2ef3), (0x2f00, 0x2fd5),
+    (0x2ff0, 0x303e), (0x3041, 0x3096), (0x3099, 0x30ff), (0x3105, 0x312f),
+    (0x3131, 0x318e), (0x3190, 0x31e5), (0x31ef, 0x321e), (0x3220, 0x3247),
+    (0x3250, 0xa48c), (0xa490, 0xa4c6), (0xa960, 0xa97c), (0xac00, 0xd7a3),
+    (0xf900, 0xfaff), (0xfe10, 0xfe19), (0xfe30, 0xfe52), (0xfe54, 0xfe66),
+    (0xfe68, 0xfe6b), (0xff01, 0xff60), (0xffe0, 0xffe6), (0x16fe0, 0x16fe4),
+    (0x16ff0, 0x16ff6), (0x17000, 0x18cd5), (0x18cff, 0x18d1e), (0x18d80, 0x18df2),
+    (0x1aff0, 0x1aff3), (0x1aff5, 0x1affb), (0x1affd, 0x1affe), (0x1b000, 0x1b122),
+    (0x1b132, 0x1b132), (0x1b150, 0x1b152), (0x1b155, 0x1b155), (0x1b164, 0x1b167),
+    (0x1b170, 0x1b2fb), (0x1d300, 0x1d356), (0x1d360, 0x1d376), (0x1f004, 0x1f004),
+    (0x1f0cf, 0x1f0cf), (0x1f18e, 0x1f18e), (0x1f191, 0x1f19a), (0x1f200, 0x1f202),
+    (0x1f210, 0x1f23b), (0x1f240, 0x1f248), (0x1f250, 0x1f251), (0x1f260, 0x1f265),
+    (0x1f300, 0x1f320), (0x1f32d, 0x1f335), (0x1f337, 0x1f37c), (0x1f37e, 0x1f393),
+    (0x1f3a0, 0x1f3ca), (0x1f3cf, 0x1f3d3), (0x1f3e0, 0x1f3f0), (0x1f3f4, 0x1f3f4),
+    (0x1f3f8, 0x1f43e), (0x1f440, 0x1f440), (0x1f442, 0x1f4fc), (0x1f4ff, 0x1f53d),
+    (0x1f54b, 0x1f54e), (0x1f550, 0x1f567), (0x1f57a, 0x1f57a), (0x1f595, 0x1f596),
+    (0x1f5a4, 0x1f5a4), (0x1f5fb, 0x1f64f), (0x1f680, 0x1f6c5), (0x1f6cc, 0x1f6cc),
+    (0x1f6d0, 0x1f6d2), (0x1f6d5, 0x1f6d8), (0x1f6dc, 0x1f6df), (0x1f6eb, 0x1f6ec),
+    (0x1f6f4, 0x1f6fc), (0x1f7e0, 0x1f7eb), (0x1f7f0, 0x1f7f0), (0x1f90c, 0x1f93a),
+    (0x1f93c, 0x1f945), (0x1f947, 0x1f9ff), (0x1fa70, 0x1fa7c), (0x1fa80, 0x1fa8a),
+    (0x1fa8e, 0x1fac6), (0x1fac8, 0x1fac8), (0x1facd, 0x1fadc), (0x1fadf, 0x1faea),
+    (0x1faef, 0x1faf8), (0x20000, 0x2fffd), (0x30000, 0x3fffd),
+];
+
+/// Display width of one code point: 2 for East-Asian Wide/Fullwidth (per
+/// [`EAW_TABLE`]), 1 for everything else — combining marks, zero-width and
+/// control characters included (mbfl assigns them width 1, not 0; see D-MB-width).
+fn character_width(c: u32) -> usize {
+    if c < FIRST_DOUBLEWIDTH {
+        return 1;
+    }
+    match EAW_TABLE.binary_search_by(|&(b, e)| {
+        use std::cmp::Ordering::*;
+        if c < b {
+            Greater
+        } else if c > e {
+            Less
+        } else {
+            Equal
+        }
+    }) {
+        Ok(_) => 2,
+        Err(_) => 1,
+    }
+}
+
+/// mb_strwidth($string[, $encoding]): sum of code-point display widths.
+pub fn mb_strwidth(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = arg_str(args, "mb_strwidth", ctx)?;
+    require_utf8(args, 1, ctx, "mb_strwidth", 2, "encoding")?;
+    let w: usize = cps(s.as_bytes())
+        .iter()
+        .map(|&(c, _, _)| character_width(c as u32))
+        .sum();
+    Ok(Zval::Long(w as i64))
+}
+
+/// mb_strimwidth($string, $start, $width[, $trim_marker=""[, $encoding]]):
+/// truncate to `$width` display columns starting at code-point `$start`,
+/// appending `$trim_marker` when truncation happens (the marker's own width
+/// counts toward the limit). An out-of-range `$start` is a `ValueError`.
+pub fn mb_strimwidth(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = arg_str(args, "mb_strimwidth", ctx)?;
+    let start = convert::to_long_cast(
+        args.get(1).ok_or_else(|| {
+            PhpError::Error("mb_strimwidth() expects at least 3 arguments, 1 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let width = convert::to_long_cast(
+        args.get(2).ok_or_else(|| {
+            PhpError::Error("mb_strimwidth() expects at least 3 arguments, 2 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let marker_bytes: Vec<u8> = match args.get(3) {
+        None | Some(Zval::Null) => Vec::new(),
+        Some(v) => convert::to_zstr(v, ctx.diags).as_bytes().to_vec(),
+    };
+    require_utf8(args, 4, ctx, "mb_strimwidth", 5, "encoding")?;
+
+    let bytes = s.as_bytes();
+    let chars = cps(bytes);
+    let n = chars.len() as i64;
+    let from = if start < 0 { start + n } else { start };
+    if from < 0 || from > n {
+        return Err(PhpError::ValueError(
+            "mb_strimwidth(): Argument #2 ($start) is out of range".to_string(),
+        ));
+    }
+    let from = from as usize;
+
+    // Byte slice for the half-open code-point range [a, b).
+    let slice = |a: usize, b: usize| -> &[u8] {
+        if b <= a {
+            &[]
+        } else {
+            &bytes[chars[a].1..chars[b - 1].1 + chars[b - 1].2]
+        }
+    };
+    let cw = |i: usize| character_width(chars[i].0 as u32) as i64;
+
+    // The whole tail fits → return it untouched.
+    let tail_width: i64 = (from..chars.len()).map(cw).sum();
+    if tail_width <= width {
+        return Ok(Zval::Str(PhpStr::new(slice(from, chars.len()).to_vec())));
+    }
+
+    // Truncate: reserve room for the marker, then take whole characters.
+    let marker_width: i64 = cps(&marker_bytes)
+        .iter()
+        .map(|&(c, _, _)| character_width(c as u32) as i64)
+        .sum();
+    let avail = width - marker_width;
+    let mut used = 0i64;
+    let mut end = from;
+    while end < chars.len() && used + cw(end) <= avail {
+        used += cw(end);
+        end += 1;
+    }
+    let mut out = slice(from, end).to_vec();
+    out.extend_from_slice(&marker_bytes);
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
+/// mb_strcut($string, $start[, $length[, $encoding]]): a byte-oriented cut that
+/// never splits a multibyte character. `$start` rounds down to the character
+/// boundary that contains it; `$length` is measured in bytes from that rounded
+/// start, and only whole characters that fully fit are included.
+pub fn mb_strcut(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = arg_str(args, "mb_strcut", ctx)?;
+    let start = convert::to_long_cast(
+        args.get(1).ok_or_else(|| {
+            PhpError::Error("mb_strcut() expects at least 2 arguments, 1 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    require_utf8(args, 3, ctx, "mb_strcut", 4, "encoding")?;
+
+    let bytes = s.as_bytes();
+    let total = bytes.len() as i64;
+    let u = units(bytes);
+    // Resolve the start byte (negative counts from the end), clamped to [0, len].
+    let from = if start < 0 {
+        (total + start).max(0)
+    } else {
+        start.min(total)
+    } as usize;
+    // Round down to the start of the unit containing `from` (or len if past end).
+    let rounded = u
+        .iter()
+        .find(|&&(b, l)| b <= from && from < b + l)
+        .map(|&(b, _)| b)
+        .unwrap_or(bytes.len());
+    let limit = match args.get(2) {
+        None | Some(Zval::Null) => bytes.len(),
+        Some(v) => rounded.saturating_add(convert::to_long_cast(v, ctx.diags).max(0) as usize),
+    };
+    // Include whole units from `rounded` whose end byte stays within `limit`.
+    let mut end = rounded;
+    for &(b, l) in u.iter().filter(|&&(b, _)| b >= rounded) {
+        if b + l <= limit {
+            end = b + l;
+        } else {
+            break;
+        }
+    }
+    Ok(Zval::Str(PhpStr::new(bytes[rounded..end].to_vec())))
+}
+
+// --- step 42a: encoding (mb_convert_encoding / mb_detect_encoding) ---
+
+use encoding_rs::Encoding as RsEncoding;
+
+/// Character codec backing the encoding-aware functions.
+enum Codec {
+    Ascii,
+    Utf8,
+    Latin1,
+    Utf16Be,
+    Utf16Le,
+    Rs(&'static RsEncoding),
+}
+
+/// A resolved encoding: its codec plus the canonical PHP name that
+/// `mb_detect_encoding` reports back.
+struct Enc {
+    codec: Codec,
+    canonical: &'static str,
+}
+
+/// Resolve a PHP encoding name to a codec, or `None` if unsupported. ISO-8859-1
+/// and the UTF-16 family are handled directly rather than through `encoding_rs`,
+/// whose WHATWG label mapping diverges from PHP (true Latin-1 vs windows-1252;
+/// no UTF-16 *encoder*) — see D-MB-enc-latin1 / D-MB-enc-utf16. Everything else
+/// goes through `encoding_rs`'s label lookup.
+fn resolve_encoding(name: &[u8]) -> Option<Enc> {
+    let n = name.trim_ascii();
+    let eq = |s: &[u8]| n.eq_ignore_ascii_case(s);
+    if eq(b"UTF-8") || eq(b"UTF8") {
+        Some(Enc { codec: Codec::Utf8, canonical: "UTF-8" })
+    } else if eq(b"ASCII") || eq(b"US-ASCII") {
+        Some(Enc { codec: Codec::Ascii, canonical: "ASCII" })
+    } else if eq(b"ISO-8859-1") || eq(b"latin1") || eq(b"ISO8859-1") {
+        Some(Enc { codec: Codec::Latin1, canonical: "ISO-8859-1" })
+    } else if eq(b"UTF-16") || eq(b"UTF-16BE") {
+        Some(Enc { codec: Codec::Utf16Be, canonical: "UTF-16BE" })
+    } else if eq(b"UTF-16LE") {
+        Some(Enc { codec: Codec::Utf16Le, canonical: "UTF-16LE" })
+    } else if eq(b"SJIS") || eq(b"Shift_JIS") || eq(b"SHIFT-JIS") {
+        Some(Enc { codec: Codec::Rs(encoding_rs::SHIFT_JIS), canonical: "SJIS" })
+    } else if eq(b"EUC-JP") || eq(b"EUCJP") {
+        Some(Enc { codec: Codec::Rs(encoding_rs::EUC_JP), canonical: "EUC-JP" })
+    } else if eq(b"Windows-1252") || eq(b"CP1252") {
+        Some(Enc { codec: Codec::Rs(encoding_rs::WINDOWS_1252), canonical: "Windows-1252" })
+    } else {
+        RsEncoding::for_label_no_replacement(n).map(|e| Enc { codec: Codec::Rs(e), canonical: e.name() })
+    }
+}
+
+fn decode_utf16(bytes: &[u8], be: bool) -> String {
+    let words = bytes.chunks_exact(2).map(|c| {
+        if be {
+            u16::from_be_bytes([c[0], c[1]])
+        } else {
+            u16::from_le_bytes([c[0], c[1]])
+        }
+    });
+    char::decode_utf16(words)
+        .map(|r| r.unwrap_or('\u{FFFD}'))
+        .collect()
+}
+
+/// Decode bytes in `codec` to a UTF-8 `String` (the internal representation),
+/// substituting U+FFFD for malformed input.
+fn decode_bytes(codec: &Codec, bytes: &[u8]) -> String {
+    match codec {
+        Codec::Utf8 => String::from_utf8_lossy(bytes).into_owned(),
+        Codec::Ascii => bytes
+            .iter()
+            .map(|&b| if b < 0x80 { b as char } else { '\u{FFFD}' })
+            .collect(),
+        Codec::Latin1 => bytes.iter().map(|&b| b as char).collect(),
+        Codec::Utf16Be => decode_utf16(bytes, true),
+        Codec::Utf16Le => decode_utf16(bytes, false),
+        Codec::Rs(e) => e.decode_without_bom_handling(bytes).0.into_owned(),
+    }
+}
+
+/// Encode a UTF-8 `String` to `codec`, substituting `?` (0x3F) for any character
+/// the target cannot represent — PHP's default substitute, not the HTML numeric
+/// entity `encoding_rs::encode` would emit (D-MB-enc-subst).
+fn encode_str(codec: &Codec, s: &str) -> Vec<u8> {
+    match codec {
+        Codec::Utf8 => s.as_bytes().to_vec(),
+        Codec::Ascii => s
+            .chars()
+            .map(|c| if (c as u32) < 0x80 { c as u8 } else { b'?' })
+            .collect(),
+        Codec::Latin1 => s
+            .chars()
+            .map(|c| if (c as u32) <= 0xFF { c as u8 } else { b'?' })
+            .collect(),
+        Codec::Utf16Be => s.encode_utf16().flat_map(|u| u.to_be_bytes()).collect(),
+        Codec::Utf16Le => s.encode_utf16().flat_map(|u| u.to_le_bytes()).collect(),
+        Codec::Rs(e) => {
+            let mut out = Vec::new();
+            let mut buf = [0u8; 4];
+            for c in s.chars() {
+                let (bytes, _, unmappable) = e.encode(c.encode_utf8(&mut buf));
+                if unmappable {
+                    out.push(b'?');
+                } else {
+                    out.extend_from_slice(&bytes);
+                }
+            }
+            out
+        }
+    }
+}
+
+/// Whether `bytes` decode in `codec` without any malformed sequence (used by
+/// `mb_detect_encoding`).
+fn validates(codec: &Codec, bytes: &[u8]) -> bool {
+    match codec {
+        Codec::Utf8 => std::str::from_utf8(bytes).is_ok(),
+        Codec::Ascii => bytes.iter().all(|&b| b < 0x80),
+        Codec::Latin1 => true,
+        Codec::Utf16Be | Codec::Utf16Le => bytes.len().is_multiple_of(2),
+        Codec::Rs(e) => !e.decode_without_bom_handling(bytes).1,
+    }
+}
+
+/// Parse an encoding-list argument: an array of strings or a comma-separated
+/// string. Returns the raw candidate names (trimming is done by `resolve_encoding`).
+fn parse_enc_list(v: &Zval, ctx: &mut Ctx) -> Vec<Vec<u8>> {
+    match v {
+        Zval::Array(a) => a
+            .iter()
+            .map(|(_, val)| convert::to_zstr(val, ctx.diags).as_bytes().to_vec())
+            .collect(),
+        _ => convert::to_zstr(v, ctx.diags)
+            .as_bytes()
+            .split(|&b| b == b',')
+            .map(|p| p.to_vec())
+            .collect(),
+    }
+}
+
+/// mb_convert_encoding($string, $to_encoding[, $from_encoding=null]): transcode
+/// `$string` from `$from_encoding` (UTF-8 by default, or detected from a
+/// list/comma string) to `$to_encoding`.
+pub fn mb_convert_encoding(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = arg_str(args, "mb_convert_encoding", ctx)?;
+    let to_raw = convert::to_zstr(
+        args.get(1).ok_or_else(|| {
+            PhpError::Error("mb_convert_encoding() expects at least 2 arguments, 1 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let to = resolve_encoding(to_raw.as_bytes()).ok_or_else(|| {
+        PhpError::ValueError(format!(
+            "mb_convert_encoding(): Argument #2 ($to_encoding) must be a valid encoding, \"{}\" given",
+            String::from_utf8_lossy(to_raw.as_bytes())
+        ))
+    })?;
+
+    let from = match args.get(2) {
+        None | Some(Zval::Null) => Codec::Utf8,
+        Some(v) => {
+            let mut encs = Vec::new();
+            for name in parse_enc_list(v, ctx) {
+                let e = resolve_encoding(&name).ok_or_else(|| {
+                    PhpError::ValueError(format!(
+                        "mb_convert_encoding(): Argument #3 ($from_encoding) contains invalid encoding \"{}\"",
+                        String::from_utf8_lossy(&name)
+                    ))
+                })?;
+                encs.push(e);
+            }
+            match encs.len() {
+                0 => Codec::Utf8,
+                1 => encs.pop().unwrap().codec,
+                _ => {
+                    // Detect among the candidates (non-strict: first valid, else first).
+                    let idx = encs
+                        .iter()
+                        .position(|e| validates(&e.codec, s.as_bytes()))
+                        .unwrap_or(0);
+                    encs.into_iter().nth(idx).unwrap().codec
+                }
+            }
+        }
+    };
+
+    let decoded = decode_bytes(&from, s.as_bytes());
+    Ok(Zval::Str(PhpStr::new(encode_str(&to.codec, &decoded))))
+}
+
+/// mb_detect_encoding($string[, $encodings=null[, $strict=false]]): return the
+/// canonical name of the first candidate under which `$string` is valid. The
+/// default candidate order is ASCII, UTF-8. Non-strict mode falls back to the
+/// first candidate (never `false`); strict mode returns `false` when none match.
+pub fn mb_detect_encoding(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = arg_str(args, "mb_detect_encoding", ctx)?;
+    let names: Vec<Vec<u8>> = match args.get(1) {
+        None | Some(Zval::Null) => vec![b"ASCII".to_vec(), b"UTF-8".to_vec()],
+        Some(v) => parse_enc_list(v, ctx),
+    };
+    if names.is_empty() {
+        return Err(PhpError::ValueError(
+            "mb_detect_encoding(): Argument #2 ($encodings) must specify at least one encoding"
+                .to_string(),
+        ));
+    }
+    let mut encs = Vec::new();
+    for name in &names {
+        let e = resolve_encoding(name).ok_or_else(|| {
+            PhpError::ValueError(format!(
+                "mb_detect_encoding(): Argument #2 ($encodings) contains invalid encoding \"{}\"",
+                String::from_utf8_lossy(name)
+            ))
+        })?;
+        encs.push(e);
+    }
+    let strict = match args.get(2) {
+        None | Some(Zval::Null) => false,
+        Some(v) => convert::to_bool(v, ctx.diags),
+    };
+    let bytes = s.as_bytes();
+    let chosen = encs.iter().find(|e| validates(&e.codec, bytes));
+    Ok(match chosen {
+        Some(e) => Zval::Str(PhpStr::new(e.canonical.as_bytes().to_vec())),
+        None if strict => Zval::Bool(false),
+        None => Zval::Str(PhpStr::new(encs[0].canonical.as_bytes().to_vec())),
+    })
+}

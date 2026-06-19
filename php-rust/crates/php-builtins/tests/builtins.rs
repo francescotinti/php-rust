@@ -12,6 +12,15 @@ fn out(src: &str) -> String {
     String::from_utf8(o.stdout).expect("utf8")
 }
 
+/// Like [`out`] but returns the raw stdout bytes (for non-UTF-8 output such as
+/// transcoded strings).
+fn out_bytes(src: &str) -> Vec<u8> {
+    let reg = registry();
+    let o = run_source_with(b"t.php", src.as_bytes(), &reg).expect("lowers");
+    assert!(o.fatal.is_none(), "unexpected fatal: {:?}", o.fatal);
+    o.stdout
+}
+
 #[test]
 fn var_dump_scalars() {
     assert_eq!(out("<?php var_dump(42);"), "int(42)\n");
@@ -2357,4 +2366,195 @@ fn mb_trim_family() {
 fn mb_check_encoding_utf8() {
     assert_eq!(out("<?php var_dump(mb_check_encoding('café', 'UTF-8'));"), "bool(true)\n");
     assert_eq!(out("<?php var_dump(mb_check_encoding(\"a\\xFF\", 'UTF-8'));"), "bool(false)\n");
+}
+
+// --- step 42b: width (mb_strwidth / mb_strimwidth / mb_strcut) ---
+
+#[test]
+fn mb_strwidth_counts_east_asian_width() {
+    // ASCII = 1 each, CJK ideographs = 2 each.
+    assert_eq!(out("<?php echo mb_strwidth('ABC日本語');"), "9");
+    assert_eq!(out("<?php echo mb_strwidth('hello');"), "5");
+    // Combining mark, zero-width space, ambiguous-width: all width 1 (mbfl rule).
+    assert_eq!(out("<?php echo mb_strwidth('e\u{301}');"), "2");
+    assert_eq!(out("<?php echo mb_strwidth('\u{200B}');"), "1");
+    assert_eq!(out("<?php echo mb_strwidth('\u{00B1}');"), "1");
+    // Emoji, fullwidth and halfwidth forms, Hangul syllable.
+    assert_eq!(out("<?php echo mb_strwidth('\u{1F600}');"), "2");
+    assert_eq!(out("<?php echo mb_strwidth('\u{FF21}');"), "2");
+    assert_eq!(out("<?php echo mb_strwidth('\u{FF61}');"), "1");
+    assert_eq!(out("<?php echo mb_strwidth('\u{AC00}');"), "2");
+    // Each invalid byte becomes one replacement unit of width 1.
+    assert_eq!(out("<?php echo mb_strwidth(\"\\xFF\\xFE\");"), "2");
+}
+
+#[test]
+fn mb_strimwidth_trims_to_width() {
+    // Truncated: marker width counts toward the limit (こ=2, ...=3, fits in 6).
+    assert_eq!(out("<?php echo mb_strimwidth('こんにちは', 0, 6, '...');"), "こ...");
+    // Whole string fits → no marker appended.
+    assert_eq!(out("<?php echo mb_strimwidth('こんにちは', 0, 10, '...');"), "こんにちは");
+    // start is a code-point offset; tail fits exactly → no marker.
+    assert_eq!(out("<?php echo mb_strimwidth('こんにちは', 2, 6, '...');"), "にちは");
+    assert_eq!(out("<?php echo mb_strimwidth('A日本', 1, 4);"), "日本");
+    // Empty default marker.
+    assert_eq!(out("<?php echo mb_strimwidth('こんにちは', 0, 6);"), "こんに");
+    // Marker wider than the limit → output is the marker.
+    assert_eq!(out("<?php echo mb_strimwidth('こんにちは', 0, 2, '....');"), "....");
+    assert_eq!(out("<?php echo mb_strimwidth('ABCDE', 0, 5, 'x');"), "ABCDE");
+    assert_eq!(out("<?php echo mb_strimwidth('Hello World', 0, 8, '...');"), "Hello...");
+    // Negative start counts from the end.
+    assert_eq!(out("<?php echo mb_strimwidth('こんにちは', -2, 4);"), "ちは");
+    // start == length is allowed and yields the empty string.
+    assert_eq!(out("<?php var_dump(mb_strimwidth('こんにちは', 5, 4, 'x'));"), "string(0) \"\"\n");
+}
+
+#[test]
+fn mb_strimwidth_start_out_of_range_is_value_error() {
+    match fatal("<?php mb_strimwidth('こんにちは', 10, 4, 'x');") {
+        PhpError::ValueError(m) => {
+            assert_eq!(m, "mb_strimwidth(): Argument #2 ($start) is out of range")
+        }
+        other => panic!("expected ValueError, got {other:?}"),
+    }
+}
+
+#[test]
+fn mb_strcut_is_byte_oriented() {
+    // Byte length 4 requested but never splits a multibyte char (stops at 日).
+    assert_eq!(out("<?php echo mb_strcut('日本語', 0, 4);"), "日");
+    // start byte 1 falls inside 日 → rounds down to its boundary.
+    assert_eq!(out("<?php echo mb_strcut('日本語', 1, 5);"), "日");
+    // length is measured from the rounded-down start.
+    assert_eq!(out("<?php echo mb_strcut('日本語', 4, 5);"), "本");
+    assert_eq!(out("<?php echo mb_strcut('日本語', 2, 7);"), "日本");
+    // A char that does not fully fit is excluded.
+    assert_eq!(out("<?php echo mb_strcut('日本語', 0, 2);"), "");
+    // ASCII behaves like a plain byte cut.
+    assert_eq!(out("<?php echo mb_strcut('Hello', 1, 3);"), "ell");
+    assert_eq!(out("<?php echo mb_strcut('Hello', -3, 2);"), "ll");
+    // Omitted length runs to the end (rounded to a boundary).
+    assert_eq!(out("<?php echo mb_strcut('日本語', 3);"), "本語");
+    assert_eq!(out("<?php echo mb_strcut('日本語', 2);"), "日本語");
+    // start beyond the string → empty.
+    assert_eq!(out("<?php echo mb_strcut('日本語', 100, 5);"), "");
+}
+
+// --- step 42a: encoding (mb_convert_encoding / mb_detect_encoding) ---
+
+#[test]
+fn mb_convert_encoding_transcodes() {
+    // UTF-8 → ISO-8859-1: é (U+00E9) becomes the single byte 0xE9.
+    assert_eq!(
+        out_bytes("<?php echo mb_convert_encoding('café', 'ISO-8859-1', 'UTF-8');"),
+        b"caf\xe9"
+    );
+    // from_encoding omitted defaults to UTF-8.
+    assert_eq!(
+        out_bytes("<?php echo mb_convert_encoding('café', 'ISO-8859-1');"),
+        b"caf\xe9"
+    );
+    // ISO-8859-1 → UTF-8.
+    assert_eq!(
+        out_bytes("<?php echo mb_convert_encoding(\"\\xE9\", 'UTF-8', 'ISO-8859-1');"),
+        b"\xc3\xa9"
+    );
+    // True Latin-1: 0x80 → U+0080 (NOT windows-1252's € — D-MB-enc-latin1).
+    assert_eq!(
+        out_bytes("<?php echo mb_convert_encoding(\"\\x80\", 'UTF-8', 'ISO-8859-1');"),
+        b"\xc2\x80"
+    );
+    // Windows-1252: 0x80 → € (U+20AC).
+    assert_eq!(
+        out_bytes("<?php echo mb_convert_encoding(\"\\x80\", 'UTF-8', 'Windows-1252');"),
+        b"\xe2\x82\xac"
+    );
+    // Un-encodable target char → substitute '?' (0x3F), not an HTML entity.
+    assert_eq!(
+        out_bytes("<?php echo mb_convert_encoding('€', 'ISO-8859-1', 'UTF-8');"),
+        b"?"
+    );
+    // UTF-16: bare name is big-endian; LE/BE explicit.
+    assert_eq!(
+        out_bytes("<?php echo mb_convert_encoding('AB', 'UTF-16', 'UTF-8');"),
+        b"\x00A\x00B"
+    );
+    assert_eq!(
+        out_bytes("<?php echo mb_convert_encoding('AB', 'UTF-16LE', 'UTF-8');"),
+        b"A\x00B\x00"
+    );
+    // from_encoding as a detect-list: UTF-8 is picked, then encoded to UTF-16BE.
+    assert_eq!(
+        out_bytes("<?php echo mb_convert_encoding('café', 'UTF-16', 'UTF-8, ISO-8859-1');"),
+        b"\x00c\x00a\x00f\x00\xe9"
+    );
+    // Round-trip through Shift-JIS (multibyte CJK).
+    assert_eq!(
+        out_bytes("<?php echo mb_convert_encoding('日', 'SJIS', 'UTF-8');"),
+        b"\x93\xfa"
+    );
+    assert_eq!(
+        out_bytes("<?php echo mb_convert_encoding(\"\\x93\\xfa\", 'UTF-8', 'SJIS');"),
+        "日".as_bytes()
+    );
+}
+
+#[test]
+fn mb_convert_encoding_unknown_is_value_error() {
+    match fatal("<?php mb_convert_encoding('x', 'BOGUS', 'UTF-8');") {
+        PhpError::ValueError(m) => assert_eq!(
+            m,
+            "mb_convert_encoding(): Argument #2 ($to_encoding) must be a valid encoding, \"BOGUS\" given"
+        ),
+        other => panic!("expected ValueError, got {other:?}"),
+    }
+    match fatal("<?php mb_convert_encoding('x', 'UTF-8', 'BOGUS');") {
+        PhpError::ValueError(m) => assert_eq!(
+            m,
+            "mb_convert_encoding(): Argument #3 ($from_encoding) contains invalid encoding \"BOGUS\""
+        ),
+        other => panic!("expected ValueError, got {other:?}"),
+    }
+}
+
+#[test]
+fn mb_detect_encoding_picks_candidate() {
+    // Default order is ASCII, UTF-8.
+    assert_eq!(out("<?php echo mb_detect_encoding('hello');"), "ASCII");
+    assert_eq!(out("<?php echo mb_detect_encoding('café');"), "UTF-8");
+    // No candidate validates → fall back to the first candidate (ASCII).
+    assert_eq!(out("<?php echo mb_detect_encoding(\"\\xE9\");"), "ASCII");
+    // Explicit comma-list and array, with canonical names returned.
+    assert_eq!(out("<?php echo mb_detect_encoding('hello', 'UTF-8, ASCII');"), "UTF-8");
+    assert_eq!(out("<?php echo mb_detect_encoding(\"\\xE9\", 'UTF-8, ISO-8859-1');"), "ISO-8859-1");
+    assert_eq!(
+        out("<?php echo mb_detect_encoding(\"\\xE9\", ['UTF-8', 'SJIS', 'ISO-8859-1']);"),
+        "ISO-8859-1"
+    );
+    // Non-strict never returns false: falls back to the first candidate.
+    assert_eq!(out("<?php echo mb_detect_encoding(\"\\xFF\\xFE\", ['UTF-8']);"), "UTF-8");
+    // Strict mode returns false when nothing fully validates.
+    assert_eq!(out("<?php var_dump(mb_detect_encoding('café', ['ASCII'], true));"), "bool(false)\n");
+    assert_eq!(
+        out("<?php echo mb_detect_encoding(\"\\xE9\", ['UTF-8', 'ISO-8859-1'], true);"),
+        "ISO-8859-1"
+    );
+}
+
+#[test]
+fn mb_detect_encoding_invalid_or_empty_list_is_value_error() {
+    match fatal("<?php mb_detect_encoding('x', []);") {
+        PhpError::ValueError(m) => assert_eq!(
+            m,
+            "mb_detect_encoding(): Argument #2 ($encodings) must specify at least one encoding"
+        ),
+        other => panic!("expected ValueError, got {other:?}"),
+    }
+    match fatal("<?php mb_detect_encoding('x', 'BOGUS');") {
+        PhpError::ValueError(m) => assert_eq!(
+            m,
+            "mb_detect_encoding(): Argument #2 ($encodings) contains invalid encoding \"BOGUS\""
+        ),
+        other => panic!("expected ValueError, got {other:?}"),
+    }
 }

@@ -123,6 +123,11 @@ pub fn registry() -> Registry {
     add(b"mb_ltrim", mbstring::mb_ltrim);
     add(b"mb_rtrim", mbstring::mb_rtrim);
     add(b"mb_check_encoding", mbstring::mb_check_encoding);
+    add(b"mb_strwidth", mbstring::mb_strwidth);
+    add(b"mb_strimwidth", mbstring::mb_strimwidth);
+    add(b"mb_strcut", mbstring::mb_strcut);
+    add(b"mb_convert_encoding", mbstring::mb_convert_encoding);
+    add(b"mb_detect_encoding", mbstring::mb_detect_encoding);
     add(b"number_format", string::number_format);
     add(b"sprintf", format::sprintf);
     add(b"printf", format::printf);

@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–41 completati · 752 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–42 completati · 760 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 > Hardening tooling (non-funzionale): depth-guard nell'evaluator (`MAX_CALL_DEPTH`,
 > converte la ricorsione runaway in un `Error` catchable invece di un SIGABRT del
@@ -66,6 +66,7 @@ full port semantico del solo `zend_operators.c`).
 | 39 | **generatori `yield`** — esecuzione sospendibile via coroutine stackful `corosensei` (D-GEN-1). `yield`/`yield $k=>$v`/`yield;`/`yield from` (array+sub-generatore), `send()`, `return`+`getReturn()`, Iterator (current/key/next/valid/rewind), `foreach` su Generator, instanceof Generator/Iterator/Traversable, var_dump. Closure-generator. Corpus `Zend/tests/generators` 59/110. Scope-out (D-GEN-4): `throw()`, eccezioni/finally attraverso yield, yield by-ref | ✅ |
 | 40 | **argument unpacking / spread** `f(...$arr)` per Call/New/MethodCall/StaticCall: chiavi int→posizionali (valore chiave ignorato), chiavi string→nominati, spread→variadic (re-keyed), Traversable/generator, `TypeError` su non-iterabile, compile-fatal posizionale-dopo-spread / spread-dopo-nominato. **named→variadic** (`...$rest` raccoglie i nominati senza match con chiave string, esplicita e da spread). Scope-out D-40.1: precedenza messaggio su input doppiamente-invalido | ✅ |
 | 41 | **mbstring batch 1** (UTF-8 code-point) — `mb_strlen`/`mb_substr`/`mb_str_split`, case (`mb_strtoupper`/`mb_strtolower`/`mb_convert_case`/`mb_ucfirst`/`mb_lcfirst`, full Unicode via std), ricerca (`mb_strpos`/`stripos`/`strrpos`/`strripos`/`mb_strstr`/`stristr`/`strrchr`/`strrichr`/`mb_substr_count`), `mb_ord`/`mb_chr`/`mb_str_pad`/`mb_trim`/`ltrim`/`rtrim`/`mb_check_encoding`. Builtin puri. Scope-out: encoding non-UTF-8 (serve `encoding_rs`), `mb_ereg*`, `mb_convert_encoding`/`detect`/`strwidth` | ✅ |
+| 42 | **mbstring batch 2A** (encoding + width) — `mb_convert_encoding`/`mb_detect_encoding` via `encoding_rs` (UTF-8↔ISO-8859-1/Windows-1252/SJIS/EUC-JP/UTF-16; true Latin-1 e UTF-16 hand-rolled, substitute `?`); `mb_strwidth`/`mb_strimwidth`/`mb_strcut` via tabella EAW portata da libmbfl. Builtin puri. Scope-out: `mb_ereg*`/`mb_split` (oniguruma → step 43), `mb_list_encodings`, width su encoding ≠ UTF-8 | ✅ |
 
 > Lo step 6 è stato eseguito **dopo** lo step 7 (deciso con l'utente: gli array
 > rendono il phpt-runner molto più utile, quintuplicando i test in-scope).
