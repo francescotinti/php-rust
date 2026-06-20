@@ -99,12 +99,16 @@ impl Stream {
         Ok(buf)
     }
 
-    /// Read a single line up to and including the next `\n`, or to EOF. Returns
-    /// `None` at end-of-data (sets EOF), mirroring `fgets` returning `false`.
-    pub fn read_line(&mut self) -> std::io::Result<Option<Vec<u8>>> {
+    /// Read a single line up to and including the next `\n`, to EOF, or until
+    /// `max` bytes have been read (`fgets($f, $len)` caps at `$len - 1` bytes).
+    /// Returns `None` at end-of-data (sets EOF), mirroring `fgets` → `false`.
+    pub fn read_line(&mut self, max: Option<usize>) -> std::io::Result<Option<Vec<u8>>> {
         let mut out = Vec::new();
         let mut one = [0u8; 1];
         loop {
+            if matches!(max, Some(m) if out.len() >= m) {
+                break;
+            }
             let got = match &mut self.backend {
                 StreamBackend::File(f) => f.read(&mut one)?,
                 StreamBackend::Memory(c) => c.read(&mut one)?,

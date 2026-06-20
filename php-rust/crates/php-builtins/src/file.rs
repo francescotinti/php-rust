@@ -4,10 +4,11 @@
 //! evaluator-dispatched (it owns the resource-id counter, D-51.3).
 
 use std::cell::RefCell;
+use std::io::SeekFrom;
 use std::rc::Rc;
 
 use php_runtime::Ctx;
-use php_types::{convert, Diag, PhpError, PhpStr, ResKind, Resource, Zval};
+use php_types::{convert, Diag, PhpError, PhpStr, ResKind, Resource, StreamBackend, Zval};
 
 /// Resolve the `$stream` first argument to its live resource cell, or raise the
 /// PHP TypeError: a non-resource is "must be of type resource, T given", a
@@ -93,6 +94,12 @@ pub fn fwrite(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         )));
         return Ok(Zval::Bool(false));
     }
+    // `php://stdout` must land in the evaluator's output buffer (so it
+    // interleaves with `echo` and is captured), not the real process stdout.
+    if matches!(stream.backend, StreamBackend::Stdout) {
+        ctx.out.extend_from_slice(bytes);
+        return Ok(Zval::Long(bytes.len() as i64));
+    }
     match stream.write(bytes) {
         Ok(n) => Ok(Zval::Long(n as i64)),
         Err(_) => Ok(Zval::Bool(false)),
@@ -104,5 +111,111 @@ pub fn fwrite(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 pub fn fclose(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let r = stream_arg(argv, "fclose")?;
     r.borrow_mut().kind = ResKind::Closed;
+    Ok(Zval::Bool(true))
+}
+
+/// `fgets($stream, $length = null)`: read one line (up to and including `\n`),
+/// to EOF, or at most `$length - 1` bytes. `false` at end-of-data.
+pub fn fgets(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let r = stream_arg(argv, "fgets")?;
+    // PHP `fgets($f, $len)` reads at most `$len - 1` bytes (the C convention).
+    let max = argv.get(1).map(|v| {
+        let n = convert::to_long_cast(v, ctx.diags);
+        if n > 1 {
+            (n - 1) as usize
+        } else {
+            0
+        }
+    });
+    let mut res = r.borrow_mut();
+    let stream = res.as_stream_mut().expect("open stream checked in stream_arg");
+    if !stream.readable {
+        return Ok(Zval::Bool(false));
+    }
+    match stream.read_line(max) {
+        Ok(Some(bytes)) => Ok(Zval::Str(PhpStr::new(bytes))),
+        _ => Ok(Zval::Bool(false)),
+    }
+}
+
+/// `fgetc($stream)`: read a single byte, or `false` at EOF.
+pub fn fgetc(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let r = stream_arg(argv, "fgetc")?;
+    let mut res = r.borrow_mut();
+    let stream = res.as_stream_mut().expect("open stream checked in stream_arg");
+    if !stream.readable {
+        return Ok(Zval::Bool(false));
+    }
+    match stream.read(1) {
+        Ok(b) if !b.is_empty() => Ok(Zval::Str(PhpStr::new(b))),
+        _ => Ok(Zval::Bool(false)),
+    }
+}
+
+/// `feof($stream)`: the stream's sticky EOF flag (set only by a read that hit
+/// end-of-data, cleared by a seek).
+pub fn feof(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let r = stream_arg(argv, "feof")?;
+    let mut res = r.borrow_mut();
+    let eof = res.as_stream_mut().map(|s| s.eof).unwrap_or(true);
+    Ok(Zval::Bool(eof))
+}
+
+/// `fseek($stream, $offset, $whence = SEEK_SET)`: 0 on success, -1 on failure.
+pub fn fseek(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let r = stream_arg(argv, "fseek")?;
+    let Some(off_arg) = argv.get(1) else {
+        return Err(PhpError::ArgumentCountError(
+            "fseek() expects at least 2 arguments, 1 given".to_string(),
+        ));
+    };
+    let off = convert::to_long_cast(off_arg, ctx.diags);
+    let whence = argv
+        .get(2)
+        .map(|v| convert::to_long_cast(v, ctx.diags))
+        .unwrap_or(0);
+    let pos = match whence {
+        1 => SeekFrom::Current(off),
+        2 => SeekFrom::End(off),
+        // SEEK_SET (0) and any unknown whence: absolute. A negative absolute
+        // offset is invalid → report failure without touching the stream.
+        _ => {
+            if off < 0 {
+                return Ok(Zval::Long(-1));
+            }
+            SeekFrom::Start(off as u64)
+        }
+    };
+    let mut res = r.borrow_mut();
+    let stream = res.as_stream_mut().expect("open stream checked in stream_arg");
+    Ok(Zval::Long(stream.seek(pos)))
+}
+
+/// `ftell($stream)`: current byte offset, or `false` if not tellable.
+pub fn ftell(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let r = stream_arg(argv, "ftell")?;
+    let mut res = r.borrow_mut();
+    let stream = res.as_stream_mut().expect("open stream checked in stream_arg");
+    Ok(match stream.tell() {
+        Some(p) => Zval::Long(p as i64),
+        None => Zval::Bool(false),
+    })
+}
+
+/// `rewind($stream)`: seek to offset 0 (also clears EOF). Returns `true`.
+pub fn rewind(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let r = stream_arg(argv, "rewind")?;
+    let mut res = r.borrow_mut();
+    let stream = res.as_stream_mut().expect("open stream checked in stream_arg");
+    stream.seek(SeekFrom::Start(0));
+    Ok(Zval::Bool(true))
+}
+
+/// `fflush($stream)`: flush buffered writes. Returns `true`.
+pub fn fflush(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let r = stream_arg(argv, "fflush")?;
+    let mut res = r.borrow_mut();
+    let stream = res.as_stream_mut().expect("open stream checked in stream_arg");
+    let _ = stream.flush();
     Ok(Zval::Bool(true))
 }

@@ -4388,13 +4388,17 @@ impl<'p> Evaluator<'p> {
         let mode_v = self.eval(mode_e)?.deref_clone();
         let mode = self.stringify(&mode_v)?.as_bytes().to_vec();
         // Args 3/4 (use_include_path, context) are a documented scope-out.
-        if path.starts_with(b"php://") {
-            // 51b territory; for now report the standard open failure.
-            self.diags.push(Diag::Warning(format!(
-                "fopen({}): Failed to open stream: no suitable wrapper could be found",
-                String::from_utf8_lossy(&path)
-            )));
-            return Ok(Zval::Bool(false));
+        if let Some(spec) = path.strip_prefix(b"php://".as_slice()) {
+            return match open_php_stream(spec, &mode) {
+                Some(stream) => Ok(self.alloc_resource(stream)),
+                None => {
+                    self.diags.push(Diag::Warning(format!(
+                        "fopen({}): Failed to open stream: no suitable wrapper could be found",
+                        String::from_utf8_lossy(&path)
+                    )));
+                    Ok(Zval::Bool(false))
+                }
+            };
         }
         match open_file_stream(&path, &mode) {
             Ok(stream) => Ok(self.alloc_resource(stream)),
@@ -6646,6 +6650,46 @@ fn closure_params_for(f: &FnDecl) -> Vec<ClosureParam> {
         .collect()
 }
 
+/// Read/write capabilities implied by a PHP fopen mode: `r`→read, `w`/`a`/`x`/`c`
+/// →write, and `+` adds the other direction. `None` for an unrecognised mode.
+fn mode_caps(mode: &[u8]) -> Option<(bool, bool)> {
+    let plus = mode.contains(&b'+');
+    match mode.first() {
+        Some(b'r') => Some((true, plus)),
+        Some(b'w') | Some(b'a') | Some(b'x') | Some(b'c') => Some((plus, true)),
+        _ => None,
+    }
+}
+
+/// Open a `php://` stream (step 51b). `memory`/`temp` get an in-process buffer
+/// (the `temp` spill-to-disk threshold is a scope-out); `stdout`/`stderr` map to
+/// the process streams (write-only). Other wrappers (http/ftp/data/filter/…) are
+/// unsupported → `None`, so `fopen` reports "no suitable wrapper".
+fn open_php_stream(spec: &[u8], mode: &[u8]) -> Option<Stream> {
+    let backend = if spec == b"memory" || spec == b"temp" || spec.starts_with(b"temp/") {
+        StreamBackend::Memory(std::io::Cursor::new(Vec::new()))
+    } else if spec == b"stdout" {
+        StreamBackend::Stdout
+    } else if spec == b"stderr" {
+        StreamBackend::Stderr
+    } else {
+        return None;
+    };
+    // stdout/stderr are write-only regardless of mode; memory/temp honour it
+    // (oracle: php://memory opened "r" is not writable), defaulting to read+write
+    // for an unrecognised mode (php is lenient about the mode string here).
+    let (readable, writable) = match backend {
+        StreamBackend::Stdout | StreamBackend::Stderr => (false, true),
+        _ => mode_caps(mode).unwrap_or((true, true)),
+    };
+    Some(Stream {
+        backend,
+        readable,
+        writable,
+        eof: false,
+    })
+}
+
 /// Open a real file as a [`Stream`] per PHP `fopen` mode rules (step 51a).
 /// Returns the OS error text (with Rust's " (os error N)" suffix stripped, so it
 /// reads like PHP's strerror) on failure. Modes: `r`/`w`/`a`/`x`/`c` with an
@@ -6653,31 +6697,29 @@ fn closure_params_for(f: &FnDecl) -> Vec<ClosureParam> {
 fn open_file_stream(path: &[u8], mode: &[u8]) -> Result<Stream, String> {
     use std::os::unix::ffi::OsStrExt;
     let plus = mode.contains(&b'+');
+    let Some((readable, writable)) = mode_caps(mode) else {
+        return Err("`mode` is not a valid mode".to_string());
+    };
     let mut opts = std::fs::OpenOptions::new();
-    let (readable, writable) = match mode.first() {
+    match mode.first() {
         Some(b'r') => {
             opts.read(true).write(plus);
-            (true, plus)
         }
         Some(b'w') => {
             opts.write(true).create(true).truncate(true).read(plus);
-            (plus, true)
         }
         Some(b'a') => {
             opts.append(true).create(true).read(plus);
-            (plus, true)
         }
         Some(b'x') => {
             opts.write(true).create_new(true).read(plus);
-            (plus, true)
         }
         Some(b'c') => {
             // create + write, NO truncate, position 0 (oracle: `c` keeps content).
             opts.write(true).create(true).read(plus);
-            (plus, true)
         }
-        _ => return Err("`mode` is not a valid mode".to_string()),
-    };
+        _ => unreachable!("mode_caps already rejected unrecognised modes"),
+    }
     let os_path = std::ffi::OsStr::from_bytes(path);
     match opts.open(os_path) {
         Ok(f) => Ok(Stream {

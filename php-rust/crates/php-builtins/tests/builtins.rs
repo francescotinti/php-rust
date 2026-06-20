@@ -3448,3 +3448,75 @@ fn serialize_resource_is_int_zero() {
     assert_eq!(out(&src), "i:0;");
     let _ = std::fs::remove_file(&p);
 }
+
+// ---- step 51b: fgets/fgetc/feof/fseek/ftell/rewind/fflush + php:// wrappers ----
+
+#[test]
+fn php_memory_roundtrip_ftell_rewind() {
+    let src = "<?php $m=fopen('php://memory','w+'); echo fwrite($m,'abcdef'),';',ftell($m),';'; \
+               rewind($m); echo fgetc($m),fgetc($m),';',ftell($m),';'; echo fgets($m); \
+               var_dump(feof($m)); echo fread($m,100); var_dump(feof($m));";
+    assert_eq!(out(src), "6;6;ab;2;cdefbool(true)\nbool(true)\n");
+}
+
+#[test]
+fn fseek_whence_and_constants() {
+    let src = "<?php $m=fopen('php://memory','w+'); fwrite($m,'0123456789'); \
+               fseek($m,2); echo fread($m,2),';'; fseek($m,-3,SEEK_END); echo fread($m,3),';'; \
+               fseek($m,1,SEEK_CUR); echo ftell($m),';',SEEK_SET,SEEK_CUR,SEEK_END;";
+    assert_eq!(out(src), "23;789;11;012");
+}
+
+#[test]
+fn fgets_length_cap() {
+    // fgets($f, 4) reads at most 4-1 = 3 bytes.
+    let src = "<?php $m=fopen('php://memory','w+'); fwrite($m,\"abcdef\\nghi\"); rewind($m); \
+               var_dump(fgets($m,4));";
+    assert_eq!(out(src), "string(3) \"abc\"\n");
+}
+
+#[test]
+fn fgets_stops_at_newline() {
+    let src = "<?php $m=fopen('php://memory','w+'); fwrite($m,\"l1\\nl2\\nl3\"); rewind($m); \
+               echo fgets($m); echo '|'; echo fgets($m); echo '|'; echo fgets($m); \
+               var_dump(fgets($m));";
+    assert_eq!(out(src), "l1\n|l2\n|l3bool(false)\n");
+}
+
+#[test]
+fn php_memory_read_mode_not_writable() {
+    // php://memory opened "r" honours the mode: not writable, empty to read.
+    let src = "<?php $m=fopen('php://memory','r'); var_dump(@fwrite($m,'x')); var_dump(fread($m,5));";
+    assert_eq!(out(src), "bool(false)\nstring(0) \"\"\n");
+}
+
+#[test]
+fn php_stdout_writes_to_output() {
+    let src = "<?php $o=fopen('php://stdout','w'); fwrite($o,'OUT'); fclose($o);";
+    assert_eq!(out(src), "OUT");
+}
+
+#[test]
+fn feof_on_closed_is_type_error() {
+    let reg = registry();
+    let o = run_source_with(
+        b"t.php",
+        b"<?php $m=fopen('php://memory','r'); fclose($m); feof($m);",
+        &reg,
+    )
+    .expect("lowers");
+    let fatal = o.fatal.expect("expected a fatal TypeError");
+    assert_eq!(fatal.class_name(), "TypeError");
+    assert_eq!(
+        fatal.message(),
+        "feof(): Argument #1 ($stream) must be an open stream resource"
+    );
+}
+
+#[test]
+fn unsupported_wrapper_is_false() {
+    assert_eq!(
+        out("<?php echo @fopen('http://example.com/','r') === false ? 'F' : 'T';"),
+        "F"
+    );
+}

@@ -3498,6 +3498,10 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"PHP_SAPI" => str_lit(b"cli"),
         b"DIRECTORY_SEPARATOR" => str_lit(b"/"),
         b"PATH_SEPARATOR" => str_lit(b":"),
+        // Stream seek whence (step 51b): `fseek($f, $offset, $whence)`.
+        b"SEEK_SET" => ExprKind::Int(0),
+        b"SEEK_CUR" => ExprKind::Int(1),
+        b"SEEK_END" => ExprKind::Int(2),
         // error_reporting / set_error_handler levels (bit flags). PHP 8.5 keeps
         // the E_STRICT slot (2048) reserved/unused; E_ALL is 32767.
         b"E_ERROR" => ExprKind::Int(1),

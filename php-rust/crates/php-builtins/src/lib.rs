@@ -57,6 +57,13 @@ pub fn registry() -> Registry {
     add(b"fwrite", file::fwrite);
     add(b"fputs", file::fwrite);
     add(b"fclose", file::fclose);
+    add(b"fgets", file::fgets);
+    add(b"fgetc", file::fgetc);
+    add(b"feof", file::feof);
+    add(b"fseek", file::fseek);
+    add(b"ftell", file::ftell);
+    add(b"rewind", file::rewind);
+    add(b"fflush", file::fflush);
     add(b"array_keys", array::array_keys);
     add(b"array_values", array::array_values);
     add(b"in_array", array::in_array);
