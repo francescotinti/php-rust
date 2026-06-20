@@ -26,7 +26,8 @@ use mago_syntax::ast::{
     DeclareBody, DocumentIndentation, DocumentKind, DocumentString, Enum, EnumCaseItem,
     Expression, Extends, ForeachTarget, Function,
     FunctionLikeParameterList, Hint,
-    Identifier, Instantiation, Interface, Literal, LiteralInteger, MatchArm as AstMatchArm, Method,
+    Identifier, Instantiation, Interface, Literal, LiteralInteger, MagicConstant,
+    MatchArm as AstMatchArm, Method,
     MethodBody, Modifier, Node, PartialApplication, Property, PropertyItem, Statement, StaticItem,
     StringPart, Trait, TraitUse, TraitUseAdaptation, TraitUseMethodReference,
     TraitUseSpecification, UnaryPostfixOperator, UnaryPrefixOperator, Variable, Yield,
@@ -727,6 +728,14 @@ struct Lowerer<'f> {
     /// entry is fully resolved (nested `use` already flattened), so a consuming
     /// class copies the members verbatim into its own [`ClassDecl`] (D-21.1/2/8).
     traits: HashMap<Vec<u8>, LoweredTrait>,
+    /// Lexical scope for the magic constants `__CLASS__` / `__FUNCTION__` /
+    /// `__METHOD__` / `__TRAIT__` (step 49). PHP resolves these at compile time
+    /// from the *defining* scope, so we substitute them to string literals while
+    /// lowering. Each is `Some` only while the corresponding body is lowered and
+    /// is saved/restored around nested bodies, exactly like `fn_by_ref`.
+    cur_class: Option<Box<[u8]>>,
+    cur_function: Option<Box<[u8]>>,
+    cur_trait: Option<Box<[u8]>>,
 }
 
 /// A trait whose members have been lowered and whose own `use` clauses have been
@@ -760,6 +769,9 @@ impl<'f> Lowerer<'f> {
             classes: Vec::new(),
             class_index: HashMap::new(),
             traits: HashMap::new(),
+            cur_class: None,
+            cur_function: None,
+            cur_trait: None,
         }
     }
 
@@ -1230,6 +1242,11 @@ impl<'f> Lowerer<'f> {
         let mut consts = Vec::new();
         let mut abstract_methods: Vec<Box<[u8]>> = Vec::new();
         let mut uses: Vec<&TraitUse> = Vec::new();
+        // `__TRAIT__` in any method body resolves to this trait name (step 49).
+        // `__CLASS__` inside a trait method is the *using* class in PHP, which is
+        // unknown here (members are lowered once, then copied per consumer); it
+        // resolves to "" — a documented divergence (D-49).
+        let saved_trait = self.cur_trait.replace(t.name.value.into());
         for member in t.members.iter() {
             match member {
                 ClassLikeMember::Property(p) => {
@@ -1249,6 +1266,7 @@ impl<'f> Lowerer<'f> {
                 }
             }
         }
+        self.cur_trait = saved_trait;
         // Resolve any nested traits before flattening their members in.
         for u in &uses {
             for tn in u.trait_names.iter() {
@@ -1582,6 +1600,10 @@ impl<'f> Lowerer<'f> {
         // Names of abstract methods this class must implement (its own, plus any
         // pulled in from traits during flattening), step 21-4 / D-21.11.
         let mut abstract_req: Vec<Box<[u8]>> = Vec::new();
+        // `__CLASS__`/`__METHOD__` in any method body resolve to this class name
+        // (step 49). Restored after the member loop; an early error here aborts
+        // the whole lowering, so the leak-on-error path is harmless.
+        let saved_cls = self.cur_class.replace(name.clone());
         for member in class.members.iter() {
             match member {
                 ClassLikeMember::Property(p) => {
@@ -1603,6 +1625,7 @@ impl<'f> Lowerer<'f> {
                 }
             }
         }
+        self.cur_class = saved_cls;
         // Flatten any `use TraitName;` members into this class (step 21). The
         // class's own declarations take precedence and come first; trait members
         // follow, so the instance layout / dump order matches PHP's (own props
@@ -1872,6 +1895,9 @@ impl<'f> Lowerer<'f> {
         let saved_tag = std::mem::replace(&mut self.after_closing_tag, false);
         let saved_by_ref = std::mem::replace(&mut self.fn_by_ref, by_ref);
         let saved_saw_yield = std::mem::replace(&mut self.fn_saw_yield, false);
+        // `cur_class` is already set by `lower_class`; set the method name so
+        // `__FUNCTION__`/`__METHOD__` resolve in the body (step 49).
+        let saved_fn = self.cur_function.replace(name.clone());
 
         let inner = (|| {
             let params = self.lower_params(&method.parameter_list, line)?;
@@ -1883,6 +1909,7 @@ impl<'f> Lowerer<'f> {
             .expect("local scope installed for method body");
         self.after_closing_tag = saved_tag;
         self.fn_by_ref = saved_by_ref;
+        self.cur_function = saved_fn;
         let is_generator = std::mem::replace(&mut self.fn_saw_yield, saved_saw_yield);
 
         let (params, body) = inner?;
@@ -1924,6 +1951,10 @@ impl<'f> Lowerer<'f> {
         let saved_tag = std::mem::replace(&mut self.after_closing_tag, false);
         let saved_by_ref = std::mem::replace(&mut self.fn_by_ref, by_ref);
         let saved_saw_yield = std::mem::replace(&mut self.fn_saw_yield, false);
+        // A free function is not a method: `__CLASS__`/`__METHOD__` inside it must
+        // not see an enclosing class, so clear `cur_class` too (step 49).
+        let saved_fn = self.cur_function.replace(name.clone());
+        let saved_cls = self.cur_class.take();
 
         let inner = self.lower_function_body(func, line);
 
@@ -1932,6 +1963,8 @@ impl<'f> Lowerer<'f> {
             .expect("local scope installed for function body");
         self.after_closing_tag = saved_tag;
         self.fn_by_ref = saved_by_ref;
+        self.cur_function = saved_fn;
+        self.cur_class = saved_cls;
         let is_generator = std::mem::replace(&mut self.fn_saw_yield, saved_saw_yield);
 
         let (params, body) = inner?;
@@ -1950,6 +1983,38 @@ impl<'f> Lowerer<'f> {
             ret_hint,
             line,
         })
+    }
+
+    /// Substitute a magic constant to a literal from the current lexical scope
+    /// (step 49). PHP resolves these at compile time, so no runtime support is
+    /// needed. `__NAMESPACE__` is always `""` (Tier 1 has no namespaces) and
+    /// `__PROPERTY__` (property hooks, unsupported) is also `""`.
+    fn lower_magic_constant(&self, m: &MagicConstant, line: Line) -> ExprKind {
+        let s = |b: &[u8]| ExprKind::Str(b.to_vec().into_boxed_slice());
+        let cls = self.cur_class.as_deref().unwrap_or(b"");
+        let func = self.cur_function.as_deref().unwrap_or(b"");
+        match m {
+            MagicConstant::Line(_) => ExprKind::Int(line as i64),
+            MagicConstant::File(_) => s(&self.prog_name),
+            MagicConstant::Directory(_) => s(dirname(&self.prog_name)),
+            MagicConstant::Class(_) => s(cls),
+            MagicConstant::Function(_) => s(func),
+            // PHP: `Class::method` inside a method, the bare function name inside
+            // a free function, and `""` at the top level.
+            MagicConstant::Method(_) => match (&self.cur_function, &self.cur_class) {
+                (None, _) => s(b""),
+                (Some(_), Some(_)) => {
+                    let mut v = cls.to_vec();
+                    v.extend_from_slice(b"::");
+                    v.extend_from_slice(func);
+                    ExprKind::Str(v.into_boxed_slice())
+                }
+                (Some(_), None) => s(func),
+            },
+            MagicConstant::Trait(_) => s(self.cur_trait.as_deref().unwrap_or(b"")),
+            MagicConstant::Namespace(_) => s(b""),
+            MagicConstant::Property(_) => s(b""),
+        }
     }
 
     /// Bind parameters into the leading slots of the (already fresh) scope, then
@@ -2025,6 +2090,9 @@ impl<'f> Lowerer<'f> {
         let saved_tag = std::mem::replace(&mut self.after_closing_tag, false);
         let saved_by_ref = std::mem::replace(&mut self.fn_by_ref, by_ref);
         let saved_saw_yield = std::mem::replace(&mut self.fn_saw_yield, false);
+        // `__FUNCTION__` inside a closure is PHP's `{closure}`; the lexical class
+        // (for `__CLASS__`) is inherited from the enclosing scope (step 49).
+        let saved_fn = self.cur_function.replace((*b"{closure}").into());
 
         let inner = (|| -> Result<LoweredClosure, LowerError> {
             let params = self.lower_params(&closure.parameter_list, line)?;
@@ -2045,6 +2113,7 @@ impl<'f> Lowerer<'f> {
             .expect("local scope installed for closure body");
         self.after_closing_tag = saved_tag;
         self.fn_by_ref = saved_by_ref;
+        self.cur_function = saved_fn;
         let is_generator = std::mem::replace(&mut self.fn_saw_yield, saved_saw_yield);
 
         let (params, captures, body) = inner?;
@@ -2142,6 +2211,8 @@ impl<'f> Lowerer<'f> {
         let saved_tag = std::mem::replace(&mut self.after_closing_tag, false);
         let saved_by_ref = std::mem::replace(&mut self.fn_by_ref, false);
         let saved_saw_yield = std::mem::replace(&mut self.fn_saw_yield, false);
+        // Same as a closure: `__FUNCTION__` is `{closure}`, class is inherited.
+        let saved_fn = self.cur_function.replace((*b"{closure}").into());
 
         let inner = (|| -> Result<LoweredClosure, LowerError> {
             let params = self.lower_params(&af.parameter_list, line)?;
@@ -2166,6 +2237,7 @@ impl<'f> Lowerer<'f> {
             .expect("local scope installed for arrow body");
         self.after_closing_tag = saved_tag;
         self.fn_by_ref = saved_by_ref;
+        self.cur_function = saved_fn;
         let is_generator = std::mem::replace(&mut self.fn_saw_yield, saved_saw_yield);
 
         let (params, captures, body) = inner?;
@@ -2395,6 +2467,11 @@ impl<'f> Lowerer<'f> {
 
             // A first-class callable `name(...)` (step 18-6, D-18.10).
             Expression::PartialApplication(pa) => self.lower_partial_application(pa, line)?,
+
+            // Magic constants (`__LINE__`, `__CLASS__`, …) are compile-time in
+            // PHP: substitute each to a literal from the current file/line and
+            // the lexical class/function/trait scope tracked above (step 49).
+            Expression::MagicConstant(m) => self.lower_magic_constant(m, line),
 
             // A bare `NAME` constant: only the known engine constants are
             // resolved (to a literal at lowering time, D-18.7); user-defined
@@ -3494,6 +3571,17 @@ fn collect_direct_vars<'a>(expr: &'a Expression<'a>, out: &mut Vec<&'a [u8]>) {
             }
         }
         stack.extend(node.children());
+    }
+}
+
+/// PHP `dirname()` of the script path, for `__DIR__` (step 49). No separator →
+/// `"."`; a leading-slash-only parent → `"/"`; otherwise the bytes before the
+/// last `/`. Matches PHP for the POSIX paths `.phpt` runners use.
+fn dirname(path: &[u8]) -> &[u8] {
+    match path.iter().rposition(|&b| b == b'/') {
+        None => b".",
+        Some(0) => b"/",
+        Some(i) => &path[..i],
     }
 }
 

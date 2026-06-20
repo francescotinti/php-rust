@@ -4484,3 +4484,46 @@ fn deep_recursion_yields_clean_error_not_host_crash() {
         None => panic!("expected depth-guard error, got none"),
     }
 }
+
+// ---- step 49: magic constants -------------------------------------------
+
+#[test]
+fn magic_line_file_dir() {
+    // `__LINE__` is the line of the constant itself; `out` runs `t.php`.
+    assert_eq!(out("<?php echo __LINE__;"), "1");
+    assert_eq!(out("<?php\n\necho __LINE__;"), "3");
+    assert_eq!(out("<?php echo __FILE__;"), "t.php");
+    assert_eq!(out("<?php echo __DIR__;"), ".");
+}
+
+#[test]
+fn magic_function_class_method() {
+    // Free function: `__FUNCTION__`/`__METHOD__` are the bare name; `__CLASS__` "".
+    assert_eq!(out("<?php function f(){ echo __FUNCTION__; } f();"), "f");
+    assert_eq!(out("<?php function f(){ echo __METHOD__; } f();"), "f");
+    assert_eq!(out("<?php function f(){ echo '['.__CLASS__.']'; } f();"), "[]");
+    // Method: class name, method name, and `Class::method`.
+    assert_eq!(
+        out("<?php class C { function m(){ echo __CLASS__,'|',__FUNCTION__,'|',__METHOD__; } } (new C)->m();"),
+        "C|m|C::m"
+    );
+}
+
+#[test]
+fn magic_top_level_and_closure() {
+    // At the top level every name-scoped magic constant is the empty string.
+    assert_eq!(out("<?php echo '['.__FUNCTION__.']'.'['.__CLASS__.']';"), "[][]");
+    // `__FUNCTION__` inside a closure is PHP's `{closure}`.
+    assert_eq!(out("<?php $f = function(){ echo __FUNCTION__; }; $f();"), "{closure}");
+}
+
+#[test]
+fn magic_trait_and_namespace() {
+    // `__TRAIT__` resolves to the trait name in the trait's method body.
+    assert_eq!(
+        out("<?php trait T { function m(){ echo __TRAIT__; } } class C { use T; } (new C)->m();"),
+        "T"
+    );
+    // No namespaces in Tier 1: `__NAMESPACE__` is always empty.
+    assert_eq!(out("<?php echo '['.__NAMESPACE__.']';"), "[]");
+}
