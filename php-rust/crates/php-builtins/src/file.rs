@@ -80,10 +80,12 @@ pub fn fwrite(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let data = convert::to_zstr(data_arg, ctx.diags);
     let mut bytes: &[u8] = data.as_bytes();
     if let Some(len_arg) = argv.get(2) {
+        // `$length` caps the write, clamped to [0, len]: a negative length
+        // writes 0 bytes, an over-large one writes everything (oracle: fwrite.phpt
+        // `fwrite($f,"data",-1)` → 0, `fwrite($f,"data",100000)` → 4).
         let len = convert::to_long_cast(len_arg, ctx.diags);
-        if len >= 0 && (len as usize) < bytes.len() {
-            bytes = &bytes[..len as usize];
-        }
+        let n = len.clamp(0, bytes.len() as i64) as usize;
+        bytes = &bytes[..n];
     }
     let mut res = r.borrow_mut();
     let stream = res.as_stream_mut().expect("open stream checked in stream_arg");

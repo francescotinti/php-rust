@@ -3577,3 +3577,17 @@ fn file_put_contents_from_stream_resource() {
     let _ = std::fs::remove_file(&src_p);
     let _ = std::fs::remove_file(&dst_p);
 }
+
+#[test]
+fn fwrite_length_clamps() {
+    let p = tmp_path("fw_len");
+    let _ = std::fs::remove_file(&p);
+    // Negative length writes 0 bytes; over-large writes everything (oracle).
+    let src = format!(
+        "<?php $f=fopen('{p}','w'); var_dump(fwrite($f,'data',-1)); \
+         var_dump(fwrite($f,'data',100000)); fclose($f); \
+         $r=fopen('{p}','r'); echo fread($r,10); fclose($r);"
+    );
+    assert_eq!(out(&src), "int(0)\nint(4)\ndata");
+    let _ = std::fs::remove_file(&p);
+}
