@@ -105,6 +105,9 @@ pub fn registry() -> Registry {
     add(b"link", file::link);
     add(b"readlink", file::readlink);
     add(b"chmod", file::chmod);
+    add(b"scandir", file::scandir);
+    add(b"glob", file::glob);
+    add(b"tempnam", file::tempnam);
     add(b"array_keys", array::array_keys);
     add(b"array_values", array::array_values);
     add(b"in_array", array::in_array);

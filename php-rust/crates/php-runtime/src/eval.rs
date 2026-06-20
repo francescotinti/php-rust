@@ -47,6 +47,7 @@ const HIGHER_ORDER_BUILTINS: &[&[u8]] = &[
     b"json_decode",
     b"unserialize",
     b"fopen",
+    b"tmpfile",
     b"preg_match",
     b"preg_match_all",
     b"preg_replace",
@@ -3562,6 +3563,7 @@ impl<'p> Evaluator<'p> {
             b"json_decode" => Some(self.ho_json_decode(args)),
             b"unserialize" => Some(self.ho_unserialize(args)),
             b"fopen" => Some(self.ho_fopen(args)),
+            b"tmpfile" => Some(self.ho_tmpfile(args)),
             b"preg_match" => Some(self.ho_preg_match(args)),
             b"preg_match_all" => Some(self.ho_preg_match_all(args)),
             b"preg_replace" => Some(self.ho_preg_replace(args)),
@@ -4410,6 +4412,45 @@ impl<'p> Evaluator<'p> {
                 Ok(Zval::Bool(false))
             }
         }
+    }
+
+    /// `tmpfile()` (step 52e, evaluator-dispatched — mints a resource). Creates a
+    /// fresh file under the system temp dir opened read+write, then immediately
+    /// unlinks it so the OS reclaims it on close / process exit (PHP's
+    /// auto-removal semantics; the path is not observable). `false` on failure.
+    fn ho_tmpfile(&mut self, _args: &[Expr]) -> Result<Zval, PhpError> {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static CTR: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir();
+        for _ in 0..100 {
+            let n = CTR.fetch_add(1, Ordering::Relaxed);
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.subsec_nanos())
+                .unwrap_or(0);
+            let mut path = dir.clone();
+            path.push(format!("phpr_tmp_{:x}_{nanos:x}_{n:x}", std::process::id()));
+            match std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create_new(true)
+                .open(&path)
+            {
+                Ok(f) => {
+                    let _ = std::fs::remove_file(&path);
+                    let stream = Stream {
+                        backend: StreamBackend::File(f),
+                        readable: true,
+                        writable: true,
+                        eof: false,
+                    };
+                    return Ok(self.alloc_resource(stream));
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(_) => return Ok(Zval::Bool(false)),
+            }
+        }
+        Ok(Zval::Bool(false))
     }
 
     /// Wrap a freshly opened stream in a `Zval::Resource` with the next id.

@@ -1017,3 +1017,329 @@ pub fn chmod(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         }
     }
 }
+
+// ---- step 52e: scandir / glob / tempnam ----
+
+/// A `&OsStr` view over raw bytes (unix paths are arbitrary bytes).
+fn os_from_bytes(b: &[u8]) -> &std::ffi::OsStr {
+    use std::os::unix::ffi::OsStrExt;
+    std::ffi::OsStr::from_bytes(b)
+}
+
+/// `scandir($directory, $sorting_order = SCANDIR_SORT_ASCENDING)`: the entries
+/// including `.`/`..`, byte-sorted ascending (0) / descending (1) / unsorted (2).
+/// On failure PHP emits *two* Warnings then returns false (oracle-verified).
+pub fn scandir(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::os::unix::ffi::OsStrExt;
+    let p = arg_os_path(argv, ctx);
+    let sort = argv
+        .get(1)
+        .map(|v| convert::to_long_cast(v, ctx.diags))
+        .unwrap_or(0);
+    let rd = match std::fs::read_dir(&p) {
+        Ok(rd) => rd,
+        Err(e) => {
+            ctx.diags.push(Diag::Warning(format!(
+                "scandir({}): Failed to open directory: {}",
+                show_path(&p),
+                strerror(&e)
+            )));
+            ctx.diags.push(Diag::Warning(format!(
+                "scandir(): (errno {}): {}",
+                e.raw_os_error().unwrap_or(0),
+                strerror(&e)
+            )));
+            return Ok(Zval::Bool(false));
+        }
+    };
+    let mut names: Vec<Vec<u8>> = vec![b".".to_vec(), b"..".to_vec()];
+    for ent in rd.flatten() {
+        names.push(ent.file_name().as_os_str().as_bytes().to_vec());
+    }
+    match sort {
+        1 => names.sort_by(|a, b| b.cmp(a)),
+        2 => {} // SCANDIR_SORT_NONE: leave readdir order
+        _ => names.sort(),
+    }
+    let mut arr = PhpArray::new();
+    for (i, n) in names.into_iter().enumerate() {
+        arr.insert(Key::Int(i as i64), Zval::Str(PhpStr::new(n)));
+    }
+    Ok(Zval::Array(Rc::new(arr)))
+}
+
+const GLOB_MARK: i64 = 8;
+const GLOB_NOSORT: i64 = 32;
+const GLOB_NOCHECK: i64 = 16;
+const GLOB_BRACE: i64 = 128;
+const GLOB_ONLYDIR: i64 = 1_073_741_824;
+
+/// Does a pattern segment contain a glob metacharacter?
+fn has_wildcard(s: &[u8]) -> bool {
+    s.iter().any(|&c| c == b'*' || c == b'?' || c == b'[')
+}
+
+/// Match a `[...]` character class at the start of `p` against `ch`. Returns
+/// `(matched, bytes_consumed)`, or `None` if the class has no closing `]`.
+fn match_class(p: &[u8], ch: u8) -> Option<(bool, usize)> {
+    let mut i = 1; // skip '['
+    let negate = matches!(p.get(1), Some(b'!') | Some(b'^'));
+    if negate {
+        i += 1;
+    }
+    let start = i;
+    let mut matched = false;
+    while i < p.len() {
+        if p[i] == b']' && i > start {
+            return Some((matched ^ negate, i + 1));
+        }
+        if i + 2 < p.len() && p[i + 1] == b'-' && p[i + 2] != b']' {
+            if ch >= p[i] && ch <= p[i + 2] {
+                matched = true;
+            }
+            i += 3;
+        } else {
+            if p[i] == ch {
+                matched = true;
+            }
+            i += 1;
+        }
+    }
+    None
+}
+
+/// fnmatch over a single path segment: `*` (no `/`), `?`, `[...]`, literals.
+fn fnmatch(p: &[u8], s: &[u8]) -> bool {
+    match p.first() {
+        None => s.is_empty(),
+        Some(b'*') => {
+            let rest = &p[1..];
+            if rest.is_empty() {
+                return true;
+            }
+            (0..=s.len()).any(|k| fnmatch(rest, &s[k..]))
+        }
+        Some(b'?') => !s.is_empty() && fnmatch(&p[1..], &s[1..]),
+        Some(b'[') => match (s.first(), match_class(p, *s.first().unwrap_or(&0))) {
+            (Some(_), Some((matched, consumed))) => matched && fnmatch(&p[consumed..], &s[1..]),
+            // Malformed class → treat '[' literally.
+            _ => s.first() == Some(&b'[') && fnmatch(&p[1..], &s[1..]),
+        },
+        Some(&c) => !s.is_empty() && s[0] == c && fnmatch(&p[1..], &s[1..]),
+    }
+}
+
+/// Glob's leading-dot rule: a name beginning with `.` matches only when the
+/// pattern segment also begins with a literal `.`.
+fn glob_segment_match(pat: &[u8], name: &[u8]) -> bool {
+    if name.first() == Some(&b'.') && pat.first() != Some(&b'.') {
+        return false;
+    }
+    fnmatch(pat, name)
+}
+
+fn join_path(prefix: &[u8], name: &[u8]) -> Vec<u8> {
+    if prefix.is_empty() {
+        name.to_vec()
+    } else if prefix == b"/" {
+        let mut v = vec![b'/'];
+        v.extend_from_slice(name);
+        v
+    } else {
+        let mut v = prefix.to_vec();
+        v.push(b'/');
+        v.extend_from_slice(name);
+        v
+    }
+}
+
+/// Add a fully-matched path to the results, applying GLOB_ONLYDIR (keep only
+/// directories) and GLOB_MARK (append `/` to a directory).
+fn glob_emit(path: &[u8], flags: i64, out: &mut Vec<Vec<u8>>) {
+    let is_dir = std::fs::metadata(os_from_bytes(path))
+        .map(|m| m.is_dir())
+        .unwrap_or(false);
+    if flags & GLOB_ONLYDIR != 0 && !is_dir {
+        return;
+    }
+    let mut p = path.to_vec();
+    if flags & GLOB_MARK != 0 && is_dir && p.last() != Some(&b'/') {
+        p.push(b'/');
+    }
+    out.push(p);
+}
+
+/// Walk the remaining `segments` from a directory `prefix`, matching each
+/// wildcard segment against the live filesystem.
+fn glob_rec(prefix: &[u8], segments: &[&[u8]], flags: i64, out: &mut Vec<Vec<u8>>) {
+    let Some((seg, rest)) = segments.split_first() else {
+        glob_emit(prefix, flags, out);
+        return;
+    };
+    let last = rest.is_empty();
+    if !has_wildcard(seg) {
+        let cand = join_path(prefix, seg);
+        if last {
+            if std::fs::symlink_metadata(os_from_bytes(&cand)).is_ok() {
+                glob_emit(&cand, flags, out);
+            }
+        } else {
+            glob_rec(&cand, rest, flags, out);
+        }
+        return;
+    }
+    let read_path = if prefix.is_empty() {
+        b".".to_vec()
+    } else {
+        prefix.to_vec()
+    };
+    if let Ok(rd) = std::fs::read_dir(os_from_bytes(&read_path)) {
+        use std::os::unix::ffi::OsStrExt;
+        for ent in rd.flatten() {
+            let name = ent.file_name().as_os_str().as_bytes().to_vec();
+            if glob_segment_match(seg, &name) {
+                let cand = join_path(prefix, &name);
+                if last {
+                    glob_emit(&cand, flags, out);
+                } else {
+                    glob_rec(&cand, rest, flags, out);
+                }
+            }
+        }
+    }
+}
+
+/// Expand `{a,b,c}` alternations (GLOB_BRACE), innermost/leftmost first.
+fn brace_expand(pat: &[u8]) -> Vec<Vec<u8>> {
+    let Some(open) = pat.iter().position(|&c| c == b'{') else {
+        return vec![pat.to_vec()];
+    };
+    // Matching close brace, honouring nesting.
+    let mut depth = 0;
+    let mut close = None;
+    for (i, &c) in pat.iter().enumerate().skip(open) {
+        match c {
+            b'{' => depth += 1,
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    close = Some(i);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let Some(close) = close else {
+        return vec![pat.to_vec()];
+    };
+    // Split the inner content on top-level commas.
+    let inner = &pat[open + 1..close];
+    let mut alts: Vec<&[u8]> = Vec::new();
+    let (mut d, mut start) = (0, 0);
+    for (i, &c) in inner.iter().enumerate() {
+        match c {
+            b'{' => d += 1,
+            b'}' => d -= 1,
+            b',' if d == 0 => {
+                alts.push(&inner[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    alts.push(&inner[start..]);
+    if alts.len() == 1 {
+        // No top-level comma: not a real alternation, keep the braces literal.
+        return vec![pat.to_vec()];
+    }
+    let pre = &pat[..open];
+    let post = &pat[close + 1..];
+    let mut result = Vec::new();
+    for alt in alts {
+        let mut combined = pre.to_vec();
+        combined.extend_from_slice(alt);
+        combined.extend_from_slice(post);
+        result.extend(brace_expand(&combined));
+    }
+    result
+}
+
+/// `glob($pattern, $flags = 0)`: shell-style pattern expansion over the live
+/// filesystem. Returns the matched paths (empty array on no match, unless
+/// GLOB_NOCHECK). Supports `*`/`?`/`[...]` across segments plus GLOB_MARK /
+/// GLOB_NOSORT / GLOB_NOCHECK / GLOB_BRACE / GLOB_ONLYDIR (D-52.11).
+pub fn glob(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let pat = convert::to_zstr(&argv[0], ctx.diags).as_bytes().to_vec();
+    let flags = argv
+        .get(1)
+        .map(|v| convert::to_long_cast(v, ctx.diags))
+        .unwrap_or(0);
+    let patterns = if flags & GLOB_BRACE != 0 {
+        brace_expand(&pat)
+    } else {
+        vec![pat.clone()]
+    };
+    let mut out: Vec<Vec<u8>> = Vec::new();
+    for p in &patterns {
+        let absolute = p.first() == Some(&b'/');
+        let segments: Vec<&[u8]> = p.split(|&c| c == b'/').filter(|s| !s.is_empty()).collect();
+        let start: Vec<u8> = if absolute { vec![b'/'] } else { Vec::new() };
+        glob_rec(&start, &segments, flags, &mut out);
+    }
+    if out.is_empty() && flags & GLOB_NOCHECK != 0 {
+        out = patterns;
+    }
+    if flags & GLOB_NOSORT == 0 {
+        out.sort();
+    }
+    let mut arr = PhpArray::new();
+    for (i, p) in out.into_iter().enumerate() {
+        arr.insert(Key::Int(i as i64), Zval::Str(PhpStr::new(p)));
+    }
+    Ok(Zval::Array(Rc::new(arr)))
+}
+
+/// `tempnam($directory, $prefix)`: create a unique 0600 file in `$directory`
+/// and return its path (canonicalized, matching PHP's realpath-resolved result
+/// on macOS). `false` if no name could be created.
+pub fn tempnam(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::fs::OpenOptionsExt;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static CTR: AtomicU64 = AtomicU64::new(0);
+    let dir = arg_os_path(argv, ctx);
+    let prefix = convert::to_zstr(&argv[1], ctx.diags);
+    for _ in 0..100 {
+        let n = CTR.fetch_add(1, Ordering::Relaxed);
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.subsec_nanos())
+            .unwrap_or(0);
+        let mut name = dir.as_os_str().as_bytes().to_vec();
+        if name.last() != Some(&b'/') {
+            name.push(b'/');
+        }
+        name.extend_from_slice(prefix.as_bytes());
+        name.extend_from_slice(format!("{:x}{nanos:x}{n:x}", std::process::id()).as_bytes());
+        let path = os_from_bytes(&name);
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(path)
+        {
+            Ok(_) => {
+                let created = std::path::Path::new(path);
+                let resolved =
+                    std::fs::canonicalize(created).unwrap_or_else(|_| created.to_path_buf());
+                return Ok(Zval::Str(PhpStr::new(
+                    resolved.as_os_str().as_bytes().to_vec(),
+                )));
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(_) => break,
+        }
+    }
+    Ok(Zval::Bool(false))
+}

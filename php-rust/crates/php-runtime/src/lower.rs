@@ -3511,6 +3511,18 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"PATHINFO_BASENAME" => ExprKind::Int(2),
         b"PATHINFO_EXTENSION" => ExprKind::Int(4),
         b"PATHINFO_FILENAME" => ExprKind::Int(8),
+        // scandir() sort order (step 52e).
+        b"SCANDIR_SORT_ASCENDING" => ExprKind::Int(0),
+        b"SCANDIR_SORT_DESCENDING" => ExprKind::Int(1),
+        b"SCANDIR_SORT_NONE" => ExprKind::Int(2),
+        // glob() flags (step 52e).
+        b"GLOB_MARK" => ExprKind::Int(8),
+        b"GLOB_NOSORT" => ExprKind::Int(32),
+        b"GLOB_NOCHECK" => ExprKind::Int(16),
+        b"GLOB_NOESCAPE" => ExprKind::Int(4096),
+        b"GLOB_BRACE" => ExprKind::Int(128),
+        b"GLOB_ONLYDIR" => ExprKind::Int(1_073_741_824),
+        b"GLOB_ERR" => ExprKind::Int(4),
         // error_reporting / set_error_handler levels (bit flags). PHP 8.5 keeps
         // the E_STRICT slot (2048) reserved/unused; E_ALL is 32767.
         b"E_ERROR" => ExprKind::Int(1),

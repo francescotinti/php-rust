@@ -3838,6 +3838,77 @@ fn touch_sets_explicit_mtime() {
 }
 
 #[test]
+fn scandir_sort_orders_and_error() {
+    let dir = tmp_path("b52_scan");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(format!("{dir}/b.txt"), "").unwrap();
+    std::fs::write(format!("{dir}/a.txt"), "").unwrap();
+    std::fs::write(format!("{dir}/c.log"), "").unwrap();
+    std::fs::create_dir(format!("{dir}/sub")).unwrap();
+    let src = format!(
+        "<?php echo implode(',',scandir('{dir}')),'|'; echo implode(',',scandir('{dir}',1));"
+    );
+    assert_eq!(out(&src), ".,..,a.txt,b.txt,c.log,sub|sub,c.log,b.txt,a.txt,..,.");
+    // Missing directory → false + the two oracle Warnings (errno 2 = ENOENT).
+    let (_, w) = out_diags("<?php scandir('/no/such/zz');");
+    assert_eq!(
+        w,
+        vec![
+            "scandir(/no/such/zz): Failed to open directory: No such file or directory",
+            "scandir(): (errno 2): No such file or directory",
+        ]
+    );
+    assert_eq!(out("<?php var_dump(@scandir('/no/such/zz'));"), "bool(false)\n");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn glob_patterns_and_flags() {
+    let dir = tmp_path("b52_glob");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(format!("{dir}/a.txt"), "").unwrap();
+    std::fs::write(format!("{dir}/b.txt"), "").unwrap();
+    std::fs::write(format!("{dir}/c.log"), "").unwrap();
+    std::fs::create_dir(format!("{dir}/sub")).unwrap();
+    let src = format!(
+        "<?php $bn=fn($a)=>implode(',',array_map('basename',$a)); \
+         echo $bn(glob('{dir}/*.txt')),'|'; \
+         echo $bn(glob('{dir}/[ab].txt')),'|'; \
+         echo $bn(glob('{dir}/?.txt')),'|'; \
+         echo count(glob('{dir}/nomatch*')),'|'; \
+         echo $bn(glob('{dir}/*', GLOB_ONLYDIR)),'|'; \
+         echo $bn(glob('{dir}/{{a,c}}.*', GLOB_BRACE)),'|'; \
+         echo glob('{dir}/*.txt')[0]==='{dir}/a.txt'?'abs':'rel';"
+    );
+    assert_eq!(out(&src), "a.txt,b.txt|a.txt,b.txt|a.txt,b.txt|0|sub|a.txt,c.log|abs");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn tempnam_creates_unique_file() {
+    let dir = tmp_path("b52_tmpnam");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let src = format!(
+        "<?php $f=tempnam('{dir}','pre'); \
+         echo file_exists($f)?'E':'X'; echo '|'; echo substr(basename($f),0,3); \
+         echo '|'; echo (is_string($f)&&$f!=='')?'S':'?'; unlink($f);"
+    );
+    assert_eq!(out(&src), "E|pre|S");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn tmpfile_roundtrip_and_autoremove() {
+    // tmpfile() mints an unlinked read/write stream resource.
+    let src = "<?php $f=tmpfile(); echo gettype($f),'|'; \
+        echo fwrite($f,'hello'),'|'; rewind($f); echo fread($f,100); fclose($f);";
+    assert_eq!(out(src), "resource|5|hello");
+}
+
+#[test]
 fn mutator_warning_messages() {
     // Exact PHP Warning text (oracle-verified): each mutator frames the path /
     // strerror differently — mkdir omits the path, copy says "Failed to open
