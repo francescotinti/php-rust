@@ -3133,3 +3133,73 @@ fn get_object_vars_all_from_inside() {
         "p=1;q=2;r=3;"
     );
 }
+
+// --- dynamic class references (step 48) ------------------------------------
+
+#[test]
+fn dynamic_new_from_string() {
+    assert_eq!(
+        out("<?php class Foo { public $x = 5; } $c = 'Foo'; $o = new $c(); echo $o->x;"),
+        "5"
+    );
+    // No parentheses form, and a leading namespace separator is stripped.
+    assert_eq!(
+        out("<?php class Foo { public $x = 1; } $c = '\\\\Foo'; $o = new $c; echo $o->x;"),
+        "1"
+    );
+}
+
+#[test]
+fn dynamic_new_from_object() {
+    // `new $obj` instantiates the object's class.
+    assert_eq!(
+        out("<?php class Foo { public $x = 3; } $a = new Foo; $b = new $a; echo $b->x;"),
+        "3"
+    );
+}
+
+#[test]
+fn dynamic_static_const_method_prop() {
+    assert_eq!(
+        out("<?php class Foo { const K = 9; static function m(){ return 'M'; } } \
+             $c = 'Foo'; echo $c::K, $c::m();"),
+        "9M"
+    );
+    assert_eq!(
+        out("<?php class Foo { static $s = 7; } $c = 'Foo'; echo $c::$s;"),
+        "7"
+    );
+}
+
+#[test]
+fn dynamic_static_call_via_object() {
+    assert_eq!(
+        out("<?php class Foo { static function m(){ return 'ok'; } } $o = new Foo; echo $o::m();"),
+        "ok"
+    );
+}
+
+#[test]
+fn dynamic_instanceof() {
+    assert_eq!(
+        out("<?php class Foo {} $c = 'Foo'; $o = new Foo; var_dump($o instanceof $c);"),
+        "bool(true)\n"
+    );
+    assert_eq!(
+        out("<?php class A {} class B extends A {} $c = 'A'; var_dump(new B instanceof $c);"),
+        "bool(true)\n"
+    );
+}
+
+#[test]
+fn dynamic_new_unknown_class_is_fatal() {
+    // An unresolved dynamic class name is a runtime fatal, no output.
+    let reg = registry();
+    let o = run_source_with(b"t.php", b"<?php echo 'a'; $c = 'Nope'; new $c();", &reg).expect("lowers");
+    assert_eq!(o.stdout, b"a");
+    assert!(
+        String::from_utf8_lossy(&o.rendered).contains("Class \"Nope\" not found"),
+        "got: {}",
+        String::from_utf8_lossy(&o.rendered)
+    );
+}

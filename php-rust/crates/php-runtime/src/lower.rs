@@ -2229,7 +2229,7 @@ impl<'f> Lowerer<'f> {
                 // handled before the operands are lowered as expressions (19-5).
                 if let BinaryOperator::Instanceof(_) = b.operator {
                     let expr = Box::new(self.lower_expr(b.lhs)?);
-                    let class = class_ref_of(b.rhs, line)?;
+                    let class = self.class_ref_of(b.rhs, line)?;
                     return Ok(Expr {
                         line,
                         kind: ExprKind::InstanceOf { expr, class },
@@ -2286,7 +2286,7 @@ impl<'f> Lowerer<'f> {
                 // not a `Place` (it roots at a per-class cell, not a slot), so it
                 // gets dedicated nodes (step 19-4, D-19.14).
                 if let Expression::Access(Access::StaticProperty(sp)) = a.lhs {
-                    let class = class_ref_of(sp.class, line)?;
+                    let class = self.class_ref_of(sp.class, line)?;
                     let name: Box<[u8]> = static_prop_name(&sp.property, line)?.into();
                     let rhs = Box::new(self.lower_expr(a.rhs)?);
                     let op = static_assign_op(&a.operator);
@@ -2704,7 +2704,7 @@ impl<'f> Lowerer<'f> {
             }
             // `Class::$p++` — static-property inc/dec (step 19-4), its own node.
             Expression::Access(Access::StaticProperty(sp)) => Ok(ExprKind::StaticPropIncDec {
-                class: class_ref_of(sp.class, line)?,
+                class: self.class_ref_of(sp.class, line)?,
                 name: static_prop_name(&sp.property, line)?.into(),
                 inc,
                 pre,
@@ -2752,7 +2752,7 @@ impl<'f> Lowerer<'f> {
             }
             // `Class::m()` / `self::m()` / `parent::m()` / `static::m()`.
             Call::StaticMethod(sm) => {
-                let class = class_ref_of(sm.class, line)?;
+                let class = self.class_ref_of(sm.class, line)?;
                 let method = member_name(&sm.method, line)?;
                 let (args, named) = self.lower_args(&sm.argument_list, line)?;
                 return Ok(ExprKind::StaticCall {
@@ -2781,14 +2781,28 @@ impl<'f> Lowerer<'f> {
         })
     }
 
-    /// Lower `new ClassName(args)` (step 19, D-19.6). Only a literal class name is
-    /// in 19-1 scope; a dynamic / `self` / `static` class lowers to unsupported.
+    /// Lower a class-position expression to a [`ClassRef`] (step 19; dynamic
+    /// forms added in step 48). `self`/`parent`/`static` and a bare identifier
+    /// resolve statically; anything else (`$cls`, `$obj`, `Foo::CONST`, a call,
+    /// …) becomes `ClassRef::Dynamic` and is resolved to a class at runtime.
+    fn class_ref_of(&mut self, class: &Expression, _line: Line) -> Result<ClassRef, LowerError> {
+        match class {
+            Expression::Self_(_) => Ok(ClassRef::SelfClass),
+            Expression::Parent(_) => Ok(ClassRef::Parent),
+            Expression::Static(_) => Ok(ClassRef::Static),
+            Expression::Identifier(id) => Ok(ClassRef::Named(function_name(id).into())),
+            other => Ok(ClassRef::Dynamic(Box::new(self.lower_expr(other)?))),
+        }
+    }
+
+    /// Lower `new ClassName(args)` (step 19, D-19.6). A dynamic class
+    /// (`new $cls`) lowers to `ClassRef::Dynamic` (step 48).
     fn lower_instantiation(
         &mut self,
         inst: &Instantiation,
         line: Line,
     ) -> Result<ExprKind, LowerError> {
-        let class = class_ref_of(inst.class, line)?;
+        let class = self.class_ref_of(inst.class, line)?;
         let (args, named) = match &inst.argument_list {
             Some(list) => self.lower_args(list, line)?,
             None => (Vec::new(), Vec::new()),
@@ -2812,7 +2826,7 @@ impl<'f> Lowerer<'f> {
             }),
             // `Class::CONST` / `self::CONST` / `Class::class` (step 19-4).
             Access::ClassConstant(cc) => {
-                let class = class_ref_of(cc.class, line)?;
+                let class = self.class_ref_of(cc.class, line)?;
                 let name = match &cc.constant {
                     ClassLikeConstantSelector::Identifier(id) => id.value,
                     _ => {
@@ -2829,7 +2843,7 @@ impl<'f> Lowerer<'f> {
             }
             // `Class::$prop` static-property read (step 19-4).
             Access::StaticProperty(sp) => {
-                let class = class_ref_of(sp.class, line)?;
+                let class = self.class_ref_of(sp.class, line)?;
                 let name = static_prop_name(&sp.property, line)?;
                 Ok(ExprKind::StaticProp {
                     class,
@@ -3329,22 +3343,6 @@ fn static_prop_name<'a>(var: &Variable<'a>, line: Line) -> Result<&'a [u8], Lowe
         Variable::Direct(d) => Ok(strip_dollar(d.name)),
         _ => Err(LowerError::Unsupported {
             what: "dynamic static property name",
-            line,
-        }),
-    }
-}
-
-/// Classify the class side of a `::` static call. 19-3 handles `self`/`parent`;
-/// named classes and `static::` (late static binding) are step 19-4.
-fn class_ref_of(class: &Expression, line: Line) -> Result<ClassRef, LowerError> {
-    match class {
-        Expression::Self_(_) => Ok(ClassRef::SelfClass),
-        Expression::Parent(_) => Ok(ClassRef::Parent),
-        Expression::Static(_) => Ok(ClassRef::Static),
-        Expression::Identifier(id) => Ok(ClassRef::Named(function_name(id).into())),
-        // A dynamic class reference (`$cls::m()`, `new $cls`) stays out of scope.
-        _ => Err(LowerError::Unsupported {
-            what: "dynamic class reference",
             line,
         }),
     }

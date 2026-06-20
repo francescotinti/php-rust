@@ -2472,18 +2472,9 @@ impl<'p> Evaluator<'p> {
     /// Resolve a [`ClassRef`] to a class id in the current context (step 19-4):
     /// a named class via the class table, `self`/`parent` via the defining class,
     /// `static` via the late-static-binding class.
-    fn resolve_class_ref(&self, class: &ClassRef) -> Result<ClassId, PhpError> {
+    fn resolve_class_ref(&mut self, class: &ClassRef) -> Result<ClassId, PhpError> {
         match class {
-            ClassRef::Named(name) => self
-                .class_index
-                .get(&name.to_ascii_lowercase())
-                .copied()
-                .ok_or_else(|| {
-                    PhpError::Error(format!(
-                        "Class \"{}\" not found",
-                        String::from_utf8_lossy(name)
-                    ))
-                }),
+            ClassRef::Named(name) => self.resolve_class_name(name),
             ClassRef::SelfClass => self
                 .cur_class
                 .ok_or_else(|| PhpError::Error("Cannot use \"self\" outside class context".into())),
@@ -2498,7 +2489,33 @@ impl<'p> Evaluator<'p> {
             ClassRef::Static => self.cur_static_class.ok_or_else(|| {
                 PhpError::Error("Cannot use \"static\" outside class context".into())
             }),
+            // `new $cls`, `$cls::m()`, `$obj::m()` (step 48): evaluate to a class
+            // name (string) or an object, then resolve to a class id.
+            ClassRef::Dynamic(expr) => match self.eval(expr)?.deref_clone() {
+                Zval::Str(s) => {
+                    // A leading namespace separator is stripped (`\Foo` == `Foo`).
+                    let name = s.as_bytes();
+                    let name = name.strip_prefix(b"\\").unwrap_or(name);
+                    self.resolve_class_name(name)
+                }
+                Zval::Object(o) => Ok(o.borrow().class_id as usize),
+                other => Err(PhpError::TypeError(format!(
+                    "Class name must be a valid object or a string, {} given",
+                    other.error_type_name()
+                ))),
+            },
         }
+    }
+
+    /// Resolve a class *name* (case-insensitive) to its id, or PHP's "not found"
+    /// error (step 48; shared by `Named` and `Dynamic` class refs).
+    fn resolve_class_name(&self, name: &[u8]) -> Result<ClassId, PhpError> {
+        self.class_index
+            .get(&name.to_ascii_lowercase())
+            .copied()
+            .ok_or_else(|| {
+                PhpError::Error(format!("Class \"{}\" not found", String::from_utf8_lossy(name)))
+            })
     }
 
     /// Evaluate `new ClassRef(args)` (step 19, D-19.6/D-19.12): resolve the class
@@ -3224,7 +3241,7 @@ impl<'p> Evaluator<'p> {
         }
         match self.resolve_method(start, method) {
             Some((defc, m)) if self.visible_from(m.visibility, defc) => {
-                let forwarding = !matches!(class, ClassRef::Named(_));
+                let forwarding = !matches!(class, ClassRef::Named(_) | ClassRef::Dynamic(_));
                 // LSB class: forwarding calls preserve the caller's, a named call
                 // rebinds it to the named class.
                 let static_class = if forwarding {
@@ -3256,7 +3273,7 @@ impl<'p> Evaluator<'p> {
                 // e.g. `parent::priv()` from a method) it routes to `__call` on
                 // `$this`; otherwise to `__callStatic` (step 22, D-22.3,
                 // bug #53826).
-                let forwarding = !matches!(class, ClassRef::Named(_));
+                let forwarding = !matches!(class, ClassRef::Named(_) | ClassRef::Dynamic(_));
                 let this_obj = match &self.cur_this {
                     Some(t @ Zval::Object(o))
                         if forwarding

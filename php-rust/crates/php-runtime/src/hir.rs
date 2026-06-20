@@ -166,6 +166,11 @@ pub enum ClassRef {
     /// `static::` / `new static` — the late-static-binding class (the runtime
     /// "called" class), step 19-4, D-19.12.
     Static,
+    /// A dynamic class reference (step 48): `new $cls`, `$cls::m()`,
+    /// `$cls::CONST`, `$obj::m()`. The expression is evaluated at runtime to a
+    /// class name (string, leading `\` stripped) or an object (its class). Like
+    /// `Named`, a dynamic static call is *non-forwarding* for late static binding.
+    Dynamic(Box<Expr>),
 }
 
 /// One declared instance property (step 19). `default` is evaluated per instance
