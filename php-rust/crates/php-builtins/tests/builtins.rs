@@ -21,6 +21,16 @@ fn out_bytes(src: &str) -> Vec<u8> {
     o.stdout
 }
 
+/// Run a script and return `(stdout, raw diagnostic messages)` — for asserting
+/// the exact text of Warnings a builtin raises (step 52 filesystem mutators).
+fn out_diags(src: &str) -> (String, Vec<String>) {
+    let reg = registry();
+    let o = run_source_with(b"t.php", src.as_bytes(), &reg).expect("lowers");
+    assert!(o.fatal.is_none(), "unexpected fatal: {:?}", o.fatal);
+    let warns = o.diags.iter().map(|d| d.message().to_string()).collect();
+    (String::from_utf8(o.stdout).expect("utf8"), warns)
+}
+
 /// Run a script and return `(stdout, exit_code)` — for `exit`/`die` tests where
 /// the process exit code matters (step 46).
 fn out_exit(src: &str) -> (String, Option<u8>) {
@@ -3793,4 +3803,59 @@ fn fstat_on_file_and_memory() {
     );
     assert_eq!(out(&src), "26|6|26|4|33206");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn mutators_roundtrip() {
+    let dir = tmp_path("b52_mut");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let src = format!(
+        "<?php $b=fn($x)=>$x?'1':'0'; \
+         echo $b(mkdir('{dir}/a')),$b(mkdir('{dir}/x/y/z',0777,true)),$b(is_dir('{dir}/x/y/z')),'|'; \
+         file_put_contents('{dir}/f','hello'); \
+         echo $b(touch('{dir}/f')),$b(touch('{dir}/new')),$b(is_file('{dir}/new')),'|'; \
+         echo $b(copy('{dir}/f','{dir}/f2')),filesize('{dir}/f2'),'|'; \
+         echo $b(rename('{dir}/f2','{dir}/f3')),$b(file_exists('{dir}/f2')),$b(file_exists('{dir}/f3')),'|'; \
+         chmod('{dir}/f',0600); printf('%o', fileperms('{dir}/f')&0777); echo '|'; \
+         symlink('{dir}/f','{dir}/sl'); echo basename(readlink('{dir}/sl')),'|'; \
+         echo $b(unlink('{dir}/f')),$b(rmdir('{dir}/a'));"
+    );
+    assert_eq!(out(&src), "111|111|15|101|600|f|11");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn touch_sets_explicit_mtime() {
+    let dir = tmp_path("b52_touch");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let src = format!(
+        "<?php touch('{dir}/t', 1000000000); echo filemtime('{dir}/t');"
+    );
+    assert_eq!(out(&src), "1000000000");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn mutator_warning_messages() {
+    // Exact PHP Warning text (oracle-verified): each mutator frames the path /
+    // strerror differently — mkdir omits the path, copy says "Failed to open
+    // stream", touch says "Unable to create file …".
+    let (_, w) = out_diags(
+        "<?php unlink('/no/such/zz'); rmdir('/no/such/zz'); mkdir('/no/such/deep/zz'); \
+         rename('/no/such/a','/no/such/b'); copy('/no/such/a','/tmp/zzz_phpr'); \
+         readlink('/no/such/zz');",
+    );
+    assert_eq!(
+        w,
+        vec![
+            "unlink(/no/such/zz): No such file or directory",
+            "rmdir(/no/such/zz): No such file or directory",
+            "mkdir(): No such file or directory",
+            "rename(/no/such/a,/no/such/b): No such file or directory",
+            "copy(/no/such/a): Failed to open stream: No such file or directory",
+            "readlink(): No such file or directory",
+        ]
+    );
 }

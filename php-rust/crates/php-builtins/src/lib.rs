@@ -95,6 +95,16 @@ pub fn registry() -> Registry {
     add(b"fileinode", file::fileinode);
     add(b"fileowner", file::fileowner);
     add(b"filegroup", file::filegroup);
+    add(b"unlink", file::unlink);
+    add(b"mkdir", file::mkdir);
+    add(b"rmdir", file::rmdir);
+    add(b"rename", file::rename);
+    add(b"copy", file::copy);
+    add(b"touch", file::touch);
+    add(b"symlink", file::symlink);
+    add(b"link", file::link);
+    add(b"readlink", file::readlink);
+    add(b"chmod", file::chmod);
     add(b"array_keys", array::array_keys);
     add(b"array_values", array::array_values);
     add(b"in_array", array::in_array);

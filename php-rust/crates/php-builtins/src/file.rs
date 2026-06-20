@@ -768,3 +768,252 @@ pub fn fileowner(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 pub fn filegroup(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     file_stat_long(argv, ctx, "filegroup", |v| v[5])
 }
+
+// ---- step 52d: filesystem mutators ----
+
+/// Render a path argument's raw bytes for an error message (lossy UTF-8).
+fn show_path(p: &std::ffi::OsStr) -> String {
+    String::from_utf8_lossy(p.as_encoded_bytes()).into_owned()
+}
+
+/// The OS path for the `idx`-th argument (raw bytes → `OsString`).
+fn os_path_at(argv: &[Zval], ctx: &mut Ctx, idx: usize) -> std::ffi::OsString {
+    use std::os::unix::ffi::OsStrExt;
+    let s = convert::to_zstr(&argv[idx], ctx.diags);
+    std::ffi::OsStr::from_bytes(s.as_bytes()).to_os_string()
+}
+
+/// `unlink`: delete a file; `false` + "unlink(%s): %s" Warning on failure.
+pub fn unlink(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let p = arg_os_path(argv, ctx);
+    match std::fs::remove_file(&p) {
+        Ok(()) => Ok(Zval::Bool(true)),
+        Err(e) => {
+            ctx.diags.push(Diag::Warning(format!(
+                "unlink({}): {}",
+                show_path(&p),
+                strerror(&e)
+            )));
+            Ok(Zval::Bool(false))
+        }
+    }
+}
+
+/// `mkdir($dir, $permissions = 0777, $recursive = false)`. The mode is applied
+/// through `mkdir(2)` (kernel masks it with the umask, exactly like PHP); a
+/// non-recursive create over an existing path fails with "mkdir(): File exists".
+pub fn mkdir(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::os::unix::fs::DirBuilderExt;
+    let p = arg_os_path(argv, ctx);
+    let perms = argv
+        .get(1)
+        .map(|v| convert::to_long_cast(v, ctx.diags))
+        .unwrap_or(0o777);
+    let recursive = argv
+        .get(2)
+        .map(|v| convert::to_bool(v, ctx.diags))
+        .unwrap_or(false);
+    let mut b = std::fs::DirBuilder::new();
+    b.recursive(recursive).mode(perms as u32);
+    match b.create(&p) {
+        Ok(()) => Ok(Zval::Bool(true)),
+        Err(e) => {
+            ctx.diags
+                .push(Diag::Warning(format!("mkdir(): {}", strerror(&e))));
+            Ok(Zval::Bool(false))
+        }
+    }
+}
+
+/// `rmdir`: remove an empty directory; "rmdir(%s): %s" Warning on failure.
+pub fn rmdir(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let p = arg_os_path(argv, ctx);
+    match std::fs::remove_dir(&p) {
+        Ok(()) => Ok(Zval::Bool(true)),
+        Err(e) => {
+            ctx.diags.push(Diag::Warning(format!(
+                "rmdir({}): {}",
+                show_path(&p),
+                strerror(&e)
+            )));
+            Ok(Zval::Bool(false))
+        }
+    }
+}
+
+/// `rename($from, $to)`: atomic where the OS allows; overwrites an existing
+/// destination (like PHP). "rename(%s,%s): %s" Warning on failure.
+pub fn rename(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    if argv.len() < 2 {
+        return Err(PhpError::ArgumentCountError(format!(
+            "rename() expects at least 2 arguments, {} given",
+            argv.len()
+        )));
+    }
+    let from = arg_os_path(argv, ctx);
+    let to = os_path_at(argv, ctx, 1);
+    match std::fs::rename(&from, &to) {
+        Ok(()) => Ok(Zval::Bool(true)),
+        Err(e) => {
+            ctx.diags.push(Diag::Warning(format!(
+                "rename({},{}): {}",
+                show_path(&from),
+                show_path(&to),
+                strerror(&e)
+            )));
+            Ok(Zval::Bool(false))
+        }
+    }
+}
+
+/// `copy($from, $to)`: byte copy, overwriting the destination. PHP frames the
+/// failure around the source stream: "copy(%s): Failed to open stream: %s".
+pub fn copy(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    if argv.len() < 2 {
+        return Err(PhpError::ArgumentCountError(format!(
+            "copy() expects at least 2 arguments, {} given",
+            argv.len()
+        )));
+    }
+    let from = arg_os_path(argv, ctx);
+    let to = os_path_at(argv, ctx, 1);
+    match std::fs::copy(&from, &to) {
+        Ok(_) => Ok(Zval::Bool(true)),
+        Err(e) => {
+            ctx.diags.push(Diag::Warning(format!(
+                "copy({}): Failed to open stream: {}",
+                show_path(&from),
+                strerror(&e)
+            )));
+            Ok(Zval::Bool(false))
+        }
+    }
+}
+
+/// Set a path's access + modification times (seconds) via `utimes(2)`.
+fn set_times(p: &std::ffi::OsStr, atime: i64, mtime: i64) -> std::io::Result<()> {
+    use std::os::unix::ffi::OsStrExt;
+    let c = std::ffi::CString::new(p.as_bytes())
+        .map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
+    let tv = [
+        libc::timeval {
+            tv_sec: atime as libc::time_t,
+            tv_usec: 0,
+        },
+        libc::timeval {
+            tv_sec: mtime as libc::time_t,
+            tv_usec: 0,
+        },
+    ];
+    if unsafe { libc::utimes(c.as_ptr(), tv.as_ptr()) } == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+/// `touch($filename, $mtime = null, $atime = null)`: create the file if absent
+/// (without truncating an existing one), then stamp its times. A null `$mtime`
+/// uses now; a null `$atime` mirrors `$mtime` (PHP semantics).
+pub fn touch(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let p = arg_os_path(argv, ctx);
+    if let Err(e) = std::fs::OpenOptions::new().write(true).create(true).open(&p) {
+        ctx.diags.push(Diag::Warning(format!(
+            "touch(): Unable to create file {} because {}",
+            show_path(&p),
+            strerror(&e)
+        )));
+        return Ok(Zval::Bool(false));
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let mtime = match argv.get(1) {
+        Some(v) if !matches!(v, Zval::Null) => convert::to_long_cast(v, ctx.diags),
+        _ => now,
+    };
+    let atime = match argv.get(2) {
+        Some(v) if !matches!(v, Zval::Null) => convert::to_long_cast(v, ctx.diags),
+        _ => mtime,
+    };
+    let _ = set_times(p.as_os_str(), atime, mtime);
+    Ok(Zval::Bool(true))
+}
+
+/// `symlink($target, $link)`: create `$link` pointing at `$target`.
+pub fn symlink(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    if argv.len() < 2 {
+        return Err(PhpError::ArgumentCountError(format!(
+            "symlink() expects exactly 2 arguments, {} given",
+            argv.len()
+        )));
+    }
+    let target = arg_os_path(argv, ctx);
+    let link = os_path_at(argv, ctx, 1);
+    match std::os::unix::fs::symlink(&target, &link) {
+        Ok(()) => Ok(Zval::Bool(true)),
+        Err(e) => {
+            ctx.diags
+                .push(Diag::Warning(format!("symlink(): {}", strerror(&e))));
+            Ok(Zval::Bool(false))
+        }
+    }
+}
+
+/// `link($target, $link)`: create a hard link `$link` to `$target`.
+pub fn link(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    if argv.len() < 2 {
+        return Err(PhpError::ArgumentCountError(format!(
+            "link() expects exactly 2 arguments, {} given",
+            argv.len()
+        )));
+    }
+    let target = arg_os_path(argv, ctx);
+    let link = os_path_at(argv, ctx, 1);
+    match std::fs::hard_link(&target, &link) {
+        Ok(()) => Ok(Zval::Bool(true)),
+        Err(e) => {
+            ctx.diags
+                .push(Diag::Warning(format!("link(): {}", strerror(&e))));
+            Ok(Zval::Bool(false))
+        }
+    }
+}
+
+/// `readlink`: the target a symlink points to, or `false` + Warning.
+pub fn readlink(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::os::unix::ffi::OsStrExt;
+    let p = arg_os_path(argv, ctx);
+    match std::fs::read_link(&p) {
+        Ok(target) => Ok(Zval::Str(PhpStr::new(
+            target.as_os_str().as_bytes().to_vec(),
+        ))),
+        Err(e) => {
+            ctx.diags
+                .push(Diag::Warning(format!("readlink(): {}", strerror(&e))));
+            Ok(Zval::Bool(false))
+        }
+    }
+}
+
+/// `chmod($filename, $permissions)`: set the mode (follows symlinks, like PHP).
+pub fn chmod(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::os::unix::fs::PermissionsExt;
+    if argv.len() < 2 {
+        return Err(PhpError::ArgumentCountError(format!(
+            "chmod() expects exactly 2 arguments, {} given",
+            argv.len()
+        )));
+    }
+    let p = arg_os_path(argv, ctx);
+    let perms = convert::to_long_cast(&argv[1], ctx.diags) as u32;
+    match std::fs::set_permissions(&p, std::fs::Permissions::from_mode(perms)) {
+        Ok(()) => Ok(Zval::Bool(true)),
+        Err(e) => {
+            ctx.diags
+                .push(Diag::Warning(format!("chmod(): {}", strerror(&e))));
+            Ok(Zval::Bool(false))
+        }
+    }
+}
