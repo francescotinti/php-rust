@@ -83,6 +83,7 @@ pub fn registry() -> Registry {
     add(b"getcwd", file::getcwd);
     add(b"chdir", file::chdir);
     add(b"sys_get_temp_dir", file::sys_get_temp_dir);
+    add(b"clearstatcache", file::clearstatcache);
     add(b"array_keys", array::array_keys);
     add(b"array_values", array::array_values);
     add(b"in_array", array::in_array);

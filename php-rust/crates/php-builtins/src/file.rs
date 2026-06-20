@@ -507,32 +507,33 @@ pub fn is_link(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     ))
 }
 
-/// `is_readable`: approximated as "statable" — we have no euid-aware `access(2)`
-/// in std, so an existing file the process can stat reads as readable (D-52).
+/// Run `access(2)` on the first argument with the given mode mask. PHP's
+/// `is_readable`/`is_writable`/`is_executable` defer to the OS permission check
+/// (euid-aware, symlink-following), so a `chmod 0` file reads as not readable
+/// even to its stat-capable owner — matching this rather than the raw mode bits
+/// (D-52.7, oracle-verified). A path with an interior NUL is not accessible.
+fn access_ok(argv: &[Zval], ctx: &mut Ctx, mode: libc::c_int) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let p = arg_os_path(argv, ctx);
+    match std::ffi::CString::new(p.as_bytes()) {
+        Ok(c) => unsafe { libc::access(c.as_ptr(), mode) == 0 },
+        Err(_) => false,
+    }
+}
+
+/// `is_readable`: the OS grants read access (`access(2)` `R_OK`).
 pub fn is_readable(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let p = arg_os_path(argv, ctx);
-    Ok(Zval::Bool(std::fs::metadata(&p).is_ok()))
+    Ok(Zval::Bool(access_ok(argv, ctx, libc::R_OK)))
 }
 
-/// `is_writable`: statable and the owner write bit set (std `readonly()`).
+/// `is_writable`: the OS grants write access (`access(2)` `W_OK`).
 pub fn is_writable(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let p = arg_os_path(argv, ctx);
-    Ok(Zval::Bool(
-        std::fs::metadata(&p)
-            .map(|m| !m.permissions().readonly())
-            .unwrap_or(false),
-    ))
+    Ok(Zval::Bool(access_ok(argv, ctx, libc::W_OK)))
 }
 
-/// `is_executable`: statable and any execute bit set.
+/// `is_executable`: the OS grants execute access (`access(2)` `X_OK`).
 pub fn is_executable(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    use std::os::unix::fs::MetadataExt;
-    let p = arg_os_path(argv, ctx);
-    Ok(Zval::Bool(
-        std::fs::metadata(&p)
-            .map(|m| m.mode() & 0o111 != 0)
-            .unwrap_or(false),
-    ))
+    Ok(Zval::Bool(access_ok(argv, ctx, libc::X_OK)))
 }
 
 /// `filetype`: the lstat-based type name (a symlink reports "link"), or `false`
@@ -608,4 +609,12 @@ pub fn sys_get_temp_dir(_argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError
         bytes.pop();
     }
     Ok(Zval::Str(PhpStr::new(bytes)))
+}
+
+/// `clearstatcache`: a no-op returning null. Unlike PHP-C we hold no per-request
+/// stat cache — every predicate / `stat` call hits the filesystem fresh — so
+/// there is nothing to clear (D-52.8). The optional `$clear_realpath_cache` /
+/// `$filename` arguments are accepted and ignored.
+pub fn clearstatcache(_argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    Ok(Zval::Null)
 }

@@ -9,3 +9,4 @@ php-types.workspace = true
 php-runtime.workspace = true
 time = "0.3.49"
 encoding_rs = "0.8.35"
+libc = "0.2"

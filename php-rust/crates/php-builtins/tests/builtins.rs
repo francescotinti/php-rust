@@ -3705,3 +3705,36 @@ fn realpath_and_cwd() {
     assert_eq!(out(&src), "bool(false)\nf.txt|T|noslash|T");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn access_predicates_respect_mode() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tmp_path("b52_acc");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let plain = format!("{dir}/plain");
+    std::fs::write(&plain, "x").unwrap();
+    std::fs::set_permissions(&plain, std::fs::Permissions::from_mode(0o644)).unwrap();
+    let exe = format!("{dir}/exe");
+    std::fs::write(&exe, "x").unwrap();
+    std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+    // 0644: readable + writable, not executable. 0755: executable.
+    // `access(X_OK)` on a file with no exec bits fails even for root, so these
+    // assertions hold regardless of the test user's uid.
+    let src = format!(
+        "<?php $b=fn($x)=>$x?'1':'0'; \
+         echo $b(is_readable('{plain}')),$b(is_writable('{plain}')),$b(is_executable('{plain}')),'|'; \
+         echo $b(is_executable('{exe}')),'|'; \
+         echo $b(is_readable('{dir}/none')),$b(is_writable('{dir}/none'));"
+    );
+    assert_eq!(out(&src), "110|1|00");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn clearstatcache_is_noop_null() {
+    assert_eq!(
+        out("<?php var_dump(clearstatcache()); var_dump(clearstatcache(true, '/x'));"),
+        "NULL\nNULL\n"
+    );
+}
