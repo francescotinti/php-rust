@@ -122,6 +122,26 @@ fn run_isolated(args: &[String], list_fails: bool) -> ExitCode {
                         (Some("SKIP"), Some(cat)) => {
                             total.skip += 1;
                             *total.skip_by_category.entry(cat.to_string()).or_insert(0) += 1;
+                            // Same breakdown as the in-process path, so --isolate
+                            // (crash-surviving) also reports it (step 48).
+                            match cat {
+                                "unsupported" => {
+                                    let what = detail
+                                        .rsplit_once(" (line")
+                                        .map_or(detail.as_str(), |(w, _)| w);
+                                    *total
+                                        .unsupported_by_what
+                                        .entry(what.to_string())
+                                        .or_insert(0) += 1;
+                                }
+                                "builtin" => {
+                                    let name = detail
+                                        .strip_prefix("Call to undefined function ")
+                                        .map_or(detail.as_str(), |n| n.trim_end_matches("()"));
+                                    *total.builtin_missing.entry(name.to_string()).or_insert(0) += 1;
+                                }
+                                _ => {}
+                            }
                         }
                         _ => {
                             total.fail += 1;
@@ -199,7 +219,26 @@ fn merge(into: &mut Summary, other: Summary) {
     for (k, v) in other.skip_by_category {
         *into.skip_by_category.entry(k).or_insert(0) += v;
     }
+    for (k, v) in other.unsupported_by_what {
+        *into.unsupported_by_what.entry(k).or_insert(0) += v;
+    }
+    for (k, v) in other.builtin_missing {
+        *into.builtin_missing.entry(k).or_insert(0) += v;
+    }
     into.failures.extend(other.failures);
+}
+
+/// Print the top entries of a count map (descending, ties broken by key).
+fn print_top(title: &str, map: &std::collections::BTreeMap<String, usize>, top: usize) {
+    if map.is_empty() {
+        return;
+    }
+    println!("\n{title}");
+    let mut v: Vec<_> = map.iter().collect();
+    v.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
+    for (k, n) in v.into_iter().take(top) {
+        println!("  {n:>6}  {k}");
+    }
 }
 
 fn print_summary(s: &Summary, list_fails: bool) {
@@ -223,6 +262,11 @@ fn print_summary(s: &Summary, list_fails: bool) {
             println!("  {n:>6}  {cat}");
         }
     }
+
+    // Breakdowns that steer prioritisation (step 48): which specific construct
+    // dominates the `unsupported` bucket, and which builtins are most wanted.
+    print_top("unsupported by construct (top 20):", &s.unsupported_by_what, 20);
+    print_top("missing builtins (top 20):", &s.builtin_missing, 20);
 
     if s.fail > 0 {
         println!("\nfailures: {}", s.fail);

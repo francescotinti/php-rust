@@ -312,6 +312,12 @@ pub struct Summary {
     pub skip: usize,
     /// Skip counts keyed by category (sorted by the caller for display).
     pub skip_by_category: std::collections::BTreeMap<String, usize>,
+    /// For the `unsupported` category, counts keyed by the specific construct
+    /// (`what`, e.g. `expr:Instantiation`) — the line suffix stripped. Surfaces
+    /// *which* missing construct dominates, to steer the next step (step 48).
+    pub unsupported_by_what: std::collections::BTreeMap<String, usize>,
+    /// For the `builtin` category, counts keyed by the missing function name.
+    pub builtin_missing: std::collections::BTreeMap<String, usize>,
     /// `(path, detail)` for each failure, for reporting.
     pub failures: Vec<(PathBuf, String)>,
 }
@@ -331,6 +337,22 @@ impl Summary {
             Status::Skip => {
                 self.skip += 1;
                 *self.skip_by_category.entry(r.category.to_string()).or_insert(0) += 1;
+                match r.category {
+                    "unsupported" => {
+                        // detail is `"{what} (line {line})"`; key on `what`.
+                        let what = r.detail.rsplit_once(" (line").map_or(&*r.detail, |(w, _)| w);
+                        *self.unsupported_by_what.entry(what.to_string()).or_insert(0) += 1;
+                    }
+                    "builtin" => {
+                        // detail is `"Call to undefined function NAME()"`.
+                        let name = r
+                            .detail
+                            .strip_prefix("Call to undefined function ")
+                            .map_or(&*r.detail, |n| n.trim_end_matches("()"));
+                        *self.builtin_missing.entry(name.to_string()).or_insert(0) += 1;
+                    }
+                    _ => {}
+                }
             }
         }
     }

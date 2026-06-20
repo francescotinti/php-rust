@@ -295,6 +295,90 @@ fn collect_goto<'a>(
     Ok(())
 }
 
+/// The mago `Expression` variant name, for a precise `Unsupported` category
+/// (step 48 micro-step): the generic `"expression"` bucket told us nothing about
+/// *which* construct was missing, so the catch-all now reports the node kind
+/// (e.g. `expr:Instantiation`), making the phpt-runner skip detail actionable.
+fn expr_variant_name(e: &Expression) -> &'static str {
+    match e {
+        Expression::Binary(_) => "expr:Binary",
+        Expression::UnaryPrefix(_) => "expr:UnaryPrefix",
+        Expression::UnaryPostfix(_) => "expr:UnaryPostfix",
+        Expression::Parenthesized(_) => "expr:Parenthesized",
+        Expression::Literal(_) => "expr:Literal",
+        Expression::CompositeString(_) => "expr:CompositeString",
+        Expression::Assignment(_) => "expr:Assignment",
+        Expression::Conditional(_) => "expr:Conditional",
+        Expression::Array(_) => "expr:Array",
+        Expression::LegacyArray(_) => "expr:LegacyArray",
+        Expression::List(_) => "expr:List",
+        Expression::ArrayAccess(_) => "expr:ArrayAccess",
+        Expression::ArrayAppend(_) => "expr:ArrayAppend",
+        Expression::AnonymousClass(_) => "expr:AnonymousClass",
+        Expression::Closure(_) => "expr:Closure",
+        Expression::ArrowFunction(_) => "expr:ArrowFunction",
+        Expression::Variable(_) => "expr:Variable",
+        Expression::ConstantAccess(_) => "expr:ConstantAccess",
+        Expression::Identifier(_) => "expr:Identifier",
+        Expression::Match(_) => "expr:Match",
+        Expression::Yield(_) => "expr:Yield",
+        Expression::Construct(_) => "expr:Construct",
+        Expression::Throw(_) => "expr:Throw",
+        Expression::Clone(_) => "expr:Clone",
+        Expression::Call(_) => "expr:Call",
+        Expression::PartialApplication(_) => "expr:PartialApplication",
+        Expression::Access(_) => "expr:Access",
+        Expression::Parent(_) => "expr:Parent",
+        Expression::Static(_) => "expr:Static",
+        Expression::Instantiation(_) => "expr:Instantiation",
+        Expression::MagicConstant(_) => "expr:MagicConstant",
+        Expression::Pipe(_) => "expr:Pipe",
+        Expression::Error(_) => "expr:Error",
+        _ => "expr:other",
+    }
+}
+
+/// The mago `Statement` variant name, for a precise `Unsupported` category
+/// (step 48 micro-step). See [`expr_variant_name`].
+fn stmt_variant_name(s: &Statement) -> &'static str {
+    match s {
+        Statement::OpeningTag(_) => "stmt:OpeningTag",
+        Statement::ClosingTag(_) => "stmt:ClosingTag",
+        Statement::Inline(_) => "stmt:Inline",
+        Statement::Namespace(_) => "stmt:Namespace",
+        Statement::Use(_) => "stmt:Use",
+        Statement::Class(_) => "stmt:Class",
+        Statement::Interface(_) => "stmt:Interface",
+        Statement::Trait(_) => "stmt:Trait",
+        Statement::Enum(_) => "stmt:Enum",
+        Statement::Block(_) => "stmt:Block",
+        Statement::Constant(_) => "stmt:Constant",
+        Statement::Function(_) => "stmt:Function",
+        Statement::Declare(_) => "stmt:Declare",
+        Statement::Goto(_) => "stmt:Goto",
+        Statement::Label(_) => "stmt:Label",
+        Statement::Try(_) => "stmt:Try",
+        Statement::Foreach(_) => "stmt:Foreach",
+        Statement::For(_) => "stmt:For",
+        Statement::While(_) => "stmt:While",
+        Statement::DoWhile(_) => "stmt:DoWhile",
+        Statement::Continue(_) => "stmt:Continue",
+        Statement::Break(_) => "stmt:Break",
+        Statement::Switch(_) => "stmt:Switch",
+        Statement::If(_) => "stmt:If",
+        Statement::Return(_) => "stmt:Return",
+        Statement::Expression(_) => "stmt:Expression",
+        Statement::Echo(_) => "stmt:Echo",
+        Statement::EchoTag(_) => "stmt:EchoTag",
+        Statement::Global(_) => "stmt:Global",
+        Statement::Static(_) => "stmt:Static",
+        Statement::HaltCompiler(_) => "stmt:HaltCompiler",
+        Statement::Unset(_) => "stmt:Unset",
+        Statement::Noop(_) => "stmt:Noop",
+        _ => "stmt:other",
+    }
+}
+
 /// The built-in classes, authored in PHP and lowered once into the front of
 /// every program's class table (step 20): `stdClass` plus the throwable
 /// hierarchy. Mirrors PHP's core/SPL classes closely enough for catch-matching,
@@ -989,7 +1073,7 @@ impl<'f> Lowerer<'f> {
 
             _ => {
                 return Err(LowerError::Unsupported {
-                    what: "statement",
+                    what: stmt_variant_name(stmt),
                     line,
                 })
             }
@@ -2414,7 +2498,7 @@ impl<'f> Lowerer<'f> {
 
             _ => {
                 return Err(LowerError::Unsupported {
-                    what: "expression",
+                    what: expr_variant_name(e),
                     line,
                 })
             }
