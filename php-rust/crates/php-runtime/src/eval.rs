@@ -45,6 +45,7 @@ const HIGHER_ORDER_BUILTINS: &[&[u8]] = &[
     b"array_filter",
     b"usort",
     b"json_decode",
+    b"unserialize",
     b"preg_match",
     b"preg_match_all",
     b"preg_replace",
@@ -3553,6 +3554,7 @@ impl<'p> Evaluator<'p> {
             b"array_walk" => Some(self.ho_array_walk(args)),
             b"usort" => Some(self.ho_usort(args)),
             b"json_decode" => Some(self.ho_json_decode(args)),
+            b"unserialize" => Some(self.ho_unserialize(args)),
             b"preg_match" => Some(self.ho_preg_match(args)),
             b"preg_match_all" => Some(self.ho_preg_match_all(args)),
             b"preg_replace" => Some(self.ho_preg_replace(args)),
@@ -4308,6 +4310,90 @@ impl<'p> Evaluator<'p> {
             self.created.push(o.clone());
         }
         value
+    }
+
+    /// Build an object of a named class with the given properties (step 50b,
+    /// `unserialize`). A known class is instantiated with its real class id and
+    /// shape, the properties set directly (the constructor is **not** run, as in
+    /// PHP). An unknown class falls back to `stdClass` (D-50 scope-out: PHP makes
+    /// a `__PHP_Incomplete_Class`); `__wakeup` is not called (D-50).
+    fn make_object(&mut self, class: &[u8], fields: Vec<(Vec<u8>, Zval)>) -> Zval {
+        let cid = match self.class_index.get(&class.to_ascii_lowercase()) {
+            Some(&c) => c,
+            None => return self.make_stdclass(fields),
+        };
+        let class_name = PhpStr::new(self.classes[cid].name.to_vec());
+        let mut props = Props::new();
+        for (k, v) in fields {
+            props.set(&k, v);
+        }
+        let info = self.class_shape(cid);
+        let id = self.next_id();
+        let obj = Object { class_id: cid as u32, class_name, props, id, info };
+        let value = Zval::Object(Rc::new(RefCell::new(obj)));
+        if let Zval::Object(o) = &value {
+            self.created.push(o.clone());
+        }
+        value
+    }
+
+    /// `unserialize($str)` (step 50b). Intercepted here because rebuilding an
+    /// object needs the class table / id allocator. A malformed string yields
+    /// `false` with PHP's notice, like the engine.
+    fn ho_unserialize(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        let Some(first) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "unserialize() expects at least 1 argument, 0 given".to_string(),
+            ));
+        };
+        let arg0 = self.eval(first)?.deref_clone();
+        let bytes = self.stringify(&arg0)?;
+        match crate::unserialize::parse(bytes.as_bytes()) {
+            Some(s) => Ok(self.ser_to_zval(s)),
+            None => {
+                // PHP reports a Warning with the byte length; we do not track the
+                // precise failing offset, so report 0 (D-50).
+                self.diags.push(Diag::Warning(format!(
+                    "unserialize(): Error at offset 0 of {} bytes",
+                    bytes.as_bytes().len()
+                )));
+                Ok(Zval::Bool(false))
+            }
+        }
+    }
+
+    /// Turn a parsed [`crate::unserialize::Ser`] tree into a `Zval`.
+    fn ser_to_zval(&mut self, s: crate::unserialize::Ser) -> Zval {
+        use crate::unserialize::Ser;
+        match s {
+            Ser::Null => Zval::Null,
+            Ser::Bool(b) => Zval::Bool(b),
+            Ser::Long(n) => Zval::Long(n),
+            Ser::Double(d) => Zval::Double(d),
+            Ser::Str(bytes) => Zval::Str(PhpStr::new(bytes)),
+            Ser::Array(items) => {
+                let mut arr = PhpArray::new();
+                for (k, v) in items {
+                    let key = match k {
+                        Ser::Long(i) => Key::Int(i),
+                        // String keys coerce to int when canonically numeric,
+                        // matching PHP array semantics.
+                        Ser::Str(b) => Key::from_bytes(&b),
+                        _ => continue,
+                    };
+                    let val = self.ser_to_zval(v);
+                    arr.insert(key, val);
+                }
+                Zval::Array(Rc::new(arr))
+            }
+            Ser::Object(class, props) => {
+                let fields: Vec<(Vec<u8>, Zval)> = props
+                    .into_iter()
+                    .map(|(name, v)| (name, self.ser_to_zval(v)))
+                    .collect();
+                self.make_object(&class, fields)
+            }
+        }
     }
 
     /// Class-introspection builtins the evaluator answers directly because they
