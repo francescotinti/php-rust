@@ -9,8 +9,10 @@
 //!
 //! Exit code is non-zero iff at least one test FAILED (skips never fail the run).
 
+use std::io::Read;
 use std::path::Path;
-use std::process::{Command, ExitCode};
+use std::process::{Command, ExitCode, Stdio};
+use std::time::{Duration, Instant};
 
 use php_builtins::registry;
 use phpt_runner::{collect_phpt, php_script_name, run_path, run_phpt, Status, Summary};
@@ -21,6 +23,19 @@ use phpt_runner::{collect_phpt, php_script_name, run_path, run_phpt, Status, Sum
 /// main stack. Run the whole job on a worker thread with a generous stack so
 /// such tests are handled (parsed deeply, or run) rather than aborting the run.
 const WORKER_STACK: usize = 1 << 30; // 1 GiB
+
+/// Per-test wall-clock cap for `--isolate`. A `.phpt` that drives our evaluator
+/// into an unbounded loop (e.g. `while (true) $a[] = 1;`) would otherwise run
+/// forever, exhausting RAM and freezing the host — there is no `timeout(1)` on
+/// macOS to lean on. We kill the child past this budget and record one FAIL.
+/// Override with `PHPT_TIMEOUT_SECS` (0 disables the cap).
+fn isolate_timeout() -> Option<Duration> {
+    match std::env::var("PHPT_TIMEOUT_SECS").ok().and_then(|s| s.parse::<u64>().ok()) {
+        Some(0) => None,
+        Some(n) => Some(Duration::from_secs(n)),
+        None => Some(Duration::from_secs(10)),
+    }
+}
 
 fn main() -> ExitCode {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -102,11 +117,12 @@ fn run_isolated(args: &[String], list_fails: bool) -> ExitCode {
                 return ExitCode::from(2);
             }
         };
+        let timeout = isolate_timeout();
         for path in paths {
-            let out = Command::new(&exe).arg("--run-one").arg(&path).output();
+            let out = run_one_isolated(&exe, &path, timeout);
             match out {
                 // Clean run: the child serialised a result on stdout.
-                Ok(o) if o.status.success() => {
+                Ok(IsolatedRun::Done(o)) if o.status.success() => {
                     let stdout = String::from_utf8_lossy(&o.stdout);
                     let (header, detail) = match stdout.split_once('\n') {
                         Some((h, d)) => (h, d.to_string()),
@@ -152,11 +168,19 @@ fn run_isolated(args: &[String], list_fails: bool) -> ExitCode {
                     }
                 }
                 // Abnormal exit: signal (e.g. SIGABRT from stack overflow) or panic.
-                Ok(o) => {
+                Ok(IsolatedRun::Done(o)) => {
                     total.fail += 1;
                     total
                         .failures
                         .push((path, format!("isolated worker crashed ({})", o.status)));
+                }
+                // Ran past the wall-clock budget — almost always an unbounded loop
+                // in the evaluator. Killed before it could exhaust host memory.
+                Ok(IsolatedRun::TimedOut) => {
+                    total.fail += 1;
+                    total
+                        .failures
+                        .push((path, "isolated worker timed out (likely infinite loop)".to_string()));
                 }
                 Err(e) => {
                     total.fail += 1;
@@ -167,6 +191,64 @@ fn run_isolated(args: &[String], list_fails: bool) -> ExitCode {
     }
     print_summary(&total, list_fails);
     exit_for(&total)
+}
+
+/// Outcome of one isolated child: it either finished (cleanly or via crash) and
+/// we hold its captured output, or it blew the wall-clock budget and was killed.
+enum IsolatedRun {
+    Done(std::process::Output),
+    TimedOut,
+}
+
+/// Spawn one `--run-one` child and wait for it, enforcing `timeout` if set.
+/// stdout is drained on a side thread so a child that emits more than one pipe
+/// buffer (large diff) can't deadlock against our wait/kill loop.
+fn run_one_isolated(
+    exe: &Path,
+    path: &Path,
+    timeout: Option<Duration>,
+) -> std::io::Result<IsolatedRun> {
+    let mut child = Command::new(exe)
+        .arg("--run-one")
+        .arg(path)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()?;
+
+    // Drain stdout concurrently; the reader returns when the child closes it.
+    let stdout = child.stdout.take();
+    let reader = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        if let Some(mut s) = stdout {
+            let _ = s.read_to_end(&mut buf);
+        }
+        buf
+    });
+
+    let start = Instant::now();
+    let status = loop {
+        match child.try_wait()? {
+            Some(status) => break status,
+            None => {
+                if let Some(limit) = timeout {
+                    if start.elapsed() >= limit {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        let _ = reader.join();
+                        return Ok(IsolatedRun::TimedOut);
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+        }
+    };
+
+    let stdout = reader.join().unwrap_or_default();
+    Ok(IsolatedRun::Done(std::process::Output {
+        status,
+        stdout,
+        stderr: Vec::new(),
+    }))
 }
 
 /// Child mode: run a single test on a big-stack worker and serialise its result
