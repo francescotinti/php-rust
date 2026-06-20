@@ -3239,3 +3239,46 @@ fn dynamic_new_unknown_class_is_fatal() {
         String::from_utf8_lossy(&o.rendered)
     );
 }
+
+// ---- step 50a: serialize() (verified byte-exact against the PHP 8.5 oracle) ----
+
+#[test]
+fn serialize_scalars() {
+    assert_eq!(out("<?php echo serialize(null);"), "N;");
+    assert_eq!(out("<?php echo serialize(true);"), "b:1;");
+    assert_eq!(out("<?php echo serialize(false);"), "b:0;");
+    assert_eq!(out("<?php echo serialize(42);"), "i:42;");
+    assert_eq!(out("<?php echo serialize(-7);"), "i:-7;");
+    assert_eq!(out("<?php echo serialize(3.14);"), "d:3.14;");
+    // serialize_precision = -1: 1.0 has no fractional part in the shortest repr.
+    assert_eq!(out("<?php echo serialize(1.0);"), "d:1;");
+    assert_eq!(out("<?php echo serialize(2.5);"), "d:2.5;");
+}
+
+#[test]
+fn serialize_strings_byte_length() {
+    assert_eq!(out("<?php echo serialize('hello');"), "s:5:\"hello\";");
+    assert_eq!(out("<?php echo serialize('');"), "s:0:\"\";");
+    // Multibyte: byte length, not codepoint count ('é' is 2 bytes).
+    assert_eq!(out("<?php echo serialize('héllo');"), "s:6:\"héllo\";");
+}
+
+#[test]
+fn serialize_arrays_nested_and_ordered() {
+    assert_eq!(
+        out("<?php echo serialize([1,2,3]);"),
+        "a:3:{i:0;i:1;i:1;i:2;i:2;i:3;}"
+    );
+    assert_eq!(
+        out("<?php echo serialize([1,'a'=>2.5,3=>[true,null]]);"),
+        "a:3:{i:0;i:1;s:1:\"a\";d:2.5;i:3;a:2:{i:0;b:1;i:1;N;}}"
+    );
+}
+
+#[test]
+fn serialize_object_stdclass() {
+    assert_eq!(
+        out("<?php $o=new stdClass; $o->x=1; $o->y='z'; echo serialize($o);"),
+        "O:8:\"stdClass\":2:{s:1:\"x\";i:1;s:1:\"y\";s:1:\"z\";}"
+    );
+}

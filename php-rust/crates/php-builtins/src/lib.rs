@@ -15,6 +15,7 @@ mod format;
 mod json;
 mod math;
 mod mbstring;
+mod serialize;
 mod string;
 
 use std::rc::Rc;
@@ -143,6 +144,7 @@ pub fn registry() -> Registry {
     add(b"round", math::round);
     add(b"var_dump", var_dump);
     add(b"var_export", var_export);
+    add(b"serialize", serialize::serialize);
     add(b"strlen", strlen);
     add(b"gettype", gettype);
     add(b"is_int", is_int);
