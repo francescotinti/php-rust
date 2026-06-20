@@ -219,3 +219,125 @@ pub fn fflush(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let _ = stream.flush();
     Ok(Zval::Bool(true))
 }
+
+/// Strip Rust's " (os error N)" suffix so the text reads like PHP's strerror.
+fn strerror(e: &std::io::Error) -> String {
+    let m = e.to_string();
+    m.split(" (os error").next().unwrap_or(&m).to_string()
+}
+
+/// `file_get_contents($filename, $use_include_path = false, $context = null,
+/// $offset = 0, $length = null)` (step 51c, pure builtin — no resource). Reads
+/// the whole file, then applies `$offset`/`$length`. Missing → Warning + false.
+pub fn file_get_contents(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::os::unix::ffi::OsStrExt;
+    let Some(name_arg) = argv.first() else {
+        return Err(PhpError::ArgumentCountError(
+            "file_get_contents() expects at least 1 argument, 0 given".to_string(),
+        ));
+    };
+    let name = convert::to_zstr(name_arg, ctx.diags);
+    let path = std::ffi::OsStr::from_bytes(name.as_bytes());
+    let mut data = match std::fs::read(path) {
+        Ok(d) => d,
+        Err(e) => {
+            ctx.diags.push(Diag::Warning(format!(
+                "file_get_contents({}): Failed to open stream: {}",
+                String::from_utf8_lossy(name.as_bytes()),
+                strerror(&e)
+            )));
+            return Ok(Zval::Bool(false));
+        }
+    };
+    // $offset (arg #4): positive from the start, negative from the end.
+    let offset = argv
+        .get(3)
+        .map(|v| convert::to_long_cast(v, ctx.diags))
+        .unwrap_or(0);
+    let start = if offset >= 0 {
+        (offset as usize).min(data.len())
+    } else {
+        data.len().saturating_sub((-offset) as usize)
+    };
+    data.drain(..start);
+    // $length (arg #5): cap, when given and not null.
+    if let Some(len_arg) = argv.get(4) {
+        if !matches!(len_arg, Zval::Null | Zval::Undef) {
+            let len = convert::to_long_cast(len_arg, ctx.diags);
+            if len >= 0 && (len as usize) < data.len() {
+                data.truncate(len as usize);
+            }
+        }
+    }
+    Ok(Zval::Str(PhpStr::new(data)))
+}
+
+/// `file_put_contents($filename, $data, $flags = 0, $context = null)` (step
+/// 51c). `$data` may be a string, an array (elements concatenated), or a
+/// readable stream resource (drained). `FILE_APPEND` (8) appends; `LOCK_EX` is
+/// accepted and ignored. Returns the byte count, or `false` + Warning.
+pub fn file_put_contents(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::io::Write;
+    use std::os::unix::ffi::OsStrExt;
+    let Some(name_arg) = argv.first() else {
+        return Err(PhpError::ArgumentCountError(
+            "file_put_contents() expects at least 2 arguments, 0 given".to_string(),
+        ));
+    };
+    let Some(data_arg) = argv.get(1) else {
+        return Err(PhpError::ArgumentCountError(
+            "file_put_contents() expects at least 2 arguments, 1 given".to_string(),
+        ));
+    };
+    let name = convert::to_zstr(name_arg, ctx.diags);
+    let bytes: Vec<u8> = match data_arg {
+        Zval::Array(a) => {
+            let mut v = Vec::new();
+            for (_k, el) in a.iter() {
+                v.extend_from_slice(convert::to_zstr(el, ctx.diags).as_bytes());
+            }
+            v
+        }
+        Zval::Resource(r) => {
+            // Drain the remaining bytes of a readable stream resource.
+            let mut v = Vec::new();
+            if let Some(stream) = r.borrow_mut().as_stream_mut() {
+                while let Ok(chunk) = stream.read(8192) {
+                    if chunk.is_empty() {
+                        break;
+                    }
+                    v.extend_from_slice(&chunk);
+                }
+            }
+            v
+        }
+        other => convert::to_zstr(other, ctx.diags).as_bytes().to_vec(),
+    };
+    let flags = argv
+        .get(2)
+        .map(|v| convert::to_long_cast(v, ctx.diags))
+        .unwrap_or(0);
+    let append = flags & 8 != 0; // FILE_APPEND
+    let path = std::ffi::OsStr::from_bytes(name.as_bytes());
+    let mut opts = std::fs::OpenOptions::new();
+    if append {
+        opts.append(true).create(true);
+    } else {
+        opts.write(true).create(true).truncate(true);
+    }
+    let mut f = match opts.open(path) {
+        Ok(f) => f,
+        Err(e) => {
+            ctx.diags.push(Diag::Warning(format!(
+                "file_put_contents({}): Failed to open stream: {}",
+                String::from_utf8_lossy(name.as_bytes()),
+                strerror(&e)
+            )));
+            return Ok(Zval::Bool(false));
+        }
+    };
+    match f.write_all(&bytes) {
+        Ok(()) => Ok(Zval::Long(bytes.len() as i64)),
+        Err(_) => Ok(Zval::Bool(false)),
+    }
+}

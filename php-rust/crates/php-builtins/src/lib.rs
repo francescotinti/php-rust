@@ -64,6 +64,8 @@ pub fn registry() -> Registry {
     add(b"ftell", file::ftell);
     add(b"rewind", file::rewind);
     add(b"fflush", file::fflush);
+    add(b"file_get_contents", file::file_get_contents);
+    add(b"file_put_contents", file::file_put_contents);
     add(b"array_keys", array::array_keys);
     add(b"array_values", array::array_values);
     add(b"in_array", array::in_array);

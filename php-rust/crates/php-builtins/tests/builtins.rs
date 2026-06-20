@@ -3520,3 +3520,60 @@ fn unsupported_wrapper_is_false() {
         "F"
     );
 }
+
+// ---- step 51c: file_get_contents / file_put_contents (pure builtins) ----
+
+#[test]
+fn file_put_get_contents_roundtrip() {
+    let p = tmp_path("fgc_round");
+    let _ = std::fs::remove_file(&p);
+    let src = format!(
+        "<?php var_dump(file_put_contents('{p}','hello')); var_dump(file_get_contents('{p}'));"
+    );
+    assert_eq!(out(&src), "int(5)\nstring(5) \"hello\"\n");
+    let _ = std::fs::remove_file(&p);
+}
+
+#[test]
+fn file_put_contents_append_and_array() {
+    let p = tmp_path("fgc_append");
+    let _ = std::fs::remove_file(&p);
+    let src = format!(
+        "<?php file_put_contents('{p}','A'); file_put_contents('{p}','B',FILE_APPEND); \
+         echo file_get_contents('{p}'); echo ';'; \
+         var_dump(file_put_contents('{p}',['x','y','z'])); echo file_get_contents('{p}');"
+    );
+    assert_eq!(out(&src), "AB;int(3)\nxyz");
+    let _ = std::fs::remove_file(&p);
+}
+
+#[test]
+fn file_get_contents_offset_length() {
+    let p = tmp_path("fgc_ol");
+    let _ = std::fs::write(&p, "0123456789");
+    let src = format!("<?php var_dump(file_get_contents('{p}',false,null,3,4));");
+    assert_eq!(out(&src), "string(4) \"3456\"\n");
+    let _ = std::fs::remove_file(&p);
+}
+
+#[test]
+fn file_get_contents_missing_is_false() {
+    assert_eq!(
+        out("<?php var_dump(@file_get_contents('/no_dir_phpr_zz/x'));"),
+        "bool(false)\n"
+    );
+}
+
+#[test]
+fn file_put_contents_from_stream_resource() {
+    let (src_p, dst_p) = (tmp_path("fgc_src"), tmp_path("fgc_dst"));
+    let _ = std::fs::write(&src_p, "copied!");
+    let _ = std::fs::remove_file(&dst_p);
+    let prog = format!(
+        "<?php $r=fopen('{src_p}','r'); var_dump(file_put_contents('{dst_p}',$r)); fclose($r); \
+         echo file_get_contents('{dst_p}');"
+    );
+    assert_eq!(out(&prog), "int(7)\ncopied!");
+    let _ = std::fs::remove_file(&src_p);
+    let _ = std::fs::remove_file(&dst_p);
+}

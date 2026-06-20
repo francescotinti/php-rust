@@ -3502,6 +3502,10 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"SEEK_SET" => ExprKind::Int(0),
         b"SEEK_CUR" => ExprKind::Int(1),
         b"SEEK_END" => ExprKind::Int(2),
+        // file_put_contents / file flags (step 51c).
+        b"FILE_USE_INCLUDE_PATH" => ExprKind::Int(1),
+        b"LOCK_EX" => ExprKind::Int(2),
+        b"FILE_APPEND" => ExprKind::Int(8),
         // error_reporting / set_error_handler levels (bit flags). PHP 8.5 keeps
         // the E_STRICT slot (2048) reserved/unused; E_ALL is 32767.
         b"E_ERROR" => ExprKind::Int(1),
