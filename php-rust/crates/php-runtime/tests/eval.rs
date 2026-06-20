@@ -4527,3 +4527,13 @@ fn magic_trait_and_namespace() {
     // No namespaces in Tier 1: `__NAMESPACE__` is always empty.
     assert_eq!(out("<?php echo '['.__NAMESPACE__.']';"), "[]");
 }
+
+#[test]
+fn predefined_error_and_path_constants() {
+    assert_eq!(out("<?php echo E_ALL;"), "32767");
+    assert_eq!(out("<?php echo E_WARNING | E_NOTICE;"), "10");
+    assert_eq!(out("<?php echo E_ALL & ~E_NOTICE;"), "32759");
+    assert_eq!(out("<?php echo DIRECTORY_SEPARATOR;"), "/");
+    assert_eq!(out("<?php echo PATH_SEPARATOR;"), ":");
+    assert_eq!(out("<?php echo PHP_SAPI;"), "cli");
+}
