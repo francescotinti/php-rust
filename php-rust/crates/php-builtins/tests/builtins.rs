@@ -3638,3 +3638,70 @@ fn pathinfo_array_and_flags() {
         "hidden|[]"
     );
 }
+
+// ---- step 52b: existence/type predicates + realpath + cwd ----
+
+#[test]
+fn existence_and_type_predicates() {
+    use std::os::unix::fs::symlink;
+    let dir = tmp_path("b52_dir");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = format!("{dir}/f.txt");
+    std::fs::write(&file, "hi").unwrap();
+    let link = format!("{dir}/sl");
+    let _ = symlink(&file, &link);
+    let broken = format!("{dir}/broken");
+    let _ = symlink(format!("{dir}/nope"), &broken);
+    let missing = format!("{dir}/none");
+
+    // `echo` of a bool false is "", so map every predicate through a ternary.
+    let src = format!(
+        "<?php $b=fn($x)=>$x?'1':'0'; \
+         echo $b(file_exists('{file}')),$b(is_file('{file}')),$b(is_dir('{file}')),$b(is_link('{file}')),'|'; \
+         echo $b(file_exists('{dir}')),$b(is_file('{dir}')),$b(is_dir('{dir}')),'|'; \
+         echo $b(file_exists('{link}')),$b(is_file('{link}')),$b(is_link('{link}')),'|'; \
+         echo $b(file_exists('{broken}')),$b(is_link('{broken}')),'|'; \
+         echo $b(file_exists('{missing}'));"
+    );
+    // file: ex,isf,!isd,!isl | dir: ex,!isf,isd | link→file: ex,isf,isl |
+    // broken: !ex,isl | missing: !ex
+    assert_eq!(out(&src), "1100|101|111|01|0");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn filetype_kinds() {
+    use std::os::unix::fs::symlink;
+    let dir = tmp_path("b52_ft");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = format!("{dir}/f");
+    std::fs::write(&file, "x").unwrap();
+    let link = format!("{dir}/l");
+    let _ = symlink(&file, &link);
+    let src = format!(
+        "<?php echo filetype('{file}'),'|',filetype('{dir}'),'|',filetype('{link}'),'|'; \
+         var_dump(@filetype('{dir}/none'));"
+    );
+    assert_eq!(out(&src), "file|dir|link|bool(false)\n");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn realpath_and_cwd() {
+    let dir = tmp_path("b52_rp");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = format!("{dir}/f.txt");
+    std::fs::write(&file, "x").unwrap();
+    // realpath of a missing path is false; of an existing file, basename matches.
+    let src = format!(
+        "<?php var_dump(realpath('{dir}/none')); echo basename(realpath('{file}')); \
+         echo '|', strlen(sys_get_temp_dir())>0?'T':'F'; \
+         echo '|', substr(sys_get_temp_dir(),-1)==='/'?'slash':'noslash'; \
+         echo '|', strlen(getcwd())>0?'T':'F';"
+    );
+    assert_eq!(out(&src), "bool(false)\nf.txt|T|noslash|T");
+    let _ = std::fs::remove_dir_all(&dir);
+}

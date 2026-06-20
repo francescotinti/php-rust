@@ -465,3 +465,147 @@ pub fn pathinfo(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     arr.insert(Key::from_bytes(b"filename"), Zval::Str(PhpStr::new(filename.to_vec())));
     Ok(Zval::Array(Rc::new(arr)))
 }
+
+// ---- step 52b: existence / type predicates + realpath + cwd ----
+
+/// The OS path for a builtin's first argument (raw bytes → `OsString`).
+fn arg_os_path(argv: &[Zval], ctx: &mut Ctx) -> std::ffi::OsString {
+    use std::os::unix::ffi::OsStrExt;
+    let s = convert::to_zstr(&argv[0], ctx.diags);
+    std::ffi::OsStr::from_bytes(s.as_bytes()).to_os_string()
+}
+
+/// `file_exists`: true if the path exists (following symlinks → a broken
+/// symlink is `false`, oracle-verified).
+pub fn file_exists(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let p = arg_os_path(argv, ctx);
+    Ok(Zval::Bool(std::fs::metadata(&p).is_ok()))
+}
+
+pub fn is_file(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let p = arg_os_path(argv, ctx);
+    Ok(Zval::Bool(
+        std::fs::metadata(&p).map(|m| m.is_file()).unwrap_or(false),
+    ))
+}
+
+pub fn is_dir(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let p = arg_os_path(argv, ctx);
+    Ok(Zval::Bool(
+        std::fs::metadata(&p).map(|m| m.is_dir()).unwrap_or(false),
+    ))
+}
+
+/// `is_link`: true if the path itself is a symlink (no-follow), so a broken
+/// symlink is still `true` (oracle-verified).
+pub fn is_link(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let p = arg_os_path(argv, ctx);
+    Ok(Zval::Bool(
+        std::fs::symlink_metadata(&p)
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(false),
+    ))
+}
+
+/// `is_readable`: approximated as "statable" — we have no euid-aware `access(2)`
+/// in std, so an existing file the process can stat reads as readable (D-52).
+pub fn is_readable(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let p = arg_os_path(argv, ctx);
+    Ok(Zval::Bool(std::fs::metadata(&p).is_ok()))
+}
+
+/// `is_writable`: statable and the owner write bit set (std `readonly()`).
+pub fn is_writable(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let p = arg_os_path(argv, ctx);
+    Ok(Zval::Bool(
+        std::fs::metadata(&p)
+            .map(|m| !m.permissions().readonly())
+            .unwrap_or(false),
+    ))
+}
+
+/// `is_executable`: statable and any execute bit set.
+pub fn is_executable(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::os::unix::fs::MetadataExt;
+    let p = arg_os_path(argv, ctx);
+    Ok(Zval::Bool(
+        std::fs::metadata(&p)
+            .map(|m| m.mode() & 0o111 != 0)
+            .unwrap_or(false),
+    ))
+}
+
+/// `filetype`: the lstat-based type name (a symlink reports "link"), or `false`
+/// + Warning when the path cannot be stat'd.
+pub fn filetype(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::os::unix::fs::FileTypeExt;
+    let p = arg_os_path(argv, ctx);
+    match std::fs::symlink_metadata(&p) {
+        Ok(m) => {
+            let ft = m.file_type();
+            let name = if ft.is_symlink() {
+                "link"
+            } else if ft.is_dir() {
+                "dir"
+            } else if ft.is_file() {
+                "file"
+            } else if ft.is_fifo() {
+                "fifo"
+            } else if ft.is_char_device() {
+                "char"
+            } else if ft.is_block_device() {
+                "block"
+            } else if ft.is_socket() {
+                "socket"
+            } else {
+                "unknown"
+            };
+            Ok(Zval::Str(PhpStr::from_str(name)))
+        }
+        Err(_) => {
+            let shown = String::from_utf8_lossy(p.as_os_str().as_encoded_bytes()).into_owned();
+            ctx.diags
+                .push(Diag::Warning(format!("filetype(): Lstat failed for {shown}")));
+            Ok(Zval::Bool(false))
+        }
+    }
+}
+
+/// `realpath`: the canonical absolute path (symlinks + `..` resolved), or
+/// `false` if any component is missing.
+pub fn realpath(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::os::unix::ffi::OsStrExt;
+    let p = arg_os_path(argv, ctx);
+    match std::fs::canonicalize(&p) {
+        Ok(abs) => Ok(Zval::Str(PhpStr::new(abs.as_os_str().as_bytes().to_vec()))),
+        Err(_) => Ok(Zval::Bool(false)),
+    }
+}
+
+/// `getcwd`: the current working directory, or `false`.
+pub fn getcwd(_argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::os::unix::ffi::OsStrExt;
+    Ok(match std::env::current_dir() {
+        Ok(d) => Zval::Str(PhpStr::new(d.as_os_str().as_bytes().to_vec())),
+        Err(_) => Zval::Bool(false),
+    })
+}
+
+/// `chdir`: change the working directory. Process-global — safe under
+/// `phpt-runner --isolate` (one process per test); cargo tests use absolute
+/// paths to avoid interference (D-52).
+pub fn chdir(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let p = arg_os_path(argv, ctx);
+    Ok(Zval::Bool(std::env::set_current_dir(&p).is_ok()))
+}
+
+/// `sys_get_temp_dir`: the system temp directory, without a trailing slash.
+pub fn sys_get_temp_dir(_argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::os::unix::ffi::OsStrExt;
+    let d = std::env::temp_dir();
+    let mut bytes = d.as_os_str().as_bytes().to_vec();
+    while bytes.len() > 1 && bytes.last() == Some(&b'/') {
+        bytes.pop();
+    }
+    Ok(Zval::Str(PhpStr::new(bytes)))
+}
