@@ -562,3 +562,28 @@ Casi **non** divergenti (parità byte-exact verificata contro l'oracle PHP 8.5):
 scalari, stringhe (lunghezza in byte, multibyte), array annidati/ordinati, oggetti
 `stdClass`; `serialize(unserialize(S)) == S` per ogni forma canonica; round-trip di
 valori freschi; `Closure`/`Generator` → `Error`; malformato → `false`.
+
+## Step 51 — `fopen` / sottosistema filesystem-stream
+
+| ID | Caso | Noi | PHP | Note |
+|---|---|---|---|---|
+| **D-51.1** | byte-count nel Notice di `fread` su stream non-readable | `Read of <length richiesta> bytes failed…` | `Read of 8192 bytes failed…` (dimensione buffer interno) | Il `false` e il prefisso/errno (`errno=9 Bad file descriptor`) combaciano; solo il conteggio diverge. `fwrite` invece combacia esatto (usa la lunghezza dati) |
+| **D-51.2** | id risorsa di partenza | base **5** (come la CLI: STDIN/OUT/ERR=1/2/3 + 1 interno) | 5 in CLI `-n`; varia con gli stream pre-aperti | Gli EXPECTF usano `%d`; solo i test EXPECT esatti in contesti non-CLI potrebbero divergere |
+| **D-51.3** | `php://temp` | sempre buffer in memoria (`Cursor`) | spill su disco oltre 2 MB (`php://temp/maxmemory:N`) | Comportamento osservabile identico per dimensioni in-memory; nessun limite di memoria modellato |
+
+Casi **non** divergenti (parità verificata byte-exact contro l'oracle PHP 8.5.7):
+`var_dump` (`resource(N) of type (stream|Unknown)`), echo/`(string)`/`print_r`
+(`Resource id #N`), `(int)`=id, `(bool)`=true, `gettype` (`resource`/`resource
+(closed)`), `serialize`→`i:0;`, `var_export`→`NULL`; `$f===$f`/`$f==$f` e
+confronto per id; aritmetica/`++` → TypeError; risorsa come offset di array
+(Warning "Resource ID#N used as offset, casting to integer (N)"); `match` su
+risorsa → `Unhandled match case of type resource`; round-trip write/read su file
+reali; modi r/w/a/x/c (+`+`); `php://memory`/`temp` w+/r+; fgets (stop a `\n`,
+cap `$len-1`), fgetc, feof (flag sticky), fseek/ftell/rewind (SET/CUR/END);
+`file_get_contents` (offset±/length), `file_put_contents` (string/array/resource,
+`FILE_APPEND`); testi d'errore esatti (`ValueError` length, `TypeError` open
+stream resource, `fopen` Warning "Failed to open stream: <strerror>").
+
+> **Classe A (fix nello step)**: `ext/standard/tests/file/fwrite.phpt` ha
+> rivelato che `$length` di `fwrite` va clampato a `[0, len]` (negativo → 0).
+> Corretto; il test ora passa. Vedi `03-translation-log.md` step 51.

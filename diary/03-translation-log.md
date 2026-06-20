@@ -1211,3 +1211,65 @@ da `string_body()`. Le lunghezze sono in byte: `;`/`"` interni sono dati.
 sbloccati: +12 passano, +92 ora **eseguono e falliscono** su un gate successivo.
 Il prossimo lever è ora schiacciante: **`fopen` (297)** — l'intero sottosistema
 filesystem/stream (decisione architetturale a sé).
+
+## Step 51 — `fopen` + sottosistema filesystem-stream (spina)
+Lever data-driven (builtin = bucket #1; `fopen` 297 file). Scelta utente
+2026-06-21: **"spina fopen"** — introdurre il tipo risorsa + stream su file
+reali + `php://` base, scope-out dei wrapper di rete/context/filter. Tre
+sotto-step + un fix corpus-driven. Tutti i formati osservabili verificati
+**byte-exact contro l'oracle PHP 8.5.7** (probe diretti). Design in
+`02-mapping-table.md` (D-51.1…51.6). Workspace 845→**864** verde, clippy pulito.
+
+### 51a — `Zval::Resource` + tipo stream + fopen/fread/fwrite/fputs/fclose
+Mancava del tutto un tipo risorsa. Nuovo `Zval::Resource(Rc<RefCell<Resource>>)`
+con handle semantics come `Object` (il clone condivide l'`Rc`: `$g=$f` aliasa,
+`fclose($g)` chiude `$f`). Modulo `php-types::stream` (`Resource`/`ResKind`/
+`Stream`/`StreamBackend` con I/O `std` puro + EOF flag sticky). **Arm `Resource`
+in ~14 match esaustivi** (la parte più laboriosa, scoperti via `cargo build`):
+gettype/error_type_name, convert (to_bool/is_true_silent=true, to_long_cast/
+to_double=id, to_zstr="Resource id #N"), ops (try_to_number/try_to_long=None →
+TypeError aritmetico, increment/decrement=TypeError, compare per id, identical
+per handle), var_dump/print_r/var_export/serialize, coerce_key(+Warning)/
+coerce_key_silent/php_type_name/match_case_repr. `fopen` è
+**evaluator-dispatched** (`ho_fopen`, possiede il contatore `next_resource_id`
+base 5 come la CLI); fread/fwrite/fputs/fclose sono **builtin puri**
+(`php-builtins/src/file.rs`) che operano sull'`Rc` condiviso. Modi r/w/a/x/c
+con `+`; b/t ignorati; fallimento → Warning "Failed to open stream: <strerror>"
+(suffisso " (os error N)" di Rust strippato). 9 test.
+
+### 51b — fgets/fgetc/feof/fseek/ftell/rewind/fflush + `php://`
+`ho_fopen` apre `php://memory`/`temp` (buffer `Cursor` in-process; spill-to-disk
+di temp = scope-out), `php://stdout` (→ buffer di output dell'evaluator, così
+interleava con echo ed è catturato; **non** lo stdout reale), `php://stderr`
+(→ stderr reale). Wrapper ignoti → Warning "no suitable wrapper" + false.
+Costanti `SEEK_SET/CUR/END` = 0/1/2. `fgets($f,$len)` legge ≤ `$len-1` byte
+(convenzione C). `feof` riflette l'EOF flag sticky; closed → TypeError. `fseek`
+whence SET/CUR/END, offset assoluto negativo → −1. 8 test.
+
+### 51c — file_get_contents / file_put_contents (builtin puri)
+Nessuna risorsa: I/O diretto su `std::fs`. `file_get_contents` legge tutto poi
+applica offset (negativo = dalla fine)/length; mancante → Warning + false.
+`file_put_contents` accetta string | array (concatenato) | stream resource
+(drenato); `FILE_APPEND`(8) appende, `LOCK_EX`(2) accettato e ignorato.
+Costanti FILE_USE_INCLUDE_PATH/LOCK_EX/FILE_APPEND. 5 test.
+
+### Fix corpus-driven (Fase 4c) — fwrite $length clamp
+`ext/standard/tests/file/fwrite.phpt` ha rivelato un bug **classe A**: il terzo
+arg `$length` va clampato a `[0, len]` — `fwrite($f,"data",-1)` scrive 0 byte
+(scrivevo tutti e 4). Fix + 1 test → **fwrite.phpt passa end-to-end**. Conferma
+collaterale: i testi d'errore dell'oracle combaciano esatti (errno=9 "Bad file
+descriptor", ValueError "$length must be greater than 0", TypeError "must be an
+open stream resource").
+
+### Impatto corpus (bounded — `ext/standard/tests/file`, 897 test)
+Sweep mirato (`--isolate`, `PHPT_TIMEOUT_SECS=5`) sulla directory più toccata:
+**pass 1→2, fail 43→42, skip 853** dopo il fix fwrite. Pass-rate basso atteso:
+la suite `file` dipende massicciamente da predicati FS non implementati
+(`unlink`/`tempnam`/`mkdir`/`stat`/`fileperms`…, scope-out esplicito) e da
+helper di setup, quindi 853/897 sono SKIP per capability-scan e molti dei 42
+FAIL falliscono **a monte** (il path costruito dal setup non esiste → `fopen`
+fallisce), non per bug delle primitive stream. Lo sweep full-corpus (delta del
+bucket "missing builtin") è rinviato al prossimo run batch per la policy
+anti-freeze (mai tutto il corpus in un colpo). Lever successivo naturale:
+**predicati filesystem** (`file_exists`/`is_file`/`unlink`/`mkdir`/`stat`…),
+che sblocca la maggioranza dei FAIL di `ext/standard/tests/file`.
