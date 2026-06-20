@@ -3191,6 +3191,42 @@ fn dynamic_instanceof() {
     );
 }
 
+// --- @ error-control operator (step 48) ------------------------------------
+
+/// Run a script and return its CLI-rendered stream (output with diagnostics
+/// interleaved) — for asserting that `@` suppresses a warning.
+fn rendered(src: &str) -> String {
+    let reg = registry();
+    let o = run_source_with(b"t.php", src.as_bytes(), &reg).expect("lowers");
+    String::from_utf8(o.rendered).expect("utf8")
+}
+
+#[test]
+fn error_suppression_silences_warning() {
+    // `@$x` yields NULL and the "Undefined variable" warning is suppressed.
+    assert_eq!(out("<?php var_dump(@$x);"), "NULL\n");
+    let r = rendered("<?php var_dump(@$x);");
+    assert!(!r.contains("Undefined variable"), "warning leaked: {r}");
+    // Control: without `@`, the warning is rendered.
+    assert!(rendered("<?php var_dump($x);").contains("Undefined variable"));
+}
+
+#[test]
+fn error_suppression_on_array_key() {
+    assert_eq!(out("<?php $a = []; var_dump(@$a['k']);"), "NULL\n");
+    assert!(!rendered("<?php $a = []; var_dump(@$a['k']);").contains("Undefined"));
+}
+
+#[test]
+fn error_suppression_does_not_swallow_throwable() {
+    // `@` silences warnings, not engine errors: a DivisionByZeroError still
+    // propagates (caught here to observe it fired).
+    assert_eq!(
+        out("<?php try { echo @(1 % 0); } catch (\\DivisionByZeroError $e) { echo 'caught'; }"),
+        "caught"
+    );
+}
+
 #[test]
 fn dynamic_new_unknown_class_is_fatal() {
     // An unresolved dynamic class name is a runtime fatal, no output.

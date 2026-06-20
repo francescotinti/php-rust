@@ -2670,10 +2670,7 @@ impl<'f> Lowerer<'f> {
                 })
             }
             P::ErrorControl(_) => {
-                return Err(LowerError::Unsupported {
-                    what: "@ error-control operator",
-                    line,
-                })
+                ExprKind::Suppress(Box::new(self.lower_expr(operand)?))
             }
             P::Reference(_) => {
                 return Err(LowerError::Unsupported {

@@ -425,6 +425,7 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         rendered: Vec::new(),
         diags: Vec::new(),
         diags_rendered: 0,
+        suppress_depth: 0,
         cur_line: 1,
         gen_yielder: None,
         mb_regex: crate::mbregex::MbRegexState::default(),
@@ -568,6 +569,10 @@ struct Evaluator<'p> {
     /// into `rendered`, tracked by `diags_rendered`.
     diags: Diags,
     diags_rendered: usize,
+    /// Nesting depth of the `@` error-control operator (step 48). While > 0,
+    /// `flush_diags` does not render diagnostics (the `@` handler drops them
+    /// afterwards), so warnings/notices raised under `@` are suppressed.
+    suppress_depth: usize,
     /// 1-based source line of the node currently executing, stamped onto every
     /// rendered diagnostic and the uncaught-fatal location. Updated at the top of
     /// `eval` / `exec_stmt`; on the error path it is intentionally *not* restored,
@@ -622,6 +627,11 @@ impl<'p> Evaluator<'p> {
     /// stamped with the current line and file:
     /// `\n{Severity}: {message} in {file} on line {N}\n` (`main/main.c:1493`).
     fn flush_diags(&mut self) {
+        // Under `@` (step 48) diagnostics are not rendered; the operator drops
+        // them once the suppressed expression finishes.
+        if self.suppress_depth > 0 {
+            return;
+        }
         while self.diags_rendered < self.diags.len() {
             let d = &self.diags[self.diags_rendered];
             let header = format!("\n{}: {} in ", d.severity(), d.message());
@@ -5017,6 +5027,23 @@ impl<'p> Evaluator<'p> {
                 let steps = self.resolve_steps(place)?;
                 let empty = self.place_empty(place.base, &steps)?;
                 Ok(Zval::Bool(empty))
+            }
+
+            // `@expr` (step 48): evaluate `expr`, then drop any non-fatal
+            // diagnostics it raised — error_reporting is silenced for the
+            // duration. A thrown exception / engine `Error` is on the `Err`
+            // channel and is NOT suppressed (PHP only silences warnings/notices).
+            // Edge: a diagnostic already *rendered* mid-evaluation (the operand
+            // emitted output) can't be unrendered — a minor scope-out (D-48.1).
+            ExprKind::Suppress(e) => {
+                let saved = self.diags.len();
+                self.suppress_depth += 1;
+                let r = self.eval(e);
+                self.suppress_depth -= 1;
+                // Drop the diagnostics raised while suppressed (they were never
+                // rendered, since `flush_diags` was a no-op under `@`).
+                self.diags.truncate(saved);
+                r
             }
 
             // `print expr` (step 46): emit the stringified value (honouring

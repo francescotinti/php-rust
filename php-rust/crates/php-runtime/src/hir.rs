@@ -558,6 +558,12 @@ pub enum ExprKind {
     /// `empty($place)` — true iff the place is unset or falsy (no warnings).
     Empty(Place),
 
+    /// `@expr` (step 48) — the error-control operator: evaluate `expr` but
+    /// suppress the non-fatal diagnostics (warnings/notices/deprecations) it
+    /// raises. A thrown exception / engine `Error` is *not* suppressed (it rides
+    /// the `Err` channel, like PHP, which only silences the error_reporting path).
+    Suppress(Box<Expr>),
+
     /// `print expr` (step 46) — an *expression*: emits `expr` stringified, then
     /// evaluates to `int(1)` (so `$x = print "a"` and `(print "a") + 10` work).
     Print(Box<Expr>),
