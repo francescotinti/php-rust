@@ -84,6 +84,17 @@ pub fn registry() -> Registry {
     add(b"chdir", file::chdir);
     add(b"sys_get_temp_dir", file::sys_get_temp_dir);
     add(b"clearstatcache", file::clearstatcache);
+    add(b"stat", file::stat);
+    add(b"lstat", file::lstat);
+    add(b"fstat", file::fstat);
+    add(b"filesize", file::filesize);
+    add(b"filemtime", file::filemtime);
+    add(b"fileatime", file::fileatime);
+    add(b"filectime", file::filectime);
+    add(b"fileperms", file::fileperms);
+    add(b"fileinode", file::fileinode);
+    add(b"fileowner", file::fileowner);
+    add(b"filegroup", file::filegroup);
     add(b"array_keys", array::array_keys);
     add(b"array_values", array::array_values);
     add(b"in_array", array::in_array);

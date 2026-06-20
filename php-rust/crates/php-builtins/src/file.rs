@@ -618,3 +618,153 @@ pub fn sys_get_temp_dir(_argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError
 pub fn clearstatcache(_argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Null)
 }
+
+// ---- step 52c: stat / lstat / fstat + single-field accessors ----
+
+/// The 13 stat fields in PHP's documented order; each value appears twice in the
+/// result array — first under integer keys `0..=12`, then under these names.
+const STAT_NAMES: [&[u8]; 13] = [
+    b"dev", b"ino", b"mode", b"nlink", b"uid", b"gid", b"rdev", b"size", b"atime", b"mtime",
+    b"ctime", b"blksize", b"blocks",
+];
+
+/// Extract the 13 stat fields from unix metadata as signed longs (PHP exposes
+/// them as `int`; dev/ino/size fit i64 on the platforms we target).
+fn stat_vals(m: &std::fs::Metadata) -> [i64; 13] {
+    use std::os::unix::fs::MetadataExt;
+    [
+        m.dev() as i64,
+        m.ino() as i64,
+        m.mode() as i64,
+        m.nlink() as i64,
+        m.uid() as i64,
+        m.gid() as i64,
+        m.rdev() as i64,
+        m.size() as i64,
+        m.atime(),
+        m.mtime(),
+        m.ctime(),
+        m.blksize() as i64,
+        m.blocks() as i64,
+    ]
+}
+
+/// Build the 26-element `stat` array: integer keys `0..=12` then the named keys,
+/// in order (D-52.9). var_dump / array access depend on this exact ordering.
+fn stat_array_from(vals: [i64; 13]) -> PhpArray {
+    let mut arr = PhpArray::new();
+    for (i, v) in vals.iter().enumerate() {
+        arr.insert(Key::Int(i as i64), Zval::Long(*v));
+    }
+    for (name, v) in STAT_NAMES.iter().zip(vals.iter()) {
+        arr.insert(Key::from_bytes(name), Zval::Long(*v));
+    }
+    arr
+}
+
+/// Push the PHP Warning a stat-family builtin raises when the path can't be
+/// stat'd. `verb` is the exact phrase PHP uses ("stat failed" / "Lstat failed").
+fn warn_stat_failed(ctx: &mut Ctx, p: &std::ffi::OsStr, fname: &str, verb: &str) {
+    let shown = String::from_utf8_lossy(p.as_encoded_bytes()).into_owned();
+    ctx.diags
+        .push(Diag::Warning(format!("{fname}(): {verb} for {shown}")));
+}
+
+/// `stat`: the 26-element array, following symlinks; `false` + Warning on error.
+pub fn stat(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let p = arg_os_path(argv, ctx);
+    match std::fs::metadata(&p) {
+        Ok(m) => Ok(Zval::Array(Rc::new(stat_array_from(stat_vals(&m))))),
+        Err(_) => {
+            warn_stat_failed(ctx, &p, "stat", "stat failed");
+            Ok(Zval::Bool(false))
+        }
+    }
+}
+
+/// `lstat`: like `stat` but does not follow a final symlink (its own metadata).
+pub fn lstat(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let p = arg_os_path(argv, ctx);
+    match std::fs::symlink_metadata(&p) {
+        Ok(m) => Ok(Zval::Array(Rc::new(stat_array_from(stat_vals(&m))))),
+        Err(_) => {
+            warn_stat_failed(ctx, &p, "lstat", "Lstat failed");
+            Ok(Zval::Bool(false))
+        }
+    }
+}
+
+/// `fstat`: the stat array for the file behind a stream resource. In-memory and
+/// std stream backends have no inode, so we synthesize a regular-file 0666 entry
+/// carrying the buffer length as `size` and zeros elsewhere (D-52.10).
+pub fn fstat(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let r = stream_arg(argv, "fstat")?;
+    let mut res = r.borrow_mut();
+    let stream = res.as_stream_mut().expect("open stream checked in stream_arg");
+    let vals = match &stream.backend {
+        StreamBackend::File(f) => match f.metadata() {
+            Ok(m) => stat_vals(&m),
+            Err(_) => return Ok(Zval::Bool(false)),
+        },
+        StreamBackend::Memory(c) => {
+            let mut v = [0i64; 13];
+            v[2] = 0o100_666; // mode: regular file, rw-rw-rw-
+            v[3] = 1; // nlink
+            v[7] = c.get_ref().len() as i64; // size
+            v
+        }
+        StreamBackend::Stdout | StreamBackend::Stderr => {
+            let mut v = [0i64; 13];
+            v[2] = 0o100_666;
+            v[3] = 1;
+            v
+        }
+    };
+    Ok(Zval::Array(Rc::new(stat_array_from(vals))))
+}
+
+/// Shared body for the single-field accessors (`filesize`, `filemtime`, …):
+/// follow symlinks, return the picked field as an `int`, or `false` + the
+/// "%s(): stat failed for %s" Warning on error.
+fn file_stat_long(
+    argv: &[Zval],
+    ctx: &mut Ctx,
+    fname: &str,
+    pick: impl Fn([i64; 13]) -> i64,
+) -> Result<Zval, PhpError> {
+    let p = arg_os_path(argv, ctx);
+    match std::fs::metadata(&p) {
+        Ok(m) => Ok(Zval::Long(pick(stat_vals(&m)))),
+        Err(_) => {
+            warn_stat_failed(ctx, &p, fname, "stat failed");
+            Ok(Zval::Bool(false))
+        }
+    }
+}
+
+pub fn filesize(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    file_stat_long(argv, ctx, "filesize", |v| v[7])
+}
+pub fn filemtime(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    file_stat_long(argv, ctx, "filemtime", |v| v[9])
+}
+pub fn fileatime(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    file_stat_long(argv, ctx, "fileatime", |v| v[8])
+}
+pub fn filectime(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    file_stat_long(argv, ctx, "filectime", |v| v[10])
+}
+/// `fileperms`: the full `st_mode` (type bits included), e.g. 0100644 for a
+/// regular 0644 file — matching PHP (callers mask with `& 0777` themselves).
+pub fn fileperms(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    file_stat_long(argv, ctx, "fileperms", |v| v[2])
+}
+pub fn fileinode(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    file_stat_long(argv, ctx, "fileinode", |v| v[1])
+}
+pub fn fileowner(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    file_stat_long(argv, ctx, "fileowner", |v| v[4])
+}
+pub fn filegroup(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    file_stat_long(argv, ctx, "filegroup", |v| v[5])
+}

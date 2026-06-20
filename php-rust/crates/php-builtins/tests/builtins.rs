@@ -3738,3 +3738,59 @@ fn clearstatcache_is_noop_null() {
         "NULL\nNULL\n"
     );
 }
+
+#[test]
+fn stat_array_shape_and_fields() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tmp_path("b52_stat");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = format!("{dir}/f");
+    std::fs::write(&file, "hello\n").unwrap(); // 6 bytes
+    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644)).unwrap();
+    // 26 keys; integer key 7 aliases 'size'; regular 0644 file → mode 33188 (0100644).
+    let src = format!(
+        "<?php $s=stat('{file}'); \
+         echo count($s),'|',$s[7]===$s['size']?'Y':'N','|',$s['size'],'|',$s['mode'],'|'; \
+         echo filesize('{file}'),'|',is_int(filemtime('{file}'))?'I':'X','|'; \
+         printf('%o', fileperms('{file}')); echo '|'; \
+         var_dump(@stat('{dir}/none'));"
+    );
+    assert_eq!(out(&src), "26|Y|6|33188|6|I|100644|bool(false)\n");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn lstat_vs_stat_on_symlink() {
+    use std::os::unix::fs::symlink;
+    let dir = tmp_path("b52_lstat");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = format!("{dir}/f");
+    std::fs::write(&file, "abc").unwrap();
+    let link = format!("{dir}/l");
+    let _ = symlink(&file, &link);
+    // stat follows → regular-file type bits (0100000); lstat → symlink (0120000).
+    let src = format!(
+        "<?php echo (stat('{link}')['mode'] & 0xF000)===0x8000?'reg':'?','|'; \
+         echo (lstat('{link}')['mode'] & 0xF000)===0xA000?'lnk':'?';"
+    );
+    assert_eq!(out(&src), "reg|lnk");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn fstat_on_file_and_memory() {
+    let dir = tmp_path("b52_fstat");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = format!("{dir}/f");
+    std::fs::write(&file, "hello\n").unwrap();
+    let src = format!(
+        "<?php $f=fopen('{file}','r'); $s=fstat($f); echo count($s),'|',$s['size'],'|'; fclose($f); \
+         $m=fopen('php://memory','r+'); fwrite($m,'abcd'); $t=fstat($m); \
+         echo count($t),'|',$t['size'],'|',$t['mode']; fclose($m);"
+    );
+    assert_eq!(out(&src), "26|6|26|4|33206");
+    let _ = std::fs::remove_dir_all(&dir);
+}
