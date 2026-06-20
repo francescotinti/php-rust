@@ -1127,3 +1127,54 @@ dell'operando; al termine i diagnostici accumulati vengono **troncati**. I
 silenzia solo `error_reporting`): verificato con `@(1%0)` → `DivisionByZeroError`
 ancora catchable. Scope-out **D-48.1**: un diagnostico già renderizzato a metà
 valutazione (operando che emette output) non è ritrattabile (raro).
+
+## Step 49 — constant expressions (magic + named) + hardening del runner
+
+Scelta **data-driven** dal breakdown dello step 48: dopo un run completo del
+corpus (9.117 `.phpt`) i due bucket `unsupported` dominanti erano
+`expr:MagicConstant` (758) e `named constant` (381) — ~1.140 test bloccati su
+un'unica famiglia. Tre sotto-step coesi (commit separati). **+11 unit test**
+(821→832), clippy pulito, workspace 829 verde.
+
+### 49-pre — runner: timeout per-test in `--isolate` (hardening)
+Far girare il corpus pieno piantava il Mac (OOM): un `.phpt` che porta
+l'evaluator in un loop illimitato (`while (true) $a[] = 1;`) girava all'infinito
+mentre `--isolate` attendeva — su macOS non c'è `timeout(1)`. Ora ogni child gira
+sotto un budget wall-clock (default 10s, `PHPT_TIMEOUT_SECS` per override/`0`=off):
+oltre il limite è ucciso e contato come un FAIL `timed out`. Lo stdout è drenato
+su un thread separato così un diff grande non causa deadlock nel ciclo
+wait/kill. Verificato con un test sintetico `while(true)` (ucciso al cap).
+
+### 49a — magic constants (commit `feat step49a`)
+Le 9 varianti mago `MagicConstant` (`__LINE__ __FILE__ __DIR__ __CLASS__
+__FUNCTION__ __METHOD__ __TRAIT__ __NAMESPACE__ __PROPERTY__`) sono risolte **a
+lowering time** a literal: PHP le sostituisce a compile-time dallo *scope
+lessicale*, quindi nessun supporto runtime. Il Lowerer traccia
+`cur_class`/`cur_function`/`cur_trait` con lo stesso idioma save/restore di
+`fn_by_ref` (function, method, closure/arrow=`{closure}`, class, trait).
+`__LINE__`→`Int(line)`, `__FILE__`→`prog_name`, `__DIR__`→`dirname`,
+`__METHOD__`→`Class::m` (nome nudo in funzione libera, `""` a top level),
+`__NAMESPACE__`/`__PROPERTY__`→`""` (Tier 1: niente namespace; hook non
+supportati).
+
+### 49b — named constants predefinite estese (commit `feat step49b`)
+`resolve_constant` ora folda anche la famiglia `E_*` (E_ALL=32767),
+`DIRECTORY_SEPARATOR`, `PATH_SEPARATOR`, `PHP_SAPI='cli'`.
+
+### 49c — costanti utente: `define`/`constant`/`defined` (commit `feat step49c`)
+Un bare `NAME` non-engine non è più uno SKIP: lowera a `ExprKind::Const(name)` e
+si risolve a runtime contro una tabella `define()` sull'`Evaluator`, con il fatal
+PHP 8 `Undefined constant "NAME"` se assente. I tre builtin sono dispatchati
+**nell'evaluator** (serve la tabella) prima del registry stateless, sia sul path
+diretto sia su `call_named` (chiamate dinamiche/stringa). `define()` avvisa e
+ritorna `false` su ridefinizione; `defined()`/`constant()` consultano anche la
+tabella engine (`resolve_constant`, ora `pub(crate)`).
+
+### Impatto sul corpus (9.117 test)
+`pass 1180→1231` (**+51** passano del tutto), `skip 6744→6389` (**−355**),
+bucket `unsupported` `2926→1933` (**−993**: MagicConstant e named-constant spariti
+dalla classifica). I ~993 test sbloccati: +51 passano, +304 ora **eseguono e
+falliscono** su un gate successivo (prima non partivano), il resto migra a un
+altro skip — soprattutto **builtin mancanti** (1473→2110, ora il bucket #1 e il
+prossimo lever naturale). Il pass-rate "of runnable" cala (49,7%→45,1%) solo
+perché il denominatore cresce: 355 test in più ora girano.

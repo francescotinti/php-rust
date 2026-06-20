@@ -531,3 +531,20 @@ throwable/`Error` (es. `DivisionByZeroError` resta catchable).
 Scope-out minori 48b (non divergenze osservabili comuni): `$cls::bind()` dinamico
 sulla classe `Closure` interna; `$gen instanceof $dyn` (generator vs nome-classe
 dinamico → `false`).
+
+## Step 49 — constant expressions (magic + named)
+
+| ID | Caso | Noi | PHP | Note |
+|---|---|---|---|---|
+| **D-49.1** | `__CLASS__` dentro un **metodo di trait** | `""` | nome della classe **usante** | I membri del trait sono lowerati una volta e copiati in ogni classe consumatrice, quindi la classe non è nota al momento della risoluzione lessicale. `__TRAIT__` è corretto (nome del trait). Raro |
+| **D-49.2** | `__FILE__` / `__DIR__` | nome script passato al runner (es. `t.php`) e suo dirname | path assoluto reale (`realpath`) | Il transpiler non ha un filesystem reale; sufficiente per i `.phpt` che usano `basename(__FILE__)` o confronti relativi |
+| **D-49.3** | `__FUNCTION__`/`__METHOD__` dentro closure/arrow | `{closure}` | `{closure}` (8.x) o `{closure:file:line}` (forma estesa più recente) | Usiamo la forma corta `{closure}`; `__METHOD__` in closure dentro un metodo dà `Class::{closure}` |
+
+Casi **non** divergenti (parità verificata): `__LINE__`, `__FUNCTION__`/`__CLASS__`/
+`__METHOD__` in funzioni/metodi/global (vuoto a top level); `E_*`/`DIRECTORY_SEPARATOR`/
+`PHP_SAPI`; `define()`/`constant()`/`defined()` con costanti utente ed engine;
+costante indefinita → fatal runtime `Undefined constant "NAME"` (PHP 8, **non**
+più uno SKIP di lowering).
+
+Scope-out: `define()` con terzo argomento case-insensitive (rimosso in PHP 8, non
+implementato); array/oggetti come valore di `define()` funzionano (Zval qualsiasi).
