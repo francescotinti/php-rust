@@ -1178,3 +1178,36 @@ falliscono** su un gate successivo (prima non partivano), il resto migra a un
 altro skip — soprattutto **builtin mancanti** (1473→2110, ora il bucket #1 e il
 prossimo lever naturale). Il pass-rate "of runnable" cala (49,7%→45,1%) solo
 perché il denominatore cresce: 355 test in più ora girano.
+
+## Step 50 — `serialize()` / `unserialize()`
+
+Scelta data-driven (builtin = bucket #1). Coppia auto-contenuta e ben
+specificata, verificata **byte-exact contro l'oracle PHP 8.5**. Due sotto-step.
+**+12 unit/functional test** sul parser e round-trip, workspace 841 verde.
+
+### 50a — `serialize()` builtin puro (commit `feat step50a`)
+Nuovo modulo `php-builtins/src/serialize.rs`. Walk del `Zval` → byte string:
+`N;` / `b:N;` / `i:N;` / `d:<shortest>;` / `s:<bytelen>:"…";` / `a:<n>:{…}` /
+`O:<len>:"class":<n>:{…}`. Float con `serialize_precision=-1`
+(`dtoa::double_to_shortest`, riuso step 47); stringhe a **lunghezza in byte**;
+`Closure`/`Generator` → `Error` "Serialization of 'X' is not allowed". È un
+builtin puro: non serve stato dell'evaluator.
+
+### 50b — `unserialize()` evaluator-dispatched (commit `feat step50b`)
+Parser recursive-descent **puro** (`php-runtime/src/unserialize.rs`, intermedio
+`enum Ser`, 4 unit test) + conversione `Ser`→`Zval` **nell'evaluator** (come
+`json_decode`): ricostruire un oggetto richiede la class table / id allocator,
+fuori portata di un builtin puro. Nuovo `make_object(class, fields)` istanzia la
+classe per nome col suo `class_id` e shape reali e setta le proprietà
+direttamente (**il costruttore NON gira**, come PHP); classe sconosciuta →
+fallback `stdClass`. Input malformato o con garbage finale → `false` + Warning.
+**Punto delicato**: il nome-classe in `O:` è `<len>:"class":` (terminato da `:`,
+non `;`) — diverso dalle stringhe-valore; risolto con `quoted_bytes()` separato
+da `string_body()`. Le lunghezze sono in byte: `;`/`"` interni sono dati.
+
+### Impatto sul corpus (9.117 test)
+`pass 1231→1243` (**+12**), `skip 6389→6285` (**−104**), bucket `builtin`
+`2110→2006`: `serialize`/`unserialize` spariti dai builtin mancanti. I ~104 test
+sbloccati: +12 passano, +92 ora **eseguono e falliscono** su un gate successivo.
+Il prossimo lever è ora schiacciante: **`fopen` (297)** — l'intero sottosistema
+filesystem/stream (decisione architetturale a sé).

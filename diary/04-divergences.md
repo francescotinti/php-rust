@@ -548,3 +548,17 @@ più uno SKIP di lowering).
 
 Scope-out: `define()` con terzo argomento case-insensitive (rimosso in PHP 8, non
 implementato); array/oggetti come valore di `define()` funzionano (Zval qualsiasi).
+
+## Step 50 — `serialize` / `unserialize`
+
+| ID | Caso | Noi | PHP | Note |
+|---|---|---|---|---|
+| **D-50.1** | proprietà `private`/`protected` in `serialize` | nome nudo | nome mangled (`\0Class\0p` / `\0*\0p`) | Le proprietà `public` (caso comune) sono byte-exact; il mangling visibilità è scope-out |
+| **D-50.2** | riferimenti condivisi / ricorsione (`r:`/`R:`) | `serialize` deref trasparente; `unserialize` di `r:`/`R:` → `false` | marker di riferimento condiviso | Identità dei riferimenti non preservata; strutture cicliche non serializzabili |
+| **D-50.3** | `unserialize` di classe sconosciuta | `stdClass` con le proprietà | `__PHP_Incomplete_Class` | + nessun `__wakeup`/`__unserialize` invocato (scope-out) |
+| **D-50.4** | `unserialize` malformato: offset nel Warning | sempre `offset 0` | offset reale del byte di errore | Non tracciamo l'offset di fallimento; il valore `false` e il Warning sono corretti |
+
+Casi **non** divergenti (parità byte-exact verificata contro l'oracle PHP 8.5):
+scalari, stringhe (lunghezza in byte, multibyte), array annidati/ordinati, oggetti
+`stdClass`; `serialize(unserialize(S)) == S` per ogni forma canonica; round-trip di
+valori freschi; `Closure`/`Generator` → `Error`; malformato → `false`.
