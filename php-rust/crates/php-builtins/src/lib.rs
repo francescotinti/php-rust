@@ -11,6 +11,7 @@
 
 mod array;
 mod date;
+mod file;
 mod format;
 mod json;
 mod math;
@@ -51,6 +52,11 @@ pub fn registry() -> Registry {
     add(b"__interval_format", date::__interval_format);
     add(b"__date_from_format", date::__date_from_format);
     add(b"json_encode", json::json_encode);
+    // File / stream builtins (step 51; `fopen` is evaluator-dispatched).
+    add(b"fread", file::fread);
+    add(b"fwrite", file::fwrite);
+    add(b"fputs", file::fwrite);
+    add(b"fclose", file::fclose);
     add(b"array_keys", array::array_keys);
     add(b"array_values", array::array_values);
     add(b"in_array", array::in_array);
@@ -290,6 +296,14 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
             spaces(out, indent);
             out.extend_from_slice(b"}\n");
         }
+        // A resource (step 51): `resource(N) of type (stream)` while open,
+        // `resource(N) of type (Unknown)` once closed (oracle-verified, D-51.5).
+        Zval::Resource(r) => {
+            let r = r.borrow();
+            out.extend_from_slice(
+                format!("resource({}) of type ({})\n", r.id, r.dump_type()).as_bytes(),
+            );
+        }
         // A class instance (step 19-7): `object(C)#N (k) { ["p"]=>…,
         // ["p":protected]=>…, ["p":"C":private]=>… }`, with a recursion guard.
         Zval::Object(o) => {
@@ -477,8 +491,11 @@ fn export_into(out: &mut Vec<u8>, v: &Zval, level: usize, seen: &mut Vec<usize>,
                 out.extend_from_slice(b"))");
             }
         }
-        // Closures / generators have no `var_export` form (D-47.1 scope-out).
-        Zval::Closure(_) | Zval::Generator(_) => out.extend_from_slice(b"NULL"),
+        // Closures / generators / resources have no `var_export` form
+        // (D-47.1 scope-out; PHP warns and yields NULL for a resource).
+        Zval::Closure(_) | Zval::Generator(_) | Zval::Resource(_) => {
+            out.extend_from_slice(b"NULL")
+        }
     }
 }
 
@@ -593,6 +610,10 @@ fn print_r_into(out: &mut Vec<u8>, v: &Zval, indent: usize, ctx: &mut Ctx, seen:
             out.push(b'\n');
             spaces(out, indent);
             out.extend_from_slice(b")\n");
+        }
+        // A resource prints as "Resource id #N" (step 51, like echo).
+        Zval::Resource(r) => {
+            out.extend_from_slice(format!("Resource id #{}", r.borrow().id).as_bytes());
         }
         // A class instance (step 19-7): `C Object ( [p] => …, [p:protected] => …,
         // [p:C:private] => … )`, with a recursion guard.

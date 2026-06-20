@@ -45,6 +45,13 @@ pub enum Zval {
     /// the shared `Rc<RefCell<GenState>>` (assigning the variable aliases the
     /// same running generator). See [`crate::GenState`].
     Generator(Rc<RefCell<GenState>>),
+    /// A stream resource (`Zval::Resource`, step 51, D-51.1): the value `fopen`
+    /// and friends return. Handle semantics like `Object` — `$g = $f` aliases
+    /// the same stream via the shared `Rc<RefCell<Resource>>`, so `fclose($g)`
+    /// also closes `$f`. `gettype` reports "resource"/"resource (closed)". The
+    /// byte stream itself lives in [`crate::Resource`]; only `fopen` (which owns
+    /// the id counter) mints these, in the evaluator (D-51.3).
+    Resource(Rc<RefCell<crate::Resource>>),
 }
 
 /// A lowered-and-captured closure value (step 18). `fn_idx` selects the body
@@ -131,6 +138,8 @@ impl Zval {
             Zval::Array(_) => "array",
             Zval::Ref(cell) => cell.borrow().gettype(),
             Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) => "object",
+            // "resource" while open, "resource (closed)" after fclose (D-51.1).
+            Zval::Resource(r) => r.borrow().type_name(),
         }
     }
 
@@ -151,6 +160,7 @@ impl Zval {
             // (which has the class table) build class-specific messages where it
             // matters (step 19-1 simplification; refine if the corpus needs it).
             Zval::Object(_) => "object",
+            Zval::Resource(r) => r.borrow().type_name(),
         }
     }
 }

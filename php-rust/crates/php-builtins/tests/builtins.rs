@@ -3329,3 +3329,122 @@ fn serialize_unserialize_roundtrip_values() {
     let prog = "<?php echo serialize(unserialize(serialize([1, 'a' => 2.5, 3 => [true, null]])));";
     assert_eq!(out(prog), "a:3:{i:0;i:1;s:1:\"a\";d:2.5;i:3;a:2:{i:0;b:1;i:1;N;}}");
 }
+
+// ---- step 51a: fopen / fread / fwrite / fclose on real files + Resource type ----
+
+/// A unique path under the system temp dir for a single test (avoids collisions
+/// when tests run in parallel). Cleaned up by the test after use.
+fn tmp_path(tag: &str) -> String {
+    let mut p = std::env::temp_dir();
+    p.push(format!("phpr_51a_{tag}"));
+    p.to_string_lossy().into_owned()
+}
+
+#[test]
+fn fopen_write_read_roundtrip() {
+    let p = tmp_path("roundtrip");
+    let _ = std::fs::remove_file(&p);
+    let src = format!(
+        "<?php $w=fopen('{p}','w'); echo fwrite($w,'hello world'); fclose($w); \
+         $r=fopen('{p}','r'); echo '|',fread($r,5),'|',fread($r,100); fclose($r);"
+    );
+    assert_eq!(out(&src), "11|hello| world");
+    let _ = std::fs::remove_file(&p);
+}
+
+#[test]
+fn resource_var_dump_echo_and_casts() {
+    let p = tmp_path("dump");
+    let _ = std::fs::remove_file(&p);
+    let src = format!(
+        "<?php $f=fopen('{p}','w'); var_dump($f); echo $f,\"\\n\"; \
+         echo gettype($f),\"\\n\"; echo (int)$f,' ',(bool)$f?'1':'0',\"\\n\"; fclose($f);"
+    );
+    assert_eq!(
+        out(&src),
+        "resource(5) of type (stream)\nResource id #5\nresource\n5 1\n"
+    );
+    let _ = std::fs::remove_file(&p);
+}
+
+#[test]
+fn resource_closed_observable() {
+    let p = tmp_path("closed");
+    let _ = std::fs::remove_file(&p);
+    let src = format!(
+        "<?php $f=fopen('{p}','w'); fclose($f); var_dump($f); echo gettype($f);"
+    );
+    assert_eq!(out(&src), "resource(5) of type (Unknown)\nresource (closed)");
+    let _ = std::fs::remove_file(&p);
+}
+
+#[test]
+fn resource_identity_and_alias() {
+    let p = tmp_path("ident");
+    let _ = std::fs::remove_file(&p);
+    // $g aliases $f (shared handle): closing $g closes $f.
+    let src = format!(
+        "<?php $f=fopen('{p}','w'); $g=$f; var_dump($f===$f,$f===$g); \
+         fclose($g); echo gettype($f);"
+    );
+    assert_eq!(out(&src), "bool(true)\nbool(true)\nresource (closed)");
+    let _ = std::fs::remove_file(&p);
+}
+
+#[test]
+fn resource_compare_by_id() {
+    let (a, b) = (tmp_path("cmpA"), tmp_path("cmpB"));
+    let _ = std::fs::remove_file(&a);
+    let _ = std::fs::remove_file(&b);
+    let src = format!(
+        "<?php $x=fopen('{a}','w'); $y=fopen('{b}','w'); \
+         var_dump($x<$y,$x==$x,$x==$y); fclose($x); fclose($y);"
+    );
+    assert_eq!(out(&src), "bool(true)\nbool(true)\nbool(false)\n");
+    let _ = std::fs::remove_file(&a);
+    let _ = std::fs::remove_file(&b);
+}
+
+#[test]
+fn fopen_missing_file_is_false() {
+    // Suppressed with @ so the warning does not interleave into stdout.
+    assert_eq!(
+        out("<?php echo @fopen('/no_such_dir_phpr/x','r') === false ? 'F' : 'T';"),
+        "F"
+    );
+}
+
+#[test]
+fn fputs_is_fwrite_alias() {
+    let p = tmp_path("fputs");
+    let _ = std::fs::remove_file(&p);
+    let src = format!(
+        "<?php $f=fopen('{p}','w'); echo fputs($f,'abc'); fclose($f); \
+         $r=fopen('{p}','r'); echo fread($r,3); fclose($r);"
+    );
+    assert_eq!(out(&src), "3abc");
+    let _ = std::fs::remove_file(&p);
+}
+
+#[test]
+fn fopen_c_mode_keeps_content_pos_zero() {
+    let p = tmp_path("cmode");
+    let _ = std::fs::write(&p, "ABCD");
+    // `c` opens without truncating, position 0 → write overwrites the head.
+    // (Read back via fread; file_get_contents is step 51c.)
+    let src = format!(
+        "<?php $f=fopen('{p}','c'); fwrite($f,'X'); fclose($f); \
+         $r=fopen('{p}','r'); echo fread($r,10); fclose($r);"
+    );
+    assert_eq!(out(&src), "XBCD");
+    let _ = std::fs::remove_file(&p);
+}
+
+#[test]
+fn serialize_resource_is_int_zero() {
+    let p = tmp_path("ser");
+    let _ = std::fs::remove_file(&p);
+    let src = format!("<?php $f=fopen('{p}','w'); echo serialize($f); fclose($f);");
+    assert_eq!(out(&src), "i:0;");
+    let _ = std::fs::remove_file(&p);
+}

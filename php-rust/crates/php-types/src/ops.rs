@@ -55,8 +55,9 @@ fn try_to_number(v: &Zval, diags: &mut Diags) -> Option<Num> {
         },
         Zval::Array(_) => None,
         // An object (closure or instance) has no numeric value: the caller raises
-        // the op's TypeError ("Unsupported operand types: ...", step 18/19).
-        Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) => None,
+        // the op's TypeError ("Unsupported operand types: ...", step 18/19). A
+        // resource is the same (oracle: `$fp + 1` → TypeError, step 51).
+        Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) | Zval::Resource(_) => None,
         // A reference is converted as its target (deref-on-read should make this
         // unreachable, but recursing keeps the op correct if one slips through).
         Zval::Ref(c) => try_to_number(&c.borrow(), diags),
@@ -104,7 +105,7 @@ fn try_to_long(v: &Zval, diags: &mut Diags) -> Option<i64> {
             }
         }
         Zval::Array(_) => None,
-        Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) => None,
+        Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) | Zval::Resource(_) => None,
         Zval::Ref(c) => try_to_long(&c.borrow(), diags),
     }
 }
@@ -509,6 +510,11 @@ pub fn compare(a: &Zval, b: &Zval) -> i32 {
             (Zval::Long(l), Zval::Double(r)) => return threeway(*l as f64, *r),
             (Zval::Double(l), Zval::Double(r)) => return threeway(*l, *r),
             (Zval::Array(l), Zval::Array(r)) => return compare_arrays(l, r),
+            // Two resources compare by their numeric id (oracle: `$a < $b` is
+            // `id_a < id_b`, step 51).
+            (Zval::Resource(l), Zval::Resource(r)) => {
+                return threeway_i(l.borrow().id as i64, r.borrow().id as i64)
+            }
             (Zval::Undef | Zval::Null, Zval::Undef | Zval::Null) => return 0,
             (Zval::Undef | Zval::Null, Zval::Bool(rb)) => return if *rb { -1 } else { 0 },
             (Zval::Bool(lb), Zval::Undef | Zval::Null) => return if *lb { 1 } else { 0 },
@@ -695,6 +701,9 @@ pub fn identical(a: &Zval, b: &Zval) -> bool {
         // instance (object assignment shares the `Rc`). Enum cases are interned
         // singletons, so this also gives `E::Case === E::Case` (step 23, D-23.3).
         (Zval::Object(l), Zval::Object(r)) => Rc::ptr_eq(l, r),
+        // Two resources are identical iff the same handle (`$f === $f`); each
+        // `fopen` mints a unique handle so this also matches `==` by id (step 51).
+        (Zval::Resource(l), Zval::Resource(r)) => Rc::ptr_eq(l, r),
         // Identity follows references on either side (also covers reference
         // elements inside arrays via the recursive call above).
         (Zval::Ref(c), _) => identical(&c.borrow(), b),
@@ -759,6 +768,9 @@ pub fn increment(v: &mut Zval, diags: &mut Diags) -> Result<(), PhpError> {
         Zval::Object(o) => {
             let name = String::from_utf8_lossy(o.borrow().class_name.as_bytes()).into_owned();
             return Err(PhpError::TypeError(format!("Cannot increment {name}")));
+        }
+        Zval::Resource(_) => {
+            return Err(PhpError::TypeError("Cannot increment resource".to_string()));
         }
         Zval::Ref(cell) => {
             let inner = &mut *cell.borrow_mut();
@@ -888,6 +900,9 @@ pub fn decrement(v: &mut Zval, diags: &mut Diags) -> Result<(), PhpError> {
         Zval::Object(o) => {
             let name = String::from_utf8_lossy(o.borrow().class_name.as_bytes()).into_owned();
             return Err(PhpError::TypeError(format!("Cannot decrement {name}")));
+        }
+        Zval::Resource(_) => {
+            return Err(PhpError::TypeError("Cannot decrement resource".to_string()));
         }
         Zval::Ref(cell) => {
             let inner = &mut *cell.borrow_mut();

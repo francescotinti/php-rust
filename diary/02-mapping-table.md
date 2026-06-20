@@ -895,3 +895,72 @@ compile-time (duplicate backing value, case-type vs backing mismatch, `from()`
 argument TypeError), enforcement degli object type-hint sui parametri,
 dipendenze da Reflection*/SplObjectStorage/WeakMap, stack-trace frames. Dettaglio
 divergenze D-NEW-11/12/13 in `04-divergences.md`.
+
+## Step 51 — `fopen` / sottosistema filesystem-stream (DESIGN PASS)
+
+> Generato con assistenza AI (Claude Opus 4.8). Lever data-driven: `fopen` (297
+> file nel corpus) = il bucket builtin #1. Scelta utente 2026-06-21: **"spina
+> fopen"** (introdurre il tipo `Resource` + stream su file reali + `php://`
+> base), sotto-step 51a/51b/51c. Ground truth catturato contro l'oracle 8.5.7.
+
+**D-51.1 — nuovo `Zval::Resource(Rc<RefCell<Resource>>)`.** Mancava del tutto.
+Handle semantics come `Object`/`Generator`: il clone condivide l'`Rc`, quindi
+`$g = $f` aliasa lo stesso stream e `fclose($g)` chiude anche `$f`. `gettype` →
+`"resource"` (aperto) / `"resource (closed)"` (chiuso). `error_type_name` →
+`"resource (closed)"`/`"resource"`. Identità `$f === $f` via `Rc::ptr_eq`.
+
+**D-51.2 — payload in `php-types::stream`, logica I/O lì, semantica PHP sopra.**
+`Resource { id: u32, kind: ResKind }`, `ResKind::{ Stream(Stream), Closed }`,
+`Stream { backend, readable, writable, eof }`, `StreamBackend::{ File(fs::File),
+Memory(Cursor<Vec<u8>>), Stdout, Stderr }`. I metodi `read/read_line/write/seek/
+tell/eof` (pura `std::io`) vivono su `Stream`; precedente: `GenState` (payload
+runtime) già in php-types. Le **regole PHP** (mode→capability, `false`+Warning su
+fallimento, EOF flag) stanno nel chiamante (evaluator/builtins). `Resource` NON
+è `Clone` (sta dietro `Rc`); `File`/`Cursor` sono `Debug` → `derive(Debug)` ok.
+
+**D-51.3 — `fopen` evaluator-dispatched, le operazioni builtin puri.** `fopen`
+(e gli opener `php://` in 51b) servono il **contatore id** (stato evaluator) →
+in `HIGHER_ORDER_BUILTINS`/`dispatch_higher_order` come `unserialize`. `fread/
+fwrite/fputs/fclose/fgets/fgetc/feof/fseek/ftell/rewind/fflush` raggiungono lo
+stream tramite l'`Rc<RefCell<Resource>>` dell'argomento → **builtin puri** in
+`php-builtins/src/file.rs`, nessuno stato evaluator necessario.
+
+**D-51.4 — base id risorse = 5.** Oracle CLI `-n`: STDIN/STDOUT/STDERR = id 1/2/3,
+id 4 interno, primo `fopen` utente = id 5, poi monotono. `next_resource_id`
+inizializzato a 5. STDIN/STDOUT/STDERR non modellati come costanti in Tier 1
+(se serviranno, id 1/2/3 fissi). L'id esatto conta solo per i test EXPECT
+(esatti); gli EXPECTF usano `%d` → divergenza-prone, documentata.
+
+**D-51.5 — formati osservabili (oracle-verified):**
+- `var_dump($f)` aperto → `resource(N) of type (stream)`; chiuso →
+  `resource(N) of type (Unknown)`.
+- `print_r`/echo/`(string)$f` → `Resource id #N`.
+- `(int)$f` → `N` (l'id); `(bool)$f` → `true`; `(float)$f` → `N as f64`.
+- `serialize($f)` → `i:0;` (PHP serializza le risorse come intero 0).
+- aritmetica/`try_to_number` su risorsa → l'id (niente Warning in Tier 1).
+- `feof` riflette l'**EOF flag**: falso finché una lettura non oltrepassa la
+  fine (verificato: dopo aver letto esattamente fino a EOF è ancora false).
+
+**D-51.6 — enforcement mode su file reali.** `r`=read, `w`=write+truncate,
+`a`=write+append, `x`=create-excl+write, `c`=write-no-truncate; suffisso `+`
+aggiunge l'altra capability; `b`/`t` ignorati. `fwrite` su stream non-writable e
+`fread` su non-readable → `false` + Warning (oracle: `bool(false)`). `php://memory`
+è lenient sul mode (oracle accetta `"zz"`); per i file reali un mode senza
+r/w/a/x/c → `false`.
+
+### Sotto-step
+- **51a**: `Zval::Resource` + `php-types::stream` + `next_resource_id` + `fopen`
+  (solo file reali) + `fread`/`fwrite`/`fputs`/`fclose`. Arm `Resource` in tutti
+  i match esaustivi su `Zval` (convert/ops/var_dump/print_r/serialize).
+- **51b**: `fgets`/`fgetc`/`feof`/`fseek`/`ftell`/`rewind`/`fflush` + opener
+  `php://memory`/`php://temp`/`php://stdout`/`php://stderr`.
+- **51c**: `file_get_contents`/`file_put_contents` (builtin puri, no Resource).
+
+### Scope-out (debito esplicito → futuri step)
+Wrapper `http://`/`https://`/`ftp://`/`data://`/`zlib://`/`phar://`, stream
+context (`stream_context_create`), stream filter (`stream_filter_append`,
+`php://filter`), socket stream (`fsockopen`, `stream_socket_*`),
+`stream_get_contents`/`stream_get_line`/`stream_select`, `php://input`,
+registrazione wrapper custom (`stream_wrapper_register`), predicati FS
+(`file_exists`/`is_file`/`mkdir`/`unlink`/`rename`/`copy`/`glob`/`scandir`) —
+candidati a uno step FS dedicato dopo 51.

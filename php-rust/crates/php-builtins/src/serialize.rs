@@ -105,6 +105,8 @@ fn ser_into(out: &mut Vec<u8>, v: &Zval) -> Result<(), PhpError> {
                 "Serialization of 'Generator' is not allowed".into(),
             ))
         }
+        // PHP serializes a resource as the integer 0 (step 51, D-51.5).
+        Zval::Resource(_) => out.extend_from_slice(b"i:0;"),
     }
     Ok(())
 }

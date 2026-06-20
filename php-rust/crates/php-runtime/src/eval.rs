@@ -24,7 +24,7 @@ use corosensei::{Coroutine, CoroutineResult, Yielder};
 use php_types::{
     convert, dtoa, numstr, ops, Closure, ClosureInfo, ClosureParam, ClosureRender, Diag, Diags,
     GenDriver, GenKey, GenState, GenStatus, GenStep, Key, Object, ObjectInfo, PhpArray, PhpError,
-    PhpStr, PropVis, Props, Zval,
+    PhpStr, PropVis, Props, Resource, Stream, StreamBackend, Zval,
 };
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
@@ -46,6 +46,7 @@ const HIGHER_ORDER_BUILTINS: &[&[u8]] = &[
     b"usort",
     b"json_decode",
     b"unserialize",
+    b"fopen",
     b"preg_match",
     b"preg_match_all",
     b"preg_replace",
@@ -417,6 +418,7 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         closures: &program.closures,
         closure_info,
         next_object_id: 1,
+        next_resource_id: 5,
         fn_index: &fn_index,
         classes: &program.classes,
         class_index: &class_index,
@@ -505,6 +507,10 @@ struct Evaluator<'p> {
     /// Monotonic — handles are not recycled when a closure is freed, so dumps of
     /// short-lived closures may number higher than PHP's (step 18-7 scope-out).
     next_object_id: u32,
+    /// Next id minted for an `fopen` stream resource (the `#N` in "Resource id
+    /// #N" / `resource(N)`). Monotonic; starts at 5 to match the CLI oracle,
+    /// where STDIN/STDOUT/STDERR + one internal stream take ids 1–4 (D-51.4).
+    next_resource_id: u32,
     fn_index: &'p HashMap<Vec<u8>, usize>,
     /// User classes and their name→index map (step 19, D-19.3). A `new` / method
     /// dispatch resolves a class against `class_index`.
@@ -3555,6 +3561,7 @@ impl<'p> Evaluator<'p> {
             b"usort" => Some(self.ho_usort(args)),
             b"json_decode" => Some(self.ho_json_decode(args)),
             b"unserialize" => Some(self.ho_unserialize(args)),
+            b"fopen" => Some(self.ho_fopen(args)),
             b"preg_match" => Some(self.ho_preg_match(args)),
             b"preg_match_all" => Some(self.ho_preg_match_all(args)),
             b"preg_replace" => Some(self.ho_preg_replace(args)),
@@ -4360,6 +4367,52 @@ impl<'p> Evaluator<'p> {
                 Ok(Zval::Bool(false))
             }
         }
+    }
+
+    /// `fopen($filename, $mode, …)` (step 51, evaluator-dispatched because it
+    /// mints a resource id, D-51.3). 51a opens **real files** only; the
+    /// `php://` wrappers land in 51b. On failure: Warning + `false`.
+    fn ho_fopen(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        let Some(path_e) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "fopen() expects at least 2 arguments, 0 given".to_string(),
+            ));
+        };
+        let Some(mode_e) = args.get(1) else {
+            return Err(PhpError::ArgumentCountError(
+                "fopen() expects at least 2 arguments, 1 given".to_string(),
+            ));
+        };
+        let path_v = self.eval(path_e)?.deref_clone();
+        let path = self.stringify(&path_v)?.as_bytes().to_vec();
+        let mode_v = self.eval(mode_e)?.deref_clone();
+        let mode = self.stringify(&mode_v)?.as_bytes().to_vec();
+        // Args 3/4 (use_include_path, context) are a documented scope-out.
+        if path.starts_with(b"php://") {
+            // 51b territory; for now report the standard open failure.
+            self.diags.push(Diag::Warning(format!(
+                "fopen({}): Failed to open stream: no suitable wrapper could be found",
+                String::from_utf8_lossy(&path)
+            )));
+            return Ok(Zval::Bool(false));
+        }
+        match open_file_stream(&path, &mode) {
+            Ok(stream) => Ok(self.alloc_resource(stream)),
+            Err(msg) => {
+                self.diags.push(Diag::Warning(format!(
+                    "fopen({}): Failed to open stream: {msg}",
+                    String::from_utf8_lossy(&path)
+                )));
+                Ok(Zval::Bool(false))
+            }
+        }
+    }
+
+    /// Wrap a freshly opened stream in a `Zval::Resource` with the next id.
+    fn alloc_resource(&mut self, stream: Stream) -> Zval {
+        let id = self.next_resource_id;
+        self.next_resource_id += 1;
+        Zval::Resource(Rc::new(RefCell::new(Resource::new(id, stream))))
     }
 
     /// Turn a parsed [`crate::unserialize::Ser`] tree into a `Zval`.
@@ -5713,6 +5766,15 @@ impl<'p> Evaluator<'p> {
                     "Illegal offset type".to_string(),
                 ))
             }
+            // A resource offset casts to its id with a Warning (oracle:
+            // "Resource ID#5 used as offset, casting to integer (5)", step 51).
+            Zval::Resource(r) => {
+                let id = r.borrow().id;
+                self.diags.push(Diag::Warning(format!(
+                    "Resource ID#{id} used as offset, casting to integer ({id})"
+                )));
+                Key::Int(id as i64)
+            }
             Zval::Ref(c) => return self.coerce_key(&c.borrow()),
         })
     }
@@ -6400,6 +6462,8 @@ fn coerce_key_silent(v: &Zval) -> Option<Key> {
         Zval::Str(s) => Some(Key::from_zstr(s)),
         Zval::Null | Zval::Undef => Some(Key::from_bytes(b"")),
         Zval::Array(_) | Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) => None,
+        // A resource offset is its id (silent here; the noisy path warns).
+        Zval::Resource(r) => Some(Key::Int(r.borrow().id as i64)),
         Zval::Ref(c) => coerce_key_silent(&c.borrow()),
     }
 }
@@ -6582,6 +6646,55 @@ fn closure_params_for(f: &FnDecl) -> Vec<ClosureParam> {
         .collect()
 }
 
+/// Open a real file as a [`Stream`] per PHP `fopen` mode rules (step 51a).
+/// Returns the OS error text (with Rust's " (os error N)" suffix stripped, so it
+/// reads like PHP's strerror) on failure. Modes: `r`/`w`/`a`/`x`/`c` with an
+/// optional `+` (adds the other direction); `b`/`t` are accepted and ignored.
+fn open_file_stream(path: &[u8], mode: &[u8]) -> Result<Stream, String> {
+    use std::os::unix::ffi::OsStrExt;
+    let plus = mode.contains(&b'+');
+    let mut opts = std::fs::OpenOptions::new();
+    let (readable, writable) = match mode.first() {
+        Some(b'r') => {
+            opts.read(true).write(plus);
+            (true, plus)
+        }
+        Some(b'w') => {
+            opts.write(true).create(true).truncate(true).read(plus);
+            (plus, true)
+        }
+        Some(b'a') => {
+            opts.append(true).create(true).read(plus);
+            (plus, true)
+        }
+        Some(b'x') => {
+            opts.write(true).create_new(true).read(plus);
+            (plus, true)
+        }
+        Some(b'c') => {
+            // create + write, NO truncate, position 0 (oracle: `c` keeps content).
+            opts.write(true).create(true).read(plus);
+            (plus, true)
+        }
+        _ => return Err("`mode` is not a valid mode".to_string()),
+    };
+    let os_path = std::ffi::OsStr::from_bytes(path);
+    match opts.open(os_path) {
+        Ok(f) => Ok(Stream {
+            backend: StreamBackend::File(f),
+            readable,
+            writable,
+            eof: false,
+        }),
+        Err(e) => {
+            // Strip Rust's trailing " (os error N)" so the message reads like
+            // PHP's bare strerror text (e.g. "No such file or directory").
+            let m = e.to_string();
+            Err(m.split(" (os error").next().unwrap_or(&m).to_string())
+        }
+    }
+}
+
 fn php_type_name(v: &Zval) -> &'static str {
     match v {
         Zval::Undef | Zval::Null => "null",
@@ -6591,6 +6704,7 @@ fn php_type_name(v: &Zval) -> &'static str {
         Zval::Str(_) => "string",
         Zval::Array(_) => "array",
         Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) => "object",
+        Zval::Resource(_) => "resource",
         Zval::Ref(c) => php_type_name(&c.borrow()),
     }
 }
@@ -6612,6 +6726,7 @@ fn match_case_repr(v: &Zval) -> String {
             String::from_utf8_lossy(o.borrow().class_name.as_bytes())
         ),
         Zval::Generator(_) => "of type Generator".to_string(),
+        Zval::Resource(_) => "of type resource".to_string(),
         Zval::Ref(c) => match_case_repr(&c.borrow()),
     }
 }
