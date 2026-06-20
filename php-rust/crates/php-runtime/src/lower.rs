@@ -2473,18 +2473,16 @@ impl<'f> Lowerer<'f> {
             // the lexical class/function/trait scope tracked above (step 49).
             Expression::MagicConstant(m) => self.lower_magic_constant(m, line),
 
-            // A bare `NAME` constant: only the known engine constants are
-            // resolved (to a literal at lowering time, D-18.7); user-defined
-            // constants stay unsupported (the script becomes a SKIP).
-            Expression::ConstantAccess(ca) => match resolve_constant(function_name(&ca.name)) {
-                Some(kind) => kind,
-                None => {
-                    return Err(LowerError::Unsupported {
-                        what: "named constant",
-                        line,
-                    })
+            // A bare `NAME` constant: known engine constants fold to a literal
+            // here (D-18.7); any other name becomes a runtime `Const` read,
+            // resolved against `define()`'d constants at eval time (step 49c).
+            Expression::ConstantAccess(ca) => {
+                let name = function_name(&ca.name);
+                match resolve_constant(name) {
+                    Some(kind) => kind,
+                    None => ExprKind::Const(name.to_vec().into_boxed_slice()),
                 }
-            },
+            }
 
             Expression::Array(arr) => ExprKind::Array(self.lower_array_elements(arr.elements.iter(), line)?),
             Expression::LegacyArray(arr) => {
@@ -3470,7 +3468,7 @@ fn visibility_of_modifier(m: &Modifier) -> Visibility {
 /// Only engine constants are known; `true`/`false`/`null` are case-insensitive,
 /// every other name is case-sensitive (PHP constants are). `None` for an unknown
 /// (user-defined) constant — the caller turns that into an Unsupported SKIP.
-fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
+pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
     match name.to_ascii_lowercase().as_slice() {
         b"true" => return Some(ExprKind::Bool(true)),
         b"false" => return Some(ExprKind::Bool(false)),

@@ -91,6 +91,20 @@ fn fresh_slots(n: usize) -> Vec<Zval> {
     vec![Zval::Undef; n]
 }
 
+/// Convert an engine constant's lowered literal to a runtime value, for
+/// `constant()` (step 49c). [`resolve_constant`] only ever yields literal kinds.
+fn const_literal_to_zval(kind: crate::hir::ExprKind) -> Option<Zval> {
+    use crate::hir::ExprKind;
+    Some(match kind {
+        ExprKind::Null => Zval::Null,
+        ExprKind::Bool(b) => Zval::Bool(b),
+        ExprKind::Int(i) => Zval::Long(i),
+        ExprKind::Float(f) => Zval::Double(f),
+        ExprKind::Str(b) => Zval::Str(PhpStr::new(b)),
+        _ => return None,
+    })
+}
+
 /// Mutable view of the *active* frame's value slots: the callee's locals while a
 /// user function runs, otherwise the script globals (D-12.1). Deliberately a
 /// macro, not a method: it expands to a borrow that touches only the `locals`
@@ -429,6 +443,7 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         cur_line: 1,
         gen_yielder: None,
         mb_regex: crate::mbregex::MbRegexState::default(),
+        constants: HashMap::new(),
     };
 
     let mut exit_code = None;
@@ -587,6 +602,11 @@ struct Evaluator<'p> {
     /// `mb_regex_set_options` and the `mb_ereg_search` cursor. Survives across
     /// `mb_ereg*` calls for the whole run, since the search family is stateful.
     mb_regex: crate::mbregex::MbRegexState,
+    /// User-defined constants from `define()` (step 49c). Case-sensitive (the
+    /// case-insensitive third arg was removed in PHP 8). A bare `NAME` the
+    /// lowerer could not fold to an engine constant becomes [`ExprKind::Const`]
+    /// and reads from here at runtime.
+    constants: HashMap<Vec<u8>, Zval>,
 }
 
 /// Which magic property accessor is currently running for an object/property,
@@ -2133,6 +2153,11 @@ impl<'p> Evaluator<'p> {
                 other => other,
             });
         }
+        // Constant builtins need the evaluator's `define()` table, so they are
+        // dispatched here ahead of the stateless registry (step 49c).
+        if let Some(result) = self.call_constant_builtin(name, &argv) {
+            return result;
+        }
         match self.reg.get(name).copied() {
             Some(Builtin::Value(f)) => self.dispatch_value_builtin(f, &argv),
             // String-calling a by-reference builtin (sort/array_push/…) is a
@@ -2146,6 +2171,69 @@ impl<'p> Evaluator<'p> {
                 String::from_utf8_lossy(name)
             ))),
         }
+    }
+
+    /// `define()` / `defined()` / `constant()` (step 49c). Returns `None` for any
+    /// other name so the caller falls through to the normal registry. The
+    /// engine-constant table ([`resolve_constant`]) is consulted alongside the
+    /// runtime `define()` table so `defined('PHP_INT_MAX')` etc. answer `true`.
+    fn call_constant_builtin(
+        &mut self,
+        name: &[u8],
+        argv: &[Zval],
+    ) -> Option<Result<Zval, PhpError>> {
+        let known = |n: &[u8], ev: &Self| {
+            ev.constants.contains_key(n) || crate::lower::resolve_constant(n).is_some()
+        };
+        if name.eq_ignore_ascii_case(b"define") {
+            let Some(name_arg) = argv.first() else {
+                return Some(Err(PhpError::Error(
+                    "define() expects at least 2 arguments, 0 given".into(),
+                )));
+            };
+            let cname = convert::to_zstr_cast(name_arg, &mut self.diags)
+                .as_bytes()
+                .to_vec();
+            let value = argv.get(1).cloned().unwrap_or(Zval::Null);
+            // Redefining an existing (user or engine) constant warns and fails.
+            if known(&cname, self) {
+                self.diags.push(Diag::Warning(format!(
+                    "Constant {} already defined",
+                    String::from_utf8_lossy(&cname)
+                )));
+                return Some(Ok(Zval::Bool(false)));
+            }
+            self.constants.insert(cname, value);
+            return Some(Ok(Zval::Bool(true)));
+        }
+        if name.eq_ignore_ascii_case(b"defined") {
+            let Some(name_arg) = argv.first() else {
+                return Some(Ok(Zval::Bool(false)));
+            };
+            let cname = convert::to_zstr_cast(name_arg, &mut self.diags);
+            return Some(Ok(Zval::Bool(known(cname.as_bytes(), self))));
+        }
+        if name.eq_ignore_ascii_case(b"constant") {
+            let Some(name_arg) = argv.first() else {
+                return Some(Err(PhpError::Error(
+                    "constant() expects exactly 1 argument, 0 given".into(),
+                )));
+            };
+            let cname = convert::to_zstr_cast(name_arg, &mut self.diags)
+                .as_bytes()
+                .to_vec();
+            if let Some(v) = self.constants.get(&cname) {
+                return Some(Ok(v.clone()));
+            }
+            if let Some(z) = crate::lower::resolve_constant(&cname).and_then(const_literal_to_zval) {
+                return Some(Ok(z));
+            }
+            return Some(Err(PhpError::Error(format!(
+                "Undefined constant \"{}\"",
+                String::from_utf8_lossy(&cname)
+            ))));
+        }
+        None
     }
 
     /// Invoke a closure value: install its frame, bind the captured variables
@@ -4669,6 +4757,15 @@ impl<'p> Evaluator<'p> {
             ExprKind::Int(i) => Ok(Zval::Long(*i)),
             ExprKind::Float(f) => Ok(Zval::Double(*f)),
             ExprKind::Str(bytes) => Ok(Zval::Str(PhpStr::new(bytes.clone()))),
+            // A bare `NAME` that was not an engine constant: read it from the
+            // `define()` table, else PHP 8's fatal `Error` (step 49c).
+            ExprKind::Const(name) => match self.constants.get(name.as_ref()) {
+                Some(v) => Ok(v.clone()),
+                None => Err(PhpError::Error(format!(
+                    "Undefined constant \"{}\"",
+                    String::from_utf8_lossy(name)
+                ))),
+            },
 
             ExprKind::Var(slot) => Ok(self.read_var(*slot)),
             ExprKind::GlobalVar(slot) => Ok(self.read_global_var(*slot)),
@@ -4860,6 +4957,21 @@ impl<'p> Evaluator<'p> {
                 // table, so the evaluator answers them directly (step 20 coda).
                 if let Some(res) = self.dispatch_class_introspection(name, args) {
                     return res;
+                }
+                // define()/constant()/defined() read the evaluator's runtime
+                // constant table, so they are answered here (step 49c). Evaluate
+                // arguments by value only once we know the name matches.
+                if name.eq_ignore_ascii_case(b"define")
+                    || name.eq_ignore_ascii_case(b"defined")
+                    || name.eq_ignore_ascii_case(b"constant")
+                {
+                    let mut argv = Vec::with_capacity(args.len());
+                    for a in args {
+                        argv.push(self.eval(a)?);
+                    }
+                    if let Some(res) = self.call_constant_builtin(name, &argv) {
+                        return res;
+                    }
                 }
                 // A by-reference builtin (array_push/sort/...) binds its first
                 // argument's variable cell rather than a copy, so it is handled

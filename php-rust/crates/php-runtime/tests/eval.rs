@@ -1436,9 +1436,12 @@ fn const_true_false_null_case_insensitive() {
 }
 
 #[test]
-fn unknown_constant_is_unsupported() {
-    // User-defined constants are not lowered yet: the script becomes a SKIP.
-    assert!(run_source(b"t.php", b"<?php echo NOPE_UNDEFINED_CONST;").is_err());
+fn unknown_constant_is_runtime_error() {
+    // A bare name that is neither an engine constant nor `define()`d now lowers
+    // to a runtime `Const` read and fatals at eval like PHP 8 (step 49c), rather
+    // than being an unsupported-lowering SKIP.
+    let o = run_source(b"t.php", b"<?php echo NOPE_UNDEFINED_CONST;").expect("lowers");
+    assert!(o.fatal.is_some(), "expected a runtime fatal");
 }
 
 // --- step 18-5: array_map / array_filter / usort ---
@@ -4536,4 +4539,35 @@ fn predefined_error_and_path_constants() {
     assert_eq!(out("<?php echo DIRECTORY_SEPARATOR;"), "/");
     assert_eq!(out("<?php echo PATH_SEPARATOR;"), ":");
     assert_eq!(out("<?php echo PHP_SAPI;"), "cli");
+}
+
+// ---- step 49c: user-defined constants (define/constant/defined) ----------
+
+#[test]
+fn user_define_and_read() {
+    assert_eq!(out("<?php define('FOO', 42); echo FOO;"), "42");
+    assert_eq!(out("<?php define('GREETING', 'hi'); echo GREETING;"), "hi");
+    // define() returns true; a second define of the same name returns false.
+    assert_eq!(out("<?php echo define('X', 1) ? 't' : 'f';"), "t");
+    assert_eq!(out("<?php define('X', 1); echo define('X', 2) ? 't' : 'f'; echo X;"), "f1");
+}
+
+#[test]
+fn constant_and_defined_builtins() {
+    assert_eq!(out("<?php define('A', 7); echo constant('A');"), "7");
+    assert_eq!(out("<?php echo defined('NOPE') ? 'y' : 'n';"), "n");
+    assert_eq!(out("<?php define('B', 1); echo defined('B') ? 'y' : 'n';"), "y");
+    // Engine constants answer to defined()/constant() as well.
+    assert_eq!(out("<?php echo defined('PHP_INT_MAX') ? 'y' : 'n';"), "y");
+    assert_eq!(out("<?php echo constant('E_ALL');"), "32767");
+}
+
+#[test]
+fn undefined_constant_is_error() {
+    let o = php_runtime::run_source(b"t.php", b"<?php echo MISSING;").expect("lowers");
+    let fatal = o.fatal.expect("undefined constant should fatal");
+    assert!(
+        format!("{fatal:?}").contains("Undefined constant"),
+        "unexpected: {fatal:?}"
+    );
 }
