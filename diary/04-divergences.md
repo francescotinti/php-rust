@@ -515,3 +515,19 @@ ordine di dichiarazione, prop dinamiche.
 Il test `get_class_methods/bug64239_1` resta FAIL per l'**ordine** dei metodi
 alias di trait (`use T as Alias` — PHP mette l'alias prima dell'originale),
 dettaglio del flattening dei trait (step 21), ortogonale a `get_class_methods`.
+
+## Step 48 — dynamic class references / `@`
+
+| ID | Caso | Noi | PHP | Note |
+|---|---|---|---|---|
+| **D-48.1** | `@expr` dove l'operando **emette output** mentre solleva un diagnostico | il diagnostico già renderizzato in quel punto non viene ritrattato | tutto soppresso | `flush_diags` è no-op sotto `@` e i diagnostici accumulati vengono troncati; ma se l'operando ha già scritto su `rendered` (es. `@print(...)`) il testo è fuori. Raro |
+
+Casi **non** divergenti (parità oracle verificata): `new $cls`/`new $obj`,
+`$cls::CONST`/`$cls::m()`/`$cls::$prop`/`$obj::m()`, `$x instanceof $cls`
+(stringa con `\` iniziale strippato, oggetto→sua classe, sconosciuta→fatal
+`Class "X" not found`); `@` sopprime warning/notice/deprecation ma **non** i
+throwable/`Error` (es. `DivisionByZeroError` resta catchable).
+
+Scope-out minori 48b (non divergenze osservabili comuni): `$cls::bind()` dinamico
+sulla classe `Closure` interna; `$gen instanceof $dyn` (generator vs nome-classe
+dinamico → `false`).

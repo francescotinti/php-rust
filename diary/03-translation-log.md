@@ -1093,3 +1093,37 @@ test** (799→813… al netto: workspace a 812), oracle-verificati, clippy pulit
   **D-47.2**: `get_object_vars` su proprietà-riferimento — l'aliasing fine nel
   var_dump dell'array risultante diverge in casi limite. `var_export` di
   closure/generator → `NULL`.
+
+## Step 48 — micro-step (runner breakdown) + dynamic class references + `@`
+
+Tre sotto-step coesi (commit separati). **+9 unit test** (812→821), clippy pulito.
+
+### 48a — micro-step: breakdown dei costrutti non supportati (commit `344bc69`)
+Il catch-all di lowering riportava un generico `"expression"`/`"statement"`. Ora
+`expr_variant_name`/`stmt_variant_name` riportano il tipo di nodo mago
+(`expr:Instantiation`, `stmt:...`). Il phpt-runner aggrega due breakdown nel
+summary — **"unsupported by construct"** e **"missing builtins"** (top 20) — sia
+in-process sia in `--isolate` (sopravvive ai test patologici). Strumento per
+guidare data-driven la scelta dei prossimi costrutti/builtin.
+
+### 48b — dynamic class references (commit `fdafb4c`)
+Nuova variante `ClassRef::Dynamic(Box<Expr>)`. `class_ref_of` (ora **metodo** del
+Lowerer) lowera qualunque espressione in posizione-classe non statica. A runtime
+`resolve_class_ref` (ora `&mut self`) valuta l'espressione → nome **stringa** (con
+`\` iniziale strippato) risolto via `class_index`, oppure **oggetto** → il suo
+`class_id`, altrimenti `TypeError`. `Dynamic` è **non-forwarding** per il late
+static binding (come `Named`). Copre `new $cls` / `new $obj` / `$cls::CONST` /
+`$cls::m()` / `$cls::$prop` / `$obj::m()` / `$x instanceof $cls`. Helper condiviso
+`resolve_class_name`. Scope-out minori: `$cls::bind()` su `Closure`, generator
+`instanceof $dyn`.
+
+### 48c — `@` error-control operator (commit `e6b405a`)
+Nuova `ExprKind::Suppress(Box<Expr>)`. **Punto delicato**: `eval()` chiama
+`flush_diags()` dopo *ogni* `eval_inner`, quindi un warning dell'operando sarebbe
+renderizzato prima di poterlo droppare. Soluzione: un contatore
+`suppress_depth` che rende `flush_diags` un **no-op** durante la valutazione
+dell'operando; al termine i diagnostici accumulati vengono **troncati**. I
+**throwable/Error NON sono soppressi** (viaggiano sul canale `Err`, come PHP che
+silenzia solo `error_reporting`): verificato con `@(1%0)` → `DivisionByZeroError`
+ancora catchable. Scope-out **D-48.1**: un diagnostico già renderizzato a metà
+valutazione (operando che emette output) non è ritrattabile (raro).

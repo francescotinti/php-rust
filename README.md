@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–47 completati · 812 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–48 completati · 821 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 > Hardening tooling (non-funzionale): depth-guard nell'evaluator (`MAX_CALL_DEPTH`,
 > converte la ricorsione runaway in un `Error` catchable invece di un SIGABRT del
@@ -72,6 +72,7 @@ full port semantico del solo `zend_operators.c`).
 | 45 | **`goto` + label** — ultima feature di control-flow. `Flow::Goto` + `exec_stmts` con indice (salto same-block / propagazione out-of-block, incl. uscita da loop/`try`+`finally`); validazione compile-time (undefined / dup label, into-loop/switch, **into-finally**) via stack di barriere. Corpus `Zend/tests/*goto*` = 5 pass / 5 skip (non-goto) / 0 fail. Scope-out **D-45.1**: salto *dentro* un blocco trasparente (raro, mai nel corpus). +2 fix di fedeltà al phpt-runner (strip backtrace con `fatal_error_backtraces=Off`; nome script = path `.php` reale) | ✅ |
 | 46 | **`print` + `exit`/`die`** — costrutti di linguaggio. `print` = espressione (emette, ritorna `1`); `exit`/`die` si propagano via `Err(PhpError::Exit(u8))` (uncatchable, **NON** girano i `finally`), nuovo `Outcome.exit_code`. Coercion `string|int $status`: int/bool/float/null → exit code, string/`__toString` → messaggio, array/oggetto non-stringabile → `TypeError`. Sblocca `finally_goto_005` + test `Zend/tests/exit`. Scope-out **D-46.1**: Deprecated notice di coercion non emessi | ✅ |
 | 47 | **`var_export` + reflection** — `var_export` (port di `php_var_export_ex`: indent esatto, float con `.0`, stringhe single-quote + NUL via `. "\0" .`, `(object) array`/`__set_state`, modalità return, warning su ref circolari); `get_class_methods`/`get_object_vars` scope-aware (visibilità da `cur_class`, ereditarietà child→parent, metodi d'interfaccia via nuovo `ClassDecl.abstract_methods`). +14 test. Scope-out **D-47.1/2**: visibilità `abstract protected`, aliasing reference di `get_object_vars` | ✅ |
+| 48 | **micro-step runner breakdown + dynamic class refs + `@`** — (a) il phpt-runner riporta il costrutto specifico non supportato (`expr:*`/`stmt:*`) e i builtin mancanti (top 20), in-process e `--isolate`; (b) `ClassRef::Dynamic` per `new $cls`/`$cls::m()`/`$cls::CONST`/`$obj::m()`/`$x instanceof $cls` (stringa o oggetto → class id; non-forwarding); (c) operatore `@` via `suppress_depth` (no-op di `flush_diags` + truncate dei diag; throwable NON soppressi). +9 test. Scope-out **D-48.1** | ✅ |
 
 > Lo step 6 è stato eseguito **dopo** lo step 7 (deciso con l'utente: gli array
 > rendono il phpt-runner molto più utile, quintuplicando i test in-scope).
