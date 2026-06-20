@@ -3591,3 +3591,50 @@ fn fwrite_length_clamps() {
     assert_eq!(out(&src), "int(0)\nint(4)\ndata");
     let _ = std::fs::remove_file(&p);
 }
+
+// ---- step 52a: basename / dirname / pathinfo (path-string, pure) ----
+
+#[test]
+fn basename_cases() {
+    assert_eq!(out("<?php echo basename('/a/b/c.php');"), "c.php");
+    assert_eq!(out("<?php echo basename('/a/b/');"), "b");
+    assert_eq!(out("<?php echo '['.basename('/').']';"), "[]");
+    assert_eq!(out("<?php echo basename('a//b//c');"), "c");
+    assert_eq!(out("<?php echo basename('/x/.hidden');"), ".hidden");
+    assert_eq!(out("<?php echo basename('a.tar.gz','.gz');"), "a.tar");
+    assert_eq!(out("<?php echo basename('test.php','.php');"), "test");
+    // Suffix equal to the whole basename is not stripped.
+    assert_eq!(out("<?php echo basename('.php','.php');"), ".php");
+}
+
+#[test]
+fn dirname_cases() {
+    assert_eq!(out("<?php echo dirname('/a/b/c');"), "/a/b");
+    assert_eq!(out("<?php echo dirname('/a/b/');"), "/a");
+    assert_eq!(out("<?php echo dirname('c');"), ".");
+    assert_eq!(out("<?php echo dirname('/');"), "/");
+    assert_eq!(out("<?php echo dirname('a//b');"), "a");
+    assert_eq!(out("<?php echo dirname('/a/b/c/');"), "/a/b");
+    assert_eq!(out("<?php echo dirname('/a/b/c/d',2);"), "/a/b");
+    assert_eq!(out("<?php echo dirname('/a/b/c/d',3);"), "/a");
+}
+
+#[test]
+fn pathinfo_array_and_flags() {
+    assert_eq!(
+        out("<?php $i=pathinfo('/a/b/file.tar.gz'); echo $i['dirname'],'|',$i['basename'],'|',$i['extension'],'|',$i['filename'];"),
+        "/a/b|file.tar.gz|gz|file.tar"
+    );
+    assert_eq!(out("<?php echo pathinfo('/a/b/c.txt', PATHINFO_EXTENSION);"), "txt");
+    assert_eq!(out("<?php echo pathinfo('/a/b/c.txt', PATHINFO_FILENAME);"), "c");
+    // No extension → no 'extension' key, filename == basename.
+    assert_eq!(
+        out("<?php $i=pathinfo('noext'); echo $i['dirname'],'|',$i['basename'],'|',$i['filename'],'|',isset($i['extension'])?'Y':'N';"),
+        ".|noext|noext|N"
+    );
+    // Leading-dot file: extension is the tail, filename empty.
+    assert_eq!(
+        out("<?php $i=pathinfo('/dir/.hidden'); echo $i['extension'],'|','['.$i['filename'].']';"),
+        "hidden|[]"
+    );
+}

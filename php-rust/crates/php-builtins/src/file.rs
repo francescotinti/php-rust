@@ -1,14 +1,15 @@
-//! File / stream builtins (step 51). These operate on the shared
-//! `Rc<RefCell<Resource>>` carried by a `Zval::Resource` argument, so they need
-//! no evaluator state and are plain by-value builtins. `fopen` itself is
-//! evaluator-dispatched (it owns the resource-id counter, D-51.3).
+//! File / stream builtins (steps 51–52). The stream functions operate on the
+//! shared `Rc<RefCell<Resource>>` carried by a `Zval::Resource` argument; the
+//! filesystem predicates/operations (step 52) are pure `std::fs` wrappers. The
+//! resource-minting entry points (`fopen`/`opendir`/`tmpfile`) are
+//! evaluator-dispatched (they own the resource-id counter, D-51.3).
 
 use std::cell::RefCell;
 use std::io::SeekFrom;
 use std::rc::Rc;
 
 use php_runtime::Ctx;
-use php_types::{convert, Diag, PhpError, PhpStr, ResKind, Resource, StreamBackend, Zval};
+use php_types::{convert, Diag, Key, PhpArray, PhpError, PhpStr, ResKind, Resource, StreamBackend, Zval};
 
 /// Resolve the `$stream` first argument to its live resource cell, or raise the
 /// PHP TypeError: a non-resource is "must be of type resource, T given", a
@@ -342,4 +343,125 @@ pub fn file_put_contents(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
         Ok(()) => Ok(Zval::Long(bytes.len() as i64)),
         Err(_) => Ok(Zval::Bool(false)),
     }
+}
+
+// ---- step 52a: path-string functions (pure, no filesystem access) ----
+
+/// The trailing path component, after stripping trailing `/` (PHP `php_basename`
+/// on Unix). With `$suffix`, the suffix is removed only when the result is
+/// strictly longer than it (so `basename(".php", ".php")` stays `.php`).
+fn php_basename(path: &[u8], suffix: Option<&[u8]>) -> Vec<u8> {
+    let mut end = path.len();
+    while end > 0 && path[end - 1] == b'/' {
+        end -= 1;
+    }
+    let trimmed = &path[..end];
+    let base = match trimmed.iter().rposition(|&c| c == b'/') {
+        Some(i) => &trimmed[i + 1..],
+        None => trimmed,
+    };
+    let mut base = base.to_vec();
+    if let Some(suf) = suffix {
+        if !suf.is_empty() && base.len() > suf.len() && base.ends_with(suf) {
+            base.truncate(base.len() - suf.len());
+        }
+    }
+    base
+}
+
+/// The parent directory (PHP `zend_dirname`), applied `levels` times. Empty in,
+/// empty out; a path with no `/` → `.`; a single leading `/` → `/`.
+fn php_dirname_once(path: &[u8]) -> Vec<u8> {
+    if path.is_empty() {
+        return Vec::new();
+    }
+    let mut end = path.len();
+    while end > 0 && path[end - 1] == b'/' {
+        end -= 1;
+    }
+    if end == 0 {
+        // The path was all slashes (e.g. "/").
+        return b"/".to_vec();
+    }
+    let trimmed = &path[..end];
+    match trimmed.iter().rposition(|&c| c == b'/') {
+        None => b".".to_vec(),
+        Some(0) => b"/".to_vec(),
+        Some(i) => {
+            // Drop the last component, then any slashes joining it ("a//b" → "a").
+            let mut j = i;
+            while j > 0 && trimmed[j - 1] == b'/' {
+                j -= 1;
+            }
+            if j == 0 {
+                b"/".to_vec()
+            } else {
+                trimmed[..j].to_vec()
+            }
+        }
+    }
+}
+
+fn php_dirname(path: &[u8], levels: i64) -> Vec<u8> {
+    let mut cur = path.to_vec();
+    for _ in 0..levels.max(1) {
+        cur = php_dirname_once(&cur);
+    }
+    cur
+}
+
+/// Split a basename into `(filename, extension)` at the last `.` — a leading
+/// dot still counts (`.hidden` → filename `""`, extension `hidden`), and no dot
+/// means no extension (PHP `pathinfo` semantics).
+fn split_ext(base: &[u8]) -> (&[u8], Option<&[u8]>) {
+    match base.iter().rposition(|&c| c == b'.') {
+        Some(i) => (&base[..i], Some(&base[i + 1..])),
+        None => (base, None),
+    }
+}
+
+pub fn basename(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let path = convert::to_zstr(&argv[0], ctx.diags);
+    let suffix = argv.get(1).map(|v| convert::to_zstr(v, ctx.diags));
+    let base = php_basename(path.as_bytes(), suffix.as_ref().map(|s| s.as_bytes()));
+    Ok(Zval::Str(PhpStr::new(base)))
+}
+
+pub fn dirname(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let path = convert::to_zstr(&argv[0], ctx.diags);
+    let levels = argv
+        .get(1)
+        .map(|v| convert::to_long_cast(v, ctx.diags))
+        .unwrap_or(1);
+    Ok(Zval::Str(PhpStr::new(php_dirname(path.as_bytes(), levels))))
+}
+
+pub fn pathinfo(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let path = convert::to_zstr(&argv[0], ctx.diags);
+    let p = path.as_bytes();
+    let dir = php_dirname_once(p);
+    let base = php_basename(p, None);
+    let (filename, extension) = split_ext(&base);
+    let flags = argv.get(1).map(|v| convert::to_long_cast(v, ctx.diags));
+    // A single component flag returns that string (empty when absent).
+    if let Some(f) = flags {
+        let single = match f {
+            1 => Some(dir.clone()),
+            2 => Some(base.clone()),
+            4 => Some(extension.map(|e| e.to_vec()).unwrap_or_default()),
+            8 => Some(filename.to_vec()),
+            _ => None, // a combination (or 0): fall through to the array form
+        };
+        if let Some(s) = single {
+            return Ok(Zval::Str(PhpStr::new(s)));
+        }
+    }
+    let mut arr = PhpArray::new();
+    arr.insert(Key::from_bytes(b"dirname"), Zval::Str(PhpStr::new(dir)));
+    arr.insert(Key::from_bytes(b"basename"), Zval::Str(PhpStr::new(base.clone())));
+    if let Some(ext) = extension {
+        arr.insert(Key::from_bytes(b"extension"), Zval::Str(PhpStr::new(ext.to_vec())));
+    }
+    arr.insert(Key::from_bytes(b"filename"), Zval::Str(PhpStr::new(filename.to_vec())));
+    Ok(Zval::Array(Rc::new(arr)))
 }

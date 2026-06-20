@@ -3506,6 +3506,11 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"FILE_USE_INCLUDE_PATH" => ExprKind::Int(1),
         b"LOCK_EX" => ExprKind::Int(2),
         b"FILE_APPEND" => ExprKind::Int(8),
+        // pathinfo() component selectors (step 52a).
+        b"PATHINFO_DIRNAME" => ExprKind::Int(1),
+        b"PATHINFO_BASENAME" => ExprKind::Int(2),
+        b"PATHINFO_EXTENSION" => ExprKind::Int(4),
+        b"PATHINFO_FILENAME" => ExprKind::Int(8),
         // error_reporting / set_error_handler levels (bit flags). PHP 8.5 keeps
         // the E_STRICT slot (2048) reserved/unused; E_ALL is 32767.
         b"E_ERROR" => ExprKind::Int(1),
