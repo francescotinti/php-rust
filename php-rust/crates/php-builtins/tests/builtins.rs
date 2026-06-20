@@ -3282,3 +3282,50 @@ fn serialize_object_stdclass() {
         "O:8:\"stdClass\":2:{s:1:\"x\";i:1;s:1:\"y\";s:1:\"z\";}"
     );
 }
+
+// ---- step 50b: unserialize() (round-trips verified against the PHP 8.5 oracle) ----
+
+/// serialize(unserialize(S)) == S for every canonical serialized form.
+#[test]
+fn unserialize_roundtrips_canonical() {
+    for s in [
+        "i:42;",
+        "i:-7;",
+        "d:3.14;",
+        "d:1;",
+        "b:1;",
+        "b:0;",
+        "N;",
+        "s:5:\"hello\";",
+        "s:0:\"\";",
+        "a:3:{i:0;i:1;i:1;i:2;i:2;i:3;}",
+        "a:2:{s:1:\"a\";i:1;s:1:\"b\";i:2;}",
+        "a:1:{i:0;a:2:{i:0;b:1;i:1;N;}}",
+        "O:8:\"stdClass\":2:{s:1:\"x\";i:1;s:1:\"y\";s:1:\"z\";}",
+    ] {
+        let src = format!("<?php echo serialize(unserialize('{s}'));");
+        assert_eq!(out(&src), s, "round-trip mismatch for {s}");
+    }
+}
+
+#[test]
+fn unserialize_values_observable() {
+    assert_eq!(out("<?php echo unserialize('i:42;') + 1;"), "43");
+    assert_eq!(out("<?php $a = unserialize('a:2:{i:0;i:10;i:1;i:20;}'); echo $a[0]+$a[1];"), "30");
+    assert_eq!(out("<?php $o = unserialize('O:8:\"stdClass\":1:{s:1:\"n\";i:5;}'); echo $o->n;"), "5");
+}
+
+#[test]
+fn unserialize_malformed_is_false() {
+    assert_eq!(out("<?php echo unserialize('z') === false ? 'F' : 'T';"), "F");
+    assert_eq!(out("<?php echo unserialize('') === false ? 'F' : 'T';"), "F");
+    // Trailing garbage after a valid value is rejected too.
+    assert_eq!(out("<?php echo unserialize('i:1;XX') === false ? 'F' : 'T';"), "F");
+}
+
+/// Round-trip a freshly serialized value through unserialize and back.
+#[test]
+fn serialize_unserialize_roundtrip_values() {
+    let prog = "<?php echo serialize(unserialize(serialize([1, 'a' => 2.5, 3 => [true, null]])));";
+    assert_eq!(out(prog), "a:3:{i:0;i:1;s:1:\"a\";d:2.5;i:3;a:2:{i:0;b:1;i:1;N;}}");
+}
