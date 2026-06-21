@@ -3838,6 +3838,38 @@ fn touch_sets_explicit_mtime() {
 }
 
 #[test]
+fn sscanf_array_mode() {
+    // Mixed conversions, types preserved.
+    assert_eq!(
+        out("<?php var_dump(sscanf('age:42 pi:3.14 name:bob','age:%d pi:%f name:%s'));"),
+        "array(3) {\n  [0]=>\n  int(42)\n  [1]=>\n  float(3.14)\n  [2]=>\n  string(3) \"bob\"\n}\n"
+    );
+    // json_encode for compact checks (NULL → null).
+    assert_eq!(out("<?php echo json_encode(sscanf('ab12cd','%2s%2d%2s'));"), "[\"ab\",12,\"cd\"]");
+    assert_eq!(out("<?php echo json_encode(sscanf('abc123','%[a-z]%[0-9]'));"), "[\"abc\",\"123\"]");
+    assert_eq!(out("<?php echo json_encode(sscanf('0x1A','%i'));"), "[26]");
+    assert_eq!(out("<?php echo json_encode(sscanf('ff','%i'));"), "[null]");
+    assert_eq!(out("<?php echo json_encode(sscanf('12 34 56','%d %*d %d'));"), "[12,56]");
+    assert_eq!(out("<?php echo json_encode(sscanf('12 only','%d %d'));"), "[12,null]");
+    assert_eq!(out("<?php echo json_encode(sscanf('xyz','a%d'));"), "[null]");
+    assert_eq!(out("<?php echo json_encode(sscanf('hello','%3c'));"), "[\"hel\"]");
+    assert_eq!(out("<?php echo json_encode(sscanf('-42 +7','%d %d'));"), "[-42,7]");
+}
+
+#[test]
+fn sscanf_byref_mode() {
+    assert_eq!(
+        out("<?php $n=sscanf('12 f0 0x1A 777','%d %x %x %o',$a,$b,$c,$d); echo \"$n|$a|$b|$c|$d\";"),
+        "4|12|240|26|511"
+    );
+    // Stops at first failed conversion; count reflects successes, rest NULL.
+    assert_eq!(
+        out("<?php $n=sscanf('only','%d %s',$a,$b); echo $n; var_dump($a,$b);"),
+        "0NULL\nNULL\n"
+    );
+}
+
+#[test]
 fn strstr_family() {
     assert_eq!(out("<?php var_dump(strstr('hello@world.com','@'));"), "string(10) \"@world.com\"\n");
     assert_eq!(out("<?php var_dump(strstr('hello@world.com','@',true));"), "string(5) \"hello\"\n");

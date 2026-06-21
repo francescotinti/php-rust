@@ -49,6 +49,7 @@ const HIGHER_ORDER_BUILTINS: &[&[u8]] = &[
     b"fopen",
     b"tmpfile",
     b"opendir",
+    b"sscanf",
     b"preg_match",
     b"preg_match_all",
     b"preg_replace",
@@ -3566,6 +3567,7 @@ impl<'p> Evaluator<'p> {
             b"fopen" => Some(self.ho_fopen(args)),
             b"tmpfile" => Some(self.ho_tmpfile(args)),
             b"opendir" => Some(self.ho_opendir(args)),
+            b"sscanf" => Some(self.ho_sscanf(args)),
             b"preg_match" => Some(self.ho_preg_match(args)),
             b"preg_match_all" => Some(self.ho_preg_match_all(args)),
             b"preg_replace" => Some(self.ho_preg_replace(args)),
@@ -3708,6 +3710,52 @@ impl<'p> Evaluator<'p> {
             Some(e) => Ok(convert::to_long_cast(&self.eval(e)?.deref_clone(), &mut self.diags)),
             None => Ok(0),
         }
+    }
+
+    /// `sscanf($string, $format, ...&$vars)` (step 54a). Without output vars it
+    /// returns the array of parsed values (NULL for unmatched conversions); with
+    /// `&$var` args it assigns each conversion to its variable and returns the
+    /// count of successful conversions (by-ref → higher-order, like preg_match;
+    /// non-`$var` targets are silently skipped, D-54.1).
+    fn ho_sscanf(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        if args.len() < 2 {
+            return Err(PhpError::ArgumentCountError(
+                "sscanf() expects at least 2 arguments".to_string(),
+            ));
+        }
+        let input = convert::to_zstr(&self.eval(&args[0])?.deref_clone(), &mut self.diags)
+            .as_bytes()
+            .to_vec();
+        let fmt = convert::to_zstr(&self.eval(&args[1])?.deref_clone(), &mut self.diags)
+            .as_bytes()
+            .to_vec();
+        let results = crate::scanf::run_scanf(&input, &fmt);
+        self.scanf_finish(results, &args[2..])
+    }
+
+    /// Shared tail for `sscanf`/`fscanf`: turn the engine's per-conversion slots
+    /// into either a return array (no out vars) or by-reference assignments
+    /// returning the successful-conversion count.
+    fn scanf_finish(&mut self, results: Vec<Option<Zval>>, out: &[Expr]) -> Result<Zval, PhpError> {
+        if out.is_empty() {
+            let mut arr = PhpArray::new();
+            for v in results {
+                let _ = arr.append(v.unwrap_or(Zval::Null));
+            }
+            return Ok(Zval::Array(Rc::new(arr)));
+        }
+        let mut count = 0i64;
+        for (i, slot) in results.iter().enumerate() {
+            let Some(target) = out.get(i) else { break };
+            match slot {
+                Some(v) => {
+                    count += 1;
+                    self.write_out_param(target, v.clone());
+                }
+                None => self.write_out_param(target, Zval::Null),
+            }
+        }
+        Ok(Zval::Long(count))
     }
 
     /// `preg_match($pattern, $subject, &$matches = null)` (step 27): returns 1 on

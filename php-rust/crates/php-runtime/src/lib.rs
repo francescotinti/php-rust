@@ -16,6 +16,7 @@ pub mod json;
 pub mod lower;
 pub mod mbregex;
 pub mod preg;
+pub mod scanf;
 pub mod unserialize;
 
 pub use builtin::{Builtin, BuiltinFn, BuiltinRefFn, Ctx, Registry};
