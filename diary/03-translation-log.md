@@ -1819,9 +1819,19 @@ per-modulo. Risultato: monolite da 6.965 → `mod.rs` di 1.913 righe (**−72%**
 
 > Generato con assistenza AI (Claude Opus 4.8). Completati gli altri suggerimenti della
 > code-review esterna (`analysis_and_suggestions.md`): diff unificato del runner (E), flag di
-> trace HIR (B), e lo split di `lower.rs` come già fatto per `eval.rs`. Scartati: la macro per
-> il binding dei builtin (D, rischiosa come i named-args, scope-out) e altri test unitari (C,
-> copertura già forte: 927 test + 37.835 casi differential). 927 test verdi, clippy pulito.
+> trace HIR + **trace d'esecuzione** (B), test unitari low-level su `ops` (C), e lo split di
+> `lower.rs` come già fatto per `eval.rs`. Scartata solo la macro per il binding dei builtin
+> (D, rischiosa come i named-args, scope-out). 934 test verdi, clippy pulito.
+>
+> Mea culpa su C: l'avevo prima liquidato come "copertura già forte" guardando il *totale* dei
+> test, ma `ops.rs` (913 righe, port di `zend_operators`, l'anima type-juggling) aveva **zero
+> test inline** — coperto SOLO da `differential.rs`, che richiede il binario oracle e si
+> **auto-salta** se assente (e l'oracle non sopravvive a un reboot). Aggiunti **7 test unitari
+> oracle-independent** (in `crates/php-types/src/ops.rs`) che inchiodano le semantiche PHP 8.5
+> più insidiose — loose-eq PHP 8 (`0 == "foo"` → false), three-way compare, identical
+> type-strict, coercion + overflow int→float, div/modulo by-zero, pow/concat, increment
+> Perl-style (`az`→`ba`, `Zz`→`AAa`) — girano in ~0ms senza oracle, così una discrepanza si
+> localizza in secondi.
 
 ### E — diff unificato nel `phpt-runner`
 `--list-fails` non stampa più due blob `expected "…"`/`got "…"` troncati a 200 char, ma un

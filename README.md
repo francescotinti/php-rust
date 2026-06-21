@@ -14,15 +14,16 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–61 completati · 927 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–61 completati · 934 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 Step 61 ha completato i suggerimenti della code-review esterna: (E) **diff unificato** nel
 `phpt-runner` (`--list-fails` mostra un line-diff EXPECTF-aware invece di due blob troncati); (B)
 flag **`PHP_RUST_TRACE`** che su stderr dumpa l'HIR (`=hir`/`body`) e/o traccia ogni statement
 eseguito indentato per profondità di chiamata (`=exec`/`all`), per il triage lowering-vs-eval; e la
 **modularizzazione di `lower.rs`** (3.783 → `lower/{mod,stmt,class,expr}.rs`, `mod.rs` 1.412
-righe, −63%, zero cambi di comportamento). Scartati: macro di binding builtin (rischiosa) e altri
-test unitari (copertura già forte).
+righe, −63%, zero cambi di comportamento); e (C) **7 test unitari oracle-independent** su
+`php-types::ops` (l'anima type-juggling, prima senza test inline). Scartata solo la macro di
+binding builtin (rischiosa).
 
 Step 60 ha **modularizzato `eval.rs`** (era un monolite da 6.965 righe, segnalato da una
 code-review esterna): spezzato in `eval/{mod,expr,stmt,calls,class,builtins}.rs`, ognuno un
