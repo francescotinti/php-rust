@@ -1,31 +1,15 @@
 //! HIR lowering of statements and the function/class hoist passes. Split out of `lower.rs` (step 61); behaviour is unchanged.
-#![allow(unused_imports)]
-use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
 
-use bumpalo::Bump;
-use mago_database::file::File;
-use mago_span::{HasSpan, Span};
+use mago_span::HasSpan;
 use mago_syntax::ast::{
-    Access, Argument, ArrayElement, ArrowFunction, AssignmentOperator, BinaryOperator, Call,
-    Class, ClassLikeConstantSelector, ClassLikeMember, ClassLikeMemberSelector, Closure,
-    CompositeString, Construct,
-    DeclareBody, DocumentIndentation, DocumentKind, DocumentString, Enum, EnumCaseItem,
-    Expression, Extends, ForeachTarget, Function,
-    FunctionLikeParameterList, Hint,
-    Identifier, Instantiation, Interface, Literal, LiteralInteger, MagicConstant,
-    MatchArm as AstMatchArm, Method,
-    MethodBody, Modifier, Node, PartialApplication, Property, PropertyItem, Statement, StaticItem,
-    StringPart, Trait, TraitUse, TraitUseAdaptation, TraitUseMethodReference,
-    TraitUseSpecification, UnaryPostfixOperator, UnaryPrefixOperator, Variable, Yield,
+    Class,
+    DeclareBody, Enum,
+    Expression, ForeachTarget, Function, Interface, Literal, Statement, StaticItem, Variable,
 };
-use mago_syntax::parser::parse_file;
 
 use crate::hir::{
-    ArrayElem, BinOp, Capture, Case, CastKind, ClassDecl, ClassRef, Expr, ExprKind, FnDecl,
-    GlobalBinding, Line, MatchArm, MethodDecl, Param, Place, PlaceBase, PlaceStep, Program,
-    PropDecl, ScalarType, Slot, StaticAssignOp, StaticBinding, Stmt, StmtKind, TypeHint, UnOp,
-    Visibility,
+    Case,
+    GlobalBinding, Line, StaticBinding, Stmt, StmtKind,
 };
 
 use super::*;
