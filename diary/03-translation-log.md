@@ -1814,3 +1814,43 @@ per-modulo. Risultato: monolite da 6.965 → `mod.rs` di 1.913 righe (**−72%**
 > Nota DevEx: il `target-dir` di cargo è stato spostato fuori dal volume "Extreme Pro" (vedi
 > `.cargo/config.toml`), che non sa fare hard-link della cache incrementale → build stale.
 > `lower.rs` (3.783 righe) resta un candidato per lo stesso trattamento in un secondo momento.
+
+## Step 61 — DevEx tooling (Gemini E + B) + modularizzazione di `lower.rs`
+
+> Generato con assistenza AI (Claude Opus 4.8). Completati gli altri suggerimenti della
+> code-review esterna (`analysis_and_suggestions.md`): diff unificato del runner (E), flag di
+> trace HIR (B), e lo split di `lower.rs` come già fatto per `eval.rs`. Scartati: la macro per
+> il binding dei builtin (D, rischiosa come i named-args, scope-out) e altri test unitari (C,
+> copertura già forte: 927 test + 37.835 casi differential). 927 test verdi, clippy pulito.
+
+### E — diff unificato nel `phpt-runner`
+`--list-fails` non stampa più due blob `expected "…"`/`got "…"` troncati a 200 char, ma un
+**line-diff compatto**: un paio di righe di contesto, poi la regione divergente (`- atteso` /
+`+ reale`), con l'header `@@ <EXPECT|EXPECTF> first diff at line N @@`. È **EXPECTF-aware**: una
+riga attesa "combacia" se il suo pattern (come regex) matcha la riga reale, così il diff cade
+sulla **prima divergenza reale** e non su ogni riga con un `%d`/`%s`. Righe lunghe clippate,
+regione cappata. Cambia solo il *detail* del fail, non la classificazione. (Avevo sofferto
+direttamente la troncatura durante gli step 58-59.)
+
+### B — flag `PHP_RUST_TRACE` (dump HIR)
+`run_source`/`run_source_with` (in `eval/mod.rs`), se `PHP_RUST_TRACE` è settata, stampano l'HIR
+abbassato su **stderr** prima dell'esecuzione, per triage *lowering* vs *evaluation*.
+`PHP_RUST_TRACE=hir|1|full` dumpa l'intero `Program`; altri valori solo la lista di statement
+top-level. Su stderr → non inquina lo stdout/`rendered` confrontato. Vale sia per `phpr` sia per
+il runner (entrambi passano da `run_source_with`).
+
+### Modularizzazione di `lower.rs` (refactor, zero cambi di comportamento)
+Stessa meccanica di eval (step 60): `lower.rs` (**3.783 righe**) → `lower/mod.rs` + tre
+sottomoduli, ognuno un `impl<'f> Lowerer<'f>`:
+- **`lower/stmt.rs`** (406) — `lower_stmt`/`lower_stmts` + hoist passes (funzioni/classi).
+- **`lower/class.rs`** (1.090) — classi/interfacce/trait/enum, metodi, proprietà, closure,
+  arrow-function.
+- **`lower/expr.rs`** (932) — dispatch `lower_expr`, interpolazione/heredoc, call,
+  instantiation, member-access, args, place, array-elements.
+- **`lower/mod.rs`** (1.412) — `LowerError`, `lower_source`, validate_goto, `BarrierKind`,
+  `Scope`, struct `Lowerer` + metodi core, `AssignFlavour` e tutte le free-fn helper.
+
+Niente macro qui (a differenza di eval), quindi più semplice. `pub(super)` solo sui metodi
+chiamati cross-modulo; `cargo fix` ha sfrondato gli import. `mod.rs` 3.783 → 1.412 (**−63%**).
+Trappola incontrata e risolta: terminare il range di estrazione alla `}` dell'ultimo metodo —
+includere il doc-comment del metodo *successivo* lascia un "expected item after doc comment".

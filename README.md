@@ -14,7 +14,14 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–60 completati · 927 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–61 completati · 927 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+
+Step 61 ha completato i suggerimenti della code-review esterna: (E) **diff unificato** nel
+`phpt-runner` (`--list-fails` mostra un line-diff EXPECTF-aware invece di due blob troncati); (B)
+flag **`PHP_RUST_TRACE`** che dumpa l'HIR su stderr per il triage lowering-vs-eval; e la
+**modularizzazione di `lower.rs`** (3.783 → `lower/{mod,stmt,class,expr}.rs`, `mod.rs` 1.412
+righe, −63%, zero cambi di comportamento). Scartati: macro di binding builtin (rischiosa) e altri
+test unitari (copertura già forte).
 
 Step 60 ha **modularizzato `eval.rs`** (era un monolite da 6.965 righe, segnalato da una
 code-review esterna): spezzato in `eval/{mod,expr,stmt,calls,class,builtins}.rs`, ognuno un
@@ -160,7 +167,8 @@ php-rust/crates/
   php-types      Zval / PhpStr / PhpArray / Object + operatori (zero dep interne)
   php-runtime    HIR, lowering da mago, evaluator tree-walk (OOP, eccezioni,
                  enum, closure, __destruct, interpolazione; json_decode +
-                 preg_* intercettati; stack-trace). evaluator in
+                 preg_* intercettati; stack-trace). lowering in
+                 lower/{mod,stmt,class,expr}.rs; evaluator in
                  eval/{mod,expr,stmt,calls,class,builtins}.rs
   php-builtins   registry ~65 builtin (var_dump/print_r, array_*, string,
                  sprintf, math, json_encode, …)
