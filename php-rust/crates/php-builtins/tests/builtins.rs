@@ -421,6 +421,66 @@ fn strspn_strcspn_span() {
 }
 
 #[test]
+fn strtr_three_arg_byte_map() {
+    assert_eq!(out("<?php echo strtr('hello', 'el', 'ip');"), "hippo");
+    assert_eq!(out("<?php echo strtr('hello', 'ello', 'XY');"), "hXYYo");
+    assert_eq!(out("<?php echo strtr('abcdef', 'abc', '12');"), "12cdef");
+    assert_eq!(out("<?php echo strtr('a', 'aa', 'XY');"), "Y"); // last mapping wins
+    assert_eq!(out("<?php echo strtr('abc', '', '');"), "abc");
+}
+
+#[test]
+fn strtr_array_longest_first() {
+    assert_eq!(out("<?php echo strtr('hello', ['he'=>'HE','lo'=>'LO']);"), "HElLO");
+    assert_eq!(out("<?php echo strtr('hello', ['h'=>'1','he'=>'2']);"), "2llo");
+    assert_eq!(out("<?php echo strtr('aaa', ['aa'=>'X']);"), "Xa");
+    assert_eq!(out("<?php echo strtr('abcabc', ['abc'=>'X','bc'=>'Y']);"), "XX");
+    assert_eq!(out("<?php echo strtr('5x', [5=>'FIVE']);"), "FIVEx");
+}
+
+#[test]
+fn strtr_array_empty_key_warns_and_is_ignored() {
+    let (o, diags) = out_diags("<?php echo strtr('abc', ['' => 'X', 'b' => 'Y']);");
+    assert_eq!(o, "aYc");
+    assert!(
+        diags.iter().any(|d| d.contains("Ignoring replacement of empty string")),
+        "missing empty-key warning: {diags:?}"
+    );
+}
+
+#[test]
+fn strtr_two_arg_non_array_is_type_error() {
+    match fatal("<?php strtr('abc', 'xy');") {
+        PhpError::TypeError(m) => assert_eq!(
+            m,
+            "strtr(): Argument #2 ($from) must be of type array, string given"
+        ),
+        other => panic!("expected TypeError, got {other:?}"),
+    }
+}
+
+#[test]
+fn chunk_split_inserts_trailing_separator() {
+    assert_eq!(out("<?php echo chunk_split('abcdefgh', 3, '-');"), "abc-def-gh-");
+    assert_eq!(out("<?php echo chunk_split('abcdef', 3, '-');"), "abc-def-");
+    assert_eq!(out("<?php echo chunk_split('abc', 1, '-');"), "a-b-c-");
+    assert_eq!(out("<?php echo chunk_split('', 3, '-');"), "-");
+    assert_eq!(out("<?php echo chunk_split('a', 3, '-');"), "a-");
+    assert_eq!(out("<?php var_dump(chunk_split('abcde'));"), "string(7) \"abcde\r\n\"\n");
+}
+
+#[test]
+fn chunk_split_zero_length_is_value_error() {
+    match fatal("<?php chunk_split('abc', 0, '-');") {
+        PhpError::ValueError(m) => assert_eq!(
+            m,
+            "chunk_split(): Argument #2 ($length) must be greater than 0"
+        ),
+        other => panic!("expected ValueError, got {other:?}"),
+    }
+}
+
+#[test]
 fn str_replace_scalar_and_arrays() {
     assert_eq!(out("<?php echo str_replace('o', '0', 'foobar');"), "f00bar");
     // Array search + array replace, applied element-wise and sequentially.

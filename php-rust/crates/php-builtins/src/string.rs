@@ -3,7 +3,7 @@
 use std::rc::Rc;
 
 use php_runtime::Ctx;
-use php_types::{convert, Diag, PhpArray, PhpError, PhpStr, Zval};
+use php_types::{convert, Diag, Key, PhpArray, PhpError, PhpStr, Zval};
 
 /// implode($separator, $array) or implode($array).
 ///
@@ -1229,4 +1229,107 @@ pub fn strcspn(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let window = span_slice(&s, args, ctx);
     let n = window.iter().take_while(|&&b| !set[b as usize]).count();
     Ok(Zval::Long(n as i64))
+}
+
+// ---- step 57b: strtr + chunk_split ----------------------------------------
+
+/// strtr($string, $from, $to): per-byte translation table, mapping `from[i]` to
+/// `to[i]` for `i` in `0..min(len(from), len(to))`. Bytes absent from the table
+/// pass through unchanged; a duplicate source byte takes its last mapping.
+fn strtr_pairs(s: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
+    let n = from.len().min(to.len());
+    let mut table: [u8; 256] = core::array::from_fn(|i| i as u8);
+    for i in 0..n {
+        table[from[i] as usize] = to[i];
+    }
+    s.iter().map(|&b| table[b as usize]).collect()
+}
+
+/// strtr($string, $map): substring replacement, longest key first, scanning
+/// left to right without re-scanning emitted output. Integer keys take their
+/// decimal-string form; an empty key is ignored (with a Warning).
+fn strtr_array(s: &[u8], map: &PhpArray, ctx: &mut Ctx) -> Vec<u8> {
+    let mut pairs: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
+    for (k, v) in map.iter() {
+        let key = match k {
+            Key::Int(i) => i.to_string().into_bytes(),
+            Key::Str(s) => s.as_bytes().to_vec(),
+        };
+        if key.is_empty() {
+            ctx.diags.push(Diag::Warning(
+                "strtr(): Ignoring replacement of empty string".to_string(),
+            ));
+            continue;
+        }
+        let val = convert::to_zstr(v, ctx.diags).as_bytes().to_vec();
+        pairs.push((key, val));
+    }
+    // Longest key first; the stable sort keeps insertion order among equal lengths.
+    pairs.sort_by_key(|p| core::cmp::Reverse(p.0.len()));
+
+    let mut out = Vec::with_capacity(s.len());
+    let mut i = 0;
+    while i < s.len() {
+        let hit = pairs.iter().find(|(k, _)| s[i..].starts_with(k));
+        match hit {
+            Some((k, val)) => {
+                out.extend_from_slice(val);
+                i += k.len();
+            }
+            None => {
+                out.push(s[i]);
+                i += 1;
+            }
+        }
+    }
+    out
+}
+
+/// strtr($string, $from, $to) | strtr($string, $map): translate characters or
+/// substrings. The two-argument form requires an array map.
+pub fn strtr(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let subject = str_at(args, ctx, 0, "strtr", 2)?;
+    if args.len() == 2 {
+        return match args.get(1) {
+            Some(Zval::Array(map)) => Ok(Zval::Str(PhpStr::new(strtr_array(&subject, map, ctx)))),
+            _ => Err(PhpError::TypeError(
+                "strtr(): Argument #2 ($from) must be of type array, string given".to_string(),
+            )),
+        };
+    }
+    let from = str_at(args, ctx, 1, "strtr", 3)?;
+    let to = str_at(args, ctx, 2, "strtr", 3)?;
+    Ok(Zval::Str(PhpStr::new(strtr_pairs(&subject, &from, &to))))
+}
+
+/// chunk_split($string, $length = 76, $separator = "\r\n"): insert `$separator`
+/// after every `$length`-byte chunk, including a trailing one after the final
+/// (possibly short) chunk. An empty `$string` still yields one separator.
+pub fn chunk_split(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = str_at(args, ctx, 0, "chunk_split", 1)?;
+    let len = args.get(1).map_or(76, |v| convert::to_long_cast(v, ctx.diags));
+    if len < 1 {
+        return Err(PhpError::ValueError(
+            "chunk_split(): Argument #2 ($length) must be greater than 0".to_string(),
+        ));
+    }
+    let sep = match args.get(2) {
+        Some(v) => convert::to_zstr(v, ctx.diags).as_bytes().to_vec(),
+        None => b"\r\n".to_vec(),
+    };
+    let len = len as usize;
+    let mut out = Vec::with_capacity(s.len() + sep.len());
+    let mut i = 0;
+    while i + len <= s.len() {
+        out.extend_from_slice(&s[i..i + len]);
+        out.extend_from_slice(&sep);
+        i += len;
+    }
+    if i < s.len() {
+        out.extend_from_slice(&s[i..]);
+        out.extend_from_slice(&sep);
+    } else if s.is_empty() {
+        out.extend_from_slice(&sep);
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
 }
