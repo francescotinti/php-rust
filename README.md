@@ -14,7 +14,12 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–55 completati · 898 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–56 completati · 903 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+
+Step 56 ha aggiunto un batch di funzioni stringa pure (`bin2hex`/`hex2bin`, `addslashes`/
+`stripslashes`, `substr_replace`, `nl2br`, `wordwrap`, `htmlspecialchars`/`htmlentities`
++ decode, `vsprintf`/`vprintf`): sulla copia pulita di `ext/standard/tests/strings` il
+pass-rate sul runnable è **51% (143/280)** alla prima sweep.
 
 Step 55 ha aggiunto un batch di builtin stream/file read (`file`, `readfile`, `fpassthru`,
 `stream_get_contents`, `stream_copy_to_stream`, `ftruncate`) + `getenv`/`putenv` +

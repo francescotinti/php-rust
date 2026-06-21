@@ -1011,3 +1011,13 @@ candidati a uno step FS dedicato dopo 51.
 | D-55.4 | `disk_*_space` | `libc::statvfs` (f_bavail/f_blocks * f_frsize) → f64 | nessun equivalente in std; libc già dep; Unix-only | confermato |
 | D-55.5 | `putenv` | `std::env::set_var`/`remove_var` (edition 2021, safe) | process-global; ok sotto `--isolate` (un processo per test) | confermato |
 | D-55.6 | named-args ai builtin | **scope-out** (refactor ABI + tabella ~199 fn) | ROI basso vs il costo; ribadito da D-38.2 | scope-out |
+
+## Step 56 — Decisioni (D-56.x): batch funzioni stringa
+
+| ID | Costrutto PHP | Scelta Rust | Razionale | Status |
+|---|---|---|---|---|
+| D-56.1 | `htmlentities` tabella entità | solo Latin-1 (U+00A0–U+00FF) via decode UTF-8 | il set HTML4 completo (greco/matematica) è grande e raro; Latin-1 copre il caso comune (café→&eacute;) | scope-out parziale |
+| D-56.2 | `htmlspecialchars` flag default | 11 (ENT_QUOTES|ENT_SUBSTITUTE|ENT_HTML401); bit1=`'`, bit2=`"` | default PHP 8.1+ codifica entrambe le virgolette (oracle) | confermato |
+| D-56.3 | `wordwrap` | greedy con replace dello spazio (multi-char break = rebuild) | port fedele dell'algoritmo PHP; verificato sui casi wrap dell'oracle | confermato |
+| D-56.4 | `vsprintf`/`vprintf` | riuso `format_impl` (slot 0 = formato dummy) | zero duplicazione dell'engine, come `vfprintf` | confermato |
+| D-56.5 | `substr_replace` | solo forma scalare | la forma-array (string/replace come array) è rara; scalare copre il grosso | scope-out parziale |

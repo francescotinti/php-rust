@@ -1557,3 +1557,44 @@ semantica è semplice e deterministica). Lever residui ora: `parse_ini_file`(5),
 - named-args ai builtin (refactor ABI + ~199 tabelle nomi-parametro) — fuori scope.
 - `$context`/`$use_include_path` di `file`/`readfile`: accettati e ignorati.
 - `disk_*_space` solo Unix (statvfs); Windows fuori scope.
+
+## Step 56 — batch funzioni stringa (HTML/escape/transform/binary)
+
+> Generato con assistenza AI (Claude Opus 4.8). Dopo 5 step nel dominio file/stream, una
+> **scansione di frequenza sull'intero corpus** (9.984 `.phpt`) ha ri-orientato la scelta
+> verso le funzioni stringa pure più chiamate e ancora mancanti. Scelta utente 2026-06-21:
+> **batch stringhe**. Tutte funzioni pure, byte-exact contro l'oracle PHP 8.5.7. Tre
+> sotto-step. Workspace 898→**903** verde, clippy pulito.
+
+### 56a — binary/escape/transform
+`bin2hex`/`hex2bin` (false+Warning "Input string must be hexadecimal string" su
+lunghezza dispari/non-hex). `addslashes` (escape `'` `"` `\` NUL) / `stripslashes`
+(rimuove un `\`; `\0`→NUL; backslash finale isolato rimosso). `substr_replace` (forma
+scalare; start/len negativi, len=0=insert). `nl2br` (`<br />`/`<br>` prima di `\n`/`\r\n`/
+`\r`). `wordwrap` (greedy, `$cut` spezza parole lunghe — port fedele dell'algoritmo
+space-replace di PHP).
+
+### 56b — HTML (nuovo `html.rs`)
+`htmlspecialchars` (5 ASCII special, bit virgolette per flag; default 11 = entrambe).
+`htmlentities` (+ tabella Latin-1 U+00A0–U+00FF via decode UTF-8; set HTML4 completo
+greco/matematica = scope-out D-56.1). `htmlspecialchars_decode` (5 special) e
+`html_entity_decode` (named Latin-1 + numerici `&#NN;`/`&#xHH;`). Costanti `ENT_*` in
+lower.rs (NOQUOTES/HTML401=0, COMPAT=2, QUOTES=3, IGNORE=4, SUBSTITUTE=8, HTML5=48).
+
+### 56c — vsprintf / vprintf
+Riuso di `format_impl` (come `vfprintf`): `vsprintf`→string, `vprintf`→`ctx.out` +
+byte-count, valori dall'array.
+
+### Impatto corpus (copia pulita di `ext/standard/tests/strings`, 733 test)
+Prima sweep di questa directory (runner ricostruito + copia pulita in `/tmp`, una run):
+**pass 143 / fail 137 / skip 453** — pass-rate sul runnable **51% (143/280)**. Le 11
+funzioni dello step 56 sono **sparite** dalla lista "missing builtin" (nessuna regressione
+possibile: solo aggiunte pure). Lever residui di questa directory: `strip_tags`(27),
+`pack`/`unpack`(15/10), `strrpos`/`stripos`/`strripos`(15/13/10), `strtr`(15), `crypt`(13),
+`strcspn`/`strspn`(9), `chunk_split`(9), `base64_decode`(6), `md5`(6), `strtok`(6),
+`levenshtein`(5).
+
+### Scope-out espliciti (debito)
+- tabella HTML4 completa di `htmlentities` (greco/matematica/symbol): solo Latin-1 (D-56.1).
+- `$encoding` di htmlspecialchars/htmlentities: assunto UTF-8.
+- forma-array di `substr_replace` (`$string`/`$replace` array): solo forma scalare.
