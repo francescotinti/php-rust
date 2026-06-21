@@ -635,6 +635,50 @@ pub fn get_resource_type(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError
     }
 }
 
+// ---- step 53c: directory iteration (opendir is evaluator-dispatched) ----
+
+/// Resolve the `$dir_handle` argument to its live resource cell.
+fn dir_arg<'a>(argv: &'a [Zval], fname: &str) -> Result<&'a Rc<RefCell<Resource>>, PhpError> {
+    match argv.first() {
+        Some(Zval::Resource(r)) => Ok(r),
+        Some(other) => Err(PhpError::TypeError(format!(
+            "{fname}(): Argument #1 ($dir_handle) must be of type resource, {} given",
+            other.error_type_name()
+        ))),
+        None => Err(PhpError::ArgumentCountError(format!(
+            "{fname}() expects exactly 1 argument, 0 given"
+        ))),
+    }
+}
+
+/// `readdir($dir_handle)`: the next entry (incl. `.`/`..`) as raw bytes, or
+/// `false` past the end — so a directory entry literally named "0" still trips
+/// the canonical `=== false` loop guard.
+pub fn readdir(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let r = dir_arg(argv, "readdir")?;
+    let mut res = r.borrow_mut();
+    match res.as_dir_mut().and_then(|d| d.next_entry().map(|e| e.to_vec())) {
+        Some(name) => Ok(Zval::Str(PhpStr::new(name))),
+        None => Ok(Zval::Bool(false)),
+    }
+}
+
+/// `closedir($dir_handle)`: close the handle (it becomes a closed resource).
+pub fn closedir(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let r = dir_arg(argv, "closedir")?;
+    r.borrow_mut().kind = ResKind::Closed;
+    Ok(Zval::Null)
+}
+
+/// `rewinddir($dir_handle)`: reset the read cursor to the first entry.
+pub fn rewinddir(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let r = dir_arg(argv, "rewinddir")?;
+    if let Some(d) = r.borrow_mut().as_dir_mut() {
+        d.rewind();
+    }
+    Ok(Zval::Null)
+}
+
 // ---- step 52c: stat / lstat / fstat + single-field accessors ----
 
 /// The 13 stat fields in PHP's documented order; each value appears twice in the

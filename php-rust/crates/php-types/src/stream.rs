@@ -17,9 +17,34 @@ pub struct Resource {
 #[derive(Debug)]
 pub enum ResKind {
     Stream(Stream),
+    /// A directory handle from `opendir` (step 53c). PHP models these as php_stream
+    /// too, so they report the same "resource"/"stream" labels as a byte stream.
+    Dir(DirHandle),
     /// After `fclose`: the handle keeps its id but the backend is gone. PHP
     /// reports `gettype` "resource (closed)" and var_dumps "of type (Unknown)".
     Closed,
+}
+
+/// An open directory: the entries snapshot (including `.`/`..`, in readdir order)
+/// plus the cursor `readdir` advances and `rewinddir` resets (step 53c).
+#[derive(Debug)]
+pub struct DirHandle {
+    pub entries: Vec<Vec<u8>>,
+    pub pos: usize,
+}
+
+impl DirHandle {
+    /// Return the next entry and advance, or `None` past the end (`readdir` → false).
+    pub fn next_entry(&mut self) -> Option<&[u8]> {
+        let e = self.entries.get(self.pos)?;
+        self.pos += 1;
+        Some(e)
+    }
+
+    /// Reset the cursor to the first entry (`rewinddir`).
+    pub fn rewind(&mut self) {
+        self.pos = 0;
+    }
 }
 
 /// A byte stream with its capability flags and sticky EOF bit (`feof`).
@@ -55,7 +80,7 @@ impl Resource {
     /// "resource (closed)" (oracle-verified, D-51.1/D-51.5).
     pub fn type_name(&self) -> &'static str {
         match self.kind {
-            ResKind::Stream(_) => "resource",
+            ResKind::Stream(_) | ResKind::Dir(_) => "resource",
             ResKind::Closed => "resource (closed)",
         }
     }
@@ -64,7 +89,7 @@ impl Resource {
     /// "Unknown" once closed (oracle-verified, D-51.5).
     pub fn dump_type(&self) -> &'static str {
         match self.kind {
-            ResKind::Stream(_) => "stream",
+            ResKind::Stream(_) | ResKind::Dir(_) => "stream",
             ResKind::Closed => "Unknown",
         }
     }
@@ -72,7 +97,15 @@ impl Resource {
     pub fn as_stream_mut(&mut self) -> Option<&mut Stream> {
         match &mut self.kind {
             ResKind::Stream(s) => Some(s),
-            ResKind::Closed => None,
+            ResKind::Dir(_) | ResKind::Closed => None,
+        }
+    }
+
+    /// The directory handle, if this is an `opendir` resource (step 53c).
+    pub fn as_dir_mut(&mut self) -> Option<&mut DirHandle> {
+        match &mut self.kind {
+            ResKind::Dir(d) => Some(d),
+            ResKind::Stream(_) | ResKind::Closed => None,
         }
     }
 }

@@ -109,6 +109,9 @@ pub fn registry() -> Registry {
     add(b"glob", file::glob);
     add(b"tempnam", file::tempnam);
     add(b"get_resource_type", file::get_resource_type);
+    add(b"readdir", file::readdir);
+    add(b"closedir", file::closedir);
+    add(b"rewinddir", file::rewinddir);
     add(b"array_keys", array::array_keys);
     add(b"array_values", array::array_values);
     add(b"in_array", array::in_array);

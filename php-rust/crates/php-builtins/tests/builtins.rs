@@ -3864,6 +3864,33 @@ fn get_resource_type_stream() {
 }
 
 #[test]
+fn opendir_readdir_roundtrip() {
+    let dir = tmp_path("b53_dir");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(format!("{dir}/a"), "").unwrap();
+    std::fs::write(format!("{dir}/b"), "").unwrap();
+    let src = format!(
+        "<?php $d=opendir('{dir}'); echo get_resource_type($d),'|'; \
+         $n=[]; while(($e=readdir($d))!==false){{ $n[]=$e; }} sort($n); echo implode(',',$n),'|'; \
+         rewinddir($d); echo readdir($d)!==false?'got':'none','|'; \
+         closedir($d); echo gettype($d);"
+    );
+    assert_eq!(out(&src), "stream|.,..,a,b|got|resource (closed)");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn opendir_missing_warns_false() {
+    let (_, w) = out_diags("<?php opendir('/no/such/zz');");
+    assert_eq!(
+        w,
+        vec!["opendir(/no/such/zz): Failed to open directory: No such file or directory"]
+    );
+    assert_eq!(out("<?php var_dump(@opendir('/no/such/zz'));"), "bool(false)\n");
+}
+
+#[test]
 fn scandir_sort_orders_and_error() {
     let dir = tmp_path("b52_scan");
     let _ = std::fs::remove_dir_all(&dir);

@@ -23,8 +23,8 @@ use corosensei::{Coroutine, CoroutineResult, Yielder};
 
 use php_types::{
     convert, dtoa, numstr, ops, Closure, ClosureInfo, ClosureParam, ClosureRender, Diag, Diags,
-    GenDriver, GenKey, GenState, GenStatus, GenStep, Key, Object, ObjectInfo, PhpArray, PhpError,
-    PhpStr, PropVis, Props, Resource, Stream, StreamBackend, Zval,
+    DirHandle, GenDriver, GenKey, GenState, GenStatus, GenStep, Key, Object, ObjectInfo, PhpArray,
+    PhpError, PhpStr, PropVis, Props, ResKind, Resource, Stream, StreamBackend, Zval,
 };
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
@@ -48,6 +48,7 @@ const HIGHER_ORDER_BUILTINS: &[&[u8]] = &[
     b"unserialize",
     b"fopen",
     b"tmpfile",
+    b"opendir",
     b"preg_match",
     b"preg_match_all",
     b"preg_replace",
@@ -3564,6 +3565,7 @@ impl<'p> Evaluator<'p> {
             b"unserialize" => Some(self.ho_unserialize(args)),
             b"fopen" => Some(self.ho_fopen(args)),
             b"tmpfile" => Some(self.ho_tmpfile(args)),
+            b"opendir" => Some(self.ho_opendir(args)),
             b"preg_match" => Some(self.ho_preg_match(args)),
             b"preg_match_all" => Some(self.ho_preg_match_all(args)),
             b"preg_replace" => Some(self.ho_preg_replace(args)),
@@ -4451,6 +4453,43 @@ impl<'p> Evaluator<'p> {
             }
         }
         Ok(Zval::Bool(false))
+    }
+
+    /// `opendir($directory)` (step 53c, evaluator-dispatched — mints a resource).
+    /// Snapshots the directory entries (`.`/`..` first, then OS order) into a
+    /// `DirHandle`; `false` + Warning if the directory can't be opened.
+    fn ho_opendir(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        use std::os::unix::ffi::OsStrExt;
+        let Some(path_e) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "opendir() expects at least 1 argument, 0 given".to_string(),
+            ));
+        };
+        let path_v = self.eval(path_e)?.deref_clone();
+        let path = self.stringify(&path_v)?.as_bytes().to_vec();
+        match std::fs::read_dir(std::ffi::OsStr::from_bytes(&path)) {
+            Ok(rd) => {
+                let mut entries = vec![b".".to_vec(), b"..".to_vec()];
+                for e in rd.flatten() {
+                    entries.push(e.file_name().as_os_str().as_bytes().to_vec());
+                }
+                let id = self.next_resource_id;
+                self.next_resource_id += 1;
+                Ok(Zval::Resource(Rc::new(RefCell::new(Resource {
+                    id,
+                    kind: ResKind::Dir(DirHandle { entries, pos: 0 }),
+                }))))
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                let msg = msg.split(" (os error").next().unwrap_or(&msg);
+                self.diags.push(Diag::Warning(format!(
+                    "opendir({}): Failed to open directory: {msg}",
+                    String::from_utf8_lossy(&path)
+                )));
+                Ok(Zval::Bool(false))
+            }
+        }
     }
 
     /// Wrap a freshly opened stream in a `Zval::Resource` with the next id.
