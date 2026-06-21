@@ -237,12 +237,71 @@ pub fn run_phpt(src: &[u8], name: &[u8], reg: &Registry) -> TestResult {
     if matched {
         TestResult::pass()
     } else {
-        TestResult::fail(format!(
-            "expected {:?}\n   got      {:?}",
-            truncate(&want, 200),
-            truncate(&got, 200)
-        ))
+        TestResult::fail(unified_diff(&want, &got, &expect_kind))
     }
+}
+
+/// Do an expected line and an actual line correspond? Exact sections compare
+/// literally; EXPECTF sections treat the expected line as an anchored pattern so
+/// a `%d`/`%s` placeholder still counts as a match (and the diff lands on the
+/// *first genuinely diverging* line, not on every line with a placeholder).
+fn lines_match(want_line: &str, got_line: &str, kind: &ExpectKind) -> bool {
+    match kind {
+        ExpectKind::Exact => want_line == got_line,
+        ExpectKind::Format => Regex::new(&expectf_to_regex(want_line))
+            .map(|re| re.is_match(got_line))
+            .unwrap_or(false),
+    }
+}
+
+/// A compact, readable line diff for a failing test: a couple of lines of common
+/// context, then the diverging region (`-` expected / `+` actual), bounded so a
+/// large mismatch stays legible. Far easier to act on than two truncated blobs.
+fn unified_diff(want: &str, got: &str, kind: &ExpectKind) -> String {
+    let w: Vec<&str> = want.lines().collect();
+    let g: Vec<&str> = got.lines().collect();
+
+    // Longest common prefix / suffix (suffix not overlapping the prefix).
+    let mut p = 0;
+    while p < w.len() && p < g.len() && lines_match(w[p], g[p], kind) {
+        p += 1;
+    }
+    let mut s = 0;
+    while s < w.len() - p && s < g.len() - p && lines_match(w[w.len() - 1 - s], g[g.len() - 1 - s], kind)
+    {
+        s += 1;
+    }
+
+    let clip = |line: &str| truncate(line, 240);
+    let mut out = String::new();
+    for line in &w[p.saturating_sub(2)..p] {
+        out.push_str(&format!("  {}\n", clip(line)));
+    }
+    const CAP: usize = 20;
+    let w_mid = &w[p..w.len() - s];
+    let g_mid = &g[p..g.len() - s];
+    for (i, line) in w_mid.iter().enumerate() {
+        if i == CAP {
+            out.push_str(&format!("  … (+{} more expected lines)\n", w_mid.len() - CAP));
+            break;
+        }
+        out.push_str(&format!("- {}\n", clip(line)));
+    }
+    for (i, line) in g_mid.iter().enumerate() {
+        if i == CAP {
+            out.push_str(&format!("  … (+{} more actual lines)\n", g_mid.len() - CAP));
+            break;
+        }
+        out.push_str(&format!("+ {}\n", clip(line)));
+    }
+    if s > 0 {
+        out.push_str(&format!("  {}\n", clip(w[w.len() - s])));
+    }
+    let tag = match kind {
+        ExpectKind::Exact => "EXPECT",
+        ExpectKind::Format => "EXPECTF",
+    };
+    format!("@@ {} first diff at line {} @@\n{}", tag, p + 1, out.trim_end())
 }
 
 enum ExpectKind {
