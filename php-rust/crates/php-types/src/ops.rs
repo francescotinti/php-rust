@@ -911,3 +911,106 @@ pub fn decrement(v: &mut Zval, diags: &mut Diags) -> Result<(), PhpError> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    //! Fast, oracle-independent unit tests for the type-juggling core. These pin
+    //! the trickiest PHP 8.5 semantics (comparison, coercion, overflow, Perl-style
+    //! string increment) as named regression guards, so a single discrepancy is
+    //! localised in seconds — without the `differential` test's PHP oracle binary
+    //! (which self-skips when absent). Expectations were confirmed against PHP 8.5.7.
+
+    use super::*;
+
+    fn d() -> Diags {
+        Vec::new()
+    }
+    fn s(x: &str) -> Zval {
+        Zval::str_from(x)
+    }
+    fn as_long(z: &Zval) -> i64 {
+        match z {
+            Zval::Long(n) => *n,
+            o => panic!("expected Long, got {o:?}"),
+        }
+    }
+    fn as_double(z: &Zval) -> f64 {
+        match z {
+            Zval::Double(f) => *f,
+            o => panic!("expected Double, got {o:?}"),
+        }
+    }
+    fn as_str(z: &Zval) -> String {
+        match z {
+            Zval::Str(s) => String::from_utf8_lossy(s.as_bytes()).into_owned(),
+            o => panic!("expected Str, got {o:?}"),
+        }
+    }
+
+    #[test]
+    fn loose_eq_php8_semantics() {
+        // The PHP 8 change: a number vs a non-numeric string compares *as strings*.
+        assert!(!loose_eq(&Zval::Long(0), &s("foo"))); // 0 == "foo" -> false
+        assert!(!loose_eq(&Zval::Long(0), &s(""))); // 0 == ""   -> false
+        assert!(loose_eq(&s("10"), &s("1e1"))); // numeric strings compare numerically
+        assert!(loose_eq(&s("1"), &Zval::Long(1)));
+        assert!(loose_eq(&Zval::Null, &Zval::Bool(false)));
+        assert!(!loose_eq(&s("0x1A"), &Zval::Long(26))); // no hex strings since PHP 7
+    }
+
+    #[test]
+    fn compare_threeway() {
+        assert_eq!(compare(&s("abc"), &s("abd")), -1);
+        assert_eq!(compare(&Zval::Long(2), &Zval::Long(2)), 0);
+        assert_eq!(compare(&Zval::Long(5), &Zval::Long(3)), 1);
+    }
+
+    #[test]
+    fn identical_is_type_strict() {
+        assert!(!identical(&Zval::Long(1), &Zval::Double(1.0))); // 1 === 1.0 -> false
+        assert!(identical(&Zval::Long(1), &Zval::Long(1)));
+        assert!(!identical(&s("1"), &Zval::Long(1)));
+    }
+
+    #[test]
+    fn add_coercion_and_overflow() {
+        assert_eq!(as_long(&add(&s("5"), &Zval::Long(3), &mut d()).unwrap()), 8);
+        assert_eq!(as_double(&add(&s("5.5"), &Zval::Long(1), &mut d()).unwrap()), 6.5);
+        assert_eq!(as_long(&add(&Zval::Bool(true), &Zval::Bool(true), &mut d()).unwrap()), 2);
+        assert_eq!(as_long(&add(&Zval::Null, &Zval::Long(5), &mut d()).unwrap()), 5);
+        // int overflow promotes the result to float
+        let r = add(&Zval::Long(i64::MAX), &Zval::Long(1), &mut d()).unwrap();
+        assert_eq!(as_double(&r), 9_223_372_036_854_775_808.0);
+    }
+
+    #[test]
+    fn div_modulo_int_float_and_by_zero() {
+        assert_eq!(as_long(&div(&Zval::Long(6), &Zval::Long(3), &mut d()).unwrap()), 2);
+        assert_eq!(as_double(&div(&Zval::Long(7), &Zval::Long(2), &mut d()).unwrap()), 3.5);
+        assert_eq!(as_long(&modulo(&Zval::Long(7), &Zval::Long(3), &mut d()).unwrap()), 1);
+        assert!(div(&Zval::Long(1), &Zval::Long(0), &mut d()).is_err());
+        assert!(modulo(&Zval::Long(1), &Zval::Long(0), &mut d()).is_err());
+    }
+
+    #[test]
+    fn pow_and_concat() {
+        assert_eq!(as_long(&pow(&Zval::Long(2), &Zval::Long(10), &mut d()).unwrap()), 1024);
+        assert_eq!(as_str(&concat(&Zval::Long(3), &Zval::Long(4), &mut d()).unwrap()), "34");
+    }
+
+    #[test]
+    fn string_increment_perl_style() {
+        for (input, expected) in [("az", "ba"), ("Zz", "AAa"), ("a9", "b0"), ("Az", "Ba")] {
+            let mut z = s(input);
+            increment(&mut z, &mut d()).unwrap();
+            assert_eq!(as_str(&z), expected, "increment({input:?})");
+        }
+        // A numeric string increments numerically; an empty string becomes "1".
+        let mut n = s("9");
+        increment(&mut n, &mut d()).unwrap();
+        assert_eq!(as_long(&n), 10);
+        let mut e = s("");
+        increment(&mut e, &mut d()).unwrap();
+        assert_eq!(as_str(&e), "1");
+    }
+}
