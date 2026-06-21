@@ -165,6 +165,9 @@ pub fn registry() -> Registry {
     add(b"strcspn", string::strcspn);
     add(b"strtr", string::strtr);
     add(b"chunk_split", string::chunk_split);
+    add(b"strip_tags", string::strip_tags);
+    add(b"quotemeta", string::quotemeta);
+    add(b"levenshtein", string::levenshtein);
     add(b"strstr", string::strstr);
     add(b"strchr", string::strstr);
     add(b"stristr", string::stristr);

@@ -1333,3 +1333,122 @@ pub fn chunk_split(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     }
     Ok(Zval::Str(PhpStr::new(out)))
 }
+
+// ---- step 57c: strip_tags + quotemeta + levenshtein ----------------------
+
+/// The C `isspace` set, for the "`<` not followed by a tag char" rule (note it
+/// includes the vertical tab `\x0b`, which Rust's `is_ascii_whitespace` omits).
+fn is_c_space(b: u8) -> bool {
+    matches!(b, b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r')
+}
+
+/// strip_tags($string): remove `<...>` tag spans (HTML / PHP / comments),
+/// keeping the surrounding text. Faithful to PHP's scanner:
+/// - a `<` followed by whitespace (or EOF-as-non-tag) stays literal;
+/// - inside a normal tag, nested `<` raise a depth that `>` must balance, and a
+///   quote (`"`/`'`) suppresses `<`/`>` until closed;
+/// - `<!-- ... -->` is a comment whose closing `-->` may reuse the opener
+///   dashes (so `<!-->` is an empty comment); `<! ...>` runs to the next `>`;
+/// - `<? ... ?>` runs to `?>`.
+///
+/// The `$allowed_tags` argument is **not** honoured (scope-out D-57.1): every
+/// tag is stripped regardless.
+pub fn strip_tags(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = str_at(args, ctx, 0, "strip_tags", 1)?;
+    let n = s.len();
+    let mut out = Vec::with_capacity(n);
+    let mut i = 0;
+    while i < n {
+        if s[i] != b'<' {
+            out.push(s[i]);
+            i += 1;
+            continue;
+        }
+        match s.get(i + 1) {
+            // `<` followed by whitespace is a literal `<`.
+            Some(&b) if is_c_space(b) => {
+                out.push(b'<');
+                i += 1;
+            }
+            // `<? ... ?>` (PHP / processing instruction).
+            Some(b'?') => {
+                i = find_sub(&s[i + 2..], b"?>").map_or(n, |p| i + 2 + p + 2);
+            }
+            // `<!-- ... -->` comment, or `<! ...>` declaration.
+            Some(b'!') => {
+                let rest = &s[i + 2..];
+                i = if rest.starts_with(b"--") {
+                    find_sub(rest, b"-->").map_or(n, |p| i + 2 + p + 3)
+                } else {
+                    find_sub(rest, b">").map_or(n, |p| i + 2 + p + 1)
+                };
+            }
+            // A normal tag (or a `<` at EOF): balance `<`-depth, track quotes.
+            _ => {
+                let mut depth = 1usize;
+                let mut quote = 0u8;
+                i += 1;
+                while i < n && depth > 0 {
+                    let c = s[i];
+                    if quote != 0 {
+                        if c == quote {
+                            quote = 0;
+                        }
+                    } else {
+                        match c {
+                            b'"' | b'\'' => quote = c,
+                            b'<' => depth += 1,
+                            b'>' => depth -= 1,
+                            _ => {}
+                        }
+                    }
+                    i += 1;
+                }
+            }
+        }
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
+/// quotemeta($string): backslash-escape the regex metacharacters
+/// `. \ + * ? [ ^ ] $ ( )`.
+pub fn quotemeta(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = str_at(args, ctx, 0, "quotemeta", 1)?;
+    let mut out = Vec::with_capacity(s.len());
+    for &b in &s {
+        if matches!(
+            b,
+            b'.' | b'\\' | b'+' | b'*' | b'?' | b'[' | b'^' | b']' | b'$' | b'(' | b')'
+        ) {
+            out.push(b'\\');
+        }
+        out.push(b);
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
+/// levenshtein($string1, $string2): byte-oriented edit distance with unit
+/// insert/replace/delete costs (the default two-argument form). The weighted
+/// five-argument form is not implemented (scope-out D-57.2).
+pub fn levenshtein(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let a = str_at(args, ctx, 0, "levenshtein", 2)?;
+    let b = str_at(args, ctx, 1, "levenshtein", 2)?;
+    let lb = b.len();
+    if a.is_empty() {
+        return Ok(Zval::Long(lb as i64));
+    }
+    if lb == 0 {
+        return Ok(Zval::Long(a.len() as i64));
+    }
+    let mut prev: Vec<usize> = (0..=lb).collect();
+    let mut cur = vec![0usize; lb + 1];
+    for (i, &ca) in a.iter().enumerate() {
+        cur[0] = i + 1;
+        for (j, &cb) in b.iter().enumerate() {
+            let cost = usize::from(ca != cb);
+            cur[j + 1] = (prev[j + 1] + 1).min(cur[j] + 1).min(prev[j] + cost);
+        }
+        std::mem::swap(&mut prev, &mut cur);
+    }
+    Ok(Zval::Long(prev[lb] as i64))
+}

@@ -481,6 +481,53 @@ fn chunk_split_zero_length_is_value_error() {
 }
 
 #[test]
+fn strip_tags_basic_and_comments() {
+    assert_eq!(out("<?php echo strip_tags('<b>bold</b> & <i>x</i>');"), "bold & x");
+    assert_eq!(out("<?php echo strip_tags('a<br>b');"), "ab");
+    assert_eq!(out("<?php echo strip_tags('a<!-- c -->b');"), "ab");
+    assert_eq!(out("<?php echo strip_tags('a<!-- <b> -->b');"), "ab");
+    assert_eq!(out("<?php echo strip_tags('a<!yz>b');"), "ab");
+    assert_eq!(out("<?php echo strip_tags('<!-->x');"), "x"); // empty-comment quirk
+    assert_eq!(out("<?php echo strip_tags('a<?php echo 1; ?>b');"), "ab");
+    assert_eq!(out("<?php echo strip_tags('a<? > ?>b');"), "ab"); // <? runs to ?>
+}
+
+#[test]
+fn strip_tags_depth_quotes_and_literals() {
+    // Bare `<`/`>` and `<` + whitespace stay literal.
+    assert_eq!(out("<?php echo strip_tags('3 < 5 and 6 > 2');"), "3 < 5 and 6 > 2");
+    assert_eq!(out("<?php echo strip_tags('a< b>c');"), "a< b>c");
+    assert_eq!(out("<?php echo strip_tags('a>b');"), "a>b");
+    // Nested `<` raise a depth that `>` must balance.
+    assert_eq!(out("<?php echo strip_tags('a<b<c>d');"), "a");
+    assert_eq!(out("<?php echo strip_tags('a<b<c>d>e');"), "ae");
+    // Quotes inside a tag suppress `<` and `>`.
+    assert_eq!(out("<?php echo strip_tags('<a href=\">\">x</a>');"), "x");
+    assert_eq!(out("<?php echo strip_tags('a<b c=\"<\">d');"), "ad");
+    // Unclosed tag eats to end; `<` at EOF is dropped.
+    assert_eq!(out("<?php echo strip_tags('x<a<');"), "x");
+    assert_eq!(out("<?php echo strip_tags('a<');"), "a");
+}
+
+#[test]
+fn quotemeta_escapes_metachars() {
+    assert_eq!(out("<?php echo quotemeta('1+1=2');"), "1\\+1=2");
+    assert_eq!(
+        out("<?php echo quotemeta('a.b*c?[d]^e$f(g)\\\\h');"),
+        "a\\.b\\*c\\?\\[d\\]\\^e\\$f\\(g\\)\\\\h"
+    );
+    assert_eq!(out("<?php var_dump(quotemeta(''));"), "string(0) \"\"\n");
+}
+
+#[test]
+fn levenshtein_edit_distance() {
+    assert_eq!(out("<?php echo levenshtein('kitten', 'sitting');"), "3");
+    assert_eq!(out("<?php echo levenshtein('', 'abc');"), "3");
+    assert_eq!(out("<?php echo levenshtein('abc', 'abc');"), "0");
+    assert_eq!(out("<?php echo levenshtein('flaw', 'lawn');"), "2");
+}
+
+#[test]
 fn str_replace_scalar_and_arrays() {
     assert_eq!(out("<?php echo str_replace('o', '0', 'foobar');"), "f00bar");
     // Array search + array replace, applied element-wise and sequentially.
