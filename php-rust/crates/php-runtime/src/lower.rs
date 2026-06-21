@@ -3513,6 +3513,14 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"PATHINFO_BASENAME" => ExprKind::Int(2),
         b"PATHINFO_EXTENSION" => ExprKind::Int(4),
         b"PATHINFO_FILENAME" => ExprKind::Int(8),
+        // htmlspecialchars / htmlentities flags (step 56b).
+        b"ENT_NOQUOTES" => ExprKind::Int(0),
+        b"ENT_HTML401" => ExprKind::Int(0),
+        b"ENT_COMPAT" => ExprKind::Int(2),
+        b"ENT_QUOTES" => ExprKind::Int(3),
+        b"ENT_IGNORE" => ExprKind::Int(4),
+        b"ENT_SUBSTITUTE" => ExprKind::Int(8),
+        b"ENT_HTML5" => ExprKind::Int(48),
         // scandir() sort order (step 52e).
         b"SCANDIR_SORT_ASCENDING" => ExprKind::Int(0),
         b"SCANDIR_SORT_DESCENDING" => ExprKind::Int(1),

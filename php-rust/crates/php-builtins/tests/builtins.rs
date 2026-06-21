@@ -4030,6 +4030,25 @@ fn sscanf_byref_mode() {
 }
 
 #[test]
+fn html_encode_decode() {
+    assert_eq!(
+        out("<?php echo htmlspecialchars(\"<a href=\\\"x\\\">'b'&</a>\");"),
+        "&lt;a href=&quot;x&quot;&gt;&#039;b&#039;&amp;&lt;/a&gt;"
+    );
+    assert_eq!(out("<?php echo htmlspecialchars(\"'\\\"\", ENT_QUOTES);"), "&#039;&quot;");
+    assert_eq!(out("<?php echo htmlspecialchars(\"'\\\"\", ENT_COMPAT);"), "'&quot;");
+    assert_eq!(out("<?php echo htmlspecialchars(\"'\\\"\", ENT_NOQUOTES);"), "'\"");
+    assert_eq!(
+        out("<?php echo htmlspecialchars_decode('&lt;a&gt;&amp;&quot;&#039;');"),
+        "<a>&\"'"
+    );
+    // htmlentities maps the Latin-1 supplement (é → &eacute;); decode reverses it.
+    assert_eq!(out("<?php echo htmlentities('<café>');"), "&lt;caf&eacute;&gt;");
+    assert_eq!(out("<?php echo html_entity_decode('&lt;caf&eacute;&gt;');"), "<café>");
+    assert_eq!(out("<?php echo html_entity_decode('&#65;&#x42;C');"), "ABC");
+}
+
+#[test]
 fn bin2hex_hex2bin() {
     assert_eq!(out("<?php echo bin2hex(\"AB\\x00\");"), "414200");
     assert_eq!(out("<?php var_dump(hex2bin('414200'));"), "string(3) \"AB\u{0}\"\n");

@@ -12,6 +12,7 @@
 mod array;
 mod csv;
 mod date;
+mod html;
 mod file;
 mod format;
 mod json;
@@ -168,6 +169,10 @@ pub fn registry() -> Registry {
     add(b"substr_replace", string::substr_replace);
     add(b"nl2br", string::nl2br);
     add(b"wordwrap", string::wordwrap);
+    add(b"htmlspecialchars", html::htmlspecialchars);
+    add(b"htmlspecialchars_decode", html::htmlspecialchars_decode);
+    add(b"htmlentities", html::htmlentities);
+    add(b"html_entity_decode", html::html_entity_decode);
     add(b"str_getcsv", csv::str_getcsv);
     add(b"fgetcsv", file::fgetcsv);
     add(b"fputcsv", file::fputcsv);

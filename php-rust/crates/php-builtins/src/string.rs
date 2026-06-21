@@ -549,7 +549,7 @@ pub fn strrev(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 }
 
 /// Coerce positional arg `idx` (named `pname`) to bytes for a 2-string builtin.
-fn str_at(args: &[Zval], ctx: &mut Ctx, idx: usize, fname: &str, expected: usize) -> Result<Vec<u8>, PhpError> {
+pub(crate) fn str_at(args: &[Zval], ctx: &mut Ctx, idx: usize, fname: &str, expected: usize) -> Result<Vec<u8>, PhpError> {
     let v = args.get(idx).ok_or_else(|| {
         PhpError::Error(format!(
             "{fname}() expects exactly {expected} arguments, {} given",
