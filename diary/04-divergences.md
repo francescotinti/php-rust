@@ -637,3 +637,33 @@ Scope-out dichiarati (catalogati come D-57.x):
 - **offset float→int (ereditato)**: `strrpos`/`stripos`/`strripos` con `$offset` float fuori
   range emettono il Warning di cast di `to_long_cast` invece del TypeError "must be of type
   int, float given" — gap comune a *tutti* i builtin che usano `to_long_cast`, non dello step.
+
+## Step 64 (`crypt`) — 3 D-NEW (limiti del crate `pwhash`, edge-case deprecati)
+
+`crypt` è implementato su `pwhash::unix::crypt` (DES/BSDi/MD5/SHA-256/SHA-512/bcrypt,
+glibc-compatibile) con sopra la dispatch e la convenzione `*0`/`*1` di `php_crypt`. Differential
+diretto vs oracle: **byte-identico** su STD-DES, EXT-DES, MD5, bcrypt `$2a$` (ASCII), `$2y$`,
+`$2b$`, SHA-256, SHA-512 (incl. `rounds=`), salt invalidi → `*0`, `*0`→`*1`. Test `.phpt` verdi:
+tutta la dir `ext/standard/tests/crypt` (4/4) + `crypt`, `crypt_variation1`,
+`crypt_blowfish_variation1/2`, `crypt_sha256`, `crypt_sha512`, `crypt_des_error`, `bug54721`,
+`bug73058`. Tre divergenze residue, tutte limiti di `pwhash` su casi deprecati/non-standard:
+
+- **D-64.1 — variant bcrypt `$2x$`**: `pwhash` non implementa il prefisso `$2x$` (compat del bug
+  di sign-extension di crypt_blowfish 1997). Per quei salt restituiamo `*0` invece dell'hash
+  reale. Niente codice moderno usa `$2x$`. (`crypt_blowfish.phpt`, righe `$2x$`.)
+- **D-64.2 — bcrypt 8-bit `$2a$`/`$2b$`/`$2y$` con password high-bit**: per password contenenti
+  byte ≥ 0x80 (es. `"\xff\xff\xa3"`), l'implementazione bcrypt di `pwhash` non riproduce la
+  precisa gestione 8-bit di Openwall che PHP usa (il `$2a$` "corretto" diverge dal `$2x$/$2y$`
+  solo su questi input). Output divergente sui soli casi con password non-ASCII. (`crypt_blowfish.phpt`.)
+- **D-64.3 — md5-crypt salt non-standard**: `pwhash` valida il salt md5 contro l'alfabeto
+  `./0-9A-Za-z` e ne rifiuta caratteri come `+`, mentre PHP accetta qualunque byte ≠ `$`/NUL
+  fino a 8 char. `crypt('…','$1$f+uslYF01$')` → `*0` invece dell'hash. (`bug50052.phpt`.)
+
+Portare l'esatta semantica Openwall di crypt_blowfish (`$2a/$2x/$2y` 8-bit) e un md5-crypt
+lasco è un port dedicato e voluminoso per casi deprecati: scelta di **documentare** invece di
+forzare, coerente con la policy del progetto.
+
+**Fix di sicurezza (non una D)**: `crypt` pre-valida il `rounds=N` dei salt `$5$`/`$6$` e
+restituisce `*0` se `N ∉ [1000, 999999999]`, esattamente come `crypt_sha256.c`/`crypt_sha512.c`.
+Oltre alla fedeltà (`crypt_sha256.phpt` caso `rounds=1000000000` → `*0`), questo **impedisce un
+hang**: senza il check, `pwhash` macinerebbe davvero ~1e9 round (interprete bloccato per minuti).

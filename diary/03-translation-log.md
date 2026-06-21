@@ -1943,3 +1943,32 @@ rep>1→nome+indice; canonicalizzazione numeric-string via `Key::from_bytes` (==
 32-bit-only via SKIPIF, gli altri due skip per sezione non gestita dal runner). Differential diretto
 `phpr` vs oracle **byte-identico** su uno sweep ampio (h/H, nvNV, c, f/G/d/E, X/@, q/Q/J/P 64-bit,
 unpack nominale). 5 test unitari inline. Workspace **948 test** verdi, clippy `--deny=warnings` pulito.
+
+## Step 64 — `crypt`
+
+Nuovo modulo `crates/php-builtins/src/crypto.rs` su crate **`pwhash`** (DES, BSDi/ext-DES,
+MD5-crypt, SHA-256/512-crypt, bcrypt — glibc-compatibile). Sopra ci sta la dispatch di
+`php_crypt` (`ext/standard/crypt.c`): `pwhash::unix::crypt` riconosce l'algoritmo dal prefisso
+del salt esattamente come PHP, e ci aggiungo la **convenzione `*0`/`*1`** (salt `*0`/`*1` →
+fallimento immediato; su qualunque errore restituisco `*1` se il salt iniziava per `*0`, altrimenti
+`*0`) e il troncamento del salt a `PHP_MAX_SALT_LEN` (123). `crypt` richiede **esattamente 2
+argomenti** → `ArgumentCountError`. Costanti `CRYPT_STD_DES`/`CRYPT_EXT_DES`/`CRYPT_MD5`/
+`CRYPT_BLOWFISH`/`CRYPT_SHA256`/`CRYPT_SHA512` = 1 e `CRYPT_SALT_LENGTH` = 123 in `lower/mod.rs`
+(PHP bundla ogni algoritmo, quindi tutte disponibili).
+
+**Pre-check anti-hang su `rounds` (fix importante)**: per i salt `$5$`/`$6$` con `rounds=N$`,
+PHP rifiuta `N ∉ [1000, 999999999]` restituendo `NULL` → `*0`. Senza questo controllo `pwhash`
+calcolerebbe *davvero* `rounds=1000000000` (≈1e9 iterazioni → interprete bloccato per minuti):
+verificato che `crypt_sha256.phpt` (caso `rounds=1000000000`) faceva **hang** prima del fix, ora
+restituisce `*0` istantaneo come l'oracle.
+
+**Risultato**: differential diretto `phpr` vs oracle **byte-identico** su STD-DES (`rl.3StKT.4T8M`),
+EXT-DES (`_J9..rasm…`), MD5 (`$1$…`), bcrypt `$2a$` ASCII, `$2y$`, `$2b$`, SHA-256, SHA-512 (incl.
+`rounds=`), salt invalidi → `*0`, `*0`→`*1`. `.phpt` verdi: dir `crypt/` **4/4** + `crypt`,
+`crypt_variation1`, `crypt_blowfish_variation1/2`, `crypt_sha256`, `crypt_sha512`,
+`crypt_des_error`, `bug54721`, `bug73058`. **3 divergenze** residue (D-64.1/2/3 in
+`04-divergences.md`), tutte limiti di `pwhash` su casi deprecati/non-standard: variant `$2x$`,
+bcrypt 8-bit `$2a/$2b/$2y` con password high-bit, salt md5 con caratteri fuori-alfabeto. Portare
+l'esatta crypt_blowfish di Openwall è un port voluminoso per edge-case deprecati → documentato,
+non forzato (policy del progetto). Dep nuova: `pwhash`. 4 test unitari inline. Workspace **952
+test** verdi, clippy `--deny=warnings` pulito.

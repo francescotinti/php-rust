@@ -10,6 +10,7 @@
 //! sprintf, array_*) is step 10.
 
 mod array;
+mod crypto;
 mod csv;
 mod date;
 mod encoding;
@@ -65,6 +66,7 @@ pub fn registry() -> Registry {
     add(b"hash", encoding::hash);
     add(b"pack", pack::pack);
     add(b"unpack", pack::unpack);
+    add(b"crypt", crypto::crypt);
     // File / stream builtins (step 51; `fopen` is evaluator-dispatched).
     add(b"fread", file::fread);
     add(b"fwrite", file::fwrite);

@@ -1142,6 +1142,15 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"PATHINFO_BASENAME" => ExprKind::Int(2),
         b"PATHINFO_EXTENSION" => ExprKind::Int(4),
         b"PATHINFO_FILENAME" => ExprKind::Int(8),
+        // crypt() capability flags (step 64) — PHP bundles every algorithm, so
+        // all are available; CRYPT_SALT_LENGTH is PHP_MAX_SALT_LEN.
+        b"CRYPT_SALT_LENGTH" => ExprKind::Int(123),
+        b"CRYPT_STD_DES" => ExprKind::Int(1),
+        b"CRYPT_EXT_DES" => ExprKind::Int(1),
+        b"CRYPT_MD5" => ExprKind::Int(1),
+        b"CRYPT_BLOWFISH" => ExprKind::Int(1),
+        b"CRYPT_SHA256" => ExprKind::Int(1),
+        b"CRYPT_SHA512" => ExprKind::Int(1),
         // htmlspecialchars / htmlentities flags (step 56b).
         b"ENT_NOQUOTES" => ExprKind::Int(0),
         b"ENT_HTML401" => ExprKind::Int(0),
