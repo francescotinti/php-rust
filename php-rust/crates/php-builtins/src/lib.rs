@@ -112,6 +112,8 @@ pub fn registry() -> Registry {
     add(b"readdir", file::readdir);
     add(b"closedir", file::closedir);
     add(b"rewinddir", file::rewinddir);
+    add(b"fprintf", file::fprintf);
+    add(b"vfprintf", file::vfprintf);
     add(b"array_keys", array::array_keys);
     add(b"array_values", array::array_values);
     add(b"in_array", array::in_array);

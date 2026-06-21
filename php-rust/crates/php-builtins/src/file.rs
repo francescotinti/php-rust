@@ -635,6 +635,52 @@ pub fn get_resource_type(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError
     }
 }
 
+// ---- step 53d: fprintf / vfprintf (sprintf engine → stream) ----
+
+/// Write `bytes` to a stream resource and return the byte count as a PHP int.
+/// (`fprintf`/`vfprintf` report the number of bytes written, like `printf`.)
+fn write_to_stream(r: &Rc<RefCell<Resource>>, bytes: &[u8]) -> Zval {
+    let n = bytes.len();
+    if let Some(stream) = r.borrow_mut().as_stream_mut() {
+        let _ = stream.write(bytes);
+    }
+    Zval::Long(n as i64)
+}
+
+/// `fprintf($stream, $format, ...$args)`: format like `sprintf` and write the
+/// result to the stream, returning the byte count (step 53d).
+pub fn fprintf(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let r = stream_arg(argv, "fprintf")?;
+    // The sprintf engine treats slot 0 as the format; for fprintf that is argv[1].
+    let rest = &argv[1..];
+    let fmt = crate::format::first_format(rest, "fprintf")?;
+    let bytes = crate::format::format_impl(&fmt, rest)?;
+    Ok(write_to_stream(r, &bytes))
+}
+
+/// `vfprintf($stream, $format, $args)`: like `fprintf` but the conversion args
+/// come from an array (step 53d).
+pub fn vfprintf(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let r = stream_arg(argv, "vfprintf")?;
+    let fmt = convert::to_zstr(
+        argv.get(1).ok_or_else(|| {
+            PhpError::ArgumentCountError("vfprintf() expects exactly 3 arguments, 1 given".to_string())
+        })?,
+        ctx.diags,
+    )
+    .as_bytes()
+    .to_vec();
+    // Slot 0 is the (ignored) format placeholder; the array values follow.
+    let mut vals: Vec<Zval> = vec![Zval::Null];
+    if let Some(Zval::Array(a)) = argv.get(2) {
+        for (_k, v) in a.iter() {
+            vals.push(v.clone());
+        }
+    }
+    let bytes = crate::format::format_impl(&fmt, &vals)?;
+    Ok(write_to_stream(r, &bytes))
+}
+
 // ---- step 53c: directory iteration (opendir is evaluator-dispatched) ----
 
 /// Resolve the `$dir_handle` argument to its live resource cell.

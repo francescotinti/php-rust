@@ -3864,6 +3864,15 @@ fn get_resource_type_stream() {
 }
 
 #[test]
+fn fprintf_and_vfprintf_to_stream() {
+    let src = "<?php $m=fopen('php://memory','r+'); \
+        $n=fprintf($m,'%05.2f-%s',3.14159,'hi'); rewind($m); echo $n,'|',fread($m,100),'|'; \
+        $m2=fopen('php://memory','r+'); $k=vfprintf($m2,'%d/%d',[7,9]); rewind($m2); echo $k,'|',fread($m2,100); \
+        fclose($m); fclose($m2);";
+    assert_eq!(out(src), "8|03.14-hi|3|7/9");
+}
+
+#[test]
 fn opendir_readdir_roundtrip() {
     let dir = tmp_path("b53_dir");
     let _ = std::fs::remove_dir_all(&dir);

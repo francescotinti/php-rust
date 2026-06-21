@@ -25,7 +25,7 @@ pub fn printf(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Long(n as i64))
 }
 
-fn first_format(args: &[Zval], fname: &str) -> Result<Vec<u8>, PhpError> {
+pub(crate) fn first_format(args: &[Zval], fname: &str) -> Result<Vec<u8>, PhpError> {
     match args.first() {
         Some(v) => Ok(to_bytes(v)),
         None => Err(PhpError::Error(format!(
@@ -51,7 +51,7 @@ struct Spec {
 }
 
 /// Core formatter shared by sprintf/printf.
-fn format_impl(fmt: &[u8], args: &[Zval]) -> Result<Vec<u8>, PhpError> {
+pub(crate) fn format_impl(fmt: &[u8], args: &[Zval]) -> Result<Vec<u8>, PhpError> {
     let mut out = Vec::with_capacity(fmt.len());
     let mut i = 0;
     let mut next_arg = 1usize; // args[0] is the format itself.
