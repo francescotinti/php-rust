@@ -1,22 +1,16 @@
 //! Expression evaluation: the `eval`/`eval_inner` dispatch (the core of the
 //! tree-walker), instanceof checks and binary-operator application. Split out of
 //! `eval.rs` (step 60); behaviour is unchanged.
-#![allow(unused_imports)]
-use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use php_types::{
-    convert, dtoa, numstr, ops, Closure, ClosureInfo, ClosureParam, ClosureRender, Diag, Diags,
-    DirHandle, GenDriver, GenKey, GenState, GenStatus, GenStep, Key, Object, ObjectInfo, PhpArray,
-    PhpError, PhpStr, PropVis, Props, ResKind, Resource, Stream, StreamBackend, Zval,
+    convert, ops, Closure, GenKey, PhpArray,
+    PhpError, PhpStr, Zval,
 };
 
-use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
+use crate::builtin::Builtin;
 use crate::hir::{
-    BinOp, Capture, CastKind, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, Line,
-    MethodDecl, Param, Place, PlaceBase, PlaceStep, Program, ScalarType, Slot, StaticAssignOp,
-    Stmt, StmtKind, TypeHint, UnOp, Visibility,
+    BinOp, CastKind, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, StaticAssignOp, UnOp,
 };
 
 use super::*;

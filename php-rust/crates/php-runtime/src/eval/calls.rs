@@ -2,24 +2,19 @@
 //! `run_user_fn_body`, `bind_params`), closures, named/spread argument handling,
 //! and the generator runtime (`make_generator`/`resume_generator`/`gen_suspend`,
 //! `yield from`). Split out of `eval.rs` (step 60); behaviour is unchanged.
-#![allow(unused_imports)]
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use corosensei::{Coroutine, CoroutineResult, Yielder};
+use corosensei::{Coroutine, Yielder};
 
 use php_types::{
-    convert, dtoa, numstr, ops, Closure, ClosureInfo, ClosureParam, ClosureRender, Diag, Diags,
-    DirHandle, GenDriver, GenKey, GenState, GenStatus, GenStep, Key, Object, ObjectInfo, PhpArray,
-    PhpError, PhpStr, PropVis, Props, ResKind, Resource, Stream, StreamBackend, Zval,
+    convert, Closure, ClosureInfo, ClosureRender, Diag, GenKey, GenState, GenStatus, GenStep, Key, PhpArray,
+    PhpError, PhpStr, Zval,
 };
 
-use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
+use crate::builtin::{Builtin, BuiltinRefFn, Ctx};
 use crate::hir::{
-    BinOp, Capture, CastKind, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, Line,
-    MethodDecl, Param, Place, PlaceBase, PlaceStep, Program, ScalarType, Slot, StaticAssignOp,
-    Stmt, StmtKind, TypeHint, UnOp, Visibility,
+    Capture, Expr, ExprKind, FnDecl, Param, TypeHint,
 };
 
 use super::*;

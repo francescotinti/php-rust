@@ -3,22 +3,17 @@
 //! serialize/unserialize, fopen/dir/resource openers and class-introspection
 //! (get_class_methods/get_object_vars). Split out of `eval.rs` (step 60) as one
 //! cohesive `impl Evaluator` block; behaviour is unchanged.
-#![allow(unused_imports)]
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use php_types::{
-    convert, dtoa, numstr, ops, Closure, ClosureInfo, ClosureParam, ClosureRender, Diag, Diags,
-    DirHandle, GenDriver, GenKey, GenState, GenStatus, GenStep, Key, Object, ObjectInfo, PhpArray,
-    PhpError, PhpStr, PropVis, Props, ResKind, Resource, Stream, StreamBackend, Zval,
+    convert, Diag,
+    DirHandle, Key, Object, PhpArray,
+    PhpError, PhpStr, Props, ResKind, Resource, Stream, StreamBackend, Zval,
 };
 
-use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
 use crate::hir::{
-    BinOp, Capture, CastKind, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, Line,
-    MethodDecl, Param, Place, PlaceBase, PlaceStep, Program, ScalarType, Slot, StaticAssignOp,
-    Stmt, StmtKind, TypeHint, UnOp, Visibility,
+    ClassDecl, ClassId, Expr, ExprKind,
 };
 
 use super::*;

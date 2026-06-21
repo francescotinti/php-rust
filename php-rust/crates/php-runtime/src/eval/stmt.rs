@@ -2,22 +2,17 @@
 //! loops (`exec_foreach`, `loop_step`, `eval_for_cond`), `switch`/`match`, and
 //! exception propagation (`handle_thrown`, `synthesize_throwable`,
 //! `capture_trace`). Split out of `eval.rs` (step 60); behaviour is unchanged.
-#![allow(unused_imports)]
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use php_types::{
-    convert, dtoa, numstr, ops, Closure, ClosureInfo, ClosureParam, ClosureRender, Diag, Diags,
-    DirHandle, GenDriver, GenKey, GenState, GenStatus, GenStep, Key, Object, ObjectInfo, PhpArray,
-    PhpError, PhpStr, PropVis, Props, ResKind, Resource, Stream, StreamBackend, Zval,
+    convert, ops, Diag, GenState, GenStatus, Key, Object, PhpArray,
+    PhpError, PhpStr, Zval,
 };
 
-use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
 use crate::hir::{
-    BinOp, Capture, CastKind, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, Line,
-    MethodDecl, Param, Place, PlaceBase, PlaceStep, Program, ScalarType, Slot, StaticAssignOp,
-    Stmt, StmtKind, TypeHint, UnOp, Visibility,
+    ClassId, Expr, ExprKind, Slot,
+    Stmt, StmtKind,
 };
 
 use super::*;

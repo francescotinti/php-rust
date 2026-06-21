@@ -2,22 +2,17 @@
 //! resolution, class constants, enum cases, property access and visibility,
 //! magic methods, method/static dispatch (`call_method`/`call_static`/
 //! `invoke_method`) and destructors. Split out of `eval.rs` (step 60).
-#![allow(unused_imports)]
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use php_types::{
-    convert, dtoa, numstr, ops, Closure, ClosureInfo, ClosureParam, ClosureRender, Diag, Diags,
-    DirHandle, GenDriver, GenKey, GenState, GenStatus, GenStep, Key, Object, ObjectInfo, PhpArray,
-    PhpError, PhpStr, PropVis, Props, ResKind, Resource, Stream, StreamBackend, Zval,
+    convert, ops, Diag, Object, ObjectInfo, PhpArray,
+    PhpError, PhpStr, PropVis, Props, Zval,
 };
 
-use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
 use crate::hir::{
-    BinOp, Capture, CastKind, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, Line,
-    MethodDecl, Param, Place, PlaceBase, PlaceStep, Program, ScalarType, Slot, StaticAssignOp,
-    Stmt, StmtKind, TypeHint, UnOp, Visibility,
+    ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl,
+    MethodDecl, PlaceBase, Visibility,
 };
 
 use super::*;

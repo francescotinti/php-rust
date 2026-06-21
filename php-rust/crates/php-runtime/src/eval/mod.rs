@@ -19,19 +19,16 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use corosensei::{Coroutine, CoroutineResult, Yielder};
+use corosensei::{Coroutine, CoroutineResult};
 
 use php_types::{
-    convert, dtoa, numstr, ops, Closure, ClosureInfo, ClosureParam, ClosureRender, Diag, Diags,
-    DirHandle, GenDriver, GenKey, GenState, GenStatus, GenStep, Key, Object, ObjectInfo, PhpArray,
-    PhpError, PhpStr, PropVis, Props, ResKind, Resource, Stream, StreamBackend, Zval,
+    convert, dtoa, numstr, ClosureInfo, ClosureParam, ClosureRender, Diag, Diags, GenDriver, GenKey, GenStep, Key, Object, ObjectInfo, PhpArray,
+    PhpError, PhpStr, Stream, StreamBackend, Zval,
 };
 
-use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
+use crate::builtin::Registry;
 use crate::hir::{
-    BinOp, Capture, CastKind, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, Line,
-    MethodDecl, Param, Place, PlaceBase, PlaceStep, Program, ScalarType, Slot, StaticAssignOp,
-    Stmt, StmtKind, TypeHint, UnOp, Visibility,
+    ClassDecl, ClassId, Expr, ExprKind, FnDecl, Line, Place, PlaceBase, PlaceStep, Program, ScalarType, Slot, TypeHint,
 };
 
 
