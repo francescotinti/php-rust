@@ -68,6 +68,10 @@ fn to_bytes(v: &Zval) -> Vec<u8> {
     convert::to_zstr(v, &mut diags).as_bytes().to_vec()
 }
 
+/// PHP caps width and precision at `INT_MAX`; beyond it a `ValueError` is thrown
+/// (and, crucially, we never reach `Vec::with_capacity` with a pathological size).
+const INT_MAX: u64 = 2147483647;
+
 #[derive(Default)]
 struct Spec {
     left: bool,
@@ -137,6 +141,11 @@ pub(crate) fn format_impl(fmt: &[u8], args: &[Zval]) -> Result<Vec<u8>, PhpError
         // Width.
         let (w, j) = read_uint(fmt, i);
         if let Some(w) = w {
+            if w > INT_MAX {
+                return Err(PhpError::ValueError(
+                    "Width must be between 0 and 2147483647".to_string(),
+                ));
+            }
             spec.width = w as usize;
             i = j;
         }
@@ -145,6 +154,11 @@ pub(crate) fn format_impl(fmt: &[u8], args: &[Zval]) -> Result<Vec<u8>, PhpError
         if fmt.get(i) == Some(&b'.') {
             i += 1;
             let (p, j) = read_uint(fmt, i);
+            if p.unwrap_or(0) > INT_MAX {
+                return Err(PhpError::ValueError(
+                    "Precision must be between 0 and 2147483647".to_string(),
+                ));
+            }
             spec.precision = Some(p.unwrap_or(0) as usize);
             i = j;
         }

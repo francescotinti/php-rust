@@ -611,6 +611,20 @@ fn sprintf_missing_arg_is_argument_count_error() {
 }
 
 #[test]
+fn sprintf_huge_width_precision_is_value_error_not_panic() {
+    // Regression: a width/precision past INT_MAX must raise a ValueError instead
+    // of panicking on Vec::with_capacity (sprintf_star.phpt).
+    match fatal("<?php sprintf('%9999999999999999999999.f', 1.5);") {
+        PhpError::ValueError(m) => assert_eq!(m, "Width must be between 0 and 2147483647"),
+        other => panic!("expected ValueError, got {other:?}"),
+    }
+    match fatal("<?php sprintf('%.9999999999999999999999f', 1.5);") {
+        PhpError::ValueError(m) => assert_eq!(m, "Precision must be between 0 and 2147483647"),
+        other => panic!("expected ValueError, got {other:?}"),
+    }
+}
+
+#[test]
 fn abs_numbers_and_strings() {
     assert_eq!(out("<?php var_dump(abs(-5));"), "int(5)\n");
     assert_eq!(out("<?php var_dump(abs(-5.5));"), "float(5.5)\n");
