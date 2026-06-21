@@ -18,7 +18,8 @@ full port semantico del solo `zend_operators.c`).
 
 Step 61 ha completato i suggerimenti della code-review esterna: (E) **diff unificato** nel
 `phpt-runner` (`--list-fails` mostra un line-diff EXPECTF-aware invece di due blob troncati); (B)
-flag **`PHP_RUST_TRACE`** che dumpa l'HIR su stderr per il triage lowering-vs-eval; e la
+flag **`PHP_RUST_TRACE`** che su stderr dumpa l'HIR (`=hir`/`body`) e/o traccia ogni statement
+eseguito indentato per profondità di chiamata (`=exec`/`all`), per il triage lowering-vs-eval; e la
 **modularizzazione di `lower.rs`** (3.783 → `lower/{mod,stmt,class,expr}.rs`, `mod.rs` 1.412
 righe, −63%, zero cambi di comportamento). Scartati: macro di binding builtin (rischiosa) e altri
 test unitari (copertura già forte).

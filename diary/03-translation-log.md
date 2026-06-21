@@ -1832,12 +1832,21 @@ sulla **prima divergenza reale** e non su ogni riga con un `%d`/`%s`. Righe lung
 regione cappata. Cambia solo il *detail* del fail, non la classificazione. (Avevo sofferto
 direttamente la troncatura durante gli step 58-59.)
 
-### B — flag `PHP_RUST_TRACE` (dump HIR)
-`run_source`/`run_source_with` (in `eval/mod.rs`), se `PHP_RUST_TRACE` è settata, stampano l'HIR
-abbassato su **stderr** prima dell'esecuzione, per triage *lowering* vs *evaluation*.
-`PHP_RUST_TRACE=hir|1|full` dumpa l'intero `Program`; altri valori solo la lista di statement
-top-level. Su stderr → non inquina lo stdout/`rendered` confrontato. Vale sia per `phpr` sia per
-il runner (entrambi passano da `run_source_with`).
+### B — flag `PHP_RUST_TRACE` (dump HIR **+ trace d'esecuzione**)
+Due metà, entrambe coperte (su **stderr** → non inquina lo stdout/`rendered` confrontato; valgono
+per `phpr` e per il runner):
+1. **Dump HIR** (static): `run_source*` (in `eval/mod.rs`) stampano l'HIR abbassato prima
+   dell'esecuzione, per triage *lowering* vs *evaluation*. `=hir|1|full` = intero `Program`;
+   `=body` = solo la lista di statement top-level.
+2. **Trace d'esecuzione** (runtime): `=exec|stmt|all` logga **ogni statement mentre viene
+   eseguito** — `[exec] L<line> <variante StmtKind>`, **indentato per profondità di chiamata** —
+   così un `.phpt` in fallimento si segue fino al punto esatto in cui l'esecuzione diverge (la
+   ricorsione/le call si annidano visibilmente). Il flag è letto **una sola volta** in un campo
+   dell'`Evaluator` (`trace_exec`, niente getenv per-statement); a trace spento è un solo check
+   booleano. `=all` combina dump HIR completo + trace.
+
+Il nome della variante dello statement è ricavato da `{:?}` fino al primo delimitatore (niente
+enumerazione manuale di tutte le `StmtKind`).
 
 ### Modularizzazione di `lower.rs` (refactor, zero cambi di comportamento)
 Stessa meccanica di eval (step 60): `lower.rs` (**3.783 righe**) → `lower/mod.rs` + tre
