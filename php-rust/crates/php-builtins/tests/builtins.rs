@@ -3838,6 +3838,23 @@ fn touch_sets_explicit_mtime() {
 }
 
 #[test]
+fn fscanf_lines_and_eof() {
+    let dir = tmp_path("b54_fscanf");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let p = format!("{dir}/n.txt");
+    std::fs::write(&p, "10 20\n30 40\n").unwrap();
+    // Loop terminates on EOF (fscanf → false); by-ref mode on the last line.
+    let src = format!(
+        "<?php $f=fopen('{p}','r'); \
+         while(($r=fscanf($f,'%d %d'))!==false){{ echo json_encode($r),'|'; }} \
+         rewind($f); $n=fscanf($f,'%d %d',$a,$b); echo \"$n:$a:$b\"; fclose($f);"
+    );
+    assert_eq!(out(&src), "[10,20]|[30,40]|2:10:20");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn sscanf_array_mode() {
     // Mixed conversions, types preserved.
     assert_eq!(

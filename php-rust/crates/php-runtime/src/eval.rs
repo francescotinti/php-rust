@@ -50,6 +50,7 @@ const HIGHER_ORDER_BUILTINS: &[&[u8]] = &[
     b"tmpfile",
     b"opendir",
     b"sscanf",
+    b"fscanf",
     b"preg_match",
     b"preg_match_all",
     b"preg_replace",
@@ -3568,6 +3569,7 @@ impl<'p> Evaluator<'p> {
             b"tmpfile" => Some(self.ho_tmpfile(args)),
             b"opendir" => Some(self.ho_opendir(args)),
             b"sscanf" => Some(self.ho_sscanf(args)),
+            b"fscanf" => Some(self.ho_fscanf(args)),
             b"preg_match" => Some(self.ho_preg_match(args)),
             b"preg_match_all" => Some(self.ho_preg_match_all(args)),
             b"preg_replace" => Some(self.ho_preg_replace(args)),
@@ -3756,6 +3758,47 @@ impl<'p> Evaluator<'p> {
             }
         }
         Ok(Zval::Long(count))
+    }
+
+    /// `fscanf($stream, $format, ...&$vars)` (step 54b): read one line from the
+    /// stream and scan it like `sscanf`. Returns `false` at end-of-file (so
+    /// `while ($r = fscanf(...))` terminates); otherwise an array or the by-ref
+    /// conversion count.
+    fn ho_fscanf(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        if args.len() < 2 {
+            return Err(PhpError::ArgumentCountError(
+                "fscanf() expects at least 2 arguments".to_string(),
+            ));
+        }
+        let stream_v = self.eval(&args[0])?.deref_clone();
+        let line = match &stream_v {
+            Zval::Resource(r) => {
+                let mut res = r.borrow_mut();
+                match res.as_stream_mut() {
+                    Some(s) => match s.read_line(None) {
+                        Ok(Some(l)) => l,
+                        _ => return Ok(Zval::Bool(false)), // EOF or read error
+                    },
+                    None => {
+                        return Err(PhpError::TypeError(
+                            "fscanf(): Argument #1 ($stream) must be an open stream resource"
+                                .to_string(),
+                        ))
+                    }
+                }
+            }
+            other => {
+                return Err(PhpError::TypeError(format!(
+                    "fscanf(): Argument #1 ($stream) must be of type resource, {} given",
+                    other.error_type_name()
+                )))
+            }
+        };
+        let fmt = convert::to_zstr(&self.eval(&args[1])?.deref_clone(), &mut self.diags)
+            .as_bytes()
+            .to_vec();
+        let results = crate::scanf::run_scanf(&line, &fmt);
+        self.scanf_finish(results, &args[2..])
     }
 
     /// `preg_match($pattern, $subject, &$matches = null)` (step 27): returns 1 on
