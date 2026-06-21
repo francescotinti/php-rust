@@ -36,10 +36,11 @@ drop-in che esegue uno script e scrive lo stream CLI-faithful con exit code fede
 come differential vs l'oracle; (b) chiuso 13 dei 29 fail sprintf/printf residui con un batch di
 fedeltà (modificatore `l`, specifier sconosciuti→ValueError, errori catchable col tipo giusto,
 conteggio "N arguments are required", threading dei warning di coercion, pad char in
-left-justify). Sweep `strings` **229→242/393 (61.6%)**. I 16 residui non sono bug del motore
-(output byte-identico all'oracle) ma di runner-EXPECTF su binario, interleaving warning
-dell'evaluator, e `fopen(__FILE__)` non materializzato dall'harness. Infra: `target-dir` di
-cargo spostato su disco interno (il volume esterno rompeva le build incrementali).
+left-justify). Sweep `strings` **229→242/393 (61.6%)**. I residui non sono bug del motore
+(output byte-identico all'oracle) ma di runner-EXPECTF su binario e `fopen(__FILE__)` non
+materializzato dall'harness (l'interleaving dei warning dell'evaluator è stato **risolto** allo
+step 66). Infra: `target-dir` di cargo spostato su disco interno (il volume esterno rompeva le
+build incrementali).
 
 Step 58 ha **chiuso il motore sprintf**: (a) fix del crash `capacity overflow` su width/precision
 oltre `INT_MAX` (un `%9999…f` abortiva l'intero run in-process) → ora `ValueError`; (b) sintassi
@@ -151,6 +152,7 @@ i pass salgono **2 → 63**. Step 53 ha aggiunto `strstr`/`strrchr`/`stristr`,
 | 63 | **`pack`/`unpack`** in `pack.rs` — port fedele di `ext/standard/pack.c` (host little-endian): tutti i codici `aAZ hH cC sSnv iI lLNV qQJP fgG deE xX@`, ValueError/Warning fedeli, chiavi nominali in `unpack`. `pack_*`/`unpack_*` `.phpt` verdi, byte-identico all'oracle su sweep ampio (inclusi codici 64-bit) | ✅ |
 | 64 | **`crypt`** in `crypto.rs` su `pwhash` (DES/BSDi/MD5/SHA-256/512/bcrypt) + dispatch e convenzione `*0`/`*1` di `php_crypt`, costanti `CRYPT_*`, pre-check anti-hang su `rounds=N`. Dir `crypt/` 4/4 + crypt/sha256/sha512/des verdi, byte-identico all'oracle; 3 D-NEW (`$2x$`, bcrypt 8-bit, salt md5 non-standard — limiti pwhash, casi deprecati) | ✅ |
 | 65 | **`strtok`** (stateful → evaluator-dispatched): campo `strtok_state` sull'`Evaluator`, port fedele di `PHP_FUNCTION(strtok)`. Forma a 2 arg (re)inizializza il cursore, 1 arg lo riprende, cleared a fine stringa. Tutti gli `strtok_*` `.phpt` verdi, byte-identico all'oracle | ✅ |
+| 66 | **fix interleaving diag/output dei builtin**: in `dispatch_value_builtin` i diagnostici sollevati da un builtin che scrive su stdout (`printf`/`vprintf`) sono ora resi su `rendered` **prima** del suo output — il warning nasce durante la formattazione, prima della scrittura (es. `Array to string conversion` precede il risultato di printf, come PHP). Byte-identico all'oracle su casi multipli | ✅ |
 
 > Lo step 6 è stato eseguito **dopo** lo step 7 (deciso con l'utente: gli array
 > rendono il phpt-runner molto più utile, quintuplicando i test in-scope).

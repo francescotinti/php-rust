@@ -809,9 +809,14 @@ impl<'p> Evaluator<'p> {
             diags: &mut self.diags,
         };
         let res = f(argv, &mut ctx);
+        // A builtin that writes to stdout (printf/vprintf) emits its warnings
+        // while *formatting* the arguments — before the formatted result is
+        // written. So render the diagnostics it raised first, then its output, to
+        // match PHP's interleaving (e.g. "Array to string conversion" prints
+        // ahead of the printf result, not after it).
         let produced = self.out[pre..].to_vec();
-        self.rendered.extend_from_slice(&produced);
         self.flush_diags();
+        self.rendered.extend_from_slice(&produced);
         res
     }
 

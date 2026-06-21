@@ -1999,3 +1999,35 @@ verdi, clippy `--deny=warnings` pulito.
 Con questo step il **backlog builtin del piano è chiuso** (step 62–65): hash/encoding,
 `pack`/`unpack`, `crypt`, `strtok`. Le uniche divergenze residue sono i 3 D-64 (limiti `pwhash`
 su edge-case crypt deprecati), documentati in `04-divergences.md`.
+
+## Step 66 — fix interleaving diagnostici/output dei builtin
+
+Bug di **ordinamento** nel rendering: per un builtin che scrive su stdout **e** solleva un
+warning (`printf`/`vprintf`), il warning compariva *dopo* l'output invece che *prima*. PHP emette
+il warning nel momento in cui avviene (durante la formattazione degli argomenti), quindi **prima**
+che printf scriva il risultato:
+
+```
+printf("BEFORE[%s]AFTER\n", [1,2]);
+```
+- **oracle**: `Warning: Array to string conversion …` poi `BEFORE[Array]AFTER`
+- **noi (prima)**: `BEFORE[Array]AFTER` poi il warning
+
+Causa in `eval/calls.rs::dispatch_value_builtin`: appendeva l'output del builtin a `rendered`
+e *solo dopo* chiamava `flush_diags()`. I diag del builtin (raccolti durante la formattazione)
+finivano così dopo l'output. **Fix** (riordino di due righe): snapshot dell'output prodotto →
+`flush_diags()` (rende i warning su `rendered`) → poi append dell'output. Ora l'ordine è
+`[warning][output]` come PHP. Il numero di riga resta corretto (`cur_line` è ancora quello della
+chiamata al momento del flush).
+
+Sicuro per costruzione: tocca l'ordine solo quando un **value-builtin produce output E diag**
+nella stessa chiamata — di fatto solo `printf`/`vprintf` (gli altri builtin che scrivono su stdout
+non emettono warning, e quelli che emettono warning non scrivono su stdout). Verificato
+byte-identico all'oracle su più casi (`%s`/`%d` con array, conversioni multiple, `vprintf`).
+Workspace **952 test** verdi, clippy `--deny=warnings` pulito. Chiude il debito "warning-position"
+annotato dallo step 59.
+
+> Nota: alcuni `*printf*_variation*.phpt` restano rossi, ma **non** per l'interleaving: usano
+> `fopen(__FILE__, 'r')` e il runner esegue lo script **in-process** (non lo materializza su disco),
+> quindi `__FILE__` non esiste → `fopen` fallisce con un warning spurio. È un limite dell'harness,
+> ortogonale a questo fix.
