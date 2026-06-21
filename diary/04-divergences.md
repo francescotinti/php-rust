@@ -611,3 +611,32 @@ metodologiche / divergenze *intenzionali* (catalogate come D-52.x in
   `GLOB_BRACE`/`MARK`/`NOSORT`/`NOCHECK`/`ONLYDIR`. Flag non implementati
   (`GLOB_ERR`/`GLOB_NOESCAPE` semantica completa) accettati e ignorati dove non
   cambiano l'output dei pattern comuni del corpus.
+
+## Step 57 (batch stringhe #2) — 1 D-NEW (crash sprintf pre-esistente) + scope-out
+
+Lo sweep `ext/standard/tests/strings` con `--isolate` ha isolato **1 divergenza nuova**,
+non relativa allo step 57 (tutte le funzioni dello step sono additive):
+
+- **D-NEW `sprintf` star `*` → capacity overflow (`sprintf_star.phpt`)**: il motore di
+  formattazione non gestisce la sintassi `*` (width/precision presi da un argomento, incl.
+  forme posizionali `%1$.*2$f` e precisioni negative `%.*g`). Su una combinazione del test la
+  larghezza derivata diventa un valore enorme/negativo che finisce in un `Vec::with_capacity`
+  → panic `capacity overflow` che **aborta il run in-process** (un singolo test cattivo uccide
+  il batch — lo stesso pattern documentato in `NEXT-backlog-scan.md`). I casi minimi `%*f`/
+  `%.*g` da soli non crashano; serve la combinazione. **Pre-esistente** (sprintf non toccato
+  dallo step 57) e indipendente dalle nuove funzioni. Mitigazione usata: misurare con
+  `--isolate` (ogni test in un child, sopravvive al crash). Fix vero = supporto `*` nel motore
+  sprintf, fuori scope dello step 57 (debito).
+
+Bug trovato **e fixato** dal corpus (non una D, è un fix di fedeltà): `strtr("", $map)` non
+deve emettere il Warning chiave-vuota perché PHP corto-circuita il subject vuoto prima di
+toccare la mappa (`strtr_variation4.phpt`) — vedi `03-translation-log.md` Step 57.
+
+Scope-out dichiarati (catalogati come D-57.x):
+- **D-57.1 `strip_tags $allowed_tags`**: non onorato (stringa o array), tutti i tag rimossi.
+  La semantica completa (parsing del set di tag ammessi + attributi) è un mini-parser a sé.
+- **D-57.2 `levenshtein` 5-arg pesata**: solo la forma 2-arg a costi unitari; la variante
+  `levenshtein($s1,$s2,$cost_ins,$cost_rep,$cost_del)` usa un algoritmo asimmetrico a parte.
+- **offset float→int (ereditato)**: `strrpos`/`stripos`/`strripos` con `$offset` float fuori
+  range emettono il Warning di cast di `to_long_cast` invece del TypeError "must be of type
+  int, float given" — gap comune a *tutti* i builtin che usano `to_long_cast`, non dello step.

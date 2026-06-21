@@ -1598,3 +1598,75 @@ possibile: solo aggiunte pure). Lever residui di questa directory: `strip_tags`(
 - tabella HTML4 completa di `htmlentities` (greco/matematica/symbol): solo Latin-1 (D-56.1).
 - `$encoding` di htmlspecialchars/htmlentities: assunto UTF-8.
 - forma-array di `substr_replace` (`$string`/`$replace` array): solo forma scalare.
+
+## Step 57 — batch funzioni stringa #2 (search / span / translate / split / strip)
+
+> Generato con assistenza AI (Claude Opus 4.8). Piano scelto dall'utente 2026-06-21
+> (`~/.claude/plans/silly-wobbling-whisper.md`): secondo batch di funzioni stringa pure
+> dai lever residui di `ext/standard/tests/strings`. Tutte byte-exact contro l'oracle PHP
+> 8.5.7 (semantica inchiodata *prima* di implementare). Tre sotto-step + diario/sweep.
+> Workspace 903→**918** verde, clippy pulito su `string.rs`.
+
+### 57a — search family (rpos / case-insensitive) + span
+`strrpos`/`stripos`/`strripos` con la semantica di `$offset` inchiodata sull'oracle:
+- forward (`stripos`): `start=len+offset` se negativo; `start<0 || start>len` → ValueError
+  "Argument #3 ($offset) must be contained in argument #1 ($haystack)".
+- reverse (`strrpos`/`strripos`, helper `rpos_window`): per `offset≥0` cerca start in
+  `[offset, len-nlen]` (ValueError se `offset>len`); per `offset<0` (ValueError se
+  `offset<-len`) il bound alto è `len+offset`, ma se `nlen>-offset` si allarga a `len-nlen`;
+  needle vuota → posizione massima del window. `rfind_window` ritorna l'ultima occorrenza.
+Le varianti case-insensitive fanno fold ASCII di haystack+needle e riusano `find_sub`/
+`rfind_window`. `strspn`/`strcspn` (helper `span_slice` per `$start`/`$length` con
+negativo-da-fine + clamping; `byte_set` 256-bool): lunghezza del segmento iniziale del
+window fatto di byte ∈/∉ `$mask`.
+
+### 57b — strtr + chunk_split
+`strtr($s,$from,$to)`: tabella di traduzione per-byte su `min(len(from),len(to))` coppie
+(byte assenti passano invariati; duplicato nel `from` → vince l'ultima mappatura). Forma
+2-arg con 2° non-array → TypeError "Argument #2 ($from) must be of type array, string given".
+`strtr($s,$map)`: replace di sottostringhe **longest-key-first** (sort stabile per lunghezza
+desc), scansione L→R senza ri-scansione dell'output; chiavi int → forma decimale; chiave
+vuota → Warning "Ignoring replacement of empty string" e skip. `chunk_split($s,$len=76,
+$sep="\r\n")`: separatore dopo ogni chunk incluso uno finale; `$len<1` → ValueError; stringa
+vuota → comunque un separatore (fedele a PHP).
+
+### 57c — strip_tags + quotemeta + levenshtein
+`strip_tags` è un **port fedele dello scanner** di PHP (state-machine inchiodata su ~20
+probe oracle): un `<` seguito da whitespace (o EOF) resta letterale; in un tag normale i `<`
+annidati alzano una profondità che i `>` devono bilanciare e le virgolette (`"`/`'`)
+sopprimono `<`/`>` finché aperte; `<!-- -->` è un commento la cui chiusura `-->` può riusare
+i trattini di apertura (così `<!-->` è un commento vuoto); `<! …>` corre fino a `>`; `<? …?>`
+corre fino a `?>`. `quotemeta` (escape di `. \ + * ? [ ^ ] $ ( )`). `levenshtein` 2-arg
+(distanza di edit byte, costi unitari, DP a due righe).
+
+### Impatto corpus (copia pulita di `ext/standard/tests/strings`, 733 test)
+Runner ricostruito `--release` + copia pulita in `/tmp` (una run). **Misura con `--isolate`**
+perché l'esecuzione in-process aborta su un crash *pre-esistente* di `sprintf` (vedi D-NEW):
+
+| | pass | fail | skip | runnable | pass-rate |
+|---|---:|---:|---:|---:|---:|
+| post-56 (in-process, **troncato** dal crash) | 143 | 137 | 453 | 280 | 51% |
+| **post-57 (`--isolate`, completo)** | **228** | 165 | **340** | 393 | **58.0%** |
+
+Le 9 funzioni dello step 57 sono **sparite** dalla lista "missing builtin". Il salto di
+runnable (280→393) è in parte reale (nuovi builtin) e in parte perché la baseline post-56 era
+un conteggio **troncato**: il run in-process abortiva a `sprintf_star.phpt` (alfabeticamente
+verso la fine), quindi `--isolate` è ora la misura di riferimento. Lever residui ora:
+`pack`(15), `crypt`(13), `unpack`(10), `base64_decode`(6), `md5`(6), `strtok`(6),
+`substr_compare`(6), `strncasecmp`(5).
+
+**1 bug trovato e fixato dal corpus** (`strtr_variation4.phpt`): con subject vuoto PHP
+ritorna `""` **senza** processare la mappa, quindi il Warning chiave-vuota non deve scattare;
+`strtr_array` ora corto-circuita su subject vuoto.
+
+### Scope-out espliciti (debito)
+- `$allowed_tags` di `strip_tags` (stringa o array): non onorato, tutti i tag rimossi (D-57.1).
+- forma pesata 5-arg di `levenshtein` (`$cost_ins/$cost_rep/$cost_del`): solo 2-arg unitaria (D-57.2).
+- `strtok` (stateful: ricorda stringa+posizione tra chiamate): rinviato a uno step con stato
+  sull'evaluator.
+- coercion float→int degli argomenti `$offset` (`to_long_cast` emette Warning invece del
+  TypeError "must be of type int, float given"): gap **ereditato** comune a tutti i builtin
+  (`strrpos_offset`/`strripos_offset.phpt`), non specifico dello step 57.
+- 2 EXPECTF (`chunk_split_variation7`, `strcspn_variation5`) sono FAIL nel runner ma l'output
+  di `phpr` è **byte-identico** all'atteso: sfumatura del matcher EXPECTF del runner (probabile
+  `%` letterale nei dati), non una divergenza dei builtin.

@@ -14,7 +14,14 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–56 completati · 903 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–57 completati · 918 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+
+Step 57 ha aggiunto il secondo batch di funzioni stringa pure (`strrpos`/`stripos`/`strripos`,
+`strspn`/`strcspn`, `strtr` byte-map + array, `chunk_split`, `strip_tags`, `quotemeta`,
+`levenshtein`): sulla copia pulita di `ext/standard/tests/strings` il pass-rate sul runnable
+sale a **58.0% (228/393)** con `--isolate` (il run in-process aborta su un crash *pre-esistente*
+di `sprintf` con la sintassi `*`, vedi `diary/04-divergences.md`). Il corpus ha fatto trovare e
+fixare 1 bug di fedeltà (`strtr("", $map)` non deve emettere il Warning chiave-vuota).
 
 Step 56 ha aggiunto un batch di funzioni stringa pure (`bin2hex`/`hex2bin`, `addslashes`/
 `stripslashes`, `substr_replace`, `nl2br`, `wordwrap`, `htmlspecialchars`/`htmlentities`
