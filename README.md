@@ -14,7 +14,13 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–59 completati · 927 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–60 completati · 927 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+
+Step 60 ha **modularizzato `eval.rs`** (era un monolite da 6.965 righe, segnalato da una
+code-review esterna): spezzato in `eval/{mod,expr,stmt,calls,class,builtins}.rs`, ognuno un
+blocco `impl Evaluator`. Refactor puramente meccanico, **zero cambi di comportamento**, 927 test
+verdi a ogni sotto-step; `mod.rs` ora 1.913 righe (−72%). (`lower.rs`, 3.783 righe, candidato per
+lo stesso trattamento in futuro.)
 
 Step 59 ha (a) implementato il CLI **`phpr`** (era uno stub `fn main(){}`): ora è un `php`
 drop-in che esegue uno script e scrive lo stream CLI-faithful con exit code fedele, utile anche
@@ -154,7 +160,8 @@ php-rust/crates/
   php-types      Zval / PhpStr / PhpArray / Object + operatori (zero dep interne)
   php-runtime    HIR, lowering da mago, evaluator tree-walk (OOP, eccezioni,
                  enum, closure, __destruct, interpolazione; json_decode +
-                 preg_* intercettati; stack-trace)
+                 preg_* intercettati; stack-trace). evaluator in
+                 eval/{mod,expr,stmt,calls,class,builtins}.rs
   php-builtins   registry ~65 builtin (var_dump/print_r, array_*, string,
                  sprintf, math, json_encode, …)
   php-cli        binario `phpr` (CLI: esegue uno script, stream CLI-faithful, exit code)

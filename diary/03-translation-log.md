@@ -1781,3 +1781,36 @@ Sweep `ext/standard/tests/strings` (copia pulita, in-process): **229→242 pass 
 - **niche** (`sprintf_variation52`: cap precision a 53 cifre con Notice; `vprintf_variation3/5`:
   quirk di parsing `% %%d`; `sprintf_rope_optimization_001`: rendering dell'`ArgumentCountError`
   non catturato).
+
+## Step 60 — modularizzazione di `eval.rs` (refactor, zero cambi di comportamento)
+
+> Generato con assistenza AI (Claude Opus 4.8). Scelta utente 2026-06-21: implementare il
+> suggerimento principale di una code-review esterna (Gemini, `analysis_and_suggestions.md`) —
+> spezzare il monolite `eval.rs` (**6.965 righe**). Refactor puramente meccanico: spostamento di
+> codice, **nessun cambio di comportamento**, con i **927 test** come rete a ogni sotto-step.
+
+`eval.rs` → `eval/mod.rs` + cinque sottomoduli, ognuno un blocco `impl<'p> Evaluator<'p>`:
+- **`eval/expr.rs`** (745) — `eval`/`eval_inner` (il cuore tree-walker), instanceof, `apply_binop`.
+- **`eval/stmt.rs`** (591) — `exec_stmt*`, loop/`foreach`/`switch`, propagazione eccezioni.
+- **`eval/calls.rs`** (1128) — invocazione funzioni/metodi, closure, named/spread args, runtime
+  dei generatori (corosensei).
+- **`eval/class.rs`** (1177) — `new`, risoluzione classi/interfacce, costanti, enum, proprietà +
+  visibilità, magic method, dispatch metodi/static, destructor.
+- **`eval/builtins.rs`** (1521) — builtin evaluator-dispatched: higher-order (`array_map`/
+  `filter`/`walk`/`usort`/`call_user_func*`), famiglie `preg_*`/`mb_ereg*`, `json_decode`,
+  `serialize`/`unserialize`, `fopen`/dir/resource, class-introspection.
+- **`eval/mod.rs`** (1913) — struct `Evaluator`, macro `frame_mut!`/`slot_mut!`, le funzioni
+  `run*`/`Outcome`, i metodi core (`frame`/`read_var`/`eval_isset`/array/place) e le free-fn.
+
+**Meccanica Rust sfruttata**: un `impl` di un tipo può essere spezzato su più file dello stesso
+crate; un **modulo figlio vede gli item privati dell'antenato**, quindi i metodi spostati
+accedono ancora a campi e free-fn privati di `mod.rs` senza cambi di visibilità. Le uniche
+annotazioni `pub(super)` servono per i metodi chiamati *dal* padre o da un altro sottomodulo (il
+padre non vede i privati del figlio). I macro (`frame_mut!`) sono in scope testuale: le
+dichiarazioni `mod` stanno **dopo** la loro definizione. `cargo fix` ha poi sfrondato gli import
+per-modulo. Risultato: monolite da 6.965 → `mod.rs` di 1.913 righe (**−72%**), clippy pulito,
+927 test verdi.
+
+> Nota DevEx: il `target-dir` di cargo è stato spostato fuori dal volume "Extreme Pro" (vedi
+> `.cargo/config.toml`), che non sa fare hard-link della cache incrementale → build stale.
+> `lower.rs` (3.783 righe) resta un candidato per lo stesso trattamento in un secondo momento.
