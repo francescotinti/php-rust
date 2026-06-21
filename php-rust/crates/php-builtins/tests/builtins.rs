@@ -644,6 +644,18 @@ fn vprintf_family_arg_validation() {
 }
 
 #[test]
+fn sprintf_left_align_pad_char() {
+    // Left-justify fills with the pad char, except an integer's `0` flag, which
+    // PHP downgrades to a space (a float/string keeps the `0`) — sprintf_f.phpt.
+    assert_eq!(out("<?php echo sprintf('[%-05.2f]', 3.4);"), "[3.400]");
+    assert_eq!(out("<?php echo sprintf('[%-5.2f]', 3.4);"), "[3.40 ]");
+    assert_eq!(out("<?php echo sprintf('[%-08.2f]', -5.6);"), "[-5.60000]");
+    assert_eq!(out("<?php echo sprintf('[%-05d]', 42);"), "[42   ]");
+    assert_eq!(out("<?php echo sprintf(\"[%-'x5d]\", 42);"), "[42xxx]");
+    assert_eq!(out("<?php echo sprintf('[%-05s]', 'hi');"), "[hi000]");
+}
+
+#[test]
 fn sprintf_l_modifier_is_ignored() {
     // A single `l` length modifier is accepted and ignored: %ld == %d.
     assert_eq!(out("<?php echo sprintf('%ld', 42.5);"), "42");

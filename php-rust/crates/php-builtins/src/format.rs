@@ -430,11 +430,11 @@ fn format_one(conv: u8, arg: &Zval, spec: &Spec, diags: &mut Diags) -> Vec<u8> {
             let n = convert::to_long_cast(arg, diags);
             let neg = n < 0;
             let mag = (n as i128).unsigned_abs().to_string().into_bytes();
-            pad_numeric(neg, mag, spec)
+            pad_numeric(neg, mag, spec, true)
         }
         b'u' => {
             let n = convert::to_long_cast(arg, diags) as u64;
-            pad_numeric(false, n.to_string().into_bytes(), spec)
+            pad_numeric(false, n.to_string().into_bytes(), spec, true)
         }
         b'x' | b'X' | b'o' | b'b' => {
             let n = convert::to_long_cast(arg, diags) as u64;
@@ -444,7 +444,7 @@ fn format_one(conv: u8, arg: &Zval, spec: &Spec, diags: &mut Diags) -> Vec<u8> {
                 b'o' => format!("{n:o}"),
                 _ => format!("{n:b}"),
             };
-            pad_numeric(false, body.into_bytes(), spec)
+            pad_numeric(false, body.into_bytes(), spec, true)
         }
         b'c' => {
             let n = convert::to_long_cast(arg, diags);
@@ -455,14 +455,14 @@ fn format_one(conv: u8, arg: &Zval, spec: &Spec, diags: &mut Diags) -> Vec<u8> {
             let prec = spec.precision.unwrap_or(6).max(0) as usize;
             let neg = v.is_sign_negative() && v != 0.0;
             let mag = format!("{:.*}", prec, v.abs()).into_bytes();
-            pad_numeric(neg, mag, spec)
+            pad_numeric(neg, mag, spec, false)
         }
         b'e' | b'E' => {
             let v = convert::to_double(arg);
             let prec = spec.precision.unwrap_or(6).max(0) as usize;
             let neg = v.is_sign_negative() && v != 0.0;
             let mag = format_exp(v.abs(), prec, conv == b'E');
-            pad_numeric(neg, mag, spec)
+            pad_numeric(neg, mag, spec, false)
         }
         b'g' | b'G' | b'h' | b'H' => {
             let v = convert::to_double(arg);
@@ -476,7 +476,7 @@ fn format_one(conv: u8, arg: &Zval, spec: &Spec, diags: &mut Diags) -> Vec<u8> {
             let upper = matches!(conv, b'G' | b'H');
             let prec = spec.precision.unwrap_or(6);
             let neg = v.is_sign_negative();
-            pad_numeric(neg, php_gcvt(v.abs(), prec, upper), spec)
+            pad_numeric(neg, php_gcvt(v.abs(), prec, upper), spec, false)
         }
         b's' => {
             let mut body = to_bytes(arg, diags);
@@ -563,8 +563,11 @@ fn php_gcvt(mag: f64, precision: i64, upper: bool) -> Vec<u8> {
     }
 }
 
-/// Pad a signed numeric body honoring sign/zero/left/width flags.
-fn pad_numeric(neg: bool, mag: Vec<u8>, spec: &Spec) -> Vec<u8> {
+/// Pad a signed numeric body honoring sign/zero/left/width flags. `is_int` marks
+/// integer conversions, for which PHP ignores the `0` flag when left-justifying
+/// (a left-aligned `%-05d` pads with spaces, but a left-aligned `%-05.2f` keeps
+/// the `0`).
+fn pad_numeric(neg: bool, mag: Vec<u8>, spec: &Spec, is_int: bool) -> Vec<u8> {
     let sign: &[u8] = if neg {
         b"-"
     } else if spec.plus {
@@ -581,9 +584,16 @@ fn pad_numeric(neg: bool, mag: Vec<u8>, spec: &Spec) -> Vec<u8> {
     let pad = spec.width - content_len;
     let mut out = Vec::with_capacity(spec.width);
     if spec.left {
+        // Left-justified: trailing fill with the pad char, except an integer's
+        // `0` flag, which PHP downgrades to a space.
+        let fill = if is_int && spec.pad == b'0' {
+            b' '
+        } else {
+            spec.pad
+        };
         out.extend_from_slice(sign);
         out.extend_from_slice(&mag);
-        out.resize(out.len() + pad, b' ');
+        out.resize(out.len() + pad, fill);
     } else if spec.pad == b'0' {
         // Zeros go between the sign and the digits.
         out.extend_from_slice(sign);
