@@ -1388,7 +1388,12 @@ fn set_times(p: &std::ffi::OsStr, atime: i64, mtime: i64) -> std::io::Result<()>
 /// uses now; a null `$atime` mirrors `$mtime` (PHP semantics).
 pub fn touch(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let p = arg_os_path(argv, ctx);
-    if let Err(e) = std::fs::OpenOptions::new().write(true).create(true).open(&p) {
+    if let Err(e) = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&p)
+    {
         ctx.diags.push(Diag::Warning(format!(
             "touch(): Unable to create file {} because {}",
             show_path(&p),

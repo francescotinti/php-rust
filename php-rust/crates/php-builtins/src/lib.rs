@@ -12,6 +12,7 @@
 mod array;
 mod csv;
 mod date;
+mod encoding;
 mod html;
 mod file;
 mod format;
@@ -54,6 +55,13 @@ pub fn registry() -> Registry {
     add(b"__interval_format", date::__interval_format);
     add(b"__date_from_format", date::__date_from_format);
     add(b"json_encode", json::json_encode);
+    // Hashing / encoding builtins (step 62).
+    add(b"base64_encode", encoding::base64_encode);
+    add(b"base64_decode", encoding::base64_decode);
+    add(b"md5", encoding::md5);
+    add(b"sha1", encoding::sha1);
+    add(b"crc32", encoding::crc32);
+    add(b"hash", encoding::hash);
     // File / stream builtins (step 51; `fopen` is evaluator-dispatched).
     add(b"fread", file::fread);
     add(b"fwrite", file::fwrite);

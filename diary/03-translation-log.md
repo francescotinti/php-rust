@@ -1873,3 +1873,41 @@ Niente macro qui (a differenza di eval), quindi più semplice. `pub(super)` solo
 chiamati cross-modulo; `cargo fix` ha sfrondato gli import. `mod.rs` 3.783 → 1.412 (**−63%**).
 Trappola incontrata e risolta: terminare il range di estrazione alla `}` dell'ultimo metodo —
 includere il doc-comment del metodo *successivo* lascia un "expected item after doc comment".
+
+## Step 62 — Famiglia hash/encoding (`base64_*`, `md5`, `sha1`, `crc32`, `hash`)
+
+Nuovo modulo `crates/php-builtins/src/encoding.rs` (registrato in `lib.rs`), tutto
+**byte-exact** (le stringhe PHP sono byte: input e output binari sono `[u8]`).
+
+- **`base64_encode`** — port a mano (alfabeto standard, padding `=`), nessuna dipendenza.
+- **`base64_decode($s, $strict = false)`** — port **fedele** di `php_base64_decode_impl`
+  (`ext/standard/base64.c`): lenient salta ogni byte fuori-alfabeto; strict salta solo il
+  whitespace (`\t \n \r` e spazio — **non** `\v`/`\f`, come la `base64_reverse_table`),
+  fallisce su byte invalido, su dati dopo `=`, su gruppo finale di un solo carattere
+  (`i % 4 == 1`) e su padding malformato (`padding > 2 || (i + padding) % 4 != 0`). La prima
+  versione ingenua (con `seen_pad` + `is_ascii_whitespace`) sbagliava proprio gli edge-case di
+  padding di `base64_decode_basic_003.phpt` → riscritta replicando la macchina a stati `i % 4`
+  del C. Ora il test passa.
+- **`md5`/`sha1`** (`$binary = false`) — digest RustCrypto (`md-5`, `sha1`), output hex
+  lowercase o raw secondo il flag.
+- **`crc32`** — CRC-32 zlib/IEEE (poly `0xEDB88320`, reflected) via `crc32fast`; ritorna il
+  valore unsigned pieno come int positivo (`crc as i64`), come su PHP a 64-bit.
+- **`hash($algo, $data, $binary = false)`** — dispatch su `md5`/`sha1`/`sha256`/`sha384`/
+  `sha512`/`crc32b` (`crc32b` == output di `crc32()` in hex); algoritmo ignoto → `ValueError`.
+  `crc32` (senza `b`, variante BZIP2) volutamente **non** incluso ora: poligono diverso,
+  nessun test del corpus lo esercita (i `crc32*.phpt` testano la funzione `crc32()`, non
+  `hash('crc32')`).
+
+Dipendenze nuove in `php-builtins/Cargo.toml`: `md-5`, `sha1`, `sha2`, `crc32fast` (mature,
+minimali). 10 test unitari inline (vettori noti: `md5("")`, `sha1("abc")`, `crc32("123456789")`
+= `0xCBF43926`, round-trip base64, strict/lenient).
+
+**Verifica `.phpt`** (oracle = output reale di PHP nelle sezioni EXPECT): verdi
+`md5`/`md5_basic1`/`md5raw`, `sha1_basic`/`sha1raw`, `crc32`/`crc32_basic`/`crc32_variation2-4`,
+e tutti e 6 i `base64_*` di `ext/standard/tests/url`. Gli skip residui (`sha1.phpt`,
+`md5_basic2`) dipendono da `sha1_file`/`md5_file` (altri builtin), non dalle funzioni di questo
+step. Workspace **943 test** verdi, clippy `--deny=warnings` pulito.
+
+Fix incidentale: clippy si è inasprito (`suspicious_open_options`) e segnalava `touch()` in
+`file.rs` (`create(true)` senza `truncate` esplicito) — aggiunto `.truncate(false)`, coerente
+con la docstring ("without truncating an existing one").

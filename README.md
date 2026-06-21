@@ -147,6 +147,7 @@ i pass salgono **2 → 63**. Step 53 ha aggiunto `strstr`/`strrchr`/`stristr`,
 | 59 | **CLI `phpr`** (era uno stub: ora esegue uno script, stream CLI-faithful, exit code fedele) + batch fedeltà sprintf/printf (modificatore `l`, specifier ignota/mancante → `ValueError`, errori catchable col tipo giusto, conteggio "N arguments required", warning Array-to-string, pad char left-justify). `strings` **242/393 (61.6%)**. Infra: `target-dir` cargo fuori dal volume esterno | ✅ |
 | 60 | **modularizzazione `eval.rs`** (6.965 righe) → `eval/{mod,expr,stmt,calls,class,builtins}.rs`, ognuno un `impl Evaluator`. Refactor meccanico, zero cambi di comportamento; `mod.rs` −72% | ✅ |
 | 61 | **DevEx tooling** (code-review esterna): diff unificato EXPECTF-aware nel `phpt-runner` (E), flag `PHP_RUST_TRACE` = dump HIR + trace d'esecuzione su stderr (B), 7 test unitari oracle-independent su `php-types::ops` (C); + split `lower.rs` (3.783) → `lower/{mod,stmt,class,expr}.rs` (−63%) | ✅ |
+| 62 | **famiglia hash/encoding** (`base64_encode`/`base64_decode`, `md5`, `sha1`, `crc32`, `hash`) in `encoding.rs` — base64 port byte-exact di `php_base64_decode_impl` (strict/lenient, padding), digest via RustCrypto (`md-5`/`sha1`/`sha2`), CRC-32 zlib via `crc32fast`. base64/md5/sha1/crc32 `.phpt` tutti verdi | ✅ |
 
 > Lo step 6 è stato eseguito **dopo** lo step 7 (deciso con l'utente: gli array
 > rendono il phpt-runner molto più utile, quintuplicando i test in-scope).
@@ -185,8 +186,9 @@ php-rust/crates/
                  preg_* intercettati; stack-trace). lowering in
                  lower/{mod,stmt,class,expr}.rs; evaluator in
                  eval/{mod,expr,stmt,calls,class,builtins}.rs
-  php-builtins   registry ~233 builtin (var_dump/print_r, array_*, string,
-                 sprintf/printf, math, json_encode, file/stream, mbstring, …)
+  php-builtins   registry ~239 builtin (var_dump/print_r, array_*, string,
+                 sprintf/printf, math, json_encode, file/stream, mbstring,
+                 hash/encoding: base64/md5/sha1/crc32/hash, …)
   php-cli        binario `phpr` (CLI: esegue uno script, stream CLI-faithful, exit code)
   phpt-runner    runner .phpt + capability scan + diff unificato (bin + lib)
 diary/           00-reconnaissance … 99-conclusions + metrics
