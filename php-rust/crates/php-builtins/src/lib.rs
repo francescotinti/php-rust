@@ -227,6 +227,8 @@ pub fn registry() -> Registry {
     add(b"number_format", string::number_format);
     add(b"sprintf", format::sprintf);
     add(b"printf", format::printf);
+    add(b"vsprintf", format::vsprintf);
+    add(b"vprintf", format::vprintf);
     add(b"abs", math::abs);
     add(b"max", math::max);
     add(b"min", math::min);

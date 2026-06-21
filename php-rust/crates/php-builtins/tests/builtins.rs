@@ -4030,6 +4030,12 @@ fn sscanf_byref_mode() {
 }
 
 #[test]
+fn vsprintf_vprintf() {
+    assert_eq!(out("<?php echo vsprintf('%d-%s',[5,'x']);"), "5-x");
+    assert_eq!(out("<?php $n=vprintf('%02d|%s',[7,'y']); echo \"|$n\";"), "07|y|4");
+}
+
+#[test]
 fn html_encode_decode() {
     assert_eq!(
         out("<?php echo htmlspecialchars(\"<a href=\\\"x\\\">'b'&</a>\");"),

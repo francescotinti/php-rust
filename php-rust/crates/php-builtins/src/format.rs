@@ -25,6 +25,33 @@ pub fn printf(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Long(n as i64))
 }
 
+/// Format `$format` against an array of values (step 56c). Slot 0 of the values
+/// slice is an ignored placeholder for the format itself (the engine numbers
+/// conversion args from index 1), so the array elements follow it.
+fn vformat(args: &[Zval], fname: &str) -> Result<Vec<u8>, PhpError> {
+    let fmt = first_format(args, fname)?;
+    let mut vals: Vec<Zval> = vec![Zval::Null];
+    if let Some(Zval::Array(a)) = args.get(1) {
+        for (_k, v) in a.iter() {
+            vals.push(v.clone());
+        }
+    }
+    format_impl(&fmt, &vals)
+}
+
+/// vsprintf($format, $args): like sprintf with the conversion args in an array.
+pub fn vsprintf(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    Ok(Zval::Str(PhpStr::new(vformat(args, "vsprintf")?)))
+}
+
+/// vprintf($format, $args): like printf with the args in an array; returns length.
+pub fn vprintf(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let bytes = vformat(args, "vprintf")?;
+    let n = bytes.len();
+    ctx.out.extend_from_slice(&bytes);
+    Ok(Zval::Long(n as i64))
+}
+
 pub(crate) fn first_format(args: &[Zval], fname: &str) -> Result<Vec<u8>, PhpError> {
     match args.first() {
         Some(v) => Ok(to_bytes(v)),
