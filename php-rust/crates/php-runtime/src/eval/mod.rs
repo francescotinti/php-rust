@@ -341,10 +341,32 @@ pub struct Outcome {
     pub exit_code: Option<u8>,
 }
 
+/// Diagnostic hook (DevEx): when `PHP_RUST_TRACE` is set, dump the lowered HIR
+/// to stderr before execution, so a failing test can be triaged as a *lowering*
+/// vs *evaluation* problem. `PHP_RUST_TRACE=hir` (or `1`/`full`) prints the whole
+/// `Program`; anything else prints just the top-level statement list (terser).
+/// Stderr keeps it out of the compared stdout/`rendered` stream.
+fn trace_hir(name: &[u8], program: &Program) {
+    let Ok(mode) = std::env::var("PHP_RUST_TRACE") else {
+        return;
+    };
+    let file = String::from_utf8_lossy(name);
+    eprintln!("=== PHP_RUST_TRACE: HIR for {file} ===");
+    if matches!(mode.as_str(), "hir" | "1" | "full") {
+        eprintln!("{program:#?}");
+    } else {
+        eprintln!("{:#?}", program.body);
+    }
+    eprintln!("=== end HIR ===");
+}
+
 /// Lower `source` and run it with no builtins. Convenience wrapper over [`run`].
 pub fn run_source(name: &[u8], source: &[u8]) -> Result<Outcome, crate::LowerError> {
     match crate::lower_source(name, source) {
-        Ok(program) => Ok(run(&program)),
+        Ok(program) => {
+            trace_hir(name, &program);
+            Ok(run(&program))
+        }
         Err(crate::LowerError::Fatal { message, line }) => {
             Ok(compile_fatal_outcome(name, &message, line))
         }
@@ -359,7 +381,10 @@ pub fn run_source_with(
     registry: &Registry,
 ) -> Result<Outcome, crate::LowerError> {
     match crate::lower_source(name, source) {
-        Ok(program) => Ok(run_with(&program, registry)),
+        Ok(program) => {
+            trace_hir(name, &program);
+            Ok(run_with(&program, registry))
+        }
         Err(crate::LowerError::Fatal { message, line }) => {
             Ok(compile_fatal_outcome(name, &message, line))
         }
