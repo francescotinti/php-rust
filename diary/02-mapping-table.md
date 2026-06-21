@@ -989,3 +989,14 @@ candidati a uno step FS dedicato dopo 51.
 | D-53.2 | `opendir`/`readdir`/`closedir`/`rewinddir` | `ResKind::Dir(DirHandle)` (snapshot voci + cursore); opendir evaluator-dispatched | PHP modella i dir handle come `php_stream` (stesse etichette "resource"/"stream"); `readdir` ordine OS con `.`/`..` in testa | confermato |
 | D-53.3 | `fprintf`/`vfprintf` | riuso di `format_impl`/`first_format` (sprintf engine) → stream | zero duplicazione dell'engine di formattazione; ritorna il byte-count come `printf` | confermato |
 | D-53.4 | `strrchr` | usa solo il primo byte del needle, ultima occorrenza | semantica storica PHP (oracle-verified) | confermato |
+
+## Step 54 — Decisioni (D-54.x): sscanf/fscanf + CSV
+
+| ID | Costrutto PHP | Scelta Rust | Razionale | Status |
+|---|---|---|---|---|
+| D-54.1 | `sscanf`/`fscanf` by-ref out-var | higher-order `ho_sscanf`/`ho_fscanf` + `write_out_param` | l'ABI builtin puro non assegna a `&$var`; solo `$var` bare (array-elem/prop ignorati, come preg_match) | confermato |
+| D-54.2 | CSV `$escape` omesso | emette `Deprecated` "$escape parameter must be provided…" | i .phpt 8.5 lo hanno in EXPECTF; rilevato via `argv.len()` | confermato |
+| D-54.3 | record CSV multi-riga in `fgetcsv` | leggiamo una sola riga (scope-out) | continuazione su più righe di un campo quotato è rara; `str_getcsv` gestisce `\n` embedded | scope-out |
+| D-54.4 | motore scanf | nuovo `php-runtime/src/scanf.rs` (no `php-builtins`) | `ho_sscanf` vive nell'evaluator (by-ref) e `php-runtime` non dipende da `php-builtins` | confermato |
+| D-54.5 | motore CSV | nuovo `php-builtins/src/csv.rs` condiviso | funzioni CSV pure; primo-byte di sep/enc/esc, escape vuoto = disabilitato | confermato |
+| D-54.6 | `%i` vs `%d` | `%i` auto-base (0x/0), `%d` decimale stretto | semantica C/PHP (oracle: `%i` di "0x1A"→26, di "ff"→NULL) | confermato |

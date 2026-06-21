@@ -14,7 +14,11 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–53 completati · 888 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–54 completati · 894 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+
+Step 54 ha aggiunto due engine di parsing: **scanf** (`sscanf`/`fscanf`, con modo
+return-array e modo by-reference) e **CSV** (`str_getcsv`/`fgetcsv`/`fputcsv`), eliminando
+il bucket di skip "missing builtin: fscanf/fgetcsv/fputcsv" su `ext/standard/tests/file`.
 
 Step 52 ha aggiunto il sottosistema filesystem (predicati `file_exists`/`is_*`/`filetype`,
 famiglia `stat`/`lstat`/`fstat` + accessor, mutatori `unlink`/`mkdir`/`rename`/`copy`/`touch`/

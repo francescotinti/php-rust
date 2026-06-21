@@ -1433,3 +1433,77 @@ fscanf/CSV-dipendenti (ancora fuori scope) e quindi falliscono comunque; il
 delta-pass netto reale è piccolo e positivo. Lever successivo naturale:
 **`fscanf`/`sscanf`** e **CSV** (`fgetcsv`/`fputcsv`/`str_getcsv`), entrambi
 parser che meritano il loro design pass.
+
+## Step 54 — parser families: `sscanf`/`fscanf` + CSV (`str_getcsv`/`fgetcsv`/`fputcsv`)
+
+> Generato con assistenza AI (Claude Opus 4.8). Scelta utente 2026-06-21: dopo lo
+> step 53 i due lever residui di `ext/standard/tests/file` erano *parser veri*;
+> l'utente ha scelto di farli **entrambi** in un design pass. Due engine distinti
+> (scanf in `php-runtime`, CSV in `php-builtins`) con semantica byte-exact verificata
+> contro l'oracle PHP 8.5.7. Quattro sotto-step. Workspace 888→**894** verde, clippy
+> pulito.
+
+### Vincolo di layering (decisione)
+`sscanf`/`fscanf` hanno il **modo by-reference** (`sscanf($s,$fmt,&$a,...)` assegna e
+ritorna il count): i parametri by-ref si fanno **solo** higher-order/evaluator-dispatched
+(come `preg_match` → `write_out_param`). Quindi il motore scanf vive in `php-runtime`
+(`crates/php-runtime/src/scanf.rs`), non in `php-builtins` (che `php-runtime` non può
+importare). Le funzioni CSV ritornano array / scrivono su stream → **builtin puri**,
+motore in `crates/php-builtins/src/csv.rs`.
+
+### 54a — motore scanf + `sscanf`
+`run_scanf(input,fmt) -> Vec<Option<Zval>>`: una slot per conversione non soppressa
+(None quando una conversione fallisce o non viene raggiunta — lo scanning si ferma alla
+prima conversione fallita o al primo mismatch di un literal). Conversioni: `%d` (decimale
+stretto), `%i` (**auto-base C**: 0x→16, 0→8, else 10 — distinto da `%d`), `%u`/`%x`/`%X`/
+`%o`/`%b`, `%f`/`%e`/`%g`, `%s` (fino a ws), `%c` (esattamente `width` byte, **non** salta
+ws), `%[..]`/`%[^..]` (char class), width `%2d`, `%*` suppress, `%%`; ws-matcha-ws. Riusa
+parse i64 saturante + parse f64 std. `ho_sscanf` (eval.rs): senza out-var → array (NULL
+per non-match); con `&$var` → assegna e ritorna il count (D-54.1: solo `$var` bare, come
+preg_match).
+
+### 54b — `fscanf`
+`ho_fscanf`: legge **una riga** (`Stream::read_line`) poi riusa `run_scanf` +
+`scanf_finish` (condivisi con sscanf). `false` a EOF (così `while($r=fscanf(...))`
+termina); array o count by-ref altrimenti.
+
+### 54c+54d — motore CSV + `str_getcsv` / `fgetcsv` / `fputcsv`
+`csv.rs`: `parse_csv_line` (doppia-enclosure `""`→`"`, escape char dentro le quote,
+sep/newline embedded nelle quote) e `format_csv_line`. Set di qualifica di `fputcsv`
+(oracle-verified) = `{sep, enclosure, escape, space, tab, \r, \n, NUL}` → quota e
+raddoppia l'enclosure. Solo il **primo byte** di sep/enclosure/escape è usato; escape
+stringa vuota = disabilitato (come PHP). `str_getcsv` (puro; input vuoto → `[null]`);
+`fgetcsv` (legge una riga → array; `false` a EOF) e `fputcsv` (scrive un record, ritorna
+il byte-count) in file.rs via `stream_arg`. **Fedeltà 8.5 (D-54.2)**: emesso il
+`Deprecated: <fn>(): the $escape parameter must be provided as its default value will
+change` quando `$escape` è omesso (testo oracle-verified).
+
+### Impatto corpus (copia pulita di `ext/standard/tests/file`)
+Per evitare la pollution in-tree dello step 53, sweep su una **copia pulita** in `/tmp`
+(solo `.phpt`+`.inc`, una sola run col binario aggiornato):
+
+| | pass | fail | skip | runnable |
+|---|---:|---:|---:|---:|
+| pre-54 (engine assenti) | 66 | 115 | 604 | 181 |
+| **post-54** | **71** | 166 | **548** | 237 |
+
+Segnale robusto: **skip −56** — il bucket "missing builtin: `fscanf`/`fgetcsv`/`fputcsv`"
+è **eliminato** (i ~56 test ora vengono ammessi). I net-new pass sono modesti (~5): i test
+ammessi falliscono in larga parte per ragioni **ortogonali** al motore (verificato
+ispezionando i diff):
+- **named arguments ai builtin** non supportati (limite pre-esistente del runtime, es.
+  `fgetcsv_variation1`);
+- **fixture / `__FILE__`** non risolti nella copia pulita (es. `fscanf_variation10` fa
+  `fopen` di un path derivato dal proprio file);
+- **messaggi d'errore edge** non implementati: "Variable is not assigned by any conversion
+  specifiers" / "Bad scan conversion" per mismatch numero-var/spec (scope-out 54).
+I motori in sé sono validati byte-exact dai test unit. Lever successivi naturali per
+questa directory: `ftruncate`, `stream_get_contents`/`stream_copy_to_stream`,
+`parse_ini_file`, `readfile` — più il supporto named-args ai builtin (trasversale).
+
+### Scope-out espliciti (debito)
+- by-ref `sscanf`/`fscanf` su `&$a[0]`/`&$o->p`: ignorati come `preg_match` (D-54.1).
+- record CSV multi-riga (campo quotato con `\n` che attraversa più righe in `fgetcsv`):
+  leggiamo una riga sola (D-54.3); `str_getcsv` su stringa con `\n` embedded funziona.
+- messaggi d'errore di mismatch var/spec di sscanf/fscanf (vedi sopra).
+- argomento `$length` di `fgetcsv` ignorato (leggiamo la riga intera).
