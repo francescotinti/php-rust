@@ -1,10 +1,11 @@
 //! sprintf/printf engine (plan step 10).
 //!
-//! Supported conversions: d/i, u, f/F, e/E, s, x/X, o, b, c, %%. Flags: `-`
-//! (left-justify), `+` (force sign), `0` (zero pad), `'<c>` (custom pad char).
-//! Width and `.precision` are supported, as is positional `%N$`. The `g`/`G`
-//! conversions are intentionally out of scope (shortest-form formatting differs
-//! subtly from PHP and is rarely used in the corpus).
+//! Supported conversions: d/i, u, f/F, e/E, g/G, h/H, s, x/X, o, b, c, %%.
+//! Flags: `-` (left-justify), `+` (force sign), `0` (zero pad), `'<c>` (custom
+//! pad char). Width and `.precision` are supported, including the PHP 8.4 `*`
+//! (argument-driven) forms and positional `%N$` / `%*N$`. The `g`/`G`/`h`/`H`
+//! conversions reproduce PHP's `php_gcvt` (fixed-or-scientific shortest form;
+//! `h`/`H` are the locale-independent twins of `g`/`G`, identical under C locale).
 
 use php_runtime::Ctx;
 use php_types::{convert, PhpError, PhpStr, Zval};
@@ -312,6 +313,20 @@ fn format_one(conv: u8, arg: &Zval, spec: &Spec) -> Vec<u8> {
             let mag = format_exp(v.abs(), prec, conv == b'E');
             pad_numeric(neg, mag, spec)
         }
+        b'g' | b'G' | b'h' | b'H' => {
+            let v = convert::to_double(arg);
+            if v.is_nan() {
+                return pad_plain(b"NaN".to_vec(), spec);
+            }
+            if v.is_infinite() {
+                let body = if v < 0.0 { &b"-INF"[..] } else { &b"INF"[..] };
+                return pad_plain(body.to_vec(), spec);
+            }
+            let upper = matches!(conv, b'G' | b'H');
+            let prec = spec.precision.unwrap_or(6);
+            let neg = v.is_sign_negative();
+            pad_numeric(neg, php_gcvt(v.abs(), prec, upper), spec)
+        }
         b's' => {
             let mut body = to_bytes(arg);
             if let Some(p) = spec.precision {
@@ -335,6 +350,66 @@ fn format_exp(mag: f64, prec: usize, upper: bool) -> Vec<u8> {
     let e = if upper { 'E' } else { 'e' };
     let sign = if exp_num < 0 { '-' } else { '+' };
     format!("{mantissa}{e}{sign}{}", exp_num.abs()).into_bytes()
+}
+
+/// Significant digits + decimal-point position of `mag > 0` (finite). `digits`
+/// carries no point and has trailing zeros stripped; `decpt` is the number of
+/// digits before the point (may be `<= 0`). `precision == -1` → shortest
+/// round-trip, else exactly `max(precision, 1)` significant digits (rounded
+/// half-to-even by Rust's float formatting, matching PHP's dtoa).
+fn sig_digits(mag: f64, precision: i64) -> (Vec<u8>, i64) {
+    let raw = if precision == -1 {
+        format!("{mag:e}")
+    } else {
+        format!("{:.*e}", precision.max(1) as usize - 1, mag)
+    };
+    let (mantissa, exp) = raw.split_once('e').unwrap_or((raw.as_str(), "0"));
+    let exp: i64 = exp.parse().unwrap_or(0);
+    let mut digits: Vec<u8> = mantissa.bytes().filter(|&b| b != b'.').collect();
+    while digits.len() > 1 && digits.last() == Some(&b'0') {
+        digits.pop();
+    }
+    (digits, exp + 1)
+}
+
+/// PHP's `%g`/`%G`/`%h`/`%H` magnitude formatting (`php_gcvt`): pick fixed or
+/// scientific by `decpt < -3 || decpt > P`, strip trailing zeros, and in
+/// scientific form keep a single leading digit plus at least one fractional
+/// digit (`1.0e+6`), with a signed exponent free of leading zeros.
+fn php_gcvt(mag: f64, precision: i64, upper: bool) -> Vec<u8> {
+    if mag == 0.0 {
+        return vec![b'0'];
+    }
+    let (digits, decpt) = sig_digits(mag, precision);
+    let p_thresh = if precision == -1 { 17 } else { precision.max(1) };
+    if decpt < -3 || decpt > p_thresh {
+        let mut out = vec![digits[0], b'.'];
+        if digits.len() > 1 {
+            out.extend_from_slice(&digits[1..]);
+        } else {
+            out.push(b'0');
+        }
+        out.push(if upper { b'E' } else { b'e' });
+        let exp_out = decpt - 1;
+        out.push(if exp_out < 0 { b'-' } else { b'+' });
+        out.extend_from_slice(exp_out.abs().to_string().as_bytes());
+        out
+    } else if decpt <= 0 {
+        let mut out = b"0.".to_vec();
+        out.resize(out.len() + (-decpt) as usize, b'0');
+        out.extend_from_slice(&digits);
+        out
+    } else if decpt as usize >= digits.len() {
+        let mut out = digits.clone();
+        out.resize(out.len() + (decpt as usize - digits.len()), b'0');
+        out
+    } else {
+        let d = decpt as usize;
+        let mut out = digits[..d].to_vec();
+        out.push(b'.');
+        out.extend_from_slice(&digits[d..]);
+        out
+    }
 }
 
 /// Pad a signed numeric body honoring sign/zero/left/width flags.

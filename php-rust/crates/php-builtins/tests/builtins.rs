@@ -611,6 +611,33 @@ fn sprintf_missing_arg_is_argument_count_error() {
 }
 
 #[test]
+fn sprintf_g_family_fixed_and_scientific() {
+    // Threshold decpt < -3 || decpt > P: fixed vs scientific, trailing zeros stripped.
+    assert_eq!(out("<?php echo sprintf('%g', 100000.0);"), "100000");
+    assert_eq!(out("<?php echo sprintf('%g', 1000000.0);"), "1.0e+6");
+    assert_eq!(out("<?php echo sprintf('%g', 0.0001);"), "0.0001");
+    assert_eq!(out("<?php echo sprintf('%g', 0.00001);"), "1.0e-5");
+    assert_eq!(out("<?php echo sprintf('%g', 1234567.0);"), "1.23457e+6");
+    assert_eq!(out("<?php echo sprintf('%g', 1.5);"), "1.5");
+    assert_eq!(out("<?php echo sprintf('%g', 2.0);"), "2");
+    assert_eq!(out("<?php echo sprintf('%G', 1000000.0);"), "1.0E+6");
+    // Precision and the locale-independent h/H twins.
+    assert_eq!(out("<?php echo sprintf('%.3g', 123456.0);"), "1.23e+5");
+    assert_eq!(out("<?php echo sprintf('%.0g', 1.5);"), "2");
+    assert_eq!(out("<?php echo sprintf('%h', 1234567.0);"), "1.23457e+6");
+    assert_eq!(out("<?php echo sprintf('%H', 1234567.0);"), "1.23457E+6");
+    // Shortest (precision -1, star only).
+    assert_eq!(out("<?php echo sprintf('%.*g', -1, 1234567.0);"), "1234567");
+    assert_eq!(out("<?php echo sprintf('%.*g', -1, 1.0e16);"), "10000000000000000");
+    assert_eq!(out("<?php echo sprintf('%.*g', -1, 1.0e17);"), "1.0e+17");
+    // Sign, zero-pad, special values.
+    assert_eq!(out("<?php echo sprintf('%+g', 1.5);"), "+1.5");
+    assert_eq!(out("<?php echo sprintf('%010g', 1.5);"), "00000001.5");
+    assert_eq!(out("<?php echo sprintf('%g', -0.0);"), "-0");
+    assert_eq!(out("<?php echo sprintf('[%g][%g][%g]', INF, -INF, NAN);"), "[INF][-INF][NaN]");
+}
+
+#[test]
 fn sprintf_star_width_and_precision() {
     assert_eq!(out("<?php echo sprintf('%*d', 5, 42);"), "   42");
     assert_eq!(out("<?php echo sprintf('%.*f', 2, 3.14159);"), "3.14");
