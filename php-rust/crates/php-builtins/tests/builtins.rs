@@ -611,6 +611,39 @@ fn sprintf_missing_arg_is_argument_count_error() {
 }
 
 #[test]
+fn sprintf_star_width_and_precision() {
+    assert_eq!(out("<?php echo sprintf('%*d', 5, 42);"), "   42");
+    assert_eq!(out("<?php echo sprintf('%.*f', 2, 3.14159);"), "3.14");
+    assert_eq!(out("<?php echo sprintf('%*.*f', 8, 2, 3.14159);"), "    3.14");
+    assert_eq!(out("<?php echo sprintf('%-*d|', 5, 42);"), "42   |");
+    assert_eq!(out("<?php echo sprintf('%0*d', 5, 42);"), "00042");
+    // Positional stars.
+    assert_eq!(out("<?php echo sprintf('%1$*2$d', 42, 5);"), "   42");
+    assert_eq!(out("<?php echo sprintf('%2$.*1$f', 2, 3.14159);"), "3.14");
+    assert_eq!(out("<?php echo sprintf('%*1$d', 5);"), "    5");
+}
+
+#[test]
+fn sprintf_star_validation_errors() {
+    let cases = [
+        ("sprintf('%*d', -5, 42)", "Width must be between 0 and 2147483647"),
+        ("sprintf('%*d', 9999999999, 42)", "Width must be between 0 and 2147483647"),
+        ("sprintf('%*d', 'x', 42)", "Width must be an integer"),
+        ("sprintf('%*d', 5.0, 42)", "Width must be an integer"),
+        ("sprintf('%.*f', -2, 3.14)", "Precision must be between -1 and 2147483647"),
+        ("sprintf('%.*f', 9999999999, 3.14)", "Precision must be between -1 and 2147483647"),
+        ("sprintf('%.*f', 'x', 3.14)", "Precision must be an integer"),
+        ("sprintf('%.*f', -1, 3.14)", "Precision -1 is only supported for %g, %G, %h and %H"),
+    ];
+    for (call, msg) in cases {
+        match fatal(&format!("<?php {call};")) {
+            PhpError::ValueError(m) => assert_eq!(m, msg, "for {call}"),
+            other => panic!("expected ValueError for {call}, got {other:?}"),
+        }
+    }
+}
+
+#[test]
 fn sprintf_huge_width_precision_is_value_error_not_panic() {
     // Regression: a width/precision past INT_MAX must raise a ValueError instead
     // of panicking on Vec::with_capacity (sprintf_star.phpt).

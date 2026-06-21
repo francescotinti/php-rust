@@ -78,7 +78,45 @@ struct Spec {
     plus: bool,
     pad: u8,
     width: usize,
-    precision: Option<usize>,
+    /// `None` = default; `Some(-1)` = shortest (only `g/G/h/H`); `Some(n>=0)` = n digits.
+    precision: Option<i64>,
+}
+
+const INT_MAX_I64: i64 = 2147483647;
+
+/// Resolve a `*` width/precision: an optional positional `N$` binds the star to
+/// a specific argument, otherwise it consumes the next sequential one. The value
+/// must be a real int (`field` names it for the "must be an integer" error).
+fn read_star_arg(
+    fmt: &[u8],
+    i: &mut usize,
+    args: &[Zval],
+    next_arg: &mut usize,
+    field: &str,
+) -> Result<i64, PhpError> {
+    let (num, j) = read_uint(fmt, *i);
+    let idx = match num {
+        Some(n) if j < fmt.len() && fmt[j] == b'$' => {
+            *i = j + 1;
+            n as usize
+        }
+        _ => {
+            let v = *next_arg;
+            *next_arg += 1;
+            v
+        }
+    };
+    let arg = args.get(idx).ok_or_else(|| {
+        PhpError::ArgumentCountError(format!(
+            "{} arguments are required, {} given",
+            idx + 1,
+            args.len()
+        ))
+    })?;
+    match arg {
+        Zval::Long(n) => Ok(*n),
+        _ => Err(PhpError::ValueError(format!("{field} must be an integer"))),
+    }
 }
 
 /// Core formatter shared by sprintf/printf.
@@ -138,33 +176,62 @@ pub(crate) fn format_impl(fmt: &[u8], args: &[Zval]) -> Result<Vec<u8>, PhpError
             i += 1;
         }
 
-        // Width.
-        let (w, j) = read_uint(fmt, i);
-        if let Some(w) = w {
-            if w > INT_MAX {
+        // Width: `*` (from an argument) or literal digits.
+        if fmt.get(i) == Some(&b'*') {
+            i += 1;
+            let wv = read_star_arg(fmt, &mut i, args, &mut next_arg, "Width")?;
+            if !(0..=INT_MAX_I64).contains(&wv) {
                 return Err(PhpError::ValueError(
                     "Width must be between 0 and 2147483647".to_string(),
                 ));
             }
-            spec.width = w as usize;
-            i = j;
+            spec.width = wv as usize;
+        } else {
+            let (w, j) = read_uint(fmt, i);
+            if let Some(w) = w {
+                if w > INT_MAX {
+                    return Err(PhpError::ValueError(
+                        "Width must be between 0 and 2147483647".to_string(),
+                    ));
+                }
+                spec.width = w as usize;
+                i = j;
+            }
         }
 
-        // Precision.
+        // Precision: `*` (from an argument, may be -1 = shortest) or literal digits.
         if fmt.get(i) == Some(&b'.') {
             i += 1;
-            let (p, j) = read_uint(fmt, i);
-            if p.unwrap_or(0) > INT_MAX {
-                return Err(PhpError::ValueError(
-                    "Precision must be between 0 and 2147483647".to_string(),
-                ));
+            if fmt.get(i) == Some(&b'*') {
+                i += 1;
+                let pv = read_star_arg(fmt, &mut i, args, &mut next_arg, "Precision")?;
+                if !(-1..=INT_MAX_I64).contains(&pv) {
+                    return Err(PhpError::ValueError(
+                        "Precision must be between -1 and 2147483647".to_string(),
+                    ));
+                }
+                spec.precision = Some(pv);
+            } else {
+                let (p, j) = read_uint(fmt, i);
+                if p.unwrap_or(0) > INT_MAX {
+                    return Err(PhpError::ValueError(
+                        "Precision must be between 0 and 2147483647".to_string(),
+                    ));
+                }
+                spec.precision = Some(p.unwrap_or(0) as i64);
+                i = j;
             }
-            spec.precision = Some(p.unwrap_or(0) as usize);
-            i = j;
         }
 
         let Some(&conv) = fmt.get(i) else { break };
         i += 1;
+
+        // A `-1` precision (shortest) is only meaningful for the g/G/h/H family.
+        if spec.precision == Some(-1) && !matches!(conv, b'g' | b'G' | b'h' | b'H') {
+            return Err(PhpError::ValueError(
+                "Precision -1 is only supported for %g, %G, %h and %H".to_string(),
+            ));
+        }
 
         // Resolve the argument for this directive.
         let idx = arg_idx.map(|n| n as usize).unwrap_or_else(|| {
@@ -233,14 +300,14 @@ fn format_one(conv: u8, arg: &Zval, spec: &Spec) -> Vec<u8> {
         }
         b'f' | b'F' => {
             let v = convert::to_double(arg);
-            let prec = spec.precision.unwrap_or(6);
+            let prec = spec.precision.unwrap_or(6).max(0) as usize;
             let neg = v.is_sign_negative() && v != 0.0;
             let mag = format!("{:.*}", prec, v.abs()).into_bytes();
             pad_numeric(neg, mag, spec)
         }
         b'e' | b'E' => {
             let v = convert::to_double(arg);
-            let prec = spec.precision.unwrap_or(6);
+            let prec = spec.precision.unwrap_or(6).max(0) as usize;
             let neg = v.is_sign_negative() && v != 0.0;
             let mag = format_exp(v.abs(), prec, conv == b'E');
             pad_numeric(neg, mag, spec)
@@ -248,7 +315,7 @@ fn format_one(conv: u8, arg: &Zval, spec: &Spec) -> Vec<u8> {
         b's' => {
             let mut body = to_bytes(arg);
             if let Some(p) = spec.precision {
-                body.truncate(p);
+                body.truncate(p.max(0) as usize);
             }
             pad_plain(body, spec)
         }
