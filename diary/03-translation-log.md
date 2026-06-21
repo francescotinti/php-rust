@@ -1911,3 +1911,35 @@ step. Workspace **943 test** verdi, clippy `--deny=warnings` pulito.
 Fix incidentale: clippy si è inasprito (`suspicious_open_options`) e segnalava `touch()` in
 `file.rs` (`create(true)` senza `truncate` esplicito) — aggiunto `.truncate(false)`, coerente
 con la docstring ("without truncating an existing one").
+
+## Step 63 — `pack` / `unpack`
+
+Nuovo modulo `crates/php-builtins/src/pack.rs`: port **fedele** di `ext/standard/pack.c` (host
+little-endian — l'oracle è compilato su macOS x86_64/arm64, quindi "machine endian" == LE).
+
+**Codici supportati** (tutti quelli di PHP): stringhe `a A Z` (NUL/space-pad, `Z` NUL-terminata),
+nibble hex `h H` (low/high-first), interi `c C s S n v i I l L N V q Q J P` (con endianness:
+`n N J G E` big, `v V P g e` little, gli altri machine=LE; `i/I` = `sizeof(int)` = 4),
+float/double `f g G d e E`, e i controlli di posizione `x X @`. Endianness implementata come
+"low `size` byte di `to_le_bytes()`; se big-endian, invertiti" — equivalente al `BSWAP`+shift del C.
+
+**Fedeltà errori** (i `.phpt` li verificano in EXPECTF): `pack` lancia `ValueError` senza prefisso
+(`Type X: not enough arguments` / `too few arguments` / `unknown format code` /
+`integer overflow in format string`, come `zend_value_error`) ed emette `Warning` con prefisso
+`pack(): ` (`'*' ignored`, `N arguments unused`, `not enough characters in string`,
+`illegal hex digit`, `outside of string`). `unpack` lancia `ValueError` `Invalid format type X`
+(senza prefisso) e `unpack(): Argument #3 ($offset) ...` (con prefisso, da `zend_argument_value_error`),
+e `Warning` `unpack(): Type X: not enough input values, need N values but only M was/were provided`
+ecc. Chiavi nominali in `unpack` (`"f[rep]name/..."`): namelen→chiave int `i+1`; rep==1→nome;
+rep>1→nome+indice; canonicalizzazione numeric-string via `Key::from_bytes` (== `zend_symtable_update`).
+
+**Protezione anti-OOM**: replicato `INC_OUTPUTPOS` (overflow check su `INT_MAX`) così
+`pack("a2000000000", …)` dà `ValueError` invece di tentare un'alloc gigante (stessa classe del crash
+`capacity overflow` di sprintf, step 58). La lunghezza del risultato è `outputpos` finale (non
+`outputsize`), come `ZSTR_LEN = outputpos` nel C — `out.truncate(outputpos)`.
+
+**Verifica**: `.phpt` `pack_A`/`pack_Z`/`pack_float`/`pack_arrays`/`unpack_offset`/`unpack_error`/
+`unpack_bug68225` tutti verdi (`pack`/`pack64`/`pack64_32` sono skip indipendenti — `pack.phpt` è
+32-bit-only via SKIPIF, gli altri due skip per sezione non gestita dal runner). Differential diretto
+`phpr` vs oracle **byte-identico** su uno sweep ampio (h/H, nvNV, c, f/G/d/E, X/@, q/Q/J/P 64-bit,
+unpack nominale). 5 test unitari inline. Workspace **948 test** verdi, clippy `--deny=warnings` pulito.
