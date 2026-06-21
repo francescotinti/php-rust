@@ -14,7 +14,15 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–57 completati · 918 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–58 completati · 922 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+
+Step 58 ha **chiuso il motore sprintf**: (a) fix del crash `capacity overflow` su width/precision
+oltre `INT_MAX` (un `%9999…f` abortiva l'intero run in-process) → ora `ValueError`; (b) sintassi
+`*` (width/precision da argomento, PHP 8.4) con binding posizionale e validazione fedele; (c)
+conversioni `%g`/`%G`/`%h`/`%H` (port di `php_gcvt`: fixed/scientific shortest-form, byte-exact
+vs oracle su 24×9 casi). `sprintf_star.phpt` ora passa; lo sweep `strings` completa in-process
+(229/393). Il valore è trasversale: `%g` e `*` sono comuni in tutto il corpus, e ogni run
+in-process è ora robusto.
 
 Step 57 ha aggiunto il secondo batch di funzioni stringa pure (`strrpos`/`stripos`/`strripos`,
 `strspn`/`strcspn`, `strtr` byte-map + array, `chunk_split`, `strip_tags`, `quotemeta`,

@@ -1670,3 +1670,54 @@ ritorna `""` **senza** processare la mappa, quindi il Warning chiave-vuota non d
 - 2 EXPECTF (`chunk_split_variation7`, `strcspn_variation5`) sono FAIL nel runner ma l'output
   di `phpr` è **byte-identico** all'atteso: sfumatura del matcher EXPECTF del runner (probabile
   `%` letterale nei dati), non una divergenza dei builtin.
+
+## Step 58 — chiusura del motore sprintf (crash + `*` star + `%g/%G/%h/%H`)
+
+> Generato con assistenza AI (Claude Opus 4.8). Scelta utente 2026-06-21: dopo che lo step 57
+> ha scoperto che il run **in-process** del corpus abortiva su un crash di `sprintf`, si è
+> deciso di **chiudere il motore** (`crates/php-builtins/src/format.rs`) invece di lasciarlo a
+> debito. Tutto inchiodato byte-exact contro l'oracle PHP 8.5.7. Quattro sotto-step. Obiettivo
+> raggiunto: **`sprintf_star.phpt` ora PASSA**. Workspace 918→**922** verde, clippy pulito.
+
+### 58a — kill del crash + validazione width/precision letterali
+Il colpevole del crash dello step 57 era `sprintf_star.phpt` riga 62:
+`printf("%9999999999999999999999.f\n", $f)`. Una width letterale oltre `u64`/`INT_MAX`
+saturava `read_uint`→`u64::MAX`, finiva in `Vec::with_capacity` e dava **`capacity overflow`**
+panic che abortiva l'intero run in-process (un test cattivo uccide il batch). PHP lancia invece
+una `ValueError`. Validate width e precision contro `INT_MAX` (2147483647) **prima** di
+salvarle → "Width must be between 0 and 2147483647" / "Precision must be between 0 and
+2147483647". Lo sweep `strings` ora completa in-process (==`--isolate`).
+
+### 58b — `*` star width/precision (PHP 8.4, arg-driven)
+`%*d`/`%.*f`/`%*.*f`: width/precision presi da un argomento `int`, consumati L→R **prima** del
+valore; binding posizionale `%*N$`/`%.*N$`. Validazione fedele (helper `read_star_arg`):
+- l'arg dello star dev'essere un vero `int` (`Zval::Long`), altrimenti "Width/Precision must be
+  an integer";
+- width ∈ [0, INT_MAX] altrimenti "Width must be between 0 and 2147483647";
+- precision ∈ [-1, INT_MAX] altrimenti "Precision must be between -1 and 2147483647"; un `-1`
+  (shortest) è valido **solo** per `%g/%G/%h/%H`, altrimenti "Precision -1 is only supported
+  for %g, %G, %h and %H".
+`Spec.precision` diventa `i64` (-1 = shortest, trasportato fino alla famiglia g/G).
+
+### 58c — `%g/%G/%h/%H` shortest-form (port di `php_gcvt`)
+La parte deliberatamente saltata a suo tempo. Algoritmo: scelta fixed/scientific con
+`decpt < -3 || decpt > P` (P = precision, default 6; **17** per la forma shortest `-1`); strip
+delle zero finali; in scientific una sola cifra di testa + **almeno una** cifra frazionaria
+(`1.0e+6`) ed esponente con segno senza zeri iniziali. Le cifre significative vengono dalla
+formattazione float di Rust (`{:.*e}` / `{:e}` per lo shortest = round-half-to-even, **come il
+dtoa di PHP**). `h`/`H` sono i gemelli locale-independent di `g`/`G` (identici sotto locale C).
+`INF`/`-INF`/`NaN` e lo zero con segno (`-0`) gestiti. **Differential vs oracle byte-exact** su
+24 valori × 9 varianti di formato (verifica via un `.phpt` generato dall'oracle).
+
+### Impatto corpus + residui
+Sweep `ext/standard/tests/strings` (copia pulita, in-process — niente più crash):
+**228→229 pass** (sprintf_star) su 393 runnable (58.3%). Il valore vero è però **trasversale**:
+`%g/%G` e il `*` sono comunissimi in tutto il corpus oltre questa dir, e il crash-fix rende
+robusto **ogni** run in-process (prima un singolo `%9999…f` abortiva il batch).
+
+Residui sprintf di questa dir (≈29) sono **ortogonali** alla chiusura del motore (erano già
+fail): padding fine di `%f` (`sprintf_f.phpt`: es. `%.3f` in certe combinazioni di width/flag),
+`fopen` su `__FILE__` (`sprintf_variation1.phpt`, limite harness ereditato come step 57), e la
+**catchability** degli errori (`printf_error.phpt`: emettiamo `PhpError::Error` *fatale* dove
+PHP lancia un `ArgumentCountError` *catchable*). Debito per un eventuale step di fedeltà
+sprintf dedicato; non parte della chiusura del motore (crash + star + g/G/h/H).

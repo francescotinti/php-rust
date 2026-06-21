@@ -617,16 +617,13 @@ metodologiche / divergenze *intenzionali* (catalogate come D-52.x in
 Lo sweep `ext/standard/tests/strings` con `--isolate` ha isolato **1 divergenza nuova**,
 non relativa allo step 57 (tutte le funzioni dello step sono additive):
 
-- **D-NEW `sprintf` star `*` → capacity overflow (`sprintf_star.phpt`)**: il motore di
-  formattazione non gestisce la sintassi `*` (width/precision presi da un argomento, incl.
-  forme posizionali `%1$.*2$f` e precisioni negative `%.*g`). Su una combinazione del test la
-  larghezza derivata diventa un valore enorme/negativo che finisce in un `Vec::with_capacity`
-  → panic `capacity overflow` che **aborta il run in-process** (un singolo test cattivo uccide
-  il batch — lo stesso pattern documentato in `NEXT-backlog-scan.md`). I casi minimi `%*f`/
-  `%.*g` da soli non crashano; serve la combinazione. **Pre-esistente** (sprintf non toccato
-  dallo step 57) e indipendente dalle nuove funzioni. Mitigazione usata: misurare con
-  `--isolate` (ogni test in un child, sopravvive al crash). Fix vero = supporto `*` nel motore
-  sprintf, fuori scope dello step 57 (debito).
+- **D-NEW `sprintf` capacity overflow (`sprintf_star.phpt`) — RISOLTA nello step 58**: il
+  crash NON era il `*` ma una **width letterale enorme** (`%9999999999999999999999.f`):
+  `read_uint` saturava a `u64::MAX` → `Vec::with_capacity` → panic `capacity overflow` che
+  abortiva il run in-process (un singolo test cattivo uccide il batch). **Chiuso nello step 58**
+  (vedi `03-translation-log.md`): width/precision validate contro `INT_MAX` → `ValueError`; in
+  più sono stati implementati la sintassi `*` (width/precision da argomento) e le conversioni
+  `%g/%G/%h/%H`, così `sprintf_star.phpt` **passa** e ogni run in-process è robusto.
 
 Bug trovato **e fixato** dal corpus (non una D, è un fix di fedeltà): `strtr("", $map)` non
 deve emettere il Warning chiave-vuota perché PHP corto-circuita il subject vuoto prima di
