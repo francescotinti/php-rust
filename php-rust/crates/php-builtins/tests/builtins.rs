@@ -3939,6 +3939,43 @@ fn readfile_and_fpassthru() {
 }
 
 #[test]
+fn stream_get_contents_copy_truncate() {
+    let dir = tmp_path("b55_stream");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let p = format!("{dir}/f.txt");
+    std::fs::write(&p, "line1\nline2\n\nline4\n").unwrap(); // 19 bytes
+    // stream_get_contents reads the rest after one fgets; and maxlength caps it.
+    assert_eq!(
+        out(&format!(
+            "<?php $f=fopen('{p}','r'); fgets($f); echo '[',stream_get_contents($f),']'; \
+             rewind($f); echo '|',stream_get_contents($f,5); fclose($f);"
+        )),
+        "[line2\n\nline4\n]|line1"
+    );
+    // stream_copy_to_stream copies the whole source into a memory stream.
+    assert_eq!(
+        out(&format!(
+            "<?php $s=fopen('{p}','r'); $d=fopen('php://memory','r+'); \
+             $n=stream_copy_to_stream($s,$d); rewind($d); \
+             echo $n,'|',stream_get_contents($d); fclose($s); fclose($d);"
+        )),
+        "19|line1\nline2\n\nline4\n"
+    );
+    // ftruncate shrinks the file; filesize reflects it.
+    let tp = format!("{dir}/t.txt");
+    std::fs::write(&tp, "hello world").unwrap();
+    assert_eq!(
+        out(&format!(
+            "<?php $f=fopen('{tp}','r+'); var_dump(ftruncate($f,4)); fclose($f); \
+             echo file_get_contents('{tp}'),'|',filesize('{tp}');"
+        )),
+        "bool(true)\nhell|4"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn sscanf_array_mode() {
     // Mixed conversions, types preserved.
     assert_eq!(

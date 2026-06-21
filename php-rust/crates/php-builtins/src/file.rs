@@ -441,6 +441,118 @@ pub fn fpassthru(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Long(total as i64))
 }
 
+// ---- step 55b: stream_get_contents / stream_copy_to_stream / ftruncate ----
+
+/// Read the rest of a stream into a buffer (or up to `max` bytes when `max >= 0`).
+fn read_remaining(stream: &mut php_types::Stream, max: i64) -> Vec<u8> {
+    let mut buf = Vec::new();
+    if max < 0 {
+        while let Ok(chunk) = stream.read(8192) {
+            if chunk.is_empty() {
+                break;
+            }
+            buf.extend_from_slice(&chunk);
+        }
+    } else {
+        let mut remaining = max as usize;
+        while remaining > 0 {
+            match stream.read(remaining.min(8192)) {
+                Ok(chunk) if !chunk.is_empty() => {
+                    remaining -= chunk.len();
+                    buf.extend_from_slice(&chunk);
+                }
+                _ => break,
+            }
+        }
+    }
+    buf
+}
+
+/// `stream_get_contents($stream, $maxlength = -1, $offset = -1)`: read the rest
+/// of the stream (or `$maxlength` bytes), optionally seeking to `$offset` first.
+pub fn stream_get_contents(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let r = stream_arg(argv, "stream_get_contents")?;
+    let maxlength = argv
+        .get(1)
+        .map(|v| convert::to_long_cast(v, ctx.diags))
+        .unwrap_or(-1);
+    let offset = argv
+        .get(2)
+        .map(|v| convert::to_long_cast(v, ctx.diags))
+        .unwrap_or(-1);
+    let mut res = r.borrow_mut();
+    let stream = res.as_stream_mut().expect("open stream checked in stream_arg");
+    if offset >= 0 {
+        stream.seek(SeekFrom::Start(offset as u64));
+    }
+    Ok(Zval::Str(PhpStr::new(read_remaining(stream, maxlength))))
+}
+
+/// `stream_copy_to_stream($from, $to, $length = null, $offset = 0)`: copy the
+/// rest of `$from` (or `$length` bytes) into `$to`; returns the byte count.
+pub fn stream_copy_to_stream(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let from = stream_arg(argv, "stream_copy_to_stream")?;
+    let to = match argv.get(1) {
+        Some(Zval::Resource(r)) if matches!(r.borrow().kind, ResKind::Stream(_)) => r,
+        Some(_) => {
+            return Err(PhpError::TypeError(
+                "stream_copy_to_stream(): Argument #2 ($to) must be an open stream resource"
+                    .to_string(),
+            ))
+        }
+        None => {
+            return Err(PhpError::ArgumentCountError(
+                "stream_copy_to_stream() expects at least 2 arguments, 1 given".to_string(),
+            ))
+        }
+    };
+    let length = match argv.get(2) {
+        Some(Zval::Null) | None => -1,
+        Some(v) => convert::to_long_cast(v, ctx.diags),
+    };
+    let offset = argv
+        .get(3)
+        .map(|v| convert::to_long_cast(v, ctx.diags))
+        .unwrap_or(0);
+    // Read fully first so `from` and `to` are never borrowed at the same time
+    // (they may even be the same resource).
+    let buf = {
+        let mut res = from.borrow_mut();
+        let stream = res.as_stream_mut().expect("open stream checked in stream_arg");
+        if offset > 0 {
+            stream.seek(SeekFrom::Start(offset as u64));
+        }
+        read_remaining(stream, length)
+    };
+    let n = buf.len();
+    if let Some(s) = to.borrow_mut().as_stream_mut() {
+        let _ = s.write(&buf);
+    }
+    Ok(Zval::Long(n as i64))
+}
+
+/// `ftruncate($stream, $size)`: truncate (or zero-extend) the underlying file /
+/// in-memory buffer to `$size` bytes. Returns `true` on success.
+pub fn ftruncate(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let r = stream_arg(argv, "ftruncate")?;
+    let size = argv
+        .get(1)
+        .map(|v| convert::to_long_cast(v, ctx.diags))
+        .unwrap_or(0)
+        .max(0) as u64;
+    let mut res = r.borrow_mut();
+    let stream = res.as_stream_mut().expect("open stream checked in stream_arg");
+    let ok = match &mut stream.backend {
+        StreamBackend::File(f) => f.set_len(size).is_ok(),
+        StreamBackend::Memory(c) => {
+            c.get_mut().resize(size as usize, 0);
+            true
+        }
+        StreamBackend::Stdout | StreamBackend::Stderr => false,
+    };
+    Ok(Zval::Bool(ok))
+}
+
 // ---- step 52a: path-string functions (pure, no filesystem access) ----
 
 /// The trailing path component, after stripping trailing `/` (PHP `php_basename`
