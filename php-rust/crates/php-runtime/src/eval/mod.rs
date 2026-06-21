@@ -341,18 +341,31 @@ pub struct Outcome {
     pub exit_code: Option<u8>,
 }
 
-/// Diagnostic hook (DevEx): when `PHP_RUST_TRACE` is set, dump the lowered HIR
-/// to stderr before execution, so a failing test can be triaged as a *lowering*
-/// vs *evaluation* problem. `PHP_RUST_TRACE=hir` (or `1`/`full`) prints the whole
-/// `Program`; anything else prints just the top-level statement list (terser).
-/// Stderr keeps it out of the compared stdout/`rendered` stream.
+/// Whether the execution trace (per-statement logging) is enabled — read once
+/// from `PHP_RUST_TRACE` (`exec`, `stmt` or `all`).
+fn trace_exec_enabled() -> bool {
+    std::env::var("PHP_RUST_TRACE")
+        .map(|m| matches!(m.as_str(), "exec" | "stmt" | "all"))
+        .unwrap_or(false)
+}
+
+/// Diagnostic hook (DevEx): when `PHP_RUST_TRACE` selects an HIR mode, dump the
+/// lowered HIR to stderr before execution, so a failing test can be triaged as a
+/// *lowering* vs *evaluation* problem. `PHP_RUST_TRACE=hir` (or `1`/`full`/`all`)
+/// prints the whole `Program`; `body` prints just the top-level statement list;
+/// the execution-only modes (`exec`/`stmt`) print nothing here. Stderr keeps it
+/// out of the compared stdout/`rendered` stream.
 fn trace_hir(name: &[u8], program: &Program) {
     let Ok(mode) = std::env::var("PHP_RUST_TRACE") else {
         return;
     };
+    let full = matches!(mode.as_str(), "hir" | "1" | "full" | "all");
+    if !full && mode != "body" {
+        return; // exec/stmt: no static HIR dump
+    }
     let file = String::from_utf8_lossy(name);
     eprintln!("=== PHP_RUST_TRACE: HIR for {file} ===");
-    if matches!(mode.as_str(), "hir" | "1" | "full") {
+    if full {
         eprintln!("{program:#?}");
     } else {
         eprintln!("{:#?}", program.body);
@@ -477,6 +490,7 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         diags_rendered: 0,
         suppress_depth: 0,
         cur_line: 1,
+        trace_exec: trace_exec_enabled(),
         gen_yielder: None,
         mb_regex: crate::mbregex::MbRegexState::default(),
         constants: HashMap::new(),
@@ -633,6 +647,11 @@ struct Evaluator<'p> {
     /// `eval` / `exec_stmt`; on the error path it is intentionally *not* restored,
     /// so it still points at the throwing node when the fatal is rendered.
     cur_line: Line,
+    /// DevEx execution trace (step 61b): when set, [`Self::exec_stmt`] logs each
+    /// statement (line + variant, indented by call depth) to stderr, so a failing
+    /// `.phpt` can be followed to the exact point execution diverges. Read once
+    /// from `PHP_RUST_TRACE` (`exec`/`all`) at construction — never per-statement.
+    trace_exec: bool,
     /// While a generator body runs, the type-erased `*const Yielder<ResumeIn,
     /// YieldOut>` of the active generator (step 39). The `yield` arm reborrows it
     /// to suspend. `None` outside any generator; saved/restored per resume by

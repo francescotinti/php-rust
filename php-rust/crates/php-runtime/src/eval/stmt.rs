@@ -63,6 +63,19 @@ impl<'p> Evaluator<'p> {
     /// throwing node (see the field doc) for the fatal renderer.
     fn exec_stmt(&mut self, stmt: &Stmt) -> Result<Flow, PhpError> {
         self.cur_line = stmt.line;
+        if self.trace_exec {
+            // `{:?}` of the kind up to the first delimiter is its variant name —
+            // cheap, and avoids enumerating every StmtKind by hand.
+            let dbg = format!("{:?}", stmt.kind);
+            let variant = dbg.split(|c: char| !c.is_alphanumeric()).next().unwrap_or("");
+            eprintln!(
+                "[exec]{:indent$}L{} {}",
+                "",
+                stmt.line,
+                variant,
+                indent = self.call_stack.len() * 2 + 1
+            );
+        }
         let r = self.exec_stmt_inner(stmt);
         self.flush_diags();
         r
