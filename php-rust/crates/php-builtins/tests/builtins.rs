@@ -611,6 +611,32 @@ fn sprintf_missing_arg_is_argument_count_error() {
 }
 
 #[test]
+fn sprintf_l_modifier_is_ignored() {
+    // A single `l` length modifier is accepted and ignored: %ld == %d.
+    assert_eq!(out("<?php echo sprintf('%ld', 42.5);"), "42");
+    assert_eq!(out("<?php echo sprintf('%lf', 42.5);"), "42.500000");
+    assert_eq!(out("<?php echo sprintf('%lx', 255);"), "ff");
+    assert_eq!(out("<?php echo sprintf('%2ld', 5);"), " 5");
+}
+
+#[test]
+fn sprintf_unknown_and_missing_specifier_are_value_errors() {
+    let cases = [
+        ("sprintf('%q', 1)", "Unknown format specifier \"q\""),
+        ("sprintf('%lld', 1)", "Unknown format specifier \"l\""),
+        ("sprintf('%l', 1)", "Missing format specifier at end of string"),
+        ("sprintf('abc%')", "Missing format specifier at end of string"),
+        ("sprintf('%5')", "Missing format specifier at end of string"),
+    ];
+    for (call, msg) in cases {
+        match fatal(&format!("<?php {call};")) {
+            PhpError::ValueError(m) => assert_eq!(m, msg, "for {call}"),
+            other => panic!("expected ValueError for {call}, got {other:?}"),
+        }
+    }
+}
+
+#[test]
 fn sprintf_g_family_fixed_and_scientific() {
     // Threshold decpt < -3 || decpt > P: fixed vs scientific, trailing zeros stripped.
     assert_eq!(out("<?php echo sprintf('%g', 100000.0);"), "100000");

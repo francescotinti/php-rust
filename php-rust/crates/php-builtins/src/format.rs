@@ -134,7 +134,10 @@ pub(crate) fn format_impl(fmt: &[u8], args: &[Zval]) -> Result<Vec<u8>, PhpError
         }
         i += 1;
         if i >= fmt.len() {
-            break;
+            // A trailing `%` with nothing after it (PHP: catchable ValueError).
+            return Err(PhpError::ValueError(
+                "Missing format specifier at end of string".to_string(),
+            ));
         }
         if fmt[i] == b'%' {
             out.push(b'%');
@@ -224,8 +227,44 @@ pub(crate) fn format_impl(fmt: &[u8], args: &[Zval]) -> Result<Vec<u8>, PhpError
             }
         }
 
-        let Some(&conv) = fmt.get(i) else { break };
+        // A single `l` length modifier is accepted and ignored (PHP: `%ld` == `%d`).
+        if fmt.get(i) == Some(&b'l') {
+            i += 1;
+        }
+
+        let Some(&conv) = fmt.get(i) else {
+            return Err(PhpError::ValueError(
+                "Missing format specifier at end of string".to_string(),
+            ));
+        };
         i += 1;
+
+        // Reject anything that is not a known conversion (PHP throws a catchable
+        // ValueError, rather than silently emitting the character).
+        if !matches!(
+            conv,
+            b'd' | b'i'
+                | b'u'
+                | b'f'
+                | b'F'
+                | b'e'
+                | b'E'
+                | b'g'
+                | b'G'
+                | b'h'
+                | b'H'
+                | b's'
+                | b'x'
+                | b'X'
+                | b'o'
+                | b'b'
+                | b'c'
+        ) {
+            return Err(PhpError::ValueError(format!(
+                "Unknown format specifier \"{}\"",
+                conv as char
+            )));
+        }
 
         // A `-1` precision (shortest) is only meaningful for the g/G/h/H family.
         if spec.precision == Some(-1) && !matches!(conv, b'g' | b'G' | b'h' | b'H') {
