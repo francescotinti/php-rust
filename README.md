@@ -14,12 +14,14 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–52 completati · 882 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–53 completati · 888 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 Step 52 ha aggiunto il sottosistema filesystem (predicati `file_exists`/`is_*`/`filetype`,
 famiglia `stat`/`lstat`/`fstat` + accessor, mutatori `unlink`/`mkdir`/`rename`/`copy`/`touch`/
 `symlink`/`chmod`/…, `scandir`/`glob`/`tempnam`/`tmpfile`): sul corpus `ext/standard/tests/file`
-i pass salgono **2 → 63**.
+i pass salgono **2 → 63**. Step 53 ha aggiunto `strstr`/`strrchr`/`stristr`,
+`get_resource_type`, la famiglia `opendir`/`readdir`/`closedir`/`rewinddir` e
+`fprintf`/`vfprintf`, e ha corretto un panic latente (dir handle in un builtin di stream).
 
 > Hardening tooling (non-funzionale): depth-guard nell'evaluator (`MAX_CALL_DEPTH`,
 > converte la ricorsione runaway in un `Error` catchable invece di un SIGABRT del

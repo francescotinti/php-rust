@@ -980,3 +980,12 @@ candidati a uno step FS dedicato dopo 51.
 | D-52.12 | `opendir`/`readdir`/`closedir` | **scope-out** | `scandir` copre la forma comune; iterazione resource-based differita | scope-out |
 | D-52.13 | `tmpfile` | evaluator-dispatched (conia resource); file unlinkato r+ | possiede `next_resource_id` come `fopen`/`tmpfile`; unlink-while-open = auto-cleanup POSIX | confermato |
 | D-52.14 | `tempnam` | crea file 0600, ritorna path canonicalizzato | l'oracle risolve `/var`→`/private/var` su macOS via realpath | confermato |
+
+## Step 53 — Decisioni (D-53.x): lever filesystem/stringa residui
+
+| ID | Costrutto C/PHP | Scelta Rust | Razionale | Status |
+|---|---|---|---|---|
+| D-53.1 | dir handle in un builtin di stream | `stream_arg` ammette solo `ResKind::Stream(_)`; `fstat` ritorna `false` su dir/closed | un `ResKind::Dir` raggiungeva `as_stream_mut().expect()` → panic (corpus `directory_wrapper_fstat_basic`); il rigetto mantiene sani gli 8 `.expect()` | confermato |
+| D-53.2 | `opendir`/`readdir`/`closedir`/`rewinddir` | `ResKind::Dir(DirHandle)` (snapshot voci + cursore); opendir evaluator-dispatched | PHP modella i dir handle come `php_stream` (stesse etichette "resource"/"stream"); `readdir` ordine OS con `.`/`..` in testa | confermato |
+| D-53.3 | `fprintf`/`vfprintf` | riuso di `format_impl`/`first_format` (sprintf engine) → stream | zero duplicazione dell'engine di formattazione; ritorna il byte-count come `printf` | confermato |
+| D-53.4 | `strrchr` | usa solo il primo byte del needle, ultima occorrenza | semantica storica PHP (oracle-verified) | confermato |

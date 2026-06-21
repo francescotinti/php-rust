@@ -1369,3 +1369,67 @@ directory: **`fprintf`/`fscanf`**, la **famiglia `opendir`/`readdir`/`closedir`*
   `stream_filter_append`) restano fuori (continuità con lo scope-out di step 51).
 - `SCANDIR_SORT_NONE` ritorna l'ordine `readdir` grezzo (non garantito uguale
   all'ordine OS dell'oracle); ascendente/discendente sono byte-exact.
+
+## Step 53 — lever cheap/medi che finiscono `ext/standard/tests/file`
+
+> Generato con assistenza AI (Claude Opus 4.8). Scelta utente 2026-06-21 dopo lo
+> step 52: implementare **i quattro lever a basso rischio** che restavano sul
+> bucket `ext/standard/tests/file` (i parser veri — `fscanf`, CSV — rinviati a
+> sessione dedicata con design pass). Tutti i formati verificati byte-exact
+> contro l'oracle PHP 8.5.7. Quattro sotto-step + un fix. Workspace 882→**888**
+> verde, clippy pulito.
+
+### 53a — `strstr` / `strchr` / `stristr` / `strrchr`
+String puri (in `string.rs`, riusano `find_sub`). `strstr($h,$n,$before=false)`
+ritorna la fetta da/prima dell'occorrenza; `strchr` = alias. `stristr`
+case-insensitive (match in lowercase, fetta in case originale). `strrchr` usa
+**solo il primo byte** del needle e cerca l'ultima occorrenza. `false` se assente.
+
+### 53b — `get_resource_type`
+Ritorna l'etichetta `dump_type` del resource ("stream" aperto / "Unknown"
+chiuso) — esattamente la stringa che PHP dà per file e dir handle; TypeError su
+un non-resource.
+
+### 53c — iterazione directory: `opendir`/`readdir`/`closedir`/`rewinddir`
+Nuova `ResKind::Dir(DirHandle)` (snapshot delle voci `.`/`..` + resto in ordine
+OS, più un cursore). PHP modella i dir handle come `php_stream`, quindi riportano
+le stesse etichette "resource"/"stream" di un byte stream (chiude D-52.12).
+`opendir` è **evaluator-dispatched** (conia resource come `fopen`/`tmpfile`);
+Warning "opendir(%s): Failed to open directory: %s" + false in errore. `readdir`
+ritorna i byte grezzi (una voce "0" trippa ancora `=== false`), `closedir` →
+resource chiuso, `rewinddir` resetta il cursore.
+
+### 53d — `fprintf` / `vfprintf`
+Riusano l'engine `sprintf` esistente (`format_impl`/`first_format` resi
+`pub(crate)`): formattano e scrivono sul resource stream, ritornando il conteggio
+di byte (come `printf`). `vfprintf` prende gli argomenti da un array.
+
+### Fix (D-53.1) — dir handle in un builtin di stream non panica più
+Bug latente scoperto dal corpus (`directory_wrapper_fstat_basic`): un
+`ResKind::Dir` passato a `fstat` colpiva `as_stream_mut().expect(...)` →
+**panic** (e con `--isolate` abortiva il worker). Ora `stream_arg` ammette solo
+`ResKind::Stream(_)` (rigetta Dir + Closed con il TypeError "must be an open
+stream resource"), mantenendo sani gli 8 `.expect()` dei builtin byte-stream;
+`fstat` risolve il resource da sé e ritorna `false` su un dir/closed handle (non
+abbiamo il path per ricostruire lo stat). Test di regressione aggiunto.
+
+### Impatto corpus (bounded — `ext/standard/tests/file`, 897 test)
+Sweep `--isolate`. Segnale **robusto**: lo skip scende **753→716** (−37): i test
+che lo capability-scan saltava per `strstr`/`get_resource_type`/`opendir`/
+`fprintf` ora vengono ammessi. La composizione degli skip residui conferma che
+il lever è speso — ora dominano *parser veri* ancora mancanti: **`fscanf`(50)**,
+`stream_wrapper_register`(14), `stream_context_create`(8), `ftruncate`(7),
+**CSV** (`fputcsv`(6)/`fgetcsv`(4)) — più i 498 skip "section" (multi-sezione,
+harness-level).
+
+**Caveat di misura**: il conteggio *pass* osservato in questo run è confondato
+da **accumulo di artefatti in-tree**. Il nostro phpt-runner esegue i test
+*in loco* nell'albero sorgente ma **non** esegue le sezioni `--CLEAN--`, quindi
+sweep ripetuti lasciano `*.tmp`/directory generate che fanno fallire con
+"File exists" test altrimenti verdi (es. `bug45181`, `007_variation7`,
+`copy_variation11` — tutti leftover, non regressioni di codice: lo step 53 non
+tocca `mkdir`/`fopen`). Su albero pulito i ~37 ammessi sono in larga parte
+fscanf/CSV-dipendenti (ancora fuori scope) e quindi falliscono comunque; il
+delta-pass netto reale è piccolo e positivo. Lever successivo naturale:
+**`fscanf`/`sscanf`** e **CSV** (`fgetcsv`/`fputcsv`/`str_getcsv`), entrambi
+parser che meritano il loro design pass.
