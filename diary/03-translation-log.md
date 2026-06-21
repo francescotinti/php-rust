@@ -1721,3 +1721,63 @@ fail): padding fine di `%f` (`sprintf_f.phpt`: es. `%.3f` in certe combinazioni 
 **catchability** degli errori (`printf_error.phpt`: emettiamo `PhpError::Error` *fatale* dove
 PHP lancia un `ArgumentCountError` *catchable*). Debito per un eventuale step di fedeltà
 sprintf dedicato; non parte della chiusura del motore (crash + star + g/G/h/H).
+
+## Step 59 — CLI `phpr` (era uno stub) + batch di fedeltà sprintf/printf
+
+> Generato con assistenza AI (Claude Opus 4.8). Scelta utente 2026-06-21: "chiudiamo i 29 fail
+> [residui sprintf dello step 58] e poi indaghiamo il binario CLI phpr". Indagando phpr si è
+> scoperto che `php-cli/src/main.rs` era **`fn main() {}`** (uno scheletro): il binario non
+> emetteva nulla. Implementarlo è prerequisito per un differential rapido, quindi è stato
+> fatto per primo. Poi un batch di fedeltà sprintf guidato dal corpus. Workspace 922→**927**
+> verde. **Infra**: `target-dir` di cargo spostato su disco interno (il volume "Extreme Pro"
+> non sa fare hard-link della cache incrementale → binari stale/incoerenti, fonte di misure
+> ballerine; vedi `.cargo/config.toml`).
+
+### 59a — implementazione del CLI `phpr`
+`php-cli` ora legge lo script, lo esegue con la registry dei builtin (`run_source_with`),
+scrive lo stream **CLI-faithful** (`Outcome::rendered`: output + diagnostics + fatal non
+catturato resi inline, come la CLI di PHP sotto `display_errors=1, html_errors=0`) ed esce con
+lo status fedele (codice di `exit`/`die`, **255** su fatal, altrimenti 0). Diventa un `php`
+drop-in **e** un differential contro l'oracle 8.5.7. Verificato byte-exact su output e exit
+code (3/255/0) — al netto del path `/private` (symlink macOS) nei messaggi d'errore.
+
+### 59b — batch di fedeltà sprintf/printf (corpus `ext/standard/tests/strings`)
+Cinque fix guidati dal differential `phpr` vs oracle:
+- **modificatore `l`**: `%ld`/`%lf`/`%lx`… — un singolo `l` (length modifier) prima della
+  conversione è accettato e **ignorato** (`%ld`==`%d`). Prima emettevamo "d" letterale.
+- **specifier sconosciuto/mancante → ValueError catchable**: conv ignota → `Unknown format
+  specifier "X"`; `%`/`%l` a fine stringa → `Missing format specifier at end of string`
+  (prima: silenziosamente literal).
+- **errori catchable + tipo corretto**: `sprintf`/`printf` senza format → `ArgumentCountError`
+  (era `Error` non catchable); `vsprintf`/`vprintf` "exactly 2 arguments" + `TypeError`
+  "Argument #2 ($values) must be of type array"; `fprintf`/`vfprintf` controllano il conteggio
+  prima del tipo.
+- **conteggio "N arguments are required"**: PHP riporta `1 + (numero totale di specifier)` =
+  max indice arg referenziato + 1 (pre-scan `max_arg_index`), non l'indice del primo specifier
+  rimasto a secco.
+- **threading dei diagnostics**: il motore scartava i warning di coercion in un sink throwaway
+  → `%s` di un array (e `%d`/`%c` di un object) perdeva "Array to string conversion" /
+  "Object … could not be converted". Ora `&mut Diags` passa per tutto il motore.
+- **pad char in left-justify**: il riempimento a sinistra usa il pad char (non sempre lo
+  spazio); l'unica eccezione è il flag `0` di un **intero**, che PHP declassa a spazio
+  (`%-05d`→"42   "), mentre float/string lo tengono (`%-05.2f`→"3.400", `%-05s`→"hi000"); il
+  pad custom `'<c>` è onorato per ogni tipo (helper `is_int` in `pad_numeric`).
+
+### Impatto corpus + residui (debito categorizzato)
+Sweep `ext/standard/tests/strings` (copia pulita, in-process): **229→242 pass / 393 runnable
+(61.6%)**. Chiusi 13 dei 29 fail sprintf/printf. I 16 residui **non** sono bug del motore
+(verificato byte-exact `phpr` vs oracle) ma di tre nature:
+- **runner EXPECTF su contenuto binario** (~6: `fprintf_variation_004`, `sprintf_variation15/27`,
+  `vprintf_variation7/9/10`): il nostro output è **identico all'oracle** (`cmp`), ma il runner
+  legge il `.phpt` con `from_utf8_lossy` e i byte NUL/binari corrompono il regex EXPECTF →
+  falso-negativo del *tooling*, non del motore.
+- **interleaving warning/output nell'evaluator** (4: `printf_variation2`, `sprintf_variation2`,
+  `vprintf_variation8`, `sprintf_rope_optimization_003`): il warning ora **viene emesso** ma
+  appare *dopo* l'output di printf invece che prima (PHP lo mette prima). Richiede che ogni
+  diag porti la posizione in `out` al push — modifica trasversale al sistema diagnostico,
+  rischiosa, fuori dallo scope sprintf.
+- **harness `fopen(__FILE__)`** (2: `sprintf_variation1`, `vprintf_variation2`): il test apre il
+  proprio file `.php`, che il runner non materializza (limite ereditato, come `strtr_variation6`).
+- **niche** (`sprintf_variation52`: cap precision a 53 cifre con Notice; `vprintf_variation3/5`:
+  quirk di parsing `% %%d`; `sprintf_rope_optimization_001`: rendering dell'`ArgumentCountError`
+  non catturato).

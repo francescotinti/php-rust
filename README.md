@@ -14,7 +14,17 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–58 completati · 922 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–59 completati · 927 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+
+Step 59 ha (a) implementato il CLI **`phpr`** (era uno stub `fn main(){}`): ora è un `php`
+drop-in che esegue uno script e scrive lo stream CLI-faithful con exit code fedele, utile anche
+come differential vs l'oracle; (b) chiuso 13 dei 29 fail sprintf/printf residui con un batch di
+fedeltà (modificatore `l`, specifier sconosciuti→ValueError, errori catchable col tipo giusto,
+conteggio "N arguments are required", threading dei warning di coercion, pad char in
+left-justify). Sweep `strings` **229→242/393 (61.6%)**. I 16 residui non sono bug del motore
+(output byte-identico all'oracle) ma di runner-EXPECTF su binario, interleaving warning
+dell'evaluator, e `fopen(__FILE__)` non materializzato dall'harness. Infra: `target-dir` di
+cargo spostato su disco interno (il volume esterno rompeva le build incrementali).
 
 Step 58 ha **chiuso il motore sprintf**: (a) fix del crash `capacity overflow` su width/precision
 oltre `INT_MAX` (un `%9999…f` abortiva l'intero run in-process) → ora `ValueError`; (b) sintassi
@@ -147,7 +157,7 @@ php-rust/crates/
                  preg_* intercettati; stack-trace)
   php-builtins   registry ~65 builtin (var_dump/print_r, array_*, string,
                  sprintf, math, json_encode, …)
-  php-cli        binario `phpr`                           (scheletro)
+  php-cli        binario `phpr` (CLI: esegue uno script, stream CLI-faithful, exit code)
   phpt-runner    runner .phpt + capability scan (bin + lib)
 diary/           00-reconnaissance … 99-conclusions + metrics
 ```
