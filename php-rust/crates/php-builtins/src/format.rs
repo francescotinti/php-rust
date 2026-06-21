@@ -8,19 +8,19 @@
 //! `h`/`H` are the locale-independent twins of `g`/`G`, identical under C locale).
 
 use php_runtime::Ctx;
-use php_types::{convert, PhpError, PhpStr, Zval};
+use php_types::{convert, Diags, PhpError, PhpStr, Zval};
 
 /// sprintf($format, ...$args): the formatted string.
-pub fn sprintf(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let fmt = first_format(args, "sprintf")?;
-    let bytes = format_impl(&fmt, args)?;
+pub fn sprintf(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let fmt = first_format(args, "sprintf", ctx.diags)?;
+    let bytes = format_impl(&fmt, args, ctx.diags)?;
     Ok(Zval::Str(PhpStr::new(bytes)))
 }
 
 /// printf($format, ...$args): writes the result and returns its byte length.
 pub fn printf(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let fmt = first_format(args, "printf")?;
-    let bytes = format_impl(&fmt, args)?;
+    let fmt = first_format(args, "printf", ctx.diags)?;
+    let bytes = format_impl(&fmt, args, ctx.diags)?;
     let n = bytes.len();
     ctx.out.extend_from_slice(&bytes);
     Ok(Zval::Long(n as i64))
@@ -29,14 +29,14 @@ pub fn printf(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// Format `$format` against an array of values (step 56c). Slot 0 of the values
 /// slice is an ignored placeholder for the format itself (the engine numbers
 /// conversion args from index 1), so the array elements follow it.
-fn vformat(args: &[Zval], fname: &str) -> Result<Vec<u8>, PhpError> {
+fn vformat(args: &[Zval], fname: &str, diags: &mut Diags) -> Result<Vec<u8>, PhpError> {
     if args.len() != 2 {
         return Err(PhpError::ArgumentCountError(format!(
             "{fname}() expects exactly 2 arguments, {} given",
             args.len()
         )));
     }
-    let fmt = to_bytes(&args[0]);
+    let fmt = to_bytes(&args[0], diags);
     let Zval::Array(arr) = &args[1] else {
         return Err(PhpError::TypeError(format!(
             "{fname}(): Argument #2 ($values) must be of type array, {} given",
@@ -47,36 +47,37 @@ fn vformat(args: &[Zval], fname: &str) -> Result<Vec<u8>, PhpError> {
     for (_k, v) in arr.iter() {
         vals.push(v.clone());
     }
-    format_impl(&fmt, &vals)
+    format_impl(&fmt, &vals, diags)
 }
 
 /// vsprintf($format, $args): like sprintf with the conversion args in an array.
-pub fn vsprintf(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    Ok(Zval::Str(PhpStr::new(vformat(args, "vsprintf")?)))
+pub fn vsprintf(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    Ok(Zval::Str(PhpStr::new(vformat(args, "vsprintf", ctx.diags)?)))
 }
 
 /// vprintf($format, $args): like printf with the args in an array; returns length.
 pub fn vprintf(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let bytes = vformat(args, "vprintf")?;
+    let bytes = vformat(args, "vprintf", ctx.diags)?;
     let n = bytes.len();
     ctx.out.extend_from_slice(&bytes);
     Ok(Zval::Long(n as i64))
 }
 
-pub(crate) fn first_format(args: &[Zval], fname: &str) -> Result<Vec<u8>, PhpError> {
+pub(crate) fn first_format(
+    args: &[Zval],
+    fname: &str,
+    diags: &mut Diags,
+) -> Result<Vec<u8>, PhpError> {
     match args.first() {
-        Some(v) => Ok(to_bytes(v)),
+        Some(v) => Ok(to_bytes(v, diags)),
         None => Err(PhpError::ArgumentCountError(format!(
             "{fname}() expects at least 1 argument, 0 given"
         ))),
     }
 }
 
-fn to_bytes(v: &Zval) -> Vec<u8> {
-    // Builtins never observe Array-to-string warnings here in practice; use a
-    // throwaway diag sink for the rare coercion.
-    let mut diags = Vec::new();
-    convert::to_zstr(v, &mut diags).as_bytes().to_vec()
+fn to_bytes(v: &Zval, diags: &mut Diags) -> Vec<u8> {
+    convert::to_zstr(v, diags).as_bytes().to_vec()
 }
 
 /// PHP caps width and precision at `INT_MAX`; beyond it a `ValueError` is thrown
@@ -227,7 +228,11 @@ fn max_arg_index(fmt: &[u8]) -> usize {
 }
 
 /// Core formatter shared by sprintf/printf.
-pub(crate) fn format_impl(fmt: &[u8], args: &[Zval]) -> Result<Vec<u8>, PhpError> {
+pub(crate) fn format_impl(
+    fmt: &[u8],
+    args: &[Zval],
+    diags: &mut Diags,
+) -> Result<Vec<u8>, PhpError> {
     let required = max_arg_index(fmt) + 1;
     let mut out = Vec::with_capacity(fmt.len());
     let mut i = 0;
@@ -397,7 +402,7 @@ pub(crate) fn format_impl(fmt: &[u8], args: &[Zval]) -> Result<Vec<u8>, PhpError
             }
         };
 
-        let formatted = format_one(conv, arg, &spec);
+        let formatted = format_one(conv, arg, &spec, diags);
         out.extend_from_slice(&formatted);
     }
     Ok(out)
@@ -419,20 +424,20 @@ fn read_uint(fmt: &[u8], pos: usize) -> (Option<u64>, usize) {
 }
 
 /// Format one resolved argument for conversion char `conv`.
-fn format_one(conv: u8, arg: &Zval, spec: &Spec) -> Vec<u8> {
+fn format_one(conv: u8, arg: &Zval, spec: &Spec, diags: &mut Diags) -> Vec<u8> {
     match conv {
         b'd' | b'i' => {
-            let n = convert::to_long_cast(arg, &mut Vec::new());
+            let n = convert::to_long_cast(arg, diags);
             let neg = n < 0;
             let mag = (n as i128).unsigned_abs().to_string().into_bytes();
             pad_numeric(neg, mag, spec)
         }
         b'u' => {
-            let n = convert::to_long_cast(arg, &mut Vec::new()) as u64;
+            let n = convert::to_long_cast(arg, diags) as u64;
             pad_numeric(false, n.to_string().into_bytes(), spec)
         }
         b'x' | b'X' | b'o' | b'b' => {
-            let n = convert::to_long_cast(arg, &mut Vec::new()) as u64;
+            let n = convert::to_long_cast(arg, diags) as u64;
             let body = match conv {
                 b'x' => format!("{n:x}"),
                 b'X' => format!("{n:X}"),
@@ -442,7 +447,7 @@ fn format_one(conv: u8, arg: &Zval, spec: &Spec) -> Vec<u8> {
             pad_numeric(false, body.into_bytes(), spec)
         }
         b'c' => {
-            let n = convert::to_long_cast(arg, &mut Vec::new());
+            let n = convert::to_long_cast(arg, diags);
             vec![n as u8]
         }
         b'f' | b'F' => {
@@ -474,7 +479,7 @@ fn format_one(conv: u8, arg: &Zval, spec: &Spec) -> Vec<u8> {
             pad_numeric(neg, php_gcvt(v.abs(), prec, upper), spec)
         }
         b's' => {
-            let mut body = to_bytes(arg);
+            let mut body = to_bytes(arg, diags);
             if let Some(p) = spec.precision {
                 body.truncate(p.max(0) as usize);
             }

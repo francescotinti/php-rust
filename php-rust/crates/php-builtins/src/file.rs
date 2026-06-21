@@ -929,7 +929,7 @@ fn write_to_stream(r: &Rc<RefCell<Resource>>, bytes: &[u8]) -> Zval {
 
 /// `fprintf($stream, $format, ...$args)`: format like `sprintf` and write the
 /// result to the stream, returning the byte count (step 53d).
-pub fn fprintf(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+pub fn fprintf(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     if argv.len() < 2 {
         return Err(PhpError::ArgumentCountError(format!(
             "fprintf() expects at least 2 arguments, {} given",
@@ -939,8 +939,8 @@ pub fn fprintf(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let r = stream_arg(argv, "fprintf")?;
     // The sprintf engine treats slot 0 as the format; for fprintf that is argv[1].
     let rest = &argv[1..];
-    let fmt = crate::format::first_format(rest, "fprintf")?;
-    let bytes = crate::format::format_impl(&fmt, rest)?;
+    let fmt = crate::format::first_format(rest, "fprintf", ctx.diags)?;
+    let bytes = crate::format::format_impl(&fmt, rest, ctx.diags)?;
     Ok(write_to_stream(r, &bytes))
 }
 
@@ -966,7 +966,7 @@ pub fn vfprintf(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     for (_k, v) in a.iter() {
         vals.push(v.clone());
     }
-    let bytes = crate::format::format_impl(&fmt, &vals)?;
+    let bytes = crate::format::format_impl(&fmt, &vals, ctx.diags)?;
     Ok(write_to_stream(r, &bytes))
 }
 
