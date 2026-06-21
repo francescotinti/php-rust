@@ -30,12 +30,22 @@ pub fn printf(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// slice is an ignored placeholder for the format itself (the engine numbers
 /// conversion args from index 1), so the array elements follow it.
 fn vformat(args: &[Zval], fname: &str) -> Result<Vec<u8>, PhpError> {
-    let fmt = first_format(args, fname)?;
+    if args.len() != 2 {
+        return Err(PhpError::ArgumentCountError(format!(
+            "{fname}() expects exactly 2 arguments, {} given",
+            args.len()
+        )));
+    }
+    let fmt = to_bytes(&args[0]);
+    let Zval::Array(arr) = &args[1] else {
+        return Err(PhpError::TypeError(format!(
+            "{fname}(): Argument #2 ($values) must be of type array, {} given",
+            args[1].error_type_name()
+        )));
+    };
     let mut vals: Vec<Zval> = vec![Zval::Null];
-    if let Some(Zval::Array(a)) = args.get(1) {
-        for (_k, v) in a.iter() {
-            vals.push(v.clone());
-        }
+    for (_k, v) in arr.iter() {
+        vals.push(v.clone());
     }
     format_impl(&fmt, &vals)
 }
@@ -56,7 +66,7 @@ pub fn vprintf(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 pub(crate) fn first_format(args: &[Zval], fname: &str) -> Result<Vec<u8>, PhpError> {
     match args.first() {
         Some(v) => Ok(to_bytes(v)),
-        None => Err(PhpError::Error(format!(
+        None => Err(PhpError::ArgumentCountError(format!(
             "{fname}() expects at least 1 argument, 0 given"
         ))),
     }
@@ -93,6 +103,7 @@ fn read_star_arg(
     i: &mut usize,
     args: &[Zval],
     next_arg: &mut usize,
+    required: usize,
     field: &str,
 ) -> Result<i64, PhpError> {
     let (num, j) = read_uint(fmt, *i);
@@ -110,7 +121,7 @@ fn read_star_arg(
     let arg = args.get(idx).ok_or_else(|| {
         PhpError::ArgumentCountError(format!(
             "{} arguments are required, {} given",
-            idx + 1,
+            required.max(idx + 1),
             args.len()
         ))
     })?;
@@ -120,8 +131,104 @@ fn read_star_arg(
     }
 }
 
+/// Index a `*` width/precision argument while pre-scanning: an optional
+/// positional `N$` binds it, otherwise it takes the next sequential slot.
+fn star_index(fmt: &[u8], i: &mut usize, next_arg: &mut usize) -> usize {
+    let (num, j) = read_uint(fmt, *i);
+    match num {
+        Some(n) if j < fmt.len() && fmt[j] == b'$' => {
+            *i = j + 1;
+            n as usize
+        }
+        _ => {
+            let v = *next_arg;
+            *next_arg += 1;
+            v
+        }
+    }
+}
+
+/// Highest argument index a format references, mirroring the consumption order
+/// of [`format_impl`] (positional `N$`, sequential fallback, and `*` width /
+/// precision slots). PHP reports `required = this + 1` in the ArgumentCountError
+/// for a short argument list — the *total* the format needs, not the index of
+/// the first specifier that ran out.
+fn max_arg_index(fmt: &[u8]) -> usize {
+    let mut i = 0;
+    let mut next_arg = 1usize;
+    let mut max_idx = 0usize;
+    while i < fmt.len() {
+        if fmt[i] != b'%' {
+            i += 1;
+            continue;
+        }
+        i += 1;
+        if i >= fmt.len() {
+            break;
+        }
+        if fmt[i] == b'%' {
+            i += 1;
+            continue;
+        }
+        // Value positional `N$`.
+        let mut val_pos = None;
+        let save = i;
+        let (num, j) = read_uint(fmt, i);
+        if let Some(n) = num {
+            if j < fmt.len() && fmt[j] == b'$' {
+                val_pos = Some(n as usize);
+                i = j + 1;
+            } else {
+                i = save;
+            }
+        }
+        // Flags.
+        loop {
+            match fmt.get(i) {
+                Some(b'-') | Some(b'+') | Some(b'0') | Some(b' ') => {}
+                Some(b'\'') if i + 1 < fmt.len() => i += 1,
+                _ => break,
+            }
+            i += 1;
+        }
+        // Width (`*` consumes an argument).
+        if fmt.get(i) == Some(&b'*') {
+            i += 1;
+            max_idx = max_idx.max(star_index(fmt, &mut i, &mut next_arg));
+        } else {
+            let (_, j) = read_uint(fmt, i);
+            i = j;
+        }
+        // Precision (`.*` consumes an argument).
+        if fmt.get(i) == Some(&b'.') {
+            i += 1;
+            if fmt.get(i) == Some(&b'*') {
+                i += 1;
+                max_idx = max_idx.max(star_index(fmt, &mut i, &mut next_arg));
+            } else {
+                let (_, j) = read_uint(fmt, i);
+                i = j;
+            }
+        }
+        if fmt.get(i) == Some(&b'l') {
+            i += 1;
+        }
+        if i < fmt.len() {
+            i += 1; // conversion char
+        }
+        let vidx = val_pos.unwrap_or_else(|| {
+            let v = next_arg;
+            next_arg += 1;
+            v
+        });
+        max_idx = max_idx.max(vidx);
+    }
+    max_idx
+}
+
 /// Core formatter shared by sprintf/printf.
 pub(crate) fn format_impl(fmt: &[u8], args: &[Zval]) -> Result<Vec<u8>, PhpError> {
+    let required = max_arg_index(fmt) + 1;
     let mut out = Vec::with_capacity(fmt.len());
     let mut i = 0;
     let mut next_arg = 1usize; // args[0] is the format itself.
@@ -183,7 +290,7 @@ pub(crate) fn format_impl(fmt: &[u8], args: &[Zval]) -> Result<Vec<u8>, PhpError
         // Width: `*` (from an argument) or literal digits.
         if fmt.get(i) == Some(&b'*') {
             i += 1;
-            let wv = read_star_arg(fmt, &mut i, args, &mut next_arg, "Width")?;
+            let wv = read_star_arg(fmt, &mut i, args, &mut next_arg, required, "Width")?;
             if !(0..=INT_MAX_I64).contains(&wv) {
                 return Err(PhpError::ValueError(
                     "Width must be between 0 and 2147483647".to_string(),
@@ -208,7 +315,7 @@ pub(crate) fn format_impl(fmt: &[u8], args: &[Zval]) -> Result<Vec<u8>, PhpError
             i += 1;
             if fmt.get(i) == Some(&b'*') {
                 i += 1;
-                let pv = read_star_arg(fmt, &mut i, args, &mut next_arg, "Precision")?;
+                let pv = read_star_arg(fmt, &mut i, args, &mut next_arg, required, "Precision")?;
                 if !(-1..=INT_MAX_I64).contains(&pv) {
                     return Err(PhpError::ValueError(
                         "Precision must be between -1 and 2147483647".to_string(),
@@ -284,7 +391,7 @@ pub(crate) fn format_impl(fmt: &[u8], args: &[Zval]) -> Result<Vec<u8>, PhpError
             None => {
                 return Err(PhpError::ArgumentCountError(format!(
                     "{} arguments are required, {} given",
-                    idx + 1,
+                    required.max(idx + 1),
                     args.len()
                 )))
             }

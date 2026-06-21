@@ -930,6 +930,12 @@ fn write_to_stream(r: &Rc<RefCell<Resource>>, bytes: &[u8]) -> Zval {
 /// `fprintf($stream, $format, ...$args)`: format like `sprintf` and write the
 /// result to the stream, returning the byte count (step 53d).
 pub fn fprintf(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    if argv.len() < 2 {
+        return Err(PhpError::ArgumentCountError(format!(
+            "fprintf() expects at least 2 arguments, {} given",
+            argv.len()
+        )));
+    }
     let r = stream_arg(argv, "fprintf")?;
     // The sprintf engine treats slot 0 as the format; for fprintf that is argv[1].
     let rest = &argv[1..];
@@ -941,21 +947,24 @@ pub fn fprintf(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// `vfprintf($stream, $format, $args)`: like `fprintf` but the conversion args
 /// come from an array (step 53d).
 pub fn vfprintf(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    if argv.len() != 3 {
+        return Err(PhpError::ArgumentCountError(format!(
+            "vfprintf() expects exactly 3 arguments, {} given",
+            argv.len()
+        )));
+    }
     let r = stream_arg(argv, "vfprintf")?;
-    let fmt = convert::to_zstr(
-        argv.get(1).ok_or_else(|| {
-            PhpError::ArgumentCountError("vfprintf() expects exactly 3 arguments, 1 given".to_string())
-        })?,
-        ctx.diags,
-    )
-    .as_bytes()
-    .to_vec();
+    let fmt = convert::to_zstr(&argv[1], ctx.diags).as_bytes().to_vec();
+    let Zval::Array(a) = &argv[2] else {
+        return Err(PhpError::TypeError(format!(
+            "vfprintf(): Argument #3 ($values) must be of type array, {} given",
+            argv[2].error_type_name()
+        )));
+    };
     // Slot 0 is the (ignored) format placeholder; the array values follow.
     let mut vals: Vec<Zval> = vec![Zval::Null];
-    if let Some(Zval::Array(a)) = argv.get(2) {
-        for (_k, v) in a.iter() {
-            vals.push(v.clone());
-        }
+    for (_k, v) in a.iter() {
+        vals.push(v.clone());
     }
     let bytes = crate::format::format_impl(&fmt, &vals)?;
     Ok(write_to_stream(r, &bytes))

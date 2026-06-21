@@ -611,6 +611,39 @@ fn sprintf_missing_arg_is_argument_count_error() {
 }
 
 #[test]
+fn sprintf_missing_arg_reports_total_required() {
+    // PHP reports `required = 1 + total specifiers`, not the index of the first
+    // specifier that ran out (printf_error.phpt).
+    for (call, msg) in [
+        ("sprintf('%s%s')", "3 arguments are required, 1 given"),
+        ("sprintf('%s%s%s%s%s')", "6 arguments are required, 1 given"),
+        ("sprintf('%d-%d-%d', 7)", "4 arguments are required, 2 given"),
+        ("sprintf('%3$s')", "4 arguments are required, 1 given"),
+    ] {
+        match fatal(&format!("<?php {call};")) {
+            PhpError::ArgumentCountError(m) => assert_eq!(m, msg, "for {call}"),
+            other => panic!("expected ArgumentCountError for {call}, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn vprintf_family_arg_validation() {
+    match fatal("<?php vsprintf('%d');") {
+        PhpError::ArgumentCountError(m) => {
+            assert_eq!(m, "vsprintf() expects exactly 2 arguments, 1 given")
+        }
+        other => panic!("expected ArgumentCountError, got {other:?}"),
+    }
+    match fatal("<?php vsprintf('%d', 5);") {
+        PhpError::TypeError(m) => {
+            assert_eq!(m, "vsprintf(): Argument #2 ($values) must be of type array, int given")
+        }
+        other => panic!("expected TypeError, got {other:?}"),
+    }
+}
+
+#[test]
 fn sprintf_l_modifier_is_ignored() {
     // A single `l` length modifier is accepted and ignored: %ld == %d.
     assert_eq!(out("<?php echo sprintf('%ld', 42.5);"), "42");
