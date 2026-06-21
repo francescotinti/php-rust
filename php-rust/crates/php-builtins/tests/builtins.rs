@@ -370,6 +370,57 @@ fn strpos_offset_out_of_range_is_value_error() {
 }
 
 #[test]
+fn strrpos_finds_last() {
+    assert_eq!(out("<?php var_dump(strrpos('abcabc', 'b'));"), "int(4)\n");
+    assert_eq!(out("<?php var_dump(strrpos('abcabc', 'b', 2));"), "int(4)\n");
+    assert_eq!(out("<?php var_dump(strrpos('abcabc', 'b', -2));"), "int(4)\n");
+    assert_eq!(out("<?php var_dump(strrpos('abcabc', 'b', 5));"), "bool(false)\n");
+    assert_eq!(out("<?php var_dump(strrpos('abcabc', 'x'));"), "bool(false)\n");
+    assert_eq!(out("<?php var_dump(strrpos('abc', ''));"), "int(3)\n");
+    assert_eq!(out("<?php var_dump(strrpos('abab', 'ab', -1));"), "int(2)\n");
+    assert_eq!(out("<?php var_dump(strrpos('abc', 'a', -3));"), "int(0)\n");
+}
+
+#[test]
+fn stripos_strripos_case_insensitive() {
+    assert_eq!(out("<?php var_dump(stripos('HELLO', 'l'));"), "int(2)\n");
+    assert_eq!(out("<?php var_dump(stripos('HELLO', 'l', 3));"), "int(3)\n");
+    assert_eq!(out("<?php var_dump(stripos('abXc', 'X', -1));"), "bool(false)\n");
+    assert_eq!(out("<?php var_dump(strripos('HeLLo', 'l'));"), "int(3)\n");
+    assert_eq!(out("<?php var_dump(strripos('XabX', 'x', -1));"), "int(3)\n");
+}
+
+#[test]
+fn strrpos_stripos_offset_out_of_range_is_value_error() {
+    for (call, fname) in [
+        ("strrpos('abc', 'a', 10)", "strrpos"),
+        ("strrpos('abc', 'a', -10)", "strrpos"),
+        ("stripos('abc', 'a', 10)", "stripos"),
+        ("strripos('abc', 'a', 10)", "strripos"),
+    ] {
+        match fatal(&format!("<?php {call};")) {
+            PhpError::ValueError(m) => assert_eq!(
+                m,
+                format!("{fname}(): Argument #3 ($offset) must be contained in argument #1 ($haystack)")
+            ),
+            other => panic!("expected ValueError, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn strspn_strcspn_span() {
+    assert_eq!(out("<?php var_dump(strspn('42 is', '0123456789'));"), "int(2)\n");
+    assert_eq!(out("<?php var_dump(strcspn('hello world', ' '));"), "int(5)\n");
+    assert_eq!(out("<?php var_dump(strspn('aabbcc', 'a', 1));"), "int(1)\n");
+    assert_eq!(out("<?php var_dump(strspn('aabbcc', 'b', -4));"), "int(2)\n");
+    assert_eq!(out("<?php var_dump(strspn('aaaaXa', 'a', 0, -2));"), "int(4)\n");
+    assert_eq!(out("<?php var_dump(strcspn('abcXef', 'X', 0, -1));"), "int(3)\n");
+    assert_eq!(out("<?php var_dump(strspn('aaa', 'a', 10));"), "int(0)\n");
+    assert_eq!(out("<?php var_dump(strspn('aaa', 'a', -10));"), "int(3)\n");
+}
+
+#[test]
 fn str_replace_scalar_and_arrays() {
     assert_eq!(out("<?php echo str_replace('o', '0', 'foobar');"), "f00bar");
     // Array search + array replace, applied element-wise and sequentially.

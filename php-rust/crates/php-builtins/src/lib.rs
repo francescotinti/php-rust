@@ -158,6 +158,11 @@ pub fn registry() -> Registry {
     add(b"explode", string::explode);
     add(b"substr", string::substr);
     add(b"strpos", string::strpos);
+    add(b"strrpos", string::strrpos);
+    add(b"stripos", string::stripos);
+    add(b"strripos", string::strripos);
+    add(b"strspn", string::strspn);
+    add(b"strcspn", string::strcspn);
     add(b"strstr", string::strstr);
     add(b"strchr", string::strstr);
     add(b"stristr", string::stristr);

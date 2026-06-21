@@ -1044,3 +1044,189 @@ pub fn wordwrap(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     }
     Ok(Zval::Str(PhpStr::new(out)))
 }
+
+// ---- step 57a: search family (rpos / case-insensitive) + span -------------
+
+/// Coerce the first two positional args of a `($haystack, $needle, …)` builtin
+/// to bytes, mirroring PHP's "expects at least 2 arguments, N given" fatal.
+fn haystack_needle(
+    args: &[Zval],
+    ctx: &mut Ctx,
+    fname: &str,
+) -> Result<(Vec<u8>, Vec<u8>), PhpError> {
+    let hay = convert::to_zstr(
+        args.first().ok_or_else(|| {
+            PhpError::Error(format!("{fname}() expects at least 2 arguments, 0 given"))
+        })?,
+        ctx.diags,
+    )
+    .as_bytes()
+    .to_vec();
+    let needle = convert::to_zstr(
+        args.get(1).ok_or_else(|| {
+            PhpError::Error(format!("{fname}() expects at least 2 arguments, 1 given"))
+        })?,
+        ctx.diags,
+    )
+    .as_bytes()
+    .to_vec();
+    Ok((hay, needle))
+}
+
+fn offset_value_error(fname: &str) -> PhpError {
+    PhpError::ValueError(format!(
+        "{fname}(): Argument #3 ($offset) must be contained in argument #1 ($haystack)"
+    ))
+}
+
+/// Index of the **last** occurrence of `needle` whose start lies in `[lo, hi]`
+/// (inclusive); `hi` is clamped to the last position where `needle` still fits.
+/// An empty needle matches at the clamped `hi`.
+fn rfind_window(hay: &[u8], needle: &[u8], lo: usize, hi: usize) -> Option<usize> {
+    let max_start = hay.len().checked_sub(needle.len())?;
+    let hi = hi.min(max_start);
+    if hi < lo {
+        return None;
+    }
+    (lo..=hi).rev().find(|&i| &hay[i..i + needle.len()] == needle)
+}
+
+/// Resolve a `strrpos`-style `$offset` into the inclusive start-position window
+/// `[lo, hi]`, or `Ok(None)` when the window is empty. Out-of-range is a fatal.
+///
+/// `offset >= 0` searches starts at or after `offset`; `offset < 0` searches
+/// starts whose end is at or before `len + offset` (unless the needle is longer
+/// than `-offset`, in which case the whole string is scanned).
+fn rpos_window(
+    len: i64,
+    nlen: i64,
+    offset: i64,
+    fname: &str,
+) -> Result<Option<(usize, usize)>, PhpError> {
+    let (lo, hi) = if offset >= 0 {
+        if offset > len {
+            return Err(offset_value_error(fname));
+        }
+        (offset, len - nlen)
+    } else {
+        if offset < -len {
+            return Err(offset_value_error(fname));
+        }
+        let hi = if nlen > -offset { len - nlen } else { len + offset };
+        (0, hi)
+    };
+    if hi < lo || hi < 0 {
+        return Ok(None);
+    }
+    Ok(Some((lo as usize, hi as usize)))
+}
+
+/// strrpos($haystack, $needle[, $offset]): byte index of the last occurrence, or
+/// `false`. See [`rpos_window`] for the `$offset` semantics.
+pub fn strrpos(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let (hay, needle) = haystack_needle(args, ctx, "strrpos")?;
+    let offset = args.get(2).map_or(0, |v| convert::to_long_cast(v, ctx.diags));
+    match rpos_window(hay.len() as i64, needle.len() as i64, offset, "strrpos")? {
+        Some((lo, hi)) => Ok(match rfind_window(&hay, &needle, lo, hi) {
+            Some(p) => Zval::Long(p as i64),
+            None => Zval::Bool(false),
+        }),
+        None => Ok(Zval::Bool(false)),
+    }
+}
+
+/// stripos($haystack, $needle[, $offset]): case-insensitive [`strpos`].
+pub fn stripos(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let (hay, needle) = haystack_needle(args, ctx, "stripos")?;
+    let len = hay.len() as i64;
+    let offset = args.get(2).map_or(0, |v| convert::to_long_cast(v, ctx.diags));
+    let start = if offset < 0 { len + offset } else { offset };
+    if start < 0 || start > len {
+        return Err(offset_value_error("stripos"));
+    }
+    let hay_lc = hay.to_ascii_lowercase();
+    let needle_lc = needle.to_ascii_lowercase();
+    match find_sub(&hay_lc[start as usize..], &needle_lc) {
+        Some(pos) => Ok(Zval::Long(start + pos as i64)),
+        None => Ok(Zval::Bool(false)),
+    }
+}
+
+/// strripos($haystack, $needle[, $offset]): case-insensitive [`strrpos`].
+pub fn strripos(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let (hay, needle) = haystack_needle(args, ctx, "strripos")?;
+    let offset = args.get(2).map_or(0, |v| convert::to_long_cast(v, ctx.diags));
+    match rpos_window(hay.len() as i64, needle.len() as i64, offset, "strripos")? {
+        Some((lo, hi)) => {
+            let hay_lc = hay.to_ascii_lowercase();
+            let needle_lc = needle.to_ascii_lowercase();
+            Ok(match rfind_window(&hay_lc, &needle_lc, lo, hi) {
+                Some(p) => Zval::Long(p as i64),
+                None => Zval::Bool(false),
+            })
+        }
+        None => Ok(Zval::Bool(false)),
+    }
+}
+
+/// Resolve the `$start` / `$length` arguments of `strspn`/`strcspn` into a byte
+/// slice of `$s`, applying PHP's negative-counts-from-end + clamping rules.
+fn span_slice<'a>(s: &'a [u8], args: &[Zval], ctx: &mut Ctx) -> &'a [u8] {
+    let slen = s.len() as i64;
+    let mut start = args.get(2).map_or(0, |v| convert::to_long_cast(v, ctx.diags));
+    if start < 0 {
+        start += slen;
+        if start < 0 {
+            start = 0;
+        }
+    } else if start > slen {
+        start = slen;
+    }
+    let avail = slen - start;
+    let len = match args.get(3) {
+        None | Some(Zval::Null) => avail,
+        Some(v) => {
+            let mut l = convert::to_long_cast(v, ctx.diags);
+            if l < 0 {
+                l += avail;
+                if l < 0 {
+                    l = 0;
+                }
+            } else if l > avail {
+                l = avail;
+            }
+            l
+        }
+    };
+    let start = start as usize;
+    &s[start..start + len as usize]
+}
+
+/// Set of bytes present in `mask`, for the span scanners.
+fn byte_set(mask: &[u8]) -> [bool; 256] {
+    let mut set = [false; 256];
+    for &b in mask {
+        set[b as usize] = true;
+    }
+    set
+}
+
+/// strspn($s, $mask[, $start[, $length]]): length of the initial segment of the
+/// `[start, length)` window of `$s` made up solely of bytes present in `$mask`.
+pub fn strspn(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let (s, mask) = haystack_needle(args, ctx, "strspn")?;
+    let set = byte_set(&mask);
+    let window = span_slice(&s, args, ctx);
+    let n = window.iter().take_while(|&&b| set[b as usize]).count();
+    Ok(Zval::Long(n as i64))
+}
+
+/// strcspn($s, $mask[, $start[, $length]]): length of the initial segment of the
+/// window of `$s` made up of bytes **not** present in `$mask`.
+pub fn strcspn(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let (s, mask) = haystack_needle(args, ctx, "strcspn")?;
+    let set = byte_set(&mask);
+    let window = span_slice(&s, args, ctx);
+    let n = window.iter().take_while(|&&b| !set[b as usize]).count();
+    Ok(Zval::Long(n as i64))
+}
