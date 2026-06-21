@@ -3,7 +3,7 @@
 use std::rc::Rc;
 
 use php_runtime::Ctx;
-use php_types::{convert, PhpArray, PhpError, PhpStr, Zval};
+use php_types::{convert, Diag, PhpArray, PhpError, PhpStr, Zval};
 
 /// implode($separator, $array) or implode($array).
 ///
@@ -822,4 +822,225 @@ pub fn strrchr(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         Some(pos) => Ok(Zval::Str(PhpStr::new(hay[pos..].to_vec()))),
         None => Ok(Zval::Bool(false)),
     }
+}
+
+// ---- step 56a: binary / escape / transform string functions ----
+
+/// `bin2hex($string)`: each byte → two lowercase hex digits.
+pub fn bin2hex(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let s = str_at(args, ctx, 0, "bin2hex", 1)?;
+    let mut out = Vec::with_capacity(s.len() * 2);
+    for &b in &s {
+        out.push(HEX[(b >> 4) as usize]);
+        out.push(HEX[(b & 0x0f) as usize]);
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
+/// `hex2bin($string)`: inverse of `bin2hex`. Odd length or a non-hex byte → false
+/// + "Input string must be hexadecimal string" Warning.
+pub fn hex2bin(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = str_at(args, ctx, 0, "hex2bin", 1)?;
+    let nibble = |b: u8| -> Option<u8> {
+        match b {
+            b'0'..=b'9' => Some(b - b'0'),
+            b'a'..=b'f' => Some(b - b'a' + 10),
+            b'A'..=b'F' => Some(b - b'A' + 10),
+            _ => None,
+        }
+    };
+    let bad = |ctx: &mut Ctx| {
+        ctx.diags.push(Diag::Warning(
+            "hex2bin(): Input string must be hexadecimal string".to_string(),
+        ));
+    };
+    if s.len() % 2 != 0 {
+        bad(ctx);
+        return Ok(Zval::Bool(false));
+    }
+    let mut out = Vec::with_capacity(s.len() / 2);
+    for pair in s.chunks(2) {
+        match (nibble(pair[0]), nibble(pair[1])) {
+            (Some(h), Some(l)) => out.push((h << 4) | l),
+            _ => {
+                bad(ctx);
+                return Ok(Zval::Bool(false));
+            }
+        }
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
+/// `addslashes($string)`: backslash-escape `'`, `"`, `\` and NUL.
+pub fn addslashes(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = str_at(args, ctx, 0, "addslashes", 1)?;
+    let mut out = Vec::with_capacity(s.len());
+    for &b in &s {
+        match b {
+            b'\'' | b'"' | b'\\' => {
+                out.push(b'\\');
+                out.push(b);
+            }
+            0 => {
+                out.push(b'\\');
+                out.push(b'0');
+            }
+            _ => out.push(b),
+        }
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
+/// `stripslashes($string)`: drop one backslash before any char (`\0` → NUL); a
+/// trailing lone backslash is removed.
+pub fn stripslashes(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = str_at(args, ctx, 0, "stripslashes", 1)?;
+    let mut out = Vec::with_capacity(s.len());
+    let mut i = 0;
+    while i < s.len() {
+        if s[i] == b'\\' {
+            i += 1;
+            if i < s.len() {
+                out.push(if s[i] == b'0' { 0 } else { s[i] });
+                i += 1;
+            }
+        } else {
+            out.push(s[i]);
+            i += 1;
+        }
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
+/// `substr_replace($string, $replace, $start, $length = ∞)` (scalar form): splice
+/// `$replace` into `$string` over the `[start, start+length)` window; negative
+/// start/length count from the end, `length = 0` inserts.
+pub fn substr_replace(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = str_at(args, ctx, 0, "substr_replace", 3)?;
+    let repl = str_at(args, ctx, 1, "substr_replace", 3)?;
+    let len_i = s.len() as i64;
+    let offset = convert::to_long_cast(
+        args.get(2).ok_or_else(|| {
+            PhpError::Error("substr_replace() expects at least 3 arguments, 2 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let start = if offset < 0 {
+        (len_i + offset).max(0)
+    } else {
+        offset.min(len_i)
+    };
+    let end = match args.get(3) {
+        None | Some(Zval::Null) => len_i,
+        Some(v) => {
+            let l = convert::to_long_cast(v, ctx.diags);
+            if l < 0 {
+                (len_i + l).max(start)
+            } else {
+                (start + l).min(len_i)
+            }
+        }
+    };
+    let (start, end) = (start as usize, end.max(start) as usize);
+    let mut out = Vec::with_capacity(s.len() + repl.len());
+    out.extend_from_slice(&s[..start]);
+    out.extend_from_slice(&repl);
+    out.extend_from_slice(&s[end..]);
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
+/// `nl2br($string, $use_xhtml = true)`: insert `<br />` (or `<br>`) before each
+/// `\n` / `\r\n` / `\r`, keeping the newline.
+pub fn nl2br(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = str_at(args, ctx, 0, "nl2br", 1)?;
+    let xhtml = match args.get(1) {
+        Some(v) => convert::to_bool(v, ctx.diags),
+        None => true,
+    };
+    let br: &[u8] = if xhtml { b"<br />" } else { b"<br>" };
+    let mut out = Vec::with_capacity(s.len());
+    let mut i = 0;
+    while i < s.len() {
+        match s[i] {
+            b'\r' => {
+                out.extend_from_slice(br);
+                out.push(b'\r');
+                if s.get(i + 1) == Some(&b'\n') {
+                    out.push(b'\n');
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            b'\n' => {
+                out.extend_from_slice(br);
+                out.push(b'\n');
+                i += 1;
+            }
+            b => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
+/// `wordwrap($string, $width = 75, $break = "\n", $cut = false)`: greedy
+/// word-wrap, breaking long words only when `$cut` is set.
+pub fn wordwrap(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = str_at(args, ctx, 0, "wordwrap", 1)?;
+    let width = args
+        .get(1)
+        .map(|v| convert::to_long_cast(v, ctx.diags))
+        .unwrap_or(75)
+        .max(1) as usize;
+    let brk = match args.get(2) {
+        Some(v) => convert::to_zstr(v, ctx.diags).as_bytes().to_vec(),
+        None => b"\n".to_vec(),
+    };
+    let cut = match args.get(3) {
+        Some(v) => convert::to_bool(v, ctx.diags),
+        None => false,
+    };
+    if s.is_empty() || brk.is_empty() {
+        return Ok(Zval::Str(PhpStr::new(s)));
+    }
+    let mut out: Vec<u8> = Vec::with_capacity(s.len());
+    let mut line_start = 0usize;
+    let mut last_space: Option<usize> = None;
+    let mut i = 0;
+    while i < s.len() {
+        if s[i..].starts_with(&brk) {
+            out.extend_from_slice(&brk);
+            i += brk.len();
+            line_start = out.len();
+            last_space = None;
+            continue;
+        }
+        let c = s[i];
+        out.push(c);
+        i += 1;
+        if c == b' ' {
+            last_space = Some(out.len() - 1);
+        }
+        if out.len() - line_start > width {
+            if let Some(sp) = last_space.filter(|&sp| sp >= line_start) {
+                let after = out[sp + 1..].to_vec();
+                out.truncate(sp);
+                out.extend_from_slice(&brk);
+                out.extend_from_slice(&after);
+                line_start = sp + brk.len();
+                last_space = None;
+            } else if cut {
+                let last = out.pop().unwrap();
+                out.extend_from_slice(&brk);
+                out.push(last);
+                line_start = out.len() - 1;
+                last_space = None;
+            }
+        }
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
 }

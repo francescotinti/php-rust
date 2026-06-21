@@ -4030,6 +4030,34 @@ fn sscanf_byref_mode() {
 }
 
 #[test]
+fn bin2hex_hex2bin() {
+    assert_eq!(out("<?php echo bin2hex(\"AB\\x00\");"), "414200");
+    assert_eq!(out("<?php var_dump(hex2bin('414200'));"), "string(3) \"AB\u{0}\"\n");
+    assert_eq!(out("<?php var_dump(@hex2bin('zz'));"), "bool(false)\n");
+    let (_, w) = out_diags("<?php hex2bin('abc');"); // odd length
+    assert_eq!(w, vec!["hex2bin(): Input string must be hexadecimal string"]);
+}
+
+#[test]
+fn addslashes_stripslashes_substr_replace() {
+    assert_eq!(out("<?php echo addslashes(\"a'b\\\"c\\\\d\");"), "a\\'b\\\"c\\\\d");
+    assert_eq!(out("<?php echo stripslashes(\"a\\\\'b\\\\\\\"c\\\\\\\\d\");"), "a'b\"c\\d");
+    assert_eq!(out("<?php echo substr_replace('Hello','XXX',1,3);"), "HXXXo");
+    assert_eq!(out("<?php echo substr_replace('Hello','_',1);"), "H_");
+    assert_eq!(out("<?php echo substr_replace('Hello','_',-2,1);"), "Hel_o");
+    assert_eq!(out("<?php echo substr_replace('abc','X',1,0);"), "aXbc");
+}
+
+#[test]
+fn nl2br_and_wordwrap() {
+    assert_eq!(out("<?php echo nl2br(\"a\\nb\");"), "a<br />\nb");
+    assert_eq!(out("<?php echo nl2br(\"a\\nb\", false);"), "a<br>\nb");
+    assert_eq!(out("<?php echo wordwrap('The quick brown fox',10,\"\\n\",true);"), "The quick\nbrown fox");
+    assert_eq!(out("<?php echo wordwrap('A very longwordhere',8,\"\\n\",true);"), "A very\nlongword\nhere");
+    assert_eq!(out("<?php echo wordwrap('aaa bbb ccc',5);"), "aaa\nbbb\nccc");
+}
+
+#[test]
 fn strstr_family() {
     assert_eq!(out("<?php var_dump(strstr('hello@world.com','@'));"), "string(10) \"@world.com\"\n");
     assert_eq!(out("<?php var_dump(strstr('hello@world.com','@',true));"), "string(5) \"hello\"\n");

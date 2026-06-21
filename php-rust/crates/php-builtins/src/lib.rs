@@ -161,6 +161,13 @@ pub fn registry() -> Registry {
     add(b"strchr", string::strstr);
     add(b"stristr", string::stristr);
     add(b"strrchr", string::strrchr);
+    add(b"bin2hex", string::bin2hex);
+    add(b"hex2bin", string::hex2bin);
+    add(b"addslashes", string::addslashes);
+    add(b"stripslashes", string::stripslashes);
+    add(b"substr_replace", string::substr_replace);
+    add(b"nl2br", string::nl2br);
+    add(b"wordwrap", string::wordwrap);
     add(b"str_getcsv", csv::str_getcsv);
     add(b"fgetcsv", file::fgetcsv);
     add(b"fputcsv", file::fputcsv);
