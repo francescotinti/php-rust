@@ -1273,3 +1273,99 @@ bucket "missing builtin") è rinviato al prossimo run batch per la policy
 anti-freeze (mai tutto il corpus in un colpo). Lever successivo naturale:
 **predicati filesystem** (`file_exists`/`is_file`/`unlink`/`mkdir`/`stat`…),
 che sblocca la maggioranza dei FAIL di `ext/standard/tests/file`.
+
+## Step 52 — sottosistema predicati/operazioni filesystem (il lever di fine step 51)
+
+> Generato con assistenza AI (Claude Opus 4.8). Continuazione diretta del lever
+> dichiarato a fine step 51 ("predicati filesystem … sblocca la maggioranza dei
+> FAIL di `ext/standard/tests/file`"). Scelta utente 2026-06-21: **scope A–E
+> completo** (≈30 funzioni). Tutti i formati osservabili (array `stat` a 26 voci,
+> messaggi di Warning per-funzione, formato `pathinfo`, ordini `scandir`)
+> verificati **byte-exact contro l'oracle PHP 8.5.7** via probe diretti. Cinque
+> sotto-step; ogni sotto-step commit + push. Workspace 864→**882** verde, clippy
+> pulito. Nuova dep `libc` (già nel lockfile) per `access(2)` e `utimes(2)`.
+
+### 52a — path-string puri: `basename` / `dirname` / `pathinfo` (commit 617b17c)
+Nessun I/O: manipolazione di byte pura, quindi byte-exact testabile senza FS.
+`php_basename` (strip trailing `/`, suffix rimosso solo se l'output resta più
+lungo del suffix: `basename(".php",".php")`→`.php`), `php_dirname` con il param
+`$levels` (clamp ≥1, "/" assorbente), `pathinfo` con i selettori
+`PATHINFO_DIRNAME/BASENAME/EXTENSION/FILENAME` = 1/2/4/8 e la regola del dot
+iniziale (`.htaccess`→filename `""`, extension `htaccess`). 27 asserzioni.
+
+### 52b — predicati esistenza/tipo + `access(2)` + `clearstatcache`
+`file_exists`/`is_file`/`is_dir` (segue symlink via `metadata`), `is_link`
+(no-follow via `symlink_metadata`: un symlink rotto è ancora `true`), `filetype`
+(lstat → file/dir/link/fifo/char/block/socket/unknown). **`is_readable`/
+`is_writable`/`is_executable` rifatti su `libc::access(2)`** (euid-aware, segue
+symlink): un file `chmod 0` legge come *non* leggibile anche per l'owner che lo
+può stat'are (D-52.7) — il vecchio euristico su `metadata().readonly()` non
+distingueva. `realpath` (`canonicalize`, `false` se manca un componente),
+`getcwd`/`chdir` (cwd di processo), `sys_get_temp_dir` (senza slash finale).
+`clearstatcache` = no-op `null`: non teniamo cache di stat per-richiesta, niente
+da invalidare (D-52.8). 5 test nuovi + i 3 preesistenti di 52a.
+
+### 52c — `stat` / `lstat` / `fstat` + accessor a campo singolo
+Builder condiviso dell'array a 26 voci (chiavi intere `0..=12` poi le nominali
+`dev,ino,mode,nlink,uid,gid,rdev,size,atime,mtime,ctime,blksize,blocks` nello
+stesso ordine, D-52.9) da `std::os::unix::fs::MetadataExt`. `stat` segue symlink,
+`lstat` no (mode 0120xxx vs 0100xxx, verificato). `fstat` su un resource: backend
+File → metadata reale; backend in-memory/std → array sintetico mode 0100666 con
+`size`=lunghezza buffer e zeri altrove (D-52.10, l'oracle dà 33206 per
+`php://memory`). `filesize/filemtime/fileatime/filectime/fileperms/fileinode/
+fileowner/filegroup` via helper condiviso (tutti seguono symlink); messaggio
+"`%s(): stat failed for %s`" (`lstat` usa "Lstat failed"). 3 test.
+
+### 52d — mutatori
+`unlink`, `mkdir` (`$permissions`+`$recursive`, mode via `DirBuilderExt::mode`
+mascherato dall'umask come PHP), `rmdir`, `rename` (sovrascrive dest), `copy`
+(sovrascrive dest), `touch` (create-senza-troncare + `utimes(2)`; `$mtime` null →
+now, `$atime` null → `$mtime`), `symlink`, `link` (hard), `readlink`, `chmod`
+(`PermissionsExt::from_mode`). Ogni mutatore emette il **Warning esatto** di PHP
+in fallimento — ognuno incornicia path/strerror diversamente (oracle-verified):
+`unlink(%s)`/`rmdir(%s)`/`rename(%s,%s): %s`; `mkdir(): %s` (senza path!);
+`copy(%s): Failed to open stream: %s`; `touch(): Unable to create file %s
+because %s`; `symlink/link/readlink/chmod(): %s`. Nuovo helper `out_diags` nei
+test per asserire il testo grezzo dei diag. 3 test.
+
+### 52e — `scandir` / `glob` / `tempnam` / `tmpfile`
+`scandir($dir,$sort)`: voci incluse `.`/`..`, sort byte ascendente(0)/
+discendente(1)/none(2); in fallimento PHP emette **due** Warning ("Failed to open
+directory" + "(errno N)") poi `false` — replicati entrambi. `glob` è un
+**globber shell self-contained** (no crate): `*`/`?`/`[...]` su tutti i segmenti
+di path, regola del dot iniziale, espansione `GLOB_BRACE`, flag `GLOB_MARK/
+NOSORT/NOCHECK/ONLYDIR`; array vuoto se nessun match (D-52.11). `tempnam` crea un
+file 0600 unico e ritorna il path canonicalizzato (l'oracle risolve `/var`→
+`/private/var` su macOS). **`tmpfile` è evaluator-dispatched** (conia un resource
+come `fopen`): crea un file temp unlinkato aperto r+ (riassorbito dall'OS alla
+chiusura/uscita). 4 test.
+
+### Impatto corpus (bounded — `ext/standard/tests/file`, 897 test)
+Sweep `--isolate` `PHPT_TIMEOUT_SECS=5` sulla directory più toccata, prima/dopo
+lo step:
+
+| | pass | fail | skip | runnable |
+|---|---:|---:|---:|---:|
+| fine step 51 | 2 | 42 | 853 | ~44 |
+| **fine step 52** | **63** | **81** | **753** | **144** |
+
+**pass 2→63 (+61)**, skip −100 (il capability-scan non salta più i test che
+usano unlink/mkdir/stat/scandir/…), fail +39 (più test arrivano *fino* alle
+asserzioni invece di fallire a monte su un `fopen` impossibile). Il lever dei
+predicati FS è **speso**: i 753 skip residui sono ora dominati da *altri*
+builtin mancanti — `fprintf`(35), `strstr`(32), `stream_wrapper_register`(14),
+`opendir`(9), `stream_context_create`(8), `fscanf`(7), `ftruncate`(7),
+`get_resource_type`(6), `fputcsv`/`fgetcsv`/`parse_ini_file` — e da 498 skip di
+tipo "section" (multi-sezione `--FILE_EXTERNAL--`/`--CLEAN--`/`--INI--`,
+harness-level, non gap di builtin). Lever successivi naturali entro questa
+directory: **`fprintf`/`fscanf`**, la **famiglia `opendir`/`readdir`/`closedir`**
+(D-52.12 scope-out di questo step), **`get_resource_type`**, e i **CSV**
+(`fputcsv`/`fgetcsv`).
+
+### Scope-out espliciti (debito)
+- **D-52.12**: `opendir`/`readdir`/`closedir`/`rewinddir` (iterazione directory
+  basata su resource) — `scandir` copre la forma moderna/comune; 9 test skippati.
+- Wrapper di rete/context/filter (`stream_context_create`, `stream_wrapper_register`,
+  `stream_filter_append`) restano fuori (continuità con lo scope-out di step 51).
+- `SCANDIR_SORT_NONE` ritorna l'ordine `readdir` grezzo (non garantito uguale
+  all'ordine OS dell'oracle); ascendente/discendente sono byte-exact.

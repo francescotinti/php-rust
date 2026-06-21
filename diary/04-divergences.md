@@ -587,3 +587,27 @@ stream resource, `fopen` Warning "Failed to open stream: <strerror>").
 > **Classe A (fix nello step)**: `ext/standard/tests/file/fwrite.phpt` ha
 > rivelato che `$length` di `fwrite` va clampato a `[0, len]` (negativo → 0).
 > Corretto; il test ora passa. Vedi `03-translation-log.md` step 51.
+
+## Step 52 — Note (filesystem)
+
+Nessuna D-NEW (divergenza inattesa) emersa: tutti i formati osservabili sono
+stati inchiodati byte-exact contro l'oracle *prima* di implementare. Note
+metodologiche / divergenze *intenzionali* (catalogate come D-52.x in
+`02-mapping-table.md`):
+
+- **clearstatcache no-cache (D-52.8)**: non avendo cache di stat per-richiesta,
+  `clearstatcache()` è un no-op e ogni `stat`/predicato riflette sempre lo stato
+  corrente dell'FS. Più corretto di PHP-C, ma un test che si affida alla *stale*
+  cache di PHP (es. `statcache-corruption.phpt`) può divergere — è un internals
+  del motore, non semantica del linguaggio.
+- **fstat su stream in-memory (D-52.10)**: `php://memory`/`temp`, `php://std*`
+  non hanno inode reale → array sintetico (mode 0100666, size = buffer, zeri
+  altrove). Solo `mode`/`size` sono osservabili in pratica; timestamps a 0
+  divergono da eventuali asserzioni (rare).
+- **tempnam `/private` (D-52.14)**: su macOS l'oracle ritorna il path
+  realpath-risolto (`/var/folders/...`→`/private/var/folders/...`). Canonicalizziamo
+  il file creato per combaciare; su Linux (niente symlink `/var`) è un no-op.
+- **glob own-impl (D-52.11)**: globber scritto a mano; copre `*`/`?`/`[...]` +
+  `GLOB_BRACE`/`MARK`/`NOSORT`/`NOCHECK`/`ONLYDIR`. Flag non implementati
+  (`GLOB_ERR`/`GLOB_NOESCAPE` semantica completa) accettati e ignorati dove non
+  cambiano l'output dei pattern comuni del corpus.

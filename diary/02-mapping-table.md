@@ -964,3 +964,19 @@ context (`stream_context_create`), stream filter (`stream_filter_append`,
 registrazione wrapper custom (`stream_wrapper_register`), predicati FS
 (`file_exists`/`is_file`/`mkdir`/`unlink`/`rename`/`copy`/`glob`/`scandir`) —
 candidati a uno step FS dedicato dopo 51.
+
+## Step 52 — Decisioni (D-52.x): predicati/operazioni filesystem
+
+| ID | Costrutto C/PHP | Scelta Rust | Razionale | Status |
+|---|---|---|---|---|
+| D-52.1 | `basename`/`dirname`/`pathinfo` | byte-op puri su `&[u8]`, no I/O | path PHP sono byte; nessuno stat necessario | confermato |
+| D-52.2 | `file_exists`/`is_file`/`is_dir` | `std::fs::metadata` (segue symlink) | un symlink rotto → `false` (oracle) | confermato |
+| D-52.3 | `is_link`/`filetype` | `symlink_metadata` (no-follow) | symlink rotto resta `true`; type da lstat | confermato |
+| D-52.7 | `is_readable`/`is_writable`/`is_executable` | `libc::access(2)` (R/W/X_OK) | euid-aware: `chmod 0` → non leggibile anche per l'owner; il vecchio `metadata().readonly()` non distingueva | confermato |
+| D-52.8 | `clearstatcache` | no-op `null` | non teniamo cache di stat per-richiesta (ogni call colpisce l'FS fresco) → niente da invalidare; semantica *più* corretta di PHP-C | confermato |
+| D-52.9 | array `stat`/`lstat`/`fstat` | 26 voci: int `0..=12` poi nominali, da `MetadataExt` | ordine osservabile per var_dump/accesso; valori i64 (dev/ino/size stanno) | confermato |
+| D-52.10 | `fstat` su stream non-File | array sintetico mode 0100666 + size buffer | stream in-memory non hanno inode; l'oracle dà 33206 per `php://memory` | confermato |
+| D-52.11 | `glob` | globber shell self-contained (no crate) | controllo esatto su `*`/`?`/`[...]`, dot-rule, `GLOB_BRACE`, flag; il crate `glob` ha semantica propria divergente da PHP | confermato |
+| D-52.12 | `opendir`/`readdir`/`closedir` | **scope-out** | `scandir` copre la forma comune; iterazione resource-based differita | scope-out |
+| D-52.13 | `tmpfile` | evaluator-dispatched (conia resource); file unlinkato r+ | possiede `next_resource_id` come `fopen`/`tmpfile`; unlink-while-open = auto-cleanup POSIX | confermato |
+| D-52.14 | `tempnam` | crea file 0600, ritorna path canonicalizzato | l'oracle risolve `/var`→`/private/var` su macOS via realpath | confermato |
