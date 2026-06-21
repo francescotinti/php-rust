@@ -684,6 +684,65 @@ pub fn vfprintf(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(write_to_stream(r, &bytes))
 }
 
+// ---- step 54d: CSV stream I/O (fgetcsv / fputcsv) ----
+
+/// `fputcsv($stream, $fields, $sep=",", $enclosure="\"", $escape="\\", $eol="\n")`:
+/// write one CSV record and return the byte count. Emits the PHP 8.5 `$escape`
+/// deprecation when that argument is omitted.
+pub fn fputcsv(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let r = stream_arg(argv, "fputcsv")?;
+    crate::csv::maybe_escape_deprecation(ctx, "fputcsv", argv.len(), 4);
+    let fields: Vec<Vec<u8>> = match argv.get(1) {
+        Some(Zval::Array(a)) => a
+            .iter()
+            .map(|(_, v)| convert::to_zstr(v, ctx.diags).as_bytes().to_vec())
+            .collect(),
+        _ => {
+            return Err(PhpError::TypeError(
+                "fputcsv(): Argument #2 ($fields) must be of type array".to_string(),
+            ))
+        }
+    };
+    let sep = crate::csv::first_byte(argv.get(2), ctx, b',');
+    let enc = crate::csv::first_byte(argv.get(3), ctx, b'"');
+    let esc = crate::csv::escape_byte(argv.get(4), ctx);
+    let eol = match argv.get(5) {
+        Some(v) => convert::to_zstr(v, ctx.diags).as_bytes().to_vec(),
+        None => vec![b'\n'],
+    };
+    let mut line = crate::csv::format_csv_line(&fields, sep, enc, esc);
+    line.extend_from_slice(&eol);
+    let n = line.len();
+    if let Some(stream) = r.borrow_mut().as_stream_mut() {
+        let _ = stream.write(&line);
+    }
+    Ok(Zval::Long(n as i64))
+}
+
+/// `fgetcsv($stream, $length=null, $sep=",", $enclosure="\"", $escape="\\")`:
+/// read one line and parse it into a fields array; `false` at end-of-file.
+/// Emits the PHP 8.5 `$escape` deprecation when that argument is omitted.
+pub fn fgetcsv(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let r = stream_arg(argv, "fgetcsv")?;
+    crate::csv::maybe_escape_deprecation(ctx, "fgetcsv", argv.len(), 4);
+    let sep = crate::csv::first_byte(argv.get(2), ctx, b',');
+    let enc = crate::csv::first_byte(argv.get(3), ctx, b'"');
+    let esc = crate::csv::escape_byte(argv.get(4), ctx);
+    let line = {
+        let mut res = r.borrow_mut();
+        let stream = res.as_stream_mut().expect("open stream checked in stream_arg");
+        match stream.read_line(None) {
+            Ok(Some(l)) => l,
+            _ => return Ok(Zval::Bool(false)), // EOF or read error
+        }
+    };
+    let mut end = line.len();
+    while end > 0 && matches!(line[end - 1], b'\n' | b'\r') {
+        end -= 1;
+    }
+    Ok(crate::csv::fields_to_array(&line[..end], sep, enc, esc))
+}
+
 // ---- step 53c: directory iteration (opendir is evaluator-dispatched) ----
 
 /// Resolve the `$dir_handle` argument to its live resource cell.

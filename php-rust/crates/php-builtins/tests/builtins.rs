@@ -3838,6 +3838,42 @@ fn touch_sets_explicit_mtime() {
 }
 
 #[test]
+fn csv_str_getcsv() {
+    assert_eq!(out("<?php echo json_encode(str_getcsv('a,b,c'));"), "[\"a\",\"b\",\"c\"]");
+    assert_eq!(out("<?php echo json_encode(str_getcsv('\"a,b\",c'));"), "[\"a,b\",\"c\"]");
+    assert_eq!(out("<?php echo json_encode(str_getcsv('\"x\"\"y\"'));"), "[\"x\\\"y\"]");
+    assert_eq!(out("<?php echo json_encode(str_getcsv('a,,c'));"), "[\"a\",\"\",\"c\"]");
+    assert_eq!(out("<?php echo json_encode(str_getcsv(''));"), "[null]");
+    assert_eq!(out("<?php echo json_encode(str_getcsv('a;b', ';'));"), "[\"a\",\"b\"]");
+}
+
+#[test]
+fn csv_escape_deprecation() {
+    let (_, w) = out_diags("<?php str_getcsv('a,b');");
+    assert_eq!(
+        w,
+        vec!["str_getcsv(): the $escape parameter must be provided as its default value will change"]
+    );
+    // Passing $escape explicitly suppresses it.
+    let (_, w2) = out_diags("<?php str_getcsv('a,b', ',', '\"', '\\\\');");
+    assert!(w2.is_empty(), "unexpected diags: {w2:?}");
+}
+
+#[test]
+fn csv_fputcsv_fgetcsv_roundtrip() {
+    // fputcsv quotes space/comma fields, returns byte count.
+    let put = "<?php $m=fopen('php://memory','r+'); \
+        $n=fputcsv($m,['a','b c','d,e'],',','\"','\\\\'); rewind($m); echo $n,'|',fread($m,100);";
+    assert_eq!(out(put), "14|a,\"b c\",\"d,e\"\n");
+    // Roundtrip through fgetcsv; second read is EOF → false.
+    let trip = "<?php $m=fopen('php://memory','r+'); \
+        fputcsv($m,['a','b,c','x y'],',','\"','\\\\'); rewind($m); \
+        echo json_encode(fgetcsv($m,0,',','\"','\\\\')),'|'; \
+        var_dump(fgetcsv($m,0,',','\"','\\\\'));";
+    assert_eq!(out(trip), "[\"a\",\"b,c\",\"x y\"]|bool(false)\n");
+}
+
+#[test]
 fn fscanf_lines_and_eof() {
     let dir = tmp_path("b54_fscanf");
     let _ = std::fs::remove_dir_all(&dir);

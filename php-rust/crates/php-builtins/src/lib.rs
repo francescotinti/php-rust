@@ -10,6 +10,7 @@
 //! sprintf, array_*) is step 10.
 
 mod array;
+mod csv;
 mod date;
 mod file;
 mod format;
@@ -149,6 +150,9 @@ pub fn registry() -> Registry {
     add(b"strchr", string::strstr);
     add(b"stristr", string::stristr);
     add(b"strrchr", string::strrchr);
+    add(b"str_getcsv", csv::str_getcsv);
+    add(b"fgetcsv", file::fgetcsv);
+    add(b"fputcsv", file::fputcsv);
     add(b"str_replace", string::str_replace);
     add(b"strtoupper", string::strtoupper);
     add(b"strtolower", string::strtolower);
