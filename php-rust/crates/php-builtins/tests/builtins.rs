@@ -3891,6 +3891,54 @@ fn fscanf_lines_and_eof() {
 }
 
 #[test]
+fn file_lines_and_flags() {
+    let dir = tmp_path("b55_file");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let p = format!("{dir}/f.txt");
+    std::fs::write(&p, "line1\nline2\n\nline4\n").unwrap();
+    // Default keeps newlines (4 entries incl. the bare "\n").
+    assert_eq!(
+        out(&format!("<?php echo json_encode(file('{p}'));")),
+        "[\"line1\\n\",\"line2\\n\",\"\\n\",\"line4\\n\"]"
+    );
+    // FILE_IGNORE_NEW_LINES strips them; the empty line stays as "".
+    assert_eq!(
+        out(&format!("<?php echo json_encode(file('{p}', FILE_IGNORE_NEW_LINES));")),
+        "[\"line1\",\"line2\",\"\",\"line4\"]"
+    );
+    // + FILE_SKIP_EMPTY_LINES drops the empty line.
+    assert_eq!(
+        out(&format!(
+            "<?php echo json_encode(file('{p}', FILE_IGNORE_NEW_LINES|FILE_SKIP_EMPTY_LINES));"
+        )),
+        "[\"line1\",\"line2\",\"line4\"]"
+    );
+    assert_eq!(out(&format!("<?php var_dump(@file('{dir}/none'));")), "bool(false)\n");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn readfile_and_fpassthru() {
+    let dir = tmp_path("b55_rf");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let p = format!("{dir}/f.txt");
+    std::fs::write(&p, "line1\nline2\nline3\n").unwrap();
+    // readfile echoes the whole file and returns the byte count.
+    assert_eq!(
+        out(&format!("<?php $n=readfile('{p}'); echo '|',$n;")),
+        "line1\nline2\nline3\n|18"
+    );
+    // fpassthru echoes the rest of the stream after one fgets.
+    assert_eq!(
+        out(&format!("<?php $f=fopen('{p}','r'); fgets($f); $n=fpassthru($f); echo '|',$n; fclose($f);")),
+        "line2\nline3\n|12"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn sscanf_array_mode() {
     // Mixed conversions, types preserved.
     assert_eq!(

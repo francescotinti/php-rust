@@ -348,6 +348,99 @@ pub fn file_put_contents(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
     }
 }
 
+// ---- step 55a: file() / readfile() / fpassthru() (whole-file read + output) ----
+
+/// `file($filename, $flags = 0)`: read a file into an array of lines. Each line
+/// keeps its trailing newline unless `FILE_IGNORE_NEW_LINES` (2) is set;
+/// `FILE_SKIP_EMPTY_LINES` (4) drops lines that are empty (after the newline).
+/// Missing file → `false` + the "Failed to open stream" Warning.
+pub fn file(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let p = arg_os_path(argv, ctx);
+    let flags = argv
+        .get(1)
+        .map(|v| convert::to_long_cast(v, ctx.diags))
+        .unwrap_or(0);
+    let ignore_nl = flags & 2 != 0;
+    let skip_empty = flags & 4 != 0;
+    let data = match std::fs::read(&p) {
+        Ok(d) => d,
+        Err(e) => {
+            ctx.diags.push(Diag::Warning(format!(
+                "file({}): Failed to open stream: {}",
+                show_path(&p),
+                strerror(&e)
+            )));
+            return Ok(Zval::Bool(false));
+        }
+    };
+    let mut arr = PhpArray::new();
+    let mut start = 0;
+    let push_line = |arr: &mut PhpArray, raw: &[u8]| {
+        // The line content with any trailing "\r\n"/"\n" removed.
+        let mut end = raw.len();
+        if end > 0 && raw[end - 1] == b'\n' {
+            end -= 1;
+            if end > 0 && raw[end - 1] == b'\r' {
+                end -= 1;
+            }
+        }
+        let stripped = &raw[..end];
+        if skip_empty && stripped.is_empty() {
+            return;
+        }
+        let stored = if ignore_nl { stripped } else { raw };
+        let _ = arr.append(Zval::Str(PhpStr::new(stored.to_vec())));
+    };
+    for i in 0..data.len() {
+        if data[i] == b'\n' {
+            push_line(&mut arr, &data[start..=i]);
+            start = i + 1;
+        }
+    }
+    if start < data.len() {
+        push_line(&mut arr, &data[start..]); // trailing line without a newline
+    }
+    Ok(Zval::Array(Rc::new(arr)))
+}
+
+/// `readfile($filename)`: write the whole file to program output and return the
+/// byte count; `false` + Warning if it cannot be opened.
+pub fn readfile(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let p = arg_os_path(argv, ctx);
+    match std::fs::read(&p) {
+        Ok(d) => {
+            let n = d.len();
+            ctx.out.extend_from_slice(&d);
+            Ok(Zval::Long(n as i64))
+        }
+        Err(e) => {
+            ctx.diags.push(Diag::Warning(format!(
+                "readfile({}): Failed to open stream: {}",
+                show_path(&p),
+                strerror(&e)
+            )));
+            Ok(Zval::Bool(false))
+        }
+    }
+}
+
+/// `fpassthru($stream)`: write the rest of the stream (from the current position)
+/// to program output and return the number of bytes passed through.
+pub fn fpassthru(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let r = stream_arg(argv, "fpassthru")?;
+    let mut res = r.borrow_mut();
+    let stream = res.as_stream_mut().expect("open stream checked in stream_arg");
+    let mut total = 0usize;
+    while let Ok(chunk) = stream.read(8192) {
+        if chunk.is_empty() {
+            break;
+        }
+        total += chunk.len();
+        ctx.out.extend_from_slice(&chunk);
+    }
+    Ok(Zval::Long(total as i64))
+}
+
 // ---- step 52a: path-string functions (pure, no filesystem access) ----
 
 /// The trailing path component, after stripping trailing `/` (PHP `php_basename`

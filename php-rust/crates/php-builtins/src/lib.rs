@@ -67,6 +67,9 @@ pub fn registry() -> Registry {
     add(b"fflush", file::fflush);
     add(b"file_get_contents", file::file_get_contents);
     add(b"file_put_contents", file::file_put_contents);
+    add(b"file", file::file);
+    add(b"readfile", file::readfile);
+    add(b"fpassthru", file::fpassthru);
     // Filesystem predicates / operations (step 52).
     add(b"basename", file::basename);
     add(b"dirname", file::dirname);

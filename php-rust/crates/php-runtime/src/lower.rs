@@ -3502,9 +3502,11 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"SEEK_SET" => ExprKind::Int(0),
         b"SEEK_CUR" => ExprKind::Int(1),
         b"SEEK_END" => ExprKind::Int(2),
-        // file_put_contents / file flags (step 51c).
+        // file_put_contents / file flags (step 51c, 55a).
         b"FILE_USE_INCLUDE_PATH" => ExprKind::Int(1),
         b"LOCK_EX" => ExprKind::Int(2),
+        b"FILE_IGNORE_NEW_LINES" => ExprKind::Int(2),
+        b"FILE_SKIP_EMPTY_LINES" => ExprKind::Int(4),
         b"FILE_APPEND" => ExprKind::Int(8),
         // pathinfo() component selectors (step 52a).
         b"PATHINFO_DIRNAME" => ExprKind::Int(1),
