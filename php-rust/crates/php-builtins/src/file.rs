@@ -20,12 +20,15 @@ fn stream_arg<'a>(
 ) -> Result<&'a Rc<RefCell<Resource>>, PhpError> {
     match argv.first() {
         Some(Zval::Resource(r)) => {
-            if matches!(r.borrow().kind, ResKind::Closed) {
+            // Only a live byte stream qualifies — a closed handle or a directory
+            // handle (ResKind::Dir, step 53c) is rejected, keeping the
+            // `as_stream_mut().expect(...)` in the stream builtins sound.
+            if matches!(r.borrow().kind, ResKind::Stream(_)) {
+                Ok(r)
+            } else {
                 Err(PhpError::TypeError(format!(
                     "{fname}(): Argument #1 ($stream) must be an open stream resource"
                 )))
-            } else {
-                Ok(r)
             }
         }
         Some(other) => Err(PhpError::TypeError(format!(
@@ -802,11 +805,28 @@ pub fn lstat(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 
 /// `fstat`: the stat array for the file behind a stream resource. In-memory and
 /// std stream backends have no inode, so we synthesize a regular-file 0666 entry
-/// carrying the buffer length as `size` and zeros elsewhere (D-52.10).
+/// carrying the buffer length as `size` and zeros elsewhere (D-52.10). A
+/// directory handle (`opendir`) or a closed handle has no byte stream → `false`
+/// (no panic; we cannot reconstruct the path, D-53.1).
 pub fn fstat(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let r = stream_arg(argv, "fstat")?;
+    let r = match argv.first() {
+        Some(Zval::Resource(r)) => r,
+        Some(other) => {
+            return Err(PhpError::TypeError(format!(
+                "fstat(): Argument #1 ($stream) must be of type resource, {} given",
+                other.error_type_name()
+            )))
+        }
+        None => {
+            return Err(PhpError::ArgumentCountError(
+                "fstat() expects exactly 1 argument, 0 given".to_string(),
+            ))
+        }
+    };
     let mut res = r.borrow_mut();
-    let stream = res.as_stream_mut().expect("open stream checked in stream_arg");
+    let Some(stream) = res.as_stream_mut() else {
+        return Ok(Zval::Bool(false)); // directory / closed handle
+    };
     let vals = match &stream.backend {
         StreamBackend::File(f) => match f.metadata() {
             Ok(m) => stat_vals(&m),

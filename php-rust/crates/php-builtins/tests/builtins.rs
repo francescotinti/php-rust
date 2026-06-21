@@ -3890,6 +3890,21 @@ fn opendir_readdir_roundtrip() {
 }
 
 #[test]
+fn fstat_on_dir_handle_is_false_not_panic() {
+    // Regression (step 53c): a dir handle reaching a stream builtin must not
+    // panic. fstat → false; a byte-stream builtin → clean TypeError.
+    let dir = tmp_path("b53_dirfstat");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let src = format!(
+        "<?php $d=opendir('{dir}'); var_dump(fstat($d)); \
+         try {{ fread($d, 4); }} catch (\\TypeError $e) {{ echo 'TypeError'; }} closedir($d);"
+    );
+    assert_eq!(out(&src), "bool(false)\nTypeError");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn opendir_missing_warns_false() {
     let (_, w) = out_diags("<?php opendir('/no/such/zz');");
     assert_eq!(
