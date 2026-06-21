@@ -3891,6 +3891,28 @@ fn fscanf_lines_and_eof() {
 }
 
 #[test]
+fn getenv_putenv_and_disk_space() {
+    // putenv/getenv roundtrip; unique var names avoid clashing with other tests.
+    assert_eq!(out("<?php putenv('PHPR_T55=hello'); echo getenv('PHPR_T55');"), "hello");
+    assert_eq!(out("<?php var_dump(getenv('PHPR_NOPE_55'));"), "bool(false)\n");
+    assert_eq!(
+        out("<?php putenv('PHPR_K55=v'); $a=getenv(); echo array_key_exists('PHPR_K55',$a)?'Y':'N';"),
+        "Y"
+    );
+    // putenv without '=' unsets.
+    assert_eq!(
+        out("<?php putenv('PHPR_U55=x'); putenv('PHPR_U55'); var_dump(getenv('PHPR_U55'));"),
+        "bool(false)\n"
+    );
+    // disk_*_space: a float > 0 on '/', false on a missing path.
+    assert_eq!(
+        out("<?php echo (is_float(disk_free_space('/'))&&disk_free_space('/')>0)?'F':'?'; \
+             echo is_float(disk_total_space('/'))?'F':'?'; var_dump(@disk_free_space('/no/such/zz55'));"),
+        "FFbool(false)\n"
+    );
+}
+
+#[test]
 fn file_lines_and_flags() {
     let dir = tmp_path("b55_file");
     let _ = std::fs::remove_dir_all(&dir);

@@ -73,6 +73,10 @@ pub fn registry() -> Registry {
     add(b"stream_get_contents", file::stream_get_contents);
     add(b"stream_copy_to_stream", file::stream_copy_to_stream);
     add(b"ftruncate", file::ftruncate);
+    add(b"getenv", file::getenv);
+    add(b"putenv", file::putenv);
+    add(b"disk_free_space", file::disk_free_space);
+    add(b"disk_total_space", file::disk_total_space);
     // Filesystem predicates / operations (step 52).
     add(b"basename", file::basename);
     add(b"dirname", file::dirname);

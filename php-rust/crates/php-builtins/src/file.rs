@@ -553,6 +553,78 @@ pub fn ftruncate(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Bool(ok))
 }
 
+// ---- step 55c: environment + disk space ----
+
+/// `getenv($name = null, $local_only = false)`: the value of an environment
+/// variable (string) or `false` if unset; with no argument, an array of all
+/// environment variables.
+pub fn getenv(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::os::unix::ffi::OsStrExt;
+    match argv.first() {
+        Some(v) => {
+            let name = convert::to_zstr(v, ctx.diags);
+            match std::env::var_os(std::ffi::OsStr::from_bytes(name.as_bytes())) {
+                Some(val) => Ok(Zval::Str(PhpStr::new(val.as_os_str().as_bytes().to_vec()))),
+                None => Ok(Zval::Bool(false)),
+            }
+        }
+        None => {
+            let mut arr = PhpArray::new();
+            for (k, val) in std::env::vars_os() {
+                arr.insert(
+                    Key::from_bytes(k.as_os_str().as_bytes()),
+                    Zval::Str(PhpStr::new(val.as_os_str().as_bytes().to_vec())),
+                );
+            }
+            Ok(Zval::Array(Rc::new(arr)))
+        }
+    }
+}
+
+/// `putenv("NAME=VALUE")` sets an environment variable; `putenv("NAME")` unsets
+/// it. Returns `true` (process-global; safe under per-process `--isolate`).
+pub fn putenv(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::os::unix::ffi::OsStrExt;
+    let setting = convert::to_zstr(
+        argv.first().ok_or_else(|| {
+            PhpError::ArgumentCountError("putenv() expects exactly 1 argument, 0 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let bytes = setting.as_bytes();
+    match bytes.iter().position(|&b| b == b'=') {
+        Some(eq) => std::env::set_var(
+            std::ffi::OsStr::from_bytes(&bytes[..eq]),
+            std::ffi::OsStr::from_bytes(&bytes[eq + 1..]),
+        ),
+        None => std::env::remove_var(std::ffi::OsStr::from_bytes(bytes)),
+    }
+    Ok(Zval::Bool(true))
+}
+
+/// Shared body for `disk_free_space`/`disk_total_space` via `statvfs(2)`. Returns
+/// the byte count as a float, or `false` if the path cannot be stat'd.
+fn disk_space(argv: &[Zval], ctx: &mut Ctx, total: bool) -> Result<Zval, PhpError> {
+    use std::os::unix::ffi::OsStrExt;
+    let p = arg_os_path(argv, ctx);
+    let Ok(c) = std::ffi::CString::new(p.as_os_str().as_bytes()) else {
+        return Ok(Zval::Bool(false));
+    };
+    let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
+    if unsafe { libc::statvfs(c.as_ptr(), &mut st) } != 0 {
+        return Ok(Zval::Bool(false));
+    }
+    let blocks = if total { st.f_blocks } else { st.f_bavail } as f64;
+    Ok(Zval::Double(blocks * st.f_frsize as f64))
+}
+
+pub fn disk_free_space(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    disk_space(argv, ctx, false)
+}
+pub fn disk_total_space(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    disk_space(argv, ctx, true)
+}
+
 // ---- step 52a: path-string functions (pure, no filesystem access) ----
 
 /// The trailing path component, after stripping trailing `/` (PHP `php_basename`
