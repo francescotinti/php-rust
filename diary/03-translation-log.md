@@ -1507,3 +1507,53 @@ questa directory: `ftruncate`, `stream_get_contents`/`stream_copy_to_stream`,
   leggiamo una riga sola (D-54.3); `str_getcsv` su stringa con `\n` embedded funziona.
 - messaggi d'errore di mismatch var/spec di sscanf/fscanf (vedi sopra).
 - argomento `$length` di `fgetcsv` ignorato (leggiamo la riga intera).
+
+## Step 55 — batch builtin stream/file read + env/disk
+
+> Generato con assistenza AI (Claude Opus 4.8). Scelta utente 2026-06-21: dopo lo step 54
+> i lever residui cheap del dir `file` erano builtin diretti (non parser). Scope ampio:
+> i 6 core read/output + env + disk. Tutti verificati byte-exact contro l'oracle PHP 8.5.7.
+> Tre sotto-step. Workspace 894→**898** verde, clippy pulito. Named-args ai builtin
+> **scartati** (refactor ABI + tabella ~199 funzioni, ROI basso — eval.rs:5255).
+
+### 55a — `file` + `readfile` + `fpassthru`
+`file($path,$flags)`: array di righe; di default ogni riga tiene il `\n` finale (l'ultima
+senza newline no); `FILE_IGNORE_NEW_LINES`(2) strippa `\r?\n`, `FILE_SKIP_EMPTY_LINES`(4)
+scarta le righe vuote; `false`+Warning "Failed to open stream" se manca. `readfile`
+(file→`ctx.out`, byte-count) e `fpassthru` (resto dello stream→`ctx.out`, byte-count).
+Costanti `FILE_IGNORE_NEW_LINES`/`FILE_SKIP_EMPTY_LINES` in lower.rs.
+
+### 55b — `stream_get_contents` + `stream_copy_to_stream` + `ftruncate`
+Helper condiviso `read_remaining(stream,max)`. `stream_get_contents($s,$max=-1,$off=-1)`
+(seek assoluto se off≥0). `stream_copy_to_stream($from,$to,$len=null,$off=0)`: legge tutto
+prima in un buffer poi scrive (così `from`/`to` non sono mai borrowed insieme, anche se
+identici), ritorna il count. `ftruncate($s,$size)`: per-backend (`File::set_len` /
+`Memory` Vec `resize`-con-zeri; Stdout/Stderr→false).
+
+### 55c — `getenv`/`putenv` + `disk_free_space`/`disk_total_space`
+`getenv($name)`→string|false; `getenv()`→array di tutte le env (`vars_os`, byte grezzi).
+`putenv("K=V")` set / `putenv("K")` unset → true (process-global, ok sotto `--isolate`).
+`disk_free_space`/`disk_total_space` via `libc::statvfs` (`f_bavail`/`f_blocks * f_frsize`
+come `f64`; `false` su path non stat'abile). Alias legacy `diskfreespace`.
+
+### Impatto corpus (copia pulita di `ext/standard/tests/file`, 785 test)
+Lezioni step 54 applicate: **runner ricostruito** prima dello sweep + **copia pulita** in
+`/tmp` (una run, niente pollution in-tree):
+
+| | pass | fail | skip | runnable |
+|---|---:|---:|---:|---:|
+| post-54 | 71 | 166 | 548 | 237 |
+| **post-55** | **86** | 177 | **522** | 263 |
+
+**pass +15 (71→86)**, skip −26 — risultato pulito e positivo (niente caveat di misura
+questa volta). I builtin `file`/`readfile`/`fpassthru`/`stream_get_contents`/
+`stream_copy_to_stream`/`ftruncate` sono **spariti** dalla lista "missing builtin"; i ~26
+test ammessi passano in buona parte (a differenza dei parser dello step 54, qui la
+semantica è semplice e deterministica). Lever residui ora: `parse_ini_file`(5), `ini_set`(4),
+`rand`(4), `stream_get_line`(2), `set_include_path`(2) + i wrapper scope-out
+(`stream_wrapper_register`/`stream_context_create`/`stream_filter_append`).
+
+### Scope-out espliciti (debito)
+- named-args ai builtin (refactor ABI + ~199 tabelle nomi-parametro) — fuori scope.
+- `$context`/`$use_include_path` di `file`/`readfile`: accettati e ignorati.
+- `disk_*_space` solo Unix (statvfs); Windows fuori scope.

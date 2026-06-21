@@ -14,7 +14,12 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–54 completati · 894 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–55 completati · 898 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+
+Step 55 ha aggiunto un batch di builtin stream/file read (`file`, `readfile`, `fpassthru`,
+`stream_get_contents`, `stream_copy_to_stream`, `ftruncate`) + `getenv`/`putenv` +
+`disk_free_space`/`disk_total_space`: sulla copia pulita di `ext/standard/tests/file` i
+pass salgono **71 → 86** (skip −26).
 
 Step 54 ha aggiunto due engine di parsing: **scanf** (`sscanf`/`fscanf`, con modo
 return-array e modo by-reference) e **CSV** (`str_getcsv`/`fgetcsv`/`fputcsv`), eliminando

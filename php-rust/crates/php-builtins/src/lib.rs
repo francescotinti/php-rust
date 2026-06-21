@@ -76,6 +76,7 @@ pub fn registry() -> Registry {
     add(b"getenv", file::getenv);
     add(b"putenv", file::putenv);
     add(b"disk_free_space", file::disk_free_space);
+    add(b"diskfreespace", file::disk_free_space); // legacy alias
     add(b"disk_total_space", file::disk_total_space);
     // Filesystem predicates / operations (step 52).
     add(b"basename", file::basename);

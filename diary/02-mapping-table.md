@@ -1000,3 +1000,14 @@ candidati a uno step FS dedicato dopo 51.
 | D-54.4 | motore scanf | nuovo `php-runtime/src/scanf.rs` (no `php-builtins`) | `ho_sscanf` vive nell'evaluator (by-ref) e `php-runtime` non dipende da `php-builtins` | confermato |
 | D-54.5 | motore CSV | nuovo `php-builtins/src/csv.rs` condiviso | funzioni CSV pure; primo-byte di sep/enc/esc, escape vuoto = disabilitato | confermato |
 | D-54.6 | `%i` vs `%d` | `%i` auto-base (0x/0), `%d` decimale stretto | semantica C/PHP (oracle: `%i` di "0x1A"→26, di "ff"→NULL) | confermato |
+
+## Step 55 — Decisioni (D-55.x): batch stream/file read + env/disk
+
+| ID | Costrutto PHP | Scelta Rust | Razionale | Status |
+|---|---|---|---|---|
+| D-55.1 | `file()` line-split | split su `\n`, newline tenuto/strippato per flag | default tiene `\n`; IGNORE_NEW_LINES strippa `\r?\n`; SKIP_EMPTY scarta righe vuote (oracle) | confermato |
+| D-55.2 | `ftruncate` | match `StreamBackend`: `File::set_len` / `Memory` Vec `resize(0-fill)` | i due backend troncano in modi diversi; Stdout/Stderr→false | confermato |
+| D-55.3 | `stream_copy_to_stream` | read-all in buffer poi write | evita doppio borrow di `from`/`to` (anche se stesso resource) | confermato |
+| D-55.4 | `disk_*_space` | `libc::statvfs` (f_bavail/f_blocks * f_frsize) → f64 | nessun equivalente in std; libc già dep; Unix-only | confermato |
+| D-55.5 | `putenv` | `std::env::set_var`/`remove_var` (edition 2021, safe) | process-global; ok sotto `--isolate` (un processo per test) | confermato |
+| D-55.6 | named-args ai builtin | **scope-out** (refactor ABI + tabella ~199 fn) | ROI basso vs il costo; ribadito da D-38.2 | scope-out |
