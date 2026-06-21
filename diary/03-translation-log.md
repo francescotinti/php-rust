@@ -1972,3 +1972,30 @@ bcrypt 8-bit `$2a/$2b/$2y` con password high-bit, salt md5 con caratteri fuori-a
 l'esatta crypt_blowfish di Openwall è un port voluminoso per edge-case deprecati → documentato,
 non forzato (policy del progetto). Dep nuova: `pwhash`. 4 test unitari inline. Workspace **952
 test** verdi, clippy `--deny=warnings` pulito.
+
+## Step 65 — `strtok` (chiusura backlog builtin)
+
+`strtok` è **stateful** (mantiene un cursore tra le chiamate) → implementato come builtin
+**evaluator-dispatched**, non puro. Nuovo campo `strtok_state: Option<(Vec<u8>, usize)>`
+sull'`Evaluator` (stringa in tokenizzazione + offset del prossimo token), `None` quando la
+stringa è esaurita — l'equivalente di `BG(strtok_string)`/`BG(strtok_last)` di PHP. Ramo
+`b"strtok"` in `dispatch_higher_order`, metodo `ho_strtok` in `eval/builtins.rs`.
+
+Port fedele di `PHP_FUNCTION(strtok)` (`ext/standard/string.c`): la forma a **2 argomenti**
+`strtok($str, $tok)` (re)inizializza lo stato (cursore a 0); la forma a **1 argomento**
+`strtok($tok)` riprende dal cursore; senza stato → `Warning "strtok(): Both arguments must be
+provided when starting tokenization"` + `false`. L'algoritmo: salta i delimitatori iniziali
+(azzerando lo stato se la stringa finisce mentre salta), prende il token fino al delimitatore
+successivo (o fine stringa), e avanza il cursore oltre quel delimitatore. Set di delimitatori
+come tabella `[bool; 256]` (byte-based, come `STRTOK_TABLE`). Per evitare conflitti di borrow
+uso `self.strtok_state.take()` e ripristino lo stato aggiornato a fine calcolo (il path `last >=
+pe` rimette lo stato senza azzerarlo, come il `RETURN_FALSE` del C che NON libera la stringa).
+
+**Verifica**: tutti gli `strtok_*` `.phpt` (`strtok_basic`, `strtok_variation3..7`) **verdi**;
+differential diretto `phpr` vs oracle **byte-identico** su edge-case (delimitatori multipli
+iniziali/finali, token set vuoto, subject vuoto, esaurimento → `false`). Workspace **952 test**
+verdi, clippy `--deny=warnings` pulito.
+
+Con questo step il **backlog builtin del piano è chiuso** (step 62–65): hash/encoding,
+`pack`/`unpack`, `crypt`, `strtok`. Le uniche divergenze residue sono i 3 D-64 (limiti `pwhash`
+su edge-case crypt deprecati), documentati in `04-divergences.md`.

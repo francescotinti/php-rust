@@ -493,6 +493,7 @@ pub fn run_with(program: &Program, registry: &Registry) -> Outcome {
         trace_exec: trace_exec_enabled(),
         gen_yielder: None,
         mb_regex: crate::mbregex::MbRegexState::default(),
+        strtok_state: None,
         constants: HashMap::new(),
     };
 
@@ -661,6 +662,11 @@ struct Evaluator<'p> {
     /// `mb_regex_set_options` and the `mb_ereg_search` cursor. Survives across
     /// `mb_ereg*` calls for the whole run, since the search family is stateful.
     mb_regex: crate::mbregex::MbRegexState,
+    /// Persistent `strtok` cursor (step 65): the string being tokenized plus the
+    /// offset where the next token search starts. `strtok($str, $tok)` sets it;
+    /// `strtok($tok)` resumes from it; it is cleared (`None`) when the string is
+    /// exhausted, matching PHP's `BG(strtok_string)`/`BG(strtok_last)`.
+    strtok_state: Option<(Vec<u8>, usize)>,
     /// User-defined constants from `define()` (step 49c). Case-sensitive (the
     /// case-insensitive third arg was removed in PHP 8). A bare `NAME` the
     /// lowerer could not fold to an engine constant becomes [`ExprKind::Const`]

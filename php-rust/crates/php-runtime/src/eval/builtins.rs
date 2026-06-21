@@ -36,6 +36,7 @@ impl<'p> Evaluator<'p> {
             b"array_walk" => Some(self.ho_array_walk(args)),
             b"usort" => Some(self.ho_usort(args)),
             b"json_decode" => Some(self.ho_json_decode(args)),
+            b"strtok" => Some(self.ho_strtok(args)),
             b"unserialize" => Some(self.ho_unserialize(args)),
             b"fopen" => Some(self.ho_fopen(args)),
             b"tmpfile" => Some(self.ho_tmpfile(args)),
@@ -473,6 +474,89 @@ impl<'p> Evaluator<'p> {
     }
 
     /// `preg_quote($str, $delimiter = null)` (step 27).
+    /// `strtok(string $string, string $token)` / `strtok(string $token)` (step 65).
+    ///
+    /// Stateful tokenizer: the two-arg form (re)sets the persistent cursor, the
+    /// one-arg form resumes it. Faithful port of `PHP_FUNCTION(strtok)`
+    /// (ext/standard/string.c): leading delimiters are skipped, the token runs up
+    /// to the next delimiter, and the cursor is cleared once the string is spent.
+    fn ho_strtok(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
+        if args.is_empty() {
+            return Err(PhpError::ArgumentCountError(
+                "strtok() expects at least 1 argument, 0 given".to_string(),
+            ));
+        }
+        if args.len() > 2 {
+            return Err(PhpError::ArgumentCountError(format!(
+                "strtok() expects at most 2 arguments, {} given",
+                args.len()
+            )));
+        }
+
+        let tok: Vec<u8> = if args.len() == 2 {
+            let s = convert::to_zstr(&self.eval(&args[0])?.deref_clone(), &mut self.diags)
+                .as_bytes()
+                .to_vec();
+            let t = convert::to_zstr(&self.eval(&args[1])?.deref_clone(), &mut self.diags)
+                .as_bytes()
+                .to_vec();
+            self.strtok_state = Some((s, 0));
+            t
+        } else {
+            convert::to_zstr(&self.eval(&args[0])?.deref_clone(), &mut self.diags)
+                .as_bytes()
+                .to_vec()
+        };
+
+        // The string to tokenize must have been set by an earlier two-arg call.
+        let mut state = match self.strtok_state.take() {
+            Some(st) => st,
+            None => {
+                self.diags.push(Diag::Warning(
+                    "strtok(): Both arguments must be provided when starting tokenization"
+                        .to_string(),
+                ));
+                return Ok(Zval::Bool(false));
+            }
+        };
+
+        let pe = state.0.len();
+        let last = state.1;
+        if last >= pe {
+            // Reached the end; PHP returns false without clearing the string.
+            self.strtok_state = Some(state);
+            return Ok(Zval::Bool(false));
+        }
+
+        let mut is_delim = [false; 256];
+        for &b in &tok {
+            is_delim[b as usize] = true;
+        }
+
+        let s = &state.0;
+        let mut p = last;
+        let mut skipped = 0usize;
+        // Skip leading delimiters; exhausting the string here clears the cursor.
+        while is_delim[s[p] as usize] {
+            p += 1;
+            if p >= pe {
+                return Ok(Zval::Bool(false)); // state already taken (cleared)
+            }
+            skipped += 1;
+        }
+        // Advance to the next delimiter (or the end of the string).
+        loop {
+            p += 1;
+            if p >= pe || is_delim[s[p] as usize] {
+                break;
+            }
+        }
+        let token = s[last + skipped..p].to_vec();
+        state.1 = p + 1;
+        self.strtok_state = Some(state);
+        Ok(Zval::Str(PhpStr::new(token)))
+    }
+
     fn ho_preg_quote(&mut self, args: &[Expr]) -> Result<Zval, PhpError> {
         let Some(first) = args.first() else {
             return Err(PhpError::ArgumentCountError(
