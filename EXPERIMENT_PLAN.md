@@ -1,5 +1,9 @@
 # Piano: PHP → Rust come reimplementazione moderna (non porting di Zend)
 
+> **Nota**: questo è il piano *iniziale* (Fase 0), conservato come artefatto storico.
+> Per lo **stato corrente** (step 0–61, 934 test, struttura dei crate, tooling) vedi
+> `README.md` e il diario in `diary/03-translation-log.md`.
+
 ## Context
 
 L'utente vuole migrare PHP (sorgente C in `/Volumes/Extreme Pro/Claude/php-8.5.7`, ~1,94M LOC) verso Rust. Dopo una prima proposta di porting fedele a Zend (opcode VM), la direzione è cambiata su sua indicazione: **non ricreare lo Zend Engine** — è un design del 1999-2004 — ma sfruttare Rust e il suo ecosistema per una reimplementazione moderna e semplificata, prima il core del linguaggio, poi le estensioni.

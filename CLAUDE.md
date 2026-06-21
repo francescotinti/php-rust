@@ -27,4 +27,11 @@ Reimplementazione moderna di PHP 8.5 in Rust, guidata dal comportamento osservab
 ## Comandi
 
 - Test: `cd php-rust && cargo test`
-- Runner .phpt: `cargo run -p phpt-runner -- <dir o file .phpt>` (vedi --help)
+- CLI: `cargo run -p php-cli -- script.php` (binario `phpr`, php drop-in)
+- Runner .phpt: `cargo run -p phpt-runner -- <dir o file .phpt>` (`--isolate`, `--list-fails`)
+- Trace diagnostico: `PHP_RUST_TRACE=hir|body|exec|all` su stderr (lowering vs evaluation)
+
+> Build: il `target-dir` di cargo è dirottato fuori dal volume "Extreme Pro" via
+> `php-rust/.cargo/config.toml` (il filesystem esterno rompe la cache incrementale).
+> Evaluator in `php-runtime/src/eval/{mod,expr,stmt,calls,class,builtins}.rs`,
+> lowering in `lower/{mod,stmt,class,expr}.rs`.

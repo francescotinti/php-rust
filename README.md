@@ -134,6 +134,19 @@ i pass salgono **2 → 63**. Step 53 ha aggiunto `strstr`/`strrchr`/`stristr`,
 | 46 | **`print` + `exit`/`die`** — costrutti di linguaggio. `print` = espressione (emette, ritorna `1`); `exit`/`die` si propagano via `Err(PhpError::Exit(u8))` (uncatchable, **NON** girano i `finally`), nuovo `Outcome.exit_code`. Coercion `string|int $status`: int/bool/float/null → exit code, string/`__toString` → messaggio, array/oggetto non-stringabile → `TypeError`. Sblocca `finally_goto_005` + test `Zend/tests/exit`. Scope-out **D-46.1**: Deprecated notice di coercion non emessi | ✅ |
 | 47 | **`var_export` + reflection** — `var_export` (port di `php_var_export_ex`: indent esatto, float con `.0`, stringhe single-quote + NUL via `. "\0" .`, `(object) array`/`__set_state`, modalità return, warning su ref circolari); `get_class_methods`/`get_object_vars` scope-aware (visibilità da `cur_class`, ereditarietà child→parent, metodi d'interfaccia via nuovo `ClassDecl.abstract_methods`). +14 test. Scope-out **D-47.1/2**: visibilità `abstract protected`, aliasing reference di `get_object_vars` | ✅ |
 | 48 | **micro-step runner breakdown + dynamic class refs + `@`** — (a) il phpt-runner riporta il costrutto specifico non supportato (`expr:*`/`stmt:*`) e i builtin mancanti (top 20), in-process e `--isolate`; (b) `ClassRef::Dynamic` per `new $cls`/`$cls::m()`/`$cls::CONST`/`$obj::m()`/`$x instanceof $cls` (stringa o oggetto → class id; non-forwarding); (c) operatore `@` via `suppress_depth` (no-op di `flush_diags` + truncate dei diag; throwable NON soppressi). +9 test. Scope-out **D-48.1** | ✅ |
+| 49 | **constant expressions** — `define()`/`const`, costanti magiche (`__LINE__`/`__FILE__`/`__DIR__`/…), costanti named risolte in lowering; + hardening del phpt-runner | ✅ |
+| 50 | **`serialize()` / `unserialize()`** — formato byte-exact (scalari, array, oggetti `O:`, ref), round-trip vs oracle | ✅ |
+| 51 | **`fopen` + sottosistema filesystem-stream** — tipo `Zval::Resource`, `php://memory`/`temp`/`std*`, file reali r/w/a/x/c+; `fread`/`fwrite`/`fgets`/`fseek`/`ftell`/`feof`/`fclose` + `file_get_contents`/`file_put_contents`, byte-exact | ✅ |
+| 52 | **predicati/operazioni filesystem** — `file_exists`/`is_*`/`filetype`, famiglia `stat`/`lstat`/`fstat` + accessor, mutatori `unlink`/`mkdir`/`rename`/`copy`/`touch`/`symlink`/`chmod`, `scandir`/`glob`/`tempnam`/`tmpfile`. `ext/standard/tests/file` **2 → 63 pass** | ✅ |
+| 53 | lever cheap dir `file` — `strstr`/`strrchr`/`stristr`, `get_resource_type`, famiglia `opendir`/`readdir`/`closedir`/`rewinddir`, `fprintf`/`vfprintf` + fix panic dir-handle | ✅ |
+| 54 | **engine di parsing** — `scanf` (`sscanf`/`fscanf`, return-array + by-ref) e **CSV** (`str_getcsv`/`fgetcsv`/`fputcsv`) | ✅ |
+| 55 | batch stream/file read (`file`/`readfile`/`fpassthru`/`stream_get_contents`/`stream_copy_to_stream`/`ftruncate`) + `getenv`/`putenv` + `disk_*_space`. `file` **71 → 86 pass** | ✅ |
+| 56 | batch funzioni stringa (`bin2hex`/`hex2bin`, `addslashes`/`stripslashes`, `substr_replace`, `nl2br`, `wordwrap`, `htmlspecialchars`/`htmlentities`+decode, `vsprintf`/`vprintf`). `strings` 51% runnable | ✅ |
+| 57 | batch stringhe #2 (`strrpos`/`stripos`/`strripos`, `strspn`/`strcspn`, `strtr` byte-map+array, `chunk_split`, `strip_tags`, `quotemeta`, `levenshtein`) + fix `strtr("",$map)`. `strings` 58% | ✅ |
+| 58 | **chiusura motore sprintf** — fix crash `capacity overflow` (width/precision > INT_MAX → `ValueError`); sintassi `*` (PHP 8.4, da argomento, posizionale); `%g`/`%G`/`%h`/`%H` (port di `php_gcvt`, byte-exact su 24×9 casi). `sprintf_star.phpt` passa | ✅ |
+| 59 | **CLI `phpr`** (era uno stub: ora esegue uno script, stream CLI-faithful, exit code fedele) + batch fedeltà sprintf/printf (modificatore `l`, specifier ignota/mancante → `ValueError`, errori catchable col tipo giusto, conteggio "N arguments required", warning Array-to-string, pad char left-justify). `strings` **242/393 (61.6%)**. Infra: `target-dir` cargo fuori dal volume esterno | ✅ |
+| 60 | **modularizzazione `eval.rs`** (6.965 righe) → `eval/{mod,expr,stmt,calls,class,builtins}.rs`, ognuno un `impl Evaluator`. Refactor meccanico, zero cambi di comportamento; `mod.rs` −72% | ✅ |
+| 61 | **DevEx tooling** (code-review esterna): diff unificato EXPECTF-aware nel `phpt-runner` (E), flag `PHP_RUST_TRACE` = dump HIR + trace d'esecuzione su stderr (B), 7 test unitari oracle-independent su `php-types::ops` (C); + split `lower.rs` (3.783) → `lower/{mod,stmt,class,expr}.rs` (−63%) | ✅ |
 
 > Lo step 6 è stato eseguito **dopo** lo step 7 (deciso con l'utente: gli array
 > rendono il phpt-runner molto più utile, quintuplicando i test in-scope).
@@ -172,10 +185,10 @@ php-rust/crates/
                  preg_* intercettati; stack-trace). lowering in
                  lower/{mod,stmt,class,expr}.rs; evaluator in
                  eval/{mod,expr,stmt,calls,class,builtins}.rs
-  php-builtins   registry ~65 builtin (var_dump/print_r, array_*, string,
-                 sprintf, math, json_encode, …)
+  php-builtins   registry ~233 builtin (var_dump/print_r, array_*, string,
+                 sprintf/printf, math, json_encode, file/stream, mbstring, …)
   php-cli        binario `phpr` (CLI: esegue uno script, stream CLI-faithful, exit code)
-  phpt-runner    runner .phpt + capability scan (bin + lib)
+  phpt-runner    runner .phpt + capability scan + diff unificato (bin + lib)
 diary/           00-reconnaissance … 99-conclusions + metrics
 ```
 
@@ -189,16 +202,41 @@ cargo test                       # unit + integration
 PHP_ORACLE=/path/to/php cargo test -p php-types --test differential
 ```
 
-Il differential si auto-salta con un messaggio se l'oracle non è disponibile.
+Il differential si auto-salta con un messaggio se l'oracle non è disponibile; i
+**test unitari** in `php-types::ops` coprono lo stesso nucleo type-juggling
+**senza** bisogno dell'oracle.
+
+### CLI `phpr`
+
+`phpr` è un `php` drop-in: esegue uno script e scrive lo stream CLI-faithful
+(output + diagnostics + fatal inline) con exit code fedele (`exit`/`die`, `255`
+su fatal, altrimenti `0`). Utile anche come differential contro l'oracle.
+
+```bash
+cargo run -p php-cli -- script.php
+```
+
+### Tracing diagnostico (`PHP_RUST_TRACE`)
+
+Per capire se un `.phpt` fallisce in *lowering* o in *evaluation*, su **stderr**
+(non inquina lo stdout confrontato), valido per `phpr` e per il runner:
+
+```bash
+PHP_RUST_TRACE=hir   phpr s.php   # dump dell'HIR abbassato (Program intero)
+PHP_RUST_TRACE=body  phpr s.php   # solo la lista di statement top-level
+PHP_RUST_TRACE=exec  phpr s.php   # traccia ogni statement eseguito, indentato per call-depth
+PHP_RUST_TRACE=all   phpr s.php   # HIR + trace d'esecuzione
+```
 
 ### phpt-runner
 
 Esegue i `.phpt` ufficiali attraverso l'evaluator, con capability scan e
-classificazione PASS/FAIL/SKIP (l'unico FAIL è una divergenza di output reale):
+classificazione PASS/FAIL/SKIP (i fuori-scope sono SKIP motivati):
 
 ```bash
 cargo run -p phpt-runner -- /path/to/php-src/tests /path/to/php-src/Zend/tests
-cargo run -p phpt-runner -- --list-fails <path>   # mostra i diff dei fail
+cargo run -p phpt-runner -- --isolate <path>      # ogni test in un sotto-processo (un crash = un FAIL)
+cargo run -p phpt-runner -- --list-fails <path>   # diff unificato (riga + contesto) per ogni fail
 ```
 
 ## Diario
