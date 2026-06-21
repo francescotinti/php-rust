@@ -1,0 +1,6 @@
+# Build artifacts are redirected off the "Extreme Pro" external volume, whose
+# filesystem cannot hard-link the incremental-compilation cache (cargo prints
+# "hard linking files ... failed" and can leave stale/inconsistent binaries).
+# Keeping the target dir on the internal disk makes incremental builds reliable.
+[build]
+target-dir = "/Users/francescotinti/Claude/php-rust-output"
