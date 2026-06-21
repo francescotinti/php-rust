@@ -1249,6 +1249,11 @@ fn strtr_pairs(s: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
 /// left to right without re-scanning emitted output. Integer keys take their
 /// decimal-string form; an empty key is ignored (with a Warning).
 fn strtr_array(s: &[u8], map: &PhpArray, ctx: &mut Ctx) -> Vec<u8> {
+    // PHP short-circuits an empty subject before touching the map, so the
+    // empty-key Warning never fires for `strtr("", [...])`.
+    if s.is_empty() {
+        return Vec::new();
+    }
     let mut pairs: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
     for (k, v) in map.iter() {
         let key = match k {

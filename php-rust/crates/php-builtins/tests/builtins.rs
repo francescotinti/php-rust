@@ -449,6 +449,15 @@ fn strtr_array_empty_key_warns_and_is_ignored() {
 }
 
 #[test]
+fn strtr_empty_subject_skips_map_no_warning() {
+    // An empty subject short-circuits before the map is processed, so the
+    // empty-key warning must NOT fire (PHP behaviour, strtr_variation4.phpt).
+    let (o, diags) = out_diags("<?php var_dump(strtr('', ['' => 'X', 'a' => 'b']));");
+    assert_eq!(o, "string(0) \"\"\n");
+    assert!(diags.is_empty(), "unexpected diags for empty subject: {diags:?}");
+}
+
+#[test]
 fn strtr_two_arg_non_array_is_type_error() {
     match fatal("<?php strtr('abc', 'xy');") {
         PhpError::TypeError(m) => assert_eq!(
