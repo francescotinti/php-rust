@@ -3838,6 +3838,32 @@ fn touch_sets_explicit_mtime() {
 }
 
 #[test]
+fn strstr_family() {
+    assert_eq!(out("<?php var_dump(strstr('hello@world.com','@'));"), "string(10) \"@world.com\"\n");
+    assert_eq!(out("<?php var_dump(strstr('hello@world.com','@',true));"), "string(5) \"hello\"\n");
+    assert_eq!(out("<?php var_dump(strstr('hello','xyz'));"), "bool(false)\n");
+    assert_eq!(out("<?php var_dump(strstr('hello','LL'));"), "bool(false)\n");
+    assert_eq!(out("<?php var_dump(stristr('HELLO@x','ll'));"), "string(5) \"LLO@x\"\n");
+    assert_eq!(out("<?php var_dump(strrchr('a/b/c.txt','/'));"), "string(6) \"/c.txt\"\n");
+    assert_eq!(out("<?php var_dump(strrchr('abc','x'));"), "bool(false)\n");
+    // strrchr uses only the first byte of the needle.
+    assert_eq!(out("<?php var_dump(strrchr('path/to','/x'));"), "string(3) \"/to\"\n");
+    assert_eq!(out("<?php var_dump(strchr('a@b','@'));"), "string(2) \"@b\"\n");
+}
+
+#[test]
+fn get_resource_type_stream() {
+    let p = tmp_path("b53_grt");
+    let _ = std::fs::remove_file(&p);
+    let src = format!(
+        "<?php $f=fopen('{p}','w'); echo get_resource_type($f),'|'; fclose($f); \
+         echo get_resource_type($f);"
+    );
+    assert_eq!(out(&src), "stream|Unknown");
+    let _ = std::fs::remove_file(&p);
+}
+
+#[test]
 fn scandir_sort_orders_and_error() {
     let dir = tmp_path("b52_scan");
     let _ = std::fs::remove_dir_all(&dir);

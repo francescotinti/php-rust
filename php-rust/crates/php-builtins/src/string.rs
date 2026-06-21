@@ -743,3 +743,83 @@ fn decimal_parts(v: f64) -> (Vec<u8>, Vec<u8>) {
     };
     (int_digits, frac_digits)
 }
+
+/// `strstr($haystack, $needle, $before_needle = false)` (alias `strchr`): the
+/// slice of `$haystack` from the first occurrence of `$needle` to the end, or
+/// the part before it when `$before_needle` is true; `false` if not found.
+pub fn strstr(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let haystack = convert::to_zstr(
+        args.first().ok_or_else(|| {
+            PhpError::Error("strstr() expects at least 2 arguments, 0 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let needle = convert::to_zstr(
+        args.get(1).ok_or_else(|| {
+            PhpError::Error("strstr() expects at least 2 arguments, 1 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let before = matches!(args.get(2), Some(v) if convert::to_bool(v, ctx.diags));
+    let hay = haystack.as_bytes();
+    match find_sub(hay, needle.as_bytes()) {
+        Some(pos) => {
+            let part = if before { &hay[..pos] } else { &hay[pos..] };
+            Ok(Zval::Str(PhpStr::new(part.to_vec())))
+        }
+        None => Ok(Zval::Bool(false)),
+    }
+}
+
+/// `stristr`: case-insensitive `strstr`. The match is located case-insensitively
+/// but the returned slice preserves the original casing of `$haystack`.
+pub fn stristr(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let haystack = convert::to_zstr(
+        args.first().ok_or_else(|| {
+            PhpError::Error("stristr() expects at least 2 arguments, 0 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let needle = convert::to_zstr(
+        args.get(1).ok_or_else(|| {
+            PhpError::Error("stristr() expects at least 2 arguments, 1 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let before = matches!(args.get(2), Some(v) if convert::to_bool(v, ctx.diags));
+    let hay = haystack.as_bytes();
+    let hay_lc = hay.to_ascii_lowercase();
+    let needle_lc = needle.as_bytes().to_ascii_lowercase();
+    match find_sub(&hay_lc, &needle_lc) {
+        Some(pos) => {
+            let part = if before { &hay[..pos] } else { &hay[pos..] };
+            Ok(Zval::Str(PhpStr::new(part.to_vec())))
+        }
+        None => Ok(Zval::Bool(false)),
+    }
+}
+
+/// `strrchr($haystack, $needle)`: the slice from the *last* occurrence of the
+/// first byte of `$needle` to the end of `$haystack`; `false` if not present.
+pub fn strrchr(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let haystack = convert::to_zstr(
+        args.first().ok_or_else(|| {
+            PhpError::Error("strrchr() expects at least 2 arguments, 0 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let needle = convert::to_zstr(
+        args.get(1).ok_or_else(|| {
+            PhpError::Error("strrchr() expects at least 2 arguments, 1 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let hay = haystack.as_bytes();
+    let Some(&ch) = needle.as_bytes().first() else {
+        return Ok(Zval::Bool(false));
+    };
+    match hay.iter().rposition(|&c| c == ch) {
+        Some(pos) => Ok(Zval::Str(PhpStr::new(hay[pos..].to_vec()))),
+        None => Ok(Zval::Bool(false)),
+    }
+}

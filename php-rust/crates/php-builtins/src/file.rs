@@ -619,6 +619,22 @@ pub fn clearstatcache(_argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> 
     Ok(Zval::Null)
 }
 
+/// `get_resource_type($resource)`: the resource's type label ("stream" for our
+/// file/dir streams, "Unknown" once closed) — this is exactly `dump_type`
+/// (step 53b, oracle-verified).
+pub fn get_resource_type(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    match argv.first() {
+        Some(Zval::Resource(r)) => Ok(Zval::Str(PhpStr::from_str(r.borrow().dump_type()))),
+        Some(other) => Err(PhpError::TypeError(format!(
+            "get_resource_type(): Argument #1 ($resource) must be of type resource, {} given",
+            other.error_type_name()
+        ))),
+        None => Err(PhpError::ArgumentCountError(
+            "get_resource_type() expects exactly 1 argument, 0 given".to_string(),
+        )),
+    }
+}
+
 // ---- step 52c: stat / lstat / fstat + single-field accessors ----
 
 /// The 13 stat fields in PHP's documented order; each value appears twice in the

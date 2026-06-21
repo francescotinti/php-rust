@@ -108,6 +108,7 @@ pub fn registry() -> Registry {
     add(b"scandir", file::scandir);
     add(b"glob", file::glob);
     add(b"tempnam", file::tempnam);
+    add(b"get_resource_type", file::get_resource_type);
     add(b"array_keys", array::array_keys);
     add(b"array_values", array::array_values);
     add(b"in_array", array::in_array);
@@ -139,6 +140,10 @@ pub fn registry() -> Registry {
     add(b"explode", string::explode);
     add(b"substr", string::substr);
     add(b"strpos", string::strpos);
+    add(b"strstr", string::strstr);
+    add(b"strchr", string::strstr);
+    add(b"stristr", string::stristr);
+    add(b"strrchr", string::strrchr);
     add(b"str_replace", string::str_replace);
     add(b"strtoupper", string::strtoupper);
     add(b"strtolower", string::strtolower);
