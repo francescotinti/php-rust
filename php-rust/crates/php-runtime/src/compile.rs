@@ -1161,9 +1161,22 @@ impl<'a> FnCompiler<'a> {
                             self.emit(Op::StaticPropOpSetDynamic { name: name.clone(), op: *b });
                         }
                         StaticAssignOp::Coalesce => {
-                            return Err(CompileError::Unsupported(
-                                "`??=` on a dynamic-class static property".into(),
-                            ))
+                            // `$cls::$p ??= rhs`: the class reference is evaluated
+                            // *once* into a temp and reused for the read and the
+                            // conditional write (the rhs is evaluated only when the
+                            // property is null).
+                            let t = self.alloc_temp();
+                            self.expr(cexpr)?;
+                            self.emit(Op::StoreSlot(t));
+                            self.emit(Op::LoadSlot(t));
+                            self.emit(Op::StaticPropGetDynamic { name: name.clone() });
+                            let to_end = self.emit(Op::JumpIfNotNull(Addr::MAX));
+                            self.expr(rhs)?;
+                            self.emit(Op::LoadSlot(t)); // class ref on top for the set
+                            self.emit(Op::StaticPropSetDynamic { name: name.clone() });
+                            let end = self.here();
+                            self.patch(to_end, Op::JumpIfNotNull(end));
+                            self.free_temp();
                         }
                     }
                     return Ok(());
@@ -1190,8 +1203,14 @@ impl<'a> FnCompiler<'a> {
                 }
             }
             ExprKind::StaticPropIncDec { class, name, inc, pre } => {
-                let (target, _) = self.resolve_target(class)?;
-                self.emit(Op::StaticPropIncDec { target, name: name.clone(), inc: *inc, pre: *pre });
+                if let ClassRef::Dynamic(cexpr) = class {
+                    // `$cls::$p++` (PAR): the class reference is resolved at run time.
+                    self.expr(cexpr)?;
+                    self.emit(Op::StaticPropIncDecDynamic { name: name.clone(), inc: *inc, pre: *pre });
+                } else {
+                    let (target, _) = self.resolve_target(class)?;
+                    self.emit(Op::StaticPropIncDec { target, name: name.clone(), inc: *inc, pre: *pre });
+                }
             }
             ExprKind::Yield { key, value } => {
                 // `yield`, `yield $v`, `yield $k => $v` (GEN). Push the value (NULL

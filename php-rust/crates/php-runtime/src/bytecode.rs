@@ -572,6 +572,11 @@ pub enum Op {
     StaticPropSetDynamic { name: Box<[u8]> },
     /// `[rhs, classRef] -> [result]` — `$cls::$name op= rhs` (PAR).
     StaticPropOpSetDynamic { name: Box<[u8]>, op: BinOp },
+    /// `[classRef] -> [result]` — `$cls::$name++` / `--` (PAR, dynamic class): the
+    /// class reference is on top; resolved at run time, then the property is
+    /// incremented/decremented like [`Op::StaticPropIncDec`] (`pre` selects new vs
+    /// old value).
+    StaticPropIncDecDynamic { name: Box<[u8]>, inc: bool, pre: bool },
 
     // ----- OOP-2c: mixed property/index write paths (`$o->a[$k]`, `$o->x->y`) -----
     /// `[keys…, value] -> [value]` — write `value` through `base` then `steps`

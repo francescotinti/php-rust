@@ -1636,6 +1636,26 @@ impl<'m> Vm<'m> {
                     *cell.borrow_mut() = result.clone();
                     self.frames[top].stack.push(result);
                 }
+                Op::StaticPropIncDecDynamic { name, inc, pre } => {
+                    // `$cls::$p++` (PAR): peek the class ref so a scheduled init
+                    // thunk can re-run this op; pop it once the cell is ready.
+                    let classval = self.frames[top].stack.last().expect("class ref").clone();
+                    let cid = self.resolve_dynamic_class(&classval)?;
+                    let cell = match self.ensure_static(ClassTarget::Class(cid), &name, top, ip)? {
+                        Some(c) => c,
+                        None => continue,
+                    };
+                    self.frames[top].stack.pop(); // class
+                    let old = cell.borrow().deref_clone();
+                    let mut newv = old.clone();
+                    if inc {
+                        ops::increment(&mut newv, &mut self.diags)?;
+                    } else {
+                        ops::decrement(&mut newv, &mut self.diags)?;
+                    }
+                    *cell.borrow_mut() = newv.clone();
+                    self.frames[top].stack.push(if pre { newv } else { old });
+                }
                 Op::FieldAssign { base, steps } => {
                     let value = self.frames[top].stack.pop().expect("FieldAssign value");
                     let keys = self.pop_field_keys(top, &steps);
@@ -6597,6 +6617,65 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php class C { public static $x = 7; } $o=new C; echo $o::$x;"),
             b"7"
+        );
+    }
+
+    // ----- Session A: ++/-- and ??= on a dynamic-class static property -----
+
+    #[test]
+    fn dynamic_static_prop_post_incr() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public static $p = 5; } $c='C'; echo $c::$p++; echo '|'; echo C::$p;"),
+            b"5|6"
+        );
+    }
+
+    #[test]
+    fn dynamic_static_prop_pre_incr() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public static $p = 5; } $c='C'; echo ++$c::$p; echo '|'; echo C::$p;"),
+            b"6|6"
+        );
+    }
+
+    #[test]
+    fn dynamic_static_prop_post_decr() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public static $p = 3; } $c='C'; echo $c::$p--; echo '|'; echo C::$p;"),
+            b"3|2"
+        );
+    }
+
+    #[test]
+    fn dynamic_static_prop_coalesce_assigns_when_null() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public static $p = null; } $c='C'; $c::$p ??= 7; echo C::$p;"),
+            b"7"
+        );
+    }
+
+    #[test]
+    fn dynamic_static_prop_coalesce_keeps_when_set() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public static $p = 4; } $c='C'; $c::$p ??= 7; echo C::$p;"),
+            b"4"
+        );
+    }
+
+    #[test]
+    fn dynamic_static_prop_coalesce_skips_rhs_when_set() {
+        // The rhs (which would mutate `C::$log`) must not run when `$p` is set.
+        assert_eq!(
+            vm_stdout(b"<?php class C { public static $p=4; public static $log='no'; } $c='C'; $c::$p ??= (C::$log='ran'); echo C::$p, '|', C::$log;"),
+            b"4|no"
+        );
+    }
+
+    #[test]
+    fn dynamic_static_prop_incr_via_object() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public static $p = 1; } $o=new C; echo $o::$p++; echo '|'; echo C::$p;"),
+            b"1|2"
         );
     }
 
