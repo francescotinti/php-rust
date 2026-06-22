@@ -351,6 +351,12 @@ pub enum Op {
     /// compile time. The instance itself is kept by the surrounding
     /// `AllocStatic; Dup; …; InvokeCtor; Pop` sequence.
     InvokeCtor { argc: u32 },
+    /// `[obj] -> [ret]` — run `obj`'s class [`CompiledClass::prop_init`] thunk (if
+    /// any) with `$this = obj`, materialising its non-constant property defaults;
+    /// otherwise push NULL. Emitted as `Alloc; Dup; InitProps; Pop` so property
+    /// defaults are set before the constructor runs. The class is read from the
+    /// object at run time (so it serves `new static` too).
+    InitProps,
 
     // ----- OOP-2b: static properties (visibility-checked, lazily initialised) -----
     /// `[] -> [value]` — read static property `target::$name` (deref-clone). The
@@ -509,6 +515,11 @@ pub struct CompiledClass {
     /// Static properties declared *on this class* (OOP-2b); resolution walks the
     /// parent chain. The live cells are keyed by (declaring class, name) in the VM.
     pub static_props: Vec<CompiledStaticProp>,
+    /// Thunk that materialises this class's *non-constant* instance-property
+    /// defaults (`This; <expr>; PropSet; …`), run with `$this` = the new object by
+    /// [`Op::InitProps`]. `None` when every default folded to a constant. Covers
+    /// the flattened (parent-first) property set, so it is complete for the class.
+    pub prop_init: Option<Func>,
     /// Class constants declared *on this class* (same index space as the source
     /// [`crate::hir::ClassDecl::consts`]); resolution walks `parent` then
     /// interfaces at run time.

@@ -204,28 +204,19 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
 
     let chain = class_chain(ctx.classes, cid); // root → leaf
 
-    // Flattened property defaults (constant-folded) and the visibility shape.
+    // Flatten the property layout parent-first, a redeclared property keeping its
+    // inherited position but taking the most-derived default / visibility. Build
+    // the visibility shape here; resolve defaults (const vs init-thunk) below.
     let mut ok = true;
-    let mut prop_defaults: Vec<(Box<[u8]>, Const)> = Vec::new();
+    let mut flat_defaults: Vec<(Box<[u8]>, Option<&Expr>)> = Vec::new();
     let mut vis_entries: Vec<(Box<[u8]>, PropVis)> = Vec::new();
     for &x in &chain {
         let cname = PhpStr::new(ctx.classes[x].name.to_vec());
         for p in &ctx.classes[x].props {
-            let value = match &p.default {
-                None => Const::Null,
-                Some(e) => match const_eval(e) {
-                    Some(c) => c,
-                    // A non-constant default (array / expression) isn't
-                    // representable yet: keep parity by marking the class
-                    // uncompilable rather than emitting a wrong default.
-                    None => {
-                        ok = false;
-                        Const::Null
-                    }
-                },
-            };
-            set_prop(&mut prop_defaults, &p.name, value);
-
+            match flat_defaults.iter_mut().find(|(k, _)| k.as_ref() == p.name.as_ref()) {
+                Some(e) => e.1 = p.default.as_ref(),
+                None => flat_defaults.push((p.name.clone(), p.default.as_ref())),
+            }
             let vis = match p.visibility {
                 Visibility::Public => PropVis::Public,
                 Visibility::Protected => PropVis::Protected,
@@ -237,6 +228,37 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
             }
         }
     }
+
+    // A constant default is materialised directly; a non-constant one gets a NULL
+    // placeholder (so the property exists, in order) and is set at `new` time by
+    // the prop-init thunk.
+    let mut prop_defaults: Vec<(Box<[u8]>, Const)> = Vec::new();
+    let mut init_items: Vec<(Box<[u8]>, &Expr)> = Vec::new();
+    for (name, default) in &flat_defaults {
+        match default {
+            None => prop_defaults.push((name.clone(), Const::Null)),
+            Some(e) => match const_eval(e) {
+                Some(c) => prop_defaults.push((name.clone(), c)),
+                None => {
+                    prop_defaults.push((name.clone(), Const::Null));
+                    init_items.push((name.clone(), e));
+                }
+            },
+        }
+    }
+    let prop_init = if init_items.is_empty() {
+        None
+    } else {
+        match compile_prop_init(&init_items, ctx, cid) {
+            Ok(f) => Some(f),
+            // A default that doesn't compile makes the class uninstantiable in the
+            // VM (Alloc fatals) rather than producing a wrong instance.
+            Err(_) => {
+                ok = false;
+                None
+            }
+        }
+    };
 
     // Methods declared on this class (same order as the HIR, so a compile-time
     // `InvokeMethod` index lines up). Each compiles tolerantly to a stub.
@@ -308,9 +330,37 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         methods,
         own_prop_vis,
         static_props,
+        prop_init,
         consts,
         ok,
     }
+}
+
+/// Compile the prop-init thunk: for each non-constant property default, `This;
+/// <expr>; PropSet{name}; Pop`, ending `PushConst(null); Ret`. Run with `$this` =
+/// the new object (see [`Op::InitProps`]); compiled in the class's own context so
+/// a `self::CONST` default resolves.
+fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassId) -> R<Func> {
+    let mut c = FnCompiler::new(ctx, 0, Some(cid));
+    for (name, expr) in items {
+        c.emit(Op::This);
+        c.expr(expr)?;
+        c.emit(Op::PropSet { name: name.clone() });
+        c.emit(Op::Pop); // PropSet leaves the assigned value; discard it
+    }
+    let null = c.konst(Const::Null);
+    c.emit(Op::PushConst(null));
+    c.emit(Op::Ret);
+    Ok(Func {
+        name: Box::from(&b"{prop-init}"[..]),
+        ops: c.ops,
+        consts: c.consts,
+        n_slots: c.n_temps_max,
+        n_params: 0,
+        by_ref: false,
+        is_generator: false,
+        line: 0,
+    })
 }
 
 /// Compile a class-constant value expression into a thunk [`Func`] (`<expr>; Ret`)
@@ -344,15 +394,6 @@ fn const_stub(name: &[u8], err: &CompileError) -> Func {
         by_ref: false,
         is_generator: false,
         line: 0,
-    }
-}
-
-/// Insert / update a flattened property default by name, keeping its first
-/// (inherited) position — the analogue of `Props::set` at compile time.
-fn set_prop(defaults: &mut Vec<(Box<[u8]>, Const)>, name: &[u8], value: Const) {
-    match defaults.iter_mut().find(|(k, _)| k.as_ref() == name) {
-        Some(e) => e.1 = value,
-        None => defaults.push((name.into(), value)),
     }
 }
 
@@ -1023,6 +1064,9 @@ impl<'a> FnCompiler<'a> {
                 // dynamically.
                 self.emit(Op::AllocStatic);
                 self.emit(Op::Dup);
+                self.emit(Op::InitProps);
+                self.emit(Op::Pop);
+                self.emit(Op::Dup);
                 self.push_value_args(args)?;
                 self.emit(Op::InvokeCtor { argc: args.len() as u32 });
                 self.emit(Op::Pop);
@@ -1037,6 +1081,11 @@ impl<'a> FnCompiler<'a> {
     fn new_obj_cid(&mut self, cid: ClassId, args: &[Expr]) -> R<()> {
         let ctor = self.resolve_method_compile(cid, b"__construct");
         self.emit(Op::Alloc { class: cid });
+        // Materialise non-constant property defaults before the constructor runs.
+        // `InitProps` is a no-op (pushes NULL) for classes with none.
+        self.emit(Op::Dup);
+        self.emit(Op::InitProps);
+        self.emit(Op::Pop);
         if let Some((defc, midx)) = ctor {
             self.emit(Op::Dup); // keep the instance as the result; the dup is the receiver
             self.push_value_args(args)?;

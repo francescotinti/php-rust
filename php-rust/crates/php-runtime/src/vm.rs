@@ -661,6 +661,22 @@ impl Vm<'_> {
                         None => self.frames[top].stack.push(Zval::Null),
                     }
                 }
+                Op::InitProps => {
+                    let module = self.module;
+                    let recv = self.frames[top].stack.pop().expect("InitProps receiver");
+                    let cid = object_class_id(&recv).expect("InitProps on a non-object");
+                    match &module.classes[cid].prop_init {
+                        Some(func) => {
+                            let mut frame = Frame::new(func);
+                            frame.this = Some(recv.deref_clone());
+                            frame.class = Some(cid);
+                            frame.static_class = Some(cid);
+                            self.frames.push(frame);
+                        }
+                        // No non-constant defaults: nothing to do, balance the stack.
+                        None => self.frames[top].stack.push(Zval::Null),
+                    }
+                }
                 Op::StaticPropGet { target, name } => {
                     let cell = match self.ensure_static(target, &name, top, ip)? {
                         Some(c) => c,
@@ -2061,10 +2077,22 @@ mod tests {
     }
 
     #[test]
-    fn non_constant_property_default_makes_new_fatal() {
-        // An array default is not constant-foldable -> the class is a stub and
-        // `new` fatals rather than producing a wrong instance.
-        assert!(vm_outcome(b"<?php class C { public $x = [1, 2, 3]; } $o = new C();").fatal.is_some());
+    fn non_constant_property_default_is_initialised() {
+        // An array default is materialised by the prop-init thunk at `new` time
+        // (OOP-2b), not stubbed.
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $x = [1, 2, 3]; } $o = new C(); echo $o->x[0], $o->x[2];"),
+            b"13"
+        );
+    }
+
+    #[test]
+    fn non_constant_default_set_before_constructor() {
+        // The prop-init thunk runs before __construct, which can then read it.
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $arr = [5, 6]; public $first; function __construct() { $this->first = $this->arr[0]; } } $o = new C(); echo $o->first, $o->arr[1];"),
+            b"56"
+        );
     }
 
     // --- OOP-2a: self/parent/static, class constants, static calls ---
