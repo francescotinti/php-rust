@@ -1059,6 +1059,34 @@ impl<'m> Vm<'m> {
                     let obj = self.alloc_object(cid)?;
                     self.frames[top].stack.push(obj);
                 }
+                Op::AllocDynamic => {
+                    // `new $cls` (PAR): resolve the class reference at run time.
+                    let classval =
+                        self.frames[top].stack.pop().expect("AllocDynamic class").deref_clone();
+                    let cid = match &classval {
+                        Zval::Object(o) => o.borrow().class_id as usize,
+                        Zval::Str(s) => {
+                            let raw = s.as_bytes();
+                            let name = raw.strip_prefix(b"\\").unwrap_or(raw);
+                            match self.module.class_index.get(&name.to_ascii_lowercase()) {
+                                Some(&c) => c,
+                                None => {
+                                    return Err(PhpError::Error(format!(
+                                        "Class \"{}\" not found",
+                                        String::from_utf8_lossy(name)
+                                    )))
+                                }
+                            }
+                        }
+                        _ => {
+                            return Err(PhpError::Error(
+                                "Class name must be a valid object or a string".to_string(),
+                            ))
+                        }
+                    };
+                    let obj = self.alloc_object(cid)?;
+                    self.frames[top].stack.push(obj);
+                }
                 Op::StampThrowable => {
                     // Stamp line/file/trace on a `new`-constructed Throwable, after
                     // its property-init thunk ran (which would otherwise clobber
@@ -1284,6 +1312,18 @@ impl<'m> Vm<'m> {
                         Zval::Object(o) => {
                             is_instance_of(self.module, o.borrow().class_id as usize, target)
                         }
+                        _ => false,
+                    };
+                    self.frames[top].stack.push(Zval::Bool(result));
+                }
+                Op::InstanceOfDynamic => {
+                    // `$x instanceof $cls` (PAR): an unknown class name (or a
+                    // non-object operand) yields false — PHP does not error here.
+                    let classval = self.frames[top].stack.pop().expect("InstanceOfDynamic class");
+                    let operand = self.frames[top].stack.pop().expect("InstanceOfDynamic operand");
+                    let result = match (object_class_id(&operand), self.class_id_from_value(&classval))
+                    {
+                        (Some(ocid), Some(tcid)) => is_instance_of(self.module, ocid, tcid),
                         _ => false,
                     };
                     self.frames[top].stack.push(Zval::Bool(result));
@@ -2082,6 +2122,24 @@ impl<'m> Vm<'m> {
                 "Call to undefined method Fiber::{}()",
                 String::from_utf8_lossy(other)
             ))),
+        }
+    }
+
+    /// Resolve a runtime class-reference value to its class id (PAR, dynamic
+    /// class): an object reuses its class; a string is looked up
+    /// case-insensitively with a leading `\` stripped; anything else (or an
+    /// unknown name) yields `None`. Used by `instanceof $cls` (where `None` means
+    /// `false`); `new $cls` resolves inline so it can distinguish the error kinds.
+    fn class_id_from_value(&self, v: &Zval) -> Option<ClassId> {
+        match v {
+            Zval::Object(o) => Some(o.borrow().class_id as usize),
+            Zval::Str(s) => {
+                let raw = s.as_bytes();
+                let name = raw.strip_prefix(b"\\").unwrap_or(raw);
+                self.module.class_index.get(&name.to_ascii_lowercase()).copied()
+            }
+            Zval::Ref(r) => self.class_id_from_value(&r.borrow()),
+            _ => None,
         }
     }
 
@@ -5595,6 +5653,80 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php function f($a, $b=1, ...$rest){ $c=0; foreach($rest as $r) $c++; return \"$a-$b-$c\"; } echo f(5),'|',f(5,6),'|',f(5,6,7,8);"),
             b"5-1-0|5-6-0|5-6-2"
+        );
+    }
+
+    // ----- PAR: dynamic class references (verified vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn new_dynamic_class_from_string() {
+        assert_eq!(
+            vm_stdout(b"<?php class Foo { function __construct(){ echo 'made;'; } function n(){ return 'Foo'; } } $c='Foo'; $o=new $c; echo $o->n();"),
+            b"made;Foo"
+        );
+    }
+
+    #[test]
+    fn new_dynamic_class_then_method() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function hi(){ return 'hi'; } } $c='C'; echo (new $c)->hi();"),
+            b"hi"
+        );
+    }
+
+    #[test]
+    fn new_dynamic_class_with_args_and_default() {
+        assert_eq!(
+            vm_stdout(b"<?php class P { public $v; function __construct($a,$b=2){ $this->v=$a+$b; } } $c='P'; echo (new $c(10))->v;"),
+            b"12"
+        );
+    }
+
+    #[test]
+    fn new_dynamic_from_object_reuses_class() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $v=3; } $o=new C; $o2=new $o; echo $o2->v;"),
+            b"3"
+        );
+    }
+
+    #[test]
+    fn new_dynamic_strips_leading_backslash() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function n(){ return 'C'; } } $c='\\C'; echo (new $c)->n();"),
+            b"C"
+        );
+    }
+
+    #[test]
+    fn new_dynamic_unknown_class_errors() {
+        assert_eq!(
+            vm_stdout(b"<?php $c='Nope'; try { new $c; } catch(Error $e){ echo 'Error:', $e->getMessage(); }"),
+            b"Error:Class \"Nope\" not found"
+        );
+    }
+
+    #[test]
+    fn new_dynamic_scalar_errors() {
+        assert_eq!(
+            vm_stdout(b"<?php $c=5; try { new $c; } catch(Error $e){ echo $e->getMessage(); }"),
+            b"Class name must be a valid object or a string"
+        );
+    }
+
+    #[test]
+    fn instanceof_dynamic_class() {
+        assert_eq!(
+            vm_stdout(b"<?php class A{} class B extends A{} $cls='A'; $b=new B; echo ($b instanceof $cls)?'Y':'N'; $cls2='B'; echo (new A instanceof $cls2)?'Y':'N';"),
+            b"YN"
+        );
+    }
+
+    #[test]
+    fn instanceof_dynamic_unknown_is_false() {
+        assert_eq!(
+            vm_stdout(b"<?php $cls='Nope'; echo (5 instanceof $cls)?'Y':'N';"),
+            b"N"
         );
     }
 }

@@ -432,6 +432,11 @@ pub enum Op {
     /// `[value] -> [bool]` — `value instanceof static`: like [`Op::InstanceOf`]
     /// but the target is the running frame's late-static-binding class.
     InstanceOfStatic,
+    /// `[value, classRef] -> [bool]` — `value instanceof $cls` (PAR, dynamic
+    /// class): pop the class reference (a name string, leading `\` stripped, or an
+    /// object whose class is used) and the operand; an unknown class name yields
+    /// `false` (PHP does not error here).
+    InstanceOfDynamic,
 
     // ----- OOP-2a: class context (self/parent/static), constants, static calls -----
     /// `[arg0, …, arg{argc-1}] -> [ret]` — `Class::m()` / `self::m()` /
@@ -461,6 +466,12 @@ pub enum Op {
     /// following [`Op::InvokeCtor`] (the actual class — hence the ctor — is only
     /// known at run time).
     AllocStatic,
+    /// `[classRef] -> [obj]` — `new $cls` (PAR, dynamic class): pop the class
+    /// reference (a name string, leading `\` stripped, or an object whose class is
+    /// reused) and allocate an instance of it (defaults materialised, fresh id).
+    /// An unknown class name is a catchable `Error`. The constructor is run by the
+    /// following `Dup; …; InvokeCtor; Pop`, like `new static`.
+    AllocDynamic,
     /// `[obj, arg0, …, arg{argc-1}] -> [ret]` — run `obj`'s `__construct` if its
     /// class (or an ancestor) declares one, with `$this = obj`; otherwise push
     /// NULL. Used for `new static`, where the constructor can't be resolved at

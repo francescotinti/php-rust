@@ -1305,7 +1305,21 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::Pop);
                 Ok(())
             }
-            ClassRef::Dynamic(_) => Err(CompileError::Unsupported("new of a dynamic class".into())),
+            ClassRef::Dynamic(expr) => {
+                // `new $cls` (PAR): resolve the class at run time, then run the
+                // constructor dynamically (like `new static`).
+                self.expr(expr)?;
+                self.emit(Op::AllocDynamic);
+                self.emit(Op::Dup);
+                self.emit(Op::InitProps);
+                self.emit(Op::Pop);
+                self.emit(Op::StampThrowable);
+                self.emit(Op::Dup);
+                self.push_value_args(args)?;
+                self.emit(Op::InvokeCtor { argc: args.len() as u32 });
+                self.emit(Op::Pop);
+                Ok(())
+            }
         }
     }
 
@@ -1359,8 +1373,12 @@ impl<'a> FnCompiler<'a> {
                 self.expr(expr)?;
                 self.emit(Op::InstanceOfStatic);
             }
-            ClassRef::Dynamic(_) => {
-                return Err(CompileError::Unsupported("instanceof a dynamic class".into()))
+            ClassRef::Dynamic(cls) => {
+                // `$x instanceof $cls` (PAR): evaluate the operand, then the class
+                // reference, and test at run time.
+                self.expr(expr)?;
+                self.expr(cls)?;
+                self.emit(Op::InstanceOfDynamic);
             }
         }
         Ok(())

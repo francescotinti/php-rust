@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–61 completati · 1.209 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–61 completati · 1.218 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 **Migrazione VM (Fase 4, in corso).** In parallelo all'evaluator tree-walk — che resta il motore
 di produzione e tiene il differential a 0 mismatch — è in costruzione una **VM a bytecode**
@@ -72,9 +72,12 @@ omessi nel frame del chiamato (così un default può riferirsi a parametri prece
 degli argomenti è ora limitato a `n_params` (gli argomenti in eccesso vengono scartati come in PHP).
 Vale per funzioni, metodi, costruttori e closure. Secondo blocco: **funzioni variadiche**
 (`function f($a, ...$rest)`) — il binder raccoglie gli argomenti in eccesso in un array (chiavi intere
-sequenziali, vuoto se nessuno) nello slot variadico, combinandosi coi default. Restano da portare alla
-VM: argomenti con nome, spread/unpacking, riferimenti dinamici a classe, `ArgumentCountError`, e altri
-edge — vedi i siti `CompileError::Unsupported` in `compile.rs`.
+sequenziali, vuoto se nessuno) nello slot variadico, combinandosi coi default. Terzo blocco: **riferimenti dinamici a classe** —
+`new $cls` (`AllocDynamic`: il nome-classe è risolto a runtime via `class_index`, `\` iniziale tolto,
+oppure un oggetto riusa la sua classe; classe ignota → `Error` catchabile) e `$x instanceof $cls`
+(`InstanceOfDynamic`: classe ignota → `false`, come PHP). Restano da portare alla VM: `$cls::metodo()`/
+`$cls::CONST`, argomenti con nome, spread/unpacking, `ArgumentCountError`, e altri edge — vedi i siti
+`CompileError::Unsupported` in `compile.rs`.
 
 Step 61 ha completato i suggerimenti della code-review esterna: (E) **diff unificato** nel
 `phpt-runner` (`--list-fails` mostra un line-diff EXPECTF-aware invece di due blob troncati); (B)
