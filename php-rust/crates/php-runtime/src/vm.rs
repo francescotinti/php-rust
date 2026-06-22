@@ -1673,14 +1673,27 @@ impl<'m> Vm<'m> {
         Ok(())
     }
 
+    /// Synthesize a plain `Exception` carrying `msg`, for the generator misuse
+    /// errors PHP raises as `Exception` (rewind-after-run, getReturn-before-return)
+    /// — the tree-walker raises these as `Error`; the VM matches real PHP. Falls
+    /// back to an engine `Error` if the prelude has no `Exception`.
+    fn gen_exception(&mut self, msg: &str) -> PhpError {
+        match self.module.class_index.get(&b"exception"[..]).copied() {
+            Some(cid) => match self.synthesize_throwable(cid, msg) {
+                Ok(obj) => PhpError::Thrown(obj),
+                Err(e) => e,
+            },
+            None => PhpError::Error(msg.to_string()),
+        }
+    }
+
     /// Dispatch a built-in `Generator` method (GEN), returning the value to leave
-    /// on the caller's stack. Mirrors `eval::generator_method`. `send`/`getReturn`
-    /// arrive in GEN-2.
+    /// on the caller's stack. Mirrors `eval::generator_method`.
     fn generator_method(
         &mut self,
         gs_rc: Rc<RefCell<GenState>>,
         method: &[u8],
-        _args: Vec<Zval>,
+        args: Vec<Zval>,
     ) -> Result<Zval, PhpError> {
         match method.to_ascii_lowercase().as_slice() {
             b"current" => {
@@ -1704,11 +1717,31 @@ impl<'m> Vm<'m> {
             b"rewind" => {
                 self.ensure_started(&gs_rc)?;
                 if gs_rc.borrow().advanced {
-                    return Err(PhpError::Error(
-                        "Cannot rewind a generator that was already run".to_string(),
-                    ));
+                    return Err(self.gen_exception("Cannot rewind a generator that was already run"));
                 }
                 Ok(Zval::Null)
+            }
+            b"send" => {
+                // Deliver `$value` as the suspended `yield`'s result and advance;
+                // an unstarted generator is primed first (GEN-2). Returns the next
+                // yielded value (NULL once the generator is done).
+                let value = args.into_iter().next().unwrap_or(Zval::Null);
+                if matches!(gs_rc.borrow().status, GenStatus::NotStarted) {
+                    self.resume_generator(&gs_rc, Zval::Null)?;
+                }
+                self.resume_generator(&gs_rc, value)?;
+                Ok(gs_rc.borrow().cur_val.clone())
+            }
+            b"getreturn" => {
+                // PHP auto-primes: getReturn() on a fresh generator starts it (so a
+                // body that returns before any yield exposes its value); before the
+                // body has returned, it is an error (GEN-2).
+                self.ensure_started(&gs_rc)?;
+                if !matches!(gs_rc.borrow().status, GenStatus::Done) {
+                    return Err(self
+                        .gen_exception("Cannot get return value of a generator that hasn't returned"));
+                }
+                Ok(gs_rc.borrow().ret.clone())
             }
             other => Err(PhpError::Error(format!(
                 "Call to undefined method Generator::{}()",
@@ -4878,6 +4911,70 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php function g(){ $a = yield 1; yield 2; } foreach (g() as $v) echo $v;"),
             b"12"
+        );
+    }
+
+    // ----- GEN-2: send / return / getReturn (verified vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn generator_send_ping_pong() {
+        assert_eq!(
+            vm_stdout(b"<?php function g(){ $x = yield 1; echo \"got:$x;\"; $y = yield 2; echo \"got:$y;\"; } $gen=g(); echo $gen->current(); echo $gen->send('A'); echo $gen->send('B');"),
+            b"1got:A;2got:B;"
+        );
+    }
+
+    #[test]
+    fn generator_send_on_fresh_primes_then_delivers() {
+        // `send` on a NotStarted generator primes to the first yield, then
+        // delivers the value as that yield's result.
+        assert_eq!(
+            vm_stdout(b"<?php function g(){ $x = yield 1; echo \"x=$x;\"; yield 2; } $g=g(); echo $g->send('Z');"),
+            b"x=Z;2"
+        );
+    }
+
+    #[test]
+    fn generator_get_return() {
+        assert_eq!(
+            vm_stdout(b"<?php function g(){ yield 1; yield 2; return 42; } $g=g(); foreach($g as $v) echo $v; echo '|', $g->getReturn();"),
+            b"12|42"
+        );
+    }
+
+    #[test]
+    fn generator_return_bare_is_null() {
+        // A bare `return;` leaves getReturn() NULL, which echoes as empty.
+        assert_eq!(
+            vm_stdout(b"<?php function g(){ yield 1; return; } $g=g(); foreach($g as $v) echo $v; echo '[', $g->getReturn(), ']';"),
+            b"1[]"
+        );
+    }
+
+    #[test]
+    fn generator_return_without_yield() {
+        // A body that returns before any yield: getReturn auto-primes it.
+        assert_eq!(
+            vm_stdout(b"<?php function g(){ if(false) yield; return 99; } $g=g(); echo $g->getReturn();"),
+            b"99"
+        );
+    }
+
+    #[test]
+    fn generator_get_return_too_early_throws_exception() {
+        // PHP raises a plain `Exception` here (the tree-walker raises `Error`).
+        // The `catch (Exception)` arm firing (not `catch (Error)`) proves the class.
+        assert_eq!(
+            vm_stdout(b"<?php function g(){ yield 1; return 5; } $g=g(); try { $g->getReturn(); } catch (Exception $e) { echo 'Exception:', $e->getMessage(); } catch (Error $e) { echo 'Error'; }"),
+            b"Exception:Cannot get return value of a generator that hasn't returned"
+        );
+    }
+
+    #[test]
+    fn generator_rewind_after_run_throws_exception() {
+        assert_eq!(
+            vm_stdout(b"<?php function g(){ yield 1; yield 2; } $g=g(); $g->next(); try { $g->rewind(); } catch (Exception $e) { echo 'Exception:', $e->getMessage(); } catch (Error $e) { echo 'Error'; }"),
+            b"Exception:Cannot rewind a generator that was already run"
         );
     }
 }
