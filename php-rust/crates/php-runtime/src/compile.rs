@@ -1031,10 +1031,8 @@ impl<'a> FnCompiler<'a> {
         // User functions shadow builtins.
         if let Some(idx) = self.ctx.funcs.iter().position(|f| ascii_eq_ignore_case(&f.name, name)) {
             let callee = &self.ctx.funcs[idx];
-            if callee.params.iter().any(|p| p.by_ref || p.variadic) {
-                return Err(CompileError::Unsupported(
-                    "call to a function with by-ref / variadic parameters".into(),
-                ));
+            if callee.params.iter().any(|p| p.variadic) {
+                return Err(CompileError::Unsupported("call to a variadic function".into()));
             }
             if args.len() != callee.params.len() {
                 return Err(CompileError::Unsupported(format!(
@@ -1043,7 +1041,10 @@ impl<'a> FnCompiler<'a> {
                     callee.params.len()
                 )));
             }
-            self.push_value_args(args)?;
+            // Snapshot the by-ref mask so the immutable borrow of `callee` ends
+            // before `push_call_args` borrows `self` mutably (REF-2).
+            let by_ref: Vec<bool> = callee.params.iter().map(|p| p.by_ref).collect();
+            self.push_call_args(args, &by_ref)?;
             self.emit(Op::Call { func: idx as u32, argc: args.len() as u32 });
             return Ok(());
         }
@@ -1060,6 +1061,33 @@ impl<'a> FnCompiler<'a> {
                 String::from_utf8_lossy(name)
             ))),
         }
+    }
+
+    /// Push each positional argument for a user call, honouring by-reference
+    /// parameters (REF-2): a by-ref position whose argument is a plain variable
+    /// is passed by [`Op::PushRef`] (the callee slot aliases the caller's cell);
+    /// every other position is pushed by value. A by-ref position with a
+    /// non-variable argument is out of slice — the tree-walker raises the proper
+    /// catchable `Error` ("could not be passed by reference").
+    fn push_call_args(&mut self, args: &[Expr], by_ref: &[bool]) -> R<()> {
+        for (i, a) in args.iter().enumerate() {
+            if matches!(a.kind, ExprKind::Spread(_)) {
+                return Err(CompileError::Unsupported("argument unpacking (spread)".into()));
+            }
+            if by_ref.get(i).copied().unwrap_or(false) {
+                match &a.kind {
+                    ExprKind::Var(slot) => self.emit(Op::PushRef(*slot)),
+                    _ => {
+                        return Err(CompileError::Unsupported(
+                            "by-reference argument that is not a plain variable".into(),
+                        ))
+                    }
+                };
+            } else {
+                self.expr(a)?;
+            }
+        }
+        Ok(())
     }
 
     /// Push each positional argument's value (source order); reject spreads.

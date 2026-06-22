@@ -408,6 +408,12 @@ impl Vm<'_> {
                     *ref_base_mut(&mut self.frames, top, target) = Zval::Ref(cell);
                     self.frames[top].stack.push(value);
                 }
+                Op::PushRef(slot) => {
+                    // REF-2: promote the local to a shared cell and push the ref;
+                    // the next `Op::Call` binds it into the by-ref callee slot.
+                    let cell = make_cell(&mut self.frames[top].slots[slot as usize]);
+                    self.frames[top].stack.push(Zval::Ref(cell));
+                }
                 Op::IterInit => {
                     let iterable = self.frames[top].stack.pop().expect("IterInit iterable");
                     self.frames[top].iters.push(IterState {
@@ -3240,5 +3246,67 @@ mod tests {
         // At script scope the named variable *is* the global, so `global` does
         // nothing and the variable keeps its value.
         assert_eq!(vm_stdout(b"<?php $x = 3; global $x; echo $x;"), b"3");
+    }
+
+    // ----- REF-2: by-reference parameters (user functions) -----
+
+    #[test]
+    fn by_ref_param_mutates_caller() {
+        assert_eq!(
+            vm_stdout(b"<?php function inc(&$x) { $x = $x + 1; } $n = 5; inc($n); echo $n;"),
+            b"6"
+        );
+    }
+
+    #[test]
+    fn by_ref_param_swap() {
+        assert_eq!(
+            vm_stdout(b"<?php function swap(&$a, &$b) { $t = $a; $a = $b; $b = $t; } $x = 1; $y = 2; swap($x, $y); echo $x . $y;"),
+            b"21"
+        );
+    }
+
+    #[test]
+    fn by_ref_and_by_value_mixed() {
+        // The by-ref param writes through; the by-value param is a copy.
+        assert_eq!(
+            vm_stdout(b"<?php function f(&$r, $v) { $r = $v * 10; $v = 0; } $a = 0; $b = 4; f($a, $b); echo $a . '|' . $b;"),
+            b"40|4"
+        );
+    }
+
+    #[test]
+    fn by_value_param_does_not_mutate_caller() {
+        assert_eq!(
+            vm_stdout(b"<?php function noref($v) { $v = 99; } $a = 5; noref($a); echo $a;"),
+            b"5"
+        );
+    }
+
+    #[test]
+    fn by_ref_param_defines_undefined_var() {
+        // Passing an undefined variable by reference defines it in the caller.
+        assert_eq!(
+            vm_stdout(b"<?php function set(&$x) { $x = 7; } set($u); echo $u;"),
+            b"7"
+        );
+    }
+
+    #[test]
+    fn same_var_to_two_by_ref_params_shares_cell() {
+        assert_eq!(
+            vm_stdout(b"<?php function two(&$a, &$b) { $a = 1; $b = 2; } $x = 0; two($x, $x); echo $x;"),
+            b"2"
+        );
+    }
+
+    #[test]
+    fn by_ref_propagates_through_nested_calls() {
+        // `outer`'s by-ref param is itself passed by-ref to `inner`: the write in
+        // `inner` reaches all the way back to the original caller's variable.
+        assert_eq!(
+            vm_stdout(b"<?php function outer(&$x) { inner($x); } function inner(&$y) { $y = 42; } $n = 0; outer($n); echo $n;"),
+            b"42"
+        );
     }
 }

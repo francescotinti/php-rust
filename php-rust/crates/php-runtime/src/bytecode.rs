@@ -171,6 +171,13 @@ pub enum Op {
     /// References into array elements / properties (`$x = &$a[0]`) are REF-4.
     BindRef { target: DimBase, source: DimBase },
 
+    /// `[] -> [ref]` — push a [`Zval::Ref`] aliasing local `slot`, promoting the
+    /// slot to a shared cell on first use (REF-2). The call mechanism binds this
+    /// value into a by-reference parameter's callee slot, so the callee writes
+    /// through to the caller's variable. Emitted only for a by-ref argument
+    /// position whose argument is a plain variable.
+    PushRef(Slot),
+
     // ----- operators (semantics delegated to php_types::ops / ::convert) -----
     /// `[lhs, rhs] -> [result]` — pop rhs then lhs, push `lhs <op> rhs`.
     Binary(BinOp),
