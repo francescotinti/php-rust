@@ -19,7 +19,9 @@
 //! gaps (unsupported syntax, missing builtins) are counted and labelled, never
 //! silently passed or falsely failed.
 
+use std::ffi::OsStr;
 use std::fs;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use php_runtime::{run_source_with, LowerError, Registry};
@@ -177,7 +179,18 @@ pub fn run_phpt(src: &[u8], name: &[u8], reg: &Registry) -> TestResult {
     // named `<test>.php`, so `name` is the `.phpt` path with a `.php` extension;
     // EXPECTF `%s` placeholders absorb the directory prefix, and patterns that
     // embed the basename (e.g. `%sfinally_goto_001.php`) now line up too.
-    let outcome = match run_source_with(name, source, reg) {
+    // Materialize the script on disk so `__FILE__` resolves to a real file —
+    // `fopen(__FILE__)` / `include __FILE__` then behave as under run-tests.php
+    // (which executes a real `<test>.php`). Guard against clobbering a companion
+    // source file that genuinely exists next to the `.phpt`: only create the file
+    // when it is absent, and only remove the one we created.
+    let script_path = Path::new(OsStr::from_bytes(name)).to_path_buf();
+    let materialized = !script_path.exists() && fs::write(&script_path, source).is_ok();
+    let run = run_source_with(name, source, reg);
+    if materialized {
+        let _ = fs::remove_file(&script_path);
+    }
+    let outcome = match run {
         Ok(o) => o,
         Err(e) => return TestResult::skip("parse", format!("lower error: {e}")),
     };

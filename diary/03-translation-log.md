@@ -2031,3 +2031,26 @@ annotato dallo step 59.
 > `fopen(__FILE__, 'r')` e il runner esegue lo script **in-process** (non lo materializza su disco),
 > quindi `__FILE__` non esiste → `fopen` fallisce con un warning spurio. È un limite dell'harness,
 > ortogonale a questo fix.
+
+## Step 67 — harness: materializzazione dello script su disco (`fopen(__FILE__)`)
+
+Molti `*printf*_variation*.phpt` fanno `fopen(__FILE__, 'r')` per mettere una risorsa nell'array
+dei valori di test. Il runner eseguiva lo script **in-process** (`run_source_with`) senza
+materializzarlo: `__FILE__` puntava a un `<test>.php` inesistente su disco → `fopen` falliva con un
+`Warning: fopen(...): Failed to open stream` spurio in cima all'output, mascherando le vere
+divergenze.
+
+Fix in `phpt-runner/src/lib.rs::run_phpt`: prima di eseguire, scrivo `source` nel path `name`
+(il `<test>.php` accanto al `.phpt`, esattamente come fa run-tests.php), eseguo, poi rimuovo.
+**Guardato**: materializzo solo se il file NON esiste già (per non sovrascrivere un file companion
+reale tipo `<test>.inc`/`.php`), e rimuovo **solo** ciò che ho creato. `name` resta invariato →
+zero impatto sul matching dei path EXPECTF nel resto del corpus. `printf_variation2.phpt` ora
+diverge a riga 168 invece che a riga 3 (il `fopen` funziona). Sweep `strings` **289→290 pass,
+164→163 fail**, nessuna regressione; **952 test** workspace verdi, clippy pulito.
+
+> Resta un **terzo** problema, ortogonale e separato, su quei test: `%s` di `sprintf`/`printf` su
+> un oggetto con `__toString()` non invoca il metodo (emette `Warning: Object of class X could not
+> be converted to string` + nome classe), mentre `echo`/concatenazione/cast `(string)` lo
+> chiamano già correttamente. Il motore di formato (`php-builtins/src/format.rs`) è un builtin
+> **puro**: non ha accesso all'evaluator per invocare `__toString`. Fix futuro = rendere la
+> famiglia sprintf/printf evaluator-dispatched (o passare un hook di stringificazione nel `Ctx`).
