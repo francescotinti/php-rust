@@ -148,6 +148,9 @@ struct FnCompiler<'a> {
 struct LoopCtx {
     break_sites: Vec<Addr>,
     continue_sites: Vec<Addr>,
+    /// `true` for a `foreach`: a `break`/`continue` that leaves this loop must
+    /// first emit an [`Op::IterPop`] to free the iterator (Zend's `FE_FREE`).
+    has_iter: bool,
 }
 
 impl<'a> FnCompiler<'a> {
@@ -266,6 +269,23 @@ impl<'a> FnCompiler<'a> {
                 }
                 self.close_loop(cont, end);
             }
+            StmtKind::Foreach { iter, key, value, by_ref, body } => {
+                if *by_ref {
+                    return Err(CompileError::Unsupported("foreach by-reference".into()));
+                }
+                self.expr(iter)?;
+                self.emit(Op::IterInit);
+                let cont = self.here(); // `continue` re-fetches
+                let fetch = self.emit(Op::IterNext { value: *value, key: *key, end: Addr::MAX });
+                self.loops.push(LoopCtx { has_iter: true, ..LoopCtx::default() });
+                self.block(body)?;
+                self.emit(Op::Jump(cont));
+                let exhaust = self.here();
+                self.patch(fetch, Op::IterNext { value: *value, key: *key, end: exhaust });
+                self.emit(Op::IterPop); // normal exhaustion frees the iterator
+                let after = self.here(); // `break` lands here (after its own IterPop)
+                self.close_loop(cont, after);
+            }
             StmtKind::Break(n) => self.loop_jump(*n, true)?,
             StmtKind::Continue(n) => self.loop_jump(*n, false)?,
             StmtKind::Return(opt) => {
@@ -340,8 +360,16 @@ impl<'a> FnCompiler<'a> {
                 "{kw} {level} with {depth} enclosing loop(s)"
             )));
         }
-        let at = self.emit(Op::Jump(Addr::MAX));
         let idx = depth - level as usize;
+        // Free the iterator of every `foreach` this jump leaves: for `break`,
+        // the target loop itself (idx..depth); for `continue`, only the inner
+        // loops fully exited (idx+1..depth) — we stay inside the target.
+        let first = if is_break { idx } else { idx + 1 };
+        let pops = self.loops[first..depth].iter().filter(|l| l.has_iter).count();
+        for _ in 0..pops {
+            self.emit(Op::IterPop);
+        }
+        let at = self.emit(Op::Jump(Addr::MAX));
         if is_break {
             self.loops[idx].break_sites.push(at);
         } else {

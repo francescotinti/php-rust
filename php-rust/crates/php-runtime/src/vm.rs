@@ -58,6 +58,10 @@ struct Frame<'m> {
     ip: usize,
     slots: Vec<Zval>,
     stack: Vec<Zval>,
+    /// Active `foreach` iterators, innermost last. Lives in the frame (not the
+    /// operand stack) so it survives across the loop body; freed by `IterPop`,
+    /// and discarded wholesale when the frame unwinds (a `return` out of a loop).
+    iters: Vec<IterState>,
 }
 
 impl<'m> Frame<'m> {
@@ -67,8 +71,16 @@ impl<'m> Frame<'m> {
             ip: 0,
             slots: vec![Zval::Undef; func.n_slots as usize],
             stack: Vec::new(),
+            iters: Vec::new(),
         }
     }
+}
+
+/// A `foreach` iteration snapshot: the (key, value) pairs captured at loop entry
+/// and the cursor into them.
+struct IterState {
+    entries: Vec<(Zval, Zval)>,
+    pos: usize,
 }
 
 /// The virtual machine: the module under execution plus the explicit call stack.
@@ -260,6 +272,29 @@ impl Vm<'_> {
                     };
                     unset_into(cell, &keys);
                 }
+                Op::IterInit => {
+                    let iterable = self.frames[top].stack.pop().expect("IterInit iterable");
+                    self.frames[top].iters.push(IterState {
+                        entries: snapshot_entries(&iterable),
+                        pos: 0,
+                    });
+                }
+                Op::IterNext { value, key, end } => {
+                    let it = self.frames[top].iters.last().expect("IterNext without iterator");
+                    if it.pos >= it.entries.len() {
+                        self.frames[top].ip = end as usize;
+                    } else {
+                        let (k, v) = self.frames[top].iters.last().unwrap().entries[it.pos].clone();
+                        self.frames[top].iters.last_mut().unwrap().pos += 1;
+                        store_slot(&mut self.frames[top].slots[value as usize], v);
+                        if let Some(ks) = key {
+                            store_slot(&mut self.frames[top].slots[ks as usize], k);
+                        }
+                    }
+                }
+                Op::IterPop => {
+                    self.frames[top].iters.pop();
+                }
                 Op::Call { func, argc } => {
                     let callee = &self.module.functions[func as usize];
                     // Pop argc args (pushed left-to-right) and bind them to the
@@ -431,6 +466,26 @@ fn coerce_key_silent(v: &Zval) -> Option<Key> {
         Zval::Null | Zval::Undef => Some(Key::from_bytes(b"")),
         Zval::Ref(c) => coerce_key_silent(&c.borrow()),
         _ => None,
+    }
+}
+
+/// Snapshot an iterable into `(key, value)` pairs for `foreach`. An array (or a
+/// reference to one) is copied element-wise — by-value `foreach` iterates this
+/// snapshot, so the body mutating the source can't disturb the loop. Any other
+/// value iterates zero times for now (object / Traversable support is OOP work).
+fn snapshot_entries(iterable: &Zval) -> Vec<(Zval, Zval)> {
+    match iterable {
+        Zval::Array(a) => a.iter().map(|(k, v)| (key_to_zval(k), v.deref_clone())).collect(),
+        Zval::Ref(rc) => snapshot_entries(&rc.borrow()),
+        _ => Vec::new(),
+    }
+}
+
+/// Materialise an array [`Key`] as the [`Zval`] `foreach` binds to its key slot.
+fn key_to_zval(k: &Key) -> Zval {
+    match k {
+        Key::Int(i) => Zval::Long(*i),
+        Key::Str(s) => Zval::Str(Rc::clone(s)),
     }
 }
 
@@ -847,6 +902,56 @@ mod tests {
             vm_stdout(b"<?php $a = ['k' => 0, 'm' => 5]; echo empty($a['k']) ? 'y' : 'n', empty($a['m']) ? 'y' : 'n';"),
             b"yn"
         );
+    }
+
+    #[test]
+    fn foreach_value_only() {
+        assert_eq!(vm_stdout(b"<?php foreach ([1, 2, 3] as $v) echo $v;"), b"123");
+    }
+
+    #[test]
+    fn foreach_key_and_value() {
+        assert_eq!(
+            vm_stdout(b"<?php foreach (['a' => 1, 'b' => 2] as $k => $v) echo $k, $v;"),
+            b"a1b2"
+        );
+    }
+
+    #[test]
+    fn foreach_iterates_a_snapshot() {
+        // Mutating the source inside the body does not change the iteration.
+        assert_eq!(
+            vm_stdout(b"<?php $a = [1, 2, 3]; foreach ($a as $v) { $a[] = 99; echo $v; }"),
+            b"123"
+        );
+    }
+
+    #[test]
+    fn foreach_with_break_and_continue() {
+        assert_eq!(
+            vm_stdout(b"<?php foreach ([1, 2, 3, 4] as $v) { if ($v == 3) break; echo $v; }"),
+            b"12"
+        );
+        assert_eq!(
+            vm_stdout(b"<?php foreach ([1, 2, 3, 4] as $v) { if ($v == 2) continue; echo $v; }"),
+            b"134"
+        );
+    }
+
+    #[test]
+    fn nested_foreach_with_break_levels() {
+        // break 2 must free both iterators and leave the outer loop cleanly.
+        assert_eq!(
+            vm_stdout(
+                b"<?php foreach ([1, 2] as $i) { foreach ([3, 4] as $j) { echo $i, $j; if ($j == 3 && $i == 1) break 2; } } echo 'X';"
+            ),
+            b"13X"
+        );
+    }
+
+    #[test]
+    fn foreach_over_non_array_is_empty() {
+        assert_eq!(vm_stdout(b"<?php foreach (null as $v) echo $v; echo 'done';"), b"done");
     }
 
     #[test]

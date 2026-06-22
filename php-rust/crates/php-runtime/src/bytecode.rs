@@ -245,6 +245,20 @@ pub enum Op {
     /// body with no explicit `return` ends with `PushConst(null); Ret`.
     Ret,
 
+    // ----- foreach iteration -----
+    /// `[iterable] -> []` — pop the iterable, snapshot it into a fresh iterator
+    /// pushed on the frame's iterator stack. By-value `foreach` iterates a
+    /// snapshot, so later mutation of the source array doesn't perturb the loop
+    /// (PHP's copy-on-write semantics). A non-array iterates zero times for now.
+    IterInit,
+    /// Fetch the next element: bind it to `value` (and the key to `key`, if
+    /// present) and fall through, or — when the iterator is exhausted — jump to
+    /// `end` (which frees it via [`Op::IterPop`]). Operates on the top iterator.
+    IterNext { value: Slot, key: Option<Slot>, end: Addr },
+    /// Pop (free) the top iterator. Emitted at normal loop exhaustion and, by the
+    /// compiler, on every `break`/`continue` path that leaves a `foreach`.
+    IterPop,
+
     /// Raise a fatal `Error` carrying `consts[idx]` (a string) as its message.
     /// Used for *stub* function bodies: the always-present PHP prelude (exception
     /// classes, the procedural date API) contains constructs not yet ported, so
