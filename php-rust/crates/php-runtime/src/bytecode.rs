@@ -510,6 +510,11 @@ pub enum Op {
     /// (PHP 8). Otherwise the class is resolved (unknown → `Error`) and the
     /// constant looked up (absent → "Undefined constant" `Error`).
     ClassConstFromValue { name: Box<[u8]> },
+    /// `[] -> [case]` — `E::Case` (Session A): push the interned singleton object
+    /// for enum `class`'s `case`-th case (materialised on first use, with its
+    /// read-only `name` — and, for a backed enum, `value` — property, then cached
+    /// so `E::Case === E::Case`).
+    EnumCase { class: ClassId, case: u32 },
     /// `[] -> [name]` — `static::class`: push the frame's LSB class name as a
     /// string. (`Class::class` / `self::class` / `parent::class` are folded to a
     /// [`Op::PushConst`] at compile time.)
@@ -771,6 +776,17 @@ pub struct CompiledConst {
     pub func: Func,
 }
 
+/// One enum `case` the VM can materialise (Session A): its name and, for a backed
+/// enum, the folded backing value (`None` for a pure case — only a `name`
+/// property). A backed case whose value did not const-fold is *omitted* from
+/// [`CompiledClass::enum_cases`], so `E::Case` for it falls back to the evaluator.
+/// The list order matches [`Op::EnumCase`]'s `case` index.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompiledEnumCase {
+    pub name: Box<[u8]>,
+    pub value: Option<Const>,
+}
+
 /// Compile-time class metadata, in the same index space as
 /// [`crate::hir::Program::classes`] / [`ClassId`] (a [`ClassRef::Named`] resolved
 /// to `classes[i]` in the HIR maps to `classes[i]` here). The VM consults this at
@@ -815,6 +831,9 @@ pub struct CompiledClass {
     /// [`crate::hir::ClassDecl::consts`]); resolution walks `parent` then
     /// interfaces at run time.
     pub consts: Vec<CompiledConst>,
+    /// Enum cases the VM can materialise as singletons (Session A); empty for a
+    /// non-enum. Indexed by [`Op::EnumCase`]'s `case`.
+    pub enum_cases: Vec<CompiledEnumCase>,
     /// `false` if the class could not be fully compiled (e.g. a non-constant
     /// property default): [`Op::Alloc`] on it fatals instead of producing a
     /// wrong instance, mirroring the function-stub discipline.

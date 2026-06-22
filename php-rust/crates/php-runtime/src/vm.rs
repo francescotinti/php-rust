@@ -21,7 +21,7 @@ use std::rc::Rc;
 
 use php_types::{
     convert, ops, Closure, ClosureInfo, ClosureRender, Diag, Diags, GenKey, GenState, GenStatus,
-    Key, Object, PhpArray, PhpError, PhpStr, Props, Zval,
+    Key, Object, ObjectInfo, PhpArray, PhpError, PhpStr, PropVis, Props, Zval,
 };
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
@@ -110,6 +110,7 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         fiber_stack: Vec::new(),
         fiber_class_id: module.class_index.get(&b"fiber"[..]).copied(),
         throwable_id: module.class_index.get(&b"throwable"[..]).copied(),
+        enum_cache: HashMap::new(),
     };
     vm.frames.push(Frame::new(&module.main));
     let fatal = vm.run().err();
@@ -287,6 +288,9 @@ struct Vm<'m> {
     /// (EXC-3b). Used to recognise a `new`-constructed exception so its
     /// `line`/`file` are stamped at allocation time, as PHP does.
     throwable_id: Option<ClassId>,
+    /// Interned enum case singletons, keyed by (enum class id, case index), so
+    /// `E::Case === E::Case` (Session A). Materialised lazily on first `E::Case`.
+    enum_cache: HashMap<(ClassId, u32), Rc<RefCell<Object>>>,
 }
 
 impl<'m> Vm<'m> {
@@ -1495,6 +1499,10 @@ impl<'m> Vm<'m> {
                     let name = self.module.classes[start].name.to_vec();
                     self.frames[top].stack.push(Zval::Str(PhpStr::new(name)));
                 }
+                Op::EnumCase { class, case } => {
+                    let obj = self.enum_case(class, case);
+                    self.frames[top].stack.push(Zval::Object(obj));
+                }
                 Op::InvokeCtor { argc } => {
                     let module = self.module;
                     let args = self.pop_keys(top, argc);
@@ -2655,6 +2663,39 @@ impl<'m> Vm<'m> {
         // Track for `__destruct` (OOP-3d): the extra strong ref drives the sweep.
         self.created.push(Rc::clone(&rc));
         Ok(Zval::Object(rc))
+    }
+
+    /// Return the interned singleton object for enum `class`'s `case`-th case,
+    /// materialising it on first use (Session A; mirrors `eval::eval_enum_case`).
+    /// It carries a read-only `name` property and, for a backed enum, a `value`
+    /// property; the object holds the enum's class id so the whole OOP machinery
+    /// (`instanceof`, method dispatch, `$this`) applies. Cached so `E::Case` is the
+    /// same handle every time (identity `===`). Singletons are *not* tracked for
+    /// `__destruct` — they live for the whole run.
+    fn enum_case(&mut self, class: ClassId, case: u32) -> Rc<RefCell<Object>> {
+        if let Some(o) = self.enum_cache.get(&(class, case)) {
+            return Rc::clone(o);
+        }
+        let cc = &self.module.classes[class];
+        let decl = &cc.enum_cases[case as usize];
+        let mut props = Props::new();
+        let mut entries: Vec<(Box<[u8]>, PropVis)> = vec![(Box::from(&b"name"[..]), PropVis::Public)];
+        props.set(b"name", Zval::Str(PhpStr::new(decl.name.to_vec())));
+        if let Some(v) = &decl.value {
+            props.set(b"value", v.to_zval());
+            entries.push((Box::from(&b"value"[..]), PropVis::Public));
+        }
+        let id = self.next_id();
+        let obj = Object {
+            class_id: class as u32,
+            class_name: Rc::clone(&cc.class_name),
+            props,
+            id,
+            info: Rc::new(ObjectInfo::enum_case(entries)),
+        };
+        let rc = Rc::new(RefCell::new(obj));
+        self.enum_cache.insert((class, case), Rc::clone(&rc));
+        rc
     }
 
     /// Build a Throwable object of `cid` carrying `message`, used to materialise
@@ -7047,6 +7088,72 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php class C { function __call($n,$a){ $s=$n; foreach($a as $k=>$v) $s.=\";$k=$v\"; return $s; } } echo (new C)->missing(x:1, y:2);"),
             b"missing;x=1;y=2"
+        );
+    }
+
+    // ----- Session A: enum cases via `::` (vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn enum_pure_case_name() {
+        assert_eq!(
+            vm_stdout(b"<?php enum Suit { case Hearts; case Spades; } echo Suit::Hearts->name;"),
+            b"Hearts"
+        );
+    }
+
+    #[test]
+    fn enum_backed_case_value() {
+        assert_eq!(
+            vm_stdout(b"<?php enum E: int { case A = 1; case B = 2; } echo E::B->value;"),
+            b"2"
+        );
+    }
+
+    #[test]
+    fn enum_backed_string_case() {
+        assert_eq!(
+            vm_stdout(b"<?php enum E: string { case A = 'x'; } echo E::A->name,'/',E::A->value;"),
+            b"A/x"
+        );
+    }
+
+    #[test]
+    fn enum_case_is_a_singleton() {
+        assert_eq!(
+            vm_stdout(b"<?php enum E { case A; } echo E::A === E::A ? 'y':'n';"),
+            b"y"
+        );
+    }
+
+    #[test]
+    fn enum_case_instanceof() {
+        assert_eq!(
+            vm_stdout(b"<?php enum E { case A; } echo (E::A instanceof E) ? 'y':'n';"),
+            b"y"
+        );
+    }
+
+    #[test]
+    fn enum_case_identity_comparison() {
+        assert_eq!(
+            vm_stdout(b"<?php enum E { case A; case B; } $x = E::A; echo $x === E::A ? 'same':'diff'; echo $x === E::B ? 'x':'-';"),
+            b"same-"
+        );
+    }
+
+    #[test]
+    fn enum_case_method_uses_value() {
+        assert_eq!(
+            vm_stdout(b"<?php enum E: int { case A = 1; case B = 2; function label(): string { return 'case-'.$this->value; } } echo E::B->label();"),
+            b"case-2"
+        );
+    }
+
+    #[test]
+    fn enum_case_in_match() {
+        assert_eq!(
+            vm_stdout(b"<?php enum E { case A; case B; } function f($e){ return match($e){ E::A=>'a', E::B=>'b' }; } echo f(E::B);"),
+            b"b"
         );
     }
 }

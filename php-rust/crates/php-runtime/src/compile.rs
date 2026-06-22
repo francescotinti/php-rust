@@ -26,7 +26,7 @@ use php_types::{ObjectInfo, PhpStr, PropVis};
 
 use crate::builtin::{Builtin, Registry};
 use crate::bytecode::{
-    Addr, ClassTarget, CompiledClass, CompiledConst, CompiledMethod, CompiledStaticProp, Const,
+    Addr, ClassTarget, CompiledClass, CompiledConst, CompiledEnumCase, CompiledMethod, CompiledStaticProp, Const,
     ConstIdx, DimBase, ExcRegion, FieldBase, FieldStep, Func, Instantiable, Module, Op, StaticInit,
 };
 use crate::hir::{
@@ -365,6 +365,19 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
 
     let own_prop_vis = cd.props.iter().map(|p| (p.name.clone(), p.visibility)).collect();
 
+    // Enum cases, 1:1 with the source order (so `Op::EnumCase`'s index lines up).
+    // `value` is the folded backing value, or `None` for a pure case *and* for a
+    // backed case whose value did not const-fold — the latter never reaches the VM
+    // because `class_const` only emits `Op::EnumCase` for a materialisable case.
+    let enum_cases = cd
+        .enum_cases
+        .iter()
+        .map(|c| CompiledEnumCase {
+            name: c.name.clone(),
+            value: c.value.as_ref().and_then(const_eval),
+        })
+        .collect();
+
     CompiledClass {
         name: cd.name.clone(),
         class_name: PhpStr::new(cd.name.to_vec()),
@@ -378,6 +391,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         static_props,
         prop_init,
         consts,
+        enum_cases,
         ok,
     }
 }
@@ -1740,14 +1754,21 @@ impl<'a> FnCompiler<'a> {
                 Some((decl, idx)) => {
                     self.emit(Op::ClassConst { class: decl, idx: idx as u32 });
                 }
-                // Undefined constant, or an enum case (`E::Case`, OOP-3) — fall
-                // back to the tree-walker.
-                None => {
-                    return Err(CompileError::Unsupported(format!(
-                        "class constant `{}` (undefined here, or an enum case)",
-                        String::from_utf8_lossy(name)
-                    )))
-                }
+                // An enum case `E::Case` (Session A): materialise its singleton at
+                // run time. Cases are matched case-sensitively (like PHP); a backed
+                // case whose value did not const-fold is not materialisable and
+                // falls through to the evaluator.
+                None => match self.enum_case_index(cid, name) {
+                    Some(case) => {
+                        self.emit(Op::EnumCase { class: cid, case });
+                    }
+                    None => {
+                        return Err(CompileError::Unsupported(format!(
+                            "class constant `{}` (undefined here, or an enum case)",
+                            String::from_utf8_lossy(name)
+                        )))
+                    }
+                },
             },
             ClassTarget::Static => {
                 self.emit(Op::ClassConstDyn { name: name.into() });
@@ -1812,6 +1833,25 @@ impl<'a> FnCompiler<'a> {
             c = classes[x].parent;
         }
         None
+    }
+
+    /// The index of enum `cid`'s case `name` (case-sensitive, like PHP), if `cid`
+    /// is an enum, the case exists, and it is *materialisable* by the VM — a pure
+    /// case, or a backed case whose value const-folds (Session A). A backed case
+    /// with a non-folding value returns `None` so `E::Case` falls back to the
+    /// evaluator. The index matches [`CompiledClass::enum_cases`] (1:1 with source).
+    fn enum_case_index(&self, cid: ClassId, name: &[u8]) -> Option<u32> {
+        let cd = &self.ctx.classes[cid];
+        if !cd.is_enum {
+            return None;
+        }
+        let i = cd.enum_cases.iter().position(|c| c.name.as_ref() == name)?;
+        let case = &cd.enum_cases[i];
+        let materialisable = match &case.value {
+            None => true,
+            Some(e) => const_eval(e).is_some(),
+        };
+        materialisable.then_some(i as u32)
     }
 
     /// Resolve a class name (case-insensitive) to its [`ClassId`].
