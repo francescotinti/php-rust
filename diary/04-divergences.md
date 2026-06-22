@@ -667,3 +667,20 @@ forzare, coerente con la policy del progetto.
 restituisce `*0` se `N ∉ [1000, 999999999]`, esattamente come `crypt_sha256.c`/`crypt_sha512.c`.
 Oltre alla fedeltà (`crypt_sha256.phpt` caso `rounds=1000000000` → `*0`), questo **impedisce un
 hang**: senza il check, `pwhash` macinerebbe davvero ~1e9 round (interprete bloccato per minuti).
+
+## Step 68 (`%s`/`__toString` in sprintf/printf) — 1 D-NEW (specifier numerico su oggetto)
+
+La famiglia `sprintf`/`printf`/`vsprintf`/`vprintf`/`fprintf`/`vfprintf` è ora evaluator-dispatched
+(`eval/builtins.rs::ho_format`): prima del motore di formato puro, ogni argomento **oggetto** è
+risolto a stringa via `self.stringify` (che invoca `__toString`, o solleva il fatale "Object of
+class X could not be converted to string" se assente), ricorsivamente anche dentro gli array che
+ricevono i `v*`. Questo allinea all'oracle `%s` su oggetti (prima: warning + nome classe).
+
+- **D-68.1 — specifier numerico su oggetto con `__toString`**: poiché gli oggetti sono
+  pre-stringificati *prima* del motore, `printf("%d", $obj)` con `$obj` dotato di `__toString`
+  formatta la **stringa** di `__toString` (es. `"T"` → `%d` → `0`), mentre PHP tiene l'oggetto e
+  per `%d` emette `Warning: Object of class X could not be converted to int` + `1`. Caso
+  **patologico** (in codice reale un oggetto va in `%s`, non in `%d`/`%f`); nessuna regressione
+  osservata nello sweep `strings` (fail 163→161). La risoluzione per-specifier richiederebbe di
+  passare le stringhe pre-calcolate al motore via un campo del `Ctx` (ABI condivisa da ~243
+  builtin): sproporzionato per l'edge. Documentato, non forzato.

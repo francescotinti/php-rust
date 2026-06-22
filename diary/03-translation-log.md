@@ -2054,3 +2054,29 @@ diverge a riga 168 invece che a riga 3 (il `fopen` funziona). Sweep `strings` **
 > chiamano già correttamente. Il motore di formato (`php-builtins/src/format.rs`) è un builtin
 > **puro**: non ha accesso all'evaluator per invocare `__toString`. Fix futuro = rendere la
 > famiglia sprintf/printf evaluator-dispatched (o passare un hook di stringificazione nel `Ctx`).
+
+## Step 68 — `%s` di sprintf/printf onora `__toString`
+
+Terzo problema emerso dopo gli step 66/67: `%s` di `sprintf`/`printf` su un oggetto non chiamava
+`__toString` (emetteva `Warning: Object of class X could not be converted to string` + nome
+classe), mentre `echo`/concatenazione/cast `(string)` lo facevano già. Causa: il motore di formato
+(`php-builtins/src/format.rs`) è un builtin **puro** — `Ctx{out,diags}` — e non può invocare un
+metodo dell'oggetto; per giunta durante la chiamata l'evaluator tiene già `&mut out`/`&mut diags`,
+quindi un hook reentrante è impossibile.
+
+**Soluzione**: rendere la famiglia `sprintf`/`printf`/`vsprintf`/`vprintf`/`fprintf`/`vfprintf`
+**evaluator-dispatched** (ramo in `dispatch_higher_order`, `ho_format` in `eval/builtins.rs`).
+`ho_format` valuta gli argomenti, li passa per `format_resolve_objects` (sostituisce ogni
+`Zval::Object` con `Zval::Str(self.stringify(&o)?)` — ricorsivamente dentro gli array, per la lista
+di valori dei `v*`), poi chiama il builtin puro via `dispatch_value_builtin` (riusa
+out/diags/interleaving dello step 66). Si riusa `self.stringify` (eval/class.rs), già usato da
+echo/concat/cast: invoca `__toString` o solleva il **fatale corretto** se assente — quindi è
+fedele in entrambi i casi (anche `printf("%s", new stdClass)` ora è un Error fatale, non un
+warning). Resource/scalari/format-string passano invariati; i named-arg ai builtin erano già
+respinti a monte di `dispatch_higher_order`.
+
+**Verifica**: `echo`/concat/`(string)`/`printf`/`sprintf`/`vsprintf`/`vprintf` con oggetto
+`__toString` ora **byte-identici** all'oracle. `printf_variation2`/`sprintf_variation2` passano;
+sweep `strings` **290→292 pass / 163→161 fail**, zero regressioni; **952 test** verdi, clippy
+pulito. Unica divergenza nuova **D-68.1** (specifier numerico su oggetto-con-`__toString`,
+patologica) in `04-divergences.md`.

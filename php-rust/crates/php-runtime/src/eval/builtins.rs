@@ -15,6 +15,7 @@ use php_types::{
 use crate::hir::{
     ClassDecl, ClassId, Expr, ExprKind,
 };
+use crate::Builtin;
 
 use super::*;
 
@@ -37,6 +38,13 @@ impl<'p> Evaluator<'p> {
             b"usort" => Some(self.ho_usort(args)),
             b"json_decode" => Some(self.ho_json_decode(args)),
             b"strtok" => Some(self.ho_strtok(args)),
+            // The sprintf/printf family is a pure builtin, but `%s` on an object
+            // must honour `__toString` — which needs the evaluator. Intercept here
+            // to resolve object arguments to strings before the pure format engine
+            // runs (step 68).
+            b"sprintf" | b"printf" | b"vsprintf" | b"vprintf" | b"fprintf" | b"vfprintf" => {
+                Some(self.ho_format(name, args))
+            }
             b"unserialize" => Some(self.ho_unserialize(args)),
             b"fopen" => Some(self.ho_fopen(args)),
             b"tmpfile" => Some(self.ho_tmpfile(args)),
@@ -474,6 +482,51 @@ impl<'p> Evaluator<'p> {
     }
 
     /// `preg_quote($str, $delimiter = null)` (step 27).
+    /// The sprintf/printf family, dispatched through the evaluator so that object
+    /// arguments are resolved to strings via `__toString` before the pure format
+    /// engine sees them (step 68). PHP's `%s` converts an object with a
+    /// `zval_get_string`, which invokes `__toString` (or raises the fatal "could
+    /// not be converted to string" for an object without one) — neither of which
+    /// a pure builtin can do. Everything else (the format string, scalars, stream
+    /// resources, arrays of scalars) passes through unchanged, so the value
+    /// builtin keeps its existing argument handling and diagnostics.
+    fn ho_format(&mut self, name: &[u8], args: &[Expr]) -> Result<Zval, PhpError> {
+        let mut argv = Vec::with_capacity(args.len());
+        for a in args {
+            let v = self.eval(a)?;
+            argv.push(self.format_resolve_objects(v)?);
+        }
+        let f = match self.reg.get(name) {
+            Some(Builtin::Value(f)) => *f,
+            _ => {
+                return Err(PhpError::Error(format!(
+                    "Call to undefined function {}()",
+                    String::from_utf8_lossy(name)
+                )))
+            }
+        };
+        self.dispatch_value_builtin(f, &argv)
+    }
+
+    /// Replace every object in `v` (including those nested inside an array — the
+    /// value list `vsprintf`/`vprintf` receive) with its `__toString` string,
+    /// raising the fatal for an object that has none. Non-objects are returned
+    /// unchanged; an array is rebuilt element-wise (preserving keys and order).
+    fn format_resolve_objects(&mut self, v: Zval) -> Result<Zval, PhpError> {
+        let v = v.deref_clone();
+        match v {
+            Zval::Object(_) => Ok(Zval::Str(self.stringify(&v)?)),
+            Zval::Array(arr) => {
+                let mut out = PhpArray::new();
+                for (k, e) in arr.iter() {
+                    out.insert(k.clone(), self.format_resolve_objects(e.clone())?);
+                }
+                Ok(Zval::Array(Rc::new(out)))
+            }
+            other => Ok(other),
+        }
+    }
+
     /// `strtok(string $string, string $token)` / `strtok(string $token)` (step 65).
     ///
     /// Stateful tokenizer: the two-arg form (re)sets the persistent cursor, the
