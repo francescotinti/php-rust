@@ -117,6 +117,56 @@ struct FiberContext {
     obj: Zval,
 }
 
+/// Why [`run_source_with`] could not produce a [`VmOutcome`] (E2). `Lower` is a
+/// failure shared with the evaluator — a parse error or an unsupported *lowering*
+/// — so both engines fail alike on it; `Unsupported` is the bytecode compiler
+/// ([`crate::compile`]) rejecting a construct the evaluator still runs, which is
+/// the VM-vs-eval gap the corpus harness (E4) measures.
+#[derive(Debug)]
+pub enum VmRunError {
+    Lower(crate::LowerError),
+    Unsupported(String),
+}
+
+/// Lower `source`, compile it to bytecode, and run it on the VM (E2) — the VM
+/// analogue of [`crate::eval::run_source_with`], so the corpus harness can drive
+/// either engine behind an `--engine` flag. A compile-time PHP `Fatal error:`
+/// (link-time, e.g. an abstract-method collision) becomes a rendered
+/// [`VmOutcome`] just as the evaluator does; a genuine lowering failure or a
+/// bytecode-compiler rejection is surfaced as [`VmRunError`].
+pub fn run_source_with(
+    name: &[u8],
+    source: &[u8],
+    registry: &Registry,
+) -> Result<VmOutcome, VmRunError> {
+    let program = match crate::lower_source(name, source) {
+        Ok(p) => p,
+        // A link-time PHP fatal renders like a runtime one (no "Uncaught" prefix),
+        // mirroring `eval::compile_fatal_outcome`.
+        Err(crate::LowerError::Fatal { message, line }) => {
+            return Ok(compile_fatal_outcome(name, &message, line))
+        }
+        Err(e) => return Err(VmRunError::Lower(e)),
+    };
+    let module = crate::compile::compile_program(&program, registry)
+        .map_err(|crate::compile::CompileError::Unsupported(what)| VmRunError::Unsupported(what))?;
+    Ok(run_module(&module, registry))
+}
+
+/// Build the [`VmOutcome`] for a compile-time PHP `Fatal error:` (E2; mirrors
+/// `eval::compile_fatal_outcome`): rendered like a runtime fatal but without the
+/// "Uncaught" prefix or "thrown in" tail.
+fn compile_fatal_outcome(file: &[u8], message: &str, line: Line) -> VmOutcome {
+    let file_s = String::from_utf8_lossy(file);
+    let rendered =
+        format!("\nFatal error: {message} in {file_s} on line {line}\nStack trace:\n#0 {{main}}\n");
+    VmOutcome {
+        rendered: rendered.into_bytes(),
+        fatal: Some(PhpError::Error(message.to_string())),
+        ..VmOutcome::default()
+    }
+}
+
 /// Compile-and-run is the caller's job ([`crate::compile`]); this takes the
 /// already-compiled module and executes its `main`.
 pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
@@ -4847,6 +4897,25 @@ mod tests {
         let out = vm_outcome(b"<?php try { throw new Exception('x'); } catch (Exception $e) { echo 'caught'; }");
         assert_eq!(out.rendered, b"caught");
         assert!(out.fatal.is_none());
+    }
+
+    // ----- E2: vm::run_source_with (lower → compile → run) -----
+
+    #[test]
+    fn run_source_with_runs_plain_code() {
+        let reg = Registry::new();
+        let out = super::run_source_with(b"test.php", b"<?php echo 'ok';", &reg).expect("ok");
+        assert_eq!(out.rendered, b"ok");
+    }
+
+    #[test]
+    fn run_source_with_reports_vm_unsupported() {
+        // `array_map` is an evaluator-only higher-order builtin the bytecode
+        // compiler rejects — surfaced as `VmRunError::Unsupported`, not a fatal.
+        let reg = Registry::new();
+        let err = super::run_source_with(b"test.php", b"<?php array_map('strtoupper', ['a']);", &reg)
+            .expect_err("vm should reject array_map");
+        assert!(matches!(err, super::VmRunError::Unsupported(_)));
     }
 
     #[test]
