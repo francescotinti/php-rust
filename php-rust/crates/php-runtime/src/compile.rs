@@ -1066,6 +1066,23 @@ impl<'a> FnCompiler<'a> {
                 let (target, _) = self.resolve_target(class)?;
                 self.emit(Op::StaticPropIncDec { target, name: name.clone(), inc: *inc, pre: *pre });
             }
+            ExprKind::Yield { key, value } => {
+                // `yield`, `yield $v`, `yield $k => $v` (GEN). Push the value (NULL
+                // for a bare `yield`) and, if present, the key beneath it, then
+                // suspend. `Op::Yield` leaves the `send()` value on the stack, so
+                // the `yield` expression yields it (and `StmtKind::Expr` pops it).
+                if let Some(k) = key {
+                    self.expr(k)?;
+                }
+                match value {
+                    Some(v) => self.expr(v)?,
+                    None => {
+                        let null = self.konst(Const::Null);
+                        self.emit(Op::PushConst(null));
+                    }
+                }
+                self.emit(Op::Yield { has_key: key.is_some() });
+            }
             other => return Err(CompileError::Unsupported(expr_name(other))),
         }
         Ok(())

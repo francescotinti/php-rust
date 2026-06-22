@@ -20,8 +20,8 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use php_types::{
-    convert, ops, Closure, ClosureInfo, ClosureRender, Diag, Diags, Key, Object, PhpArray,
-    PhpError, PhpStr, Props, Zval,
+    convert, ops, Closure, ClosureInfo, ClosureRender, Diag, Diags, GenState, GenStatus, Key,
+    Object, PhpArray, PhpError, PhpStr, Props, Zval,
 };
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
@@ -39,6 +39,23 @@ pub struct VmOutcome {
     pub fatal: Option<PhpError>,
 }
 
+/// How a bounded dispatch run ([`Vm::run_loop`]) terminated. The runner is
+/// parametrised by a *baseline* frame depth: it runs until the frame at that
+/// depth returns ([`RunExit::Returned`]) or a generator at that depth suspends
+/// at a `yield` ([`RunExit::Yielded`]). The top-level run uses `baseline = 0`
+/// (only `Returned` is possible); a generator resume uses the parked frame's
+/// depth, which is what makes suspension a plain return up the Rust stack — the
+/// payoff that retires `corosensei` (GEN).
+enum RunExit {
+    /// The baseline frame ran to its `Ret`; carries the returned value.
+    Returned(Zval),
+    /// The baseline generator frame hit `Op::Yield`; it has already been parked
+    /// in [`Vm::generators`]. The raw key (`None` for an auto-keyed `yield`) and
+    /// value are handed back for the resumer to record (auto-key resolution lives
+    /// in [`Vm::resume_generator`], mirroring the tree-walker).
+    Yielded { key: Option<Zval>, value: Zval },
+}
+
 /// Compile-and-run is the caller's job ([`crate::compile`]); this takes the
 /// already-compiled module and executes its `main`.
 pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
@@ -53,6 +70,7 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         magic_guard: HashSet::new(),
         created: Vec::new(),
         destructed: HashSet::new(),
+        generators: HashMap::new(),
         throwable_id: module.class_index.get(&b"throwable"[..]).copied(),
     };
     vm.frames.push(Frame::new(&module.main));
@@ -121,6 +139,10 @@ struct Frame<'m> {
     /// An exception parked while a `finally` block runs (EXC-2): set when an
     /// exception propagates into a finally region, re-raised at [`Op::EndFinally`].
     pending_throw: Option<Zval>,
+    /// The generator handle id this frame belongs to (GEN), or `None` for an
+    /// ordinary frame. Set when a generator frame is created; read by
+    /// [`Op::Yield`] to park the frame back into [`Vm::generators`] under its id.
+    gen_id: Option<u32>,
 }
 
 impl<'m> Frame<'m> {
@@ -139,6 +161,7 @@ impl<'m> Frame<'m> {
             guard_release: None,
             iters: Vec::new(),
             pending_throw: None,
+            gen_id: None,
         }
     }
 }
@@ -151,6 +174,11 @@ impl<'m> Frame<'m> {
 enum IterState {
     ByVal { entries: Vec<(Zval, Zval)>, pos: usize },
     ByRef { source: Slot, keys: Vec<Key>, pos: usize },
+    /// `foreach` over a generator (GEN): no snapshot — each step reads the
+    /// generator's current `(key, value)` and resumes it for the next. `primed`
+    /// is false until the first `IterNext` (which starts the generator rather than
+    /// advancing it), matching the tree-walker's read-then-resume order.
+    Gen { rc: Rc<RefCell<GenState>>, primed: bool },
 }
 
 /// The virtual machine: the module under execution plus the explicit call stack.
@@ -181,13 +209,19 @@ struct Vm<'m> {
     created: Vec<Rc<RefCell<Object>>>,
     /// Object handles whose `__destruct` has already run, guarding double calls.
     destructed: HashSet<u32>,
+    /// Suspended generator frames, keyed by generator handle id (GEN). A frame
+    /// lives here while the generator is `NotStarted` or `Suspended`; it is moved
+    /// onto the main `frames` stack while running (resumed), and parked back on
+    /// `yield`. This side-table is what lets a generator be a frame *outside* the
+    /// call stack without the tree-walker's `corosensei`/`unsafe`.
+    generators: HashMap<u32, Frame<'m>>,
     /// The prelude `Throwable` interface's class id, resolved once at startup
     /// (EXC-3b). Used to recognise a `new`-constructed exception so its
     /// `line`/`file` are stamped at allocation time, as PHP does.
     throwable_id: Option<ClassId>,
 }
 
-impl Vm<'_> {
+impl<'m> Vm<'m> {
     /// Allocate a fresh object handle id.
     fn next_id(&mut self) -> u32 {
         let id = self.next_object_id;
@@ -201,9 +235,15 @@ impl Vm<'_> {
     /// resume) or reports it unhandled (and we propagate it as the run's fatal).
     fn run(&mut self) -> Result<Zval, PhpError> {
         loop {
-            match self.run_until_error() {
-                Ok(v) => return Ok(v),
-                Err(e) => match self.unwind(e) {
+            // Top-level run: baseline 0 (only `main` and its callees), so the only
+            // possible exit is the script body returning. `floor = 0` keeps `main`
+            // on the stack when an exception escapes uncaught (reported as fatal).
+            match self.run_loop(0) {
+                Ok(RunExit::Returned(v)) => return Ok(v),
+                Ok(RunExit::Yielded { .. }) => {
+                    unreachable!("a `yield` can only run inside a resumed generator frame")
+                }
+                Err(e) => match self.unwind(e, 0) {
                     None => {} // routed to a `catch`; resume there
                     Some(e) => return Err(e),
                 },
@@ -215,8 +255,15 @@ impl Vm<'_> {
     /// exception and route control to its catch-dispatch block, popping frames
     /// with no handler. Returns `None` once control is parked at a `catch`, or
     /// `Some(e)` if the exception is uncatchable (a non-object throw, an engine
-    /// error — EXC-3 — or `Exit`) or escapes the top frame uncaught.
-    fn unwind(&mut self, e: PhpError) -> Option<PhpError> {
+    /// error — EXC-3 — or `Exit`) or escapes uncaught down to `floor`.
+    ///
+    /// `floor` is the lowest frame index this unwind may inspect/route into: the
+    /// search stops once the frame at `floor` has been checked, leaving that frame
+    /// on the stack. Top-level passes `0` (so `main` is the floor, retained as
+    /// today); a generator resume passes the parked frame's depth, so an
+    /// exception uncaught inside the generator surfaces at the resume site (the
+    /// resumer then pops the dead generator frame).
+    fn unwind(&mut self, e: PhpError, floor: usize) -> Option<PhpError> {
         // The in-flight Throwable object. A user `throw` of an object is itself
         // (EXC-1). An engine error (EXC-3a) is resolved to its prelude class by
         // name and a Throwable is synthesized carrying its message; if the class
@@ -264,16 +311,21 @@ impl Vm<'_> {
                 self.frames[top].ip = r.target as usize;
                 return None;
             }
-            if self.frames.len() == 1 {
-                return Some(e); // escaped the top frame uncaught
+            if top == floor {
+                // The floor frame had no matching handler: propagate, leaving the
+                // floor frame on the stack for the caller to dispose of.
+                return Some(e);
             }
             self.frames.pop();
         }
     }
 
-    /// The dispatch loop proper: runs until the bottom frame returns or an op
-    /// raises a `PhpError` (which [`Self::run`] then routes through `unwind`).
-    fn run_until_error(&mut self) -> Result<Zval, PhpError> {
+    /// The bounded dispatch loop: runs until the frame at `baseline` returns
+    /// ([`RunExit::Returned`]) or a generator at `baseline` suspends at a `yield`
+    /// ([`RunExit::Yielded`]), or an op raises a `PhpError` (which the caller
+    /// routes through [`Self::unwind`]). Frames above `baseline` (ordinary
+    /// callees) return normally to their callers within this same loop.
+    fn run_loop(&mut self, baseline: usize) -> Result<RunExit, PhpError> {
         loop {
             let top = self.frames.len() - 1;
             let ip = self.frames[top].ip;
@@ -638,12 +690,52 @@ impl Vm<'_> {
                 }
                 Op::IterInit => {
                     let iterable = self.frames[top].stack.pop().expect("IterInit iterable");
-                    self.frames[top].iters.push(IterState::ByVal {
-                        entries: snapshot_entries(&iterable),
-                        pos: 0,
-                    });
+                    // A generator iterates live (no snapshot); an array/other is
+                    // snapshotted by value as before (GEN).
+                    if let Zval::Generator(gs) = iterable.deref_clone() {
+                        self.frames[top]
+                            .iters
+                            .push(IterState::Gen { rc: gs, primed: false });
+                    } else {
+                        self.frames[top].iters.push(IterState::ByVal {
+                            entries: snapshot_entries(&iterable),
+                            pos: 0,
+                        });
+                    }
                 }
                 Op::IterNext { value, key, end } => {
+                    // A generator step: prime on the first visit, otherwise resume
+                    // to the next yield, then bind the current `(key, value)` or
+                    // jump to `end` when the generator is done (GEN).
+                    let gen = match self.frames[top].iters.last_mut() {
+                        Some(IterState::Gen { rc, primed }) => {
+                            let rc = Rc::clone(rc);
+                            let was_primed = *primed;
+                            *primed = true;
+                            Some((rc, was_primed))
+                        }
+                        _ => None,
+                    };
+                    if let Some((rc, was_primed)) = gen {
+                        if was_primed {
+                            self.resume_generator(&rc, Zval::Null)?;
+                        } else {
+                            self.ensure_started(&rc)?;
+                        }
+                        let (k, v, done) = {
+                            let gs = rc.borrow();
+                            (gs.cur_key.clone(), gs.cur_val.clone(), matches!(gs.status, GenStatus::Done))
+                        };
+                        if done {
+                            self.frames[top].ip = end as usize;
+                        } else {
+                            store_slot(&mut self.frames[top].slots[value as usize], v.deref_clone());
+                            if let Some(ks) = key {
+                                store_slot(&mut self.frames[top].slots[ks as usize], k);
+                            }
+                        }
+                        continue;
+                    }
                     // Read the cursor and bump it in a scoped borrow, then touch
                     // the slots — keeping the `iters` and `slots` borrows disjoint.
                     let pair = {
@@ -727,7 +819,7 @@ impl Vm<'_> {
                     for (i, a) in args.into_iter().enumerate() {
                         frame.slots[i] = a;
                     }
-                    self.frames.push(frame);
+                    self.enter_callee(frame);
                 }
                 Op::CallBuiltin { name, argc } => {
                     let f = match self.registry.get(&name[..]) {
@@ -773,11 +865,37 @@ impl Vm<'_> {
                         } else {
                             ret
                         };
-                        match self.frames.last_mut() {
-                            Some(caller) => caller.stack.push(v),
-                            None => return Ok(v),
+                        // The frame that owned this bounded run has returned: hand
+                        // the value back to whoever started it (the host, for the
+                        // top-level run; `resume_generator`, for a generator body).
+                        if self.frames.len() == baseline {
+                            return Ok(RunExit::Returned(v));
                         }
+                        self.frames
+                            .last_mut()
+                            .expect("a non-baseline Ret has a caller")
+                            .stack
+                            .push(v);
                     }
+                }
+                Op::Yield { has_key } => {
+                    // Suspend the running generator frame (GEN). Pop the yielded
+                    // value (and key), park the frame back under its handle id, and
+                    // hand the raw key/value to `resume_generator`. `ip` is already
+                    // past this op, so the resume continues after the `yield`.
+                    let value = self.frames[top].stack.pop().expect("Yield value");
+                    let key = if has_key {
+                        Some(self.frames[top].stack.pop().expect("Yield key"))
+                    } else {
+                        None
+                    };
+                    let gid = self.frames[top]
+                        .gen_id
+                        .expect("Yield outside a generator frame");
+                    debug_assert_eq!(top, baseline, "a generator yields at its own baseline");
+                    let frame = self.frames.pop().expect("generator frame to park");
+                    self.generators.insert(gid, frame);
+                    return Ok(RunExit::Yielded { key, value });
                 }
                 Op::Alloc { class } => {
                     let obj = self.alloc_object(class)?;
@@ -917,6 +1035,14 @@ impl Vm<'_> {
                     let mut args = self.pop_keys(top, argc); // source order
                     let recv = self.frames[top].stack.pop().expect("MethodCall receiver");
                     let this = recv.deref_clone();
+                    // A `Generator` is not a user object: dispatch its built-in
+                    // methods (current/key/next/valid/rewind/…) directly (GEN).
+                    if let Zval::Generator(gs) = &this {
+                        let gs = Rc::clone(gs);
+                        let result = self.generator_method(gs, &method, args)?;
+                        self.frames[top].stack.push(result);
+                        continue;
+                    }
                     let cid = match &this {
                         Zval::Object(o) => o.borrow().class_id as usize,
                         other => {
@@ -942,7 +1068,7 @@ impl Vm<'_> {
                             frame.this = Some(this);
                             frame.class = Some(defc);
                             frame.static_class = Some(cid); // LSB = receiver's actual class
-                            self.frames.push(frame);
+                            self.enter_callee(frame);
                         }
                         // Missing or inaccessible: route to `__call` if defined,
                         // else the original fatal (visibility / undefined method).
@@ -979,7 +1105,7 @@ impl Vm<'_> {
                     frame.this = Some(this);
                     frame.class = Some(class);
                     frame.static_class = Some(lsb);
-                    self.frames.push(frame);
+                    self.enter_callee(frame);
                 }
                 Op::InstanceOf { class } => {
                     let v = self.frames[top].stack.pop().expect("InstanceOf operand");
@@ -1048,7 +1174,7 @@ impl Vm<'_> {
                             frame.this = this;
                             frame.class = Some(defc);
                             frame.static_class = Some(static_class);
-                            self.frames.push(frame);
+                            self.enter_callee(frame);
                         }
                         None => {
                             // In object context (a `$this` in the hierarchy) a
@@ -1364,7 +1490,7 @@ impl Vm<'_> {
             }
         }
         frame.this = cl.bound_this.clone();
-        self.frames.push(frame);
+        self.enter_callee(frame);
     }
 
     /// Dispatch a call to a function *name* (a string callable / first-class
@@ -1381,7 +1507,7 @@ impl Vm<'_> {
                     frame.slots[i] = a;
                 }
             }
-            self.frames.push(frame);
+            self.enter_callee(frame);
             return Ok(());
         }
         match self.registry.get(name) {
@@ -1402,6 +1528,191 @@ impl Vm<'_> {
             None => Err(PhpError::Error(format!(
                 "Call to undefined function {}()",
                 String::from_utf8_lossy(name)
+            ))),
+        }
+    }
+
+    /// Build a `Generator` handle for a freshly-bound generator-body `frame`
+    /// (GEN): park the frame under a fresh id and return the `Zval::Generator` the
+    /// call expression evaluates to. The body does not run until the generator is
+    /// first advanced (`NotStarted`). The parked frame lives in `self.generators`
+    /// — no coroutine, no `unsafe`, unlike the tree-walker's `corosensei` driver.
+    fn make_generator(&mut self, mut frame: Frame<'m>) -> Zval {
+        let id = self.next_id();
+        frame.gen_id = Some(id);
+        let func_name = frame.func.name.to_vec().into_boxed_slice();
+        self.generators.insert(id, frame);
+        Zval::Generator(Rc::new(RefCell::new(GenState {
+            id,
+            func_name,
+            status: GenStatus::NotStarted,
+            advanced: false,
+            cur_key: Zval::Null,
+            cur_val: Zval::Null,
+            ret: Zval::Null,
+            auto_key: 0,
+            driver: None,
+        })))
+    }
+
+    /// Enter a freshly-built callee `frame`: if its body is a generator,
+    /// materialise a `Generator` handle on the caller's operand stack instead of
+    /// running it (GEN); otherwise push it to run. The caller is the current top
+    /// frame, so this is called *before* `frame` is pushed.
+    fn enter_callee(&mut self, frame: Frame<'m>) {
+        if frame.func.is_generator {
+            let gen = self.make_generator(frame);
+            let top = self.frames.len() - 1;
+            self.frames[top].stack.push(gen);
+        } else {
+            self.frames.push(frame);
+        }
+    }
+
+    /// Advance a generator one step (GEN): move its parked frame onto the call
+    /// stack and run until it yields again, returns, or throws an uncaught
+    /// exception. Mirrors `eval::resume_generator` for the status guards and
+    /// auto-key resolution. `sent` is the value the suspended `yield` expression
+    /// evaluates to (NULL for `next()`/`foreach`).
+    fn resume_generator(
+        &mut self,
+        gs_rc: &Rc<RefCell<GenState>>,
+        sent: Zval,
+    ) -> Result<(), PhpError> {
+        let was_suspended = {
+            let mut gs = gs_rc.borrow_mut();
+            match gs.status {
+                GenStatus::Running => {
+                    return Err(PhpError::Error(
+                        "Cannot resume an already running generator".to_string(),
+                    ))
+                }
+                GenStatus::Done => return Ok(()),
+                GenStatus::Suspended => {
+                    gs.advanced = true;
+                    gs.status = GenStatus::Running;
+                    true
+                }
+                GenStatus::NotStarted => {
+                    gs.status = GenStatus::Running;
+                    false
+                }
+            }
+        };
+        let id = gs_rc.borrow().id;
+        let frame = self.generators.remove(&id).expect("parked generator frame");
+        let baseline = self.frames.len();
+        self.frames.push(frame);
+        if was_suspended {
+            // The suspended `yield` expression evaluates to the sent value.
+            self.frames[baseline].stack.push(sent);
+        }
+        // Run the body until it yields/returns; route its *own* exceptions through
+        // `unwind` with the generator frame as the floor, so a `try` inside the
+        // generator is honoured and an uncaught throw surfaces at the resume site.
+        let outcome = loop {
+            match self.run_loop(baseline) {
+                Ok(exit) => break Ok(exit),
+                Err(e) => match self.unwind(e, baseline) {
+                    None => continue,
+                    Some(e) => break Err(e),
+                },
+            }
+        };
+        match outcome {
+            Ok(RunExit::Yielded { key, value }) => {
+                // The frame was already parked by `Op::Yield`.
+                let mut gs = gs_rc.borrow_mut();
+                let resolved = match key {
+                    None => {
+                        let k = Zval::Long(gs.auto_key);
+                        gs.auto_key += 1;
+                        k
+                    }
+                    Some(Zval::Long(n)) => {
+                        if n >= gs.auto_key {
+                            gs.auto_key = n.wrapping_add(1);
+                        }
+                        Zval::Long(n)
+                    }
+                    Some(z) => z,
+                };
+                gs.cur_key = resolved;
+                gs.cur_val = value;
+                gs.status = GenStatus::Suspended;
+                Ok(())
+            }
+            Ok(RunExit::Returned(v)) => {
+                // The body returned; `Op::Ret` already popped the generator frame.
+                let mut gs = gs_rc.borrow_mut();
+                gs.ret = v;
+                gs.cur_key = Zval::Null;
+                gs.cur_val = Zval::Null;
+                gs.status = GenStatus::Done;
+                Ok(())
+            }
+            Err(e) => {
+                // Uncaught inside the generator: `unwind` left the dead frame at
+                // the baseline; drop it and surface the exception at the resumer.
+                self.frames.pop();
+                let mut gs = gs_rc.borrow_mut();
+                gs.cur_key = Zval::Null;
+                gs.cur_val = Zval::Null;
+                gs.status = GenStatus::Done;
+                Err(e)
+            }
+        }
+    }
+
+    /// Prime a `NotStarted` generator to its first `yield` (GEN); a no-op
+    /// otherwise. Mirrors `eval::ensure_started`.
+    fn ensure_started(&mut self, gs_rc: &Rc<RefCell<GenState>>) -> Result<(), PhpError> {
+        if matches!(gs_rc.borrow().status, GenStatus::NotStarted) {
+            self.resume_generator(gs_rc, Zval::Null)?;
+        }
+        Ok(())
+    }
+
+    /// Dispatch a built-in `Generator` method (GEN), returning the value to leave
+    /// on the caller's stack. Mirrors `eval::generator_method`. `send`/`getReturn`
+    /// arrive in GEN-2.
+    fn generator_method(
+        &mut self,
+        gs_rc: Rc<RefCell<GenState>>,
+        method: &[u8],
+        _args: Vec<Zval>,
+    ) -> Result<Zval, PhpError> {
+        match method.to_ascii_lowercase().as_slice() {
+            b"current" => {
+                self.ensure_started(&gs_rc)?;
+                Ok(gs_rc.borrow().cur_val.clone())
+            }
+            b"key" => {
+                self.ensure_started(&gs_rc)?;
+                Ok(gs_rc.borrow().cur_key.clone())
+            }
+            b"next" => {
+                self.ensure_started(&gs_rc)?;
+                self.resume_generator(&gs_rc, Zval::Null)?;
+                Ok(Zval::Null)
+            }
+            b"valid" => {
+                self.ensure_started(&gs_rc)?;
+                let valid = !matches!(gs_rc.borrow().status, GenStatus::Done);
+                Ok(Zval::Bool(valid))
+            }
+            b"rewind" => {
+                self.ensure_started(&gs_rc)?;
+                if gs_rc.borrow().advanced {
+                    return Err(PhpError::Error(
+                        "Cannot rewind a generator that was already run".to_string(),
+                    ));
+                }
+                Ok(Zval::Null)
+            }
+            other => Err(PhpError::Error(format!(
+                "Call to undefined method Generator::{}()",
+                String::from_utf8_lossy(other)
             ))),
         }
     }
@@ -4488,6 +4799,85 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php\nclass C {\n    function m() { throw new Exception('x'); }\n}\ntry {\n    (new C)->m();\n} catch (Exception $e) {\n    $t = $e->getTrace();\n    echo $t[0]['class'], $t[0]['type'], $t[0]['function'];\n}"),
             b"C->m"
+        );
+    }
+
+    // ----- GEN-1: generators (yield, foreach, current/key/next/valid/rewind) -----
+    // Expected outputs verified byte-for-byte against PHP 8.5.7 CLI.
+
+    #[test]
+    fn generator_foreach_values() {
+        assert_eq!(
+            vm_stdout(b"<?php function g(){ yield 1; yield 2; yield 3; } foreach (g() as $v) echo $v;"),
+            b"123"
+        );
+    }
+
+    #[test]
+    fn generator_foreach_keyed() {
+        assert_eq!(
+            vm_stdout(b"<?php function g(){ yield 'a'=>1; yield 'b'=>2; } foreach (g() as $k=>$v) echo \"$k=$v;\";"),
+            b"a=1;b=2;"
+        );
+    }
+
+    #[test]
+    fn generator_auto_keys() {
+        assert_eq!(
+            vm_stdout(b"<?php function g(){ yield 10; yield 20; } foreach (g() as $k=>$v) echo \"$k=$v;\";"),
+            b"0=10;1=20;"
+        );
+    }
+
+    #[test]
+    fn generator_mixed_keys_resume_counter() {
+        // An explicit integer key bumps the auto-key counter (5 → next auto 6).
+        assert_eq!(
+            vm_stdout(b"<?php function g(){ yield 5=>'a'; yield 'b'; } foreach (g() as $k=>$v) echo \"$k=$v;\";"),
+            b"5=a;6=b;"
+        );
+    }
+
+    #[test]
+    fn generator_code_between_yields_runs_in_order() {
+        // Code between yields runs lazily, interleaved with the foreach body.
+        assert_eq!(
+            vm_stdout(b"<?php function g(){ echo 'a'; yield 1; echo 'b'; yield 2; echo 'c'; } foreach(g() as $v) echo $v;"),
+            b"a1b2c"
+        );
+    }
+
+    #[test]
+    fn generator_methods_current_next_valid() {
+        assert_eq!(
+            vm_stdout(b"<?php function g(){ yield 7; yield 8; } $x=g(); echo $x->current(); $x->next(); echo $x->current(); echo $x->valid()?'Y':'N'; $x->next(); echo $x->valid()?'Y':'N';"),
+            b"78YN"
+        );
+    }
+
+    #[test]
+    fn generator_key_method() {
+        assert_eq!(
+            vm_stdout(b"<?php function g(){ yield 'x'=>9; } $i=g(); echo $i->key(), $i->current();"),
+            b"x9"
+        );
+    }
+
+    #[test]
+    fn closure_generator() {
+        assert_eq!(
+            vm_stdout(b"<?php $g = function(){ yield 1; yield 2; }; foreach ($g() as $v) echo $v;"),
+            b"12"
+        );
+    }
+
+    #[test]
+    fn generator_send_value_via_yield_expression() {
+        // The `yield` expression evaluates to NULL under `next()`/`foreach`
+        // (send arrives in GEN-2); here it is discarded, exercising `$x = yield`.
+        assert_eq!(
+            vm_stdout(b"<?php function g(){ $a = yield 1; yield 2; } foreach (g() as $v) echo $v;"),
+            b"12"
         );
     }
 }

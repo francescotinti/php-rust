@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–61 completati · 1.164 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–61 completati · 1.173 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 **Migrazione VM (Fase 4, in corso).** In parallelo all'evaluator tree-walk — che resta il motore
 di produzione e tiene il differential a 0 mismatch — è in costruzione una **VM a bytecode**
@@ -44,7 +44,13 @@ come PHP, non nel costruttore) sia engine error sintetizzato (linea dell'op che 
 ricostruiti dallo stack di frame della VM — byte-identici al tree-walker per i throw user, con un
 miglioramento di fedeltà a PHP per gli engine error (la VM ne cattura il trace al punto di errore,
 mentre il tree-walker lo sintetizza dopo l'unwind e lo lascia vuoto). Il **blocco eccezioni (EXC) è
-così completo** nella VM. Roadmap residua: generatori → rimozione di `eval/`. Piano completo: vedi il
+così completo** nella VM. E sono partiti i **generatori** (**GEN-1**): nella VM un generatore è un
+`Frame` *sospeso parcheggiato* in una side-table del `Vm` — `yield`/`yield $k=>$v`, `foreach`,
+`current`/`key`/`next`/`valid`/`rewind`, chiavi auto/esplicite con bump del contatore,
+closure-generator. Il dispatch è ora un *bounded runner* (`run_loop(baseline)`): `yield` sospende
+ritornando su per lo stack Rust, `resume` ripristina — **niente `corosensei`, niente `unsafe`** (il
+payoff della migrazione; tree-walker e VM coesistono finché non si elimina `eval/`). Roadmap residua:
+GEN-2/3/4 (`send`/`getReturn`, `yield from`, Fiber) → rimozione di `eval/`. Piano completo: vedi il
 file di piano del progetto.
 
 Step 61 ha completato i suggerimenti della code-review esterna: (E) **diff unificato** nel

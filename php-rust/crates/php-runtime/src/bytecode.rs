@@ -345,6 +345,13 @@ pub enum Op {
     /// frame to the caller, which receives it on *its* operand stack. A function
     /// body with no explicit `return` ends with `PushConst(null); Ret`.
     Ret,
+    /// `[value]` or `[key, value] -> [sent]` (GEN) — suspend the running
+    /// generator frame at a `yield`. Pops the yielded value (and key, if
+    /// `has_key`), parks the frame (with its `ip` already past this op), and
+    /// returns control to whoever resumed the generator. On the next resume the
+    /// `sent` value (the `send()` argument, NULL for `next()`/`foreach`) is pushed
+    /// so the `yield` expression evaluates to it.
+    Yield { has_key: bool },
 
     // ----- foreach iteration -----
     /// `[iterable] -> []` — pop the iterable, snapshot it into a fresh iterator
