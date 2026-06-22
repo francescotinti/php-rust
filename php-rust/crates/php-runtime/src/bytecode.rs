@@ -215,6 +215,21 @@ pub enum Op {
     /// then params); a named closure / string names a user function or builtin.
     CallValue { argc: u32 },
 
+    // ----- exceptions (EXC) -----
+    /// `[exc] -> ` (diverges) — pop the operand and unwind with
+    /// `PhpError::Thrown`. The protected-region table ([`Func::exc_table`])
+    /// routes it to a matching `catch`, or it propagates to the caller.
+    Throw,
+    /// `[exc] -> ` (diverges) — re-raise the exception on top of the stack (no
+    /// `catch` clause in the current region matched). Identical to [`Op::Throw`]
+    /// but named for legibility at the end of a catch-dispatch sequence.
+    Rethrow,
+    /// `[exc] -> [exc] | []` — catch dispatch. The in-flight exception is on top:
+    /// if its class is `instanceof` any of `types`, pop it (binding it into `var`
+    /// if present) and jump to `body`; otherwise leave it and fall through to the
+    /// next `CatchMatch` / `Rethrow`.
+    CatchMatch { types: Box<[ClassId]>, var: Option<Slot>, body: Addr },
+
     // ----- operators (semantics delegated to php_types::ops / ::convert) -----
     /// `[lhs, rhs] -> [result]` — pop rhs then lhs, push `lhs <op> rhs`.
     Binary(BinOp),
@@ -512,6 +527,20 @@ pub struct Func {
     pub is_generator: bool,
     /// Source line of the declaration, for diagnostics / stack traces.
     pub line: Line,
+    /// Protected `try` regions, innermost first (EXC). On an in-flight exception
+    /// the VM finds the first region whose `[start, end)` op range contains the
+    /// faulting instruction and jumps to its `catch` (the catch-dispatch block).
+    pub exc_table: Vec<ExcRegion>,
+}
+
+/// One protected `try` region: the half-open op range `[start, end)` of the
+/// guarded body and the address of its catch-dispatch block (EXC). Regions are
+/// listed innermost-first so a linear scan picks the tightest enclosing handler.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ExcRegion {
+    pub start: Addr,
+    pub end: Addr,
+    pub catch: Addr,
 }
 
 /// The root of a mixed property/index write path ([`Op::FieldAssign`] &c.): a

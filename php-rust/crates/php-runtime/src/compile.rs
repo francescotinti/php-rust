@@ -27,11 +27,11 @@ use php_types::{ObjectInfo, PhpStr, PropVis};
 use crate::builtin::{Builtin, Registry};
 use crate::bytecode::{
     Addr, ClassTarget, CompiledClass, CompiledConst, CompiledMethod, CompiledStaticProp, Const,
-    ConstIdx, DimBase, FieldBase, FieldStep, Func, Instantiable, Module, Op, StaticInit,
+    ConstIdx, DimBase, ExcRegion, FieldBase, FieldStep, Func, Instantiable, Module, Op, StaticInit,
 };
 use crate::hir::{
-    BinOp, Case, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, MatchArm, Place, PlaceBase,
-    PlaceStep, Program, StaticAssignOp, Stmt, StmtKind, Visibility,
+    BinOp, Case, CatchClause, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, MatchArm,
+    Place, PlaceBase, PlaceStep, Program, StaticAssignOp, Stmt, StmtKind, Visibility,
 };
 
 /// A construct the proof-slice compiler does not yet lower. Carries the HIR
@@ -168,6 +168,7 @@ fn compile_body(
         by_ref,
         is_generator,
         line: 0,
+        exc_table: c.exc_regions,
     })
 }
 
@@ -189,6 +190,7 @@ fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
         by_ref: fd.by_ref,
         is_generator: fd.is_generator,
         line: fd.line,
+        exc_table: Vec::new(),
     }
 }
 
@@ -371,6 +373,7 @@ fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassI
         by_ref: false,
         is_generator: false,
         line: 0,
+        exc_table: c.exc_regions,
     })
 }
 
@@ -389,6 +392,7 @@ fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, decl_class: 
         by_ref: false,
         is_generator: false,
         line: 0,
+        exc_table: c.exc_regions,
     })
 }
 
@@ -405,6 +409,7 @@ fn const_stub(name: &[u8], err: &CompileError) -> Func {
         by_ref: false,
         is_generator: false,
         line: 0,
+        exc_table: Vec::new(),
     }
 }
 
@@ -455,6 +460,9 @@ struct FnCompiler<'a> {
     n_locals: u32,
     n_temps_cur: u32,
     n_temps_max: u32,
+    /// Protected `try` regions accumulated while compiling this body (EXC); each
+    /// is appended when its `try` finishes, so inner regions precede outer ones.
+    exc_regions: Vec<ExcRegion>,
 }
 
 /// One enclosing loop's unresolved jump sites. `break` jumps land at the loop
@@ -481,6 +489,7 @@ impl<'a> FnCompiler<'a> {
             n_locals,
             n_temps_cur: 0,
             n_temps_max: 0,
+            exc_regions: Vec::new(),
         }
     }
 
@@ -682,6 +691,7 @@ impl<'a> FnCompiler<'a> {
                 }
             }
             StmtKind::Switch { subject, cases } => self.switch(subject, cases)?,
+            StmtKind::Try { body, catches, finally } => self.try_stmt(body, catches, finally)?,
             StmtKind::Global(bindings) => {
                 // REF-1. At script scope the named variable *is* the global
                 // (main's frame is the global frame), so `global` is a no-op —
@@ -918,6 +928,13 @@ impl<'a> FnCompiler<'a> {
             }
             ExprKind::FirstClassCallable(name) => {
                 self.emit(Op::MakeFcc { name: name.clone() });
+            }
+            ExprKind::Throw(e) => {
+                // PHP 8 `throw` is an expression that diverges; evaluate the
+                // operand and raise. Any value the surrounding context expected is
+                // never produced (the following ops are unreachable).
+                self.expr(e)?;
+                self.emit(Op::Throw);
             }
             ExprKind::CallDynamic { callee, args } => {
                 // Push the callee, then the arguments by value; `CallValue`
@@ -1433,6 +1450,56 @@ impl<'a> FnCompiler<'a> {
     /// expression in source order (consumed at run time beneath the value). The
     /// in-place vs copy-on-write distinction between object and array steps is the
     /// VM's job; the compiler only records the shape.
+    /// Compile `try { body } catch (...) { } ...` (EXC-1; `finally` is out of
+    /// slice → falls back to the evaluator). The body's op range becomes a
+    /// protected region pointing at the catch-dispatch block: one `CatchMatch`
+    /// per clause (forward-referencing its body) terminated by `Rethrow`, then
+    /// the catch bodies. On a thrown exception the VM jumps to `catch_addr`.
+    fn try_stmt(&mut self, body: &[Stmt], catches: &[CatchClause], finally: &[Stmt]) -> R<()> {
+        if !finally.is_empty() {
+            return Err(CompileError::Unsupported("try/finally".into()));
+        }
+        let start = self.here();
+        self.block(body)?;
+        let end = self.here(); // exclusive end of the protected op range
+        let skip = self.emit(Op::Jump(Addr::MAX)); // normal completion skips the catches
+        let catch_addr = self.here();
+        self.exc_regions.push(ExcRegion { start, end, catch: catch_addr });
+        // Catch dispatch: one `CatchMatch` per clause (body forward-referenced),
+        // then `Rethrow` if none matched.
+        let mut sites: Vec<(Addr, Vec<ClassId>, Option<crate::hir::Slot>)> = Vec::new();
+        for c in catches {
+            let cids = self.resolve_catch_types(&c.types);
+            let at = self.emit(Op::CatchMatch {
+                types: cids.clone().into(),
+                var: c.var,
+                body: Addr::MAX,
+            });
+            sites.push((at, cids, c.var));
+        }
+        self.emit(Op::Rethrow);
+        let mut end_jumps = Vec::new();
+        for (i, c) in catches.iter().enumerate() {
+            let body_at = self.here();
+            let (at, cids, var) = &sites[i];
+            self.patch(*at, Op::CatchMatch { types: cids.clone().into(), var: *var, body: body_at });
+            self.block(&c.body)?;
+            end_jumps.push(self.emit(Op::Jump(Addr::MAX)));
+        }
+        let after = self.here();
+        self.patch(skip, Op::Jump(after));
+        for j in end_jumps {
+            self.patch(j, Op::Jump(after));
+        }
+        Ok(())
+    }
+
+    /// Resolve a catch clause's type names to class ids (compile time); a name the
+    /// program doesn't define is dropped — it can never match a thrown object.
+    fn resolve_catch_types(&self, names: &[Box<[u8]>]) -> Vec<ClassId> {
+        names.iter().filter_map(|n| self.resolve_class(n)).collect()
+    }
+
     fn field_path(&mut self, place: &Place) -> R<(FieldBase, Vec<FieldStep>)> {
         let base = match place.base {
             PlaceBase::Local(s) => FieldBase::Local(s),

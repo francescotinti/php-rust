@@ -187,7 +187,61 @@ impl Vm<'_> {
     }
 
     /// Run until the bottom frame returns, yielding the script's result value.
+    /// Intercepts thrown exceptions (EXC): when [`Self::run_until_error`] surfaces
+    /// an `Err`, [`Self::unwind`] either routes it to a matching `catch` (and we
+    /// resume) or reports it unhandled (and we propagate it as the run's fatal).
     fn run(&mut self) -> Result<Zval, PhpError> {
+        loop {
+            match self.run_until_error() {
+                Ok(v) => return Ok(v),
+                Err(e) => match self.unwind(e) {
+                    None => {} // routed to a `catch`; resume there
+                    Some(e) => return Err(e),
+                },
+            }
+        }
+    }
+
+    /// Find the innermost `try` whose protected range covers the in-flight
+    /// exception and route control to its catch-dispatch block, popping frames
+    /// with no handler. Returns `None` once control is parked at a `catch`, or
+    /// `Some(e)` if the exception is uncatchable (a non-object throw, an engine
+    /// error — EXC-3 — or `Exit`) or escapes the top frame uncaught.
+    fn unwind(&mut self, e: PhpError) -> Option<PhpError> {
+        // EXC-1: only user-thrown objects are catchable; everything else (engine
+        // errors, `Exit`, a thrown non-object) propagates unchanged.
+        let obj = match &e {
+            PhpError::Thrown(v) if matches!(v, Zval::Object(_)) => v.clone(),
+            _ => return Some(e),
+        };
+        loop {
+            let top = self.frames.len() - 1;
+            let faulting = self.frames[top].ip.saturating_sub(1);
+            let region = self.frames[top]
+                .func
+                .exc_table
+                .iter()
+                .find(|r| faulting >= r.start as usize && faulting < r.end as usize)
+                .copied();
+            if let Some(r) = region {
+                // Statement boundaries leave the operand stack at its baseline, so
+                // clearing any partial-expression values restores it for the catch
+                // body; then park the exception for `CatchMatch`.
+                self.frames[top].stack.clear();
+                self.frames[top].stack.push(obj);
+                self.frames[top].ip = r.catch as usize;
+                return None;
+            }
+            if self.frames.len() == 1 {
+                return Some(e); // escaped the top frame uncaught
+            }
+            self.frames.pop();
+        }
+    }
+
+    /// The dispatch loop proper: runs until the bottom frame returns or an op
+    /// raises a `PhpError` (which [`Self::run`] then routes through `unwind`).
+    fn run_until_error(&mut self) -> Result<Zval, PhpError> {
         loop {
             let top = self.frames.len() - 1;
             let ip = self.frames[top].ip;
@@ -479,6 +533,27 @@ impl Vm<'_> {
                     args.reverse();
                     let callee = self.frames[top].stack.pop().expect("CallValue callee");
                     self.invoke_value(callee, args)?;
+                }
+                Op::Throw => {
+                    let v = self.frames[top].stack.pop().expect("throw operand");
+                    return Err(PhpError::Thrown(v.deref_clone()));
+                }
+                Op::Rethrow => {
+                    let v = self.frames[top].stack.pop().expect("rethrow operand");
+                    return Err(PhpError::Thrown(v));
+                }
+                Op::CatchMatch { types, var, body } => {
+                    let exc = self.frames[top].stack.last().expect("in-flight exception").clone();
+                    let caught = object_class_id(&exc)
+                        .is_some_and(|ec| types.iter().any(|&t| is_instance_of(self.module, ec, t)));
+                    if caught {
+                        self.frames[top].stack.pop();
+                        if let Some(slot) = var {
+                            store_slot(&mut self.frames[top].slots[slot as usize], exc);
+                        }
+                        self.frames[top].ip = body as usize;
+                    }
+                    // else: fall through to the next CatchMatch / Rethrow.
                 }
                 Op::DerefTop => {
                     // REF-4b: copy a by-ref return used in value context.
@@ -3922,4 +3997,91 @@ mod tests {
             b"42"
         );
     }
+
+    // ----- EXC-1: throw + try/catch (user-thrown objects, no finally) -----
+
+    #[test]
+    fn try_catch_basic() {
+        assert_eq!(
+            vm_stdout(b"<?php try { throw new Exception('boom'); } catch (Exception $e) { echo $e->getMessage(); }"),
+            b"boom"
+        );
+    }
+
+    #[test]
+    fn try_catch_no_throw_skips_handler() {
+        assert_eq!(
+            vm_stdout(b"<?php try { echo 'body'; } catch (Exception $e) { echo 'no'; } echo '!';"),
+            b"body!"
+        );
+    }
+
+    #[test]
+    fn try_catch_resumes_after() {
+        assert_eq!(
+            vm_stdout(b"<?php try { throw new Exception('x'); } catch (Exception $e) {} echo 'after';"),
+            b"after"
+        );
+    }
+
+    #[test]
+    fn try_catch_first_matching_clause_wins() {
+        assert_eq!(
+            vm_stdout(b"<?php try { throw new Exception('a'); } catch (TypeError $e) { echo 'no'; } catch (Exception $e) { echo 'yes'; }"),
+            b"yes"
+        );
+    }
+
+    #[test]
+    fn try_catch_variable_less() {
+        assert_eq!(
+            vm_stdout(b"<?php try { throw new Exception('x'); } catch (Exception) { echo 'caught'; }"),
+            b"caught"
+        );
+    }
+
+    #[test]
+    fn try_catch_by_throwable_interface() {
+        assert_eq!(
+            vm_stdout(b"<?php try { throw new Exception('x'); } catch (Throwable $e) { echo 't'; }"),
+            b"t"
+        );
+    }
+
+    #[test]
+    fn exception_propagates_from_called_function() {
+        assert_eq!(
+            vm_stdout(b"<?php function f() { throw new Exception('deep'); } try { f(); echo 'unreached'; } catch (Exception $e) { echo $e->getMessage(); }"),
+            b"deep"
+        );
+    }
+
+    #[test]
+    fn throw_mid_expression_clears_stack() {
+        // The partial expression value (`5 +`) is discarded before the catch runs.
+        assert_eq!(
+            vm_stdout(b"<?php function g() { throw new Exception('e'); } try { $r = 5 + g(); echo 'unreached'; } catch (Exception $e) { echo 'caught'; }"),
+            b"caught"
+        );
+    }
+
+    #[test]
+    fn nested_try_inner_rethrows_to_outer() {
+        // The inner clause (TypeError) does not match; its Rethrow reaches the
+        // outer Exception handler.
+        assert_eq!(
+            vm_stdout(b"<?php try { try { throw new Exception('x'); } catch (TypeError $e) { echo 'inner'; } } catch (Exception $e) { echo 'outer'; }"),
+            b"outer"
+        );
+    }
+
+    #[test]
+    fn uncaught_exception_is_fatal() {
+        // No matching clause anywhere: the run reports a fatal (not a panic).
+        let program = lower_source(b"test.php", b"<?php throw new Exception('nope');").expect("lower");
+        let module = compile_program(&program, &Registry::new()).expect("compile");
+        let out = run_module(&module, &Registry::new());
+        assert!(out.fatal.is_some(), "expected an uncaught-exception fatal");
+    }
 }
+
