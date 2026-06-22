@@ -118,6 +118,17 @@ impl Const {
     }
 }
 
+/// The storable cell a dimension write ([`Op::AssignDim`] / [`Op::AppendDim`])
+/// is rooted at. Reads don't need this — they consume a base *value* off the
+/// stack — but a write must reach back into a real cell to persist (and to
+/// copy-on-write the array in place), so it names the slot directly. `Global`
+/// targets the script (bottom) frame, for `$GLOBALS['x'][…] = …`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DimBase {
+    Local(Slot),
+    Global(Slot),
+}
+
 /// One VM instruction. Operands are immediate (slots, constant-pool indices,
 /// jump addresses); runtime values flow through the frame's operand stack.
 ///
@@ -164,6 +175,11 @@ pub enum Op {
     JumpIfFalse(Addr),
     /// `[cond] -> []` — pop; jump to `addr` if the value is truthy.
     JumpIfTrue(Addr),
+    /// `[v] -> [v]` if `v` is *not* null/undefined (jump to `addr`, value kept);
+    /// `[v] -> []` otherwise (fall through, value discarded). The primitive
+    /// behind `??` and `??=`: the left operand is read silently, and the right is
+    /// evaluated only when the left is null.
+    JumpIfNotNull(Addr),
 
     // ----- output -----
     /// `[v] -> []` — pop, stringify (PHP string conversion), and emit to stdout.
@@ -172,6 +188,28 @@ pub enum Op {
     /// `[v] -> [int(1)]` — pop, stringify and emit, then push `int(1)`: `print`
     /// is an expression valued 1.
     Print,
+
+    // ----- arrays & dimensions -----
+    /// `[] -> [array()]` — push a fresh empty array. An array literal compiles to
+    /// `ArrayInit` followed by one `ArrayPush` / `ArrayInsert` per element, so the
+    /// growing array stays on the stack under the element operands.
+    ArrayInit,
+    /// `[array, v] -> [array]` — append `v` to the array (next integer key).
+    ArrayPush,
+    /// `[array, key, v] -> [array]` — insert `v` at `key` (key coerced per PHP).
+    ArrayInsert,
+    /// `[base, key] -> [v]` — read `base[key]` by value (array element or string
+    /// offset); a missing key / non-subscriptable base yields NULL. Read context
+    /// is silent in the proof slice (the undefined-key warning rides the
+    /// diagnostics-ordering work, like the undefined-variable notice).
+    FetchDim,
+    /// `[key, v] -> [v]` — store `v` into `base[key]`, copy-on-writing the array
+    /// in the rooted cell and auto-vivifying it from null/undefined. Leaves `v`
+    /// (the assignment's value).
+    AssignDim(DimBase),
+    /// `[v] -> [v]` — append `v` to the array in the rooted cell (`$a[] = v`),
+    /// auto-vivifying from null/undefined. Leaves `v`.
+    AppendDim(DimBase),
 
     // ----- calls & frame control -----
     /// `[arg0, arg1, …, arg{argc-1}] -> [result]` — call user function

@@ -19,8 +19,8 @@
 //! Calls, arrays, references, OOP and generators are deliberately out of slice;
 //! `Module::functions` / `closures` are left empty until the call opcode lands.
 
-use crate::bytecode::{Addr, Const, ConstIdx, Func, Module, Op};
-use crate::hir::{Expr, ExprKind, FnDecl, Program, Stmt, StmtKind};
+use crate::bytecode::{Addr, Const, ConstIdx, DimBase, Func, Module, Op};
+use crate::hir::{Expr, ExprKind, FnDecl, Place, PlaceBase, PlaceStep, Program, Stmt, StmtKind};
 
 /// A construct the proof-slice compiler does not yet lower. Carries the HIR
 /// variant name so the coverage gap is legible (mirrors `lower::LowerError`).
@@ -440,6 +440,48 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::Print);
             }
             ExprKind::Call { name, args, named } => self.call(name, args, named)?,
+            ExprKind::Array(elems) => {
+                self.emit(Op::ArrayInit);
+                for el in elems {
+                    if matches!(el.value.kind, ExprKind::Spread(_)) {
+                        return Err(CompileError::Unsupported("array spread element".into()));
+                    }
+                    match &el.key {
+                        Some(k) => {
+                            self.expr(k)?;
+                            self.expr(&el.value)?;
+                            self.emit(Op::ArrayInsert);
+                        }
+                        None => {
+                            self.expr(&el.value)?;
+                            self.emit(Op::ArrayPush);
+                        }
+                    }
+                }
+            }
+            ExprKind::Index { base, index } => {
+                self.expr(base)?;
+                self.expr(index)?;
+                self.emit(Op::FetchDim);
+            }
+            ExprKind::AssignPlace(place, rhs) => self.assign_place(place, rhs)?,
+            ExprKind::Coalesce(a, b) => {
+                // Left read silently (Var/Index reads don't warn); right only if null.
+                self.expr(a)?;
+                let to_end = self.emit(Op::JumpIfNotNull(Addr::MAX));
+                self.expr(b)?;
+                let end = self.here();
+                self.patch(to_end, Op::JumpIfNotNull(end));
+            }
+            ExprKind::AssignCoalesce(slot, rhs) => {
+                self.emit(Op::LoadSlot(*slot));
+                let to_end = self.emit(Op::JumpIfNotNull(Addr::MAX));
+                self.expr(rhs)?;
+                self.emit(Op::Dup); // the assignment yields the stored value
+                self.emit(Op::StoreSlot(*slot));
+                let end = self.here();
+                self.patch(to_end, Op::JumpIfNotNull(end));
+            }
             other => return Err(CompileError::Unsupported(expr_name(other))),
         }
         Ok(())
@@ -518,6 +560,41 @@ impl<'a> FnCompiler<'a> {
         }
         self.emit(Op::Call { func: idx as u32, argc: args.len() as u32 });
         Ok(())
+    }
+
+    /// Compile a single-level array-element write: `$a[k] = rhs` or `$a[] = rhs`,
+    /// rooted at a local (or `$GLOBALS`) slot. Nested targets (`$a[i][j] = …`)
+    /// and object-property targets (`$this`) await the write-back / OOP work.
+    fn assign_place(&mut self, place: &Place, rhs: &Expr) -> R<()> {
+        let base = dim_base(place)?;
+        match place.steps.as_slice() {
+            [PlaceStep::Index(k)] => {
+                self.expr(k)?;
+                self.expr(rhs)?;
+                self.emit(Op::AssignDim(base));
+            }
+            [PlaceStep::Append] => {
+                self.expr(rhs)?;
+                self.emit(Op::AppendDim(base));
+            }
+            _ => {
+                return Err(CompileError::Unsupported(
+                    "nested or property array write (single-level only)".into(),
+                ))
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Map a [`Place`]'s base to the VM's write-cell selector. Only a single-step
+/// array write on a local / `$GLOBALS` slot is in slice; `$this` and deeper
+/// chains are rejected so the VM never sees an opcode it can't honour.
+fn dim_base(place: &Place) -> R<DimBase> {
+    match place.base {
+        PlaceBase::Local(s) => Ok(DimBase::Local(s)),
+        PlaceBase::Global(s) => Ok(DimBase::Global(s)),
+        PlaceBase::This => Err(CompileError::Unsupported("$this property write".into())),
     }
 }
 

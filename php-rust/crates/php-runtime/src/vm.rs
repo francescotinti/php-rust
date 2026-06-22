@@ -15,9 +15,11 @@
 //! `php_types::convert`, exactly as the tree-walker does — the VM only moves
 //! data and steers control flow.
 
-use php_types::{convert, ops, Diags, PhpError, Zval};
+use std::rc::Rc;
 
-use crate::bytecode::{Func, Module, Op};
+use php_types::{convert, ops, Diags, Key, PhpArray, PhpError, PhpStr, Zval};
+
+use crate::bytecode::{DimBase, Func, Module, Op};
 use crate::hir::{BinOp, CastKind, UnOp};
 
 /// The result of running a [`Module`]: the bytes written to stdout, the
@@ -172,6 +174,55 @@ impl Vm<'_> {
                     self.stdout.extend_from_slice(s.as_bytes());
                     self.frames[top].stack.push(Zval::Long(1));
                 }
+                Op::JumpIfNotNull(addr) => {
+                    let keep = !matches!(
+                        self.frames[top].stack.last(),
+                        Some(Zval::Null | Zval::Undef)
+                    );
+                    if keep {
+                        self.frames[top].ip = addr as usize;
+                    } else {
+                        self.frames[top].stack.pop();
+                    }
+                }
+                Op::ArrayInit => {
+                    self.frames[top].stack.push(Zval::Array(Rc::new(PhpArray::new())));
+                }
+                Op::ArrayPush => {
+                    let value = self.frames[top].stack.pop().expect("ArrayPush value");
+                    let mut arr = self.frames[top].stack.pop().expect("ArrayPush array");
+                    if let Zval::Array(rc) = &mut arr {
+                        let _ = Rc::make_mut(rc).append(value);
+                    }
+                    self.frames[top].stack.push(arr);
+                }
+                Op::ArrayInsert => {
+                    let value = self.frames[top].stack.pop().expect("ArrayInsert value");
+                    let key = self.frames[top].stack.pop().expect("ArrayInsert key");
+                    let mut arr = self.frames[top].stack.pop().expect("ArrayInsert array");
+                    if let Zval::Array(rc) = &mut arr {
+                        let k = coerce_key_silent(&key)
+                            .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
+                        Rc::make_mut(rc).insert(k, value);
+                    }
+                    self.frames[top].stack.push(arr);
+                }
+                Op::FetchDim => {
+                    let key = self.frames[top].stack.pop().expect("FetchDim key");
+                    let base = self.frames[top].stack.pop().expect("FetchDim base");
+                    self.frames[top].stack.push(read_dim(&base, &key));
+                }
+                Op::AssignDim(base) => {
+                    let value = self.frames[top].stack.pop().expect("AssignDim value");
+                    let key = self.frames[top].stack.pop().expect("AssignDim key");
+                    self.array_set(base, top, Some(key), value.clone())?;
+                    self.frames[top].stack.push(value);
+                }
+                Op::AppendDim(base) => {
+                    let value = self.frames[top].stack.pop().expect("AppendDim value");
+                    self.array_set(base, top, None, value.clone())?;
+                    self.frames[top].stack.push(value);
+                }
                 Op::Call { func, argc } => {
                     let callee = &self.module.functions[func as usize];
                     // Pop argc args (pushed left-to-right) and bind them to the
@@ -208,6 +259,27 @@ impl Vm<'_> {
             }
         }
     }
+
+    /// Store (or append, when `key` is `None`) into the array rooted at `base`,
+    /// copy-on-writing it in place and auto-vivifying from null/undefined/false.
+    /// A reference cell is followed so the write lands in the shared target.
+    fn array_set(
+        &mut self,
+        base: DimBase,
+        top: usize,
+        key: Option<Zval>,
+        value: Zval,
+    ) -> Result<(), PhpError> {
+        let cell = match base {
+            DimBase::Local(s) => &mut self.frames[top].slots[s as usize],
+            DimBase::Global(s) => &mut self.frames[0].slots[s as usize],
+        };
+        if let Zval::Ref(rc) = cell {
+            let mut inner = rc.borrow_mut();
+            return set_into(&mut inner, key, value);
+        }
+        set_into(cell, key, value)
+    }
 }
 
 /// Read a local cell's value, following a reference and mapping an unset slot to
@@ -218,6 +290,86 @@ fn read_slot(cell: &Zval) -> Zval {
         Zval::Ref(r) => r.borrow().clone(),
         other => other.clone(),
     }
+}
+
+/// Coerce an index value to an array [`Key`] without raising diagnostics — the
+/// proof slice reads and writes silently. Mirrors `eval::coerce_key` minus the
+/// deprecation/warning pushes; `None` marks an illegal offset type
+/// (array/object/closure/generator/resource).
+fn coerce_key_silent(v: &Zval) -> Option<Key> {
+    match v {
+        Zval::Long(i) => Some(Key::Int(*i)),
+        Zval::Bool(b) => Some(Key::Int(*b as i64)),
+        Zval::Double(d) => Some(Key::Int(convert::dval_to_lval(*d))),
+        Zval::Str(s) => Some(Key::from_zstr(s)),
+        Zval::Null | Zval::Undef => Some(Key::from_bytes(b"")),
+        Zval::Ref(c) => coerce_key_silent(&c.borrow()),
+        _ => None,
+    }
+}
+
+/// Read `base[key]` by value (silent). Array elements deref-clone; a string base
+/// reads a byte offset; anything else (or a missing key) yields NULL.
+fn read_dim(base: &Zval, key: &Zval) -> Zval {
+    match base {
+        Zval::Array(a) => match coerce_key_silent(key) {
+            Some(k) => a.get(&k).map(|v| v.deref_clone()).unwrap_or(Zval::Null),
+            None => Zval::Null,
+        },
+        Zval::Str(s) => read_string_offset(s, key),
+        Zval::Ref(rc) => read_dim(&rc.borrow(), key),
+        _ => Zval::Null,
+    }
+}
+
+/// String byte-offset read `$s[i]` (silent): integer index, negatives count from
+/// the end, out-of-range yields `""`.
+fn read_string_offset(s: &PhpStr, key: &Zval) -> Zval {
+    if matches!(key, Zval::Array(_) | Zval::Object(_) | Zval::Closure(_) | Zval::Generator(_)) {
+        return Zval::Null;
+    }
+    let i = convert::to_long_cast(key, &mut Diags::new());
+    let len = s.len() as i64;
+    let idx = if i < 0 { len + i } else { i };
+    if idx < 0 || idx >= len {
+        Zval::Str(PhpStr::new(Vec::new()))
+    } else {
+        Zval::Str(PhpStr::new(vec![s.as_bytes()[idx as usize]]))
+    }
+}
+
+/// Store/append `value` into the array `cell`, auto-vivifying it from
+/// null/undefined/false and copy-on-writing a shared backing store.
+fn set_into(cell: &mut Zval, key: Option<Zval>, value: Zval) -> Result<(), PhpError> {
+    match cell {
+        Zval::Undef | Zval::Null | Zval::Bool(false) => {
+            *cell = Zval::Array(Rc::new(PhpArray::new()));
+        }
+        Zval::Array(_) => {}
+        _ => {
+            return Err(PhpError::Error(
+                "Cannot use a scalar value as an array".to_string(),
+            ))
+        }
+    }
+    let Zval::Array(rc) = cell else { unreachable!("vivified to array above") };
+    let arr = Rc::make_mut(rc);
+    match key {
+        Some(k) => {
+            let k = coerce_key_silent(&k)
+                .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
+            arr.insert(k, value);
+        }
+        None => {
+            arr.append(value).map_err(|_| {
+                PhpError::Error(
+                    "Cannot add element to the array as the next element is already occupied"
+                        .to_string(),
+                )
+            })?;
+        }
+    }
+    Ok(())
 }
 
 /// Write `v` into a local cell. A reference slot writes *through* its shared
@@ -379,5 +531,67 @@ mod tests {
             vm_stdout(b"<?php function sub($a, $b) { return $a - $b; } echo sub(sub(10, 3), 2);"),
             b"5"
         );
+    }
+
+    #[test]
+    fn array_literal_and_index_read() {
+        assert_eq!(vm_stdout(b"<?php $a = [10, 20, 30]; echo $a[1];"), b"20");
+    }
+
+    #[test]
+    fn keyed_array_literal() {
+        assert_eq!(
+            vm_stdout(b"<?php $a = ['x' => 5, 'y' => 7]; echo $a['x'] + $a['y'];"),
+            b"12"
+        );
+    }
+
+    #[test]
+    fn element_assign_and_append() {
+        assert_eq!(
+            vm_stdout(b"<?php $a = []; $a[0] = 1; $a[1] = 2; echo $a[0] + $a[1];"),
+            b"3"
+        );
+        assert_eq!(
+            vm_stdout(b"<?php $a = []; $a[] = 'p'; $a[] = 'q'; echo $a[0] . $a[1];"),
+            b"pq"
+        );
+    }
+
+    #[test]
+    fn autovivification_from_undefined() {
+        assert_eq!(vm_stdout(b"<?php $a[] = 1; $a[] = 2; echo $a[0] + $a[1];"), b"3");
+        assert_eq!(vm_stdout(b"<?php $a['k'] = 9; echo $a['k'];"), b"9");
+    }
+
+    #[test]
+    fn nested_array_read() {
+        assert_eq!(vm_stdout(b"<?php $a = [[1, 2], [3, 4]]; echo $a[1][0];"), b"3");
+    }
+
+    #[test]
+    fn string_offset_read() {
+        assert_eq!(vm_stdout(b"<?php $s = 'hello'; echo $s[1];"), b"e");
+        assert_eq!(vm_stdout(b"<?php $s = 'hello'; echo $s[-1];"), b"o");
+    }
+
+    #[test]
+    fn coalesce_on_variable() {
+        assert_eq!(vm_stdout(b"<?php echo $x ?? 'def';"), b"def");
+        assert_eq!(vm_stdout(b"<?php $x = 'v'; echo $x ?? 'def';"), b"v");
+    }
+
+    #[test]
+    fn coalesce_on_array_element() {
+        assert_eq!(
+            vm_stdout(b"<?php $a = ['k' => 9]; echo $a['k'] ?? 0; echo $a['m'] ?? 7;"),
+            b"97"
+        );
+    }
+
+    #[test]
+    fn coalesce_assign() {
+        assert_eq!(vm_stdout(b"<?php $x ??= 5; echo $x;"), b"5");
+        assert_eq!(vm_stdout(b"<?php $x = 1; $x ??= 5; echo $x;"), b"1");
     }
 }
