@@ -555,6 +555,11 @@ pub struct Func {
     /// Number of formal parameters, occupying the leading `n_params` slots
     /// (`params[i].slot == i`, as the HIR guarantees).
     pub n_params: u32,
+    /// The slot of a trailing `...$rest` variadic parameter (PAR), or `None`.
+    /// When set, the call binder fills slots `0..variadic_slot` from the leading
+    /// arguments and collects every remaining argument into an array in this
+    /// slot (an empty array when there are no extras).
+    pub variadic_slot: Option<Slot>,
     /// `function &f()` — returns by reference (carried through for the by-ref
     /// call/return path, ported later).
     pub by_ref: bool,

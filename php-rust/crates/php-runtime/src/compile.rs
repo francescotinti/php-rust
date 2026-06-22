@@ -172,6 +172,7 @@ fn compile_body(
         // Named locals plus the high-water mark of compiler temporaries.
         n_slots: n_locals + c.n_temps_max,
         n_params,
+        variadic_slot: params.iter().find(|p| p.variadic).map(|p| p.slot),
         by_ref,
         is_generator,
         line: 0,
@@ -195,6 +196,7 @@ fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
         consts: vec![Const::Str(msg.into_bytes().into())],
         n_slots: fd.slots.len() as u32,
         n_params: fd.params.len() as u32,
+        variadic_slot: fd.params.iter().find(|p| p.variadic).map(|p| p.slot),
         by_ref: fd.by_ref,
         is_generator: fd.is_generator,
         line: fd.line,
@@ -379,6 +381,7 @@ fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassI
         consts: c.consts,
         n_slots: c.n_temps_max,
         n_params: 0,
+        variadic_slot: None,
         by_ref: false,
         is_generator: false,
         line: 0,
@@ -399,6 +402,7 @@ fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, decl_class: 
         consts: c.consts,
         n_slots: c.n_temps_max,
         n_params: 0,
+        variadic_slot: None,
         by_ref: false,
         is_generator: false,
         line: 0,
@@ -417,6 +421,7 @@ fn const_stub(name: &[u8], err: &CompileError) -> Func {
         consts: vec![Const::Str(msg.into_bytes().into())],
         n_slots: 0,
         n_params: 0,
+        variadic_slot: None,
         by_ref: false,
         is_generator: false,
         line: 0,
@@ -1162,9 +1167,6 @@ impl<'a> FnCompiler<'a> {
         // User functions shadow builtins.
         if let Some(idx) = self.ctx.funcs.iter().position(|f| ascii_eq_ignore_case(&f.name, name)) {
             let callee = &self.ctx.funcs[idx];
-            if callee.params.iter().any(|p| p.variadic) {
-                return Err(CompileError::Unsupported("call to a variadic function".into()));
-            }
             // Omitted optional args are filled by the callee's default prologue
             // (PAR); extra args are dropped by the binder. A required arg left
             // unbound reads as NULL (ArgumentCountError is a later block).

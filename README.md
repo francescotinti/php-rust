@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–61 completati · 1.202 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–61 completati · 1.209 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 **Migrazione VM (Fase 4, in corso).** In parallelo all'evaluator tree-walk — che resta il motore
 di produzione e tiene il differential a 0 mismatch — è in costruzione una **VM a bytecode**
@@ -70,9 +70,11 @@ parità di copertura con l'eval (pre-requisito per spegnere `eval/`). Primo bloc
 default + arità** — un *prologo* per-funzione (`Op::FillDefault`) riempie gli argomenti opzionali
 omessi nel frame del chiamato (così un default può riferirsi a parametri precedenti), e il binding
 degli argomenti è ora limitato a `n_params` (gli argomenti in eccesso vengono scartati come in PHP).
-Vale per funzioni, metodi, costruttori e closure. Restano da portare alla VM: argomenti con nome,
-spread/unpacking, funzioni variadiche, riferimenti dinamici a classe, `ArgumentCountError`, e altri
-edge — vedi i ~50 siti `CompileError::Unsupported` in `compile.rs`.
+Vale per funzioni, metodi, costruttori e closure. Secondo blocco: **funzioni variadiche**
+(`function f($a, ...$rest)`) — il binder raccoglie gli argomenti in eccesso in un array (chiavi intere
+sequenziali, vuoto se nessuno) nello slot variadico, combinandosi coi default. Restano da portare alla
+VM: argomenti con nome, spread/unpacking, riferimenti dinamici a classe, `ArgumentCountError`, e altri
+edge — vedi i siti `CompileError::Unsupported` in `compile.rs`.
 
 Step 61 ha completato i suggerimenti della code-review esterna: (E) **diff unificato** nel
 `phpt-runner` (`--list-fails` mostra un line-diff EXPECTF-aware invece di due blob troncati); (B)

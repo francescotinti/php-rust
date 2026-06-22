@@ -890,7 +890,7 @@ impl<'m> Vm<'m> {
                     }
                     args.reverse();
                     let mut frame = Frame::new(callee);
-                    bind_params(&mut frame, args, callee.n_params);
+                    bind_params(&mut frame, args);
                     self.enter_callee(frame);
                 }
                 Op::CallBuiltin { name, argc } => {
@@ -1224,7 +1224,7 @@ impl<'m> Vm<'m> {
                         Some((defc, midx)) => {
                             let callee = &module.classes[defc].methods[midx].func;
                             let mut frame = Frame::new(callee);
-                            bind_params(&mut frame, args, callee.n_params);
+                            bind_params(&mut frame, args);
                             frame.this = Some(this);
                             frame.class = Some(defc);
                             frame.static_class = Some(cid); // LSB = receiver's actual class
@@ -1259,7 +1259,7 @@ impl<'m> Vm<'m> {
                     let lsb = object_class_id(&this).unwrap_or(class);
                     let callee = &module.classes[class].methods[method_idx as usize].func;
                     let mut frame = Frame::new(callee);
-                    bind_params(&mut frame, args, callee.n_params);
+                    bind_params(&mut frame, args);
                     frame.this = Some(this);
                     frame.class = Some(class);
                     frame.static_class = Some(lsb);
@@ -1354,7 +1354,7 @@ impl<'m> Vm<'m> {
                         Some((defc, midx)) => {
                             let callee = &module.classes[defc].methods[midx].func;
                             let mut frame = Frame::new(callee);
-                            bind_params(&mut frame, args, callee.n_params);
+                            bind_params(&mut frame, args);
                             frame.this = this;
                             frame.class = Some(defc);
                             frame.static_class = Some(static_class);
@@ -1436,7 +1436,7 @@ impl<'m> Vm<'m> {
                         Some((defc, midx)) => {
                             let callee = &module.classes[defc].methods[midx].func;
                             let mut frame = Frame::new(callee);
-                            bind_params(&mut frame, args, callee.n_params);
+                            bind_params(&mut frame, args);
                             frame.this = Some(this);
                             frame.class = Some(defc);
                             frame.static_class = Some(cid);
@@ -1666,7 +1666,7 @@ impl<'m> Vm<'m> {
         for (slot, val) in &cl.captures {
             frame.slots[*slot as usize] = val.clone();
         }
-        bind_params(&mut frame, args, callee.n_params);
+        bind_params(&mut frame, args);
         frame.this = cl.bound_this.clone();
         self.enter_callee(frame);
     }
@@ -1680,7 +1680,7 @@ impl<'m> Vm<'m> {
         {
             let callee = &self.module.functions[idx];
             let mut frame = Frame::new(callee);
-            bind_params(&mut frame, args, callee.n_params);
+            bind_params(&mut frame, args);
             self.enter_callee(frame);
             return Ok(());
         }
@@ -3034,13 +3034,35 @@ fn name_eq_ignore_case(a: &[u8], b: &[u8]) -> bool {
 }
 
 /// Bind positional `args` to a callee frame's leading parameter slots (PAR).
-/// Extra arguments beyond `n_params` are dropped (PHP silently ignores them for
-/// a non-variadic function); omitted parameters are left `Undef` for the body's
-/// default prologue ([`Op::FillDefault`]) to fill.
-fn bind_params(frame: &mut Frame, args: Vec<Zval>, n_params: u32) {
-    for (i, a) in args.into_iter().enumerate() {
-        if i < n_params as usize {
-            frame.slots[i] = a;
+/// Omitted parameters are left `Undef` for the body's default prologue
+/// ([`Op::FillDefault`]) to fill. For a **variadic** function the leading fixed
+/// params are bound and every remaining argument is collected into an array in
+/// the variadic slot (empty when there are none); otherwise surplus arguments
+/// are dropped (PHP silently ignores them for a non-variadic function).
+fn bind_params(frame: &mut Frame, args: Vec<Zval>) {
+    match frame.func.variadic_slot {
+        None => {
+            let n = frame.func.n_params as usize;
+            for (i, a) in args.into_iter().enumerate() {
+                if i < n {
+                    frame.slots[i] = a;
+                }
+            }
+        }
+        Some(vslot) => {
+            let v = vslot as usize;
+            let mut it = args.into_iter();
+            for slot in frame.slots.iter_mut().take(v) {
+                match it.next() {
+                    Some(a) => *slot = a,
+                    None => break, // omitted fixed params stay Undef (default prologue)
+                }
+            }
+            let mut rest = PhpArray::new();
+            for a in it {
+                let _ = rest.append(a);
+            }
+            frame.slots[v] = Zval::Array(Rc::new(rest));
         }
     }
 }
@@ -5514,6 +5536,65 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php $f = function($a, $b=3){ return $a+$b; }; echo $f(10);"),
             b"13"
+        );
+    }
+
+    // ----- PAR: variadic parameters (verified vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn variadic_collects_all_args() {
+        assert_eq!(
+            vm_stdout(b"<?php function sum(...$n){ $s=0; foreach($n as $x) $s+=$x; return $s; } echo sum(1,2,3,4);"),
+            b"10"
+        );
+    }
+
+    #[test]
+    fn variadic_after_fixed_param() {
+        assert_eq!(
+            vm_stdout(b"<?php function f($a, ...$rest){ $s=$a; foreach($rest as $x) $s.=$x; return $s; } echo f('x',1,2,3);"),
+            b"x123"
+        );
+    }
+
+    #[test]
+    fn variadic_empty_when_no_extra_args() {
+        assert_eq!(
+            vm_stdout(b"<?php function f($a, ...$rest){ $c=0; foreach($rest as $x) $c++; return \"$a:$c\"; } echo f('x');"),
+            b"x:0"
+        );
+    }
+
+    #[test]
+    fn variadic_array_is_indexable_with_int_keys() {
+        assert_eq!(
+            vm_stdout(b"<?php function f(...$a){ return $a[0].'-'.$a[2]; } echo f(10,20,30);"),
+            b"10-30"
+        );
+    }
+
+    #[test]
+    fn variadic_array_keys_are_sequential() {
+        assert_eq!(
+            vm_stdout(b"<?php function f(...$a){ $s=''; foreach($a as $k=>$v) $s.=\"$k:$v;\"; return $s; } echo f('a','b');"),
+            b"0:a;1:b;"
+        );
+    }
+
+    #[test]
+    fn variadic_method() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function m($x, ...$ys){ $s=$x; foreach($ys as $y) $s+=$y; return $s; } } echo (new C)->m(10,1,2,3);"),
+            b"16"
+        );
+    }
+
+    #[test]
+    fn variadic_with_default_in_between() {
+        // `f($a, $b=1, ...$rest)`: defaults fill, then the rest collects.
+        assert_eq!(
+            vm_stdout(b"<?php function f($a, $b=1, ...$rest){ $c=0; foreach($rest as $r) $c++; return \"$a-$b-$c\"; } echo f(5),'|',f(5,6),'|',f(5,6,7,8);"),
+            b"5-1-0|5-6-0|5-6-2"
         );
     }
 }
