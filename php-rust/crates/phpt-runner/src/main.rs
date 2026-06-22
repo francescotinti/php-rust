@@ -15,7 +15,9 @@ use std::process::{Command, ExitCode, Stdio};
 use std::time::{Duration, Instant};
 
 use php_builtins::registry;
-use phpt_runner::{collect_phpt, php_script_name, run_path, run_phpt, Status, Summary};
+use phpt_runner::{
+    collect_phpt, php_script_name, run_path_with, run_phpt_with, Engine, Status, Summary,
+};
 
 /// The recursive-descent front-end (mago) and our tree-walking evaluator both
 /// recurse on the native stack, so pathological tests — e.g. PHP's own
@@ -40,11 +42,15 @@ fn isolate_timeout() -> Option<Duration> {
 fn main() -> ExitCode {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
 
+    // `--engine=vm|eval` (or `--engine vm`) selects the execution engine (E3),
+    // default the production evaluator. Stripped before the path arguments.
+    let engine = extract_engine(&mut args);
+
     // Hidden child mode: run exactly one test and serialise its result, so the
     // parent (`--isolate`) can survive a crash here as a non-zero exit status.
     if let Some(pos) = args.iter().position(|a| a == "--run-one") {
         let path = args.get(pos + 1).cloned();
-        return run_one_child(path);
+        return run_one_child(path, engine);
     }
 
     let mut list_fails = false;
@@ -62,30 +68,61 @@ fn main() -> ExitCode {
     });
 
     if args.is_empty() {
-        eprintln!("usage: phpt-runner [--list-fails] [--isolate] <path>...");
+        eprintln!("usage: phpt-runner [--engine=vm|eval] [--list-fails] [--isolate] <path>...");
         return ExitCode::from(2);
     }
 
     if isolate {
         // The parent only spawns children, so it needs no large stack itself.
-        return run_isolated(&args, list_fails);
+        return run_isolated(&args, list_fails, engine);
     }
 
     // In-process (fast) path: run the whole job on a generous-stack worker.
     std::thread::Builder::new()
         .stack_size(WORKER_STACK)
-        .spawn(move || run_in_process(&args, list_fails))
+        .spawn(move || run_in_process(&args, list_fails, engine))
         .expect("spawn worker")
         .join()
         .expect("worker panicked")
 }
 
+/// Strip `--engine=<name>` / `--engine <name>` from `args` and return the chosen
+/// [`Engine`] (default [`Engine::Eval`]). An unknown name falls back to `Eval`.
+fn extract_engine(args: &mut Vec<String>) -> Engine {
+    let mut engine = Engine::Eval;
+    let mut out: Vec<String> = Vec::with_capacity(args.len());
+    let mut i = 0;
+    while i < args.len() {
+        let a = &args[i];
+        if let Some(v) = a.strip_prefix("--engine=") {
+            engine = parse_engine(v);
+        } else if a == "--engine" {
+            if let Some(v) = args.get(i + 1) {
+                engine = parse_engine(v);
+                i += 1; // also consume the value
+            }
+        } else {
+            out.push(a.clone());
+        }
+        i += 1;
+    }
+    *args = out;
+    engine
+}
+
+fn parse_engine(name: &str) -> Engine {
+    match name {
+        "vm" | "VM" => Engine::Vm,
+        _ => Engine::Eval,
+    }
+}
+
 /// Run every test in-process under one big-stack worker thread (the default).
-fn run_in_process(args: &[String], list_fails: bool) -> ExitCode {
+fn run_in_process(args: &[String], list_fails: bool, engine: Engine) -> ExitCode {
     let reg = registry();
     let mut total = Summary::default();
     for arg in args {
-        match run_path(Path::new(arg), &reg) {
+        match run_path_with(Path::new(arg), &reg, engine) {
             Ok(s) => merge(&mut total, s),
             Err(e) => {
                 eprintln!("error reading {arg}: {e}");
@@ -100,7 +137,7 @@ fn run_in_process(args: &[String], list_fails: bool) -> ExitCode {
 /// Run each test in its own child process (`--run-one`). A child that exits
 /// abnormally (signal from a stack overflow, or a panic) is recorded as one
 /// FAIL with the cause, instead of aborting the whole batch (DevEx hardening).
-fn run_isolated(args: &[String], list_fails: bool) -> ExitCode {
+fn run_isolated(args: &[String], list_fails: bool, engine: Engine) -> ExitCode {
     let exe = match std::env::current_exe() {
         Ok(p) => p,
         Err(e) => {
@@ -119,7 +156,7 @@ fn run_isolated(args: &[String], list_fails: bool) -> ExitCode {
         };
         let timeout = isolate_timeout();
         for path in paths {
-            let out = run_one_isolated(&exe, &path, timeout);
+            let out = run_one_isolated(&exe, &path, timeout, engine);
             match out {
                 // Clean run: the child serialised a result on stdout.
                 Ok(IsolatedRun::Done(o)) if o.status.success() => {
@@ -207,10 +244,15 @@ fn run_one_isolated(
     exe: &Path,
     path: &Path,
     timeout: Option<Duration>,
+    engine: Engine,
 ) -> std::io::Result<IsolatedRun> {
-    let mut child = Command::new(exe)
-        .arg("--run-one")
-        .arg(path)
+    let mut cmd = Command::new(exe);
+    cmd.arg("--run-one").arg(path);
+    // Forward the engine selection to the child (default eval needs no flag).
+    if engine == Engine::Vm {
+        cmd.arg("--engine=vm");
+    }
+    let mut child = cmd
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()?;
@@ -254,7 +296,7 @@ fn run_one_isolated(
 /// Child mode: run a single test on a big-stack worker and serialise its result
 /// as `STATUS\tCATEGORY\n` followed by the (possibly multi-line) detail. A crash
 /// or panic here exits the process abnormally, which the parent detects.
-fn run_one_child(path: Option<String>) -> ExitCode {
+fn run_one_child(path: Option<String>, engine: Engine) -> ExitCode {
     let Some(path) = path else {
         eprintln!("--run-one needs a path");
         return ExitCode::from(2);
@@ -271,7 +313,7 @@ fn run_one_child(path: Option<String>) -> ExitCode {
         .stack_size(WORKER_STACK)
         .spawn(move || {
             let reg = registry();
-            run_phpt(&src, &name, &reg)
+            run_phpt_with(&src, &name, &reg, engine)
         })
         .expect("spawn worker")
         .join()

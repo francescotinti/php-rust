@@ -38,6 +38,18 @@ pub enum Status {
     Skip,
 }
 
+/// Which execution engine runs a test (E3). `Eval` is the production tree-walker
+/// ([`php_runtime::run_source_with`]); `Vm` is the bytecode VM
+/// ([`php_runtime::vm::run_source_with`]). The runner compares the chosen
+/// engine's `rendered` stream against the `.phpt` expectation, so running the
+/// corpus on both measures VM↔eval parity (E4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Engine {
+    #[default]
+    Eval,
+    Vm,
+}
+
 /// The result of evaluating one `.phpt` file.
 #[derive(Debug, Clone)]
 pub struct TestResult {
@@ -111,8 +123,15 @@ const UNSUPPORTED_SECTIONS: &[&str] = &[
 const SUPPORTED_EXTENSIONS: &[&str] =
     &["core", "standard", "mbstring", "pcre", "json", "date"];
 
-/// Classify and (when in scope) run a single `.phpt` source.
+/// Classify and (when in scope) run a single `.phpt` source on the evaluator.
 pub fn run_phpt(src: &[u8], name: &[u8], reg: &Registry) -> TestResult {
+    run_phpt_with(src, name, reg, Engine::Eval)
+}
+
+/// Like [`run_phpt`] but on the chosen [`Engine`] (E3). The classification (which
+/// sections are in scope, the capability scan, the expectation comparison) is
+/// engine-independent; only the run step differs.
+pub fn run_phpt_with(src: &[u8], name: &[u8], reg: &Registry, engine: Engine) -> TestResult {
     let sections = parse_sections(src);
 
     let Some(file) = find(&sections, "FILE") else {
@@ -186,28 +205,44 @@ pub fn run_phpt(src: &[u8], name: &[u8], reg: &Registry) -> TestResult {
     // when it is absent, and only remove the one we created.
     let script_path = Path::new(OsStr::from_bytes(name)).to_path_buf();
     let materialized = !script_path.exists() && fs::write(&script_path, source).is_ok();
-    let run = run_source_with(name, source, reg);
+    // Run on the selected engine. Both yield the CLI-faithful `rendered` stream
+    // and an optional fatal message; the VM additionally reports a construct its
+    // bytecode compiler rejects (a VM-vs-eval coverage gap), skipped distinctly.
+    let run: Result<(Vec<u8>, Option<String>), TestResult> = match engine {
+        Engine::Eval => match run_source_with(name, source, reg) {
+            Ok(o) => Ok((o.rendered, o.fatal.as_ref().map(|e| e.message().to_string()))),
+            Err(e) => Err(TestResult::skip("parse", format!("lower error: {e}"))),
+        },
+        Engine::Vm => match php_runtime::vm::run_source_with(name, source, reg) {
+            Ok(o) => Ok((o.rendered, o.fatal.as_ref().map(|e| e.message().to_string()))),
+            Err(php_runtime::vm::VmRunError::Unsupported(what)) => {
+                Err(TestResult::skip("vm-unsupported", what))
+            }
+            Err(php_runtime::vm::VmRunError::Lower(e)) => {
+                Err(TestResult::skip("parse", format!("lower error: {e}")))
+            }
+        },
+    };
     if materialized {
         let _ = fs::remove_file(&script_path);
     }
-    let outcome = match run {
-        Ok(o) => o,
-        Err(e) => return TestResult::skip("parse", format!("lower error: {e}")),
+    let (rendered, fatal_msg) = match run {
+        Ok(v) => v,
+        Err(skip) => return skip,
     };
 
     // A builtin we have not implemented yet is a scope gap, not a defect: a
     // "Call to undefined function" fatal means missing coverage. Every other
     // fatal is rendered onto the stream (step 9) and compared like normal output.
-    if let Some(err) = &outcome.fatal {
-        let msg = err.message();
+    if let Some(msg) = &fatal_msg {
         if msg.starts_with("Call to undefined function") {
-            return TestResult::skip("builtin", msg.to_string());
+            return TestResult::skip("builtin", msg.clone());
         }
     }
 
     // Compare the rendered stream: program output with diagnostics and any
     // uncaught fatal interleaved exactly as PHP's CLI prints them (step 9).
-    let mut got = normalize(&String::from_utf8_lossy(&outcome.rendered));
+    let mut got = normalize(&String::from_utf8_lossy(&rendered));
     let want = normalize(wanted);
 
     // run-tests.php runs every test with `fatal_error_backtraces=Off`, so a
@@ -433,10 +468,16 @@ impl Summary {
 /// Run every `.phpt` under `root` (a file or a directory, searched
 /// recursively), returning the aggregate [`Summary`].
 pub fn run_path(root: &Path, reg: &Registry) -> std::io::Result<Summary> {
+    run_path_with(root, reg, Engine::Eval)
+}
+
+/// Like [`run_path`] but on the chosen [`Engine`] (E3/E4): walk `root` and run
+/// every `.phpt` through `engine`, accumulating a [`Summary`].
+pub fn run_path_with(root: &Path, reg: &Registry, engine: Engine) -> std::io::Result<Summary> {
     let mut summary = Summary::default();
     for path in collect_phpt(root)? {
         let src = fs::read(&path)?;
-        let result = run_phpt(&src, &php_script_name(&path), reg);
+        let result = run_phpt_with(&src, &php_script_name(&path), reg, engine);
         summary.record(&path, &result);
     }
     Ok(summary)
