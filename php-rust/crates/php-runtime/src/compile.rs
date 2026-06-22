@@ -102,7 +102,7 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
         .iter()
         .map(|fd| compile_fndecl(fd, &ctx).unwrap_or_else(|e| stub_func(fd, &e)))
         .collect();
-    let main = compile_body(b"", &program.body, program.slots.len() as u32, &[], false, false, &ctx, None, true)?;
+    let main = compile_body(b"", &program.body, program.slots.len() as u32, &[], &program.slots, false, false, &ctx, None, true)?;
     // Classes are compiled tolerantly too (see `compile_class`).
     let classes = program
         .classes
@@ -130,6 +130,7 @@ fn compile_fndecl(fd: &FnDecl, ctx: &ProgramCtx) -> R<Func> {
         &fd.body,
         fd.slots.len() as u32,
         &fd.params,
+        &fd.slots,
         fd.by_ref,
         fd.is_generator,
         ctx,
@@ -147,6 +148,7 @@ fn compile_body(
     body: &[Stmt],
     n_locals: u32,
     params: &[Param],
+    slot_names: &[Box<[u8]>],
     by_ref: bool,
     is_generator: bool,
     ctx: &ProgramCtx,
@@ -172,6 +174,16 @@ fn compile_body(
         // Named locals plus the high-water mark of compiler temporaries.
         n_slots: n_locals + c.n_temps_max,
         n_params,
+        // Parameter names / required-ness for run-time named-argument binding (A):
+        // a param's name is its slot's name (`params[i].slot == i`).
+        param_names: params
+            .iter()
+            .map(|p| slot_names[p.slot as usize].clone())
+            .collect(),
+        param_required: params
+            .iter()
+            .map(|p| p.default.is_none() && !p.variadic)
+            .collect(),
         variadic_slot: params.iter().find(|p| p.variadic).map(|p| p.slot),
         by_ref,
         is_generator,
@@ -196,6 +208,16 @@ fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
         consts: vec![Const::Str(msg.into_bytes().into())],
         n_slots: fd.slots.len() as u32,
         n_params: fd.params.len() as u32,
+        param_names: fd
+            .params
+            .iter()
+            .map(|p| fd.slots[p.slot as usize].clone())
+            .collect(),
+        param_required: fd
+            .params
+            .iter()
+            .map(|p| p.default.is_none() && !p.variadic)
+            .collect(),
         variadic_slot: fd.params.iter().find(|p| p.variadic).map(|p| p.slot),
         by_ref: fd.by_ref,
         is_generator: fd.is_generator,
@@ -293,6 +315,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
                 &m.decl.body,
                 m.decl.slots.len() as u32,
                 &m.decl.params,
+                &m.decl.slots,
                 m.decl.by_ref,
                 m.decl.is_generator,
                 ctx,
@@ -381,6 +404,8 @@ fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassI
         consts: c.consts,
         n_slots: c.n_temps_max,
         n_params: 0,
+        param_names: Box::default(),
+        param_required: Box::default(),
         variadic_slot: None,
         by_ref: false,
         is_generator: false,
@@ -402,6 +427,8 @@ fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, decl_class: 
         consts: c.consts,
         n_slots: c.n_temps_max,
         n_params: 0,
+        param_names: Box::default(),
+        param_required: Box::default(),
         variadic_slot: None,
         by_ref: false,
         is_generator: false,
@@ -421,6 +448,8 @@ fn const_stub(name: &[u8], err: &CompileError) -> Func {
         consts: vec![Const::Str(msg.into_bytes().into())],
         n_slots: 0,
         n_params: 0,
+        param_names: Box::default(),
+        param_required: Box::default(),
         variadic_slot: None,
         by_ref: false,
         is_generator: false,
@@ -1045,19 +1074,16 @@ impl<'a> FnCompiler<'a> {
                 }
             }
             ExprKind::MethodCall { object, method, args, named, nullsafe } => {
-                if !named.is_empty() {
-                    return Err(CompileError::Unsupported("method call with named arguments".into()));
-                }
                 self.expr(object)?;
                 if *nullsafe {
                     // `$o?->m(...)`: a null receiver keeps null and skips the call
                     // (its arguments are not evaluated either).
                     let skip = self.emit(Op::JumpIfNull(Addr::MAX));
-                    self.emit_method_call(method, args)?;
+                    self.emit_method_call(method, args, named)?;
                     let end = self.here();
                     self.patch(skip, Op::JumpIfNull(end));
                 } else {
-                    self.emit_method_call(method, args)?;
+                    self.emit_method_call(method, args, named)?;
                 }
             }
             ExprKind::InstanceOf { expr, class } => self.instance_of(expr, class)?,
@@ -1430,11 +1456,37 @@ impl<'a> FnCompiler<'a> {
     }
 
     /// Emit an instance method call `$obj->m(args)` (the receiver is already on the
-    /// stack). A spread (`...$a`) builds a runtime argument array and dispatches via
-    /// [`Op::MethodCallArgs`]; otherwise the values are pushed positionally for
-    /// [`Op::MethodCall`].
-    fn emit_method_call(&mut self, method: &[u8], args: &[Expr]) -> R<()> {
-        if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
+    /// stack). Named arguments (`name: v`) push the positional values then the named
+    /// values and dispatch via [`Op::MethodCallNamed`] (the method, hence its
+    /// parameters, is only known at run time); a spread (`...$a`) builds a runtime
+    /// argument array for [`Op::MethodCallArgs`]; otherwise the values are pushed
+    /// positionally for [`Op::MethodCall`]. Named + spread mixed falls back to the
+    /// evaluator.
+    fn emit_method_call(
+        &mut self,
+        method: &[u8],
+        args: &[Expr],
+        named: &[(Box<[u8]>, Expr)],
+    ) -> R<()> {
+        let has_spread = args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_)));
+        if !named.is_empty() {
+            if has_spread {
+                return Err(CompileError::Unsupported(
+                    "method call mixing argument unpacking and named arguments".into(),
+                ));
+            }
+            // Positional values first, then each named value (its label rides in the
+            // op); the run-time binder maps names against the callee's params.
+            self.push_value_args(args)?;
+            for (_, expr) in named {
+                self.expr(expr)?;
+            }
+            self.emit(Op::MethodCallNamed {
+                method: method.into(),
+                positional: args.len() as u32,
+                names: named.iter().map(|(n, _)| n.clone()).collect(),
+            });
+        } else if has_spread {
             self.build_args_array(args)?;
             self.emit(Op::MethodCallArgs { method: method.into() });
         } else {

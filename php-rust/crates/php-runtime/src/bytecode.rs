@@ -445,6 +445,15 @@ pub enum Op {
     /// string keys are dropped, values bound positionally. Resolves the method at
     /// run time exactly as [`Op::MethodCall`] (including `Generator`/`Fiber`).
     MethodCallArgs { method: Box<[u8]> },
+    /// `[obj, pos0, …, pos{positional-1}, named0, …, named{k-1}] -> [ret]` — an
+    /// instance method call with **named arguments** `$obj->m(p…, n: v, …)`
+    /// (Session A). The `positional` leading values fill the callee's first slots;
+    /// each of the `k = names.len()` trailing values is bound by `names[i]` to the
+    /// matching parameter (resolved at run time from the callee's `param_names`),
+    /// with gaps left for the default prologue and a trailing `...$rest` collecting
+    /// unmatched names (string keys). Mirrors the evaluator's named-binding errors
+    /// (`ArgumentCountError`, unknown / overwriting name).
+    MethodCallNamed { method: Box<[u8]>, positional: u32, names: Box<[Box<[u8]>]> },
     /// `[obj, arg0, …, arg{argc-1}] -> [ret]` — like [`Op::MethodCall`] but the
     /// target method is resolved at *compile* time (`classes[class].methods[idx]`):
     /// used for the constructor, whose defining class and slot are known statically.
@@ -625,6 +634,16 @@ pub struct Func {
     /// Number of formal parameters, occupying the leading `n_params` slots
     /// (`params[i].slot == i`, as the HIR guarantees).
     pub n_params: u32,
+    /// Name of each formal parameter (length `n_params`, parallel to the leading
+    /// slots). Empty for the synthetic thunks (prop-init, constants). Used to bind
+    /// **named arguments at run time** for a call whose callee isn't known at
+    /// compile time — `$obj->m(name: …)`, Session A — where the compile-time
+    /// layout ([`crate::compile`]'s `emit_named_layout`) can't be built.
+    pub param_names: Box<[Box<[u8]>]>,
+    /// Whether each formal parameter is *required* (no default and non-variadic),
+    /// parallel to `param_names`. The run-time named binder validates that every
+    /// required parameter received an argument (raising `ArgumentCountError`).
+    pub param_required: Box<[bool]>,
     /// The slot of a trailing `...$rest` variadic parameter (PAR), or `None`.
     /// When set, the call binder fills slots `0..variadic_slot` from the leading
     /// arguments and collects every remaining argument into an array in this

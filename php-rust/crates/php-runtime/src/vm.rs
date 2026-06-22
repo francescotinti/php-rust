@@ -1296,6 +1296,17 @@ impl<'m> Vm<'m> {
                     let this = recv.deref_clone();
                     self.method_call(top, this, &method, args)?;
                 }
+                Op::MethodCallNamed { method, positional, names } => {
+                    // Named `$obj->m(p…, n: v, …)` (Session A): pop the named values
+                    // (source order), then the positional values, then the receiver.
+                    let named_vals = self.pop_keys(top, names.len() as u32);
+                    let named: Vec<(Box<[u8]>, Zval)> =
+                        names.iter().cloned().zip(named_vals).collect();
+                    let pos = self.pop_keys(top, positional);
+                    let recv = self.frames[top].stack.pop().expect("MethodCallNamed receiver");
+                    let this = recv.deref_clone();
+                    self.dispatch_instance_call_named(top, this, &method, pos, named)?;
+                }
                 Op::InvokeMethod { class, method_idx, argc } => {
                     let module = self.module;
                     let args = self.pop_keys(top, argc);
@@ -2249,6 +2260,117 @@ impl<'m> Vm<'m> {
             }
         };
         self.dispatch_instance_call(top, cid, this, method, args)
+    }
+
+    /// Dispatch an instance method call `$this->method(positional…, named…)` whose
+    /// **named arguments** are bound at run time against the callee's `param_names`
+    /// (Session A). A non-object receiver is the "Call to a member function …" fatal
+    /// (a `Generator`/`Fiber`'s native methods take no named arguments — the first
+    /// name is reported as unknown). A resolved-and-visible user method binds via
+    /// [`build_named_frame`]; a missing/inaccessible one routes to `__call` (the
+    /// named args ride in the `$args` array as string keys, like the evaluator),
+    /// else the visibility / undefined-method error.
+    fn dispatch_instance_call_named(
+        &mut self,
+        top: usize,
+        this: Zval,
+        method: &[u8],
+        positional: Vec<Zval>,
+        named: Vec<(Box<[u8]>, Zval)>,
+    ) -> Result<(), PhpError> {
+        let cid = match &this {
+            // A `Generator`/`Fiber`'s native methods take no named arguments.
+            Zval::Generator(_) => return Err(unknown_named_param(&named)),
+            Zval::Object(o) => o.borrow().class_id as usize,
+            other => {
+                return Err(PhpError::Error(format!(
+                    "Call to a member function {}() on {}",
+                    String::from_utf8_lossy(method),
+                    other.error_type_name()
+                )))
+            }
+        };
+        if let Some(fcid) = self.fiber_class_id {
+            if is_instance_of(self.module, cid, fcid) {
+                return Err(unknown_named_param(&named));
+            }
+        }
+        let module = self.module;
+        let resolved = resolve_method_runtime(module, cid, method);
+        let usable = resolved.filter(|&(defc, midx)| {
+            visible_from(module, self.frames[top].class, module.classes[defc].methods[midx].visibility, defc)
+        });
+        match usable {
+            Some((defc, midx)) => {
+                let callee = &module.classes[defc].methods[midx].func;
+                let qn = format!(
+                    "{}::{}",
+                    String::from_utf8_lossy(&module.classes[defc].name),
+                    String::from_utf8_lossy(method)
+                );
+                let line = self.cur_line(top);
+                let mut frame =
+                    build_named_frame(callee, &module.file, line, &qn, positional, named)?;
+                frame.this = Some(this);
+                frame.class = Some(defc);
+                frame.static_class = Some(cid); // LSB = receiver's actual class
+                self.enter_callee(frame);
+            }
+            None => match resolve_method_runtime(module, cid, b"__call") {
+                Some((cdefc, cmidx)) => {
+                    self.push_magic_call_named(cdefc, cmidx, Some(this), cid, method, positional, named);
+                }
+                None => {
+                    return Err(match resolved {
+                        Some((defc, midx)) => method_access_error(
+                            module,
+                            defc,
+                            method,
+                            self.frames[top].class,
+                            module.classes[defc].methods[midx].visibility,
+                        ),
+                        None => undefined_method(module, cid, method),
+                    })
+                }
+            },
+        }
+        Ok(())
+    }
+
+    /// Like [`Self::push_magic_call`] but the forwarded `$args` array also carries
+    /// any **named arguments** keyed by name (string keys), matching PHP's `__call`
+    /// behaviour for `$obj->missing(x: 1)` (Session A).
+    #[allow(clippy::too_many_arguments)]
+    fn push_magic_call_named(
+        &mut self,
+        defc: ClassId,
+        midx: usize,
+        this: Option<Zval>,
+        static_class: ClassId,
+        method: &[u8],
+        positional: Vec<Zval>,
+        named: Vec<(Box<[u8]>, Zval)>,
+    ) {
+        let callee = &self.module.classes[defc].methods[midx].func;
+        let mut frame = Frame::new(callee);
+        frame.argc = callee.n_params;
+        if !frame.slots.is_empty() {
+            frame.slots[0] = Zval::Str(PhpStr::new(method.to_vec()));
+        }
+        if frame.slots.len() > 1 {
+            let mut arr = PhpArray::new();
+            for a in positional {
+                let _ = arr.append(a);
+            }
+            for (name, val) in named {
+                arr.insert(Key::Str(PhpStr::new(name.to_vec())), val);
+            }
+            frame.slots[1] = Zval::Array(Rc::new(arr));
+        }
+        frame.this = this;
+        frame.class = Some(defc);
+        frame.static_class = Some(static_class);
+        self.frames.push(frame);
     }
 
     /// undefined-method error. Shared by `Op::MethodCall`.
@@ -3465,6 +3587,95 @@ fn bind_params(frame: &mut Frame, args: Vec<Zval>) {
             frame.slots[v] = Zval::Array(Rc::new(rest));
         }
     }
+}
+
+/// The catchable `Error` PHP raises for a named argument with no place to go —
+/// reported for the first name. Used when the target has no parameter list to
+/// bind against (a `Generator`/`Fiber`'s native methods).
+fn unknown_named_param(named: &[(Box<[u8]>, Zval)]) -> PhpError {
+    match named.first() {
+        Some((name, _)) => PhpError::Error(format!(
+            "Unknown named parameter ${}",
+            String::from_utf8_lossy(name)
+        )),
+        None => PhpError::Error("Unknown named parameter".to_string()),
+    }
+}
+
+/// Build a callee frame for a method call with **named** (and positional)
+/// arguments, binding by name against `callee.param_names` at run time (Session
+/// A). Positional values fill the leading fixed slots; each named value targets
+/// its matching fixed parameter (gaps stay `Undef` for the default prologue) or,
+/// with no match and a trailing `...$rest`, is collected into the variadic array
+/// keyed by its name (string key) — surplus positional args are collected too (int
+/// keys). Mirrors the evaluator's errors: a duplicate/positional collision is an
+/// overwrite `Error`, a name with no home (and no variadic) is unknown, and a
+/// required parameter left unbound is an `ArgumentCountError`. `display_name` is
+/// the `Class::method` used in that message; `frame.this`/`class`/`static_class`
+/// are set by the caller.
+fn build_named_frame<'m>(
+    callee: &'m Func,
+    file: &[u8],
+    line: Line,
+    display_name: &str,
+    positional: Vec<Zval>,
+    named: Vec<(Box<[u8]>, Zval)>,
+) -> Result<Frame<'m>, PhpError> {
+    let n_params = callee.n_params as usize;
+    let fixed = match callee.variadic_slot {
+        Some(s) => s as usize,
+        None => n_params,
+    };
+    let has_variadic = callee.variadic_slot.is_some();
+    let passed = positional.len() + named.len();
+    let mut frame = Frame::new(callee);
+    let mut variadic = PhpArray::new();
+    // Positional args fill the leading fixed slots; surplus goes to the variadic.
+    for (i, a) in positional.into_iter().enumerate() {
+        if i < fixed {
+            frame.slots[i] = a;
+        } else if has_variadic {
+            let _ = variadic.append(a);
+        }
+    }
+    // Named args target a fixed parameter by name, or collect into the variadic.
+    for (name, val) in named {
+        match callee.param_names[..fixed].iter().position(|pn| pn[..] == name[..]) {
+            Some(j) if !matches!(frame.slots[j], Zval::Undef) => {
+                return Err(PhpError::Error(format!(
+                    "Named parameter ${} overwrites previous argument",
+                    String::from_utf8_lossy(&name)
+                )))
+            }
+            Some(j) => frame.slots[j] = val,
+            None if has_variadic => {
+                variadic.insert(Key::Str(PhpStr::new(name.to_vec())), val);
+            }
+            None => {
+                return Err(PhpError::Error(format!(
+                    "Unknown named parameter ${}",
+                    String::from_utf8_lossy(&name)
+                )))
+            }
+        }
+    }
+    if let Some(vs) = callee.variadic_slot {
+        frame.slots[vs as usize] = Zval::Array(Rc::new(variadic));
+    }
+    // Every required (default-less, non-variadic) parameter must be bound.
+    for (i, &required) in callee.param_required.iter().enumerate() {
+        if required && matches!(frame.slots[i], Zval::Undef) {
+            let required_count = callee.param_required.iter().filter(|&&r| r).count();
+            let exactly = callee.param_required.iter().all(|&r| r);
+            let qualifier = if exactly { "exactly" } else { "at least" };
+            return Err(PhpError::ArgumentCountError(format!(
+                "Too few arguments to function {display_name}(), {passed} passed in {} on line {line} and {qualifier} {required_count} expected",
+                String::from_utf8_lossy(file)
+            )));
+        }
+    }
+    frame.argc = passed as u32;
+    Ok(frame)
 }
 
 /// Read a local cell's value, following a reference and mapping an unset slot to
@@ -6553,6 +6764,90 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php class C { public $s; function __construct($a){ $this->s=$a; } static function make(...$a){ return new static(...$a); } } echo C::make(7)->s;"),
             b"7"
+        );
+    }
+
+    // ----- Session A: named arguments on instance methods (vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn named_method_skips_optional() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function m($a,$b=7,$c=9){ return \"$a-$b-$c\"; } } echo (new C)->m(1, c:3);"),
+            b"1-7-3"
+        );
+    }
+
+    #[test]
+    fn named_method_all_reordered() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function m($a,$b){ return \"$a:$b\"; } } echo (new C)->m(b:2, a:1);"),
+            b"1:2"
+        );
+    }
+
+    #[test]
+    fn named_method_mixed_positional_and_named() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function m($a,$b,$c){ return \"$a$b$c\"; } } echo (new C)->m(1, c:3, b:2);"),
+            b"123"
+        );
+    }
+
+    #[test]
+    fn named_method_into_variadic() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function m($a, ...$r){ $s=$a; foreach($r as $k=>$v) $s.=\";$k=$v\"; return $s; } } echo (new C)->m(1, x:2, y:3);"),
+            b"1;x=2;y=3"
+        );
+    }
+
+    #[test]
+    fn named_method_nullsafe() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function m($a,$b){ return $a+$b; } } $o=new C; echo $o?->m(b:20, a:10);"),
+            b"30"
+        );
+    }
+
+    #[test]
+    fn named_method_inherited() {
+        // The defining class (P) resolves the parameter names at run time.
+        assert_eq!(
+            vm_stdout(b"<?php class P { function m($a,$b){ return \"$a/$b\"; } } class C extends P {} echo (new C)->m(b:2, a:1);"),
+            b"1/2"
+        );
+    }
+
+    #[test]
+    fn named_method_missing_required() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function m($a,$b){} } try { (new C)->m(a:1); } catch(ArgumentCountError $e){ echo $e->getMessage(); }"),
+            b"Too few arguments to function C::m(), 1 passed in test.php on line 1 and exactly 2 expected"
+        );
+    }
+
+    #[test]
+    fn named_method_unknown_parameter() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function m($a){} } try { (new C)->m(z:1); } catch(\\Error $e){ echo $e->getMessage(); }"),
+            b"Unknown named parameter $z"
+        );
+    }
+
+    #[test]
+    fn named_method_overwrites_positional() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function m($a){} } try { (new C)->m(1, a:2); } catch(\\Error $e){ echo $e->getMessage(); }"),
+            b"Named parameter $a overwrites previous argument"
+        );
+    }
+
+    #[test]
+    fn named_method_routes_to_call_magic() {
+        // `__call` collects named arguments into its `$args` array (string keys).
+        assert_eq!(
+            vm_stdout(b"<?php class C { function __call($n,$a){ $s=$n; foreach($a as $k=>$v) $s.=\";$k=$v\"; return $s; } } echo (new C)->missing(x:1, y:2);"),
+            b"missing;x=1;y=2"
         );
     }
 }
