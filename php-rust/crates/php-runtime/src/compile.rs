@@ -21,7 +21,10 @@
 
 use crate::builtin::{Builtin, Registry};
 use crate::bytecode::{Addr, Const, ConstIdx, DimBase, Func, Module, Op};
-use crate::hir::{Expr, ExprKind, FnDecl, Place, PlaceBase, PlaceStep, Program, Stmt, StmtKind};
+use crate::hir::{
+    BinOp, Case, Expr, ExprKind, FnDecl, MatchArm, Place, PlaceBase, PlaceStep, Program, Stmt,
+    StmtKind,
+};
 
 /// A construct the proof-slice compiler does not yet lower. Carries the HIR
 /// variant name so the coverage gap is legible (mirrors `lower::LowerError`).
@@ -89,14 +92,14 @@ fn compile_fndecl(fd: &FnDecl, funcs: &[FnDecl], registry: &Registry) -> R<Func>
 fn compile_body(
     name: &[u8],
     body: &[Stmt],
-    n_slots: u32,
+    n_locals: u32,
     n_params: u32,
     by_ref: bool,
     is_generator: bool,
     funcs: &[FnDecl],
     registry: &Registry,
 ) -> R<Func> {
-    let mut c = FnCompiler::new(funcs, registry);
+    let mut c = FnCompiler::new(funcs, registry, n_locals);
     c.block(body)?;
     // A body that runs off the end returns NULL (PHP's implicit return).
     let null = c.konst(Const::Null);
@@ -106,7 +109,8 @@ fn compile_body(
         name: name.into(),
         ops: c.ops,
         consts: c.consts,
-        n_slots,
+        // Named locals plus the high-water mark of compiler temporaries.
+        n_slots: n_locals + c.n_temps_max,
         n_params,
         by_ref,
         is_generator,
@@ -146,6 +150,11 @@ struct FnCompiler<'a> {
     /// The builtin registry, consulted at compile time only to classify a call
     /// name (value builtin / by-ref builtin / not-a-VM-builtin) — never executed.
     registry: &'a Registry,
+    /// Number of named locals (HIR slots); compiler temporaries are allocated
+    /// above this, so the frame's slot array is `n_locals + n_temps_max` wide.
+    n_locals: u32,
+    n_temps_cur: u32,
+    n_temps_max: u32,
 }
 
 /// One enclosing loop's unresolved jump sites. `break` jumps land at the loop
@@ -161,14 +170,30 @@ struct LoopCtx {
 }
 
 impl<'a> FnCompiler<'a> {
-    fn new(funcs: &'a [FnDecl], registry: &'a Registry) -> Self {
+    fn new(funcs: &'a [FnDecl], registry: &'a Registry, n_locals: u32) -> Self {
         FnCompiler {
             ops: Vec::new(),
             consts: Vec::new(),
             loops: Vec::new(),
             funcs,
             registry,
+            n_locals,
+            n_temps_cur: 0,
+            n_temps_max: 0,
         }
+    }
+
+    /// Reserve a scratch slot above the named locals (for `switch`/`match`
+    /// subjects). Freed with [`Self::free_temp`] so siblings reuse the space.
+    fn alloc_temp(&mut self) -> crate::hir::Slot {
+        let s = self.n_locals + self.n_temps_cur;
+        self.n_temps_cur += 1;
+        self.n_temps_max = self.n_temps_max.max(self.n_temps_cur);
+        s
+    }
+
+    fn free_temp(&mut self) {
+        self.n_temps_cur -= 1;
     }
 
     /// Append `op`, returning its address.
@@ -313,6 +338,7 @@ impl<'a> FnCompiler<'a> {
                     self.emit(Op::UnsetPath { base, nkeys });
                 }
             }
+            StmtKind::Switch { subject, cases } => self.switch(subject, cases)?,
             other => return Err(CompileError::Unsupported(stmt_name(other))),
         }
         Ok(())
@@ -533,6 +559,7 @@ impl<'a> FnCompiler<'a> {
                 let end = self.here();
                 self.patch(to_end, Op::JumpIfNotNull(end));
             }
+            ExprKind::Match { subject, arms } => self.match_expr(subject, arms)?,
             other => return Err(CompileError::Unsupported(expr_name(other))),
         }
         Ok(())
@@ -644,6 +671,99 @@ impl<'a> FnCompiler<'a> {
         let slot = *slot;
         self.push_value_args(rest)?;
         self.emit(Op::CallBuiltinRef { name: name.into(), slot, argc: rest.len() as u32 });
+        Ok(())
+    }
+
+    /// Compile a `switch`: the subject is evaluated once into a temp, each `case`
+    /// is compared with loose `==`, and on a match control jumps to that case's
+    /// body. Bodies are laid out in source order so execution falls through to the
+    /// next case until a `break` (the switch is one `break`/`continue` level, both
+    /// landing past its end). `default` runs when no case matches, at its source
+    /// position in the fall-through chain.
+    fn switch(&mut self, subject: &Expr, cases: &[Case]) -> R<()> {
+        let t = self.alloc_temp();
+        self.expr(subject)?;
+        self.emit(Op::StoreSlot(t));
+        // Dispatch: compare against each non-default case, jump to its body.
+        let mut test_jumps: Vec<(usize, Addr)> = Vec::new();
+        for (i, case) in cases.iter().enumerate() {
+            if let Some(test) = &case.test {
+                self.emit(Op::LoadSlot(t));
+                self.expr(test)?;
+                self.emit(Op::Binary(BinOp::Eq));
+                test_jumps.push((i, self.emit(Op::JumpIfTrue(Addr::MAX))));
+            }
+        }
+        // No case matched -> default (if any) or past the end.
+        let no_match = self.emit(Op::Jump(Addr::MAX));
+        // Bodies in source order (fall-through between consecutive cases).
+        self.loops.push(LoopCtx::default());
+        let mut body_addrs: Vec<Addr> = Vec::with_capacity(cases.len());
+        let mut default_addr: Option<Addr> = None;
+        for case in cases {
+            let at = self.here();
+            body_addrs.push(at);
+            if case.test.is_none() {
+                default_addr = Some(at);
+            }
+            self.block(&case.body)?;
+        }
+        let end = self.here();
+        for (i, j) in test_jumps {
+            self.patch(j, Op::JumpIfTrue(body_addrs[i]));
+        }
+        self.patch(no_match, Op::Jump(default_addr.unwrap_or(end)));
+        self.free_temp();
+        // `break` and (PHP) `continue` both leave the switch.
+        self.close_loop(end, end);
+        Ok(())
+    }
+
+    /// Compile a `match` expression: the subject is evaluated once into a temp,
+    /// each arm condition compared with strict `===`; the first match's body is
+    /// evaluated as the result (no fall-through). With no matching arm and no
+    /// `default`, PHP throws `UnhandledMatchError`; lacking VM exceptions, this
+    /// raises a fatal (catchable-match handling is deferred). Leaves the result.
+    fn match_expr(&mut self, subject: &Expr, arms: &[MatchArm]) -> R<()> {
+        let t = self.alloc_temp();
+        self.expr(subject)?;
+        self.emit(Op::StoreSlot(t));
+        let mut to_body: Vec<(usize, Addr)> = Vec::new();
+        let mut default_arm: Option<usize> = None;
+        for (i, arm) in arms.iter().enumerate() {
+            if arm.conditions.is_empty() {
+                default_arm = Some(i);
+                continue;
+            }
+            for cond in &arm.conditions {
+                self.emit(Op::LoadSlot(t));
+                self.expr(cond)?;
+                self.emit(Op::Binary(BinOp::Identical));
+                to_body.push((i, self.emit(Op::JumpIfTrue(Addr::MAX))));
+            }
+        }
+        let no_match = self.emit(Op::Jump(Addr::MAX));
+        // Each arm body is an expression leaving one value, then jumps to the end.
+        let mut body_addrs: Vec<Addr> = vec![0; arms.len()];
+        let mut to_end: Vec<Addr> = Vec::new();
+        for (i, arm) in arms.iter().enumerate() {
+            body_addrs[i] = self.here();
+            self.expr(&arm.body)?;
+            to_end.push(self.emit(Op::Jump(Addr::MAX)));
+        }
+        let unhandled = self.here();
+        let msg = self.konst(Const::Str(b"Unhandled match case".to_vec().into()));
+        self.emit(Op::Fatal(msg));
+        let end = self.here();
+        for (i, j) in to_body {
+            self.patch(j, Op::JumpIfTrue(body_addrs[i]));
+        }
+        let nm_target = default_arm.map(|i| body_addrs[i]).unwrap_or(unhandled);
+        self.patch(no_match, Op::Jump(nm_target));
+        for j in to_end {
+            self.patch(j, Op::Jump(end));
+        }
+        self.free_temp();
         Ok(())
     }
 

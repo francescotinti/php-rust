@@ -1126,4 +1126,78 @@ mod tests {
         let reg = fake_registry();
         assert!(compile_program(&program, &reg).is_err());
     }
+
+    // --- switch ---
+
+    #[test]
+    fn switch_basic_with_break() {
+        assert_eq!(
+            vm_stdout(b"<?php $x = 2; switch ($x) { case 1: echo 'a'; break; case 2: echo 'b'; break; default: echo 'd'; }"),
+            b"b"
+        );
+    }
+
+    #[test]
+    fn switch_fall_through() {
+        assert_eq!(
+            vm_stdout(b"<?php $x = 1; switch ($x) { case 1: echo 'a'; case 2: echo 'b'; break; case 3: echo 'c'; }"),
+            b"ab"
+        );
+    }
+
+    #[test]
+    fn switch_default_in_the_middle_falls_through() {
+        assert_eq!(
+            vm_stdout(b"<?php $x = 9; switch ($x) { case 1: echo '1'; default: echo 'd'; case 2: echo '2'; }"),
+            b"d2"
+        );
+    }
+
+    #[test]
+    fn switch_uses_loose_equality() {
+        assert_eq!(
+            vm_stdout(b"<?php switch ('1') { case 1: echo 'y'; break; default: echo 'n'; }"),
+            b"y"
+        );
+    }
+
+    #[test]
+    fn switch_break_inside_loop_leaves_only_the_switch() {
+        assert_eq!(
+            vm_stdout(b"<?php for ($i = 0; $i < 3; $i++) { switch ($i) { case 1: break; default: echo $i; } }"),
+            b"02"
+        );
+    }
+
+    // --- match ---
+
+    #[test]
+    fn match_basic() {
+        assert_eq!(vm_stdout(b"<?php echo match (2) { 1 => 'a', 2 => 'b', 3 => 'c' };"), b"b");
+    }
+
+    #[test]
+    fn match_multiple_conditions() {
+        assert_eq!(vm_stdout(b"<?php echo match (3) { 1, 2 => 'low', 3, 4 => 'high' };"), b"high");
+    }
+
+    #[test]
+    fn match_default() {
+        assert_eq!(vm_stdout(b"<?php echo match (9) { 1 => 'a', default => 'd' };"), b"d");
+    }
+
+    #[test]
+    fn match_is_strict() {
+        // '1' !== 1, so the string arm wins.
+        assert_eq!(vm_stdout(b"<?php echo match ('1') { 1 => 'int', '1' => 'str' };"), b"str");
+    }
+
+    #[test]
+    fn match_unhandled_is_fatal() {
+        let program = lower_source(b"test.php", b"<?php echo match (9) { 1 => 'a' };").expect("lower");
+        let reg = Registry::new();
+        let module = compile_program(&program, &reg).expect("compile");
+        let out = run_module(&module, &reg);
+        assert!(out.fatal.is_some());
+    }
 }
