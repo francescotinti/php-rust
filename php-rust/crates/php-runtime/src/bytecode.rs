@@ -352,6 +352,13 @@ pub enum Op {
     /// `sent` value (the `send()` argument, NULL for `next()`/`foreach`) is pushed
     /// so the `yield` expression evaluates to it.
     Yield { has_key: bool },
+    /// `[delegate] -> [returnValue]` (GEN) — `yield from`. Re-yields each element
+    /// of an array or sub-generator verbatim (keys unchanged, the outer auto-key
+    /// counter untouched). It re-enters itself across resumes — driving one
+    /// delegated step per resume, forwarding `send()` into a sub-generator — until
+    /// the delegate is exhausted, then leaves the delegate's return value (NULL for
+    /// an array, the sub-generator's `getReturn()` otherwise) on the stack.
+    YieldFrom,
 
     // ----- foreach iteration -----
     /// `[iterable] -> []` — pop the iterable, snapshot it into a fresh iterator

@@ -20,8 +20,8 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use php_types::{
-    convert, ops, Closure, ClosureInfo, ClosureRender, Diag, Diags, GenState, GenStatus, Key,
-    Object, PhpArray, PhpError, PhpStr, Props, Zval,
+    convert, ops, Closure, ClosureInfo, ClosureRender, Diag, Diags, GenKey, GenState, GenStatus,
+    Key, Object, PhpArray, PhpError, PhpStr, Props, Zval,
 };
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
@@ -49,11 +49,12 @@ pub struct VmOutcome {
 enum RunExit {
     /// The baseline frame ran to its `Ret`; carries the returned value.
     Returned(Zval),
-    /// The baseline generator frame hit `Op::Yield`; it has already been parked
-    /// in [`Vm::generators`]. The raw key (`None` for an auto-keyed `yield`) and
-    /// value are handed back for the resumer to record (auto-key resolution lives
-    /// in [`Vm::resume_generator`], mirroring the tree-walker).
-    Yielded { key: Option<Zval>, value: Zval },
+    /// The baseline generator frame hit `Op::Yield` / `Op::YieldFrom`; it has
+    /// already been parked in [`Vm::generators`]. The key (`Auto`/`Keyed` from a
+    /// plain yield, `Verbatim` from `yield from`) and value are handed back for
+    /// the resumer to record — auto-key resolution lives in
+    /// [`Vm::resume_generator`], mirroring the tree-walker.
+    Yielded { key: GenKey, value: Zval },
 }
 
 /// Compile-and-run is the caller's job ([`crate::compile`]); this takes the
@@ -143,6 +144,9 @@ struct Frame<'m> {
     /// ordinary frame. Set when a generator frame is created; read by
     /// [`Op::Yield`] to park the frame back into [`Vm::generators`] under its id.
     gen_id: Option<u32>,
+    /// An in-progress `yield from` delegation (GEN-3), `None` outside one. Lives
+    /// on the frame so it is preserved across the generator's suspensions.
+    yield_from: Option<YieldFromState>,
 }
 
 impl<'m> Frame<'m> {
@@ -162,6 +166,7 @@ impl<'m> Frame<'m> {
             iters: Vec::new(),
             pending_throw: None,
             gen_id: None,
+            yield_from: None,
         }
     }
 }
@@ -179,6 +184,17 @@ enum IterState {
     /// is false until the first `IterNext` (which starts the generator rather than
     /// advancing it), matching the tree-walker's read-then-resume order.
     Gen { rc: Rc<RefCell<GenState>>, primed: bool },
+}
+
+/// In-progress `yield from` delegation (GEN-3), parked on the generator frame so
+/// it survives suspension. `Op::YieldFrom` re-enters itself across resumes,
+/// advancing this cursor one step each time until the delegate is exhausted.
+enum YieldFromState {
+    /// Delegating to an array's elements (re-yielded verbatim).
+    Array { entries: Vec<(Zval, Zval)>, pos: usize },
+    /// Delegating to a sub-generator (its `send()`s forwarded, its return value
+    /// becoming the `yield from` expression's value).
+    Gen { rc: Rc<RefCell<GenState>> },
 }
 
 /// The virtual machine: the module under execution plus the explicit call stack.
@@ -881,13 +897,13 @@ impl<'m> Vm<'m> {
                 Op::Yield { has_key } => {
                     // Suspend the running generator frame (GEN). Pop the yielded
                     // value (and key), park the frame back under its handle id, and
-                    // hand the raw key/value to `resume_generator`. `ip` is already
+                    // hand the key/value to `resume_generator`. `ip` is already
                     // past this op, so the resume continues after the `yield`.
                     let value = self.frames[top].stack.pop().expect("Yield value");
                     let key = if has_key {
-                        Some(self.frames[top].stack.pop().expect("Yield key"))
+                        GenKey::Keyed(self.frames[top].stack.pop().expect("Yield key"))
                     } else {
-                        None
+                        GenKey::Auto
                     };
                     let gid = self.frames[top]
                         .gen_id
@@ -896,6 +912,85 @@ impl<'m> Vm<'m> {
                     let frame = self.frames.pop().expect("generator frame to park");
                     self.generators.insert(gid, frame);
                     return Ok(RunExit::Yielded { key, value });
+                }
+                Op::YieldFrom => {
+                    // `yield from` (GEN-3): re-enters itself across resumes, driving
+                    // one delegated step per visit. First visit sets up the cursor
+                    // from the delegate on the stack; a re-visit pops the resume's
+                    // sent value (forwarded into a sub-generator, ignored by arrays).
+                    if self.frames[top].yield_from.is_none() {
+                        let delegate = self.frames[top].stack.pop().expect("YieldFrom delegate");
+                        match delegate.deref_clone() {
+                            Zval::Array(_) => {
+                                let entries = snapshot_entries(&delegate);
+                                self.frames[top].yield_from =
+                                    Some(YieldFromState::Array { entries, pos: 0 });
+                            }
+                            Zval::Generator(rc) => {
+                                self.frames[top].yield_from =
+                                    Some(YieldFromState::Gen { rc: Rc::clone(&rc) });
+                                self.ensure_started(&rc)?; // prime to its first yield
+                            }
+                            other => {
+                                return Err(PhpError::Error(format!(
+                                    "Can use \"yield from\" only with arrays and Traversables, {} given",
+                                    other.error_type_name()
+                                )))
+                            }
+                        }
+                    } else {
+                        // Re-entry from a resume: the sent value is on the stack.
+                        let sent = self.frames[top].stack.pop().expect("YieldFrom sent");
+                        let sub = match &self.frames[top].yield_from {
+                            Some(YieldFromState::Gen { rc }) => Some(Rc::clone(rc)),
+                            _ => None,
+                        };
+                        if let Some(rc) = sub {
+                            self.resume_generator(&rc, sent)?;
+                        }
+                    }
+                    // Take the next delegated `(key, value)`, or finish.
+                    let step = match self.frames[top].yield_from.as_mut().unwrap() {
+                        YieldFromState::Array { entries, pos } => {
+                            if *pos < entries.len() {
+                                let pair = entries[*pos].clone();
+                                *pos += 1;
+                                Some(pair)
+                            } else {
+                                None
+                            }
+                        }
+                        YieldFromState::Gen { rc } => {
+                            let g = rc.borrow();
+                            if matches!(g.status, GenStatus::Done) {
+                                None
+                            } else {
+                                Some((g.cur_key.clone(), g.cur_val.clone()))
+                            }
+                        }
+                    };
+                    match step {
+                        Some((k, v)) => {
+                            // Re-enter this op on the next resume; park and re-yield
+                            // verbatim (the outer auto-key counter is untouched).
+                            self.frames[top].ip -= 1;
+                            let gid =
+                                self.frames[top].gen_id.expect("YieldFrom outside a generator");
+                            let frame = self.frames.pop().expect("generator frame to park");
+                            self.generators.insert(gid, frame);
+                            return Ok(RunExit::Yielded { key: GenKey::Verbatim(k), value: v });
+                        }
+                        None => {
+                            // Delegation done: leave the delegate's return value (NULL
+                            // for an array, the sub-generator's getReturn()) on the
+                            // stack as the `yield from` expression's value.
+                            let value = match self.frames[top].yield_from.take().unwrap() {
+                                YieldFromState::Array { .. } => Zval::Null,
+                                YieldFromState::Gen { rc } => rc.borrow().ret.clone(),
+                            };
+                            self.frames[top].stack.push(value);
+                        }
+                    }
                 }
                 Op::Alloc { class } => {
                     let obj = self.alloc_object(class)?;
@@ -1621,21 +1716,21 @@ impl<'m> Vm<'m> {
         };
         match outcome {
             Ok(RunExit::Yielded { key, value }) => {
-                // The frame was already parked by `Op::Yield`.
+                // The frame was already parked by `Op::Yield` / `Op::YieldFrom`.
                 let mut gs = gs_rc.borrow_mut();
                 let resolved = match key {
-                    None => {
+                    GenKey::Auto => {
                         let k = Zval::Long(gs.auto_key);
                         gs.auto_key += 1;
                         k
                     }
-                    Some(Zval::Long(n)) => {
+                    GenKey::Keyed(Zval::Long(n)) => {
                         if n >= gs.auto_key {
                             gs.auto_key = n.wrapping_add(1);
                         }
                         Zval::Long(n)
                     }
-                    Some(z) => z,
+                    GenKey::Keyed(z) | GenKey::Verbatim(z) => z,
                 };
                 gs.cur_key = resolved;
                 gs.cur_val = value;
@@ -4975,6 +5070,60 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php function g(){ yield 1; yield 2; } $g=g(); $g->next(); try { $g->rewind(); } catch (Exception $e) { echo 'Exception:', $e->getMessage(); } catch (Error $e) { echo 'Error'; }"),
             b"Exception:Cannot rewind a generator that was already run"
+        );
+    }
+
+    // ----- GEN-3: yield from (verified vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn yield_from_array_keeps_keys_and_counter() {
+        // Array keys re-yielded verbatim; the outer auto-key counter is NOT
+        // advanced, so the trailing `yield 3` is key 0.
+        assert_eq!(
+            vm_stdout(b"<?php function g(){ yield from [1,2]; yield 3; } foreach(g() as $k=>$v) echo \"$k:$v;\";"),
+            b"0:1;1:2;0:3;"
+        );
+    }
+
+    #[test]
+    fn yield_from_assoc_array() {
+        assert_eq!(
+            vm_stdout(b"<?php function g(){ yield from ['x'=>1, 'y'=>2]; } foreach(g() as $k=>$v) echo \"$k:$v;\";"),
+            b"x:1;y:2;"
+        );
+    }
+
+    #[test]
+    fn yield_from_subgenerator() {
+        assert_eq!(
+            vm_stdout(b"<?php function inner(){ yield 'a'; yield 'b'; } function outer(){ yield from inner(); yield 'c'; } foreach(outer() as $k=>$v) echo \"$k:$v;\";"),
+            b"0:a;1:b;0:c;"
+        );
+    }
+
+    #[test]
+    fn yield_from_return_value() {
+        // The `yield from` expression evaluates to the sub-generator's return.
+        assert_eq!(
+            vm_stdout(b"<?php function inner(){ yield 1; return 99; } function outer(){ $r = yield from inner(); echo \"r=$r;\"; } foreach(outer() as $v) echo $v;"),
+            b"1r=99;"
+        );
+    }
+
+    #[test]
+    fn yield_from_forwards_send() {
+        // `send()` on the outer is delivered to the suspended `yield` in the inner.
+        assert_eq!(
+            vm_stdout(b"<?php function inner(){ $x = yield 1; echo \"inner:$x;\"; yield 2; } function outer(){ yield from inner(); } $g=outer(); echo $g->current(); echo $g->send('S');"),
+            b"1inner:S;2"
+        );
+    }
+
+    #[test]
+    fn yield_from_nested() {
+        assert_eq!(
+            vm_stdout(b"<?php function a(){ yield 1; yield 2; } function b(){ yield from a(); yield 3; } function c(){ yield from b(); yield 4; } foreach(c() as $v) echo $v;"),
+            b"1234"
         );
     }
 }

@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–61 completati · 1.180 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–61 completati · 1.186 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 **Migrazione VM (Fase 4, in corso).** In parallelo all'evaluator tree-walk — che resta il motore
 di produzione e tiene il differential a 0 mismatch — è in costruzione una **VM a bytecode**
@@ -52,8 +52,11 @@ ritornando su per lo stack Rust, `resume` ripristina — **niente `corosensei`, 
 payoff della migrazione; tree-walker e VM coesistono finché non si elimina `eval/`). **GEN-2** aggiunge
 `send()` (ping-pong: il valore arriva come risultato del `yield` sospeso, con priming automatico),
 `return`/`getReturn()` e la fedeltà a PHP sulle eccezioni di misuso (rewind-dopo-run e
-getReturn-troppo-presto sono `Exception`, dove il tree-walker usa `Error`). Roadmap residua:
-GEN-3/4 (`yield from`, Fiber) → rimozione di `eval/`. Piano completo: vedi il file di piano del progetto.
+getReturn-troppo-presto sono `Exception`, dove il tree-walker usa `Error`). **GEN-3** aggiunge
+`yield from` su array e sub-generatori: l'opcode `YieldFrom` si **ri-entra da solo** a ogni resume
+(un passo di delega per volta, chiavi verbatim col contatore esterno intatto, `send()` inoltrato nel
+sub-generatore, valore dell'espressione = `getReturn()` del delegato), con delega annidata. Roadmap
+residua: GEN-4 (Fiber) → rimozione di `eval/`. Piano completo: vedi il file di piano del progetto.
 
 Step 61 ha completato i suggerimenti della code-review esterna: (E) **diff unificato** nel
 `phpt-runner` (`--list-fails` mostra un line-diff EXPECTF-aware invece di due blob troncati); (B)

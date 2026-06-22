@@ -1083,6 +1083,12 @@ impl<'a> FnCompiler<'a> {
                 }
                 self.emit(Op::Yield { has_key: key.is_some() });
             }
+            ExprKind::YieldFrom(delegate) => {
+                // `yield from $x` (GEN-3): push the delegate, then the re-entrant
+                // `YieldFrom` op drives the delegation and leaves its return value.
+                self.expr(delegate)?;
+                self.emit(Op::YieldFrom);
+            }
             other => return Err(CompileError::Unsupported(expr_name(other))),
         }
         Ok(())
