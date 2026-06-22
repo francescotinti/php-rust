@@ -22,7 +22,9 @@ use std::rc::Rc;
 use php_types::{convert, ops, Diag, Diags, Key, Object, PhpArray, PhpError, PhpStr, Props, Zval};
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
-use crate::bytecode::{ClassTarget, DimBase, Func, Instantiable, Module, Op, StaticInit};
+use crate::bytecode::{
+    ClassTarget, DimBase, FieldBase, FieldStep, Func, Instantiable, Module, Op, StaticInit,
+};
 use crate::hir::{BinOp, CastKind, ClassId, UnOp, Visibility};
 
 /// The result of running a [`Module`]: the bytes written to stdout, the
@@ -726,6 +728,44 @@ impl Vm<'_> {
                     *cell.borrow_mut() = newv.clone();
                     self.frames[top].stack.push(if pre { newv } else { old });
                 }
+                Op::FieldAssign { base, steps } => {
+                    let value = self.frames[top].stack.pop().expect("FieldAssign value");
+                    let keys = self.pop_field_keys(top, &steps);
+                    self.field_set(base, top, &steps, keys, value.clone())?;
+                    self.frames[top].stack.push(value);
+                }
+                Op::FieldAssignOp { base, steps, op } => {
+                    let rhs = self.frames[top].stack.pop().expect("FieldAssignOp rhs");
+                    let keys = self.pop_field_keys(top, &steps);
+                    let old = self.field_value(base, top, &steps, keys.clone()).unwrap_or(Zval::Null);
+                    let result = apply_binop(op, &old, &rhs, &mut self.diags)?;
+                    self.field_set(base, top, &steps, keys, result.clone())?;
+                    self.frames[top].stack.push(result);
+                }
+                Op::FieldIncDec { base, steps, inc, pre } => {
+                    let keys = self.pop_field_keys(top, &steps);
+                    let old = self.field_value(base, top, &steps, keys.clone()).unwrap_or(Zval::Null);
+                    let mut newv = old.clone();
+                    if inc {
+                        ops::increment(&mut newv, &mut self.diags)?;
+                    } else {
+                        ops::decrement(&mut newv, &mut self.diags)?;
+                    }
+                    self.field_set(base, top, &steps, keys, newv.clone())?;
+                    self.frames[top].stack.push(if pre { newv } else { old });
+                }
+                Op::FieldIsset { base, steps } => {
+                    let keys = self.pop_field_keys(top, &steps);
+                    let set = matches!(
+                        self.field_value(base, top, &steps, keys),
+                        Some(v) if !matches!(v, Zval::Null | Zval::Undef)
+                    );
+                    self.frames[top].stack.push(Zval::Bool(set));
+                }
+                Op::FieldUnset { base, steps } => {
+                    let keys = self.pop_field_keys(top, &steps);
+                    self.field_remove(base, top, &steps, keys);
+                }
                 Op::Fatal(i) => {
                     let msg = match &self.frames[top].func.consts[i as usize] {
                         crate::bytecode::Const::Str(b) => String::from_utf8_lossy(b).into_owned(),
@@ -872,6 +912,60 @@ impl Vm<'_> {
             }
         }
     }
+
+    /// Pop the operand-stack keys for a field path's `Index` steps (one per
+    /// `Index`), restoring source order.
+    fn pop_field_keys(&mut self, top: usize, steps: &[FieldStep]) -> Vec<Zval> {
+        let n = steps.iter().filter(|s| matches!(s, FieldStep::Index)).count();
+        let mut keys: Vec<Zval> =
+            (0..n).map(|_| self.frames[top].stack.pop().expect("field index key")).collect();
+        keys.reverse();
+        keys
+    }
+
+    /// Write `value` through a mixed field path. The base cell borrows
+    /// `self.frames` and `&mut self.diags` a disjoint field, so the two coexist
+    /// (the same split the array `path_op` relies on).
+    fn field_set(
+        &mut self,
+        base: FieldBase,
+        top: usize,
+        steps: &[FieldStep],
+        keys: Vec<Zval>,
+        value: Zval,
+    ) -> Result<(), PhpError> {
+        let cell = match base {
+            FieldBase::Local(s) => &mut self.frames[top].slots[s as usize],
+            FieldBase::Global(s) => &mut self.frames[0].slots[s as usize],
+            FieldBase::This => self.frames[top].this.as_mut().ok_or_else(|| {
+                PhpError::Error("Using $this when not in object context".to_string())
+            })?,
+        };
+        field_write(cell, steps, &mut keys.into_iter(), value, &mut self.diags)
+    }
+
+    /// Read a mixed field path's value (silent; `None` if any level is absent).
+    fn field_value(&self, base: FieldBase, top: usize, steps: &[FieldStep], keys: Vec<Zval>) -> Option<Zval> {
+        let cell = match base {
+            FieldBase::Local(s) => &self.frames[top].slots[s as usize],
+            FieldBase::Global(s) => &self.frames[0].slots[s as usize],
+            FieldBase::This => self.frames[top].this.as_ref()?,
+        };
+        field_get(cell, steps, &mut keys.into_iter())
+    }
+
+    /// Remove a mixed field path's leaf (silent no-op if absent).
+    fn field_remove(&mut self, base: FieldBase, top: usize, steps: &[FieldStep], keys: Vec<Zval>) {
+        let cell = match base {
+            FieldBase::Local(s) => &mut self.frames[top].slots[s as usize],
+            FieldBase::Global(s) => &mut self.frames[0].slots[s as usize],
+            FieldBase::This => match self.frames[top].this.as_mut() {
+                Some(c) => c,
+                None => return,
+            },
+        };
+        field_unset(cell, steps, &mut keys.into_iter());
+    }
 }
 
 /// The leaf operation of a path write, carried to the bottom of the drill-down.
@@ -947,6 +1041,178 @@ fn unset_into(cell: &mut Zval, keys: &[Zval]) {
                 }
             }
         }
+    }
+}
+
+/// Write `value` through a mixed field path (OOP-2c), the VM analogue of the
+/// tree-walker's `write_into`: a reference is written through; an object property
+/// is navigated *in place* (no copy-on-write, shared `Rc<RefCell>`); an array
+/// element auto-vivifies and copy-on-writes. `Index` steps consume `keys` in
+/// source order.
+fn field_write(
+    target: &mut Zval,
+    steps: &[FieldStep],
+    keys: &mut std::vec::IntoIter<Zval>,
+    value: Zval,
+    diags: &mut Diags,
+) -> Result<(), PhpError> {
+    if let Zval::Ref(cell) = target {
+        let inner = &mut *cell.borrow_mut();
+        return field_write(inner, steps, keys, value, diags);
+    }
+    let Some((first, rest)) = steps.split_first() else {
+        *target = value;
+        return Ok(());
+    };
+    match first {
+        FieldStep::Prop(name) => {
+            match target {
+                Zval::Object(o) => {
+                    let mut obj = o.borrow_mut();
+                    if obj.info.is_enum_case {
+                        let cls = String::from_utf8_lossy(obj.class_name.as_bytes()).into_owned();
+                        let prop = String::from_utf8_lossy(name).into_owned();
+                        return Err(PhpError::Error(if obj.props.contains(name) {
+                            format!("Cannot modify readonly property {cls}::${prop}")
+                        } else {
+                            format!("Cannot create dynamic property {cls}::${prop}")
+                        }));
+                    }
+                    if rest.is_empty() {
+                        obj.props.set(name, value);
+                    } else {
+                        if !obj.props.contains(name) {
+                            obj.props.set(name, Zval::Array(Rc::new(PhpArray::new())));
+                        }
+                        let child = obj.props.get_mut(name).expect("property just inserted");
+                        field_write(child, rest, keys, value, diags)?;
+                    }
+                }
+                other => {
+                    diags.push(Diag::Warning(format!(
+                        "Attempt to assign property \"{}\" on {}",
+                        String::from_utf8_lossy(name),
+                        other.error_type_name()
+                    )));
+                }
+            }
+            Ok(())
+        }
+        FieldStep::Index => {
+            let key = keys.next().expect("field index key");
+            ensure_array(target)?;
+            let Zval::Array(rc) = target else { unreachable!("ensured array") };
+            let arr = Rc::make_mut(rc);
+            let k = coerce_key_silent(&key)
+                .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
+            if rest.is_empty() {
+                // Overwrite a plain element, but write *through* an existing
+                // reference element (the recursive call derefs at its top).
+                match arr.get_mut(&k) {
+                    Some(child) => field_write(child, rest, keys, value, diags)?,
+                    None => arr.insert(k, value),
+                }
+            } else {
+                if !arr.contains_key(&k) {
+                    arr.insert(k.clone(), Zval::Array(Rc::new(PhpArray::new())));
+                }
+                let child = arr.get_mut(&k).expect("key just inserted");
+                field_write(child, rest, keys, value, diags)?;
+            }
+            Ok(())
+        }
+        FieldStep::Append => {
+            ensure_array(target)?;
+            let Zval::Array(rc) = target else { unreachable!("ensured array") };
+            let arr = Rc::make_mut(rc);
+            let occupied =
+                || PhpError::Error("Cannot add element to the array as the next element is already occupied".to_string());
+            if rest.is_empty() {
+                arr.append(value).map_err(|_| occupied())?;
+            } else {
+                let mut child = Zval::Array(Rc::new(PhpArray::new()));
+                field_write(&mut child, rest, keys, value, diags)?;
+                arr.append(child).map_err(|_| occupied())?;
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Silently read a mixed field path's value (OOP-2c), `None` if any level is
+/// absent — backs compound/inc-dec (missing → NULL) and `isset`/field tests.
+fn field_get(cell: &Zval, steps: &[FieldStep], keys: &mut std::vec::IntoIter<Zval>) -> Option<Zval> {
+    if let Zval::Ref(rc) = cell {
+        return field_get(&rc.borrow(), steps, keys);
+    }
+    match steps.split_first() {
+        None => match cell {
+            Zval::Undef => None,
+            other => Some(other.deref_clone()),
+        },
+        Some((first, rest)) => match first {
+            FieldStep::Prop(name) => match cell {
+                Zval::Object(o) => {
+                    let obj = o.borrow();
+                    match obj.props.get(name) {
+                        Some(v) => field_get(v, rest, keys),
+                        None => None,
+                    }
+                }
+                _ => None,
+            },
+            FieldStep::Index => {
+                let key = keys.next()?;
+                match cell {
+                    Zval::Array(a) => {
+                        let k = coerce_key_silent(&key)?;
+                        a.get(&k).and_then(|c| field_get(c, rest, keys))
+                    }
+                    Zval::Str(s) if rest.is_empty() => {
+                        string_offset(s, &key).map(|byte| Zval::Str(PhpStr::new(vec![byte])))
+                    }
+                    _ => None,
+                }
+            }
+            FieldStep::Append => None,
+        },
+    }
+}
+
+/// Remove a mixed field path's leaf (OOP-2c). A missing intermediate level is a
+/// silent no-op; arrays copy-on-write, objects mutate in place.
+fn field_unset(target: &mut Zval, steps: &[FieldStep], keys: &mut std::vec::IntoIter<Zval>) {
+    if let Zval::Ref(rc) = target {
+        field_unset(&mut rc.borrow_mut(), steps, keys);
+        return;
+    }
+    let Some((first, rest)) = steps.split_first() else {
+        return;
+    };
+    match first {
+        FieldStep::Prop(name) => {
+            if let Zval::Object(o) = target {
+                if rest.is_empty() {
+                    o.borrow_mut().props.remove(name);
+                } else if let Some(child) = o.borrow_mut().props.get_mut(name) {
+                    field_unset(child, rest, keys);
+                }
+            }
+        }
+        FieldStep::Index => {
+            let Some(key) = keys.next() else { return };
+            if let Zval::Array(rc) = target {
+                if let Some(k) = coerce_key_silent(&key) {
+                    let arr = Rc::make_mut(rc);
+                    if rest.is_empty() {
+                        arr.remove(&k);
+                    } else if let Some(child) = arr.get_mut(&k) {
+                        field_unset(child, rest, keys);
+                    }
+                }
+            }
+        }
+        FieldStep::Append => {}
     }
 }
 
@@ -2281,6 +2547,64 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php $n = null; echo ($n?->a?->b) === null ? 'null' : 'set';"),
             b"null"
+        );
+    }
+
+    // --- OOP-2c (2/2): mixed property + index paths ---
+
+    #[test]
+    fn property_array_element_write_and_read() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $arr = []; } $o = new C(); $o->arr[0] = 'x'; $o->arr['k'] = 'y'; echo $o->arr[0], $o->arr['k'];"),
+            b"xy"
+        );
+    }
+
+    #[test]
+    fn this_property_append() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $items = []; function add($v) { $this->items[] = $v; } function get($i) { return $this->items[$i]; } } $o = new C(); $o->add('a'); $o->add('b'); echo $o->get(0), $o->get(1);"),
+            b"ab"
+        );
+    }
+
+    #[test]
+    fn nested_object_property_write() {
+        assert_eq!(
+            vm_stdout(b"<?php class P { public $inner; } class Q { public $val = 1; } $p = new P(); $p->inner = new Q(); $p->inner->val = 99; echo $p->inner->val;"),
+            b"99"
+        );
+    }
+
+    #[test]
+    fn compound_assign_on_property_element() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $counts = []; function bump($k) { $this->counts[$k] += 1; } } $o = new C(); $o->bump('a'); $o->bump('a'); $o->bump('b'); echo $o->counts['a'], $o->counts['b'];"),
+            b"21"
+        );
+    }
+
+    #[test]
+    fn incdec_on_property_element() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $arr = [5]; } $o = new C(); $o->arr[0]++; echo $o->arr[0];"),
+            b"6"
+        );
+    }
+
+    #[test]
+    fn isset_and_unset_on_property_element() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $arr = ['k' => 1]; } $o = new C(); echo isset($o->arr['k']) ? 'y' : 'n', isset($o->arr['z']) ? 'y' : 'n'; unset($o->arr['k']); echo isset($o->arr['k']) ? 'y' : 'n';"),
+            b"ynn"
+        );
+    }
+
+    #[test]
+    fn nested_autovivification_through_property() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $data; } $o = new C(); $o->data['x']['y'] = 7; echo $o->data['x']['y'];"),
+            b"7"
         );
     }
 }

@@ -377,6 +377,22 @@ pub enum Op {
     /// `[] -> [result]` — `++`/`--` on `target::$name`.
     StaticPropIncDec { target: ClassTarget, name: Box<[u8]>, inc: bool, pre: bool },
 
+    // ----- OOP-2c: mixed property/index write paths (`$o->a[$k]`, `$o->x->y`) -----
+    /// `[keys…, value] -> [value]` — write `value` through `base` then `steps`
+    /// (`Index` steps consume the pushed keys in source order). Objects navigate
+    /// in place, arrays auto-vivify + copy-on-write (à la `write_into`).
+    FieldAssign { base: FieldBase, steps: Box<[FieldStep]> },
+    /// `[keys…, rhs] -> [result]` — compound `place op= rhs`: read the place (NULL
+    /// if absent), apply `op`, write back, leave the result.
+    FieldAssignOp { base: FieldBase, steps: Box<[FieldStep]>, op: BinOp },
+    /// `[keys…] -> [result]` — `++`/`--` on a mixed place (read, apply, write back).
+    FieldIncDec { base: FieldBase, steps: Box<[FieldStep]>, inc: bool, pre: bool },
+    /// `[keys…] -> [bool]` — `isset()` of a mixed place: true iff every level
+    /// exists and the leaf is non-null (silent).
+    FieldIsset { base: FieldBase, steps: Box<[FieldStep]> },
+    /// `[keys…] -> []` — `unset()` of a mixed place's leaf (silent no-op if absent).
+    FieldUnset { base: FieldBase, steps: Box<[FieldStep]> },
+
     /// Raise a fatal `Error` carrying `consts[idx]` (a string) as its message.
     /// Used for *stub* function bodies: the always-present PHP prelude (exception
     /// classes, the procedural date API) contains constructs not yet ported, so
@@ -418,6 +434,28 @@ pub struct Func {
     pub is_generator: bool,
     /// Source line of the declaration, for diagnostics / stack traces.
     pub line: Line,
+}
+
+/// The root of a mixed property/index write path ([`Op::FieldAssign`] &c.): a
+/// local slot, a `$GLOBALS` slot, or `$this`. Unlike [`DimBase`] this admits
+/// `This`, since a mixed path may begin at an object property of `$this`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FieldBase {
+    Local(Slot),
+    Global(Slot),
+    This,
+}
+
+/// One step of a mixed write path ([`Op::FieldAssign`] &c.). `Index` consumes a
+/// key from the operand stack (keys are pushed in source order, beneath the
+/// value); `Prop` carries its name inline; `Append` is `[]` (final step only).
+/// Objects are navigated in place (no copy-on-write); arrays auto-vivify and
+/// copy-on-write, exactly as the tree-walker's `write_into`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FieldStep {
+    Index,
+    Append,
+    Prop(Box<[u8]>),
 }
 
 /// The class a `::`-qualified op ([`Op::StaticCall`], `instanceof static`) starts

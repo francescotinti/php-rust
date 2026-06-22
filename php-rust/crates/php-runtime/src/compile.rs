@@ -27,7 +27,7 @@ use php_types::{ObjectInfo, PhpStr, PropVis};
 use crate::builtin::{Builtin, Registry};
 use crate::bytecode::{
     Addr, ClassTarget, CompiledClass, CompiledConst, CompiledMethod, CompiledStaticProp, Const,
-    ConstIdx, DimBase, Func, Instantiable, Module, Op, StaticInit,
+    ConstIdx, DimBase, FieldBase, FieldStep, Func, Instantiable, Module, Op, StaticInit,
 };
 use crate::hir::{
     BinOp, Case, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, MatchArm, Place, PlaceBase,
@@ -620,6 +620,9 @@ impl<'a> FnCompiler<'a> {
                 for place in places {
                     if let Some(name) = self.prop_place(place)? {
                         self.emit(Op::PropUnset { name });
+                    } else if place_has_prop(place) {
+                        let (base, steps) = self.field_path(place)?;
+                        self.emit(Op::FieldUnset { base, steps: steps.into() });
                     } else {
                         let base = dim_base(place)?;
                         let nkeys = self.test_path_steps(place)?;
@@ -1286,6 +1289,35 @@ impl<'a> FnCompiler<'a> {
         Ok(Some(name.clone()))
     }
 
+    /// Lower a mixed property/index place (`$o->a[$k]`, `$this->x->y`, …) into a
+    /// [`FieldBase`] plus a [`FieldStep`] list, emitting each `Index` step's key
+    /// expression in source order (consumed at run time beneath the value). The
+    /// in-place vs copy-on-write distinction between object and array steps is the
+    /// VM's job; the compiler only records the shape.
+    fn field_path(&mut self, place: &Place) -> R<(FieldBase, Vec<FieldStep>)> {
+        let base = match place.base {
+            PlaceBase::Local(s) => FieldBase::Local(s),
+            PlaceBase::Global(s) => FieldBase::Global(s),
+            PlaceBase::This => FieldBase::This,
+        };
+        let mut steps = Vec::with_capacity(place.steps.len());
+        let last = place.steps.len().saturating_sub(1);
+        for (i, step) in place.steps.iter().enumerate() {
+            match step {
+                PlaceStep::Index(k) => {
+                    self.expr(k)?;
+                    steps.push(FieldStep::Index);
+                }
+                PlaceStep::Prop(name) => steps.push(FieldStep::Prop(name.clone())),
+                PlaceStep::Append if i == last => steps.push(FieldStep::Append),
+                PlaceStep::Append => {
+                    return Err(CompileError::Unsupported("`[]` is only valid as the last step".into()))
+                }
+            }
+        }
+        Ok((base, steps))
+    }
+
     /// Compile a `switch`: the subject is evaluated once into a temp, each `case`
     /// is compared with loose `==`, and on a match control jumps to that case's
     /// body. Bodies are laid out in source order so execution falls through to the
@@ -1389,6 +1421,12 @@ impl<'a> FnCompiler<'a> {
             self.emit(Op::PropSet { name });
             return Ok(());
         }
+        if place_has_prop(place) {
+            let (base, steps) = self.field_path(place)?;
+            self.expr(rhs)?;
+            self.emit(Op::FieldAssign { base, steps: steps.into() });
+            return Ok(());
+        }
         let base = dim_base(place)?;
         let (nkeys, append) = self.push_index_steps(&place.steps)?;
         if nkeys == 0 && !append {
@@ -1406,6 +1444,12 @@ impl<'a> FnCompiler<'a> {
             self.emit(Op::PropOpSet { name, op });
             return Ok(());
         }
+        if place_has_prop(place) {
+            let (base, steps) = self.field_path(place)?;
+            self.expr(rhs)?;
+            self.emit(Op::FieldAssignOp { base, steps: steps.into(), op });
+            return Ok(());
+        }
         let base = dim_base(place)?;
         let (nkeys, append) = self.push_index_steps(&place.steps)?;
         if append || nkeys == 0 {
@@ -1420,6 +1464,11 @@ impl<'a> FnCompiler<'a> {
     fn incdec_place(&mut self, place: &Place, inc: bool, pre: bool) -> R<()> {
         if let Some(name) = self.prop_place(place)? {
             self.emit(Op::PropIncDec { name, inc, pre });
+            return Ok(());
+        }
+        if place_has_prop(place) {
+            let (base, steps) = self.field_path(place)?;
+            self.emit(Op::FieldIncDec { base, steps: steps.into(), inc, pre });
             return Ok(());
         }
         let base = dim_base(place)?;
@@ -1440,6 +1489,9 @@ impl<'a> FnCompiler<'a> {
         for (i, place) in places.iter().enumerate() {
             if let Some(name) = self.prop_place(place)? {
                 self.emit(Op::PropIsset { name });
+            } else if place_has_prop(place) {
+                let (base, steps) = self.field_path(place)?;
+                self.emit(Op::FieldIsset { base, steps: steps.into() });
             } else {
                 let base = dim_base(place)?;
                 let nkeys = self.test_path_steps(place)?;
@@ -1500,6 +1552,12 @@ impl<'a> FnCompiler<'a> {
         }
         Ok((nkeys, append))
     }
+}
+
+/// Whether a place contains an object-property step — routing it to the mixed
+/// field-path opcodes (OOP-2c) rather than the array-only path opcodes.
+fn place_has_prop(place: &Place) -> bool {
+    place.steps.iter().any(|s| matches!(s, PlaceStep::Prop(_)))
 }
 
 /// Map a [`Place`]'s base to the VM's write-cell selector. Only a single-step
