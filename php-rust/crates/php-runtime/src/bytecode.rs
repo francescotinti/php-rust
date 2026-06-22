@@ -156,6 +156,11 @@ pub enum Op {
     /// `[v] -> []` — pop and store into local `slot`. To use an assignment as an
     /// expression, the compiler emits [`Op::Dup`] before this.
     StoreSlot(Slot),
+    /// Default-parameter prologue (PAR): if `slot` already holds an argument
+    /// (it is not `Undef`), jump to `skip` (past the default); otherwise fall
+    /// through to evaluate the default expression and `StoreSlot` it. Emitted at
+    /// function entry for each parameter that has a default.
+    FillDefault { slot: Slot, skip: Addr },
     /// `++`/`--` on a bare local. `inc` selects increment vs decrement, `pre`
     /// selects whether the pushed result is the new value (prefix) or the old
     /// value (postfix). Stack: `[] -> [result]`. Semantics (string increment,

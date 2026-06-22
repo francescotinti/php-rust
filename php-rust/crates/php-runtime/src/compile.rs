@@ -31,7 +31,7 @@ use crate::bytecode::{
 };
 use crate::hir::{
     BinOp, Case, CatchClause, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, Line, MatchArm,
-    Place, PlaceBase, PlaceStep, Program, StaticAssignOp, Stmt, StmtKind, Visibility,
+    Param, Place, PlaceBase, PlaceStep, Program, StaticAssignOp, Stmt, StmtKind, Visibility,
 };
 
 /// A construct the proof-slice compiler does not yet lower. Carries the HIR
@@ -102,7 +102,7 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
         .iter()
         .map(|fd| compile_fndecl(fd, &ctx).unwrap_or_else(|e| stub_func(fd, &e)))
         .collect();
-    let main = compile_body(b"", &program.body, program.slots.len() as u32, 0, false, false, &ctx, None, true)?;
+    let main = compile_body(b"", &program.body, program.slots.len() as u32, &[], false, false, &ctx, None, true)?;
     // Classes are compiled tolerantly too (see `compile_class`).
     let classes = program
         .classes
@@ -129,7 +129,7 @@ fn compile_fndecl(fd: &FnDecl, ctx: &ProgramCtx) -> R<Func> {
         &fd.name,
         &fd.body,
         fd.slots.len() as u32,
-        fd.params.len() as u32,
+        &fd.params,
         fd.by_ref,
         fd.is_generator,
         ctx,
@@ -146,14 +146,19 @@ fn compile_body(
     name: &[u8],
     body: &[Stmt],
     n_locals: u32,
-    n_params: u32,
+    params: &[Param],
     by_ref: bool,
     is_generator: bool,
     ctx: &ProgramCtx,
     cur_class: Option<ClassId>,
     is_main: bool,
 ) -> R<Func> {
+    let n_params = params.len() as u32;
     let mut c = FnCompiler::new(ctx, n_locals, cur_class, is_main);
+    // Default-parameter prologue (PAR): fill any omitted optional parameter with
+    // its default before the body runs. Runs in the callee frame, so a default
+    // may reference earlier parameters.
+    c.param_prologue(params)?;
     c.block(body)?;
     // A body that runs off the end returns NULL (PHP's implicit return).
     let null = c.konst(Const::Null);
@@ -285,7 +290,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
                 &m.decl.name,
                 &m.decl.body,
                 m.decl.slots.len() as u32,
-                m.decl.params.len() as u32,
+                &m.decl.params,
                 m.decl.by_ref,
                 m.decl.is_generator,
                 ctx,
@@ -547,6 +552,22 @@ impl<'a> FnCompiler<'a> {
         let i = self.consts.len() as ConstIdx;
         self.consts.push(c);
         i
+    }
+
+    /// Emit the default-parameter prologue (PAR): for each parameter with a
+    /// default, `FillDefault` skips the default when the argument was supplied,
+    /// else the default expression is evaluated and stored into the slot.
+    /// Variadic / required parameters have no default and emit nothing.
+    fn param_prologue(&mut self, params: &[Param]) -> R<()> {
+        for p in params {
+            let Some(default) = &p.default else { continue };
+            let fill = self.emit(Op::FillDefault { slot: p.slot, skip: Addr::MAX });
+            self.expr(default)?;
+            self.emit(Op::StoreSlot(p.slot));
+            let here = self.here();
+            self.patch(fill, Op::FillDefault { slot: p.slot, skip: here });
+        }
+        Ok(())
     }
 
     fn block(&mut self, stmts: &[Stmt]) -> R<()> {
@@ -1144,13 +1165,9 @@ impl<'a> FnCompiler<'a> {
             if callee.params.iter().any(|p| p.variadic) {
                 return Err(CompileError::Unsupported("call to a variadic function".into()));
             }
-            if args.len() != callee.params.len() {
-                return Err(CompileError::Unsupported(format!(
-                    "call arity {} != {} declared params (default-filled calls not yet handled)",
-                    args.len(),
-                    callee.params.len()
-                )));
-            }
+            // Omitted optional args are filled by the callee's default prologue
+            // (PAR); extra args are dropped by the binder. A required arg left
+            // unbound reads as NULL (ArgumentCountError is a later block).
             // Snapshot the by-ref mask so the immutable borrow of `callee` ends
             // before `push_call_args` borrows `self` mutably (REF-2).
             let by_ref: Vec<bool> = callee.params.iter().map(|p| p.by_ref).collect();

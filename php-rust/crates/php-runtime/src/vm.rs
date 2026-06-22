@@ -424,6 +424,13 @@ impl<'m> Vm<'m> {
                     let v = self.frames[top].stack.pop().expect("StoreSlot on empty stack");
                     store_slot(&mut self.frames[top].slots[s as usize], v);
                 }
+                Op::FillDefault { slot, skip } => {
+                    // Default-parameter prologue (PAR): skip the default if the
+                    // argument was supplied (the slot is not `Undef`).
+                    if !matches!(self.frames[top].slots[slot as usize], Zval::Undef) {
+                        self.frames[top].ip = skip as usize;
+                    }
+                }
                 Op::IncDecSlot { slot, inc, pre } => {
                     let i = slot as usize;
                     if matches!(self.frames[top].slots[i], Zval::Undef) {
@@ -883,9 +890,7 @@ impl<'m> Vm<'m> {
                     }
                     args.reverse();
                     let mut frame = Frame::new(callee);
-                    for (i, a) in args.into_iter().enumerate() {
-                        frame.slots[i] = a;
-                    }
+                    bind_params(&mut frame, args, callee.n_params);
                     self.enter_callee(frame);
                 }
                 Op::CallBuiltin { name, argc } => {
@@ -1178,7 +1183,7 @@ impl<'m> Vm<'m> {
                 }
                 Op::MethodCall { method, argc } => {
                     let module = self.module;
-                    let mut args = self.pop_keys(top, argc); // source order
+                    let args = self.pop_keys(top, argc); // source order
                     let recv = self.frames[top].stack.pop().expect("MethodCall receiver");
                     let this = recv.deref_clone();
                     // A `Generator` is not a user object: dispatch its built-in
@@ -1219,9 +1224,7 @@ impl<'m> Vm<'m> {
                         Some((defc, midx)) => {
                             let callee = &module.classes[defc].methods[midx].func;
                             let mut frame = Frame::new(callee);
-                            for (i, a) in args.drain(..).enumerate() {
-                                frame.slots[i] = a;
-                            }
+                            bind_params(&mut frame, args, callee.n_params);
                             frame.this = Some(this);
                             frame.class = Some(defc);
                             frame.static_class = Some(cid); // LSB = receiver's actual class
@@ -1250,15 +1253,13 @@ impl<'m> Vm<'m> {
                 }
                 Op::InvokeMethod { class, method_idx, argc } => {
                     let module = self.module;
-                    let mut args = self.pop_keys(top, argc);
+                    let args = self.pop_keys(top, argc);
                     let recv = self.frames[top].stack.pop().expect("InvokeMethod receiver");
                     let this = recv.deref_clone();
                     let lsb = object_class_id(&this).unwrap_or(class);
                     let callee = &module.classes[class].methods[method_idx as usize].func;
                     let mut frame = Frame::new(callee);
-                    for (i, a) in args.drain(..).enumerate() {
-                        frame.slots[i] = a;
-                    }
+                    bind_params(&mut frame, args, callee.n_params);
                     frame.this = Some(this);
                     frame.class = Some(class);
                     frame.static_class = Some(lsb);
@@ -1289,7 +1290,7 @@ impl<'m> Vm<'m> {
                 }
                 Op::StaticCall { target, method, forwarding, argc } => {
                     let module = self.module;
-                    let mut args = self.pop_keys(top, argc);
+                    let args = self.pop_keys(top, argc);
                     let start = match target {
                         ClassTarget::Class(cid) => cid,
                         ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
@@ -1353,9 +1354,7 @@ impl<'m> Vm<'m> {
                         Some((defc, midx)) => {
                             let callee = &module.classes[defc].methods[midx].func;
                             let mut frame = Frame::new(callee);
-                            for (i, a) in args.drain(..).enumerate() {
-                                frame.slots[i] = a;
-                            }
+                            bind_params(&mut frame, args, callee.n_params);
                             frame.this = this;
                             frame.class = Some(defc);
                             frame.static_class = Some(static_class);
@@ -1429,7 +1428,7 @@ impl<'m> Vm<'m> {
                 }
                 Op::InvokeCtor { argc } => {
                     let module = self.module;
-                    let mut args = self.pop_keys(top, argc);
+                    let args = self.pop_keys(top, argc);
                     let recv = self.frames[top].stack.pop().expect("InvokeCtor receiver");
                     let this = recv.deref_clone();
                     let cid = object_class_id(&this).expect("InvokeCtor on a non-object");
@@ -1437,9 +1436,7 @@ impl<'m> Vm<'m> {
                         Some((defc, midx)) => {
                             let callee = &module.classes[defc].methods[midx].func;
                             let mut frame = Frame::new(callee);
-                            for (i, a) in args.drain(..).enumerate() {
-                                frame.slots[i] = a;
-                            }
+                            bind_params(&mut frame, args, callee.n_params);
                             frame.this = Some(this);
                             frame.class = Some(defc);
                             frame.static_class = Some(cid);
@@ -1669,11 +1666,7 @@ impl<'m> Vm<'m> {
         for (slot, val) in &cl.captures {
             frame.slots[*slot as usize] = val.clone();
         }
-        for (i, a) in args.into_iter().enumerate() {
-            if i < frame.slots.len() {
-                frame.slots[i] = a;
-            }
-        }
+        bind_params(&mut frame, args, callee.n_params);
         frame.this = cl.bound_this.clone();
         self.enter_callee(frame);
     }
@@ -1687,11 +1680,7 @@ impl<'m> Vm<'m> {
         {
             let callee = &self.module.functions[idx];
             let mut frame = Frame::new(callee);
-            for (i, a) in args.into_iter().enumerate() {
-                if i < frame.slots.len() {
-                    frame.slots[i] = a;
-                }
-            }
+            bind_params(&mut frame, args, callee.n_params);
             self.enter_callee(frame);
             return Ok(());
         }
@@ -3042,6 +3031,18 @@ fn iface_is_a(module: &Module, i: ClassId, target: ClassId) -> bool {
 /// case-insensitively in ASCII (mirrors the compiler's resolution).
 fn name_eq_ignore_case(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.eq_ignore_ascii_case(y))
+}
+
+/// Bind positional `args` to a callee frame's leading parameter slots (PAR).
+/// Extra arguments beyond `n_params` are dropped (PHP silently ignores them for
+/// a non-variadic function); omitted parameters are left `Undef` for the body's
+/// default prologue ([`Op::FillDefault`]) to fill.
+fn bind_params(frame: &mut Frame, args: Vec<Zval>, n_params: u32) {
+    for (i, a) in args.into_iter().enumerate() {
+        if i < n_params as usize {
+            frame.slots[i] = a;
+        }
+    }
 }
 
 /// Read a local cell's value, following a reference and mapping an unset slot to
@@ -5453,6 +5454,66 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php try { Fiber::suspend(1); } catch (\\Throwable $e) { echo 'err'; }"),
             b"err"
+        );
+    }
+
+    // ----- PAR: default parameters + arity (verified vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn default_param_omitted_and_given() {
+        assert_eq!(
+            vm_stdout(b"<?php function f($a, $b=5){ return $a+$b; } echo f(1), ',', f(1,2);"),
+            b"6,3"
+        );
+    }
+
+    #[test]
+    fn default_param_expression() {
+        assert_eq!(
+            vm_stdout(b"<?php function greet($name, $greeting='Hello'){ return \"$greeting, $name\"; } echo greet('X');"),
+            b"Hello, X"
+        );
+    }
+
+    #[test]
+    fn extra_args_dropped() {
+        // A non-variadic function silently ignores surplus positional arguments.
+        assert_eq!(
+            vm_stdout(b"<?php function f($a){ return $a; } echo f(7, 8, 9);"),
+            b"7"
+        );
+    }
+
+    #[test]
+    fn method_default_param() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function m($x, $y=10){ return $x*$y; } } $o=new C; echo $o->m(3), ',', $o->m(3,2);"),
+            b"30,6"
+        );
+    }
+
+    #[test]
+    fn default_references_earlier_param() {
+        // The default runs in the callee frame, so it can see earlier params.
+        assert_eq!(
+            vm_stdout(b"<?php function f($a, $b=null){ $b = $b ?? $a*2; return $b; } echo f(4);"),
+            b"8"
+        );
+    }
+
+    #[test]
+    fn constructor_default_param() {
+        assert_eq!(
+            vm_stdout(b"<?php class P { public $v; function __construct($v=99){ $this->v=$v; } } $p=new P; echo $p->v; $q=new P(7); echo $q->v;"),
+            b"997"
+        );
+    }
+
+    #[test]
+    fn closure_default_param() {
+        assert_eq!(
+            vm_stdout(b"<?php $f = function($a, $b=3){ return $a+$b; }; echo $f(10);"),
+            b"13"
         );
     }
 }
