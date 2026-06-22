@@ -184,6 +184,9 @@ struct Frame<'m> {
     /// An in-progress `yield from` delegation (GEN-3), `None` outside one. Lives
     /// on the frame so it is preserved across the generator's suspensions.
     yield_from: Option<YieldFromState>,
+    /// The number of arguments actually passed to this call (PAR), recorded by
+    /// the binder. Read by `Op::CheckArity` for the `ArgumentCountError` message.
+    argc: u32,
 }
 
 impl<'m> Frame<'m> {
@@ -204,6 +207,7 @@ impl<'m> Frame<'m> {
             pending_throw: None,
             gen_id: None,
             yield_from: None,
+            argc: 0,
         }
     }
 }
@@ -429,6 +433,34 @@ impl<'m> Vm<'m> {
                     // argument was supplied (the slot is not `Undef`).
                     if !matches!(self.frames[top].slots[slot as usize], Zval::Undef) {
                         self.frames[top].ip = skip as usize;
+                    }
+                }
+                Op::CheckArity { required, exactly } => {
+                    let argc = self.frames[top].argc;
+                    if argc < required {
+                        // `Class::method` for a method, bare name for a function.
+                        let func_name = self.frames[top].func.name.clone();
+                        let name = match self.frames[top].class {
+                            Some(cid) => format!(
+                                "{}::{}",
+                                String::from_utf8_lossy(&self.module.classes[cid].name),
+                                String::from_utf8_lossy(&func_name)
+                            ),
+                            None => String::from_utf8_lossy(&func_name).into_owned(),
+                        };
+                        // The message reports the *call site* line (the caller's
+                        // current op), recovered from the EXC-3b line table.
+                        let line = if self.frames.len() >= 2 {
+                            self.cur_line(self.frames.len() - 2)
+                        } else {
+                            self.cur_line(top)
+                        };
+                        let qualifier = if exactly { "exactly" } else { "at least" };
+                        let msg = format!(
+                            "Too few arguments to function {name}(), {argc} passed in {} on line {line} and {qualifier} {required} expected",
+                            String::from_utf8_lossy(&self.module.file)
+                        );
+                        return Err(PhpError::ArgumentCountError(msg));
                     }
                 }
                 Op::IncDecSlot { slot, inc, pre } => {
@@ -2554,6 +2586,9 @@ impl<'m> Vm<'m> {
     ) {
         let callee = &self.module.classes[defc].methods[midx].func;
         let mut frame = Frame::new(callee);
+        // A magic accessor is always invoked with exactly its declared
+        // parameters, so the arity guard (PAR) sees a full argument count.
+        frame.argc = callee.n_params;
         if !frame.slots.is_empty() {
             frame.slots[0] = Zval::Str(PhpStr::new(method.to_vec()));
         }
@@ -2618,6 +2653,9 @@ impl<'m> Vm<'m> {
         let lsb = object_class_id(&recv).unwrap_or(defc);
         let callee = &self.module.classes[defc].methods[midx].func;
         let mut frame = Frame::new(callee);
+        // A magic accessor is always invoked with exactly its declared
+        // parameters, so the arity guard (PAR) sees a full argument count.
+        frame.argc = callee.n_params;
         if !frame.slots.is_empty() {
             frame.slots[0] = Zval::Str(PhpStr::new(name.to_vec()));
         }
@@ -3228,6 +3266,7 @@ fn name_eq_ignore_case(a: &[u8], b: &[u8]) -> bool {
 /// the variadic slot (empty when there are none); otherwise surplus arguments
 /// are dropped (PHP silently ignores them for a non-variadic function).
 fn bind_params(frame: &mut Frame, args: Vec<Zval>) {
+    frame.argc = args.len() as u32;
     match frame.func.variadic_slot {
         None => {
             let n = frame.func.n_params as usize;
@@ -6047,6 +6086,57 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php $o=(object)null; echo ($o instanceof stdClass)?'Y':'N';"),
             b"Y"
+        );
+    }
+
+    // ----- PAR: ArgumentCountError (verified vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn too_few_args_function() {
+        assert_eq!(
+            vm_stdout(b"<?php function f($a, $b){ return $a+$b; } try { f(1); } catch(ArgumentCountError $e){ echo $e->getMessage(); }"),
+            b"Too few arguments to function f(), 1 passed in test.php on line 1 and exactly 2 expected"
+        );
+    }
+
+    #[test]
+    fn too_few_args_zero_passed() {
+        assert_eq!(
+            vm_stdout(b"<?php function f($a){} try { f(); } catch(ArgumentCountError $e){ echo $e->getMessage(); }"),
+            b"Too few arguments to function f(), 0 passed in test.php on line 1 and exactly 1 expected"
+        );
+    }
+
+    #[test]
+    fn too_few_args_method() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function m($a,$b,$c){} } try { (new C)->m(1); } catch(ArgumentCountError $e){ echo $e->getMessage(); }"),
+            b"Too few arguments to function C::m(), 1 passed in test.php on line 1 and exactly 3 expected"
+        );
+    }
+
+    #[test]
+    fn too_few_args_at_least_with_optional() {
+        assert_eq!(
+            vm_stdout(b"<?php function f($a,$b,$c=3){} try { f(1); } catch(ArgumentCountError $e){ echo $e->getMessage(); }"),
+            b"Too few arguments to function f(), 1 passed in test.php on line 1 and at least 2 expected"
+        );
+    }
+
+    #[test]
+    fn enough_args_no_error() {
+        assert_eq!(
+            vm_stdout(b"<?php function f($a, $b){ return $a+$b; } echo f(1,2);"),
+            b"3"
+        );
+    }
+
+    #[test]
+    fn argument_count_error_is_a_type_error() {
+        // ArgumentCountError extends TypeError, so a TypeError clause catches it.
+        assert_eq!(
+            vm_stdout(b"<?php function f($a){} try { f(); } catch(TypeError $e){ echo 'caught'; }"),
+            b"caught"
         );
     }
 }

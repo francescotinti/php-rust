@@ -564,6 +564,13 @@ impl<'a> FnCompiler<'a> {
     /// else the default expression is evaluated and stored into the slot.
     /// Variadic / required parameters have no default and emit nothing.
     fn param_prologue(&mut self, params: &[Param]) -> R<()> {
+        // Arity guard (PAR): a required param is a non-variadic one with no
+        // default. "exactly" when there are no optional/variadic params at all.
+        let required = params.iter().filter(|p| p.default.is_none() && !p.variadic).count() as u32;
+        if required > 0 {
+            let exactly = !params.iter().any(|p| p.default.is_some() || p.variadic);
+            self.emit(Op::CheckArity { required, exactly });
+        }
         for p in params {
             let Some(default) = &p.default else { continue };
             let fill = self.emit(Op::FillDefault { slot: p.slot, skip: Addr::MAX });

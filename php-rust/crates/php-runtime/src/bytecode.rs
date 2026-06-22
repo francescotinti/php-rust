@@ -161,6 +161,11 @@ pub enum Op {
     /// through to evaluate the default expression and `StoreSlot` it. Emitted at
     /// function entry for each parameter that has a default.
     FillDefault { slot: Slot, skip: Addr },
+    /// Arity guard (PAR), emitted at function entry when there is at least one
+    /// required parameter: if fewer than `required` arguments were passed, raise
+    /// an `ArgumentCountError`. `exactly` selects the wording ("exactly N" when
+    /// there are no optional/variadic params, else "at least N").
+    CheckArity { required: u32, exactly: bool },
     /// `++`/`--` on a bare local. `inc` selects increment vs decrement, `pre`
     /// selects whether the pushed result is the new value (prefix) or the old
     /// value (postfix). Stack: `[] -> [result]`. Semantics (string increment,
