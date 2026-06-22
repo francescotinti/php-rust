@@ -890,13 +890,15 @@ impl<'a> FnCompiler<'a> {
                         self.expr(a)?;
                         self.emit(Op::Stringify);
                     }
-                    CastKind::Int | CastKind::Bool => {
+                    CastKind::Int | CastKind::Bool | CastKind::Float | CastKind::Array => {
                         self.expr(a)?;
                         self.emit(Op::Cast(*kind));
                     }
-                    // Float/Array/Object casts await the broader value-conversion
-                    // and array opcodes.
-                    other => return Err(CompileError::Unsupported(format!("cast {other:?}"))),
+                    // `(object)` awaits a stdClass allocation in the VM (it needs
+                    // the object table); the rest are handled by `Op::Cast`.
+                    CastKind::Object => {
+                        return Err(CompileError::Unsupported(format!("cast {kind:?}")))
+                    }
                 }
             }
             ExprKind::And(a, b) => self.short_circuit(a, b, false)?,

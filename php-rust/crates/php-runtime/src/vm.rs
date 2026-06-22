@@ -3557,10 +3557,22 @@ fn apply_unop(op: UnOp, a: &Zval, d: &mut Diags) -> Result<Zval, PhpError> {
 fn apply_cast(kind: CastKind, a: &Zval, d: &mut Diags) -> Zval {
     match kind {
         CastKind::Int => Zval::Long(convert::to_long_cast(a, d)),
+        CastKind::Float => Zval::Double(convert::to_double(a)),
         CastKind::String => Zval::Str(convert::to_zstr_cast(a, d)),
         CastKind::Bool => Zval::Bool(convert::to_bool(a, d)),
-        // The compiler only emits Int/String/Bool casts in the proof slice.
-        other => unreachable!("VM saw an unported cast {other:?}"),
+        // `(array)`: an array passes through, null/unset → empty, a scalar wraps
+        // into a single `[0 => v]` element (mirrors `eval::array_cast`).
+        CastKind::Array => match a.deref_clone() {
+            arr @ Zval::Array(_) => arr,
+            Zval::Null | Zval::Undef => Zval::Array(Rc::new(PhpArray::new())),
+            scalar => {
+                let mut arr = PhpArray::new();
+                arr.insert(Key::Int(0), scalar);
+                Zval::Array(Rc::new(arr))
+            }
+        },
+        // `(object)` is lowered to a stub by the compiler (it needs VM state).
+        CastKind::Object => unreachable!("VM saw an unported (object) cast"),
     }
 }
 
@@ -5918,6 +5930,46 @@ mod tests {
             vm_stdout(b"<?php $c='C'; class C{} try { echo $c::class; } catch(TypeError $e){ echo 'TE:', $e->getMessage(); }"),
             b"TE:Cannot use \"::class\" on string"
         );
+    }
+
+    // ----- PAR: (float) and (array) casts (verified vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn float_cast_string() {
+        assert_eq!(vm_stdout(b"<?php echo (float)'3.14';"), b"3.14");
+    }
+
+    #[test]
+    fn float_cast_in_arithmetic() {
+        assert_eq!(vm_stdout(b"<?php echo (float)'2e3' + 1;"), b"2001");
+    }
+
+    #[test]
+    fn float_cast_int_prints_without_point() {
+        assert_eq!(vm_stdout(b"<?php echo (float)10;"), b"10");
+    }
+
+    #[test]
+    fn array_cast_scalar_wraps() {
+        assert_eq!(vm_stdout(b"<?php $a=(array)5; echo $a[0];"), b"5");
+    }
+
+    #[test]
+    fn array_cast_string_wraps() {
+        assert_eq!(vm_stdout(b"<?php $a=(array)'hi'; echo $a[0];"), b"hi");
+    }
+
+    #[test]
+    fn array_cast_null_is_empty() {
+        assert_eq!(
+            vm_stdout(b"<?php $a=(array)null; $c=0; foreach($a as $x) $c++; echo $c;"),
+            b"0"
+        );
+    }
+
+    #[test]
+    fn array_cast_array_passes_through() {
+        assert_eq!(vm_stdout(b"<?php $a=(array)[1,2,3]; echo $a[0],$a[2];"), b"13");
     }
 }
 
