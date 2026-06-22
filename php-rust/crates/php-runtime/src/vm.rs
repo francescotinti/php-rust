@@ -1329,7 +1329,6 @@ impl<'m> Vm<'m> {
                     self.frames[top].stack.push(Zval::Bool(result));
                 }
                 Op::StaticCall { target, method, forwarding, argc } => {
-                    let module = self.module;
                     let args = self.pop_keys(top, argc);
                     let start = match target {
                         ClassTarget::Class(cid) => cid,
@@ -1365,71 +1364,7 @@ impl<'m> Vm<'m> {
                             continue;
                         }
                     }
-                    let resolved = resolve_method_runtime(module, start, &method);
-                    let usable = resolved.filter(|&(defc, midx)| {
-                        visible_from(module, self.frames[top].class, module.classes[defc].methods[midx].visibility, defc)
-                    });
-                    // LSB: a forwarding call (self/parent/static) keeps the caller's;
-                    // a named call rebinds it to the start class.
-                    let static_class = if forwarding {
-                        self.frames[top].static_class.unwrap_or(start)
-                    } else {
-                        start
-                    };
-                    // `$this` is forwarded for a forwarding call, or for a named
-                    // call to a class in the current object's hierarchy.
-                    let this = match &self.frames[top].this {
-                        Some(t) => {
-                            let keep = forwarding
-                                || matches!(object_class_id(t), Some(ocid) if class_is_a(module, ocid, start));
-                            if keep {
-                                Some(t.clone())
-                            } else {
-                                None
-                            }
-                        }
-                        None => None,
-                    };
-                    match usable {
-                        Some((defc, midx)) => {
-                            let callee = &module.classes[defc].methods[midx].func;
-                            let mut frame = Frame::new(callee);
-                            bind_params(&mut frame, args);
-                            frame.this = this;
-                            frame.class = Some(defc);
-                            frame.static_class = Some(static_class);
-                            self.enter_callee(frame);
-                        }
-                        None => {
-                            // In object context (a `$this` in the hierarchy) a
-                            // missing/inaccessible static target routes to `__call`
-                            // on `$this`; otherwise to `__callStatic` on the class.
-                            let via_call = this
-                                .as_ref()
-                                .and_then(|t| object_class_id(t).map(|oc| (t.clone(), oc)))
-                                .and_then(|(tv, oc)| {
-                                    resolve_method_runtime(module, oc, b"__call").map(|(d, m)| (tv, oc, d, m))
-                                });
-                            if let Some((tv, oc, cdefc, cmidx)) = via_call {
-                                self.push_magic_call(cdefc, cmidx, Some(tv), oc, &method, args);
-                            } else if let Some((cdefc, cmidx)) =
-                                resolve_method_runtime(module, start, b"__callStatic")
-                            {
-                                self.push_magic_call(cdefc, cmidx, None, start, &method, args);
-                            } else {
-                                return Err(match resolved {
-                                    Some((defc, midx)) => method_access_error(
-                                        module,
-                                        defc,
-                                        &method,
-                                        self.frames[top].class,
-                                        module.classes[defc].methods[midx].visibility,
-                                    ),
-                                    None => undefined_method(module, start, &method),
-                                });
-                            }
-                        }
-                    }
+                    self.dispatch_static_call(top, start, &method, forwarding, args)?;
                 }
                 Op::ClassConst { class, idx } => {
                     // Run the constant's value thunk as a frame in its declaring
@@ -2123,6 +2058,90 @@ impl<'m> Vm<'m> {
                 String::from_utf8_lossy(other)
             ))),
         }
+    }
+
+    /// Dispatch a static method call `start::method(args)` whose starting class
+    /// `start` is already resolved (OOP-2a). `forwarding` is true for
+    /// `self`/`parent`/`static` (keep the caller's LSB class and `$this`), false
+    /// for a named/dynamic class (rebind LSB; forward `$this` only when the
+    /// receiver is in `start`'s hierarchy). A missing or inaccessible target
+    /// routes to `__call` on `$this` (in object context) or `__callStatic`,
+    /// otherwise raises the visibility / undefined-method error. Shared by
+    /// `Op::StaticCall` (and, later, the dynamic `$cls::method()` path).
+    fn dispatch_static_call(
+        &mut self,
+        top: usize,
+        start: ClassId,
+        method: &[u8],
+        forwarding: bool,
+        args: Vec<Zval>,
+    ) -> Result<(), PhpError> {
+        let module = self.module;
+        let resolved = resolve_method_runtime(module, start, method);
+        let usable = resolved.filter(|&(defc, midx)| {
+            visible_from(module, self.frames[top].class, module.classes[defc].methods[midx].visibility, defc)
+        });
+        // LSB: a forwarding call keeps the caller's; a named/dynamic call rebinds.
+        let static_class = if forwarding {
+            self.frames[top].static_class.unwrap_or(start)
+        } else {
+            start
+        };
+        // `$this` is forwarded for a forwarding call, or for a named/dynamic call
+        // to a class in the current object's hierarchy.
+        let this = match &self.frames[top].this {
+            Some(t) => {
+                let keep = forwarding
+                    || matches!(object_class_id(t), Some(ocid) if class_is_a(module, ocid, start));
+                if keep {
+                    Some(t.clone())
+                } else {
+                    None
+                }
+            }
+            None => None,
+        };
+        match usable {
+            Some((defc, midx)) => {
+                let callee = &module.classes[defc].methods[midx].func;
+                let mut frame = Frame::new(callee);
+                bind_params(&mut frame, args);
+                frame.this = this;
+                frame.class = Some(defc);
+                frame.static_class = Some(static_class);
+                self.enter_callee(frame);
+            }
+            None => {
+                // In object context (a `$this` in the hierarchy) a missing /
+                // inaccessible static target routes to `__call` on `$this`;
+                // otherwise to `__callStatic` on the class.
+                let via_call = this
+                    .as_ref()
+                    .and_then(|t| object_class_id(t).map(|oc| (t.clone(), oc)))
+                    .and_then(|(tv, oc)| {
+                        resolve_method_runtime(module, oc, b"__call").map(|(d, m)| (tv, oc, d, m))
+                    });
+                if let Some((tv, oc, cdefc, cmidx)) = via_call {
+                    self.push_magic_call(cdefc, cmidx, Some(tv), oc, method, args);
+                } else if let Some((cdefc, cmidx)) =
+                    resolve_method_runtime(module, start, b"__callStatic")
+                {
+                    self.push_magic_call(cdefc, cmidx, None, start, method, args);
+                } else {
+                    return Err(match resolved {
+                        Some((defc, midx)) => method_access_error(
+                            module,
+                            defc,
+                            method,
+                            self.frames[top].class,
+                            module.classes[defc].methods[midx].visibility,
+                        ),
+                        None => undefined_method(module, start, method),
+                    });
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Resolve a runtime class-reference value to its class id (PAR, dynamic
