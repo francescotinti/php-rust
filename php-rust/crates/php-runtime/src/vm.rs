@@ -19,7 +19,10 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use php_types::{convert, ops, Diag, Diags, Key, Object, PhpArray, PhpError, PhpStr, Props, Zval};
+use php_types::{
+    convert, ops, Closure, ClosureInfo, ClosureRender, Diag, Diags, Key, Object, PhpArray,
+    PhpError, PhpStr, Props, Zval,
+};
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
 use crate::bytecode::{
@@ -416,6 +419,66 @@ impl Vm<'_> {
                     // the next `Op::Call` binds it into the by-ref callee slot.
                     let cell = make_cell(&mut self.frames[top].slots[slot as usize]);
                     self.frames[top].stack.push(Zval::Ref(cell));
+                }
+                Op::MakeClosure { fn_idx, captures, bind_this } => {
+                    let mut bound = Vec::with_capacity(captures.len());
+                    for cap in captures.iter() {
+                        let val = if cap.by_ref {
+                            Zval::Ref(make_cell(&mut self.frames[top].slots[cap.src as usize]))
+                        } else {
+                            read_slot(&self.frames[top].slots[cap.src as usize])
+                        };
+                        bound.push((cap.dst, val));
+                    }
+                    let bound_this = if bind_this { self.frames[top].this.clone() } else { None };
+                    let func = &self.module.closures[fn_idx as usize];
+                    // Minimal render metadata: the VM omits the parameter dump
+                    // (`var_dump` of a closure is a declared cosmetic gap here).
+                    let info = Rc::new(ClosureInfo {
+                        kind: ClosureRender::Closure {
+                            name: PhpStr::new(func.name.to_vec()),
+                            file: PhpStr::new(self.module.file.to_vec()),
+                            line: func.line,
+                        },
+                        params: Vec::new(),
+                    });
+                    let id = self.next_id();
+                    let cl = Closure {
+                        fn_idx: fn_idx as usize,
+                        captures: bound,
+                        named: None,
+                        bound_this,
+                        id,
+                        info,
+                    };
+                    self.frames[top].stack.push(Zval::Closure(Rc::new(cl)));
+                }
+                Op::MakeFcc { name } => {
+                    // CLO-2: a first-class callable wraps a function *name*.
+                    let info = Rc::new(ClosureInfo {
+                        kind: ClosureRender::Function(PhpStr::new(name.to_vec())),
+                        params: Vec::new(),
+                    });
+                    let id = self.next_id();
+                    let cl = Closure {
+                        fn_idx: 0,
+                        captures: Vec::new(),
+                        named: Some(PhpStr::new(name.to_vec())),
+                        bound_this: None,
+                        id,
+                        info,
+                    };
+                    self.frames[top].stack.push(Zval::Closure(Rc::new(cl)));
+                }
+                Op::CallValue { argc } => {
+                    let n = argc as usize;
+                    let mut args = Vec::with_capacity(n);
+                    for _ in 0..n {
+                        args.push(self.frames[top].stack.pop().expect("CallValue argument"));
+                    }
+                    args.reverse();
+                    let callee = self.frames[top].stack.pop().expect("CallValue callee");
+                    self.invoke_value(callee, args)?;
                 }
                 Op::DerefTop => {
                     // REF-4b: copy a by-ref return used in value context.
@@ -1130,6 +1193,95 @@ impl Vm<'_> {
             DimBase::Global(s) => &mut self.frames[0].slots[s as usize],
         };
         path_apply(cell, &keys, last, &mut self.diags)
+    }
+
+    /// Dispatch a dynamic call on a runtime callee value (CLO): an anonymous
+    /// closure runs its body (binding captures then args); a named closure or a
+    /// string names a user function / builtin; a reference is followed. Anything
+    /// else is an uncatchable "not callable" error. A pushed frame runs via the
+    /// main loop; a builtin result is pushed on the current frame's stack.
+    fn invoke_value(&mut self, callee: Zval, args: Vec<Zval>) -> Result<(), PhpError> {
+        match callee {
+            Zval::Closure(cl) => match &cl.named {
+                None => {
+                    self.push_closure_frame(&cl, args);
+                    Ok(())
+                }
+                Some(name) => {
+                    let name = name.as_bytes().to_vec();
+                    self.invoke_named(&name, args)
+                }
+            },
+            Zval::Str(s) => {
+                let name = s.as_bytes().to_vec();
+                self.invoke_named(&name, args)
+            }
+            Zval::Ref(rc) => {
+                let inner = rc.borrow().clone();
+                self.invoke_value(inner, args)
+            }
+            other => Err(PhpError::Error(format!(
+                "Value of type {} is not callable",
+                other.error_type_name()
+            ))),
+        }
+    }
+
+    /// Install a frame for an anonymous closure: bind its captured variables into
+    /// their slots, then the call arguments into the leading parameter slots, and
+    /// the bound `$this`. Mirrors `eval::call_closure` (captures before params).
+    fn push_closure_frame(&mut self, cl: &Closure, args: Vec<Zval>) {
+        let callee = &self.module.closures[cl.fn_idx];
+        let mut frame = Frame::new(callee);
+        for (slot, val) in &cl.captures {
+            frame.slots[*slot as usize] = val.clone();
+        }
+        for (i, a) in args.into_iter().enumerate() {
+            if i < frame.slots.len() {
+                frame.slots[i] = a;
+            }
+        }
+        frame.this = cl.bound_this.clone();
+        self.frames.push(frame);
+    }
+
+    /// Dispatch a call to a function *name* (a string callable / first-class
+    /// callable / named closure): a user function (case-insensitive, shadows
+    /// builtins) installs a frame; a value builtin runs and pushes its result.
+    fn invoke_named(&mut self, name: &[u8], args: Vec<Zval>) -> Result<(), PhpError> {
+        if let Some(idx) =
+            self.module.functions.iter().position(|f| name_eq_ignore_case(&f.name, name))
+        {
+            let callee = &self.module.functions[idx];
+            let mut frame = Frame::new(callee);
+            for (i, a) in args.into_iter().enumerate() {
+                if i < frame.slots.len() {
+                    frame.slots[i] = a;
+                }
+            }
+            self.frames.push(frame);
+            return Ok(());
+        }
+        match self.registry.get(name) {
+            Some(Builtin::Value(f)) => {
+                let f = *f;
+                let result = {
+                    let mut ctx = Ctx { out: &mut self.stdout, diags: &mut self.diags };
+                    f(&args, &mut ctx)?
+                };
+                let top = self.frames.len() - 1;
+                self.frames[top].stack.push(result);
+                Ok(())
+            }
+            Some(Builtin::RefFirst(_)) => Err(PhpError::Error(format!(
+                "VM: dynamic call to by-reference builtin {}() is out of slice",
+                String::from_utf8_lossy(name)
+            ))),
+            None => Err(PhpError::Error(format!(
+                "Call to undefined function {}()",
+                String::from_utf8_lossy(name)
+            ))),
+        }
     }
 
     /// Build a fresh instance of class `cid`: its declared property defaults
@@ -1964,6 +2116,12 @@ fn iface_is_a(module: &Module, i: ClassId, target: ClassId) -> bool {
         return true;
     }
     module.classes[i].interfaces.iter().any(|&p| iface_is_a(module, p, target))
+}
+
+/// ASCII-case-insensitive byte-string equality — PHP resolves function names
+/// case-insensitively in ASCII (mirrors the compiler's resolution).
+fn name_eq_ignore_case(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.eq_ignore_ascii_case(y))
 }
 
 /// Read a local cell's value, following a reference and mapping an unset slot to
@@ -3677,6 +3835,90 @@ mod tests {
         // `$y = &f()` over a by-ref return of a global aliases the global cell.
         assert_eq!(
             vm_stdout(b"<?php function &f() { global $g; return $g; } $g = 1; $y = &f(); $y = 42; echo $g;"),
+            b"42"
+        );
+    }
+
+    // ----- CLO: closures, arrow functions, first-class callables -----
+
+    #[test]
+    fn closure_basic_call() {
+        assert_eq!(vm_stdout(b"<?php $f = function() { return 42; }; echo $f();"), b"42");
+    }
+
+    #[test]
+    fn closure_with_params() {
+        assert_eq!(
+            vm_stdout(b"<?php $add = function($a, $b) { return $a + $b; }; echo $add(2, 3);"),
+            b"5"
+        );
+    }
+
+    #[test]
+    fn closure_capture_by_value_snapshots() {
+        // `use($x)` snapshots the value at creation; a later write does not change it.
+        assert_eq!(
+            vm_stdout(b"<?php $x = 10; $f = function() use ($x) { return $x; }; $x = 20; echo $f();"),
+            b"10"
+        );
+    }
+
+    #[test]
+    fn closure_capture_by_ref() {
+        // `use(&$x)` shares the cell; the closure's write is visible to the caller.
+        assert_eq!(
+            vm_stdout(b"<?php $x = 10; $f = function() use (&$x) { $x = $x + 5; }; $f(); echo $x;"),
+            b"15"
+        );
+    }
+
+    #[test]
+    fn arrow_function_auto_captures() {
+        assert_eq!(vm_stdout(b"<?php $y = 7; $f = fn($n) => $n + $y; echo $f(3);"), b"10");
+    }
+
+    #[test]
+    fn closure_immediately_invoked() {
+        assert_eq!(vm_stdout(b"<?php echo (function() { return 'hi'; })();"), b"hi");
+    }
+
+    #[test]
+    fn closure_returning_closure() {
+        assert_eq!(
+            vm_stdout(b"<?php $mk = function($s) { return function() use ($s) { return $s; }; }; $c = $mk(9); echo $c();"),
+            b"9"
+        );
+    }
+
+    #[test]
+    fn closure_captures_this_in_method() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $v = 5; function mk() { return function() { return $this->v; }; } } $o = new C(); $f = $o->mk(); echo $f();"),
+            b"5"
+        );
+    }
+
+    #[test]
+    fn dynamic_string_call_to_user_function() {
+        assert_eq!(
+            vm_stdout(b"<?php function greet() { return 'hi'; } $f = 'greet'; echo $f();"),
+            b"hi"
+        );
+    }
+
+    #[test]
+    fn first_class_callable_of_user_function() {
+        assert_eq!(
+            vm_stdout(b"<?php function dbl($n) { return $n * 2; } $f = dbl(...); echo $f(21);"),
+            b"42"
+        );
+    }
+
+    #[test]
+    fn dynamic_call_to_value_builtin() {
+        // `$f = 't_double'; $f(21)` dispatches to the registered value builtin.
+        assert_eq!(
+            vm_run(b"<?php $f = 't_double'; echo $f(21);", &fake_registry()).stdout,
             b"42"
         );
     }

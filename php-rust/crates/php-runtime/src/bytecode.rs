@@ -81,7 +81,7 @@ use std::rc::Rc;
 
 use php_types::{ObjectInfo, PhpStr, Zval};
 
-use crate::hir::{BinOp, CastKind, ClassId, Line, Slot, UnOp, Visibility};
+use crate::hir::{BinOp, Capture, CastKind, ClassId, Line, Slot, UnOp, Visibility};
 
 /// Index into a [`Func`]'s instruction vector ([`Func::ops`]); also the form a
 /// jump target takes. `u32` is plenty (PHP function bodies are tiny) and keeps
@@ -199,6 +199,21 @@ pub enum Op {
     /// to a `function &f()` used in a *value* context, so the reference it returns
     /// is copied rather than aliased — `$y = &f()` skips this and aliases instead.
     DerefTop,
+
+    // ----- closures (CLO) -----
+    /// `[] -> [closure]` — build a [`Zval::Closure`] over `closures[fn_idx]`. Each
+    /// `Capture` is read in the *current* frame at this point: `use($x)` snapshots
+    /// the value, `use(&$x)` shares the cell as a `Zval::Ref`. `bind_this` captures
+    /// the current `$this` (a non-static closure in a method).
+    MakeClosure { fn_idx: u32, captures: Box<[Capture]>, bind_this: bool },
+    /// `[] -> [closure]` — a first-class callable `name(...)` (CLO-2): a closure
+    /// value wrapping the function *name* (dispatched like a string callable).
+    MakeFcc { name: Box<[u8]> },
+    /// `[callee, args…] -> [result]` — a dynamic call `$f(...)` (CLO). Pop `argc`
+    /// arguments (source order) and the callee beneath them, then dispatch on the
+    /// callee value: an anonymous closure runs `closures[fn_idx]` (binding captures
+    /// then params); a named closure / string names a user function or builtin.
+    CallValue { argc: u32 },
 
     // ----- operators (semantics delegated to php_types::ops / ::convert) -----
     /// `[lhs, rhs] -> [result]` — pop rhs then lhs, push `lhs <op> rhs`.

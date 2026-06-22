@@ -94,6 +94,14 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
             Err(e) => functions.push(stub_func(fd, &e)),
         }
     }
+    // Closure bodies compile tolerantly (like functions): an unsupported body
+    // becomes a stub that fatals only if the closure is actually invoked. Same
+    // index space as `program.closures`, so `MakeClosure { fn_idx }` lines up.
+    let closures = program
+        .closures
+        .iter()
+        .map(|fd| compile_fndecl(fd, &ctx).unwrap_or_else(|e| stub_func(fd, &e)))
+        .collect();
     let main = compile_body(b"", &program.body, program.slots.len() as u32, 0, false, false, &ctx, None, true)?;
     // Classes are compiled tolerantly too (see `compile_class`).
     let classes = program
@@ -106,7 +114,7 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
     Ok(Module {
         main,
         functions,
-        closures: Vec::new(),
+        closures,
         classes,
         file: program.file.clone(),
     })
@@ -901,6 +909,28 @@ impl<'a> FnCompiler<'a> {
             ExprKind::AssignPlace(place, rhs) => self.assign_place(place, rhs)?,
             ExprKind::AssignRef { target, source } => self.assign_ref(target, source)?,
             ExprKind::AssignRefCall { target, call } => self.assign_ref_call(target, call)?,
+            ExprKind::Closure { fn_idx, captures, bind_this } => {
+                self.emit(Op::MakeClosure {
+                    fn_idx: *fn_idx as u32,
+                    captures: captures.clone().into_boxed_slice(),
+                    bind_this: *bind_this,
+                });
+            }
+            ExprKind::FirstClassCallable(name) => {
+                self.emit(Op::MakeFcc { name: name.clone() });
+            }
+            ExprKind::CallDynamic { callee, args } => {
+                // Push the callee, then the arguments by value; `CallValue`
+                // dispatches on the callee at run time.
+                self.expr(callee)?;
+                for a in args {
+                    if matches!(a.kind, ExprKind::Spread(_)) {
+                        return Err(CompileError::Unsupported("argument unpacking (spread)".into()));
+                    }
+                    self.expr(a)?;
+                }
+                self.emit(Op::CallValue { argc: args.len() as u32 });
+            }
             ExprKind::AssignOpPlace(op, place, rhs) => self.assign_op_place(*op, place, rhs)?,
             ExprKind::IncDecPlace { place, inc, pre } => self.incdec_place(place, *inc, *pre)?,
             ExprKind::Isset(places) => self.isset(places)?,
