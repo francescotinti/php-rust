@@ -463,6 +463,12 @@ pub enum Op {
     /// is resolved at run time from the frame's LSB class (walking parents and
     /// interfaces).
     ClassConstDyn { name: Box<[u8]> },
+    /// `[classRef] -> [value]` — `$cls::CONST` / `$cls::class` (PAR, dynamic
+    /// class): pop the class reference and read its constant at run time. For
+    /// `::class`, an object yields its class name and a string is a `TypeError`
+    /// (PHP 8). Otherwise the class is resolved (unknown → `Error`) and the
+    /// constant looked up (absent → "Undefined constant" `Error`).
+    ClassConstFromValue { name: Box<[u8]> },
     /// `[] -> [name]` — `static::class`: push the frame's LSB class name as a
     /// string. (`Class::class` / `self::class` / `parent::class` are folded to a
     /// [`Op::PushConst`] at compile time.)

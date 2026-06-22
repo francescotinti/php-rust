@@ -1347,6 +1347,41 @@ impl<'m> Vm<'m> {
                     frame.static_class = Some(decl);
                     self.frames.push(frame);
                 }
+                Op::ClassConstFromValue { name } => {
+                    let classval =
+                        self.frames[top].stack.pop().expect("ClassConstFromValue class");
+                    if name.eq_ignore_ascii_case(b"class") {
+                        // `$x::class`: an object yields its class name; a string (or
+                        // any non-object) is a TypeError in PHP 8.
+                        match classval.deref_clone() {
+                            Zval::Object(o) => {
+                                let cls = self.module.classes[o.borrow().class_id as usize].name.to_vec();
+                                self.frames[top].stack.push(Zval::Str(PhpStr::new(cls)));
+                            }
+                            other => {
+                                return Err(PhpError::TypeError(format!(
+                                    "Cannot use \"::class\" on {}",
+                                    other.error_type_name()
+                                )))
+                            }
+                        }
+                    } else {
+                        let cid = self.resolve_dynamic_class(&classval)?;
+                        let module = self.module;
+                        let Some((decl, idx)) = find_const_runtime(module, cid, &name) else {
+                            return Err(PhpError::Error(format!(
+                                "Undefined constant {}::{}",
+                                String::from_utf8_lossy(&module.classes[cid].name),
+                                String::from_utf8_lossy(&name)
+                            )));
+                        };
+                        let thunk = &module.classes[decl].consts[idx].func;
+                        let mut frame = Frame::new(thunk);
+                        frame.class = Some(decl);
+                        frame.static_class = Some(decl);
+                        self.frames.push(frame);
+                    }
+                }
                 Op::ClassNameStatic => {
                     let start = self.frames[top].static_class.ok_or_else(|| {
                         PhpError::Error("Cannot use \"static\" outside class context".to_string())
@@ -5831,6 +5866,57 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php $c='Nope'; try { $c::s(); } catch(Error $e){ echo 'Error:', $e->getMessage(); }"),
             b"Error:Class \"Nope\" not found"
+        );
+    }
+
+    // ----- PAR: dynamic class constants $cls::CONST / $cls::class -----
+
+    #[test]
+    fn dynamic_class_const() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { const K = 42; } $c='C'; echo $c::K;"),
+            b"42"
+        );
+    }
+
+    #[test]
+    fn dynamic_class_const_inherited() {
+        assert_eq!(
+            vm_stdout(b"<?php class A { const K='ak'; } class B extends A {} $c='B'; echo $c::K;"),
+            b"ak"
+        );
+    }
+
+    #[test]
+    fn dynamic_class_const_undefined_errors() {
+        assert_eq!(
+            vm_stdout(b"<?php class C{} $c='C'; try { echo $c::NOPE; } catch(Error $e){ echo 'Error:', $e->getMessage(); }"),
+            b"Error:Undefined constant C::NOPE"
+        );
+    }
+
+    #[test]
+    fn dynamic_class_const_unknown_class_errors() {
+        assert_eq!(
+            vm_stdout(b"<?php $c='Nope'; try { echo $c::K; } catch(Error $e){ echo $e->getMessage(); }"),
+            b"Class \"Nope\" not found"
+        );
+    }
+
+    #[test]
+    fn dynamic_class_name_on_object() {
+        assert_eq!(
+            vm_stdout(b"<?php class C{} $o=new C; echo $o::class;"),
+            b"C"
+        );
+    }
+
+    #[test]
+    fn dynamic_class_name_on_string_is_type_error() {
+        // PHP 8: `$str::class` is a TypeError (only objects work dynamically).
+        assert_eq!(
+            vm_stdout(b"<?php $c='C'; class C{} try { echo $c::class; } catch(TypeError $e){ echo 'TE:', $e->getMessage(); }"),
+            b"TE:Cannot use \"::class\" on string"
         );
     }
 }

@@ -1394,6 +1394,12 @@ impl<'a> FnCompiler<'a> {
 
     /// Compile `ClassRef::name` — a class constant or the special `::class`.
     fn class_const(&mut self, class: &ClassRef, name: &[u8]) -> R<()> {
+        if let ClassRef::Dynamic(cexpr) = class {
+            // `$cls::CONST` / `$cls::class` (PAR): resolve at run time.
+            self.expr(cexpr)?;
+            self.emit(Op::ClassConstFromValue { name: name.into() });
+            return Ok(());
+        }
         let (target, _forwarding) = self.resolve_target(class)?;
         if name.eq_ignore_ascii_case(b"class") {
             match target {

@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–61 completati · 1.225 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–61 completati · 1.231 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 **Migrazione VM (Fase 4, in corso).** In parallelo all'evaluator tree-walk — che resta il motore
 di produzione e tiene il differential a 0 mismatch — è in costruzione una **VM a bytecode**
@@ -77,9 +77,11 @@ sequenziali, vuoto se nessuno) nello slot variadico, combinandosi coi default. T
 oppure un oggetto riusa la sua classe; classe ignota → `Error` catchabile) e `$x instanceof $cls`
 (`InstanceOfDynamic`: classe ignota → `false`, come PHP) e `$cls::metodo()` (`StaticCallDynamic`:
 classe risolta a runtime e dispatch non-forwarding via l'helper condiviso `dispatch_static_call`,
-con default/variadici/`__callStatic`/ereditarietà). Restano da portare alla VM: `$cls::CONST`,
-argomenti con nome, spread/unpacking, `ArgumentCountError`, e altri edge — vedi i siti
-`CompileError::Unsupported` in `compile.rs`.
+con default/variadici/`__callStatic`/ereditarietà) e `$cls::CONST` / `$cls::class`
+(`ClassConstFromValue`: costante risolta a runtime con ereditarietà; `$obj::class` → nome classe,
+`$str::class` → `TypeError` come PHP 8). La **famiglia classi-dinamiche è completa**. Restano da
+portare alla VM: argomenti con nome, spread/unpacking, `ArgumentCountError`, `$cls::$prop`, e altri
+edge — vedi i siti `CompileError::Unsupported` in `compile.rs`.
 
 Step 61 ha completato i suggerimenti della code-review esterna: (E) **diff unificato** nel
 `phpt-runner` (`--list-fails` mostra un line-diff EXPECTF-aware invece di due blob troncati); (B)
