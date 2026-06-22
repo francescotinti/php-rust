@@ -1079,10 +1079,37 @@ impl<'a> FnCompiler<'a> {
             }
             ExprKind::ClassConst { class, name } => self.class_const(class, name)?,
             ExprKind::StaticProp { class, name } => {
-                let (target, _) = self.resolve_target(class)?;
-                self.emit(Op::StaticPropGet { target, name: name.clone() });
+                if let ClassRef::Dynamic(cexpr) = class {
+                    self.expr(cexpr)?;
+                    self.emit(Op::StaticPropGetDynamic { name: name.clone() });
+                } else {
+                    let (target, _) = self.resolve_target(class)?;
+                    self.emit(Op::StaticPropGet { target, name: name.clone() });
+                }
             }
             ExprKind::StaticPropAssign { class, name, op, rhs } => {
+                // `$cls::$p` (PAR): resolve the class at run time; the rhs is
+                // pushed first so the class reference ends up on top.
+                if let ClassRef::Dynamic(cexpr) = class {
+                    match op {
+                        StaticAssignOp::Plain => {
+                            self.expr(rhs)?;
+                            self.expr(cexpr)?;
+                            self.emit(Op::StaticPropSetDynamic { name: name.clone() });
+                        }
+                        StaticAssignOp::Op(b) => {
+                            self.expr(rhs)?;
+                            self.expr(cexpr)?;
+                            self.emit(Op::StaticPropOpSetDynamic { name: name.clone(), op: *b });
+                        }
+                        StaticAssignOp::Coalesce => {
+                            return Err(CompileError::Unsupported(
+                                "`??=` on a dynamic-class static property".into(),
+                            ))
+                        }
+                    }
+                    return Ok(());
+                }
                 let (target, _) = self.resolve_target(class)?;
                 match op {
                     StaticAssignOp::Plain => {

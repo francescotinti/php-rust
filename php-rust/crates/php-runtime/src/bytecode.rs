@@ -525,6 +525,15 @@ pub enum Op {
     StaticPropOpSet { target: ClassTarget, name: Box<[u8]>, op: BinOp },
     /// `[] -> [result]` — `++`/`--` on `target::$name`.
     StaticPropIncDec { target: ClassTarget, name: Box<[u8]>, inc: bool, pre: bool },
+    /// `[classRef] -> [value]` — `$cls::$name` read (PAR, dynamic class): the
+    /// class reference sits on top; it is resolved at run time, then the static
+    /// property is read like [`Op::StaticPropGet`].
+    StaticPropGetDynamic { name: Box<[u8]> },
+    /// `[value, classRef] -> [value]` — `$cls::$name = value` (PAR): the class
+    /// reference is on top, the value beneath. Resolved at run time, then written.
+    StaticPropSetDynamic { name: Box<[u8]> },
+    /// `[rhs, classRef] -> [result]` — `$cls::$name op= rhs` (PAR).
+    StaticPropOpSetDynamic { name: Box<[u8]>, op: BinOp },
 
     // ----- OOP-2c: mixed property/index write paths (`$o->a[$k]`, `$o->x->y`) -----
     /// `[keys…, value] -> [value]` — write `value` through `base` then `steps`

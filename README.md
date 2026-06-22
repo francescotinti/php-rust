@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–61 completati · 1.252 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–61 completati · 1.257 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 **Migrazione VM (Fase 4, in corso).** In parallelo all'evaluator tree-walk — che resta il motore
 di produzione e tiene il differential a 0 mismatch — è in costruzione una **VM a bytecode**
@@ -89,9 +89,12 @@ metodi e la linea del *call-site*). E gli **argomenti con nome** per le chiamate
 (`f(b: 2, a: 1)`): risolti a *compile-time* in layout posizionale (i nomi mappati agli slot via
 `FnDecl.slots`), con `Op::PushUndef` per gli opzionali saltati che il prologo riempie di default;
 fallback al tree-walker per i casi non esprimibili (variadici/by-ref, nome ignoto, required mancante).
-Restano da portare alla VM: argomenti con nome su metodi/`new`/static (dispatch dinamico),
-spread/unpacking, `$cls::$prop`, accesso a property dinamica `$o->{expr}`, e altri edge — vedi i siti
-`CompileError::Unsupported` in `compile.rs`.
+E le **proprietà statiche su classe dinamica** `$cls::$p` (lettura/scrittura/`op=`): la classe è
+risolta a runtime e instradata nel percorso `ensure_static` esistente (la classe è *peekata* dallo
+stack così l'eventuale init-thunk può ri-eseguire l'op). Restano da portare alla VM: argomenti con
+nome su metodi/`new`/static (dispatch dinamico), spread/unpacking, accesso a property dinamica
+`$o->{expr}`, `$cls::$p++`/`??=`, e altri edge — vedi i siti `CompileError::Unsupported` in
+`compile.rs`.
 
 Step 61 ha completato i suggerimenti della code-review esterna: (E) **diff unificato** nel
 `phpt-runner` (`--list-fails` mostra un line-diff EXPECTF-aware invece di due blob troncati); (B)

@@ -1510,6 +1510,45 @@ impl<'m> Vm<'m> {
                     *cell.borrow_mut() = newv.clone();
                     self.frames[top].stack.push(if pre { newv } else { old });
                 }
+                Op::StaticPropGetDynamic { name } => {
+                    // The class reference is on top; peek it so a scheduled init
+                    // thunk can re-run this op without losing it (PAR).
+                    let classval = self.frames[top].stack.last().expect("class ref").clone();
+                    let cid = self.resolve_dynamic_class(&classval)?;
+                    let cell = match self.ensure_static(ClassTarget::Class(cid), &name, top, ip)? {
+                        Some(c) => c,
+                        None => continue,
+                    };
+                    self.frames[top].stack.pop(); // remove the class reference
+                    let v = cell.borrow().deref_clone();
+                    self.frames[top].stack.push(v);
+                }
+                Op::StaticPropSetDynamic { name } => {
+                    let classval = self.frames[top].stack.last().expect("class ref").clone();
+                    let cid = self.resolve_dynamic_class(&classval)?;
+                    let cell = match self.ensure_static(ClassTarget::Class(cid), &name, top, ip)? {
+                        Some(c) => c,
+                        None => continue,
+                    };
+                    self.frames[top].stack.pop(); // class
+                    let value = self.frames[top].stack.pop().expect("StaticPropSetDynamic value");
+                    *cell.borrow_mut() = value.clone();
+                    self.frames[top].stack.push(value);
+                }
+                Op::StaticPropOpSetDynamic { name, op } => {
+                    let classval = self.frames[top].stack.last().expect("class ref").clone();
+                    let cid = self.resolve_dynamic_class(&classval)?;
+                    let cell = match self.ensure_static(ClassTarget::Class(cid), &name, top, ip)? {
+                        Some(c) => c,
+                        None => continue,
+                    };
+                    self.frames[top].stack.pop(); // class
+                    let rhs = self.frames[top].stack.pop().expect("StaticPropOpSetDynamic rhs");
+                    let old = cell.borrow().deref_clone();
+                    let result = apply_binop(op, &old, &rhs, &mut self.diags)?;
+                    *cell.borrow_mut() = result.clone();
+                    self.frames[top].stack.push(result);
+                }
                 Op::FieldAssign { base, steps } => {
                     let value = self.frames[top].stack.pop().expect("FieldAssign value");
                     let keys = self.pop_field_keys(top, &steps);
@@ -6174,6 +6213,48 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php function greet($greeting, $name){ return \"$greeting, $name!\"; } echo greet(name: 'X', greeting: 'Hi');"),
             b"Hi, X!"
+        );
+    }
+
+    // ----- PAR: dynamic static property $cls::$prop (verified vs PHP 8.5.7) -----
+
+    #[test]
+    fn dynamic_static_prop_get() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public static $x = 5; } $c='C'; echo $c::$x;"),
+            b"5"
+        );
+    }
+
+    #[test]
+    fn dynamic_static_prop_set() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public static $x = 5; } $c='C'; $c::$x = 20; echo C::$x;"),
+            b"20"
+        );
+    }
+
+    #[test]
+    fn dynamic_static_prop_opset() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public static $x = 5; } $c='C'; $c::$x += 3; echo $c::$x;"),
+            b"8"
+        );
+    }
+
+    #[test]
+    fn dynamic_static_prop_inherited() {
+        assert_eq!(
+            vm_stdout(b"<?php class A { public static $v = 'av'; } class B extends A {} $c='B'; echo $c::$v;"),
+            b"av"
+        );
+    }
+
+    #[test]
+    fn dynamic_static_prop_via_object() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public static $x = 7; } $o=new C; echo $o::$x;"),
+            b"7"
         );
     }
 }
