@@ -1061,29 +1061,8 @@ impl<'m> Vm<'m> {
                 }
                 Op::AllocDynamic => {
                     // `new $cls` (PAR): resolve the class reference at run time.
-                    let classval =
-                        self.frames[top].stack.pop().expect("AllocDynamic class").deref_clone();
-                    let cid = match &classval {
-                        Zval::Object(o) => o.borrow().class_id as usize,
-                        Zval::Str(s) => {
-                            let raw = s.as_bytes();
-                            let name = raw.strip_prefix(b"\\").unwrap_or(raw);
-                            match self.module.class_index.get(&name.to_ascii_lowercase()) {
-                                Some(&c) => c,
-                                None => {
-                                    return Err(PhpError::Error(format!(
-                                        "Class \"{}\" not found",
-                                        String::from_utf8_lossy(name)
-                                    )))
-                                }
-                            }
-                        }
-                        _ => {
-                            return Err(PhpError::Error(
-                                "Class name must be a valid object or a string".to_string(),
-                            ))
-                        }
-                    };
+                    let classval = self.frames[top].stack.pop().expect("AllocDynamic class");
+                    let cid = self.resolve_dynamic_class(&classval)?;
                     let obj = self.alloc_object(cid)?;
                     self.frames[top].stack.push(obj);
                 }
@@ -1330,6 +1309,15 @@ impl<'m> Vm<'m> {
                         }
                     }
                     self.dispatch_static_call(top, start, &method, forwarding, args)?;
+                }
+                Op::StaticCallDynamic { method, argc } => {
+                    // `$cls::m()` (PAR): args are on top, the class reference beneath.
+                    let args = self.pop_keys(top, argc);
+                    let classval =
+                        self.frames[top].stack.pop().expect("StaticCallDynamic class");
+                    let start = self.resolve_dynamic_class(&classval)?;
+                    // A dynamic class is non-forwarding, like a named class.
+                    self.dispatch_static_call(top, start, &method, false, args)?;
                 }
                 Op::ClassConst { class, idx } => {
                     // Run the constant's value thunk as a frame in its declaring
@@ -2175,6 +2163,29 @@ impl<'m> Vm<'m> {
             }
             Zval::Ref(r) => self.class_id_from_value(&r.borrow()),
             _ => None,
+        }
+    }
+
+    /// Like [`Self::class_id_from_value`] but for contexts that must error rather
+    /// than yield `false` (`new $cls`, `$cls::m()`): an unknown name is a
+    /// catchable `Error` ("Class \"X\" not found") and a non-string/object is an
+    /// `Error` ("Class name must be a valid object or a string").
+    fn resolve_dynamic_class(&self, v: &Zval) -> Result<ClassId, PhpError> {
+        match v.deref_clone() {
+            Zval::Object(o) => Ok(o.borrow().class_id as usize),
+            Zval::Str(s) => {
+                let raw = s.as_bytes();
+                let name = raw.strip_prefix(b"\\").unwrap_or(raw);
+                self.module.class_index.get(&name.to_ascii_lowercase()).copied().ok_or_else(|| {
+                    PhpError::Error(format!(
+                        "Class \"{}\" not found",
+                        String::from_utf8_lossy(name)
+                    ))
+                })
+            }
+            _ => Err(PhpError::Error(
+                "Class name must be a valid object or a string".to_string(),
+            )),
         }
     }
 
@@ -5762,6 +5773,64 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php $cls='Nope'; echo (5 instanceof $cls)?'Y':'N';"),
             b"N"
+        );
+    }
+
+    // ----- PAR: dynamic static calls $cls::method() (verified vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn dynamic_static_call_basic() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { static function s($x){ return \"S$x\"; } } $c='C'; echo $c::s(7);"),
+            b"S7"
+        );
+    }
+
+    #[test]
+    fn dynamic_static_call_inherited() {
+        assert_eq!(
+            vm_stdout(b"<?php class A { static function who(){ return 'A'; } } class B extends A {} $c='B'; echo $c::who();"),
+            b"A"
+        );
+    }
+
+    #[test]
+    fn dynamic_static_call_with_default_arg() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { static function s($x, $y=5){ return $x+$y; } } $c='C'; echo $c::s(10);"),
+            b"15"
+        );
+    }
+
+    #[test]
+    fn dynamic_static_call_variadic() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { static function s(...$a){ $t=0; foreach($a as $x) $t+=$x; return $t; } } $c='C'; echo $c::s(1,2,3);"),
+            b"6"
+        );
+    }
+
+    #[test]
+    fn dynamic_static_call_callstatic() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { static function __callStatic($n,$a){ return $n.':'.$a[0].$a[1]; } } $c='C'; echo $c::ghost(1,2);"),
+            b"ghost:12"
+        );
+    }
+
+    #[test]
+    fn dynamic_static_call_via_object() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { static function s(){ return 'ok'; } } $o=new C; echo $o::s();"),
+            b"ok"
+        );
+    }
+
+    #[test]
+    fn dynamic_static_call_unknown_class_errors() {
+        assert_eq!(
+            vm_stdout(b"<?php $c='Nope'; try { $c::s(); } catch(Error $e){ echo 'Error:', $e->getMessage(); }"),
+            b"Error:Class \"Nope\" not found"
         );
     }
 }

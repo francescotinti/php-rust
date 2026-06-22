@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–61 completati · 1.218 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–61 completati · 1.225 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 **Migrazione VM (Fase 4, in corso).** In parallelo all'evaluator tree-walk — che resta il motore
 di produzione e tiene il differential a 0 mismatch — è in costruzione una **VM a bytecode**
@@ -75,8 +75,10 @@ Vale per funzioni, metodi, costruttori e closure. Secondo blocco: **funzioni var
 sequenziali, vuoto se nessuno) nello slot variadico, combinandosi coi default. Terzo blocco: **riferimenti dinamici a classe** —
 `new $cls` (`AllocDynamic`: il nome-classe è risolto a runtime via `class_index`, `\` iniziale tolto,
 oppure un oggetto riusa la sua classe; classe ignota → `Error` catchabile) e `$x instanceof $cls`
-(`InstanceOfDynamic`: classe ignota → `false`, come PHP). Restano da portare alla VM: `$cls::metodo()`/
-`$cls::CONST`, argomenti con nome, spread/unpacking, `ArgumentCountError`, e altri edge — vedi i siti
+(`InstanceOfDynamic`: classe ignota → `false`, come PHP) e `$cls::metodo()` (`StaticCallDynamic`:
+classe risolta a runtime e dispatch non-forwarding via l'helper condiviso `dispatch_static_call`,
+con default/variadici/`__callStatic`/ereditarietà). Restano da portare alla VM: `$cls::CONST`,
+argomenti con nome, spread/unpacking, `ArgumentCountError`, e altri edge — vedi i siti
 `CompileError::Unsupported` in `compile.rs`.
 
 Step 61 ha completato i suggerimenti della code-review esterna: (E) **diff unificato** nel

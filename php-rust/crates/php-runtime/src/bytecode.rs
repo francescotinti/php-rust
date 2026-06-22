@@ -446,6 +446,12 @@ pub enum Op {
     /// `forwarding` (self/parent/static) else the start class, and `$this` is
     /// propagated per PHP's forwarding rules.
     StaticCall { target: ClassTarget, method: Box<[u8]>, forwarding: bool, argc: u32 },
+    /// `[classRef, arg0, …, arg{argc-1}] -> [ret]` — `$cls::m()` (PAR, dynamic
+    /// class): the class reference sits beneath the arguments; it is resolved at
+    /// run time (name string with leading `\` stripped, or an object's class) and
+    /// the call dispatched non-forwarding (LSB = the resolved class), like a
+    /// named static call. An unknown class is a catchable `Error`.
+    StaticCallDynamic { method: Box<[u8]>, argc: u32 },
     /// `[] -> [value]` — `Class::CONST` / `self::CONST` / `parent::CONST` resolved
     /// at compile time to its declaring class and constant index. Runs the
     /// constant's value *thunk* ([`CompiledConst::func`]) as a frame whose

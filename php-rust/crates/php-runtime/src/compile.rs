@@ -1057,9 +1057,17 @@ impl<'a> FnCompiler<'a> {
                 if !named.is_empty() {
                     return Err(CompileError::Unsupported("static call with named arguments".into()));
                 }
-                let (target, forwarding) = self.resolve_target(class)?;
-                self.push_value_args(args)?;
-                self.emit(Op::StaticCall { target, method: method.clone(), forwarding, argc: args.len() as u32 });
+                if let ClassRef::Dynamic(cexpr) = class {
+                    // `$cls::m()` (PAR): the class reference is pushed beneath the
+                    // arguments and resolved at run time.
+                    self.expr(cexpr)?;
+                    self.push_value_args(args)?;
+                    self.emit(Op::StaticCallDynamic { method: method.clone(), argc: args.len() as u32 });
+                } else {
+                    let (target, forwarding) = self.resolve_target(class)?;
+                    self.push_value_args(args)?;
+                    self.emit(Op::StaticCall { target, method: method.clone(), forwarding, argc: args.len() as u32 });
+                }
             }
             ExprKind::ClassConst { class, name } => self.class_const(class, name)?,
             ExprKind::StaticProp { class, name } => {
