@@ -1062,10 +1062,10 @@ impl<'a> FnCompiler<'a> {
             }
             ExprKind::InstanceOf { expr, class } => self.instance_of(expr, class)?,
             ExprKind::StaticCall { class, method, args, named } => {
-                if !named.is_empty() {
-                    return Err(CompileError::Unsupported("static call with named arguments".into()));
-                }
                 if let ClassRef::Dynamic(cexpr) = class {
+                    if !named.is_empty() {
+                        return Err(CompileError::Unsupported("named arguments on `$cls::m()`".into()));
+                    }
                     // `$cls::m()` (PAR): the class reference is pushed beneath the
                     // arguments and resolved at run time.
                     self.expr(cexpr)?;
@@ -1073,8 +1073,28 @@ impl<'a> FnCompiler<'a> {
                     self.emit(Op::StaticCallDynamic { method: method.clone(), argc: args.len() as u32 });
                 } else {
                     let (target, forwarding) = self.resolve_target(class)?;
-                    self.push_value_args(args)?;
-                    self.emit(Op::StaticCall { target, method: method.clone(), forwarding, argc: args.len() as u32 });
+                    if named.is_empty() {
+                        self.push_value_args(args)?;
+                        self.emit(Op::StaticCall { target, method: method.clone(), forwarding, argc: args.len() as u32 });
+                    } else {
+                        // Named args: resolve the method at compile time against the
+                        // known class's parameters (PAR). `static::` is run-time only.
+                        let cid = match target {
+                            ClassTarget::Class(c) => c,
+                            ClassTarget::Static => {
+                                return Err(CompileError::Unsupported(
+                                    "named arguments on `static::m()`".into(),
+                                ))
+                            }
+                        };
+                        let (defc, midx) = self.resolve_method_compile(cid, method).ok_or_else(|| {
+                            CompileError::Unsupported("named call to an unresolved static method".into())
+                        })?;
+                        let method_fd = &self.ctx.classes[defc].methods[midx].decl;
+                        let n = method_fd.params.len() as u32;
+                        self.emit_named_layout(method_fd, args, named)?;
+                        self.emit(Op::StaticCall { target, method: method.clone(), forwarding, argc: n });
+                    }
                 }
             }
             ExprKind::ClassConst { class, name } => self.class_const(class, name)?,
@@ -1253,13 +1273,36 @@ impl<'a> FnCompiler<'a> {
     /// variadic / by-ref parameters, an unknown or duplicate name, a missing
     /// required argument, or a spread.
     fn call_user_named(&mut self, idx: usize, args: &[Expr], named: &[(Box<[u8]>, Expr)]) -> R<()> {
-        let callee = &self.ctx.funcs[idx];
-        if callee.params.iter().any(|p| p.variadic || p.by_ref) {
+        let fd = &self.ctx.funcs[idx];
+        let n = fd.params.len() as u32;
+        let returns_ref = fd.by_ref;
+        self.emit_named_layout(fd, args, named)?;
+        self.emit(Op::Call { func: idx as u32, argc: n });
+        if returns_ref {
+            self.emit(Op::DerefTop);
+        }
+        Ok(())
+    }
+
+    /// Lay named + positional arguments into `fd`'s parameter slots at compile
+    /// time and emit them in slot order — pushing `Undef` for a skipped optional
+    /// (the callee's default prologue fills it) — so a normal positional call op
+    /// with `argc = fd.params.len()` can follow (PAR). Shared by named function,
+    /// `new`, and static calls. Returns `Unsupported` for what the compile-time
+    /// layout can't express: variadic / by-ref parameters, an unknown or
+    /// duplicate name, a missing required argument, or a spread.
+    fn emit_named_layout(
+        &mut self,
+        fd: &FnDecl,
+        args: &[Expr],
+        named: &[(Box<[u8]>, Expr)],
+    ) -> R<()> {
+        if fd.params.iter().any(|p| p.variadic || p.by_ref) {
             return Err(CompileError::Unsupported(
                 "named arguments with a variadic or by-reference parameter".into(),
             ));
         }
-        let n = callee.params.len();
+        let n = fd.params.len();
         if args.len() > n {
             return Err(CompileError::Unsupported(
                 "named call with too many positional arguments".into(),
@@ -1274,10 +1317,10 @@ impl<'a> FnCompiler<'a> {
             slots[i] = Some(a);
         }
         for (nm, expr) in named {
-            let pos = callee
+            let pos = fd
                 .params
                 .iter()
-                .position(|p| callee.slots[p.slot as usize][..] == nm[..]);
+                .position(|p| fd.slots[p.slot as usize][..] == nm[..]);
             match pos {
                 Some(pi) if slots[pi].is_none() => slots[pi] = Some(expr),
                 Some(_) => {
@@ -1294,14 +1337,13 @@ impl<'a> FnCompiler<'a> {
             }
         }
         // Every required (default-less) parameter must be supplied.
-        for p in &callee.params {
+        for p in &fd.params {
             if p.default.is_none() && slots[p.slot as usize].is_none() {
                 return Err(CompileError::Unsupported(
                     "named call missing a required argument".into(),
                 ));
             }
         }
-        let returns_ref = callee.by_ref;
         // Emit in slot order; a gap pushes `Undef` for the default prologue.
         for s in slots {
             match s {
@@ -1310,10 +1352,6 @@ impl<'a> FnCompiler<'a> {
                     self.emit(Op::PushUndef);
                 }
             }
-        }
-        self.emit(Op::Call { func: idx as u32, argc: n as u32 });
-        if returns_ref {
-            self.emit(Op::DerefTop);
         }
         Ok(())
     }
@@ -1380,9 +1418,6 @@ impl<'a> FnCompiler<'a> {
     /// `Named`; OOP-2a adds `self` / `parent` (class id known at compile time) and
     /// `static` (the run-time LSB class). `Dynamic` stays out of slice.
     fn new_obj(&mut self, class: &ClassRef, args: &[Expr], named: &[(Box<[u8]>, Expr)]) -> R<()> {
-        if !named.is_empty() {
-            return Err(CompileError::Unsupported("new with named arguments".into()));
-        }
         match class {
             ClassRef::Named(name) => {
                 // A genuinely-undefined class falls back to the tree-walker (which
@@ -1394,20 +1429,25 @@ impl<'a> FnCompiler<'a> {
                         String::from_utf8_lossy(name)
                     ))
                 })?;
-                self.new_obj_cid(cid, args)
+                self.new_obj_cid(cid, args, named)
             }
             ClassRef::SelfClass => {
                 let cid = self
                     .cur_class
                     .ok_or_else(|| CompileError::Unsupported("`new self` outside class context".into()))?;
-                self.new_obj_cid(cid, args)
+                self.new_obj_cid(cid, args, named)
             }
             ClassRef::Parent => {
                 let cid = self
                     .cur_class
                     .and_then(|c| self.ctx.classes[c].parent)
                     .ok_or_else(|| CompileError::Unsupported("`new parent` without a parent class".into()))?;
-                self.new_obj_cid(cid, args)
+                self.new_obj_cid(cid, args, named)
+            }
+            // `new static`/`new $cls` resolve the constructor at run time, where the
+            // compile-time named layout can't be built.
+            ClassRef::Static | ClassRef::Dynamic(_) if !named.is_empty() => {
+                Err(CompileError::Unsupported("named arguments to `new static`/`new $cls`".into()))
             }
             ClassRef::Static => {
                 // The actual class (hence the constructor) is only known at run
@@ -1445,8 +1485,13 @@ impl<'a> FnCompiler<'a> {
 
     /// `new` of a class whose id is known at compile time: allocate, then run the
     /// compile-time-resolved constructor (if any) with the fresh object as `$this`.
-    fn new_obj_cid(&mut self, cid: ClassId, args: &[Expr]) -> R<()> {
+    fn new_obj_cid(&mut self, cid: ClassId, args: &[Expr], named: &[(Box<[u8]>, Expr)]) -> R<()> {
         let ctor = self.resolve_method_compile(cid, b"__construct");
+        if ctor.is_none() && !named.is_empty() {
+            return Err(CompileError::Unsupported(
+                "named arguments to a class with no constructor".into(),
+            ));
+        }
         self.emit(Op::Alloc { class: cid });
         // Materialise non-constant property defaults before the constructor runs.
         // `InitProps` is a no-op (pushes NULL) for classes with none.
@@ -1458,8 +1503,17 @@ impl<'a> FnCompiler<'a> {
         self.emit(Op::StampThrowable);
         if let Some((defc, midx)) = ctor {
             self.emit(Op::Dup); // keep the instance as the result; the dup is the receiver
-            self.push_value_args(args)?;
-            self.emit(Op::InvokeMethod { class: defc, method_idx: midx as u32, argc: args.len() as u32 });
+            let argc = if named.is_empty() {
+                self.push_value_args(args)?;
+                args.len() as u32
+            } else {
+                // Resolve named arguments against the constructor's parameters (PAR).
+                let ctor_fd = &self.ctx.classes[defc].methods[midx].decl;
+                let n = ctor_fd.params.len() as u32;
+                self.emit_named_layout(ctor_fd, args, named)?;
+                n
+            };
+            self.emit(Op::InvokeMethod { class: defc, method_idx: midx as u32, argc });
             self.emit(Op::Pop); // discard the constructor's return value
         }
         Ok(())

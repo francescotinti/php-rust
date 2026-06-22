@@ -6257,5 +6257,47 @@ mod tests {
             b"7"
         );
     }
+
+    // ----- PAR: named arguments on new / static (known class) vs PHP 8.5.7 -----
+
+    #[test]
+    fn named_args_new() {
+        assert_eq!(
+            vm_stdout(b"<?php class P { public $v; function __construct($a, $b){ $this->v=\"$a-$b\"; } } echo (new P(b: 2, a: 1))->v;"),
+            b"1-2"
+        );
+    }
+
+    #[test]
+    fn named_args_new_skip_optional() {
+        assert_eq!(
+            vm_stdout(b"<?php class P { public $v; function __construct($a, $b=5){ $this->v=\"$a-$b\"; } } echo (new P(a: 7))->v;"),
+            b"7-5"
+        );
+    }
+
+    #[test]
+    fn named_args_static_call() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { static function s($x, $y){ return \"$x/$y\"; } } echo C::s(y: 2, x: 1);"),
+            b"1/2"
+        );
+    }
+
+    #[test]
+    fn named_args_static_inherited() {
+        assert_eq!(
+            vm_stdout(b"<?php class A { static function s($a, $b){ return \"$a$b\"; } } class B extends A {} echo B::s(b: 'Y', a: 'X');"),
+            b"XY"
+        );
+    }
+
+    #[test]
+    fn named_args_self_static_call() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { static function make($a,$b){ return \"$a:$b\"; } static function go(){ return self::make(b: 2, a: 1); } } echo C::go();"),
+            b"1:2"
+        );
+    }
 }
 
