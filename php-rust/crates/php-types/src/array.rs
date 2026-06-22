@@ -143,6 +143,19 @@ impl PhpArray {
         Ok(())
     }
 
+    /// `&$a[]`: append a fresh `Null` element at the next free int index and
+    /// return a mutable reference to it, so a caller can promote it to a shared
+    /// reference cell. `None` when that slot is occupied (saturation), matching
+    /// [`Self::append`].
+    pub fn append_default(&mut self) -> Option<&mut Zval> {
+        let h = if self.next_free == i64::MIN { 0 } else { self.next_free };
+        if self.contains_key(&Key::Int(h)) {
+            return None;
+        }
+        self.insert(Key::Int(h), Zval::Null);
+        self.get_mut(&Key::Int(h))
+    }
+
     pub fn get(&self, key: &Key) -> Option<&Zval> {
         self.index
             .get(key)

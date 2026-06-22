@@ -749,8 +749,7 @@ impl<'a> FnCompiler<'a> {
             StmtKind::ReturnRef(place) => {
                 // `function &f()` returning an lvalue (REF-4b): push a reference
                 // to the place's cell and return it raw, so `$y = &f()` aliases
-                // it. References into object properties / `[]` fall back to eval.
-                ref_index_only(place)?;
+                // it. `field_path`/`MakeRef` handle index, property and `[]` steps.
                 let (base, steps) = self.field_path(place)?;
                 self.emit(Op::MakeRef { base, steps: steps.into() });
                 self.emit(Op::Ret);
@@ -2075,8 +2074,6 @@ impl<'a> FnCompiler<'a> {
             self.emit(Op::BindRef { target: t, source: s });
             return Ok(());
         }
-        ref_index_only(target)?;
-        ref_index_only(source)?;
         let (tbase, tsteps) = self.field_path(target)?; // pushes target keys…
         let (sbase, ssteps) = self.field_path(source)?; // …then source keys
         self.emit(Op::MakeRef { base: sbase, steps: ssteps.into() });
@@ -2109,7 +2106,6 @@ impl<'a> FnCompiler<'a> {
             return Err(CompileError::Unsupported("reference call arity mismatch".into()));
         }
         let by_ref: Vec<bool> = callee.params.iter().map(|p| p.by_ref).collect();
-        ref_index_only(target)?;
         let (base, steps) = self.field_path(target)?; // target index keys first…
         self.push_call_args(args, &by_ref)?; // …then the call args…
         self.emit(Op::Call { func: idx as u32, argc: args.len() as u32 }); // …leaving the raw ref on top
@@ -2312,23 +2308,6 @@ fn stmt_transfers_control(s: &Stmt) -> bool {
     }
 }
 
-/// Ensure a reference target/source addresses only array elements (REF-4): a
-/// reference into an object property or an appended slot is out of slice and
-/// falls back to the tree-walker.
-fn ref_index_only(place: &Place) -> R<()> {
-    for step in &place.steps {
-        match step {
-            PlaceStep::Index(_) => {}
-            PlaceStep::Prop(_) => {
-                return Err(CompileError::Unsupported("reference into an object property".into()))
-            }
-            PlaceStep::Append => {
-                return Err(CompileError::Unsupported("reference to an appended element".into()))
-            }
-        }
-    }
-    Ok(())
-}
 
 /// ASCII-case-insensitive byte-string equality — PHP resolves function names
 /// case-insensitively in ASCII (`STRLEN` == `strlen`).

@@ -3958,40 +3958,73 @@ fn field_base_mut<'f>(
     })
 }
 
-/// Navigate `steps` (only `Index` steps reach references — the compiler rejects
-/// `Prop`/`Append`) from `target`, auto-vivifying missing elements as NULL, and
+/// Navigate `steps` from `target`, auto-vivifying missing levels as NULL, and
 /// promote the addressed leaf to a shared `Zval::Ref`, returning its cell
-/// (REF-4). Mirrors `eval::place_cell`: a reference is followed into its cell; a
-/// scalar that cannot be indexed yields a detached cell so the caller does not
-/// crash. `Index` steps consume `keys` in source order.
+/// (REF-4 + Session A `&$o->p` / `&$a[]`). A reference is followed into its cell;
+/// an `Index` step drills into an array element (consuming `keys` in source
+/// order), a `Prop` step into an object property, and a final `Append` creates a
+/// fresh array element. A scalar/non-object where a container was expected yields
+/// a detached cell so the caller does not crash.
 fn field_cell(
     target: &mut Zval,
     steps: &[FieldStep],
     keys: &mut std::vec::IntoIter<Zval>,
 ) -> Rc<RefCell<Zval>> {
-    let Some((_first, rest)) = steps.split_first() else {
+    let Some((first, rest)) = steps.split_first() else {
         return make_cell(target);
     };
     if let Zval::Ref(rc) = target {
         let inner = &mut *rc.borrow_mut();
         return field_cell(inner, steps, keys);
     }
-    let key = keys.next().expect("ref index key");
-    let Some(k) = coerce_key_silent(&key) else {
-        return Rc::new(RefCell::new(Zval::Null));
-    };
-    if ensure_array(target).is_err() {
-        return Rc::new(RefCell::new(Zval::Null));
+    match first {
+        FieldStep::Prop(name) => {
+            // `&$o->prop` (Session A): promote the property to a shared cell. A
+            // non-object yields a detached cell (PHP warns / does nothing).
+            let Zval::Object(o) = target else {
+                return Rc::new(RefCell::new(Zval::Null));
+            };
+            let mut obj = o.borrow_mut();
+            if !obj.props.contains(name) {
+                obj.props.set(name, Zval::Null);
+            }
+            let child = obj.props.get_mut(name).expect("property present after insert");
+            field_cell(child, rest, keys)
+        }
+        FieldStep::Append => {
+            // `&$a[]` (Session A): append a fresh element and reference it. Append
+            // is always the final step (the compiler enforces it).
+            if ensure_array(target).is_err() {
+                return Rc::new(RefCell::new(Zval::Null));
+            }
+            let Zval::Array(rc) = target else {
+                return Rc::new(RefCell::new(Zval::Null));
+            };
+            let arr = Rc::make_mut(rc);
+            match arr.append_default() {
+                Some(child) => field_cell(child, rest, keys),
+                None => Rc::new(RefCell::new(Zval::Null)),
+            }
+        }
+        FieldStep::Index => {
+            let key = keys.next().expect("ref index key");
+            let Some(k) = coerce_key_silent(&key) else {
+                return Rc::new(RefCell::new(Zval::Null));
+            };
+            if ensure_array(target).is_err() {
+                return Rc::new(RefCell::new(Zval::Null));
+            }
+            let Zval::Array(rc) = target else {
+                return Rc::new(RefCell::new(Zval::Null));
+            };
+            let arr = Rc::make_mut(rc);
+            if !arr.contains_key(&k) {
+                arr.insert(k.clone(), Zval::Null);
+            }
+            let child = arr.get_mut(&k).expect("key present after insert");
+            field_cell(child, rest, keys)
+        }
     }
-    let Zval::Array(rc) = target else {
-        return Rc::new(RefCell::new(Zval::Null));
-    };
-    let arr = Rc::make_mut(rc);
-    if !arr.contains_key(&k) {
-        arr.insert(k.clone(), Zval::Null);
-    }
-    let child = arr.get_mut(&k).expect("key present after insert");
-    field_cell(child, rest, keys)
 }
 
 /// Write `v` into a local cell. A reference slot writes *through* its shared
@@ -5423,6 +5456,51 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php $a = []; $r = &$a[5]; $r = 'hi'; echo $a[5];"),
             b"hi"
+        );
+    }
+
+    // ----- Session A: references into object properties / `[]` (vs PHP 8.5.7) -----
+
+    #[test]
+    fn ref_to_object_property_writes_through() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $v=1; } $o=new C; $r = &$o->v; $r = 99; echo $o->v;"),
+            b"99"
+        );
+    }
+
+    #[test]
+    fn ref_to_appended_element() {
+        // `&$a[]` appends a fresh element and aliases it.
+        assert_eq!(
+            vm_stdout(b"<?php $a=[1,2]; $r = &$a[]; $r = 99; echo $a[0],$a[1],$a[2];"),
+            b"1299"
+        );
+    }
+
+    #[test]
+    fn bind_ref_into_object_property() {
+        // `$o->v = &$x`: the property aliases the variable's cell.
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $v=0; } $o=new C; $x=5; $o->v = &$x; $x=42; echo $o->v;"),
+            b"42"
+        );
+    }
+
+    #[test]
+    fn ref_to_object_array_element() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $a=[10,20]; } $o=new C; $r=&$o->a[1]; $r=99; echo $o->a[1];"),
+            b"99"
+        );
+    }
+
+    #[test]
+    fn append_a_reference_to_array() {
+        // `$a[] = &$x`: the appended element aliases the variable.
+        assert_eq!(
+            vm_stdout(b"<?php $a=[]; $x=7; $a[] = &$x; $x=88; echo $a[0];"),
+            b"88"
         );
     }
 
