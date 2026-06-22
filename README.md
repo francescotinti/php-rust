@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–61 completati · 1.186 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–61 completati · 1.195 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 **Migrazione VM (Fase 4, in corso).** In parallelo all'evaluator tree-walk — che resta il motore
 di produzione e tiene il differential a 0 mismatch — è in costruzione una **VM a bytecode**
@@ -55,8 +55,15 @@ payoff della migrazione; tree-walker e VM coesistono finché non si elimina `eva
 getReturn-troppo-presto sono `Exception`, dove il tree-walker usa `Error`). **GEN-3** aggiunge
 `yield from` su array e sub-generatori: l'opcode `YieldFrom` si **ri-entra da solo** a ogni resume
 (un passo di delega per volta, chiavi verbatim col contatore esterno intatto, `send()` inoltrato nel
-sub-generatore, valore dell'espressione = `getReturn()` del delegato), con delega annidata. Roadmap
-residua: GEN-4 (Fiber) → rimozione di `eval/`. Piano completo: vedi il file di piano del progetto.
+sub-generatore, valore dell'espressione = `getReturn()` del delegato), con delega annidata. E
+(**GEN-4**) le **Fiber** — *funzionalità nuova, assente nel tree-walker*, validata solo contro PHP
+reale: `start`/`resume`/`Fiber::suspend`/`getReturn`/`getCurrent`/`is*`, con passaggio argomenti e
+propagazione delle eccezioni fuori dalla fiber. A differenza di un generatore (un frame), `Fiber::
+suspend` può essere chiamata da *qualsiasi profondità* dello stack della fiber, quindi la sospensione
+parcheggia l'**intero segmento di frame** in una side-table del `Vm` e lo ripristina al resume — di
+nuovo senza `corosensei`/`unsafe`. Scope-out dichiarati: `Fiber::throw()` e il nesting patologico
+fiber-dentro-generator. Roadmap residua: GEN-5/CLEANUP (switch del motore in `lib.rs`, rimozione di
+`eval/` e di `corosensei`). Piano completo: vedi il file di piano del progetto.
 
 Step 61 ha completato i suggerimenti della code-review esterna: (E) **diff unificato** nel
 `phpt-runner` (`--list-fails` mostra un line-diff EXPECTF-aware invece di due blob troncati); (B)
