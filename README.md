@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–61 completati · 1.262 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–61 completati · 1.268 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 **Migrazione VM (Fase 4, in corso).** In parallelo all'evaluator tree-walk — che resta il motore
 di produzione e tiene il differential a 0 mismatch — è in costruzione una **VM a bytecode**
@@ -93,10 +93,13 @@ E le **proprietà statiche su classe dinamica** `$cls::$p` (lettura/scrittura/`o
 risolta a runtime e instradata nel percorso `ensure_static` esistente (la classe è *peekata* dallo
 stack così l'eventuale init-thunk può ri-eseguire l'op). Restano da portare alla VM: argomenti con
 nome anche su **`new ClassName(...)`** e **`Class::metodo(...)`** a classe nota (risoluzione del
-costruttore/metodo a compile-time + `emit_named_layout` condiviso). Restano da portare alla VM:
-argomenti con nome su **metodi d'istanza** `$obj->m()` (dispatch dinamico), spread/unpacking, accesso a
-property dinamica `$o->{expr}`, `$cls::$p++`/`??=`, e altri edge — vedi i siti
-`CompileError::Unsupported` in `compile.rs`.
+costruttore/metodo a compile-time + `emit_named_layout` condiviso). E l'**unpacking di argomenti**
+`f(...$arr)` per le funzioni: si costruisce a runtime un array di argomenti (`ArrayInit` + `ArrayPush`
++ `ArrayAppendSpread`, che fonde un array o pilota un generatore) e `Op::CallArgs` lega i valori ai
+parametri via lo stesso binder (default/variadici compongono). Restano da portare alla VM: argomenti
+con nome su **metodi d'istanza** `$obj->m()`, spread su metodi/`new`/static, `$cls::$p++`/`??=`, e altri
+edge. **Non sono problemi della VM ma del *lowering* (condivisi con l'eval)**: spread in array literal
+`[...$a]` e nomi di membro dinamici `$o->{expr}`/`$o->$n` (rifiutati in `member_name`/lowering).
 
 Step 61 ha completato i suggerimenti della code-review esterna: (E) **diff unificato** nel
 `phpt-runner` (`--list-fails` mostra un line-diff EXPECTF-aware invece di due blob troncati); (B)

@@ -604,6 +604,47 @@ impl<'m> Vm<'m> {
                     }
                     self.frames[top].stack.push(arr);
                 }
+                Op::ArrayAppendSpread => {
+                    let src = self.frames[top].stack.pop().expect("ArrayAppendSpread source");
+                    // Collect the (int-key → append, string-key → insert) pairs to
+                    // merge. A generator is driven to completion (its keys are
+                    // re-yielded verbatim, so honour them like an array's).
+                    let pairs: Vec<(Key, Zval)> = match src.deref_clone() {
+                        Zval::Array(s) => {
+                            s.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect()
+                        }
+                        Zval::Generator(rc) => {
+                            let mut out = Vec::new();
+                            self.ensure_started(&rc)?;
+                            loop {
+                                let (k, v, done) = {
+                                    let g = rc.borrow();
+                                    (g.cur_key.clone(), g.cur_val.clone(), matches!(g.status, GenStatus::Done))
+                                };
+                                if done {
+                                    break;
+                                }
+                                let key = coerce_key_silent(&k).unwrap_or(Key::Int(0));
+                                out.push((key, v));
+                                self.resume_generator(&rc, Zval::Null)?;
+                            }
+                            out
+                        }
+                        _ => Vec::new(),
+                    };
+                    let mut arr = self.frames[top].stack.pop().expect("ArrayAppendSpread array");
+                    if let Zval::Array(rc) = &mut arr {
+                        let dest = Rc::make_mut(rc);
+                        for (k, v) in pairs {
+                            if matches!(k, Key::Int(_)) {
+                                let _ = dest.append(v);
+                            } else {
+                                dest.insert(k, v);
+                            }
+                        }
+                    }
+                    self.frames[top].stack.push(arr);
+                }
                 Op::FetchDim => {
                     let key = self.frames[top].stack.pop().expect("FetchDim key");
                     let base = self.frames[top].stack.pop().expect("FetchDim base");
@@ -930,6 +971,20 @@ impl<'m> Vm<'m> {
                         args.push(self.frames[top].stack.pop().expect("call argument"));
                     }
                     args.reverse();
+                    let mut frame = Frame::new(callee);
+                    bind_params(&mut frame, args);
+                    self.enter_callee(frame);
+                }
+                Op::CallArgs { func } => {
+                    // Spread call `f(...$arr)` (PAR): the arguments are the values
+                    // of a runtime array, bound positionally (variadic/defaults
+                    // compose via the binder).
+                    let argsval = self.frames[top].stack.pop().expect("CallArgs array");
+                    let args: Vec<Zval> = match argsval.deref_clone() {
+                        Zval::Array(a) => a.iter().map(|(_, v)| v.deref_clone()).collect(),
+                        _ => Vec::new(),
+                    };
+                    let callee = &self.module.functions[func as usize];
                     let mut frame = Frame::new(callee);
                     bind_params(&mut frame, args);
                     self.enter_callee(frame);
@@ -6297,6 +6352,56 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php class C { static function make($a,$b){ return \"$a:$b\"; } static function go(){ return self::make(b: 2, a: 1); } } echo C::go();"),
             b"1:2"
+        );
+    }
+
+    // ----- PAR: argument unpacking f(...$arr) (verified vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn spread_call_fills_positional() {
+        assert_eq!(
+            vm_stdout(b"<?php function f($a,$b,$c){ return \"$a$b$c\"; } echo f(...[1,2,3]);"),
+            b"123"
+        );
+    }
+
+    #[test]
+    fn spread_call_mixed_with_positional() {
+        assert_eq!(
+            vm_stdout(b"<?php function f($a,$b,$c){ return \"$a$b$c\"; } echo f(1, ...[2,3]);"),
+            b"123"
+        );
+    }
+
+    #[test]
+    fn spread_call_of_variable() {
+        assert_eq!(
+            vm_stdout(b"<?php $arr=[5,6]; function f($a,$b){ return $a+$b; } echo f(...$arr);"),
+            b"11"
+        );
+    }
+
+    #[test]
+    fn spread_call_into_variadic() {
+        assert_eq!(
+            vm_stdout(b"<?php function sum(...$n){ $s=0; foreach($n as $x) $s+=$x; return $s; } echo sum(...[1,2,3,4]);"),
+            b"10"
+        );
+    }
+
+    #[test]
+    fn spread_call_with_default() {
+        assert_eq!(
+            vm_stdout(b"<?php function f($a,$b=9){ return \"$a-$b\"; } echo f(...[1]);"),
+            b"1-9"
+        );
+    }
+
+    #[test]
+    fn spread_call_of_generator() {
+        assert_eq!(
+            vm_stdout(b"<?php function g(){ yield 1; yield 2; } function f($a,$b){ return $a+$b; } echo f(...g());"),
+            b"3"
         );
     }
 }

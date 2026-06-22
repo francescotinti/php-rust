@@ -301,6 +301,16 @@ pub enum Op {
     ArrayPush,
     /// `[array, key, v] -> [array]` — insert `v` at `key` (key coerced per PHP).
     ArrayInsert,
+    /// `[array, src] -> [array]` — merge `src`'s elements into the array on the
+    /// stack (PAR): integer keys are re-indexed (appended), string keys inserted
+    /// (overwriting). `src` is an array; a generator is driven to completion. Used
+    /// to build the runtime argument array for a spread call `f(...$src)`.
+    ArrayAppendSpread,
+    /// `[argsArray] -> [ret]` — call user function `func` with arguments taken
+    /// from a runtime array (PAR, `f(...$arr)`): the array's values are bound to
+    /// the callee's parameters in order (string keys — named-via-spread — are not
+    /// handled and fall back at compile time).
+    CallArgs { func: u32 },
     /// `[base, key] -> [v]` — read `base[key]` by value (array element or string
     /// offset); a missing key / non-subscriptable base yields NULL. Read context
     /// is silent in the proof slice (the undefined-key warning rides the

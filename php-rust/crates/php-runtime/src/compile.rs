@@ -947,6 +947,8 @@ impl<'a> FnCompiler<'a> {
             ExprKind::Array(elems) => {
                 self.emit(Op::ArrayInit);
                 for el in elems {
+                    // Array spread `[...$a]` is rejected at lowering (both engines),
+                    // so a Spread element never reaches here; keep the guard.
                     if matches!(el.value.kind, ExprKind::Spread(_)) {
                         return Err(CompileError::Unsupported("array spread element".into()));
                     }
@@ -1230,6 +1232,29 @@ impl<'a> FnCompiler<'a> {
             // (the callee is known), PAR.
             if !named.is_empty() {
                 return self.call_user_named(idx, args, named);
+            }
+            // Argument unpacking `f(...$arr)` (PAR): build a runtime argument array
+            // and bind from it. Only for by-value callees (by-ref + spread is out
+            // of slice).
+            if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
+                let callee = &self.ctx.funcs[idx];
+                if callee.by_ref || callee.params.iter().any(|p| p.by_ref) {
+                    return Err(CompileError::Unsupported(
+                        "spread call to a by-reference function".into(),
+                    ));
+                }
+                self.emit(Op::ArrayInit);
+                for a in args {
+                    if let ExprKind::Spread(src) = &a.kind {
+                        self.expr(src)?;
+                        self.emit(Op::ArrayAppendSpread);
+                    } else {
+                        self.expr(a)?;
+                        self.emit(Op::ArrayPush);
+                    }
+                }
+                self.emit(Op::CallArgs { func: idx as u32 });
+                return Ok(());
             }
             let callee = &self.ctx.funcs[idx];
             // Omitted optional args are filled by the callee's default prologue
