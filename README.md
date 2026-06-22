@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–61 completati · 1.248 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–61 completati · 1.252 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 **Migrazione VM (Fase 4, in corso).** In parallelo all'evaluator tree-walk — che resta il motore
 di produzione e tiene il differential a 0 mismatch — è in costruzione una **VM a bytecode**
@@ -85,8 +85,12 @@ vuoto, oggetto passthrough; mirror di `eval::object_cast`). E l'**`ArgumentCount
 insufficiente: un guard `CheckArity` nel prologo della funzione confronta gli argomenti passati
 (`Frame.argc`) coi parametri richiesti e lancia il messaggio fedele a PHP (`Too few arguments to
 function f(), N passed in <file> on line L and exactly/at least M expected`, con `Class::method` per i
-metodi e la linea del *call-site*). Restano da portare alla VM: argomenti con nome, spread/unpacking,
-`$cls::$prop`, accesso a property dinamica `$o->{expr}`, e altri edge — vedi i siti
+metodi e la linea del *call-site*). E gli **argomenti con nome** per le chiamate a funzione note
+(`f(b: 2, a: 1)`): risolti a *compile-time* in layout posizionale (i nomi mappati agli slot via
+`FnDecl.slots`), con `Op::PushUndef` per gli opzionali saltati che il prologo riempie di default;
+fallback al tree-walker per i casi non esprimibili (variadici/by-ref, nome ignoto, required mancante).
+Restano da portare alla VM: argomenti con nome su metodi/`new`/static (dispatch dinamico),
+spread/unpacking, `$cls::$prop`, accesso a property dinamica `$o->{expr}`, e altri edge — vedi i siti
 `CompileError::Unsupported` in `compile.rs`.
 
 Step 61 ha completato i suggerimenti della code-review esterna: (E) **diff unificato** nel

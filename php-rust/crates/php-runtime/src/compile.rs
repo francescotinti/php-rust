@@ -1177,15 +1177,16 @@ impl<'a> FnCompiler<'a> {
     /// the tree-walker. Named/spread arguments and user by-ref/variadic params are
     /// likewise deferred.
     fn call(&mut self, name: &[u8], args: &[Expr], named: &[(Box<[u8]>, Expr)]) -> R<()> {
-        if !named.is_empty() {
-            return Err(CompileError::Unsupported("call with named arguments".into()));
-        }
         // User functions shadow builtins.
         if let Some(idx) = self.ctx.funcs.iter().position(|f| ascii_eq_ignore_case(&f.name, name)) {
+            // Named arguments are resolved to parameter slots at compile time
+            // (the callee is known), PAR.
+            if !named.is_empty() {
+                return self.call_user_named(idx, args, named);
+            }
             let callee = &self.ctx.funcs[idx];
             // Omitted optional args are filled by the callee's default prologue
-            // (PAR); extra args are dropped by the binder. A required arg left
-            // unbound reads as NULL (ArgumentCountError is a later block).
+            // (PAR); extra args are dropped by the binder.
             // Snapshot the by-ref mask so the immutable borrow of `callee` ends
             // before `push_call_args` borrows `self` mutably (REF-2).
             let by_ref: Vec<bool> = callee.params.iter().map(|p| p.by_ref).collect();
@@ -1198,6 +1199,9 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::DerefTop);
             }
             return Ok(());
+        }
+        if !named.is_empty() {
+            return Err(CompileError::Unsupported("builtin call with named arguments".into()));
         }
         // Builtins: classify by-value vs by-reference-first via the registry.
         match self.ctx.registry.get(name) {
@@ -1212,6 +1216,79 @@ impl<'a> FnCompiler<'a> {
                 String::from_utf8_lossy(name)
             ))),
         }
+    }
+
+    /// Compile a call to known user function `idx` that has named arguments
+    /// (PAR): lay positional then named args into the parameter slots at compile
+    /// time, pushing `Undef` for any skipped optional (the callee's default
+    /// prologue then fills it), and emit a normal positional `Op::Call`. Falls
+    /// back to the tree-walker for what the compile-time layout can't express:
+    /// variadic / by-ref parameters, an unknown or duplicate name, a missing
+    /// required argument, or a spread.
+    fn call_user_named(&mut self, idx: usize, args: &[Expr], named: &[(Box<[u8]>, Expr)]) -> R<()> {
+        let callee = &self.ctx.funcs[idx];
+        if callee.params.iter().any(|p| p.variadic || p.by_ref) {
+            return Err(CompileError::Unsupported(
+                "named arguments with a variadic or by-reference parameter".into(),
+            ));
+        }
+        let n = callee.params.len();
+        if args.len() > n {
+            return Err(CompileError::Unsupported(
+                "named call with too many positional arguments".into(),
+            ));
+        }
+        // Lay each argument into its parameter slot; `None` is a skipped optional.
+        let mut slots: Vec<Option<&Expr>> = vec![None; n];
+        for (i, a) in args.iter().enumerate() {
+            if matches!(a.kind, ExprKind::Spread(_)) {
+                return Err(CompileError::Unsupported("argument unpacking (spread)".into()));
+            }
+            slots[i] = Some(a);
+        }
+        for (nm, expr) in named {
+            let pos = callee
+                .params
+                .iter()
+                .position(|p| callee.slots[p.slot as usize][..] == nm[..]);
+            match pos {
+                Some(pi) if slots[pi].is_none() => slots[pi] = Some(expr),
+                Some(_) => {
+                    return Err(CompileError::Unsupported(
+                        "named argument overwrites a positional one".into(),
+                    ))
+                }
+                None => {
+                    return Err(CompileError::Unsupported(format!(
+                        "unknown named parameter ${}",
+                        String::from_utf8_lossy(nm)
+                    )))
+                }
+            }
+        }
+        // Every required (default-less) parameter must be supplied.
+        for p in &callee.params {
+            if p.default.is_none() && slots[p.slot as usize].is_none() {
+                return Err(CompileError::Unsupported(
+                    "named call missing a required argument".into(),
+                ));
+            }
+        }
+        let returns_ref = callee.by_ref;
+        // Emit in slot order; a gap pushes `Undef` for the default prologue.
+        for s in slots {
+            match s {
+                Some(e) => self.expr(e)?,
+                None => {
+                    self.emit(Op::PushUndef);
+                }
+            }
+        }
+        self.emit(Op::Call { func: idx as u32, argc: n as u32 });
+        if returns_ref {
+            self.emit(Op::DerefTop);
+        }
+        Ok(())
     }
 
     /// Push each positional argument for a user call, honouring by-reference

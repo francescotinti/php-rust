@@ -153,6 +153,10 @@ pub enum Op {
     /// follows PHP's "undefined variable" semantics in the VM (warning + NULL),
     /// matching the tree-walker.
     LoadSlot(Slot),
+    /// `[] -> [Undef]` — push the `Undef` sentinel, used to leave a skipped
+    /// optional parameter unbound in a named call (PAR) so the callee's default
+    /// prologue fills it.
+    PushUndef,
     /// `[v] -> []` — pop and store into local `slot`. To use an assignment as an
     /// expression, the compiler emits [`Op::Dup`] before this.
     StoreSlot(Slot),

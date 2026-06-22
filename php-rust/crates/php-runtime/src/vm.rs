@@ -428,6 +428,9 @@ impl<'m> Vm<'m> {
                     let v = self.frames[top].stack.pop().expect("StoreSlot on empty stack");
                     store_slot(&mut self.frames[top].slots[s as usize], v);
                 }
+                Op::PushUndef => {
+                    self.frames[top].stack.push(Zval::Undef);
+                }
                 Op::FillDefault { slot, skip } => {
                     // Default-parameter prologue (PAR): skip the default if the
                     // argument was supplied (the slot is not `Undef`).
@@ -6137,6 +6140,40 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php function f($a){} try { f(); } catch(TypeError $e){ echo 'caught'; }"),
             b"caught"
+        );
+    }
+
+    // ----- PAR: named arguments (function calls; verified vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn named_args_reordered() {
+        assert_eq!(
+            vm_stdout(b"<?php function f($a, $b){ return \"$a-$b\"; } echo f(b: 2, a: 1);"),
+            b"1-2"
+        );
+    }
+
+    #[test]
+    fn named_args_skip_optional() {
+        assert_eq!(
+            vm_stdout(b"<?php function f($a, $b=1, $c=2){ return \"$a-$b-$c\"; } echo f(1, c: 3);"),
+            b"1-1-3"
+        );
+    }
+
+    #[test]
+    fn named_args_mixed_positional_and_named() {
+        assert_eq!(
+            vm_stdout(b"<?php function f($x, $y, $z=9){ return \"$x$y$z\"; } echo f(1, z: 7, y: 2);"),
+            b"127"
+        );
+    }
+
+    #[test]
+    fn named_args_all_named() {
+        assert_eq!(
+            vm_stdout(b"<?php function greet($greeting, $name){ return \"$greeting, $name!\"; } echo greet(name: 'X', greeting: 'Hi');"),
+            b"Hi, X!"
         );
     }
 }
