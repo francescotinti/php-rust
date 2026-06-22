@@ -32,118 +32,191 @@ pub struct VmOutcome {
 /// Compile-and-run is the caller's job ([`crate::compile`]); this takes the
 /// already-compiled module and executes its `main`.
 pub fn run_module(module: &Module) -> VmOutcome {
-    let mut out = VmOutcome::default();
-    match exec_func(&module.main, &mut out.stdout, &mut out.diags) {
-        Ok(_) => {}
-        Err(e) => out.fatal = Some(e),
+    let mut vm = Vm {
+        module,
+        stdout: Vec::new(),
+        diags: Diags::new(),
+        frames: Vec::new(),
+    };
+    vm.frames.push(Frame::new(&module.main));
+    let fatal = vm.run().err();
+    VmOutcome {
+        stdout: vm.stdout,
+        diags: vm.diags,
+        fatal,
     }
-    out
 }
 
-/// Execute one frame to completion, returning its result value (the operand the
-/// terminating [`Op::Ret`] left). A frame owns its slot array (named locals) and
-/// its operand stack; both would be saved verbatim to suspend a generator.
-fn exec_func(func: &Func, stdout: &mut Vec<u8>, diags: &mut Diags) -> Result<Zval, PhpError> {
-    let mut slots: Vec<Zval> = vec![Zval::Undef; func.n_slots as usize];
-    let mut stack: Vec<Zval> = Vec::new();
-    let mut ip: usize = 0;
+/// One activation record: the function being run, its instruction pointer, its
+/// slot array (named locals) and its operand stack. This is the unit that would
+/// be parked to suspend a generator — `ip` + `slots` + `stack`, all owned, no
+/// Rust stack involved.
+struct Frame<'m> {
+    func: &'m Func,
+    ip: usize,
+    slots: Vec<Zval>,
+    stack: Vec<Zval>,
+}
 
-    loop {
-        let op = &func.ops[ip];
-        match op {
-            Op::PushConst(i) => stack.push(func.consts[*i as usize].to_zval()),
-            Op::Pop => {
-                stack.pop();
-            }
-            Op::Dup => {
-                let v = stack.last().expect("Dup on empty stack").clone();
-                stack.push(v);
-            }
-            Op::LoadSlot(s) => {
-                // An unset local reads as NULL (the curated proof corpus is
-                // warning-free; the "Undefined variable" notice is wired in with
-                // the diagnostics-ordering work). A reference slot is followed.
-                let v = match &slots[*s as usize] {
-                    Zval::Undef => Zval::Null,
-                    Zval::Ref(cell) => cell.borrow().clone(),
-                    other => other.clone(),
-                };
-                stack.push(v);
-            }
-            Op::StoreSlot(s) => {
-                let v = stack.pop().expect("StoreSlot on empty stack");
-                store_slot(&mut slots[*s as usize], v);
-            }
-            Op::IncDecSlot { slot, inc, pre } => {
-                let cell = &mut slots[*slot as usize];
-                if matches!(cell, Zval::Undef) {
-                    *cell = Zval::Null;
-                }
-                if *pre {
-                    if *inc {
-                        ops::increment(cell, diags)?;
-                    } else {
-                        ops::decrement(cell, diags)?;
-                    }
-                    stack.push(cell.clone());
-                } else {
-                    let old = cell.clone();
-                    if *inc {
-                        ops::increment(cell, diags)?;
-                    } else {
-                        ops::decrement(cell, diags)?;
-                    }
-                    stack.push(old);
-                }
-            }
-            Op::Binary(b) => {
-                let rhs = stack.pop().expect("Binary rhs");
-                let lhs = stack.pop().expect("Binary lhs");
-                stack.push(apply_binop(*b, &lhs, &rhs, diags)?);
-            }
-            Op::Unary(u) => {
-                let a = stack.pop().expect("Unary operand");
-                stack.push(apply_unop(*u, &a, diags)?);
-            }
-            Op::Cast(k) => {
-                let a = stack.pop().expect("Cast operand");
-                stack.push(apply_cast(*k, &a, diags));
-            }
-            Op::Jump(addr) => {
-                ip = *addr as usize;
-                continue;
-            }
-            Op::JumpIfFalse(addr) => {
-                let c = stack.pop().expect("JumpIfFalse cond");
-                if !convert::to_bool(&c, diags) {
-                    ip = *addr as usize;
-                    continue;
-                }
-            }
-            Op::JumpIfTrue(addr) => {
-                let c = stack.pop().expect("JumpIfTrue cond");
-                if convert::to_bool(&c, diags) {
-                    ip = *addr as usize;
-                    continue;
-                }
-            }
-            Op::Echo => {
-                let v = stack.pop().expect("Echo operand");
-                let s = convert::to_zstr(&v, diags);
-                stdout.extend_from_slice(s.as_bytes());
-            }
-            Op::Print => {
-                let v = stack.pop().expect("Print operand");
-                let s = convert::to_zstr(&v, diags);
-                stdout.extend_from_slice(s.as_bytes());
-                stack.push(Zval::Long(1));
-            }
-            Op::Ret => {
-                return Ok(stack.pop().unwrap_or(Zval::Null));
-            }
-            Op::Nop => {}
+impl<'m> Frame<'m> {
+    fn new(func: &'m Func) -> Self {
+        Frame {
+            func,
+            ip: 0,
+            slots: vec![Zval::Undef; func.n_slots as usize],
+            stack: Vec::new(),
         }
-        ip += 1;
+    }
+}
+
+/// The virtual machine: the module under execution plus the explicit call stack.
+/// PHP function calls grow `frames` rather than the Rust stack, so deep PHP
+/// recursion cannot overflow the host stack, and a frame is suspendable.
+struct Vm<'m> {
+    module: &'m Module,
+    stdout: Vec<u8>,
+    diags: Diags,
+    frames: Vec<Frame<'m>>,
+}
+
+impl Vm<'_> {
+    /// Run until the bottom frame returns, yielding the script's result value.
+    fn run(&mut self) -> Result<Zval, PhpError> {
+        loop {
+            let top = self.frames.len() - 1;
+            let ip = self.frames[top].ip;
+            let op = self.frames[top].func.ops[ip].clone();
+            // Default fall-through advance. Jumps overwrite `ip`; `Call` advances
+            // the *caller* before pushing the callee; `Ret` discards this frame.
+            self.frames[top].ip = ip + 1;
+
+            match op {
+                Op::PushConst(i) => {
+                    let v = self.frames[top].func.consts[i as usize].to_zval();
+                    self.frames[top].stack.push(v);
+                }
+                Op::Pop => {
+                    self.frames[top].stack.pop();
+                }
+                Op::Dup => {
+                    let v = self.frames[top].stack.last().expect("Dup on empty stack").clone();
+                    self.frames[top].stack.push(v);
+                }
+                Op::LoadSlot(s) => {
+                    // An unset local reads as NULL (the curated corpus is
+                    // warning-free; the "Undefined variable" notice rides the
+                    // diagnostics-ordering work). A reference slot is followed.
+                    let v = read_slot(&self.frames[top].slots[s as usize]);
+                    self.frames[top].stack.push(v);
+                }
+                Op::StoreSlot(s) => {
+                    let v = self.frames[top].stack.pop().expect("StoreSlot on empty stack");
+                    store_slot(&mut self.frames[top].slots[s as usize], v);
+                }
+                Op::IncDecSlot { slot, inc, pre } => {
+                    let i = slot as usize;
+                    if matches!(self.frames[top].slots[i], Zval::Undef) {
+                        self.frames[top].slots[i] = Zval::Null;
+                    }
+                    let old = if pre { None } else { Some(self.frames[top].slots[i].clone()) };
+                    {
+                        let cell = &mut self.frames[top].slots[i];
+                        if inc {
+                            ops::increment(cell, &mut self.diags)?;
+                        } else {
+                            ops::decrement(cell, &mut self.diags)?;
+                        }
+                    }
+                    let pushed = old.unwrap_or_else(|| self.frames[top].slots[i].clone());
+                    self.frames[top].stack.push(pushed);
+                }
+                Op::Binary(b) => {
+                    let rhs = self.frames[top].stack.pop().expect("Binary rhs");
+                    let lhs = self.frames[top].stack.pop().expect("Binary lhs");
+                    let r = apply_binop(b, &lhs, &rhs, &mut self.diags)?;
+                    self.frames[top].stack.push(r);
+                }
+                Op::Unary(u) => {
+                    let a = self.frames[top].stack.pop().expect("Unary operand");
+                    let r = apply_unop(u, &a, &mut self.diags)?;
+                    self.frames[top].stack.push(r);
+                }
+                Op::Cast(k) => {
+                    let a = self.frames[top].stack.pop().expect("Cast operand");
+                    let r = apply_cast(k, &a, &mut self.diags);
+                    self.frames[top].stack.push(r);
+                }
+                Op::Jump(addr) => {
+                    self.frames[top].ip = addr as usize;
+                }
+                Op::JumpIfFalse(addr) => {
+                    let c = self.frames[top].stack.pop().expect("JumpIfFalse cond");
+                    if !convert::to_bool(&c, &mut self.diags) {
+                        self.frames[top].ip = addr as usize;
+                    }
+                }
+                Op::JumpIfTrue(addr) => {
+                    let c = self.frames[top].stack.pop().expect("JumpIfTrue cond");
+                    if convert::to_bool(&c, &mut self.diags) {
+                        self.frames[top].ip = addr as usize;
+                    }
+                }
+                Op::Echo => {
+                    let v = self.frames[top].stack.pop().expect("Echo operand");
+                    let s = convert::to_zstr(&v, &mut self.diags);
+                    self.stdout.extend_from_slice(s.as_bytes());
+                }
+                Op::Print => {
+                    let v = self.frames[top].stack.pop().expect("Print operand");
+                    let s = convert::to_zstr(&v, &mut self.diags);
+                    self.stdout.extend_from_slice(s.as_bytes());
+                    self.frames[top].stack.push(Zval::Long(1));
+                }
+                Op::Call { func, argc } => {
+                    let callee = &self.module.functions[func as usize];
+                    // Pop argc args (pushed left-to-right) and bind them to the
+                    // callee's leading slots. The caller's `ip` is already past
+                    // the Call, so it resumes correctly once the callee returns.
+                    let n = argc as usize;
+                    let mut args = Vec::with_capacity(n);
+                    for _ in 0..n {
+                        args.push(self.frames[top].stack.pop().expect("call argument"));
+                    }
+                    args.reverse();
+                    let mut frame = Frame::new(callee);
+                    for (i, a) in args.into_iter().enumerate() {
+                        frame.slots[i] = a;
+                    }
+                    self.frames.push(frame);
+                }
+                Op::Ret => {
+                    let ret = self.frames[top].stack.pop().unwrap_or(Zval::Null);
+                    self.frames.pop();
+                    match self.frames.last_mut() {
+                        Some(caller) => caller.stack.push(ret),
+                        None => return Ok(ret),
+                    }
+                }
+                Op::Fatal(i) => {
+                    let msg = match &self.frames[top].func.consts[i as usize] {
+                        crate::bytecode::Const::Str(b) => String::from_utf8_lossy(b).into_owned(),
+                        _ => "VM: unsupported construct".to_string(),
+                    };
+                    return Err(PhpError::Error(msg));
+                }
+                Op::Nop => {}
+            }
+        }
+    }
+}
+
+/// Read a local cell's value, following a reference and mapping an unset slot to
+/// NULL.
+fn read_slot(cell: &Zval) -> Zval {
+    match cell {
+        Zval::Undef => Zval::Null,
+        Zval::Ref(r) => r.borrow().clone(),
+        other => other.clone(),
     }
 }
 
@@ -273,5 +346,38 @@ mod tests {
     fn print_is_expression() {
         // `print` evaluates to int(1): "x" is printed, then 1 echoed.
         assert_eq!(vm_stdout(b"<?php echo print 'x';"), b"x1");
+    }
+
+    #[test]
+    fn user_function_call() {
+        assert_eq!(
+            vm_stdout(b"<?php function add($a, $b) { return $a + $b; } echo add(2, 3);"),
+            b"5"
+        );
+    }
+
+    #[test]
+    fn void_return_and_multiple_calls() {
+        // No explicit return -> implicit NULL; the calls run for their echo.
+        assert_eq!(
+            vm_stdout(b"<?php function greet() { echo 'hi'; } greet(); greet();"),
+            b"hihi"
+        );
+    }
+
+    #[test]
+    fn recursion_uses_the_explicit_frame_stack() {
+        assert_eq!(
+            vm_stdout(b"<?php function fact($n) { if ($n <= 1) return 1; return $n * fact($n - 1); } echo fact(5);"),
+            b"120"
+        );
+    }
+
+    #[test]
+    fn nested_calls_and_argument_order() {
+        assert_eq!(
+            vm_stdout(b"<?php function sub($a, $b) { return $a - $b; } echo sub(sub(10, 3), 2);"),
+            b"5"
+        );
     }
 }

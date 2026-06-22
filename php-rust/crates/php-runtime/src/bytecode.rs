@@ -173,11 +173,25 @@ pub enum Op {
     /// is an expression valued 1.
     Print,
 
-    // ----- frame control -----
+    // ----- calls & frame control -----
+    /// `[arg0, arg1, …, arg{argc-1}] -> [result]` — call user function
+    /// `Module::functions[func]`. The `argc` arguments are popped (they were
+    /// pushed left-to-right) and bound to the callee's leading slots; when the
+    /// callee returns, its result is left on the caller's operand stack. The
+    /// callee runs in its own pushed [`crate::vm`] frame, so this is *not* a Rust
+    /// recursion — PHP recursion grows the explicit frame stack instead.
+    Call { func: u32, argc: u32 },
     /// `[v] -> ` (frame ends) — pop the return value and unwind the current
     /// frame to the caller, which receives it on *its* operand stack. A function
     /// body with no explicit `return` ends with `PushConst(null); Ret`.
     Ret,
+
+    /// Raise a fatal `Error` carrying `consts[idx]` (a string) as its message.
+    /// Used for *stub* function bodies: the always-present PHP prelude (exception
+    /// classes, the procedural date API) contains constructs not yet ported, so
+    /// those functions compile to a single `Fatal` rather than sinking every
+    /// script — the fatal fires only if such a function is actually called.
+    Fatal(ConstIdx),
 
     /// No-op. Kept so a [`crate::hir::StmtKind::Nop`] / `Label` has a stable
     /// address to compile pass-throughs against without special-casing empty

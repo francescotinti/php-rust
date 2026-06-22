@@ -20,7 +20,7 @@
 //! `Module::functions` / `closures` are left empty until the call opcode lands.
 
 use crate::bytecode::{Addr, Const, ConstIdx, Func, Module, Op};
-use crate::hir::{Expr, ExprKind, Program, Stmt, StmtKind};
+use crate::hir::{Expr, ExprKind, FnDecl, Program, Stmt, StmtKind};
 
 /// A construct the proof-slice compiler does not yet lower. Carries the HIR
 /// variant name so the coverage gap is legible (mirrors `lower::LowerError`).
@@ -41,21 +41,58 @@ type R<T> = Result<T, CompileError>;
 
 /// Compile a lowered [`Program`] into an executable [`Module`].
 ///
-/// Only the script body (`main`) is compiled in the proof slice; the function
-/// and closure tables are populated once the call opcode is wired in.
+/// The user-function table is compiled in the same index space as
+/// [`Program::functions`], so a call resolved to `functions[i]` maps to the same
+/// index here. Closures are still out of slice.
 pub fn compile_program(program: &Program) -> R<Module> {
-    let main = compile_func(b"", &program.body, program.slots.len() as u32, 0)?;
+    let funcs = &program.functions;
+    let mut functions = Vec::with_capacity(funcs.len());
+    for fd in funcs {
+        // Function bodies compile *tolerantly*: the always-injected PHP prelude
+        // (exception classes, date API) uses not-yet-ported constructs, so a
+        // failure becomes a stub that fatals only if the function is called —
+        // rather than making every script uncompilable. `main`, below, is not
+        // tolerant: if the script body itself is unsupported, the VM can't run it.
+        match compile_fndecl(fd, funcs) {
+            Ok(f) => functions.push(f),
+            Err(e) => functions.push(stub_func(fd, &e)),
+        }
+    }
+    let main = compile_body(b"", &program.body, program.slots.len() as u32, 0, false, false, funcs)?;
     Ok(Module {
         main,
-        functions: Vec::new(),
+        functions,
         closures: Vec::new(),
         file: program.file.clone(),
     })
 }
 
-/// Compile one body (the script's, or later a function's) into a [`Func`].
-fn compile_func(name: &[u8], body: &[Stmt], n_slots: u32, n_params: u32) -> R<Func> {
-    let mut c = FnCompiler::default();
+/// Compile a user [`FnDecl`] into a [`Func`], resolving calls in its body
+/// against `funcs` (the whole program's function table, for forward references
+/// and recursion).
+fn compile_fndecl(fd: &FnDecl, funcs: &[FnDecl]) -> R<Func> {
+    compile_body(
+        &fd.name,
+        &fd.body,
+        fd.slots.len() as u32,
+        fd.params.len() as u32,
+        fd.by_ref,
+        fd.is_generator,
+        funcs,
+    )
+}
+
+/// Compile one body (the script's or a function's) into a [`Func`].
+fn compile_body(
+    name: &[u8],
+    body: &[Stmt],
+    n_slots: u32,
+    n_params: u32,
+    by_ref: bool,
+    is_generator: bool,
+    funcs: &[FnDecl],
+) -> R<Func> {
+    let mut c = FnCompiler::new(funcs);
     c.block(body)?;
     // A body that runs off the end returns NULL (PHP's implicit return).
     let null = c.konst(Const::Null);
@@ -67,19 +104,41 @@ fn compile_func(name: &[u8], body: &[Stmt], n_slots: u32, n_params: u32) -> R<Fu
         consts: c.consts,
         n_slots,
         n_params,
-        by_ref: false,
-        is_generator: false,
+        by_ref,
+        is_generator,
         line: 0,
     })
 }
 
+/// A placeholder body for a function that could not be compiled yet: it raises
+/// a fatal naming the gap if (and only if) the function is actually called. Its
+/// slot/param counts mirror the real declaration so the call ABI stays valid.
+fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
+    let msg = format!(
+        "VM: call to `{}` — {}",
+        String::from_utf8_lossy(&fd.name),
+        err
+    );
+    Func {
+        name: fd.name.clone(),
+        ops: vec![Op::Fatal(0)],
+        consts: vec![Const::Str(msg.into_bytes().into())],
+        n_slots: fd.slots.len() as u32,
+        n_params: fd.params.len() as u32,
+        by_ref: fd.by_ref,
+        is_generator: fd.is_generator,
+        line: fd.line,
+    }
+}
+
 /// Per-function emit state: the growing instruction stream, the constant pool,
-/// and the stack of enclosing loops (for `break N` / `continue N`).
-#[derive(Default)]
-struct FnCompiler {
+/// the stack of enclosing loops (for `break N` / `continue N`), and the
+/// program's function table for resolving call targets.
+struct FnCompiler<'a> {
     ops: Vec<Op>,
     consts: Vec<Const>,
     loops: Vec<LoopCtx>,
+    funcs: &'a [FnDecl],
 }
 
 /// One enclosing loop's unresolved jump sites. `break` jumps land at the loop
@@ -91,7 +150,16 @@ struct LoopCtx {
     continue_sites: Vec<Addr>,
 }
 
-impl FnCompiler {
+impl<'a> FnCompiler<'a> {
+    fn new(funcs: &'a [FnDecl]) -> Self {
+        FnCompiler {
+            ops: Vec::new(),
+            consts: Vec::new(),
+            loops: Vec::new(),
+            funcs,
+        }
+    }
+
     /// Append `op`, returning its address.
     fn emit(&mut self, op: Op) -> Addr {
         let at = self.ops.len() as Addr;
@@ -371,6 +439,7 @@ impl FnCompiler {
                 self.expr(a)?;
                 self.emit(Op::Print);
             }
+            ExprKind::Call { name, args, named } => self.call(name, args, named)?,
             other => return Err(CompileError::Unsupported(expr_name(other))),
         }
         Ok(())
@@ -405,6 +474,60 @@ impl FnCompiler {
         self.patch(to_end, Op::Jump(end));
         Ok(())
     }
+
+    /// Compile a named function call `name(args...)`. Proof-slice scope: a call
+    /// to a *user-defined* function (resolved against [`Self::funcs`]
+    /// ASCII-case-insensitively) with exactly its declared number of positional
+    /// arguments and no by-ref / variadic parameters. Builtins, named/spread
+    /// arguments, and arity mismatches (default-filled calls) are deferred.
+    fn call(&mut self, name: &[u8], args: &[Expr], named: &[(Box<[u8]>, Expr)]) -> R<()> {
+        if !named.is_empty() {
+            return Err(CompileError::Unsupported("call with named arguments".into()));
+        }
+        let idx = self
+            .funcs
+            .iter()
+            .position(|f| ascii_eq_ignore_case(&f.name, name));
+        let idx = match idx {
+            Some(i) => i,
+            None => {
+                return Err(CompileError::Unsupported(format!(
+                    "call to `{}` (builtin / undefined function not yet in VM)",
+                    String::from_utf8_lossy(name)
+                )))
+            }
+        };
+        let callee = &self.funcs[idx];
+        if callee.params.iter().any(|p| p.by_ref || p.variadic) {
+            return Err(CompileError::Unsupported(
+                "call to a function with by-ref / variadic parameters".into(),
+            ));
+        }
+        if args.len() != callee.params.len() {
+            return Err(CompileError::Unsupported(format!(
+                "call arity {} != {} declared params (default-filled calls not yet handled)",
+                args.len(),
+                callee.params.len()
+            )));
+        }
+        for a in args {
+            if matches!(a.kind, ExprKind::Spread(_)) {
+                return Err(CompileError::Unsupported("argument unpacking (spread)".into()));
+            }
+            self.expr(a)?;
+        }
+        self.emit(Op::Call { func: idx as u32, argc: args.len() as u32 });
+        Ok(())
+    }
+}
+
+/// ASCII-case-insensitive byte-string equality — PHP resolves function names
+/// case-insensitively in ASCII (`STRLEN` == `strlen`).
+fn ascii_eq_ignore_case(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len()
+        && a.iter()
+            .zip(b)
+            .all(|(x, y)| x.eq_ignore_ascii_case(y))
 }
 
 /// HIR statement-variant name, for [`CompileError::Unsupported`].
