@@ -218,6 +218,19 @@ pub enum Op {
     /// `++`/`--` on an array element `$a[…][k]`. Drills as above; `nkeys >= 1`.
     /// Stack: `[k0, …, k{nkeys-1}] -> [result]` (new value if `pre`, else old).
     IncDecPath { base: DimBase, nkeys: u32, inc: bool, pre: bool },
+    /// `isset($a[…][k])` for one place: a *silent* read along the path with no
+    /// auto-vivification. Pushes `true` iff every level exists and the leaf is
+    /// not null. `nkeys == 0` tests a bare variable. Stack:
+    /// `[k0, …, k{nkeys-1}] -> [bool]`. (`isset($a, $b)` chains these with
+    /// short-circuit jumps.)
+    IssetPath { base: DimBase, nkeys: u32 },
+    /// `empty($a[…][k])`: like [`Op::IssetPath`] but pushes `true` when the path
+    /// is absent *or* the leaf value is falsy. Stack: `[…keys] -> [bool]`.
+    EmptyPath { base: DimBase, nkeys: u32 },
+    /// `unset($a[…][k])` / `unset($x)`: silently remove the leaf element (or, with
+    /// `nkeys == 0`, the variable itself). A missing intermediate level is a
+    /// no-op. Stack: `[k0, …, k{nkeys-1}] -> []`.
+    UnsetPath { base: DimBase, nkeys: u32 },
 
     // ----- calls & frame control -----
     /// `[arg0, arg1, …, arg{argc-1}] -> [result]` — call user function

@@ -236,6 +236,30 @@ impl Vm<'_> {
                     let result = self.path_op(base, top, keys, Last::IncDec { key, inc, pre })?;
                     self.frames[top].stack.push(result);
                 }
+                Op::IssetPath { base, nkeys } => {
+                    let keys = self.pop_keys(top, nkeys);
+                    let set = matches!(
+                        silent_get_path(self.base_cell(base, top), &keys),
+                        Some(v) if !matches!(v, Zval::Null | Zval::Undef)
+                    );
+                    self.frames[top].stack.push(Zval::Bool(set));
+                }
+                Op::EmptyPath { base, nkeys } => {
+                    let keys = self.pop_keys(top, nkeys);
+                    let empty = match silent_get_path(self.base_cell(base, top), &keys) {
+                        Some(v) => !convert::is_true_silent(&v),
+                        None => true,
+                    };
+                    self.frames[top].stack.push(Zval::Bool(empty));
+                }
+                Op::UnsetPath { base, nkeys } => {
+                    let keys = self.pop_keys(top, nkeys);
+                    let cell = match base {
+                        DimBase::Local(s) => &mut self.frames[top].slots[s as usize],
+                        DimBase::Global(s) => &mut self.frames[0].slots[s as usize],
+                    };
+                    unset_into(cell, &keys);
+                }
                 Op::Call { func, argc } => {
                     let callee = &self.module.functions[func as usize];
                     // Pop argc args (pushed left-to-right) and bind them to the
@@ -273,6 +297,14 @@ impl Vm<'_> {
         }
     }
 
+    /// The cell a [`DimBase`] is rooted at, for read-only path inspection.
+    fn base_cell(&self, base: DimBase, top: usize) -> &Zval {
+        match base {
+            DimBase::Local(s) => &self.frames[top].slots[s as usize],
+            DimBase::Global(s) => &self.frames[0].slots[s as usize],
+        }
+    }
+
     /// Pop `n` index values off the current frame, restoring source order.
     fn pop_keys(&mut self, top: usize, n: u32) -> Vec<Zval> {
         let mut keys: Vec<Zval> = (0..n)
@@ -306,6 +338,74 @@ enum Last {
     Append { value: Zval },
     OpSet { key: Zval, op: BinOp, rhs: Zval },
     IncDec { key: Zval, inc: bool, pre: bool },
+}
+
+/// Silently follow `keys` from `cell` without auto-vivifying anything, returning
+/// the leaf value if the whole path exists (an unset variable or a missing key
+/// at any level yields `None`). Backs `isset` / `empty`. A reference is followed;
+/// a string base supports a final byte-offset step.
+fn silent_get_path(cell: &Zval, keys: &[Zval]) -> Option<Zval> {
+    if let Zval::Ref(rc) = cell {
+        return silent_get_path(&rc.borrow(), keys);
+    }
+    match keys.split_first() {
+        None => match cell {
+            Zval::Undef => None,
+            other => Some(other.clone()),
+        },
+        Some((k, rest)) => match cell {
+            Zval::Array(a) => {
+                let key = coerce_key_silent(k)?;
+                a.get(&key).and_then(|child| silent_get_path(child, rest))
+            }
+            Zval::Str(s) if rest.is_empty() => {
+                string_offset(s, k).map(|byte| Zval::Str(PhpStr::new(vec![byte])))
+            }
+            _ => None,
+        },
+    }
+}
+
+/// The in-bounds byte at a string offset (negatives count from the end), or
+/// `None` if out of range — the existence test behind `isset($s[i])`.
+fn string_offset(s: &PhpStr, key: &Zval) -> Option<u8> {
+    if matches!(key, Zval::Array(_) | Zval::Object(_) | Zval::Closure(_) | Zval::Generator(_)) {
+        return None;
+    }
+    let i = convert::to_long_cast(key, &mut Diags::new());
+    let len = s.len() as i64;
+    let idx = if i < 0 { len + i } else { i };
+    if idx < 0 || idx >= len {
+        None
+    } else {
+        Some(s.as_bytes()[idx as usize])
+    }
+}
+
+/// Remove the leaf of `keys` from `cell` (or, when `keys` is empty, unset the
+/// variable itself by resetting it to `Undef`). A missing intermediate level is
+/// a silent no-op; copy-on-write applies to each array touched.
+fn unset_into(cell: &mut Zval, keys: &[Zval]) {
+    match keys.split_first() {
+        None => *cell = Zval::Undef,
+        Some((k, rest)) => {
+            if let Zval::Ref(rc) = cell {
+                let mut inner = rc.borrow_mut();
+                unset_into(&mut inner, keys);
+                return;
+            }
+            if let Zval::Array(rc) = cell {
+                if let Some(key) = coerce_key_silent(k) {
+                    let arr = Rc::make_mut(rc);
+                    if rest.is_empty() {
+                        arr.remove(&key);
+                    } else if let Some(child) = arr.get_mut(&key) {
+                        unset_into(child, rest);
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Read a local cell's value, following a reference and mapping an unset slot to
@@ -351,16 +451,9 @@ fn read_dim(base: &Zval, key: &Zval) -> Zval {
 /// String byte-offset read `$s[i]` (silent): integer index, negatives count from
 /// the end, out-of-range yields `""`.
 fn read_string_offset(s: &PhpStr, key: &Zval) -> Zval {
-    if matches!(key, Zval::Array(_) | Zval::Object(_) | Zval::Closure(_) | Zval::Generator(_)) {
-        return Zval::Null;
-    }
-    let i = convert::to_long_cast(key, &mut Diags::new());
-    let len = s.len() as i64;
-    let idx = if i < 0 { len + i } else { i };
-    if idx < 0 || idx >= len {
-        Zval::Str(PhpStr::new(Vec::new()))
-    } else {
-        Zval::Str(PhpStr::new(vec![s.as_bytes()[idx as usize]]))
+    match string_offset(s, key) {
+        Some(byte) => Zval::Str(PhpStr::new(vec![byte])),
+        None => Zval::Str(PhpStr::new(Vec::new())),
     }
 }
 
@@ -718,5 +811,60 @@ mod tests {
         assert_eq!(vm_stdout(b"<?php $a = [5]; echo $a[0]++, '/', $a[0];"), b"5/6");
         // Nested.
         assert_eq!(vm_stdout(b"<?php $a[2][3] = 9; $a[2][3]--; echo $a[2][3];"), b"8");
+    }
+
+    #[test]
+    fn isset_variable_and_element() {
+        assert_eq!(vm_stdout(b"<?php echo isset($x) ? 'y' : 'n';"), b"n");
+        assert_eq!(vm_stdout(b"<?php $x = 1; echo isset($x) ? 'y' : 'n';"), b"y");
+        // A null value is not "set".
+        assert_eq!(vm_stdout(b"<?php $x = null; echo isset($x) ? 'y' : 'n';"), b"n");
+        assert_eq!(
+            vm_stdout(b"<?php $a = ['k' => 1]; echo isset($a['k']) ? 'y' : 'n', isset($a['m']) ? 'y' : 'n';"),
+            b"yn"
+        );
+        // Nested + missing intermediate level.
+        assert_eq!(vm_stdout(b"<?php $a[1][2] = 3; echo isset($a[1][2]) ? 'y' : 'n', isset($a[9][9]) ? 'y' : 'n';"), b"yn");
+    }
+
+    #[test]
+    fn isset_multiple_is_and() {
+        assert_eq!(vm_stdout(b"<?php $a = 1; $b = 2; echo isset($a, $b) ? 'y' : 'n';"), b"y");
+        assert_eq!(vm_stdout(b"<?php $a = 1; echo isset($a, $b) ? 'y' : 'n';"), b"n");
+    }
+
+    #[test]
+    fn isset_on_string_offset() {
+        assert_eq!(vm_stdout(b"<?php $s = 'hi'; echo isset($s[1]) ? 'y' : 'n', isset($s[5]) ? 'y' : 'n';"), b"yn");
+    }
+
+    #[test]
+    fn empty_semantics() {
+        assert_eq!(vm_stdout(b"<?php echo empty($x) ? 'y' : 'n';"), b"y");
+        assert_eq!(vm_stdout(b"<?php $x = 0; echo empty($x) ? 'y' : 'n';"), b"y");
+        assert_eq!(vm_stdout(b"<?php $x = 'a'; echo empty($x) ? 'y' : 'n';"), b"n");
+        assert_eq!(
+            vm_stdout(b"<?php $a = ['k' => 0, 'm' => 5]; echo empty($a['k']) ? 'y' : 'n', empty($a['m']) ? 'y' : 'n';"),
+            b"yn"
+        );
+    }
+
+    #[test]
+    fn unset_variable_and_element() {
+        assert_eq!(vm_stdout(b"<?php $x = 1; unset($x); echo isset($x) ? 'y' : 'n';"), b"n");
+        assert_eq!(
+            vm_stdout(b"<?php $a = ['k' => 1, 'm' => 2]; unset($a['k']); echo isset($a['k']) ? 'y' : 'n', $a['m'];"),
+            b"n2"
+        );
+        // Nested unset leaves siblings intact.
+        assert_eq!(
+            vm_stdout(b"<?php $a[1][2] = 'x'; $a[1][3] = 'y'; unset($a[1][2]); echo isset($a[1][2]) ? 'y' : 'n', $a[1][3];"),
+            b"ny"
+        );
+        // unset of multiple targets.
+        assert_eq!(
+            vm_stdout(b"<?php $a = 1; $b = 2; unset($a, $b); echo isset($a) ? '1' : '0', isset($b) ? '1' : '0';"),
+            b"00"
+        );
     }
 }

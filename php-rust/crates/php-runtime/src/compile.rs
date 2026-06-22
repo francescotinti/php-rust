@@ -278,6 +278,13 @@ impl<'a> FnCompiler<'a> {
                 }
                 self.emit(Op::Ret);
             }
+            StmtKind::Unset(places) => {
+                for place in places {
+                    let base = dim_base(place)?;
+                    let nkeys = self.test_path_steps(place)?;
+                    self.emit(Op::UnsetPath { base, nkeys });
+                }
+            }
             other => return Err(CompileError::Unsupported(stmt_name(other))),
         }
         Ok(())
@@ -467,6 +474,12 @@ impl<'a> FnCompiler<'a> {
             ExprKind::AssignPlace(place, rhs) => self.assign_place(place, rhs)?,
             ExprKind::AssignOpPlace(op, place, rhs) => self.assign_op_place(*op, place, rhs)?,
             ExprKind::IncDecPlace { place, inc, pre } => self.incdec_place(place, *inc, *pre)?,
+            ExprKind::Isset(places) => self.isset(places)?,
+            ExprKind::Empty(place) => {
+                let base = dim_base(place)?;
+                let nkeys = self.test_path_steps(place)?;
+                self.emit(Op::EmptyPath { base, nkeys });
+            }
             ExprKind::Coalesce(a, b) => {
                 // Left read silently (Var/Index reads don't warn); right only if null.
                 self.expr(a)?;
@@ -599,6 +612,47 @@ impl<'a> FnCompiler<'a> {
         }
         self.emit(Op::IncDecPath { base, nkeys, inc, pre });
         Ok(())
+    }
+
+    /// Compile `isset($p0, $p1, …)` to a boolean: each place is tested in turn
+    /// and the result short-circuits to `false` on the first absent one (so a
+    /// later place's index expressions aren't evaluated), mirroring PHP.
+    fn isset(&mut self, places: &[Place]) -> R<()> {
+        let last = places.len() - 1;
+        let mut to_false = Vec::new();
+        for (i, place) in places.iter().enumerate() {
+            let base = dim_base(place)?;
+            let nkeys = self.test_path_steps(place)?;
+            self.emit(Op::IssetPath { base, nkeys });
+            if i != last {
+                // [bi]: if false, jump to the shared false-result; else discard.
+                to_false.push(self.emit(Op::JumpIfFalse(Addr::MAX)));
+            }
+        }
+        if to_false.is_empty() {
+            return Ok(()); // single place: its IssetPath bool is the result
+        }
+        let to_end = self.emit(Op::Jump(Addr::MAX));
+        let false_at = self.here();
+        let f = self.konst(Const::Bool(false));
+        self.emit(Op::PushConst(f));
+        let end = self.here();
+        self.patch(to_end, Op::Jump(end));
+        for j in to_false {
+            self.patch(j, Op::JumpIfFalse(false_at));
+        }
+        Ok(())
+    }
+
+    /// Like [`Self::push_index_steps`] but for a read-only test target
+    /// (`isset` / `empty` / `unset`): pushes the index values and returns the
+    /// key count. `[]` and `->prop` steps are not valid here.
+    fn test_path_steps(&mut self, place: &Place) -> R<u32> {
+        let (nkeys, append) = self.push_index_steps(&place.steps)?;
+        if append {
+            return Err(CompileError::Unsupported("`[]` is not a readable place".into()));
+        }
+        Ok(nkeys)
     }
 
     /// Push each `Index` step's value (source order) and report `(nkeys, append)`:
