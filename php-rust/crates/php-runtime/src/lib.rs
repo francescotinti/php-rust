@@ -10,6 +10,7 @@
 //! mago's arena-bound types.
 
 pub mod builtin;
+pub mod bytecode;
 pub mod eval;
 pub mod hir;
 pub mod json;
