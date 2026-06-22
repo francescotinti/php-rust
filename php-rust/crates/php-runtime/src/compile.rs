@@ -645,6 +645,21 @@ impl<'a> FnCompiler<'a> {
                 }
             }
             StmtKind::Switch { subject, cases } => self.switch(subject, cases)?,
+            StmtKind::Global(bindings) => {
+                // REF-1. At script scope the named variable *is* the global
+                // (main's frame is the global frame), so `global` is a no-op —
+                // matching the tree-walker (D-12.2). Inside a function, alias each
+                // local slot to its global-frame cell via a shared reference.
+                if !self.is_main {
+                    for b in bindings {
+                        self.emit(Op::BindRef {
+                            target: DimBase::Local(b.local),
+                            source: DimBase::Global(b.global),
+                        });
+                        self.emit(Op::Pop); // statement: drop the BindRef value
+                    }
+                }
+            }
             other => return Err(CompileError::Unsupported(stmt_name(other))),
         }
         Ok(())
@@ -855,6 +870,15 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::FetchDim);
             }
             ExprKind::AssignPlace(place, rhs) => self.assign_place(place, rhs)?,
+            ExprKind::AssignRef { target, source } => {
+                // REF-1: `$a = &$b` between bare variables (and `$GLOBALS['x']`).
+                // `BindRef` promotes `source` to a shared cell and aliases
+                // `target` to it, leaving the aliased value as the expression's
+                // result. Array-element / property references are REF-4.
+                let target = ref_bare_base(target)?;
+                let source = ref_bare_base(source)?;
+                self.emit(Op::BindRef { target, source });
+            }
             ExprKind::AssignOpPlace(op, place, rhs) => self.assign_op_place(*op, place, rhs)?,
             ExprKind::IncDecPlace { place, inc, pre } => self.incdec_place(place, *inc, *pre)?,
             ExprKind::Isset(places) => self.isset(places)?,
@@ -1598,6 +1622,18 @@ fn dim_base(place: &Place) -> R<DimBase> {
         PlaceBase::Global(s) => Ok(DimBase::Global(s)),
         PlaceBase::This => Err(CompileError::Unsupported("$this property write".into())),
     }
+}
+
+/// The [`DimBase`] of a *bare* (step-less) reference target/source — `$x` or
+/// `$GLOBALS['x']` (REF-1). A binding into an array element or property carries
+/// `steps` and is REF-4 (still `Unsupported`); `$this` cannot be a bare base.
+fn ref_bare_base(place: &Place) -> R<DimBase> {
+    if !place.steps.is_empty() {
+        return Err(CompileError::Unsupported(
+            "reference to array element or property".into(),
+        ));
+    }
+    dim_base(place)
 }
 
 /// ASCII-case-insensitive byte-string equality — PHP resolves function names

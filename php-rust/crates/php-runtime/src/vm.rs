@@ -398,6 +398,16 @@ impl Vm<'_> {
                     };
                     unset_into(cell, &keys);
                 }
+                Op::BindRef { target, source } => {
+                    // REF-1: promote `source` to a shared cell, alias `target` to
+                    // the same `Rc`, and push the cell's value (the assignment
+                    // expression yields the aliased value). The two slot reads are
+                    // sequential, so the borrows never overlap.
+                    let cell = make_cell(ref_base_mut(&mut self.frames, top, source));
+                    let value = cell.borrow().clone();
+                    *ref_base_mut(&mut self.frames, top, target) = Zval::Ref(cell);
+                    self.frames[top].stack.push(value);
+                }
                 Op::IterInit => {
                     let iterable = self.frames[top].stack.pop().expect("IterInit iterable");
                     self.frames[top].iters.push(IterState {
@@ -2008,6 +2018,33 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags) -> Result<Zval, 
     }
 }
 
+/// The mutable cell a [`DimBase`] addresses: a slot in the current frame
+/// (`Local`) or in the global/script frame (`Global`). Mirrors the inline match
+/// `Op::UnsetPath` uses; factored out for the REF-1 `BindRef` arm.
+fn ref_base_mut<'f>(frames: &'f mut [Frame<'_>], top: usize, base: DimBase) -> &'f mut Zval {
+    match base {
+        DimBase::Local(s) => &mut frames[top].slots[s as usize],
+        DimBase::Global(s) => &mut frames[0].slots[s as usize],
+    }
+}
+
+/// Promote a cell to a shared [`Zval::Ref`], returning the shared cell. An
+/// already-shared cell is returned as-is; an `Undef` is promoted to a defined
+/// `Null` (a later write through the alias then has a real cell to land in).
+/// Mirrors `eval::make_cell` (the step-11d reference machinery, D-R3 / D-12.4).
+fn make_cell(cell: &mut Zval) -> Rc<RefCell<Zval>> {
+    if let Zval::Ref(rc) = cell {
+        return Rc::clone(rc);
+    }
+    let init = match &*cell {
+        Zval::Undef => Zval::Null,
+        other => other.clone(),
+    };
+    let rc = Rc::new(RefCell::new(init));
+    *cell = Zval::Ref(Rc::clone(&rc));
+    rc
+}
+
 /// Write `v` into a local cell. A reference slot writes *through* its shared
 /// cell (so aliases see the update); a plain slot is overwritten. This mirrors
 /// the tree-walker's write-through discipline (`Zval::Ref`, D-R3).
@@ -3142,5 +3179,66 @@ mod tests {
             vm_stdout(b"<?php class C {} $o = new C(); unset($o); echo 'ok';"),
             b"ok"
         );
+    }
+
+    // ----- REF-1: `$a = &$b` (bare variables) + `global` -----
+
+    #[test]
+    fn ref_alias_writes_through_to_original() {
+        // Writing through the alias updates the original.
+        assert_eq!(vm_stdout(b"<?php $a = 1; $b = &$a; $b = 2; echo $a;"), b"2");
+    }
+
+    #[test]
+    fn ref_original_writes_visible_through_alias() {
+        // Writing through the original is visible through the alias.
+        assert_eq!(vm_stdout(b"<?php $a = 1; $b = &$a; $a = 5; echo $b;"), b"5");
+    }
+
+    #[test]
+    fn ref_assignment_is_an_expression() {
+        // `$b = &$a` yields the aliased value, usable in a surrounding assignment.
+        assert_eq!(vm_stdout(b"<?php $a = 7; $c = ($b = &$a); echo $c;"), b"7");
+    }
+
+    #[test]
+    fn ref_to_undefined_var_promotes_to_null_cell() {
+        // Aliasing an undefined variable defines a shared NULL cell; a later write
+        // through the alias creates the original (D-12.4 semantics for bare vars).
+        assert_eq!(vm_stdout(b"<?php $b = &$a; $b = 9; echo $a;"), b"9");
+    }
+
+    #[test]
+    fn ref_chain_three_aliases() {
+        // A three-way alias chain all shares one cell.
+        assert_eq!(
+            vm_stdout(b"<?php $a = 1; $b = &$a; $c = &$b; $c = 8; echo $a + $b + $c;"),
+            b"24"
+        );
+    }
+
+    #[test]
+    fn global_reads_and_writes_through_into_global() {
+        assert_eq!(
+            vm_stdout(b"<?php $g = 10; function f() { global $g; $g = $g + 5; } f(); echo $g;"),
+            b"15"
+        );
+    }
+
+    #[test]
+    fn global_creates_undefined_global() {
+        // `global $g` on an undefined global promotes it to a cell; a write through
+        // the alias creates the global, visible at script scope after the call.
+        assert_eq!(
+            vm_stdout(b"<?php function f() { global $g; $g = 42; } f(); echo $g;"),
+            b"42"
+        );
+    }
+
+    #[test]
+    fn global_at_script_scope_is_noop() {
+        // At script scope the named variable *is* the global, so `global` does
+        // nothing and the variable keeps its value.
+        assert_eq!(vm_stdout(b"<?php $x = 3; global $x; echo $x;"), b"3");
     }
 }

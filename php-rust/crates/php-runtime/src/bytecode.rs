@@ -161,6 +161,16 @@ pub enum Op {
     /// `null++ == 1`, …) are delegated to `php_types`.
     IncDecSlot { slot: Slot, inc: bool, pre: bool },
 
+    /// `[] -> [v]` — bind a reference between two bare locations (REF-1):
+    /// `$a = &$b`. Promote `source` to a shared cell (a [`Zval::Ref`], `Undef`
+    /// becoming a defined `Null`), alias `target` to the same `Rc`, and push the
+    /// cell's current value (the assignment *expression* yields the aliased
+    /// value). `global $x;` inside a function reuses this as
+    /// `{target: Local(local), source: Global(global)}` followed by [`Op::Pop`]
+    /// (D-12.2); at script scope `global` is a no-op the compiler omits.
+    /// References into array elements / properties (`$x = &$a[0]`) are REF-4.
+    BindRef { target: DimBase, source: DimBase },
+
     // ----- operators (semantics delegated to php_types::ops / ::convert) -----
     /// `[lhs, rhs] -> [result]` — pop rhs then lhs, push `lhs <op> rhs`.
     Binary(BinOp),
