@@ -240,6 +240,12 @@ impl Vm<'_> {
                         self.frames[top].stack.pop();
                     }
                 }
+                Op::JumpIfNull(addr) => {
+                    // Peek; the value is kept either way (nullsafe `?->`).
+                    if matches!(self.frames[top].stack.last(), Some(Zval::Null | Zval::Undef)) {
+                        self.frames[top].ip = addr as usize;
+                    }
+                }
                 Op::ArrayInit => {
                     self.frames[top].stack.push(Zval::Array(Rc::new(PhpArray::new())));
                 }
@@ -2249,5 +2255,32 @@ mod tests {
     #[test]
     fn private_static_property_from_outside_is_fatal() {
         assert!(vm_outcome(b"<?php class C { private static $s = 1; } echo C::$s;").fatal.is_some());
+    }
+
+    // --- OOP-2c (1/2): nullsafe ?-> ---
+
+    #[test]
+    fn nullsafe_property_on_object_and_null() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $x = 7; } $o = new C(); echo $o?->x; $n = null; echo $n?->x; echo 'end';"),
+            b"7end"
+        );
+    }
+
+    #[test]
+    fn nullsafe_method_on_object_and_null() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function f() { return 'hi'; } } $o = new C(); echo $o?->f(); $n = null; echo $n?->f(); echo 'end';"),
+            b"hiend"
+        );
+    }
+
+    #[test]
+    fn nullsafe_chain_short_circuits() {
+        // $n?->a?->b: an all-nullsafe chain yields null without erroring.
+        assert_eq!(
+            vm_stdout(b"<?php $n = null; echo ($n?->a?->b) === null ? 'null' : 'set';"),
+            b"null"
+        );
     }
 }

@@ -182,6 +182,11 @@ pub enum Op {
     /// behind `??` and `??=`: the left operand is read silently, and the right is
     /// evaluated only when the left is null.
     JumpIfNotNull(Addr),
+    /// `[v] -> [v]` — peek the top value; if it is null/undefined jump to `addr`,
+    /// otherwise fall through. The value is *kept* either way (never popped). The
+    /// primitive behind nullsafe `?->`: a null receiver keeps the null as the
+    /// expression's result and skips the property/method access.
+    JumpIfNull(Addr),
 
     // ----- output -----
     /// `[v] -> []` — pop, stringify (PHP string conversion), and emit to stdout.

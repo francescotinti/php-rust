@@ -854,22 +854,34 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::This);
             }
             ExprKind::PropGet { object, name, nullsafe } => {
-                if *nullsafe {
-                    return Err(CompileError::Unsupported("nullsafe property access (`?->`)".into()));
-                }
                 self.expr(object)?;
-                self.emit(Op::PropGet { name: name.clone() });
+                if *nullsafe {
+                    // `$o?->p`: a null receiver keeps null and skips the read.
+                    let skip = self.emit(Op::JumpIfNull(Addr::MAX));
+                    self.emit(Op::PropGet { name: name.clone() });
+                    let end = self.here();
+                    self.patch(skip, Op::JumpIfNull(end));
+                } else {
+                    self.emit(Op::PropGet { name: name.clone() });
+                }
             }
             ExprKind::MethodCall { object, method, args, named, nullsafe } => {
-                if *nullsafe {
-                    return Err(CompileError::Unsupported("nullsafe method call (`?->`)".into()));
-                }
                 if !named.is_empty() {
                     return Err(CompileError::Unsupported("method call with named arguments".into()));
                 }
                 self.expr(object)?;
-                self.push_value_args(args)?;
-                self.emit(Op::MethodCall { method: method.clone(), argc: args.len() as u32 });
+                if *nullsafe {
+                    // `$o?->m(...)`: a null receiver keeps null and skips the call
+                    // (its arguments are not evaluated either).
+                    let skip = self.emit(Op::JumpIfNull(Addr::MAX));
+                    self.push_value_args(args)?;
+                    self.emit(Op::MethodCall { method: method.clone(), argc: args.len() as u32 });
+                    let end = self.here();
+                    self.patch(skip, Op::JumpIfNull(end));
+                } else {
+                    self.push_value_args(args)?;
+                    self.emit(Op::MethodCall { method: method.clone(), argc: args.len() as u32 });
+                }
             }
             ExprKind::InstanceOf { expr, class } => self.instance_of(expr, class)?,
             ExprKind::StaticCall { class, method, args, named } => {
