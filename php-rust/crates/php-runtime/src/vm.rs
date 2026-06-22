@@ -16,7 +16,7 @@
 //! data and steers control flow.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use php_types::{convert, ops, Diag, Diags, Key, Object, PhpArray, PhpError, PhpStr, Props, Zval};
@@ -47,6 +47,7 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         frames: Vec::new(),
         next_object_id: 1,
         static_props: HashMap::new(),
+        magic_guard: HashSet::new(),
     };
     vm.frames.push(Frame::new(&module.main));
     let fatal = vm.run().err();
@@ -55,6 +56,17 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         diags: vm.diags,
         fatal,
     }
+}
+
+/// Which magic property accessor a dispatch is for (OOP-3b). Doubles as part of
+/// the recursion-guard key so e.g. a `__get` that reads the same property again
+/// falls through to direct access instead of re-entering `__get`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum MagicKind {
+    Get,
+    Set,
+    Isset,
+    Unset,
 }
 
 /// One activation record: the function being run, its instruction pointer, its
@@ -78,10 +90,18 @@ struct Frame<'m> {
     /// For an instance / constructor call it is the receiver's actual class;
     /// forwarding static calls preserve the caller's. `None` outside a method.
     static_class: Option<ClassId>,
-    /// When set, this frame is a static-property *init thunk*: on `Ret` its value
-    /// is written into this shared cell instead of being pushed to the caller (the
-    /// access opcode that scheduled it rewound its `ip` and will re-read the cell).
+    /// When set, this frame's `Ret` value is written into this shared cell instead
+    /// of being pushed to the caller. Used by a static-property init thunk (the
+    /// access opcode rewound its `ip` to re-read the cell) and by `__set`/`__unset`
+    /// (whose return is discarded — a throwaway cell — while the expression's own
+    /// result was pre-pushed).
     ret_cell: Option<Rc<RefCell<Zval>>>,
+    /// When true, this frame's `Ret` value is cast to bool before being pushed to
+    /// the caller — for `__isset`, whose return PHP coerces to bool.
+    ret_bool: bool,
+    /// A magic-accessor recursion-guard key to remove from [`Vm::magic_guard`]
+    /// when this frame returns (OOP-3b).
+    guard_release: Option<(u32, MagicKind, Vec<u8>)>,
     /// Active `foreach` iterators, innermost last. Lives in the frame (not the
     /// operand stack) so it survives across the loop body; freed by `IterPop`,
     /// and discarded wholesale when the frame unwinds (a `return` out of a loop).
@@ -99,6 +119,8 @@ impl<'m> Frame<'m> {
             class: None,
             static_class: None,
             ret_cell: None,
+            ret_bool: false,
+            guard_release: None,
             iters: Vec::new(),
         }
     }
@@ -129,6 +151,9 @@ struct Vm<'m> {
     /// property name); lazily created on first access and shared for the run
     /// (OOP-2b), mirroring the tree-walker's `static_props`.
     static_props: HashMap<(ClassId, Vec<u8>), Rc<RefCell<Zval>>>,
+    /// Active magic-accessor guards (object id, kind, property) — a magic method
+    /// is not re-entered for the same access while it is running (OOP-3b).
+    magic_guard: HashSet<(u32, MagicKind, Vec<u8>)>,
 }
 
 impl Vm<'_> {
@@ -388,15 +413,25 @@ impl Vm<'_> {
                 Op::Ret => {
                     let ret = self.frames[top].stack.pop().unwrap_or(Zval::Null);
                     let ret_cell = self.frames[top].ret_cell.take();
+                    let ret_bool = self.frames[top].ret_bool;
+                    let guard = self.frames[top].guard_release.take();
                     self.frames.pop();
+                    if let Some(key) = guard {
+                        self.magic_guard.remove(&key);
+                    }
                     if let Some(cell) = ret_cell {
-                        // Static-prop init thunk: store the value into its cell; the
-                        // access opcode (ip rewound) re-reads it. Nothing is pushed.
+                        // Init thunk / discarded magic return: store into the cell;
+                        // the caller already has (or re-reads) its own value.
                         *cell.borrow_mut() = ret;
                     } else {
+                        let v = if ret_bool {
+                            Zval::Bool(convert::to_bool(&ret, &mut self.diags))
+                        } else {
+                            ret
+                        };
                         match self.frames.last_mut() {
-                            Some(caller) => caller.stack.push(ret),
-                            None => return Ok(ret),
+                            Some(caller) => caller.stack.push(v),
+                            None => return Ok(v),
                         }
                     }
                 }
@@ -424,19 +459,40 @@ impl Vm<'_> {
                 },
                 Op::PropGet { name } => {
                     let obj = self.frames[top].stack.pop().expect("PropGet object");
-                    if let Some(ocid) = object_class_id(&obj) {
-                        check_prop_access(self.module, self.frames[top].class, ocid, &name)?;
+                    let cur = self.frames[top].class;
+                    let target = obj.deref_clone();
+                    if let Zval::Object(o) = &target {
+                        if let Some((defc, midx, oid)) =
+                            self.magic_applies(o, &name, cur, MagicKind::Get, b"__get")
+                        {
+                            // __get's return *is* the read result (flows via Ret).
+                            self.push_magic_prop(defc, midx, oid, MagicKind::Get, target.clone(), &name, None, None, false);
+                            continue;
+                        }
+                        check_prop_access(self.module, cur, o.borrow().class_id as usize, &name)?;
                     }
-                    let v = read_property(&obj, &name, &mut self.diags);
+                    let v = read_property(&target, &name, &mut self.diags);
                     self.frames[top].stack.push(v);
                 }
                 Op::PropSet { name } => {
                     let value = self.frames[top].stack.pop().expect("PropSet value");
                     let obj = self.frames[top].stack.pop().expect("PropSet object");
-                    if let Some(ocid) = object_class_id(&obj) {
-                        check_prop_access(self.module, self.frames[top].class, ocid, &name)?;
+                    let cur = self.frames[top].class;
+                    let target = obj.deref_clone();
+                    if let Zval::Object(o) = &target {
+                        if let Some((defc, midx, oid)) =
+                            self.magic_applies(o, &name, cur, MagicKind::Set, b"__set")
+                        {
+                            // The expression yields the assigned value; __set's own
+                            // return is discarded into a throwaway cell.
+                            self.frames[top].stack.push(value.clone());
+                            let discard = Rc::new(RefCell::new(Zval::Null));
+                            self.push_magic_prop(defc, midx, oid, MagicKind::Set, target.clone(), &name, Some(value), Some(discard), false);
+                            continue;
+                        }
+                        check_prop_access(self.module, cur, o.borrow().class_id as usize, &name)?;
                     }
-                    write_property(&obj, &name, value.clone())?;
+                    write_property(&target, &name, value.clone())?;
                     self.frames[top].stack.push(value);
                 }
                 Op::PropOpSet { name, op } => {
@@ -467,27 +523,42 @@ impl Vm<'_> {
                 }
                 Op::PropIsset { name } => {
                     let obj = self.frames[top].stack.pop().expect("PropIsset object");
-                    // An inaccessible declared property reads as not-set (silent),
-                    // matching `isset()` semantics; otherwise test the value.
-                    let set = match object_class_id(&obj) {
-                        Some(ocid) => match resolve_prop_decl(self.module, ocid, &name) {
-                            Some((vis, decl))
-                                if !visible_from(self.module, self.frames[top].class, vis, decl) =>
-                            {
-                                false
-                            }
-                            _ => prop_isset(&obj, &name),
-                        },
-                        None => prop_isset(&obj, &name),
+                    let cur = self.frames[top].class;
+                    let target = obj.deref_clone();
+                    let set = if let Zval::Object(o) = &target {
+                        if let Some((defc, midx, oid)) =
+                            self.magic_applies(o, &name, cur, MagicKind::Isset, b"__isset")
+                        {
+                            // __isset's return (coerced to bool via ret_bool) is the
+                            // result.
+                            self.push_magic_prop(defc, midx, oid, MagicKind::Isset, target.clone(), &name, None, None, true);
+                            continue;
+                        }
+                        // No magic: an inaccessible declared property reads as not-set.
+                        match resolve_prop_decl(self.module, o.borrow().class_id as usize, &name) {
+                            Some((vis, decl)) if !visible_from(self.module, cur, vis, decl) => false,
+                            _ => prop_isset(&target, &name),
+                        }
+                    } else {
+                        prop_isset(&target, &name)
                     };
                     self.frames[top].stack.push(Zval::Bool(set));
                 }
                 Op::PropUnset { name } => {
                     let obj = self.frames[top].stack.pop().expect("PropUnset object");
-                    if let Some(ocid) = object_class_id(&obj) {
-                        check_prop_access(self.module, self.frames[top].class, ocid, &name)?;
+                    let cur = self.frames[top].class;
+                    let target = obj.deref_clone();
+                    if let Zval::Object(o) = &target {
+                        if let Some((defc, midx, oid)) =
+                            self.magic_applies(o, &name, cur, MagicKind::Unset, b"__unset")
+                        {
+                            let discard = Rc::new(RefCell::new(Zval::Null));
+                            self.push_magic_prop(defc, midx, oid, MagicKind::Unset, target.clone(), &name, None, Some(discard), false);
+                            continue;
+                        }
+                        check_prop_access(self.module, cur, o.borrow().class_id as usize, &name)?;
                     }
-                    prop_unset(&obj, &name);
+                    prop_unset(&target, &name);
                 }
                 Op::MethodCall { method, argc } => {
                     let module = self.module;
@@ -1038,6 +1109,77 @@ impl Vm<'_> {
         frame.this = this;
         frame.class = Some(defc);
         frame.static_class = Some(static_class);
+        self.frames.push(frame);
+    }
+
+    /// Decide whether a magic property accessor of `kind` should run for `name` on
+    /// `o` instead of direct access (OOP-3b), mirroring the tree-walker's
+    /// `magic_prop_method`: it applies when the property is missing *or* not
+    /// visible from `cur_class`, the class defines the accessor, and no same-key
+    /// guard is active. Returns `(defining class, method index, object id)`.
+    fn magic_applies(
+        &self,
+        o: &Rc<RefCell<Object>>,
+        name: &[u8],
+        cur_class: Option<ClassId>,
+        kind: MagicKind,
+        magic_name: &[u8],
+    ) -> Option<(ClassId, usize, u32)> {
+        let (cid, oid, present, accessible) = {
+            let obj = o.borrow();
+            let cid = obj.class_id as usize;
+            let accessible = match resolve_prop_decl(self.module, cid, name) {
+                Some((vis, dc)) => visible_from(self.module, cur_class, vis, dc),
+                None => true,
+            };
+            (cid, obj.id, obj.props.contains(name), accessible)
+        };
+        if present && accessible {
+            return None;
+        }
+        if self.magic_guard.contains(&(oid, kind, name.to_vec())) {
+            return None;
+        }
+        let (defc, midx) = resolve_method_runtime(self.module, cid, magic_name)?;
+        Some((defc, midx, oid))
+    }
+
+    /// Push a magic property-accessor frame (`__get`/`__set`/`__isset`/`__unset`),
+    /// binding the property name (and, for `__set`, the value) and registering the
+    /// recursion guard (released on the frame's `Ret`). `ret_cell` discards the
+    /// return (`__set`/`__unset`); `ret_bool` coerces it to bool (`__isset`).
+    #[allow(clippy::too_many_arguments)]
+    fn push_magic_prop(
+        &mut self,
+        defc: ClassId,
+        midx: usize,
+        oid: u32,
+        kind: MagicKind,
+        recv: Zval,
+        name: &[u8],
+        extra: Option<Zval>,
+        ret_cell: Option<Rc<RefCell<Zval>>>,
+        ret_bool: bool,
+    ) {
+        let lsb = object_class_id(&recv).unwrap_or(defc);
+        let callee = &self.module.classes[defc].methods[midx].func;
+        let mut frame = Frame::new(callee);
+        if !frame.slots.is_empty() {
+            frame.slots[0] = Zval::Str(PhpStr::new(name.to_vec()));
+        }
+        if let Some(v) = extra {
+            if frame.slots.len() > 1 {
+                frame.slots[1] = v;
+            }
+        }
+        frame.this = Some(recv);
+        frame.class = Some(defc);
+        frame.static_class = Some(lsb);
+        frame.ret_cell = ret_cell;
+        frame.ret_bool = ret_bool;
+        let key = (oid, kind, name.to_vec());
+        self.magic_guard.insert(key.clone());
+        frame.guard_release = Some(key);
         self.frames.push(frame);
     }
 }
@@ -2738,5 +2880,57 @@ mod tests {
     fn undefined_method_without_magic_is_fatal() {
         assert!(vm_outcome(b"<?php class C {} $o = new C(); echo $o->nope();").fatal.is_some());
         assert!(vm_outcome(b"<?php class C {} echo C::nope();").fatal.is_some());
+    }
+
+    // --- OOP-3b: __get / __set / __isset / __unset ---
+
+    #[test]
+    fn magic_get_for_missing_and_inaccessible() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { private $data = 1; function __get($n) { return 'got:' . $n; } } $o = new C(); echo $o->missing, '/', $o->data;"),
+            b"got:missing/got:data"
+        );
+    }
+
+    #[test]
+    fn magic_set_then_get_roundtrip() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $store = []; function __set($n, $v) { $this->store[$n] = $v; } function __get($n) { return $this->store[$n]; } } $o = new C(); $o->x = 5; echo $o->x;"),
+            b"5"
+        );
+    }
+
+    #[test]
+    fn magic_set_expression_yields_assigned_value() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function __set($n, $v) {} } $o = new C(); $r = ($o->x = 42); echo $r;"),
+            b"42"
+        );
+    }
+
+    #[test]
+    fn magic_isset_coerces_to_bool() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { private $h = ['a' => 1]; function __isset($n) { return isset($this->h[$n]); } } $o = new C(); echo isset($o->a) ? 'y' : 'n', isset($o->b) ? 'y' : 'n';"),
+            b"yn"
+        );
+    }
+
+    #[test]
+    fn magic_unset_is_invoked() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $log = ''; function __unset($n) { $this->log = 'unset:' . $n; } } $o = new C(); unset($o->ghost); echo $o->log;"),
+            b"unset:ghost"
+        );
+    }
+
+    #[test]
+    fn magic_get_recursion_is_guarded() {
+        // __get reading the same missing property must not recurse forever: the
+        // guard makes the inner access fall through to a direct (null) read.
+        assert_eq!(
+            vm_stdout(b"<?php class C { function __get($n) { return $this->missing; } } $o = new C(); $x = $o->missing; echo ($x === null) ? 'null' : 'other';"),
+            b"null"
+        );
     }
 }
