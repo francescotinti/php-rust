@@ -521,6 +521,7 @@ impl<'a> FnCompiler<'a> {
             StmtKind::Echo(values) => {
                 for e in values {
                     self.expr(e)?;
+                    self.emit(Op::Stringify); // honour __toString (OOP-3c)
                     self.emit(Op::Echo);
                 }
             }
@@ -745,8 +746,16 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::IncDecSlot { slot: *slot, inc: *inc, pre: *pre });
             }
             ExprKind::Binary(op, a, b) => {
+                // String concatenation stringifies each operand, honouring
+                // `__toString` on object operands (OOP-3c).
                 self.expr(a)?;
+                if *op == BinOp::Concat {
+                    self.emit(Op::Stringify);
+                }
                 self.expr(b)?;
+                if *op == BinOp::Concat {
+                    self.emit(Op::Stringify);
+                }
                 self.emit(Op::Binary(*op));
             }
             ExprKind::Unary(op, a) => {
@@ -756,7 +765,13 @@ impl<'a> FnCompiler<'a> {
             ExprKind::Cast(kind, a) => {
                 use crate::hir::CastKind;
                 match kind {
-                    CastKind::Int | CastKind::String | CastKind::Bool => {
+                    // `(string)` honours `__toString` (OOP-3c). (The exotic
+                    // `(string)NAN` coercion warning is not reproduced here.)
+                    CastKind::String => {
+                        self.expr(a)?;
+                        self.emit(Op::Stringify);
+                    }
+                    CastKind::Int | CastKind::Bool => {
                         self.expr(a)?;
                         self.emit(Op::Cast(*kind));
                     }
@@ -798,6 +813,7 @@ impl<'a> FnCompiler<'a> {
             }
             ExprKind::Print(a) => {
                 self.expr(a)?;
+                self.emit(Op::Stringify); // honour __toString (OOP-3c)
                 self.emit(Op::Print);
             }
             ExprKind::Call { name, args, named } => self.call(name, args, named)?,

@@ -195,6 +195,13 @@ pub enum Op {
     /// `[v] -> [int(1)]` — pop, stringify and emit, then push `int(1)`: `print`
     /// is an expression valued 1.
     Print,
+    /// `[v] -> [string]` — convert the top value to a string honouring
+    /// `__toString` on objects (OOP-3c): an object with `__toString` runs it (the
+    /// stringified return flows back via `Ret`); an object without one is a fatal;
+    /// any other value goes through ordinary PHP string conversion. The compiler
+    /// inserts this at object→string sites (`echo`, `print`, `.` concat,
+    /// `(string)`).
+    Stringify,
 
     // ----- arrays & dimensions -----
     /// `[] -> [array()]` — push a fresh empty array. An array literal compiles to

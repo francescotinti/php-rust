@@ -99,6 +99,9 @@ struct Frame<'m> {
     /// When true, this frame's `Ret` value is cast to bool before being pushed to
     /// the caller — for `__isset`, whose return PHP coerces to bool.
     ret_bool: bool,
+    /// When true, this frame's `Ret` value is converted to a string before being
+    /// pushed — for a `__toString` call scheduled by [`Op::Stringify`].
+    ret_stringify: bool,
     /// A magic-accessor recursion-guard key to remove from [`Vm::magic_guard`]
     /// when this frame returns (OOP-3b).
     guard_release: Option<(u32, MagicKind, Vec<u8>)>,
@@ -120,6 +123,7 @@ impl<'m> Frame<'m> {
             static_class: None,
             ret_cell: None,
             ret_bool: false,
+            ret_stringify: false,
             guard_release: None,
             iters: Vec::new(),
         }
@@ -255,6 +259,40 @@ impl Vm<'_> {
                     let s = convert::to_zstr(&v, &mut self.diags);
                     self.stdout.extend_from_slice(s.as_bytes());
                     self.frames[top].stack.push(Zval::Long(1));
+                }
+                Op::Stringify => {
+                    let v = self.frames[top].stack.pop().expect("Stringify operand");
+                    let target = v.deref_clone();
+                    match &target {
+                        Zval::Object(o) => {
+                            let cid = o.borrow().class_id as usize;
+                            match resolve_method_runtime(self.module, cid, b"__toString") {
+                                // __toString's (stringified) return flows back via Ret.
+                                Some((defc, midx)) => {
+                                    let callee = &self.module.classes[defc].methods[midx].func;
+                                    let mut frame = Frame::new(callee);
+                                    frame.this = Some(target.clone());
+                                    frame.class = Some(defc);
+                                    frame.static_class = Some(cid);
+                                    frame.ret_stringify = true;
+                                    self.frames.push(frame);
+                                }
+                                None => {
+                                    let name = String::from_utf8_lossy(
+                                        o.borrow().class_name.as_bytes(),
+                                    )
+                                    .into_owned();
+                                    return Err(PhpError::Error(format!(
+                                        "Object of class {name} could not be converted to string"
+                                    )));
+                                }
+                            }
+                        }
+                        other => {
+                            let s = convert::to_zstr(other, &mut self.diags);
+                            self.frames[top].stack.push(Zval::Str(s));
+                        }
+                    }
                 }
                 Op::JumpIfNotNull(addr) => {
                     let keep = !matches!(
@@ -414,6 +452,7 @@ impl Vm<'_> {
                     let ret = self.frames[top].stack.pop().unwrap_or(Zval::Null);
                     let ret_cell = self.frames[top].ret_cell.take();
                     let ret_bool = self.frames[top].ret_bool;
+                    let ret_stringify = self.frames[top].ret_stringify;
                     let guard = self.frames[top].guard_release.take();
                     self.frames.pop();
                     if let Some(key) = guard {
@@ -426,6 +465,8 @@ impl Vm<'_> {
                     } else {
                         let v = if ret_bool {
                             Zval::Bool(convert::to_bool(&ret, &mut self.diags))
+                        } else if ret_stringify {
+                            Zval::Str(convert::to_zstr(&ret, &mut self.diags))
                         } else {
                             ret
                         };
@@ -2932,5 +2973,52 @@ mod tests {
             vm_stdout(b"<?php class C { function __get($n) { return $this->missing; } } $o = new C(); $x = $o->missing; echo ($x === null) ? 'null' : 'other';"),
             b"null"
         );
+    }
+
+    // --- OOP-3c: __toString ---
+
+    #[test]
+    fn tostring_on_echo() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function __toString() { return 'hello'; } } $o = new C(); echo $o;"),
+            b"hello"
+        );
+    }
+
+    #[test]
+    fn tostring_in_concatenation() {
+        assert_eq!(
+            vm_stdout(b"<?php class Money { public $amt; function __construct($a) { $this->amt = $a; } function __toString() { return '$' . $this->amt; } } $m = new Money(5); echo 'price: ' . $m;"),
+            b"price: $5"
+        );
+    }
+
+    #[test]
+    fn tostring_in_interpolation() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function __toString() { return 'V'; } } $o = new C(); echo \"val=$o!\";"),
+            b"val=V!"
+        );
+    }
+
+    #[test]
+    fn tostring_on_string_cast() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function __toString() { return 'X'; } } $o = new C(); $s = (string)$o; echo $s;"),
+            b"X"
+        );
+    }
+
+    #[test]
+    fn tostring_via_print() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function __toString() { return 'P'; } } $o = new C(); print $o;"),
+            b"P"
+        );
+    }
+
+    #[test]
+    fn object_without_tostring_is_fatal_on_echo() {
+        assert!(vm_outcome(b"<?php class C {} $o = new C(); echo $o;").fatal.is_some());
     }
 }
