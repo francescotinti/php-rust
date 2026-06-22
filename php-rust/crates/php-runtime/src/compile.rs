@@ -890,15 +890,7 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::FetchDim);
             }
             ExprKind::AssignPlace(place, rhs) => self.assign_place(place, rhs)?,
-            ExprKind::AssignRef { target, source } => {
-                // REF-1: `$a = &$b` between bare variables (and `$GLOBALS['x']`).
-                // `BindRef` promotes `source` to a shared cell and aliases
-                // `target` to it, leaving the aliased value as the expression's
-                // result. Array-element / property references are REF-4.
-                let target = ref_bare_base(target)?;
-                let source = ref_bare_base(source)?;
-                self.emit(Op::BindRef { target, source });
-            }
+            ExprKind::AssignRef { target, source } => self.assign_ref(target, source)?,
             ExprKind::AssignOpPlace(op, place, rhs) => self.assign_op_place(*op, place, rhs)?,
             ExprKind::IncDecPlace { place, inc, pre } => self.incdec_place(place, *inc, *pre)?,
             ExprKind::Isset(places) => self.isset(places)?,
@@ -1512,6 +1504,28 @@ impl<'a> FnCompiler<'a> {
         Ok(())
     }
 
+    /// `$target = &$source`. A step-less pair (REF-1: bare variables /
+    /// `$GLOBALS['x']`) binds via a single [`Op::BindRef`]. Otherwise (REF-4:
+    /// array elements) the source cell is produced with [`Op::MakeRef`] and the
+    /// target bound with [`Op::BindRefTo`], evaluating the target's index
+    /// expressions before the source's — the tree-walker's order. References into
+    /// object properties or an appended slot fall back to the evaluator.
+    fn assign_ref(&mut self, target: &Place, source: &Place) -> R<()> {
+        if target.steps.is_empty() && source.steps.is_empty() {
+            let t = dim_base(target)?;
+            let s = dim_base(source)?;
+            self.emit(Op::BindRef { target: t, source: s });
+            return Ok(());
+        }
+        ref_index_only(target)?;
+        ref_index_only(source)?;
+        let (tbase, tsteps) = self.field_path(target)?; // pushes target keys…
+        let (sbase, ssteps) = self.field_path(source)?; // …then source keys
+        self.emit(Op::MakeRef { base: sbase, steps: ssteps.into() });
+        self.emit(Op::BindRefTo { base: tbase, steps: tsteps.into() });
+        Ok(())
+    }
+
     /// Compile an array-element write `$a[…][k] = rhs` / `$a[…][] = rhs`, rooted
     /// at a local (or `$GLOBALS`) slot, at any nesting depth — or a single-step
     /// object-property write `$o->p = rhs` / `$this->p = rhs` (OOP-1). Mixed
@@ -1672,16 +1686,22 @@ fn dim_base(place: &Place) -> R<DimBase> {
     }
 }
 
-/// The [`DimBase`] of a *bare* (step-less) reference target/source — `$x` or
-/// `$GLOBALS['x']` (REF-1). A binding into an array element or property carries
-/// `steps` and is REF-4 (still `Unsupported`); `$this` cannot be a bare base.
-fn ref_bare_base(place: &Place) -> R<DimBase> {
-    if !place.steps.is_empty() {
-        return Err(CompileError::Unsupported(
-            "reference to array element or property".into(),
-        ));
+/// Ensure a reference target/source addresses only array elements (REF-4): a
+/// reference into an object property or an appended slot is out of slice and
+/// falls back to the tree-walker.
+fn ref_index_only(place: &Place) -> R<()> {
+    for step in &place.steps {
+        match step {
+            PlaceStep::Index(_) => {}
+            PlaceStep::Prop(_) => {
+                return Err(CompileError::Unsupported("reference into an object property".into()))
+            }
+            PlaceStep::Append => {
+                return Err(CompileError::Unsupported("reference to an appended element".into()))
+            }
+        }
     }
-    dim_base(place)
+    Ok(())
 }
 
 /// ASCII-case-insensitive byte-string equality — PHP resolves function names

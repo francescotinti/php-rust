@@ -417,6 +417,41 @@ impl Vm<'_> {
                     let cell = make_cell(&mut self.frames[top].slots[slot as usize]);
                     self.frames[top].stack.push(Zval::Ref(cell));
                 }
+                Op::MakeRef { base, steps } => {
+                    // REF-4: navigate to the place's leaf, promote it to a shared
+                    // cell, and push a reference to it. Keys (for `Index` steps)
+                    // were pushed in source order and sit on top of the stack.
+                    let keys = self.pop_field_keys(top, &steps);
+                    let cell = {
+                        let base_cell = field_base_mut(&mut self.frames, top, base)?;
+                        if steps.is_empty() {
+                            make_cell(base_cell)
+                        } else {
+                            field_cell(base_cell, &steps, &mut keys.into_iter())
+                        }
+                    };
+                    self.frames[top].stack.push(Zval::Ref(cell));
+                }
+                Op::BindRefTo { base, steps } => {
+                    // REF-4: pop the reference, bind the target place to its cell,
+                    // and push the aliased value (the assignment's result).
+                    let top_val = self.frames[top].stack.pop().expect("BindRefTo value");
+                    let cell = match top_val {
+                        Zval::Ref(rc) => rc,
+                        other => Rc::new(RefCell::new(other)),
+                    };
+                    let value = cell.borrow().clone();
+                    let keys = self.pop_field_keys(top, &steps);
+                    if steps.is_empty() {
+                        // A step-less base is rebound directly (not written
+                        // through), matching `eval::bind_ref_target`.
+                        let base_cell = field_base_mut(&mut self.frames, top, base)?;
+                        *base_cell = Zval::Ref(cell);
+                    } else {
+                        self.field_set(base, top, &steps, keys, Zval::Ref(cell))?;
+                    }
+                    self.frames[top].stack.push(value);
+                }
                 Op::IterInit => {
                     let iterable = self.frames[top].stack.pop().expect("IterInit iterable");
                     self.frames[top].iters.push(IterState::ByVal {
@@ -2048,7 +2083,12 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags) -> Result<Zval, 
         Last::Set { key, value } => {
             let k = coerce_key_silent(&key)
                 .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
-            arr.insert(k, value.clone());
+            // Write *through* an existing reference element (REF-4) so an alias
+            // sees the update; otherwise overwrite / insert.
+            match arr.get_mut(&k) {
+                Some(slot) => store_slot(slot, value.clone()),
+                None => arr.insert(k, value.clone()),
+            }
             Ok(value)
         }
         Last::Append { value } => {
@@ -2065,7 +2105,11 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags) -> Result<Zval, 
                 .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
             let old = arr.get(&k).map(|v| v.deref_clone()).unwrap_or(Zval::Null);
             let result = apply_binop(op, &old, &rhs, diags)?;
-            arr.insert(k, result.clone());
+            // Write through an existing reference element (REF-4).
+            match arr.get_mut(&k) {
+                Some(slot) => store_slot(slot, result.clone()),
+                None => arr.insert(k, result.clone()),
+            }
             Ok(result)
         }
         Last::IncDec { key, inc, pre } => {
@@ -2074,14 +2118,27 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags) -> Result<Zval, 
             if !arr.contains_key(&k) {
                 arr.insert(k.clone(), Zval::Null);
             }
-            let cell = arr.get_mut(&k).expect("just inserted");
-            let old = cell.clone();
-            if inc {
-                ops::increment(cell, diags)?;
+            // Operate through a reference element (REF-4) so an alias updates too.
+            let slot = arr.get_mut(&k).expect("just inserted");
+            let cell = if let Zval::Ref(rc) = slot {
+                Rc::clone(rc)
             } else {
-                ops::decrement(cell, diags)?;
+                let old = slot.clone();
+                if inc {
+                    ops::increment(slot, diags)?;
+                } else {
+                    ops::decrement(slot, diags)?;
+                }
+                return Ok(if pre { slot.clone() } else { old });
+            };
+            let mut inner = cell.borrow_mut();
+            let old = inner.clone();
+            if inc {
+                ops::increment(&mut inner, diags)?;
+            } else {
+                ops::decrement(&mut inner, diags)?;
             }
-            Ok(if pre { cell.clone() } else { old })
+            Ok(if pre { inner.clone() } else { old })
         }
     }
 }
@@ -2143,6 +2200,59 @@ fn elem_cell(cell: &mut Zval, key: &Key) -> Rc<RefCell<Zval>> {
         return make_cell(child);
     }
     Rc::new(RefCell::new(Zval::Null))
+}
+
+/// The mutable cell a [`FieldBase`] addresses — the root of a [`Op::MakeRef`] /
+/// [`Op::BindRefTo`] path. Mirrors the base match in `Vm::field_set`, adding the
+/// `$this`-not-in-object error.
+fn field_base_mut<'f>(
+    frames: &'f mut [Frame<'_>],
+    top: usize,
+    base: FieldBase,
+) -> Result<&'f mut Zval, PhpError> {
+    Ok(match base {
+        FieldBase::Local(s) => &mut frames[top].slots[s as usize],
+        FieldBase::Global(s) => &mut frames[0].slots[s as usize],
+        FieldBase::This => frames[top].this.as_mut().ok_or_else(|| {
+            PhpError::Error("Using $this when not in object context".to_string())
+        })?,
+    })
+}
+
+/// Navigate `steps` (only `Index` steps reach references — the compiler rejects
+/// `Prop`/`Append`) from `target`, auto-vivifying missing elements as NULL, and
+/// promote the addressed leaf to a shared `Zval::Ref`, returning its cell
+/// (REF-4). Mirrors `eval::place_cell`: a reference is followed into its cell; a
+/// scalar that cannot be indexed yields a detached cell so the caller does not
+/// crash. `Index` steps consume `keys` in source order.
+fn field_cell(
+    target: &mut Zval,
+    steps: &[FieldStep],
+    keys: &mut std::vec::IntoIter<Zval>,
+) -> Rc<RefCell<Zval>> {
+    let Some((_first, rest)) = steps.split_first() else {
+        return make_cell(target);
+    };
+    if let Zval::Ref(rc) = target {
+        let inner = &mut *rc.borrow_mut();
+        return field_cell(inner, steps, keys);
+    }
+    let key = keys.next().expect("ref index key");
+    let Some(k) = coerce_key_silent(&key) else {
+        return Rc::new(RefCell::new(Zval::Null));
+    };
+    if ensure_array(target).is_err() {
+        return Rc::new(RefCell::new(Zval::Null));
+    }
+    let Zval::Array(rc) = target else {
+        return Rc::new(RefCell::new(Zval::Null));
+    };
+    let arr = Rc::make_mut(rc);
+    if !arr.contains_key(&k) {
+        arr.insert(k.clone(), Zval::Null);
+    }
+    let child = arr.get_mut(&k).expect("key present after insert");
+    field_cell(child, rest, keys)
 }
 
 /// Write `v` into a local cell. A reference slot writes *through* its shared
@@ -3457,6 +3567,69 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php $a = ['x' => 1, 'y' => 2]; foreach ($a as &$v) { $v = $v * 100; } echo $a['x']; echo '-'; echo $a['y'];"),
             b"100-200"
+        );
+    }
+
+    // ----- REF-4: references into array elements -----
+
+    #[test]
+    fn ref_to_array_element_writes_through() {
+        // `$x = &$a[0]`: writing $x updates the array element.
+        assert_eq!(
+            vm_stdout(b"<?php $a = [10, 20]; $x = &$a[0]; $x = 99; echo $a[0]; echo '-'; echo $a[1];"),
+            b"99-20"
+        );
+    }
+
+    #[test]
+    fn ref_to_array_element_visible_from_element() {
+        // The reverse direction: writing the element updates the alias.
+        assert_eq!(
+            vm_stdout(b"<?php $a = [1, 2]; $r = &$a[1]; $a[1] = 50; echo $r;"),
+            b"50"
+        );
+    }
+
+    #[test]
+    fn array_element_aliases_variable() {
+        // `$a[0] = &$x`: the element aliases the (initially undefined) variable.
+        assert_eq!(
+            vm_stdout(b"<?php $a = [1]; $a[0] = &$x; $x = 7; echo $a[0];"),
+            b"7"
+        );
+    }
+
+    #[test]
+    fn ref_between_two_array_elements() {
+        // `$a[0] = &$b[1]`: both sides are stepped places.
+        assert_eq!(
+            vm_stdout(b"<?php $a = [0]; $b = [0, 0]; $a[0] = &$b[1]; $b[1] = 7; echo $a[0];"),
+            b"7"
+        );
+    }
+
+    #[test]
+    fn ref_to_nested_array_element() {
+        assert_eq!(
+            vm_stdout(b"<?php $a = [[1, 2]]; $r = &$a[0][1]; $r = 88; echo $a[0][1];"),
+            b"88"
+        );
+    }
+
+    #[test]
+    fn ref_to_array_element_string_key() {
+        assert_eq!(
+            vm_stdout(b"<?php $a = ['k' => 1]; $r = &$a['k']; $r = 8; echo $a['k'];"),
+            b"8"
+        );
+    }
+
+    #[test]
+    fn ref_to_array_element_autovivifies() {
+        // Referencing a missing element defines it (NULL) then a write creates it.
+        assert_eq!(
+            vm_stdout(b"<?php $a = []; $r = &$a[5]; $r = 'hi'; echo $a[5];"),
+            b"hi"
         );
     }
 }

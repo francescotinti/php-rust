@@ -178,6 +178,23 @@ pub enum Op {
     /// position whose argument is a plain variable.
     PushRef(Slot),
 
+    /// `[keys…] -> [ref]` — REF-4. Navigate a place (a local/global/`$this` base
+    /// plus `Index` steps; the keys are on the stack in source order), promoting
+    /// the addressed location to a shared cell, and push a [`Zval::Ref`] to it.
+    /// With no steps this is the stepped generalisation of [`Op::PushRef`] over a
+    /// `FieldBase`. The reference *source* of `$x = &$a[0]` and the value returned
+    /// by `return $place;` in a `function &f()`.
+    MakeRef { base: FieldBase, steps: Box<[FieldStep]> },
+    /// `[keys…, ref] -> [v]` — REF-4. Pop a reference value, then bind the place
+    /// (base + `Index` steps, keys beneath the ref in source order) to its shared
+    /// cell: a step-less base is overwritten directly, a stepped leaf is written
+    /// like a normal element assignment (so an existing reference element is
+    /// written *through*, mirroring the tree-walker's `bind_ref_target`). A
+    /// non-reference top-of-stack is wrapped in a fresh cell (the `$y = &f()`
+    /// path where `f` is not by-reference). Pushes the aliased value as the
+    /// assignment expression's result.
+    BindRefTo { base: FieldBase, steps: Box<[FieldStep]> },
+
     // ----- operators (semantics delegated to php_types::ops / ::convert) -----
     /// `[lhs, rhs] -> [result]` — pop rhs then lhs, push `lhs <op> rhs`.
     Binary(BinOp),
