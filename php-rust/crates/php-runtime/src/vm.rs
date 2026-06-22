@@ -461,7 +461,13 @@ impl<'m> Vm<'m> {
                 }
                 Op::Cast(k) => {
                     let a = self.frames[top].stack.pop().expect("Cast operand");
-                    let r = apply_cast(k, &a, &mut self.diags);
+                    // `(object)` needs the object table (stdClass alloc); the rest
+                    // are pure value conversions.
+                    let r = if matches!(k, CastKind::Object) {
+                        self.object_cast(a)?
+                    } else {
+                        apply_cast(k, &a, &mut self.diags)
+                    };
                     self.frames[top].stack.push(r);
                 }
                 Op::Jump(addr) => {
@@ -2181,6 +2187,49 @@ impl<'m> Vm<'m> {
             }
         }
         Ok(())
+    }
+
+    /// `(object)` cast (PAR): an object passes through; an array becomes a
+    /// stdClass with one property per element (int keys stringified); null/unset
+    /// is an empty stdClass; a scalar becomes `stdClass { scalar: v }`. Mirrors
+    /// `eval::object_cast`.
+    fn object_cast(&mut self, v: Zval) -> Result<Zval, PhpError> {
+        match v.deref_clone() {
+            obj @ Zval::Object(_) => Ok(obj),
+            Zval::Array(a) => {
+                let obj = self.alloc_stdclass()?;
+                if let Zval::Object(o) = &obj {
+                    let mut b = o.borrow_mut();
+                    for (k, val) in a.iter() {
+                        let name = match k {
+                            Key::Int(i) => i.to_string().into_bytes(),
+                            Key::Str(s) => s.as_bytes().to_vec(),
+                        };
+                        b.props.set(&name, val.deref_clone());
+                    }
+                }
+                Ok(obj)
+            }
+            Zval::Null | Zval::Undef => self.alloc_stdclass(),
+            scalar => {
+                let obj = self.alloc_stdclass()?;
+                if let Zval::Object(o) = &obj {
+                    o.borrow_mut().props.set(b"scalar", scalar);
+                }
+                Ok(obj)
+            }
+        }
+    }
+
+    /// Allocate a fresh empty `stdClass` instance (PAR), for `(object)` casts.
+    fn alloc_stdclass(&mut self) -> Result<Zval, PhpError> {
+        let cid = self
+            .module
+            .class_index
+            .get(&b"stdclass"[..])
+            .copied()
+            .ok_or_else(|| PhpError::Error("VM: stdClass is not available".to_string()))?;
+        self.alloc_object(cid)
     }
 
     /// Resolve a runtime class-reference value to its class id (PAR, dynamic
@@ -5970,6 +6019,35 @@ mod tests {
     #[test]
     fn array_cast_array_passes_through() {
         assert_eq!(vm_stdout(b"<?php $a=(array)[1,2,3]; echo $a[0],$a[2];"), b"13");
+    }
+
+    #[test]
+    fn object_cast_scalar() {
+        assert_eq!(vm_stdout(b"<?php $o=(object)5; echo $o->scalar;"), b"5");
+    }
+
+    #[test]
+    fn object_cast_assoc_array() {
+        assert_eq!(
+            vm_stdout(b"<?php $o=(object)['a'=>1,'b'=>2]; echo $o->a, $o->b;"),
+            b"12"
+        );
+    }
+
+    #[test]
+    fn object_cast_object_passes_through() {
+        assert_eq!(
+            vm_stdout(b"<?php class C{public $v=7;} $c=new C; $o=(object)$c; echo $o->v;"),
+            b"7"
+        );
+    }
+
+    #[test]
+    fn object_cast_null_is_empty_stdclass() {
+        assert_eq!(
+            vm_stdout(b"<?php $o=(object)null; echo ($o instanceof stdClass)?'Y':'N';"),
+            b"Y"
+        );
     }
 }
 

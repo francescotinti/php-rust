@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–61 completati · 1.238 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–61 completati · 1.242 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 **Migrazione VM (Fase 4, in corso).** In parallelo all'evaluator tree-walk — che resta il motore
 di produzione e tiene il differential a 0 mismatch — è in costruzione una **VM a bytecode**
@@ -79,11 +79,11 @@ oppure un oggetto riusa la sua classe; classe ignota → `Error` catchabile) e `
 classe risolta a runtime e dispatch non-forwarding via l'helper condiviso `dispatch_static_call`,
 con default/variadici/`__callStatic`/ereditarietà) e `$cls::CONST` / `$cls::class`
 (`ClassConstFromValue`: costante risolta a runtime con ereditarietà; `$obj::class` → nome classe,
-`$str::class` → `TypeError` come PHP 8). La **famiglia classi-dinamiche è completa**. Inoltre i cast **`(float)`** e **`(array)`**
-(`apply_cast`: float via `to_double`, array passthrough/null-vuoto/scalare-incapsulato come
-`eval::array_cast`). Restano da portare alla VM: argomenti con nome, spread/unpacking,
-`ArgumentCountError`, `$cls::$prop`, cast `(object)`, e altri edge — vedi i siti
-`CompileError::Unsupported` in `compile.rs`.
+`$str::class` → `TypeError` come PHP 8). La **famiglia classi-dinamiche è completa**. Inoltre **tutti i cast** sono ora supportati — `(float)`/`(array)` (`apply_cast`) e `(object)`
+(`object_cast`: array→stdClass con una property per elemento, scalare→`{scalar:v}`, null→stdClass
+vuoto, oggetto passthrough; mirror di `eval::object_cast`). Restano da portare alla VM: argomenti con
+nome, spread/unpacking, `ArgumentCountError`, `$cls::$prop`, accesso a property dinamica `$o->{expr}`,
+e altri edge — vedi i siti `CompileError::Unsupported` in `compile.rs`.
 
 Step 61 ha completato i suggerimenti della code-review esterna: (E) **diff unificato** nel
 `phpt-runner` (`--list-fails` mostra un line-diff EXPECTF-aware invece di due blob troncati); (B)
