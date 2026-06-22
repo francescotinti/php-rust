@@ -19,6 +19,7 @@ use std::rc::Rc;
 
 use php_types::{convert, ops, Diags, Key, PhpArray, PhpError, PhpStr, Zval};
 
+use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
 use crate::bytecode::{DimBase, Func, Module, Op};
 use crate::hir::{BinOp, CastKind, UnOp};
 
@@ -33,9 +34,10 @@ pub struct VmOutcome {
 
 /// Compile-and-run is the caller's job ([`crate::compile`]); this takes the
 /// already-compiled module and executes its `main`.
-pub fn run_module(module: &Module) -> VmOutcome {
+pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
     let mut vm = Vm {
         module,
+        registry,
         stdout: Vec::new(),
         diags: Diags::new(),
         frames: Vec::new(),
@@ -88,6 +90,9 @@ struct IterState {
 /// recursion cannot overflow the host stack, and a frame is suspendable.
 struct Vm<'m> {
     module: &'m Module,
+    /// Builtin registry, injected by the caller (php-runtime can't build a
+    /// populated one — that lives in php-builtins, which depends on php-runtime).
+    registry: &'m Registry,
     stdout: Vec<u8>,
     diags: Diags,
     frames: Vec<Frame<'m>>,
@@ -312,6 +317,28 @@ impl Vm<'_> {
                     }
                     self.frames.push(frame);
                 }
+                Op::CallBuiltin { name, argc } => {
+                    let f = match self.registry.get(&name[..]) {
+                        Some(Builtin::Value(f)) => *f,
+                        // The compiler only emits CallBuiltin for value builtins.
+                        _ => return Err(undefined_builtin(&name)),
+                    };
+                    let args = self.pop_keys(top, argc); // pops argc, source order
+                    let result = {
+                        let mut ctx = Ctx { out: &mut self.stdout, diags: &mut self.diags };
+                        f(&args, &mut ctx)?
+                    };
+                    self.frames[top].stack.push(result);
+                }
+                Op::CallBuiltinRef { name, slot, argc } => {
+                    let f = match self.registry.get(&name[..]) {
+                        Some(Builtin::RefFirst(f)) => *f,
+                        _ => return Err(undefined_builtin(&name)),
+                    };
+                    let rest = self.pop_keys(top, argc);
+                    let result = builtin_ref_call(f, &mut self.frames[top].slots[slot as usize], &rest, &mut self.stdout, &mut self.diags)?;
+                    self.frames[top].stack.push(result);
+                }
                 Op::Ret => {
                     let ret = self.frames[top].stack.pop().unwrap_or(Zval::Null);
                     self.frames.pop();
@@ -441,6 +468,33 @@ fn unset_into(cell: &mut Zval, keys: &[Zval]) {
             }
         }
     }
+}
+
+/// Invoke a by-reference-first builtin, handing it `&mut Zval` for the slot cell
+/// (following a `Zval::Ref` so the write lands in the shared target).
+fn builtin_ref_call(
+    f: BuiltinRefFn,
+    cell: &mut Zval,
+    rest: &[Zval],
+    out: &mut Vec<u8>,
+    diags: &mut Diags,
+) -> Result<Zval, PhpError> {
+    let mut ctx = Ctx { out, diags };
+    if let Zval::Ref(rc) = cell {
+        let mut guard = rc.borrow_mut();
+        f(&mut guard, rest, &mut ctx)
+    } else {
+        f(cell, rest, &mut ctx)
+    }
+}
+
+/// The fatal a call raises when a name isn't a callable VM builtin (defensive:
+/// the compiler already filters these, so this is a safety net).
+fn undefined_builtin(name: &[u8]) -> PhpError {
+    PhpError::Error(format!(
+        "Call to undefined function {}()",
+        String::from_utf8_lossy(name)
+    ))
 }
 
 /// Read a local cell's value, following a reference and mapping an unset slot to
@@ -663,18 +717,67 @@ fn apply_cast(kind: CastKind, a: &Zval, d: &mut Diags) -> Zval {
 
 #[cfg(test)]
 mod tests {
+    use crate::builtin::{Builtin, Ctx, Registry};
     use crate::compile::compile_program;
     use crate::lower::lower_source;
+    use php_types::{Diag, PhpError, Zval};
 
     use super::run_module;
 
-    /// Compile and run a PHP snippet through the bytecode VM, returning stdout.
+    /// Compile and run a PHP snippet through the bytecode VM (no builtins),
+    /// returning stdout. The bulk of the suite is builtin-free control flow.
     fn vm_stdout(src: &[u8]) -> Vec<u8> {
+        vm_run(src, &Registry::new()).stdout
+    }
+
+    /// Compile and run with a given registry, asserting no fatal; full outcome.
+    fn vm_run(src: &[u8], reg: &Registry) -> super::VmOutcome {
         let program = lower_source(b"test.php", src).expect("lower");
-        let module = compile_program(&program).expect("compile");
-        let out = run_module(&module);
+        let module = compile_program(&program, reg).expect("compile");
+        let out = run_module(&module, reg);
         assert!(out.fatal.is_none(), "unexpected fatal: {:?}", out.fatal);
-        out.stdout
+        out
+    }
+
+    // --- fake builtins, to exercise the VM's dispatch mechanism without the
+    // real php-builtins crate (which would be a dependency cycle here) ---
+
+    /// `t_double($n)` -> int(n*2). A pure value builtin.
+    fn t_double(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+        let n = match args.first() {
+            Some(Zval::Long(n)) => *n,
+            _ => 0,
+        };
+        Ok(Zval::Long(n * 2))
+    }
+
+    /// `t_emit($s)` -> writes its string arg to stdout, returns null.
+    fn t_emit(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+        if let Some(Zval::Str(s)) = args.first() {
+            ctx.out.extend_from_slice(s.as_bytes());
+        }
+        Ok(Zval::Null)
+    }
+
+    /// `t_warn()` -> pushes a warning diagnostic, returns null.
+    fn t_warn(_args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+        ctx.diags.push(Diag::Warning("from builtin".to_string()));
+        Ok(Zval::Null)
+    }
+
+    /// `t_set42(&$x)` -> writes int(42) through the by-ref first arg, returns true.
+    fn t_set42(target: &mut Zval, _rest: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+        *target = Zval::Long(42);
+        Ok(Zval::Bool(true))
+    }
+
+    fn fake_registry() -> Registry {
+        let mut r = Registry::new();
+        r.insert(b"t_double".to_vec(), Builtin::Value(t_double));
+        r.insert(b"t_emit".to_vec(), Builtin::Value(t_emit));
+        r.insert(b"t_warn".to_vec(), Builtin::Value(t_warn));
+        r.insert(b"t_set42".to_vec(), Builtin::RefFirst(t_set42));
+        r
     }
 
     #[test]
@@ -971,5 +1074,56 @@ mod tests {
             vm_stdout(b"<?php $a = 1; $b = 2; unset($a, $b); echo isset($a) ? '1' : '0', isset($b) ? '1' : '0';"),
             b"00"
         );
+    }
+
+    // --- builtin dispatch mechanism (with fake builtins) ---
+
+    #[test]
+    fn value_builtin_returns_a_value() {
+        let out = vm_run(b"<?php echo t_double(21);", &fake_registry());
+        assert_eq!(out.stdout, b"42");
+    }
+
+    #[test]
+    fn value_builtin_writes_to_stdout() {
+        let out = vm_run(b"<?php t_emit('hi'); t_emit('!');", &fake_registry());
+        assert_eq!(out.stdout, b"hi!");
+    }
+
+    #[test]
+    fn value_builtin_in_expression() {
+        let out = vm_run(b"<?php echo t_double(t_double(3)) + 1;", &fake_registry());
+        assert_eq!(out.stdout, b"13");
+    }
+
+    #[test]
+    fn builtin_diagnostics_propagate() {
+        let out = vm_run(b"<?php t_warn();", &fake_registry());
+        assert_eq!(out.diags.len(), 1);
+    }
+
+    #[test]
+    fn ref_builtin_writes_through_to_the_variable() {
+        let out = vm_run(b"<?php $x = 1; t_set42($x); echo $x;", &fake_registry());
+        assert_eq!(out.stdout, b"42");
+    }
+
+    #[test]
+    fn user_function_shadows_a_builtin() {
+        // A user t_double wins over the registry's t_double.
+        let out = vm_run(
+            b"<?php function t_double($n) { return $n + 100; } echo t_double(5);",
+            &fake_registry(),
+        );
+        assert_eq!(out.stdout, b"105");
+    }
+
+    #[test]
+    fn unknown_function_is_unsupported_at_compile_time() {
+        // Not a user function and not in the registry -> the module won't compile
+        // for the VM (so the harness can fall back to the tree-walker).
+        let program = lower_source(b"test.php", b"<?php echo no_such_fn();").expect("lower");
+        let reg = fake_registry();
+        assert!(compile_program(&program, &reg).is_err());
     }
 }

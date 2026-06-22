@@ -19,6 +19,7 @@
 //! Calls, arrays, references, OOP and generators are deliberately out of slice;
 //! `Module::functions` / `closures` are left empty until the call opcode lands.
 
+use crate::builtin::{Builtin, Registry};
 use crate::bytecode::{Addr, Const, ConstIdx, DimBase, Func, Module, Op};
 use crate::hir::{Expr, ExprKind, FnDecl, Place, PlaceBase, PlaceStep, Program, Stmt, StmtKind};
 
@@ -44,7 +45,7 @@ type R<T> = Result<T, CompileError>;
 /// The user-function table is compiled in the same index space as
 /// [`Program::functions`], so a call resolved to `functions[i]` maps to the same
 /// index here. Closures are still out of slice.
-pub fn compile_program(program: &Program) -> R<Module> {
+pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
     let funcs = &program.functions;
     let mut functions = Vec::with_capacity(funcs.len());
     for fd in funcs {
@@ -53,12 +54,12 @@ pub fn compile_program(program: &Program) -> R<Module> {
         // failure becomes a stub that fatals only if the function is called —
         // rather than making every script uncompilable. `main`, below, is not
         // tolerant: if the script body itself is unsupported, the VM can't run it.
-        match compile_fndecl(fd, funcs) {
+        match compile_fndecl(fd, funcs, registry) {
             Ok(f) => functions.push(f),
             Err(e) => functions.push(stub_func(fd, &e)),
         }
     }
-    let main = compile_body(b"", &program.body, program.slots.len() as u32, 0, false, false, funcs)?;
+    let main = compile_body(b"", &program.body, program.slots.len() as u32, 0, false, false, funcs, registry)?;
     Ok(Module {
         main,
         functions,
@@ -70,7 +71,7 @@ pub fn compile_program(program: &Program) -> R<Module> {
 /// Compile a user [`FnDecl`] into a [`Func`], resolving calls in its body
 /// against `funcs` (the whole program's function table, for forward references
 /// and recursion).
-fn compile_fndecl(fd: &FnDecl, funcs: &[FnDecl]) -> R<Func> {
+fn compile_fndecl(fd: &FnDecl, funcs: &[FnDecl], registry: &Registry) -> R<Func> {
     compile_body(
         &fd.name,
         &fd.body,
@@ -79,10 +80,12 @@ fn compile_fndecl(fd: &FnDecl, funcs: &[FnDecl]) -> R<Func> {
         fd.by_ref,
         fd.is_generator,
         funcs,
+        registry,
     )
 }
 
 /// Compile one body (the script's or a function's) into a [`Func`].
+#[allow(clippy::too_many_arguments)]
 fn compile_body(
     name: &[u8],
     body: &[Stmt],
@@ -91,8 +94,9 @@ fn compile_body(
     by_ref: bool,
     is_generator: bool,
     funcs: &[FnDecl],
+    registry: &Registry,
 ) -> R<Func> {
-    let mut c = FnCompiler::new(funcs);
+    let mut c = FnCompiler::new(funcs, registry);
     c.block(body)?;
     // A body that runs off the end returns NULL (PHP's implicit return).
     let null = c.konst(Const::Null);
@@ -139,6 +143,9 @@ struct FnCompiler<'a> {
     consts: Vec<Const>,
     loops: Vec<LoopCtx>,
     funcs: &'a [FnDecl],
+    /// The builtin registry, consulted at compile time only to classify a call
+    /// name (value builtin / by-ref builtin / not-a-VM-builtin) — never executed.
+    registry: &'a Registry,
 }
 
 /// One enclosing loop's unresolved jump sites. `break` jumps land at the loop
@@ -154,12 +161,13 @@ struct LoopCtx {
 }
 
 impl<'a> FnCompiler<'a> {
-    fn new(funcs: &'a [FnDecl]) -> Self {
+    fn new(funcs: &'a [FnDecl], registry: &'a Registry) -> Self {
         FnCompiler {
             ops: Vec::new(),
             consts: Vec::new(),
             loops: Vec::new(),
             funcs,
+            registry,
         }
     }
 
@@ -560,48 +568,82 @@ impl<'a> FnCompiler<'a> {
         Ok(())
     }
 
-    /// Compile a named function call `name(args...)`. Proof-slice scope: a call
-    /// to a *user-defined* function (resolved against [`Self::funcs`]
-    /// ASCII-case-insensitively) with exactly its declared number of positional
-    /// arguments and no by-ref / variadic parameters. Builtins, named/spread
-    /// arguments, and arity mismatches (default-filled calls) are deferred.
+    /// Compile a named function call `name(args...)`.
+    ///
+    /// Resolution mirrors the evaluator: a *user* function (matched
+    /// ASCII-case-insensitively) shadows builtins; otherwise the name is looked
+    /// up in the registry — a by-value builtin emits [`Op::CallBuiltin`], a
+    /// by-reference-first builtin (`sort`, …) emits [`Op::CallBuiltinRef`]. A name
+    /// absent from the registry (higher-order / class-introspection /
+    /// `define`-family / undefined) is out of slice, so the script falls back to
+    /// the tree-walker. Named/spread arguments and user by-ref/variadic params are
+    /// likewise deferred.
     fn call(&mut self, name: &[u8], args: &[Expr], named: &[(Box<[u8]>, Expr)]) -> R<()> {
         if !named.is_empty() {
             return Err(CompileError::Unsupported("call with named arguments".into()));
         }
-        let idx = self
-            .funcs
-            .iter()
-            .position(|f| ascii_eq_ignore_case(&f.name, name));
-        let idx = match idx {
-            Some(i) => i,
-            None => {
-                return Err(CompileError::Unsupported(format!(
-                    "call to `{}` (builtin / undefined function not yet in VM)",
-                    String::from_utf8_lossy(name)
-                )))
+        // User functions shadow builtins.
+        if let Some(idx) = self.funcs.iter().position(|f| ascii_eq_ignore_case(&f.name, name)) {
+            let callee = &self.funcs[idx];
+            if callee.params.iter().any(|p| p.by_ref || p.variadic) {
+                return Err(CompileError::Unsupported(
+                    "call to a function with by-ref / variadic parameters".into(),
+                ));
             }
-        };
-        let callee = &self.funcs[idx];
-        if callee.params.iter().any(|p| p.by_ref || p.variadic) {
-            return Err(CompileError::Unsupported(
-                "call to a function with by-ref / variadic parameters".into(),
-            ));
+            if args.len() != callee.params.len() {
+                return Err(CompileError::Unsupported(format!(
+                    "call arity {} != {} declared params (default-filled calls not yet handled)",
+                    args.len(),
+                    callee.params.len()
+                )));
+            }
+            self.push_value_args(args)?;
+            self.emit(Op::Call { func: idx as u32, argc: args.len() as u32 });
+            return Ok(());
         }
-        if args.len() != callee.params.len() {
-            return Err(CompileError::Unsupported(format!(
-                "call arity {} != {} declared params (default-filled calls not yet handled)",
-                args.len(),
-                callee.params.len()
-            )));
+        // Builtins: classify by-value vs by-reference-first via the registry.
+        match self.registry.get(name) {
+            Some(Builtin::Value(_)) => {
+                self.push_value_args(args)?;
+                self.emit(Op::CallBuiltin { name: name.into(), argc: args.len() as u32 });
+                Ok(())
+            }
+            Some(Builtin::RefFirst(_)) => self.call_ref_builtin(name, args),
+            None => Err(CompileError::Unsupported(format!(
+                "call to `{}` (undefined, or an evaluator-only builtin: higher-order / class-introspection / define-family)",
+                String::from_utf8_lossy(name)
+            ))),
         }
+    }
+
+    /// Push each positional argument's value (source order); reject spreads.
+    fn push_value_args(&mut self, args: &[Expr]) -> R<()> {
         for a in args {
             if matches!(a.kind, ExprKind::Spread(_)) {
                 return Err(CompileError::Unsupported("argument unpacking (spread)".into()));
             }
             self.expr(a)?;
         }
-        self.emit(Op::Call { func: idx as u32, argc: args.len() as u32 });
+        Ok(())
+    }
+
+    /// Emit a by-reference-first builtin call (`sort`, `array_push`, …). As the
+    /// evaluator requires, the first argument must be a plain variable: it is
+    /// passed by reference via its slot, the rest by value.
+    fn call_ref_builtin(&mut self, name: &[u8], args: &[Expr]) -> R<()> {
+        let Some((first, rest)) = args.split_first() else {
+            return Err(CompileError::Unsupported(
+                "by-reference builtin called with no arguments".into(),
+            ));
+        };
+        let ExprKind::Var(slot) = &first.kind else {
+            return Err(CompileError::Unsupported(
+                "by-reference builtin whose first argument is not a plain variable".into(),
+            ));
+        };
+        let slot = *slot;
+        self.push_value_args(rest)?;
+        self.emit(Op::CallBuiltinRef { name: name.into(), slot, argc: rest.len() as u32 });
         Ok(())
     }
 

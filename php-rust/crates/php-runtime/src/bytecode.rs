@@ -240,6 +240,18 @@ pub enum Op {
     /// callee runs in its own pushed [`crate::vm`] frame, so this is *not* a Rust
     /// recursion — PHP recursion grows the explicit frame stack instead.
     Call { func: u32, argc: u32 },
+    /// `[arg0, …, arg{argc-1}] -> [result]` — call the by-value builtin named
+    /// `name` (resolved in the [`crate::builtin::Registry`] at run time, as the
+    /// tree-walker does). Arguments are popped into a `&[Zval]`; the builtin runs
+    /// against a `Ctx { out, diags }` borrowed from the VM. Builtins that need the
+    /// evaluator (higher-order, class-introspection, `define`/`defined`/`constant`)
+    /// are *not* emitted — the compiler rejects them so the VM never sees them.
+    CallBuiltin { name: Box<[u8]>, argc: u32 },
+    /// `[rest0, …, rest{argc-1}] -> [result]` — call a by-reference-first builtin
+    /// (`sort`, `array_push`, …): its first argument is the variable in `slot`,
+    /// handed to the builtin as `&mut Zval` (write-through), and `argc` is the
+    /// count of the remaining by-value arguments on the stack.
+    CallBuiltinRef { name: Box<[u8]>, slot: Slot, argc: u32 },
     /// `[v] -> ` (frame ends) — pop the return value and unwind the current
     /// frame to the caller, which receives it on *its* operand stack. A function
     /// body with no explicit `return` ends with `PushConst(null); Ret`.
