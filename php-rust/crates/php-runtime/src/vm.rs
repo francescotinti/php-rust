@@ -1210,7 +1210,6 @@ impl<'m> Vm<'m> {
                     prop_unset(&target, &name);
                 }
                 Op::MethodCall { method, argc } => {
-                    let module = self.module;
                     let args = self.pop_keys(top, argc); // source order
                     let recv = self.frames[top].stack.pop().expect("MethodCall receiver");
                     let this = recv.deref_clone();
@@ -1243,41 +1242,7 @@ impl<'m> Vm<'m> {
                             )))
                         }
                     };
-                    let resolved = resolve_method_runtime(module, cid, &method);
-                    // Usable only if found *and* visible from the caller's scope.
-                    let usable = resolved.filter(|&(defc, midx)| {
-                        visible_from(module, self.frames[top].class, module.classes[defc].methods[midx].visibility, defc)
-                    });
-                    match usable {
-                        Some((defc, midx)) => {
-                            let callee = &module.classes[defc].methods[midx].func;
-                            let mut frame = Frame::new(callee);
-                            bind_params(&mut frame, args);
-                            frame.this = Some(this);
-                            frame.class = Some(defc);
-                            frame.static_class = Some(cid); // LSB = receiver's actual class
-                            self.enter_callee(frame);
-                        }
-                        // Missing or inaccessible: route to `__call` if defined,
-                        // else the original fatal (visibility / undefined method).
-                        None => match resolve_method_runtime(module, cid, b"__call") {
-                            Some((cdefc, cmidx)) => {
-                                self.push_magic_call(cdefc, cmidx, Some(this), cid, &method, args);
-                            }
-                            None => {
-                                return Err(match resolved {
-                                    Some((defc, midx)) => method_access_error(
-                                        module,
-                                        defc,
-                                        &method,
-                                        self.frames[top].class,
-                                        module.classes[defc].methods[midx].visibility,
-                                    ),
-                                    None => undefined_method(module, cid, &method),
-                                })
-                            }
-                        },
-                    }
+                    self.dispatch_instance_call(top, cid, this, &method, args)?;
                 }
                 Op::InvokeMethod { class, method_idx, argc } => {
                     let module = self.module;
@@ -2058,6 +2023,57 @@ impl<'m> Vm<'m> {
                 String::from_utf8_lossy(other)
             ))),
         }
+    }
+
+    /// Dispatch an instance method call `obj->method(args)` where the receiver's
+    /// class `cid` and bound `$this` are already resolved (OOP). A missing or
+    /// inaccessible target routes to `__call`, otherwise raises the visibility /
+    /// undefined-method error. Shared by `Op::MethodCall`.
+    fn dispatch_instance_call(
+        &mut self,
+        top: usize,
+        cid: ClassId,
+        this: Zval,
+        method: &[u8],
+        args: Vec<Zval>,
+    ) -> Result<(), PhpError> {
+        let module = self.module;
+        let resolved = resolve_method_runtime(module, cid, method);
+        // Usable only if found *and* visible from the caller's scope.
+        let usable = resolved.filter(|&(defc, midx)| {
+            visible_from(module, self.frames[top].class, module.classes[defc].methods[midx].visibility, defc)
+        });
+        match usable {
+            Some((defc, midx)) => {
+                let callee = &module.classes[defc].methods[midx].func;
+                let mut frame = Frame::new(callee);
+                bind_params(&mut frame, args);
+                frame.this = Some(this);
+                frame.class = Some(defc);
+                frame.static_class = Some(cid); // LSB = receiver's actual class
+                self.enter_callee(frame);
+            }
+            // Missing or inaccessible: route to `__call` if defined, else the
+            // original fatal (visibility / undefined method).
+            None => match resolve_method_runtime(module, cid, b"__call") {
+                Some((cdefc, cmidx)) => {
+                    self.push_magic_call(cdefc, cmidx, Some(this), cid, method, args);
+                }
+                None => {
+                    return Err(match resolved {
+                        Some((defc, midx)) => method_access_error(
+                            module,
+                            defc,
+                            method,
+                            self.frames[top].class,
+                            module.classes[defc].methods[midx].visibility,
+                        ),
+                        None => undefined_method(module, cid, method),
+                    })
+                }
+            },
+        }
+        Ok(())
     }
 
     /// Dispatch a static method call `start::method(args)` whose starting class
