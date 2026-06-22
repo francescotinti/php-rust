@@ -417,6 +417,13 @@ impl Vm<'_> {
                     let cell = make_cell(&mut self.frames[top].slots[slot as usize]);
                     self.frames[top].stack.push(Zval::Ref(cell));
                 }
+                Op::DerefTop => {
+                    // REF-4b: copy a by-ref return used in value context.
+                    if let Some(Zval::Ref(_)) = self.frames[top].stack.last() {
+                        let v = self.frames[top].stack.pop().unwrap().deref_clone();
+                        self.frames[top].stack.push(v);
+                    }
+                }
                 Op::MakeRef { base, steps } => {
                     // REF-4: navigate to the place's leaf, promote it to a shared
                     // cell, and push a reference to it. Keys (for `Index` steps)
@@ -3630,6 +3637,47 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php $a = []; $r = &$a[5]; $r = 'hi'; echo $a[5];"),
             b"hi"
+        );
+    }
+
+    // ----- REF-4b: by-reference return (`function &f()`) + `$y = &f()` -----
+
+    #[test]
+    fn return_ref_of_by_ref_param_aliases() {
+        // `function &id(&$x) { return $x; }` returns a reference to its by-ref
+        // param; `$r = &id($a)` aliases the caller's variable.
+        assert_eq!(
+            vm_stdout(b"<?php function &id(&$x) { return $x; } $a = 5; $r = &id($a); $r = 10; echo $a;"),
+            b"10"
+        );
+    }
+
+    #[test]
+    fn return_ref_of_array_element_aliases() {
+        // Returning a reference to a by-ref param's array element; writing the
+        // alias updates the caller's array.
+        assert_eq!(
+            vm_stdout(b"<?php function &elem(&$arr, $k) { return $arr[$k]; } $a = [1, 2, 3]; $r = &elem($a, 1); $r = 99; echo $a[0]; echo $a[1]; echo $a[2];"),
+            b"1993"
+        );
+    }
+
+    #[test]
+    fn ref_return_in_value_context_copies() {
+        // `$y = f()` (no `&`) copies the by-ref return — `DerefTop` — so a later
+        // write to $y does not touch the source.
+        assert_eq!(
+            vm_stdout(b"<?php function &f() { global $g; return $g; } $g = 5; $y = f(); $y = 100; echo $g;"),
+            b"5"
+        );
+    }
+
+    #[test]
+    fn ref_return_via_global_aliases() {
+        // `$y = &f()` over a by-ref return of a global aliases the global cell.
+        assert_eq!(
+            vm_stdout(b"<?php function &f() { global $g; return $g; } $g = 1; $y = &f(); $y = 42; echo $g;"),
+            b"42"
         );
     }
 }

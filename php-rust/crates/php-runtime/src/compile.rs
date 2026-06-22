@@ -650,6 +650,15 @@ impl<'a> FnCompiler<'a> {
                 }
                 self.emit(Op::Ret);
             }
+            StmtKind::ReturnRef(place) => {
+                // `function &f()` returning an lvalue (REF-4b): push a reference
+                // to the place's cell and return it raw, so `$y = &f()` aliases
+                // it. References into object properties / `[]` fall back to eval.
+                ref_index_only(place)?;
+                let (base, steps) = self.field_path(place)?;
+                self.emit(Op::MakeRef { base, steps: steps.into() });
+                self.emit(Op::Ret);
+            }
             StmtKind::Unset(places) => {
                 for place in places {
                     if let Some(name) = self.prop_place(place)? {
@@ -891,6 +900,7 @@ impl<'a> FnCompiler<'a> {
             }
             ExprKind::AssignPlace(place, rhs) => self.assign_place(place, rhs)?,
             ExprKind::AssignRef { target, source } => self.assign_ref(target, source)?,
+            ExprKind::AssignRefCall { target, call } => self.assign_ref_call(target, call)?,
             ExprKind::AssignOpPlace(op, place, rhs) => self.assign_op_place(*op, place, rhs)?,
             ExprKind::IncDecPlace { place, inc, pre } => self.incdec_place(place, *inc, *pre)?,
             ExprKind::Isset(places) => self.isset(places)?,
@@ -1056,8 +1066,14 @@ impl<'a> FnCompiler<'a> {
             // Snapshot the by-ref mask so the immutable borrow of `callee` ends
             // before `push_call_args` borrows `self` mutably (REF-2).
             let by_ref: Vec<bool> = callee.params.iter().map(|p| p.by_ref).collect();
+            let returns_ref = callee.by_ref;
             self.push_call_args(args, &by_ref)?;
             self.emit(Op::Call { func: idx as u32, argc: args.len() as u32 });
+            // A `function &f()` used in value context yields a copy, not an alias
+            // (REF-4b). `$y = &f()` takes the raw ref via `AssignRefCall` instead.
+            if returns_ref {
+                self.emit(Op::DerefTop);
+            }
             return Ok(());
         }
         // Builtins: classify by-value vs by-reference-first via the registry.
@@ -1523,6 +1539,39 @@ impl<'a> FnCompiler<'a> {
         let (sbase, ssteps) = self.field_path(source)?; // …then source keys
         self.emit(Op::MakeRef { base: sbase, steps: ssteps.into() });
         self.emit(Op::BindRefTo { base: tbase, steps: tsteps.into() });
+        Ok(())
+    }
+
+    /// `$target = &f(...)` (REF-4b): invoke the call *raw* (no `DerefTop`) so a
+    /// by-reference return's cell can be aliased, then bind the target to it. The
+    /// target's index expressions are emitted before the call (the tree-walker's
+    /// order) so the returned reference lands on top of them for `BindRefTo`. Only
+    /// user-function calls are in slice; anything else falls back to the evaluator.
+    fn assign_ref_call(&mut self, target: &Place, call: &Expr) -> R<()> {
+        let ExprKind::Call { name, args, named } = &call.kind else {
+            return Err(CompileError::Unsupported("reference assignment from a non-call".into()));
+        };
+        if !named.is_empty() {
+            return Err(CompileError::Unsupported("reference call with named arguments".into()));
+        }
+        let Some(idx) = self.ctx.funcs.iter().position(|f| ascii_eq_ignore_case(&f.name, name)) else {
+            return Err(CompileError::Unsupported(
+                "reference assignment from a builtin / undefined call".into(),
+            ));
+        };
+        let callee = &self.ctx.funcs[idx];
+        if callee.params.iter().any(|p| p.variadic) {
+            return Err(CompileError::Unsupported("reference call to a variadic function".into()));
+        }
+        if args.len() != callee.params.len() {
+            return Err(CompileError::Unsupported("reference call arity mismatch".into()));
+        }
+        let by_ref: Vec<bool> = callee.params.iter().map(|p| p.by_ref).collect();
+        ref_index_only(target)?;
+        let (base, steps) = self.field_path(target)?; // target index keys first…
+        self.push_call_args(args, &by_ref)?; // …then the call args…
+        self.emit(Op::Call { func: idx as u32, argc: args.len() as u32 }); // …leaving the raw ref on top
+        self.emit(Op::BindRefTo { base, steps: steps.into() });
         Ok(())
     }
 

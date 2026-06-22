@@ -194,6 +194,11 @@ pub enum Op {
     /// path where `f` is not by-reference). Pushes the aliased value as the
     /// assignment expression's result.
     BindRefTo { base: FieldBase, steps: Box<[FieldStep]> },
+    /// `[v] -> [v']` — if the top is a [`Zval::Ref`], replace it with a clone of
+    /// its referent; otherwise leave it untouched (REF-4b). Emitted after a call
+    /// to a `function &f()` used in a *value* context, so the reference it returns
+    /// is copied rather than aliased — `$y = &f()` skips this and aliases instead.
+    DerefTop,
 
     // ----- operators (semantics delegated to php_types::ops / ::convert) -----
     /// `[lhs, rhs] -> [result]` — pop rhs then lhs, push `lhs <op> rhs`.
