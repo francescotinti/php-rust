@@ -212,11 +212,25 @@ impl Vm<'_> {
     /// `Some(e)` if the exception is uncatchable (a non-object throw, an engine
     /// error — EXC-3 — or `Exit`) or escapes the top frame uncaught.
     fn unwind(&mut self, e: PhpError) -> Option<PhpError> {
-        // EXC-1: only user-thrown objects are catchable; everything else (engine
-        // errors, `Exit`, a thrown non-object) propagates unchanged.
+        // The in-flight Throwable object. A user `throw` of an object is itself
+        // (EXC-1). An engine error (EXC-3a) is resolved to its prelude class by
+        // name and a Throwable is synthesized carrying its message; if the class
+        // is absent or can't be instantiated, the original error propagates.
+        // `Exit` and a thrown non-object stay uncatchable.
         let obj = match &e {
             PhpError::Thrown(v) if matches!(v, Zval::Object(_)) => v.clone(),
-            _ => return Some(e),
+            PhpError::Exit(_) | PhpError::Thrown(_) => return Some(e),
+            engine => {
+                let name = engine.class_name().to_ascii_lowercase();
+                let msg = engine.message().to_owned();
+                match self.module.class_index.get(name.as_bytes()).copied() {
+                    Some(cid) => match self.synthesize_throwable(cid, &msg) {
+                        Ok(v) => v,
+                        Err(_) => return Some(e),
+                    },
+                    None => return Some(e),
+                }
+            }
         };
         loop {
             let top = self.frames.len() - 1;
@@ -1425,6 +1439,23 @@ impl Vm<'_> {
         // Track for `__destruct` (OOP-3d): the extra strong ref drives the sweep.
         self.created.push(Rc::clone(&rc));
         Ok(Zval::Object(rc))
+    }
+
+    /// Build a Throwable object of `cid` carrying `message`, used to materialise
+    /// an engine error (`TypeError`, `DivisionByZeroError`, …) so it can be
+    /// offered to a `catch` (EXC-3a). Mirrors `eval::synthesize_throwable`:
+    /// allocates the instance (prop defaults + `info` + id, via `alloc_object`)
+    /// **without** running a constructor, then overwrites `message` directly.
+    /// `line`/`file`/`trace` stay at their prelude defaults here — they are
+    /// filled by the line-tracking (EXC-3b) and stack-trace (EXC-3c) steps.
+    fn synthesize_throwable(&mut self, cid: ClassId, message: &str) -> Result<Zval, PhpError> {
+        let value = self.alloc_object(cid)?;
+        if let Zval::Object(o) = &value {
+            o.borrow_mut()
+                .props
+                .set(b"message", Zval::Str(PhpStr::new(message.as_bytes().to_vec())));
+        }
+        Ok(value)
     }
 
     /// Resolve and lazily initialise the persistent cell for static property
@@ -4162,6 +4193,89 @@ mod tests {
             vm_stdout(b"<?php try { try { throw new Exception('a'); } finally { throw new Exception('b'); } } catch (Exception $e) {} try { echo 'x'; } finally { echo 'y'; } echo 'z';"),
             b"xyz"
         );
+    }
+
+    // ----- EXC-3a: engine errors are catchable -----
+
+    #[test]
+    fn division_by_zero_error_catchable() {
+        // `1 % 0` raises a DivisionByZeroError, synthesized into a Throwable and
+        // routed to the matching `catch`; its message round-trips via getMessage.
+        assert_eq!(
+            vm_stdout(b"<?php try { $x = 1 % 0; } catch (DivisionByZeroError $e) { echo $e->getMessage(); }"),
+            b"Modulo by zero"
+        );
+    }
+
+    #[test]
+    fn divide_by_zero_error_catchable() {
+        assert_eq!(
+            vm_stdout(b"<?php try { $x = 1 / 0; } catch (DivisionByZeroError $e) { echo $e->getMessage(); }"),
+            b"Division by zero"
+        );
+    }
+
+    #[test]
+    fn engine_error_caught_by_supertype() {
+        // DivisionByZeroError extends ArithmeticError: a clause for the supertype
+        // catches it (instance-of is interface/parent-aware).
+        assert_eq!(
+            vm_stdout(b"<?php try { $x = 1 % 0; } catch (ArithmeticError $e) { echo 'arith'; }"),
+            b"arith"
+        );
+    }
+
+    #[test]
+    fn type_error_catchable() {
+        // `[] + 1` raises a TypeError (unsupported operand types).
+        assert_eq!(
+            vm_stdout(b"<?php try { $x = [] + 1; } catch (TypeError $e) { echo 'type'; }"),
+            b"type"
+        );
+    }
+
+    #[test]
+    fn type_error_caught_as_error() {
+        // TypeError extends Error: a `catch (Error)` clause catches it.
+        assert_eq!(
+            vm_stdout(b"<?php try { $x = [] + 1; } catch (Error $e) { echo 'err'; }"),
+            b"err"
+        );
+    }
+
+    #[test]
+    fn engine_error_caught_by_throwable() {
+        assert_eq!(
+            vm_stdout(b"<?php try { $x = 1 % 0; } catch (Throwable $e) { echo 'caught'; }"),
+            b"caught"
+        );
+    }
+
+    #[test]
+    fn error_base_catchable() {
+        // Instantiating an abstract class raises a plain Error, caught here.
+        assert_eq!(
+            vm_stdout(b"<?php abstract class A {} try { $a = new A(); } catch (Error $e) { echo $e->getMessage(); }"),
+            b"Cannot instantiate abstract class A"
+        );
+    }
+
+    #[test]
+    fn engine_error_non_matching_clause_propagates() {
+        // A clause for an unrelated type does not catch the engine error: it
+        // keeps unwinding and the run reports a fatal (not a panic).
+        let program = lower_source(b"test.php", b"<?php try { $x = 1 % 0; } catch (ValueError $e) { echo 'no'; }").expect("lower");
+        let module = compile_program(&program, &Registry::new()).expect("compile");
+        let out = run_module(&module, &Registry::new());
+        assert!(out.fatal.is_some(), "expected an uncaught engine-error fatal");
+    }
+
+    #[test]
+    fn uncaught_engine_error_is_fatal() {
+        let program = lower_source(b"test.php", b"<?php $x = 1 % 0;").expect("lower");
+        let module = compile_program(&program, &Registry::new()).expect("compile");
+        let out = run_module(&module, &Registry::new());
+        assert!(out.fatal.is_some(), "expected an uncaught engine-error fatal");
     }
 }
 

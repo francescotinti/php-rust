@@ -77,6 +77,7 @@
 //! - classes/enums/static props/consts → method bodies compile to [`Func`]s; the
 //!   class metadata stays in the HIR [`ClassDecl`] table the VM consults.
 
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use php_types::{ObjectInfo, PhpStr, Zval};
@@ -711,4 +712,9 @@ pub struct Module {
     /// Source file name, reproduced verbatim in diagnostics (`… in <file> on
     /// line N`), carried over from [`crate::hir::Program::file`].
     pub file: Box<[u8]>,
+    /// Case-insensitive class-name → [`ClassId`] index, cloned from the
+    /// compiler's `ProgramCtx`. The VM needs it at runtime to resolve an engine
+    /// error's prelude class (`TypeError`, `DivisionByZeroError`, …) so the
+    /// matching Throwable can be synthesized and offered to a `catch` (EXC-3a).
+    pub class_index: HashMap<Vec<u8>, ClassId>,
 }

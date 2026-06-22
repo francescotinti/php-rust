@@ -117,6 +117,7 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
         closures,
         classes,
         file: program.file.clone(),
+        class_index,
     })
 }
 
