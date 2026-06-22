@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–61 completati · 1.099 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–61 completati · 1.105 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 **Migrazione VM (Fase 4, in corso).** In parallelo all'evaluator tree-walk — che resta il motore
 di produzione e tiene il differential a 0 mismatch — è in costruzione una **VM a bytecode**
@@ -22,10 +22,11 @@ di produzione e tiene il differential a 0 mismatch — è in costruzione una **V
 `corosensei`/`unsafe`. Coperto finora, validato da test unitari VM-side: espressioni e control-flow,
 chiamate, array, **OOP completo** (classi, `$this`, proprietà/visibility, metodi, `static` + LSB,
 costanti di classe, magic `__get`/`__set`/`__isset`/`__unset`/`__toString`/`__destruct`, nullsafe
-`?->`), e i reference **REF-1** (`$a = &$b` fra variabili bare, `global`) e **REF-2** (parametri
-by-ref su funzioni utente: `function f(&$x)`, con propagazione attraverso chiamate annidate).
-Roadmap residua: REF-3/4 (foreach by-ref, ref su elementi array, return-ref) → closure → eccezioni
-→ generatori → rimozione di `eval/`. Piano completo: vedi il file di piano del progetto.
+`?->`), e i reference **REF-1** (`$a = &$b` fra variabili bare, `global`), **REF-2** (parametri by-ref su
+funzioni utente: `function f(&$x)`, con propagazione attraverso chiamate annidate) e **REF-3**
+(`foreach $a as &$v`, incluso il *lingering-reference gotcha* fedele all'oracle). Roadmap residua:
+REF-4 (ref su elementi array, return-ref) → closure → eccezioni → generatori → rimozione di
+`eval/`. Piano completo: vedi il file di piano del progetto.
 
 Step 61 ha completato i suggerimenti della code-review esterna: (E) **diff unificato** nel
 `phpt-runner` (`--list-fails` mostra un line-diff EXPECTF-aware invece di due blob troncati); (B)

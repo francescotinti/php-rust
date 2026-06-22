@@ -25,7 +25,7 @@ use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
 use crate::bytecode::{
     ClassTarget, DimBase, FieldBase, FieldStep, Func, Instantiable, Module, Op, StaticInit,
 };
-use crate::hir::{BinOp, CastKind, ClassId, UnOp, Visibility};
+use crate::hir::{BinOp, CastKind, ClassId, Slot, UnOp, Visibility};
 
 /// The result of running a [`Module`]: the bytes written to stdout, the
 /// diagnostics raised, and the fatal that stopped execution (if any).
@@ -135,11 +135,14 @@ impl<'m> Frame<'m> {
     }
 }
 
-/// A `foreach` iteration snapshot: the (key, value) pairs captured at loop entry
-/// and the cursor into them.
-struct IterState {
-    entries: Vec<(Zval, Zval)>,
-    pos: usize,
+/// A `foreach` iteration cursor. **By-value** mode snapshots the `(key, value)`
+/// pairs at loop entry (so the body mutating the source can't disturb the loop).
+/// **By-reference** mode (REF-3) snapshots only the *keys* and rebinds each
+/// element of the source variable live each step, so body writes land back in
+/// the array.
+enum IterState {
+    ByVal { entries: Vec<(Zval, Zval)>, pos: usize },
+    ByRef { source: Slot, keys: Vec<Key>, pos: usize },
 }
 
 /// The virtual machine: the module under execution plus the explicit call stack.
@@ -416,21 +419,74 @@ impl Vm<'_> {
                 }
                 Op::IterInit => {
                     let iterable = self.frames[top].stack.pop().expect("IterInit iterable");
-                    self.frames[top].iters.push(IterState {
+                    self.frames[top].iters.push(IterState::ByVal {
                         entries: snapshot_entries(&iterable),
                         pos: 0,
                     });
                 }
                 Op::IterNext { value, key, end } => {
-                    let it = self.frames[top].iters.last().expect("IterNext without iterator");
-                    if it.pos >= it.entries.len() {
-                        self.frames[top].ip = end as usize;
-                    } else {
-                        let (k, v) = self.frames[top].iters.last().unwrap().entries[it.pos].clone();
-                        self.frames[top].iters.last_mut().unwrap().pos += 1;
-                        store_slot(&mut self.frames[top].slots[value as usize], v);
-                        if let Some(ks) = key {
-                            store_slot(&mut self.frames[top].slots[ks as usize], k);
+                    // Read the cursor and bump it in a scoped borrow, then touch
+                    // the slots — keeping the `iters` and `slots` borrows disjoint.
+                    let pair = {
+                        let it = self.frames[top].iters.last_mut().expect("IterNext without iterator");
+                        let IterState::ByVal { entries, pos } = it else {
+                            unreachable!("IterNext on a by-reference iterator");
+                        };
+                        if *pos >= entries.len() {
+                            None
+                        } else {
+                            let pair = entries[*pos].clone();
+                            *pos += 1;
+                            Some(pair)
+                        }
+                    };
+                    match pair {
+                        None => self.frames[top].ip = end as usize,
+                        Some((k, v)) => {
+                            // Deref at bind time: a reference element snapshots its
+                            // cell and is read live here. `store_slot` writes
+                            // *through* a value slot that is itself a reference (the
+                            // lingering-ref gotcha), matching the tree-walker.
+                            store_slot(&mut self.frames[top].slots[value as usize], v.deref_clone());
+                            if let Some(ks) = key {
+                                store_slot(&mut self.frames[top].slots[ks as usize], k);
+                            }
+                        }
+                    }
+                }
+                Op::IterInitRef(source) => {
+                    // REF-3: snapshot the source array's keys once; each step
+                    // rebinds the live element by reference.
+                    let keys = ref_array_keys(&self.frames[top].slots[source as usize]);
+                    self.frames[top].iters.push(IterState::ByRef { source, keys, pos: 0 });
+                }
+                Op::IterNextRef { value, key, end } => {
+                    let next = {
+                        let it = self.frames[top].iters.last_mut().expect("IterNextRef without iterator");
+                        let IterState::ByRef { source, keys, pos } = it else {
+                            unreachable!("IterNextRef on a by-value iterator");
+                        };
+                        if *pos >= keys.len() {
+                            None
+                        } else {
+                            let k = keys[*pos].clone();
+                            let src = *source;
+                            *pos += 1;
+                            Some((src, k))
+                        }
+                    };
+                    match next {
+                        None => self.frames[top].ip = end as usize,
+                        Some((src, k)) => {
+                            let cell = elem_cell(&mut self.frames[top].slots[src as usize], &k);
+                            if let Some(ks) = key {
+                                store_slot(&mut self.frames[top].slots[ks as usize], key_to_zval(&k));
+                            }
+                            // Direct overwrite, *not* `store_slot`: on later
+                            // iterations the value slot is itself a `Zval::Ref` to
+                            // the previous element, and writing through it would
+                            // corrupt that element (D-R13).
+                            self.frames[top].slots[value as usize] = Zval::Ref(cell);
                         }
                     }
                 }
@@ -1898,9 +1954,15 @@ fn coerce_key_silent(v: &Zval) -> Option<Key> {
 /// reference to one) is copied element-wise — by-value `foreach` iterates this
 /// snapshot, so the body mutating the source can't disturb the loop. Any other
 /// value iterates zero times for now (object / Traversable support is OOP work).
+///
+/// Element values are cloned *shallowly* (`v.clone()`), so a reference element
+/// keeps sharing its cell and is read live at bind time (see `IterNext`). This
+/// is what reproduces PHP's lingering-reference gotcha — a `foreach (… as &$v)`
+/// followed by `foreach (… as $v)` mutates the last element (D-R13) — and
+/// mirrors the tree-walker (`eval::exec_foreach`).
 fn snapshot_entries(iterable: &Zval) -> Vec<(Zval, Zval)> {
     match iterable {
-        Zval::Array(a) => a.iter().map(|(k, v)| (key_to_zval(k), v.deref_clone())).collect(),
+        Zval::Array(a) => a.iter().map(|(k, v)| (key_to_zval(k), v.clone())).collect(),
         Zval::Ref(rc) => snapshot_entries(&rc.borrow()),
         _ => Vec::new(),
     }
@@ -2049,6 +2111,38 @@ fn make_cell(cell: &mut Zval) -> Rc<RefCell<Zval>> {
     let rc = Rc::new(RefCell::new(init));
     *cell = Zval::Ref(Rc::clone(&rc));
     rc
+}
+
+/// The keys of the array a `foreach … as &$v` iterates, snapshotted once at loop
+/// entry (REF-3). A reference is followed; a non-array yields no keys (the loop
+/// runs zero times), matching the by-value path's tolerance of non-iterables.
+fn ref_array_keys(cell: &Zval) -> Vec<Key> {
+    match cell {
+        Zval::Array(a) => a.iter().map(|(k, _)| k.clone()).collect(),
+        Zval::Ref(rc) => ref_array_keys(&rc.borrow()),
+        _ => Vec::new(),
+    }
+}
+
+/// Promote `array[key]` to a shared cell and return it, de-COW-ing the array in
+/// place (REF-3 / future REF-4). Mirrors `eval::place_cell` for a single key
+/// step: a missing element auto-vivifies as `Null`, the element is promoted to a
+/// `Zval::Ref`, and that shared cell is returned. A reference is followed; a
+/// non-array yields a detached cell so the caller has something to bind.
+fn elem_cell(cell: &mut Zval, key: &Key) -> Rc<RefCell<Zval>> {
+    if let Zval::Ref(rc) = cell {
+        let inner = &mut *rc.borrow_mut();
+        return elem_cell(inner, key);
+    }
+    if let Zval::Array(rc) = cell {
+        let arr = Rc::make_mut(rc);
+        if !arr.contains_key(key) {
+            arr.insert(key.clone(), Zval::Null);
+        }
+        let child = arr.get_mut(key).expect("key present after insert");
+        return make_cell(child);
+    }
+    Rc::new(RefCell::new(Zval::Null))
 }
 
 /// Write `v` into a local cell. A reference slot writes *through* its shared
@@ -3307,6 +3401,62 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php function outer(&$x) { inner($x); } function inner(&$y) { $y = 42; } $n = 0; outer($n); echo $n;"),
             b"42"
+        );
+    }
+
+    // ----- REF-3: foreach by-reference (`foreach $a as &$v`) -----
+
+    #[test]
+    fn foreach_by_ref_mutates_source() {
+        assert_eq!(
+            vm_stdout(b"<?php $a = [1, 2, 3]; foreach ($a as &$v) { $v = $v * 2; } echo $a[0]; echo $a[1]; echo $a[2];"),
+            b"246"
+        );
+    }
+
+    #[test]
+    fn foreach_by_ref_with_key() {
+        // The key is bound by value while the value aliases the element.
+        assert_eq!(
+            vm_stdout(b"<?php $a = [10, 20]; foreach ($a as $k => &$v) { $v = $v + $k; } echo $a[0] . ',' . $a[1];"),
+            b"10,21"
+        );
+    }
+
+    #[test]
+    fn foreach_by_ref_then_unset_is_safe() {
+        // Unsetting the alias after the loop detaches it; a later by-value loop is
+        // then unaffected.
+        assert_eq!(
+            vm_stdout(b"<?php $a = [1, 2, 3]; foreach ($a as &$v) { $v = $v + 10; } unset($v); foreach ($a as $v) {} echo $a[0]; echo $a[1]; echo $a[2];"),
+            b"111213"
+        );
+    }
+
+    #[test]
+    fn foreach_by_ref_lingering_reference_gotcha() {
+        // The classic PHP gotcha: after a by-ref loop, `$v` still aliases the last
+        // element; a following by-value loop overwrites it on each step, leaving
+        // the last element equal to the second-to-last (D-R13).
+        assert_eq!(
+            vm_stdout(b"<?php $a = [1, 2, 3]; foreach ($a as &$v) {} foreach ($a as $v) {} echo $a[0]; echo $a[1]; echo $a[2];"),
+            b"122"
+        );
+    }
+
+    #[test]
+    fn foreach_by_ref_empty_array() {
+        assert_eq!(
+            vm_stdout(b"<?php $a = []; foreach ($a as &$v) { $v = 1; } echo 'done';"),
+            b"done"
+        );
+    }
+
+    #[test]
+    fn foreach_by_ref_string_keys() {
+        assert_eq!(
+            vm_stdout(b"<?php $a = ['x' => 1, 'y' => 2]; foreach ($a as &$v) { $v = $v * 100; } echo $a['x']; echo '-'; echo $a['y'];"),
+            b"100-200"
         );
     }
 }

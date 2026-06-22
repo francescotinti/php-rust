@@ -298,6 +298,16 @@ pub enum Op {
     /// present) and fall through, or — when the iterator is exhausted — jump to
     /// `end` (which frees it via [`Op::IterPop`]). Operates on the top iterator.
     IterNext { value: Slot, key: Option<Slot>, end: Addr },
+    /// `foreach $src as &$v` (REF-3): snapshot the *keys* of the array in local
+    /// `source` and push a by-reference iterator. Unlike [`Op::IterInit`] the
+    /// source stays a live variable so each element can be rebound in place.
+    IterInitRef(Slot),
+    /// By-reference counterpart of [`Op::IterNext`]: promote the source's current
+    /// element to a shared cell, alias the `value` slot to it (so body writes land
+    /// in the array), bind the `key` slot if present, then fall through — or jump
+    /// to `end` when exhausted. The `value` slot lingers as a reference to the
+    /// last element after the loop (the documented PHP gotcha, D-R13).
+    IterNextRef { value: Slot, key: Option<Slot>, end: Addr },
     /// Pop (free) the top iterator. Emitted at normal loop exhaustion and, by the
     /// compiler, on every `break`/`continue` path that leaves a `foreach`.
     IterPop,

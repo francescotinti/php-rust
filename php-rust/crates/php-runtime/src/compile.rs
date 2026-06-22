@@ -603,7 +603,27 @@ impl<'a> FnCompiler<'a> {
             }
             StmtKind::Foreach { iter, key, value, by_ref, body } => {
                 if *by_ref {
-                    return Err(CompileError::Unsupported("foreach by-reference".into()));
+                    // REF-3: by-ref iteration needs an lvalue source to write back
+                    // to. Over a plain variable we rebind each element live; any
+                    // other source is out of slice (the tree-walker degrades it to
+                    // by-value, which writes nowhere observable).
+                    let ExprKind::Var(slot) = iter.kind else {
+                        return Err(CompileError::Unsupported(
+                            "foreach by-reference over a non-variable source".into(),
+                        ));
+                    };
+                    self.emit(Op::IterInitRef(slot));
+                    let cont = self.here();
+                    let fetch = self.emit(Op::IterNextRef { value: *value, key: *key, end: Addr::MAX });
+                    self.loops.push(LoopCtx { has_iter: true, ..LoopCtx::default() });
+                    self.block(body)?;
+                    self.emit(Op::Jump(cont));
+                    let exhaust = self.here();
+                    self.patch(fetch, Op::IterNextRef { value: *value, key: *key, end: exhaust });
+                    self.emit(Op::IterPop);
+                    let after = self.here();
+                    self.close_loop(cont, after);
+                    return Ok(());
                 }
                 self.expr(iter)?;
                 self.emit(Op::IterInit);
