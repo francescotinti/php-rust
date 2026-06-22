@@ -504,26 +504,43 @@ impl Vm<'_> {
                             )))
                         }
                     };
-                    let Some((defc, midx)) = resolve_method_runtime(module, cid, &method) else {
-                        return Err(PhpError::Error(format!(
-                            "Call to undefined method {}::{}()",
-                            String::from_utf8_lossy(&module.classes[cid].name),
-                            String::from_utf8_lossy(&method)
-                        )));
-                    };
-                    let vis = module.classes[defc].methods[midx].visibility;
-                    if !visible_from(module, self.frames[top].class, vis, defc) {
-                        return Err(method_access_error(module, defc, &method, self.frames[top].class, vis));
+                    let resolved = resolve_method_runtime(module, cid, &method);
+                    // Usable only if found *and* visible from the caller's scope.
+                    let usable = resolved.filter(|&(defc, midx)| {
+                        visible_from(module, self.frames[top].class, module.classes[defc].methods[midx].visibility, defc)
+                    });
+                    match usable {
+                        Some((defc, midx)) => {
+                            let callee = &module.classes[defc].methods[midx].func;
+                            let mut frame = Frame::new(callee);
+                            for (i, a) in args.drain(..).enumerate() {
+                                frame.slots[i] = a;
+                            }
+                            frame.this = Some(this);
+                            frame.class = Some(defc);
+                            frame.static_class = Some(cid); // LSB = receiver's actual class
+                            self.frames.push(frame);
+                        }
+                        // Missing or inaccessible: route to `__call` if defined,
+                        // else the original fatal (visibility / undefined method).
+                        None => match resolve_method_runtime(module, cid, b"__call") {
+                            Some((cdefc, cmidx)) => {
+                                self.push_magic_call(cdefc, cmidx, Some(this), cid, &method, args);
+                            }
+                            None => {
+                                return Err(match resolved {
+                                    Some((defc, midx)) => method_access_error(
+                                        module,
+                                        defc,
+                                        &method,
+                                        self.frames[top].class,
+                                        module.classes[defc].methods[midx].visibility,
+                                    ),
+                                    None => undefined_method(module, cid, &method),
+                                })
+                            }
+                        },
                     }
-                    let callee = &module.classes[defc].methods[midx].func;
-                    let mut frame = Frame::new(callee);
-                    for (i, a) in args.drain(..).enumerate() {
-                        frame.slots[i] = a;
-                    }
-                    frame.this = Some(this);
-                    frame.class = Some(defc);
-                    frame.static_class = Some(cid); // LSB = receiver's actual class
-                    self.frames.push(frame);
                 }
                 Op::InvokeMethod { class, method_idx, argc } => {
                     let module = self.module;
@@ -573,13 +590,10 @@ impl Vm<'_> {
                             PhpError::Error("Cannot use \"static\" outside class context".to_string())
                         })?,
                     };
-                    let Some((defc, midx)) = resolve_method_runtime(module, start, &method) else {
-                        return Err(undefined_method(module, start, &method));
-                    };
-                    let vis = module.classes[defc].methods[midx].visibility;
-                    if !visible_from(module, self.frames[top].class, vis, defc) {
-                        return Err(method_access_error(module, defc, &method, self.frames[top].class, vis));
-                    }
+                    let resolved = resolve_method_runtime(module, start, &method);
+                    let usable = resolved.filter(|&(defc, midx)| {
+                        visible_from(module, self.frames[top].class, module.classes[defc].methods[midx].visibility, defc)
+                    });
                     // LSB: a forwarding call (self/parent/static) keeps the caller's;
                     // a named call rebinds it to the start class.
                     let static_class = if forwarding {
@@ -601,15 +615,48 @@ impl Vm<'_> {
                         }
                         None => None,
                     };
-                    let callee = &module.classes[defc].methods[midx].func;
-                    let mut frame = Frame::new(callee);
-                    for (i, a) in args.drain(..).enumerate() {
-                        frame.slots[i] = a;
+                    match usable {
+                        Some((defc, midx)) => {
+                            let callee = &module.classes[defc].methods[midx].func;
+                            let mut frame = Frame::new(callee);
+                            for (i, a) in args.drain(..).enumerate() {
+                                frame.slots[i] = a;
+                            }
+                            frame.this = this;
+                            frame.class = Some(defc);
+                            frame.static_class = Some(static_class);
+                            self.frames.push(frame);
+                        }
+                        None => {
+                            // In object context (a `$this` in the hierarchy) a
+                            // missing/inaccessible static target routes to `__call`
+                            // on `$this`; otherwise to `__callStatic` on the class.
+                            let via_call = this
+                                .as_ref()
+                                .and_then(|t| object_class_id(t).map(|oc| (t.clone(), oc)))
+                                .and_then(|(tv, oc)| {
+                                    resolve_method_runtime(module, oc, b"__call").map(|(d, m)| (tv, oc, d, m))
+                                });
+                            if let Some((tv, oc, cdefc, cmidx)) = via_call {
+                                self.push_magic_call(cdefc, cmidx, Some(tv), oc, &method, args);
+                            } else if let Some((cdefc, cmidx)) =
+                                resolve_method_runtime(module, start, b"__callStatic")
+                            {
+                                self.push_magic_call(cdefc, cmidx, None, start, &method, args);
+                            } else {
+                                return Err(match resolved {
+                                    Some((defc, midx)) => method_access_error(
+                                        module,
+                                        defc,
+                                        &method,
+                                        self.frames[top].class,
+                                        module.classes[defc].methods[midx].visibility,
+                                    ),
+                                    None => undefined_method(module, start, &method),
+                                });
+                            }
+                        }
                     }
-                    frame.this = this;
-                    frame.class = Some(defc);
-                    frame.static_class = Some(static_class);
-                    self.frames.push(frame);
                 }
                 Op::ClassConst { class, idx } => {
                     // Run the constant's value thunk as a frame in its declaring
@@ -965,6 +1012,33 @@ impl Vm<'_> {
             },
         };
         field_unset(cell, steps, &mut keys.into_iter());
+    }
+
+    /// Push a `__call` / `__callStatic` magic-dispatch frame (OOP-3a): the magic
+    /// method receives the original method name and a 0-indexed array of the
+    /// arguments. Its `Ret` leaves the result on the caller's operand stack, like
+    /// any method call.
+    fn push_magic_call(
+        &mut self,
+        defc: ClassId,
+        midx: usize,
+        this: Option<Zval>,
+        static_class: ClassId,
+        method: &[u8],
+        args: Vec<Zval>,
+    ) {
+        let callee = &self.module.classes[defc].methods[midx].func;
+        let mut frame = Frame::new(callee);
+        if !frame.slots.is_empty() {
+            frame.slots[0] = Zval::Str(PhpStr::new(method.to_vec()));
+        }
+        if frame.slots.len() > 1 {
+            frame.slots[1] = pack_args(args);
+        }
+        frame.this = this;
+        frame.class = Some(defc);
+        frame.static_class = Some(static_class);
+        self.frames.push(frame);
     }
 }
 
@@ -1381,6 +1455,16 @@ fn find_const_runtime(module: &Module, start: ClassId, name: &[u8]) -> Option<(C
         c = module.classes[x].parent;
     }
     None
+}
+
+/// Pack call arguments into a 0-indexed list array — the second argument handed
+/// to `__call` / `__callStatic` (OOP-3a), mirroring the tree-walker's `pack_args`.
+fn pack_args(args: Vec<Zval>) -> Zval {
+    let mut arr = PhpArray::new();
+    for a in args {
+        let _ = arr.append(a);
+    }
+    Zval::Array(Rc::new(arr))
 }
 
 /// The "call to undefined method" fatal, shared by instance and static dispatch.
@@ -2606,5 +2690,53 @@ mod tests {
             vm_stdout(b"<?php class C { public $data; } $o = new C(); $o->data['x']['y'] = 7; echo $o->data['x']['y'];"),
             b"7"
         );
+    }
+
+    // --- OOP-3a: __call / __callStatic ---
+
+    #[test]
+    fn magic_call_for_missing_method() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function __call($name, $args) { return $name . '/' . $args[0]; } } $o = new C(); echo $o->foo('x');"),
+            b"foo/x"
+        );
+    }
+
+    #[test]
+    fn magic_call_receives_argument_array() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function __call($n, $a) { return $a[0] + $a[1]; } } $o = new C(); echo $o->sum(2, 3);"),
+            b"5"
+        );
+    }
+
+    #[test]
+    fn magic_call_for_inaccessible_method() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { private function secret() { return 'no'; } function __call($n, $a) { return 'magic:' . $n; } } $o = new C(); echo $o->secret();"),
+            b"magic:secret"
+        );
+    }
+
+    #[test]
+    fn real_method_not_routed_to_magic_call() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function real() { return 'real'; } function __call($n, $a) { return 'magic'; } } $o = new C(); echo $o->real();"),
+            b"real"
+        );
+    }
+
+    #[test]
+    fn magic_callstatic_for_missing_static_method() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { static function __callStatic($name, $args) { return 'static:' . $name; } } echo C::foo();"),
+            b"static:foo"
+        );
+    }
+
+    #[test]
+    fn undefined_method_without_magic_is_fatal() {
+        assert!(vm_outcome(b"<?php class C {} $o = new C(); echo $o->nope();").fatal.is_some());
+        assert!(vm_outcome(b"<?php class C {} echo C::nope();").fatal.is_some());
     }
 }
