@@ -1841,9 +1841,11 @@ impl<'a> FnCompiler<'a> {
 
     /// If `place` is a single-step property access on `$this` or a local
     /// (`$this->p` / `$o->p`), push the object onto the stack and return the
-    /// property name; otherwise return `None` (the caller falls back to the array
-    /// path, which rejects property steps / `$this` for OOP-1). Multi-step or
-    /// `$GLOBALS`-rooted property targets are out of slice.
+    /// property name; otherwise return `None` so the caller falls through to the
+    /// mixed field path (`field_path` / `FieldAssign`) or the array path. A
+    /// `$GLOBALS`-rooted property (`$GLOBALS['x']->p`) returns `None` too: the
+    /// `FieldBase::Global` field path handles it (the [`Op::PropSet`] fast path
+    /// only roots at `$this` / a local slot).
     fn prop_place(&mut self, place: &Place) -> R<Option<Box<[u8]>>> {
         if place.steps.len() != 1 {
             return Ok(None);
@@ -1858,9 +1860,8 @@ impl<'a> FnCompiler<'a> {
             PlaceBase::Local(s) => {
                 self.emit(Op::LoadSlot(s));
             }
-            PlaceBase::Global(_) => {
-                return Err(CompileError::Unsupported("$GLOBALS property write".into()))
-            }
+            // A `$GLOBALS`-rooted property write goes through the field path.
+            PlaceBase::Global(_) => return Ok(None),
         }
         Ok(Some(name.clone()))
     }

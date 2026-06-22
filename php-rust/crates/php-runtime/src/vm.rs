@@ -5203,6 +5203,48 @@ mod tests {
         assert_eq!(vm_stdout(b"<?php $x = 3; global $x; echo $x;"), b"3");
     }
 
+    // ----- Session A: $GLOBALS['x']->prop writes (field path) vs PHP 8.5.7 -----
+
+    #[test]
+    fn globals_property_set() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $v=1; } $x=new C; $GLOBALS['x']->v = 5; echo $x->v;"),
+            b"5"
+        );
+    }
+
+    #[test]
+    fn globals_property_op_set() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $v=10; } $x=new C; $GLOBALS['x']->v += 3; echo $x->v;"),
+            b"13"
+        );
+    }
+
+    #[test]
+    fn globals_property_incdec() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $v=10; } $x=new C; $GLOBALS['x']->v++; echo $x->v;"),
+            b"11"
+        );
+    }
+
+    #[test]
+    fn globals_property_nested_index() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $a=[]; } $x=new C; $GLOBALS['x']->a[0] = 7; echo $x->a[0];"),
+            b"7"
+        );
+    }
+
+    #[test]
+    fn globals_property_isset_and_unset() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $v=10; } $x=new C; echo isset($GLOBALS['x']->v)?'y':'n'; unset($GLOBALS['x']->v); echo isset($GLOBALS['x']->v)?'y':'n';"),
+            b"yn"
+        );
+    }
+
     // ----- REF-2: by-reference parameters (user functions) -----
 
     #[test]
