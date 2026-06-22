@@ -48,9 +48,14 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         next_object_id: 1,
         static_props: HashMap::new(),
         magic_guard: HashSet::new(),
+        created: Vec::new(),
+        destructed: HashSet::new(),
     };
     vm.frames.push(Frame::new(&module.main));
     let fatal = vm.run().err();
+    // End-of-script destructors (LIFO over the objects still tracked), run after
+    // `main` returns — or after a fatal, on a cleared stack (OOP-3d).
+    vm.run_shutdown_destructors();
     VmOutcome {
         stdout: vm.stdout,
         diags: vm.diags,
@@ -158,6 +163,13 @@ struct Vm<'m> {
     /// Active magic-accessor guards (object id, kind, property) — a magic method
     /// is not re-entered for the same access while it is running (OOP-3b).
     magic_guard: HashSet<(u32, MagicKind, Vec<u8>)>,
+    /// A strong handle to every object created via `new`, in creation order
+    /// (OOP-3d). The extra ref lets the destruction sweep detect unreachability
+    /// (`Rc::strong_count == 1` ⇒ only this tracking ref remains); entries are
+    /// removed as they are destructed or at shutdown.
+    created: Vec<Rc<RefCell<Object>>>,
+    /// Object handles whose `__destruct` has already run, guarding double calls.
+    destructed: HashSet<u32>,
 }
 
 impl Vm<'_> {
@@ -932,6 +944,41 @@ impl Vm<'_> {
                     };
                     return Err(PhpError::Error(msg));
                 }
+                Op::Sweep => {
+                    let module = self.module;
+                    // Release every now-unreachable tracked object, running one
+                    // destructor per pass. A destructor is a frame: schedule it and
+                    // rewind so this Sweep re-runs (to a fixpoint) once it returns.
+                    while let Some(i) =
+                        self.created.iter().rposition(|o| Rc::strong_count(o) == 1)
+                    {
+                        let o = self.created.remove(i);
+                        let (cid, id) = {
+                            let b = o.borrow();
+                            (b.class_id as usize, b.id)
+                        };
+                        if self.destructed.contains(&id) {
+                            continue; // `o` drops here, freeing what it held
+                        }
+                        // A destructor-less object just drops here; one with a
+                        // `__destruct` runs it in a pushed frame (rewind so Sweep
+                        // re-runs to a fixpoint after it returns).
+                        if let Some((defc, midx)) = resolve_method_runtime(module, cid, b"__destruct") {
+                            self.destructed.insert(id);
+                            let callee = &module.classes[defc].methods[midx].func;
+                            let mut frame = Frame::new(callee);
+                            frame.this = Some(Zval::Object(Rc::clone(&o)));
+                            frame.class = Some(defc);
+                            frame.static_class = Some(cid);
+                            // Discard the destructor's return (don't disturb the
+                            // caller's operand stack).
+                            frame.ret_cell = Some(Rc::new(RefCell::new(Zval::Null)));
+                            self.frames[top].ip = ip; // re-run Sweep after it returns
+                            self.frames.push(frame);
+                            break;
+                        }
+                    }
+                }
                 Op::Nop => {}
             }
         }
@@ -1013,7 +1060,10 @@ impl Vm<'_> {
         let info = Rc::clone(&cc.info);
         let id = self.next_id();
         let obj = Object { class_id: cid as u32, class_name, props, id, info };
-        Ok(Zval::Object(Rc::new(RefCell::new(obj))))
+        let rc = Rc::new(RefCell::new(obj));
+        // Track for `__destruct` (OOP-3d): the extra strong ref drives the sweep.
+        self.created.push(Rc::clone(&rc));
+        Ok(Zval::Object(rc))
     }
 
     /// Resolve and lazily initialise the persistent cell for static property
@@ -1222,6 +1272,36 @@ impl Vm<'_> {
         self.magic_guard.insert(key.clone());
         frame.guard_release = Some(key);
         self.frames.push(frame);
+    }
+
+    /// Run `__destruct` on every object still tracked at the end of the script,
+    /// in reverse creation order (PHP shutdown is LIFO), step OOP-3d. The frame
+    /// stack is cleared first so this works even after a fatal unwound `main`.
+    fn run_shutdown_destructors(&mut self) {
+        self.frames.clear();
+        let survivors = std::mem::take(&mut self.created);
+        for o in survivors.into_iter().rev() {
+            let (cid, id) = {
+                let b = o.borrow();
+                (b.class_id as usize, b.id)
+            };
+            if self.destructed.contains(&id) {
+                continue;
+            }
+            let module = self.module;
+            if let Some((defc, midx)) = resolve_method_runtime(module, cid, b"__destruct") {
+                self.destructed.insert(id);
+                let callee = &module.classes[defc].methods[midx].func;
+                let mut frame = Frame::new(callee);
+                frame.this = Some(Zval::Object(Rc::clone(&o)));
+                frame.class = Some(defc);
+                frame.static_class = Some(cid);
+                self.frames.push(frame);
+                // Drive the destructor to completion; swallow any fatal it raises
+                // (PHP turns a shutdown-time throw into a separate fatal).
+                let _ = self.run();
+            }
+        }
     }
 }
 
@@ -3020,5 +3100,47 @@ mod tests {
     #[test]
     fn object_without_tostring_is_fatal_on_echo() {
         assert!(vm_outcome(b"<?php class C {} $o = new C(); echo $o;").fatal.is_some());
+    }
+
+    // --- OOP-3d: __destruct + destruction sweep ---
+
+    #[test]
+    fn destructor_runs_at_shutdown() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function __destruct() { echo 'bye'; } } $o = new C(); echo 'mid';"),
+            b"midbye"
+        );
+    }
+
+    #[test]
+    fn destructor_runs_mid_script_on_unset() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function __destruct() { echo 'D'; } } $o = new C(); unset($o); echo 'after';"),
+            b"Dafter"
+        );
+    }
+
+    #[test]
+    fn destructor_runs_on_reassignment() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $n; function __construct($n) { $this->n = $n; } function __destruct() { echo 'd' . $this->n; } } $o = new C(1); $o = new C(2); echo 'x';"),
+            b"d1xd2"
+        );
+    }
+
+    #[test]
+    fn shutdown_destructors_run_lifo() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $n; function __construct($n) { $this->n = $n; } function __destruct() { echo $this->n; } } $a = new C(1); $b = new C(2); echo '|';"),
+            b"|21"
+        );
+    }
+
+    #[test]
+    fn destructorless_object_freed_silently() {
+        assert_eq!(
+            vm_stdout(b"<?php class C {} $o = new C(); unset($o); echo 'ok';"),
+            b"ok"
+        );
     }
 }

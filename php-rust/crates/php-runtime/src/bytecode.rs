@@ -407,6 +407,13 @@ pub enum Op {
     /// script — the fatal fires only if such a function is actually called.
     Fatal(ConstIdx),
 
+    /// Release every tracked object the program can no longer reach
+    /// (`Rc::strong_count == 1`), running `__destruct` on each, to a fixpoint
+    /// (OOP-3d). Emitted by the compiler after each top-level (`main`) statement,
+    /// mirroring the tree-walker's global-scope `sweep_destructors`; never inside a
+    /// function/method body. A no-op when nothing is unreachable.
+    Sweep,
+
     /// No-op. Kept so a [`crate::hir::StmtKind::Nop`] / `Label` has a stable
     /// address to compile pass-throughs against without special-casing empty
     /// instruction ranges.

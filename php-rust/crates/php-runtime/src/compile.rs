@@ -94,7 +94,7 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
             Err(e) => functions.push(stub_func(fd, &e)),
         }
     }
-    let main = compile_body(b"", &program.body, program.slots.len() as u32, 0, false, false, &ctx, None)?;
+    let main = compile_body(b"", &program.body, program.slots.len() as u32, 0, false, false, &ctx, None, true)?;
     // Classes are compiled tolerantly too (see `compile_class`).
     let classes = program
         .classes
@@ -125,6 +125,7 @@ fn compile_fndecl(fd: &FnDecl, ctx: &ProgramCtx) -> R<Func> {
         fd.is_generator,
         ctx,
         None,
+        false,
     )
 }
 
@@ -141,8 +142,9 @@ fn compile_body(
     is_generator: bool,
     ctx: &ProgramCtx,
     cur_class: Option<ClassId>,
+    is_main: bool,
 ) -> R<Func> {
-    let mut c = FnCompiler::new(ctx, n_locals, cur_class);
+    let mut c = FnCompiler::new(ctx, n_locals, cur_class, is_main);
     c.block(body)?;
     // A body that runs off the end returns NULL (PHP's implicit return).
     let null = c.konst(Const::Null);
@@ -275,6 +277,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
                 m.decl.is_generator,
                 ctx,
                 Some(cid),
+                false,
             ) {
                 Ok(f) => f,
                 Err(e) => stub_func(&m.decl, &e),
@@ -341,7 +344,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
 /// the new object (see [`Op::InitProps`]); compiled in the class's own context so
 /// a `self::CONST` default resolves.
 fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassId) -> R<Func> {
-    let mut c = FnCompiler::new(ctx, 0, Some(cid));
+    let mut c = FnCompiler::new(ctx, 0, Some(cid), false);
     for (name, expr) in items {
         c.emit(Op::This);
         c.expr(expr)?;
@@ -366,7 +369,7 @@ fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassI
 /// Compile a class-constant value expression into a thunk [`Func`] (`<expr>; Ret`)
 /// evaluated in `decl_class`'s context (so a `self::OTHER` inside resolves).
 fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, decl_class: ClassId) -> R<Func> {
-    let mut c = FnCompiler::new(ctx, 0, Some(decl_class));
+    let mut c = FnCompiler::new(ctx, 0, Some(decl_class), false);
     c.expr(value)?;
     c.emit(Op::Ret);
     Ok(Func {
@@ -435,6 +438,10 @@ struct FnCompiler<'a> {
     /// resolving `self::` / `parent::` at compile time; `None` for the script
     /// body and free functions.
     cur_class: Option<ClassId>,
+    /// True only for the top-level script body: a destruction sweep
+    /// ([`Op::Sweep`]) is emitted after each of its statements, mirroring the
+    /// tree-walker's global-scope sweep (OOP-3d). Never set for functions/methods.
+    is_main: bool,
     /// Number of named locals (HIR slots); compiler temporaries are allocated
     /// above this, so the frame's slot array is `n_locals + n_temps_max` wide.
     n_locals: u32,
@@ -455,13 +462,14 @@ struct LoopCtx {
 }
 
 impl<'a> FnCompiler<'a> {
-    fn new(ctx: &'a ProgramCtx<'a>, n_locals: u32, cur_class: Option<ClassId>) -> Self {
+    fn new(ctx: &'a ProgramCtx<'a>, n_locals: u32, cur_class: Option<ClassId>, is_main: bool) -> Self {
         FnCompiler {
             ops: Vec::new(),
             consts: Vec::new(),
             loops: Vec::new(),
             ctx,
             cur_class,
+            is_main,
             n_locals,
             n_temps_cur: 0,
             n_temps_max: 0,
@@ -511,6 +519,11 @@ impl<'a> FnCompiler<'a> {
     fn block(&mut self, stmts: &[Stmt]) -> R<()> {
         for s in stmts {
             self.stmt(s)?;
+            // At global scope, sweep unreachable objects after each statement
+            // (OOP-3d); inside functions/methods the tree-walker does not.
+            if self.is_main {
+                self.emit(Op::Sweep);
+            }
         }
         Ok(())
     }
