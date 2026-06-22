@@ -11,10 +11,12 @@
 
 pub mod builtin;
 pub mod bytecode;
+pub mod compile;
 pub mod eval;
 pub mod hir;
 pub mod json;
 pub mod lower;
+pub mod vm;
 pub mod mbregex;
 pub mod preg;
 pub mod scanf;
