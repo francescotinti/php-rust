@@ -16,13 +16,14 @@
 //! data and steers control flow.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use php_types::{convert, ops, Diag, Diags, Key, Object, PhpArray, PhpError, PhpStr, Props, Zval};
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
-use crate::bytecode::{ClassTarget, DimBase, Func, Instantiable, Module, Op};
-use crate::hir::{BinOp, CastKind, ClassId, UnOp};
+use crate::bytecode::{ClassTarget, DimBase, Func, Instantiable, Module, Op, StaticInit};
+use crate::hir::{BinOp, CastKind, ClassId, UnOp, Visibility};
 
 /// The result of running a [`Module`]: the bytes written to stdout, the
 /// diagnostics raised, and the fatal that stopped execution (if any).
@@ -43,6 +44,7 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         diags: Diags::new(),
         frames: Vec::new(),
         next_object_id: 1,
+        static_props: HashMap::new(),
     };
     vm.frames.push(Frame::new(&module.main));
     let fatal = vm.run().err();
@@ -74,6 +76,10 @@ struct Frame<'m> {
     /// For an instance / constructor call it is the receiver's actual class;
     /// forwarding static calls preserve the caller's. `None` outside a method.
     static_class: Option<ClassId>,
+    /// When set, this frame is a static-property *init thunk*: on `Ret` its value
+    /// is written into this shared cell instead of being pushed to the caller (the
+    /// access opcode that scheduled it rewound its `ip` and will re-read the cell).
+    ret_cell: Option<Rc<RefCell<Zval>>>,
     /// Active `foreach` iterators, innermost last. Lives in the frame (not the
     /// operand stack) so it survives across the loop body; freed by `IterPop`,
     /// and discarded wholesale when the frame unwinds (a `return` out of a loop).
@@ -90,6 +96,7 @@ impl<'m> Frame<'m> {
             this: None,
             class: None,
             static_class: None,
+            ret_cell: None,
             iters: Vec::new(),
         }
     }
@@ -116,6 +123,10 @@ struct Vm<'m> {
     /// Monotonic object-handle counter (`#N` in `var_dump`), starting at 1 like
     /// the tree-walker's `next_object_id`.
     next_object_id: u32,
+    /// Persistent storage for `static` properties, keyed by (declaring class id,
+    /// property name); lazily created on first access and shared for the run
+    /// (OOP-2b), mirroring the tree-walker's `static_props`.
+    static_props: HashMap<(ClassId, Vec<u8>), Rc<RefCell<Zval>>>,
 }
 
 impl Vm<'_> {
@@ -368,10 +379,17 @@ impl Vm<'_> {
                 }
                 Op::Ret => {
                     let ret = self.frames[top].stack.pop().unwrap_or(Zval::Null);
+                    let ret_cell = self.frames[top].ret_cell.take();
                     self.frames.pop();
-                    match self.frames.last_mut() {
-                        Some(caller) => caller.stack.push(ret),
-                        None => return Ok(ret),
+                    if let Some(cell) = ret_cell {
+                        // Static-prop init thunk: store the value into its cell; the
+                        // access opcode (ip rewound) re-reads it. Nothing is pushed.
+                        *cell.borrow_mut() = ret;
+                    } else {
+                        match self.frames.last_mut() {
+                            Some(caller) => caller.stack.push(ret),
+                            None => return Ok(ret),
+                        }
                     }
                 }
                 Op::Alloc { class } => {
@@ -398,18 +416,27 @@ impl Vm<'_> {
                 },
                 Op::PropGet { name } => {
                     let obj = self.frames[top].stack.pop().expect("PropGet object");
+                    if let Some(ocid) = object_class_id(&obj) {
+                        check_prop_access(self.module, self.frames[top].class, ocid, &name)?;
+                    }
                     let v = read_property(&obj, &name, &mut self.diags);
                     self.frames[top].stack.push(v);
                 }
                 Op::PropSet { name } => {
                     let value = self.frames[top].stack.pop().expect("PropSet value");
                     let obj = self.frames[top].stack.pop().expect("PropSet object");
+                    if let Some(ocid) = object_class_id(&obj) {
+                        check_prop_access(self.module, self.frames[top].class, ocid, &name)?;
+                    }
                     write_property(&obj, &name, value.clone())?;
                     self.frames[top].stack.push(value);
                 }
                 Op::PropOpSet { name, op } => {
                     let rhs = self.frames[top].stack.pop().expect("PropOpSet rhs");
                     let obj = self.frames[top].stack.pop().expect("PropOpSet object");
+                    if let Some(ocid) = object_class_id(&obj) {
+                        check_prop_access(self.module, self.frames[top].class, ocid, &name)?;
+                    }
                     let old = read_property(&obj, &name, &mut self.diags);
                     let result = apply_binop(op, &old, &rhs, &mut self.diags)?;
                     write_property(&obj, &name, result.clone())?;
@@ -417,6 +444,9 @@ impl Vm<'_> {
                 }
                 Op::PropIncDec { name, inc, pre } => {
                     let obj = self.frames[top].stack.pop().expect("PropIncDec object");
+                    if let Some(ocid) = object_class_id(&obj) {
+                        check_prop_access(self.module, self.frames[top].class, ocid, &name)?;
+                    }
                     let old = read_property(&obj, &name, &mut self.diags);
                     let mut newv = old.clone();
                     if inc {
@@ -429,10 +459,26 @@ impl Vm<'_> {
                 }
                 Op::PropIsset { name } => {
                     let obj = self.frames[top].stack.pop().expect("PropIsset object");
-                    self.frames[top].stack.push(Zval::Bool(prop_isset(&obj, &name)));
+                    // An inaccessible declared property reads as not-set (silent),
+                    // matching `isset()` semantics; otherwise test the value.
+                    let set = match object_class_id(&obj) {
+                        Some(ocid) => match resolve_prop_decl(self.module, ocid, &name) {
+                            Some((vis, decl))
+                                if !visible_from(self.module, self.frames[top].class, vis, decl) =>
+                            {
+                                false
+                            }
+                            _ => prop_isset(&obj, &name),
+                        },
+                        None => prop_isset(&obj, &name),
+                    };
+                    self.frames[top].stack.push(Zval::Bool(set));
                 }
                 Op::PropUnset { name } => {
                     let obj = self.frames[top].stack.pop().expect("PropUnset object");
+                    if let Some(ocid) = object_class_id(&obj) {
+                        check_prop_access(self.module, self.frames[top].class, ocid, &name)?;
+                    }
                     prop_unset(&obj, &name);
                 }
                 Op::MethodCall { method, argc } => {
@@ -457,6 +503,10 @@ impl Vm<'_> {
                             String::from_utf8_lossy(&method)
                         )));
                     };
+                    let vis = module.classes[defc].methods[midx].visibility;
+                    if !visible_from(module, self.frames[top].class, vis, defc) {
+                        return Err(method_access_error(module, defc, &method, self.frames[top].class, vis));
+                    }
                     let callee = &module.classes[defc].methods[midx].func;
                     let mut frame = Frame::new(callee);
                     for (i, a) in args.drain(..).enumerate() {
@@ -518,6 +568,10 @@ impl Vm<'_> {
                     let Some((defc, midx)) = resolve_method_runtime(module, start, &method) else {
                         return Err(undefined_method(module, start, &method));
                     };
+                    let vis = module.classes[defc].methods[midx].visibility;
+                    if !visible_from(module, self.frames[top].class, vis, defc) {
+                        return Err(method_access_error(module, defc, &method, self.frames[top].class, vis));
+                    }
                     // LSB: a forwarding call (self/parent/static) keeps the caller's;
                     // a named call rebinds it to the start class.
                     let static_class = if forwarding {
@@ -606,6 +660,49 @@ impl Vm<'_> {
                         // the operand stack balanced (the instance is kept by `Dup`).
                         None => self.frames[top].stack.push(Zval::Null),
                     }
+                }
+                Op::StaticPropGet { target, name } => {
+                    let cell = match self.ensure_static(target, &name, top, ip)? {
+                        Some(c) => c,
+                        None => continue, // init thunk scheduled; re-run after it
+                    };
+                    let v = cell.borrow().deref_clone();
+                    self.frames[top].stack.push(v);
+                }
+                Op::StaticPropSet { target, name } => {
+                    let cell = match self.ensure_static(target, &name, top, ip)? {
+                        Some(c) => c,
+                        None => continue,
+                    };
+                    let value = self.frames[top].stack.pop().expect("StaticPropSet value");
+                    *cell.borrow_mut() = value.clone();
+                    self.frames[top].stack.push(value);
+                }
+                Op::StaticPropOpSet { target, name, op } => {
+                    let cell = match self.ensure_static(target, &name, top, ip)? {
+                        Some(c) => c,
+                        None => continue,
+                    };
+                    let rhs = self.frames[top].stack.pop().expect("StaticPropOpSet rhs");
+                    let old = cell.borrow().deref_clone();
+                    let result = apply_binop(op, &old, &rhs, &mut self.diags)?;
+                    *cell.borrow_mut() = result.clone();
+                    self.frames[top].stack.push(result);
+                }
+                Op::StaticPropIncDec { target, name, inc, pre } => {
+                    let cell = match self.ensure_static(target, &name, top, ip)? {
+                        Some(c) => c,
+                        None => continue,
+                    };
+                    let old = cell.borrow().deref_clone();
+                    let mut newv = old.clone();
+                    if inc {
+                        ops::increment(&mut newv, &mut self.diags)?;
+                    } else {
+                        ops::decrement(&mut newv, &mut self.diags)?;
+                    }
+                    *cell.borrow_mut() = newv.clone();
+                    self.frames[top].stack.push(if pre { newv } else { old });
                 }
                 Op::Fatal(i) => {
                     let msg = match &self.frames[top].func.consts[i as usize] {
@@ -696,6 +793,62 @@ impl Vm<'_> {
         let id = self.next_id();
         let obj = Object { class_id: cid as u32, class_name, props, id, info };
         Ok(Zval::Object(Rc::new(RefCell::new(obj))))
+    }
+
+    /// Resolve and lazily initialise the persistent cell for static property
+    /// `target::$name`, enforcing visibility against the running frame's class.
+    /// Returns `Some(cell)` when ready, or `None` when a non-constant default's
+    /// init thunk was just scheduled — in that case the caller has had its `ip`
+    /// rewound and must `continue` so the access re-runs once the cell is filled.
+    fn ensure_static(
+        &mut self,
+        target: ClassTarget,
+        name: &[u8],
+        top: usize,
+        ip: usize,
+    ) -> Result<Option<Rc<RefCell<Zval>>>, PhpError> {
+        let module = self.module;
+        let start = match target {
+            ClassTarget::Class(cid) => cid,
+            ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
+                PhpError::Error("Cannot use \"static\" outside class context".to_string())
+            })?,
+        };
+        let Some((decl, idx)) = find_static_prop(module, start, name) else {
+            return Err(PhpError::Error(format!(
+                "Access to undeclared static property {}::${}",
+                String::from_utf8_lossy(&module.classes[start].name),
+                String::from_utf8_lossy(name)
+            )));
+        };
+        let entry = &module.classes[decl].static_props[idx];
+        if !visible_from(module, self.frames[top].class, entry.visibility, decl) {
+            return Err(prop_access_error(module, decl, name, entry.visibility));
+        }
+        let key = (decl, name.to_vec());
+        if let Some(cell) = self.static_props.get(&key) {
+            return Ok(Some(Rc::clone(cell)));
+        }
+        match &entry.init {
+            StaticInit::Const(c) => {
+                let cell = Rc::new(RefCell::new(c.to_zval()));
+                self.static_props.insert(key, Rc::clone(&cell));
+                Ok(Some(cell))
+            }
+            StaticInit::Thunk(func) => {
+                // Insert a placeholder cell now, run the thunk into it, and rewind
+                // so the access re-reads the filled cell on the next iteration.
+                let cell = Rc::new(RefCell::new(Zval::Null));
+                self.static_props.insert(key, Rc::clone(&cell));
+                let mut frame = Frame::new(func);
+                frame.class = Some(decl);
+                frame.static_class = Some(decl);
+                frame.ret_cell = Some(Rc::clone(&cell));
+                self.frames[top].ip = ip;
+                self.frames.push(frame);
+                Ok(None)
+            }
+        }
     }
 }
 
@@ -947,6 +1100,94 @@ fn undefined_method(module: &Module, cid: ClassId, method: &[u8]) -> PhpError {
     PhpError::Error(format!(
         "Call to undefined method {}::{}()",
         String::from_utf8_lossy(&module.classes[cid].name),
+        String::from_utf8_lossy(method)
+    ))
+}
+
+/// Whether a member of visibility `vis` declared on `decl` is accessible from the
+/// running frame's class `cur` (OOP-2b), mirroring the tree-walker's
+/// `visible_from`: public always; private only from the declaring class;
+/// protected from anywhere in the same hierarchy.
+fn visible_from(module: &Module, cur: Option<ClassId>, vis: Visibility, decl: ClassId) -> bool {
+    match vis {
+        Visibility::Public => true,
+        Visibility::Private => cur == Some(decl),
+        Visibility::Protected => matches!(
+            cur,
+            Some(cc) if class_is_a(module, cc, decl) || class_is_a(module, decl, cc)
+        ),
+    }
+}
+
+/// Resolve a declared instance property's visibility and declaring class by
+/// walking `class`'s parent chain child→ancestor. `None` for a dynamic /
+/// undeclared property (effectively public).
+fn resolve_prop_decl(module: &Module, class: ClassId, name: &[u8]) -> Option<(Visibility, ClassId)> {
+    let mut cid = Some(class);
+    while let Some(c) = cid {
+        if let Some((_, vis)) = module.classes[c].own_prop_vis.iter().find(|(n, _)| n.as_ref() == name) {
+            return Some((*vis, c));
+        }
+        cid = module.classes[c].parent;
+    }
+    None
+}
+
+/// Resolve a static property to its declaring class and index, walking the parent
+/// chain (OOP-2b).
+fn find_static_prop(module: &Module, start: ClassId, name: &[u8]) -> Option<(ClassId, usize)> {
+    let mut cid = Some(start);
+    while let Some(c) = cid {
+        if let Some(i) = module.classes[c].static_props.iter().position(|p| p.name.as_ref() == name) {
+            return Some((c, i));
+        }
+        cid = module.classes[c].parent;
+    }
+    None
+}
+
+/// Enforce instance-property visibility for an access from frame class `cur` on an
+/// object of `obj_class`. A dynamic / undeclared property is always accessible.
+fn check_prop_access(
+    module: &Module,
+    cur: Option<ClassId>,
+    obj_class: ClassId,
+    name: &[u8],
+) -> Result<(), PhpError> {
+    if let Some((vis, decl)) = resolve_prop_decl(module, obj_class, name) {
+        if !visible_from(module, cur, vis, decl) {
+            return Err(prop_access_error(module, decl, name, vis));
+        }
+    }
+    Ok(())
+}
+
+/// The "Cannot access {private,protected} property C::$p" fatal.
+fn prop_access_error(module: &Module, decl: ClassId, name: &[u8], vis: Visibility) -> PhpError {
+    let kind = if matches!(vis, Visibility::Private) { "private" } else { "protected" };
+    PhpError::Error(format!(
+        "Cannot access {kind} property {}::${}",
+        String::from_utf8_lossy(&module.classes[decl].name),
+        String::from_utf8_lossy(name)
+    ))
+}
+
+/// The "Call to {private,protected} method C::m() from <scope>" fatal.
+fn method_access_error(
+    module: &Module,
+    decl: ClassId,
+    method: &[u8],
+    cur: Option<ClassId>,
+    vis: Visibility,
+) -> PhpError {
+    let kind = if matches!(vis, Visibility::Private) { "private" } else { "protected" };
+    let scope = match cur {
+        Some(c) => format!("scope {}", String::from_utf8_lossy(&module.classes[c].name)),
+        None => "global scope".to_string(),
+    };
+    PhpError::Error(format!(
+        "Call to {kind} method {}::{}() from {scope}",
+        String::from_utf8_lossy(&module.classes[decl].name),
         String::from_utf8_lossy(method)
     ))
 }
@@ -1904,5 +2145,81 @@ mod tests {
             vm_stdout(b"<?php class A { function check($o) { return ($o instanceof static) ? '1' : '0'; } } class B extends A {} $b = new B(); $a = new A(); echo $b->check($b), $b->check($a);"),
             b"10"
         );
+    }
+
+    // --- OOP-2b: static properties + visibility enforcement ---
+
+    #[test]
+    fn static_property_shared_across_instances() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public static $count = 0; function inc() { self::$count++; } } $a = new C(); $b = new C(); $a->inc(); $b->inc(); $a->inc(); echo C::$count;"),
+            b"3"
+        );
+    }
+
+    #[test]
+    fn static_property_write_and_op_assign() {
+        assert_eq!(vm_stdout(b"<?php class C { public static $x = 1; } C::$x = 42; echo C::$x;"), b"42");
+        assert_eq!(vm_stdout(b"<?php class C { public static $n = 10; } C::$n += 5; echo C::$n;"), b"15");
+    }
+
+    #[test]
+    fn static_property_non_constant_default_lazy_init() {
+        // An array default initialises via its thunk on first access.
+        assert_eq!(vm_stdout(b"<?php class C { public static $list = [1, 2, 3]; } echo C::$list[1], C::$list[2];"), b"23");
+    }
+
+    #[test]
+    fn inherited_static_property_shares_one_cell() {
+        // B::$v resolves to A's declaration; a write through B is seen through A.
+        assert_eq!(
+            vm_stdout(b"<?php class A { public static $v = 'p'; } class B extends A {} echo B::$v; B::$v = 'q'; echo A::$v;"),
+            b"pq"
+        );
+    }
+
+    #[test]
+    fn static_property_coalesce_assign() {
+        assert_eq!(vm_stdout(b"<?php class C { public static $x = null; } C::$x ??= 7; echo C::$x;"), b"7");
+    }
+
+    #[test]
+    fn private_property_accessible_from_inside_only() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { private $secret = 42; function reveal() { return $this->secret; } } $o = new C(); echo $o->reveal();"),
+            b"42"
+        );
+        assert!(vm_outcome(b"<?php class C { private $secret = 1; } $o = new C(); echo $o->secret;").fatal.is_some());
+    }
+
+    #[test]
+    fn protected_property_visible_in_subclass_but_not_outside() {
+        assert_eq!(
+            vm_stdout(b"<?php class A { protected $x = 7; } class B extends A { function get() { return $this->x; } } $o = new B(); echo $o->get();"),
+            b"7"
+        );
+        assert!(vm_outcome(b"<?php class A { protected $x = 7; } $o = new A(); echo $o->x;").fatal.is_some());
+    }
+
+    #[test]
+    fn private_method_accessible_from_inside_only() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { private function secret() { return 9; } function call_it() { return $this->secret(); } } $o = new C(); echo $o->call_it();"),
+            b"9"
+        );
+        assert!(vm_outcome(b"<?php class C { private function secret() { return 1; } } $o = new C(); echo $o->secret();").fatal.is_some());
+    }
+
+    #[test]
+    fn isset_on_inaccessible_property_is_false() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { private $x = 1; } $o = new C(); echo isset($o->x) ? 'y' : 'n';"),
+            b"n"
+        );
+    }
+
+    #[test]
+    fn private_static_property_from_outside_is_fatal() {
+        assert!(vm_outcome(b"<?php class C { private static $s = 1; } echo C::$s;").fatal.is_some());
     }
 }

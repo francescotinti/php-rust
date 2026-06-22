@@ -26,12 +26,12 @@ use php_types::{ObjectInfo, PhpStr, PropVis};
 
 use crate::builtin::{Builtin, Registry};
 use crate::bytecode::{
-    Addr, ClassTarget, CompiledClass, CompiledConst, CompiledMethod, Const, ConstIdx, DimBase, Func,
-    Instantiable, Module, Op,
+    Addr, ClassTarget, CompiledClass, CompiledConst, CompiledMethod, CompiledStaticProp, Const,
+    ConstIdx, DimBase, Func, Instantiable, Module, Op, StaticInit,
 };
 use crate::hir::{
     BinOp, Case, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, MatchArm, Place, PlaceBase,
-    PlaceStep, Program, Stmt, StmtKind, Visibility,
+    PlaceStep, Program, StaticAssignOp, Stmt, StmtKind, Visibility,
 };
 
 /// A construct the proof-slice compiler does not yet lower. Carries the HIR
@@ -257,7 +257,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
                 Ok(f) => f,
                 Err(e) => stub_func(&m.decl, &e),
             };
-            CompiledMethod { name: m.decl.name.clone(), func }
+            CompiledMethod { name: m.decl.name.clone(), visibility: m.visibility, func }
         })
         .collect();
 
@@ -274,6 +274,29 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         })
         .collect();
 
+    // Static properties: a constant default is folded; a non-constant one becomes
+    // an init thunk run in this class's context on first access (a thunk that
+    // doesn't compile becomes a fatal stub).
+    let static_props = cd
+        .static_props
+        .iter()
+        .map(|sp| {
+            let init = match &sp.default {
+                None => StaticInit::Const(Const::Null),
+                Some(e) => match const_eval(e) {
+                    Some(c) => StaticInit::Const(c),
+                    None => StaticInit::Thunk(
+                        compile_const_thunk(&sp.name, e, ctx, cid)
+                            .unwrap_or_else(|err| const_stub(&sp.name, &err)),
+                    ),
+                },
+            };
+            CompiledStaticProp { name: sp.name.clone(), visibility: sp.visibility, init }
+        })
+        .collect();
+
+    let own_prop_vis = cd.props.iter().map(|p| (p.name.clone(), p.visibility)).collect();
+
     CompiledClass {
         name: cd.name.clone(),
         class_name: PhpStr::new(cd.name.to_vec()),
@@ -283,6 +306,8 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         prop_defaults,
         info: Rc::new(ObjectInfo::from_entries(vis_entries)),
         methods,
+        own_prop_vis,
+        static_props,
         consts,
         ok,
     }
@@ -815,6 +840,36 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::StaticCall { target, method: method.clone(), forwarding, argc: args.len() as u32 });
             }
             ExprKind::ClassConst { class, name } => self.class_const(class, name)?,
+            ExprKind::StaticProp { class, name } => {
+                let (target, _) = self.resolve_target(class)?;
+                self.emit(Op::StaticPropGet { target, name: name.clone() });
+            }
+            ExprKind::StaticPropAssign { class, name, op, rhs } => {
+                let (target, _) = self.resolve_target(class)?;
+                match op {
+                    StaticAssignOp::Plain => {
+                        self.expr(rhs)?;
+                        self.emit(Op::StaticPropSet { target, name: name.clone() });
+                    }
+                    StaticAssignOp::Op(b) => {
+                        self.expr(rhs)?;
+                        self.emit(Op::StaticPropOpSet { target, name: name.clone(), op: *b });
+                    }
+                    StaticAssignOp::Coalesce => {
+                        // `C::$p ??= rhs`: read, keep if non-null, else assign.
+                        self.emit(Op::StaticPropGet { target, name: name.clone() });
+                        let to_end = self.emit(Op::JumpIfNotNull(Addr::MAX));
+                        self.expr(rhs)?;
+                        self.emit(Op::StaticPropSet { target, name: name.clone() });
+                        let end = self.here();
+                        self.patch(to_end, Op::JumpIfNotNull(end));
+                    }
+                }
+            }
+            ExprKind::StaticPropIncDec { class, name, inc, pre } => {
+                let (target, _) = self.resolve_target(class)?;
+                self.emit(Op::StaticPropIncDec { target, name: name.clone(), inc: *inc, pre: *pre });
+            }
             other => return Err(CompileError::Unsupported(expr_name(other))),
         }
         Ok(())

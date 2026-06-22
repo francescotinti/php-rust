@@ -81,7 +81,7 @@ use std::rc::Rc;
 
 use php_types::{ObjectInfo, PhpStr, Zval};
 
-use crate::hir::{BinOp, CastKind, ClassId, Line, Slot, UnOp};
+use crate::hir::{BinOp, CastKind, ClassId, Line, Slot, UnOp, Visibility};
 
 /// Index into a [`Func`]'s instruction vector ([`Func::ops`]); also the form a
 /// jump target takes. `u32` is plenty (PHP function bodies are tiny) and keeps
@@ -352,6 +352,20 @@ pub enum Op {
     /// `AllocStatic; Dup; …; InvokeCtor; Pop` sequence.
     InvokeCtor { argc: u32 },
 
+    // ----- OOP-2b: static properties (visibility-checked, lazily initialised) -----
+    /// `[] -> [value]` — read static property `target::$name` (deref-clone). The
+    /// declaring class is resolved by walking the parent chain; the cell is
+    /// lazily initialised (const default inline, non-const via its init thunk) and
+    /// shared for the run. Visibility is enforced against the running frame's class.
+    StaticPropGet { target: ClassTarget, name: Box<[u8]> },
+    /// `[value] -> [value]` — write `value` into `target::$name` (through the
+    /// shared cell); leaves the assigned value.
+    StaticPropSet { target: ClassTarget, name: Box<[u8]> },
+    /// `[rhs] -> [result]` — compound `target::$name op= rhs`.
+    StaticPropOpSet { target: ClassTarget, name: Box<[u8]>, op: BinOp },
+    /// `[] -> [result]` — `++`/`--` on `target::$name`.
+    StaticPropIncDec { target: ClassTarget, name: Box<[u8]>, inc: bool, pre: bool },
+
     /// Raise a fatal `Error` carrying `consts[idx]` (a string) as its message.
     /// Used for *stub* function bodies: the always-present PHP prelude (exception
     /// classes, the procedural date API) contains constructs not yet ported, so
@@ -425,7 +439,29 @@ pub enum Instantiable {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompiledMethod {
     pub name: Box<[u8]>,
+    /// Declared visibility, enforced against the calling frame's class (OOP-2b).
+    pub visibility: Visibility,
     pub func: Func,
+}
+
+/// How a static property's initial value is produced. A constant default is
+/// materialised inline on first access; a non-constant one (array / expression /
+/// class constant) runs its thunk [`Func`] in the declaring class's context, the
+/// result stored into the persistent cell (see [`Op::StaticPropGet`]).
+#[derive(Debug, Clone, PartialEq)]
+pub enum StaticInit {
+    Const(Const),
+    Thunk(Func),
+}
+
+/// A static property declared on a class (OOP-2b): its name, visibility, and how
+/// its initial value is produced. The persistent cell lives in the VM, keyed by
+/// (declaring class, name), and is created on first access.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompiledStaticProp {
+    pub name: Box<[u8]>,
+    pub visibility: Visibility,
+    pub init: StaticInit,
 }
 
 /// A class constant compiled onto a class (same index space as the source
@@ -465,6 +501,14 @@ pub struct CompiledClass {
     pub info: Rc<ObjectInfo>,
     /// Methods declared *on this class* (resolution walks `parent` at run time).
     pub methods: Vec<CompiledMethod>,
+    /// Instance properties *declared directly on this class* with their
+    /// visibility, in declaration order (OOP-2b). Visibility resolution
+    /// (`$o->p` access checks) walks the parent chain looking at each class's own
+    /// list; the *declaring* class is the one whose list contains the property.
+    pub own_prop_vis: Vec<(Box<[u8]>, Visibility)>,
+    /// Static properties declared *on this class* (OOP-2b); resolution walks the
+    /// parent chain. The live cells are keyed by (declaring class, name) in the VM.
+    pub static_props: Vec<CompiledStaticProp>,
     /// Class constants declared *on this class* (same index space as the source
     /// [`crate::hir::ClassDecl::consts`]); resolution walks `parent` then
     /// interfaces at run time.
