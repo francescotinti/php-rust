@@ -212,16 +212,29 @@ impl Vm<'_> {
                     let base = self.frames[top].stack.pop().expect("FetchDim base");
                     self.frames[top].stack.push(read_dim(&base, &key));
                 }
-                Op::AssignDim(base) => {
-                    let value = self.frames[top].stack.pop().expect("AssignDim value");
-                    let key = self.frames[top].stack.pop().expect("AssignDim key");
-                    self.array_set(base, top, Some(key), value.clone())?;
-                    self.frames[top].stack.push(value);
+                Op::AssignPath { base, nkeys, append } => {
+                    let value = self.frames[top].stack.pop().expect("AssignPath value");
+                    let mut keys = self.pop_keys(top, nkeys);
+                    let last = if append {
+                        Last::Append { value }
+                    } else {
+                        Last::Set { key: keys.pop().expect("AssignPath key"), value }
+                    };
+                    let result = self.path_op(base, top, keys, last)?;
+                    self.frames[top].stack.push(result);
                 }
-                Op::AppendDim(base) => {
-                    let value = self.frames[top].stack.pop().expect("AppendDim value");
-                    self.array_set(base, top, None, value.clone())?;
-                    self.frames[top].stack.push(value);
+                Op::AssignOpPath { base, nkeys, op } => {
+                    let rhs = self.frames[top].stack.pop().expect("AssignOpPath rhs");
+                    let mut keys = self.pop_keys(top, nkeys);
+                    let key = keys.pop().expect("AssignOpPath key");
+                    let result = self.path_op(base, top, keys, Last::OpSet { key, op, rhs })?;
+                    self.frames[top].stack.push(result);
+                }
+                Op::IncDecPath { base, nkeys, inc, pre } => {
+                    let mut keys = self.pop_keys(top, nkeys);
+                    let key = keys.pop().expect("IncDecPath key");
+                    let result = self.path_op(base, top, keys, Last::IncDec { key, inc, pre })?;
+                    self.frames[top].stack.push(result);
                 }
                 Op::Call { func, argc } => {
                     let callee = &self.module.functions[func as usize];
@@ -260,26 +273,39 @@ impl Vm<'_> {
         }
     }
 
-    /// Store (or append, when `key` is `None`) into the array rooted at `base`,
-    /// copy-on-writing it in place and auto-vivifying from null/undefined/false.
-    /// A reference cell is followed so the write lands in the shared target.
-    fn array_set(
+    /// Pop `n` index values off the current frame, restoring source order.
+    fn pop_keys(&mut self, top: usize, n: u32) -> Vec<Zval> {
+        let mut keys: Vec<Zval> = (0..n)
+            .map(|_| self.frames[top].stack.pop().expect("path index key"))
+            .collect();
+        keys.reverse();
+        keys
+    }
+
+    /// Run a path write/compound/incdec rooted at `base`, drilling through the
+    /// intermediate `keys` and applying `last` at the leaf. Returns the value the
+    /// expression evaluates to (assigned value / compound result / inc-dec value).
+    fn path_op(
         &mut self,
         base: DimBase,
         top: usize,
-        key: Option<Zval>,
-        value: Zval,
-    ) -> Result<(), PhpError> {
+        keys: Vec<Zval>,
+        last: Last,
+    ) -> Result<Zval, PhpError> {
         let cell = match base {
             DimBase::Local(s) => &mut self.frames[top].slots[s as usize],
             DimBase::Global(s) => &mut self.frames[0].slots[s as usize],
         };
-        if let Zval::Ref(rc) = cell {
-            let mut inner = rc.borrow_mut();
-            return set_into(&mut inner, key, value);
-        }
-        set_into(cell, key, value)
+        path_apply(cell, &keys, last, &mut self.diags)
     }
+}
+
+/// The leaf operation of a path write, carried to the bottom of the drill-down.
+enum Last {
+    Set { key: Zval, value: Zval },
+    Append { value: Zval },
+    OpSet { key: Zval, op: BinOp, rhs: Zval },
+    IncDec { key: Zval, inc: bool, pre: bool },
 }
 
 /// Read a local cell's value, following a reference and mapping an unset slot to
@@ -338,38 +364,91 @@ fn read_string_offset(s: &PhpStr, key: &Zval) -> Zval {
     }
 }
 
-/// Store/append `value` into the array `cell`, auto-vivifying it from
-/// null/undefined/false and copy-on-writing a shared backing store.
-fn set_into(cell: &mut Zval, key: Option<Zval>, value: Zval) -> Result<(), PhpError> {
+/// Ensure `cell` is an array, auto-vivifying from null/undefined/false; a
+/// non-empty scalar cannot become an array.
+fn ensure_array(cell: &mut Zval) -> Result<(), PhpError> {
     match cell {
         Zval::Undef | Zval::Null | Zval::Bool(false) => {
             *cell = Zval::Array(Rc::new(PhpArray::new()));
+            Ok(())
         }
-        Zval::Array(_) => {}
-        _ => {
-            return Err(PhpError::Error(
-                "Cannot use a scalar value as an array".to_string(),
-            ))
-        }
+        Zval::Array(_) => Ok(()),
+        _ => Err(PhpError::Error(
+            "Cannot use a scalar value as an array".to_string(),
+        )),
     }
-    let Zval::Array(rc) = cell else { unreachable!("vivified to array above") };
-    let arr = Rc::make_mut(rc);
-    match key {
-        Some(k) => {
-            let k = coerce_key_silent(&k)
+}
+
+/// Drill through `keys` from `cell` (following references, auto-vivifying and
+/// copy-on-writing each level), then apply `last` at the leaf. Recursion (not a
+/// reassigned `&mut` in a loop) keeps the nested borrows well-formed.
+fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags) -> Result<Zval, PhpError> {
+    if let Zval::Ref(rc) = cell {
+        let mut inner = rc.borrow_mut();
+        return path_apply(&mut inner, keys, last, diags);
+    }
+    match keys.split_first() {
+        Some((k, rest)) => {
+            ensure_array(cell)?;
+            let Zval::Array(rc) = cell else { unreachable!("ensured array") };
+            let arr = Rc::make_mut(rc);
+            let key = coerce_key_silent(k)
                 .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
-            arr.insert(k, value);
+            if !arr.contains_key(&key) {
+                arr.insert(key.clone(), Zval::Null);
+            }
+            let child = arr.get_mut(&key).expect("just inserted");
+            path_apply(child, rest, last, diags)
         }
-        None => {
-            arr.append(value).map_err(|_| {
+        None => apply_last(cell, last, diags),
+    }
+}
+
+/// Apply the leaf step to the parent cell (which must hold the target array).
+fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags) -> Result<Zval, PhpError> {
+    ensure_array(parent)?;
+    let Zval::Array(rc) = parent else { unreachable!("ensured array") };
+    let arr = Rc::make_mut(rc);
+    match last {
+        Last::Set { key, value } => {
+            let k = coerce_key_silent(&key)
+                .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
+            arr.insert(k, value.clone());
+            Ok(value)
+        }
+        Last::Append { value } => {
+            arr.append(value.clone()).map_err(|_| {
                 PhpError::Error(
                     "Cannot add element to the array as the next element is already occupied"
                         .to_string(),
                 )
             })?;
+            Ok(value)
+        }
+        Last::OpSet { key, op, rhs } => {
+            let k = coerce_key_silent(&key)
+                .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
+            let old = arr.get(&k).map(|v| v.deref_clone()).unwrap_or(Zval::Null);
+            let result = apply_binop(op, &old, &rhs, diags)?;
+            arr.insert(k, result.clone());
+            Ok(result)
+        }
+        Last::IncDec { key, inc, pre } => {
+            let k = coerce_key_silent(&key)
+                .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
+            if !arr.contains_key(&k) {
+                arr.insert(k.clone(), Zval::Null);
+            }
+            let cell = arr.get_mut(&k).expect("just inserted");
+            let old = cell.clone();
+            if inc {
+                ops::increment(cell, diags)?;
+            } else {
+                ops::decrement(cell, diags)?;
+            }
+            Ok(if pre { cell.clone() } else { old })
         }
     }
-    Ok(())
 }
 
 /// Write `v` into a local cell. A reference slot writes *through* its shared
@@ -593,5 +672,51 @@ mod tests {
     fn coalesce_assign() {
         assert_eq!(vm_stdout(b"<?php $x ??= 5; echo $x;"), b"5");
         assert_eq!(vm_stdout(b"<?php $x = 1; $x ??= 5; echo $x;"), b"1");
+    }
+
+    #[test]
+    fn nested_array_write() {
+        assert_eq!(
+            vm_stdout(b"<?php $a = []; $a[0][1] = 'x'; echo $a[0][1];"),
+            b"x"
+        );
+    }
+
+    #[test]
+    fn nested_write_autovivifies_each_level() {
+        assert_eq!(vm_stdout(b"<?php $a[1][2][3] = 5; echo $a[1][2][3];"), b"5");
+    }
+
+    #[test]
+    fn nested_append() {
+        assert_eq!(
+            vm_stdout(b"<?php $a[0][] = 'p'; $a[0][] = 'q'; echo $a[0][0] . $a[0][1];"),
+            b"pq"
+        );
+    }
+
+    #[test]
+    fn compound_assign_on_element() {
+        assert_eq!(
+            vm_stdout(b"<?php $a = ['n' => 10]; $a['n'] += 5; echo $a['n'];"),
+            b"15"
+        );
+        // Compound on a missing element starts from NULL.
+        assert_eq!(vm_stdout(b"<?php $a['c'] += 3; echo $a['c'];"), b"3");
+        // Nested compound.
+        assert_eq!(
+            vm_stdout(b"<?php $a[0][0] = 1; $a[0][0] += 9; echo $a[0][0];"),
+            b"10"
+        );
+    }
+
+    #[test]
+    fn incdec_on_element() {
+        assert_eq!(vm_stdout(b"<?php $a = [5]; $a[0]++; echo $a[0];"), b"6");
+        assert_eq!(vm_stdout(b"<?php $a = [5]; echo ++$a[0];"), b"6");
+        // Postfix yields the old value.
+        assert_eq!(vm_stdout(b"<?php $a = [5]; echo $a[0]++, '/', $a[0];"), b"5/6");
+        // Nested.
+        assert_eq!(vm_stdout(b"<?php $a[2][3] = 9; $a[2][3]--; echo $a[2][3];"), b"8");
     }
 }

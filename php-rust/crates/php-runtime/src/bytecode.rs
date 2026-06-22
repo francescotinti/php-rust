@@ -203,13 +203,21 @@ pub enum Op {
     /// is silent in the proof slice (the undefined-key warning rides the
     /// diagnostics-ordering work, like the undefined-variable notice).
     FetchDim,
-    /// `[key, v] -> [v]` — store `v` into `base[key]`, copy-on-writing the array
-    /// in the rooted cell and auto-vivifying it from null/undefined. Leaves `v`
-    /// (the assignment's value).
-    AssignDim(DimBase),
-    /// `[v] -> [v]` — append `v` to the array in the rooted cell (`$a[] = v`),
-    /// auto-vivifying from null/undefined. Leaves `v`.
-    AppendDim(DimBase),
+    /// Write into an array path rooted at `base`, drilling through `nkeys` index
+    /// values taken off the stack (pushed source-order, under the value). The
+    /// final step is an append (`$a[…][] = v`) when `append`, else an index write
+    /// (`$a[…][k] = v`, where `k` is the last of the `nkeys` keys). Every level is
+    /// copy-on-written and auto-vivified from null/undefined/false. Stack:
+    /// `[k0, …, k{nkeys-1}, v] -> [v]` (the assignment's value).
+    AssignPath { base: DimBase, nkeys: u32, append: bool },
+    /// Compound write `$a[…][k] op= rhs`: like [`Op::AssignPath`] but reads the
+    /// current element (NULL if absent), applies `op`, and stores the result.
+    /// `nkeys >= 1`; the last key is the element's. Stack:
+    /// `[k0, …, k{nkeys-1}, rhs] -> [result]`.
+    AssignOpPath { base: DimBase, nkeys: u32, op: BinOp },
+    /// `++`/`--` on an array element `$a[…][k]`. Drills as above; `nkeys >= 1`.
+    /// Stack: `[k0, …, k{nkeys-1}] -> [result]` (new value if `pre`, else old).
+    IncDecPath { base: DimBase, nkeys: u32, inc: bool, pre: bool },
 
     // ----- calls & frame control -----
     /// `[arg0, arg1, …, arg{argc-1}] -> [result]` — call user function

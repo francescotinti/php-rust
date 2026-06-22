@@ -465,6 +465,8 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::FetchDim);
             }
             ExprKind::AssignPlace(place, rhs) => self.assign_place(place, rhs)?,
+            ExprKind::AssignOpPlace(op, place, rhs) => self.assign_op_place(*op, place, rhs)?,
+            ExprKind::IncDecPlace { place, inc, pre } => self.incdec_place(place, *inc, *pre)?,
             ExprKind::Coalesce(a, b) => {
                 // Left read silently (Var/Index reads don't warn); right only if null.
                 self.expr(a)?;
@@ -562,28 +564,66 @@ impl<'a> FnCompiler<'a> {
         Ok(())
     }
 
-    /// Compile a single-level array-element write: `$a[k] = rhs` or `$a[] = rhs`,
-    /// rooted at a local (or `$GLOBALS`) slot. Nested targets (`$a[i][j] = …`)
-    /// and object-property targets (`$this`) await the write-back / OOP work.
+    /// Compile an array-element write `$a[…][k] = rhs` / `$a[…][] = rhs`, rooted
+    /// at a local (or `$GLOBALS`) slot, at any nesting depth. Object-property
+    /// targets (`$this`, `->prop`) await the OOP work.
     fn assign_place(&mut self, place: &Place, rhs: &Expr) -> R<()> {
         let base = dim_base(place)?;
-        match place.steps.as_slice() {
-            [PlaceStep::Index(k)] => {
-                self.expr(k)?;
-                self.expr(rhs)?;
-                self.emit(Op::AssignDim(base));
-            }
-            [PlaceStep::Append] => {
-                self.expr(rhs)?;
-                self.emit(Op::AppendDim(base));
-            }
-            _ => {
-                return Err(CompileError::Unsupported(
-                    "nested or property array write (single-level only)".into(),
-                ))
+        let (nkeys, append) = self.push_index_steps(&place.steps)?;
+        if nkeys == 0 && !append {
+            return Err(CompileError::Unsupported("array write with no steps".into()));
+        }
+        self.expr(rhs)?;
+        self.emit(Op::AssignPath { base, nkeys, append });
+        Ok(())
+    }
+
+    /// Compile a compound element write `$a[…][k] op= rhs`.
+    fn assign_op_place(&mut self, op: crate::hir::BinOp, place: &Place, rhs: &Expr) -> R<()> {
+        let base = dim_base(place)?;
+        let (nkeys, append) = self.push_index_steps(&place.steps)?;
+        if append || nkeys == 0 {
+            return Err(CompileError::Unsupported("`[]` has no value for reading".into()));
+        }
+        self.expr(rhs)?;
+        self.emit(Op::AssignOpPath { base, nkeys, op });
+        Ok(())
+    }
+
+    /// Compile `++`/`--` on an array element `$a[…][k]`.
+    fn incdec_place(&mut self, place: &Place, inc: bool, pre: bool) -> R<()> {
+        let base = dim_base(place)?;
+        let (nkeys, append) = self.push_index_steps(&place.steps)?;
+        if append || nkeys == 0 {
+            return Err(CompileError::Unsupported("`[]` has no value for reading".into()));
+        }
+        self.emit(Op::IncDecPath { base, nkeys, inc, pre });
+        Ok(())
+    }
+
+    /// Push each `Index` step's value (source order) and report `(nkeys, append)`:
+    /// how many index values were pushed, and whether the final step is `[]`.
+    /// A `Prop` step or a non-final `Append` is out of slice.
+    fn push_index_steps(&mut self, steps: &[PlaceStep]) -> R<(u32, bool)> {
+        let mut nkeys = 0u32;
+        let mut append = false;
+        let last = steps.len().saturating_sub(1);
+        for (i, step) in steps.iter().enumerate() {
+            match step {
+                PlaceStep::Index(k) => {
+                    self.expr(k)?;
+                    nkeys += 1;
+                }
+                PlaceStep::Append if i == last => append = true,
+                PlaceStep::Append => {
+                    return Err(CompileError::Unsupported("`[]` is only valid as the last step".into()))
+                }
+                PlaceStep::Prop(_) => {
+                    return Err(CompileError::Unsupported("object property step".into()))
+                }
             }
         }
-        Ok(())
+        Ok((nkeys, append))
     }
 }
 
