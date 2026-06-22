@@ -28,7 +28,7 @@ use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
 use crate::bytecode::{
     ClassTarget, DimBase, FieldBase, FieldStep, Func, Instantiable, Module, Op, StaticInit,
 };
-use crate::hir::{BinOp, CastKind, ClassId, Slot, UnOp, Visibility};
+use crate::hir::{BinOp, CastKind, ClassId, Line, Slot, UnOp, Visibility};
 
 /// The result of running a [`Module`]: the bytes written to stdout, the
 /// diagnostics raised, and the fatal that stopped execution (if any).
@@ -53,6 +53,7 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         magic_guard: HashSet::new(),
         created: Vec::new(),
         destructed: HashSet::new(),
+        throwable_id: module.class_index.get(&b"throwable"[..]).copied(),
     };
     vm.frames.push(Frame::new(&module.main));
     let fatal = vm.run().err();
@@ -180,6 +181,10 @@ struct Vm<'m> {
     created: Vec<Rc<RefCell<Object>>>,
     /// Object handles whose `__destruct` has already run, guarding double calls.
     destructed: HashSet<u32>,
+    /// The prelude `Throwable` interface's class id, resolved once at startup
+    /// (EXC-3b). Used to recognise a `new`-constructed exception so its
+    /// `line`/`file` are stamped at allocation time, as PHP does.
+    throwable_id: Option<ClassId>,
 }
 
 impl Vm<'_> {
@@ -776,6 +781,7 @@ impl Vm<'_> {
                 }
                 Op::Alloc { class } => {
                     let obj = self.alloc_object(class)?;
+                    self.stamp_throwable_location(&obj);
                     self.frames[top].stack.push(obj);
                 }
                 Op::AllocStatic => {
@@ -783,6 +789,7 @@ impl Vm<'_> {
                         PhpError::Error("Cannot use \"static\" outside class context".to_string())
                     })?;
                     let obj = self.alloc_object(cid)?;
+                    self.stamp_throwable_location(&obj);
                     self.frames[top].stack.push(obj);
                 }
                 Op::This => match &self.frames[top].this {
@@ -1450,12 +1457,44 @@ impl Vm<'_> {
     /// filled by the line-tracking (EXC-3b) and stack-trace (EXC-3c) steps.
     fn synthesize_throwable(&mut self, cid: ClassId, message: &str) -> Result<Zval, PhpError> {
         let value = self.alloc_object(cid)?;
+        // The line of the op that faulted (`ip-1` in the faulting frame), and the
+        // module's file — mirroring `eval::synthesize_throwable` (EXC-3b).
+        let line = self.cur_line(self.frames.len() - 1);
         if let Zval::Object(o) = &value {
-            o.borrow_mut()
-                .props
+            let mut b = o.borrow_mut();
+            b.props
                 .set(b"message", Zval::Str(PhpStr::new(message.as_bytes().to_vec())));
+            b.props.set(b"line", Zval::Long(line as i64));
+            b.props
+                .set(b"file", Zval::Str(PhpStr::new(self.module.file.to_vec())));
         }
         Ok(value)
+    }
+
+    /// The source line of the instruction that just ran (or faulted) in frame
+    /// `top`: `lines[ip-1]`, since the dispatch loop has already advanced `ip`
+    /// past it. Defensive: returns 0 if the table is short or `ip` is 0 (EXC-3b).
+    fn cur_line(&self, top: usize) -> Line {
+        let f = &self.frames[top];
+        f.ip.checked_sub(1).and_then(|i| f.func.lines.get(i).copied()).unwrap_or(0)
+    }
+
+    /// PHP fixes a Throwable's `line`/`file` at `new` time (not in the user
+    /// constructor). After allocating an object whose class is-a `Throwable`,
+    /// stamp the current source location onto it before `__construct` runs
+    /// (EXC-3b). A no-op for non-Throwable classes.
+    fn stamp_throwable_location(&self, obj: &Zval) {
+        let Some(throwable_id) = self.throwable_id else { return };
+        let Zval::Object(o) = obj else { return };
+        let cid = o.borrow().class_id as ClassId;
+        if !is_instance_of(self.module, cid, throwable_id) {
+            return;
+        }
+        let line = self.cur_line(self.frames.len() - 1);
+        let mut b = o.borrow_mut();
+        b.props.set(b"line", Zval::Long(line as i64));
+        b.props
+            .set(b"file", Zval::Str(PhpStr::new(self.module.file.to_vec())));
     }
 
     /// Resolve and lazily initialise the persistent cell for static property
@@ -4276,6 +4315,54 @@ mod tests {
         let module = compile_program(&program, &Registry::new()).expect("compile");
         let out = run_module(&module, &Registry::new());
         assert!(out.fatal.is_some(), "expected an uncaught engine-error fatal");
+    }
+
+    // ----- EXC-3b: line / file tracking -----
+
+    #[test]
+    fn new_exception_carries_line() {
+        // PHP fixes a Throwable's line at `new` time: the `throw new Exception`
+        // sits on source line 3.
+        assert_eq!(
+            vm_stdout(b"<?php\ntry {\n    throw new Exception('boom');\n} catch (Exception $e) {\n    echo $e->getLine();\n}"),
+            b"3"
+        );
+    }
+
+    #[test]
+    fn new_exception_carries_file() {
+        assert_eq!(
+            vm_stdout(b"<?php try { throw new Exception('x'); } catch (Exception $e) { echo $e->getFile(); }"),
+            b"test.php"
+        );
+    }
+
+    #[test]
+    fn engine_error_carries_line() {
+        // The synthesized DivisionByZeroError reports the line of the faulting
+        // `1 % 0` op (source line 3).
+        assert_eq!(
+            vm_stdout(b"<?php\ntry {\n    $x = 1 % 0;\n} catch (DivisionByZeroError $e) {\n    echo $e->getLine();\n}"),
+            b"3"
+        );
+    }
+
+    #[test]
+    fn engine_error_carries_file() {
+        assert_eq!(
+            vm_stdout(b"<?php try { $x = 1 % 0; } catch (DivisionByZeroError $e) { echo $e->getFile(); }"),
+            b"test.php"
+        );
+    }
+
+    #[test]
+    fn exception_line_is_new_site_not_construct() {
+        // A Throwable's line is fixed at the `new` site (source line 3), not at
+        // the later `make()` call site (line 5) that returns it.
+        assert_eq!(
+            vm_stdout(b"<?php\nfunction make() {\n    return new Exception('e');\n}\n$e = make();\necho $e->getLine();"),
+            b"3"
+        );
     }
 }
 

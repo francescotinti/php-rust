@@ -30,7 +30,7 @@ use crate::bytecode::{
     ConstIdx, DimBase, ExcRegion, FieldBase, FieldStep, Func, Instantiable, Module, Op, StaticInit,
 };
 use crate::hir::{
-    BinOp, Case, CatchClause, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, MatchArm,
+    BinOp, Case, CatchClause, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, Line, MatchArm,
     Place, PlaceBase, PlaceStep, Program, StaticAssignOp, Stmt, StmtKind, Visibility,
 };
 
@@ -162,6 +162,7 @@ fn compile_body(
     Ok(Func {
         name: name.into(),
         ops: c.ops,
+        lines: c.lines,
         consts: c.consts,
         // Named locals plus the high-water mark of compiler temporaries.
         n_slots: n_locals + c.n_temps_max,
@@ -185,6 +186,7 @@ fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
     Func {
         name: fd.name.clone(),
         ops: vec![Op::Fatal(0)],
+        lines: vec![fd.line],
         consts: vec![Const::Str(msg.into_bytes().into())],
         n_slots: fd.slots.len() as u32,
         n_params: fd.params.len() as u32,
@@ -368,6 +370,7 @@ fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassI
     Ok(Func {
         name: Box::from(&b"{prop-init}"[..]),
         ops: c.ops,
+        lines: c.lines,
         consts: c.consts,
         n_slots: c.n_temps_max,
         n_params: 0,
@@ -387,6 +390,7 @@ fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, decl_class: 
     Ok(Func {
         name: name.into(),
         ops: c.ops,
+        lines: c.lines,
         consts: c.consts,
         n_slots: c.n_temps_max,
         n_params: 0,
@@ -404,6 +408,7 @@ fn const_stub(name: &[u8], err: &CompileError) -> Func {
     Func {
         name: name.into(),
         ops: vec![Op::Fatal(0)],
+        lines: vec![0],
         consts: vec![Const::Str(msg.into_bytes().into())],
         n_slots: 0,
         n_params: 0,
@@ -445,6 +450,12 @@ fn const_eval(e: &Expr) -> Option<Const> {
 /// program-wide [`ProgramCtx`] for resolving call / class targets.
 struct FnCompiler<'a> {
     ops: Vec<Op>,
+    /// Source line of each emitted op, parallel to `ops` (EXC-3b). `emit` pushes
+    /// the current line; `patch` overwrites an op in place and leaves this alone.
+    lines: Vec<Line>,
+    /// The line of the statement/expression currently being compiled; stamped
+    /// onto every op `emit` appends. Updated at the top of `stmt`/`expr`.
+    cur_line: Line,
     consts: Vec<Const>,
     loops: Vec<LoopCtx>,
     ctx: &'a ProgramCtx<'a>,
@@ -482,6 +493,8 @@ impl<'a> FnCompiler<'a> {
     fn new(ctx: &'a ProgramCtx<'a>, n_locals: u32, cur_class: Option<ClassId>, is_main: bool) -> Self {
         FnCompiler {
             ops: Vec::new(),
+            lines: Vec::new(),
+            cur_line: 0,
             consts: Vec::new(),
             loops: Vec::new(),
             ctx,
@@ -507,10 +520,12 @@ impl<'a> FnCompiler<'a> {
         self.n_temps_cur -= 1;
     }
 
-    /// Append `op`, returning its address.
+    /// Append `op`, returning its address. Records the current source line in the
+    /// parallel `lines` table (EXC-3b).
     fn emit(&mut self, op: Op) -> Addr {
         let at = self.ops.len() as Addr;
         self.ops.push(op);
+        self.lines.push(self.cur_line);
         at
     }
 
@@ -547,6 +562,7 @@ impl<'a> FnCompiler<'a> {
     }
 
     fn stmt(&mut self, s: &Stmt) -> R<()> {
+        self.cur_line = s.line;
         match &s.kind {
             StmtKind::Nop => {}
             StmtKind::Echo(values) => {
@@ -782,6 +798,7 @@ impl<'a> FnCompiler<'a> {
     }
 
     fn expr(&mut self, e: &Expr) -> R<()> {
+        self.cur_line = e.line;
         match &e.kind {
             ExprKind::Null => {
                 let k = self.konst(Const::Null);

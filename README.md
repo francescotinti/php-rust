@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–61 completati · 1.153 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–61 completati · 1.158 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 **Migrazione VM (Fase 4, in corso).** In parallelo all'evaluator tree-walk — che resta il motore
 di produzione e tiene il differential a 0 mismatch — è in costruzione una **VM a bytecode**
@@ -36,9 +36,12 @@ Inoltre (**EXC-3a**) gli **engine error sono catchabili**: `DivisionByZeroError`
 `TypeError` (`[] + 1`), `Error` (es. istanza di classe astratta) vengono risolti alla classe-prelude
 per nome e *sintetizzati* in un Throwable (con `getMessage()` corretto), instradato al `catch` come un
 throw user — incluso il match per supertipo (`catch (ArithmeticError)` su un `DivisionByZeroError`) e
-`catch (Throwable)`. Roadmap residua: EXC-3b (line-tracking: `getLine()`/`getFile()`) + EXC-3c
-(stack trace: `getTrace()`/`getTraceAsString()`) → generatori → rimozione di `eval/`. Piano completo:
-vedi il file di piano del progetto.
+`catch (Throwable)`. E (**EXC-3b**) il **line-tracking**: ogni op porta la sua linea sorgente (tabella
+`Func.lines` parallela a `ops`), così ogni Throwable — sia `new Exception` (linea fissata al `new`,
+come PHP, non nel costruttore) sia engine error sintetizzato (linea dell'op che fallisce) — riporta
+`getLine()`/`getFile()` corretti. Roadmap residua: EXC-3c (stack trace:
+`getTrace()`/`getTraceAsString()`) → generatori → rimozione di `eval/`. Piano completo: vedi il file
+di piano del progetto.
 
 Step 61 ha completato i suggerimenti della code-review esterna: (E) **diff unificato** nel
 `phpt-runner` (`--list-fails` mostra un line-diff EXPECTF-aware invece di due blob troncati); (B)

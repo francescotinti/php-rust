@@ -516,6 +516,11 @@ pub struct Func {
     pub name: Box<[u8]>,
     /// The instruction stream. Jump targets are indices into this vector.
     pub ops: Vec<Op>,
+    /// Source line of each op, parallel to `ops` (same length). The VM reads
+    /// `lines[ip-1]` to know the line of the instruction that just faulted, so a
+    /// synthesized or `new`-constructed Throwable carries the right
+    /// `getLine()`/`getFile()` (EXC-3b).
+    pub lines: Vec<Line>,
     /// Per-function constant pool, indexed by [`Op::PushConst`].
     pub consts: Vec<Const>,
     /// Size of the frame's slot array (named locals). The compiler copies this
