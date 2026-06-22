@@ -117,6 +117,9 @@ struct Frame<'m> {
     /// operand stack) so it survives across the loop body; freed by `IterPop`,
     /// and discarded wholesale when the frame unwinds (a `return` out of a loop).
     iters: Vec<IterState>,
+    /// An exception parked while a `finally` block runs (EXC-2): set when an
+    /// exception propagates into a finally region, re-raised at [`Op::EndFinally`].
+    pending_throw: Option<Zval>,
 }
 
 impl<'m> Frame<'m> {
@@ -134,6 +137,7 @@ impl<'m> Frame<'m> {
             ret_stringify: false,
             guard_release: None,
             iters: Vec::new(),
+            pending_throw: None,
         }
     }
 }
@@ -225,11 +229,20 @@ impl Vm<'_> {
                 .copied();
             if let Some(r) = region {
                 // Statement boundaries leave the operand stack at its baseline, so
-                // clearing any partial-expression values restores it for the catch
-                // body; then park the exception for `CatchMatch`.
+                // clearing any partial-expression values restores it for the
+                // handler. A catch region parks the exception on the stack for
+                // `CatchMatch`; a finally region parks it in `pending_throw`, to be
+                // re-raised at `EndFinally` (EXC-2).
                 self.frames[top].stack.clear();
-                self.frames[top].stack.push(obj);
-                self.frames[top].ip = r.catch as usize;
+                if r.is_finally {
+                    self.frames[top].pending_throw = Some(obj);
+                } else {
+                    // A new in-flight exception supersedes any exception parked by
+                    // an earlier finally in this frame (e.g. a finally that threw).
+                    self.frames[top].pending_throw = None;
+                    self.frames[top].stack.push(obj);
+                }
+                self.frames[top].ip = r.target as usize;
                 return None;
             }
             if self.frames.len() == 1 {
@@ -554,6 +567,13 @@ impl Vm<'_> {
                         self.frames[top].ip = body as usize;
                     }
                     // else: fall through to the next CatchMatch / Rethrow.
+                }
+                Op::EndFinally => {
+                    // EXC-2: if an exception was propagating through this finally,
+                    // re-raise it now; otherwise fall through past the `try`.
+                    if let Some(v) = self.frames[top].pending_throw.take() {
+                        return Err(PhpError::Thrown(v));
+                    }
                 }
                 Op::DerefTop => {
                     // REF-4b: copy a by-ref return used in value context.
@@ -4082,6 +4102,66 @@ mod tests {
         let module = compile_program(&program, &Registry::new()).expect("compile");
         let out = run_module(&module, &Registry::new());
         assert!(out.fatal.is_some(), "expected an uncaught-exception fatal");
+    }
+
+    // ----- EXC-2: finally -----
+
+    #[test]
+    fn finally_runs_after_normal_completion() {
+        assert_eq!(
+            vm_stdout(b"<?php try { echo 'a'; } finally { echo 'b'; } echo 'c';"),
+            b"abc"
+        );
+    }
+
+    #[test]
+    fn finally_runs_after_caught() {
+        assert_eq!(
+            vm_stdout(b"<?php try { throw new Exception('x'); } catch (Exception $e) { echo 'caught'; } finally { echo 'fin'; } echo '!';"),
+            b"caughtfin!"
+        );
+    }
+
+    #[test]
+    fn finally_runs_while_exception_propagates() {
+        assert_eq!(
+            vm_stdout(b"<?php function f() { try { throw new Exception('x'); } finally { echo 'fin'; } } try { f(); } catch (Exception $e) { echo 'outer'; }"),
+            b"finouter"
+        );
+    }
+
+    #[test]
+    fn finally_runs_when_clause_does_not_match() {
+        assert_eq!(
+            vm_stdout(b"<?php try { try { throw new Exception('x'); } catch (TypeError $e) { echo 'no'; } finally { echo 'fin'; } } catch (Exception $e) { echo 'out'; }"),
+            b"finout"
+        );
+    }
+
+    #[test]
+    fn nested_finally_both_run() {
+        assert_eq!(
+            vm_stdout(b"<?php function f() { try { try { throw new Exception('x'); } finally { echo '1'; } } finally { echo '2'; } } try { f(); } catch (Exception $e) { echo '3'; }"),
+            b"123"
+        );
+    }
+
+    #[test]
+    fn exception_in_finally_overrides_original() {
+        assert_eq!(
+            vm_stdout(b"<?php try { try { throw new Exception('a'); } finally { throw new Exception('b'); } } catch (Exception $e) { echo $e->getMessage(); }"),
+            b"b"
+        );
+    }
+
+    #[test]
+    fn finally_pending_does_not_leak_to_next_try() {
+        // After a finally re-throws and is caught, a *later* normally-completing
+        // try/finally must not re-raise the stale parked exception.
+        assert_eq!(
+            vm_stdout(b"<?php try { try { throw new Exception('a'); } finally { throw new Exception('b'); } } catch (Exception $e) {} try { echo 'x'; } finally { echo 'y'; } echo 'z';"),
+            b"xyz"
+        );
     }
 }
 

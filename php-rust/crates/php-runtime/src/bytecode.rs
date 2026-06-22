@@ -229,6 +229,11 @@ pub enum Op {
     /// if present) and jump to `body`; otherwise leave it and fall through to the
     /// next `CatchMatch` / `Rethrow`.
     CatchMatch { types: Box<[ClassId]>, var: Option<Slot>, body: Addr },
+    /// `[] -> []` — the end of a `finally` block (EXC-2). If the frame carries a
+    /// pending exception (the `finally` ran while an exception was propagating
+    /// through it), re-raise it now so it resumes unwinding to an outer handler;
+    /// otherwise fall through to the code after the `try`.
+    EndFinally,
 
     // ----- operators (semantics delegated to php_types::ops / ::convert) -----
     /// `[lhs, rhs] -> [result]` — pop rhs then lhs, push `lhs <op> rhs`.
@@ -533,14 +538,20 @@ pub struct Func {
     pub exc_table: Vec<ExcRegion>,
 }
 
-/// One protected `try` region: the half-open op range `[start, end)` of the
-/// guarded body and the address of its catch-dispatch block (EXC). Regions are
-/// listed innermost-first so a linear scan picks the tightest enclosing handler.
+/// One protected `try` region: the half-open op range `[start, end)` it guards
+/// and the `target` it routes an in-flight exception to (EXC). For a *catch*
+/// region (`is_finally == false`) the target is the catch-dispatch block; for a
+/// *finally* region the target is the `finally` body, entered with the exception
+/// parked in the frame's pending slot (re-raised at [`Op::EndFinally`]). A
+/// `try { } catch { } finally { }` emits both — the catch region (body only)
+/// before the finally region (body + catches) so a linear scan tries catches
+/// first. Regions are listed innermost-first.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ExcRegion {
     pub start: Addr,
     pub end: Addr,
-    pub catch: Addr,
+    pub target: Addr,
+    pub is_finally: bool,
 }
 
 /// The root of a mixed property/index write path ([`Op::FieldAssign`] &c.): a

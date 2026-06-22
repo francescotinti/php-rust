@@ -1450,46 +1450,70 @@ impl<'a> FnCompiler<'a> {
     /// expression in source order (consumed at run time beneath the value). The
     /// in-place vs copy-on-write distinction between object and array steps is the
     /// VM's job; the compiler only records the shape.
-    /// Compile `try { body } catch (...) { } ...` (EXC-1; `finally` is out of
-    /// slice → falls back to the evaluator). The body's op range becomes a
-    /// protected region pointing at the catch-dispatch block: one `CatchMatch`
-    /// per clause (forward-referencing its body) terminated by `Rethrow`, then
-    /// the catch bodies. On a thrown exception the VM jumps to `catch_addr`.
+    /// Compile `try { body } catch (...) { } [finally { }]` (EXC). The body's op
+    /// range becomes a *catch* region (→ a `CatchMatch`-per-clause / `Rethrow`
+    /// dispatch) and, when a `finally` is present, the body+catches range also
+    /// becomes a *finally* region (→ the finally body, re-raising at `EndFinally`)
+    /// — so normal, caught, and propagating exits all run `finally`, and nesting
+    /// works via re-raise. EXC-2 scope: a `return`/`break`/`continue`/`goto`
+    /// crossing a `finally` is out of slice (falls back to the evaluator).
     fn try_stmt(&mut self, body: &[Stmt], catches: &[CatchClause], finally: &[Stmt]) -> R<()> {
-        if !finally.is_empty() {
-            return Err(CompileError::Unsupported("try/finally".into()));
+        let has_finally = !finally.is_empty();
+        if has_finally
+            && (stmts_transfer_control(body)
+                || catches.iter().any(|c| stmts_transfer_control(&c.body))
+                || stmts_transfer_control(finally))
+        {
+            return Err(CompileError::Unsupported(
+                "try/finally with return/break/continue/goto in a protected block".into(),
+            ));
         }
         let start = self.here();
         self.block(body)?;
-        let end = self.here(); // exclusive end of the protected op range
-        let skip = self.emit(Op::Jump(Addr::MAX)); // normal completion skips the catches
+        let body_end = self.here();
+        let after_body = self.emit(Op::Jump(Addr::MAX)); // normal completion → finally / after
         let catch_addr = self.here();
-        self.exc_regions.push(ExcRegion { start, end, catch: catch_addr });
+        if !catches.is_empty() {
+            self.exc_regions.push(ExcRegion { start, end: body_end, target: catch_addr, is_finally: false });
+        }
         // Catch dispatch: one `CatchMatch` per clause (body forward-referenced),
         // then `Rethrow` if none matched.
         let mut sites: Vec<(Addr, Vec<ClassId>, Option<crate::hir::Slot>)> = Vec::new();
         for c in catches {
             let cids = self.resolve_catch_types(&c.types);
-            let at = self.emit(Op::CatchMatch {
-                types: cids.clone().into(),
-                var: c.var,
-                body: Addr::MAX,
-            });
+            let at = self.emit(Op::CatchMatch { types: cids.clone().into(), var: c.var, body: Addr::MAX });
             sites.push((at, cids, c.var));
         }
-        self.emit(Op::Rethrow);
-        let mut end_jumps = Vec::new();
+        if !catches.is_empty() {
+            self.emit(Op::Rethrow);
+        }
+        let mut catch_end_jumps = Vec::new();
         for (i, c) in catches.iter().enumerate() {
             let body_at = self.here();
             let (at, cids, var) = &sites[i];
             self.patch(*at, Op::CatchMatch { types: cids.clone().into(), var: *var, body: body_at });
             self.block(&c.body)?;
-            end_jumps.push(self.emit(Op::Jump(Addr::MAX)));
+            catch_end_jumps.push(self.emit(Op::Jump(Addr::MAX)));
+        }
+        let finally_entry = self.here();
+        if has_finally {
+            // Covers the body, the catch dispatch, and the catch bodies — an
+            // exception anywhere before `finally_entry` runs `finally` then
+            // re-propagates. Pushed after the catch region so catches win first.
+            self.exc_regions.push(ExcRegion {
+                start,
+                end: finally_entry,
+                target: finally_entry,
+                is_finally: true,
+            });
+            self.block(finally)?;
+            self.emit(Op::EndFinally);
         }
         let after = self.here();
-        self.patch(skip, Op::Jump(after));
-        for j in end_jumps {
-            self.patch(j, Op::Jump(after));
+        let normal_target = if has_finally { finally_entry } else { after };
+        self.patch(after_body, Op::Jump(normal_target));
+        for j in catch_end_jumps {
+            self.patch(j, Op::Jump(normal_target));
         }
         Ok(())
     }
@@ -1829,6 +1853,41 @@ fn dim_base(place: &Place) -> R<DimBase> {
         PlaceBase::Local(s) => Ok(DimBase::Local(s)),
         PlaceBase::Global(s) => Ok(DimBase::Global(s)),
         PlaceBase::This => Err(CompileError::Unsupported("$this property write".into())),
+    }
+}
+
+/// Whether any statement (recursively, but not into nested closures — those are
+/// separate bodies) performs a control transfer that could cross a `finally`:
+/// `return`/`break`/`continue`/`goto` (EXC-2). Conservative — a `break` confined
+/// to a loop inside the `try` also trips it, forcing a fallback to the evaluator.
+fn stmts_transfer_control(stmts: &[Stmt]) -> bool {
+    stmts.iter().any(stmt_transfers_control)
+}
+
+fn stmt_transfers_control(s: &Stmt) -> bool {
+    match &s.kind {
+        StmtKind::Return(_)
+        | StmtKind::ReturnRef(_)
+        | StmtKind::Break(_)
+        | StmtKind::Continue(_)
+        | StmtKind::Goto(_) => true,
+        StmtKind::Block(b) => stmts_transfer_control(b),
+        StmtKind::If { then, elseifs, otherwise, .. } => {
+            stmts_transfer_control(then)
+                || elseifs.iter().any(|(_, b)| stmts_transfer_control(b))
+                || stmts_transfer_control(otherwise)
+        }
+        StmtKind::While { body, .. }
+        | StmtKind::DoWhile { body, .. }
+        | StmtKind::For { body, .. }
+        | StmtKind::Foreach { body, .. } => stmts_transfer_control(body),
+        StmtKind::Switch { cases, .. } => cases.iter().any(|c| stmts_transfer_control(&c.body)),
+        StmtKind::Try { body, catches, finally } => {
+            stmts_transfer_control(body)
+                || catches.iter().any(|c| stmts_transfer_control(&c.body))
+                || stmts_transfer_control(finally)
+        }
+        _ => false,
     }
 }
 
