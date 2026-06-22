@@ -14,7 +14,17 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–61 completati · 934 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–61 completati · 1.092 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+
+**Migrazione VM (Fase 4, in corso).** In parallelo all'evaluator tree-walk — che resta il motore
+di produzione e tiene il differential a 0 mismatch — è in costruzione una **VM a bytecode**
+(`compile.rs` HIR→bytecode + `vm.rs` dispatch loop), presupposto per generatori/Fiber senza
+`corosensei`/`unsafe`. Coperto finora, validato da test unitari VM-side: espressioni e control-flow,
+chiamate, array, **OOP completo** (classi, `$this`, proprietà/visibility, metodi, `static` + LSB,
+costanti di classe, magic `__get`/`__set`/`__isset`/`__unset`/`__toString`/`__destruct`, nullsafe
+`?->`), e ora **REF-1** (reference fra variabili bare `$a = &$b` e `global`). Roadmap residua:
+REF-2/4 (param by-ref, foreach by-ref, return-ref) → closure → eccezioni → generatori → rimozione
+di `eval/`. Piano completo: vedi il file di piano del progetto.
 
 Step 61 ha completato i suggerimenti della code-review esterna: (E) **diff unificato** nel
 `phpt-runner` (`--list-fails` mostra un line-diff EXPECTF-aware invece di due blob troncati); (B)
