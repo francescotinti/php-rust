@@ -19,11 +19,18 @@
 //! Calls, arrays, references, OOP and generators are deliberately out of slice;
 //! `Module::functions` / `closures` are left empty until the call opcode lands.
 
+use std::collections::HashMap;
+use std::rc::Rc;
+
+use php_types::{ObjectInfo, PhpStr, PropVis};
+
 use crate::builtin::{Builtin, Registry};
-use crate::bytecode::{Addr, Const, ConstIdx, DimBase, Func, Module, Op};
+use crate::bytecode::{
+    Addr, CompiledClass, CompiledMethod, Const, ConstIdx, DimBase, Func, Instantiable, Module, Op,
+};
 use crate::hir::{
-    BinOp, Case, Expr, ExprKind, FnDecl, MatchArm, Place, PlaceBase, PlaceStep, Program, Stmt,
-    StmtKind,
+    BinOp, Case, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, MatchArm, Place, PlaceBase,
+    PlaceStep, Program, Stmt, StmtKind, Visibility,
 };
 
 /// A construct the proof-slice compiler does not yet lower. Carries the HIR
@@ -43,38 +50,70 @@ impl std::fmt::Display for CompileError {
 
 type R<T> = Result<T, CompileError>;
 
+/// The program-wide context every body compiles against: the function table (for
+/// call resolution), the builtin registry (for classifying call names), the class
+/// table (for compile-time method/constructor resolution and walking parents),
+/// and a case-insensitive name→[`ClassId`] index (for resolving
+/// [`ClassRef::Named`]). Bundled so a body's compiler can borrow it whole.
+struct ProgramCtx<'a> {
+    funcs: &'a [FnDecl],
+    registry: &'a Registry,
+    classes: &'a [ClassDecl],
+    class_index: &'a HashMap<Vec<u8>, ClassId>,
+}
+
 /// Compile a lowered [`Program`] into an executable [`Module`].
 ///
-/// The user-function table is compiled in the same index space as
-/// [`Program::functions`], so a call resolved to `functions[i]` maps to the same
-/// index here. Closures are still out of slice.
+/// Functions, classes and methods are compiled in the same index spaces as the
+/// source [`Program`], so a call/`new`/method resolved to index `i` in the HIR
+/// maps to index `i` here. Closures are still out of slice.
 pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
-    let funcs = &program.functions;
-    let mut functions = Vec::with_capacity(funcs.len());
-    for fd in funcs {
+    // Case-insensitive name→id index for resolving `ClassRef::Named`; the first
+    // declaration of a name wins (PHP forbids redeclaration).
+    let mut class_index: HashMap<Vec<u8>, ClassId> = HashMap::new();
+    for (i, cd) in program.classes.iter().enumerate() {
+        class_index.entry(cd.name.to_ascii_lowercase()).or_insert(i);
+    }
+    let ctx = ProgramCtx {
+        funcs: &program.functions,
+        registry,
+        classes: &program.classes,
+        class_index: &class_index,
+    };
+
+    let mut functions = Vec::with_capacity(program.functions.len());
+    for fd in &program.functions {
         // Function bodies compile *tolerantly*: the always-injected PHP prelude
         // (exception classes, date API) uses not-yet-ported constructs, so a
         // failure becomes a stub that fatals only if the function is called —
         // rather than making every script uncompilable. `main`, below, is not
         // tolerant: if the script body itself is unsupported, the VM can't run it.
-        match compile_fndecl(fd, funcs, registry) {
+        match compile_fndecl(fd, &ctx) {
             Ok(f) => functions.push(f),
             Err(e) => functions.push(stub_func(fd, &e)),
         }
     }
-    let main = compile_body(b"", &program.body, program.slots.len() as u32, 0, false, false, funcs, registry)?;
+    let main = compile_body(b"", &program.body, program.slots.len() as u32, 0, false, false, &ctx)?;
+    // Classes are compiled tolerantly too (see `compile_class`).
+    let classes = program
+        .classes
+        .iter()
+        .enumerate()
+        .map(|(cid, cd)| compile_class(cid, cd, &ctx))
+        .collect();
+
     Ok(Module {
         main,
         functions,
         closures: Vec::new(),
+        classes,
         file: program.file.clone(),
     })
 }
 
-/// Compile a user [`FnDecl`] into a [`Func`], resolving calls in its body
-/// against `funcs` (the whole program's function table, for forward references
-/// and recursion).
-fn compile_fndecl(fd: &FnDecl, funcs: &[FnDecl], registry: &Registry) -> R<Func> {
+/// Compile a user [`FnDecl`] into a [`Func`], resolving calls in its body against
+/// the program context (for forward references and recursion).
+fn compile_fndecl(fd: &FnDecl, ctx: &ProgramCtx) -> R<Func> {
     compile_body(
         &fd.name,
         &fd.body,
@@ -82,12 +121,11 @@ fn compile_fndecl(fd: &FnDecl, funcs: &[FnDecl], registry: &Registry) -> R<Func>
         fd.params.len() as u32,
         fd.by_ref,
         fd.is_generator,
-        funcs,
-        registry,
+        ctx,
     )
 }
 
-/// Compile one body (the script's or a function's) into a [`Func`].
+/// Compile one body (the script's, a function's, or a method's) into a [`Func`].
 #[allow(clippy::too_many_arguments)]
 fn compile_body(
     name: &[u8],
@@ -96,10 +134,9 @@ fn compile_body(
     n_params: u32,
     by_ref: bool,
     is_generator: bool,
-    funcs: &[FnDecl],
-    registry: &Registry,
+    ctx: &ProgramCtx,
 ) -> R<Func> {
-    let mut c = FnCompiler::new(funcs, registry, n_locals);
+    let mut c = FnCompiler::new(ctx, n_locals);
     c.block(body)?;
     // A body that runs off the end returns NULL (PHP's implicit return).
     let null = c.konst(Const::Null);
@@ -139,17 +176,140 @@ fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
     }
 }
 
+/// Compile one HIR [`ClassDecl`] into a [`CompiledClass`] (OOP-1). Tolerant, like
+/// functions: a method that doesn't compile becomes a [`stub_func`]; a
+/// non-constant property default marks the class `ok = false` so [`Op::Alloc`]
+/// fatals rather than producing a wrong instance.
+///
+/// Properties and visibility are flattened **parent-first** (root→leaf), so a
+/// redeclared property keeps its inherited position and takes the most-derived
+/// default / visibility — matching the tree-walker's `collect_props` /
+/// `class_shape` (D-19.10/D-19.20).
+fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClass {
+    let instantiable = if cd.is_enum {
+        Instantiable::Enum
+    } else if cd.is_interface {
+        Instantiable::Interface
+    } else if cd.is_abstract {
+        Instantiable::Abstract
+    } else {
+        Instantiable::Yes
+    };
+
+    let chain = class_chain(ctx.classes, cid); // root → leaf
+
+    // Flattened property defaults (constant-folded) and the visibility shape.
+    let mut ok = true;
+    let mut prop_defaults: Vec<(Box<[u8]>, Const)> = Vec::new();
+    let mut vis_entries: Vec<(Box<[u8]>, PropVis)> = Vec::new();
+    for &x in &chain {
+        let cname = PhpStr::new(ctx.classes[x].name.to_vec());
+        for p in &ctx.classes[x].props {
+            let value = match &p.default {
+                None => Const::Null,
+                Some(e) => match const_eval(e) {
+                    Some(c) => c,
+                    // A non-constant default (array / expression) isn't
+                    // representable yet: keep parity by marking the class
+                    // uncompilable rather than emitting a wrong default.
+                    None => {
+                        ok = false;
+                        Const::Null
+                    }
+                },
+            };
+            set_prop(&mut prop_defaults, &p.name, value);
+
+            let vis = match p.visibility {
+                Visibility::Public => PropVis::Public,
+                Visibility::Protected => PropVis::Protected,
+                Visibility::Private => PropVis::Private(Rc::clone(&cname)),
+            };
+            match vis_entries.iter_mut().find(|(k, _)| k.as_ref() == p.name.as_ref()) {
+                Some(e) => e.1 = vis,
+                None => vis_entries.push((p.name.clone(), vis)),
+            }
+        }
+    }
+
+    // Methods declared on this class (same order as the HIR, so a compile-time
+    // `InvokeMethod` index lines up). Each compiles tolerantly to a stub.
+    let methods = cd
+        .methods
+        .iter()
+        .map(|m| {
+            let func = match compile_body(
+                &m.decl.name,
+                &m.decl.body,
+                m.decl.slots.len() as u32,
+                m.decl.params.len() as u32,
+                m.decl.by_ref,
+                m.decl.is_generator,
+                ctx,
+            ) {
+                Ok(f) => f,
+                Err(e) => stub_func(&m.decl, &e),
+            };
+            CompiledMethod { name: m.decl.name.clone(), func }
+        })
+        .collect();
+
+    CompiledClass {
+        name: cd.name.clone(),
+        class_name: PhpStr::new(cd.name.to_vec()),
+        parent: cd.parent,
+        interfaces: cd.interfaces.clone(),
+        instantiable,
+        prop_defaults,
+        info: Rc::new(ObjectInfo::from_entries(vis_entries)),
+        methods,
+        ok,
+    }
+}
+
+/// Insert / update a flattened property default by name, keeping its first
+/// (inherited) position — the analogue of `Props::set` at compile time.
+fn set_prop(defaults: &mut Vec<(Box<[u8]>, Const)>, name: &[u8], value: Const) {
+    match defaults.iter_mut().find(|(k, _)| k.as_ref() == name) {
+        Some(e) => e.1 = value,
+        None => defaults.push((name.into(), value)),
+    }
+}
+
+/// The class ancestry root→leaf (parent-first), for flattening properties.
+fn class_chain(classes: &[ClassDecl], cid: ClassId) -> Vec<ClassId> {
+    let mut chain = Vec::new();
+    let mut c = Some(cid);
+    while let Some(x) = c {
+        chain.push(x);
+        c = classes[x].parent;
+    }
+    chain.reverse();
+    chain
+}
+
+/// Constant-fold a property-default expression to a [`Const`]. OOP-1 only handles
+/// scalar literals; anything else (array, constant ref, arithmetic) yields `None`
+/// and makes its class an uninstantiable stub.
+fn const_eval(e: &Expr) -> Option<Const> {
+    match &e.kind {
+        ExprKind::Null => Some(Const::Null),
+        ExprKind::Bool(b) => Some(Const::Bool(*b)),
+        ExprKind::Int(i) => Some(Const::Int(*i)),
+        ExprKind::Float(f) => Some(Const::Float(*f)),
+        ExprKind::Str(s) => Some(Const::Str(s.clone())),
+        _ => None,
+    }
+}
+
 /// Per-function emit state: the growing instruction stream, the constant pool,
 /// the stack of enclosing loops (for `break N` / `continue N`), and the
-/// program's function table for resolving call targets.
+/// program-wide [`ProgramCtx`] for resolving call / class targets.
 struct FnCompiler<'a> {
     ops: Vec<Op>,
     consts: Vec<Const>,
     loops: Vec<LoopCtx>,
-    funcs: &'a [FnDecl],
-    /// The builtin registry, consulted at compile time only to classify a call
-    /// name (value builtin / by-ref builtin / not-a-VM-builtin) — never executed.
-    registry: &'a Registry,
+    ctx: &'a ProgramCtx<'a>,
     /// Number of named locals (HIR slots); compiler temporaries are allocated
     /// above this, so the frame's slot array is `n_locals + n_temps_max` wide.
     n_locals: u32,
@@ -170,13 +330,12 @@ struct LoopCtx {
 }
 
 impl<'a> FnCompiler<'a> {
-    fn new(funcs: &'a [FnDecl], registry: &'a Registry, n_locals: u32) -> Self {
+    fn new(ctx: &'a ProgramCtx<'a>, n_locals: u32) -> Self {
         FnCompiler {
             ops: Vec::new(),
             consts: Vec::new(),
             loops: Vec::new(),
-            funcs,
-            registry,
+            ctx,
             n_locals,
             n_temps_cur: 0,
             n_temps_max: 0,
@@ -333,9 +492,13 @@ impl<'a> FnCompiler<'a> {
             }
             StmtKind::Unset(places) => {
                 for place in places {
-                    let base = dim_base(place)?;
-                    let nkeys = self.test_path_steps(place)?;
-                    self.emit(Op::UnsetPath { base, nkeys });
+                    if let Some(name) = self.prop_place(place)? {
+                        self.emit(Op::PropUnset { name });
+                    } else {
+                        let base = dim_base(place)?;
+                        let nkeys = self.test_path_steps(place)?;
+                        self.emit(Op::UnsetPath { base, nkeys });
+                    }
                 }
             }
             StmtKind::Switch { subject, cases } => self.switch(subject, cases)?,
@@ -560,6 +723,47 @@ impl<'a> FnCompiler<'a> {
                 self.patch(to_end, Op::JumpIfNotNull(end));
             }
             ExprKind::Match { subject, arms } => self.match_expr(subject, arms)?,
+            ExprKind::New { class, args, named } => self.new_obj(class, args, named)?,
+            ExprKind::This => {
+                self.emit(Op::This);
+            }
+            ExprKind::PropGet { object, name, nullsafe } => {
+                if *nullsafe {
+                    return Err(CompileError::Unsupported("nullsafe property access (`?->`)".into()));
+                }
+                self.expr(object)?;
+                self.emit(Op::PropGet { name: name.clone() });
+            }
+            ExprKind::MethodCall { object, method, args, named, nullsafe } => {
+                if *nullsafe {
+                    return Err(CompileError::Unsupported("nullsafe method call (`?->`)".into()));
+                }
+                if !named.is_empty() {
+                    return Err(CompileError::Unsupported("method call with named arguments".into()));
+                }
+                self.expr(object)?;
+                self.push_value_args(args)?;
+                self.emit(Op::MethodCall { method: method.clone(), argc: args.len() as u32 });
+            }
+            ExprKind::InstanceOf { expr, class } => {
+                let ClassRef::Named(name) = class else {
+                    return Err(CompileError::Unsupported("instanceof a non-named class".into()));
+                };
+                // Evaluate the operand first (PHP order), then test the class.
+                self.expr(expr)?;
+                match self.resolve_class(name) {
+                    Some(cid) => {
+                        self.emit(Op::InstanceOf { class: cid });
+                    }
+                    // An unknown class on the RHS is simply not matched (PHP does
+                    // not error here under the CLI without autoloading).
+                    None => {
+                        self.emit(Op::Pop);
+                        let f = self.konst(Const::Bool(false));
+                        self.emit(Op::PushConst(f));
+                    }
+                }
+            }
             other => return Err(CompileError::Unsupported(expr_name(other))),
         }
         Ok(())
@@ -610,8 +814,8 @@ impl<'a> FnCompiler<'a> {
             return Err(CompileError::Unsupported("call with named arguments".into()));
         }
         // User functions shadow builtins.
-        if let Some(idx) = self.funcs.iter().position(|f| ascii_eq_ignore_case(&f.name, name)) {
-            let callee = &self.funcs[idx];
+        if let Some(idx) = self.ctx.funcs.iter().position(|f| ascii_eq_ignore_case(&f.name, name)) {
+            let callee = &self.ctx.funcs[idx];
             if callee.params.iter().any(|p| p.by_ref || p.variadic) {
                 return Err(CompileError::Unsupported(
                     "call to a function with by-ref / variadic parameters".into(),
@@ -629,7 +833,7 @@ impl<'a> FnCompiler<'a> {
             return Ok(());
         }
         // Builtins: classify by-value vs by-reference-first via the registry.
-        match self.registry.get(name) {
+        match self.ctx.registry.get(name) {
             Some(Builtin::Value(_)) => {
                 self.push_value_args(args)?;
                 self.emit(Op::CallBuiltin { name: name.into(), argc: args.len() as u32 });
@@ -672,6 +876,89 @@ impl<'a> FnCompiler<'a> {
         self.push_value_args(rest)?;
         self.emit(Op::CallBuiltinRef { name: name.into(), slot, argc: rest.len() as u32 });
         Ok(())
+    }
+
+    /// Compile `new ClassName(args)` (OOP-1: `ClassRef::Named` only, no named /
+    /// spread arguments). Allocates the instance, then — if the class (or an
+    /// ancestor) declares `__construct`, resolved at compile time — runs it with
+    /// the fresh object as `$this`, leaving the object as the expression's value.
+    fn new_obj(&mut self, class: &ClassRef, args: &[Expr], named: &[(Box<[u8]>, Expr)]) -> R<()> {
+        if !named.is_empty() {
+            return Err(CompileError::Unsupported("new with named arguments".into()));
+        }
+        let ClassRef::Named(name) = class else {
+            return Err(CompileError::Unsupported(
+                "new self/parent/static / dynamic class".into(),
+            ));
+        };
+        // A genuinely-undefined class falls back to the tree-walker (which raises
+        // PHP's "Class not found"); a *defined* but non-instantiable class is
+        // handled at run time by `Alloc` (so its fatal matches PHP).
+        let Some(cid) = self.resolve_class(name) else {
+            return Err(CompileError::Unsupported(format!(
+                "new of unknown class `{}`",
+                String::from_utf8_lossy(name)
+            )));
+        };
+        let ctor = self.resolve_method_compile(cid, b"__construct");
+        self.emit(Op::Alloc { class: cid });
+        if let Some((defc, midx)) = ctor {
+            self.emit(Op::Dup); // keep the instance as the result; the dup is the receiver
+            self.push_value_args(args)?;
+            self.emit(Op::InvokeMethod { class: defc, method_idx: midx as u32, argc: args.len() as u32 });
+            self.emit(Op::Pop); // discard the constructor's return value
+        }
+        Ok(())
+    }
+
+    /// Resolve a class name (case-insensitive) to its [`ClassId`].
+    fn resolve_class(&self, name: &[u8]) -> Option<ClassId> {
+        self.ctx.class_index.get(&name.to_ascii_lowercase()).copied()
+    }
+
+    /// Resolve a method by name at compile time, walking the parent chain
+    /// child→ancestor; returns the *defining* class id and the method's index in
+    /// that class's `methods` (matching [`CompiledClass::methods`]).
+    fn resolve_method_compile(&self, start: ClassId, name: &[u8]) -> Option<(ClassId, usize)> {
+        let classes = self.ctx.classes;
+        let mut cid = Some(start);
+        while let Some(c) = cid {
+            if let Some(i) = classes[c]
+                .methods
+                .iter()
+                .position(|m| m.decl.name.eq_ignore_ascii_case(name))
+            {
+                return Some((c, i));
+            }
+            cid = classes[c].parent;
+        }
+        None
+    }
+
+    /// If `place` is a single-step property access on `$this` or a local
+    /// (`$this->p` / `$o->p`), push the object onto the stack and return the
+    /// property name; otherwise return `None` (the caller falls back to the array
+    /// path, which rejects property steps / `$this` for OOP-1). Multi-step or
+    /// `$GLOBALS`-rooted property targets are out of slice.
+    fn prop_place(&mut self, place: &Place) -> R<Option<Box<[u8]>>> {
+        if place.steps.len() != 1 {
+            return Ok(None);
+        }
+        let PlaceStep::Prop(name) = &place.steps[0] else {
+            return Ok(None);
+        };
+        match place.base {
+            PlaceBase::This => {
+                self.emit(Op::This);
+            }
+            PlaceBase::Local(s) => {
+                self.emit(Op::LoadSlot(s));
+            }
+            PlaceBase::Global(_) => {
+                return Err(CompileError::Unsupported("$GLOBALS property write".into()))
+            }
+        }
+        Ok(Some(name.clone()))
     }
 
     /// Compile a `switch`: the subject is evaluated once into a temp, each `case`
@@ -768,9 +1055,15 @@ impl<'a> FnCompiler<'a> {
     }
 
     /// Compile an array-element write `$a[…][k] = rhs` / `$a[…][] = rhs`, rooted
-    /// at a local (or `$GLOBALS`) slot, at any nesting depth. Object-property
-    /// targets (`$this`, `->prop`) await the OOP work.
+    /// at a local (or `$GLOBALS`) slot, at any nesting depth — or a single-step
+    /// object-property write `$o->p = rhs` / `$this->p = rhs` (OOP-1). Mixed
+    /// property+index chains (`$o->a[$k] = …`) remain out of slice.
     fn assign_place(&mut self, place: &Place, rhs: &Expr) -> R<()> {
+        if let Some(name) = self.prop_place(place)? {
+            self.expr(rhs)?;
+            self.emit(Op::PropSet { name });
+            return Ok(());
+        }
         let base = dim_base(place)?;
         let (nkeys, append) = self.push_index_steps(&place.steps)?;
         if nkeys == 0 && !append {
@@ -783,6 +1076,11 @@ impl<'a> FnCompiler<'a> {
 
     /// Compile a compound element write `$a[…][k] op= rhs`.
     fn assign_op_place(&mut self, op: crate::hir::BinOp, place: &Place, rhs: &Expr) -> R<()> {
+        if let Some(name) = self.prop_place(place)? {
+            self.expr(rhs)?;
+            self.emit(Op::PropOpSet { name, op });
+            return Ok(());
+        }
         let base = dim_base(place)?;
         let (nkeys, append) = self.push_index_steps(&place.steps)?;
         if append || nkeys == 0 {
@@ -795,6 +1093,10 @@ impl<'a> FnCompiler<'a> {
 
     /// Compile `++`/`--` on an array element `$a[…][k]`.
     fn incdec_place(&mut self, place: &Place, inc: bool, pre: bool) -> R<()> {
+        if let Some(name) = self.prop_place(place)? {
+            self.emit(Op::PropIncDec { name, inc, pre });
+            return Ok(());
+        }
         let base = dim_base(place)?;
         let (nkeys, append) = self.push_index_steps(&place.steps)?;
         if append || nkeys == 0 {
@@ -811,9 +1113,13 @@ impl<'a> FnCompiler<'a> {
         let last = places.len() - 1;
         let mut to_false = Vec::new();
         for (i, place) in places.iter().enumerate() {
-            let base = dim_base(place)?;
-            let nkeys = self.test_path_steps(place)?;
-            self.emit(Op::IssetPath { base, nkeys });
+            if let Some(name) = self.prop_place(place)? {
+                self.emit(Op::PropIsset { name });
+            } else {
+                let base = dim_base(place)?;
+                let nkeys = self.test_path_steps(place)?;
+                self.emit(Op::IssetPath { base, nkeys });
+            }
             if i != last {
                 // [bi]: if false, jump to the shared false-result; else discard.
                 to_false.push(self.emit(Op::JumpIfFalse(Addr::MAX)));

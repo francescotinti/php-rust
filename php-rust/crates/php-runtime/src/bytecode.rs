@@ -77,9 +77,11 @@
 //! - classes/enums/static props/consts → method bodies compile to [`Func`]s; the
 //!   class metadata stays in the HIR [`ClassDecl`] table the VM consults.
 
-use php_types::{PhpStr, Zval};
+use std::rc::Rc;
 
-use crate::hir::{BinOp, CastKind, Line, Slot, UnOp};
+use php_types::{ObjectInfo, PhpStr, Zval};
+
+use crate::hir::{BinOp, CastKind, ClassId, Line, Slot, UnOp};
 
 /// Index into a [`Func`]'s instruction vector ([`Func::ops`]); also the form a
 /// jump target takes. `u32` is plenty (PHP function bodies are tiny) and keeps
@@ -271,6 +273,47 @@ pub enum Op {
     /// compiler, on every `break`/`continue` path that leaves a `foreach`.
     IterPop,
 
+    // ----- objects (OOP-1: instances, properties, methods, instanceof) -----
+    /// `[] -> [obj]` — allocate a fresh instance of [`Module::classes`]`[class]`,
+    /// its declared properties materialised from `prop_defaults`, with a fresh
+    /// object id. Fatal if the class is non-instantiable (abstract / interface /
+    /// enum) or could not be compiled ([`CompiledClass::ok`] false). The
+    /// constructor, if any, is run by a following [`Op::InvokeMethod`].
+    Alloc { class: ClassId },
+    /// `[] -> [this]` — push the current frame's bound object. Fatal "Using $this
+    /// when not in object context" if the frame has no `this`.
+    This,
+    /// `[obj] -> [value]` — read property `name` (deref-clone); a missing property
+    /// (or a non-object receiver) warns and yields NULL, matching the tree-walker.
+    PropGet { name: Box<[u8]> },
+    /// `[obj, value] -> [value]` — write `value` into property `name` (created if
+    /// absent), in place through the shared object cell. Leaves the assigned value.
+    PropSet { name: Box<[u8]> },
+    /// `[obj, rhs] -> [result]` — compound `$o->p op= rhs`: read the property
+    /// (NULL if absent), apply `op`, store and leave the result.
+    PropOpSet { name: Box<[u8]>, op: BinOp },
+    /// `[obj] -> [result]` — `++`/`--` on property `name`; `pre` selects new vs old
+    /// value, semantics delegated to `php_types`.
+    PropIncDec { name: Box<[u8]>, inc: bool, pre: bool },
+    /// `[obj] -> [bool]` — `isset($o->p)`: true iff the property exists and is not
+    /// null (silent, no warning).
+    PropIsset { name: Box<[u8]> },
+    /// `[obj] -> []` — `unset($o->p)`: remove the property (no-op if absent).
+    PropUnset { name: Box<[u8]> },
+    /// `[obj, arg0, …, arg{argc-1}] -> [result]` — instance method call resolved
+    /// at *run time* by walking the receiver's class `parent` chain
+    /// (case-insensitive). The callee runs in a pushed frame with `$this` bound to
+    /// the receiver; a missing method is a fatal (magic `__call` is OOP-3).
+    MethodCall { method: Box<[u8]>, argc: u32 },
+    /// `[obj, arg0, …, arg{argc-1}] -> [ret]` — like [`Op::MethodCall`] but the
+    /// target method is resolved at *compile* time (`classes[class].methods[idx]`):
+    /// used for the constructor, whose defining class and slot are known statically.
+    InvokeMethod { class: ClassId, method_idx: u32, argc: u32 },
+    /// `[value] -> [bool]` — `value instanceof classes[class]`: true if `value` is
+    /// an object whose class is `class`, a subclass, or an implemented interface
+    /// (transitively). A non-object yields `false`.
+    InstanceOf { class: ClassId },
+
     /// Raise a fatal `Error` carrying `consts[idx]` (a string) as its message.
     /// Used for *stub* function bodies: the always-present PHP prelude (exception
     /// classes, the procedural date API) contains constructs not yet ported, so
@@ -314,13 +357,64 @@ pub struct Func {
     pub line: Line,
 }
 
-/// A whole compiled program: the script body plus the flat function/closure
-/// tables, indexed exactly as the source [`crate::hir::Program`] indexes them
-/// (so a call resolved to `functions[i]` in the HIR maps to `functions[i]` here).
+/// Whether a class can be instantiated, and if not, why — so [`Op::Alloc`] can
+/// raise the same fatal PHP does (`Cannot instantiate {abstract class,interface,
+/// enum} X`). Derived from [`crate::hir::ClassDecl`] at compile time.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Instantiable {
+    Yes,
+    Abstract,
+    Interface,
+    Enum,
+}
+
+/// A method compiled onto a class: its name (matched case-insensitively at
+/// dispatch) and body [`Func`]. The index in [`CompiledClass::methods`] matches
+/// the source [`crate::hir::ClassDecl::methods`] order, so a compile-time method
+/// resolution ([`Op::InvokeMethod`]) addresses the same slot.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompiledMethod {
+    pub name: Box<[u8]>,
+    pub func: Func,
+}
+
+/// Compile-time class metadata, in the same index space as
+/// [`crate::hir::Program::classes`] / [`ClassId`] (a [`ClassRef::Named`] resolved
+/// to `classes[i]` in the HIR maps to `classes[i]` here). The VM consults this at
+/// `new` / property / method / `instanceof` dispatch.
 ///
-/// Class metadata is intentionally absent for now: when OOP is ported, method
-/// bodies compile into [`Func`]s while the structural class table continues to
-/// live in the HIR [`crate::hir::ClassDecl`] the VM consults at dispatch time.
+/// [`ClassRef::Named`]: crate::hir::ClassRef::Named
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompiledClass {
+    /// Name as written (original case).
+    pub name: Box<[u8]>,
+    /// The name as a shared [`PhpStr`], stamped into each instance's
+    /// [`php_types::Object::class_name`] without re-allocating.
+    pub class_name: Rc<PhpStr>,
+    /// Superclass, resolved to its [`ClassId`] at lowering; `None` for a root.
+    pub parent: Option<ClassId>,
+    /// Implemented interfaces (resolved ids); `instanceof` walks them transitively.
+    pub interfaces: Vec<ClassId>,
+    /// Whether `new` on this class is allowed, and the fatal reason if not.
+    pub instantiable: Instantiable,
+    /// Effective instance properties, parent-first and flattened (a redeclared
+    /// property keeps its inherited position with the most-derived default), each
+    /// with its constant default materialised by [`Const::to_zval`].
+    pub prop_defaults: Vec<(Box<[u8]>, Const)>,
+    /// Declared-property visibility shape (for `var_dump`), shared by all instances.
+    pub info: Rc<ObjectInfo>,
+    /// Methods declared *on this class* (resolution walks `parent` at run time).
+    pub methods: Vec<CompiledMethod>,
+    /// `false` if the class could not be fully compiled (e.g. a non-constant
+    /// property default): [`Op::Alloc`] on it fatals instead of producing a
+    /// wrong instance, mirroring the function-stub discipline.
+    pub ok: bool,
+}
+
+/// A whole compiled program: the script body plus the flat function / closure /
+/// class tables, indexed exactly as the source [`crate::hir::Program`] indexes
+/// them (so a call resolved to `functions[i]` in the HIR maps to `functions[i]`
+/// here, and likewise for classes).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Module {
     /// The top-level script body (the implicit `main`).
@@ -331,6 +425,9 @@ pub struct Module {
     /// Anonymous / arrow-function bodies — same index space as
     /// [`crate::hir::Program::closures`].
     pub closures: Vec<Func>,
+    /// Compiled class metadata — same index space as
+    /// [`crate::hir::Program::classes`] / [`ClassId`].
+    pub classes: Vec<CompiledClass>,
     /// Source file name, reproduced verbatim in diagnostics (`… in <file> on
     /// line N`), carried over from [`crate::hir::Program::file`].
     pub file: Box<[u8]>,

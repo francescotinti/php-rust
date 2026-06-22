@@ -15,13 +15,14 @@
 //! `php_types::convert`, exactly as the tree-walker does — the VM only moves
 //! data and steers control flow.
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
-use php_types::{convert, ops, Diags, Key, PhpArray, PhpError, PhpStr, Zval};
+use php_types::{convert, ops, Diag, Diags, Key, Object, PhpArray, PhpError, PhpStr, Props, Zval};
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
-use crate::bytecode::{DimBase, Func, Module, Op};
-use crate::hir::{BinOp, CastKind, UnOp};
+use crate::bytecode::{DimBase, Func, Instantiable, Module, Op};
+use crate::hir::{BinOp, CastKind, ClassId, UnOp};
 
 /// The result of running a [`Module`]: the bytes written to stdout, the
 /// diagnostics raised, and the fatal that stopped execution (if any).
@@ -41,6 +42,7 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         stdout: Vec::new(),
         diags: Diags::new(),
         frames: Vec::new(),
+        next_object_id: 1,
     };
     vm.frames.push(Frame::new(&module.main));
     let fatal = vm.run().err();
@@ -60,6 +62,10 @@ struct Frame<'m> {
     ip: usize,
     slots: Vec<Zval>,
     stack: Vec<Zval>,
+    /// The object bound to `$this` while running a method, or `None` for the
+    /// script body and free functions. Read by [`Op::This`]; set when a
+    /// [`Op::MethodCall`] / [`Op::InvokeMethod`] pushes a method frame.
+    this: Option<Zval>,
     /// Active `foreach` iterators, innermost last. Lives in the frame (not the
     /// operand stack) so it survives across the loop body; freed by `IterPop`,
     /// and discarded wholesale when the frame unwinds (a `return` out of a loop).
@@ -73,6 +79,7 @@ impl<'m> Frame<'m> {
             ip: 0,
             slots: vec![Zval::Undef; func.n_slots as usize],
             stack: Vec::new(),
+            this: None,
             iters: Vec::new(),
         }
     }
@@ -96,9 +103,19 @@ struct Vm<'m> {
     stdout: Vec<u8>,
     diags: Diags,
     frames: Vec<Frame<'m>>,
+    /// Monotonic object-handle counter (`#N` in `var_dump`), starting at 1 like
+    /// the tree-walker's `next_object_id`.
+    next_object_id: u32,
 }
 
 impl Vm<'_> {
+    /// Allocate a fresh object handle id.
+    fn next_id(&mut self) -> u32 {
+        let id = self.next_object_id;
+        self.next_object_id += 1;
+        id
+    }
+
     /// Run until the bottom frame returns, yielding the script's result value.
     fn run(&mut self) -> Result<Zval, PhpError> {
         loop {
@@ -347,6 +364,148 @@ impl Vm<'_> {
                         None => return Ok(ret),
                     }
                 }
+                Op::Alloc { class } => {
+                    let module = self.module; // &'m Module: detach from `self` borrow
+                    let cc = &module.classes[class];
+                    match cc.instantiable {
+                        Instantiable::Yes => {}
+                        Instantiable::Abstract => {
+                            return Err(PhpError::Error(format!(
+                                "Cannot instantiate abstract class {}",
+                                String::from_utf8_lossy(&cc.name)
+                            )))
+                        }
+                        Instantiable::Interface => {
+                            return Err(PhpError::Error(format!(
+                                "Cannot instantiate interface {}",
+                                String::from_utf8_lossy(&cc.name)
+                            )))
+                        }
+                        Instantiable::Enum => {
+                            return Err(PhpError::Error(format!(
+                                "Cannot instantiate enum {}",
+                                String::from_utf8_lossy(&cc.name)
+                            )))
+                        }
+                    }
+                    if !cc.ok {
+                        return Err(PhpError::Error(format!(
+                            "VM: cannot instantiate {} (non-constant property default not yet ported)",
+                            String::from_utf8_lossy(&cc.name)
+                        )));
+                    }
+                    let mut props = Props::new();
+                    for (name, c) in &cc.prop_defaults {
+                        props.set(name, c.to_zval());
+                    }
+                    let class_name = Rc::clone(&cc.class_name);
+                    let info = Rc::clone(&cc.info);
+                    let id = self.next_id();
+                    let obj = Object { class_id: class as u32, class_name, props, id, info };
+                    self.frames[top].stack.push(Zval::Object(Rc::new(RefCell::new(obj))));
+                }
+                Op::This => match &self.frames[top].this {
+                    Some(t) => {
+                        let v = t.clone();
+                        self.frames[top].stack.push(v);
+                    }
+                    None => {
+                        return Err(PhpError::Error(
+                            "Using $this when not in object context".to_string(),
+                        ))
+                    }
+                },
+                Op::PropGet { name } => {
+                    let obj = self.frames[top].stack.pop().expect("PropGet object");
+                    let v = read_property(&obj, &name, &mut self.diags);
+                    self.frames[top].stack.push(v);
+                }
+                Op::PropSet { name } => {
+                    let value = self.frames[top].stack.pop().expect("PropSet value");
+                    let obj = self.frames[top].stack.pop().expect("PropSet object");
+                    write_property(&obj, &name, value.clone())?;
+                    self.frames[top].stack.push(value);
+                }
+                Op::PropOpSet { name, op } => {
+                    let rhs = self.frames[top].stack.pop().expect("PropOpSet rhs");
+                    let obj = self.frames[top].stack.pop().expect("PropOpSet object");
+                    let old = read_property(&obj, &name, &mut self.diags);
+                    let result = apply_binop(op, &old, &rhs, &mut self.diags)?;
+                    write_property(&obj, &name, result.clone())?;
+                    self.frames[top].stack.push(result);
+                }
+                Op::PropIncDec { name, inc, pre } => {
+                    let obj = self.frames[top].stack.pop().expect("PropIncDec object");
+                    let old = read_property(&obj, &name, &mut self.diags);
+                    let mut newv = old.clone();
+                    if inc {
+                        ops::increment(&mut newv, &mut self.diags)?;
+                    } else {
+                        ops::decrement(&mut newv, &mut self.diags)?;
+                    }
+                    write_property(&obj, &name, newv.clone())?;
+                    self.frames[top].stack.push(if pre { newv } else { old });
+                }
+                Op::PropIsset { name } => {
+                    let obj = self.frames[top].stack.pop().expect("PropIsset object");
+                    self.frames[top].stack.push(Zval::Bool(prop_isset(&obj, &name)));
+                }
+                Op::PropUnset { name } => {
+                    let obj = self.frames[top].stack.pop().expect("PropUnset object");
+                    prop_unset(&obj, &name);
+                }
+                Op::MethodCall { method, argc } => {
+                    let module = self.module;
+                    let mut args = self.pop_keys(top, argc); // source order
+                    let recv = self.frames[top].stack.pop().expect("MethodCall receiver");
+                    let this = recv.deref_clone();
+                    let cid = match &this {
+                        Zval::Object(o) => o.borrow().class_id as usize,
+                        other => {
+                            return Err(PhpError::Error(format!(
+                                "Call to a member function {}() on {}",
+                                String::from_utf8_lossy(&method),
+                                other.error_type_name()
+                            )))
+                        }
+                    };
+                    let Some((defc, midx)) = resolve_method_runtime(module, cid, &method) else {
+                        return Err(PhpError::Error(format!(
+                            "Call to undefined method {}::{}()",
+                            String::from_utf8_lossy(&module.classes[cid].name),
+                            String::from_utf8_lossy(&method)
+                        )));
+                    };
+                    let callee = &module.classes[defc].methods[midx].func;
+                    let mut frame = Frame::new(callee);
+                    for (i, a) in args.drain(..).enumerate() {
+                        frame.slots[i] = a;
+                    }
+                    frame.this = Some(this);
+                    self.frames.push(frame);
+                }
+                Op::InvokeMethod { class, method_idx, argc } => {
+                    let module = self.module;
+                    let mut args = self.pop_keys(top, argc);
+                    let recv = self.frames[top].stack.pop().expect("InvokeMethod receiver");
+                    let callee = &module.classes[class].methods[method_idx as usize].func;
+                    let mut frame = Frame::new(callee);
+                    for (i, a) in args.drain(..).enumerate() {
+                        frame.slots[i] = a;
+                    }
+                    frame.this = Some(recv.deref_clone());
+                    self.frames.push(frame);
+                }
+                Op::InstanceOf { class } => {
+                    let v = self.frames[top].stack.pop().expect("InstanceOf operand");
+                    let result = match v.deref_clone() {
+                        Zval::Object(o) => {
+                            is_instance_of(self.module, o.borrow().class_id as usize, class)
+                        }
+                        _ => false,
+                    };
+                    self.frames[top].stack.push(Zval::Bool(result));
+                }
                 Op::Fatal(i) => {
                     let msg = match &self.frames[top].func.consts[i as usize] {
                         crate::bytecode::Const::Str(b) => String::from_utf8_lossy(b).into_owned(),
@@ -495,6 +654,124 @@ fn undefined_builtin(name: &[u8]) -> PhpError {
         "Call to undefined function {}()",
         String::from_utf8_lossy(name)
     ))
+}
+
+/// Read object property `name` by value (deref-clone), following a reference
+/// receiver. A missing property — or a non-object receiver — warns and yields
+/// NULL, mirroring the tree-walker's `read_property` (OOP-1 has no `__get` /
+/// visibility enforcement).
+fn read_property(recv: &Zval, name: &[u8], diags: &mut Diags) -> Zval {
+    match recv {
+        Zval::Object(o) => {
+            let obj = o.borrow();
+            if let Some(v) = obj.props.get(name) {
+                return v.deref_clone();
+            }
+            let cls = String::from_utf8_lossy(obj.class_name.as_bytes()).into_owned();
+            drop(obj);
+            let prop = String::from_utf8_lossy(name).into_owned();
+            diags.push(Diag::Warning(format!("Undefined property: {cls}::${prop}")));
+            Zval::Null
+        }
+        Zval::Ref(rc) => read_property(&rc.borrow(), name, diags),
+        Zval::Null | Zval::Undef => {
+            let prop = String::from_utf8_lossy(name).into_owned();
+            diags.push(Diag::Warning(format!("Attempt to read property \"{prop}\" on null")));
+            Zval::Null
+        }
+        other => {
+            let prop = String::from_utf8_lossy(name).into_owned();
+            diags.push(Diag::Warning(format!(
+                "Attempt to read property \"{prop}\" on {}",
+                other.error_type_name()
+            )));
+            Zval::Null
+        }
+    }
+}
+
+/// Write `value` into object property `name` (created if absent), in place through
+/// the shared object cell. A non-object receiver is a fatal, matching PHP 8.
+fn write_property(recv: &Zval, name: &[u8], value: Zval) -> Result<(), PhpError> {
+    match recv {
+        Zval::Object(o) => {
+            o.borrow_mut().props.set(name, value);
+            Ok(())
+        }
+        Zval::Ref(rc) => write_property(&rc.borrow(), name, value),
+        other => Err(PhpError::Error(format!(
+            "Attempt to assign property \"{}\" on {}",
+            String::from_utf8_lossy(name),
+            other.error_type_name()
+        ))),
+    }
+}
+
+/// `isset($o->name)`: true iff the property exists and is not null/undefined
+/// (silent), following a reference receiver.
+fn prop_isset(recv: &Zval, name: &[u8]) -> bool {
+    match recv {
+        Zval::Object(o) => match o.borrow().props.get(name) {
+            Some(v) => !matches!(v.deref_clone(), Zval::Null | Zval::Undef),
+            None => false,
+        },
+        Zval::Ref(rc) => prop_isset(&rc.borrow(), name),
+        _ => false,
+    }
+}
+
+/// `unset($o->name)`: remove the property (no-op if absent or non-object).
+fn prop_unset(recv: &Zval, name: &[u8]) {
+    match recv {
+        Zval::Object(o) => {
+            o.borrow_mut().props.remove(name);
+        }
+        Zval::Ref(rc) => prop_unset(&rc.borrow(), name),
+        _ => {}
+    }
+}
+
+/// Resolve a method by name at run time, walking the receiver class's `parent`
+/// chain child→ancestor (case-insensitive). Returns the *defining* class id and
+/// the method's index in [`crate::bytecode::CompiledClass::methods`].
+fn resolve_method_runtime(module: &Module, start: ClassId, name: &[u8]) -> Option<(ClassId, usize)> {
+    let mut cid = Some(start);
+    while let Some(c) = cid {
+        if let Some(i) = module.classes[c]
+            .methods
+            .iter()
+            .position(|m| m.name.eq_ignore_ascii_case(name))
+        {
+            return Some((c, i));
+        }
+        cid = module.classes[c].parent;
+    }
+    None
+}
+
+/// Whether an object of `class_id` is an instance of `target`: the class itself,
+/// any ancestor, or any implemented interface (transitively), mirroring the
+/// tree-walker's `is_instance_of` (OOP-1 omits the `Stringable` auto-impl).
+fn is_instance_of(module: &Module, class_id: ClassId, target: ClassId) -> bool {
+    let mut cur = Some(class_id);
+    while let Some(c) = cur {
+        if c == target {
+            return true;
+        }
+        if module.classes[c].interfaces.iter().any(|&i| iface_is_a(module, i, target)) {
+            return true;
+        }
+        cur = module.classes[c].parent;
+    }
+    false
+}
+
+/// Whether interface `i` is, or transitively extends, `target`.
+fn iface_is_a(module: &Module, i: ClassId, target: ClassId) -> bool {
+    if i == target {
+        return true;
+    }
+    module.classes[i].interfaces.iter().any(|&p| iface_is_a(module, p, target))
 }
 
 /// Read a local cell's value, following a reference and mapping an unset slot to
@@ -1199,5 +1476,151 @@ mod tests {
         let module = compile_program(&program, &reg).expect("compile");
         let out = run_module(&module, &reg);
         assert!(out.fatal.is_some());
+    }
+
+    // --- OOP-1: classes, objects, $this, properties, methods, instanceof ---
+
+    /// Compile and run a snippet (no builtins), returning the full outcome — used
+    /// for the fatal-path OOP tests.
+    fn vm_outcome(src: &[u8]) -> super::VmOutcome {
+        let program = lower_source(b"test.php", src).expect("lower");
+        let reg = Registry::new();
+        let module = compile_program(&program, &reg).expect("compile");
+        run_module(&module, &reg)
+    }
+
+    #[test]
+    fn constructor_sets_property_read_back() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $x; function __construct($v) { $this->x = $v; } } $o = new C(7); echo $o->x;"),
+            b"7"
+        );
+    }
+
+    #[test]
+    fn constant_property_default() {
+        assert_eq!(vm_stdout(b"<?php class C { public $x = 5; } $o = new C(); echo $o->x;"), b"5");
+    }
+
+    #[test]
+    fn property_write_then_read() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $x; } $o = new C(); $o->x = 'hi'; echo $o->x;"),
+            b"hi"
+        );
+    }
+
+    #[test]
+    fn method_call_returns_value_from_this() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $x = 10; function get() { return $this->x; } } $o = new C(); echo $o->get();"),
+            b"10"
+        );
+    }
+
+    #[test]
+    fn method_takes_arguments() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function add($a, $b) { return $a + $b; } } $o = new C(); echo $o->add(2, 3);"),
+            b"5"
+        );
+    }
+
+    #[test]
+    fn compound_and_incdec_on_this_property() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $n = 0; function bump() { $this->n += 5; $this->n++; return $this->n; } } $o = new C(); echo $o->bump();"),
+            b"6"
+        );
+    }
+
+    #[test]
+    fn isset_and_unset_property() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $x = 1; } $o = new C(); echo isset($o->x) ? 'y' : 'n'; unset($o->x); echo isset($o->x) ? 'y' : 'n';"),
+            b"yn"
+        );
+        // A null-valued property is not "set".
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $x = null; } $o = new C(); echo isset($o->x) ? 'y' : 'n';"),
+            b"n"
+        );
+    }
+
+    #[test]
+    fn inherited_method() {
+        assert_eq!(
+            vm_stdout(b"<?php class A { function hi() { return 'A'; } } class B extends A {} $o = new B(); echo $o->hi();"),
+            b"A"
+        );
+    }
+
+    #[test]
+    fn overridden_method() {
+        assert_eq!(
+            vm_stdout(b"<?php class A { function hi() { return 'A'; } } class B extends A { function hi() { return 'B'; } } $o = new B(); echo $o->hi();"),
+            b"B"
+        );
+    }
+
+    #[test]
+    fn inherited_constructor() {
+        assert_eq!(
+            vm_stdout(b"<?php class A { public $x; function __construct($v) { $this->x = $v; } } class B extends A {} $o = new B(9); echo $o->x;"),
+            b"9"
+        );
+    }
+
+    #[test]
+    fn inherited_and_overridden_property_defaults() {
+        // Parent-first layout; B redeclares $x with a new default, keeps $y.
+        assert_eq!(
+            vm_stdout(b"<?php class A { public $x = 1; public $y = 2; } class B extends A { public $x = 10; } $o = new B(); echo $o->x, $o->y;"),
+            b"102"
+        );
+    }
+
+    #[test]
+    fn instanceof_self_parent_interface_and_false() {
+        assert_eq!(
+            vm_stdout(
+                b"<?php interface I {} class A implements I {} class B extends A {} class C {} $o = new B(); echo ($o instanceof B) ? '1' : '0', ($o instanceof A) ? '1' : '0', ($o instanceof I) ? '1' : '0', ($o instanceof C) ? '1' : '0';"
+            ),
+            b"1110"
+        );
+    }
+
+    #[test]
+    fn instanceof_non_object_is_false() {
+        assert_eq!(
+            vm_stdout(b"<?php class C {} $x = 5; echo ($x instanceof C) ? '1' : '0';"),
+            b"0"
+        );
+    }
+
+    #[test]
+    fn object_handle_semantics_are_shared() {
+        // Two handles to the same instance see each other's mutations (no COW).
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $x = 1; } $a = new C(); $b = $a; $b->x = 99; echo $a->x;"),
+            b"99"
+        );
+    }
+
+    #[test]
+    fn instantiating_abstract_class_is_fatal() {
+        assert!(vm_outcome(b"<?php abstract class A {} $o = new A();").fatal.is_some());
+    }
+
+    #[test]
+    fn instantiating_interface_is_fatal() {
+        assert!(vm_outcome(b"<?php interface I {} $o = new I();").fatal.is_some());
+    }
+
+    #[test]
+    fn non_constant_property_default_makes_new_fatal() {
+        // An array default is not constant-foldable -> the class is a stub and
+        // `new` fatals rather than producing a wrong instance.
+        assert!(vm_outcome(b"<?php class C { public $x = [1, 2, 3]; } $o = new C();").fatal.is_some());
     }
 }

@@ -40,7 +40,7 @@ pub enum PropVis {
 }
 
 /// Per-class property-visibility table for object dumping (step 19-7, D-19.20).
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct ObjectInfo {
     /// Declared property name → visibility, in declaration order. Dynamic
     /// properties are absent and default to `Public`.
