@@ -313,6 +313,44 @@ pub enum Op {
     /// an object whose class is `class`, a subclass, or an implemented interface
     /// (transitively). A non-object yields `false`.
     InstanceOf { class: ClassId },
+    /// `[value] -> [bool]` — `value instanceof static`: like [`Op::InstanceOf`]
+    /// but the target is the running frame's late-static-binding class.
+    InstanceOfStatic,
+
+    // ----- OOP-2a: class context (self/parent/static), constants, static calls -----
+    /// `[arg0, …, arg{argc-1}] -> [ret]` — `Class::m()` / `self::m()` /
+    /// `parent::m()` / `static::m()`. The starting class comes from `target`; the
+    /// method is resolved by walking its `parent` chain. The pushed frame's
+    /// defining class is the resolver's, its LSB class is the caller's when
+    /// `forwarding` (self/parent/static) else the start class, and `$this` is
+    /// propagated per PHP's forwarding rules.
+    StaticCall { target: ClassTarget, method: Box<[u8]>, forwarding: bool, argc: u32 },
+    /// `[] -> [value]` — `Class::CONST` / `self::CONST` / `parent::CONST` resolved
+    /// at compile time to its declaring class and constant index. Runs the
+    /// constant's value *thunk* ([`CompiledConst::func`]) as a frame whose
+    /// defining class is `class` (so a `self::OTHER` inside resolves), leaving the
+    /// value on the caller's stack — constant expressions are pure, so re-running
+    /// is sound (memoisation is a later optimisation).
+    ClassConst { class: ClassId, idx: u32 },
+    /// `[] -> [value]` — `static::CONST`: like [`Op::ClassConst`] but the constant
+    /// is resolved at run time from the frame's LSB class (walking parents and
+    /// interfaces).
+    ClassConstDyn { name: Box<[u8]> },
+    /// `[] -> [name]` — `static::class`: push the frame's LSB class name as a
+    /// string. (`Class::class` / `self::class` / `parent::class` are folded to a
+    /// [`Op::PushConst`] at compile time.)
+    ClassNameStatic,
+    /// `[] -> [obj]` — `new static`: allocate an instance of the frame's LSB class
+    /// (its property defaults materialised, fresh id). The constructor is run by a
+    /// following [`Op::InvokeCtor`] (the actual class — hence the ctor — is only
+    /// known at run time).
+    AllocStatic,
+    /// `[obj, arg0, …, arg{argc-1}] -> [ret]` — run `obj`'s `__construct` if its
+    /// class (or an ancestor) declares one, with `$this = obj`; otherwise push
+    /// NULL. Used for `new static`, where the constructor can't be resolved at
+    /// compile time. The instance itself is kept by the surrounding
+    /// `AllocStatic; Dup; …; InvokeCtor; Pop` sequence.
+    InvokeCtor { argc: u32 },
 
     /// Raise a fatal `Error` carrying `consts[idx]` (a string) as its message.
     /// Used for *stub* function bodies: the always-present PHP prelude (exception
@@ -357,6 +395,18 @@ pub struct Func {
     pub line: Line,
 }
 
+/// The class a `::`-qualified op ([`Op::StaticCall`], `instanceof static`) starts
+/// from. `self`/`parent` and a named class are resolved to a concrete [`ClassId`]
+/// at compile time; `static::` is the run-time late-static-binding class, read
+/// from the executing frame.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ClassTarget {
+    /// A class id known at compile time (named class, `self`, or `parent`).
+    Class(ClassId),
+    /// `static::` — resolved at run time from the frame's LSB class.
+    Static,
+}
+
 /// Whether a class can be instantiated, and if not, why — so [`Op::Alloc`] can
 /// raise the same fatal PHP does (`Cannot instantiate {abstract class,interface,
 /// enum} X`). Derived from [`crate::hir::ClassDecl`] at compile time.
@@ -374,6 +424,16 @@ pub enum Instantiable {
 /// resolution ([`Op::InvokeMethod`]) addresses the same slot.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompiledMethod {
+    pub name: Box<[u8]>,
+    pub func: Func,
+}
+
+/// A class constant compiled onto a class (same index space as the source
+/// [`crate::hir::ClassDecl::consts`]): its name and a *thunk* [`Func`] whose body
+/// evaluates the constant's value expression and returns it. Run on demand by
+/// [`Op::ClassConst`] / [`Op::ClassConstDyn`] in the declaring class's context.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompiledConst {
     pub name: Box<[u8]>,
     pub func: Func,
 }
@@ -405,6 +465,10 @@ pub struct CompiledClass {
     pub info: Rc<ObjectInfo>,
     /// Methods declared *on this class* (resolution walks `parent` at run time).
     pub methods: Vec<CompiledMethod>,
+    /// Class constants declared *on this class* (same index space as the source
+    /// [`crate::hir::ClassDecl::consts`]); resolution walks `parent` then
+    /// interfaces at run time.
+    pub consts: Vec<CompiledConst>,
     /// `false` if the class could not be fully compiled (e.g. a non-constant
     /// property default): [`Op::Alloc`] on it fatals instead of producing a
     /// wrong instance, mirroring the function-stub discipline.

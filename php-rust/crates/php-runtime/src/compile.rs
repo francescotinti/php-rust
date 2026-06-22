@@ -26,7 +26,8 @@ use php_types::{ObjectInfo, PhpStr, PropVis};
 
 use crate::builtin::{Builtin, Registry};
 use crate::bytecode::{
-    Addr, CompiledClass, CompiledMethod, Const, ConstIdx, DimBase, Func, Instantiable, Module, Op,
+    Addr, ClassTarget, CompiledClass, CompiledConst, CompiledMethod, Const, ConstIdx, DimBase, Func,
+    Instantiable, Module, Op,
 };
 use crate::hir::{
     BinOp, Case, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, MatchArm, Place, PlaceBase,
@@ -93,7 +94,7 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
             Err(e) => functions.push(stub_func(fd, &e)),
         }
     }
-    let main = compile_body(b"", &program.body, program.slots.len() as u32, 0, false, false, &ctx)?;
+    let main = compile_body(b"", &program.body, program.slots.len() as u32, 0, false, false, &ctx, None)?;
     // Classes are compiled tolerantly too (see `compile_class`).
     let classes = program
         .classes
@@ -112,7 +113,8 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
 }
 
 /// Compile a user [`FnDecl`] into a [`Func`], resolving calls in its body against
-/// the program context (for forward references and recursion).
+/// the program context (for forward references and recursion). A free function
+/// has no enclosing class (`cur_class = None`).
 fn compile_fndecl(fd: &FnDecl, ctx: &ProgramCtx) -> R<Func> {
     compile_body(
         &fd.name,
@@ -122,10 +124,13 @@ fn compile_fndecl(fd: &FnDecl, ctx: &ProgramCtx) -> R<Func> {
         fd.by_ref,
         fd.is_generator,
         ctx,
+        None,
     )
 }
 
 /// Compile one body (the script's, a function's, or a method's) into a [`Func`].
+/// `cur_class` is the enclosing class id for a method body (so `self`/`parent`
+/// resolve at compile time), `None` for the script body and free functions.
 #[allow(clippy::too_many_arguments)]
 fn compile_body(
     name: &[u8],
@@ -135,8 +140,9 @@ fn compile_body(
     by_ref: bool,
     is_generator: bool,
     ctx: &ProgramCtx,
+    cur_class: Option<ClassId>,
 ) -> R<Func> {
-    let mut c = FnCompiler::new(ctx, n_locals);
+    let mut c = FnCompiler::new(ctx, n_locals, cur_class);
     c.block(body)?;
     // A body that runs off the end returns NULL (PHP's implicit return).
     let null = c.konst(Const::Null);
@@ -246,11 +252,25 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
                 m.decl.by_ref,
                 m.decl.is_generator,
                 ctx,
+                Some(cid),
             ) {
                 Ok(f) => f,
                 Err(e) => stub_func(&m.decl, &e),
             };
             CompiledMethod { name: m.decl.name.clone(), func }
+        })
+        .collect();
+
+    // Each class constant compiles to a value *thunk* (`<expr>; Ret`) run in this
+    // class's context. A thunk that doesn't compile becomes a fatal stub, so it
+    // only fails if the constant is actually read (like a method stub).
+    let consts = cd
+        .consts
+        .iter()
+        .map(|k| {
+            let func = compile_const_thunk(&k.name, &k.value, ctx, cid)
+                .unwrap_or_else(|e| const_stub(&k.name, &e));
+            CompiledConst { name: k.name.clone(), func }
         })
         .collect();
 
@@ -263,7 +283,42 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         prop_defaults,
         info: Rc::new(ObjectInfo::from_entries(vis_entries)),
         methods,
+        consts,
         ok,
+    }
+}
+
+/// Compile a class-constant value expression into a thunk [`Func`] (`<expr>; Ret`)
+/// evaluated in `decl_class`'s context (so a `self::OTHER` inside resolves).
+fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, decl_class: ClassId) -> R<Func> {
+    let mut c = FnCompiler::new(ctx, 0, Some(decl_class));
+    c.expr(value)?;
+    c.emit(Op::Ret);
+    Ok(Func {
+        name: name.into(),
+        ops: c.ops,
+        consts: c.consts,
+        n_slots: c.n_temps_max,
+        n_params: 0,
+        by_ref: false,
+        is_generator: false,
+        line: 0,
+    })
+}
+
+/// A placeholder thunk for a constant whose value couldn't be compiled: fatals
+/// (naming the gap) only if the constant is read.
+fn const_stub(name: &[u8], err: &CompileError) -> Func {
+    let msg = format!("VM: constant `{}` — {}", String::from_utf8_lossy(name), err);
+    Func {
+        name: name.into(),
+        ops: vec![Op::Fatal(0)],
+        consts: vec![Const::Str(msg.into_bytes().into())],
+        n_slots: 0,
+        n_params: 0,
+        by_ref: false,
+        is_generator: false,
+        line: 0,
     }
 }
 
@@ -310,6 +365,10 @@ struct FnCompiler<'a> {
     consts: Vec<Const>,
     loops: Vec<LoopCtx>,
     ctx: &'a ProgramCtx<'a>,
+    /// The class whose method (or constant thunk) is being compiled, for
+    /// resolving `self::` / `parent::` at compile time; `None` for the script
+    /// body and free functions.
+    cur_class: Option<ClassId>,
     /// Number of named locals (HIR slots); compiler temporaries are allocated
     /// above this, so the frame's slot array is `n_locals + n_temps_max` wide.
     n_locals: u32,
@@ -330,12 +389,13 @@ struct LoopCtx {
 }
 
 impl<'a> FnCompiler<'a> {
-    fn new(ctx: &'a ProgramCtx<'a>, n_locals: u32) -> Self {
+    fn new(ctx: &'a ProgramCtx<'a>, n_locals: u32, cur_class: Option<ClassId>) -> Self {
         FnCompiler {
             ops: Vec::new(),
             consts: Vec::new(),
             loops: Vec::new(),
             ctx,
+            cur_class,
             n_locals,
             n_temps_cur: 0,
             n_temps_max: 0,
@@ -745,25 +805,16 @@ impl<'a> FnCompiler<'a> {
                 self.push_value_args(args)?;
                 self.emit(Op::MethodCall { method: method.clone(), argc: args.len() as u32 });
             }
-            ExprKind::InstanceOf { expr, class } => {
-                let ClassRef::Named(name) = class else {
-                    return Err(CompileError::Unsupported("instanceof a non-named class".into()));
-                };
-                // Evaluate the operand first (PHP order), then test the class.
-                self.expr(expr)?;
-                match self.resolve_class(name) {
-                    Some(cid) => {
-                        self.emit(Op::InstanceOf { class: cid });
-                    }
-                    // An unknown class on the RHS is simply not matched (PHP does
-                    // not error here under the CLI without autoloading).
-                    None => {
-                        self.emit(Op::Pop);
-                        let f = self.konst(Const::Bool(false));
-                        self.emit(Op::PushConst(f));
-                    }
+            ExprKind::InstanceOf { expr, class } => self.instance_of(expr, class)?,
+            ExprKind::StaticCall { class, method, args, named } => {
+                if !named.is_empty() {
+                    return Err(CompileError::Unsupported("static call with named arguments".into()));
                 }
+                let (target, forwarding) = self.resolve_target(class)?;
+                self.push_value_args(args)?;
+                self.emit(Op::StaticCall { target, method: method.clone(), forwarding, argc: args.len() as u32 });
             }
+            ExprKind::ClassConst { class, name } => self.class_const(class, name)?,
             other => return Err(CompileError::Unsupported(expr_name(other))),
         }
         Ok(())
@@ -878,28 +929,57 @@ impl<'a> FnCompiler<'a> {
         Ok(())
     }
 
-    /// Compile `new ClassName(args)` (OOP-1: `ClassRef::Named` only, no named /
-    /// spread arguments). Allocates the instance, then — if the class (or an
-    /// ancestor) declares `__construct`, resolved at compile time — runs it with
-    /// the fresh object as `$this`, leaving the object as the expression's value.
+    /// Compile `new ClassRef(args)` (no named / spread arguments). OOP-1 handled
+    /// `Named`; OOP-2a adds `self` / `parent` (class id known at compile time) and
+    /// `static` (the run-time LSB class). `Dynamic` stays out of slice.
     fn new_obj(&mut self, class: &ClassRef, args: &[Expr], named: &[(Box<[u8]>, Expr)]) -> R<()> {
         if !named.is_empty() {
             return Err(CompileError::Unsupported("new with named arguments".into()));
         }
-        let ClassRef::Named(name) = class else {
-            return Err(CompileError::Unsupported(
-                "new self/parent/static / dynamic class".into(),
-            ));
-        };
-        // A genuinely-undefined class falls back to the tree-walker (which raises
-        // PHP's "Class not found"); a *defined* but non-instantiable class is
-        // handled at run time by `Alloc` (so its fatal matches PHP).
-        let Some(cid) = self.resolve_class(name) else {
-            return Err(CompileError::Unsupported(format!(
-                "new of unknown class `{}`",
-                String::from_utf8_lossy(name)
-            )));
-        };
+        match class {
+            ClassRef::Named(name) => {
+                // A genuinely-undefined class falls back to the tree-walker (which
+                // raises PHP's "Class not found"); a *defined* but non-instantiable
+                // class is handled at run time by `Alloc` (so its fatal matches PHP).
+                let cid = self.resolve_class(name).ok_or_else(|| {
+                    CompileError::Unsupported(format!(
+                        "new of unknown class `{}`",
+                        String::from_utf8_lossy(name)
+                    ))
+                })?;
+                self.new_obj_cid(cid, args)
+            }
+            ClassRef::SelfClass => {
+                let cid = self
+                    .cur_class
+                    .ok_or_else(|| CompileError::Unsupported("`new self` outside class context".into()))?;
+                self.new_obj_cid(cid, args)
+            }
+            ClassRef::Parent => {
+                let cid = self
+                    .cur_class
+                    .and_then(|c| self.ctx.classes[c].parent)
+                    .ok_or_else(|| CompileError::Unsupported("`new parent` without a parent class".into()))?;
+                self.new_obj_cid(cid, args)
+            }
+            ClassRef::Static => {
+                // The actual class (hence the constructor) is only known at run
+                // time, so allocate the LSB class and dispatch `__construct`
+                // dynamically.
+                self.emit(Op::AllocStatic);
+                self.emit(Op::Dup);
+                self.push_value_args(args)?;
+                self.emit(Op::InvokeCtor { argc: args.len() as u32 });
+                self.emit(Op::Pop);
+                Ok(())
+            }
+            ClassRef::Dynamic(_) => Err(CompileError::Unsupported("new of a dynamic class".into())),
+        }
+    }
+
+    /// `new` of a class whose id is known at compile time: allocate, then run the
+    /// compile-time-resolved constructor (if any) with the fresh object as `$this`.
+    fn new_obj_cid(&mut self, cid: ClassId, args: &[Expr]) -> R<()> {
         let ctor = self.resolve_method_compile(cid, b"__construct");
         self.emit(Op::Alloc { class: cid });
         if let Some((defc, midx)) = ctor {
@@ -909,6 +989,135 @@ impl<'a> FnCompiler<'a> {
             self.emit(Op::Pop); // discard the constructor's return value
         }
         Ok(())
+    }
+
+    /// Compile `expr instanceof ClassRef`. `Named`/`self`/`parent` resolve to a
+    /// compile-time id; `static` tests the run-time LSB class. An unknown named
+    /// class is simply not matched (PHP, CLI without autoloading).
+    fn instance_of(&mut self, expr: &Expr, class: &ClassRef) -> R<()> {
+        // Evaluate the operand first (PHP order), then test the class.
+        match class {
+            ClassRef::Named(name) => {
+                self.expr(expr)?;
+                match self.resolve_class(name) {
+                    Some(cid) => self.emit(Op::InstanceOf { class: cid }),
+                    None => {
+                        self.emit(Op::Pop);
+                        let f = self.konst(Const::Bool(false));
+                        self.emit(Op::PushConst(f))
+                    }
+                };
+            }
+            ClassRef::SelfClass | ClassRef::Parent => {
+                let (ClassTarget::Class(cid), _) = self.resolve_target(class)? else {
+                    unreachable!("self/parent resolve to a class id")
+                };
+                self.expr(expr)?;
+                self.emit(Op::InstanceOf { class: cid });
+            }
+            ClassRef::Static => {
+                self.expr(expr)?;
+                self.emit(Op::InstanceOfStatic);
+            }
+            ClassRef::Dynamic(_) => {
+                return Err(CompileError::Unsupported("instanceof a dynamic class".into()))
+            }
+        }
+        Ok(())
+    }
+
+    /// Compile `ClassRef::name` — a class constant or the special `::class`.
+    fn class_const(&mut self, class: &ClassRef, name: &[u8]) -> R<()> {
+        let (target, _forwarding) = self.resolve_target(class)?;
+        if name.eq_ignore_ascii_case(b"class") {
+            match target {
+                ClassTarget::Class(cid) => {
+                    let k = self.konst(Const::Str(self.ctx.classes[cid].name.clone()));
+                    self.emit(Op::PushConst(k));
+                }
+                ClassTarget::Static => {
+                    self.emit(Op::ClassNameStatic);
+                }
+            }
+            return Ok(());
+        }
+        match target {
+            ClassTarget::Class(cid) => match self.find_class_const(cid, name) {
+                Some((decl, idx)) => {
+                    self.emit(Op::ClassConst { class: decl, idx: idx as u32 });
+                }
+                // Undefined constant, or an enum case (`E::Case`, OOP-3) — fall
+                // back to the tree-walker.
+                None => {
+                    return Err(CompileError::Unsupported(format!(
+                        "class constant `{}` (undefined here, or an enum case)",
+                        String::from_utf8_lossy(name)
+                    )))
+                }
+            },
+            ClassTarget::Static => {
+                self.emit(Op::ClassConstDyn { name: name.into() });
+            }
+        }
+        Ok(())
+    }
+
+    /// Resolve a `ClassRef` to a [`ClassTarget`] plus whether the call is
+    /// *forwarding* (`self`/`parent`/`static` keep the caller's LSB class and
+    /// `$this`; a named class rebinds them). `self`/`parent` collapse to a
+    /// compile-time class id; `static` stays run-time.
+    fn resolve_target(&self, class: &ClassRef) -> R<(ClassTarget, bool)> {
+        match class {
+            ClassRef::Named(name) => {
+                let cid = self.resolve_class(name).ok_or_else(|| {
+                    CompileError::Unsupported(format!(
+                        "reference to unknown class `{}`",
+                        String::from_utf8_lossy(name)
+                    ))
+                })?;
+                Ok((ClassTarget::Class(cid), false))
+            }
+            ClassRef::SelfClass => {
+                let cid = self
+                    .cur_class
+                    .ok_or_else(|| CompileError::Unsupported("`self` outside class context".into()))?;
+                Ok((ClassTarget::Class(cid), true))
+            }
+            ClassRef::Parent => {
+                let cid = self
+                    .cur_class
+                    .and_then(|c| self.ctx.classes[c].parent)
+                    .ok_or_else(|| CompileError::Unsupported("`parent` without a parent class".into()))?;
+                Ok((ClassTarget::Class(cid), true))
+            }
+            ClassRef::Static => Ok((ClassTarget::Static, true)),
+            ClassRef::Dynamic(_) => Err(CompileError::Unsupported("dynamic class reference".into())),
+        }
+    }
+
+    /// Find a class constant by name at compile time, searching the class's own
+    /// constants and parent chain, then (transitively) its interfaces. Returns the
+    /// declaring class id and the constant's index in that class's `consts`
+    /// (matching [`CompiledClass::consts`]). Case-sensitive, like PHP.
+    fn find_class_const(&self, cid: ClassId, name: &[u8]) -> Option<(ClassId, usize)> {
+        let classes = self.ctx.classes;
+        let mut c = Some(cid);
+        while let Some(x) = c {
+            if let Some(i) = classes[x].consts.iter().position(|k| k.name.as_ref() == name) {
+                return Some((x, i));
+            }
+            c = classes[x].parent;
+        }
+        let mut c = Some(cid);
+        while let Some(x) = c {
+            for &i in &classes[x].interfaces {
+                if let Some(r) = self.find_class_const(i, name) {
+                    return Some(r);
+                }
+            }
+            c = classes[x].parent;
+        }
+        None
     }
 
     /// Resolve a class name (case-insensitive) to its [`ClassId`].

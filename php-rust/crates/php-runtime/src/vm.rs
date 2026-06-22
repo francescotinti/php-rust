@@ -21,7 +21,7 @@ use std::rc::Rc;
 use php_types::{convert, ops, Diag, Diags, Key, Object, PhpArray, PhpError, PhpStr, Props, Zval};
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
-use crate::bytecode::{DimBase, Func, Instantiable, Module, Op};
+use crate::bytecode::{ClassTarget, DimBase, Func, Instantiable, Module, Op};
 use crate::hir::{BinOp, CastKind, ClassId, UnOp};
 
 /// The result of running a [`Module`]: the bytes written to stdout, the
@@ -66,6 +66,14 @@ struct Frame<'m> {
     /// script body and free functions. Read by [`Op::This`]; set when a
     /// [`Op::MethodCall`] / [`Op::InvokeMethod`] pushes a method frame.
     this: Option<Zval>,
+    /// The class that *defines* the running method — the referent of `self::`, the
+    /// base of `parent::`, and (OOP-2b) the access context for visibility. `None`
+    /// outside a method.
+    class: Option<ClassId>,
+    /// The late-static-binding class — the referent of `static::` / `new static`.
+    /// For an instance / constructor call it is the receiver's actual class;
+    /// forwarding static calls preserve the caller's. `None` outside a method.
+    static_class: Option<ClassId>,
     /// Active `foreach` iterators, innermost last. Lives in the frame (not the
     /// operand stack) so it survives across the loop body; freed by `IterPop`,
     /// and discarded wholesale when the frame unwinds (a `return` out of a loop).
@@ -80,6 +88,8 @@ impl<'m> Frame<'m> {
             slots: vec![Zval::Undef; func.n_slots as usize],
             stack: Vec::new(),
             this: None,
+            class: None,
+            static_class: None,
             iters: Vec::new(),
         }
     }
@@ -365,44 +375,15 @@ impl Vm<'_> {
                     }
                 }
                 Op::Alloc { class } => {
-                    let module = self.module; // &'m Module: detach from `self` borrow
-                    let cc = &module.classes[class];
-                    match cc.instantiable {
-                        Instantiable::Yes => {}
-                        Instantiable::Abstract => {
-                            return Err(PhpError::Error(format!(
-                                "Cannot instantiate abstract class {}",
-                                String::from_utf8_lossy(&cc.name)
-                            )))
-                        }
-                        Instantiable::Interface => {
-                            return Err(PhpError::Error(format!(
-                                "Cannot instantiate interface {}",
-                                String::from_utf8_lossy(&cc.name)
-                            )))
-                        }
-                        Instantiable::Enum => {
-                            return Err(PhpError::Error(format!(
-                                "Cannot instantiate enum {}",
-                                String::from_utf8_lossy(&cc.name)
-                            )))
-                        }
-                    }
-                    if !cc.ok {
-                        return Err(PhpError::Error(format!(
-                            "VM: cannot instantiate {} (non-constant property default not yet ported)",
-                            String::from_utf8_lossy(&cc.name)
-                        )));
-                    }
-                    let mut props = Props::new();
-                    for (name, c) in &cc.prop_defaults {
-                        props.set(name, c.to_zval());
-                    }
-                    let class_name = Rc::clone(&cc.class_name);
-                    let info = Rc::clone(&cc.info);
-                    let id = self.next_id();
-                    let obj = Object { class_id: class as u32, class_name, props, id, info };
-                    self.frames[top].stack.push(Zval::Object(Rc::new(RefCell::new(obj))));
+                    let obj = self.alloc_object(class)?;
+                    self.frames[top].stack.push(obj);
+                }
+                Op::AllocStatic => {
+                    let cid = self.frames[top].static_class.ok_or_else(|| {
+                        PhpError::Error("Cannot use \"static\" outside class context".to_string())
+                    })?;
+                    let obj = self.alloc_object(cid)?;
+                    self.frames[top].stack.push(obj);
                 }
                 Op::This => match &self.frames[top].this {
                     Some(t) => {
@@ -482,18 +463,24 @@ impl Vm<'_> {
                         frame.slots[i] = a;
                     }
                     frame.this = Some(this);
+                    frame.class = Some(defc);
+                    frame.static_class = Some(cid); // LSB = receiver's actual class
                     self.frames.push(frame);
                 }
                 Op::InvokeMethod { class, method_idx, argc } => {
                     let module = self.module;
                     let mut args = self.pop_keys(top, argc);
                     let recv = self.frames[top].stack.pop().expect("InvokeMethod receiver");
+                    let this = recv.deref_clone();
+                    let lsb = object_class_id(&this).unwrap_or(class);
                     let callee = &module.classes[class].methods[method_idx as usize].func;
                     let mut frame = Frame::new(callee);
                     for (i, a) in args.drain(..).enumerate() {
                         frame.slots[i] = a;
                     }
-                    frame.this = Some(recv.deref_clone());
+                    frame.this = Some(this);
+                    frame.class = Some(class);
+                    frame.static_class = Some(lsb);
                     self.frames.push(frame);
                 }
                 Op::InstanceOf { class } => {
@@ -505,6 +492,120 @@ impl Vm<'_> {
                         _ => false,
                     };
                     self.frames[top].stack.push(Zval::Bool(result));
+                }
+                Op::InstanceOfStatic => {
+                    let v = self.frames[top].stack.pop().expect("InstanceOfStatic operand");
+                    let target = self.frames[top].static_class.ok_or_else(|| {
+                        PhpError::Error("Cannot use \"static\" outside class context".to_string())
+                    })?;
+                    let result = match v.deref_clone() {
+                        Zval::Object(o) => {
+                            is_instance_of(self.module, o.borrow().class_id as usize, target)
+                        }
+                        _ => false,
+                    };
+                    self.frames[top].stack.push(Zval::Bool(result));
+                }
+                Op::StaticCall { target, method, forwarding, argc } => {
+                    let module = self.module;
+                    let mut args = self.pop_keys(top, argc);
+                    let start = match target {
+                        ClassTarget::Class(cid) => cid,
+                        ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
+                            PhpError::Error("Cannot use \"static\" outside class context".to_string())
+                        })?,
+                    };
+                    let Some((defc, midx)) = resolve_method_runtime(module, start, &method) else {
+                        return Err(undefined_method(module, start, &method));
+                    };
+                    // LSB: a forwarding call (self/parent/static) keeps the caller's;
+                    // a named call rebinds it to the start class.
+                    let static_class = if forwarding {
+                        self.frames[top].static_class.unwrap_or(start)
+                    } else {
+                        start
+                    };
+                    // `$this` is forwarded for a forwarding call, or for a named
+                    // call to a class in the current object's hierarchy.
+                    let this = match &self.frames[top].this {
+                        Some(t) => {
+                            let keep = forwarding
+                                || matches!(object_class_id(t), Some(ocid) if class_is_a(module, ocid, start));
+                            if keep {
+                                Some(t.clone())
+                            } else {
+                                None
+                            }
+                        }
+                        None => None,
+                    };
+                    let callee = &module.classes[defc].methods[midx].func;
+                    let mut frame = Frame::new(callee);
+                    for (i, a) in args.drain(..).enumerate() {
+                        frame.slots[i] = a;
+                    }
+                    frame.this = this;
+                    frame.class = Some(defc);
+                    frame.static_class = Some(static_class);
+                    self.frames.push(frame);
+                }
+                Op::ClassConst { class, idx } => {
+                    // Run the constant's value thunk as a frame in its declaring
+                    // class's context; its `Ret` leaves the value on the caller's
+                    // stack.
+                    let thunk = &self.module.classes[class].consts[idx as usize].func;
+                    let mut frame = Frame::new(thunk);
+                    frame.class = Some(class);
+                    frame.static_class = Some(class);
+                    self.frames.push(frame);
+                }
+                Op::ClassConstDyn { name } => {
+                    let module = self.module;
+                    let start = self.frames[top].static_class.ok_or_else(|| {
+                        PhpError::Error("Cannot use \"static\" outside class context".to_string())
+                    })?;
+                    let Some((decl, idx)) = find_const_runtime(module, start, &name) else {
+                        return Err(PhpError::Error(format!(
+                            "Undefined constant {}::{}",
+                            String::from_utf8_lossy(&module.classes[start].name),
+                            String::from_utf8_lossy(&name)
+                        )));
+                    };
+                    let thunk = &module.classes[decl].consts[idx].func;
+                    let mut frame = Frame::new(thunk);
+                    frame.class = Some(decl);
+                    frame.static_class = Some(decl);
+                    self.frames.push(frame);
+                }
+                Op::ClassNameStatic => {
+                    let start = self.frames[top].static_class.ok_or_else(|| {
+                        PhpError::Error("Cannot use \"static\" outside class context".to_string())
+                    })?;
+                    let name = self.module.classes[start].name.to_vec();
+                    self.frames[top].stack.push(Zval::Str(PhpStr::new(name)));
+                }
+                Op::InvokeCtor { argc } => {
+                    let module = self.module;
+                    let mut args = self.pop_keys(top, argc);
+                    let recv = self.frames[top].stack.pop().expect("InvokeCtor receiver");
+                    let this = recv.deref_clone();
+                    let cid = object_class_id(&this).expect("InvokeCtor on a non-object");
+                    match resolve_method_runtime(module, cid, b"__construct") {
+                        Some((defc, midx)) => {
+                            let callee = &module.classes[defc].methods[midx].func;
+                            let mut frame = Frame::new(callee);
+                            for (i, a) in args.drain(..).enumerate() {
+                                frame.slots[i] = a;
+                            }
+                            frame.this = Some(this);
+                            frame.class = Some(defc);
+                            frame.static_class = Some(cid);
+                            self.frames.push(frame);
+                        }
+                        // No constructor: leave NULL so the surrounding `Pop` keeps
+                        // the operand stack balanced (the instance is kept by `Dup`).
+                        None => self.frames[top].stack.push(Zval::Null),
+                    }
                 }
                 Op::Fatal(i) => {
                     let msg = match &self.frames[top].func.consts[i as usize] {
@@ -550,6 +651,51 @@ impl Vm<'_> {
             DimBase::Global(s) => &mut self.frames[0].slots[s as usize],
         };
         path_apply(cell, &keys, last, &mut self.diags)
+    }
+
+    /// Build a fresh instance of class `cid`: its declared property defaults
+    /// materialised, a fresh handle id, shared class-name / visibility metadata.
+    /// Fatal if the class is non-instantiable (abstract / interface / enum) or
+    /// could not be compiled. Shared by [`Op::Alloc`] and [`Op::AllocStatic`].
+    fn alloc_object(&mut self, cid: ClassId) -> Result<Zval, PhpError> {
+        let module = self.module; // &'m Module: detach from `self` borrow
+        let cc = &module.classes[cid];
+        match cc.instantiable {
+            Instantiable::Yes => {}
+            Instantiable::Abstract => {
+                return Err(PhpError::Error(format!(
+                    "Cannot instantiate abstract class {}",
+                    String::from_utf8_lossy(&cc.name)
+                )))
+            }
+            Instantiable::Interface => {
+                return Err(PhpError::Error(format!(
+                    "Cannot instantiate interface {}",
+                    String::from_utf8_lossy(&cc.name)
+                )))
+            }
+            Instantiable::Enum => {
+                return Err(PhpError::Error(format!(
+                    "Cannot instantiate enum {}",
+                    String::from_utf8_lossy(&cc.name)
+                )))
+            }
+        }
+        if !cc.ok {
+            return Err(PhpError::Error(format!(
+                "VM: cannot instantiate {} (non-constant property default not yet ported)",
+                String::from_utf8_lossy(&cc.name)
+            )));
+        }
+        let mut props = Props::new();
+        for (name, c) in &cc.prop_defaults {
+            props.set(name, c.to_zval());
+        }
+        let class_name = Rc::clone(&cc.class_name);
+        let info = Rc::clone(&cc.info);
+        let id = self.next_id();
+        let obj = Object { class_id: cid as u32, class_name, props, id, info };
+        Ok(Zval::Object(Rc::new(RefCell::new(obj))))
     }
 }
 
@@ -747,6 +893,62 @@ fn resolve_method_runtime(module: &Module, start: ClassId, name: &[u8]) -> Optio
         cid = module.classes[c].parent;
     }
     None
+}
+
+/// The class id of an object value (following a reference), or `None` for a
+/// non-object.
+fn object_class_id(v: &Zval) -> Option<ClassId> {
+    match v {
+        Zval::Object(o) => Some(o.borrow().class_id as usize),
+        Zval::Ref(rc) => object_class_id(&rc.borrow()),
+        _ => None,
+    }
+}
+
+/// Whether class `a` is `b` or descends from it (parent chain only) — the test
+/// behind forwarding `$this` propagation for `Parent::m()`-style calls.
+fn class_is_a(module: &Module, a: ClassId, b: ClassId) -> bool {
+    let mut cur = Some(a);
+    while let Some(c) = cur {
+        if c == b {
+            return true;
+        }
+        cur = module.classes[c].parent;
+    }
+    false
+}
+
+/// Resolve a class constant at run time (for `static::CONST`): own constants and
+/// parent chain first, then interfaces transitively. Returns the declaring class
+/// id and the constant's index. Case-sensitive, like PHP and the compiler's
+/// `find_class_const`.
+fn find_const_runtime(module: &Module, start: ClassId, name: &[u8]) -> Option<(ClassId, usize)> {
+    let mut c = Some(start);
+    while let Some(x) = c {
+        if let Some(i) = module.classes[x].consts.iter().position(|k| k.name.as_ref() == name) {
+            return Some((x, i));
+        }
+        c = module.classes[x].parent;
+    }
+    let mut c = Some(start);
+    while let Some(x) = c {
+        for &i in &module.classes[x].interfaces {
+            if let Some(r) = find_const_runtime(module, i, name) {
+                return Some(r);
+            }
+        }
+        c = module.classes[x].parent;
+    }
+    None
+}
+
+/// The "call to undefined method" fatal, shared by instance and static dispatch.
+fn undefined_method(module: &Module, cid: ClassId, method: &[u8]) -> PhpError {
+    PhpError::Error(format!(
+        "Call to undefined method {}::{}()",
+        String::from_utf8_lossy(&module.classes[cid].name),
+        String::from_utf8_lossy(method)
+    ))
 }
 
 /// Whether an object of `class_id` is an instance of `target`: the class itself,
@@ -1622,5 +1824,85 @@ mod tests {
         // An array default is not constant-foldable -> the class is a stub and
         // `new` fatals rather than producing a wrong instance.
         assert!(vm_outcome(b"<?php class C { public $x = [1, 2, 3]; } $o = new C();").fatal.is_some());
+    }
+
+    // --- OOP-2a: self/parent/static, class constants, static calls ---
+
+    #[test]
+    fn class_constant_and_class_name() {
+        assert_eq!(vm_stdout(b"<?php class C { const N = 42; } echo C::N, '/', C::class;"), b"42/C");
+    }
+
+    #[test]
+    fn self_and_parent_constants_resolve_by_defining_class() {
+        // f() lives in A (self::V = 'a'); g()/h() in B (parent::V = 'a', self::V = 'b').
+        assert_eq!(
+            vm_stdout(b"<?php class A { const V = 'a'; function f() { return self::V; } } class B extends A { const V = 'b'; function g() { return parent::V; } function h() { return self::V; } } $b = new B(); echo $b->f(), $b->g(), $b->h();"),
+            b"aab"
+        );
+    }
+
+    #[test]
+    fn constant_referencing_another_constant() {
+        assert_eq!(vm_stdout(b"<?php class C { const A = 10; const B = self::A + 5; } echo C::B;"), b"15");
+    }
+
+    #[test]
+    fn late_static_binding_via_named_static_call() {
+        // who() is declared in A; `static::class` reflects the *called* class.
+        assert_eq!(
+            vm_stdout(b"<?php class A { static function who() { return static::class; } } class B extends A {} echo A::who(), '/', B::who();"),
+            b"A/B"
+        );
+    }
+
+    #[test]
+    fn forwarding_static_call_preserves_lsb() {
+        // b() calls self::a(); self:: is forwarding, so a() sees LSB = B.
+        assert_eq!(
+            vm_stdout(b"<?php class A { static function a() { return static::class; } static function b() { return self::a(); } } class B extends A {} echo B::b();"),
+            b"B"
+        );
+    }
+
+    #[test]
+    fn new_static_instantiates_the_called_class() {
+        assert_eq!(
+            vm_stdout(b"<?php class A { static function make() { return new static(); } } class B extends A {} $x = A::make(); $y = B::make(); echo ($x instanceof A) ? '1' : '0', ($x instanceof B) ? '1' : '0', ($y instanceof B) ? '1' : '0';"),
+            b"101"
+        );
+    }
+
+    #[test]
+    fn new_self_instantiates_the_defining_class() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $x = 5; static function make() { return new self(); } } $o = C::make(); echo $o->x;"),
+            b"5"
+        );
+    }
+
+    #[test]
+    fn parent_static_call_forwards_this() {
+        // B::greet() forwards to A::greet() keeping $this, which reads B's property.
+        assert_eq!(
+            vm_stdout(b"<?php class A { function greet() { return 'hi from ' . $this->name; } } class B extends A { public $name = 'B'; function greet() { return parent::greet(); } } $b = new B(); echo $b->greet();"),
+            b"hi from B"
+        );
+    }
+
+    #[test]
+    fn instanceof_self_in_method() {
+        assert_eq!(
+            vm_stdout(b"<?php class A {} class B extends A { function test($o) { return ($o instanceof self) ? '1' : '0'; } } $b = new B(); $a = new A(); echo $b->test($b), $b->test($a);"),
+            b"10"
+        );
+    }
+
+    #[test]
+    fn instanceof_static_uses_lsb() {
+        assert_eq!(
+            vm_stdout(b"<?php class A { function check($o) { return ($o instanceof static) ? '1' : '0'; } } class B extends A {} $b = new B(); $a = new A(); echo $b->check($b), $b->check($a);"),
+            b"10"
+        );
     }
 }
