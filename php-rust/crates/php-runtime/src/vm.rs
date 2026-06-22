@@ -30,13 +30,39 @@ use crate::bytecode::{
 };
 use crate::hir::{BinOp, CastKind, ClassId, Line, Slot, UnOp, Visibility};
 
-/// The result of running a [`Module`]: the bytes written to stdout, the
-/// diagnostics raised, and the fatal that stopped execution (if any).
-#[derive(Debug, Default)]
+/// The result of running a [`Module`] — at parity with [`crate::eval::Outcome`]
+/// (E1), so the corpus harness can compare the two engines.
+#[derive(Debug)]
 pub struct VmOutcome {
+    /// Pure program output (`echo` / `print` / builtins), diagnostics *not*
+    /// interleaved.
     pub stdout: Vec<u8>,
+    /// CLI-faithful stream: `stdout` with diagnostics rendered inline at their
+    /// point of occurrence and an uncaught fatal rendered at the tail, exactly as
+    /// PHP's CLI SAPI emits them. This is what a `.phpt` `--EXPECT(F)--` section is
+    /// compared against (mirrors [`crate::eval::Outcome::rendered`]).
+    pub rendered: Vec<u8>,
+    /// Non-fatal diagnostics raised during execution, in order.
     pub diags: Diags,
+    /// The fatal that stopped execution (if any); also rendered into `rendered`.
     pub fatal: Option<PhpError>,
+    /// Top-level `return` value (NULL if the script ran to completion).
+    pub return_value: Zval,
+    /// Process exit code from `exit`/`die`, `0..=255`; `None` for a clean run.
+    pub exit_code: Option<u8>,
+}
+
+impl Default for VmOutcome {
+    fn default() -> Self {
+        VmOutcome {
+            stdout: Vec::new(),
+            rendered: Vec::new(),
+            diags: Diags::new(),
+            fatal: None,
+            return_value: Zval::Null,
+            exit_code: None,
+        }
+    }
 }
 
 /// How a bounded dispatch run ([`Vm::run_loop`]) terminated. The runner is
@@ -98,7 +124,10 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         module,
         registry,
         stdout: Vec::new(),
+        rendered: Vec::new(),
         diags: Diags::new(),
+        diags_rendered: 0,
+        fatal_line: 1,
         frames: Vec::new(),
         next_object_id: 1,
         static_props: HashMap::new(),
@@ -113,14 +142,35 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         enum_cache: HashMap::new(),
     };
     vm.frames.push(Frame::new(&module.main));
-    let fatal = vm.run().err();
+    // `exit`/`die` is a clean termination (the exit code is surfaced, not a fatal);
+    // any other `Err` is an uncaught fatal. A `Ok` carries the top-level return.
+    let mut exit_code = None;
+    let (fatal, return_value) = match vm.run() {
+        Ok(v) => (None, v),
+        Err(PhpError::Exit(code)) => {
+            exit_code = Some(code);
+            (None, Zval::Null)
+        }
+        Err(e) => (Some(e), Zval::Null),
+    };
+    // Flush any diagnostics still staged, then render the uncaught fatal at the
+    // tail of `rendered` (mirrors `eval::run_with`).
+    let line = vm.fatal_line;
+    vm.flush_diags(line);
+    if let Some(err) = &fatal {
+        vm.render_fatal(err, line);
+    }
     // End-of-script destructors (LIFO over the objects still tracked), run after
-    // `main` returns — or after a fatal, on a cleared stack (OOP-3d).
+    // `main` returns — or after a fatal, on a cleared stack (OOP-3d). Their output
+    // flows through `emit_str`, so it lands in `rendered` after the fatal block.
     vm.run_shutdown_destructors();
     VmOutcome {
         stdout: vm.stdout,
+        rendered: vm.rendered,
         diags: vm.diags,
         fatal,
+        return_value,
+        exit_code,
     }
 }
 
@@ -248,7 +298,18 @@ struct Vm<'m> {
     /// populated one — that lives in php-builtins, which depends on php-runtime).
     registry: &'m Registry,
     stdout: Vec<u8>,
+    /// CLI-faithful output stream built alongside `stdout` (E1): diagnostics are
+    /// flushed into it (stamped with the current line) at each output point, and an
+    /// uncaught fatal is rendered at the tail. Mirrors `eval::Evaluator::rendered`.
+    rendered: Vec<u8>,
     diags: Diags,
+    /// How many entries of `diags` have already been rendered into `rendered`
+    /// (the flush cursor), mirroring `eval`'s `diags_rendered`.
+    diags_rendered: usize,
+    /// The source line where the uncaught fatal occurred, captured before unwinding
+    /// pops the faulting frame — used by [`Vm::render_fatal`] for an engine error
+    /// (a thrown object carries its own line).
+    fatal_line: Line,
     frames: Vec<Frame<'m>>,
     /// Monotonic object-handle counter (`#N` in `var_dump`), starting at 1 like
     /// the tree-walker's `next_object_id`.
@@ -301,6 +362,91 @@ impl<'m> Vm<'m> {
         id
     }
 
+    /// Render every diagnostic raised since the last flush into `rendered`,
+    /// stamped with `line` and the module file (E1; mirrors `eval::flush_diags`):
+    /// `\n{Severity}: {message} in {file} on line {line}\n`.
+    fn flush_diags(&mut self, line: Line) {
+        while self.diags_rendered < self.diags.len() {
+            let d = &self.diags[self.diags_rendered];
+            let header = format!("\n{}: {} in ", d.severity(), d.message());
+            self.rendered.extend_from_slice(header.as_bytes());
+            self.rendered.extend_from_slice(&self.module.file);
+            let tail = format!(" on line {line}\n");
+            self.rendered.extend_from_slice(tail.as_bytes());
+            self.diags_rendered += 1;
+        }
+    }
+
+    /// Emit `bytes` to both output streams (E1): flush pending diagnostics first
+    /// (so they land ahead of the output they precede, stamped with the current
+    /// line), then append to `stdout` and `rendered`. Mirrors `eval::emit`.
+    fn emit_str(&mut self, top: usize, bytes: &[u8]) {
+        let line = self.cur_line(top);
+        self.flush_diags(line);
+        self.stdout.extend_from_slice(bytes);
+        self.rendered.extend_from_slice(bytes);
+    }
+
+    /// Run a by-value builtin, mirroring its fresh stdout into `rendered` and
+    /// flushing its diagnostics around it (E1; mirrors `eval::dispatch_value_builtin`):
+    /// pre-existing diagnostics, then the builtin's own warnings, then its output
+    /// — so e.g. a `printf` "Array to string conversion" prints ahead of the
+    /// formatted result.
+    fn run_value_builtin(
+        &mut self,
+        f: crate::builtin::BuiltinFn,
+        args: &[Zval],
+        line: Line,
+    ) -> Result<Zval, PhpError> {
+        self.flush_diags(line);
+        let pre = self.stdout.len();
+        let res = {
+            let mut ctx = Ctx { out: &mut self.stdout, diags: &mut self.diags };
+            f(args, &mut ctx)
+        };
+        let produced = self.stdout[pre..].to_vec();
+        self.flush_diags(line);
+        self.rendered.extend_from_slice(&produced);
+        res
+    }
+
+    /// Render an uncaught fatal at the tail of `rendered` (E1; mirrors
+    /// `eval::render_fatal`). A user-thrown object carries its own class, message,
+    /// line and trace; an engine error uses its variant name and the captured
+    /// `fault_line`.
+    fn render_fatal(&mut self, err: &PhpError, fault_line: Line) {
+        let file = String::from_utf8_lossy(&self.module.file).into_owned();
+        let (class, message, line, trace) = match err {
+            PhpError::Thrown(Zval::Object(o)) => {
+                let b = o.borrow();
+                let class = String::from_utf8_lossy(b.class_name.as_bytes()).into_owned();
+                let message = match b.props.get(b"message") {
+                    Some(Zval::Str(s)) => String::from_utf8_lossy(s.as_bytes()).into_owned(),
+                    _ => String::new(),
+                };
+                let line = match b.props.get(b"line") {
+                    Some(Zval::Long(n)) => *n,
+                    _ => fault_line as i64,
+                };
+                let trace = match b.props.get(b"traceString") {
+                    Some(Zval::Str(s)) => String::from_utf8_lossy(s.as_bytes()).into_owned(),
+                    _ => "#0 {main}".to_string(),
+                };
+                (class, message, line, trace)
+            }
+            other => (
+                other.class_name().to_string(),
+                other.message().to_string(),
+                fault_line as i64,
+                "#0 {main}".to_string(),
+            ),
+        };
+        let block = format!(
+            "\nFatal error: Uncaught {class}: {message} in {file}:{line}\nStack trace:\n{trace}\n  thrown in {file} on line {line}\n",
+        );
+        self.rendered.extend_from_slice(block.as_bytes());
+    }
+
     /// Run until the bottom frame returns, yielding the script's result value.
     /// Intercepts thrown exceptions (EXC): when [`Self::run_until_error`] surfaces
     /// an `Err`, [`Self::unwind`] either routes it to a matching `catch` (and we
@@ -318,10 +464,15 @@ impl<'m> Vm<'m> {
                 Ok(RunExit::Suspended { .. }) => {
                     unreachable!("`Fiber::suspend` outside a fiber is rejected at the call site")
                 }
-                Err(e) => match self.unwind(e, 0) {
-                    None => {} // routed to a `catch`; resume there
-                    Some(e) => return Err(e),
-                },
+                Err(e) => {
+                    // Capture the faulting line before `unwind` pops frames, for an
+                    // uncaught engine error's `render_fatal` (E1).
+                    self.fatal_line = self.cur_line(self.frames.len() - 1);
+                    match self.unwind(e, 0) {
+                        None => {} // routed to a `catch`; resume there
+                        Some(e) => return Err(e),
+                    }
+                }
             }
         }
     }
@@ -527,12 +678,12 @@ impl<'m> Vm<'m> {
                 Op::Echo => {
                     let v = self.frames[top].stack.pop().expect("Echo operand");
                     let s = convert::to_zstr(&v, &mut self.diags);
-                    self.stdout.extend_from_slice(s.as_bytes());
+                    self.emit_str(top, s.as_bytes());
                 }
                 Op::Print => {
                     let v = self.frames[top].stack.pop().expect("Print operand");
                     let s = convert::to_zstr(&v, &mut self.diags);
-                    self.stdout.extend_from_slice(s.as_bytes());
+                    self.emit_str(top, s.as_bytes());
                     self.frames[top].stack.push(Zval::Long(1));
                 }
                 Op::Stringify => {
@@ -997,10 +1148,8 @@ impl<'m> Vm<'m> {
                         _ => return Err(undefined_builtin(&name)),
                     };
                     let args = self.pop_keys(top, argc); // pops argc, source order
-                    let result = {
-                        let mut ctx = Ctx { out: &mut self.stdout, diags: &mut self.diags };
-                        f(&args, &mut ctx)?
-                    };
+                    let line = self.cur_line(top);
+                    let result = self.run_value_builtin(f, &args, line)?;
                     self.frames[top].stack.push(result);
                 }
                 Op::CallBuiltinRef { name, slot, argc } => {
@@ -1009,7 +1158,16 @@ impl<'m> Vm<'m> {
                         _ => return Err(undefined_builtin(&name)),
                     };
                     let rest = self.pop_keys(top, argc);
-                    let result = builtin_ref_call(f, &mut self.frames[top].slots[slot as usize], &rest, &mut self.stdout, &mut self.diags)?;
+                    // Mirror `eval`'s ref-builtin rendering (E1): flush, run, append
+                    // the builtin's output, then flush its own warnings.
+                    let line = self.cur_line(top);
+                    self.flush_diags(line);
+                    let pre = self.stdout.len();
+                    let result = builtin_ref_call(f, &mut self.frames[top].slots[slot as usize], &rest, &mut self.stdout, &mut self.diags);
+                    let produced = self.stdout[pre..].to_vec();
+                    self.rendered.extend_from_slice(&produced);
+                    self.flush_diags(line);
+                    let result = result?;
                     self.frames[top].stack.push(result);
                 }
                 Op::Ret => {
@@ -1845,10 +2003,8 @@ impl<'m> Vm<'m> {
         match self.registry.get(name) {
             Some(Builtin::Value(f)) => {
                 let f = *f;
-                let result = {
-                    let mut ctx = Ctx { out: &mut self.stdout, diags: &mut self.diags };
-                    f(&args, &mut ctx)?
-                };
+                let line = self.cur_line(self.frames.len() - 1);
+                let result = self.run_value_builtin(f, &args, line)?;
                 let top = self.frames.len() - 1;
                 self.frames[top].stack.push(result);
                 Ok(())
@@ -4637,6 +4793,60 @@ mod tests {
         let reg = Registry::new();
         let module = compile_program(&program, &reg).expect("compile");
         run_module(&module, &reg)
+    }
+
+    // ----- E1: VmOutcome parity (rendered / return_value / fatal) vs PHP 8.5.7 -----
+
+    #[test]
+    fn rendered_equals_stdout_when_no_diagnostics() {
+        let out = vm_outcome(b"<?php echo 'hello';");
+        assert_eq!(out.rendered, b"hello");
+        assert_eq!(out.stdout, b"hello");
+    }
+
+    #[test]
+    fn rendered_interleaves_array_to_string_warning() {
+        let out = vm_outcome(b"<?php echo [1,2];");
+        assert_eq!(
+            out.rendered,
+            b"\nWarning: Array to string conversion in test.php on line 1\nArray".to_vec()
+        );
+        // stdout stays the pure output (no diagnostic text).
+        assert_eq!(out.stdout, b"Array");
+    }
+
+    #[test]
+    fn rendered_appends_uncaught_exception_fatal() {
+        let out = vm_outcome(b"<?php\necho \"before\\n\";\nthrow new Exception(\"boom\");");
+        assert_eq!(
+            out.rendered,
+            b"before\n\nFatal error: Uncaught Exception: boom in test.php:3\nStack trace:\n#0 {main}\n  thrown in test.php on line 3\n".to_vec()
+        );
+        assert!(out.fatal.is_some());
+    }
+
+    #[test]
+    fn rendered_appends_engine_error_fatal() {
+        let out = vm_outcome(b"<?php\necho 1 % 0;");
+        assert_eq!(
+            out.rendered,
+            b"\nFatal error: Uncaught DivisionByZeroError: Modulo by zero in test.php:2\nStack trace:\n#0 {main}\n  thrown in test.php on line 2\n".to_vec()
+        );
+    }
+
+    #[test]
+    fn outcome_captures_top_level_return_value() {
+        let out = vm_outcome(b"<?php return 6 * 7;");
+        assert!(matches!(out.return_value, Zval::Long(42)));
+        assert!(out.fatal.is_none());
+    }
+
+    #[test]
+    fn caught_exception_does_not_render_a_fatal() {
+        // A caught exception leaves no fatal block in `rendered`.
+        let out = vm_outcome(b"<?php try { throw new Exception('x'); } catch (Exception $e) { echo 'caught'; }");
+        assert_eq!(out.rendered, b"caught");
+        assert!(out.fatal.is_none());
     }
 
     #[test]
