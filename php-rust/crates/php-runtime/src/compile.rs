@@ -1053,13 +1053,11 @@ impl<'a> FnCompiler<'a> {
                     // `$o?->m(...)`: a null receiver keeps null and skips the call
                     // (its arguments are not evaluated either).
                     let skip = self.emit(Op::JumpIfNull(Addr::MAX));
-                    self.push_value_args(args)?;
-                    self.emit(Op::MethodCall { method: method.clone(), argc: args.len() as u32 });
+                    self.emit_method_call(method, args)?;
                     let end = self.here();
                     self.patch(skip, Op::JumpIfNull(end));
                 } else {
-                    self.push_value_args(args)?;
-                    self.emit(Op::MethodCall { method: method.clone(), argc: args.len() as u32 });
+                    self.emit_method_call(method, args)?;
                 }
             }
             ExprKind::InstanceOf { expr, class } => self.instance_of(expr, class)?,
@@ -1071,13 +1069,25 @@ impl<'a> FnCompiler<'a> {
                     // `$cls::m()` (PAR): the class reference is pushed beneath the
                     // arguments and resolved at run time.
                     self.expr(cexpr)?;
-                    self.push_value_args(args)?;
-                    self.emit(Op::StaticCallDynamic { method: method.clone(), argc: args.len() as u32 });
+                    if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
+                        // Spread `$cls::m(...$a)` (Session A): args from a runtime array.
+                        self.build_args_array(args)?;
+                        self.emit(Op::StaticCallDynamicArgs { method: method.clone() });
+                    } else {
+                        self.push_value_args(args)?;
+                        self.emit(Op::StaticCallDynamic { method: method.clone(), argc: args.len() as u32 });
+                    }
                 } else {
                     let (target, forwarding) = self.resolve_target(class)?;
                     if named.is_empty() {
-                        self.push_value_args(args)?;
-                        self.emit(Op::StaticCall { target, method: method.clone(), forwarding, argc: args.len() as u32 });
+                        if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
+                            // Spread `C::m(...$a)` (Session A): args from a runtime array.
+                            self.build_args_array(args)?;
+                            self.emit(Op::StaticCallArgs { target, method: method.clone(), forwarding });
+                        } else {
+                            self.push_value_args(args)?;
+                            self.emit(Op::StaticCall { target, method: method.clone(), forwarding, argc: args.len() as u32 });
+                        }
                     } else {
                         // Named args: resolve the method at compile time against the
                         // known class's parameters (PAR). `static::` is run-time only.
@@ -1243,16 +1253,7 @@ impl<'a> FnCompiler<'a> {
                         "spread call to a by-reference function".into(),
                     ));
                 }
-                self.emit(Op::ArrayInit);
-                for a in args {
-                    if let ExprKind::Spread(src) = &a.kind {
-                        self.expr(src)?;
-                        self.emit(Op::ArrayAppendSpread);
-                    } else {
-                        self.expr(a)?;
-                        self.emit(Op::ArrayPush);
-                    }
-                }
+                self.build_args_array(args)?;
                 self.emit(Op::CallArgs { func: idx as u32 });
                 return Ok(());
             }
@@ -1408,6 +1409,41 @@ impl<'a> FnCompiler<'a> {
         Ok(())
     }
 
+    /// Build a runtime argument array on the stack from `args`, expanding spreads
+    /// (`...$src` via [`Op::ArrayAppendSpread`]) and pushing positional values
+    /// (via [`Op::ArrayPush`]). Mirrors the `f(...$arr)` path (PAR-13) but feeds a
+    /// dynamic-dispatch call (`$obj->m(...)`, `new C(...)`, `C::m(...)`, Session A)
+    /// whose callee — hence parameter count — isn't known at compile time. Leaves
+    /// the array on top of the stack.
+    fn build_args_array(&mut self, args: &[Expr]) -> R<()> {
+        self.emit(Op::ArrayInit);
+        for a in args {
+            if let ExprKind::Spread(src) = &a.kind {
+                self.expr(src)?;
+                self.emit(Op::ArrayAppendSpread);
+            } else {
+                self.expr(a)?;
+                self.emit(Op::ArrayPush);
+            }
+        }
+        Ok(())
+    }
+
+    /// Emit an instance method call `$obj->m(args)` (the receiver is already on the
+    /// stack). A spread (`...$a`) builds a runtime argument array and dispatches via
+    /// [`Op::MethodCallArgs`]; otherwise the values are pushed positionally for
+    /// [`Op::MethodCall`].
+    fn emit_method_call(&mut self, method: &[u8], args: &[Expr]) -> R<()> {
+        if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
+            self.build_args_array(args)?;
+            self.emit(Op::MethodCallArgs { method: method.into() });
+        } else {
+            self.push_value_args(args)?;
+            self.emit(Op::MethodCall { method: method.into(), argc: args.len() as u32 });
+        }
+        Ok(())
+    }
+
     /// Push each positional argument's value (source order); reject spreads.
     fn push_value_args(&mut self, args: &[Expr]) -> R<()> {
         for a in args {
@@ -1436,6 +1472,21 @@ impl<'a> FnCompiler<'a> {
         let slot = *slot;
         self.push_value_args(rest)?;
         self.emit(Op::CallBuiltinRef { name: name.into(), slot, argc: rest.len() as u32 });
+        Ok(())
+    }
+
+    /// Emit the run-time constructor invocation for `new static` / `new $cls` (the
+    /// receiver is already duplicated on the stack). A spread (`...$a`) builds a
+    /// runtime argument array and uses [`Op::InvokeCtorArgs`]; otherwise the values
+    /// are pushed positionally for [`Op::InvokeCtor`].
+    fn emit_invoke_ctor(&mut self, args: &[Expr]) -> R<()> {
+        if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
+            self.build_args_array(args)?;
+            self.emit(Op::InvokeCtorArgs);
+        } else {
+            self.push_value_args(args)?;
+            self.emit(Op::InvokeCtor { argc: args.len() as u32 });
+        }
         Ok(())
     }
 
@@ -1485,8 +1536,7 @@ impl<'a> FnCompiler<'a> {
                 // Fix line/file/trace on a Throwable after its defaults are set.
                 self.emit(Op::StampThrowable);
                 self.emit(Op::Dup);
-                self.push_value_args(args)?;
-                self.emit(Op::InvokeCtor { argc: args.len() as u32 });
+                self.emit_invoke_ctor(args)?;
                 self.emit(Op::Pop);
                 Ok(())
             }
@@ -1500,8 +1550,7 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::Pop);
                 self.emit(Op::StampThrowable);
                 self.emit(Op::Dup);
-                self.push_value_args(args)?;
-                self.emit(Op::InvokeCtor { argc: args.len() as u32 });
+                self.emit_invoke_ctor(args)?;
                 self.emit(Op::Pop);
                 Ok(())
             }
@@ -1526,6 +1575,18 @@ impl<'a> FnCompiler<'a> {
         // After defaults are in place, fix a Throwable's line/file/trace at the
         // `new` site (a no-op for non-Throwables), before the constructor runs.
         self.emit(Op::StampThrowable);
+        // Spread `new C(...$a)` (Session A): the parameter count isn't known until
+        // the array is flattened, so resolve the constructor at run time from the
+        // fresh object's class (`InvokeCtorArgs`) — which also serves a ctor-less
+        // class (it pushes NULL). Mixed spread + named falls back to the evaluator
+        // (handled below by `emit_named_layout`, which rejects spreads).
+        if named.is_empty() && args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
+            self.emit(Op::Dup);
+            self.build_args_array(args)?;
+            self.emit(Op::InvokeCtorArgs);
+            self.emit(Op::Pop);
+            return Ok(());
+        }
         if let Some((defc, midx)) = ctor {
             self.emit(Op::Dup); // keep the instance as the result; the dup is the receiver
             let argc = if named.is_empty() {

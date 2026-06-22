@@ -980,10 +980,7 @@ impl<'m> Vm<'m> {
                     // of a runtime array, bound positionally (variadic/defaults
                     // compose via the binder).
                     let argsval = self.frames[top].stack.pop().expect("CallArgs array");
-                    let args: Vec<Zval> = match argsval.deref_clone() {
-                        Zval::Array(a) => a.iter().map(|(_, v)| v.deref_clone()).collect(),
-                        _ => Vec::new(),
-                    };
+                    let args = args_from_array_value(argsval);
                     let callee = &self.module.functions[func as usize];
                     let mut frame = Frame::new(callee);
                     bind_params(&mut frame, args);
@@ -1288,36 +1285,16 @@ impl<'m> Vm<'m> {
                     let args = self.pop_keys(top, argc); // source order
                     let recv = self.frames[top].stack.pop().expect("MethodCall receiver");
                     let this = recv.deref_clone();
-                    // A `Generator` is not a user object: dispatch its built-in
-                    // methods (current/key/next/valid/rewind/…) directly (GEN).
-                    if let Zval::Generator(gs) = &this {
-                        let gs = Rc::clone(gs);
-                        let result = self.generator_method(gs, &method, args)?;
-                        self.frames[top].stack.push(result);
-                        continue;
-                    }
-                    // A `Fiber` instance's methods (start/resume/getReturn/is*) are
-                    // dispatched natively, except `__construct` which runs the
-                    // prelude body via `InvokeMethod` (GEN-4).
-                    if let (Zval::Object(o), Some(fcid)) = (&this, self.fiber_class_id) {
-                        let cid = o.borrow().class_id as usize;
-                        if is_instance_of(self.module, cid, fcid) {
-                            let result = self.fiber_method(&this, &method, args)?;
-                            self.frames[top].stack.push(result);
-                            continue;
-                        }
-                    }
-                    let cid = match &this {
-                        Zval::Object(o) => o.borrow().class_id as usize,
-                        other => {
-                            return Err(PhpError::Error(format!(
-                                "Call to a member function {}() on {}",
-                                String::from_utf8_lossy(&method),
-                                other.error_type_name()
-                            )))
-                        }
-                    };
-                    self.dispatch_instance_call(top, cid, this, &method, args)?;
+                    self.method_call(top, this, &method, args)?;
+                }
+                Op::MethodCallArgs { method } => {
+                    // Spread `$obj->m(...$a)` (Session A): the arguments are the
+                    // values of a runtime array (the receiver sits beneath it).
+                    let argsval = self.frames[top].stack.pop().expect("MethodCallArgs array");
+                    let args = args_from_array_value(argsval);
+                    let recv = self.frames[top].stack.pop().expect("MethodCallArgs receiver");
+                    let this = recv.deref_clone();
+                    self.method_call(top, this, &method, args)?;
                 }
                 Op::InvokeMethod { class, method_idx, argc } => {
                     let module = self.module;
@@ -1406,6 +1383,18 @@ impl<'m> Vm<'m> {
                     }
                     self.dispatch_static_call(top, start, &method, forwarding, args)?;
                 }
+                Op::StaticCallArgs { target, method, forwarding } => {
+                    // Spread `C::m(...$a)` (Session A): args from a runtime array.
+                    let argsval = self.frames[top].stack.pop().expect("StaticCallArgs array");
+                    let args = args_from_array_value(argsval);
+                    let start = match target {
+                        ClassTarget::Class(cid) => cid,
+                        ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
+                            PhpError::Error("Cannot use \"static\" outside class context".to_string())
+                        })?,
+                    };
+                    self.dispatch_static_call(top, start, &method, forwarding, args)?;
+                }
                 Op::StaticCallDynamic { method, argc } => {
                     // `$cls::m()` (PAR): args are on top, the class reference beneath.
                     let args = self.pop_keys(top, argc);
@@ -1413,6 +1402,16 @@ impl<'m> Vm<'m> {
                         self.frames[top].stack.pop().expect("StaticCallDynamic class");
                     let start = self.resolve_dynamic_class(&classval)?;
                     // A dynamic class is non-forwarding, like a named class.
+                    self.dispatch_static_call(top, start, &method, false, args)?;
+                }
+                Op::StaticCallDynamicArgs { method } => {
+                    // Spread `$cls::m(...$a)` (Session A): args array on top, the
+                    // class reference beneath.
+                    let argsval = self.frames[top].stack.pop().expect("StaticCallDynamicArgs array");
+                    let args = args_from_array_value(argsval);
+                    let classval =
+                        self.frames[top].stack.pop().expect("StaticCallDynamicArgs class");
+                    let start = self.resolve_dynamic_class(&classval)?;
                     self.dispatch_static_call(top, start, &method, false, args)?;
                 }
                 Op::ClassConst { class, idx } => {
@@ -1503,6 +1502,28 @@ impl<'m> Vm<'m> {
                         }
                         // No constructor: leave NULL so the surrounding `Pop` keeps
                         // the operand stack balanced (the instance is kept by `Dup`).
+                        None => self.frames[top].stack.push(Zval::Null),
+                    }
+                }
+                Op::InvokeCtorArgs => {
+                    // Spread `new C(...$a)` / `new $cls(...)` / `new static(...)`
+                    // (Session A): constructor arguments come from a runtime array.
+                    let module = self.module;
+                    let argsval = self.frames[top].stack.pop().expect("InvokeCtorArgs array");
+                    let args = args_from_array_value(argsval);
+                    let recv = self.frames[top].stack.pop().expect("InvokeCtorArgs receiver");
+                    let this = recv.deref_clone();
+                    let cid = object_class_id(&this).expect("InvokeCtorArgs on a non-object");
+                    match resolve_method_runtime(module, cid, b"__construct") {
+                        Some((defc, midx)) => {
+                            let callee = &module.classes[defc].methods[midx].func;
+                            let mut frame = Frame::new(callee);
+                            bind_params(&mut frame, args);
+                            frame.this = Some(this);
+                            frame.class = Some(defc);
+                            frame.static_class = Some(cid);
+                            self.frames.push(frame);
+                        }
                         None => self.frames[top].stack.push(Zval::Null),
                     }
                 }
@@ -2186,6 +2207,50 @@ impl<'m> Vm<'m> {
     /// Dispatch an instance method call `obj->method(args)` where the receiver's
     /// class `cid` and bound `$this` are already resolved (OOP). A missing or
     /// inaccessible target routes to `__call`, otherwise raises the visibility /
+    /// Dispatch an instance method call `$this->method(args)` with `$this` already
+    /// deref-cloned. A `Generator`/`Fiber` receiver routes to the native built-in
+    /// methods (their result is pushed directly); any other object resolves the
+    /// method at run time via [`Self::dispatch_instance_call`]; a non-object is the
+    /// "Call to a member function …() on …" fatal. Shared by [`Op::MethodCall`] and
+    /// the spread variant [`Op::MethodCallArgs`].
+    fn method_call(
+        &mut self,
+        top: usize,
+        this: Zval,
+        method: &[u8],
+        args: Vec<Zval>,
+    ) -> Result<(), PhpError> {
+        // A `Generator` is not a user object: dispatch its built-in methods
+        // (current/key/next/valid/rewind/…) directly (GEN).
+        if let Zval::Generator(gs) = &this {
+            let gs = Rc::clone(gs);
+            let result = self.generator_method(gs, method, args)?;
+            self.frames[top].stack.push(result);
+            return Ok(());
+        }
+        // A `Fiber` instance's methods (start/resume/getReturn/is*) are dispatched
+        // natively, except `__construct` which runs the prelude body (GEN-4).
+        if let (Zval::Object(o), Some(fcid)) = (&this, self.fiber_class_id) {
+            let cid = o.borrow().class_id as usize;
+            if is_instance_of(self.module, cid, fcid) {
+                let result = self.fiber_method(&this, method, args)?;
+                self.frames[top].stack.push(result);
+                return Ok(());
+            }
+        }
+        let cid = match &this {
+            Zval::Object(o) => o.borrow().class_id as usize,
+            other => {
+                return Err(PhpError::Error(format!(
+                    "Call to a member function {}() on {}",
+                    String::from_utf8_lossy(method),
+                    other.error_type_name()
+                )))
+            }
+        };
+        self.dispatch_instance_call(top, cid, this, method, args)
+    }
+
     /// undefined-method error. Shared by `Op::MethodCall`.
     fn dispatch_instance_call(
         &mut self,
@@ -3178,6 +3243,17 @@ fn object_class_id(v: &Zval) -> Option<ClassId> {
         Zval::Object(o) => Some(o.borrow().class_id as usize),
         Zval::Ref(rc) => object_class_id(&rc.borrow()),
         _ => None,
+    }
+}
+
+/// Flatten a runtime argument array into positional values for a spread call
+/// (`...$arr` feeding a dynamic-dispatch call, Session A): keys are dropped and
+/// each value deref-cloned. A non-array yields no arguments. Shared by the
+/// `…Args` call opcodes and [`Op::CallArgs`].
+fn args_from_array_value(v: Zval) -> Vec<Zval> {
+    match v.deref_clone() {
+        Zval::Array(a) => a.iter().map(|(_, v)| v.deref_clone()).collect(),
+        _ => Vec::new(),
     }
 }
 
@@ -6402,6 +6478,81 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php function g(){ yield 1; yield 2; } function f($a,$b){ return $a+$b; } echo f(...g());"),
             b"3"
+        );
+    }
+
+    // ----- Session A: spread on method / new / static (vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn spread_method_fills_positional() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function m($a,$b,$c){ return \"$a$b$c\"; } } echo (new C)->m(...[1,2,3]);"),
+            b"123"
+        );
+    }
+
+    #[test]
+    fn spread_method_mixed_with_positional() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function m($a,$b,$c){ return \"$a$b$c\"; } } echo (new C)->m(1, ...[2,3]);"),
+            b"123"
+        );
+    }
+
+    #[test]
+    fn spread_method_into_variadic() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function m(...$n){ $s=0; foreach($n as $x) $s+=$x; return $s; } } echo (new C)->m(...[1,2,3,4]);"),
+            b"10"
+        );
+    }
+
+    #[test]
+    fn spread_method_nullsafe_on_present_receiver() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function m($a,$b){ return $a+$b; } } $o=new C; echo $o?->m(...[10,20]);"),
+            b"30"
+        );
+    }
+
+    #[test]
+    fn spread_static_call() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { static function m($a,$b){ return $a+$b; } } echo C::m(...[5,6]);"),
+            b"11"
+        );
+    }
+
+    #[test]
+    fn spread_static_call_dynamic_class() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { static function m($a,$b){ return $a*$b; } } $c='C'; echo $c::m(...[3,4]);"),
+            b"12"
+        );
+    }
+
+    #[test]
+    fn spread_new_with_constructor() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $s; function __construct($a,$b){ $this->s=\"$a-$b\"; } } echo (new C(...[1,2]))->s;"),
+            b"1-2"
+        );
+    }
+
+    #[test]
+    fn spread_new_dynamic_class() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $s; function __construct($a,$b){ $this->s=$a+$b; } } $c='C'; $o=new $c(...[4,5]); echo $o->s;"),
+            b"9"
+        );
+    }
+
+    #[test]
+    fn spread_new_static_preserves_lsb() {
+        // `new static(...$a)` allocates the late-static-bound class and spreads.
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $s; function __construct($a){ $this->s=$a; } static function make(...$a){ return new static(...$a); } } echo C::make(7)->s;"),
+            b"7"
         );
     }
 }

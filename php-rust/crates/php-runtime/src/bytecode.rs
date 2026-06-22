@@ -440,6 +440,11 @@ pub enum Op {
     /// (case-insensitive). The callee runs in a pushed frame with `$this` bound to
     /// the receiver; a missing method is a fatal (magic `__call` is OOP-3).
     MethodCall { method: Box<[u8]>, argc: u32 },
+    /// `[obj, argsArray] -> [ret]` — like [`Op::MethodCall`] but the arguments are
+    /// the values of a runtime array (spread call `$obj->m(...$a)`, Session A):
+    /// string keys are dropped, values bound positionally. Resolves the method at
+    /// run time exactly as [`Op::MethodCall`] (including `Generator`/`Fiber`).
+    MethodCallArgs { method: Box<[u8]> },
     /// `[obj, arg0, …, arg{argc-1}] -> [ret]` — like [`Op::MethodCall`] but the
     /// target method is resolved at *compile* time (`classes[class].methods[idx]`):
     /// used for the constructor, whose defining class and slot are known statically.
@@ -465,12 +470,20 @@ pub enum Op {
     /// `forwarding` (self/parent/static) else the start class, and `$this` is
     /// propagated per PHP's forwarding rules.
     StaticCall { target: ClassTarget, method: Box<[u8]>, forwarding: bool, argc: u32 },
+    /// `[argsArray] -> [ret]` — like [`Op::StaticCall`] but the arguments are the
+    /// values of a runtime array (spread call `C::m(...$a)`, Session A): string
+    /// keys dropped, values bound positionally.
+    StaticCallArgs { target: ClassTarget, method: Box<[u8]>, forwarding: bool },
     /// `[classRef, arg0, …, arg{argc-1}] -> [ret]` — `$cls::m()` (PAR, dynamic
     /// class): the class reference sits beneath the arguments; it is resolved at
     /// run time (name string with leading `\` stripped, or an object's class) and
     /// the call dispatched non-forwarding (LSB = the resolved class), like a
     /// named static call. An unknown class is a catchable `Error`.
     StaticCallDynamic { method: Box<[u8]>, argc: u32 },
+    /// `[classRef, argsArray] -> [ret]` — like [`Op::StaticCallDynamic`] but the
+    /// arguments are the values of a runtime array (spread call `$cls::m(...$a)`,
+    /// Session A): the class reference sits beneath the array.
+    StaticCallDynamicArgs { method: Box<[u8]> },
     /// `[] -> [value]` — `Class::CONST` / `self::CONST` / `parent::CONST` resolved
     /// at compile time to its declaring class and constant index. Runs the
     /// constant's value *thunk* ([`CompiledConst::func`]) as a frame whose
@@ -509,6 +522,12 @@ pub enum Op {
     /// compile time. The instance itself is kept by the surrounding
     /// `AllocStatic; Dup; …; InvokeCtor; Pop` sequence.
     InvokeCtor { argc: u32 },
+    /// `[obj, argsArray] -> [ret]` — like [`Op::InvokeCtor`] but the constructor
+    /// arguments are the values of a runtime array (spread `new C(...$a)` /
+    /// `new $cls(...$a)` / `new static(...$a)`, Session A). The constructor is
+    /// resolved at run time from the object's class; NULL is pushed when there is
+    /// none, so it serves a ctor-less `new` too.
+    InvokeCtorArgs,
     /// `[obj] -> [ret]` — run `obj`'s class [`CompiledClass::prop_init`] thunk (if
     /// any) with `$this = obj`, materialising its non-constant property defaults;
     /// otherwise push NULL. Emitted as `Alloc; Dup; InitProps; Pop` so property
