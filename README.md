@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–61 completati · 1.158 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–61 completati · 1.164 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 **Migrazione VM (Fase 4, in corso).** In parallelo all'evaluator tree-walk — che resta il motore
 di produzione e tiene il differential a 0 mismatch — è in costruzione una **VM a bytecode**
@@ -39,9 +39,13 @@ throw user — incluso il match per supertipo (`catch (ArithmeticError)` su un `
 `catch (Throwable)`. E (**EXC-3b**) il **line-tracking**: ogni op porta la sua linea sorgente (tabella
 `Func.lines` parallela a `ops`), così ogni Throwable — sia `new Exception` (linea fissata al `new`,
 come PHP, non nel costruttore) sia engine error sintetizzato (linea dell'op che fallisce) — riporta
-`getLine()`/`getFile()` corretti. Roadmap residua: EXC-3c (stack trace:
-`getTrace()`/`getTraceAsString()`) → generatori → rimozione di `eval/`. Piano completo: vedi il file
-di piano del progetto.
+`getLine()`/`getFile()` corretti. E (**EXC-3c**) lo **stack trace**: `getTrace()` (array di frame con
+`file`/`line`/`function`/`class`/`type`) e `getTraceAsString()` (`#i file(line): fn()` … `#N {main}`),
+ricostruiti dallo stack di frame della VM — byte-identici al tree-walker per i throw user, con un
+miglioramento di fedeltà a PHP per gli engine error (la VM ne cattura il trace al punto di errore,
+mentre il tree-walker lo sintetizza dopo l'unwind e lo lascia vuoto). Il **blocco eccezioni (EXC) è
+così completo** nella VM. Roadmap residua: generatori → rimozione di `eval/`. Piano completo: vedi il
+file di piano del progetto.
 
 Step 61 ha completato i suggerimenti della code-review esterna: (E) **diff unificato** nel
 `phpt-runner` (`--list-fails` mostra un line-diff EXPECTF-aware invece di due blob troncati); (B)

@@ -454,6 +454,12 @@ pub enum Op {
     /// defaults are set before the constructor runs. The class is read from the
     /// object at run time (so it serves `new static` too).
     InitProps,
+    /// `[obj] -> [obj]` — if the top-of-stack object is-a `Throwable`, stamp its
+    /// `line`/`file`/`trace` at this `new` site (after `InitProps`, before the
+    /// constructor), mirroring PHP (EXC-3b/3c). A no-op for non-Throwables. The
+    /// object is left on the stack. Emitted right after `InitProps; Pop` so the
+    /// stamp is not clobbered by the `$trace = []` property-init thunk.
+    StampThrowable,
 
     // ----- OOP-2b: static properties (visibility-checked, lazily initialised) -----
     /// `[] -> [value]` — read static property `target::$name` (deref-clone). The

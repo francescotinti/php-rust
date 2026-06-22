@@ -781,7 +781,6 @@ impl Vm<'_> {
                 }
                 Op::Alloc { class } => {
                     let obj = self.alloc_object(class)?;
-                    self.stamp_throwable_location(&obj);
                     self.frames[top].stack.push(obj);
                 }
                 Op::AllocStatic => {
@@ -789,8 +788,15 @@ impl Vm<'_> {
                         PhpError::Error("Cannot use \"static\" outside class context".to_string())
                     })?;
                     let obj = self.alloc_object(cid)?;
-                    self.stamp_throwable_location(&obj);
                     self.frames[top].stack.push(obj);
+                }
+                Op::StampThrowable => {
+                    // Stamp line/file/trace on a `new`-constructed Throwable, after
+                    // its property-init thunk ran (which would otherwise clobber
+                    // `trace`), leaving the object on the stack (EXC-3b/3c).
+                    if let Some(obj) = self.frames[top].stack.last().cloned() {
+                        self.stamp_throwable_location(&obj);
+                    }
                 }
                 Op::This => match &self.frames[top].this {
                     Some(t) => {
@@ -1457,9 +1463,11 @@ impl Vm<'_> {
     /// filled by the line-tracking (EXC-3b) and stack-trace (EXC-3c) steps.
     fn synthesize_throwable(&mut self, cid: ClassId, message: &str) -> Result<Zval, PhpError> {
         let value = self.alloc_object(cid)?;
-        // The line of the op that faulted (`ip-1` in the faulting frame), and the
-        // module's file — mirroring `eval::synthesize_throwable` (EXC-3b).
+        // The line of the op that faulted (`ip-1` in the faulting frame), the
+        // module's file, and the current stack trace — mirroring
+        // `eval::synthesize_throwable` (EXC-3b/3c).
         let line = self.cur_line(self.frames.len() - 1);
+        let (trace, trace_string) = self.capture_trace();
         if let Zval::Object(o) = &value {
             let mut b = o.borrow_mut();
             b.props
@@ -1467,6 +1475,9 @@ impl Vm<'_> {
             b.props.set(b"line", Zval::Long(line as i64));
             b.props
                 .set(b"file", Zval::Str(PhpStr::new(self.module.file.to_vec())));
+            b.props.set(b"trace", trace);
+            b.props
+                .set(b"traceString", Zval::Str(PhpStr::new(trace_string)));
         }
         Ok(value)
     }
@@ -1491,10 +1502,64 @@ impl Vm<'_> {
             return;
         }
         let line = self.cur_line(self.frames.len() - 1);
+        let (trace, trace_string) = self.capture_trace();
         let mut b = o.borrow_mut();
         b.props.set(b"line", Zval::Long(line as i64));
         b.props
             .set(b"file", Zval::Str(PhpStr::new(self.module.file.to_vec())));
+        b.props.set(b"trace", trace);
+        b.props
+            .set(b"traceString", Zval::Str(PhpStr::new(trace_string)));
+    }
+
+    /// Snapshot the running frame stack as a Throwable's `(trace array, trace
+    /// string)` (EXC-3c), mirroring `eval::capture_trace`. Frames are
+    /// innermost-first, excluding the script body (`main`), and the string ends
+    /// with `#N {main}`. Each entry's `line` is the call-site line in the
+    /// *caller* (frame `k` was entered from frame `k-1`), recovered from the
+    /// per-op line table (EXC-3b); `args` is empty, as the tree-walker leaves it.
+    fn capture_trace(&self) -> (Zval, Vec<u8>) {
+        let file = &self.module.file;
+        let mut arr = PhpArray::new();
+        let mut s: Vec<u8> = Vec::new();
+        let n = self.frames.len();
+        for (i, k) in (1..n).rev().enumerate() {
+            let frame = &self.frames[k];
+            let line = self.cur_line(k - 1) as i64;
+            // The class shown is the late-static-binding (called) class, like the
+            // tree-walker; absent for a free-function frame.
+            let class: Option<&[u8]> = frame
+                .static_class
+                .map(|cid| self.module.classes[cid].name.as_ref());
+            let is_static = frame.this.is_none();
+
+            s.extend_from_slice(format!("#{i} ").as_bytes());
+            s.extend_from_slice(file);
+            s.extend_from_slice(format!("({line}): ").as_bytes());
+            if let Some(c) = class {
+                s.extend_from_slice(c);
+                s.extend_from_slice(if is_static { b"::" } else { b"->" });
+            }
+            s.extend_from_slice(&frame.func.name);
+            s.extend_from_slice(b"()\n");
+
+            let mut fr = PhpArray::new();
+            fr.insert(Key::from_bytes(b"file"), Zval::Str(PhpStr::new(file.to_vec())));
+            fr.insert(Key::from_bytes(b"line"), Zval::Long(line));
+            fr.insert(
+                Key::from_bytes(b"function"),
+                Zval::Str(PhpStr::new(frame.func.name.to_vec())),
+            );
+            if let Some(c) = class {
+                fr.insert(Key::from_bytes(b"class"), Zval::Str(PhpStr::new(c.to_vec())));
+                let ty: &[u8] = if is_static { b"::" } else { b"->" };
+                fr.insert(Key::from_bytes(b"type"), Zval::Str(PhpStr::new(ty.to_vec())));
+            }
+            fr.insert(Key::from_bytes(b"args"), Zval::Array(Rc::new(PhpArray::new())));
+            let _ = arr.append(Zval::Array(Rc::new(fr)));
+        }
+        s.extend_from_slice(format!("#{} {{main}}", n - 1).as_bytes());
+        (Zval::Array(Rc::new(arr)), s)
     }
 
     /// Resolve and lazily initialise the persistent cell for static property
@@ -4362,6 +4427,67 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php\nfunction make() {\n    return new Exception('e');\n}\n$e = make();\necho $e->getLine();"),
             b"3"
+        );
+    }
+
+    // ----- EXC-3c: stack trace -----
+
+    #[test]
+    fn trace_string_function_chain() {
+        // `a()` is called from `b` (line 3); `b()` from main (line 5). The trace
+        // is byte-identical to the tree-walker's (verified against `eval::run`).
+        assert_eq!(
+            vm_stdout(b"<?php\nfunction a() { throw new Exception('x'); }\nfunction b() { a(); }\ntry {\n    b();\n} catch (Exception $e) {\n    echo $e->getTraceAsString();\n}"),
+            b"#0 test.php(3): a()\n#1 test.php(5): b()\n#2 {main}"
+        );
+    }
+
+    #[test]
+    fn trace_string_method_chain() {
+        // Instance call renders `C->m`, static call `C::s`.
+        assert_eq!(
+            vm_stdout(b"<?php\nclass C {\n    function m() { throw new Exception('x'); }\n    static function s() { (new C)->m(); }\n}\ntry {\n    C::s();\n} catch (Exception $e) {\n    echo $e->getTraceAsString();\n}"),
+            b"#0 test.php(4): C->m()\n#1 test.php(7): C::s()\n#2 {main}"
+        );
+    }
+
+    #[test]
+    fn trace_string_engine_error() {
+        // A synthesized engine error captures the trace at the faulting site:
+        // `d()` called from main (line 4) — matching real PHP. (The tree-walker
+        // synthesizes lazily *after* unwinding and so reports an empty trace
+        // here; the VM is intentionally more faithful to PHP on this point.)
+        assert_eq!(
+            vm_stdout(b"<?php\nfunction d() { $x = 1 % 0; }\ntry {\n    d();\n} catch (DivisionByZeroError $e) {\n    echo $e->getTraceAsString();\n}"),
+            b"#0 test.php(4): d()\n#1 {main}"
+        );
+    }
+
+    #[test]
+    fn trace_string_top_level_throw_is_main_only() {
+        assert_eq!(
+            vm_stdout(b"<?php try { throw new Exception('x'); } catch (Exception $e) { echo $e->getTraceAsString(); }"),
+            b"#0 {main}"
+        );
+    }
+
+    #[test]
+    fn trace_array_shape_function() {
+        // getTrace()[0] carries function / line / file for a free-function frame
+        // (no class/type keys). `count` is an evaluator-only builtin, so index
+        // the array directly.
+        assert_eq!(
+            vm_stdout(b"<?php\nfunction a() { throw new Exception('x'); }\ntry {\n    a();\n} catch (Exception $e) {\n    $t = $e->getTrace();\n    echo $t[0]['function'], '|', $t[0]['line'], '|', $t[0]['file'];\n}"),
+            b"a|4|test.php"
+        );
+    }
+
+    #[test]
+    fn trace_array_shape_method() {
+        // A method frame additionally carries class and type (`->` / `::`).
+        assert_eq!(
+            vm_stdout(b"<?php\nclass C {\n    function m() { throw new Exception('x'); }\n}\ntry {\n    (new C)->m();\n} catch (Exception $e) {\n    $t = $e->getTrace();\n    echo $t[0]['class'], $t[0]['type'], $t[0]['function'];\n}"),
+            b"C->m"
         );
     }
 }

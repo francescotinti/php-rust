@@ -1255,6 +1255,8 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::Dup);
                 self.emit(Op::InitProps);
                 self.emit(Op::Pop);
+                // Fix line/file/trace on a Throwable after its defaults are set.
+                self.emit(Op::StampThrowable);
                 self.emit(Op::Dup);
                 self.push_value_args(args)?;
                 self.emit(Op::InvokeCtor { argc: args.len() as u32 });
@@ -1275,6 +1277,9 @@ impl<'a> FnCompiler<'a> {
         self.emit(Op::Dup);
         self.emit(Op::InitProps);
         self.emit(Op::Pop);
+        // After defaults are in place, fix a Throwable's line/file/trace at the
+        // `new` site (a no-op for non-Throwables), before the constructor runs.
+        self.emit(Op::StampThrowable);
         if let Some((defc, midx)) = ctor {
             self.emit(Op::Dup); // keep the instance as the result; the dup is the receiver
             self.push_value_args(args)?;
