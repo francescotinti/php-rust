@@ -1225,6 +1225,15 @@ impl<'m> Vm<'m> {
                     let top = self.frames.len() - 1;
                     self.frames[top].stack.push(result);
                 }
+                Op::CallHostBuiltinRef { name, slot, argc } => {
+                    // A by-reference-first host builtin (`usort`, Session C): its
+                    // array argument lives in `slot` of the caller frame and is
+                    // written back in place; the callback may run a nested `run_loop`.
+                    let rest = self.pop_keys(top, argc);
+                    let result = self.dispatch_host_builtin_ref(&name, slot, rest)?;
+                    let top = self.frames.len() - 1;
+                    self.frames[top].stack.push(result);
+                }
                 Op::CallBuiltinRef { name, slot, argc } => {
                     let f = match self.registry.get(&name[..]) {
                         Some(Builtin::RefFirst(f)) => *f,
@@ -2390,6 +2399,87 @@ impl<'m> Vm<'m> {
             carry = self.call_callable(cb.clone(), vec![carry, v])?;
         }
         Ok(carry)
+    }
+
+    /// Dispatch a by-reference-first host builtin (`usort`, Session C): `slot` is
+    /// the array variable in the current (caller) frame, taken by reference; `rest`
+    /// are the remaining by-value arguments. The canonical name comes from
+    /// [`host_builtin_ref_first`].
+    fn dispatch_host_builtin_ref(
+        &mut self,
+        name: &[u8],
+        slot: Slot,
+        rest: Vec<Zval>,
+    ) -> Result<Zval, PhpError> {
+        match name {
+            b"usort" => self.ho_usort(slot, rest),
+            _ => Err(undefined_builtin(name)),
+        }
+    }
+
+    /// `usort(&$array, $callback)` (Session C): sort the array's values in place by
+    /// the comparator, re-index `0..n`, and return `true`. The comparator returns
+    /// an int (`$a <=> $b`-style). Mirrors `eval::ho_usort` — a stable merge sort,
+    /// matching PHP 8's sort guarantee. Reads the array out of `slot` up front and
+    /// writes the sorted result back, so no slot borrow is held across a callback.
+    fn ho_usort(&mut self, slot: Slot, rest: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(cmp) = rest.into_iter().next() else {
+            return Err(PhpError::ArgumentCountError(
+                "usort() expects exactly 2 arguments, 1 given".to_string(),
+            ));
+        };
+        let cmp = cmp.deref_clone();
+        let top = self.frames.len() - 1;
+        let values: Vec<Zval> = match self.frames[top].slots[slot as usize].deref_clone() {
+            Zval::Array(a) => a.iter().map(|(_, v)| v.deref_clone()).collect(),
+            other => {
+                return Err(PhpError::TypeError(format!(
+                    "usort(): Argument #1 ($array) must be of type array, {} given",
+                    other.error_type_name()
+                )))
+            }
+        };
+        let sorted = self.vm_merge_sort_with(&cmp, values)?;
+        let mut out = PhpArray::new();
+        for v in sorted {
+            let _ = out.append(v);
+        }
+        let top = self.frames.len() - 1;
+        self.frames[top].slots[slot as usize] = Zval::Array(Rc::new(out));
+        Ok(Zval::Bool(true))
+    }
+
+    /// Stable merge sort driven by a PHP comparator callback (used by `usort`).
+    /// The comparator's return value is cast to an int (`<= 0` keeps the left
+    /// element first). Mirrors `eval::merge_sort_with`.
+    fn vm_merge_sort_with(&mut self, cmp: &Zval, mut vals: Vec<Zval>) -> Result<Vec<Zval>, PhpError> {
+        let n = vals.len();
+        if n <= 1 {
+            return Ok(vals);
+        }
+        let right = vals.split_off(n / 2);
+        let left = self.vm_merge_sort_with(cmp, vals)?;
+        let right = self.vm_merge_sort_with(cmp, right)?;
+        let mut merged = Vec::with_capacity(n);
+        let (mut i, mut j) = (0, 0);
+        while i < left.len() && j < right.len() {
+            if self.compare_with_callback(cmp, &left[i], &right[j])? <= 0 {
+                merged.push(left[i].clone());
+                i += 1;
+            } else {
+                merged.push(right[j].clone());
+                j += 1;
+            }
+        }
+        merged.extend_from_slice(&left[i..]);
+        merged.extend_from_slice(&right[j..]);
+        Ok(merged)
+    }
+
+    /// Invoke a sort comparator and reduce its result to an int (`usort`).
+    fn compare_with_callback(&mut self, cmp: &Zval, a: &Zval, b: &Zval) -> Result<i64, PhpError> {
+        let r = self.call_callable(cmp.clone(), vec![a.clone(), b.clone()])?;
+        Ok(convert::to_long_cast(&r, &mut self.diags))
     }
 
     /// `is_callable($value)`: a closure / FCC, a string naming a function or
@@ -3978,6 +4068,16 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"array_reduce",
     ];
     HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
+}
+
+/// Like [`host_builtin_canonical`] but for the *by-reference-first* host builtins
+/// (Session C): their first argument is an array variable taken by reference. The
+/// compiler emits [`crate::bytecode::Op::CallHostBuiltinRef`] (with the variable's
+/// slot) for these; [`Vm::dispatch_host_builtin_ref`] matches the same canonical
+/// name. The two lists are disjoint.
+pub(crate) fn host_builtin_ref_first(name: &[u8]) -> Option<&'static [u8]> {
+    const HOST_REF: &[&[u8]] = &[b"usort"];
+    HOST_REF.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
 }
 
 /// Read object property `name` by value (deref-clone), following a reference
@@ -8136,6 +8236,40 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php echo (array_reduce([],fn($c,$i)=>$c+$i)===null)?'N':'V';"),
             b"N"
+        );
+    }
+
+    #[test]
+    fn usort_sorts_and_reindexes() {
+        // Out-of-order keys 5/2/9 collapse to 0/1/2; usort returns true.
+        assert_eq!(
+            vm_stdout(b"<?php $a=[5=>'x',2=>'y',9=>'z']; $r=usort($a,fn($p,$q)=>$p<=>$q); echo ($r?'T':'F'),$a[0],$a[1],$a[2];"),
+            b"Txyz"
+        );
+    }
+
+    #[test]
+    fn usort_string_callback_descending() {
+        assert_eq!(
+            vm_stdout(b"<?php function cmp($x,$y){ return $y-$x; } $a=[3,1,2]; usort($a,'cmp'); echo $a[0],$a[1],$a[2];"),
+            b"321"
+        );
+    }
+
+    #[test]
+    fn usort_is_stable() {
+        // Equal weights keep their original order (b before a), like PHP 8's sort.
+        assert_eq!(
+            vm_stdout(b"<?php $a=[['n'=>'b','w'=>1],['n'=>'a','w'=>1],['n'=>'c','w'=>0]]; usort($a,fn($x,$y)=>$x['w']<=>$y['w']); echo $a[0]['n'],$a[1]['n'],$a[2]['n'];"),
+            b"cba"
+        );
+    }
+
+    #[test]
+    fn usort_empty_returns_true() {
+        assert_eq!(
+            vm_stdout(b"<?php $a=[]; echo (usort($a,fn($x,$y)=>0)?'T':'F'),(isset($a[0])?'y':'n');"),
+            b"Tn"
         );
     }
 }

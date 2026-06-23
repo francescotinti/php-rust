@@ -1355,6 +1355,28 @@ impl<'a> FnCompiler<'a> {
             self.emit(Op::CallHostBuiltin { name: canon.into(), argc: args.len() as u32 });
             return Ok(());
         }
+        // By-reference-first host builtins (`usort`, …): first argument is an array
+        // variable taken by reference, the rest by value (Session C).
+        if let Some(canon) = crate::vm::host_builtin_ref_first(name) {
+            let Some((first, rest)) = args.split_first() else {
+                return Err(CompileError::Unsupported(
+                    "by-reference host builtin called with no arguments".into(),
+                ));
+            };
+            let ExprKind::Var(slot) = &first.kind else {
+                return Err(CompileError::Unsupported(
+                    "by-reference host builtin whose first argument is not a plain variable".into(),
+                ));
+            };
+            let slot = *slot;
+            self.push_value_args(rest)?;
+            self.emit(Op::CallHostBuiltinRef {
+                name: canon.into(),
+                slot,
+                argc: rest.len() as u32,
+            });
+            return Ok(());
+        }
         // Builtins: classify by-value vs by-reference-first via the registry.
         match self.ctx.registry.get(name) {
             Some(Builtin::Value(_)) => {

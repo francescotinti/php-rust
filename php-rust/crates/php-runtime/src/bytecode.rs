@@ -367,6 +367,12 @@ pub enum Op {
     /// (which can run a nested `run_loop` via `call_callable`), not the stateless
     /// registry. `name` is the canonical lowercased builtin name.
     CallHostBuiltin { name: Box<[u8]>, argc: u32 },
+    /// `[rest0, …, rest{argc-1}] -> [result]` — call a by-reference-first *host*
+    /// builtin (`usort`, `array_walk`, Session C): like [`Self::CallHostBuiltin`]
+    /// but its first argument is the array variable in `slot`, read and written
+    /// back in place (the callback may run a nested `run_loop`); `argc` is the
+    /// count of the remaining by-value arguments on the stack.
+    CallHostBuiltinRef { name: Box<[u8]>, slot: Slot, argc: u32 },
     /// `[] -> [value]` — read a *user-defined* constant `name` (from `define()`),
     /// resolved at run time from the VM's constant table (B3). Engine constants
     /// (`PHP_INT_MAX`, …) are folded at lowering and never reach here; an unknown
