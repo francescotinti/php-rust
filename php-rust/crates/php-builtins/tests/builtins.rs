@@ -144,6 +144,24 @@ fn type_predicates() {
 }
 
 #[test]
+fn is_object_predicate() {
+    assert_eq!(out("<?php echo is_object(new stdClass) ? 't' : 'f';"), "t");
+    // Closures and generators are objects in PHP.
+    assert_eq!(out("<?php echo is_object(function(){}) ? 't' : 'f';"), "t");
+    assert_eq!(out("<?php function g(){yield 1;} echo is_object(g()) ? 't' : 'f';"), "t");
+    assert_eq!(out("<?php echo is_object(5) ? 't' : 'f';"), "f");
+    assert_eq!(out("<?php echo is_object([1]) ? 't' : 'f';"), "f");
+}
+
+#[test]
+fn is_resource_predicate() {
+    assert_eq!(out("<?php echo is_resource(fopen('php://memory','r+')) ? 't' : 'f';"), "t");
+    // A closed resource is no longer a resource.
+    assert_eq!(out("<?php $f=fopen('php://memory','r+'); fclose($f); echo is_resource($f) ? 't' : 'f';"), "f");
+    assert_eq!(out("<?php echo is_resource(5) ? 't' : 'f';"), "f");
+}
+
+#[test]
 fn is_numeric_cases() {
     assert_eq!(out("<?php echo is_numeric('123') ? 't' : 'f';"), "t");
     assert_eq!(out("<?php echo is_numeric('1.5e3') ? 't' : 'f';"), "t");

@@ -276,6 +276,8 @@ pub fn registry() -> Registry {
     add(b"is_bool", is_bool);
     add(b"is_null", is_null);
     add(b"is_array", is_array);
+    add(b"is_object", is_object);
+    add(b"is_resource", is_resource);
     add(b"is_scalar", is_scalar);
     add(b"is_numeric", is_numeric);
     add(b"intval", intval);
@@ -837,6 +839,22 @@ fn is_null(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
 
 fn is_array(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Bool(matches!(arg1(args, "is_array")?, Zval::Array(_))))
+}
+
+fn is_object(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    // Closures and Generators are objects in PHP (oracle-confirmed).
+    Ok(Zval::Bool(matches!(
+        arg1(args, "is_object")?,
+        Zval::Object(_) | Zval::Closure(_) | Zval::Generator(_)
+    )))
+}
+
+fn is_resource(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    // A *closed* resource (post-`fclose`) is no longer a resource (oracle-confirmed).
+    Ok(Zval::Bool(matches!(
+        arg1(args, "is_resource")?,
+        Zval::Resource(r) if r.borrow().is_open()
+    )))
 }
 
 fn is_scalar(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {

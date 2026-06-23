@@ -86,6 +86,12 @@ impl Resource {
         }
     }
 
+    /// Whether the handle is still open. `is_resource()` is `false` once `fclose`
+    /// has turned the backend into [`ResKind::Closed`] (oracle-verified).
+    pub fn is_open(&self) -> bool {
+        !matches!(self.kind, ResKind::Closed)
+    }
+
     /// The `of type (...)` label inside `var_dump`: "stream" while open,
     /// "Unknown" once closed (oracle-verified, D-51.5).
     pub fn dump_type(&self) -> &'static str {
