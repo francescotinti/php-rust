@@ -190,6 +190,7 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         fiber_class_id: module.class_index.get(&b"fiber"[..]).copied(),
         throwable_id: module.class_index.get(&b"throwable"[..]).copied(),
         enum_cache: HashMap::new(),
+        constants: HashMap::new(),
     };
     vm.frames.push(Frame::new(&module.main));
     // `exit`/`die` is a clean termination (the exit code is surfaced, not a fatal);
@@ -402,6 +403,10 @@ struct Vm<'m> {
     /// Interned enum case singletons, keyed by (enum class id, case index), so
     /// `E::Case === E::Case` (Session A). Materialised lazily on first `E::Case`.
     enum_cache: HashMap<(ClassId, u32), Rc<RefCell<Object>>>,
+    /// User-defined constants from `define()` (B3), mirror of
+    /// `eval::Evaluator::constants`. Read by [`Op::ConstFetch`] and `constant()`;
+    /// engine constants (`PHP_INT_MAX`, …) are folded at lowering and not stored here.
+    constants: HashMap<Vec<u8>, Zval>,
 }
 
 impl<'m> Vm<'m> {
@@ -613,6 +618,16 @@ impl<'m> Vm<'m> {
             match op {
                 Op::PushConst(i) => {
                     let v = self.frames[top].func.consts[i as usize].to_zval();
+                    self.frames[top].stack.push(v);
+                }
+                Op::ConstFetch { name } => {
+                    // A user constant (B3): engine constants were folded at lowering.
+                    let v = self.constants.get(&name[..]).cloned().ok_or_else(|| {
+                        PhpError::Error(format!(
+                            "Undefined constant \"{}\"",
+                            String::from_utf8_lossy(&name)
+                        ))
+                    })?;
                     self.frames[top].stack.push(v);
                 }
                 Op::Pop => {
@@ -2132,8 +2147,69 @@ impl<'m> Vm<'m> {
             b"call_user_func" => self.ho_call_user_func(args),
             b"call_user_func_array" => self.ho_call_user_func_array(args),
             b"is_callable" => self.ho_is_callable(args),
+            b"define" => self.ho_define(args),
+            b"defined" => self.ho_defined(args),
+            b"constant" => self.ho_constant(args),
             _ => Err(undefined_builtin(name)),
         }
+    }
+
+    /// `define($name, $value)` (B3): register a user constant. The name is coerced
+    /// to a string; redefining an existing user *or* engine constant warns and
+    /// returns `false` (PHP 8.5 message), otherwise stores it and returns `true`.
+    /// (The legacy case-insensitive third argument was removed in PHP 8.)
+    fn ho_define(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(name_arg) = args.first() else {
+            return Err(PhpError::Error(
+                "define() expects at least 2 arguments, 0 given".to_string(),
+            ));
+        };
+        let cname = convert::to_zstr_cast(name_arg, &mut self.diags).as_bytes().to_vec();
+        let value = args.get(1).cloned().unwrap_or(Zval::Null);
+        if self.constant_known(&cname) {
+            self.diags.push(Diag::Warning(format!(
+                "Constant {} already defined, this will be an error in PHP 9",
+                String::from_utf8_lossy(&cname)
+            )));
+            return Ok(Zval::Bool(false));
+        }
+        self.constants.insert(cname, value);
+        Ok(Zval::Bool(true))
+    }
+
+    /// `defined($name)` (B3): whether `name` is a known user or engine constant.
+    fn ho_defined(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(name_arg) = args.first() else {
+            return Ok(Zval::Bool(false));
+        };
+        let cname = convert::to_zstr_cast(name_arg, &mut self.diags).as_bytes().to_vec();
+        Ok(Zval::Bool(self.constant_known(&cname)))
+    }
+
+    /// `constant($name)` (B3): the value of user constant `name`, else the engine
+    /// constant, else the catchable "Undefined constant" `Error`.
+    fn ho_constant(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(name_arg) = args.first() else {
+            return Err(PhpError::Error(
+                "constant() expects exactly 1 argument, 0 given".to_string(),
+            ));
+        };
+        let cname = convert::to_zstr_cast(name_arg, &mut self.diags).as_bytes().to_vec();
+        if let Some(v) = self.constants.get(&cname) {
+            return Ok(v.clone());
+        }
+        if let Some(z) = crate::lower::resolve_constant(&cname).and_then(const_literal_to_zval) {
+            return Ok(z);
+        }
+        Err(PhpError::Error(format!(
+            "Undefined constant \"{}\"",
+            String::from_utf8_lossy(&cname)
+        )))
+    }
+
+    /// Whether `name` is a known constant — a user `define()` or an engine constant.
+    fn constant_known(&self, name: &[u8]) -> bool {
+        self.constants.contains_key(name) || crate::lower::resolve_constant(name).is_some()
     }
 
     /// `call_user_func($callable, ...$args)`: forward the remaining arguments by
@@ -3744,9 +3820,16 @@ fn undefined_builtin(name: &[u8]) -> PhpError {
 /// [`Vm::dispatch_host_builtin`] matches on the same canonical name. The two MUST
 /// agree — a name emitted here but unmatched there is a clean runtime error.
 pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
-    // Session B1: the call-a-callable family (the proof of the `call_callable`
-    // mechanism). Sessions C/D grow this list (array_map, usort, define, …).
-    const HOST: &[&[u8]] = &[b"call_user_func", b"call_user_func_array", b"is_callable"];
+    // B1: the call-a-callable family. B3: the define family. Sessions C/D grow
+    // this list (array_map, usort, sprintf, get_class, …).
+    const HOST: &[&[u8]] = &[
+        b"call_user_func",
+        b"call_user_func_array",
+        b"is_callable",
+        b"define",
+        b"defined",
+        b"constant",
+    ];
     HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
 }
 
@@ -3857,6 +3940,20 @@ fn object_class_id(v: &Zval) -> Option<ClassId> {
 /// (`...$arr` feeding a dynamic-dispatch call, Session A): keys are dropped and
 /// each value deref-cloned. A non-array yields no arguments. Shared by the
 /// `…Args` call opcodes and [`Op::CallArgs`].
+/// Convert an engine constant's literal HIR value ([`crate::lower::resolve_constant`])
+/// to a [`Zval`] for `constant()` (B3); `None` for a non-scalar form.
+fn const_literal_to_zval(kind: crate::hir::ExprKind) -> Option<Zval> {
+    use crate::hir::ExprKind;
+    Some(match kind {
+        ExprKind::Null => Zval::Null,
+        ExprKind::Bool(b) => Zval::Bool(b),
+        ExprKind::Int(i) => Zval::Long(i),
+        ExprKind::Float(f) => Zval::Double(f),
+        ExprKind::Str(b) => Zval::Str(PhpStr::new(b.into_vec())),
+        _ => return None,
+    })
+}
+
 fn args_from_array_value(v: Zval) -> Vec<Zval> {
     match v.deref_clone() {
         Zval::Array(a) => a.iter().map(|(_, v)| v.deref_clone()).collect(),
@@ -7748,6 +7845,61 @@ mod tests {
             vm_stdout(b"<?php echo call_user_func(function(){ try { throw new Exception('x'); } catch(Exception $e){ return 'inner'; } });"),
             b"inner"
         );
+    }
+
+    // ----- Session B3: define / defined / constant (vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn define_and_read_user_constant() {
+        assert_eq!(vm_stdout(b"<?php define('FOO', 42); echo FOO;"), b"42");
+    }
+
+    #[test]
+    fn constant_reads_user_and_engine() {
+        assert_eq!(
+            vm_stdout(b"<?php define('FOO', 'hi'); echo constant('FOO'),'|',constant('PHP_INT_SIZE');"),
+            b"hi|8"
+        );
+    }
+
+    #[test]
+    fn defined_user_unknown_and_engine() {
+        assert_eq!(
+            vm_stdout(b"<?php define('FOO', 1); echo defined('FOO')?1:0, defined('BAR')?1:0, defined('PHP_INT_MAX')?1:0;"),
+            b"101"
+        );
+    }
+
+    #[test]
+    fn redefine_constant_warns_and_keeps_first() {
+        // The redefinition fails (false), the original value is kept, and the PHP
+        // 8.5 deprecation warning is rendered inline.
+        let out = vm_outcome(b"<?php define('FOO', 1); echo (define('FOO', 2))?'t':'f','|',FOO;");
+        assert_eq!(out.stdout, b"f|1");
+        assert!(
+            out.rendered.windows(b"Constant FOO already defined, this will be an error in PHP 9".len())
+                .any(|w| w == b"Constant FOO already defined, this will be an error in PHP 9"),
+            "rendered: {}",
+            String::from_utf8_lossy(&out.rendered)
+        );
+    }
+
+    #[test]
+    fn undefined_constant_read_is_a_fatal() {
+        let out = vm_outcome(b"<?php echo NOPE;");
+        assert!(out.fatal.is_some());
+        assert!(
+            out.rendered.windows(b"Undefined constant \"NOPE\"".len())
+                .any(|w| w == b"Undefined constant \"NOPE\""),
+            "rendered: {}",
+            String::from_utf8_lossy(&out.rendered)
+        );
+    }
+
+    #[test]
+    fn constant_of_undefined_name_errors() {
+        let out = vm_outcome(b"<?php echo constant('NOPE');");
+        assert!(out.fatal.is_some());
     }
 
     #[test]

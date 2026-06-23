@@ -903,6 +903,11 @@ impl<'a> FnCompiler<'a> {
                 let k = self.konst(Const::Str(s.clone()));
                 self.emit(Op::PushConst(k));
             }
+            ExprKind::Const(name) => {
+                // A *user* constant (engine constants are folded at lowering): read
+                // it from the VM's constant table at run time (B3).
+                self.emit(Op::ConstFetch { name: name.clone() });
+            }
             ExprKind::Var(slot) => {
                 self.emit(Op::LoadSlot(*slot));
             }
