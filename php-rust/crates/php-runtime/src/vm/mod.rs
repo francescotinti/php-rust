@@ -190,6 +190,9 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         error_level: 30719, // PHP 8.5 E_ALL
         last_error: None,
         exception_handlers: Vec::new(),
+        error_handlers: Vec::new(),
+        in_error_handler: false,
+        final_flush: false,
         frames: Vec::new(),
         next_object_id: 1,
         static_props: HashMap::new(),
@@ -208,7 +211,12 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
     // `exit`/`die` is a clean termination (the exit code is surfaced, not a fatal);
     // any other `Err` is an uncaught fatal. A `Ok` carries the top-level return.
     let mut exit_code = None;
-    let (fatal, return_value) = match vm.run() {
+    // Disable error-handler routing for everything past the main run: the final
+    // flush, the uncaught-fatal render, and shutdown destructors must render raw
+    // and never call user code (Session 2 `final_flush` guard).
+    let run_result = vm.run();
+    vm.final_flush = true;
+    let (fatal, return_value) = match run_result {
         Ok(v) => (None, v),
         Err(PhpError::Exit(code)) => {
             exit_code = Some(code);
@@ -222,7 +230,8 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
     // Flush any diagnostics still staged, then render the uncaught fatal at the
     // tail of `rendered` (mirrors `eval::run_with`).
     let line = vm.fatal_line;
-    vm.flush_diags(line);
+    // `final_flush` is set, so routing is skipped and this never errs.
+    let _ = vm.flush_diags(line);
     if let Some(err) = &fatal {
         vm.render_fatal(err, line);
     }
@@ -403,6 +412,19 @@ struct Vm<'m> {
     /// `restore_exception_handler` pops; `set_exception_handler` pushes and returns
     /// the previously-active handler.
     exception_handlers: Vec<Zval>,
+    /// The `set_error_handler` stack as `(callable, level_mask)` (Session 2); the
+    /// last entry is active. A diagnostic whose `errno & mask != 0` is routed to it
+    /// by [`Vm::raise_diagnostic`] instead of the default render.
+    /// `restore_error_handler` pops; `set_error_handler` pushes and returns the
+    /// previously-active handler.
+    error_handlers: Vec<(Zval, i64)>,
+    /// Re-entrancy guard: while a user error handler is running, a diagnostic it
+    /// raises is *not* routed back into the handler (it default-renders instead).
+    in_error_handler: bool,
+    /// Set true once `run()` returns (in [`run_module`]): the final flush,
+    /// `render_fatal`, and shutdown destructors must render raw and never call a
+    /// user error handler. Load-bearing guard in [`Vm::raise_diagnostic`].
+    final_flush: bool,
     frames: Vec<Frame<'m>>,
     /// Monotonic object-handle counter (`#N` in `var_dump`), starting at 1 like
     /// the tree-walker's `next_object_id`.
@@ -462,35 +484,79 @@ impl<'m> Vm<'m> {
     /// Render every diagnostic raised since the last flush into `rendered`,
     /// stamped with `line` and the module file (E1; mirrors `eval::flush_diags`):
     /// `\n{Severity}: {message} in {file} on line {line}\n`.
-    fn flush_diags(&mut self, line: Line) {
+    fn flush_diags(&mut self, line: Line) -> Result<(), PhpError> {
         while self.diags_rendered < self.diags.len() {
-            let d = &self.diags[self.diags_rendered];
-            // Gate on `error_reporting` (Session 1): a severity whose E_* bit is not
-            // set in the current level is consumed but not rendered.
-            let bit = match d {
-                Diag::Warning(_) => 2,    // E_WARNING
-                Diag::Notice(_) => 8,     // E_NOTICE
-                Diag::Deprecated(_) => 8192, // E_DEPRECATED
+            // Map each built-in diagnostic to its E_* number, then route through the
+            // shared chokepoint. The message is cloned and `diags_rendered` advanced
+            // *before* dispatch: a user handler may itself echo (re-entering
+            // `flush_diags`), so this diag must already be consumed.
+            let (errno, message) = match &self.diags[self.diags_rendered] {
+                Diag::Warning(m) => (2, m.clone()),     // E_WARNING
+                Diag::Notice(m) => (8, m.clone()),      // E_NOTICE
+                Diag::Deprecated(m) => (8192, m.clone()), // E_DEPRECATED
             };
-            if self.error_level & bit != 0 {
-                let header = format!("\n{}: {} in ", d.severity(), d.message());
-                self.rendered.extend_from_slice(header.as_bytes());
-                self.rendered.extend_from_slice(&self.module.file);
-                let tail = format!(" on line {line}\n");
-                self.rendered.extend_from_slice(tail.as_bytes());
-            }
             self.diags_rendered += 1;
+            self.raise_diagnostic(errno, &message, line)?;
         }
+        Ok(())
+    }
+
+    /// The single routing chokepoint for every diagnostic (Session 2). If a
+    /// `set_error_handler` callback is active and its level mask matches `errno`,
+    /// the handler is invoked with `(errno, message, file, line)`; its return value
+    /// decides whether the default render is suppressed. Otherwise — or when the
+    /// handler returns falsy — the diagnostic renders the default way, gated by
+    /// `error_reporting`. A handler that throws propagates out (the caller `?`s it,
+    /// so it surfaces from the statement that raised the diagnostic).
+    fn raise_diagnostic(&mut self, errno: i64, message: &str, line: Line) -> Result<(), PhpError> {
+        // 1. Route to the active user handler when eligible. `error_reporting` does
+        //    *not* gate routing — the handler is called even under `error_reporting(0)`.
+        let active = if !self.final_flush && !self.in_error_handler {
+            self.error_handlers
+                .last()
+                .filter(|(_, mask)| errno & *mask != 0)
+                .map(|(cb, _)| cb.clone())
+        } else {
+            None
+        };
+        if let Some(handler) = active {
+            let args = vec![
+                Zval::Long(errno),
+                Zval::Str(PhpStr::new(message.as_bytes().to_vec())),
+                Zval::Str(PhpStr::new(self.module.file.to_vec())),
+                Zval::Long(line as i64),
+            ];
+            self.in_error_handler = true;
+            let r = self.call_callable(handler, args);
+            self.in_error_handler = false;
+            let r = r?; // the handler threw — propagate to the faulting statement.
+            // Oracle-confirmed: ONLY a literal boolean `false` lets the default
+            // render run; `null` (incl. no return), `0`, `''` — anything else —
+            // suppresses. So this is an identity check on `false`, not `to_bool`.
+            if !matches!(r.deref_clone(), Zval::Bool(false)) {
+                return Ok(());
+            }
+        }
+        // 2. Default render (Session 1 behaviour), gated on `error_reporting`.
+        if self.error_level & errno != 0 {
+            let header = format!("\n{}: {} in ", errno_label(errno), message);
+            self.rendered.extend_from_slice(header.as_bytes());
+            self.rendered.extend_from_slice(&self.module.file);
+            let tail = format!(" on line {line}\n");
+            self.rendered.extend_from_slice(tail.as_bytes());
+        }
+        Ok(())
     }
 
     /// Emit `bytes` to both output streams (E1): flush pending diagnostics first
     /// (so they land ahead of the output they precede, stamped with the current
     /// line), then append to `stdout` and `rendered`. Mirrors `eval::emit`.
-    fn emit_str(&mut self, top: usize, bytes: &[u8]) {
+    fn emit_str(&mut self, top: usize, bytes: &[u8]) -> Result<(), PhpError> {
         let line = self.cur_line(top);
-        self.flush_diags(line);
+        self.flush_diags(line)?;
         self.stdout.extend_from_slice(bytes);
         self.rendered.extend_from_slice(bytes);
+        Ok(())
     }
 
     /// Run a by-value builtin, mirroring its fresh stdout into `rendered` and
@@ -504,14 +570,14 @@ impl<'m> Vm<'m> {
         args: &[Zval],
         line: Line,
     ) -> Result<Zval, PhpError> {
-        self.flush_diags(line);
+        self.flush_diags(line)?;
         let pre = self.stdout.len();
         let res = {
             let mut ctx = Ctx { out: &mut self.stdout, diags: &mut self.diags };
             f(args, &mut ctx)
         };
         let produced = self.stdout[pre..].to_vec();
-        self.flush_diags(line);
+        self.flush_diags(line)?;
         self.rendered.extend_from_slice(&produced);
         res
     }
@@ -688,12 +754,12 @@ impl<'m> Vm<'m> {
                 Op::Echo => {
                     let v = self.frames[top].stack.pop().expect("Echo operand");
                     let s = convert::to_zstr(&v, &mut self.diags);
-                    self.emit_str(top, s.as_bytes());
+                    self.emit_str(top, s.as_bytes())?;
                 }
                 Op::Print => {
                     let v = self.frames[top].stack.pop().expect("Print operand");
                     let s = convert::to_zstr(&v, &mut self.diags);
-                    self.emit_str(top, s.as_bytes());
+                    self.emit_str(top, s.as_bytes())?;
                     self.frames[top].stack.push(Zval::Long(1));
                 }
                 Op::Stringify => {
@@ -1188,12 +1254,12 @@ impl<'m> Vm<'m> {
                     // Mirror `eval`'s ref-builtin rendering (E1): flush, run, append
                     // the builtin's output, then flush its own warnings.
                     let line = self.cur_line(top);
-                    self.flush_diags(line);
+                    self.flush_diags(line)?;
                     let pre = self.stdout.len();
                     let result = builtin_ref_call(f, &mut self.frames[top].slots[slot as usize], &rest, &mut self.stdout, &mut self.diags);
                     let produced = self.stdout[pre..].to_vec();
                     self.rendered.extend_from_slice(&produced);
-                    self.flush_diags(line);
+                    self.flush_diags(line)?;
                     let result = result?;
                     self.frames[top].stack.push(result);
                 }
@@ -1994,6 +2060,8 @@ impl<'m> Vm<'m> {
             b"error_get_last" => self.ho_error_get_last(),
             b"set_exception_handler" => self.ho_set_exception_handler(args),
             b"restore_exception_handler" => self.ho_restore_exception_handler(),
+            b"set_error_handler" => self.ho_set_error_handler(args),
+            b"restore_error_handler" => self.ho_restore_error_handler(),
             b"preg_replace_callback" => self.ho_preg_replace_callback(args),
             _ => Err(undefined_builtin(name)),
         }
@@ -2562,25 +2630,18 @@ impl<'m> Vm<'m> {
         let line = self.cur_line(self.frames.len() - 1);
         self.last_error = Some((level, msg.clone(), line));
         if level == 256 {
-            // E_USER_ERROR → fatal.
+            // E_USER_ERROR → fatal. The handler-handles-and-continues nuance is a
+            // documented Session-2 follow-up (sub-step 2); core keeps the fatal.
             return Err(PhpError::Error(String::from_utf8_lossy(&msg).into_owned()));
         }
-        // Flush any pending built-in diagnostics, then render this one — gated on the
-        // user level itself (E_USER_*), not the rendered label's bit, since e.g.
-        // E_USER_DEPRECATED (16384) and E_DEPRECATED (8192) are independent.
-        self.flush_diags(line);
-        if self.error_level & level != 0 {
-            let label = match level {
-                512 => "Warning",       // E_USER_WARNING
-                16384 => "Deprecated",  // E_USER_DEPRECATED
-                _ => "Notice",          // E_USER_NOTICE
-            };
-            let header = format!("\n{}: {} in ", label, String::from_utf8_lossy(&msg));
-            self.rendered.extend_from_slice(header.as_bytes());
-            self.rendered.extend_from_slice(&self.module.file);
-            let tail = format!(" on line {line}\n");
-            self.rendered.extend_from_slice(tail.as_bytes());
-        }
+        // Flush any pending built-in diagnostics, then route this user diagnostic
+        // through the shared chokepoint so a `set_error_handler` callback sees it.
+        // The default render is gated on the user level itself (E_USER_*), not the
+        // label's built-in bit, since e.g. E_USER_DEPRECATED (16384) and
+        // E_DEPRECATED (8192) are independent.
+        self.flush_diags(line)?;
+        let message = String::from_utf8_lossy(&msg).into_owned();
+        self.raise_diagnostic(level, &message, line)?;
         Ok(Zval::Bool(true))
     }
 
@@ -2617,6 +2678,29 @@ impl<'m> Vm<'m> {
     /// the previous one active again. Always returns true.
     fn ho_restore_exception_handler(&mut self) -> Result<Zval, PhpError> {
         self.exception_handlers.pop();
+        Ok(Zval::Bool(true))
+    }
+
+    /// `set_error_handler($callable, $levels = E_ALL)` (Session 2): install a
+    /// user diagnostic handler routed by [`Self::raise_diagnostic`]; returns the
+    /// previously-active handler (or null). The optional level mask gates which
+    /// E_* numbers reach the handler (default `E_ALL` = 30719).
+    fn ho_set_error_handler(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let prev = self.error_handlers.last().map(|(cb, _)| cb.clone());
+        let mut it = args.into_iter();
+        let handler = it.next().unwrap_or(Zval::Null);
+        let level = match it.next() {
+            Some(a) => convert::to_long_cast(&a.deref_clone(), &mut self.diags),
+            None => 30719, // E_ALL (PHP 8.5)
+        };
+        self.error_handlers.push((handler, level));
+        Ok(prev.unwrap_or(Zval::Null))
+    }
+
+    /// `restore_error_handler()` (Session 2): pop the current handler, re-exposing
+    /// the previous one (or the engine default). Always returns true.
+    fn ho_restore_error_handler(&mut self) -> Result<Zval, PhpError> {
+        self.error_handlers.pop();
         Ok(Zval::Bool(true))
     }
 
@@ -3550,6 +3634,18 @@ enum Last {
 /// to decide whether to emit [`Op::CallHostBuiltin`]; the VM's
 /// [`Vm::dispatch_host_builtin`] matches on the same canonical name. The two MUST
 /// agree — a name emitted here but unmatched there is a clean runtime error.
+/// The severity label PHP prints for an E_* number in the default render
+/// (`main/main.c`, `error_type_to_string`). Covers the built-in diagnostics
+/// (`E_WARNING`/`E_NOTICE`/`E_DEPRECATED`) and the `trigger_error` user levels
+/// (`E_USER_*`), which share the same three labels.
+fn errno_label(errno: i64) -> &'static str {
+    match errno {
+        2 | 512 => "Warning",        // E_WARNING / E_USER_WARNING
+        8192 | 16384 => "Deprecated", // E_DEPRECATED / E_USER_DEPRECATED
+        _ => "Notice",                // E_NOTICE (8) / E_USER_NOTICE (1024)
+    }
+}
+
 pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
     // B1: the call-a-callable family. B3: the define family. Sessions C/D grow
     // this list (array_map, usort, sprintf, get_class, …).
@@ -3588,6 +3684,8 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"error_get_last",
         b"set_exception_handler",
         b"restore_exception_handler",
+        b"set_error_handler",
+        b"restore_error_handler",
         b"preg_replace_callback",
     ];
     HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
@@ -7758,6 +7856,121 @@ mod tests {
     fn set_exception_handler_returns_previous() {
         assert_eq!(
             vm_stdout(b"<?php $p1=set_exception_handler(function($e){}); $p2=set_exception_handler(function($e){}); echo ($p1===null?'N':'?'),($p2!==null?'S':'?');"),
+            b"NS"
+        );
+    }
+
+    // ----- Session 2: set_error_handler / restore_error_handler -----
+    //
+    // The VM reads an unset local as silent NULL (no "Undefined variable"), so
+    // these exercise routing through the `t_warn()` test builtin (a built-in
+    // `Diag::Warning("from builtin")`, errno 2) and `trigger_error` (E_USER_*).
+    // The handler-return / mask / re-entrancy / throw semantics asserted here were
+    // each confirmed byte-for-byte against the PHP 8.5.7 oracle.
+
+    /// True when `rendered` contains `needle` (e.g. a default `Warning:` line that
+    /// only appears when the engine handler ran, not a suppressing user callback).
+    fn rendered_has(out: &super::VmOutcome, needle: &[u8]) -> bool {
+        out.rendered.windows(needle.len()).any(|w| w == needle)
+    }
+
+    #[test]
+    fn error_handler_routes_builtin_warning_and_suppresses_default() {
+        // Handler returns null → the built-in warning is suppressed (no default render).
+        let out = vm_run(
+            b"<?php set_error_handler(function($n,$s){ echo \"[H:$n:$s]\"; }); t_warn(); echo 'END';",
+            &fake_registry(),
+        );
+        assert_eq!(out.stdout, b"[H:2:from builtin]END");
+        assert!(!rendered_has(&out, b"Warning:"), "default render must be suppressed: {}", String::from_utf8_lossy(&out.rendered));
+    }
+
+    #[test]
+    fn error_handler_returning_false_runs_default_render() {
+        // Returning literal `false` lets the default `Warning:` render run too.
+        let out = vm_run(
+            b"<?php set_error_handler(function($n,$s){ echo '[H]'; return false; }); t_warn(); echo '|END';",
+            &fake_registry(),
+        );
+        assert!(rendered_has(&out, b"[H]"), "handler ran");
+        assert!(rendered_has(&out, b"Warning: from builtin in test.php"), "default render ran: {}", String::from_utf8_lossy(&out.rendered));
+    }
+
+    #[test]
+    fn error_handler_called_under_error_reporting_zero() {
+        // The handler is invoked even under `error_reporting(0)`; its `false` would
+        // normally render, but `error_reporting(0)` gates the default render away.
+        let out = vm_run(
+            b"<?php error_reporting(0); set_error_handler(function($n,$s){ echo \"[H:$n]\"; return false; }); t_warn(); echo '|END';",
+            &fake_registry(),
+        );
+        assert_eq!(out.stdout, b"[H:2]|END");
+        assert!(!rendered_has(&out, b"Warning:"), "error_reporting(0) gates default render: {}", String::from_utf8_lossy(&out.rendered));
+    }
+
+    #[test]
+    fn error_handler_level_mask_excludes_builtin_warning() {
+        // Handler registered for E_USER_WARNING only: a built-in E_WARNING falls to
+        // the default render, but `trigger_error(.., E_USER_WARNING)` hits the handler.
+        let out = vm_run(
+            b"<?php set_error_handler(function($n,$s){ echo \"[H:$n]\"; }, E_USER_WARNING); t_warn(); trigger_error('ut', E_USER_WARNING); echo '|END';",
+            &fake_registry(),
+        );
+        assert!(rendered_has(&out, b"Warning: from builtin in test.php"), "builtin warning uses default: {}", String::from_utf8_lossy(&out.rendered));
+        assert!(rendered_has(&out, b"[H:512]"), "trigger_error routes to handler: {}", String::from_utf8_lossy(&out.rendered));
+    }
+
+    #[test]
+    fn error_handler_throw_propagates_to_surrounding_try() {
+        // The extremely common `throw new ErrorException(...)` idiom: the handler's
+        // throw surfaces from the faulting statement, caught by its try/catch.
+        let out = vm_run(
+            b"<?php set_error_handler(function($n,$s){ throw new RuntimeException('from handler'); }); try { t_warn(); } catch (Throwable $e) { echo '[C:'.$e->getMessage().']'; } echo '|END';",
+            &fake_registry(),
+        );
+        assert!(out.fatal.is_none(), "throw was caught, not fatal: {:?}", out.fatal);
+        assert_eq!(out.stdout, b"[C:from handler]|END");
+    }
+
+    #[test]
+    fn error_handler_is_not_reentered() {
+        // A warning raised *inside* the handler must not recurse: it default-renders,
+        // and the handler body runs exactly once.
+        let out = vm_run(
+            b"<?php set_error_handler(function($n,$s){ echo '[H]'; t_warn(); }); t_warn(); echo '|END';",
+            &fake_registry(),
+        );
+        let hits = out.rendered.windows(3).filter(|w| *w == b"[H]").count();
+        assert_eq!(hits, 1, "handler ran exactly once (no recursion): {}", String::from_utf8_lossy(&out.rendered));
+        assert!(rendered_has(&out, b"Warning: from builtin in test.php"), "inner warning default-renders: {}", String::from_utf8_lossy(&out.rendered));
+    }
+
+    #[test]
+    fn trigger_error_routes_to_handler() {
+        let out = vm_run(
+            b"<?php set_error_handler(function($n,$s){ echo \"[H:$n:$s]\"; }); trigger_error('boom', E_USER_NOTICE); echo '|END';",
+            &fake_registry(),
+        );
+        assert_eq!(out.stdout, b"[H:1024:boom]|END");
+        assert!(!rendered_has(&out, b"Notice:"), "default render suppressed by handler: {}", String::from_utf8_lossy(&out.rendered));
+    }
+
+    #[test]
+    fn restore_error_handler_re_exposes_default() {
+        // After restore, a built-in warning renders the default way again, and the
+        // first `set_error_handler` returned null (no previous handler).
+        let out = vm_run(
+            b"<?php $p=set_error_handler(function($n,$s){ echo '[H]'; }); restore_error_handler(); t_warn(); echo '|'.($p===null?'N':'?').'END';",
+            &fake_registry(),
+        );
+        assert!(rendered_has(&out, b"Warning: from builtin in test.php"), "default restored: {}", String::from_utf8_lossy(&out.rendered));
+        assert!(rendered_has(&out, b"|NEND"), "first set returned null previous: {}", String::from_utf8_lossy(&out.rendered));
+    }
+
+    #[test]
+    fn set_error_handler_returns_previous() {
+        assert_eq!(
+            vm_stdout(b"<?php $p1=set_error_handler(function($n,$s){}); $p2=set_error_handler(function($n,$s){}); echo ($p1===null?'N':'?'),($p2!==null?'S':'?');"),
             b"NS"
         );
     }

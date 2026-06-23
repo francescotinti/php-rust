@@ -138,7 +138,9 @@ impl<'m> Vm<'m> {
             return false;
         };
         let line = self.fatal_line;
-        self.flush_diags(line);
+        // Reached only after `final_flush` is set, so routing is skipped and this
+        // never errs; the now-fallible signature is discharged with `let _`.
+        let _ = self.flush_diags(line);
         self.call_callable(handler, vec![obj]).is_ok()
     }
 
