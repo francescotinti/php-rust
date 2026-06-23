@@ -14,7 +14,7 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–61 completati · 1.268 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–68 completati · 1.402 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
 **Migrazione VM (Fase 4, in corso).** In parallelo all'evaluator tree-walk — che resta il motore
 di produzione e tiene il differential a 0 mismatch — è in costruzione una **VM a bytecode**
@@ -100,6 +100,30 @@ parametri via lo stesso binder (default/variadici compongono). Restano da portar
 con nome su **metodi d'istanza** `$obj->m()`, spread su metodi/`new`/static, `$cls::$p++`/`??=`, e altri
 edge. **Non sono problemi della VM ma del *lowering* (condivisi con l'eval)**: spread in array literal
 `[...$a]` e nomi di membro dinamici `$o->{expr}`/`$o->$n` (rifiutati in `member_name`/lowering).
+
+**Builtin host (in corso).** Il grosso del divario di copertura residuo non è semantica di linguaggio
+ma *funzioni che finora solo l'evaluator implementava*: la VM le sta assorbendo come **builtin host**
+(`Op::CallHostBuiltin`, più la variante by-ref-first `Op::CallHostBuiltinRef` per chi muta il primo
+argomento), molti dei quali richiamano codice utente in modo sincrono tramite un *runner annidato*
+(`drive_to_return`) — così un higher-order builtin può eseguire una callback restando dentro il
+dispatch della VM. Portati finora: gli **higher-order su array** (`array_map`/`array_filter`/
+`array_reduce`/`usort`/`array_walk`), i **varargs** (`func_num_args`/`func_get_args`/`func_get_arg`),
+`sprintf`/`printf` con risoluzione di `__toString` (`vm_stringify`, anch'esso un run annidato),
+l'**introspezione classi** (`get_class`/`get_parent_class`/`get_object_vars`/`get_class_methods`) e i
+predicati di esistenza (`function_exists`/`class_exists`/`interface_exists`/`method_exists`/
+`property_exists`/`get_called_class`), il **sistema diagnostico/errori** (`error_reporting`/
+`trigger_error`/`error_get_last`, con `error_level` per-VM e fix di `E_ALL`=`30719` a PHP 8.5),
+`preg_replace_callback`, `set_exception_handler`/`restore_exception_handler` (stack di handler +
+routing degli uncaught), `define`/`defined`/`constant` con tabella delle costanti utente, e un set di
+**stub d'ambiente** (`gc_*`, `memory_get_usage`/`peak`, `php_sapi_name`, `ini_get`/`set`). Con questi,
+sul corpus `Zend/tests` la VM **supera** il pass-rate dell'evaluator. Prossimo lever singolo più
+grande: `set_error_handler` (instradare ogni diagnostico a una callback utente) — pianificato a parte.
+
+**Modularizzazione `vm.rs`.** Cresciuto a ~9.500 righe, `vm.rs` è stato spezzato in
+`vm/{mod,exceptions,coroutines,arrays,oop,calls}.rs` (ognuno un blocco `impl Vm`), lasciando in
+`mod.rs` le struct, il `run_loop` di dispatch e la registry dei builtin host. Refactor puramente
+meccanico verificato dal compilatore, **zero cambi di comportamento**, 1.402 test verdi a ogni
+sotto-step — stesso trattamento già dato a `eval.rs` (step 60) e `lower.rs` (step 61).
 
 Step 61 ha completato i suggerimenti della code-review esterna: (E) **diff unificato** nel
 `phpt-runner` (`--list-fails` mostra un line-diff EXPECTF-aware invece di due blob troncati); (B)
@@ -260,13 +284,23 @@ literale intero gigante → `INF` #74947) e 1 divergenza ereditata da mago (`\u{
 
 | Sottosistema Zend | LOC C | Sostituto Rust | LOC Rust |
 |---|---|---|---|
-| VM generata (`zend_vm_execute.h`) + `zend_execute.c` | ~146.000 | evaluator tree-walk su HIR | 3–5K |
+| VM generata (`zend_vm_execute.h`) + `zend_execute.c` | ~146.000 | evaluator tree-walk su HIR (produzione) **+ VM a bytecode** (`compile.rs` + `vm/`, motore di domani) | 3–5K + ~9.5K |
 | `zend_compile.c` (AST→opcodes) | 12.400 | lowering AST→HIR | 1–2K |
 | lexer re2c + parser Bison + AST | ~25.000 | dipendenza `mago` + bridge | ~500 |
 | `zend_alloc` / `zend_gc` / TSRM / Optimizer / opcache / win32 | ~88.000 | ownership, `Rc`+COW, `Send`/`Sync`, processo residente | ~0 |
 | `zend_operators.c` (type juggling) | 3.900 | **full port fedele** (l'anima di PHP) | ~1.500 |
 
 ~280K LOC del core → ~8–10K LOC Rust stimati.
+
+> **Due motori, una semantica.** Il progetto è partito con un *tree-walker* su HIR — sufficiente a
+> riprodurre l'output osservabile di PHP e tuttora il motore di produzione che tiene il differential a
+> 0 mismatch. Ma generatori, `yield from` e `Fiber` richiederebbero, su un tree-walker, coroutine
+> stackful (`corosensei`) e `unsafe`. Per evitarlo è stata costruita una **VM a bytecode**: avanzando
+> un instruction pointer esplicito su uno stream di `Op`, sospendere un generatore è *parcheggiare un
+> `Frame`* e il salto non-strutturato è un'istruzione ordinaria — niente coroutine, niente `unsafe`.
+> Da qui la scelta, inizialmente accantonata, di **introdurre comunque una VM**: i due motori coesistono
+> e si validano a vicenda finché la VM non raggiunge la piena parità di copertura, dopodiché `eval/` e
+> `corosensei` verranno rimossi e la VM diventerà l'unico motore.
 
 ## Struttura
 
@@ -275,9 +309,11 @@ php-rust/crates/
   php-types      Zval / PhpStr / PhpArray / Object + operatori (zero dep interne)
   php-runtime    HIR, lowering da mago, evaluator tree-walk (OOP, eccezioni,
                  enum, closure, __destruct, interpolazione; json_decode +
-                 preg_* intercettati; stack-trace). lowering in
-                 lower/{mod,stmt,class,expr}.rs; evaluator in
-                 eval/{mod,expr,stmt,calls,class,builtins}.rs
+                 preg_* intercettati; stack-trace) + VM a bytecode in
+                 migrazione. lowering in lower/{mod,stmt,class,expr}.rs;
+                 evaluator in eval/{mod,expr,stmt,calls,class,builtins}.rs;
+                 VM in compile.rs (HIR→bytecode) + vm/{mod,exceptions,
+                 coroutines,arrays,oop,calls}.rs
   php-builtins   registry ~243 builtin (var_dump/print_r, array_*, string,
                  sprintf/printf, math, json_encode, file/stream, mbstring,
                  hash/encoding: base64/md5/sha1/crc32/hash, pack/unpack, crypt,
