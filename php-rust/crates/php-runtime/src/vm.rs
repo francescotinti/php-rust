@@ -2164,6 +2164,8 @@ impl<'m> Vm<'m> {
             b"array_reduce" => self.ho_array_reduce(args),
             b"get_class" => self.ho_get_class(args),
             b"get_parent_class" => self.ho_get_parent_class(args),
+            b"get_object_vars" => self.ho_get_object_vars(args),
+            b"get_class_methods" => self.ho_get_class_methods(args),
             _ => Err(undefined_builtin(name)),
         }
     }
@@ -2447,34 +2449,103 @@ impl<'m> Vm<'m> {
     fn ho_get_parent_class(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let top = self.frames.len() - 1;
         let cid: Option<ClassId> = match args.into_iter().next() {
-            Some(a) => match a.deref_clone() {
-                Zval::Object(o) => Some(o.borrow().class_id as usize),
-                Zval::Str(s) => {
-                    let raw = s.as_bytes();
-                    let name = raw.strip_prefix(b"\\").unwrap_or(raw);
-                    match self.module.class_index.get(&name.to_ascii_lowercase()).copied() {
-                        Some(c) => Some(c),
-                        None => {
-                            return Err(PhpError::TypeError(
-                                "get_parent_class(): Argument #1 ($object_or_class) must be an object or a valid class name, string given"
-                                    .to_string(),
-                            ))
-                        }
-                    }
-                }
-                other => {
-                    return Err(PhpError::TypeError(format!(
-                        "get_parent_class(): Argument #1 ($object_or_class) must be an object or a valid class name, {} given",
-                        other.error_type_name()
-                    )))
-                }
-            },
+            Some(a) => Some(self.class_arg_to_id(a.deref_clone(), "get_parent_class")?),
             None => self.frames[top].class,
         };
         match cid.and_then(|c| self.module.classes[c].parent) {
             Some(p) => Ok(Zval::Str(PhpStr::new(self.module.classes[p].name.to_vec()))),
             None => Ok(Zval::Bool(false)),
         }
+    }
+
+    /// Resolve an "object or class-name string" argument to a [`ClassId`], matching
+    /// PHP 8.5's `TypeError` for an unresolvable string or a non-object/non-string
+    /// value (shared by `get_parent_class` / `get_class_methods`, Session B2).
+    fn class_arg_to_id(&self, v: Zval, fname: &str) -> Result<ClassId, PhpError> {
+        match v {
+            Zval::Object(o) => Ok(o.borrow().class_id as usize),
+            Zval::Str(s) => {
+                let raw = s.as_bytes();
+                let name = raw.strip_prefix(b"\\").unwrap_or(raw);
+                self.module.class_index.get(&name.to_ascii_lowercase()).copied().ok_or_else(|| {
+                    PhpError::TypeError(format!(
+                        "{fname}(): Argument #1 ($object_or_class) must be an object or a valid class name, string given"
+                    ))
+                })
+            }
+            Zval::Ref(r) => self.class_arg_to_id(r.borrow().clone(), fname),
+            other => Err(PhpError::TypeError(format!(
+                "{fname}(): Argument #1 ($object_or_class) must be an object or a valid class name, {} given",
+                other.error_type_name()
+            ))),
+        }
+    }
+
+    /// `get_object_vars($object)` (Session B2): the object's properties as a
+    /// `name => value` array, filtered by visibility from the calling class scope —
+    /// from outside only `public`, from within the class the `protected`/`private`
+    /// ones too. Dynamic properties are public. Insertion order is preserved.
+    /// Mirrors `eval::ci_get_object_vars`.
+    fn ho_get_object_vars(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(a) = args.into_iter().next() else {
+            return Err(PhpError::ArgumentCountError(
+                "get_object_vars() expects exactly 1 argument, 0 given".to_string(),
+            ));
+        };
+        let v = a.deref_clone();
+        let Zval::Object(o) = v else {
+            return Err(PhpError::TypeError(format!(
+                "get_object_vars(): Argument #1 ($object) must be of type object, {} given",
+                v.error_type_name()
+            )));
+        };
+        let cur = self.frames[self.frames.len() - 1].class;
+        let obj = o.borrow();
+        let cid = obj.class_id as usize;
+        let mut arr = PhpArray::new();
+        for (name, val) in obj.props.iter() {
+            let visible = match resolve_prop_decl(self.module, cid, name) {
+                Some((vis, decl)) => visible_from(self.module, cur, vis, decl),
+                None => true, // dynamic / undeclared property is public
+            };
+            if visible {
+                arr.insert(Key::from_bytes(name), val.clone());
+            }
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// `get_class_methods($object_or_class)` (Session B2): the class's method names,
+    /// walking the inheritance chain child→parent (each name once, child overrides
+    /// win), filtered by visibility from the calling scope. An unresolvable
+    /// class-name string is a `TypeError` (PHP 8.5; eval returns null → VM ≥ eval).
+    /// Interface/abstract-only method names are a scope-out (not carried on the
+    /// compiled class). Mirrors `eval::ci_get_class_methods` for concrete methods.
+    fn ho_get_class_methods(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(a) = args.into_iter().next() else {
+            return Err(PhpError::ArgumentCountError(
+                "get_class_methods() expects exactly 1 argument, 0 given".to_string(),
+            ));
+        };
+        let start = self.class_arg_to_id(a.deref_clone(), "get_class_methods")?;
+        let cur = self.frames[self.frames.len() - 1].class;
+        let mut arr = PhpArray::new();
+        let mut seen: Vec<Vec<u8>> = Vec::new();
+        let mut c = Some(start);
+        while let Some(cc) = c {
+            for m in &self.module.classes[cc].methods {
+                let lname = m.name.to_ascii_lowercase();
+                if seen.contains(&lname) {
+                    continue; // a more-derived class already defined this name
+                }
+                seen.push(lname);
+                if visible_from(self.module, cur, m.visibility, cc) {
+                    let _ = arr.append(Zval::Str(PhpStr::new(m.name.to_vec())));
+                }
+            }
+            c = self.module.classes[cc].parent;
+        }
+        Ok(Zval::Array(Rc::new(arr)))
     }
 
     /// Dispatch a by-reference-first host builtin (`usort`, Session C): `slot` is
@@ -4232,6 +4303,8 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"array_reduce",
         b"get_class",
         b"get_parent_class",
+        b"get_object_vars",
+        b"get_class_methods",
     ];
     HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
 }
@@ -5652,12 +5725,12 @@ mod tests {
 
     #[test]
     fn run_source_with_reports_vm_unsupported() {
-        // `get_object_vars` is still an evaluator-only host builtin the bytecode
+        // `var_export` is still an evaluator-only host builtin the bytecode
         // compiler rejects — surfaced as `VmRunError::Unsupported`, not a fatal.
-        // (`array_map` is now VM-native, Session C.)
+        // (`array_map`/`get_object_vars` are now VM-native, Sessions C/B2.)
         let reg = Registry::new();
-        let err = super::run_source_with(b"test.php", b"<?php get_object_vars($o);", &reg)
-            .expect_err("vm should reject get_object_vars");
+        let err = super::run_source_with(b"test.php", b"<?php var_export($x);", &reg)
+            .expect_err("vm should reject var_export");
         assert!(matches!(err, super::VmRunError::Unsupported(_)));
     }
 
@@ -8529,6 +8602,66 @@ mod tests {
     #[test]
     fn get_parent_class_unresolved_string_is_type_error() {
         let out = vm_outcome(b"<?php get_parent_class('Nope');");
+        assert!(out.fatal.is_some());
+        assert!(
+            out.rendered.windows(b"must be an object or a valid class name".len())
+                .any(|w| w == b"must be an object or a valid class name"),
+            "rendered: {}",
+            String::from_utf8_lossy(&out.rendered)
+        );
+    }
+
+    // ----- Session B2b: get_object_vars / get_class_methods (vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn get_object_vars_from_outside_only_public() {
+        // public x + dynamic dyn visible; protected y / private z hidden.
+        assert_eq!(
+            vm_stdout(b"<?php class C{ public $x=1; protected $y=2; private $z=3; } $o=new C; $o->dyn=9; $v=get_object_vars($o); echo $v['x'],$v['dyn'],(isset($v['y'])?'y':'n'),(isset($v['z'])?'z':'n');"),
+            b"19nn"
+        );
+    }
+
+    #[test]
+    fn get_object_vars_from_inside_sees_all() {
+        assert_eq!(
+            vm_stdout(b"<?php class C{ public $x=1; protected $y=2; private $z=3; function d(){ $v=get_object_vars($this); return $v['x'].$v['y'].$v['z']; } } echo (new C)->d();"),
+            b"123"
+        );
+    }
+
+    #[test]
+    fn get_object_vars_non_object_is_type_error() {
+        let out = vm_outcome(b"<?php get_object_vars(5);");
+        assert!(out.fatal.is_some());
+        assert!(
+            out.rendered.windows(b"must be of type object, int given".len())
+                .any(|w| w == b"must be of type object, int given"),
+            "rendered: {}",
+            String::from_utf8_lossy(&out.rendered)
+        );
+    }
+
+    #[test]
+    fn get_class_methods_outside_child_then_parent_visible() {
+        // B::d first, then A::a (public); A::b (protected) is hidden from outside.
+        assert_eq!(
+            vm_stdout(b"<?php class A{ public function a(){} protected function b(){} } class B extends A{ public function d(){} } $s=''; foreach(get_class_methods('B') as $n){ $s.=$n.' '; } echo $s;"),
+            b"d a "
+        );
+    }
+
+    #[test]
+    fn get_class_methods_inside_sees_private_protected() {
+        assert_eq!(
+            vm_stdout(b"<?php class A{ public function a(){} protected function b(){} private function c(){} function ms(){ $s=''; foreach(get_class_methods($this) as $n){ $s.=$n; } return $s; } } echo (new A)->ms();"),
+            b"abcms"
+        );
+    }
+
+    #[test]
+    fn get_class_methods_unresolved_string_is_type_error() {
+        let out = vm_outcome(b"<?php get_class_methods('Nope');");
         assert!(out.fatal.is_some());
         assert!(
             out.rendered.windows(b"must be an object or a valid class name".len())
