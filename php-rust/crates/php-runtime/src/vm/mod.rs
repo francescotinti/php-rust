@@ -403,9 +403,11 @@ struct Vm<'m> {
     /// PHP 8.5's `E_ALL` (30719), so every diagnostic surfaces unless a script
     /// narrows it.
     error_level: i64,
-    /// The most recent `trigger_error` error as `(level, message, line)` for
-    /// `error_get_last` (Session 1). Built-in diagnostics are a documented
-    /// scope-out (they carry no error level at their emission site).
+    /// The most recent error as `(errno, message, line)` for `error_get_last`,
+    /// set at the [`Vm::raise_diagnostic`] chokepoint (Session 2): every diagnostic
+    /// — built-in warnings/notices *and* `trigger_error` — is captured (errno from
+    /// the diag's E_* number), most-recent-wins. The E_USER_ERROR fatal path records
+    /// it directly (it bypasses the chokepoint).
     last_error: Option<(i64, Vec<u8>, Line)>,
     /// The `set_exception_handler` stack (Session 1b); the last entry is active. An
     /// uncaught throwable is routed to it instead of the fatal banner.
@@ -509,6 +511,11 @@ impl<'m> Vm<'m> {
     /// `error_reporting`. A handler that throws propagates out (the caller `?`s it,
     /// so it surfaces from the statement that raised the diagnostic).
     fn raise_diagnostic(&mut self, errno: i64, message: &str, line: Line) -> Result<(), PhpError> {
+        // Record this as the most recent error for `error_get_last` (Session 2
+        // refinement): now that every diagnostic passes through this one chokepoint
+        // with its errno, built-in warnings/notices are captured too (oracle-
+        // confirmed: most-recent-wins, set regardless of handler / `@` / routing).
+        self.last_error = Some((errno, message.as_bytes().to_vec(), line));
         // 1. Route to the active user handler when eligible. `error_reporting` does
         //    *not* gate routing — the handler is called even under `error_reporting(0)`.
         let active = if !self.final_flush && !self.in_error_handler {
@@ -2628,10 +2635,11 @@ impl<'m> Vm<'m> {
             ));
         }
         let line = self.cur_line(self.frames.len() - 1);
-        self.last_error = Some((level, msg.clone(), line));
         if level == 256 {
-            // E_USER_ERROR → fatal. The handler-handles-and-continues nuance is a
-            // documented Session-2 follow-up (sub-step 2); core keeps the fatal.
+            // E_USER_ERROR → fatal (raise_diagnostic is bypassed on this path, so
+            // record `last_error` here). The handler-handles-and-continues nuance is
+            // a documented Session-2 follow-up (sub-step 2); core keeps the fatal.
+            self.last_error = Some((level, msg.clone(), line));
             return Err(PhpError::Error(String::from_utf8_lossy(&msg).into_owned()));
         }
         // Flush any pending built-in diagnostics, then route this user diagnostic
@@ -2645,10 +2653,17 @@ impl<'m> Vm<'m> {
         Ok(Zval::Bool(true))
     }
 
-    /// `error_get_last()` (Session 1): the last `trigger_error` as
-    /// `[type, message, file, line]`, or null. Built-in diagnostics are a
-    /// documented scope-out (no error level at their emission site).
+    /// `error_get_last()`: the most recent diagnostic as `[type, message, file,
+    /// line]`, or null. Captures both `trigger_error` and built-in warnings/notices
+    /// (Session 2; recorded at the [`Self::raise_diagnostic`] chokepoint).
     fn ho_error_get_last(&mut self) -> Result<Zval, PhpError> {
+        // Realize any diagnostic still pending in `self.diags`: the VM flushes diags
+        // lazily (at the next echo/builtin), so a warning raised mid-expression has
+        // not yet updated `last_error` when `error_get_last()` is read right after it.
+        // Flushing here — the same realize-state move `emit_str`/`run_value_builtin`
+        // make — captures it (mirrors PHP's synchronous-at-emission `last_error`).
+        let line = self.cur_line(self.frames.len() - 1);
+        self.flush_diags(line)?;
         match &self.last_error {
             Some((level, msg, line)) => {
                 let mut arr = PhpArray::new();
@@ -7782,6 +7797,27 @@ mod tests {
     #[test]
     fn error_get_last_null_when_none() {
         assert_eq!(vm_stdout(b"<?php echo (error_get_last()===null)?'N':'S';"), b"N");
+    }
+
+    #[test]
+    fn error_get_last_captures_builtin_diagnostic() {
+        // Session 2 refinement: a built-in warning (errno 2) is recorded too, not
+        // just `trigger_error`. `t_warn()` emits `Diag::Warning("from builtin")`.
+        let out = vm_run(
+            b"<?php t_warn(); $e=error_get_last(); echo $e['type'],'|',$e['message'];",
+            &fake_registry(),
+        );
+        assert_eq!(out.stdout, b"2|from builtin");
+    }
+
+    #[test]
+    fn error_get_last_is_most_recent_across_kinds() {
+        // Most-recent-wins: a built-in warning after a trigger_error overwrites it.
+        let out = vm_run(
+            b"<?php trigger_error('u', E_USER_NOTICE); t_warn(); $e=error_get_last(); echo $e['type'],'|',$e['message'];",
+            &fake_registry(),
+        );
+        assert_eq!(out.stdout, b"2|from builtin");
     }
 
     // ----- Session 3: preg_replace_callback (vs PHP 8.5.7 CLI) -----
