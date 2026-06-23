@@ -1499,79 +1499,12 @@ fn frame_display(frame: &CallFrame) -> Vec<u8> {
     d
 }
 
-/// `PREG_OFFSET_CAPTURE`.
-pub(crate) const PREG_OFFSET_CAPTURE: i64 = 256;
-/// `PREG_UNMATCHED_AS_NULL`.
-pub(crate) const PREG_UNMATCHED_AS_NULL: i64 = 512;
-/// `PREG_SET_ORDER`.
-pub(crate) const PREG_SET_ORDER: i64 = 2;
-
-/// Build one match's `$matches` array. Named groups are emitted as the name key
-/// immediately followed by their numeric index (PHP order). With
-/// `PREG_OFFSET_CAPTURE` each value becomes a `[string, byte-offset]` pair; with
-/// `PREG_UNMATCHED_AS_NULL` unmatched groups are `null` and every group is kept,
-/// otherwise trailing unmatched groups are dropped.
-pub(crate) fn captures_array(
-    re: &crate::preg::Engine,
-    caps: &crate::preg::Caps,
-    flags: i64,
-) -> Zval {
-    let offset = flags & PREG_OFFSET_CAPTURE != 0;
-    let as_null = flags & PREG_UNMATCHED_AS_NULL != 0;
-    let names = re.capture_names();
-    let limit = if as_null {
-        caps.len().saturating_sub(1)
-    } else {
-        (0..caps.len())
-            .rev()
-            .find(|&i| caps.get(i).is_some())
-            .unwrap_or(0)
-    };
-    let mut arr = PhpArray::new();
-    for i in 0..=limit {
-        let val = capture_value(caps.get(i), offset, as_null);
-        if let Some(Some(name)) = names.get(i) {
-            arr.insert(Key::from_bytes(name.as_bytes()), val.clone());
-        }
-        arr.insert(Key::Int(i as i64), val);
-    }
-    Zval::Array(Rc::new(arr))
-}
-
-/// A single capture group's value, honouring `PREG_OFFSET_CAPTURE` /
-/// `PREG_UNMATCHED_AS_NULL`.
-pub(crate) fn capture_value(m: Option<&crate::preg::CapMatch>, offset: bool, as_null: bool) -> Zval {
-    match m {
-        Some(mm) => {
-            let s = Zval::Str(PhpStr::new(mm.text.as_bytes().to_vec()));
-            if offset {
-                offset_pair(s, mm.start as i64)
-            } else {
-                s
-            }
-        }
-        None => {
-            let base = if as_null {
-                Zval::Null
-            } else {
-                Zval::Str(PhpStr::new(Vec::new()))
-            };
-            if offset {
-                offset_pair(base, -1)
-            } else {
-                base
-            }
-        }
-    }
-}
-
-/// `[value, offset]` pair for `PREG_OFFSET_CAPTURE`.
-fn offset_pair(value: Zval, off: i64) -> Zval {
-    let mut a = PhpArray::new();
-    let _ = a.append(value);
-    let _ = a.append(Zval::Long(off));
-    Zval::Array(Rc::new(a))
-}
+// PREG flag constants and `$matches`-array builders moved to `crate::preg`
+// (Session F1-pre: the VM shares them, so they no longer live in the evaluator).
+pub(crate) use crate::preg::{
+    capture_value, captures_array, offset_pair, PREG_OFFSET_CAPTURE, PREG_SET_ORDER,
+    PREG_UNMATCHED_AS_NULL,
+};
 
 fn unset_into(target: &mut Zval, steps: &[Step]) {
     let (first, rest) = match steps.split_first() {

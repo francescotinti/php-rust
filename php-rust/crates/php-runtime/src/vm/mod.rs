@@ -163,6 +163,13 @@ pub fn run_source_with(
     Ok(run_module(&module, registry))
 }
 
+/// Lower `source`, compile it, and run it on the VM with no builtins registered
+/// — the VM analogue of [`crate::eval::run_source`]. Convenience wrapper over
+/// [`run_source_with`] with an empty [`Registry`].
+pub fn run_source(name: &[u8], source: &[u8]) -> Result<VmOutcome, VmRunError> {
+    run_source_with(name, source, &Registry::new())
+}
+
 /// Build the [`VmOutcome`] for a compile-time PHP `Fatal error:` (E2; mirrors
 /// `eval::compile_fatal_outcome`): rendered like a runtime fatal but without the
 /// "Uncaught" prefix or "thrown in" tail.
@@ -2623,7 +2630,7 @@ impl<'m> Vm<'m> {
             .into_iter()
             .map(|caps| {
                 let m0 = caps.get(0).expect("match has group 0");
-                (m0.start, m0.end, crate::eval::captures_array(&re, &caps, 0))
+                (m0.start, m0.end, crate::preg::captures_array(&re, &caps, 0))
             })
             .collect();
         let mut out: Vec<u8> = Vec::new();
@@ -2719,7 +2726,7 @@ impl<'m> Vm<'m> {
         };
         let subj = String::from_utf8_lossy(&subject);
         let (ret, matches) = match re.captures(&subj) {
-            Some(caps) => (1, crate::eval::captures_array(&re, &caps, flags)),
+            Some(caps) => (1, crate::preg::captures_array(&re, &caps, flags)),
             None => (0, Zval::Array(Rc::new(PhpArray::new()))),
         };
         Ok((Zval::Long(ret), matches))
@@ -2730,7 +2737,7 @@ impl<'m> Vm<'m> {
     /// PREG_SET_ORDER gives one full match array per match. Returns the match count
     /// (or `false` on a bad pattern). Mirrors `eval::ho_preg_match_all`.
     fn ho_preg_match_all(&mut self, args: Vec<Zval>) -> Result<(Zval, Zval), PhpError> {
-        use crate::eval::{capture_value, PREG_OFFSET_CAPTURE, PREG_SET_ORDER, PREG_UNMATCHED_AS_NULL};
+        use crate::preg::{capture_value, PREG_OFFSET_CAPTURE, PREG_SET_ORDER, PREG_UNMATCHED_AS_NULL};
         if args.len() < 2 {
             return Err(PhpError::ArgumentCountError(
                 "preg_match_all() expects at least 2 arguments".to_string(),
@@ -2754,7 +2761,7 @@ impl<'m> Vm<'m> {
             let mut outer = PhpArray::new();
             for caps in re.captures_iter(&subj) {
                 count += 1;
-                let _ = outer.append(crate::eval::captures_array(&re, &caps, flags));
+                let _ = outer.append(crate::preg::captures_array(&re, &caps, flags));
             }
             outer
         } else {
