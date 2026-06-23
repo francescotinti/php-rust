@@ -88,6 +88,13 @@ pub struct PhpArray {
     /// i64::MAX (zend_hash.c:1183), never decreases on unset.
     next_free: i64,
     count: u32,
+    /// The internal pointer (`reset`/`next`/`prev`/`end`/`current`/`key`), as an
+    /// index into `entries`. `>= entries.len()` (or pointing only at tombstones to
+    /// its right) means "past the end" / invalid — `current` is then `false`. Reads
+    /// skip forward over tombstones from this index (mirrors Zend advancing the
+    /// pointer when the pointed bucket is deleted). `foreach` snapshots and does not
+    /// touch it (PHP 8). Carried by `Clone`/COW like the rest of the array state.
+    cursor: usize,
 }
 
 impl Default for PhpArray {
@@ -97,6 +104,7 @@ impl Default for PhpArray {
             index: HashMap::new(),
             next_free: i64::MIN,
             count: 0,
+            cursor: 0,
         }
     }
 }
@@ -205,6 +213,69 @@ impl PhpArray {
         self.entries
             .iter_mut()
             .filter_map(|e| e.as_mut().map(|(k, v)| (&*k, v)))
+    }
+
+    // --- Internal pointer (`reset`/`next`/`prev`/`end`/`current`/`key`) ---
+
+    /// The effective position of the internal pointer: the first live entry at or
+    /// after `cursor` (skipping tombstones), or `None` when the pointer is past the
+    /// end. A read never moves `cursor`; it skips forward lazily, so deleting the
+    /// pointed bucket makes the next live one current (matches Zend).
+    fn cursor_pos(&self) -> Option<usize> {
+        (self.cursor..self.entries.len()).find(|&i| self.entries[i].is_some())
+    }
+
+    /// `current($a)`: the value at the internal pointer, or `None` (PHP `false`).
+    pub fn ptr_current(&self) -> Option<Zval> {
+        self.cursor_pos()
+            .and_then(|i| self.entries[i].as_ref().map(|(_, v)| v.clone()))
+    }
+
+    /// `key($a)`: the key at the internal pointer, or `None` (PHP `null`).
+    pub fn ptr_key(&self) -> Option<Key> {
+        self.cursor_pos()
+            .and_then(|i| self.entries[i].as_ref().map(|(k, _)| k.clone()))
+    }
+
+    /// `reset($a)`: move the pointer to the first live entry; return its value.
+    pub fn ptr_reset(&mut self) -> Option<Zval> {
+        self.cursor = (0..self.entries.len())
+            .find(|&i| self.entries[i].is_some())
+            .unwrap_or(self.entries.len());
+        self.ptr_current()
+    }
+
+    /// `end($a)`: move the pointer to the last live entry; return its value.
+    pub fn ptr_end(&mut self) -> Option<Zval> {
+        self.cursor = (0..self.entries.len())
+            .rev()
+            .find(|&i| self.entries[i].is_some())
+            .unwrap_or(self.entries.len());
+        self.ptr_current()
+    }
+
+    /// `next($a)`: advance the pointer to the next live entry; return its value.
+    /// Already past the end stays past the end (`false`).
+    pub fn ptr_next(&mut self) -> Option<Zval> {
+        let start = match self.cursor_pos() {
+            Some(i) => i + 1,
+            None => self.entries.len(),
+        };
+        self.cursor = (start..self.entries.len())
+            .find(|&i| self.entries[i].is_some())
+            .unwrap_or(self.entries.len());
+        self.ptr_current()
+    }
+
+    /// `prev($a)`: retreat the pointer to the previous live entry; return its value.
+    /// Stepping before the first entry invalidates the pointer (`false`).
+    pub fn ptr_prev(&mut self) -> Option<Zval> {
+        let end = self.cursor_pos().unwrap_or(self.entries.len());
+        self.cursor = (0..end)
+            .rev()
+            .find(|&i| self.entries[i].is_some())
+            .unwrap_or(self.entries.len());
+        self.ptr_current()
     }
 }
 

@@ -2918,7 +2918,29 @@ impl<'m> Vm<'m> {
         match name {
             b"usort" => self.ho_usort(slot, rest),
             b"array_walk" => self.ho_array_walk(slot, rest),
+            b"reset" => self.ho_array_pointer(slot, PtrOp::Reset),
+            b"end" => self.ho_array_pointer(slot, PtrOp::End),
+            b"next" => self.ho_array_pointer(slot, PtrOp::Next),
+            b"prev" => self.ho_array_pointer(slot, PtrOp::Prev),
+            b"current" => self.ho_array_pointer(slot, PtrOp::Current),
+            b"key" => self.ho_array_pointer(slot, PtrOp::Key),
             _ => Err(undefined_builtin(name)),
+        }
+    }
+
+    /// The array internal-pointer family (`reset`/`end`/`next`/`prev`/`current`/
+    /// `key`): operate on the array in `slot` (following a reference), mutating or
+    /// reading its cursor. `current`/`prev`/`next`/`reset`/`end` return the value at
+    /// the pointer (or `false`); `key` returns the key (or `null`). A non-array
+    /// argument is a `TypeError`. Pure VM gain — the tree-walker has no equivalent.
+    fn ho_array_pointer(&mut self, slot: Slot, op: PtrOp) -> Result<Zval, PhpError> {
+        let top = self.frames.len() - 1;
+        match &mut self.frames[top].slots[slot as usize] {
+            Zval::Ref(rc) => {
+                let mut inner = rc.borrow_mut();
+                array_pointer_apply(&mut inner, op)
+            }
+            other => array_pointer_apply(other, op),
         }
     }
 
@@ -3736,8 +3758,64 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
 /// compiler emits [`crate::bytecode::Op::CallHostBuiltinRef`] (with the variable's
 /// slot) for these; [`Vm::dispatch_host_builtin_ref`] matches the same canonical
 /// name. The two lists are disjoint.
+/// One array internal-pointer operation (see [`Vm::ho_array_pointer`]).
+#[derive(Clone, Copy)]
+enum PtrOp {
+    Current,
+    Key,
+    Reset,
+    End,
+    Next,
+    Prev,
+}
+
+impl PtrOp {
+    fn name(self) -> &'static str {
+        match self {
+            PtrOp::Current => "current",
+            PtrOp::Key => "key",
+            PtrOp::Reset => "reset",
+            PtrOp::End => "end",
+            PtrOp::Next => "next",
+            PtrOp::Prev => "prev",
+        }
+    }
+}
+
+/// Apply an internal-pointer op to `target` (the dereferenced array slot). Reads
+/// (`current`/`key`) take `&PhpArray`; the movers COW via `Rc::make_mut` since they
+/// mutate the cursor. Non-array → the PHP `TypeError`.
+fn array_pointer_apply(target: &mut Zval, op: PtrOp) -> Result<Zval, PhpError> {
+    let Zval::Array(rc) = target else {
+        return Err(PhpError::TypeError(format!(
+            "{}(): Argument #1 ($array) must be of type array, {} given",
+            op.name(),
+            target.error_type_name()
+        )));
+    };
+    Ok(match op {
+        PtrOp::Current => rc.ptr_current().unwrap_or(Zval::Bool(false)),
+        PtrOp::Key => rc.ptr_key().map(|k| key_to_zval(&k)).unwrap_or(Zval::Null),
+        PtrOp::Reset => Rc::make_mut(rc).ptr_reset().unwrap_or(Zval::Bool(false)),
+        PtrOp::End => Rc::make_mut(rc).ptr_end().unwrap_or(Zval::Bool(false)),
+        PtrOp::Next => Rc::make_mut(rc).ptr_next().unwrap_or(Zval::Bool(false)),
+        PtrOp::Prev => Rc::make_mut(rc).ptr_prev().unwrap_or(Zval::Bool(false)),
+    })
+}
+
 pub(crate) fn host_builtin_ref_first(name: &[u8]) -> Option<&'static [u8]> {
-    const HOST_REF: &[&[u8]] = &[b"usort", b"array_walk"];
+    const HOST_REF: &[&[u8]] = &[
+        b"usort",
+        b"array_walk",
+        // Array internal-pointer family (Session: array-pointer). Each takes the
+        // array by reference (mutating/reading its internal cursor).
+        b"reset",
+        b"end",
+        b"next",
+        b"prev",
+        b"current",
+        b"key",
+    ];
     HOST_REF.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
 }
 
@@ -7473,6 +7551,82 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php function addk(&$v,$k){ $v=$v+$k; } $a=[10,20,30]; array_walk($a,'addk'); echo $a[0],$a[1],$a[2];"),
             b"102132"
+        );
+    }
+
+    // ----- Array internal pointer: reset/end/next/prev/current/key (vs PHP 8.5.7) -----
+
+    #[test]
+    fn array_pointer_basic_movement() {
+        // current=10, next=20, next=30, next past end=false, key=null, end=30,
+        // prev=20, reset=10. Matches the oracle byte-for-byte.
+        assert_eq!(
+            vm_stdout(b"<?php $a=[10,20,30]; echo current($a),next($a),next($a),(next($a)===false?'F':'?'),(key($a)===null?'N':'?'),end($a),prev($a),reset($a);"),
+            b"102030FN302010"
+        );
+    }
+
+    #[test]
+    fn array_pointer_string_keys() {
+        assert_eq!(
+            vm_stdout(b"<?php $a=['x'=>1,'y'=>2]; echo key($a),'=',current($a); next($a); echo key($a),'=',current($a);"),
+            b"x=1y=2"
+        );
+    }
+
+    #[test]
+    fn array_pointer_empty_array() {
+        assert_eq!(
+            vm_stdout(b"<?php $a=[]; echo (current($a)===false?'F':'?'),(key($a)===null?'N':'?'),(reset($a)===false?'F':'?'),(end($a)===false?'F':'?'),(next($a)===false?'F':'?');"),
+            b"FNFFF"
+        );
+    }
+
+    #[test]
+    fn array_pointer_skips_tombstones() {
+        // unset leaves a tombstone; reset/next skip over it.
+        assert_eq!(
+            vm_stdout(b"<?php $a=[1,2,3,4]; unset($a[1]); echo reset($a),next($a),next($a),(next($a)===false?'F':'?');"),
+            b"134F"
+        );
+    }
+
+    #[test]
+    fn array_pointer_advances_when_pointed_entry_unset() {
+        // The pointer is on value 2 (key 1); unsetting it makes the next live entry
+        // current (Zend advances the pointer): current=3, key=2.
+        assert_eq!(
+            vm_stdout(b"<?php $a=[1,2,3]; next($a); unset($a[1]); echo current($a),'|',key($a);"),
+            b"3|2"
+        );
+    }
+
+    #[test]
+    fn array_pointer_untouched_by_foreach() {
+        // foreach snapshots (PHP 8) — the internal pointer stays at the first entry.
+        assert_eq!(
+            vm_stdout(b"<?php $a=[1,2,3]; foreach($a as $v){} echo current($a);"),
+            b"1"
+        );
+    }
+
+    #[test]
+    fn array_pointer_prev_before_start_invalidates() {
+        assert_eq!(
+            vm_stdout(b"<?php $a=[1,2]; reset($a); echo (prev($a)===false?'F':'?'),(current($a)===false?'F':'?');"),
+            b"FF"
+        );
+    }
+
+    #[test]
+    fn array_pointer_non_array_is_type_error() {
+        let out = vm_outcome(b"<?php $x=5; next($x);");
+        assert!(out.fatal.is_some(), "next() on a non-array must be a TypeError");
+        assert!(
+            out.rendered.windows(b"must be of type array, int given".len())
+                .any(|w| w == b"must be of type array, int given"),
+            "rendered: {}",
+            String::from_utf8_lossy(&out.rendered)
         );
     }
 
