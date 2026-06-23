@@ -2150,6 +2150,9 @@ impl<'m> Vm<'m> {
             b"define" => self.ho_define(args),
             b"defined" => self.ho_defined(args),
             b"constant" => self.ho_constant(args),
+            b"array_map" => self.ho_array_map(args),
+            b"array_filter" => self.ho_array_filter(args),
+            b"array_reduce" => self.ho_array_reduce(args),
             _ => Err(undefined_builtin(name)),
         }
     }
@@ -2246,6 +2249,147 @@ impl<'m> Vm<'m> {
             }
         };
         self.call_callable(callee, argv)
+    }
+
+    /// `array_map($callback, ...$arrays)` (Session C): a single array preserves
+    /// keys; several arrays re-index 0..max and pass one element from each per row
+    /// (missing tails NULL). A NULL callback zips the arrays (single array →
+    /// identity). Mirrors `eval::ho_array_map`, calling via `call_callable`.
+    fn ho_array_map(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if args.len() < 2 {
+            return Err(PhpError::ArgumentCountError(format!(
+                "array_map() expects at least 2 arguments, {} given",
+                args.len()
+            )));
+        }
+        let cb = args[0].deref_clone();
+        let null_cb = matches!(cb, Zval::Null);
+        let mut arrays = Vec::with_capacity(args.len() - 1);
+        for (i, a) in args[1..].iter().enumerate() {
+            match a.deref_clone() {
+                Zval::Array(arr) => arrays.push(arr),
+                other => {
+                    return Err(PhpError::TypeError(format!(
+                        "array_map(): Argument #{} must be of type array, {} given",
+                        i + 2,
+                        other.error_type_name()
+                    )))
+                }
+            }
+        }
+
+        let mut out = PhpArray::new();
+        if arrays.len() == 1 {
+            let entries: Vec<(Key, Zval)> =
+                arrays[0].iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect();
+            for (k, v) in entries {
+                let mapped = if null_cb { v } else { self.call_callable(cb.clone(), vec![v])? };
+                out.insert(k, mapped);
+            }
+        } else {
+            let cols: Vec<Vec<Zval>> = arrays
+                .iter()
+                .map(|a| a.iter().map(|(_, v)| v.deref_clone()).collect())
+                .collect();
+            let max = cols.iter().map(|c| c.len()).max().unwrap_or(0);
+            for i in 0..max {
+                let row: Vec<Zval> =
+                    cols.iter().map(|c| c.get(i).cloned().unwrap_or(Zval::Null)).collect();
+                let val = if null_cb {
+                    let mut tuple = PhpArray::new();
+                    for v in row {
+                        let _ = tuple.append(v);
+                    }
+                    Zval::Array(Rc::new(tuple))
+                } else {
+                    self.call_callable(cb.clone(), row)?
+                };
+                let _ = out.append(val);
+            }
+        }
+        Ok(Zval::Array(Rc::new(out)))
+    }
+
+    /// `array_filter($array, $callback?, $mode = 0)` (Session C): keys are always
+    /// preserved. No callback keeps truthy values; otherwise the callback receives
+    /// the value (mode 0), the key (`ARRAY_FILTER_USE_KEY` = 2), or `(value, key)`
+    /// (`ARRAY_FILTER_USE_BOTH` = 1). Mirrors `eval::ho_array_filter`.
+    fn ho_array_filter(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(first) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "array_filter() expects at least 1 argument, 0 given".to_string(),
+            ));
+        };
+        let arr = match first.deref_clone() {
+            Zval::Array(a) => a,
+            other => {
+                return Err(PhpError::TypeError(format!(
+                    "array_filter(): Argument #1 ($array) must be of type array, {} given",
+                    other.error_type_name()
+                )))
+            }
+        };
+        let cb = match args.get(1) {
+            Some(a) => match a.deref_clone() {
+                Zval::Null => None,
+                v => Some(v),
+            },
+            None => None,
+        };
+        let mode = match args.get(2) {
+            Some(a) => convert::to_long_cast(&a.deref_clone(), &mut self.diags),
+            None => 0,
+        };
+
+        let entries: Vec<(Key, Zval)> =
+            arr.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect();
+        let mut out = PhpArray::new();
+        for (k, v) in entries {
+            let keep = match &cb {
+                None => convert::to_bool(&v, &mut self.diags),
+                Some(c) => {
+                    let call_args = match mode {
+                        2 => vec![key_to_zval(&k)],
+                        1 => vec![v.clone(), key_to_zval(&k)],
+                        _ => vec![v.clone()],
+                    };
+                    let r = self.call_callable(c.clone(), call_args)?;
+                    convert::to_bool(&r, &mut self.diags)
+                }
+            };
+            if keep {
+                out.insert(k, v);
+            }
+        }
+        Ok(Zval::Array(Rc::new(out)))
+    }
+
+    /// `array_reduce($array, $callback, $initial = null)` (Session C): fold the
+    /// values left-to-right through `$callback($carry, $item)`, returning the final
+    /// carry. (The evaluator has no `array_reduce`, so this is pure VM gain.)
+    fn ho_array_reduce(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if args.len() < 2 {
+            return Err(PhpError::ArgumentCountError(format!(
+                "array_reduce() expects at least 2 arguments, {} given",
+                args.len()
+            )));
+        }
+        let arr = match args[0].deref_clone() {
+            Zval::Array(a) => a,
+            other => {
+                return Err(PhpError::TypeError(format!(
+                    "array_reduce(): Argument #1 ($array) must be of type array, {} given",
+                    other.error_type_name()
+                )))
+            }
+        };
+        let cb = args[1].deref_clone();
+        let mut carry = args.get(2).map(|v| v.deref_clone()).unwrap_or(Zval::Null);
+        let values: Vec<Zval> = arr.iter().map(|(_, v)| v.deref_clone()).collect();
+        for v in values {
+            carry = self.call_callable(cb.clone(), vec![carry, v])?;
+        }
+        Ok(carry)
     }
 
     /// `is_callable($value)`: a closure / FCC, a string naming a function or
@@ -3829,6 +3973,9 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"define",
         b"defined",
         b"constant",
+        b"array_map",
+        b"array_filter",
+        b"array_reduce",
     ];
     HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
 }
@@ -5239,11 +5386,12 @@ mod tests {
 
     #[test]
     fn run_source_with_reports_vm_unsupported() {
-        // `array_map` is an evaluator-only higher-order builtin the bytecode
+        // `get_object_vars` is still an evaluator-only host builtin the bytecode
         // compiler rejects — surfaced as `VmRunError::Unsupported`, not a fatal.
+        // (`array_map` is now VM-native, Session C.)
         let reg = Registry::new();
-        let err = super::run_source_with(b"test.php", b"<?php array_map('strtoupper', ['a']);", &reg)
-            .expect_err("vm should reject array_map");
+        let err = super::run_source_with(b"test.php", b"<?php get_object_vars($o);", &reg)
+            .expect_err("vm should reject get_object_vars");
         assert!(matches!(err, super::VmRunError::Unsupported(_)));
     }
 
@@ -7911,6 +8059,83 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php class C { function m(){} static function s(){} } echo (is_callable(function(){})?1:0), (is_callable([new C,'m'])?1:0), (is_callable(['C','s'])?1:0), (is_callable(new C)?1:0), (is_callable([new C,'nope'])?1:0);"),
             b"11100"
+        );
+    }
+
+    // ----- Session C: array_map / array_filter / array_reduce (vs PHP 8.5.7) -----
+
+    #[test]
+    fn array_map_single_preserves_keys() {
+        assert_eq!(
+            vm_stdout(b"<?php $r=array_map(fn($x)=>$x*$x,[1,2,3]); echo $r[0],$r[1],$r[2];"),
+            b"149"
+        );
+    }
+
+    #[test]
+    fn array_map_string_callable() {
+        assert_eq!(
+            vm_stdout(b"<?php function dbl($x){ return $x*2; } $r=array_map('dbl',[1,2,3]); echo $r[0],$r[1],$r[2];"),
+            b"246"
+        );
+    }
+
+    #[test]
+    fn array_map_multi_reindexes_and_pads() {
+        // Several arrays: re-index 0.., one element from each per row, NULL tails.
+        assert_eq!(
+            vm_stdout(b"<?php $r=array_map(fn($a,$b)=>$a+$b,[1,2,3],[10,20,30,40]); echo $r[0],'-',$r[1],'-',$r[2],'-',$r[3];"),
+            b"11-22-33-40"
+        );
+    }
+
+    #[test]
+    fn array_map_null_callback_zips() {
+        assert_eq!(
+            vm_stdout(b"<?php $r=array_map(null,[1,2],[3,4]); echo $r[0][0],$r[0][1],$r[1][0],$r[1][1];"),
+            b"1324"
+        );
+    }
+
+    #[test]
+    fn array_filter_no_callback_keeps_truthy() {
+        // Keys are preserved; the falsy 0 entries at keys 0 and 3 are dropped.
+        assert_eq!(
+            vm_stdout(b"<?php $r=array_filter([0,1,2,0,3]); echo $r[1],$r[2],$r[4],(isset($r[0])?'y':'n'),(isset($r[3])?'y':'n');"),
+            b"123nn"
+        );
+    }
+
+    #[test]
+    fn array_filter_use_key() {
+        assert_eq!(
+            vm_stdout(b"<?php $r=array_filter(['a'=>1,'b'=>2,'c'=>3],fn($k)=>$k!=='b',2); echo $r['a'],$r['c'],(isset($r['b'])?'y':'n');"),
+            b"13n"
+        );
+    }
+
+    #[test]
+    fn array_filter_use_both() {
+        // mode 1 = ARRAY_FILTER_USE_BOTH: keep even values regardless of key.
+        assert_eq!(
+            vm_stdout(b"<?php $r=array_filter([10,11,12,13],fn($v,$k)=>$v%2===0,1); echo $r[0],$r[2],(isset($r[1])?'y':'n'),(isset($r[3])?'y':'n');"),
+            b"1012nn"
+        );
+    }
+
+    #[test]
+    fn array_reduce_sum_and_concat() {
+        assert_eq!(
+            vm_stdout(b"<?php echo array_reduce([1,2,3,4],fn($c,$i)=>$c+$i,0),'|',array_reduce([1,2,3],fn($c,$i)=>$c.$i,'x');"),
+            b"10|x123"
+        );
+    }
+
+    #[test]
+    fn array_reduce_empty_returns_initial_null() {
+        assert_eq!(
+            vm_stdout(b"<?php echo (array_reduce([],fn($c,$i)=>$c+$i)===null)?'N':'V';"),
+            b"N"
         );
     }
 }
