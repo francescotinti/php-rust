@@ -2079,6 +2079,7 @@ impl<'m> Vm<'m> {
             b"restore_exception_handler" => self.ho_restore_exception_handler(),
             b"set_error_handler" => self.ho_set_error_handler(args),
             b"restore_error_handler" => self.ho_restore_error_handler(),
+            b"unserialize" => self.ho_unserialize(args),
             b"preg_replace_callback" => self.ho_preg_replace_callback(args),
             _ => Err(undefined_builtin(name)),
         }
@@ -2742,6 +2743,102 @@ impl<'m> Vm<'m> {
     fn ho_restore_error_handler(&mut self) -> Result<Zval, PhpError> {
         self.error_handlers.pop();
         Ok(Zval::Bool(true))
+    }
+
+    /// `unserialize($str)`: rebuild a value from PHP's serialization format. A
+    /// host builtin because reconstructing an object needs the class table and id
+    /// allocator. Mirrors `eval::ho_unserialize`: the shared
+    /// [`crate::unserialize::parse`] decodes a pure [`Ser`](crate::unserialize::Ser)
+    /// tree, then [`Self::vm_ser_to_zval`] materialises it. Malformed input yields
+    /// `false` with PHP's Warning. `__wakeup` is not called (D-50 scope-out), and an
+    /// unknown class falls back to `stdClass` (PHP makes a `__PHP_Incomplete_Class`).
+    fn ho_unserialize(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(first) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "unserialize() expects at least 1 argument, 0 given".to_string(),
+            ));
+        };
+        let arg0 = first.deref_clone();
+        let bytes = convert::to_zstr_cast(&arg0, &mut self.diags);
+        let nbytes = bytes.as_bytes().len();
+        match crate::unserialize::parse(bytes.as_bytes()) {
+            Some(s) => Ok(self.vm_ser_to_zval(s)),
+            None => {
+                // PHP reports the failing offset; we do not track it, so report 0
+                // (matches `eval`, D-50).
+                self.diags.push(Diag::Warning(format!(
+                    "unserialize(): Error at offset 0 of {nbytes} bytes"
+                )));
+                Ok(Zval::Bool(false))
+            }
+        }
+    }
+
+    /// Turn a decoded [`Ser`](crate::unserialize::Ser) tree into a `Zval`, recursing
+    /// into arrays/objects. Mirrors `eval::ser_to_zval`; objects go through
+    /// [`Self::vm_make_unserialized_object`] (the VM's class table / id allocator).
+    fn vm_ser_to_zval(&mut self, s: crate::unserialize::Ser) -> Zval {
+        use crate::unserialize::Ser;
+        match s {
+            Ser::Null => Zval::Null,
+            Ser::Bool(b) => Zval::Bool(b),
+            Ser::Long(n) => Zval::Long(n),
+            Ser::Double(d) => Zval::Double(d),
+            Ser::Str(bytes) => Zval::Str(PhpStr::new(bytes)),
+            Ser::Array(items) => {
+                let mut arr = PhpArray::new();
+                for (k, v) in items {
+                    let key = match k {
+                        Ser::Long(i) => Key::Int(i),
+                        // A string key coerces to int when canonically numeric.
+                        Ser::Str(b) => Key::from_bytes(&b),
+                        _ => continue,
+                    };
+                    let val = self.vm_ser_to_zval(v);
+                    arr.insert(key, val);
+                }
+                Zval::Array(Rc::new(arr))
+            }
+            Ser::Object(class, props) => {
+                let fields: Vec<(Vec<u8>, Zval)> = props
+                    .into_iter()
+                    .map(|(name, v)| (name, self.vm_ser_to_zval(v)))
+                    .collect();
+                self.vm_make_unserialized_object(&class, fields)
+            }
+        }
+    }
+
+    /// Build an object of named `class` with the given properties, the constructor
+    /// **not** run (as PHP's `unserialize` does). Mirrors `eval::make_object` on the
+    /// VM's machinery (`Self::alloc_object`'s construction, but with the serialized
+    /// props instead of declared defaults). An unknown class falls back to
+    /// `stdClass` (D-50).
+    fn vm_make_unserialized_object(&mut self, class: &[u8], fields: Vec<(Vec<u8>, Zval)>) -> Zval {
+        let module = self.module; // &'m Module: detach from the `self` borrow.
+        let lower = class.to_ascii_lowercase();
+        let cid = module
+            .class_index
+            .get(lower.as_slice())
+            .or_else(|| module.class_index.get(&b"stdclass"[..]))
+            .copied();
+        let Some(cid) = cid else {
+            // No stdClass in the prelude (should never happen) — degrade gracefully.
+            return Zval::Null;
+        };
+        let cc = &module.classes[cid];
+        let class_name = Rc::clone(&cc.class_name);
+        let info = Rc::clone(&cc.info);
+        let mut props = Props::new();
+        for (k, v) in fields {
+            props.set(&k, v);
+        }
+        let id = self.next_id();
+        let obj = Object { class_id: cid as u32, class_name, props, id, info };
+        let rc = Rc::new(RefCell::new(obj));
+        // Track for `__destruct` (OOP-3d), like every other freshly minted object.
+        self.created.push(Rc::clone(&rc));
+        Zval::Object(rc)
     }
 
     /// Reconstruct the flat argument list of the currently executing frame for the
@@ -3748,6 +3845,7 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"restore_exception_handler",
         b"set_error_handler",
         b"restore_error_handler",
+        b"unserialize",
         b"preg_replace_callback",
     ];
     HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
@@ -7625,6 +7723,54 @@ mod tests {
         assert!(
             out.rendered.windows(b"must be of type array, int given".len())
                 .any(|w| w == b"must be of type array, int given"),
+            "rendered: {}",
+            String::from_utf8_lossy(&out.rendered)
+        );
+    }
+
+    // ----- unserialize (vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn unserialize_scalars() {
+        assert_eq!(vm_stdout(b"<?php echo unserialize('i:42;');"), b"42");
+        assert_eq!(vm_stdout(b"<?php echo unserialize('b:1;')?'T':'F';"), b"T");
+        assert_eq!(vm_stdout(b"<?php echo unserialize('s:3:\"abc\";');"), b"abc");
+        assert_eq!(vm_stdout(b"<?php echo (unserialize('N;')===null)?'N':'?';"), b"N");
+    }
+
+    #[test]
+    fn unserialize_array_mixed_keys() {
+        assert_eq!(
+            vm_stdout(b"<?php $a=unserialize('a:2:{i:0;i:10;s:1:\"k\";i:20;}'); echo $a[0],'|',$a['k'];"),
+            b"10|20"
+        );
+    }
+
+    #[test]
+    fn unserialize_object_known_class() {
+        // Props are set directly; the constructor is not run. get_class round-trips.
+        assert_eq!(
+            vm_stdout(b"<?php class P { public $x=0; public $y=0; } $o=unserialize('O:1:\"P\":2:{s:1:\"x\";i:1;s:1:\"y\";i:2;}'); echo get_class($o),':',$o->x,$o->y;"),
+            b"P:12"
+        );
+    }
+
+    #[test]
+    fn unserialize_unknown_class_falls_back_to_stdclass() {
+        // D-50 scope-out: unknown class → stdClass (PHP makes __PHP_Incomplete_Class).
+        assert_eq!(
+            vm_stdout(b"<?php $o=unserialize('O:3:\"Zzz\":1:{s:1:\"a\";i:9;}'); echo get_class($o),':',$o->a;"),
+            b"stdClass:9"
+        );
+    }
+
+    #[test]
+    fn unserialize_malformed_returns_false_with_warning() {
+        let out = vm_outcome(b"<?php echo unserialize('garbage')===false?'F':'?';");
+        assert_eq!(out.stdout, b"F");
+        assert!(
+            out.rendered.windows(b"unserialize(): Error at offset 0 of 7 bytes".len())
+                .any(|w| w == b"unserialize(): Error at offset 0 of 7 bytes"),
             "rendered: {}",
             String::from_utf8_lossy(&out.rendered)
         );
