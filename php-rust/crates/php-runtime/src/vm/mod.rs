@@ -30,6 +30,8 @@ use crate::bytecode::{
 };
 use crate::hir::{BinOp, CastKind, ClassId, Line, Slot, UnOp, Visibility};
 
+mod exceptions;
+
 /// The result of running a [`Module`] — at parity with [`crate::eval::Outcome`]
 /// (E1), so the corpus harness can compare the two engines.
 #[derive(Debug)]
@@ -507,43 +509,6 @@ impl<'m> Vm<'m> {
         res
     }
 
-    /// Render an uncaught fatal at the tail of `rendered` (E1; mirrors
-    /// `eval::render_fatal`). A user-thrown object carries its own class, message,
-    /// line and trace; an engine error uses its variant name and the captured
-    /// `fault_line`.
-    fn render_fatal(&mut self, err: &PhpError, fault_line: Line) {
-        let file = String::from_utf8_lossy(&self.module.file).into_owned();
-        let (class, message, line, trace) = match err {
-            PhpError::Thrown(Zval::Object(o)) => {
-                let b = o.borrow();
-                let class = String::from_utf8_lossy(b.class_name.as_bytes()).into_owned();
-                let message = match b.props.get(b"message") {
-                    Some(Zval::Str(s)) => String::from_utf8_lossy(s.as_bytes()).into_owned(),
-                    _ => String::new(),
-                };
-                let line = match b.props.get(b"line") {
-                    Some(Zval::Long(n)) => *n,
-                    _ => fault_line as i64,
-                };
-                let trace = match b.props.get(b"traceString") {
-                    Some(Zval::Str(s)) => String::from_utf8_lossy(s.as_bytes()).into_owned(),
-                    _ => "#0 {main}".to_string(),
-                };
-                (class, message, line, trace)
-            }
-            other => (
-                other.class_name().to_string(),
-                other.message().to_string(),
-                fault_line as i64,
-                "#0 {main}".to_string(),
-            ),
-        };
-        let block = format!(
-            "\nFatal error: Uncaught {class}: {message} in {file}:{line}\nStack trace:\n{trace}\n  thrown in {file} on line {line}\n",
-        );
-        self.rendered.extend_from_slice(block.as_bytes());
-    }
-
     /// Run until the bottom frame returns, yielding the script's result value.
     /// Intercepts thrown exceptions (EXC): when [`Self::run_until_error`] surfaces
     /// an `Err`, [`Self::unwind`] either routes it to a matching `catch` (and we
@@ -571,75 +536,6 @@ impl<'m> Vm<'m> {
                     }
                 }
             }
-        }
-    }
-
-    /// Find the innermost `try` whose protected range covers the in-flight
-    /// exception and route control to its catch-dispatch block, popping frames
-    /// with no handler. Returns `None` once control is parked at a `catch`, or
-    /// `Some(e)` if the exception is uncatchable (a non-object throw, an engine
-    /// error — EXC-3 — or `Exit`) or escapes uncaught down to `floor`.
-    ///
-    /// `floor` is the lowest frame index this unwind may inspect/route into: the
-    /// search stops once the frame at `floor` has been checked, leaving that frame
-    /// on the stack. Top-level passes `0` (so `main` is the floor, retained as
-    /// today); a generator resume passes the parked frame's depth, so an
-    /// exception uncaught inside the generator surfaces at the resume site (the
-    /// resumer then pops the dead generator frame).
-    fn unwind(&mut self, e: PhpError, floor: usize) -> Option<PhpError> {
-        // The in-flight Throwable object. A user `throw` of an object is itself
-        // (EXC-1). An engine error (EXC-3a) is resolved to its prelude class by
-        // name and a Throwable is synthesized carrying its message; if the class
-        // is absent or can't be instantiated, the original error propagates.
-        // `Exit` and a thrown non-object stay uncatchable.
-        let obj = match &e {
-            PhpError::Thrown(v) if matches!(v, Zval::Object(_)) => v.clone(),
-            PhpError::Exit(_) | PhpError::Thrown(_) => return Some(e),
-            engine => {
-                let name = engine.class_name().to_ascii_lowercase();
-                let msg = engine.message().to_owned();
-                match self.module.class_index.get(name.as_bytes()).copied() {
-                    Some(cid) => match self.synthesize_throwable(cid, &msg) {
-                        Ok(v) => v,
-                        Err(_) => return Some(e),
-                    },
-                    None => return Some(e),
-                }
-            }
-        };
-        loop {
-            let top = self.frames.len() - 1;
-            let faulting = self.frames[top].ip.saturating_sub(1);
-            let region = self.frames[top]
-                .func
-                .exc_table
-                .iter()
-                .find(|r| faulting >= r.start as usize && faulting < r.end as usize)
-                .copied();
-            if let Some(r) = region {
-                // Statement boundaries leave the operand stack at its baseline, so
-                // clearing any partial-expression values restores it for the
-                // handler. A catch region parks the exception on the stack for
-                // `CatchMatch`; a finally region parks it in `pending_throw`, to be
-                // re-raised at `EndFinally` (EXC-2).
-                self.frames[top].stack.clear();
-                if r.is_finally {
-                    self.frames[top].pending_throw = Some(obj);
-                } else {
-                    // A new in-flight exception supersedes any exception parked by
-                    // an earlier finally in this frame (e.g. a finally that threw).
-                    self.frames[top].pending_throw = None;
-                    self.frames[top].stack.push(obj);
-                }
-                self.frames[top].ip = r.target as usize;
-                return None;
-            }
-            if top == floor {
-                // The floor frame had no matching handler: propagate, leaving the
-                // floor frame on the stack for the caller to dispose of.
-                return Some(e);
-            }
-            self.frames.pop();
         }
     }
 
@@ -2868,40 +2764,6 @@ impl<'m> Vm<'m> {
         Ok(Zval::Bool(true))
     }
 
-    /// Convert an uncaught [`PhpError`] to the Throwable object a
-    /// `set_exception_handler` receives: a thrown object is itself; an engine error
-    /// is synthesized into its prelude class; `exit` / a non-object throw have no
-    /// object (`None`). Mirrors the resolution in [`Self::unwind`].
-    fn error_to_throwable(&mut self, e: &PhpError) -> Option<Zval> {
-        match e {
-            PhpError::Thrown(v) if matches!(v, Zval::Object(_)) => Some(v.clone()),
-            PhpError::Exit(_) | PhpError::Thrown(_) => None,
-            engine => {
-                let name = engine.class_name().to_ascii_lowercase();
-                let msg = engine.message().to_owned();
-                let cid = self.module.class_index.get(name.as_bytes()).copied()?;
-                self.synthesize_throwable(cid, &msg).ok()
-            }
-        }
-    }
-
-    /// Route an uncaught throwable to the active `set_exception_handler` (Session 1b):
-    /// flush pending diagnostics, then invoke the handler with the throwable. Returns
-    /// `true` when a handler ran to completion (the script then ends with no fatal
-    /// banner); `false` if there is no handler, the error is not a throwable, or the
-    /// handler itself errored (the original fatal is reported instead).
-    fn handle_uncaught_exception(&mut self, e: &PhpError) -> bool {
-        let Some(handler) = self.exception_handlers.last().cloned() else {
-            return false;
-        };
-        let Some(obj) = self.error_to_throwable(e) else {
-            return false;
-        };
-        let line = self.fatal_line;
-        self.flush_diags(line);
-        self.call_callable(handler, vec![obj]).is_ok()
-    }
-
     /// Reconstruct the flat argument list of the currently executing frame for the
     /// `func_get_args` family (Session D1): declared parameters are read live from
     /// their slots (so a parameter reassigned in the body is reflected, matching
@@ -4167,34 +4029,6 @@ impl<'m> Vm<'m> {
         let rc = Rc::new(RefCell::new(obj));
         self.enum_cache.insert((class, case), Rc::clone(&rc));
         rc
-    }
-
-    /// Build a Throwable object of `cid` carrying `message`, used to materialise
-    /// an engine error (`TypeError`, `DivisionByZeroError`, …) so it can be
-    /// offered to a `catch` (EXC-3a). Mirrors `eval::synthesize_throwable`:
-    /// allocates the instance (prop defaults + `info` + id, via `alloc_object`)
-    /// **without** running a constructor, then overwrites `message` directly.
-    /// `line`/`file`/`trace` stay at their prelude defaults here — they are
-    /// filled by the line-tracking (EXC-3b) and stack-trace (EXC-3c) steps.
-    fn synthesize_throwable(&mut self, cid: ClassId, message: &str) -> Result<Zval, PhpError> {
-        let value = self.alloc_object(cid)?;
-        // The line of the op that faulted (`ip-1` in the faulting frame), the
-        // module's file, and the current stack trace — mirroring
-        // `eval::synthesize_throwable` (EXC-3b/3c).
-        let line = self.cur_line(self.frames.len() - 1);
-        let (trace, trace_string) = self.capture_trace();
-        if let Zval::Object(o) = &value {
-            let mut b = o.borrow_mut();
-            b.props
-                .set(b"message", Zval::Str(PhpStr::new(message.as_bytes().to_vec())));
-            b.props.set(b"line", Zval::Long(line as i64));
-            b.props
-                .set(b"file", Zval::Str(PhpStr::new(self.module.file.to_vec())));
-            b.props.set(b"trace", trace);
-            b.props
-                .set(b"traceString", Zval::Str(PhpStr::new(trace_string)));
-        }
-        Ok(value)
     }
 
     /// The source line of the instruction that just ran (or faulted) in frame
