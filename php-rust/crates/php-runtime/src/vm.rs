@@ -2162,6 +2162,8 @@ impl<'m> Vm<'m> {
             b"array_map" => self.ho_array_map(args),
             b"array_filter" => self.ho_array_filter(args),
             b"array_reduce" => self.ho_array_reduce(args),
+            b"get_class" => self.ho_get_class(args),
+            b"get_parent_class" => self.ho_get_parent_class(args),
             _ => Err(undefined_builtin(name)),
         }
     }
@@ -2399,6 +2401,80 @@ impl<'m> Vm<'m> {
             carry = self.call_callable(cb.clone(), vec![carry, v])?;
         }
         Ok(carry)
+    }
+
+    /// `get_class($object = null)` (Session B2): the object's class name. A
+    /// `Closure` is `"Closure"`. With no argument PHP 8.5 uses the calling `$this`
+    /// (now deprecated) and fatals outside object context. Mirrors `eval::ci_get_class`.
+    fn ho_get_class(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let v = match args.into_iter().next() {
+            Some(a) => a.deref_clone(),
+            None => {
+                let top = self.frames.len() - 1;
+                match self.frames[top].this.clone() {
+                    Some(t) => {
+                        self.diags.push(Diag::Deprecated(
+                            "Calling get_class() without arguments is deprecated".to_string(),
+                        ));
+                        t
+                    }
+                    None => {
+                        return Err(PhpError::Error(
+                            "get_class() without arguments must be called from within a class"
+                                .to_string(),
+                        ))
+                    }
+                }
+            }
+        };
+        match &v {
+            Zval::Object(o) => {
+                Ok(Zval::Str(PhpStr::new(o.borrow().class_name.as_bytes().to_vec())))
+            }
+            Zval::Closure(_) => Ok(Zval::Str(PhpStr::new(b"Closure".to_vec()))),
+            other => Err(PhpError::TypeError(format!(
+                "get_class(): Argument #1 ($object) must be of type object, {} given",
+                other.error_type_name()
+            ))),
+        }
+    }
+
+    /// `get_parent_class($object_or_class = null)` (Session B2): the parent class
+    /// name, or `false` when there is none. An object or a *resolvable* class-name
+    /// string selects the class; an unresolvable string (or other type) is a
+    /// `TypeError`, matching PHP 8.5 (eval returns `false` here, so VM ≥ eval). No
+    /// argument uses the current class context.
+    fn ho_get_parent_class(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let top = self.frames.len() - 1;
+        let cid: Option<ClassId> = match args.into_iter().next() {
+            Some(a) => match a.deref_clone() {
+                Zval::Object(o) => Some(o.borrow().class_id as usize),
+                Zval::Str(s) => {
+                    let raw = s.as_bytes();
+                    let name = raw.strip_prefix(b"\\").unwrap_or(raw);
+                    match self.module.class_index.get(&name.to_ascii_lowercase()).copied() {
+                        Some(c) => Some(c),
+                        None => {
+                            return Err(PhpError::TypeError(
+                                "get_parent_class(): Argument #1 ($object_or_class) must be an object or a valid class name, string given"
+                                    .to_string(),
+                            ))
+                        }
+                    }
+                }
+                other => {
+                    return Err(PhpError::TypeError(format!(
+                        "get_parent_class(): Argument #1 ($object_or_class) must be an object or a valid class name, {} given",
+                        other.error_type_name()
+                    )))
+                }
+            },
+            None => self.frames[top].class,
+        };
+        match cid.and_then(|c| self.module.classes[c].parent) {
+            Some(p) => Ok(Zval::Str(PhpStr::new(self.module.classes[p].name.to_vec()))),
+            None => Ok(Zval::Bool(false)),
+        }
     }
 
     /// Dispatch a by-reference-first host builtin (`usort`, Session C): `slot` is
@@ -4154,6 +4230,8 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"array_map",
         b"array_filter",
         b"array_reduce",
+        b"get_class",
+        b"get_parent_class",
     ];
     HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
 }
@@ -8398,6 +8476,65 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php function addk(&$v,$k){ $v=$v+$k; } $a=[10,20,30]; array_walk($a,'addk'); echo $a[0],$a[1],$a[2];"),
             b"102132"
+        );
+    }
+
+    // ----- Session B2a: get_class / get_parent_class (vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn get_class_of_object_and_closure() {
+        assert_eq!(vm_stdout(b"<?php class C{} echo get_class(new C),'|',get_class(function(){});"), b"C|Closure");
+    }
+
+    #[test]
+    fn get_class_no_arg_uses_this_and_deprecates() {
+        let out = vm_outcome(b"<?php class C{ function w(){ return get_class(); } } echo (new C)->w();");
+        assert_eq!(out.stdout, b"C");
+        assert!(
+            out.rendered.windows(b"Calling get_class() without arguments is deprecated".len())
+                .any(|w| w == b"Calling get_class() without arguments is deprecated"),
+            "rendered: {}",
+            String::from_utf8_lossy(&out.rendered)
+        );
+    }
+
+    #[test]
+    fn get_class_non_object_is_type_error() {
+        let out = vm_outcome(b"<?php get_class(5);");
+        assert!(out.fatal.is_some());
+        assert!(
+            out.rendered.windows(b"must be of type object, int given".len())
+                .any(|w| w == b"must be of type object, int given"),
+            "rendered: {}",
+            String::from_utf8_lossy(&out.rendered)
+        );
+    }
+
+    #[test]
+    fn get_parent_class_object_string_and_none() {
+        assert_eq!(
+            vm_stdout(b"<?php class A{} class B extends A{} echo get_parent_class(new B),'|',get_parent_class('B'),'|',(get_parent_class(new A)===false?'F':'?');"),
+            b"A|A|F"
+        );
+    }
+
+    #[test]
+    fn get_parent_class_no_arg_uses_current_class() {
+        assert_eq!(
+            vm_stdout(b"<?php class A{} class B extends A{ function p(){ return get_parent_class(); } } echo (new B)->p();"),
+            b"A"
+        );
+    }
+
+    #[test]
+    fn get_parent_class_unresolved_string_is_type_error() {
+        let out = vm_outcome(b"<?php get_parent_class('Nope');");
+        assert!(out.fatal.is_some());
+        assert!(
+            out.rendered.windows(b"must be an object or a valid class name".len())
+                .any(|w| w == b"must be an object or a valid class name"),
+            "rendered: {}",
+            String::from_utf8_lossy(&out.rendered)
         );
     }
 }
