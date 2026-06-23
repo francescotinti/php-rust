@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use php_types::{
-    convert, Diag,
+    convert, open_file_stream, open_php_stream, Diag,
     DirHandle, Key, Object, PhpArray,
     PhpError, PhpStr, Props, ResKind, Resource, Stream, StreamBackend, Zval,
 };

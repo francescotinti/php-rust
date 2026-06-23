@@ -20,8 +20,9 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use php_types::{
-    convert, ops, Closure, ClosureInfo, ClosureRender, Diag, Diags, GenKey, GenState, GenStatus,
-    Key, Object, ObjectInfo, PhpArray, PhpError, PhpStr, PropVis, Props, Zval,
+    convert, open_file_stream, open_php_stream, ops, Closure, ClosureInfo, ClosureRender, Diag,
+    Diags, DirHandle, GenKey, GenState, GenStatus, Key, Object, ObjectInfo, PhpArray, PhpError,
+    PhpStr, PropVis, Props, ResKind, Resource, Stream, StreamBackend, Zval,
 };
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
@@ -195,6 +196,7 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         final_flush: false,
         frames: Vec::new(),
         next_object_id: 1,
+        next_resource_id: 5,
         static_props: HashMap::new(),
         magic_guard: HashSet::new(),
         created: Vec::new(),
@@ -431,6 +433,10 @@ struct Vm<'m> {
     /// Monotonic object-handle counter (`#N` in `var_dump`), starting at 1 like
     /// the tree-walker's `next_object_id`.
     next_object_id: u32,
+    /// Monotonic resource-id counter (`fopen`/`tmpfile`/`opendir` mint these),
+    /// starting at 5 to match the tree-walker's `next_resource_id` (PHP's first few
+    /// ids are taken by the default streams).
+    next_resource_id: u32,
     /// Persistent storage for `static` properties, keyed by (declaring class id,
     /// property name); lazily created on first access and shared for the run
     /// (OOP-2b), mirroring the tree-walker's `static_props`.
@@ -2080,6 +2086,9 @@ impl<'m> Vm<'m> {
             b"set_error_handler" => self.ho_set_error_handler(args),
             b"restore_error_handler" => self.ho_restore_error_handler(),
             b"unserialize" => self.ho_unserialize(args),
+            b"fopen" => self.ho_fopen(args),
+            b"tmpfile" => self.ho_tmpfile(),
+            b"opendir" => self.ho_opendir(args),
             b"preg_replace_callback" => self.ho_preg_replace_callback(args),
             _ => Err(undefined_builtin(name)),
         }
@@ -2839,6 +2848,136 @@ impl<'m> Vm<'m> {
         // Track for `__destruct` (OOP-3d), like every other freshly minted object.
         self.created.push(Rc::clone(&rc));
         Zval::Object(rc)
+    }
+
+    /// Wrap a freshly opened stream in a `Zval::Resource` with the next id (mirrors
+    /// `eval::alloc_resource`). The whole `fread`/`fwrite`/`fclose`/… family is in
+    /// the shared registry and operates on the `Rc<RefCell<Resource>>` by value, so
+    /// minting the resource here is all the VM needs to unlock it.
+    fn alloc_resource(&mut self, stream: Stream) -> Zval {
+        let id = self.next_resource_id;
+        self.next_resource_id += 1;
+        Zval::Resource(Rc::new(RefCell::new(Resource::new(id, stream))))
+    }
+
+    /// `fopen($filename, $mode, …)`: open a real file or a `php://` wrapper and mint
+    /// a stream resource. A host builtin because it allocates a resource id. Args 3/4
+    /// (use_include_path, context) are a scope-out. On failure: Warning + `false`.
+    /// Mirrors `eval::ho_fopen`.
+    fn ho_fopen(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(path_arg) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "fopen() expects at least 2 arguments, 0 given".to_string(),
+            ));
+        };
+        let Some(mode_arg) = args.get(1) else {
+            return Err(PhpError::ArgumentCountError(
+                "fopen() expects at least 2 arguments, 1 given".to_string(),
+            ));
+        };
+        let path = convert::to_zstr_cast(&path_arg.deref_clone(), &mut self.diags)
+            .as_bytes()
+            .to_vec();
+        let mode = convert::to_zstr_cast(&mode_arg.deref_clone(), &mut self.diags)
+            .as_bytes()
+            .to_vec();
+        if let Some(spec) = path.strip_prefix(b"php://".as_slice()) {
+            return match open_php_stream(spec, &mode) {
+                Some(stream) => Ok(self.alloc_resource(stream)),
+                None => {
+                    self.diags.push(Diag::Warning(format!(
+                        "fopen({}): Failed to open stream: no suitable wrapper could be found",
+                        String::from_utf8_lossy(&path)
+                    )));
+                    Ok(Zval::Bool(false))
+                }
+            };
+        }
+        match open_file_stream(&path, &mode) {
+            Ok(stream) => Ok(self.alloc_resource(stream)),
+            Err(msg) => {
+                self.diags.push(Diag::Warning(format!(
+                    "fopen({}): Failed to open stream: {msg}",
+                    String::from_utf8_lossy(&path)
+                )));
+                Ok(Zval::Bool(false))
+            }
+        }
+    }
+
+    /// `tmpfile()`: create a fresh temp file opened read+write, then immediately
+    /// unlink it (PHP's auto-removal). `false` on failure. Mirrors `eval::ho_tmpfile`.
+    fn ho_tmpfile(&mut self) -> Result<Zval, PhpError> {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static CTR: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir();
+        for _ in 0..100 {
+            let n = CTR.fetch_add(1, Ordering::Relaxed);
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.subsec_nanos())
+                .unwrap_or(0);
+            let mut path = dir.clone();
+            path.push(format!("phpr_tmp_{:x}_{nanos:x}_{n:x}", std::process::id()));
+            match std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create_new(true)
+                .open(&path)
+            {
+                Ok(f) => {
+                    let _ = std::fs::remove_file(&path);
+                    let stream = Stream {
+                        backend: StreamBackend::File(f),
+                        readable: true,
+                        writable: true,
+                        eof: false,
+                    };
+                    return Ok(self.alloc_resource(stream));
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(_) => return Ok(Zval::Bool(false)),
+            }
+        }
+        Ok(Zval::Bool(false))
+    }
+
+    /// `opendir($directory)`: snapshot the directory entries (`.`/`..` first, then
+    /// OS order) into a `DirHandle` resource; `false` + Warning on failure. Mirrors
+    /// `eval::ho_opendir`.
+    fn ho_opendir(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        use std::os::unix::ffi::OsStrExt;
+        let Some(path_arg) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "opendir() expects at least 1 argument, 0 given".to_string(),
+            ));
+        };
+        let path = convert::to_zstr_cast(&path_arg.deref_clone(), &mut self.diags)
+            .as_bytes()
+            .to_vec();
+        match std::fs::read_dir(std::ffi::OsStr::from_bytes(&path)) {
+            Ok(rd) => {
+                let mut entries = vec![b".".to_vec(), b"..".to_vec()];
+                for e in rd.flatten() {
+                    entries.push(e.file_name().as_os_str().as_bytes().to_vec());
+                }
+                let id = self.next_resource_id;
+                self.next_resource_id += 1;
+                Ok(Zval::Resource(Rc::new(RefCell::new(Resource {
+                    id,
+                    kind: ResKind::Dir(DirHandle { entries, pos: 0 }),
+                }))))
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                let msg = msg.split(" (os error").next().unwrap_or(&msg);
+                self.diags.push(Diag::Warning(format!(
+                    "opendir({}): Failed to open directory: {msg}",
+                    String::from_utf8_lossy(&path)
+                )));
+                Ok(Zval::Bool(false))
+            }
+        }
     }
 
     /// Reconstruct the flat argument list of the currently executing frame for the
@@ -3846,6 +3985,9 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"set_error_handler",
         b"restore_error_handler",
         b"unserialize",
+        b"fopen",
+        b"tmpfile",
+        b"opendir",
         b"preg_replace_callback",
     ];
     HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))

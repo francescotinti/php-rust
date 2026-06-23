@@ -5,6 +5,7 @@
 //! and the file builtins (D-51.2).
 
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+use std::os::unix::ffi::OsStrExt;
 
 /// A PHP resource value. The numeric `id` is the `#N` shown by `var_dump` /
 /// "Resource id #N"; `kind` is the live stream or `Closed` once `fclose` ran.
@@ -210,6 +211,88 @@ impl Stream {
             StreamBackend::File(f) => f.stream_position().ok(),
             StreamBackend::Memory(c) => c.stream_position().ok(),
             StreamBackend::Stdout | StreamBackend::Stderr => None,
+        }
+    }
+}
+
+/// Map a `fopen` mode string to `(readable, writable)`, or `None` if the leading
+/// character is not a recognised mode. `+` adds the opposite direction. Shared by
+/// the file builtins and stream openers (moved here from the evaluator so both
+/// engines use one definition).
+pub fn mode_caps(mode: &[u8]) -> Option<(bool, bool)> {
+    let plus = mode.contains(&b'+');
+    match mode.first() {
+        Some(b'r') => Some((true, plus)),
+        Some(b'w') | Some(b'a') | Some(b'x') | Some(b'c') => Some((plus, true)),
+        _ => None,
+    }
+}
+
+/// Open a `php://` wrapper stream (`memory`/`temp`/`stdout`/`stderr`), or `None`
+/// for an unrecognised wrapper (step 51b). stdout/stderr are write-only; memory/
+/// temp honour the mode (defaulting to read+write for a lenient/odd mode string).
+pub fn open_php_stream(spec: &[u8], mode: &[u8]) -> Option<Stream> {
+    let backend = if spec == b"memory" || spec == b"temp" || spec.starts_with(b"temp/") {
+        StreamBackend::Memory(Cursor::new(Vec::new()))
+    } else if spec == b"stdout" {
+        StreamBackend::Stdout
+    } else if spec == b"stderr" {
+        StreamBackend::Stderr
+    } else {
+        return None;
+    };
+    let (readable, writable) = match backend {
+        StreamBackend::Stdout | StreamBackend::Stderr => (false, true),
+        _ => mode_caps(mode).unwrap_or((true, true)),
+    };
+    Some(Stream {
+        backend,
+        readable,
+        writable,
+        eof: false,
+    })
+}
+
+/// Open a real file as a [`Stream`] per PHP `fopen` mode rules (step 51a).
+/// Returns the OS error text (with Rust's " (os error N)" suffix stripped, so it
+/// reads like PHP's strerror) on failure. Modes: `r`/`w`/`a`/`x`/`c` with an
+/// optional `+` (adds the other direction); `b`/`t` are accepted and ignored.
+pub fn open_file_stream(path: &[u8], mode: &[u8]) -> Result<Stream, String> {
+    let plus = mode.contains(&b'+');
+    let Some((readable, writable)) = mode_caps(mode) else {
+        return Err("`mode` is not a valid mode".to_string());
+    };
+    let mut opts = std::fs::OpenOptions::new();
+    match mode.first() {
+        Some(b'r') => {
+            opts.read(true).write(plus);
+        }
+        Some(b'w') => {
+            opts.write(true).create(true).truncate(true).read(plus);
+        }
+        Some(b'a') => {
+            opts.append(true).create(true).read(plus);
+        }
+        Some(b'x') => {
+            opts.write(true).create_new(true).read(plus);
+        }
+        Some(b'c') => {
+            // create + write, NO truncate, position 0 (oracle: `c` keeps content).
+            opts.write(true).create(true).read(plus);
+        }
+        _ => unreachable!("mode_caps already rejected unrecognised modes"),
+    }
+    let os_path = std::ffi::OsStr::from_bytes(path);
+    match opts.open(os_path) {
+        Ok(f) => Ok(Stream {
+            backend: StreamBackend::File(f),
+            readable,
+            writable,
+            eof: false,
+        }),
+        Err(e) => {
+            let m = e.to_string();
+            Err(m.split(" (os error").next().unwrap_or(&m).to_string())
         }
     }
 }
