@@ -138,6 +138,16 @@ pub enum VmRunError {
     Unsupported(String),
 }
 
+/// Defensive ceiling on PHP call-stack depth, mirroring the evaluator's
+/// `eval::MAX_CALL_DEPTH`. Pure PHP recursion runs *iteratively* in [`run_loop`]
+/// (each call grows the heap-allocated `frames` vector, not the native Rust
+/// stack), so the guard's real job is to surface a catchable PHP `Error`
+/// ("Maximum call stack depth …") before runaway recursion exhausts memory —
+/// instead of letting the host process die. Callback-nested calls (a host
+/// builtin re-entering `run_loop`) *do* recurse natively, so as with the
+/// evaluator deep-recursion safety presumes a large worker stack.
+const MAX_CALL_DEPTH: usize = 25_000;
+
 /// Lower `source`, compile it to bytecode, and run it on the VM (E2) — the VM
 /// analogue of [`crate::eval::run_source_with`], so the corpus harness can drive
 /// either engine behind an `--engine` flag. A compile-time PHP `Fatal error:`
@@ -649,6 +659,15 @@ impl<'m> Vm<'m> {
     /// callees) return normally to their callers within this same loop.
     fn run_loop(&mut self, baseline: usize) -> Result<RunExit, PhpError> {
         loop {
+            // Defensive call-stack depth guard (mirrors `eval::guard_call_depth`):
+            // surface a catchable PHP `Error` before runaway recursion exhausts
+            // memory (pure PHP recursion is iterative here, growing `frames`) or
+            // overflows the native stack (callback-nested `run_loop`s).
+            if self.frames.len() > MAX_CALL_DEPTH {
+                return Err(PhpError::Error(format!(
+                    "Maximum call stack depth of {MAX_CALL_DEPTH} exceeded"
+                )));
+            }
             let top = self.frames.len() - 1;
             let ip = self.frames[top].ip;
             let op = self.frames[top].func.ops[ip].clone();
@@ -8966,6 +8985,25 @@ mod tests {
             vm_stdout(b"<?php $p1=set_error_handler(function($n,$s){}); $p2=set_error_handler(function($n,$s){}); echo ($p1===null?'N':'?'),($p2!==null?'S':'?');"),
             b"NS"
         );
+    }
+
+    #[test]
+    fn deep_recursion_yields_clean_error_not_host_crash() {
+        // Runaway recursion must surface a catchable PHP `Error` via the
+        // call-stack depth guard, not exhaust memory / abort the host process.
+        // The VM runs PHP recursion *iteratively* (frames grow on the heap, the
+        // unwind pops them in a loop), so unlike the tree-walker this needs no
+        // oversized worker stack.
+        let program =
+            lower_source(b"t.php", b"<?php function r($n){ return r($n + 1); } r(0);").expect("lower");
+        let module = compile_program(&program, &Registry::new()).expect("compile");
+        let out = run_module(&module, &Registry::new());
+        match out.fatal {
+            Some(PhpError::Error(m)) => {
+                assert!(m.contains("call stack depth"), "unexpected message: {m}")
+            }
+            other => panic!("expected depth-guard error, got {other:?}"),
+        }
     }
 }
 
