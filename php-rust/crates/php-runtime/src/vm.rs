@@ -301,6 +301,11 @@ struct Frame<'m> {
     /// extra arguments. Declared-parameter values are read live from the slots, so
     /// `func_get_args` reflects in-body reassignment, matching PHP.
     extra_args: Vec<Zval>,
+    /// Set on the `prop_init` thunk frame (`Op::InitProps`): its `$this->prop =`
+    /// writes are privileged initialization, so `Op::PropSet` skips the visibility
+    /// check and `__set` — a subclass thunk initialises an inherited *private*
+    /// default (e.g. `Exception::$trace = []`) without a "cannot access" fatal.
+    init_props: bool,
 }
 
 impl<'m> Frame<'m> {
@@ -323,6 +328,7 @@ impl<'m> Frame<'m> {
             yield_from: None,
             argc: 0,
             extra_args: Vec::new(),
+            init_props: false,
         }
     }
 }
@@ -1480,6 +1486,13 @@ impl<'m> Vm<'m> {
                     let obj = self.frames[top].stack.pop().expect("PropSet object");
                     let cur = self.frames[top].class;
                     let target = obj.deref_clone();
+                    // A `prop_init` thunk writes defaults directly: no `__set`, no
+                    // visibility check (so a subclass can set an inherited private).
+                    if self.frames[top].init_props {
+                        write_property(&target, &name, value.clone())?;
+                        self.frames[top].stack.push(value);
+                        continue;
+                    }
                     if let Zval::Object(o) = &target {
                         if let Some((defc, midx, oid)) =
                             self.magic_applies(o, &name, cur, MagicKind::Set, b"__set")
@@ -1832,6 +1845,7 @@ impl<'m> Vm<'m> {
                             frame.this = Some(recv.deref_clone());
                             frame.class = Some(cid);
                             frame.static_class = Some(cid);
+                            frame.init_props = true; // privileged default writes
                             self.frames.push(frame);
                         }
                         // No non-constant defaults: nothing to do, balance the stack.
@@ -9472,7 +9486,7 @@ mod tests {
 
     #[test]
     fn exception_handler_catches_uncaught_throw() {
-        let out = vm_outcome(b"<?php set_exception_handler(function($e){ echo 'caught:'.$e->getMessage(); }); throw new Exception('boom');");
+        let out = vm_outcome(b"<?php set_exception_handler(function($e){ echo 'caught:'.$e->getMessage(); }); throw new RuntimeException('boom');");
         assert!(out.fatal.is_none(), "handler should suppress the fatal: {:?}", out.fatal);
         assert_eq!(out.stdout, b"caught:boom");
     }
@@ -9496,6 +9510,17 @@ mod tests {
                 .any(|w| w == b"Uncaught Exception: y"),
             "rendered: {}",
             String::from_utf8_lossy(&out.rendered)
+        );
+    }
+
+    #[test]
+    fn exception_subclass_initialises_inherited_private_default() {
+        // Regression: constructing a subclass of the prelude Exception ran the
+        // prop_init thunk in the subclass scope, faulting on Exception's private
+        // `$trace = []` default. Init writes are now privileged.
+        assert_eq!(
+            vm_stdout(b"<?php class MyEx extends InvalidArgumentException {} $e=new MyEx('bad', 7); echo get_class($e),':',$e->getMessage(),':',$e->getCode();"),
+            b"MyEx:bad:7"
         );
     }
 
