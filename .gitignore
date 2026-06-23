@@ -4,3 +4,4 @@ Cargo.lock
 **/._*
 ._*
 /oracle-build/
+.serena/
