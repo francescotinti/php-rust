@@ -1342,6 +1342,14 @@ impl<'a> FnCompiler<'a> {
         if !named.is_empty() {
             return Err(CompileError::Unsupported("builtin call with named arguments".into()));
         }
+        // Evaluator-only *host* builtins (higher-order / class-introspection /
+        // define-family, Sessions B–D) need the VM itself, so they are dispatched
+        // VM-side via `Op::CallHostBuiltin` rather than the stateless registry.
+        if let Some(canon) = crate::vm::host_builtin_canonical(name) {
+            self.push_value_args(args)?; // rejects spread (out of slice here)
+            self.emit(Op::CallHostBuiltin { name: canon.into(), argc: args.len() as u32 });
+            return Ok(());
+        }
         // Builtins: classify by-value vs by-reference-first via the registry.
         match self.ctx.registry.get(name) {
             Some(Builtin::Value(_)) => {

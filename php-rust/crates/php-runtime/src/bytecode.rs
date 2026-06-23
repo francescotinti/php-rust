@@ -360,6 +360,13 @@ pub enum Op {
     /// evaluator (higher-order, class-introspection, `define`/`defined`/`constant`)
     /// are *not* emitted — the compiler rejects them so the VM never sees them.
     CallBuiltin { name: Box<[u8]>, argc: u32 },
+    /// `[arg0, …, arg{argc-1}] -> [result]` — call an *evaluator-only* host builtin
+    /// (Session B/C/D) that needs the VM itself: a higher-order builtin that invokes
+    /// a user callable (`call_user_func`, `array_map`, …), class introspection, or
+    /// the `define` family. Dispatched by [`crate::vm`]'s `dispatch_host_builtin`
+    /// (which can run a nested `run_loop` via `call_callable`), not the stateless
+    /// registry. `name` is the canonical lowercased builtin name.
+    CallHostBuiltin { name: Box<[u8]>, argc: u32 },
     /// `[rest0, …, rest{argc-1}] -> [result]` — call a by-reference-first builtin
     /// (`sort`, `array_push`, …): its first argument is the variable in `slot`,
     /// handed to the builtin as `&mut Zval` (write-through), and `argc` is the

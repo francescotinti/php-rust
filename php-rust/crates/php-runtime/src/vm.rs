@@ -1202,6 +1202,14 @@ impl<'m> Vm<'m> {
                     let result = self.run_value_builtin(f, &args, line)?;
                     self.frames[top].stack.push(result);
                 }
+                Op::CallHostBuiltin { name, argc } => {
+                    // An evaluator-only host builtin (Session B): it may invoke a
+                    // user callable via `call_callable` (a nested `run_loop`).
+                    let args = self.pop_keys(top, argc);
+                    let result = self.dispatch_host_builtin(&name, args)?;
+                    let top = self.frames.len() - 1;
+                    self.frames[top].stack.push(result);
+                }
                 Op::CallBuiltinRef { name, slot, argc } => {
                     let f = match self.registry.get(&name[..]) {
                         Some(Builtin::RefFirst(f)) => *f,
@@ -1991,11 +1999,13 @@ impl<'m> Vm<'m> {
         path_apply(cell, &keys, last, &mut self.diags)
     }
 
-    /// Dispatch a dynamic call on a runtime callee value (CLO): an anonymous
-    /// closure runs its body (binding captures then args); a named closure or a
-    /// string names a user function / builtin; a reference is followed. Anything
-    /// else is an uncatchable "not callable" error. A pushed frame runs via the
-    /// main loop; a builtin result is pushed on the current frame's stack.
+    /// Dispatch a dynamic call on a runtime callee value (CLO + B1): an anonymous
+    /// closure runs its body (binding captures then args); a named closure / FCC or
+    /// a plain string names a user function / builtin; a `"Class::method"` string or
+    /// a `[target, method]` array is a static / instance method callable; an object
+    /// is callable via `__invoke`; a reference is followed. Anything else is an
+    /// uncatchable "not callable" error. A pushed frame runs via the main loop; a
+    /// builtin result is pushed on the current frame's stack.
     fn invoke_value(&mut self, callee: Zval, args: Vec<Zval>) -> Result<(), PhpError> {
         match callee {
             Zval::Closure(cl) => match &cl.named {
@@ -2008,9 +2018,33 @@ impl<'m> Vm<'m> {
                     self.invoke_named(&name, args)
                 }
             },
-            Zval::Str(s) => {
-                let name = s.as_bytes().to_vec();
-                self.invoke_named(&name, args)
+            Zval::Str(ref s) => {
+                let bytes = s.as_bytes();
+                // `"Class::method"` is a static method callable.
+                if let Some(pos) = bytes.windows(2).position(|w| w == b"::") {
+                    let cls = Zval::Str(PhpStr::new(bytes[..pos].to_vec()));
+                    let method = bytes[pos + 2..].to_vec();
+                    let cid = self.resolve_dynamic_class(&cls)?;
+                    let top = self.frames.len() - 1;
+                    self.dispatch_static_call(top, cid, &method, false, args)
+                } else {
+                    let name = bytes.to_vec();
+                    self.invoke_named(&name, args)
+                }
+            }
+            Zval::Array(ref a) => self.invoke_array_callable(a, args),
+            Zval::Object(ref o) => {
+                // An object is callable iff its class defines `__invoke` (D-22.7).
+                let cid = o.borrow().class_id as usize;
+                if resolve_method_runtime(self.module, cid, b"__invoke").is_some() {
+                    let top = self.frames.len() - 1;
+                    self.dispatch_instance_call(top, cid, callee.clone(), b"__invoke", args)
+                } else {
+                    Err(PhpError::Error(format!(
+                        "Object of type {} is not callable",
+                        String::from_utf8_lossy(&self.module.classes[cid].name)
+                    )))
+                }
             }
             Zval::Ref(rc) => {
                 let inner = rc.borrow().clone();
@@ -2021,6 +2055,176 @@ impl<'m> Vm<'m> {
                 other.error_type_name()
             ))),
         }
+    }
+
+    /// A `[target, method]` array callable: `target` is an object (instance call)
+    /// or a class-name string (static call); `method` is a string. A malformed
+    /// array is an uncatchable "not callable" error.
+    fn invoke_array_callable(&mut self, arr: &PhpArray, args: Vec<Zval>) -> Result<(), PhpError> {
+        let not_callable =
+            || PhpError::Error("Value of type array is not callable".to_string());
+        let elems: Vec<Zval> = arr.iter().map(|(_, v)| v.deref_clone()).collect();
+        if elems.len() != 2 {
+            return Err(not_callable());
+        }
+        let method = match &elems[1] {
+            Zval::Str(s) => s.as_bytes().to_vec(),
+            _ => return Err(not_callable()),
+        };
+        let top = self.frames.len() - 1;
+        match &elems[0] {
+            Zval::Object(_) => {
+                let cid = object_class_id(&elems[0]).expect("object class id");
+                self.dispatch_instance_call(top, cid, elems[0].clone(), &method, args)
+            }
+            Zval::Str(_) => {
+                let cid = self.resolve_dynamic_class(&elems[0])?;
+                self.dispatch_static_call(top, cid, &method, false, args)
+            }
+            _ => Err(not_callable()),
+        }
+    }
+
+    /// Invoke a user callable (`$callable($args)`) from inside a host builtin and
+    /// run it to completion, returning its value (B1). Resolves the callable via
+    /// [`Self::invoke_value`], then — when that pushed a frame — drives a *nested*
+    /// bounded [`Self::run_loop`] from the new baseline (mirrors `drive_fiber`):
+    /// an exception caught inside the callable resumes there, an uncaught one
+    /// unwinds out (its frames dropped) so it propagates through the host builtin.
+    /// A value-builtin / generator-function callable pushes no frame — its result
+    /// (or `Generator` handle) is taken straight off the caller's stack.
+    fn call_callable(&mut self, callee: Zval, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let baseline = self.frames.len();
+        self.invoke_value(callee, args)?;
+        if self.frames.len() == baseline {
+            // No frame pushed: a value builtin (or a generator-function callable,
+            // whose `Generator` handle is the call's value) left its result on the
+            // calling frame's operand stack.
+            return Ok(self.frames[baseline - 1]
+                .stack
+                .pop()
+                .expect("host callable result on the caller stack"));
+        }
+        let outcome = loop {
+            match self.run_loop(baseline) {
+                Ok(exit) => break Ok(exit),
+                Err(e) => match self.unwind(e, baseline) {
+                    None => continue,
+                    Some(e) => break Err(e),
+                },
+            }
+        };
+        match outcome {
+            Ok(RunExit::Returned(v)) => Ok(v),
+            Ok(_) => unreachable!("a called callable does not yield/suspend at its own baseline"),
+            Err(e) => {
+                self.frames.truncate(baseline);
+                Err(e)
+            }
+        }
+    }
+
+    /// Dispatch an evaluator-only *host* builtin (Session B1) emitted as
+    /// [`Op::CallHostBuiltin`]: the call-a-callable family. `name` is the canonical
+    /// lowercased name from [`host_builtin_canonical`].
+    fn dispatch_host_builtin(&mut self, name: &[u8], args: Vec<Zval>) -> Result<Zval, PhpError> {
+        match name {
+            b"call_user_func" => self.ho_call_user_func(args),
+            b"call_user_func_array" => self.ho_call_user_func_array(args),
+            b"is_callable" => self.ho_is_callable(args),
+            _ => Err(undefined_builtin(name)),
+        }
+    }
+
+    /// `call_user_func($callable, ...$args)`: forward the remaining arguments by
+    /// value to the callable (mirrors `eval::ho_call_user_func`).
+    fn ho_call_user_func(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let mut it = args.into_iter();
+        let Some(callee) = it.next() else {
+            return Err(PhpError::ArgumentCountError(
+                "call_user_func() expects at least 1 argument, 0 given".to_string(),
+            ));
+        };
+        let argv: Vec<Zval> = it.map(|v| v.deref_clone()).collect();
+        self.call_callable(callee.deref_clone(), argv)
+    }
+
+    /// `call_user_func_array($callable, $args)`: the second argument is an array
+    /// whose *values* become the positional arguments (string-keyed named
+    /// arguments are a scope-out, mirroring the evaluator).
+    fn ho_call_user_func_array(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if args.len() < 2 {
+            return Err(PhpError::ArgumentCountError(format!(
+                "call_user_func_array() expects exactly 2 arguments, {} given",
+                args.len()
+            )));
+        }
+        let callee = args[0].deref_clone();
+        let argv: Vec<Zval> = match args[1].deref_clone() {
+            Zval::Array(a) => a.iter().map(|(_, v)| v.deref_clone()).collect(),
+            other => {
+                return Err(PhpError::TypeError(format!(
+                    "call_user_func_array(): Argument #2 ($args) must be of type array, {} given",
+                    other.error_type_name()
+                )))
+            }
+        };
+        self.call_callable(callee, argv)
+    }
+
+    /// `is_callable($value)`: a closure / FCC, a string naming a function or
+    /// `Class::method`, a `[target, method]` array, or an object with `__invoke`
+    /// (mirrors `eval::ho_is_callable`; does not invoke the callable).
+    fn ho_is_callable(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(v) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "is_callable() expects at least 1 argument, 0 given".to_string(),
+            ));
+        };
+        Ok(Zval::Bool(self.is_value_callable(&v.deref_clone())))
+    }
+
+    /// Whether `v` is callable (the predicate behind `is_callable`), without
+    /// invoking it.
+    fn is_value_callable(&self, v: &Zval) -> bool {
+        match v {
+            Zval::Closure(_) => true,
+            Zval::Str(s) => {
+                let b = s.as_bytes();
+                if let Some(pos) = b.windows(2).position(|w| w == b"::") {
+                    self.class_id_from_value(&Zval::Str(PhpStr::new(b[..pos].to_vec())))
+                        .map(|cid| resolve_method_runtime(self.module, cid, &b[pos + 2..]).is_some())
+                        .unwrap_or(false)
+                } else {
+                    self.is_name_callable(b)
+                }
+            }
+            Zval::Array(a) => {
+                let elems: Vec<Zval> = a.iter().map(|(_, v)| v.deref_clone()).collect();
+                if elems.len() != 2 {
+                    return false;
+                }
+                let Zval::Str(m) = &elems[1] else { return false };
+                match self.class_id_from_value(&elems[0]) {
+                    Some(cid) => resolve_method_runtime(self.module, cid, m.as_bytes()).is_some(),
+                    None => false,
+                }
+            }
+            Zval::Object(o) => {
+                let cid = o.borrow().class_id as usize;
+                resolve_method_runtime(self.module, cid, b"__invoke").is_some()
+            }
+            Zval::Ref(r) => self.is_value_callable(&r.borrow()),
+            _ => false,
+        }
+    }
+
+    /// Whether a bare name is callable: a user function, any registry builtin, or a
+    /// host builtin (mirrors `eval::is_name_callable`).
+    fn is_name_callable(&self, name: &[u8]) -> bool {
+        self.module.functions.iter().any(|f| name_eq_ignore_case(&f.name, name))
+            || self.registry.get(name).is_some()
+            || host_builtin_canonical(name).is_some()
     }
 
     /// Install a frame for an anonymous closure: bind its captured variables into
@@ -3530,6 +3734,20 @@ fn undefined_builtin(name: &[u8]) -> PhpError {
         "Call to undefined function {}()",
         String::from_utf8_lossy(name)
     ))
+}
+
+/// If `name` (ASCII-case-insensitive, PHP function names) is an *evaluator-only
+/// host builtin* the VM dispatches itself — a higher-order builtin that invokes a
+/// user callable, class introspection, or the `define` family (Sessions B–D) —
+/// return its canonical lowercased name; otherwise `None`. The compiler calls this
+/// to decide whether to emit [`Op::CallHostBuiltin`]; the VM's
+/// [`Vm::dispatch_host_builtin`] matches on the same canonical name. The two MUST
+/// agree — a name emitted here but unmatched there is a clean runtime error.
+pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
+    // Session B1: the call-a-callable family (the proof of the `call_callable`
+    // mechanism). Sessions C/D grow this list (array_map, usort, define, …).
+    const HOST: &[&[u8]] = &[b"call_user_func", b"call_user_func_array", b"is_callable"];
+    HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
 }
 
 /// Read object property `name` by value (deref-clone), following a reference
@@ -7447,6 +7665,100 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php enum E { case A; case B; } function f($e){ return match($e){ E::A=>'a', E::B=>'b' }; } echo f(E::B);"),
             b"b"
+        );
+    }
+
+    // ----- Session B1: call_user_func* / is_callable (vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn cuf_closure() {
+        assert_eq!(vm_stdout(b"<?php echo call_user_func(function($x){ return $x*2; }, 5);"), b"10");
+    }
+
+    #[test]
+    fn cuf_user_function() {
+        assert_eq!(
+            vm_stdout(b"<?php function f($a,$b){ return $a+$b; } echo call_user_func('f', 3, 4);"),
+            b"7"
+        );
+    }
+
+    #[test]
+    fn cuf_array_with_values() {
+        assert_eq!(
+            vm_stdout(b"<?php function f($a,$b){ return $a*$b; } echo call_user_func_array('f', [6, 7]);"),
+            b"42"
+        );
+    }
+
+    #[test]
+    fn cuf_instance_method_callable() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function m($x){ return $x+1; } } echo call_user_func([new C, 'm'], 10);"),
+            b"11"
+        );
+    }
+
+    #[test]
+    fn cuf_static_array_callable() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { static function s($x){ return $x*3; } } echo call_user_func(['C','s'], 4);"),
+            b"12"
+        );
+    }
+
+    #[test]
+    fn cuf_static_string_callable() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { static function s($x){ return $x*3; } } echo call_user_func('C::s', 4);"),
+            b"12"
+        );
+    }
+
+    #[test]
+    fn cuf_invoke_object() {
+        assert_eq!(
+            vm_stdout(b"<?php class C { function __invoke($x){ return $x*5; } } $o=new C; echo call_user_func($o, 6);"),
+            b"30"
+        );
+    }
+
+    #[test]
+    fn cuf_nested_recursion() {
+        // The callback re-enters `call_callable` (nested `run_loop`).
+        assert_eq!(
+            vm_stdout(b"<?php function fact($n){ return $n<=1 ? 1 : $n * call_user_func('fact', $n-1); } echo call_user_func('fact', 5);"),
+            b"120"
+        );
+    }
+
+    #[test]
+    fn cuf_exception_propagates_through_host() {
+        // An exception thrown in the callback unwinds out through the host builtin.
+        assert_eq!(
+            vm_stdout(b"<?php try { call_user_func(function(){ throw new Exception('boom'); }); } catch(Exception $e){ echo 'caught:'.$e->getMessage(); }"),
+            b"caught:boom"
+        );
+    }
+
+    #[test]
+    fn cuf_exception_caught_inside_callback() {
+        // A `try/catch` *inside* the callback resumes there (unwind floor=baseline).
+        assert_eq!(
+            vm_stdout(b"<?php echo call_user_func(function(){ try { throw new Exception('x'); } catch(Exception $e){ return 'inner'; } });"),
+            b"inner"
+        );
+    }
+
+    #[test]
+    fn is_callable_various() {
+        // Closure / instance-method array / static array → true; a plain object
+        // (no __invoke) and a missing method → false. (Registry builtins aren't
+        // registered in this harness, so string-function names are tested via the
+        // corpus, not here.)
+        assert_eq!(
+            vm_stdout(b"<?php class C { function m(){} static function s(){} } echo (is_callable(function(){})?1:0), (is_callable([new C,'m'])?1:0), (is_callable(['C','s'])?1:0), (is_callable(new C)?1:0), (is_callable([new C,'nope'])?1:0);"),
+            b"11100"
         );
     }
 }
