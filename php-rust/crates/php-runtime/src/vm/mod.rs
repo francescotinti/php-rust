@@ -511,33 +511,9 @@ impl<'m> Vm<'m> {
     /// `error_reporting`. A handler that throws propagates out (the caller `?`s it,
     /// so it surfaces from the statement that raised the diagnostic).
     fn raise_diagnostic(&mut self, errno: i64, message: &str, line: Line) -> Result<(), PhpError> {
-        // 1. Route to the active user handler when eligible. `error_reporting` does
-        //    *not* gate routing — the handler is called even under `error_reporting(0)`.
-        let active = if !self.final_flush && !self.in_error_handler {
-            self.error_handlers
-                .last()
-                .filter(|(_, mask)| errno & *mask != 0)
-                .map(|(cb, _)| cb.clone())
-        } else {
-            None
-        };
-        if let Some(handler) = active {
-            let args = vec![
-                Zval::Long(errno),
-                Zval::Str(PhpStr::new(message.as_bytes().to_vec())),
-                Zval::Str(PhpStr::new(self.module.file.to_vec())),
-                Zval::Long(line as i64),
-            ];
-            self.in_error_handler = true;
-            let r = self.call_callable(handler, args);
-            self.in_error_handler = false;
-            let r = r?; // the handler threw — propagate to the faulting statement.
-            // Oracle-confirmed: ONLY a literal boolean `false` lets the default
-            // render run; `null` (incl. no return), `0`, `''` — anything else —
-            // suppresses. So this is an identity check on `false`, not `to_bool`.
-            if !matches!(r.deref_clone(), Zval::Bool(false)) {
-                return Ok(());
-            }
+        // 1. Offer the diagnostic to the active user handler.
+        if let Some(true) = self.route_to_handler(errno, message, line)? {
+            return Ok(()); // handled (truthy return) — suppressed entirely.
         }
         // 2. Default handler reached (no matching handler, or it returned `false`).
         //    Record `last_error` for `error_get_last` here — oracle-confirmed: a
@@ -554,6 +530,39 @@ impl<'m> Vm<'m> {
             self.rendered.extend_from_slice(tail.as_bytes());
         }
         Ok(())
+    }
+
+    /// Offer a diagnostic to the active `set_error_handler` callback. Returns
+    /// `Ok(None)` when no handler is eligible (none registered, masked out, or
+    /// routing is disabled during shutdown / inside another handler — so the
+    /// default handler must run); `Ok(Some(true))` when the handler ran and
+    /// returned truthy (diagnostic handled — suppress the default); `Ok(Some(false))`
+    /// when it returned a literal `false` (default handler must still run). A handler
+    /// that throws propagates as `Err`. `error_reporting` does NOT gate routing — the
+    /// handler is invoked even under `error_reporting(0)`.
+    fn route_to_handler(&mut self, errno: i64, message: &str, line: Line) -> Result<Option<bool>, PhpError> {
+        let active = if !self.final_flush && !self.in_error_handler {
+            self.error_handlers
+                .last()
+                .filter(|(_, mask)| errno & *mask != 0)
+                .map(|(cb, _)| cb.clone())
+        } else {
+            None
+        };
+        let Some(handler) = active else { return Ok(None) };
+        let args = vec![
+            Zval::Long(errno),
+            Zval::Str(PhpStr::new(message.as_bytes().to_vec())),
+            Zval::Str(PhpStr::new(self.module.file.to_vec())),
+            Zval::Long(line as i64),
+        ];
+        self.in_error_handler = true;
+        let r = self.call_callable(handler, args);
+        self.in_error_handler = false;
+        let r = r?; // the handler threw — propagate to the faulting statement.
+        // Oracle-confirmed: ONLY a literal boolean `false` lets the default handler
+        // run; `null` (incl. no return), `0`, `''` — anything else — suppresses.
+        Ok(Some(!matches!(r.deref_clone(), Zval::Bool(false))))
     }
 
     /// Emit `bytes` to both output streams (E1): flush pending diagnostics first
@@ -2637,11 +2646,26 @@ impl<'m> Vm<'m> {
         }
         let line = self.cur_line(self.frames.len() - 1);
         if level == 256 {
-            // E_USER_ERROR → fatal (raise_diagnostic is bypassed on this path, so
-            // record `last_error` here). The handler-handles-and-continues nuance is
-            // a documented Session-2 follow-up (sub-step 2); core keeps the fatal.
+            self.flush_diags(line)?;
+            // PHP 8.4+: passing E_USER_ERROR to trigger_error() is itself deprecated.
+            // The oracle emits this E_DEPRECATED first (routed to any handler too),
+            // *then* processes the E_USER_ERROR — so a handler sees both 8192 and 256.
+            self.raise_diagnostic(
+                8192,
+                "Passing E_USER_ERROR to trigger_error() is deprecated since 8.4, throw an exception or call exit with a string message instead",
+                line,
+            )?;
+            let message = String::from_utf8_lossy(&msg).into_owned();
+            // If a handler is registered for E_USER_ERROR and handles it (truthy
+            // return), the script CONTINUES (oracle-confirmed; error_get_last stays
+            // unset, mirroring a handler-suppressed diagnostic). Otherwise — no
+            // handler, masked out, or a `false` return — it is the fatal: record
+            // `last_error` (the default/fatal handler ran) and propagate.
+            if let Some(true) = self.route_to_handler(256, &message, line)? {
+                return Ok(Zval::Bool(true));
+            }
             self.last_error = Some((level, msg.clone(), line));
-            return Err(PhpError::Error(String::from_utf8_lossy(&msg).into_owned()));
+            return Err(PhpError::Error(message));
         }
         // Flush any pending built-in diagnostics, then route this user diagnostic
         // through the shared chokepoint so a `set_error_handler` callback sees it.
@@ -7773,6 +7797,49 @@ mod tests {
             "diagnostic should be gated; rendered: {}",
             String::from_utf8_lossy(&out.rendered)
         );
+    }
+
+    #[test]
+    fn trigger_error_user_error_no_handler_is_fatal() {
+        // No handler: E_USER_ERROR is the fatal (PHP 8.4 deprecation renders first).
+        let out = vm_outcome(b"<?php trigger_error('boom', E_USER_ERROR); echo 'AFTER';");
+        assert!(out.fatal.is_some(), "E_USER_ERROR without a handler must be fatal");
+        assert!(!out.stdout.windows(5).any(|w| w == b"AFTER"), "script must not continue past the fatal");
+        assert!(
+            out.rendered.windows(b"deprecated since 8.4".len()).any(|w| w == b"deprecated since 8.4"),
+            "the 8.4 deprecation renders before the fatal: {}",
+            String::from_utf8_lossy(&out.rendered)
+        );
+    }
+
+    #[test]
+    fn trigger_error_user_error_handled_continues() {
+        // Handler handles both the 8.4 deprecation (8192) and the E_USER_ERROR (256)
+        // and returns truthy → the script CONTINUES past trigger_error.
+        let out = vm_outcome(
+            b"<?php set_error_handler(function($n,$s){ echo \"[H:$n]\"; return true; }); trigger_error('boom', E_USER_ERROR); echo 'AFTER';",
+        );
+        assert!(out.fatal.is_none(), "handled E_USER_ERROR must not be fatal: {:?}", out.fatal);
+        assert_eq!(out.stdout, b"[H:8192][H:256]AFTER");
+    }
+
+    #[test]
+    fn trigger_error_user_error_handler_false_is_fatal() {
+        // Handler returns false for the E_USER_ERROR → it falls through to the fatal.
+        let out = vm_outcome(
+            b"<?php set_error_handler(function($n,$s){ return false; }); trigger_error('boom', E_USER_ERROR); echo 'AFTER';",
+        );
+        assert!(out.fatal.is_some(), "a `false` return on E_USER_ERROR is still fatal");
+    }
+
+    #[test]
+    fn error_get_last_null_after_handled_user_error() {
+        // A handled E_USER_ERROR leaves error_get_last unset (oracle-confirmed).
+        let out = vm_outcome(
+            b"<?php set_error_handler(function($n,$s){ return true; }); trigger_error('boom', E_USER_ERROR); echo (error_get_last()===null)?'NULL':'SET';",
+        );
+        assert!(out.fatal.is_none());
+        assert_eq!(out.stdout, b"NULL");
     }
 
     #[test]
