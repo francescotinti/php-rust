@@ -2091,6 +2091,8 @@ impl<'m> Vm<'m> {
             b"opendir" => self.ho_opendir(args),
             b"preg_replace" => self.ho_preg_replace(args),
             b"preg_quote" => self.ho_preg_quote(args),
+            b"debug_backtrace" => self.ho_debug_backtrace(args),
+            b"debug_print_backtrace" => self.ho_debug_print_backtrace(),
             b"preg_replace_callback" => self.ho_preg_replace_callback(args),
             _ => Err(undefined_builtin(name)),
         }
@@ -2892,6 +2894,105 @@ impl<'m> Vm<'m> {
         // Track for `__destruct` (OOP-3d), like every other freshly minted object.
         self.created.push(Rc::clone(&rc));
         Zval::Object(rc)
+    }
+
+    /// Walk the call stack into structured backtrace entries (shared by
+    /// `debug_backtrace` / `debug_print_backtrace`). Reports the frames from the
+    /// caller of the `debug_*` builtin (the top frame — the builtin pushes none)
+    /// down to, but excluding, the top-level script body (frame 0). Each entry's
+    /// `line` is the *call-site* line: the caller frame's current line, which —
+    /// because `run_loop` advances `ip` past the `Call` op before dispatching it —
+    /// `cur_line(i - 1)` resolves to the `Call` op's own line.
+    fn collect_backtrace(&self) -> Vec<BtFrame> {
+        let top = self.frames.len() - 1;
+        let mut out = Vec::new();
+        for i in (1..=top).rev() {
+            let f = &self.frames[i];
+            let function = if f.func.name.is_empty() {
+                b"{closure}".to_vec()
+            } else {
+                f.func.name.to_vec()
+            };
+            let (class, object) = match f.class {
+                Some(cid) => (Some(self.module.classes[cid].name.to_vec()), f.this.clone()),
+                None => (None, None),
+            };
+            out.push(BtFrame {
+                function,
+                line: self.cur_line(i - 1),
+                class,
+                // A method with no bound `$this` is a static call ("::"); otherwise "->".
+                is_static: f.class.is_some() && f.this.is_none(),
+                object,
+                args: self.current_frame_args(i),
+            });
+        }
+        out
+    }
+
+    /// `debug_backtrace()`: the call stack as an array of per-frame arrays with
+    /// `file`/`line`/`function`/`args` (plus `class`/`object`/`type` for a method).
+    /// Pure VM gain — the tree-walker has no equivalent. Options args are a scope-out.
+    fn ho_debug_backtrace(&mut self, _args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let frames = self.collect_backtrace();
+        let file = self.module.file.to_vec();
+        let mut outer = PhpArray::new();
+        for bt in frames {
+            let mut e = PhpArray::new();
+            e.insert(Key::from_bytes(b"file"), Zval::Str(PhpStr::new(file.clone())));
+            e.insert(Key::from_bytes(b"line"), Zval::Long(bt.line as i64));
+            e.insert(Key::from_bytes(b"function"), Zval::Str(PhpStr::new(bt.function)));
+            if let Some(cls) = bt.class {
+                e.insert(Key::from_bytes(b"class"), Zval::Str(PhpStr::new(cls)));
+                if let Some(obj) = bt.object {
+                    e.insert(Key::from_bytes(b"object"), obj);
+                }
+                let ty: &[u8] = if bt.is_static { b"::" } else { b"->" };
+                e.insert(Key::from_bytes(b"type"), Zval::Str(PhpStr::new(ty.to_vec())));
+            }
+            let mut argsarr = PhpArray::new();
+            for a in bt.args {
+                let _ = argsarr.append(a);
+            }
+            e.insert(Key::from_bytes(b"args"), Zval::Array(Rc::new(argsarr)));
+            let _ = outer.append(Zval::Array(Rc::new(e)));
+        }
+        Ok(Zval::Array(Rc::new(outer)))
+    }
+
+    /// `debug_print_backtrace()`: print the call stack as
+    /// `#N file(line): callee(args)` lines. Args render in PHP's compact form
+    /// (scalars literal, strings single-quoted+truncated, arrays `Array`, objects
+    /// `Object(Class)`). Pure VM gain.
+    fn ho_debug_print_backtrace(&mut self) -> Result<Zval, PhpError> {
+        let frames = self.collect_backtrace();
+        let file = String::from_utf8_lossy(&self.module.file).into_owned();
+        let mut s = String::new();
+        for (n, bt) in frames.iter().enumerate() {
+            let callee = match &bt.class {
+                Some(cls) => format!(
+                    "{}{}{}",
+                    String::from_utf8_lossy(cls),
+                    if bt.is_static { "::" } else { "->" },
+                    String::from_utf8_lossy(&bt.function)
+                ),
+                None => String::from_utf8_lossy(&bt.function).into_owned(),
+            };
+            let argstr = bt
+                .args
+                .iter()
+                .map(format_bt_arg)
+                .collect::<Vec<_>>()
+                .join(", ");
+            s.push_str(&format!("#{n} {file}({}): {callee}({argstr})\n", bt.line));
+        }
+        // Flush pending diagnostics first so the trace lands in output order, then
+        // append to both streams (this is ordinary output, like an echo).
+        let line = self.cur_line(self.frames.len() - 1);
+        self.flush_diags(line)?;
+        self.stdout.extend_from_slice(s.as_bytes());
+        self.rendered.extend_from_slice(s.as_bytes());
+        Ok(Zval::Null)
     }
 
     /// Wrap a freshly opened stream in a `Zval::Resource` with the next id (mirrors
@@ -4034,6 +4135,8 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"opendir",
         b"preg_replace",
         b"preg_quote",
+        b"debug_backtrace",
+        b"debug_print_backtrace",
         b"preg_replace_callback",
     ];
     HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
@@ -4044,6 +4147,44 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
 /// compiler emits [`crate::bytecode::Op::CallHostBuiltinRef`] (with the variable's
 /// slot) for these; [`Vm::dispatch_host_builtin_ref`] matches the same canonical
 /// name. The two lists are disjoint.
+/// One reconstructed call-stack entry (see [`Vm::collect_backtrace`]).
+struct BtFrame {
+    function: Vec<u8>,
+    line: Line,
+    class: Option<Vec<u8>>,
+    is_static: bool,
+    object: Option<Zval>,
+    args: Vec<Zval>,
+}
+
+/// Format one argument the way `debug_print_backtrace` does: scalars literal,
+/// a string single-quoted and truncated to 15 bytes + `...`, arrays as `Array`,
+/// objects/closures/generators as `Object(Class)`, resources as `Resource id #N`.
+fn format_bt_arg(v: &Zval) -> String {
+    match v {
+        Zval::Undef | Zval::Null => "NULL".to_string(),
+        Zval::Bool(true) => "true".to_string(),
+        Zval::Bool(false) => "false".to_string(),
+        Zval::Long(n) => n.to_string(),
+        Zval::Double(d) => String::from_utf8_lossy(&php_types::dtoa::double_to_precision(*d, 14)).into_owned(),
+        Zval::Str(s) => {
+            let b = s.as_bytes();
+            let shown = if b.len() > 15 {
+                format!("{}...", String::from_utf8_lossy(&b[..15]))
+            } else {
+                String::from_utf8_lossy(b).into_owned()
+            };
+            format!("'{shown}'")
+        }
+        Zval::Array(_) => "Array".to_string(),
+        Zval::Object(o) => format!("Object({})", String::from_utf8_lossy(o.borrow().class_name.as_bytes())),
+        Zval::Closure(_) => "Object(Closure)".to_string(),
+        Zval::Generator(_) => "Object(Generator)".to_string(),
+        Zval::Resource(r) => format!("Resource id #{}", r.borrow().id),
+        Zval::Ref(rc) => format_bt_arg(&rc.borrow()),
+    }
+}
+
 /// One array internal-pointer operation (see [`Vm::ho_array_pointer`]).
 #[derive(Clone, Copy)]
 enum PtrOp {
@@ -7991,6 +8132,35 @@ mod tests {
     fn preg_quote_escapes_metachars_and_delimiter() {
         assert_eq!(vm_stdout(b"<?php echo preg_quote('a.b*c+');"), b"a\\.b\\*c\\+");
         assert_eq!(vm_stdout(b"<?php echo preg_quote('a/b', '/');"), b"a\\/b");
+    }
+
+    // ----- debug_backtrace / debug_print_backtrace (vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn debug_print_backtrace_functions() {
+        // Call-site lines: b() is called on line 2 (inside a), a() on line 4.
+        let src = b"<?php\nfunction a() { b(); }\nfunction b() { debug_print_backtrace(); }\na();\n";
+        assert_eq!(
+            vm_stdout(src),
+            b"#0 test.php(2): b()\n#1 test.php(4): a()\n"
+        );
+    }
+
+    #[test]
+    fn debug_print_backtrace_args_and_method() {
+        // Arg formatting: int literal, single-quoted string, Array, and a method
+        // call rendered `Class->method`.
+        let src = b"<?php\nclass C { function m($n, $s, $arr) { debug_print_backtrace(); } }\n(new C)->m(7, 'hi', [1,2]);\n";
+        assert_eq!(
+            vm_stdout(src),
+            b"#0 test.php(3): C->m(7, 'hi', Array)\n"
+        );
+    }
+
+    #[test]
+    fn debug_backtrace_array_fields() {
+        let src = b"<?php\nfunction a($x) { $bt = debug_backtrace(); echo $bt[0]['function'],'@',$bt[0]['line'],'|',$bt[0]['args'][0]; }\na(99);\n";
+        assert_eq!(vm_stdout(src), b"a@3|99");
     }
 
     // ----- Session B2a: get_class / get_parent_class (vs PHP 8.5.7 CLI) -----
