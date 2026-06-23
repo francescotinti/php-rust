@@ -373,6 +373,14 @@ pub enum Op {
     /// back in place (the callback may run a nested `run_loop`); `argc` is the
     /// count of the remaining by-value arguments on the stack.
     CallHostBuiltinRef { name: Box<[u8]>, slot: Slot, argc: u32 },
+    /// `[arg0, …, arg{argc-1}] -> [result]` — call a host builtin with a
+    /// by-reference **output** parameter at `out_index` (`preg_match`/
+    /// `preg_match_all`'s `&$matches`). All `argc` arguments are pushed by value
+    /// (the out-param position included, harmlessly); the builtin returns
+    /// `(result, out_value)` and the VM writes `out_value` into `out_slot` (a plain
+    /// variable, following a reference) before pushing `result`. `out_slot` is
+    /// `None` when the out-param argument was omitted (e.g. `preg_match($p,$s)`).
+    CallHostBuiltinOut { name: Box<[u8]>, out_slot: Option<Slot>, out_index: u32, argc: u32 },
     /// `[] -> [value]` — read a *user-defined* constant `name` (from `define()`),
     /// resolved at run time from the VM's constant table (B3). Engine constants
     /// (`PHP_INT_MAX`, …) are folded at lowering and never reach here; an unknown

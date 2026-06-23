@@ -1268,6 +1268,22 @@ impl<'m> Vm<'m> {
                     let top = self.frames.len() - 1;
                     self.frames[top].stack.push(result);
                 }
+                Op::CallHostBuiltinOut { name, out_slot, out_index, argc } => {
+                    // A host builtin with a by-reference output parameter
+                    // (`preg_match`/`preg_match_all`'s `&$matches`): dispatch with all
+                    // args by value, then write the produced out-value into `out_slot`.
+                    let args = self.pop_keys(top, argc);
+                    let (result, out_val) =
+                        self.dispatch_host_builtin_out(&name, args, out_index as usize)?;
+                    let top = self.frames.len() - 1;
+                    if let Some(slot) = out_slot {
+                        match &mut self.frames[top].slots[slot as usize] {
+                            Zval::Ref(rc) => *rc.borrow_mut() = out_val,
+                            cell => *cell = out_val,
+                        }
+                    }
+                    self.frames[top].stack.push(result);
+                }
                 Op::CallBuiltinRef { name, slot, argc } => {
                     let f = match self.registry.get(&name[..]) {
                         Some(Builtin::RefFirst(f)) => *f,
@@ -2663,6 +2679,105 @@ impl<'m> Vm<'m> {
             None => None,
         };
         Ok(Zval::Str(PhpStr::new(crate::preg::quote(&s, delim))))
+    }
+
+    /// Dispatch a host builtin with a by-reference output parameter (Session:
+    /// out-param). Returns `(result, out_value)`; the VM writes `out_value` into the
+    /// caller's out-param slot. `_out_index` is the argument position of the
+    /// out-param (always the same per builtin; kept for symmetry / future use).
+    fn dispatch_host_builtin_out(
+        &mut self,
+        name: &[u8],
+        args: Vec<Zval>,
+        _out_index: usize,
+    ) -> Result<(Zval, Zval), PhpError> {
+        match name {
+            b"preg_match" => self.ho_preg_match(args),
+            b"preg_match_all" => self.ho_preg_match_all(args),
+            _ => Err(undefined_builtin(name)),
+        }
+    }
+
+    /// `preg_match($pattern, $subject, &$matches = null, $flags = 0)`: returns 1 on
+    /// a match, 0 on none, `false` on a bad pattern. Yields `(ret, matches_array)`;
+    /// `$matches` is written by the VM out-param path. Mirrors `eval::ho_preg_match`.
+    fn ho_preg_match(&mut self, args: Vec<Zval>) -> Result<(Zval, Zval), PhpError> {
+        if args.len() < 2 {
+            return Err(PhpError::ArgumentCountError(
+                "preg_match() expects at least 2 arguments".to_string(),
+            ));
+        }
+        let pat = convert::to_zstr_cast(&args[0].deref_clone(), &mut self.diags).as_bytes().to_vec();
+        let subject =
+            convert::to_zstr_cast(&args[1].deref_clone(), &mut self.diags).as_bytes().to_vec();
+        let Some(re) = crate::preg::compile(&pat) else {
+            return Ok((Zval::Bool(false), Zval::Null));
+        };
+        let flags = match args.get(3) {
+            Some(a) => convert::to_long_cast(&a.deref_clone(), &mut self.diags),
+            None => 0,
+        };
+        let subj = String::from_utf8_lossy(&subject);
+        let (ret, matches) = match re.captures(&subj) {
+            Some(caps) => (1, crate::eval::captures_array(&re, &caps, flags)),
+            None => (0, Zval::Array(Rc::new(PhpArray::new()))),
+        };
+        Ok((Zval::Long(ret), matches))
+    }
+
+    /// `preg_match_all($pattern, $subject, &$matches = null, $flags = 0)`: default
+    /// PREG_PATTERN_ORDER — `$matches[g]` is group `g`'s text across all matches;
+    /// PREG_SET_ORDER gives one full match array per match. Returns the match count
+    /// (or `false` on a bad pattern). Mirrors `eval::ho_preg_match_all`.
+    fn ho_preg_match_all(&mut self, args: Vec<Zval>) -> Result<(Zval, Zval), PhpError> {
+        use crate::eval::{capture_value, PREG_OFFSET_CAPTURE, PREG_SET_ORDER, PREG_UNMATCHED_AS_NULL};
+        if args.len() < 2 {
+            return Err(PhpError::ArgumentCountError(
+                "preg_match_all() expects at least 2 arguments".to_string(),
+            ));
+        }
+        let pat = convert::to_zstr_cast(&args[0].deref_clone(), &mut self.diags).as_bytes().to_vec();
+        let subject =
+            convert::to_zstr_cast(&args[1].deref_clone(), &mut self.diags).as_bytes().to_vec();
+        let Some(re) = crate::preg::compile(&pat) else {
+            return Ok((Zval::Bool(false), Zval::Null));
+        };
+        let flags = match args.get(3) {
+            Some(a) => convert::to_long_cast(&a.deref_clone(), &mut self.diags),
+            None => 0,
+        };
+        let subj = String::from_utf8_lossy(&subject).into_owned();
+        let offset = flags & PREG_OFFSET_CAPTURE != 0;
+        let as_null = flags & PREG_UNMATCHED_AS_NULL != 0;
+        let mut count: i64 = 0;
+        let outer = if flags & PREG_SET_ORDER != 0 {
+            let mut outer = PhpArray::new();
+            for caps in re.captures_iter(&subj) {
+                count += 1;
+                let _ = outer.append(crate::eval::captures_array(&re, &caps, flags));
+            }
+            outer
+        } else {
+            let ngroups = re.captures_len();
+            let names = re.capture_names();
+            let mut cols: Vec<PhpArray> = (0..ngroups).map(|_| PhpArray::new()).collect();
+            for caps in re.captures_iter(&subj) {
+                count += 1;
+                for (g, col) in cols.iter_mut().enumerate() {
+                    let _ = col.append(capture_value(caps.get(g), offset, as_null));
+                }
+            }
+            let mut outer = PhpArray::new();
+            for (g, col) in cols.into_iter().enumerate() {
+                let col_z = Zval::Array(Rc::new(col));
+                if let Some(Some(name)) = names.get(g) {
+                    outer.insert(Key::from_bytes(name.as_bytes()), col_z.clone());
+                }
+                outer.insert(Key::Int(g as i64), col_z);
+            }
+            outer
+        };
+        Ok((Zval::Long(count), Zval::Array(Rc::new(outer))))
     }
 
     /// `error_reporting($level = null)` (Session 1): set the active reporting
@@ -4228,6 +4343,19 @@ fn array_pointer_apply(target: &mut Zval, op: PtrOp) -> Result<Zval, PhpError> {
         PtrOp::Next => Rc::make_mut(rc).ptr_next().unwrap_or(Zval::Bool(false)),
         PtrOp::Prev => Rc::make_mut(rc).ptr_prev().unwrap_or(Zval::Bool(false)),
     })
+}
+
+/// Host builtins with a by-reference **output** parameter, mapping the canonical
+/// name to the argument index of that out-param. `preg_match`/`preg_match_all`
+/// write their captures into `&$matches` at index 2. The compiler emits
+/// [`crate::bytecode::Op::CallHostBuiltinOut`] for these; [`Vm::dispatch_host_builtin_out`]
+/// produces `(result, out_value)` and the VM writes the out-value into the slot.
+pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usize)> {
+    const HOST_OUT: &[(&[u8], usize)] = &[(b"preg_match", 2), (b"preg_match_all", 2)];
+    HOST_OUT
+        .iter()
+        .find(|(h, _)| name.eq_ignore_ascii_case(h))
+        .map(|&(h, i)| (h, i))
 }
 
 pub(crate) fn host_builtin_ref_first(name: &[u8]) -> Option<&'static [u8]> {
@@ -8132,6 +8260,52 @@ mod tests {
     fn preg_quote_escapes_metachars_and_delimiter() {
         assert_eq!(vm_stdout(b"<?php echo preg_quote('a.b*c+');"), b"a\\.b\\*c\\+");
         assert_eq!(vm_stdout(b"<?php echo preg_quote('a/b', '/');"), b"a\\/b");
+    }
+
+    #[test]
+    fn preg_match_writes_matches_out_param() {
+        // The by-reference $matches out-param is written back: [0]=whole, [n]=group.
+        assert_eq!(
+            vm_stdout(b"<?php $n=preg_match('/(\\d)(\\d)/', 'a12b', $m); echo $n,'|',$m[0],'|',$m[1],'|',$m[2];"),
+            b"1|12|1|2"
+        );
+    }
+
+    #[test]
+    fn preg_match_no_match_and_named_group() {
+        // No match: returns 0, $matches emptied.
+        assert_eq!(
+            vm_stdout(b"<?php $n=preg_match('/x/', 'abc', $m); echo $n,'|',($m===[]?'E':'?');"),
+            b"0|E"
+        );
+        // Named group is keyed by name and by index.
+        assert_eq!(
+            vm_stdout(b"<?php preg_match('/(?<y>\\d+)/', 'n42', $m); echo $m['y'],'|',$m[1];"),
+            b"42|42"
+        );
+    }
+
+    #[test]
+    fn preg_match_two_arg_form_no_out_param() {
+        // Omitting $matches is allowed (out_slot = None).
+        assert_eq!(vm_stdout(b"<?php echo preg_match('/b/', 'abc');"), b"1");
+    }
+
+    #[test]
+    fn preg_match_all_pattern_order() {
+        // $m[0] = whole-match column, $m[1] = group-1 column, across all 3 matches.
+        assert_eq!(
+            vm_stdout(b"<?php $n=preg_match_all('/(\\d)/', '1a2b3', $m); echo $n,'|',$m[0][0],$m[0][1],$m[0][2],'|',$m[1][0],$m[1][1],$m[1][2];"),
+            b"3|123|123"
+        );
+    }
+
+    #[test]
+    fn preg_match_bad_pattern_is_false() {
+        assert_eq!(
+            vm_stdout(b"<?php echo preg_match('/[/', 'x', $m) === false ? 'F' : '?';"),
+            b"F"
+        );
     }
 
     // ----- debug_backtrace / debug_print_backtrace (vs PHP 8.5.7 CLI) -----

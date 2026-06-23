@@ -1360,6 +1360,30 @@ impl<'a> FnCompiler<'a> {
             self.emit(Op::CallHostBuiltin { name: canon.into(), argc: args.len() as u32 });
             return Ok(());
         }
+        // Host builtins with a by-reference *output* parameter (`preg_match`'s
+        // `&$matches` at index 2): push every argument by value, capture the
+        // out-param's slot, and let the VM write the produced value back.
+        if let Some((canon, out_idx)) = crate::vm::host_builtin_out_param(name) {
+            let out_slot = match args.get(out_idx) {
+                None => None, // out-param omitted (e.g. `preg_match($p, $s)`)
+                Some(e) => match &e.kind {
+                    ExprKind::Var(slot) => Some(*slot),
+                    _ => {
+                        return Err(CompileError::Unsupported(
+                            "host builtin out-param is not a plain variable".into(),
+                        ))
+                    }
+                },
+            };
+            self.push_value_args(args)?;
+            self.emit(Op::CallHostBuiltinOut {
+                name: canon.into(),
+                out_slot,
+                out_index: out_idx as u32,
+                argc: args.len() as u32,
+            });
+            return Ok(());
+        }
         // By-reference-first host builtins (`usort`, …): first argument is an array
         // variable taken by reference, the rest by value (Session C).
         if let Some(canon) = crate::vm::host_builtin_ref_first(name) {

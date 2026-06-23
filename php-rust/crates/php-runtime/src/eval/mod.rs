@@ -1500,11 +1500,11 @@ fn frame_display(frame: &CallFrame) -> Vec<u8> {
 }
 
 /// `PREG_OFFSET_CAPTURE`.
-const PREG_OFFSET_CAPTURE: i64 = 256;
+pub(crate) const PREG_OFFSET_CAPTURE: i64 = 256;
 /// `PREG_UNMATCHED_AS_NULL`.
-const PREG_UNMATCHED_AS_NULL: i64 = 512;
+pub(crate) const PREG_UNMATCHED_AS_NULL: i64 = 512;
 /// `PREG_SET_ORDER`.
-const PREG_SET_ORDER: i64 = 2;
+pub(crate) const PREG_SET_ORDER: i64 = 2;
 
 /// Build one match's `$matches` array. Named groups are emitted as the name key
 /// immediately followed by their numeric index (PHP order). With
@@ -1540,7 +1540,7 @@ pub(crate) fn captures_array(
 
 /// A single capture group's value, honouring `PREG_OFFSET_CAPTURE` /
 /// `PREG_UNMATCHED_AS_NULL`.
-fn capture_value(m: Option<&crate::preg::CapMatch>, offset: bool, as_null: bool) -> Zval {
+pub(crate) fn capture_value(m: Option<&crate::preg::CapMatch>, offset: bool, as_null: bool) -> Zval {
     match m {
         Some(mm) => {
             let s = Zval::Str(PhpStr::new(mm.text.as_bytes().to_vec()));
