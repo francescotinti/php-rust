@@ -4533,9 +4533,9 @@ fn magic_trait_and_namespace() {
 
 #[test]
 fn predefined_error_and_path_constants() {
-    assert_eq!(out("<?php echo E_ALL;"), "32767");
+    assert_eq!(out("<?php echo E_ALL;"), "30719");
     assert_eq!(out("<?php echo E_WARNING | E_NOTICE;"), "10");
-    assert_eq!(out("<?php echo E_ALL & ~E_NOTICE;"), "32759");
+    assert_eq!(out("<?php echo E_ALL & ~E_NOTICE;"), "30711");
     assert_eq!(out("<?php echo DIRECTORY_SEPARATOR;"), "/");
     assert_eq!(out("<?php echo PATH_SEPARATOR;"), ":");
     assert_eq!(out("<?php echo PHP_SAPI;"), "cli");
@@ -4559,7 +4559,7 @@ fn constant_and_defined_builtins() {
     assert_eq!(out("<?php define('B', 1); echo defined('B') ? 'y' : 'n';"), "y");
     // Engine constants answer to defined()/constant() as well.
     assert_eq!(out("<?php echo defined('PHP_INT_MAX') ? 'y' : 'n';"), "y");
-    assert_eq!(out("<?php echo constant('E_ALL');"), "32767");
+    assert_eq!(out("<?php echo constant('E_ALL');"), "30719");
 }
 
 #[test]

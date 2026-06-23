@@ -1192,7 +1192,9 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"E_RECOVERABLE_ERROR" => ExprKind::Int(4096),
         b"E_DEPRECATED" => ExprKind::Int(8192),
         b"E_USER_DEPRECATED" => ExprKind::Int(16384),
-        b"E_ALL" => ExprKind::Int(32767),
+        // PHP 8.0 removed E_STRICT from E_ALL; PHP 8.4 made E_STRICT a no-op. The
+        // current value is 30719 (E_ALL without E_STRICT=2048), matching 8.5.
+        b"E_ALL" => ExprKind::Int(30719),
         // str_pad / array_filter / count flags.
         b"STR_PAD_RIGHT" => ExprKind::Int(1),
         b"STR_PAD_LEFT" => ExprKind::Int(0),

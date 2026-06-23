@@ -178,6 +178,8 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         diags: Diags::new(),
         diags_rendered: 0,
         fatal_line: 1,
+        error_level: 30719, // PHP 8.5 E_ALL
+        last_error: None,
         frames: Vec::new(),
         next_object_id: 1,
         static_props: HashMap::new(),
@@ -368,6 +370,15 @@ struct Vm<'m> {
     /// pops the faulting frame — used by [`Vm::render_fatal`] for an engine error
     /// (a thrown object carries its own line).
     fatal_line: Line,
+    /// The active `error_reporting` bitmask (Session 1). A diagnostic is rendered
+    /// by [`Vm::flush_diags`] only when its severity bit is set here. Defaults to
+    /// PHP 8.5's `E_ALL` (30719), so every diagnostic surfaces unless a script
+    /// narrows it.
+    error_level: i64,
+    /// The most recent `trigger_error` error as `(level, message, line)` for
+    /// `error_get_last` (Session 1). Built-in diagnostics are a documented
+    /// scope-out (they carry no error level at their emission site).
+    last_error: Option<(i64, Vec<u8>, Line)>,
     frames: Vec<Frame<'m>>,
     /// Monotonic object-handle counter (`#N` in `var_dump`), starting at 1 like
     /// the tree-walker's `next_object_id`.
@@ -430,11 +441,20 @@ impl<'m> Vm<'m> {
     fn flush_diags(&mut self, line: Line) {
         while self.diags_rendered < self.diags.len() {
             let d = &self.diags[self.diags_rendered];
-            let header = format!("\n{}: {} in ", d.severity(), d.message());
-            self.rendered.extend_from_slice(header.as_bytes());
-            self.rendered.extend_from_slice(&self.module.file);
-            let tail = format!(" on line {line}\n");
-            self.rendered.extend_from_slice(tail.as_bytes());
+            // Gate on `error_reporting` (Session 1): a severity whose E_* bit is not
+            // set in the current level is consumed but not rendered.
+            let bit = match d {
+                Diag::Warning(_) => 2,    // E_WARNING
+                Diag::Notice(_) => 8,     // E_NOTICE
+                Diag::Deprecated(_) => 8192, // E_DEPRECATED
+            };
+            if self.error_level & bit != 0 {
+                let header = format!("\n{}: {} in ", d.severity(), d.message());
+                self.rendered.extend_from_slice(header.as_bytes());
+                self.rendered.extend_from_slice(&self.module.file);
+                let tail = format!(" on line {line}\n");
+                self.rendered.extend_from_slice(tail.as_bytes());
+            }
             self.diags_rendered += 1;
         }
     }
@@ -2194,6 +2214,9 @@ impl<'m> Vm<'m> {
             b"method_exists" => self.ho_method_exists(args),
             b"property_exists" => self.ho_property_exists(args),
             b"get_called_class" => self.ho_get_called_class(),
+            b"error_reporting" => self.ho_error_reporting(args),
+            b"trigger_error" | b"user_error" => self.ho_trigger_error(args),
+            b"error_get_last" => self.ho_error_get_last(),
             _ => Err(undefined_builtin(name)),
         }
     }
@@ -2676,6 +2699,86 @@ impl<'m> Vm<'m> {
             None => Err(PhpError::Error(
                 "get_called_class() must be called from within a class".to_string(),
             )),
+        }
+    }
+
+    /// `error_reporting($level = null)` (Session 1): set the active reporting
+    /// bitmask (consulted by [`Self::flush_diags`]) and return the previous one; a
+    /// `null`/absent argument reads without changing it.
+    fn ho_error_reporting(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let old = self.error_level;
+        if let Some(a) = args.first() {
+            let v = a.deref_clone();
+            if !matches!(v, Zval::Null) {
+                self.error_level = convert::to_long_cast(&v, &mut self.diags);
+            }
+        }
+        Ok(Zval::Long(old))
+    }
+
+    /// `trigger_error($message, $level = E_USER_NOTICE)` (Session 1): raise a user
+    /// diagnostic. `E_USER_ERROR` becomes a fatal; the others render as
+    /// Warning/Notice/Deprecated (gated by `error_reporting`). An invalid level is a
+    /// `ValueError`. Records the error for [`Self::ho_error_get_last`].
+    fn ho_trigger_error(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(msg_arg) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "trigger_error() expects at least 1 argument, 0 given".to_string(),
+            ));
+        };
+        let msg = convert::to_zstr_cast(&msg_arg.deref_clone(), &mut self.diags).as_bytes().to_vec();
+        let level = match args.get(1) {
+            Some(a) => convert::to_long_cast(&a.deref_clone(), &mut self.diags),
+            None => 1024, // E_USER_NOTICE
+        };
+        if !matches!(level, 256 | 512 | 1024 | 16384) {
+            return Err(PhpError::ValueError(
+                "trigger_error(): Argument #2 ($error_level) must be one of E_USER_ERROR, E_USER_WARNING, E_USER_NOTICE, or E_USER_DEPRECATED"
+                    .to_string(),
+            ));
+        }
+        let line = self.cur_line(self.frames.len() - 1);
+        self.last_error = Some((level, msg.clone(), line));
+        if level == 256 {
+            // E_USER_ERROR → fatal.
+            return Err(PhpError::Error(String::from_utf8_lossy(&msg).into_owned()));
+        }
+        // Flush any pending built-in diagnostics, then render this one — gated on the
+        // user level itself (E_USER_*), not the rendered label's bit, since e.g.
+        // E_USER_DEPRECATED (16384) and E_DEPRECATED (8192) are independent.
+        self.flush_diags(line);
+        if self.error_level & level != 0 {
+            let label = match level {
+                512 => "Warning",       // E_USER_WARNING
+                16384 => "Deprecated",  // E_USER_DEPRECATED
+                _ => "Notice",          // E_USER_NOTICE
+            };
+            let header = format!("\n{}: {} in ", label, String::from_utf8_lossy(&msg));
+            self.rendered.extend_from_slice(header.as_bytes());
+            self.rendered.extend_from_slice(&self.module.file);
+            let tail = format!(" on line {line}\n");
+            self.rendered.extend_from_slice(tail.as_bytes());
+        }
+        Ok(Zval::Bool(true))
+    }
+
+    /// `error_get_last()` (Session 1): the last `trigger_error` as
+    /// `[type, message, file, line]`, or null. Built-in diagnostics are a
+    /// documented scope-out (no error level at their emission site).
+    fn ho_error_get_last(&mut self) -> Result<Zval, PhpError> {
+        match &self.last_error {
+            Some((level, msg, line)) => {
+                let mut arr = PhpArray::new();
+                arr.insert(Key::from_bytes(b"type"), Zval::Long(*level));
+                arr.insert(Key::from_bytes(b"message"), Zval::Str(PhpStr::new(msg.clone())));
+                arr.insert(
+                    Key::from_bytes(b"file"),
+                    Zval::Str(PhpStr::new(self.module.file.to_vec())),
+                );
+                arr.insert(Key::from_bytes(b"line"), Zval::Long(*line as i64));
+                Ok(Zval::Array(Rc::new(arr)))
+            }
+            None => Ok(Zval::Null),
         }
     }
 
@@ -4613,6 +4716,10 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"method_exists",
         b"property_exists",
         b"get_called_class",
+        b"error_reporting",
+        b"trigger_error",
+        b"user_error",
+        b"error_get_last",
     ];
     HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
 }
@@ -9151,6 +9258,79 @@ mod tests {
             "rendered: {}",
             String::from_utf8_lossy(&out.rendered)
         );
+    }
+
+    // ----- Session 1: error_reporting / trigger_error / error_get_last -----
+
+    #[test]
+    fn e_all_constant_is_php85_value() {
+        assert_eq!(vm_stdout(b"<?php echo E_ALL;"), b"30719");
+    }
+
+    #[test]
+    fn error_reporting_get_and_set_returns_old() {
+        assert_eq!(
+            vm_stdout(b"<?php $a=error_reporting(); $old=error_reporting(0); $b=error_reporting(); echo $a,'|',$old,'|',$b;"),
+            b"30719|30719|0"
+        );
+    }
+
+    #[test]
+    fn trigger_error_default_is_notice() {
+        let out = vm_outcome(b"<?php trigger_error('hi'); echo 'A';");
+        assert_eq!(out.stdout, b"A");
+        assert!(
+            out.rendered.windows(b"Notice: hi in ".len()).any(|w| w == b"Notice: hi in "),
+            "rendered: {}",
+            String::from_utf8_lossy(&out.rendered)
+        );
+    }
+
+    #[test]
+    fn trigger_error_user_warning_level() {
+        let out = vm_outcome(b"<?php trigger_error('warn', E_USER_WARNING); echo 'B';");
+        assert_eq!(out.stdout, b"B");
+        assert!(
+            out.rendered.windows(b"Warning: warn in ".len()).any(|w| w == b"Warning: warn in "),
+            "rendered: {}",
+            String::from_utf8_lossy(&out.rendered)
+        );
+    }
+
+    #[test]
+    fn error_reporting_zero_silences_trigger_error() {
+        let out = vm_outcome(b"<?php error_reporting(0); trigger_error('silent'); echo 'C';");
+        assert_eq!(out.stdout, b"C");
+        assert!(
+            !out.rendered.windows(b"silent".len()).any(|w| w == b"silent"),
+            "diagnostic should be gated; rendered: {}",
+            String::from_utf8_lossy(&out.rendered)
+        );
+    }
+
+    #[test]
+    fn trigger_error_invalid_level_is_value_error() {
+        let out = vm_outcome(b"<?php trigger_error('x', E_WARNING);");
+        assert!(out.fatal.is_some());
+        assert!(
+            out.rendered.windows(b"must be one of E_USER_ERROR".len())
+                .any(|w| w == b"must be one of E_USER_ERROR"),
+            "rendered: {}",
+            String::from_utf8_lossy(&out.rendered)
+        );
+    }
+
+    #[test]
+    fn error_get_last_reports_trigger_error() {
+        assert_eq!(
+            vm_stdout(b"<?php trigger_error('oops', E_USER_WARNING); $e=error_get_last(); echo $e['type'],'|',$e['message'],'|',$e['line'];"),
+            b"512|oops|1"
+        );
+    }
+
+    #[test]
+    fn error_get_last_null_when_none() {
+        assert_eq!(vm_stdout(b"<?php echo (error_get_last()===null)?'N':'S';"), b"N");
     }
 }
 
