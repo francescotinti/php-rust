@@ -425,8 +425,31 @@ pub struct Summary {
     pub unsupported_by_what: std::collections::BTreeMap<String, usize>,
     /// For the `builtin` category, counts keyed by the missing function name.
     pub builtin_missing: std::collections::BTreeMap<String, usize>,
+    /// For the `vm-unsupported` category (E4, `--engine=vm`), counts keyed by the
+    /// bytecode-compiler rejection message — surfaces *which* construct the VM
+    /// still defers to the evaluator, to steer the next gap to close.
+    pub vm_unsupported_by_what: std::collections::BTreeMap<String, usize>,
     /// `(path, detail)` for each failure, for reporting.
     pub failures: Vec<(PathBuf, String)>,
+}
+
+/// Bucket a `vm-unsupported` detail (a bytecode-compiler rejection message) by
+/// collapsing any backtick-quoted specifics (a function/class name) to ``…`` so
+/// like rejections aggregate (E4).
+pub fn vm_unsupported_key(detail: &str) -> String {
+    let mut out = String::with_capacity(detail.len());
+    let mut in_tick = false;
+    for c in detail.chars() {
+        if c == '`' {
+            if !in_tick {
+                out.push_str("`…`");
+            }
+            in_tick = !in_tick;
+        } else if !in_tick {
+            out.push(c);
+        }
+    }
+    out
 }
 
 impl Summary {
@@ -457,6 +480,12 @@ impl Summary {
                             .strip_prefix("Call to undefined function ")
                             .map_or(&*r.detail, |n| n.trim_end_matches("()"));
                         *self.builtin_missing.entry(name.to_string()).or_insert(0) += 1;
+                    }
+                    "vm-unsupported" => {
+                        *self
+                            .vm_unsupported_by_what
+                            .entry(vm_unsupported_key(&r.detail))
+                            .or_insert(0) += 1;
                     }
                     _ => {}
                 }

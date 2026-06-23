@@ -193,6 +193,12 @@ fn run_isolated(args: &[String], list_fails: bool, engine: Engine) -> ExitCode {
                                         .map_or(detail.as_str(), |n| n.trim_end_matches("()"));
                                     *total.builtin_missing.entry(name.to_string()).or_insert(0) += 1;
                                 }
+                                "vm-unsupported" => {
+                                    *total
+                                        .vm_unsupported_by_what
+                                        .entry(phpt_runner::vm_unsupported_key(&detail))
+                                        .or_insert(0) += 1;
+                                }
                                 _ => {}
                             }
                         }
@@ -349,6 +355,9 @@ fn merge(into: &mut Summary, other: Summary) {
     for (k, v) in other.builtin_missing {
         *into.builtin_missing.entry(k).or_insert(0) += v;
     }
+    for (k, v) in other.vm_unsupported_by_what {
+        *into.vm_unsupported_by_what.entry(k).or_insert(0) += v;
+    }
     into.failures.extend(other.failures);
 }
 
@@ -391,6 +400,8 @@ fn print_summary(s: &Summary, list_fails: bool) {
     // dominates the `unsupported` bucket, and which builtins are most wanted.
     print_top("unsupported by construct (top 20):", &s.unsupported_by_what, 20);
     print_top("missing builtins (top 20):", &s.builtin_missing, 20);
+    // VM-only (E4): which constructs the bytecode compiler still defers to eval.
+    print_top("vm-unsupported by construct (top 20):", &s.vm_unsupported_by_what, 20);
 
     if s.fail > 0 {
         println!("\nfailures: {}", s.fail);
