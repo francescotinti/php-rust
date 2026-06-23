@@ -33,7 +33,9 @@ use crate::hir::{BinOp, CastKind, ClassId, Line, Slot, UnOp, Visibility};
 mod arrays;
 mod coroutines;
 mod exceptions;
+mod oop;
 use arrays::*;
+use oop::*;
 
 /// The result of running a [`Module`] — at parity with [`crate::eval::Outcome`]
 /// (E1), so the corpus harness can compare the two engines.
@@ -3197,128 +3199,6 @@ impl<'m> Vm<'m> {
         }
     }
 
-    /// Dispatch an instance method call `obj->method(args)` where the receiver's
-    /// class `cid` and bound `$this` are already resolved (OOP). A missing or
-    /// inaccessible target routes to `__call`, otherwise raises the visibility /
-    /// Dispatch an instance method call `$this->method(args)` with `$this` already
-    /// deref-cloned. A `Generator`/`Fiber` receiver routes to the native built-in
-    /// methods (their result is pushed directly); any other object resolves the
-    /// method at run time via [`Self::dispatch_instance_call`]; a non-object is the
-    /// "Call to a member function …() on …" fatal. Shared by [`Op::MethodCall`] and
-    /// the spread variant [`Op::MethodCallArgs`].
-    fn method_call(
-        &mut self,
-        top: usize,
-        this: Zval,
-        method: &[u8],
-        args: Vec<Zval>,
-    ) -> Result<(), PhpError> {
-        // A `Generator` is not a user object: dispatch its built-in methods
-        // (current/key/next/valid/rewind/…) directly (GEN).
-        if let Zval::Generator(gs) = &this {
-            let gs = Rc::clone(gs);
-            let result = self.generator_method(gs, method, args)?;
-            self.frames[top].stack.push(result);
-            return Ok(());
-        }
-        // A `Fiber` instance's methods (start/resume/getReturn/is*) are dispatched
-        // natively, except `__construct` which runs the prelude body (GEN-4).
-        if let (Zval::Object(o), Some(fcid)) = (&this, self.fiber_class_id) {
-            let cid = o.borrow().class_id as usize;
-            if is_instance_of(self.module, cid, fcid) {
-                let result = self.fiber_method(&this, method, args)?;
-                self.frames[top].stack.push(result);
-                return Ok(());
-            }
-        }
-        let cid = match &this {
-            Zval::Object(o) => o.borrow().class_id as usize,
-            other => {
-                return Err(PhpError::Error(format!(
-                    "Call to a member function {}() on {}",
-                    String::from_utf8_lossy(method),
-                    other.error_type_name()
-                )))
-            }
-        };
-        self.dispatch_instance_call(top, cid, this, method, args)
-    }
-
-    /// Dispatch an instance method call `$this->method(positional…, named…)` whose
-    /// **named arguments** are bound at run time against the callee's `param_names`
-    /// (Session A). A non-object receiver is the "Call to a member function …" fatal
-    /// (a `Generator`/`Fiber`'s native methods take no named arguments — the first
-    /// name is reported as unknown). A resolved-and-visible user method binds via
-    /// [`build_named_frame`]; a missing/inaccessible one routes to `__call` (the
-    /// named args ride in the `$args` array as string keys, like the evaluator),
-    /// else the visibility / undefined-method error.
-    fn dispatch_instance_call_named(
-        &mut self,
-        top: usize,
-        this: Zval,
-        method: &[u8],
-        positional: Vec<Zval>,
-        named: Vec<(Box<[u8]>, Zval)>,
-    ) -> Result<(), PhpError> {
-        let cid = match &this {
-            // A `Generator`/`Fiber`'s native methods take no named arguments.
-            Zval::Generator(_) => return Err(unknown_named_param(&named)),
-            Zval::Object(o) => o.borrow().class_id as usize,
-            other => {
-                return Err(PhpError::Error(format!(
-                    "Call to a member function {}() on {}",
-                    String::from_utf8_lossy(method),
-                    other.error_type_name()
-                )))
-            }
-        };
-        if let Some(fcid) = self.fiber_class_id {
-            if is_instance_of(self.module, cid, fcid) {
-                return Err(unknown_named_param(&named));
-            }
-        }
-        let module = self.module;
-        let resolved = resolve_method_runtime(module, cid, method);
-        let usable = resolved.filter(|&(defc, midx)| {
-            visible_from(module, self.frames[top].class, module.classes[defc].methods[midx].visibility, defc)
-        });
-        match usable {
-            Some((defc, midx)) => {
-                let callee = &module.classes[defc].methods[midx].func;
-                let qn = format!(
-                    "{}::{}",
-                    String::from_utf8_lossy(&module.classes[defc].name),
-                    String::from_utf8_lossy(method)
-                );
-                let line = self.cur_line(top);
-                let mut frame =
-                    build_named_frame(callee, &module.file, line, &qn, positional, named)?;
-                frame.this = Some(this);
-                frame.class = Some(defc);
-                frame.static_class = Some(cid); // LSB = receiver's actual class
-                self.enter_callee(frame);
-            }
-            None => match resolve_method_runtime(module, cid, b"__call") {
-                Some((cdefc, cmidx)) => {
-                    self.push_magic_call_named(cdefc, cmidx, Some(this), cid, method, positional, named);
-                }
-                None => {
-                    return Err(match resolved {
-                        Some((defc, midx)) => method_access_error(
-                            module,
-                            defc,
-                            method,
-                            self.frames[top].class,
-                            module.classes[defc].methods[midx].visibility,
-                        ),
-                        None => undefined_method(module, cid, method),
-                    })
-                }
-            },
-        }
-        Ok(())
-    }
-
     /// Like [`Self::push_magic_call`] but the forwarded `$args` array also carries
     /// any **named arguments** keyed by name (string keys), matching PHP's `__call`
     /// behaviour for `$obj->missing(x: 1)` (Session A).
@@ -3485,67 +3365,6 @@ impl<'m> Vm<'m> {
             }
         }
         Ok(())
-    }
-
-    /// `(object)` cast (PAR): an object passes through; an array becomes a
-    /// stdClass with one property per element (int keys stringified); null/unset
-    /// is an empty stdClass; a scalar becomes `stdClass { scalar: v }`. Mirrors
-    /// `eval::object_cast`.
-    fn object_cast(&mut self, v: Zval) -> Result<Zval, PhpError> {
-        match v.deref_clone() {
-            obj @ Zval::Object(_) => Ok(obj),
-            Zval::Array(a) => {
-                let obj = self.alloc_stdclass()?;
-                if let Zval::Object(o) = &obj {
-                    let mut b = o.borrow_mut();
-                    for (k, val) in a.iter() {
-                        let name = match k {
-                            Key::Int(i) => i.to_string().into_bytes(),
-                            Key::Str(s) => s.as_bytes().to_vec(),
-                        };
-                        b.props.set(&name, val.deref_clone());
-                    }
-                }
-                Ok(obj)
-            }
-            Zval::Null | Zval::Undef => self.alloc_stdclass(),
-            scalar => {
-                let obj = self.alloc_stdclass()?;
-                if let Zval::Object(o) = &obj {
-                    o.borrow_mut().props.set(b"scalar", scalar);
-                }
-                Ok(obj)
-            }
-        }
-    }
-
-    /// Allocate a fresh empty `stdClass` instance (PAR), for `(object)` casts.
-    fn alloc_stdclass(&mut self) -> Result<Zval, PhpError> {
-        let cid = self
-            .module
-            .class_index
-            .get(&b"stdclass"[..])
-            .copied()
-            .ok_or_else(|| PhpError::Error("VM: stdClass is not available".to_string()))?;
-        self.alloc_object(cid)
-    }
-
-    /// Resolve a runtime class-reference value to its class id (PAR, dynamic
-    /// class): an object reuses its class; a string is looked up
-    /// case-insensitively with a leading `\` stripped; anything else (or an
-    /// unknown name) yields `None`. Used by `instanceof $cls` (where `None` means
-    /// `false`); `new $cls` resolves inline so it can distinguish the error kinds.
-    fn class_id_from_value(&self, v: &Zval) -> Option<ClassId> {
-        match v {
-            Zval::Object(o) => Some(o.borrow().class_id as usize),
-            Zval::Str(s) => {
-                let raw = s.as_bytes();
-                let name = raw.strip_prefix(b"\\").unwrap_or(raw);
-                self.module.class_index.get(&name.to_ascii_lowercase()).copied()
-            }
-            Zval::Ref(r) => self.class_id_from_value(&r.borrow()),
-            _ => None,
-        }
     }
 
     /// Like [`Self::class_id_from_value`] but for contexts that must error rather
@@ -3851,38 +3670,6 @@ impl<'m> Vm<'m> {
         self.frames.push(frame);
     }
 
-    /// Decide whether a magic property accessor of `kind` should run for `name` on
-    /// `o` instead of direct access (OOP-3b), mirroring the tree-walker's
-    /// `magic_prop_method`: it applies when the property is missing *or* not
-    /// visible from `cur_class`, the class defines the accessor, and no same-key
-    /// guard is active. Returns `(defining class, method index, object id)`.
-    fn magic_applies(
-        &self,
-        o: &Rc<RefCell<Object>>,
-        name: &[u8],
-        cur_class: Option<ClassId>,
-        kind: MagicKind,
-        magic_name: &[u8],
-    ) -> Option<(ClassId, usize, u32)> {
-        let (cid, oid, present, accessible) = {
-            let obj = o.borrow();
-            let cid = obj.class_id as usize;
-            let accessible = match resolve_prop_decl(self.module, cid, name) {
-                Some((vis, dc)) => visible_from(self.module, cur_class, vis, dc),
-                None => true,
-            };
-            (cid, obj.id, obj.props.contains(name), accessible)
-        };
-        if present && accessible {
-            return None;
-        }
-        if self.magic_guard.contains(&(oid, kind, name.to_vec())) {
-            return None;
-        }
-        let (defc, midx) = resolve_method_runtime(self.module, cid, magic_name)?;
-        Some((defc, midx, oid))
-    }
-
     /// Push a magic property-accessor frame (`__get`/`__set`/`__isset`/`__unset`),
     /// binding the property name (and, for `__set`, the value) and registering the
     /// recursion guard (released on the frame's `Ret`). `ret_cell` discards the
@@ -3925,35 +3712,6 @@ impl<'m> Vm<'m> {
         self.frames.push(frame);
     }
 
-    /// Run `__destruct` on every object still tracked at the end of the script,
-    /// in reverse creation order (PHP shutdown is LIFO), step OOP-3d. The frame
-    /// stack is cleared first so this works even after a fatal unwound `main`.
-    fn run_shutdown_destructors(&mut self) {
-        self.frames.clear();
-        let survivors = std::mem::take(&mut self.created);
-        for o in survivors.into_iter().rev() {
-            let (cid, id) = {
-                let b = o.borrow();
-                (b.class_id as usize, b.id)
-            };
-            if self.destructed.contains(&id) {
-                continue;
-            }
-            let module = self.module;
-            if let Some((defc, midx)) = resolve_method_runtime(module, cid, b"__destruct") {
-                self.destructed.insert(id);
-                let callee = &module.classes[defc].methods[midx].func;
-                let mut frame = Frame::new(callee);
-                frame.this = Some(Zval::Object(Rc::clone(&o)));
-                frame.class = Some(defc);
-                frame.static_class = Some(cid);
-                self.frames.push(frame);
-                // Drive the destructor to completion; swallow any fatal it raises
-                // (PHP turns a shutdown-time throw into a separate fatal).
-                let _ = self.run();
-            }
-        }
-    }
 }
 
 /// The leaf operation of a path write, carried to the bottom of the drill-down.
@@ -4051,109 +3809,6 @@ pub(crate) fn host_builtin_ref_first(name: &[u8]) -> Option<&'static [u8]> {
     HOST_REF.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
 }
 
-/// Read object property `name` by value (deref-clone), following a reference
-/// receiver. A missing property — or a non-object receiver — warns and yields
-/// NULL, mirroring the tree-walker's `read_property` (OOP-1 has no `__get` /
-/// visibility enforcement).
-fn read_property(recv: &Zval, name: &[u8], diags: &mut Diags) -> Zval {
-    match recv {
-        Zval::Object(o) => {
-            let obj = o.borrow();
-            if let Some(v) = obj.props.get(name) {
-                return v.deref_clone();
-            }
-            let cls = String::from_utf8_lossy(obj.class_name.as_bytes()).into_owned();
-            drop(obj);
-            let prop = String::from_utf8_lossy(name).into_owned();
-            diags.push(Diag::Warning(format!("Undefined property: {cls}::${prop}")));
-            Zval::Null
-        }
-        Zval::Ref(rc) => read_property(&rc.borrow(), name, diags),
-        Zval::Null | Zval::Undef => {
-            let prop = String::from_utf8_lossy(name).into_owned();
-            diags.push(Diag::Warning(format!("Attempt to read property \"{prop}\" on null")));
-            Zval::Null
-        }
-        other => {
-            let prop = String::from_utf8_lossy(name).into_owned();
-            diags.push(Diag::Warning(format!(
-                "Attempt to read property \"{prop}\" on {}",
-                other.error_type_name()
-            )));
-            Zval::Null
-        }
-    }
-}
-
-/// Write `value` into object property `name` (created if absent), in place through
-/// the shared object cell. A non-object receiver is a fatal, matching PHP 8.
-fn write_property(recv: &Zval, name: &[u8], value: Zval) -> Result<(), PhpError> {
-    match recv {
-        Zval::Object(o) => {
-            o.borrow_mut().props.set(name, value);
-            Ok(())
-        }
-        Zval::Ref(rc) => write_property(&rc.borrow(), name, value),
-        other => Err(PhpError::Error(format!(
-            "Attempt to assign property \"{}\" on {}",
-            String::from_utf8_lossy(name),
-            other.error_type_name()
-        ))),
-    }
-}
-
-/// `isset($o->name)`: true iff the property exists and is not null/undefined
-/// (silent), following a reference receiver.
-fn prop_isset(recv: &Zval, name: &[u8]) -> bool {
-    match recv {
-        Zval::Object(o) => match o.borrow().props.get(name) {
-            Some(v) => !matches!(v.deref_clone(), Zval::Null | Zval::Undef),
-            None => false,
-        },
-        Zval::Ref(rc) => prop_isset(&rc.borrow(), name),
-        _ => false,
-    }
-}
-
-/// `unset($o->name)`: remove the property (no-op if absent or non-object).
-fn prop_unset(recv: &Zval, name: &[u8]) {
-    match recv {
-        Zval::Object(o) => {
-            o.borrow_mut().props.remove(name);
-        }
-        Zval::Ref(rc) => prop_unset(&rc.borrow(), name),
-        _ => {}
-    }
-}
-
-/// Resolve a method by name at run time, walking the receiver class's `parent`
-/// chain child→ancestor (case-insensitive). Returns the *defining* class id and
-/// the method's index in [`crate::bytecode::CompiledClass::methods`].
-fn resolve_method_runtime(module: &Module, start: ClassId, name: &[u8]) -> Option<(ClassId, usize)> {
-    let mut cid = Some(start);
-    while let Some(c) = cid {
-        if let Some(i) = module.classes[c]
-            .methods
-            .iter()
-            .position(|m| m.name.eq_ignore_ascii_case(name))
-        {
-            return Some((c, i));
-        }
-        cid = module.classes[c].parent;
-    }
-    None
-}
-
-/// The class id of an object value (following a reference), or `None` for a
-/// non-object.
-fn object_class_id(v: &Zval) -> Option<ClassId> {
-    match v {
-        Zval::Object(o) => Some(o.borrow().class_id as usize),
-        Zval::Ref(rc) => object_class_id(&rc.borrow()),
-        _ => None,
-    }
-}
-
 /// Flatten a runtime argument array into positional values for a spread call
 /// (`...$arr` feeding a dynamic-dispatch call, Session A): keys are dropped and
 /// each value deref-cloned. A non-array yields no arguments. Shared by the
@@ -4179,43 +3834,6 @@ fn args_from_array_value(v: Zval) -> Vec<Zval> {
     }
 }
 
-/// Whether class `a` is `b` or descends from it (parent chain only) — the test
-/// behind forwarding `$this` propagation for `Parent::m()`-style calls.
-fn class_is_a(module: &Module, a: ClassId, b: ClassId) -> bool {
-    let mut cur = Some(a);
-    while let Some(c) = cur {
-        if c == b {
-            return true;
-        }
-        cur = module.classes[c].parent;
-    }
-    false
-}
-
-/// Resolve a class constant at run time (for `static::CONST`): own constants and
-/// parent chain first, then interfaces transitively. Returns the declaring class
-/// id and the constant's index. Case-sensitive, like PHP and the compiler's
-/// `find_class_const`.
-fn find_const_runtime(module: &Module, start: ClassId, name: &[u8]) -> Option<(ClassId, usize)> {
-    let mut c = Some(start);
-    while let Some(x) = c {
-        if let Some(i) = module.classes[x].consts.iter().position(|k| k.name.as_ref() == name) {
-            return Some((x, i));
-        }
-        c = module.classes[x].parent;
-    }
-    let mut c = Some(start);
-    while let Some(x) = c {
-        for &i in &module.classes[x].interfaces {
-            if let Some(r) = find_const_runtime(module, i, name) {
-                return Some(r);
-            }
-        }
-        c = module.classes[x].parent;
-    }
-    None
-}
-
 /// Pack call arguments into a 0-indexed list array — the second argument handed
 /// to `__call` / `__callStatic` (OOP-3a), mirroring the tree-walker's `pack_args`.
 fn pack_args(args: Vec<Zval>) -> Zval {
@@ -4224,128 +3842,6 @@ fn pack_args(args: Vec<Zval>) -> Zval {
         let _ = arr.append(a);
     }
     Zval::Array(Rc::new(arr))
-}
-
-/// The "call to undefined method" fatal, shared by instance and static dispatch.
-fn undefined_method(module: &Module, cid: ClassId, method: &[u8]) -> PhpError {
-    PhpError::Error(format!(
-        "Call to undefined method {}::{}()",
-        String::from_utf8_lossy(&module.classes[cid].name),
-        String::from_utf8_lossy(method)
-    ))
-}
-
-/// Whether a member of visibility `vis` declared on `decl` is accessible from the
-/// running frame's class `cur` (OOP-2b), mirroring the tree-walker's
-/// `visible_from`: public always; private only from the declaring class;
-/// protected from anywhere in the same hierarchy.
-fn visible_from(module: &Module, cur: Option<ClassId>, vis: Visibility, decl: ClassId) -> bool {
-    match vis {
-        Visibility::Public => true,
-        Visibility::Private => cur == Some(decl),
-        Visibility::Protected => matches!(
-            cur,
-            Some(cc) if class_is_a(module, cc, decl) || class_is_a(module, decl, cc)
-        ),
-    }
-}
-
-/// Resolve a declared instance property's visibility and declaring class by
-/// walking `class`'s parent chain child→ancestor. `None` for a dynamic /
-/// undeclared property (effectively public).
-fn resolve_prop_decl(module: &Module, class: ClassId, name: &[u8]) -> Option<(Visibility, ClassId)> {
-    let mut cid = Some(class);
-    while let Some(c) = cid {
-        if let Some((_, vis)) = module.classes[c].own_prop_vis.iter().find(|(n, _)| n.as_ref() == name) {
-            return Some((*vis, c));
-        }
-        cid = module.classes[c].parent;
-    }
-    None
-}
-
-/// Resolve a static property to its declaring class and index, walking the parent
-/// chain (OOP-2b).
-fn find_static_prop(module: &Module, start: ClassId, name: &[u8]) -> Option<(ClassId, usize)> {
-    let mut cid = Some(start);
-    while let Some(c) = cid {
-        if let Some(i) = module.classes[c].static_props.iter().position(|p| p.name.as_ref() == name) {
-            return Some((c, i));
-        }
-        cid = module.classes[c].parent;
-    }
-    None
-}
-
-/// Enforce instance-property visibility for an access from frame class `cur` on an
-/// object of `obj_class`. A dynamic / undeclared property is always accessible.
-fn check_prop_access(
-    module: &Module,
-    cur: Option<ClassId>,
-    obj_class: ClassId,
-    name: &[u8],
-) -> Result<(), PhpError> {
-    if let Some((vis, decl)) = resolve_prop_decl(module, obj_class, name) {
-        if !visible_from(module, cur, vis, decl) {
-            return Err(prop_access_error(module, decl, name, vis));
-        }
-    }
-    Ok(())
-}
-
-/// The "Cannot access {private,protected} property C::$p" fatal.
-fn prop_access_error(module: &Module, decl: ClassId, name: &[u8], vis: Visibility) -> PhpError {
-    let kind = if matches!(vis, Visibility::Private) { "private" } else { "protected" };
-    PhpError::Error(format!(
-        "Cannot access {kind} property {}::${}",
-        String::from_utf8_lossy(&module.classes[decl].name),
-        String::from_utf8_lossy(name)
-    ))
-}
-
-/// The "Call to {private,protected} method C::m() from <scope>" fatal.
-fn method_access_error(
-    module: &Module,
-    decl: ClassId,
-    method: &[u8],
-    cur: Option<ClassId>,
-    vis: Visibility,
-) -> PhpError {
-    let kind = if matches!(vis, Visibility::Private) { "private" } else { "protected" };
-    let scope = match cur {
-        Some(c) => format!("scope {}", String::from_utf8_lossy(&module.classes[c].name)),
-        None => "global scope".to_string(),
-    };
-    PhpError::Error(format!(
-        "Call to {kind} method {}::{}() from {scope}",
-        String::from_utf8_lossy(&module.classes[decl].name),
-        String::from_utf8_lossy(method)
-    ))
-}
-
-/// Whether an object of `class_id` is an instance of `target`: the class itself,
-/// any ancestor, or any implemented interface (transitively), mirroring the
-/// tree-walker's `is_instance_of` (OOP-1 omits the `Stringable` auto-impl).
-fn is_instance_of(module: &Module, class_id: ClassId, target: ClassId) -> bool {
-    let mut cur = Some(class_id);
-    while let Some(c) = cur {
-        if c == target {
-            return true;
-        }
-        if module.classes[c].interfaces.iter().any(|&i| iface_is_a(module, i, target)) {
-            return true;
-        }
-        cur = module.classes[c].parent;
-    }
-    false
-}
-
-/// Whether interface `i` is, or transitively extends, `target`.
-fn iface_is_a(module: &Module, i: ClassId, target: ClassId) -> bool {
-    if i == target {
-        return true;
-    }
-    module.classes[i].interfaces.iter().any(|&p| iface_is_a(module, p, target))
 }
 
 /// ASCII-case-insensitive byte-string equality — PHP resolves function names
