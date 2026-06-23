@@ -2136,6 +2136,15 @@ impl<'m> Vm<'m> {
                 .pop()
                 .expect("host callable result on the caller stack"));
         }
+        self.drive_to_return(baseline)
+    }
+
+    /// Drive a *nested* bounded [`Self::run_loop`] from `baseline` (the frame count
+    /// before a callee frame was pushed) until that callee returns, propagating an
+    /// uncaught exception out with its frames dropped. Shared by [`Self::call_callable`]
+    /// (B1) and [`Self::vm_stringify`] (D2) — both run a freshly-pushed frame to its
+    /// `Ret` from inside a host builtin.
+    fn drive_to_return(&mut self, baseline: usize) -> Result<Zval, PhpError> {
         let outcome = loop {
             match self.run_loop(baseline) {
                 Ok(exit) => break Ok(exit),
@@ -2147,7 +2156,7 @@ impl<'m> Vm<'m> {
         };
         match outcome {
             Ok(RunExit::Returned(v)) => Ok(v),
-            Ok(_) => unreachable!("a called callable does not yield/suspend at its own baseline"),
+            Ok(_) => unreachable!("a synchronously driven callee does not yield/suspend at its own baseline"),
             Err(e) => {
                 self.frames.truncate(baseline);
                 Err(e)
@@ -2176,6 +2185,9 @@ impl<'m> Vm<'m> {
             b"func_num_args" => self.ho_func_num_args(),
             b"func_get_args" => self.ho_func_get_args(),
             b"func_get_arg" => self.ho_func_get_arg(args),
+            b"sprintf" | b"printf" | b"vsprintf" | b"vprintf" | b"fprintf" | b"vfprintf" => {
+                self.ho_format(name, args)
+            }
             _ => Err(undefined_builtin(name)),
         }
     }
@@ -2646,6 +2658,77 @@ impl<'m> Vm<'m> {
         }
         let all = self.current_frame_args(top);
         Ok(all[pos as usize].clone())
+    }
+
+    /// The `sprintf`/`printf` family (Session D2): resolve object arguments to their
+    /// `__toString` form (recursively through arrays) *before* handing them to the
+    /// pure registry format engine, so `%s` on an object honours `__toString`.
+    /// Mirrors `eval::ho_format`; the engine writes to stdout for the `printf`
+    /// variants, so the call goes through [`Self::run_value_builtin`] for the
+    /// faithful rendered-stream interleaving.
+    fn ho_format(&mut self, name: &[u8], args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let mut argv = Vec::with_capacity(args.len());
+        for a in args {
+            argv.push(self.format_resolve_objects(a)?);
+        }
+        let f = match self.registry.get(name) {
+            Some(Builtin::Value(f)) => *f,
+            _ => return Err(undefined_builtin(name)),
+        };
+        let top = self.frames.len() - 1;
+        let line = self.cur_line(top);
+        self.run_value_builtin(f, &argv, line)
+    }
+
+    /// Replace every object (recursively, inside arrays) with its `__toString`
+    /// string so the pure format engine sees only scalars. Mirrors
+    /// `eval::format_resolve_objects`.
+    fn format_resolve_objects(&mut self, v: Zval) -> Result<Zval, PhpError> {
+        let v = v.deref_clone();
+        match v {
+            Zval::Object(_) => Ok(Zval::Str(self.vm_stringify(&v)?)),
+            Zval::Array(arr) => {
+                let mut out = PhpArray::new();
+                for (k, e) in arr.iter() {
+                    out.insert(k.clone(), self.format_resolve_objects(e.deref_clone())?);
+                }
+                Ok(Zval::Array(Rc::new(out)))
+            }
+            other => Ok(other),
+        }
+    }
+
+    /// Convert a value to a string, running `__toString` for an object via a nested
+    /// bounded run (the synchronous analogue of [`Op::Stringify`]). A non-object is
+    /// coerced directly; an object without `__toString` is the usual fatal `Error`.
+    fn vm_stringify(&mut self, v: &Zval) -> Result<Rc<PhpStr>, PhpError> {
+        match v {
+            Zval::Object(o) => {
+                let cid = o.borrow().class_id as usize;
+                match resolve_method_runtime(self.module, cid, b"__toString") {
+                    Some((defc, midx)) => {
+                        let callee = &self.module.classes[defc].methods[midx].func;
+                        let baseline = self.frames.len();
+                        let mut frame = Frame::new(callee);
+                        frame.this = Some(v.clone());
+                        frame.class = Some(defc);
+                        frame.static_class = Some(cid);
+                        frame.ret_stringify = true;
+                        self.frames.push(frame);
+                        let result = self.drive_to_return(baseline)?;
+                        Ok(convert::to_zstr(&result, &mut self.diags))
+                    }
+                    None => {
+                        let name =
+                            String::from_utf8_lossy(o.borrow().class_name.as_bytes()).into_owned();
+                        Err(PhpError::Error(format!(
+                            "Object of class {name} could not be converted to string"
+                        )))
+                    }
+                }
+            }
+            other => Ok(convert::to_zstr(other, &mut self.diags)),
+        }
     }
 
     /// Dispatch a by-reference-first host builtin (`usort`, Session C): `slot` is
@@ -4408,6 +4491,12 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"func_num_args",
         b"func_get_args",
         b"func_get_arg",
+        b"sprintf",
+        b"printf",
+        b"vsprintf",
+        b"vprintf",
+        b"fprintf",
+        b"vfprintf",
     ];
     HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
 }
@@ -5262,7 +5351,7 @@ mod tests {
     use crate::builtin::{Builtin, Ctx, Registry};
     use crate::compile::compile_program;
     use crate::lower::lower_source;
-    use php_types::{Diag, PhpError, Zval};
+    use php_types::{convert, Diag, PhpError, PhpStr, Zval};
 
     use super::run_module;
 
@@ -5313,12 +5402,25 @@ mod tests {
         Ok(Zval::Bool(true))
     }
 
+    /// A stand-in for the real format engine: return the concatenation of the
+    /// arguments after the format string. By the time it runs, `ho_format` has
+    /// already resolved any object argument to its `__toString` form (D2), so this
+    /// lets the unit tests observe that resolution without the php-builtins crate.
+    fn t_sprintf(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+        let mut s = Vec::new();
+        for a in args.iter().skip(1) {
+            s.extend_from_slice(convert::to_zstr(a, ctx.diags).as_bytes());
+        }
+        Ok(Zval::Str(PhpStr::new(s)))
+    }
+
     fn fake_registry() -> Registry {
         let mut r = Registry::new();
         r.insert(b"t_double".to_vec(), Builtin::Value(t_double));
         r.insert(b"t_emit".to_vec(), Builtin::Value(t_emit));
         r.insert(b"t_warn".to_vec(), Builtin::Value(t_warn));
         r.insert(b"t_set42".to_vec(), Builtin::RefFirst(t_set42));
+        r.insert(b"sprintf".to_vec(), Builtin::Value(t_sprintf));
         r
     }
 
@@ -8827,6 +8929,53 @@ mod tests {
         assert!(
             out.rendered.windows(b"must be called from a function context".len())
                 .any(|w| w == b"must be called from a function context"),
+            "rendered: {}",
+            String::from_utf8_lossy(&out.rendered)
+        );
+    }
+
+    // ----- Session D2: sprintf/printf object __toString resolution -----
+    // (The real format engine isn't linkable here; `t_sprintf` stands in and
+    // observes that `ho_format` resolved object arguments before the engine ran.)
+
+    #[test]
+    fn format_resolves_object_via_tostring() {
+        let reg = fake_registry();
+        let out = vm_run(
+            b"<?php class P { function __toString(){ return 'OBJ'; } } echo sprintf('%s', new P());",
+            &reg,
+        );
+        assert_eq!(out.stdout, b"OBJ");
+    }
+
+    #[test]
+    fn format_passes_scalars_through() {
+        let reg = fake_registry();
+        let out = vm_run(b"<?php echo sprintf('%s', 42, 'x');", &reg);
+        assert_eq!(out.stdout, b"42x");
+    }
+
+    #[test]
+    fn format_resolves_object_nested_in_array() {
+        // An object inside an array argument is resolved too (recursive).
+        let reg = fake_registry();
+        let out = vm_run(
+            b"<?php class P { function __toString(){ return 'Z'; } } $a=[new P()]; echo sprintf('%s', $a[0]);",
+            &reg,
+        );
+        assert_eq!(out.stdout, b"Z");
+    }
+
+    #[test]
+    fn format_object_without_tostring_is_fatal() {
+        let reg = fake_registry();
+        let program = lower_source(b"test.php", b"<?php class Q {} echo sprintf('%s', new Q());").expect("lower");
+        let module = compile_program(&program, &reg).expect("compile");
+        let out = run_module(&module, &reg);
+        assert!(out.fatal.is_some());
+        assert!(
+            out.rendered.windows(b"could not be converted to string".len())
+                .any(|w| w == b"could not be converted to string"),
             "rendered: {}",
             String::from_utf8_lossy(&out.rendered)
         );
