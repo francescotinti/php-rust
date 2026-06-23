@@ -180,6 +180,7 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         fatal_line: 1,
         error_level: 30719, // PHP 8.5 E_ALL
         last_error: None,
+        exception_handlers: Vec::new(),
         frames: Vec::new(),
         next_object_id: 1,
         static_props: HashMap::new(),
@@ -204,6 +205,9 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
             exit_code = Some(code);
             (None, Zval::Null)
         }
+        // An uncaught throwable routed to a `set_exception_handler` is handled
+        // there (no fatal banner; PHP exits cleanly); otherwise it is the fatal.
+        Err(e) if vm.handle_uncaught_exception(&e) => (None, Zval::Null),
         Err(e) => (Some(e), Zval::Null),
     };
     // Flush any diagnostics still staged, then render the uncaught fatal at the
@@ -379,6 +383,11 @@ struct Vm<'m> {
     /// `error_get_last` (Session 1). Built-in diagnostics are a documented
     /// scope-out (they carry no error level at their emission site).
     last_error: Option<(i64, Vec<u8>, Line)>,
+    /// The `set_exception_handler` stack (Session 1b); the last entry is active. An
+    /// uncaught throwable is routed to it instead of the fatal banner.
+    /// `restore_exception_handler` pops; `set_exception_handler` pushes and returns
+    /// the previously-active handler.
+    exception_handlers: Vec<Zval>,
     frames: Vec<Frame<'m>>,
     /// Monotonic object-handle counter (`#N` in `var_dump`), starting at 1 like
     /// the tree-walker's `next_object_id`.
@@ -2217,6 +2226,8 @@ impl<'m> Vm<'m> {
             b"error_reporting" => self.ho_error_reporting(args),
             b"trigger_error" | b"user_error" => self.ho_trigger_error(args),
             b"error_get_last" => self.ho_error_get_last(),
+            b"set_exception_handler" => self.ho_set_exception_handler(args),
+            b"restore_exception_handler" => self.ho_restore_exception_handler(),
             b"preg_replace_callback" => self.ho_preg_replace_callback(args),
             _ => Err(undefined_builtin(name)),
         }
@@ -2825,6 +2836,56 @@ impl<'m> Vm<'m> {
             }
             None => Ok(Zval::Null),
         }
+    }
+
+    /// `set_exception_handler($callable)` (Session 1b): install a top-level handler
+    /// for uncaught throwables; returns the previously-active handler (or null).
+    fn ho_set_exception_handler(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let prev = self.exception_handlers.last().cloned();
+        let handler = args.into_iter().next().unwrap_or(Zval::Null);
+        self.exception_handlers.push(handler);
+        Ok(prev.unwrap_or(Zval::Null))
+    }
+
+    /// `restore_exception_handler()` (Session 1b): pop the current handler, making
+    /// the previous one active again. Always returns true.
+    fn ho_restore_exception_handler(&mut self) -> Result<Zval, PhpError> {
+        self.exception_handlers.pop();
+        Ok(Zval::Bool(true))
+    }
+
+    /// Convert an uncaught [`PhpError`] to the Throwable object a
+    /// `set_exception_handler` receives: a thrown object is itself; an engine error
+    /// is synthesized into its prelude class; `exit` / a non-object throw have no
+    /// object (`None`). Mirrors the resolution in [`Self::unwind`].
+    fn error_to_throwable(&mut self, e: &PhpError) -> Option<Zval> {
+        match e {
+            PhpError::Thrown(v) if matches!(v, Zval::Object(_)) => Some(v.clone()),
+            PhpError::Exit(_) | PhpError::Thrown(_) => None,
+            engine => {
+                let name = engine.class_name().to_ascii_lowercase();
+                let msg = engine.message().to_owned();
+                let cid = self.module.class_index.get(name.as_bytes()).copied()?;
+                self.synthesize_throwable(cid, &msg).ok()
+            }
+        }
+    }
+
+    /// Route an uncaught throwable to the active `set_exception_handler` (Session 1b):
+    /// flush pending diagnostics, then invoke the handler with the throwable. Returns
+    /// `true` when a handler ran to completion (the script then ends with no fatal
+    /// banner); `false` if there is no handler, the error is not a throwable, or the
+    /// handler itself errored (the original fatal is reported instead).
+    fn handle_uncaught_exception(&mut self, e: &PhpError) -> bool {
+        let Some(handler) = self.exception_handlers.last().cloned() else {
+            return false;
+        };
+        let Some(obj) = self.error_to_throwable(e) else {
+            return false;
+        };
+        let line = self.fatal_line;
+        self.flush_diags(line);
+        self.call_callable(handler, vec![obj]).is_ok()
     }
 
     /// Reconstruct the flat argument list of the currently executing frame for the
@@ -4765,6 +4826,8 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"trigger_error",
         b"user_error",
         b"error_get_last",
+        b"set_exception_handler",
+        b"restore_exception_handler",
         b"preg_replace_callback",
     ];
     HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
@@ -9402,6 +9465,45 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php echo preg_replace_callback('/z/', fn($m)=>'!', 'abc');"),
             b"abc"
+        );
+    }
+
+    // ----- Session 1b: set_exception_handler / restore_exception_handler -----
+
+    #[test]
+    fn exception_handler_catches_uncaught_throw() {
+        let out = vm_outcome(b"<?php set_exception_handler(function($e){ echo 'caught:'.$e->getMessage(); }); throw new Exception('boom');");
+        assert!(out.fatal.is_none(), "handler should suppress the fatal: {:?}", out.fatal);
+        assert_eq!(out.stdout, b"caught:boom");
+    }
+
+    #[test]
+    fn exception_handler_receives_engine_error() {
+        // `$x->foo()` on an undefined variable raises an Error, synthesized into the
+        // Error throwable and handed to the handler.
+        let out = vm_outcome(b"<?php set_exception_handler(function($e){ echo 'H:'.get_class($e); }); $x->foo();");
+        assert!(out.fatal.is_none(), "fatal: {:?}", out.fatal);
+        assert_eq!(out.stdout, b"H:Error");
+    }
+
+    #[test]
+    fn restore_exception_handler_re_exposes_fatal() {
+        let out = vm_outcome(b"<?php set_exception_handler(function($e){ echo 'X'; }); restore_exception_handler(); throw new Exception('y');");
+        assert!(out.fatal.is_some(), "handler was restored, so the throw is fatal");
+        assert_eq!(out.stdout, b"");
+        assert!(
+            out.rendered.windows(b"Uncaught Exception: y".len())
+                .any(|w| w == b"Uncaught Exception: y"),
+            "rendered: {}",
+            String::from_utf8_lossy(&out.rendered)
+        );
+    }
+
+    #[test]
+    fn set_exception_handler_returns_previous() {
+        assert_eq!(
+            vm_stdout(b"<?php $p1=set_exception_handler(function($e){}); $p2=set_exception_handler(function($e){}); echo ($p1===null?'N':'?'),($p2!==null?'S':'?');"),
+            b"NS"
         );
     }
 }
