@@ -511,11 +511,6 @@ impl<'m> Vm<'m> {
     /// `error_reporting`. A handler that throws propagates out (the caller `?`s it,
     /// so it surfaces from the statement that raised the diagnostic).
     fn raise_diagnostic(&mut self, errno: i64, message: &str, line: Line) -> Result<(), PhpError> {
-        // Record this as the most recent error for `error_get_last` (Session 2
-        // refinement): now that every diagnostic passes through this one chokepoint
-        // with its errno, built-in warnings/notices are captured too (oracle-
-        // confirmed: most-recent-wins, set regardless of handler / `@` / routing).
-        self.last_error = Some((errno, message.as_bytes().to_vec(), line));
         // 1. Route to the active user handler when eligible. `error_reporting` does
         //    *not* gate routing — the handler is called even under `error_reporting(0)`.
         let active = if !self.final_flush && !self.in_error_handler {
@@ -544,7 +539,13 @@ impl<'m> Vm<'m> {
                 return Ok(());
             }
         }
-        // 2. Default render (Session 1 behaviour), gated on `error_reporting`.
+        // 2. Default handler reached (no matching handler, or it returned `false`).
+        //    Record `last_error` for `error_get_last` here — oracle-confirmed: a
+        //    diagnostic suppressed by a user handler does NOT update last_error, and
+        //    recording is independent of `error_reporting` (which gates only the
+        //    visible render below).
+        self.last_error = Some((errno, message.as_bytes().to_vec(), line));
+        // Default render (Session 1 behaviour), gated on `error_reporting`.
         if self.error_level & errno != 0 {
             let header = format!("\n{}: {} in ", errno_label(errno), message);
             self.rendered.extend_from_slice(header.as_bytes());
@@ -7815,6 +7816,27 @@ mod tests {
         // Most-recent-wins: a built-in warning after a trigger_error overwrites it.
         let out = vm_run(
             b"<?php trigger_error('u', E_USER_NOTICE); t_warn(); $e=error_get_last(); echo $e['type'],'|',$e['message'];",
+            &fake_registry(),
+        );
+        assert_eq!(out.stdout, b"2|from builtin");
+    }
+
+    #[test]
+    fn error_get_last_not_set_when_handler_suppresses() {
+        // Oracle-confirmed: a diagnostic *handled* by a user handler (truthy return)
+        // does NOT update error_get_last — only the default handler records it.
+        let out = vm_run(
+            b"<?php set_error_handler(function($n,$s){ return true; }); t_warn(); echo (error_get_last()===null)?'NULL':'SET';",
+            &fake_registry(),
+        );
+        assert_eq!(out.stdout, b"NULL");
+    }
+
+    #[test]
+    fn error_get_last_set_when_handler_returns_false() {
+        // Handler returns false → the default handler runs → last_error IS recorded.
+        let out = vm_run(
+            b"<?php set_error_handler(function($n,$s){ return false; }); t_warn(); $e=error_get_last(); echo $e===null?'NULL':($e['type'].'|'.$e['message']);",
             &fake_registry(),
         );
         assert_eq!(out.stdout, b"2|from builtin");
