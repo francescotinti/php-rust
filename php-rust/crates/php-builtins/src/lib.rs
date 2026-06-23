@@ -14,6 +14,7 @@ mod crypto;
 mod csv;
 mod date;
 mod encoding;
+mod env;
 mod html;
 mod file;
 mod format;
@@ -283,6 +284,17 @@ pub fn registry() -> Registry {
     add(b"strval", strval);
     add(b"boolval", boolval);
     add(b"print_r", print_r);
+    // Environment / runtime-introspection stubs (no real engine state modelled).
+    add(b"gc_collect_cycles", env::gc_collect_cycles);
+    add(b"gc_enable", env::gc_enable);
+    add(b"gc_disable", env::gc_enable);
+    add(b"gc_enabled", env::gc_enabled);
+    add(b"gc_mem_caches", env::gc_mem_caches);
+    add(b"memory_get_usage", env::memory_get_usage);
+    add(b"memory_get_peak_usage", env::memory_get_usage);
+    add(b"php_sapi_name", env::php_sapi_name);
+    add(b"ini_get", env::ini_get);
+    add(b"ini_set", env::ini_set);
     // By-reference builtins (step 11c): their first argument binds the caller's
     // variable cell (D-R7).
     let mut add_ref = |name: &[u8], f: php_runtime::BuiltinRefFn| {
