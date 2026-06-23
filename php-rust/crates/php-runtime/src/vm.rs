@@ -289,6 +289,12 @@ struct Frame<'m> {
     /// The number of arguments actually passed to this call (PAR), recorded by
     /// the binder. Read by `Op::CheckArity` for the `ArgumentCountError` message.
     argc: u32,
+    /// Arguments passed *beyond* the declared (non-variadic) parameters, snapshotted
+    /// at bind time for `func_get_args` / `func_get_arg` (Session D1). Empty for a
+    /// variadic callee (the surplus lands in the variadic array) or a call with no
+    /// extra arguments. Declared-parameter values are read live from the slots, so
+    /// `func_get_args` reflects in-body reassignment, matching PHP.
+    extra_args: Vec<Zval>,
 }
 
 impl<'m> Frame<'m> {
@@ -310,6 +316,7 @@ impl<'m> Frame<'m> {
             gen_id: None,
             yield_from: None,
             argc: 0,
+            extra_args: Vec::new(),
         }
     }
 }
@@ -2166,6 +2173,9 @@ impl<'m> Vm<'m> {
             b"get_parent_class" => self.ho_get_parent_class(args),
             b"get_object_vars" => self.ho_get_object_vars(args),
             b"get_class_methods" => self.ho_get_class_methods(args),
+            b"func_num_args" => self.ho_func_num_args(),
+            b"func_get_args" => self.ho_func_get_args(),
+            b"func_get_arg" => self.ho_func_get_arg(args),
             _ => Err(undefined_builtin(name)),
         }
     }
@@ -2546,6 +2556,96 @@ impl<'m> Vm<'m> {
             c = self.module.classes[cc].parent;
         }
         Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// Reconstruct the flat argument list of the currently executing frame for the
+    /// `func_get_args` family (Session D1): declared parameters are read live from
+    /// their slots (so a parameter reassigned in the body is reflected, matching
+    /// PHP), while surplus arguments come from the variadic array (variadic callee)
+    /// or the `extra_args` snapshot taken at bind time (non-variadic callee).
+    fn current_frame_args(&self, top: usize) -> Vec<Zval> {
+        let frame = &self.frames[top];
+        let a = frame.argc as usize;
+        let p = frame.func.n_params as usize;
+        let mut out = Vec::with_capacity(a);
+        match frame.func.variadic_slot {
+            None => {
+                for i in 0..a {
+                    if i < p {
+                        out.push(frame.slots[i].deref_clone());
+                    } else {
+                        out.push(frame.extra_args[i - p].deref_clone());
+                    }
+                }
+            }
+            Some(vs) => {
+                let v = vs as usize;
+                for i in 0..a.min(v) {
+                    out.push(frame.slots[i].deref_clone());
+                }
+                if a > v {
+                    if let Zval::Array(arr) = &frame.slots[v] {
+                        for (_, e) in arr.iter() {
+                            out.push(e.deref_clone());
+                        }
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// `func_num_args()` (Session D1): the number of arguments passed to the current
+    /// function. A fatal `Error` at global scope, matching PHP 8.5.
+    fn ho_func_num_args(&mut self) -> Result<Zval, PhpError> {
+        let top = self.frames.len() - 1;
+        if top == 0 {
+            return Err(PhpError::Error(
+                "func_num_args() must be called from a function context".to_string(),
+            ));
+        }
+        Ok(Zval::Long(self.frames[top].argc as i64))
+    }
+
+    /// `func_get_args()` (Session D1): the current function's arguments as a 0-indexed
+    /// array. A fatal `Error` at global scope.
+    fn ho_func_get_args(&mut self) -> Result<Zval, PhpError> {
+        let top = self.frames.len() - 1;
+        if top == 0 {
+            return Err(PhpError::Error(
+                "func_get_args() must be called from a function context".to_string(),
+            ));
+        }
+        let mut arr = PhpArray::new();
+        for v in self.current_frame_args(top) {
+            let _ = arr.append(v);
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// `func_get_arg($position)` (Session D1): the argument at `position`. A fatal
+    /// `Error` at global scope; a `ValueError` if `position` is out of range.
+    fn ho_func_get_arg(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let top = self.frames.len() - 1;
+        if top == 0 {
+            return Err(PhpError::Error(
+                "func_get_arg() must be called from a function context".to_string(),
+            ));
+        }
+        let Some(a0) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "func_get_arg() expects exactly 1 argument, 0 given".to_string(),
+            ));
+        };
+        let pos = convert::to_long_cast(&a0.deref_clone(), &mut self.diags);
+        let argc = self.frames[top].argc as i64;
+        if pos < 0 || pos >= argc {
+            return Err(PhpError::ValueError(
+                "func_get_arg(): Argument #1 ($position) must be less than the number of the arguments passed to the currently executed function".to_string(),
+            ));
+        }
+        let all = self.current_frame_args(top);
+        Ok(all[pos as usize].clone())
     }
 
     /// Dispatch a by-reference-first host builtin (`usort`, Session C): `slot` is
@@ -4305,6 +4405,9 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"get_parent_class",
         b"get_object_vars",
         b"get_class_methods",
+        b"func_num_args",
+        b"func_get_args",
+        b"func_get_arg",
     ];
     HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
 }
@@ -4633,6 +4736,11 @@ fn bind_params(frame: &mut Frame, args: Vec<Zval>) {
     match frame.func.variadic_slot {
         None => {
             let n = frame.func.n_params as usize;
+            // Snapshot arguments beyond the declared parameters: they have no slot,
+            // so `func_get_args` (D1) could not otherwise recover them.
+            if args.len() > n {
+                frame.extra_args = args[n..].to_vec();
+            }
             for (i, a) in args.into_iter().enumerate() {
                 if i < n {
                     frame.slots[i] = a;
@@ -8666,6 +8774,59 @@ mod tests {
         assert!(
             out.rendered.windows(b"must be an object or a valid class name".len())
                 .any(|w| w == b"must be an object or a valid class name"),
+            "rendered: {}",
+            String::from_utf8_lossy(&out.rendered)
+        );
+    }
+
+    // ----- Session D1: func_num_args / func_get_args / func_get_arg (vs 8.5.7) -----
+
+    #[test]
+    fn func_num_args_counts_passed_not_declared() {
+        assert_eq!(vm_stdout(b"<?php function f($a,$b=0){ return func_num_args(); } echo f(1,2,3,4),'|',f(7);"), b"4|1");
+    }
+
+    #[test]
+    fn func_get_args_reflects_current_param_and_extras() {
+        // $a reassigned to 99 shows through; extra args 2,3 recovered from snapshot.
+        assert_eq!(
+            vm_stdout(b"<?php function f($a){ $a=99; $r=func_get_args(); return $r[0].'-'.$r[1].'-'.$r[2]; } echo f(1,2,3);"),
+            b"99-2-3"
+        );
+    }
+
+    #[test]
+    fn func_get_args_variadic_is_flat() {
+        assert_eq!(
+            vm_stdout(b"<?php function f($a, ...$rest){ $r=func_get_args(); return $r[0].$r[1].$r[2].$r[3]; } echo f(10,20,30,40);"),
+            b"10203040"
+        );
+    }
+
+    #[test]
+    fn func_get_arg_returns_position() {
+        assert_eq!(vm_stdout(b"<?php function f(){ return func_get_arg(1); } echo f('x','y','z');"), b"y");
+    }
+
+    #[test]
+    fn func_get_arg_out_of_range_is_value_error() {
+        let out = vm_outcome(b"<?php function g(){ return func_get_arg(5); } g(1);");
+        assert!(out.fatal.is_some());
+        assert!(
+            out.rendered.windows(b"must be less than the number of the arguments".len())
+                .any(|w| w == b"must be less than the number of the arguments"),
+            "rendered: {}",
+            String::from_utf8_lossy(&out.rendered)
+        );
+    }
+
+    #[test]
+    fn func_num_args_global_scope_is_fatal() {
+        let out = vm_outcome(b"<?php func_num_args();");
+        assert!(out.fatal.is_some());
+        assert!(
+            out.rendered.windows(b"must be called from a function context".len())
+                .any(|w| w == b"must be called from a function context"),
             "rendered: {}",
             String::from_utf8_lossy(&out.rendered)
         );
