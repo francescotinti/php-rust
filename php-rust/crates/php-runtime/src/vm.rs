@@ -4848,6 +4848,20 @@ mod tests {
     // ----- E1: VmOutcome parity (rendered / return_value / fatal) vs PHP 8.5.7 -----
 
     #[test]
+    fn inline_html_around_php_tags() {
+        // Text outside `<?php … ?>` is emitted verbatim (unblocks the corpus, E4).
+        assert_eq!(vm_stdout(b"hello <?php echo 'X'; ?> world"), b"hello X world");
+    }
+
+    #[test]
+    fn inline_html_after_close_tag() {
+        // PHP swallows exactly one newline right after `?>`, so only "tail" leaks.
+        let out = vm_outcome(b"<?php echo 'a'; ?>\ntail");
+        assert_eq!(out.stdout, b"atail");
+        assert_eq!(out.rendered, b"atail");
+    }
+
+    #[test]
     fn rendered_equals_stdout_when_no_diagnostics() {
         let out = vm_outcome(b"<?php echo 'hello';");
         assert_eq!(out.rendered, b"hello");

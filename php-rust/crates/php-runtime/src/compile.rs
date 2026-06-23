@@ -648,6 +648,14 @@ impl<'a> FnCompiler<'a> {
                     self.emit(Op::Echo);
                 }
             }
+            StmtKind::InlineHtml(bytes) => {
+                // Raw text outside `<?php … ?>` (and the newline after a closing
+                // tag): emitted verbatim, like `eval`'s `emit(bytes)`. Reuses the
+                // string-constant + `Echo` path (a `Str` stringifies to itself).
+                let k = self.konst(Const::Str(bytes.clone()));
+                self.emit(Op::PushConst(k));
+                self.emit(Op::Echo);
+            }
             StmtKind::Expr(e) => {
                 // Every expression leaves exactly one value; a statement must
                 // restore the stack depth, so discard it.
