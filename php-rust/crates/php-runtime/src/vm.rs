@@ -2188,6 +2188,12 @@ impl<'m> Vm<'m> {
             b"sprintf" | b"printf" | b"vsprintf" | b"vprintf" | b"fprintf" | b"vfprintf" => {
                 self.ho_format(name, args)
             }
+            b"function_exists" => self.ho_function_exists(args),
+            b"class_exists" => self.ho_class_exists(args),
+            b"interface_exists" => self.ho_interface_exists(args),
+            b"method_exists" => self.ho_method_exists(args),
+            b"property_exists" => self.ho_property_exists(args),
+            b"get_called_class" => self.ho_get_called_class(),
             _ => Err(undefined_builtin(name)),
         }
     }
@@ -2568,6 +2574,109 @@ impl<'m> Vm<'m> {
             c = self.module.classes[cc].parent;
         }
         Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// `function_exists($name)` (Session B4): whether `name` is a user function, a
+    /// registry builtin, or a host builtin. A leading `\` is stripped.
+    fn ho_function_exists(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(a) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "function_exists() expects exactly 1 argument, 0 given".to_string(),
+            ));
+        };
+        let raw = convert::to_zstr_cast(&a.deref_clone(), &mut self.diags);
+        let b = raw.as_bytes();
+        let name = b.strip_prefix(b"\\").unwrap_or(b);
+        Ok(Zval::Bool(self.is_name_callable(name)))
+    }
+
+    /// Resolve a class-name *string* argument to a [`ClassId`] via the class index
+    /// (leading `\` stripped, case-insensitive). `None` if absent or unknown.
+    /// Shared by the `*_exists` predicates (Session B4).
+    fn resolve_class_name(&mut self, arg: Option<&Zval>) -> Option<ClassId> {
+        let a = arg?;
+        let raw = convert::to_zstr_cast(&a.deref_clone(), &mut self.diags);
+        let b = raw.as_bytes();
+        let name = b.strip_prefix(b"\\").unwrap_or(b);
+        self.module.class_index.get(&name.to_ascii_lowercase()).copied()
+    }
+
+    /// `class_exists($name, $autoload = true)` (Session B4): whether `name` names a
+    /// declared class — including `abstract` and `enum`, but NOT an interface
+    /// (matching PHP 8.5). The autoload flag is a no-op (no autoloading is modelled).
+    fn ho_class_exists(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let exists = match self.resolve_class_name(args.first()) {
+            Some(cid) => self.module.classes[cid].instantiable != Instantiable::Interface,
+            None => false,
+        };
+        Ok(Zval::Bool(exists))
+    }
+
+    /// `interface_exists($name, $autoload = true)` (Session B4): whether `name`
+    /// names a declared interface.
+    fn ho_interface_exists(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let is_iface = matches!(
+            self.resolve_class_name(args.first()),
+            Some(cid) if self.module.classes[cid].instantiable == Instantiable::Interface
+        );
+        Ok(Zval::Bool(is_iface))
+    }
+
+    /// `method_exists($object_or_class, $method)` (Session B4): whether the class of
+    /// the object / named class defines `method` (walking the inheritance chain). An
+    /// unresolvable target is `false` (no error, unlike `get_class_methods`).
+    fn ho_method_exists(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let (Some(a0), Some(a1)) = (args.first(), args.get(1)) else {
+            return Err(PhpError::ArgumentCountError(
+                "method_exists() expects exactly 2 arguments".to_string(),
+            ));
+        };
+        let Some(cid) = self.class_id_from_value(&a0.deref_clone()) else {
+            return Ok(Zval::Bool(false));
+        };
+        let m = convert::to_zstr_cast(&a1.deref_clone(), &mut self.diags);
+        Ok(Zval::Bool(resolve_method_runtime(self.module, cid, m.as_bytes()).is_some()))
+    }
+
+    /// `property_exists($object_or_class, $property)` (Session B4): whether the class
+    /// declares an instance or static `property` (any visibility) — or, for an object
+    /// argument, whether the instance carries it as a dynamic property. Mirrors PHP:
+    /// visibility is ignored, an unresolvable target is `false`.
+    fn ho_property_exists(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let (Some(a0), Some(a1)) = (args.first(), args.get(1)) else {
+            return Err(PhpError::ArgumentCountError(
+                "property_exists() expects exactly 2 arguments".to_string(),
+            ));
+        };
+        let v = a0.deref_clone();
+        let Some(cid) = self.class_id_from_value(&v) else {
+            return Ok(Zval::Bool(false));
+        };
+        let pname_z = convert::to_zstr_cast(&a1.deref_clone(), &mut self.diags);
+        let pname = pname_z.as_bytes();
+        if resolve_prop_decl(self.module, cid, pname).is_some()
+            || find_static_prop(self.module, cid, pname).is_some()
+        {
+            return Ok(Zval::Bool(true));
+        }
+        if let Zval::Object(o) = &v {
+            if o.borrow().props.get(pname).is_some() {
+                return Ok(Zval::Bool(true));
+            }
+        }
+        Ok(Zval::Bool(false))
+    }
+
+    /// `get_called_class()` (Session B4): the late-static-binding class name (the
+    /// receiver's actual class), a fatal `Error` outside class context.
+    fn ho_get_called_class(&mut self) -> Result<Zval, PhpError> {
+        let top = self.frames.len() - 1;
+        match self.frames[top].static_class {
+            Some(cid) => Ok(Zval::Str(PhpStr::new(self.module.classes[cid].name.to_vec()))),
+            None => Err(PhpError::Error(
+                "get_called_class() must be called from within a class".to_string(),
+            )),
+        }
     }
 
     /// Reconstruct the flat argument list of the currently executing frame for the
@@ -2953,6 +3062,7 @@ impl<'m> Vm<'m> {
         self.module.functions.iter().any(|f| name_eq_ignore_case(&f.name, name))
             || self.registry.get(name).is_some()
             || host_builtin_canonical(name).is_some()
+            || host_builtin_ref_first(name).is_some()
     }
 
     /// Install a frame for an anonymous closure: bind its captured variables into
@@ -4497,6 +4607,12 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"vprintf",
         b"fprintf",
         b"vfprintf",
+        b"function_exists",
+        b"class_exists",
+        b"interface_exists",
+        b"method_exists",
+        b"property_exists",
+        b"get_called_class",
     ];
     HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
 }
@@ -8976,6 +9092,62 @@ mod tests {
         assert!(
             out.rendered.windows(b"could not be converted to string".len())
                 .any(|w| w == b"could not be converted to string"),
+            "rendered: {}",
+            String::from_utf8_lossy(&out.rendered)
+        );
+    }
+
+    // ----- Session B4: *_exists / get_called_class predicates (vs PHP 8.5.7) -----
+
+    #[test]
+    fn function_exists_user_host_and_missing() {
+        // uf is a user function; array_map / usort are host builtins; nope is none.
+        assert_eq!(
+            vm_stdout(b"<?php function uf(){} echo (function_exists('uf')?1:0),(function_exists('array_map')?1:0),(function_exists('usort')?1:0),(function_exists('nope')?1:0);"),
+            b"1110"
+        );
+    }
+
+    #[test]
+    fn class_exists_and_interface_exists() {
+        // class_exists is true for class/abstract/enum, false for an interface.
+        assert_eq!(
+            vm_stdout(b"<?php abstract class AB{} interface IF1{} enum EN{ case A; } class C{} echo (class_exists('C')?1:0),(class_exists('AB')?1:0),(class_exists('EN')?1:0),(class_exists('IF1')?1:0),(class_exists('Nope')?1:0),'|',(interface_exists('IF1')?1:0),(interface_exists('C')?1:0);"),
+            b"11100|10"
+        );
+    }
+
+    #[test]
+    fn method_exists_object_string_inherited() {
+        assert_eq!(
+            vm_stdout(b"<?php class B{ function bm(){} } class C extends B{ function m(){} static function s(){} } echo (method_exists('C','m')?1:0),(method_exists(new C,'s')?1:0),(method_exists('C','bm')?1:0),(method_exists('C','nope')?1:0),(method_exists('Nope','m')?1:0);"),
+            b"11100"
+        );
+    }
+
+    #[test]
+    fn property_exists_declared_static_dynamic_inherited() {
+        assert_eq!(
+            vm_stdout(b"<?php class B{ public $base=1; static $st=9; } class C extends B{ protected $own=2; } $o=new C; $o->dyn=5; echo (property_exists('C','own')?1:0),(property_exists('C','base')?1:0),(property_exists('C','st')?1:0),(property_exists($o,'dyn')?1:0),(property_exists('C','dyn')?1:0);"),
+            b"11110"
+        );
+    }
+
+    #[test]
+    fn get_called_class_is_late_static_bound() {
+        assert_eq!(
+            vm_stdout(b"<?php class P{ static function who(){ return get_called_class(); } } class Q extends P{} echo Q::who(),'|',P::who();"),
+            b"Q|P"
+        );
+    }
+
+    #[test]
+    fn get_called_class_global_scope_is_fatal() {
+        let out = vm_outcome(b"<?php get_called_class();");
+        assert!(out.fatal.is_some());
+        assert!(
+            out.rendered.windows(b"must be called from within a class".len())
+                .any(|w| w == b"must be called from within a class"),
             "rendered: {}",
             String::from_utf8_lossy(&out.rendered)
         );
