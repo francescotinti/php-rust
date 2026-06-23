@@ -2413,8 +2413,96 @@ impl<'m> Vm<'m> {
     ) -> Result<Zval, PhpError> {
         match name {
             b"usort" => self.ho_usort(slot, rest),
+            b"array_walk" => self.ho_array_walk(slot, rest),
             _ => Err(undefined_builtin(name)),
         }
+    }
+
+    /// `array_walk(&$array, $callback, $arg = null)` (Session C): apply `$callback`
+    /// to each element as `($value, $key[, $arg])`. When the callback's first
+    /// parameter is by-reference the element is passed through a shared cell and
+    /// the mutation is written back; otherwise it is read-only. Keys are never
+    /// modified. Returns true. Mirrors `eval::ho_array_walk`.
+    fn ho_array_walk(&mut self, slot: Slot, rest: Vec<Zval>) -> Result<Zval, PhpError> {
+        let mut it = rest.into_iter();
+        let Some(callback) = it.next() else {
+            return Err(PhpError::ArgumentCountError(
+                "array_walk() expects at least 2 arguments, 1 given".to_string(),
+            ));
+        };
+        let callback = callback.deref_clone();
+        let extra = it.next().map(|e| e.deref_clone());
+        let by_ref = self.callable_first_by_ref(&callback);
+        let top = self.frames.len() - 1;
+        let entries: Vec<(Key, Zval)> = match self.frames[top].slots[slot as usize].deref_clone() {
+            Zval::Array(a) => a.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect(),
+            other => {
+                return Err(PhpError::TypeError(format!(
+                    "array_walk(): Argument #1 ($array) must be of type array, {} given",
+                    other.error_type_name()
+                )))
+            }
+        };
+
+        let mut out = PhpArray::new();
+        for (k, v) in entries {
+            let key_z = key_to_zval(&k);
+            let new_v = if by_ref {
+                let vcell = Rc::new(RefCell::new(v));
+                let mut argv = vec![Zval::Ref(Rc::clone(&vcell)), key_z];
+                if let Some(e) = &extra {
+                    argv.push(e.clone());
+                }
+                self.call_callable(callback.clone(), argv)?;
+                // Bind before the block ends so the `Ref` temporary is dropped
+                // before `vcell`, satisfying the borrow checker.
+                let updated = vcell.borrow().clone();
+                updated
+            } else {
+                let mut argv = vec![v.clone(), key_z];
+                if let Some(e) = &extra {
+                    argv.push(e.clone());
+                }
+                self.call_callable(callback.clone(), argv)?;
+                v
+            };
+            out.insert(k, new_v);
+        }
+        let top = self.frames.len() - 1;
+        self.frames[top].slots[slot as usize] = Zval::Array(Rc::new(out));
+        Ok(Zval::Bool(true))
+    }
+
+    /// Whether a callable's first parameter is declared by-reference (`&$x`).
+    /// Used by `array_walk` to decide if element mutations propagate. Only user
+    /// closures and named user functions are inspected; anything else is false.
+    fn callable_first_by_ref(&self, callee: &Zval) -> bool {
+        match callee {
+            Zval::Closure(cl) => match &cl.named {
+                Some(name) => self.named_first_by_ref(name.as_bytes()),
+                None => self
+                    .module
+                    .closures
+                    .get(cl.fn_idx)
+                    .and_then(|f| f.param_by_ref.first())
+                    .copied()
+                    .unwrap_or(false),
+            },
+            Zval::Str(s) => self.named_first_by_ref(s.as_bytes()),
+            Zval::Ref(c) => self.callable_first_by_ref(&c.borrow()),
+            _ => false,
+        }
+    }
+
+    /// First-parameter by-reference flag of a named user function (case-insensitive).
+    fn named_first_by_ref(&self, name: &[u8]) -> bool {
+        self.module
+            .functions
+            .iter()
+            .find(|f| name_eq_ignore_case(&f.name, name))
+            .and_then(|f| f.param_by_ref.first())
+            .copied()
+            .unwrap_or(false)
     }
 
     /// `usort(&$array, $callback)` (Session C): sort the array's values in place by
@@ -4076,7 +4164,7 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
 /// slot) for these; [`Vm::dispatch_host_builtin_ref`] matches the same canonical
 /// name. The two lists are disjoint.
 pub(crate) fn host_builtin_ref_first(name: &[u8]) -> Option<&'static [u8]> {
-    const HOST_REF: &[&[u8]] = &[b"usort"];
+    const HOST_REF: &[&[u8]] = &[b"usort", b"array_walk"];
     HOST_REF.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
 }
 
@@ -8270,6 +8358,46 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php $a=[]; echo (usort($a,fn($x,$y)=>0)?'T':'F'),(isset($a[0])?'y':'n');"),
             b"Tn"
+        );
+    }
+
+    #[test]
+    fn array_walk_by_value_visits_key_and_value() {
+        assert_eq!(
+            vm_stdout(b"<?php $a=[1,2,3]; array_walk($a, function($v,$k){ echo $k,'=',$v,' '; });"),
+            b"0=1 1=2 2=3 "
+        );
+    }
+
+    #[test]
+    fn array_walk_by_ref_mutates_in_place() {
+        assert_eq!(
+            vm_stdout(b"<?php $a=[1,2,3]; array_walk($a, function(&$v,$k){ $v=$v*10; }); echo $a[0],$a[1],$a[2];"),
+            b"102030"
+        );
+    }
+
+    #[test]
+    fn array_walk_by_value_does_not_mutate_and_returns_true() {
+        assert_eq!(
+            vm_stdout(b"<?php $a=[1,2]; $r=array_walk($a, function($v,$k){ $v=99; }); echo ($r?'T':'F'),$a[0],$a[1];"),
+            b"T12"
+        );
+    }
+
+    #[test]
+    fn array_walk_extra_arg_by_ref() {
+        assert_eq!(
+            vm_stdout(b"<?php $a=['x'=>1,'y'=>2]; array_walk($a, function(&$v,$k,$p){ $v=$k.$v.$p; }, '!'); echo $a['x'],'|',$a['y'];"),
+            b"x1!|y2!"
+        );
+    }
+
+    #[test]
+    fn array_walk_named_by_ref_function() {
+        assert_eq!(
+            vm_stdout(b"<?php function addk(&$v,$k){ $v=$v+$k; } $a=[10,20,30]; array_walk($a,'addk'); echo $a[0],$a[1],$a[2];"),
+            b"102132"
         );
     }
 }

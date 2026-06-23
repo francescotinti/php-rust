@@ -672,6 +672,11 @@ pub struct Func {
     /// parallel to `param_names`. The run-time named binder validates that every
     /// required parameter received an argument (raising `ArgumentCountError`).
     pub param_required: Box<[bool]>,
+    /// Whether each formal parameter is declared by-reference (`&$x`), parallel to
+    /// `param_names`. Read at run time when the callee isn't known at compile time
+    /// — `array_walk` (Session C) passes the element by reference only when the
+    /// callback's first parameter is by-reference, so element mutations propagate.
+    pub param_by_ref: Box<[bool]>,
     /// The slot of a trailing `...$rest` variadic parameter (PAR), or `None`.
     /// When set, the call binder fills slots `0..variadic_slot` from the leading
     /// arguments and collects every remaining argument into an array in this

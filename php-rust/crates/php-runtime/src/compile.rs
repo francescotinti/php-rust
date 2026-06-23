@@ -184,6 +184,7 @@ fn compile_body(
             .iter()
             .map(|p| p.default.is_none() && !p.variadic)
             .collect(),
+        param_by_ref: params.iter().map(|p| p.by_ref).collect(),
         variadic_slot: params.iter().find(|p| p.variadic).map(|p| p.slot),
         by_ref,
         is_generator,
@@ -218,6 +219,7 @@ fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
             .iter()
             .map(|p| p.default.is_none() && !p.variadic)
             .collect(),
+        param_by_ref: fd.params.iter().map(|p| p.by_ref).collect(),
         variadic_slot: fd.params.iter().find(|p| p.variadic).map(|p| p.slot),
         by_ref: fd.by_ref,
         is_generator: fd.is_generator,
@@ -420,6 +422,7 @@ fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassI
         n_params: 0,
         param_names: Box::default(),
         param_required: Box::default(),
+        param_by_ref: Box::default(),
         variadic_slot: None,
         by_ref: false,
         is_generator: false,
@@ -443,6 +446,7 @@ fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, decl_class: 
         n_params: 0,
         param_names: Box::default(),
         param_required: Box::default(),
+        param_by_ref: Box::default(),
         variadic_slot: None,
         by_ref: false,
         is_generator: false,
@@ -464,6 +468,7 @@ fn const_stub(name: &[u8], err: &CompileError) -> Func {
         n_params: 0,
         param_names: Box::default(),
         param_required: Box::default(),
+        param_by_ref: Box::default(),
         variadic_slot: None,
         by_ref: false,
         is_generator: false,
