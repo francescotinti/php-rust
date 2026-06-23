@@ -2089,6 +2089,8 @@ impl<'m> Vm<'m> {
             b"fopen" => self.ho_fopen(args),
             b"tmpfile" => self.ho_tmpfile(),
             b"opendir" => self.ho_opendir(args),
+            b"preg_replace" => self.ho_preg_replace(args),
+            b"preg_quote" => self.ho_preg_quote(args),
             b"preg_replace_callback" => self.ho_preg_replace_callback(args),
             _ => Err(undefined_builtin(name)),
         }
@@ -2617,6 +2619,48 @@ impl<'m> Vm<'m> {
         }
         out.extend_from_slice(&bytes[last..]);
         Ok(Zval::Str(PhpStr::new(out)))
+    }
+
+    /// `preg_replace($pattern, $replacement, $subject)`: backreferences `$1`/`${1}`/
+    /// `\1` in the replacement are honoured. Returns `null` on a bad pattern. Single
+    /// scalar pattern/subject (array forms are a scope-out). Mirrors
+    /// `eval::ho_preg_replace` on the shared `crate::preg` engine.
+    fn ho_preg_replace(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if args.len() < 3 {
+            return Err(PhpError::ArgumentCountError(
+                "preg_replace() expects at least 3 arguments".to_string(),
+            ));
+        }
+        let pat = convert::to_zstr_cast(&args[0].deref_clone(), &mut self.diags).as_bytes().to_vec();
+        let repl = convert::to_zstr_cast(&args[1].deref_clone(), &mut self.diags).as_bytes().to_vec();
+        let subject =
+            convert::to_zstr_cast(&args[2].deref_clone(), &mut self.diags).as_bytes().to_vec();
+        let Some(re) = crate::preg::compile(&pat) else {
+            return Ok(Zval::Null);
+        };
+        let repl = String::from_utf8_lossy(&crate::preg::translate_replacement(&repl)).into_owned();
+        let subj = String::from_utf8_lossy(&subject);
+        let result = re.replace_all(&subj, repl.as_str());
+        Ok(Zval::Str(PhpStr::new(result.as_bytes().to_vec())))
+    }
+
+    /// `preg_quote($str, $delimiter = null)`: escape regex metacharacters (and the
+    /// optional delimiter). Mirrors `eval::ho_preg_quote` on `crate::preg::quote`.
+    fn ho_preg_quote(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(first) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "preg_quote() expects at least 1 argument, 0 given".to_string(),
+            ));
+        };
+        let s = convert::to_zstr_cast(&first.deref_clone(), &mut self.diags).as_bytes().to_vec();
+        let delim = match args.get(1) {
+            Some(a) => convert::to_zstr_cast(&a.deref_clone(), &mut self.diags)
+                .as_bytes()
+                .first()
+                .copied(),
+            None => None,
+        };
+        Ok(Zval::Str(PhpStr::new(crate::preg::quote(&s, delim))))
     }
 
     /// `error_reporting($level = null)` (Session 1): set the active reporting
@@ -3988,6 +4032,8 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"fopen",
         b"tmpfile",
         b"opendir",
+        b"preg_replace",
+        b"preg_quote",
         b"preg_replace_callback",
     ];
     HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
@@ -7916,6 +7962,35 @@ mod tests {
             "rendered: {}",
             String::from_utf8_lossy(&out.rendered)
         );
+    }
+
+    // ----- preg_replace / preg_quote (vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn preg_replace_basic_and_backref() {
+        assert_eq!(
+            vm_stdout(b"<?php echo preg_replace('/\\d+/', 'N', 'a1b22c333');"),
+            b"aNbNcN"
+        );
+        // Backreferences in the replacement ($2$1).
+        assert_eq!(
+            vm_stdout(b"<?php echo preg_replace('/(\\w)(\\d)/', '$2$1', 'a1b2');"),
+            b"1a2b"
+        );
+    }
+
+    #[test]
+    fn preg_replace_bad_pattern_is_null() {
+        assert_eq!(
+            vm_stdout(b"<?php echo preg_replace('/[/', 'x', 'abc') === null ? 'NULL' : '?';"),
+            b"NULL"
+        );
+    }
+
+    #[test]
+    fn preg_quote_escapes_metachars_and_delimiter() {
+        assert_eq!(vm_stdout(b"<?php echo preg_quote('a.b*c+');"), b"a\\.b\\*c\\+");
+        assert_eq!(vm_stdout(b"<?php echo preg_quote('a/b', '/');"), b"a\\/b");
     }
 
     // ----- Session B2a: get_class / get_parent_class (vs PHP 8.5.7 CLI) -----
