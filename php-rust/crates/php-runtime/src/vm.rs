@@ -2217,6 +2217,7 @@ impl<'m> Vm<'m> {
             b"error_reporting" => self.ho_error_reporting(args),
             b"trigger_error" | b"user_error" => self.ho_trigger_error(args),
             b"error_get_last" => self.ho_error_get_last(),
+            b"preg_replace_callback" => self.ho_preg_replace_callback(args),
             _ => Err(undefined_builtin(name)),
         }
     }
@@ -2700,6 +2701,50 @@ impl<'m> Vm<'m> {
                 "get_called_class() must be called from within a class".to_string(),
             )),
         }
+    }
+
+    /// `preg_replace_callback($pattern, $callback, $subject)` (Session 3): replace
+    /// each match of `pattern` in `subject` with the string returned by `callback`
+    /// (called with the match array). A single pattern/subject, mirroring
+    /// `eval::ho_preg_replace_callback`; the callback runs via `call_callable` and
+    /// its result is stringified (honouring `__toString`). An invalid pattern yields
+    /// null. The optional `limit`/`count` arguments are a scope-out.
+    fn ho_preg_replace_callback(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if args.len() < 3 {
+            return Err(PhpError::ArgumentCountError(
+                "preg_replace_callback() expects at least 3 arguments".to_string(),
+            ));
+        }
+        let pat = convert::to_zstr_cast(&args[0].deref_clone(), &mut self.diags).as_bytes().to_vec();
+        let callback = args[1].deref_clone();
+        let subject =
+            convert::to_zstr_cast(&args[2].deref_clone(), &mut self.diags).as_bytes().to_vec();
+        let Some(re) = crate::preg::compile(&pat) else {
+            return Ok(Zval::Null);
+        };
+        let subj = String::from_utf8_lossy(&subject).into_owned();
+        let bytes = subj.as_bytes().to_vec();
+        // Collect (range, match-array) up front so the regex borrow of `subj` ends
+        // before we re-enter the VM via the callback.
+        let hits: Vec<(usize, usize, Zval)> = re
+            .captures_iter(&subj)
+            .into_iter()
+            .map(|caps| {
+                let m0 = caps.get(0).expect("match has group 0");
+                (m0.start, m0.end, crate::eval::captures_array(&re, &caps, 0))
+            })
+            .collect();
+        let mut out: Vec<u8> = Vec::new();
+        let mut last = 0usize;
+        for (start, end, match_arr) in hits {
+            out.extend_from_slice(&bytes[last..start]);
+            let ret = self.call_callable(callback.clone(), vec![match_arr])?;
+            let rs = self.vm_stringify(&ret.deref_clone())?;
+            out.extend_from_slice(rs.as_bytes());
+            last = end;
+        }
+        out.extend_from_slice(&bytes[last..]);
+        Ok(Zval::Str(PhpStr::new(out)))
     }
 
     /// `error_reporting($level = null)` (Session 1): set the active reporting
@@ -4720,6 +4765,7 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"trigger_error",
         b"user_error",
         b"error_get_last",
+        b"preg_replace_callback",
     ];
     HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
 }
@@ -9331,6 +9377,32 @@ mod tests {
     #[test]
     fn error_get_last_null_when_none() {
         assert_eq!(vm_stdout(b"<?php echo (error_get_last()===null)?'N':'S';"), b"N");
+    }
+
+    // ----- Session 3: preg_replace_callback (vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn preg_replace_callback_wraps_matches() {
+        assert_eq!(
+            vm_stdout(b"<?php echo preg_replace_callback('/\\d+/', function($m){ return '['.$m[0].']'; }, 'a1b22c');"),
+            b"a[1]b[22]c"
+        );
+    }
+
+    #[test]
+    fn preg_replace_callback_uses_capture_groups() {
+        assert_eq!(
+            vm_stdout(b"<?php echo preg_replace_callback('/(\\w)(\\d)/', function($m){ return $m[2].$m[1]; }, 'x5y6');"),
+            b"5x6y"
+        );
+    }
+
+    #[test]
+    fn preg_replace_callback_no_match_is_unchanged() {
+        assert_eq!(
+            vm_stdout(b"<?php echo preg_replace_callback('/z/', fn($m)=>'!', 'abc');"),
+            b"abc"
+        );
     }
 }
 

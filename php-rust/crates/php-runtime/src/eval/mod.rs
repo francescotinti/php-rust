@@ -1511,7 +1511,11 @@ const PREG_SET_ORDER: i64 = 2;
 /// `PREG_OFFSET_CAPTURE` each value becomes a `[string, byte-offset]` pair; with
 /// `PREG_UNMATCHED_AS_NULL` unmatched groups are `null` and every group is kept,
 /// otherwise trailing unmatched groups are dropped.
-fn captures_array(re: &crate::preg::Engine, caps: &crate::preg::Caps, flags: i64) -> Zval {
+pub(crate) fn captures_array(
+    re: &crate::preg::Engine,
+    caps: &crate::preg::Caps,
+    flags: i64,
+) -> Zval {
     let offset = flags & PREG_OFFSET_CAPTURE != 0;
     let as_null = flags & PREG_UNMATCHED_AS_NULL != 0;
     let names = re.capture_names();
