@@ -737,6 +737,33 @@ impl<'m> Vm<'m> {
                     );
                     self.frames[top].slots[slot as usize] = Zval::Ref(cell);
                 }
+                Op::LoadGlobal(s) => {
+                    // `$GLOBALS['x']` read: the global lives in the script frame.
+                    let v = read_slot(&self.frames[0].slots[s as usize]);
+                    self.frames[top].stack.push(v);
+                }
+                Op::StoreGlobal(s) => {
+                    // `$GLOBALS['x'] = …`: write/create the global in the script frame.
+                    let v = self.frames[top].stack.pop().expect("StoreGlobal on empty stack");
+                    store_slot(&mut self.frames[0].slots[s as usize], v);
+                }
+                Op::IncDecGlobal { slot, inc, pre } => {
+                    let i = slot as usize;
+                    if matches!(self.frames[0].slots[i], Zval::Undef) {
+                        self.frames[0].slots[i] = Zval::Null;
+                    }
+                    let old = if pre { None } else { Some(self.frames[0].slots[i].clone()) };
+                    {
+                        let cell = &mut self.frames[0].slots[i];
+                        if inc {
+                            ops::increment(cell, &mut self.diags)?;
+                        } else {
+                            ops::decrement(cell, &mut self.diags)?;
+                        }
+                    }
+                    let pushed = old.unwrap_or_else(|| self.frames[0].slots[i].clone());
+                    self.frames[top].stack.push(pushed);
+                }
                 Op::PushUndef => {
                     self.frames[top].stack.push(Zval::Undef);
                 }
@@ -9053,6 +9080,20 @@ mod tests {
             vm_stdout(b"<?php function f($d){ static $n=0; $n++; if ($d>0) f($d-1); return $n; } echo f(3);"),
             b"4"
         );
+    }
+
+    #[test]
+    fn globals_superglobal_reads_writes_and_compounds_script_scope() {
+        // Create/write a global from inside a function, read it back outside.
+        assert_eq!(vm_stdout(b"<?php function f(){ $GLOBALS['n'] = 5; } f(); echo $n;"), b"5");
+        // Read an outer global from inside a function.
+        assert_eq!(vm_stdout(b"<?php $x=10; function f(){ echo $GLOBALS['x']; } f();"), b"10");
+        // Overwrite an existing global from inside a function.
+        assert_eq!(vm_stdout(b"<?php $x=3; function f(){ $GLOBALS['x'] = 8; } f(); echo $x;"), b"8");
+        // Compound assign through $GLOBALS.
+        assert_eq!(vm_stdout(b"<?php $x=1; function f(){ $GLOBALS['x'] += 4; } f(); echo $x;"), b"5");
+        // Top-level $GLOBALS write aliases the plain variable.
+        assert_eq!(vm_stdout(b"<?php $GLOBALS['x']=7; echo $x;"), b"7");
     }
 }
 

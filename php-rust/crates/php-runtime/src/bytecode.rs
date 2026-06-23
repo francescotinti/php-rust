@@ -160,6 +160,19 @@ pub enum Op {
     /// `[v] -> []` — pop and store into local `slot`. To use an assignment as an
     /// expression, the compiler emits [`Op::Dup`] before this.
     StoreSlot(Slot),
+
+    // ----- globals (`$GLOBALS['literal']`, addressed in the script frame) -----
+    /// `[] -> [v]` — push the value of global `slot` (a slot in the script/main
+    /// frame, `frames[0]`). The read form of `$GLOBALS['x']`, reachable from
+    /// inside a function (step 12-3). Follows a reference like [`Op::LoadSlot`].
+    LoadGlobal(Slot),
+    /// `[v] -> []` — pop and store into global `slot` (script frame). The write
+    /// form of `$GLOBALS['x'] = …`; creates/overwrites the global. As with
+    /// `StoreSlot`, the compiler emits [`Op::Dup`] first to value the assignment.
+    StoreGlobal(Slot),
+    /// `[] -> [v]` — `++`/`--` on global `slot` (`$GLOBALS['x']++`), pushing the
+    /// pre- or post-value. The global analogue of [`Op::IncDecSlot`].
+    IncDecGlobal { slot: Slot, inc: bool, pre: bool },
     /// Default-parameter prologue (PAR): if `slot` already holds an argument
     /// (it is not `Undef`), jump to `skip` (past the default); otherwise fall
     /// through to evaluate the default expression and `StoreSlot` it. Emitted at

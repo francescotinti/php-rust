@@ -939,6 +939,11 @@ impl<'a> FnCompiler<'a> {
             ExprKind::Var(slot) => {
                 self.emit(Op::LoadSlot(*slot));
             }
+            ExprKind::GlobalVar(slot) => {
+                // `$GLOBALS['x']` read — a resolved script-frame slot (step 12-3),
+                // reachable from inside a function.
+                self.emit(Op::LoadGlobal(*slot));
+            }
             ExprKind::Assign(slot, rhs) => {
                 self.expr(rhs)?;
                 self.emit(Op::Dup); // assignment is an expression valued by the RHS
@@ -2264,6 +2269,15 @@ impl<'a> FnCompiler<'a> {
             self.emit(Op::FieldAssign { base, steps: steps.into() });
             return Ok(());
         }
+        if let PlaceBase::Global(s) = place.base {
+            if place.steps.is_empty() {
+                // `$GLOBALS['x'] = rhs`: a direct global write (no array steps).
+                self.expr(rhs)?;
+                self.emit(Op::Dup);
+                self.emit(Op::StoreGlobal(s));
+                return Ok(());
+            }
+        }
         let base = dim_base(place)?;
         let (nkeys, append) = self.push_index_steps(&place.steps)?;
         if nkeys == 0 && !append {
@@ -2287,6 +2301,17 @@ impl<'a> FnCompiler<'a> {
             self.emit(Op::FieldAssignOp { base, steps: steps.into(), op });
             return Ok(());
         }
+        if let PlaceBase::Global(s) = place.base {
+            if place.steps.is_empty() {
+                // `$GLOBALS['x'] op= rhs`.
+                self.emit(Op::LoadGlobal(s));
+                self.expr(rhs)?;
+                self.emit(Op::Binary(op));
+                self.emit(Op::Dup);
+                self.emit(Op::StoreGlobal(s));
+                return Ok(());
+            }
+        }
         let base = dim_base(place)?;
         let (nkeys, append) = self.push_index_steps(&place.steps)?;
         if append || nkeys == 0 {
@@ -2307,6 +2332,13 @@ impl<'a> FnCompiler<'a> {
             let (base, steps) = self.field_path(place)?;
             self.emit(Op::FieldIncDec { base, steps: steps.into(), inc, pre });
             return Ok(());
+        }
+        if let PlaceBase::Global(s) = place.base {
+            if place.steps.is_empty() {
+                // `$GLOBALS['x']++` / `--$GLOBALS['x']`.
+                self.emit(Op::IncDecGlobal { slot: s, inc, pre });
+                return Ok(());
+            }
         }
         let base = dim_base(place)?;
         let (nkeys, append) = self.push_index_steps(&place.steps)?;
