@@ -215,6 +215,7 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         next_object_id: 1,
         next_resource_id: 5,
         static_props: HashMap::new(),
+        statics: vec![None; module.static_count],
         magic_guard: HashSet::new(),
         created: Vec::new(),
         destructed: HashSet::new(),
@@ -458,6 +459,12 @@ struct Vm<'m> {
     /// property name); lazily created on first access and shared for the run
     /// (OOP-2b), mirroring the tree-walker's `static_props`.
     static_props: HashMap<(ClassId, Vec<u8>), Rc<RefCell<Zval>>>,
+    /// Persistent storage for function `static $x` variables, indexed by the
+    /// program-global binding id (`Module::static_count` entries). A cell is
+    /// created on the first execution of its declaration and shared across all
+    /// later calls — and across recursion — so the variable accumulates. Mirrors
+    /// the tree-walker's `Evaluator::statics`.
+    statics: Vec<Option<Rc<RefCell<Zval>>>>,
     /// Active magic-accessor guards (object id, kind, property) — a magic method
     /// is not re-entered for the same access while it is running (OOP-3b).
     magic_guard: HashSet<(u32, MagicKind, Vec<u8>)>,
@@ -707,6 +714,28 @@ impl<'m> Vm<'m> {
                 Op::StoreSlot(s) => {
                     let v = self.frames[top].stack.pop().expect("StoreSlot on empty stack");
                     store_slot(&mut self.frames[top].slots[s as usize], v);
+                }
+                Op::StaticGuard { id, skip } => {
+                    // First execution of this `static` declaration falls through to
+                    // run the initialiser; every later one skips to the alias.
+                    if self.statics[id as usize].is_some() {
+                        self.frames[top].ip = skip as usize;
+                    }
+                }
+                Op::StaticStore { id } => {
+                    let v = self.frames[top].stack.pop().expect("StaticStore on empty stack");
+                    self.statics[id as usize] = Some(Rc::new(RefCell::new(v)));
+                }
+                Op::StaticAlias { slot, id } => {
+                    // Alias the local slot to the persistent cell: reads/writes of
+                    // the variable now go through it (the slot holds a `Zval::Ref`,
+                    // followed by `read_slot`/`store_slot` like any reference).
+                    let cell = Rc::clone(
+                        self.statics[id as usize]
+                            .as_ref()
+                            .expect("StaticAlias reached before its StaticStore"),
+                    );
+                    self.frames[top].slots[slot as usize] = Zval::Ref(cell);
                 }
                 Op::PushUndef => {
                     self.frames[top].stack.push(Zval::Undef);
@@ -9004,6 +9033,26 @@ mod tests {
             }
             other => panic!("expected depth-guard error, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn static_var_persists_accumulates_and_is_per_function() {
+        // Accumulates across calls.
+        assert_eq!(vm_stdout(b"<?php function f(){ static $n = 0; echo ++$n; } f(); f(); f();"), b"123");
+        // Per-function: f and g keep independent statics.
+        assert_eq!(
+            vm_stdout(b"<?php function f(){ static $n=0; echo ++$n; } function g(){ static $n=100; echo ++$n; } f(); g(); f();"),
+            b"11012"
+        );
+        // Multiple bindings in one declaration.
+        assert_eq!(vm_stdout(b"<?php function f(){ static $a=1, $b=2; echo $a+$b; $a++; $b++; } f(); f();"), b"35");
+        // No initialiser: null on first call, then persists.
+        assert_eq!(vm_stdout(b"<?php function f(){ static $a; echo $a===null?'Y':'N'; $a=1; } f(); f();"), b"YN");
+        // Shared across recursion (same cell at every depth).
+        assert_eq!(
+            vm_stdout(b"<?php function f($d){ static $n=0; $n++; if ($d>0) f($d-1); return $n; } echo f(3);"),
+            b"4"
+        );
     }
 }
 

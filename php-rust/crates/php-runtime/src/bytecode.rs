@@ -186,6 +186,19 @@ pub enum Op {
     /// References into array elements / properties (`$x = &$a[0]`) are REF-4.
     BindRef { target: DimBase, source: DimBase },
 
+    /// `static $v = init;` first half (step 15 / VM port): if the program-global
+    /// static cell `id` already exists, jump past the initialiser to `skip` (the
+    /// matching [`Op::StaticAlias`]); otherwise fall through to run the
+    /// initialiser once. `id` indexes `Vm::statics` (sized by `Module::static_count`).
+    StaticGuard { id: u32, skip: Addr },
+    /// `[init] -> []` — pop the just-evaluated initialiser and store it as static
+    /// cell `id`'s first (and only) value. Reached only on the first execution.
+    StaticStore { id: u32 },
+    /// `[] -> []` — alias local `slot` to static cell `id` (`slot = Ref(cell)`), so
+    /// reads/writes of the variable go through the persistent cell. Runs on every
+    /// call (after the guard), giving `static $x` its cross-call persistence.
+    StaticAlias { slot: Slot, id: u32 },
+
     /// `[] -> [ref]` — push a [`Zval::Ref`] aliasing local `slot`, promoting the
     /// slot to a shared cell on first use (REF-2). The call mechanism binds this
     /// value into a by-reference parameter's callee slot, so the callee writes
@@ -896,4 +909,8 @@ pub struct Module {
     /// error's prelude class (`TypeError`, `DivisionByZeroError`, …) so the
     /// matching Throwable can be synthesized and offered to a `catch` (EXC-3a).
     pub class_index: HashMap<Vec<u8>, ClassId>,
+    /// Number of `static $x` bindings in the whole program (`id` space), used to
+    /// size the VM's persistent `statics` storage. Carried from
+    /// [`crate::hir::Program::static_count`].
+    pub static_count: usize,
 }

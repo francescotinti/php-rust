@@ -118,6 +118,7 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
         classes,
         file: program.file.clone(),
         class_index,
+        static_count: program.static_count,
     })
 }
 
@@ -810,6 +811,28 @@ impl<'a> FnCompiler<'a> {
                         });
                         self.emit(Op::Pop); // statement: drop the BindRef value
                     }
+                }
+            }
+            StmtKind::StaticVar(bindings) => {
+                // `static $a = init, …` (step 15 VM port): per binding, guard the
+                // one-time initialiser behind the persistent cell's existence, then
+                // alias the local slot to that cell on every call. `id` is the
+                // program-global static index; sharing it across calls (and across
+                // recursion) gives `static` its persistence.
+                for b in bindings {
+                    let id = b.id as u32;
+                    let guard = self.emit(Op::StaticGuard { id, skip: Addr::MAX });
+                    match &b.init {
+                        Some(e) => self.expr(e)?,
+                        None => {
+                            let null = self.konst(Const::Null);
+                            self.emit(Op::PushConst(null));
+                        }
+                    }
+                    self.emit(Op::StaticStore { id });
+                    let alias = self.here();
+                    self.patch(guard, Op::StaticGuard { id, skip: alias });
+                    self.emit(Op::StaticAlias { slot: b.slot, id });
                 }
             }
             other => return Err(CompileError::Unsupported(stmt_name(other))),
