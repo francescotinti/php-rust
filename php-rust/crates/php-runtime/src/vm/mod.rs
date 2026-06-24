@@ -241,6 +241,7 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         iterator_id: module.class_index.get(&b"iterator"[..]).copied(),
         iteratoraggregate_id: module.class_index.get(&b"iteratoraggregate"[..]).copied(),
         countable_id: module.class_index.get(&b"countable"[..]).copied(),
+        jsonserializable_id: module.class_index.get(&b"jsonserializable"[..]).copied(),
         enum_cache: HashMap::new(),
         constants: HashMap::new(),
         mb_regex: crate::mbregex::MbRegexState::default(),
@@ -595,6 +596,9 @@ struct Vm<'m> {
     /// The `Countable` interface id, so `count($obj)`/`sizeof($obj)` dispatches
     /// the user `count()` method instead of erroring (step 56).
     countable_id: Option<ClassId>,
+    /// The `JsonSerializable` interface id, so `json_encode()` calls a value's
+    /// `jsonSerialize()` method instead of encoding its properties (step 56c).
+    jsonserializable_id: Option<ClassId>,
     /// Interned enum case singletons, keyed by (enum class id, case index), so
     /// `E::Case === E::Case` (Session A). Materialised lazily on first `E::Case`.
     enum_cache: HashMap<(ClassId, u32), Rc<RefCell<Object>>>,
@@ -3082,6 +3086,58 @@ impl<'m> Vm<'m> {
         self.spread_pairs(src)
     }
 
+    /// `json_encode($value, $flags = 0)` (step 56c): first normalise the value so
+    /// every `JsonSerializable` object is replaced by its `jsonSerialize()` result
+    /// (recursively), then hand off to the pure registry encoder which formats the
+    /// now-method-free value. Keeps the JSON-formatting logic in one place.
+    fn ho_json_encode(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let value = args.first().cloned().unwrap_or(Zval::Null);
+        let normalized = self.json_normalize(value)?;
+        let f = match self.registry.get(&b"json_encode"[..]) {
+            Some(Builtin::Value(f)) => *f,
+            _ => return Err(PhpError::Error("json_encode builtin unavailable".to_string())),
+        };
+        let mut call_args = vec![normalized];
+        if let Some(flags) = args.get(1) {
+            call_args.push(flags.clone());
+        }
+        let line = self.cur_line(self.frames.len() - 1);
+        self.run_value_builtin(f, &call_args, line)
+    }
+
+    /// Recursively replace `JsonSerializable` objects with their `jsonSerialize()`
+    /// return (itself normalised, so a returned JsonSerializable resolves too) and
+    /// normalise array elements. A plain object is left untouched for the pure
+    /// encoder to serialise by properties (step 56c).
+    fn json_normalize(&mut self, v: Zval) -> Result<Zval, PhpError> {
+        match v {
+            Zval::Ref(r) => {
+                let inner = r.borrow().deref_clone();
+                self.json_normalize(inner)
+            }
+            Zval::Object(_) => {
+                let cid = object_class_id(&v).expect("object has a class id");
+                if self.jsonserializable_id.is_some_and(|j| is_instance_of(self.module, cid, j)) {
+                    let r = self.call_method_sync(v, b"jsonSerialize", Vec::new())?;
+                    self.json_normalize(r)
+                } else {
+                    Ok(v)
+                }
+            }
+            Zval::Array(a) => {
+                let entries: Vec<(Key, Zval)> =
+                    a.iter().map(|(k, val)| (k.clone(), val.deref_clone())).collect();
+                let mut out = PhpArray::new();
+                for (k, val) in entries {
+                    let nv = self.json_normalize(val)?;
+                    out.insert(k, nv);
+                }
+                Ok(Zval::Array(Rc::new(out)))
+            }
+            other => Ok(other),
+        }
+    }
+
     /// Issue one object-iterator protocol call from `IterNext`: advance the active
     /// `IterState::Object` to `next` stage, rewind the loop frame's `ip` so
     /// `IterNext` re-runs once the call returns, and enter the method (step 51).
@@ -3158,6 +3214,7 @@ impl<'m> Vm<'m> {
             b"call_user_func_array" => self.ho_call_user_func_array(args),
             b"iterator_to_array" => self.ho_iterator_to_array(args),
             b"iterator_count" => self.ho_iterator_count(args),
+            b"json_encode" => self.ho_json_encode(args),
             b"is_callable" => self.ho_is_callable(args),
             b"define" => self.ho_define(args),
             b"defined" => self.ho_defined(args),
@@ -6163,6 +6220,7 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"mb_ereg_search_setpos",
         b"iterator_to_array",
         b"iterator_count",
+        b"json_encode",
     ];
     HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
 }
