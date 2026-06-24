@@ -756,6 +756,20 @@ struct Lowerer<'f> {
     use_classes: HashMap<Vec<u8>, Vec<u8>>,
     use_functions: HashMap<Vec<u8>, Vec<u8>>,
     use_consts: HashMap<Vec<u8>, Vec<u8>>,
+    /// Constructor-promoted parameters collected by the most recent `lower_params`
+    /// call (PHP 8 property promotion). The owning method (`__construct`) drains
+    /// this immediately after the param list is lowered — before the body, which
+    /// may itself contain nested param lists that overwrite it — to both declare
+    /// the instance properties and prepend `$this->p = $p` assignments.
+    promoted: Vec<PromotedParam>,
+}
+
+/// One constructor-promoted parameter: its property name, declared visibility, and
+/// the parameter slot the prologue assignment reads from.
+struct PromotedParam {
+    name: Box<[u8]>,
+    visibility: Visibility,
+    slot: Slot,
 }
 
 /// A trait whose members have been lowered and whose own `use` clauses have been
@@ -796,6 +810,7 @@ impl<'f> Lowerer<'f> {
             use_classes: HashMap::new(),
             use_functions: HashMap::new(),
             use_consts: HashMap::new(),
+            promoted: Vec::new(),
         }
     }
 

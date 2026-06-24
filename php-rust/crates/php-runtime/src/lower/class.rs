@@ -11,8 +11,8 @@ use mago_syntax::ast::{
 };
 
 use crate::hir::{
-    Capture, ClassDecl, ExprKind, FnDecl, Line, MethodDecl, Param,
-    PropDecl, Slot, Stmt, StmtKind, TypeHint,
+    Capture, ClassDecl, Expr, ExprKind, FnDecl, Line, MethodDecl, Param,
+    Place, PlaceBase, PlaceStep, PropDecl, Slot, Stmt, StmtKind, TypeHint,
     Visibility,
 };
 
@@ -87,7 +87,9 @@ impl<'f> Lowerer<'f> {
                 ClassLikeMember::Method(m) if matches!(m.body, MethodBody::Abstract(_)) => {
                     abstract_methods.push(m.name.value.into())
                 }
-                ClassLikeMember::Method(m) => methods.push(self.lower_method(m, line)?),
+                ClassLikeMember::Method(m) => {
+                    methods.push(self.lower_method(m, line, &mut props)?)
+                }
                 ClassLikeMember::Constant(c) => self.lower_class_const(c, &mut consts)?,
                 ClassLikeMember::TraitUse(u) => uses.push(u),
                 _ => {
@@ -446,7 +448,9 @@ impl<'f> Lowerer<'f> {
                 ClassLikeMember::Method(m) if matches!(m.body, MethodBody::Abstract(_)) => {
                     abstract_req.push(m.name.value.into())
                 }
-                ClassLikeMember::Method(m) => methods.push(self.lower_method(m, line)?),
+                ClassLikeMember::Method(m) => {
+                    methods.push(self.lower_method(m, line, &mut props)?)
+                }
                 ClassLikeMember::Constant(c) => self.lower_class_const(c, &mut consts)?,
                 ClassLikeMember::TraitUse(u) => uses.push(u),
                 _ => {
@@ -583,7 +587,10 @@ impl<'f> Lowerer<'f> {
                 ClassLikeMember::Method(m) if matches!(m.body, MethodBody::Abstract(_)) => {
                     abstract_req.push(m.name.value.into())
                 }
-                ClassLikeMember::Method(m) => methods.push(self.lower_method(m, line)?),
+                ClassLikeMember::Method(m) => {
+                    // Enums have no instance properties, so promotion cannot occur.
+                    methods.push(self.lower_method(m, line, &mut Vec::new())?)
+                }
                 ClassLikeMember::Constant(c) => self.lower_class_const(c, &mut consts)?,
                 ClassLikeMember::TraitUse(u) => uses.push(u),
                 // Enums may not declare properties (PHP fatal); we reject them.
@@ -707,7 +714,12 @@ impl<'f> Lowerer<'f> {
     /// (step 19-1, D-19.5). The body is lowered in a fresh local scope just like
     /// a free function; `$this` is read via [`ExprKind::This`], not a slot.
     /// Static and abstract methods are deferred to later sub-steps.
-    fn lower_method(&mut self, method: &Method, class_line: Line) -> Result<MethodDecl, LowerError> {
+    fn lower_method(
+        &mut self,
+        method: &Method,
+        class_line: Line,
+        props: &mut Vec<PropDecl>,
+    ) -> Result<MethodDecl, LowerError> {
         let line = self.line_of(method.span());
         let is_static = method.modifiers.iter().any(|m| m.is_static());
         let body = match &method.body {
@@ -734,8 +746,32 @@ impl<'f> Lowerer<'f> {
 
         let inner = (|| {
             let params = self.lower_params(&method.parameter_list, line)?;
-            let body = self.lower_stmts(body.statements.as_slice())?;
-            Ok::<_, LowerError>((params, body))
+            // Constructor property promotion: drain the promoted parameters now
+            // (before the body, whose nested param lists would overwrite them),
+            // declare each as an instance property, and prepend `$this->p = $p`.
+            let promoted = std::mem::take(&mut self.promoted);
+            let mut body = self.lower_stmts(body.statements.as_slice())?;
+            if !promoted.is_empty() {
+                let mut prologue: Vec<Stmt> = Vec::with_capacity(promoted.len());
+                for p in &promoted {
+                    prologue.push(Stmt {
+                        line,
+                        kind: StmtKind::Expr(Expr {
+                            line,
+                            kind: ExprKind::AssignPlace(
+                                Place {
+                                    base: PlaceBase::This,
+                                    steps: vec![PlaceStep::Prop(p.name.clone())],
+                                },
+                                Box::new(Expr { line, kind: ExprKind::Var(p.slot) }),
+                            ),
+                        }),
+                    });
+                }
+                prologue.append(&mut body);
+                body = prologue;
+            }
+            Ok::<_, LowerError>((params, body, promoted))
         })();
 
         let local_scope = std::mem::replace(&mut self.locals, saved_locals)
@@ -745,7 +781,16 @@ impl<'f> Lowerer<'f> {
         self.cur_function = saved_fn;
         let is_generator = std::mem::replace(&mut self.fn_saw_yield, saved_saw_yield);
 
-        let (params, body) = inner?;
+        let (params, body, promoted) = inner?;
+        // Surface the promoted properties to the class (declared at the
+        // constructor's position among members → correct dump order).
+        for p in promoted {
+            props.push(PropDecl {
+                name: p.name,
+                visibility: p.visibility,
+                default: None,
+            });
+        }
         validate_goto(&body)?; // step 45: function-scoped goto/label check
         let ret_hint = method
             .return_type_hint
@@ -871,19 +916,25 @@ impl<'f> Lowerer<'f> {
     fn lower_params(
         &mut self,
         plist: &FunctionLikeParameterList,
-        line: Line,
+        _line: Line,
     ) -> Result<Vec<Param>, LowerError> {
+        // Reset the promoted-parameter accumulator for this parameter list; the
+        // owning `__construct` drains it right after this call (property promotion).
+        self.promoted.clear();
         let mut params = Vec::new();
         for p in plist.parameters.iter() {
             let by_ref = p.ampersand.is_some();
             let variadic = p.ellipsis.is_some();
+            let slot = self.slot_for(strip_dollar(p.variable.name));
             if p.is_promoted_property() {
-                return Err(LowerError::Unsupported {
-                    what: "promoted constructor property",
-                    line,
+                // `public int $x` in a constructor: still a real parameter, but it
+                // also declares an instance property assigned from the param.
+                self.promoted.push(PromotedParam {
+                    name: strip_dollar(p.variable.name).into(),
+                    visibility: visibility_of(p.modifiers.iter()),
+                    slot,
                 });
             }
-            let slot = self.slot_for(strip_dollar(p.variable.name));
             let default = match &p.default_value {
                 Some(d) => Some(self.lower_expr(d.value)?),
                 None => None,
