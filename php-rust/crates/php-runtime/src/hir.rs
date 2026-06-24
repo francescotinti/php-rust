@@ -467,10 +467,17 @@ pub enum ExprKind {
     Float(f64),
     Str(Box<[u8]>),
 
-    /// A bare `NAME` constant the lowerer could not fold to an engine constant
+    /// A `NAME` constant the lowerer could not fold to an engine constant
     /// (step 49c): resolved at runtime against `define()`'d constants, falling
-    /// back to an "Undefined constant" `Error` like PHP 8.
-    Const(Box<[u8]>),
+    /// back to an "Undefined constant" `Error` like PHP 8. `fallback` is the
+    /// global name an unqualified constant used inside a namespace falls back to
+    /// (`Foo\BAR` → `Some(BAR)`, step 50); `None` for already-global / explicitly
+    /// qualified names. The primary `name` is what an "Undefined constant" error
+    /// reports, matching PHP's namespaced lookup.
+    Const {
+        name: Box<[u8]>,
+        fallback: Option<Box<[u8]>>,
+    },
 
     /// `$x` — read of a resolved (local-frame) variable slot.
     Var(Slot),

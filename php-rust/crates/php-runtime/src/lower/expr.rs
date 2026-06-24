@@ -240,13 +240,18 @@ impl<'f> Lowerer<'f> {
             // here (D-18.7); any other name becomes a runtime `Const` read,
             // resolved against `define()`'d constants at eval time (step 49c).
             Expression::ConstantAccess(ca) => {
-                // Resolve namespace context: unqualified / fully-qualified names fold
-                // engine constants (`true`/`PHP_INT_MAX`/… — global, case-insensitive
-                // for the language ones); a namespaced `Ns\C` stays a runtime read.
-                let name = self.resolve_const_name(&ca.name);
-                match resolve_constant(&name) {
-                    Some(kind) => kind,
-                    None => ExprKind::Const(name),
+                // Engine constants (`true`/`PHP_INT_MAX`/…) fold here, on the bare
+                // last segment so they resolve regardless of the current namespace
+                // (they are global, case-insensitive for the language ones).
+                if let Some(kind) = resolve_constant(bare_last_segment(&ca.name)) {
+                    kind
+                } else {
+                    // Otherwise a runtime read. An *unqualified* name inside a
+                    // namespace resolves to `CURNS\NAME`, falling back to the global
+                    // `NAME` (step 50); the namespaced name is what an "Undefined
+                    // constant" error reports, like PHP.
+                    let (name, fallback) = self.resolve_const_fetch(&ca.name);
+                    ExprKind::Const { name, fallback }
                 }
             }
 

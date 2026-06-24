@@ -856,18 +856,24 @@ impl<'f> Lowerer<'f> {
         }
     }
 
-    /// Resolve a constant-fetch name. Like functions, an unqualified name falls
-    /// back to global (we don't yet declare namespaced constants, so the global /
-    /// engine constant is what resolves at runtime). Qualified/FQ forms keep their
-    /// path so an explicit `\Ns\C` looks up that exact key.
-    fn resolve_const_name(&self, id: &Identifier) -> Box<[u8]> {
+    /// Resolve a constant fetch to its primary name plus an optional global
+    /// fallback. An *unqualified* constant inside a namespace primarily names
+    /// `CURNS\NAME` and falls back to the global `NAME` (PHP tries the namespaced
+    /// constant first, then global). Qualified / fully-qualified / imported and
+    /// global-scope names resolve to a single name with no fallback.
+    fn resolve_const_fetch(&self, id: &Identifier) -> (Box<[u8]>, Option<Box<[u8]>>) {
         match id {
-            Identifier::FullyQualified(f) => strip_leading_backslash(f.value).into(),
-            Identifier::Qualified(q) => self.resolve_qualified(q.value),
-            Identifier::Local(l) => match self.use_consts.get(&l.value.to_ascii_lowercase()) {
-                Some(fqn) => fqn.clone().into(),
-                None => l.value.into(), // unqualified → global fallback
-            },
+            Identifier::FullyQualified(f) => (strip_leading_backslash(f.value).into(), None),
+            Identifier::Qualified(q) => (self.resolve_qualified(q.value), None),
+            Identifier::Local(l) => {
+                if let Some(fqn) = self.use_consts.get(&l.value.to_ascii_lowercase()) {
+                    (fqn.clone().into(), None)
+                } else if self.cur_namespace.is_empty() {
+                    (l.value.into(), None)
+                } else {
+                    (join_ns(&self.cur_namespace, l.value), Some(l.value.into()))
+                }
+            }
         }
     }
 

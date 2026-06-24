@@ -776,14 +776,22 @@ impl<'m> Vm<'m> {
                     let v = self.frames[top].func.consts[i as usize].to_zval();
                     self.frames[top].stack.push(v);
                 }
-                Op::ConstFetch { name } => {
+                Op::ConstFetch { name, fallback } => {
                     // A user constant (B3): engine constants were folded at lowering.
-                    let v = self.constants.get(&name[..]).cloned().ok_or_else(|| {
-                        PhpError::Error(format!(
-                            "Undefined constant \"{}\"",
-                            String::from_utf8_lossy(&name)
-                        ))
-                    })?;
+                    // An unqualified constant inside a namespace is looked up as
+                    // `CURNS\NAME` first, then the global `NAME` (step 50); an
+                    // "Undefined constant" error reports the namespaced name.
+                    let v = self
+                        .constants
+                        .get(&name[..])
+                        .or_else(|| fallback.as_ref().and_then(|g| self.constants.get(&g[..])))
+                        .cloned()
+                        .ok_or_else(|| {
+                            PhpError::Error(format!(
+                                "Undefined constant \"{}\"",
+                                String::from_utf8_lossy(&name)
+                            ))
+                        })?;
                     self.frames[top].stack.push(v);
                 }
                 Op::Pop => {

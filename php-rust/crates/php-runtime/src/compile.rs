@@ -1220,10 +1220,14 @@ impl<'a> FnCompiler<'a> {
                 let k = self.konst(Const::Str(s.clone()));
                 self.emit(Op::PushConst(k));
             }
-            ExprKind::Const(name) => {
+            ExprKind::Const { name, fallback } => {
                 // A *user* constant (engine constants are folded at lowering): read
-                // it from the VM's constant table at run time (B3).
-                self.emit(Op::ConstFetch { name: name.clone() });
+                // it from the VM's constant table at run time (B3). `fallback` is
+                // the global name a namespaced unqualified constant falls back to.
+                self.emit(Op::ConstFetch {
+                    name: name.clone(),
+                    fallback: fallback.clone(),
+                });
             }
             ExprKind::Var(slot) => {
                 // A source-level read warns on an undefined slot (PHP 8). The bare
@@ -3158,7 +3162,7 @@ fn expr_name(k: &ExprKind) -> String {
         ExprKind::Int(_) => "Int",
         ExprKind::Float(_) => "Float",
         ExprKind::Str(_) => "Str",
-        ExprKind::Const(_) => "Const",
+        ExprKind::Const { .. } => "Const",
         ExprKind::Var(_) => "Var",
         ExprKind::GlobalVar(_) => "GlobalVar",
         ExprKind::Binary(..) => "Binary",
