@@ -190,6 +190,7 @@ fn compile_body(
     // may reference earlier parameters.
     c.param_prologue(params)?;
     c.block(body)?;
+    c.resolve_gotos()?;
     // A body that runs off the end returns NULL (PHP's implicit return).
     let null = c.konst(Const::Null);
     c.emit(Op::PushConst(null));
@@ -637,6 +638,11 @@ struct FnCompiler<'a> {
     /// `continue` compiled while one is active is routed through the finally
     /// (parked, then a jump to the finally entry recorded for patching).
     finally_scopes: Vec<FinallyScope>,
+    /// Resolved `label:` positions in this function body (step 45), by name.
+    labels: HashMap<Vec<u8>, Addr>,
+    /// `goto` jump sites awaiting their label, patched once the whole body is
+    /// compiled (labels may be forward references).
+    pending_gotos: Vec<(Box<[u8]>, Addr)>,
 }
 
 /// One active `finally` block, while its protected body/catches are compiled
@@ -693,6 +699,8 @@ impl<'a> FnCompiler<'a> {
             n_temps_max: 0,
             exc_regions: Vec::new(),
             finally_scopes: Vec::new(),
+            labels: HashMap::new(),
+            pending_gotos: Vec::new(),
         }
     }
 
@@ -898,6 +906,18 @@ impl<'a> FnCompiler<'a> {
             }
             StmtKind::Break(n) => self.loop_jump(*n, true)?,
             StmtKind::Continue(n) => self.loop_jump(*n, false)?,
+            StmtKind::Label(name) => {
+                // `label:` (step 45) marks a jump target; the lowerer already
+                // validated that no `goto` jumps *into* a loop/switch/finally.
+                self.labels.insert(name.to_vec(), self.here());
+            }
+            StmtKind::Goto(name) => {
+                // Unconditional jump to a (possibly forward) label, patched once
+                // the whole body is compiled. A `goto` crossing a finally is still
+                // rejected by `try_stmt` (it routes through `stmts_have_goto`).
+                let site = self.emit(Op::Jump(Addr::MAX));
+                self.pending_gotos.push((name.clone(), site));
+            }
             StmtKind::Return(opt) => {
                 // A plain `return <expr>;` (or bare `return;`) inside a `function
                 // &f()` means the operand is a non-lvalue: PHP raises a notice and
@@ -987,7 +1007,6 @@ impl<'a> FnCompiler<'a> {
                     self.emit(Op::StaticAlias { slot: b.slot, id });
                 }
             }
-            other => return Err(CompileError::Unsupported(stmt_name(other))),
         }
         Ok(())
     }
@@ -1018,6 +1037,25 @@ impl<'a> FnCompiler<'a> {
         }
         self.expr(last)?;
         Ok(Some(self.emit(Op::JumpIfFalse(Addr::MAX))))
+    }
+
+    /// Patch every `goto` jump site to its label position, once the whole body is
+    /// compiled (labels may be forward references). An unknown label should have
+    /// been caught at lowering, but is surfaced defensively (step 45).
+    fn resolve_gotos(&mut self) -> R<()> {
+        let gotos = std::mem::take(&mut self.pending_gotos);
+        for (name, site) in gotos {
+            match self.labels.get(name.as_ref()) {
+                Some(&target) => self.patch(site, Op::Jump(target)),
+                None => {
+                    return Err(CompileError::Unsupported(format!(
+                        "goto to undefined label '{}'",
+                        String::from_utf8_lossy(&name)
+                    )))
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Pop the just-compiled loop and resolve its `break`/`continue` jump sites.
@@ -2422,11 +2460,11 @@ impl<'a> FnCompiler<'a> {
     fn try_stmt(&mut self, body: &[Stmt], catches: &[CatchClause], finally: &[Stmt]) -> R<()> {
         let has_finally = !finally.is_empty();
         // `return`/`break`/`continue` crossing a finally are handled (EXC-2b); a
-        // `goto` crossing one is still out of slice (rare, jump-table-shaped).
+        // `goto` in the body/catches that could cross the finally is still out of
+        // slice (rare). A `goto` confined to the *finally* body does not cross it,
+        // so it is allowed (compiled as a plain jump once the scope is popped).
         if has_finally
-            && (stmts_have_goto(body)
-                || catches.iter().any(|c| stmts_have_goto(&c.body))
-                || stmts_have_goto(finally))
+            && (stmts_have_goto(body) || catches.iter().any(|c| stmts_have_goto(&c.body)))
         {
             return Err(CompileError::Unsupported(
                 "try/finally with goto crossing the finally".into(),
@@ -3022,33 +3060,7 @@ fn ascii_eq_ignore_case(a: &[u8], b: &[u8]) -> bool {
             .all(|(x, y)| x.eq_ignore_ascii_case(y))
 }
 
-/// HIR statement-variant name, for [`CompileError::Unsupported`].
-fn stmt_name(k: &StmtKind) -> String {
-    let n = match k {
-        StmtKind::Echo(_) => "Echo",
-        StmtKind::InlineHtml(_) => "InlineHtml",
-        StmtKind::Expr(_) => "Expr",
-        StmtKind::Block(_) => "Block",
-        StmtKind::If { .. } => "If",
-        StmtKind::While { .. } => "While",
-        StmtKind::DoWhile { .. } => "DoWhile",
-        StmtKind::For { .. } => "For",
-        StmtKind::Foreach { .. } => "Foreach",
-        StmtKind::Switch { .. } => "Switch",
-        StmtKind::Unset(_) => "Unset",
-        StmtKind::Global(_) => "Global",
-        StmtKind::StaticVar(_) => "StaticVar",
-        StmtKind::Break(_) => "Break",
-        StmtKind::Continue(_) => "Continue",
-        StmtKind::Return(_) => "Return",
-        StmtKind::ReturnRef(_) => "ReturnRef",
-        StmtKind::Try { .. } => "Try",
-        StmtKind::Label(_) => "Label",
-        StmtKind::Goto(_) => "Goto",
-        StmtKind::Nop => "Nop",
-    };
-    format!("statement {n}")
-}
+
 
 /// HIR expression-variant name, for [`CompileError::Unsupported`].
 fn expr_name(k: &ExprKind) -> String {

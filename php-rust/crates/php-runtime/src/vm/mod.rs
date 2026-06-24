@@ -5421,6 +5421,28 @@ mod tests {
     }
 
     #[test]
+    fn goto_forward_backward_and_out_of_loop() {
+        // Forward jump skips intervening statements.
+        assert_eq!(vm_stdout(b"<?php goto a; echo 'skip'; a: echo 'A';"), b"A");
+        // Backward jump is a hand-rolled loop.
+        assert_eq!(vm_stdout(b"<?php $i=0; loop: echo $i; $i++; if ($i<3) goto loop;"), b"012");
+        // Jump out of a (nested) loop lands on the label past it.
+        assert_eq!(
+            vm_stdout(b"<?php for ($i=0;$i<5;$i++) { if ($i==2) goto done; echo $i; } done: echo '|';"),
+            b"01|"
+        );
+    }
+
+    #[test]
+    fn goto_within_finally_is_allowed() {
+        // A goto whose label is in the same finally body does not cross it.
+        assert_eq!(
+            vm_stdout(b"<?php function f(){ try {} finally { goto t; t: } } f(); echo 'ok';"),
+            b"ok"
+        );
+    }
+
+    #[test]
     fn print_is_expression() {
         // `print` evaluates to int(1): "x" is printed, then 1 echoed.
         assert_eq!(vm_stdout(b"<?php echo print 'x';"), b"x1");
