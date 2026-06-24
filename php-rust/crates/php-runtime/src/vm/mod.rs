@@ -6009,6 +6009,20 @@ mod tests {
     }
 
     #[test]
+    fn undefined_function_is_runtime_fatal_after_output() {
+        // PHP defers "Call to undefined function" to run time: the preceding output
+        // is flushed, then a catchable Error is raised at the call site.
+        let o = vm_outcome(b"<?php echo 'a'; nope();");
+        assert_eq!(o.stdout, b"a");
+        match o.fatal {
+            Some(PhpError::Error(m)) => {
+                assert!(m.contains("Call to undefined function nope"), "message was: {m}")
+            }
+            other => panic!("expected undefined-function Error, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn mb_ereg_match_replace_and_search() {
         // mb_ereg with a by-ref $regs out-param: returns bool, fills $m.
         assert_eq!(
@@ -6383,12 +6397,19 @@ mod tests {
     }
 
     #[test]
-    fn unknown_function_is_unsupported_at_compile_time() {
-        // Not a user function and not in the registry -> the module won't compile
-        // for the VM (so the harness can fall back to the tree-walker).
+    fn unknown_function_is_runtime_fatal_not_compile_error() {
+        // An unknown name compiles (PHP defers "Call to undefined function" to run
+        // time, where it is a catchable Error — the function may be declared later).
         let program = lower_source(b"test.php", b"<?php echo no_such_fn();").expect("lower");
         let reg = fake_registry();
-        assert!(compile_program(&program, &reg).is_err());
+        let module = compile_program(&program, &reg).expect("compiles");
+        let out = run_module(&module, &reg);
+        match out.fatal {
+            Some(PhpError::Error(m)) => {
+                assert!(m.contains("Call to undefined function no_such_fn"), "message was: {m}")
+            }
+            other => panic!("expected undefined-function Error, got {other:?}"),
+        }
     }
 
     // --- switch ---
@@ -6667,12 +6688,12 @@ mod tests {
 
     #[test]
     fn run_source_with_reports_vm_unsupported() {
-        // `var_export` is still an evaluator-only host builtin the bytecode
-        // compiler rejects — surfaced as `VmRunError::Unsupported`, not a fatal.
-        // (`array_map`/`get_object_vars` are now VM-native, Sessions C/B2.)
+        // Named arguments on a (non-user) builtin call are still a compile-time gap,
+        // surfaced as `VmRunError::Unsupported`, not a fatal. (An *unknown* function
+        // name is no longer rejected — it defers to a run-time Error.)
         let reg = Registry::new();
-        let err = super::run_source_with(b"test.php", b"<?php var_export($x);", &reg)
-            .expect_err("vm should reject var_export");
+        let err = super::run_source_with(b"test.php", b"<?php array_map(callback: 'x', array: []);", &reg)
+            .expect_err("vm should reject named-arg builtin call");
         assert!(matches!(err, super::VmRunError::Unsupported(_)));
     }
 

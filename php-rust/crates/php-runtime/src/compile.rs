@@ -1767,10 +1767,24 @@ impl<'a> FnCompiler<'a> {
                 Ok(())
             }
             Some(Builtin::RefFirst(_)) => self.call_ref_builtin(name, args),
-            None => Err(CompileError::Unsupported(format!(
-                "call to `{}` (undefined, or an evaluator-only builtin: higher-order / class-introspection / define-family)",
-                String::from_utf8_lossy(name)
-            ))),
+            None => {
+                // An unknown name is NOT a compile error: PHP defers "Call to
+                // undefined function" to run time (the function may be declared
+                // conditionally, or be defined after this point). Push the name as a
+                // string callable and dispatch dynamically — `invoke_named` raises
+                // the catchable `Error` at the actual call site, after any output /
+                // argument side effects, matching the tree-walker.
+                if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
+                    return Err(CompileError::Unsupported("argument unpacking (spread)".into()));
+                }
+                let k = self.konst(Const::Str(name.into()));
+                self.emit(Op::PushConst(k));
+                for a in args {
+                    self.expr(a)?;
+                }
+                self.emit(Op::CallValue { argc: args.len() as u32 });
+                Ok(())
+            }
         }
     }
 
