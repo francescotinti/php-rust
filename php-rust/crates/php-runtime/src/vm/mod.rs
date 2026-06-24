@@ -5423,6 +5423,15 @@ mod tests {
     }
 
     #[test]
+    fn nested_append_autovivifies() {
+        // An intermediate `[]` autovivifies a fresh array and appends into it.
+        assert_eq!(vm_stdout(b"<?php $a[][] = 'z'; echo $a[0][0];"), b"z");
+        assert_eq!(vm_stdout(b"<?php $b[][][] = 'd'; echo $b[0][0][0];"), b"d");
+        // Mixed: index then append then index.
+        assert_eq!(vm_stdout(b"<?php $c['k'][]['x'] = 1; echo $c['k'][0]['x'];"), b"1");
+    }
+
+    #[test]
     fn nested_write_autovivifies_each_level() {
         assert_eq!(vm_stdout(b"<?php $a[1][2][3] = 5; echo $a[1][2][3];"), b"5");
     }

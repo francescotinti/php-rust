@@ -2481,18 +2481,17 @@ impl<'a> FnCompiler<'a> {
             PlaceBase::This => FieldBase::This,
         };
         let mut steps = Vec::with_capacity(place.steps.len());
-        let last = place.steps.len().saturating_sub(1);
-        for (i, step) in place.steps.iter().enumerate() {
+        for step in &place.steps {
             match step {
                 PlaceStep::Index(k) => {
                     self.expr(k)?;
                     steps.push(FieldStep::Index);
                 }
                 PlaceStep::Prop(name) => steps.push(FieldStep::Prop(name.clone())),
-                PlaceStep::Append if i == last => steps.push(FieldStep::Append),
-                PlaceStep::Append => {
-                    return Err(CompileError::Unsupported("`[]` is only valid as the last step".into()))
-                }
+                // `[]` autovivifies a fresh array and descends into it (the VM's
+                // `field_write` recurses through an appended child), so an
+                // intermediate `$a[][] = …` is valid here, not just as the last step.
+                PlaceStep::Append => steps.push(FieldStep::Append),
             }
         }
         Ok((base, steps))
@@ -2664,7 +2663,10 @@ impl<'a> FnCompiler<'a> {
             self.emit(Op::PropSet { name });
             return Ok(());
         }
-        if place_has_prop(place) {
+        // An object-property step, or an *intermediate* `[]` append (`$a[][] = …`),
+        // routes through the general field walker — `Op::AssignPath` only models a
+        // run of index keys plus an optional trailing append.
+        if place_has_prop(place) || place_has_intermediate_append(place) {
             let (base, steps) = self.field_path(place)?;
             self.expr(rhs)?;
             self.emit(Op::FieldAssign { base, steps: steps.into() });
@@ -2919,6 +2921,18 @@ impl<'a> FnCompiler<'a> {
 /// field-path opcodes (OOP-2c) rather than the array-only path opcodes.
 fn place_has_prop(place: &Place) -> bool {
     place.steps.iter().any(|s| matches!(s, PlaceStep::Prop(_)))
+}
+
+/// Whether a place has an `[]` append anywhere but the last step (`$a[][] = …`):
+/// the array-only `Op::AssignPath` can't express it, so it routes through the
+/// general field walker (which autovivifies through the appended child).
+fn place_has_intermediate_append(place: &Place) -> bool {
+    let last = place.steps.len().saturating_sub(1);
+    place
+        .steps
+        .iter()
+        .enumerate()
+        .any(|(i, s)| i != last && matches!(s, PlaceStep::Append))
 }
 
 /// Map a [`Place`]'s base to the VM's write-cell selector. Only a single-step
