@@ -21,7 +21,6 @@ impl<'m> Vm<'m> {
             cur_val: Zval::Null,
             ret: Zval::Null,
             auto_key: 0,
-            driver: None,
         })))
     }
 

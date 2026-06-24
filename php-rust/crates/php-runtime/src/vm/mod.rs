@@ -1,11 +1,11 @@
 //! Bytecode VM: the dispatch loop that executes a [`crate::bytecode::Module`]
 //! (VM-migration Fase 4, vertical proof slice).
 //!
-//! This is the eventual replacement for [`crate::eval`]'s tree-walk. Where the
-//! evaluator recurses over the HIR, the VM advances an explicit instruction
-//! pointer over a flat [`crate::bytecode::Op`] stream — the property that makes
-//! generators (park the `ip`) and non-structured control flow (`Jump`) ordinary
-//! instead of requiring a coroutine + `unsafe` reborrow.
+//! This replaced the original tree-walk. Where the tree-walker recursed over the
+//! HIR, the VM advances an explicit instruction pointer over a flat
+//! [`crate::bytecode::Op`] stream — the property that makes generators (park the
+//! `ip`) and non-structured control flow (`Jump`) ordinary instead of requiring a
+//! coroutine + `unsafe` reborrow.
 //!
 //! # Status: proof slice
 //!
@@ -42,8 +42,8 @@ use arrays::*;
 use calls::*;
 use oop::*;
 
-/// The result of running a [`Module`] — at parity with [`crate::eval::Outcome`]
-/// (E1), so the corpus harness can compare the two engines.
+/// The result of running a [`Module`]: the program's output streams plus an
+/// optional uncaught fatal. Re-exported as `php_runtime::Outcome`.
 #[derive(Debug)]
 pub struct VmOutcome {
     /// Pure program output (`echo` / `print` / builtins), diagnostics *not*
@@ -52,7 +52,7 @@ pub struct VmOutcome {
     /// CLI-faithful stream: `stdout` with diagnostics rendered inline at their
     /// point of occurrence and an uncaught fatal rendered at the tail, exactly as
     /// PHP's CLI SAPI emits them. This is what a `.phpt` `--EXPECT(F)--` section is
-    /// compared against (mirrors [`crate::eval::Outcome::rendered`]).
+    /// compared against.
     pub rendered: Vec<u8>,
     /// Non-fatal diagnostics raised during execution, in order.
     pub diags: Diags,
@@ -161,11 +161,10 @@ impl std::error::Error for VmRunError {}
 /// evaluator deep-recursion safety presumes a large worker stack.
 const MAX_CALL_DEPTH: usize = 25_000;
 
-/// Lower `source`, compile it to bytecode, and run it on the VM (E2) — the VM
-/// analogue of [`crate::eval::run_source_with`], so the corpus harness can drive
-/// either engine behind an `--engine` flag. A compile-time PHP `Fatal error:`
-/// (link-time, e.g. an abstract-method collision) becomes a rendered
-/// [`VmOutcome`] just as the evaluator does; a genuine lowering failure or a
+/// Lower `source`, compile it to bytecode, and run it on the VM (E2): the crate's
+/// production entry point, re-exported as `php_runtime::run_source_with`. A
+/// compile-time PHP `Fatal error:` (link-time, e.g. an abstract-method collision)
+/// becomes a rendered [`VmOutcome`]; a genuine lowering failure or a
 /// bytecode-compiler rejection is surfaced as [`VmRunError`].
 pub fn run_source_with(
     name: &[u8],
@@ -186,9 +185,8 @@ pub fn run_source_with(
     Ok(run_module(&module, registry))
 }
 
-/// Lower `source`, compile it, and run it on the VM with no builtins registered
-/// — the VM analogue of [`crate::eval::run_source`]. Convenience wrapper over
-/// [`run_source_with`] with an empty [`Registry`].
+/// Lower `source`, compile it, and run it on the VM with no builtins registered.
+/// Convenience wrapper over [`run_source_with`] with an empty [`Registry`].
 pub fn run_source(name: &[u8], source: &[u8]) -> Result<VmOutcome, VmRunError> {
     run_source_with(name, source, &Registry::new())
 }

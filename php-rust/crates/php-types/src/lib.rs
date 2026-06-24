@@ -16,7 +16,7 @@ mod zval;
 
 pub use array::{ArrayAppendError, Key, PhpArray};
 pub use diag::{Diag, Diags, PhpError};
-pub use generator::{GenDriver, GenKey, GenState, GenStatus, GenStep};
+pub use generator::{GenKey, GenState, GenStatus};
 pub use object::{Object, ObjectInfo, PropVis, Props};
 pub use stream::{
     open_file_stream, open_php_stream, DirHandle, ResKind, Resource, Stream, StreamBackend,

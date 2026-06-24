@@ -1,7 +1,7 @@
 //! HIR → bytecode compiler (VM-migration Fase 3, vertical proof slice).
 //!
-//! Where [`crate::eval`] `match`es on an [`crate::hir::ExprKind`] to *execute*
-//! it, this module `match`es to *emit* [`crate::bytecode::Op`]s. The two share
+//! Where the original tree-walker `match`ed on an [`crate::hir::ExprKind`] to
+//! *execute* it, this module `match`es to *emit* [`crate::bytecode::Op`]s, sharing
 //! the same source of truth (the HIR) and the same value semantics
 //! (`php_types::ops` / `convert`, invoked by the VM, not re-implemented here).
 //!

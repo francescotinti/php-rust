@@ -12,8 +12,4 @@ mago-span = "1.30"
 bumpalo = "3"
 regex = "1"
 fancy-regex = "0.14"
-# Stackful coroutines for generators (step 39, D-GEN-1). `Coroutine` requires
-# only `'static` (not `Send`), satisfied by owning the generator body as an
-# `Rc<FnDecl>` and reborrowing a lifetime-erased evaluator pointer.
-corosensei = "0.3"
 onig = "6.5.3"

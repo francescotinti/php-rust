@@ -5,14 +5,12 @@
 //! `getReturn()` value — lives here in [`GenState`], a plain data type owned by
 //! `php-types` so it can sit inside a [`crate::Zval`] variant.
 //!
-//! The actual *suspendable execution* (a stackful coroutine) lives behind the
-//! type-erased [`GenDriver`] trait, implemented in `php-runtime` (which owns the
-//! interpreter and the coroutine engine). `php-types` never names the evaluator
-//! or the coroutine crate: the driver receives a type-erased `*mut ()` evaluator
-//! pointer and hands back a [`GenStep`]. This keeps the crate layering intact
-//! (`php-types` depends on nothing interpreter-specific).
+//! The actual *suspendable execution* lives in `php-runtime`: the bytecode VM
+//! parks the generator's frame in its own table (keyed by the generator id) and
+//! resumes it on the explicit interpreter loop — no stackful coroutine and no
+//! `unsafe` reborrow. `php-types` therefore holds only the plain observable state.
 
-use crate::{PhpError, Zval};
+use crate::Zval;
 
 /// Run status of a generator (step 39).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,25 +40,6 @@ pub enum GenKey {
     Verbatim(Zval),
 }
 
-/// One step of generator execution, returned by [`GenDriver::resume`].
-pub enum GenStep {
-    /// The body suspended at a `yield`, producing this key/value.
-    Yielded { key: GenKey, value: Zval },
-    /// The body finished: `Ok` carries the `return` value (for `getReturn()`),
-    /// `Err` an exception that unwound out of the generator (surfaces at the
-    /// advancing call site).
-    Returned(Result<Zval, PhpError>),
-}
-
-/// Type-erased handle to a generator's suspendable execution. Implemented in
-/// `php-runtime`; the `ev` pointer is a lifetime-and-type-erased `*mut Evaluator`
-/// reborrowed inside. **Invariant:** never resume a generator that is already
-/// `Running` (the [`GenState::status`] guard enforces this), which also upholds
-/// the soundness of the reborrow (no aliasing of the evaluator).
-pub trait GenDriver {
-    fn resume(&mut self, sent: Zval, ev: *mut ()) -> GenStep;
-}
-
 /// The observable state of a `Generator` value (step 39). Shared via
 /// `Rc<RefCell<GenState>>` so a generator has object/handle semantics: assigning
 /// the variable aliases the same running generator.
@@ -84,14 +63,11 @@ pub struct GenState {
     pub ret: Zval,
     /// Next auto-key handed to a keyless `yield` (starts at 0).
     pub auto_key: i64,
-    /// The suspendable body. `Some` until the generator finishes, then dropped
-    /// (freeing the coroutine stack).
-    pub driver: Option<Box<dyn GenDriver>>,
 }
 
 impl std::fmt::Debug for GenState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // The driver holds a coroutine (not `Debug`); show only observable state.
+        // Show only observable state (the suspended frame lives in the VM's table).
         f.debug_struct("GenState")
             .field("id", &self.id)
             .field("status", &self.status)

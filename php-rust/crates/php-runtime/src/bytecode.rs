@@ -3,13 +3,14 @@
 //!
 //! # Why this exists
 //!
-//! Today the runtime *tree-walks* the [`crate::hir`] directly ([`crate::eval`]).
-//! That is correct but structurally hostile to suspendable / non-structured
-//! control flow: generators ride a stackful `corosensei` coroutine plus an
-//! `unsafe` `*mut Evaluator` reborrow, and `goto` / `break N` propagate signal
-//! enums up the Rust recursion. A flat instruction stream with an explicit
-//! instruction pointer makes all of that ordinary: a generator is a frame whose
-//! `ip` is parked at a `Yield`, a `goto` is a `Jump`.
+//! The runtime originally *tree-walked* the [`crate::hir`] directly. That was
+//! correct but structurally hostile to suspendable / non-structured control flow:
+//! generators rode a stackful `corosensei` coroutine plus an `unsafe`
+//! `*mut Evaluator` reborrow, and `goto` / `break N` propagated signal enums up
+//! the Rust recursion. A flat instruction stream with an explicit instruction
+//! pointer makes all of that ordinary: a generator is a frame whose `ip` is parked
+//! at a `Yield`, a `goto` is a `Jump`. The VM is now the sole engine — the
+//! tree-walker (and `corosensei`, and the `unsafe` reborrow) have been deleted.
 //!
 //! This module defines only the *instruction set* and the *program* it lives in.
 //! The compiler (HIR → bytecode) is `crate::compile`; the dispatch loop and the
@@ -73,7 +74,7 @@
 //! - `try`/`catch`/`finally`, `throw` → an exception-handler table per `Func`
 //!   plus `Throw`;
 //! - generators (`yield`, `yield from`) → `Yield` / `YieldFrom`, the payoff that
-//!   retires `corosensei`;
+//!   retired `corosensei`;
 //! - classes/enums/static props/consts → method bodies compile to [`Func`]s; the
 //!   class metadata stays in the HIR [`ClassDecl`] table the VM consults.
 
