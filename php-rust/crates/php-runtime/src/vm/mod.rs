@@ -2200,6 +2200,14 @@ impl<'m> Vm<'m> {
                         Zval::Object(o) => {
                             is_instance_of(self.module, o.borrow().class_id as usize, class)
                         }
+                        // A generator has no ClassId but is-a Iterator/Traversable
+                        // (now real prelude interfaces); nothing else among the
+                        // value types satisfies these.
+                        Zval::Generator(_) => {
+                            let n = &self.module.classes[class].name;
+                            n.eq_ignore_ascii_case(b"Iterator")
+                                || n.eq_ignore_ascii_case(b"Traversable")
+                        }
                         _ => false,
                     };
                     self.frames[top].stack.push(Zval::Bool(result));

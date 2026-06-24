@@ -403,6 +403,12 @@ interface UnitEnum {}
 interface BackedEnum extends UnitEnum {}
 interface Stringable {}
 interface Throwable {}
+interface Traversable {}
+interface Iterator extends Traversable {}
+interface IteratorAggregate extends Traversable {}
+interface ArrayAccess {}
+interface Countable {}
+interface JsonSerializable {}
 class Exception implements Throwable {
     protected $message = "";
     protected $code = 0;
