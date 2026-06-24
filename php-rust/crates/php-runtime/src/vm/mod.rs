@@ -20,7 +20,8 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use php_types::{
-    convert, open_file_stream, open_php_stream, ops, Closure, ClosureInfo, ClosureRender, Diag,
+    convert, open_file_stream, open_php_stream, ops, Closure, ClosureInfo, ClosureParam,
+    ClosureRender, Diag,
     Diags, DirHandle, GenKey, GenState, GenStatus, Key, Object, ObjectInfo, PhpArray, PhpError,
     PhpStr, PropVis, Props, ResKind, Resource, Stream, StreamBackend, Zval,
 };
@@ -1143,15 +1144,13 @@ impl<'m> Vm<'m> {
                     }
                     let bound_this = if bind_this { self.frames[top].this.clone() } else { None };
                     let func = &self.module.closures[fn_idx as usize];
-                    // Minimal render metadata: the VM omits the parameter dump
-                    // (`var_dump` of a closure is a declared cosmetic gap here).
                     let info = Rc::new(ClosureInfo {
                         kind: ClosureRender::Closure {
                             name: PhpStr::new(func.name.to_vec()),
                             file: PhpStr::new(self.module.file.to_vec()),
                             line: func.line,
                         },
-                        params: Vec::new(),
+                        params: closure_params(func),
                     });
                     let id = self.next_id();
                     let cl = Closure {
@@ -1165,10 +1164,19 @@ impl<'m> Vm<'m> {
                     self.frames[top].stack.push(Zval::Closure(Rc::new(cl)));
                 }
                 Op::MakeFcc { name } => {
-                    // CLO-2: a first-class callable wraps a function *name*.
+                    // CLO-2: a first-class callable wraps a function *name*. A user
+                    // function contributes its `[parameter]` dump; an internal
+                    // (registry) callable has none.
+                    let params = self
+                        .module
+                        .functions
+                        .iter()
+                        .find(|f| name_eq_ignore_case(&f.name, &name))
+                        .map(closure_params)
+                        .unwrap_or_default();
                     let info = Rc::new(ClosureInfo {
                         kind: ClosureRender::Function(PhpStr::new(name.to_vec())),
-                        params: Vec::new(),
+                        params,
                     });
                     let id = self.next_id();
                     let cl = Closure {
@@ -5469,6 +5477,17 @@ pub(crate) fn host_builtin_ref_first(name: &[u8]) -> Option<&'static [u8]> {
 /// case-insensitively in ASCII (mirrors the compiler's resolution).
 fn name_eq_ignore_case(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.eq_ignore_ascii_case(y))
+}
+
+/// The `[parameter]` pseudo-property descriptors for a function/closure body
+/// (CLO, D-18.9): each parameter name (without `$`) and whether it is optional
+/// (no default ⇒ required). Mirrors `eval::closure_params_for`.
+pub(super) fn closure_params(func: &Func) -> Vec<ClosureParam> {
+    func.param_names
+        .iter()
+        .zip(func.param_required.iter())
+        .map(|(name, &req)| ClosureParam { name: name.clone(), optional: !req })
+        .collect()
 }
 
 /// Drill through `keys` from `cell` (following references, auto-vivifying and

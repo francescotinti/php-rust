@@ -373,9 +373,16 @@ impl<'m> Vm<'m> {
                 // closure, like `Op::MakeFcc`.
                 Some(Zval::Str(s)) => {
                     let id = self.next_id();
+                    let params = self
+                        .module
+                        .functions
+                        .iter()
+                        .find(|f| super::name_eq_ignore_case(&f.name, s.as_bytes()))
+                        .map(super::closure_params)
+                        .unwrap_or_default();
                     let info = Rc::new(ClosureInfo {
                         kind: ClosureRender::Function(s.clone()),
-                        params: Vec::new(),
+                        params,
                     });
                     Ok(Zval::Closure(Rc::new(Closure {
                         fn_idx: 0,
