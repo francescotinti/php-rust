@@ -2329,6 +2329,15 @@ impl<'m> Vm<'m> {
                         self.diags.push(Diag::Notice(msg));
                     }
                 }
+                Op::Exit { has_arg } => {
+                    let code = if has_arg {
+                        let v = self.frames[top].stack.pop().expect("Exit status");
+                        self.exit_status(v, top)?
+                    } else {
+                        0
+                    };
+                    return Err(PhpError::Exit(code));
+                }
                 Op::SuppressBegin => {
                     self.suppress_marks.push(self.diags.len());
                     self.suppress_depth += 1;
@@ -3770,6 +3779,54 @@ impl<'m> Vm<'m> {
             }
             other => Ok(other),
         }
+    }
+
+    /// Compute the exit status of `exit`/`die`'s argument (step 46), mirroring
+    /// `eval::exit_status`: a string (or stringable object) is printed and the code
+    /// is 0; an int / other scalar becomes the exit code (`% 256`); array / a
+    /// non-stringable object is a `TypeError`.
+    fn exit_status(&mut self, v: Zval, top: usize) -> Result<u8, PhpError> {
+        let v = match v {
+            Zval::Ref(cell) => cell.borrow().clone(),
+            other => other,
+        };
+        match &v {
+            Zval::Str(s) => {
+                let bytes = s.as_bytes().to_vec();
+                self.emit_str(top, &bytes)?;
+                Ok(0)
+            }
+            Zval::Long(_) | Zval::Double(_) | Zval::Bool(_) | Zval::Null | Zval::Undef => {
+                Ok(convert::to_long_cast(&v, &mut self.diags).rem_euclid(256) as u8)
+            }
+            Zval::Object(o) => {
+                let cid = o.borrow().class_id as usize;
+                if resolve_method_runtime(self.module, cid, b"__toString").is_some() {
+                    let s = self.vm_stringify(&v)?;
+                    let bytes = s.as_bytes().to_vec();
+                    self.emit_str(top, &bytes)?;
+                    Ok(0)
+                } else {
+                    Err(self.exit_type_error(&v))
+                }
+            }
+            _ => Err(self.exit_type_error(&v)),
+        }
+    }
+
+    /// The `TypeError` for `exit`/`die` given a value outside `string|int` (step
+    /// 46): objects are named by their class, other values by their PHP type name.
+    fn exit_type_error(&self, v: &Zval) -> PhpError {
+        let given = match v {
+            Zval::Object(o) => String::from_utf8_lossy(
+                &self.module.classes[o.borrow().class_id as usize].name,
+            )
+            .into_owned(),
+            other => crate::coerce::php_type_name(other).to_string(),
+        };
+        PhpError::TypeError(format!(
+            "exit(): Argument #1 ($status) must be of type string|int, {given} given"
+        ))
     }
 
     /// Convert a value to a string, running `__toString` for an object via a nested
@@ -5858,6 +5915,34 @@ mod tests {
             b"<?php try { echo @(1 % 0); } catch (\\DivisionByZeroError $e) {} echo $z;",
         );
         assert!(String::from_utf8_lossy(&out.rendered).contains("Undefined variable $z"));
+    }
+
+    #[test]
+    fn exit_sets_code_and_diverges() {
+        // int → exit code, no extra output; bare exit / die() → 0.
+        let o = vm_outcome(b"<?php echo 'a'; exit(5); echo 'b';");
+        assert_eq!(o.stdout, b"a");
+        assert_eq!(o.exit_code, Some(5));
+        assert_eq!(vm_outcome(b"<?php echo 'a'; exit;").exit_code, Some(0));
+        // status wraps to a byte (256 → 0, -1 → 255).
+        assert_eq!(vm_outcome(b"<?php exit(256);").exit_code, Some(0));
+        assert_eq!(vm_outcome(b"<?php exit(-1);").exit_code, Some(255));
+    }
+
+    #[test]
+    fn exit_string_prints_and_is_expression() {
+        // A string status is printed (code 0); `exit`/`die` are expressions.
+        let o = vm_outcome(b"<?php false or die('DEAD'); echo 'after';");
+        assert_eq!(o.stdout, b"DEAD");
+        assert_eq!(o.exit_code, Some(0));
+    }
+
+    #[test]
+    fn exit_does_not_run_finally() {
+        // Unlike return/throw, `exit` propagates uncatchably — finally never runs.
+        let o = vm_outcome(b"<?php try { echo 't'; exit('X'); } finally { echo 'f'; }");
+        assert_eq!(o.stdout, b"tX");
+        assert_eq!(o.exit_code, Some(0));
     }
 
     #[test]

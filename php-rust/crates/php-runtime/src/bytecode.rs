@@ -732,6 +732,11 @@ pub enum Op {
     /// `[] -> []` — enter an `@` error-suppression region (step 48): mark the
     /// current diagnostics length and raise the suppress depth so `flush_diags`
     /// renders nothing until the matching [`Op::SuppressEnd`].
+    /// `[status?] -> !` — `exit` / `die` (step 46). With `has_arg`, pop the status:
+    /// a string (or stringable object) is printed and the code is 0; an int / other
+    /// scalar becomes the exit code (`% 256`). Raises `PhpError::Exit`, which
+    /// propagates *uncatchably* and does NOT run `finally`.
+    Exit { has_arg: bool },
     SuppressBegin,
     /// `[] -> []` — leave an `@` region: lower the suppress depth and drop every
     /// diagnostic raised since the matching [`Op::SuppressBegin`]. The suppressed

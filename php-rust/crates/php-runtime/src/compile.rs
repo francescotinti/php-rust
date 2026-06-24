@@ -1189,6 +1189,19 @@ impl<'a> FnCompiler<'a> {
                 self.expr(e)?;
                 self.emit(Op::SuppressEnd);
             }
+            ExprKind::Exit(arg) => {
+                // `exit` / `die` (step 46): evaluate the optional status, then
+                // diverge via `Op::Exit` (raises `PhpError::Exit`, bypassing finally).
+                match arg {
+                    Some(e) => {
+                        self.expr(e)?;
+                        self.emit(Op::Exit { has_arg: true });
+                    }
+                    None => {
+                        self.emit(Op::Exit { has_arg: false });
+                    }
+                }
+            }
             ExprKind::And(a, b) => self.short_circuit(a, b, false)?,
             ExprKind::Or(a, b) => self.short_circuit(a, b, true)?,
             ExprKind::Xor(a, b) => {
