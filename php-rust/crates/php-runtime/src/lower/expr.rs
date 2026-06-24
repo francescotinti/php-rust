@@ -224,6 +224,9 @@ impl<'f> Lowerer<'f> {
             // arrive in later sub-steps.
             Expression::Instantiation(inst) => self.lower_instantiation(inst, line)?,
 
+            // `new class(args) extends P implements I { … }` (step 51).
+            Expression::AnonymousClass(anon) => self.lower_anonymous_class(anon, line)?,
+
             // `throw <expr>` (step 20). Valid as a statement or, in PHP 8, an
             // expression (`$x ?? throw new …`); both reach here.
             Expression::Throw(t) => ExprKind::Throw(Box::new(self.lower_expr(t.exception)?)),
@@ -875,7 +878,7 @@ impl<'f> Lowerer<'f> {
     /// 38). Variadic spread (`...$a`) stays out of scope. A positional argument
     /// after a named one is a PHP compile-time `Fatal error`, surfaced here.
     #[allow(clippy::type_complexity)]
-    fn lower_args(
+    pub(super) fn lower_args(
         &mut self,
         list: &mago_syntax::ast::ArgumentList,
         line: Line,

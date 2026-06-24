@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet};
 
 use mago_span::HasSpan;
 use mago_syntax::ast::{
-    ArrowFunction,
-    Class, ClassLikeMember, Closure, Enum, EnumCaseItem, Function,
+    AnonymousClass, ArrowFunction,
+    Class, ClassLikeMember, Closure, Enum, EnumCaseItem, Extends, Function, Implements,
     FunctionLikeParameterList, Hint, Interface, MagicConstant, Method,
     MethodBody, Property, PropertyHook, PropertyHookBody, PropertyHookConcreteBody,
     PropertyHookList, PropertyItem, Statement, Trait, TraitUse, TraitUseAdaptation,
@@ -12,7 +12,7 @@ use mago_syntax::ast::{
 };
 
 use crate::hir::{
-    Capture, ClassDecl, Expr, ExprKind, FnDecl, Line, MethodDecl, Param,
+    Capture, ClassDecl, ClassRef, Expr, ExprKind, FnDecl, Line, MethodDecl, Param,
     Place, PlaceBase, PlaceStep, PropDecl, Slot, Stmt, StmtKind, TypeHint,
     Visibility,
 };
@@ -400,9 +400,37 @@ impl<'f> Lowerer<'f> {
     /// sub-steps and lower to [`LowerError::Unsupported`] for now.
     pub(super) fn lower_class(&mut self, class: &Class) -> Result<ClassDecl, LowerError> {
         let line = self.line_of(class.span());
+        let is_abstract = class.modifiers.iter().any(|m| m.is_abstract());
+        let name: Box<[u8]> = join_ns(&self.cur_namespace, class.name.value);
+        self.lower_class_body(
+            name,
+            &class.extends,
+            &class.implements,
+            is_abstract,
+            class.members.iter(),
+            line,
+        )
+    }
+
+    /// Shared class-body lowering for both named classes and anonymous classes
+    /// (`new class {…}`, step 51): resolve `extends`/`implements`, lower members,
+    /// flatten traits, enforce abstract implementation, and build the [`ClassDecl`].
+    /// The caller supplies the already fully-qualified `name`.
+    pub(super) fn lower_class_body<'a, I>(
+        &mut self,
+        name: Box<[u8]>,
+        extends: &Option<Extends>,
+        implements: &Option<Implements>,
+        is_abstract: bool,
+        members: I,
+        line: Line,
+    ) -> Result<ClassDecl, LowerError>
+    where
+        I: Iterator<Item = &'a ClassLikeMember<'a>>,
+    {
         // Resolve `extends ParentName` to the parent's class id (registered in
         // pass 1 of `hoist_classes`, so forward references work, D-19.10).
-        let parent = match &class.extends {
+        let parent = match extends {
             Some(ext) => {
                 let pname = parent_name(self, ext, line)?;
                 match self.class_index.get(&pname.to_ascii_lowercase()) {
@@ -418,15 +446,13 @@ impl<'f> Lowerer<'f> {
             None => None,
         };
         // Resolve `implements I, J` to interface ids (step 19-5).
-        let interfaces = match &class.implements {
+        let interfaces = match implements {
             Some(imp) => {
                 let names: Vec<Box<[u8]>> = imp.types.iter().map(|id| self.resolve_class(id)).collect();
                 self.resolve_interfaces(&names, line)?
             }
             None => Vec::new(),
         };
-        let is_abstract = class.modifiers.iter().any(|m| m.is_abstract());
-        let name: Box<[u8]> = join_ns(&self.cur_namespace, class.name.value);
         let mut props = Vec::new();
         let mut static_props = Vec::new();
         let mut consts = Vec::new();
@@ -439,7 +465,7 @@ impl<'f> Lowerer<'f> {
         // (step 49). Restored after the member loop; an early error here aborts
         // the whole lowering, so the leak-on-error path is harmless.
         let saved_cls = self.cur_class.replace(name.clone());
-        for member in class.members.iter() {
+        for member in members {
             match member {
                 ClassLikeMember::Property(p) => {
                     self.lower_property(p, &mut props, &mut static_props, line)?
@@ -532,6 +558,41 @@ impl<'f> Lowerer<'f> {
             enum_cases: Vec::new(),
             line,
         })
+    }
+
+    /// Lower `new class(args) extends P implements I { … }` (step 51): lower the
+    /// body like a named class under a unique synthetic `class@anonymous…` name,
+    /// stash it for registration after the main pass, and return a `new` of that
+    /// name with the constructor arguments evaluated at the use site.
+    pub(super) fn lower_anonymous_class(
+        &mut self,
+        anon: &AnonymousClass,
+        line: Line,
+    ) -> Result<ExprKind, LowerError> {
+        let n = self.anon_count;
+        self.anon_count += 1;
+        // Mirror PHP's mangled anonymous-class name `class@anonymous\0…`: the part
+        // before the NUL is what `var_dump`/`print_r` show (`class@anonymous`),
+        // while `get_class()`/`::class` return the whole string (EXPECTF `%s`
+        // matches the `\0…` tail). `@`/NUL keep it unreachable from user names.
+        let mut nm = b"class@anonymous\0".to_vec();
+        nm.extend_from_slice(format!("{n}").as_bytes());
+        let name: Box<[u8]> = nm.into();
+        let is_abstract = anon.modifiers.iter().any(|m| m.is_abstract());
+        let decl = self.lower_class_body(
+            name.clone(),
+            &anon.extends,
+            &anon.implements,
+            is_abstract,
+            anon.members.iter(),
+            line,
+        )?;
+        self.anon_classes.push(decl);
+        let (args, named) = match &anon.argument_list {
+            Some(list) => self.lower_args(list, line)?,
+            None => (Vec::new(), Vec::new()),
+        };
+        Ok(ExprKind::New { class: ClassRef::Named(name), args, named })
     }
 
     /// Lower one `enum E [: int|string] { case ...; methods; consts }` into a

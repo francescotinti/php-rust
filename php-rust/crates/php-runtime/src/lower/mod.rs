@@ -117,6 +117,14 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
     // still carry top-level `use`s); each `namespace` arm re-scopes its own.
     low.collect_uses(stmts);
     let body = low.lower_stmts(stmts)?;
+    // Anonymous classes (`new class {…}`) collected during lowering get ids past
+    // every named class; register them so `new` resolves each by its synthetic
+    // name at compile time (step 51).
+    for decl in std::mem::take(&mut low.anon_classes) {
+        let key = decl.name.to_ascii_lowercase();
+        low.class_index.insert(key, low.classes.len());
+        low.classes.push(decl);
+    }
     // `goto`/label validation (step 45): the top-level script body is its own
     // function scope. Each user function / method / closure validates its own
     // body where it is lowered (`lower_function`/`lower_method`/`lower_closure`).
@@ -773,6 +781,13 @@ struct Lowerer<'f> {
     /// (`[$a,$b] = …`) stashes its right-hand side into (step 51). Names use a `@`
     /// prefix, which no PHP variable can have, so they never collide with locals.
     list_temp: u32,
+    /// Anonymous classes (`new class {…}`, step 51) discovered while lowering
+    /// expressions, with their synthetic `class@anonymous…` names. Appended to
+    /// `classes` (and registered in `class_index`) after the main pass, so they get
+    /// final ids past every named class; `new` resolves them by name at compile.
+    anon_classes: Vec<ClassDecl>,
+    /// Monotonic counter making each anonymous class's synthetic name unique.
+    anon_count: u32,
 }
 
 /// One constructor-promoted parameter: its property name, declared visibility, the
@@ -829,6 +844,8 @@ impl<'f> Lowerer<'f> {
             hook_prop: None,
             hook_backed: false,
             list_temp: 0,
+            anon_classes: Vec::new(),
+            anon_count: 0,
         }
     }
 

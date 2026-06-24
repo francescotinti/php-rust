@@ -456,7 +456,10 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
                 return;
             }
             out.extend_from_slice(b"object(");
-            out.extend_from_slice(obj.class_name.as_bytes());
+            // An anonymous class's name is `class@anonymous\0…`; displays show only
+            // the part before the NUL (`class@anonymous`), like PHP. A no-op for
+            // ordinary class names.
+            out.extend_from_slice(class_display_name(obj.class_name.as_bytes()));
             out.extend_from_slice(format!(")#{} ({}) {{\n", obj.id, obj.props.len()).as_bytes());
             for (k, val) in obj.props.iter() {
                 spaces(out, indent + 2);
@@ -598,7 +601,7 @@ fn export_into(out: &mut Vec<u8>, v: &Zval, level: usize, seen: &mut Vec<usize>,
                 out.extend_from_slice(b"(object) array(\n");
             } else {
                 out.push(b'\\');
-                out.extend_from_slice(obj.class_name.as_bytes());
+                out.extend_from_slice(class_display_name(obj.class_name.as_bytes()));
                 out.extend_from_slice(b"::__set_state(array(\n");
             }
             // All properties are exported by value, with no visibility markers.
@@ -747,7 +750,7 @@ fn print_r_into(out: &mut Vec<u8>, v: &Zval, indent: usize, ctx: &mut Ctx, seen:
         Zval::Object(o) => {
             let ptr = Rc::as_ptr(o) as usize;
             let obj = o.borrow();
-            out.extend_from_slice(obj.class_name.as_bytes());
+            out.extend_from_slice(class_display_name(obj.class_name.as_bytes()));
             // An enum case prints `C Enum` / `C Enum:int` / `C Enum:string`
             // instead of `C Object`; its properties render as usual (step 23,
             // D-23.5).
@@ -839,6 +842,16 @@ fn is_null(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
 
 fn is_array(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Bool(matches!(arg1(args, "is_array")?, Zval::Array(_))))
+}
+
+/// The displayable class name: an anonymous class is stored as `class@anonymous\0…`
+/// and shown (in `var_dump`/`print_r`/`var_export`) only up to the NUL, matching
+/// PHP. A no-op for ordinary class names (which contain no NUL).
+fn class_display_name(name: &[u8]) -> &[u8] {
+    match name.iter().position(|&b| b == 0) {
+        Some(i) => &name[..i],
+        None => name,
+    }
 }
 
 fn is_object(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
