@@ -316,6 +316,26 @@ pub(super) fn read_string_offset(s: &PhpStr, key: &Zval) -> Zval {
     }
 }
 
+/// Like [`read_dim`] but isset-aware for the `??` read context: a not-set leaf is
+/// NULL rather than `""`. Arrays already yield NULL on a missing key; the
+/// difference is a string offset that is out of range or non-integer, which
+/// `isset($s[i])` reports as unset — so `$s[i] ?? d` takes the default.
+pub(super) fn read_dim_nullable(base: &Zval, key: &Zval) -> Zval {
+    match base {
+        // Only an integer-valued key is a valid string offset for `isset`; a
+        // non-numeric string key (`$s["str"]`) is unset → NULL.
+        Zval::Str(s) => match coerce_key_silent(key) {
+            Some(Key::Int(_)) => match string_offset(s, key) {
+                Some(byte) => Zval::Str(PhpStr::new(vec![byte])),
+                None => Zval::Null,
+            },
+            _ => Zval::Null,
+        },
+        Zval::Ref(rc) => read_dim_nullable(&rc.borrow(), key),
+        _ => read_dim(base, key),
+    }
+}
+
 /// Ensure `cell` is an array, auto-vivifying from null/undefined/false; a
 /// non-empty scalar cannot become an array.
 pub(super) fn ensure_array(cell: &mut Zval) -> Result<(), PhpError> {

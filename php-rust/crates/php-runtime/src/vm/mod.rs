@@ -986,6 +986,11 @@ impl<'m> Vm<'m> {
                     let base = self.frames[top].stack.pop().expect("FetchDim base");
                     self.frames[top].stack.push(read_dim(&base, &key));
                 }
+                Op::CoalesceFetchDim => {
+                    let key = self.frames[top].stack.pop().expect("CoalesceFetchDim key");
+                    let base = self.frames[top].stack.pop().expect("CoalesceFetchDim base");
+                    self.frames[top].stack.push(read_dim_nullable(&base, &key));
+                }
                 Op::AssignPath { base, nkeys, append } => {
                     let value = self.frames[top].stack.pop().expect("AssignPath value");
                     let mut keys = self.pop_keys(top, nkeys);
@@ -9529,6 +9534,18 @@ mod tests {
             vm_stdout(b"<?php class A { function __toString():string { return 'x'; } } class B {} echo ((new A) instanceof Stringable)?'1':'0', ((new B) instanceof Stringable)?'1':'0';"),
             b"10"
         );
+    }
+
+    #[test]
+    fn coalesce_on_string_offset_and_array_element_assign() {
+        // `??` on a string offset: in-range yields the char, out-of-range or a
+        // non-integer key is unset → default.
+        assert_eq!(
+            vm_stdout(b"<?php $s='test'; echo $s[0]??'d', $s[5]??'d', $s['str']??'d', $s[-1]??'d';"),
+            b"tddt"
+        );
+        // `??=` on an array element assigns only when unset.
+        assert_eq!(vm_stdout(b"<?php $a=[]; $a['x'] ??= 7; echo $a['x']; $a['x'] ??= 9; echo $a['x'];"), b"77");
     }
 }
 

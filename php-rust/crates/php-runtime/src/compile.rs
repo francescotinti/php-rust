@@ -1116,6 +1116,19 @@ impl<'a> FnCompiler<'a> {
                         return Ok(());
                     }
                 }
+                // `$x[k] ?? d`: read the element isset-aware so a missing array key
+                // OR an out-of-range/non-integer string offset takes the default
+                // (a plain read of a string offset yields "", not null).
+                if let ExprKind::Index { base, index } = &a.kind {
+                    self.expr(base)?;
+                    self.expr(index)?;
+                    self.emit(Op::CoalesceFetchDim);
+                    let to_end = self.emit(Op::JumpIfNotNull(Addr::MAX));
+                    self.expr(b)?;
+                    let end = self.here();
+                    self.patch(to_end, Op::JumpIfNotNull(end));
+                    return Ok(());
+                }
                 // Left read silently (Var/Index reads don't warn); right only if null.
                 self.expr(a)?;
                 let to_end = self.emit(Op::JumpIfNotNull(Addr::MAX));
@@ -2445,7 +2458,38 @@ impl<'a> FnCompiler<'a> {
             self.patch(to_end, Op::Jump(end));
             return Ok(());
         }
-        Err(CompileError::Unsupported("`??=` on a non-property place".into()))
+        // `$a[k] ??= rhs` on a single-step array element rooted at a local /
+        // `$GLOBALS` slot: evaluate the key once (into a temp), then assign only if
+        // the element is unset, yielding the existing or newly-stored value.
+        if place.steps.len() == 1 {
+            if let PlaceStep::Index(k) = &place.steps[0] {
+                let base = dim_base(place)?;
+                let t_key = self.alloc_temp();
+                self.expr(k)?; // [key]
+                self.emit(Op::Dup); // [key, key]
+                self.emit(Op::StoreSlot(t_key)); // [key]
+                self.emit(Op::IssetPath { base, nkeys: 1 }); // [bool]
+                let to_assign = self.emit(Op::JumpIfFalse(Addr::MAX));
+                // Set: yield the existing element value.
+                match base {
+                    DimBase::Local(s) => self.emit(Op::LoadSlot(s)),
+                    DimBase::Global(s) => self.emit(Op::LoadGlobal(s)),
+                };
+                self.emit(Op::LoadSlot(t_key)); // [baseval, key]
+                self.emit(Op::FetchDim); // [value]
+                let to_end = self.emit(Op::Jump(Addr::MAX));
+                let assign_at = self.here();
+                self.patch(to_assign, Op::JumpIfFalse(assign_at));
+                self.emit(Op::LoadSlot(t_key)); // [key]
+                self.expr(rhs)?; // [key, rhs]
+                self.emit(Op::AssignPath { base, nkeys: 1, append: false }); // [value]
+                let end = self.here();
+                self.patch(to_end, Op::Jump(end));
+                self.free_temp();
+                return Ok(());
+            }
+        }
+        Err(CompileError::Unsupported("`??=` on this place".into()))
     }
 
     /// Compile a compound element write `$a[…][k] op= rhs`.

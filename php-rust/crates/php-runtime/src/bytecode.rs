@@ -342,6 +342,11 @@ pub enum Op {
     /// is silent in the proof slice (the undefined-key warning rides the
     /// diagnostics-ordering work, like the undefined-variable notice).
     FetchDim,
+    /// `[base, key] -> [v]` — like [`Op::FetchDim`] but isset-aware for the `??`
+    /// read context: a not-set leaf (missing array key, or out-of-range /
+    /// non-integer string offset) yields NULL rather than `""`, so `$x[k] ?? d`
+    /// takes the default when the element is unset.
+    CoalesceFetchDim,
     /// Write into an array path rooted at `base`, drilling through `nkeys` index
     /// values taken off the stack (pushed source-order, under the value). The
     /// final step is an append (`$a[…][] = v`) when `append`, else an index write
