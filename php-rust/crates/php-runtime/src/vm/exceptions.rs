@@ -46,10 +46,18 @@ impl<'m> Vm<'m> {
         // it. Detect those messages and render them verbatim.
         let self_located = class == "TypeError"
             && (message.contains(" and defined in ") || message.contains(" returned in "));
-        let head = if self_located {
-            format!("\nFatal error: Uncaught {class}: {message}\n")
+        // PHP omits the ": <message>" segment entirely when the throwable carries an
+        // empty message, rendering "Uncaught Exception in F:L" rather than
+        // "Uncaught Exception:  in F:L" (note the doubled space).
+        let label = if message.is_empty() {
+            format!("Uncaught {class}")
         } else {
-            format!("\nFatal error: Uncaught {class}: {message} in {file}:{line}\n")
+            format!("Uncaught {class}: {message}")
+        };
+        let head = if self_located {
+            format!("\nFatal error: {label}\n")
+        } else {
+            format!("\nFatal error: {label} in {file}:{line}\n")
         };
         let block = format!("{head}Stack trace:\n{trace}\n  thrown in {file} on line {line}\n");
         self.rendered.extend_from_slice(block.as_bytes());
