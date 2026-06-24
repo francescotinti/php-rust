@@ -1770,6 +1770,46 @@ impl<'m> Vm<'m> {
                     let result = self.run_value_builtin(f, &args, line)?;
                     self.frames[top].stack.push(result);
                 }
+                Op::CallBuiltinSpread { name, spreads } => {
+                    let f = match self.registry.get(&name[..]) {
+                        Some(Builtin::Value(f)) => *f,
+                        _ => return Err(undefined_builtin(&name)),
+                    };
+                    let comp_vals = self.pop_keys(top, spreads.len() as u32);
+                    // Flatten components to positional values; int-keyed unpacks are
+                    // positional, string-keyed are named (rejected for a builtin).
+                    let mut args: Vec<Zval> = Vec::new();
+                    let mut seen_named = false;
+                    for (&is_spread, val) in spreads.iter().zip(comp_vals) {
+                        if is_spread {
+                            for (k, v) in self.spread_pairs(val)? {
+                                match k {
+                                    Key::Int(_) => {
+                                        if seen_named {
+                                            return Err(PhpError::Error("Cannot use positional argument after named argument during unpacking".to_string()));
+                                        }
+                                        args.push(v);
+                                    }
+                                    Key::Str(_) => seen_named = true,
+                                }
+                            }
+                        } else {
+                            if seen_named {
+                                return Err(PhpError::Error("Cannot use positional argument after named argument".to_string()));
+                            }
+                            args.push(val);
+                        }
+                    }
+                    if seen_named {
+                        return Err(PhpError::Error(format!(
+                            "{}() does not accept unknown named parameters",
+                            String::from_utf8_lossy(&name)
+                        )));
+                    }
+                    let line = self.cur_line(top);
+                    let result = self.run_value_builtin(f, &args, line)?;
+                    self.frames[top].stack.push(result);
+                }
                 Op::CallHostBuiltin { name, argc } => {
                     // An evaluator-only host builtin (Session B): it may invoke a
                     // user callable via `call_callable` (a nested `run_loop`).

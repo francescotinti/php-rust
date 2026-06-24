@@ -1964,6 +1964,9 @@ impl<'a> FnCompiler<'a> {
         // Builtins: classify by-value vs by-reference-first via the registry.
         match self.ctx.registry.get(name) {
             Some(Builtin::Value(_)) => {
+                if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
+                    return self.emit_builtin_spread(name, args);
+                }
                 self.push_value_args(args)?;
                 self.emit(Op::CallBuiltin { name: name.into(), argc: args.len() as u32 });
                 Ok(())
@@ -2119,6 +2122,24 @@ impl<'a> FnCompiler<'a> {
         if returns_ref {
             self.emit(Op::DerefTop);
         }
+        Ok(())
+    }
+
+    /// Compile a spread call into a by-value builtin `b(comp…)` (step 56b): push
+    /// one value per leading component (a positional value, or a spread *source*
+    /// marked in `spreads`), then let `Op::CallBuiltinSpread` flatten and run it.
+    fn emit_builtin_spread(&mut self, name: &[u8], args: &[Expr]) -> R<()> {
+        let mut spreads = Vec::with_capacity(args.len());
+        for a in args {
+            if let ExprKind::Spread(src) = &a.kind {
+                self.expr(src)?;
+                spreads.push(true);
+            } else {
+                self.expr(a)?;
+                spreads.push(false);
+            }
+        }
+        self.emit(Op::CallBuiltinSpread { name: name.into(), spreads: spreads.into() });
         Ok(())
     }
 

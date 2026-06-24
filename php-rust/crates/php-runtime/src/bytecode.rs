@@ -415,6 +415,15 @@ pub enum Op {
     /// evaluator (higher-order, class-introspection, `define`/`defined`/`constant`)
     /// are *not* emitted — the compiler rejects them so the VM never sees them.
     CallBuiltin { name: Box<[u8]>, argc: u32 },
+    /// `f(comp…)` into a by-value builtin where at least one component is a spread
+    /// `...$src` (step 56b): one value per leading component is on the stack;
+    /// `spreads[i]` marks a spread source (expanded via `spread_pairs`) vs a plain
+    /// positional value. The VM flattens them to a positional `&[Zval]` — a
+    /// positional after a string-keyed (named) unpack raises the catchable Error
+    /// "Cannot use positional argument after named argument during unpacking";
+    /// a leftover named argument errors (builtins take no named args) — then runs
+    /// the builtin exactly like [`Op::CallBuiltin`].
+    CallBuiltinSpread { name: Box<[u8]>, spreads: Box<[bool]> },
     /// `[arg0, …, arg{argc-1}] -> [result]` — call an *evaluator-only* host builtin
     /// (Session B/C/D) that needs the VM itself: a higher-order builtin that invokes
     /// a user callable (`call_user_func`, `array_map`, …), class introspection, or
