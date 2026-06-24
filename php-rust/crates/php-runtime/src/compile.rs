@@ -1183,6 +1183,18 @@ impl<'a> FnCompiler<'a> {
             }
             ExprKind::And(a, b) => self.short_circuit(a, b, false)?,
             ExprKind::Or(a, b) => self.short_circuit(a, b, true)?,
+            ExprKind::Xor(a, b) => {
+                // `a xor b` evaluates both operands (no short-circuit) and yields a
+                // bool: `(bool)a != (bool)b`. `!!x` coerces to bool, then loose
+                // `!=` on the two bools is logical xor (eval: `Bool(a ^ b)`).
+                self.expr(a)?;
+                self.emit(Op::Unary(crate::hir::UnOp::Not));
+                self.emit(Op::Unary(crate::hir::UnOp::Not));
+                self.expr(b)?;
+                self.emit(Op::Unary(crate::hir::UnOp::Not));
+                self.emit(Op::Unary(crate::hir::UnOp::Not));
+                self.emit(Op::Binary(BinOp::NotEq));
+            }
             ExprKind::Ternary { cond, then, otherwise } => {
                 match then {
                     Some(then) => {

@@ -139,6 +139,17 @@ pub enum VmRunError {
     Unsupported(String),
 }
 
+impl std::fmt::Display for VmRunError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VmRunError::Lower(e) => write!(f, "{e}"),
+            VmRunError::Unsupported(what) => write!(f, "unsupported construct: {what}"),
+        }
+    }
+}
+
+impl std::error::Error for VmRunError {}
+
 /// Defensive ceiling on PHP call-stack depth, mirroring the evaluator's
 /// `eval::MAX_CALL_DEPTH`. Pure PHP recursion runs *iteratively* in [`run_loop`]
 /// (each call grows the heap-allocated `frames` vector, not the native Rust
@@ -5311,6 +5322,18 @@ mod tests {
         assert_eq!(vm_stdout(b"<?php echo (1 && 0) ? 'y' : 'n';"), b"n");
         assert_eq!(vm_stdout(b"<?php echo (1 || 0) ? 'y' : 'n';"), b"y");
         assert_eq!(vm_stdout(b"<?php echo 0 ?: 'fallback';"), b"fallback");
+    }
+
+    #[test]
+    fn logical_xor_word_operator() {
+        // `xor` evaluates both operands and yields a bool: exactly one truthy.
+        assert_eq!(vm_stdout(b"<?php echo (1 xor 0) ? 't' : 'f';"), b"t");
+        assert_eq!(vm_stdout(b"<?php echo (1 xor 1) ? 't' : 'f';"), b"f");
+        assert_eq!(vm_stdout(b"<?php echo (0 xor 0) ? 't' : 'f';"), b"f");
+        // truthiness coercion, not raw inequality (2 and 1 are both truthy → false).
+        assert_eq!(vm_stdout(b"<?php echo (2 xor 1) ? 't' : 'f';"), b"f");
+        // the result is a real bool (=== true), not a truthy int.
+        assert_eq!(vm_stdout(b"<?php echo (true xor false) === true ? 'Y' : 'N';"), b"Y");
     }
 
     #[test]
