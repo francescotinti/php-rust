@@ -8650,6 +8650,30 @@ mod tests {
     }
 
     #[test]
+    fn new_of_forward_declared_class_resolves_at_runtime() {
+        // `new B()` before B's declaration is valid: the compiler defers the class
+        // resolution to run time (PHP does not require a class to precede its use).
+        assert_eq!(
+            vm_stdout(b"<?php $o = new B(); echo $o->hi(); class B { function hi(){ return 'B'; } }"),
+            b"B"
+        );
+    }
+
+    #[test]
+    fn new_of_undefined_class_is_runtime_fatal() {
+        // A genuinely undefined class is a catchable run-time Error, not a compile
+        // error (the name may be declared conditionally / later).
+        let o = vm_outcome(b"<?php echo 'x'; new Nope();");
+        assert_eq!(o.stdout, b"x");
+        match o.fatal {
+            Some(PhpError::Error(m)) => {
+                assert!(m.contains("Class \"Nope\" not found"), "message was: {m}")
+            }
+            other => panic!("expected Class-not-found Error, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn new_dynamic_class_then_method() {
         assert_eq!(
             vm_stdout(b"<?php class C { function hi(){ return 'hi'; } } $c='C'; echo (new $c)->hi();"),

@@ -2222,18 +2222,24 @@ impl<'a> FnCompiler<'a> {
     /// `static` (the run-time LSB class). `Dynamic` stays out of slice.
     fn new_obj(&mut self, class: &ClassRef, args: &[Expr], named: &[(Box<[u8]>, Expr)]) -> R<()> {
         match class {
-            ClassRef::Named(name) => {
-                // A genuinely-undefined class falls back to the tree-walker (which
-                // raises PHP's "Class not found"); a *defined* but non-instantiable
-                // class is handled at run time by `Alloc` (so its fatal matches PHP).
-                let cid = self.resolve_class(name).ok_or_else(|| {
-                    CompileError::Unsupported(format!(
-                        "new of unknown class `{}`",
-                        String::from_utf8_lossy(name)
-                    ))
-                })?;
-                self.new_obj_cid(cid, args, named)
-            }
+            ClassRef::Named(name) => match self.resolve_class(name) {
+                // Known at compile time: allocate + run the resolved constructor.
+                Some(cid) => self.new_obj_cid(cid, args, named),
+                // Unknown at compile time: PHP resolves `new X` at run time and
+                // raises a catchable `Error: Class "X" not found` only if it is
+                // truly undefined (it may be declared conditionally or later). Push
+                // the name and allocate dynamically, exactly like `new $cls`.
+                None => {
+                    if !named.is_empty() {
+                        return Err(CompileError::Unsupported(
+                            "named arguments to `new` of an unknown class".into(),
+                        ));
+                    }
+                    let k = self.konst(Const::Str(name.clone()));
+                    self.emit(Op::PushConst(k));
+                    self.emit_dynamic_new(args)
+                }
+            },
             ClassRef::SelfClass => {
                 let cid = self
                     .cur_class
@@ -2271,17 +2277,25 @@ impl<'a> FnCompiler<'a> {
                 // `new $cls` (PAR): resolve the class at run time, then run the
                 // constructor dynamically (like `new static`).
                 self.expr(expr)?;
-                self.emit(Op::AllocDynamic);
-                self.emit(Op::Dup);
-                self.emit(Op::InitProps);
-                self.emit(Op::Pop);
-                self.emit(Op::StampThrowable);
-                self.emit(Op::Dup);
-                self.emit_invoke_ctor(args)?;
-                self.emit(Op::Pop);
-                Ok(())
+                self.emit_dynamic_new(args)
             }
         }
+    }
+
+    /// Emit the run-time `new` sequence for a class **value already on the stack**
+    /// (a `new $cls` or a `new Name` whose class is unknown at compile time):
+    /// resolve the class, init its properties, stamp a Throwable's location, and run
+    /// the constructor dynamically, leaving the fresh object on the stack.
+    fn emit_dynamic_new(&mut self, args: &[Expr]) -> R<()> {
+        self.emit(Op::AllocDynamic);
+        self.emit(Op::Dup);
+        self.emit(Op::InitProps);
+        self.emit(Op::Pop);
+        self.emit(Op::StampThrowable);
+        self.emit(Op::Dup);
+        self.emit_invoke_ctor(args)?;
+        self.emit(Op::Pop);
+        Ok(())
     }
 
     /// `new` of a class whose id is known at compile time: allocate, then run the
