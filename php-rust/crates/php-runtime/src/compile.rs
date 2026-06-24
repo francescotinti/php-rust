@@ -1356,12 +1356,9 @@ impl<'a> FnCompiler<'a> {
         if let Some(idx) = self.ctx.funcs.iter().position(|f| ascii_eq_ignore_case(&f.name, name)) {
             // Named arguments are resolved to parameter slots at compile time
             // (the callee is known), PAR.
-            if !named.is_empty() {
-                return self.call_user_named(idx, args, named);
-            }
-            // Argument unpacking `f(...$arr)` (PAR): build a runtime argument array
-            // and bind from it. Only for by-value callees (by-ref + spread is out
-            // of slice).
+            // A spread anywhere (`f(...$src)`, with or without named args) needs
+            // run-time binding: integer keys become positional, string keys named.
+            // By-value callees only (by-ref + spread is out of slice).
             if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
                 let callee = &self.ctx.funcs[idx];
                 if callee.by_ref || callee.params.iter().any(|p| p.by_ref) {
@@ -1369,9 +1366,10 @@ impl<'a> FnCompiler<'a> {
                         "spread call to a by-reference function".into(),
                     ));
                 }
-                self.build_args_array(args)?;
-                self.emit(Op::CallArgs { func: idx as u32 });
-                return Ok(());
+                return self.emit_call_spread(idx, args, named);
+            }
+            if !named.is_empty() {
+                return self.call_user_named(idx, args, named);
             }
             let callee = &self.ctx.funcs[idx];
             // Omitted optional args are filled by the callee's default prologue
@@ -1553,6 +1551,41 @@ impl<'a> FnCompiler<'a> {
             }
         }
         true
+    }
+
+    /// Compile a spread function call `f(comp…, name: v, …)` (PAR): push one value
+    /// per leading component — a positional value or a spread *source* (marked in
+    /// `spreads`) — then the explicit named values, and let `Op::CallSpread` expand
+    /// and bind them at run time.
+    fn emit_call_spread(
+        &mut self,
+        idx: usize,
+        args: &[Expr],
+        named: &[(Box<[u8]>, Expr)],
+    ) -> R<()> {
+        let returns_ref = self.ctx.funcs[idx].by_ref;
+        let mut spreads = Vec::with_capacity(args.len());
+        for a in args {
+            if let ExprKind::Spread(src) = &a.kind {
+                self.expr(src)?;
+                spreads.push(true);
+            } else {
+                self.expr(a)?;
+                spreads.push(false);
+            }
+        }
+        for (_, expr) in named {
+            self.expr(expr)?;
+        }
+        self.emit(Op::CallSpread {
+            func: idx as u32,
+            spreads: spreads.into(),
+            names: named.iter().map(|(n, _)| n.clone()).collect(),
+        });
+        if returns_ref {
+            self.emit(Op::DerefTop);
+        }
+        Ok(())
     }
 
     /// Lay named + positional arguments into `fd`'s parameter slots at compile

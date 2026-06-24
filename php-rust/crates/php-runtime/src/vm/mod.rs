@@ -1337,6 +1337,58 @@ impl<'m> Vm<'m> {
                         build_named_frame(callee, &self.module.file, line, &qn, pos, named)?;
                     self.enter_callee(frame);
                 }
+                Op::CallSpread { func, spreads, names } => {
+                    // Pop explicit named values (source order), then one value per
+                    // leading component (a positional value or a spread source).
+                    let named_vals = self.pop_keys(top, names.len() as u32);
+                    let comp_vals = self.pop_keys(top, spreads.len() as u32);
+                    let mut positional: Vec<Zval> = Vec::new();
+                    let mut named: Vec<(Box<[u8]>, Zval)> = Vec::new();
+                    let mut seen_named = false;
+                    for (&is_spread, val) in spreads.iter().zip(comp_vals) {
+                        if is_spread {
+                            // Integer keys are positional, string keys named; a
+                            // positional after a named (within the unpacking) is an
+                            // error, a non-iterable a TypeError.
+                            for (k, v) in self.spread_pairs(val)? {
+                                match k {
+                                    Key::Int(_) => {
+                                        if seen_named {
+                                            return Err(PhpError::Error("Cannot use positional argument after named argument during unpacking".to_string()));
+                                        }
+                                        positional.push(v);
+                                    }
+                                    Key::Str(s) => {
+                                        named.push((s.as_bytes().to_vec().into_boxed_slice(), v));
+                                        seen_named = true;
+                                    }
+                                }
+                            }
+                        } else {
+                            if seen_named {
+                                return Err(PhpError::Error("Cannot use positional argument after named argument".to_string()));
+                            }
+                            positional.push(val);
+                        }
+                    }
+                    // Explicit named args always come last, so no positional can
+                    // follow — no need to track `seen_named` past here.
+                    for (label, v) in names.iter().cloned().zip(named_vals) {
+                        named.push((label, v));
+                    }
+                    let line = self.cur_line(top);
+                    let callee = &self.module.functions[func as usize];
+                    let qn = String::from_utf8_lossy(&callee.name).into_owned();
+                    let frame = build_named_frame(
+                        callee,
+                        &self.module.file,
+                        line,
+                        &qn,
+                        positional,
+                        named,
+                    )?;
+                    self.enter_callee(frame);
+                }
                 Op::CallBuiltin { name, argc } => {
                     let f = match self.registry.get(&name[..]) {
                         Some(Builtin::Value(f)) => *f,
@@ -4132,6 +4184,38 @@ impl<'m> Vm<'m> {
             "{repr} is not a valid backing value for enum {}",
             String::from_utf8_lossy(&self.module.classes[cid].name)
         )))
+    }
+
+    /// Expand a spread source into its `(key, value)` pairs for a call's argument
+    /// unpacking (PAR): an array yields its entries verbatim; a generator is driven
+    /// to completion, honouring its yielded keys (so string keys become named
+    /// arguments). Any non-iterable is the PHP `TypeError`. Mirrors the
+    /// array-merge logic of `Op::ArrayAppendSpread`.
+    fn spread_pairs(&mut self, src: Zval) -> Result<Vec<(Key, Zval)>, PhpError> {
+        match src.deref_clone() {
+            Zval::Array(s) => Ok(s.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect()),
+            Zval::Generator(rc) => {
+                let mut out = Vec::new();
+                self.ensure_started(&rc)?;
+                loop {
+                    let (k, v, done) = {
+                        let g = rc.borrow();
+                        (g.cur_key.clone(), g.cur_val.clone(), matches!(g.status, GenStatus::Done))
+                    };
+                    if done {
+                        break;
+                    }
+                    let key = coerce_key_silent(&k).unwrap_or(Key::Int(0));
+                    out.push((key, v));
+                    self.resume_generator(&rc, Zval::Null)?;
+                }
+                Ok(out)
+            }
+            other => Err(PhpError::TypeError(format!(
+                "Only arrays and Traversables can be unpacked, {} given",
+                other.error_type_name()
+            ))),
+        }
     }
 
     /// The source line of the instruction that just ran (or faulted) in frame
@@ -9289,6 +9373,54 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php function inc(&$x){ $x++; } $n=5; inc(x: $n); echo $n;"),
             b"6"
+        );
+    }
+
+    #[test]
+    fn spread_call_named_and_positional_semantics() {
+        // String keys map to parameters by name; gaps use defaults.
+        assert_eq!(
+            vm_stdout(b"<?php function f($a,$b='B',$c='C'){ return \"$a-$b-$c\"; } echo f(...['a'=>1,'c'=>3]);"),
+            b"1-B-3"
+        );
+        // Spread positional then explicit named.
+        assert_eq!(
+            vm_stdout(b"<?php function f($a,$b,$c){ return \"$a-$b-$c\"; } echo f(...[1], c:3, b:2);"),
+            b"1-2-3"
+        );
+        // String keys collected into a variadic keep their key.
+        assert_eq!(
+            vm_stdout(b"<?php function f(...$args){ $s=''; foreach($args as $k=>$v) $s.=\"$k:$v \"; return $s; } echo f(...['x'=>1,'y'=>2]);"),
+            b"x:1 y:2 "
+        );
+        // A generator's string keys become named too.
+        assert_eq!(
+            vm_stdout(b"<?php function gen(){ yield 'x'=>1; yield 'y'=>2; } function f(...$n){ $s=''; foreach($n as $k=>$v) $s.=\"$k:$v \"; return $s; } echo f(...gen());"),
+            b"x:1 y:2 "
+        );
+    }
+
+    #[test]
+    fn spread_call_error_paths() {
+        // A non-iterable spread is a TypeError.
+        assert_eq!(
+            vm_stdout(b"<?php function f($a){} try { f(...5); } catch (\\TypeError $e) { echo $e->getMessage(); }"),
+            b"Only arrays and Traversables can be unpacked, int given"
+        );
+        // An unknown named key from a spread is a catchable Error.
+        assert_eq!(
+            vm_stdout(b"<?php function f($a){} try { f(...['z'=>1]); } catch (\\Error $e) { echo $e->getMessage(); }"),
+            b"Unknown named parameter $z"
+        );
+        // A spread named key colliding with a positional overwrites it → Error.
+        assert_eq!(
+            vm_stdout(b"<?php function f($a,$b,$c){} try { f(1, ...['a'=>9,'b'=>2,'c'=>3]); } catch (\\Error $e) { echo $e->getMessage(); }"),
+            b"Named parameter $a overwrites previous argument"
+        );
+        // A positional (int key) after a named one within the unpacking → Error.
+        assert_eq!(
+            vm_stdout(b"<?php function f($x, ...$r){} try { f(1, ...['k'=>2, 0=>3]); } catch (\\Error $e) { echo $e->getMessage(); }"),
+            b"Cannot use positional argument after named argument during unpacking"
         );
     }
 }

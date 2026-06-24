@@ -514,6 +514,15 @@ pub enum Op {
     /// name routed into `...$rest`. `positional` values are pushed first, then one
     /// value per `names` entry (label order).
     CallNamed { func: u32, positional: u32, names: Box<[Box<[u8]>]> },
+    /// `[comp…, named…] -> [ret]` — call known user function `func` whose argument
+    /// list contains a spread (`...$src`). Each leading component pushes one value:
+    /// a positional value, or (where `spreads[i]`) a spread *source* expanded at
+    /// run time — an array/Traversable whose integer keys become positional args
+    /// and string keys become named ones. Trailing explicit named values follow,
+    /// one per `names` entry. The binder enforces PHP's ordering (no positional
+    /// after a named, the "during unpacking" error) and a non-iterable spread is a
+    /// `TypeError`.
+    CallSpread { func: u32, spreads: Box<[bool]>, names: Box<[Box<[u8]>]> },
     /// `[obj, arg0, …, arg{argc-1}] -> [ret]` — like [`Op::MethodCall`] but the
     /// target method is resolved at *compile* time (`classes[class].methods[idx]`):
     /// used for the constructor, whose defining class and slot are known statically.
