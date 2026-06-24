@@ -2,12 +2,11 @@
 //! for scripts that call them via the evaluator + injected registry.
 
 use php_builtins::registry;
-// These exercise the registry *builtins* (engine-agnostic), but their scripts use
-// constructs the bytecode VM does not yet compile (`@` suppression, `exit`-expr,
-// `goto`/label, and a few evaluator-only builtins: json_decode / sscanf / fscanf /
-// mb_ereg* / mb_split). They stay pinned to the tree-walker until those VM gaps
-// close — the explicit blockers to deleting `eval/` (Session F2).
-use php_runtime::eval::run_source_with;
+// These exercise the registry *builtins* (engine-agnostic) through the production
+// bytecode VM. Every construct they use — `@` suppression, `exit`-expr, goto/label
+// (incl. crossing a finally), and the formerly evaluator-only builtins (json_decode
+// / sscanf / fscanf / mb_ereg* / mb_split) — is now VM-native (Session F2).
+use php_runtime::vm::run_source_with;
 use php_types::PhpError;
 
 fn out(src: &str) -> String {
