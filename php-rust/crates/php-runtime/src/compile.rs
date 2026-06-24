@@ -1519,13 +1519,18 @@ impl<'a> FnCompiler<'a> {
             }
             ExprKind::InstanceOf { expr, class } => self.instance_of(expr, class)?,
             ExprKind::StaticCall { class, method, args, named } => {
-                if let ClassRef::Dynamic(cexpr) = class {
+                // `Closure::bind`/`fromCallable` are built-in statics with no compiled
+                // class — must be handled before the runtime-class routing (a missing
+                // `Closure` class would otherwise look "unknown").
+                let closure_static =
+                    matches!(class, ClassRef::Named(n) if n.eq_ignore_ascii_case(b"Closure"));
+                if !closure_static && self.is_runtime_class(class) {
                     if !named.is_empty() {
                         return Err(CompileError::Unsupported("named arguments on `$cls::m()`".into()));
                     }
-                    // `$cls::m()` (PAR): the class reference is pushed beneath the
-                    // arguments and resolved at run time.
-                    self.expr(cexpr)?;
+                    // `$cls::m()` / an unknown named class (PAR): the class reference
+                    // is pushed beneath the arguments and resolved at run time.
+                    self.push_class_value(class)?;
                     if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
                         // Spread `$cls::m(...$a)` (Session A): args from a runtime array.
                         self.build_args_array(args)?;
@@ -1580,8 +1585,8 @@ impl<'a> FnCompiler<'a> {
             }
             ExprKind::ClassConst { class, name } => self.class_const(class, name)?,
             ExprKind::StaticProp { class, name } => {
-                if let ClassRef::Dynamic(cexpr) = class {
-                    self.expr(cexpr)?;
+                if self.is_runtime_class(class) {
+                    self.push_class_value(class)?;
                     self.emit(Op::StaticPropGetDynamic { name: name.clone() });
                 } else {
                     let (target, _) = self.resolve_target(class)?;
@@ -1591,16 +1596,16 @@ impl<'a> FnCompiler<'a> {
             ExprKind::StaticPropAssign { class, name, op, rhs } => {
                 // `$cls::$p` (PAR): resolve the class at run time; the rhs is
                 // pushed first so the class reference ends up on top.
-                if let ClassRef::Dynamic(cexpr) = class {
+                if self.is_runtime_class(class) {
                     match op {
                         StaticAssignOp::Plain => {
                             self.expr(rhs)?;
-                            self.expr(cexpr)?;
+                            self.push_class_value(class)?;
                             self.emit(Op::StaticPropSetDynamic { name: name.clone() });
                         }
                         StaticAssignOp::Op(b) => {
                             self.expr(rhs)?;
-                            self.expr(cexpr)?;
+                            self.push_class_value(class)?;
                             self.emit(Op::StaticPropOpSetDynamic { name: name.clone(), op: *b });
                         }
                         StaticAssignOp::Coalesce => {
@@ -1609,7 +1614,7 @@ impl<'a> FnCompiler<'a> {
                             // conditional write (the rhs is evaluated only when the
                             // property is null).
                             let t = self.alloc_temp();
-                            self.expr(cexpr)?;
+                            self.push_class_value(class)?;
                             self.emit(Op::StoreSlot(t));
                             self.emit(Op::LoadSlot(t));
                             self.emit(Op::StaticPropGetDynamic { name: name.clone() });
@@ -1646,9 +1651,9 @@ impl<'a> FnCompiler<'a> {
                 }
             }
             ExprKind::StaticPropIncDec { class, name, inc, pre } => {
-                if let ClassRef::Dynamic(cexpr) = class {
+                if self.is_runtime_class(class) {
                     // `$cls::$p++` (PAR): the class reference is resolved at run time.
-                    self.expr(cexpr)?;
+                    self.push_class_value(class)?;
                     self.emit(Op::StaticPropIncDecDynamic { name: name.clone(), inc: *inc, pre: *pre });
                 } else {
                     let (target, _) = self.resolve_target(class)?;
@@ -2399,25 +2404,39 @@ impl<'a> FnCompiler<'a> {
 
     /// Compile `ClassRef::name` — a class constant or the special `::class`.
     fn class_const(&mut self, class: &ClassRef, name: &[u8]) -> R<()> {
-        if let ClassRef::Dynamic(cexpr) = class {
-            // `$cls::CONST` / `$cls::class` (PAR): resolve at run time.
-            self.expr(cexpr)?;
+        // `::class` is a compile-time constant. A *named* class yields its
+        // fully-qualified name as a string even when the class is undefined (PHP
+        // resolves the name, not the class; the lowerer already made it the FQN).
+        if name.eq_ignore_ascii_case(b"class") {
+            match class {
+                ClassRef::Named(n) => {
+                    let k = self.konst(Const::Str(n.clone()));
+                    self.emit(Op::PushConst(k));
+                }
+                ClassRef::Dynamic(cexpr) => {
+                    self.expr(cexpr)?;
+                    self.emit(Op::ClassConstFromValue { name: name.into() });
+                }
+                _ => match self.resolve_target(class)?.0 {
+                    ClassTarget::Class(cid) => {
+                        let k = self.konst(Const::Str(self.ctx.classes[cid].name.clone()));
+                        self.emit(Op::PushConst(k));
+                    }
+                    ClassTarget::Static => {
+                        self.emit(Op::ClassNameStatic);
+                    }
+                },
+            }
+            return Ok(());
+        }
+        // A class constant `C::NAME`: `$cls::NAME` or an unknown named class resolve
+        // the class from a run-time value (PHP: `Class "X" not found` if missing).
+        if self.is_runtime_class(class) {
+            self.push_class_value(class)?;
             self.emit(Op::ClassConstFromValue { name: name.into() });
             return Ok(());
         }
         let (target, _forwarding) = self.resolve_target(class)?;
-        if name.eq_ignore_ascii_case(b"class") {
-            match target {
-                ClassTarget::Class(cid) => {
-                    let k = self.konst(Const::Str(self.ctx.classes[cid].name.clone()));
-                    self.emit(Op::PushConst(k));
-                }
-                ClassTarget::Static => {
-                    self.emit(Op::ClassNameStatic);
-                }
-            }
-            return Ok(());
-        }
         match target {
             ClassTarget::Class(cid) => match self.find_class_const(cid, name) {
                 Some((decl, idx)) => {
@@ -2444,6 +2463,34 @@ impl<'a> FnCompiler<'a> {
             }
         }
         Ok(())
+    }
+
+    /// Whether `class` is resolved at run time rather than compile time: a
+    /// `$expr::` dynamic reference, or a named class unknown at compile time. PHP
+    /// resolves an unknown named class at the point of use (throwing `Class "X"
+    /// not found` if still missing), so we defer it to the same dynamic ops as
+    /// `$cls::…` instead of failing to compile (step 50 follow-up).
+    fn is_runtime_class(&self, class: &ClassRef) -> bool {
+        match class {
+            ClassRef::Dynamic(_) => true,
+            ClassRef::Named(n) => self.resolve_class(n).is_none(),
+            _ => false,
+        }
+    }
+
+    /// Push the run-time class value for a reference where [`Self::is_runtime_class`]
+    /// holds: the evaluated `$expr`, or the (already fully-qualified) class name as
+    /// a string the VM resolves via the class table.
+    fn push_class_value(&mut self, class: &ClassRef) -> R<()> {
+        match class {
+            ClassRef::Dynamic(e) => self.expr(e),
+            ClassRef::Named(n) => {
+                let k = self.konst(Const::Str(n.clone()));
+                self.emit(Op::PushConst(k));
+                Ok(())
+            }
+            _ => unreachable!("push_class_value on a compile-time class ref"),
+        }
     }
 
     /// Resolve a `ClassRef` to a [`ClassTarget`] plus whether the call is
