@@ -1059,6 +1059,7 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::FetchDim);
             }
             ExprKind::AssignPlace(place, rhs) => self.assign_place(place, rhs)?,
+            ExprKind::AssignCoalescePlace(place, rhs) => self.assign_coalesce_place(place, rhs)?,
             ExprKind::AssignRef { target, source } => self.assign_ref(target, source)?,
             ExprKind::AssignRefCall { target, call } => self.assign_ref_call(target, call)?,
             ExprKind::Closure { fn_idx, captures, bind_this } => {
@@ -1099,6 +1100,26 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::EmptyPath { base, nkeys });
             }
             ExprKind::Coalesce(a, b) => {
+                // `$o->p ?? d`: a property is read isset-aware — `__isset` decides
+                // and `__get` runs only when set, so an unset magic property never
+                // warns or calls `__get`. Other operands (Var/Index) read silently.
+                if let ExprKind::PropGet { object, name, nullsafe } = &a.kind {
+                    if !nullsafe {
+                        self.expr(object)?; // [obj]
+                        self.emit(Op::Dup); // [obj, obj]
+                        self.emit(Op::PropIsset { name: name.clone() }); // [obj, isset]
+                        let to_default = self.emit(Op::JumpIfFalse(Addr::MAX)); // unset → default; [obj]
+                        self.emit(Op::PropGet { name: name.clone() }); // set → [value]
+                        let to_end = self.emit(Op::Jump(Addr::MAX));
+                        let default_at = self.here();
+                        self.patch(to_default, Op::JumpIfFalse(default_at));
+                        self.emit(Op::Pop); // drop the kept object
+                        self.expr(b)?; // [default]
+                        let end = self.here();
+                        self.patch(to_end, Op::Jump(end));
+                        return Ok(());
+                    }
+                }
                 // Left read silently (Var/Index reads don't warn); right only if null.
                 self.expr(a)?;
                 let to_end = self.emit(Op::JumpIfNotNull(Addr::MAX));
@@ -2406,6 +2427,30 @@ impl<'a> FnCompiler<'a> {
         self.expr(rhs)?;
         self.emit(Op::AssignPath { base, nkeys, append });
         Ok(())
+    }
+
+    /// Compile `$o->p ??= rhs` on a single property (magic-aware). Read via
+    /// `__isset`; if already set, the existing value (`__get`) is the result and
+    /// no write happens; if unset, assign `rhs` (`__set`) and yield it. Each magic
+    /// op leaves its result for the next, so the composition works for both magic
+    /// and declared properties.
+    fn assign_coalesce_place(&mut self, place: &Place, rhs: &Expr) -> R<()> {
+        if let Some(name) = self.prop_place(place)? {
+            // stack: [obj]
+            self.emit(Op::Dup); // [obj, obj]
+            self.emit(Op::PropIsset { name: name.clone() }); // [obj, isset]
+            let to_set = self.emit(Op::JumpIfFalse(Addr::MAX)); // unset → set; [obj]
+            self.emit(Op::PropGet { name: name.clone() }); // set: existing value → [value]
+            let to_end = self.emit(Op::Jump(Addr::MAX));
+            let set_at = self.here();
+            self.patch(to_set, Op::JumpIfFalse(set_at));
+            self.expr(rhs)?; // [obj, rhs]
+            self.emit(Op::PropSet { name }); // [value]
+            let end = self.here();
+            self.patch(to_end, Op::Jump(end));
+            return Ok(());
+        }
+        Err(CompileError::Unsupported("`??=` on a non-property place".into()))
     }
 
     /// Compile a compound element write `$a[…][k] op= rhs`.

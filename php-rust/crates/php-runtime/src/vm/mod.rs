@@ -9423,5 +9423,21 @@ mod tests {
             b"Cannot use positional argument after named argument during unpacking"
         );
     }
+
+    #[test]
+    fn coalesce_and_coalesce_assign_on_properties() {
+        // `??=` on a declared null property assigns.
+        assert_eq!(vm_stdout(b"<?php class C { public $x = null; } $c = new C; $c->x ??= 7; echo $c->x;"), b"7");
+        // `??=` on a magic property: __isset decides, __set only when unset.
+        assert_eq!(
+            vm_stdout(b"<?php class C { private $d=[]; function __isset($n){return isset($this->d[$n]);} function __get($n){return $this->d[$n]??null;} function __set($n,$v){$this->d[$n]=$v;} } $c=new C(); $c->x ??= 'NEW'; echo $c->x;"),
+            b"NEW"
+        );
+        // `??` on an unset magic property uses __isset and never calls __get.
+        assert_eq!(
+            vm_stdout(b"<?php class C { function __isset($n){return false;} function __get($n){echo 'G'; return 1;} } $c=new C(); echo ($c->x ?? 'D');"),
+            b"D"
+        );
+    }
 }
 
