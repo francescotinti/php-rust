@@ -1014,6 +1014,23 @@ pub struct CompiledClass {
     /// property default): [`Op::Alloc`] on it fatals instead of producing a
     /// wrong instance, mirroring the function-stub discipline.
     pub ok: bool,
+    /// PHP 8.4 property hooks (step 50), flattened parent-first so the most-derived
+    /// `get`/`set` wins. Keyed by property name. A property present here is hooked;
+    /// `PropGet`/`PropSet` route through its hook (taking precedence over magic),
+    /// and a *virtual* one (`backed == false`) has no entry in `prop_defaults`.
+    pub prop_hooks: std::collections::HashMap<Box<[u8]>, PropHooks>,
+}
+
+/// The compiled `get`/`set` hooks of one property (step 50). Each hook is a
+/// method-like [`Func`]: `get` takes no parameter and returns the value; `set`
+/// takes one (`$value`) and its return is discarded.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PropHooks {
+    pub get: Option<Func>,
+    pub set: Option<Func>,
+    /// Whether the property has backing storage (false = virtual: no slot, omitted
+    /// from `var_dump`; a `$this->name` inside its own hook reaches the backing).
+    pub backed: bool,
 }
 
 /// A whole compiled program: the script body plus the flat function / closure /

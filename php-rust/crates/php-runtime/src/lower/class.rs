@@ -6,8 +6,9 @@ use mago_syntax::ast::{
     ArrowFunction,
     Class, ClassLikeMember, Closure, Enum, EnumCaseItem, Function,
     FunctionLikeParameterList, Hint, Interface, MagicConstant, Method,
-    MethodBody, Property, PropertyItem, Statement, Trait, TraitUse, TraitUseAdaptation, TraitUseMethodReference,
-    TraitUseSpecification,
+    MethodBody, Property, PropertyHook, PropertyHookBody, PropertyHookConcreteBody,
+    PropertyHookList, PropertyItem, Statement, Trait, TraitUse, TraitUseAdaptation,
+    TraitUseMethodReference, TraitUseSpecification,
 };
 
 use crate::hir::{
@@ -668,7 +669,8 @@ impl<'f> Lowerer<'f> {
 
     /// Lower a property declaration into one entry per item (`public $a = 1, $b;`),
     /// routing `static` properties to `static_out` and instance properties to
-    /// `out` (step 19-1/19-4). Hooked properties remain out of scope.
+    /// `out` (step 19-1/19-4). A hooked property (`public $p { get … }`, PHP 8.4,
+    /// step 50) is a single item carrying `get`/`set` hook bodies.
     fn lower_property(
         &mut self,
         prop: &Property,
@@ -678,11 +680,20 @@ impl<'f> Lowerer<'f> {
     ) -> Result<(), LowerError> {
         let plain = match prop {
             Property::Plain(p) => p,
-            Property::Hooked(_) => {
-                return Err(LowerError::Unsupported {
-                    what: "property hooks",
-                    line,
-                })
+            Property::Hooked(h) => {
+                let visibility = visibility_of(h.modifiers.iter());
+                let (var, default) = match &h.item {
+                    PropertyItem::Abstract(a) => (&a.variable, None),
+                    PropertyItem::Concrete(c) => (&c.variable, Some(self.lower_expr(c.value)?)),
+                };
+                let name: Box<[u8]> = strip_dollar(var.name).into();
+                let (get_hook, set_hook, hooks_backing) =
+                    self.lower_hooks(&h.hook_list, &name, line)?;
+                // A property is backed iff it has a default, or a hook reads/writes
+                // its own `$this->name`; otherwise it is virtual (no storage).
+                let backed = default.is_some() || hooks_backing;
+                out.push(PropDecl { name, visibility, default, get_hook, set_hook, backed });
+                return Ok(());
             }
         };
         let is_static = plain.modifiers.iter().any(|m| m.is_static());
@@ -704,10 +715,145 @@ impl<'f> Lowerer<'f> {
                     name,
                     visibility,
                     default,
+                    get_hook: None,
+                    set_hook: None,
+                    backed: true,
                 });
             }
         }
         Ok(())
+    }
+
+    /// Lower a property's `{ get … set … }` hook list (PHP 8.4, step 50) into an
+    /// optional `get` and `set` hook (each an [`FnDecl`]), plus whether any hook
+    /// accesses the property's own backing (`$this-><name>`), which makes the
+    /// property backed rather than virtual.
+    fn lower_hooks(
+        &mut self,
+        list: &PropertyHookList,
+        prop_name: &[u8],
+        line: Line,
+    ) -> Result<(Option<FnDecl>, Option<FnDecl>, bool), LowerError> {
+        let mut get_hook = None;
+        let mut set_hook = None;
+        let mut backed = false;
+        for hook in list.hooks.iter() {
+            // `&get`/`&set` (by-reference) hooks are out of this step's scope.
+            if hook.ampersand.is_some() {
+                return Err(LowerError::Unsupported { what: "by-reference property hook", line });
+            }
+            let is_set = hook.name.value.eq_ignore_ascii_case(b"set");
+            let (fd, hook_backed) = self.lower_one_hook(hook, prop_name, is_set, line)?;
+            backed |= hook_backed;
+            if is_set {
+                set_hook = Some(fd);
+            } else {
+                get_hook = Some(fd);
+            }
+        }
+        Ok((get_hook, set_hook, backed))
+    }
+
+    /// Lower a single property hook body into an [`FnDecl`] in a fresh local scope
+    /// (like a method). A `get` hook takes no parameter and returns a value; a
+    /// `set` hook takes one parameter (the explicit `set($v)` one, else an
+    /// implicit `$value`). The arrow forms desugar: `get => e` → `return e;`,
+    /// `set => e` → `$this-><prop> = e;` (a backing write). Returns the hook plus
+    /// whether it touched the property's own backing.
+    fn lower_one_hook(
+        &mut self,
+        hook: &PropertyHook,
+        prop_name: &[u8],
+        is_set: bool,
+        line: Line,
+    ) -> Result<(FnDecl, bool), LowerError> {
+        let body_ast = match &hook.body {
+            // `abstract`/interface hooks (`{ get; }`) declare a contract only.
+            PropertyHookBody::Abstract(_) => {
+                return Err(LowerError::Unsupported { what: "abstract property hook", line })
+            }
+            PropertyHookBody::Concrete(c) => c,
+        };
+        let hook_name: Box<[u8]> = {
+            let mut v = prop_name.to_vec();
+            v.extend_from_slice(if is_set { b"::set" } else { b"::get" });
+            v.into()
+        };
+
+        // Fresh local overlay + backing-access tracking for this hook body.
+        let saved_locals = self.locals.replace(Scope::default());
+        let saved_tag = std::mem::replace(&mut self.after_closing_tag, false);
+        let saved_by_ref = std::mem::replace(&mut self.fn_by_ref, false);
+        let saved_saw_yield = std::mem::replace(&mut self.fn_saw_yield, false);
+        let saved_fn = self.cur_function.replace(hook_name.clone());
+        let saved_hook_prop = self.hook_prop.replace(prop_name.into());
+        let saved_hook_backed = std::mem::replace(&mut self.hook_backed, false);
+
+        let inner = (|| {
+            let params = if is_set {
+                match &hook.parameter_list {
+                    Some(pl) => self.lower_params(pl, line)?,
+                    None => {
+                        // Implicit `$value` parameter.
+                        let slot = self.slot_for(b"value");
+                        vec![Param { slot, default: None, by_ref: false, variadic: false, hint: None }]
+                    }
+                }
+            } else {
+                Vec::new()
+            };
+            let body = match body_ast {
+                PropertyHookConcreteBody::Block(b) => self.lower_stmts(b.statements.as_slice())?,
+                PropertyHookConcreteBody::Expression(e) => {
+                    let expr = self.lower_expr(e.expression)?;
+                    if is_set {
+                        // `set => e` assigns the backing field: `$this-><prop> = e`.
+                        self.note_this_prop(prop_name);
+                        vec![Stmt {
+                            line,
+                            kind: StmtKind::Expr(Expr {
+                                line,
+                                kind: ExprKind::AssignPlace(
+                                    Place {
+                                        base: PlaceBase::This,
+                                        steps: vec![PlaceStep::Prop(prop_name.into())],
+                                    },
+                                    Box::new(expr),
+                                ),
+                            }),
+                        }]
+                    } else {
+                        vec![Stmt { line, kind: StmtKind::Return(Some(expr)) }]
+                    }
+                }
+            };
+            Ok::<_, LowerError>((params, body))
+        })();
+
+        let local_scope = std::mem::replace(&mut self.locals, saved_locals)
+            .expect("local scope installed for hook body");
+        self.after_closing_tag = saved_tag;
+        self.fn_by_ref = saved_by_ref;
+        self.cur_function = saved_fn;
+        self.hook_prop = saved_hook_prop;
+        let is_generator = std::mem::replace(&mut self.fn_saw_yield, saved_saw_yield);
+        let hook_backed = std::mem::replace(&mut self.hook_backed, saved_hook_backed);
+
+        let (params, body) = inner?;
+        validate_goto(&body)?;
+        Ok((
+            FnDecl {
+                name: hook_name,
+                params,
+                body,
+                is_generator,
+                slots: local_scope.slots,
+                by_ref: false,
+                ret_hint: None,
+                line,
+            },
+            hook_backed,
+        ))
     }
 
     /// Lower one method into a [`MethodDecl`] wrapping an ordinary [`FnDecl`]
@@ -789,6 +935,9 @@ impl<'f> Lowerer<'f> {
                 name: p.name,
                 visibility: p.visibility,
                 default: None,
+                get_hook: p.get_hook,
+                set_hook: p.set_hook,
+                backed: p.backed,
             });
         }
         validate_goto(&body)?; // step 45: function-scoped goto/label check
@@ -928,11 +1077,20 @@ impl<'f> Lowerer<'f> {
             let slot = self.slot_for(strip_dollar(p.variable.name));
             if p.is_promoted_property() {
                 // `public int $x` in a constructor: still a real parameter, but it
-                // also declares an instance property assigned from the param.
+                // also declares an instance property assigned from the param. The
+                // promoted property may itself carry hooks (`public $x { get … }`).
+                let pname: Box<[u8]> = strip_dollar(p.variable.name).into();
+                let (get_hook, set_hook, backed) = match &p.hooks {
+                    Some(list) => self.lower_hooks(list, &pname, _line)?,
+                    None => (None, None, true),
+                };
                 self.promoted.push(PromotedParam {
-                    name: strip_dollar(p.variable.name).into(),
+                    name: pname,
                     visibility: visibility_of(p.modifiers.iter()),
                     slot,
+                    get_hook,
+                    set_hook,
+                    backed,
                 });
             }
             let default = match &p.default_value {

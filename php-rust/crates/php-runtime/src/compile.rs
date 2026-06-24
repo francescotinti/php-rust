@@ -27,7 +27,7 @@ use php_types::{ObjectInfo, PhpStr, PropVis};
 use crate::builtin::{Builtin, Registry};
 use crate::bytecode::{
     Addr, BuiltinIface, ClassTarget, CompiledClass, CompiledConst, CompiledEnumCase, CompiledMethod, CompiledStaticProp, Const,
-    ConstIdx, DimBase, ExcRegion, FieldBase, FieldStep, Func, Instantiable, Module, Op, StaticInit,
+    ConstIdx, DimBase, ExcRegion, FieldBase, FieldStep, Func, Instantiable, Module, Op, PropHooks, StaticInit,
 };
 use crate::hir::{
     BinOp, Case, CatchClause, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, HintKind, Line,
@@ -290,21 +290,54 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
     let mut ok = true;
     let mut flat_defaults: Vec<(Box<[u8]>, Option<&Expr>)> = Vec::new();
     let mut vis_entries: Vec<(Box<[u8]>, PropVis)> = Vec::new();
+    // Property hooks (step 50), flattened parent-first like the layout: a
+    // most-derived `get`/`set` overrides the inherited one. A *virtual* hooked
+    // property (no backing) is excluded from the object layout below.
+    let mut prop_hooks: HashMap<Box<[u8]>, PropHooks> = HashMap::new();
     for &x in &chain {
         let cname = PhpStr::new(ctx.classes[x].name.to_vec());
         for p in &ctx.classes[x].props {
-            match flat_defaults.iter_mut().find(|(k, _)| k.as_ref() == p.name.as_ref()) {
-                Some(e) => e.1 = p.default.as_ref(),
-                None => flat_defaults.push((p.name.clone(), p.default.as_ref())),
+            if p.get_hook.is_some() || p.set_hook.is_some() {
+                let entry = prop_hooks.entry(p.name.clone()).or_insert(PropHooks {
+                    get: None,
+                    set: None,
+                    backed: p.backed,
+                });
+                entry.backed = p.backed;
+                // Compile each hook in its *declaring* class's context (so `self::`
+                // resolves there), even though it is stored in the leaf's table.
+                if let Some(g) = &p.get_hook {
+                    entry.get = Some(compile_hook(g, ctx, x));
+                }
+                if let Some(s) = &p.set_hook {
+                    entry.set = Some(compile_hook(s, ctx, x));
+                }
+            } else {
+                // A plain (re)declaration shadows any inherited hook and is backed.
+                prop_hooks.remove(p.name.as_ref());
             }
-            let vis = match p.visibility {
-                Visibility::Public => PropVis::Public,
-                Visibility::Protected => PropVis::Protected,
-                Visibility::Private => PropVis::Private(Rc::clone(&cname)),
-            };
-            match vis_entries.iter_mut().find(|(k, _)| k.as_ref() == p.name.as_ref()) {
-                Some(e) => e.1 = vis,
-                None => vis_entries.push((p.name.clone(), vis)),
+            // A virtual hooked property has no backing storage: keep it out of the
+            // instance layout (not allocated, not dumped). Backed ones stay.
+            let virtual_prop = (p.get_hook.is_some() || p.set_hook.is_some()) && !p.backed;
+            if !virtual_prop {
+                match flat_defaults.iter_mut().find(|(k, _)| k.as_ref() == p.name.as_ref()) {
+                    Some(e) => e.1 = p.default.as_ref(),
+                    None => flat_defaults.push((p.name.clone(), p.default.as_ref())),
+                }
+                let vis = match p.visibility {
+                    Visibility::Public => PropVis::Public,
+                    Visibility::Protected => PropVis::Protected,
+                    Visibility::Private => PropVis::Private(Rc::clone(&cname)),
+                };
+                match vis_entries.iter_mut().find(|(k, _)| k.as_ref() == p.name.as_ref()) {
+                    Some(e) => e.1 = vis,
+                    None => vis_entries.push((p.name.clone(), vis)),
+                }
+            } else {
+                // A virtual property that shadowed an inherited backed one must
+                // also drop the inherited storage entry.
+                flat_defaults.retain(|(k, _)| k.as_ref() != p.name.as_ref());
+                vis_entries.retain(|(k, _)| k.as_ref() != p.name.as_ref());
             }
         }
     }
@@ -431,7 +464,29 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         consts,
         enum_cases,
         ok,
+        prop_hooks,
     }
+}
+
+/// Compile one property-hook body (step 50) to a [`Func`], in its class's context
+/// (so `self::`/`$this` resolve). Mirrors the method-body path; a hook that does
+/// not compile becomes a fatal stub, like a method.
+fn compile_hook(fd: &crate::hir::FnDecl, ctx: &ProgramCtx, cid: ClassId) -> Func {
+    compile_body(
+        &fd.name,
+        &fd.body,
+        fd.slots.len() as u32,
+        &fd.params,
+        &fd.slots,
+        fd.by_ref,
+        fd.is_generator,
+        fd.ret_hint.clone(),
+        fd.line,
+        ctx,
+        Some(cid),
+        false,
+    )
+    .unwrap_or_else(|e| stub_func(fd, &e))
 }
 
 /// Compile the prop-init thunk: for each non-constant property default, `This;

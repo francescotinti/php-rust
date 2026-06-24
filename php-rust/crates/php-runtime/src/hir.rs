@@ -181,6 +181,15 @@ pub struct PropDecl {
     pub name: Box<[u8]>,
     pub visibility: Visibility,
     pub default: Option<Expr>,
+    /// PHP 8.4 property hooks (step 50). A `get`/`set` hook is a method-like body
+    /// dispatched on read/write; `None` for a plain property. The `set` hook's
+    /// `FnDecl` has one parameter (`$value` or the explicit `set($x)` param).
+    pub get_hook: Option<FnDecl>,
+    pub set_hook: Option<FnDecl>,
+    /// Whether the property has backing storage. A plain property is backed; a
+    /// hooked property is *backed* only if a hook body reads/writes its own
+    /// `$this->name` (else it is *virtual*: no slot, omitted from `var_dump`).
+    pub backed: bool,
 }
 
 /// One method (step 19, D-19.5). Wraps an ordinary [`FnDecl`] (so method calls

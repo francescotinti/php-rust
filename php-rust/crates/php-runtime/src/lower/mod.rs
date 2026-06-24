@@ -762,14 +762,25 @@ struct Lowerer<'f> {
     /// may itself contain nested param lists that overwrite it — to both declare
     /// the instance properties and prepend `$this->p = $p` assignments.
     promoted: Vec<PromotedParam>,
+    /// While lowering a property hook body (step 50): the hooked property's name.
+    /// A `$this-><name>` access inside the body marks the property *backed* (it
+    /// needs real storage and appears in `var_dump`); see `hook_backed`.
+    hook_prop: Option<Box<[u8]>>,
+    /// Set when the hook body currently being lowered accesses its own backing
+    /// (`$this-><hook_prop>`), making the property backed rather than virtual.
+    hook_backed: bool,
 }
 
-/// One constructor-promoted parameter: its property name, declared visibility, and
-/// the parameter slot the prologue assignment reads from.
+/// One constructor-promoted parameter: its property name, declared visibility, the
+/// parameter slot the prologue assignment reads from, and any property hooks (a
+/// promoted property may itself be hooked, PHP 8.4).
 struct PromotedParam {
     name: Box<[u8]>,
     visibility: Visibility,
     slot: Slot,
+    get_hook: Option<FnDecl>,
+    set_hook: Option<FnDecl>,
+    backed: bool,
 }
 
 /// A trait whose members have been lowered and whose own `use` clauses have been
@@ -811,6 +822,16 @@ impl<'f> Lowerer<'f> {
             use_functions: HashMap::new(),
             use_consts: HashMap::new(),
             promoted: Vec::new(),
+            hook_prop: None,
+            hook_backed: false,
+        }
+    }
+
+    /// Note a `$this-><name>` access seen while lowering a property-hook body: if
+    /// it targets the hooked property itself, the property is backed (step 50).
+    fn note_this_prop(&mut self, name: &[u8]) {
+        if self.hook_prop.as_deref() == Some(name) {
+            self.hook_backed = true;
         }
     }
 

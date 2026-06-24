@@ -293,6 +293,10 @@ enum MagicKind {
     Set,
     Isset,
     Unset,
+    /// A property-hook activation (step 50). While a `get`/`set` hook for
+    /// `(objectId, prop)` runs, this guard is active so a `$this->prop` inside the
+    /// hook falls through to the backing store instead of re-entering the hook.
+    Hook,
 }
 
 /// A control transfer (`return` / `break` / `continue`) parked while a `finally`
@@ -339,6 +343,10 @@ struct Frame<'m> {
     /// When true, this frame's `Ret` value is cast to bool before being pushed to
     /// the caller — for `__isset`, whose return PHP coerces to bool.
     ret_bool: bool,
+    /// When true, this frame's `Ret` value is replaced by `result !== null` —
+    /// `isset($obj->hookedProp)` runs the `get` hook and tests its result for
+    /// being set (step 50), distinct from `ret_bool`'s truthiness coercion.
+    ret_isset: bool,
     /// When true, this frame's `Ret` value is converted to a string before being
     /// pushed — for a `__toString` call scheduled by [`Op::Stringify`].
     ret_stringify: bool,
@@ -392,6 +400,7 @@ impl<'m> Frame<'m> {
             static_class: None,
             ret_cell: None,
             ret_bool: false,
+            ret_isset: false,
             ret_stringify: false,
             guard_release: None,
             iters: Vec::new(),
@@ -1665,6 +1674,7 @@ impl<'m> Vm<'m> {
                     }
                     let ret_cell = self.frames[top].ret_cell.take();
                     let ret_bool = self.frames[top].ret_bool;
+                    let ret_isset = self.frames[top].ret_isset;
                     let ret_stringify = self.frames[top].ret_stringify;
                     let guard = self.frames[top].guard_release.take();
                     self.frames.pop();
@@ -1676,7 +1686,9 @@ impl<'m> Vm<'m> {
                         // the caller already has (or re-reads) its own value.
                         *cell.borrow_mut() = ret;
                     } else {
-                        let v = if ret_bool {
+                        let v = if ret_isset {
+                            Zval::Bool(!matches!(ret.deref_clone(), Zval::Null))
+                        } else if ret_bool {
                             Zval::Bool(convert::to_bool(&ret, &mut self.diags))
                         } else if ret_stringify {
                             Zval::Str(convert::to_zstr(&ret, &mut self.diags))
@@ -1836,6 +1848,16 @@ impl<'m> Vm<'m> {
                     let cur = self.frames[top].class;
                     let target = obj.deref_clone();
                     if let Zval::Object(o) = &target {
+                        // A `get` hook takes precedence over `__get` and direct read
+                        // (step 50). Skip it while a hook for this property is active
+                        // (a backing read inside the hook).
+                        let (oid, cid) = { let b = o.borrow(); (b.id, b.class_id as usize) };
+                        if !self.hook_guarded(oid, &name) {
+                            if let Some(func) = self.prop_hook(cid, &name, false) {
+                                self.push_hook(func, target.clone(), oid, &name, None);
+                                continue;
+                            }
+                        }
                         if let Some((defc, midx, oid)) =
                             self.magic_applies(o, &name, cur, MagicKind::Get, b"__get")
                         {
@@ -1893,6 +1915,18 @@ impl<'m> Vm<'m> {
                                 }));
                             }
                         }
+                        // A `set` hook takes precedence over `__set` and direct write
+                        // (step 50); skipped while a hook for this property is active
+                        // (a backing write inside the hook). The expression still
+                        // yields the assigned value; the hook's own return is dropped.
+                        let (oid, cid) = { let b = o.borrow(); (b.id, b.class_id as usize) };
+                        if !self.hook_guarded(oid, &name) {
+                            if let Some(func) = self.prop_hook(cid, &name, true) {
+                                self.frames[top].stack.push(value.clone());
+                                self.push_hook(func, target.clone(), oid, &name, Some(value));
+                                continue;
+                            }
+                        }
                         if let Some((defc, midx, oid)) =
                             self.magic_applies(o, &name, cur, MagicKind::Set, b"__set")
                         {
@@ -1939,6 +1973,16 @@ impl<'m> Vm<'m> {
                     let cur = self.frames[top].class;
                     let target = obj.deref_clone();
                     let set = if let Zval::Object(o) = &target {
+                        // `isset($o->hooked)` runs the `get` hook and tests its result
+                        // for being non-null (step 50). Hooks precede `__isset`.
+                        let (oid, cid) = { let b = o.borrow(); (b.id, b.class_id as usize) };
+                        if !self.hook_guarded(oid, &name) {
+                            if let Some(func) = self.prop_hook(cid, &name, false) {
+                                self.push_hook(func, target.clone(), oid, &name, None);
+                                self.frames.last_mut().unwrap().ret_isset = true;
+                                continue;
+                            }
+                        }
                         if let Some((defc, midx, oid)) =
                             self.magic_applies(o, &name, cur, MagicKind::Isset, b"__isset")
                         {
@@ -1969,6 +2013,17 @@ impl<'m> Vm<'m> {
                             let prop = String::from_utf8_lossy(&name).into_owned();
                             return Err(PhpError::Error(format!(
                                 "Cannot unset readonly property {cls}::${prop}"
+                            )));
+                        }
+                        // A hooked property has no plain backing to unset (step 50).
+                        if self.prop_hook(o.borrow().class_id as usize, &name, false).is_some()
+                            || self.prop_hook(o.borrow().class_id as usize, &name, true).is_some()
+                        {
+                            let ob = o.borrow();
+                            let cls = String::from_utf8_lossy(ob.class_name.as_bytes()).into_owned();
+                            let prop = String::from_utf8_lossy(&name).into_owned();
+                            return Err(PhpError::Error(format!(
+                                "Cannot unset hooked property {cls}::${prop}"
                             )));
                         }
                         if let Some((defc, midx, oid)) =
@@ -5368,6 +5423,53 @@ impl<'m> Vm<'m> {
         frame.ret_cell = ret_cell;
         frame.ret_bool = ret_bool;
         let key = (oid, kind, name.to_vec());
+        self.magic_guard.insert(key.clone());
+        frame.guard_release = Some(key);
+        self.frames.push(frame);
+    }
+
+    /// The compiled `get`/`set` hook of property `name` on class `cid`, if any
+    /// (step 50). The table is flattened parent-first, so the most-derived hook is
+    /// already in `cid`'s entry. The returned ref lives as long as the module.
+    fn prop_hook(&self, cid: usize, name: &[u8], set: bool) -> Option<&'m Func> {
+        let h = self.module.classes[cid].prop_hooks.get(name)?;
+        if set {
+            h.set.as_ref()
+        } else {
+            h.get.as_ref()
+        }
+    }
+
+    /// Whether a property hook for `(oid, name)` is currently on the stack, so an
+    /// access to that property must reach the backing store directly (step 50).
+    fn hook_guarded(&self, oid: u32, name: &[u8]) -> bool {
+        self.magic_guard.contains(&(oid, MagicKind::Hook, name.to_vec()))
+    }
+
+    /// Dispatch a property `get`/`set` hook as a frame, mirroring
+    /// [`Self::push_magic_prop`]. `set_value` is `Some` for a `set` hook (bound to
+    /// slot 0; its return discarded into a throwaway cell) and `None` for a `get`
+    /// hook (its return flows to the caller as the read result). The hook guard
+    /// `(oid, Hook, name)` is released on `Ret`, so `$this->name` inside the hook
+    /// reaches the backing store.
+    fn push_hook(&mut self, func: &'m Func, recv: Zval, oid: u32, name: &[u8], set_value: Option<Zval>) {
+        let cid = object_class_id(&recv).unwrap_or(0);
+        let is_set = set_value.is_some();
+        let mut frame = Frame::new(func);
+        frame.argc = func.n_params;
+        if let Some(v) = set_value {
+            if !frame.slots.is_empty() {
+                frame.slots[0] = v;
+            }
+        }
+        frame.this = Some(recv);
+        frame.class = Some(cid);
+        frame.static_class = Some(cid);
+        if is_set {
+            // A `set` hook's own return value is discarded (like `__set`).
+            frame.ret_cell = Some(Rc::new(RefCell::new(Zval::Null)));
+        }
+        let key = (oid, MagicKind::Hook, name.to_vec());
         self.magic_guard.insert(key.clone());
         frame.guard_release = Some(key);
         self.frames.push(frame);

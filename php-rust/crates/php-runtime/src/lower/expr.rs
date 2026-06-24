@@ -657,11 +657,14 @@ impl<'f> Lowerer<'f> {
     /// and class-constant accesses (`::`) are later sub-steps.
     fn lower_access(&mut self, access: &Access, line: Line) -> Result<ExprKind, LowerError> {
         match access {
-            Access::Property(p) => Ok(ExprKind::PropGet {
-                object: Box::new(self.lower_expr(p.object)?),
-                name: member_name(&p.property, line)?.into(),
-                nullsafe: false,
-            }),
+            Access::Property(p) => {
+                let object = self.lower_expr(p.object)?;
+                let name: Box<[u8]> = member_name(&p.property, line)?.into();
+                if matches!(object.kind, ExprKind::This) {
+                    self.note_this_prop(&name); // backing read inside a hook (step 50)
+                }
+                Ok(ExprKind::PropGet { object: Box::new(object), name, nullsafe: false })
+            }
             Access::NullSafeProperty(p) => Ok(ExprKind::PropGet {
                 object: Box::new(self.lower_expr(p.object)?),
                 name: member_name(&p.property, line)?.into(),
@@ -871,9 +874,11 @@ impl<'f> Lowerer<'f> {
             // base's own `lower_place`.
             Expression::Access(Access::Property(p)) => {
                 let mut place = self.lower_place(p.object, line)?;
-                place
-                    .steps
-                    .push(PlaceStep::Prop(member_name(&p.property, line)?.into()));
+                let name: Box<[u8]> = member_name(&p.property, line)?.into();
+                if matches!(place.base, PlaceBase::This) && place.steps.is_empty() {
+                    self.note_this_prop(&name); // backing write inside a hook (step 50)
+                }
+                place.steps.push(PlaceStep::Prop(name));
                 Ok(place)
             }
             _ => Err(LowerError::Unsupported {
