@@ -4701,8 +4701,11 @@ impl<'m> Vm<'m> {
                 matches!(&lc[..], b"generator" | b"iterator" | b"traversable")
             }
             Zval::Object(o) => {
+                // A value satisfies a class/interface type hint if it is-a that
+                // type — including implemented interfaces (transitively), not just
+                // the parent chain. Mirrors `instanceof` (`is_instance_of`).
                 matches!(self.module.class_index.get(&lc[..]),
-                    Some(&target) if class_is_a(self.module, o.borrow().class_id as usize, target))
+                    Some(&target) if is_instance_of(self.module, o.borrow().class_id as usize, target))
             }
             Zval::Ref(r) => self.value_satisfies_class(&r.borrow(), name),
             _ => false,
