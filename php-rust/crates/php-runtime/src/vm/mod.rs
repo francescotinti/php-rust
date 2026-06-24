@@ -2461,7 +2461,71 @@ impl<'m> Vm<'m> {
             b"debug_backtrace" => self.ho_debug_backtrace(args),
             b"debug_print_backtrace" => self.ho_debug_print_backtrace(),
             b"preg_replace_callback" => self.ho_preg_replace_callback(args),
+            b"json_decode" => self.ho_json_decode(args),
             _ => Err(undefined_builtin(name)),
+        }
+    }
+
+    /// `json_decode($json, $assoc = false)` (F2): parse JSON via the shared
+    /// [`crate::json`] parser, returning `null` on a parse error (JSON_THROW_ON_ERROR
+    /// is a scope-out). Objects become arrays when `$assoc` is true, `stdClass`
+    /// otherwise; the `depth`/`flags` arguments are ignored. Mirrors
+    /// `eval::ho_json_decode`.
+    fn ho_json_decode(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(first) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "json_decode() expects at least 1 argument, 0 given".to_string(),
+            ));
+        };
+        let json = convert::to_zstr_cast(first, &mut self.diags).as_bytes().to_vec();
+        let assoc = match args.get(1) {
+            Some(v) => convert::to_bool(v, &mut self.diags),
+            None => false,
+        };
+        match crate::json::parse(&json) {
+            Some(j) => self.vm_json_to_zval(&j, assoc),
+            None => Ok(Zval::Null),
+        }
+    }
+
+    /// Convert a parsed [`crate::json::Json`] tree into a `Zval`. Objects build a
+    /// `stdClass` (one property per entry) unless `assoc`, in which case they build
+    /// a PHP array. Mirrors `eval::json_to_zval`.
+    fn vm_json_to_zval(&mut self, j: &crate::json::Json, assoc: bool) -> Result<Zval, PhpError> {
+        use crate::json::Json;
+        match j {
+            Json::Null => Ok(Zval::Null),
+            Json::Bool(b) => Ok(Zval::Bool(*b)),
+            Json::Long(n) => Ok(Zval::Long(*n)),
+            Json::Double(d) => Ok(Zval::Double(*d)),
+            Json::Str(s) => Ok(Zval::Str(PhpStr::new(s.clone()))),
+            Json::Array(items) => {
+                let mut arr = PhpArray::new();
+                for item in items {
+                    let v = self.vm_json_to_zval(item, assoc)?;
+                    let _ = arr.append(v);
+                }
+                Ok(Zval::Array(Rc::new(arr)))
+            }
+            Json::Object(entries) => {
+                if assoc {
+                    let mut arr = PhpArray::new();
+                    for (k, v) in entries {
+                        let val = self.vm_json_to_zval(v, assoc)?;
+                        arr.insert(Key::from_bytes(k), val);
+                    }
+                    Ok(Zval::Array(Rc::new(arr)))
+                } else {
+                    let obj = self.alloc_stdclass()?;
+                    if let Zval::Object(o) = &obj {
+                        for (k, v) in entries {
+                            let val = self.vm_json_to_zval(v, assoc)?;
+                            o.borrow_mut().props.set(k, val);
+                        }
+                    }
+                    Ok(obj)
+                }
+            }
         }
     }
 
@@ -4821,6 +4885,7 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"debug_backtrace",
         b"debug_print_backtrace",
         b"preg_replace_callback",
+        b"json_decode",
     ];
     HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
 }
@@ -5418,6 +5483,30 @@ mod tests {
         assert_eq!(vm_stdout(b"<?php echo (2 xor 1) ? 't' : 'f';"), b"f");
         // the result is a real bool (=== true), not a truthy int.
         assert_eq!(vm_stdout(b"<?php echo (true xor false) === true ? 'Y' : 'N';"), b"Y");
+    }
+
+    #[test]
+    fn json_decode_assoc_and_stdclass() {
+        // assoc=true: objects → arrays, nested arrays preserved.
+        assert_eq!(
+            vm_stdout(b"<?php $v=json_decode('{\"a\":1,\"b\":[2,3]}', true); echo $v['a'], '|', $v['b'][1];"),
+            b"1|3"
+        );
+        assert_eq!(
+            vm_stdout(b"<?php $v=json_decode('[1,\"x\",true,null]', true); echo $v[0], $v[1], ($v[2]?'T':'F'), ($v[3]===null?'N':'?');"),
+            b"1xTN"
+        );
+        // default (assoc=false): objects → stdClass (get_class is a host builtin).
+        assert_eq!(
+            vm_stdout(b"<?php $o=json_decode('{\"a\":1,\"b\":\"z\"}'); echo get_class($o), '|', $o->a, $o->b;"),
+            b"stdClass|1z"
+        );
+        // scalars keep their JSON type (=== checks discriminate string vs double).
+        assert_eq!(vm_stdout(b"<?php $v=json_decode('\"hi\"'); echo $v, '|', ($v==='hi'?'S':'?');"), b"hi|S");
+        assert_eq!(vm_stdout(b"<?php $v=json_decode('3.14'); echo $v, '|', ($v===3.14?'D':'?');"), b"3.14|D");
+        // parse error and literal null both yield null.
+        assert_eq!(vm_stdout(b"<?php echo json_decode('null')===null?'N':'?';"), b"N");
+        assert_eq!(vm_stdout(b"<?php echo json_decode('not json')===null?'N':'?';"), b"N");
     }
 
     #[test]
