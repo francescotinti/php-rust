@@ -676,6 +676,68 @@ class ArrayObject implements IteratorAggregate, ArrayAccess, Countable {
     public function getArrayCopy() { return $this->__storage; }
     public function append($value) { $this->__storage[] = $value; }
 }
+// `IteratorIterator` wraps any Traversable as a concrete `Iterator`, resolving an
+// `IteratorAggregate` to its inner iterator once at construction; protocol calls
+// delegate to the inner. `getInnerIterator()` returns the wrapped iterator.
+class IteratorIterator implements Iterator {
+    private $__it;
+    public function __construct($iterator) {
+        if ($iterator instanceof IteratorAggregate) { $iterator = $iterator->getIterator(); }
+        $this->__it = $iterator;
+    }
+    public function getInnerIterator() { return $this->__it; }
+    public function rewind() { return $this->__it->rewind(); }
+    public function valid() { return $this->__it->valid(); }
+    public function current() { return $this->__it->current(); }
+    public function key() { return $this->__it->key(); }
+    public function next() { return $this->__it->next(); }
+}
+// `SplFixedArray`: a fixed-size, integer-indexed array. Backed by `$__storage`
+// filled with nulls to `$__size`; out-of-range offsets throw RuntimeException.
+class SplFixedArray implements ArrayAccess, Countable, Iterator {
+    private $__storage = [];
+    private $__size = 0;
+    private $__pos = 0;
+    public function __construct($size = 0) {
+        $this->__size = $size;
+        for ($i = 0; $i < $size; $i++) { $this->__storage[$i] = null; }
+    }
+    public function getSize() { return $this->__size; }
+    public function setSize($size) {
+        if ($size < $this->__size) {
+            for ($i = $size; $i < $this->__size; $i++) { unset($this->__storage[$i]); }
+        } else {
+            for ($i = $this->__size; $i < $size; $i++) { $this->__storage[$i] = null; }
+        }
+        $this->__size = $size;
+        return true;
+    }
+    public function count() { return $this->__size; }
+    public function toArray() { return $this->__storage; }
+    public function offsetExists($i) { return $i >= 0 && $i < $this->__size; }
+    public function offsetGet($i) {
+        if ($i < 0 || $i >= $this->__size) { throw new RuntimeException("Index invalid or out of range"); }
+        return $this->__storage[$i];
+    }
+    public function offsetSet($i, $v) {
+        if ($i < 0 || $i >= $this->__size) { throw new RuntimeException("Index invalid or out of range"); }
+        $this->__storage[$i] = $v;
+    }
+    public function offsetUnset($i) {
+        if ($i >= 0 && $i < $this->__size) { $this->__storage[$i] = null; }
+    }
+    public function rewind() { $this->__pos = 0; }
+    public function valid() { return $this->__pos < $this->__size; }
+    public function current() { return $this->__storage[$this->__pos]; }
+    public function key() { return $this->__pos; }
+    public function next() { $this->__pos++; }
+    public static function fromArray($array) {
+        $a = new SplFixedArray(count($array));
+        $i = 0;
+        foreach ($array as $v) { $a[$i] = $v; $i++; }
+        return $a;
+    }
+}
 "##;
 
 /// The four owned products of lowering [`PRELUDE_SRC`]: the class table + its

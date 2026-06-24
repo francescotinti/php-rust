@@ -3010,6 +3010,38 @@ impl<'m> Vm<'m> {
         Ok(out)
     }
 
+    /// `iterator_to_array(iterable $it, bool $preserve_keys = true): array`
+    /// (step 56b): collect an array / Generator / Traversable object into an
+    /// array, reusing the same protocol-driver as spread. With `$preserve_keys`
+    /// false the values are reindexed 0..n.
+    fn ho_iterator_to_array(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let src = args.first().cloned().unwrap_or(Zval::Null);
+        let preserve = args.get(1).is_none_or(|v| convert::to_bool(v, &mut self.diags));
+        let pairs = self.iter_pairs(src)?;
+        let mut out = PhpArray::new();
+        for (k, v) in pairs {
+            if preserve {
+                out.insert(k, v);
+            } else {
+                let _ = out.append(v);
+            }
+        }
+        Ok(Zval::Array(Rc::new(out)))
+    }
+
+    /// `iterator_count(iterable $it): int` (step 56b).
+    fn ho_iterator_count(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let src = args.first().cloned().unwrap_or(Zval::Null);
+        Ok(Zval::Long(self.iter_pairs(src)?.len() as i64))
+    }
+
+    /// Shared collector for `iterator_*`: an array yields its own pairs, a
+    /// Generator/Traversable object is driven through the iterator protocol
+    /// (delegates to `spread_pairs`, which raises a TypeError for non-iterables).
+    fn iter_pairs(&mut self, src: Zval) -> Result<Vec<(Key, Zval)>, PhpError> {
+        self.spread_pairs(src)
+    }
+
     /// Issue one object-iterator protocol call from `IterNext`: advance the active
     /// `IterState::Object` to `next` stage, rewind the loop frame's `ip` so
     /// `IterNext` re-runs once the call returns, and enter the method (step 51).
@@ -3084,6 +3116,8 @@ impl<'m> Vm<'m> {
         match name {
             b"call_user_func" => self.ho_call_user_func(args),
             b"call_user_func_array" => self.ho_call_user_func_array(args),
+            b"iterator_to_array" => self.ho_iterator_to_array(args),
+            b"iterator_count" => self.ho_iterator_count(args),
             b"is_callable" => self.ho_is_callable(args),
             b"define" => self.ho_define(args),
             b"defined" => self.ho_defined(args),
@@ -6087,6 +6121,8 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"mb_ereg_search_getregs",
         b"mb_ereg_search_getpos",
         b"mb_ereg_search_setpos",
+        b"iterator_to_array",
+        b"iterator_count",
     ];
     HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
 }
