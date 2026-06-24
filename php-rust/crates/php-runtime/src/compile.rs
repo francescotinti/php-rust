@@ -1438,10 +1438,12 @@ impl<'a> FnCompiler<'a> {
             ExprKind::Array(elems) => {
                 self.emit(Op::ArrayInit);
                 for el in elems {
-                    // Array spread `[...$a]` is rejected at lowering (both engines),
-                    // so a Spread element never reaches here; keep the guard.
-                    if matches!(el.value.kind, ExprKind::Spread(_)) {
-                        return Err(CompileError::Unsupported("array spread element".into()));
+                    // `[...$src]` array spread (PHP 8.1): merge the source's elements
+                    // (int keys renumbered, string keys preserved; Traversables too).
+                    if let ExprKind::Spread(src) = &el.value.kind {
+                        self.expr(src)?;
+                        self.emit(Op::ArrayAppendSpread);
+                        continue;
                     }
                     match &el.key {
                         Some(k) => {

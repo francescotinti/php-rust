@@ -1033,9 +1033,20 @@ impl<'f> Lowerer<'f> {
                     key: None,
                     value: self.lower_expr(v.value)?,
                 }),
-                ArrayElement::Variadic(_) | ArrayElement::Missing(_) => {
+                // `[...$src]` array spread (PHP 8.1): a keyless element whose value
+                // is a `Spread`, expanded at run time (step 51).
+                ArrayElement::Variadic(v) => out.push(ArrayElem {
+                    key: None,
+                    value: Expr {
+                        line,
+                        kind: ExprKind::Spread(Box::new(self.lower_expr(v.value)?)),
+                    },
+                }),
+                // A missing element `[, ]` is only valid in a destructuring pattern,
+                // not an array literal.
+                ArrayElement::Missing(_) => {
                     return Err(LowerError::Unsupported {
-                        what: "array spread / missing element",
+                        what: "missing element in array literal",
                         line,
                     })
                 }
