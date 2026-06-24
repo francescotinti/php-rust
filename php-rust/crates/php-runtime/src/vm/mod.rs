@@ -1322,6 +1322,21 @@ impl<'m> Vm<'m> {
                     bind_params(&mut frame, args);
                     self.enter_callee(frame);
                 }
+                Op::CallNamed { func, positional, names } => {
+                    // Named function call bound at run time (unknown/overwrite/
+                    // variadic/by-ref): pop named values (source order), then the
+                    // positional values, and bind via `build_named_frame`.
+                    let named_vals = self.pop_keys(top, names.len() as u32);
+                    let named: Vec<(Box<[u8]>, Zval)> =
+                        names.iter().cloned().zip(named_vals).collect();
+                    let pos = self.pop_keys(top, positional);
+                    let line = self.cur_line(top);
+                    let callee = &self.module.functions[func as usize];
+                    let qn = String::from_utf8_lossy(&callee.name).into_owned();
+                    let frame =
+                        build_named_frame(callee, &self.module.file, line, &qn, pos, named)?;
+                    self.enter_callee(frame);
+                }
                 Op::CallBuiltin { name, argc } => {
                     let f = match self.registry.get(&name[..]) {
                         Some(Builtin::Value(f)) => *f,
@@ -9250,6 +9265,30 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php enum St:string { case A='A'; } $a=St::A; try { $a->nope=1; } catch (\\Error $e) { echo $e->getMessage(); }"),
             b"Cannot create dynamic property St::$nope"
+        );
+    }
+
+    #[test]
+    fn named_function_args_runtime_binding() {
+        // Unknown name → catchable Error.
+        assert_eq!(
+            vm_stdout(b"<?php function f($a){} try { f(z:1); } catch (\\Error $e) { echo $e->getMessage(); }"),
+            b"Unknown named parameter $z"
+        );
+        // A name colliding with a positional → catchable Error.
+        assert_eq!(
+            vm_stdout(b"<?php function f($a){} try { f(1, a:2); } catch (\\Error $e) { echo $e->getMessage(); }"),
+            b"Named parameter $a overwrites previous argument"
+        );
+        // A name with no fixed home collects into the variadic, keyed by name.
+        assert_eq!(
+            vm_stdout(b"<?php function f($a, ...$rest){ $s=\"$a|\"; foreach($rest as $k=>$v) $s.=\"$k:$v \"; return $s; } echo f(1, k:2);"),
+            b"1|k:2 "
+        );
+        // A by-reference named argument writes back through its variable.
+        assert_eq!(
+            vm_stdout(b"<?php function inc(&$x){ $x++; } $n=5; inc(x: $n); echo $n;"),
+            b"6"
         );
     }
 }

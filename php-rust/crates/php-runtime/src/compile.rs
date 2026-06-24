@@ -1472,12 +1472,87 @@ impl<'a> FnCompiler<'a> {
         let fd = &self.ctx.funcs[idx];
         let n = fd.params.len() as u32;
         let returns_ref = fd.by_ref;
-        self.emit_named_layout(fd, args, named)?;
-        self.emit(Op::Call { func: idx as u32, argc: n });
+        let has_spread = args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_)));
+        // Fast path: lay the arguments into slots at compile time when expressible.
+        if !has_spread && self.can_emit_named_layout(fd, args, named) {
+            self.emit_named_layout(fd, args, named)?;
+            self.emit(Op::Call { func: idx as u32, argc: n });
+            if returns_ref {
+                self.emit(Op::DerefTop);
+            }
+            return Ok(());
+        }
+        if has_spread {
+            // Spread + named is the run-time spread path (handled elsewhere).
+            return Err(CompileError::Unsupported("argument unpacking (spread)".into()));
+        }
+        // Run-time named binding: a variadic / by-ref parameter, or a name that is
+        // unknown / collides / routes into `...$rest` — all of which PHP resolves
+        // (or errors) at run time rather than at compile time. Push positional args
+        // (honouring by-ref), then one value per named arg (by-ref when its target
+        // parameter is), and let `build_named_frame` bind them.
+        let by_ref: Vec<bool> = fd.params.iter().map(|p| p.by_ref).collect();
+        let named_by_ref: Vec<bool> = named
+            .iter()
+            .map(|(nm, _)| {
+                fd.params
+                    .iter()
+                    .find(|p| fd.slots[p.slot as usize][..] == nm[..])
+                    .is_some_and(|p| p.by_ref)
+            })
+            .collect();
+        self.push_call_args(args, &by_ref)?;
+        for ((_, expr), &br) in named.iter().zip(&named_by_ref) {
+            match (&expr.kind, br) {
+                (ExprKind::Var(slot), true) => {
+                    self.emit(Op::PushRef(*slot));
+                }
+                _ => self.expr(expr)?,
+            }
+        }
+        self.emit(Op::CallNamed {
+            func: idx as u32,
+            positional: args.len() as u32,
+            names: named.iter().map(|(nm, _)| nm.clone()).collect(),
+        });
         if returns_ref {
             self.emit(Op::DerefTop);
         }
         Ok(())
+    }
+
+    /// Whether [`emit_named_layout`] can lay this named call into parameter slots
+    /// at compile time. Mirrors its reject conditions without emitting: a variadic
+    /// or by-reference parameter, a spread, too many positionals, an unknown or
+    /// colliding name, or a missing required argument all force the run-time binder.
+    fn can_emit_named_layout(&self, fd: &FnDecl, args: &[Expr], named: &[(Box<[u8]>, Expr)]) -> bool {
+        if fd.params.iter().any(|p| p.variadic || p.by_ref) {
+            return false;
+        }
+        let n = fd.params.len();
+        if args.len() > n || args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
+            return false;
+        }
+        let mut filled = vec![false; n];
+        for slot in filled.iter_mut().take(args.len()) {
+            *slot = true;
+        }
+        for (nm, _) in named {
+            match fd
+                .params
+                .iter()
+                .position(|p| fd.slots[p.slot as usize][..] == nm[..])
+            {
+                Some(pi) if !filled[pi] => filled[pi] = true,
+                _ => return false, // unknown name or overwrite
+            }
+        }
+        for p in &fd.params {
+            if p.default.is_none() && !filled[p.slot as usize] {
+                return false;
+            }
+        }
+        true
     }
 
     /// Lay named + positional arguments into `fd`'s parameter slots at compile

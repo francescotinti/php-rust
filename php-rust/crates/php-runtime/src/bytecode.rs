@@ -506,6 +506,14 @@ pub enum Op {
     /// unmatched names (string keys). Mirrors the evaluator's named-binding errors
     /// (`ArgumentCountError`, unknown / overwriting name).
     MethodCallNamed { method: Box<[u8]>, positional: u32, names: Box<[Box<[u8]>]> },
+    /// `[pos…, named…] -> [ret]` — call known user function `func` with named
+    /// arguments bound at run time against the callee's `param_names` (the runtime
+    /// binder, not the compile-time layout). Used when the compile-time layout
+    /// can't express the call: a variadic / by-reference parameter, an unknown or
+    /// colliding name (both catchable `Error`s in PHP, not compile errors), or a
+    /// name routed into `...$rest`. `positional` values are pushed first, then one
+    /// value per `names` entry (label order).
+    CallNamed { func: u32, positional: u32, names: Box<[Box<[u8]>]> },
     /// `[obj, arg0, …, arg{argc-1}] -> [ret]` — like [`Op::MethodCall`] but the
     /// target method is resolved at *compile* time (`classes[class].methods[idx]`):
     /// used for the constructor, whose defining class and slot are known statically.
