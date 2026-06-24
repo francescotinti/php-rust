@@ -240,6 +240,7 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         throwable_id: module.class_index.get(&b"throwable"[..]).copied(),
         enum_cache: HashMap::new(),
         constants: HashMap::new(),
+        mb_regex: crate::mbregex::MbRegexState::default(),
     };
     vm.frames.push(Frame::new(&module.main));
     // `exit`/`die` is a clean termination (the exit code is surfaced, not a fatal);
@@ -545,6 +546,10 @@ struct Vm<'m> {
     /// `eval::Evaluator::constants`. Read by [`Op::ConstFetch`] and `constant()`;
     /// engine constants (`PHP_INT_MAX`, …) are folded at lowering and not stored here.
     constants: HashMap<Vec<u8>, Zval>,
+    /// Persistent mbregex state (step 43), mirror of `eval::Evaluator::mb_regex`:
+    /// the global `mb_regex_encoding`/`mb_regex_set_options` and the `mb_ereg_search`
+    /// cursor. Survives across `mb_*` calls for the whole run.
+    mb_regex: crate::mbregex::MbRegexState,
 }
 
 impl<'m> Vm<'m> {
@@ -2462,6 +2467,9 @@ impl<'m> Vm<'m> {
             b"debug_print_backtrace" => self.ho_debug_print_backtrace(),
             b"preg_replace_callback" => self.ho_preg_replace_callback(args),
             b"json_decode" => self.ho_json_decode(args),
+            b"mb_split" => self.ho_mb_split(args),
+            b"mb_regex_encoding" => self.ho_mb_regex_encoding(args),
+            b"mb_regex_set_options" => self.ho_mb_regex_set_options(args),
             _ => Err(undefined_builtin(name)),
         }
     }
@@ -2525,6 +2533,83 @@ impl<'m> Vm<'m> {
                     }
                     Ok(obj)
                 }
+            }
+        }
+    }
+
+    /// Compile an mbregex pattern, pushing a warning diagnostic on failure
+    /// (returning `None`). Mirrors `eval::mb_compile`.
+    fn mb_compile(&mut self, pat: &[u8], opts: &[u8], func: &str, ic: bool) -> Option<onig::Regex> {
+        match crate::mbregex::compile(pat, opts, ic) {
+            Ok(re) => Some(re),
+            Err(msg) => {
+                self.diags
+                    .push(php_types::Diag::Warning(format!("{func}(): mbregex compile err: {msg}")));
+                None
+            }
+        }
+    }
+
+    /// `mb_split($pattern, $string[, $limit])` (F2): split on matches, keeping
+    /// empty fields. `$limit > 0` caps the piece count. Returns `false` on a bad
+    /// pattern. Mirrors `eval::ho_mb_split`.
+    fn ho_mb_split(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if args.len() < 2 {
+            return Err(PhpError::ArgumentCountError(format!(
+                "mb_split() expects at least 2 arguments, {} given",
+                args.len()
+            )));
+        }
+        let pat = convert::to_zstr_cast(&args[0].deref_clone(), &mut self.diags).as_bytes().to_vec();
+        let subject =
+            convert::to_zstr_cast(&args[1].deref_clone(), &mut self.diags).as_bytes().to_vec();
+        let limit = match args.get(2) {
+            Some(v) => convert::to_long_cast(&v.deref_clone(), &mut self.diags),
+            None => -1,
+        };
+        let opts = self.mb_regex.options.clone();
+        let Some(re) = self.mb_compile(&pat, &opts, "mb_split", false) else {
+            return Ok(Zval::Bool(false));
+        };
+        let mut arr = PhpArray::new();
+        for p in crate::mbregex::split(&re, &subject, limit) {
+            let _ = arr.append(Zval::Str(PhpStr::new(p)));
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// `mb_regex_encoding([$encoding])` (F2): getter returns the current name
+    /// ("UTF-8" default); setter stores it and returns true. Only UTF-8 is
+    /// effectively supported (D-MB-ereg-enc). Mirrors `eval::ho_mb_regex_encoding`.
+    fn ho_mb_regex_encoding(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        match args.first() {
+            None => Ok(Zval::Str(PhpStr::new(self.mb_regex.encoding.clone()))),
+            Some(v) => {
+                let v = v.deref_clone();
+                if matches!(v, Zval::Null) {
+                    return Ok(Zval::Str(PhpStr::new(self.mb_regex.encoding.clone())));
+                }
+                self.mb_regex.encoding =
+                    convert::to_zstr_cast(&v, &mut self.diags).as_bytes().to_vec();
+                Ok(Zval::Bool(true))
+            }
+        }
+    }
+
+    /// `mb_regex_set_options([$options])` (F2): getter returns the current options
+    /// ("pr" default); setter stores them and returns the previous options. Mirrors
+    /// `eval::ho_mb_regex_set_options`.
+    fn ho_mb_regex_set_options(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let prev = self.mb_regex.options.clone();
+        match args.first() {
+            None => Ok(Zval::Str(PhpStr::new(prev))),
+            Some(v) => {
+                let v = v.deref_clone();
+                if !matches!(v, Zval::Null) {
+                    self.mb_regex.options =
+                        convert::to_zstr_cast(&v, &mut self.diags).as_bytes().to_vec();
+                }
+                Ok(Zval::Str(PhpStr::new(prev)))
             }
         }
     }
@@ -4886,6 +4971,9 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"debug_print_backtrace",
         b"preg_replace_callback",
         b"json_decode",
+        b"mb_split",
+        b"mb_regex_encoding",
+        b"mb_regex_set_options",
     ];
     HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
 }
@@ -5507,6 +5595,28 @@ mod tests {
         // parse error and literal null both yield null.
         assert_eq!(vm_stdout(b"<?php echo json_decode('null')===null?'N':'?';"), b"N");
         assert_eq!(vm_stdout(b"<?php echo json_decode('not json')===null?'N':'?';"), b"N");
+    }
+
+    #[test]
+    fn mb_split_and_regex_state() {
+        // mb_split keeps empty fields; positive limit caps piece count.
+        assert_eq!(
+            vm_stdout(b"<?php $p=mb_split('\\\\s+', 'a  b   c'); echo $p[0],$p[1],$p[2];"),
+            b"abc"
+        );
+        assert_eq!(
+            vm_stdout(b"<?php $p=mb_split(',', 'a,b,c', 2); echo $p[0],'/',$p[1];"),
+            b"a/b,c"
+        );
+        // mb_regex_encoding getter default + setter returns true; set_options getter
+        // default + setter returns previous, and the change is observed by the getter.
+        assert_eq!(vm_stdout(b"<?php echo mb_regex_encoding();"), b"UTF-8");
+        assert_eq!(vm_stdout(b"<?php echo mb_regex_encoding('UTF-8')?'Y':'N';"), b"Y");
+        assert_eq!(vm_stdout(b"<?php echo mb_regex_set_options();"), b"pr");
+        assert_eq!(
+            vm_stdout(b"<?php echo mb_regex_set_options('i'), '|', mb_regex_set_options();"),
+            b"pr|i"
+        );
     }
 
     #[test]
