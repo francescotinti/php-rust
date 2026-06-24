@@ -27,7 +27,7 @@ use php_types::{
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
 use crate::bytecode::{
-    ClassTarget, DimBase, FieldBase, FieldStep, Func, Instantiable, Module, Op, StaticInit,
+    Addr, ClassTarget, DimBase, FieldBase, FieldStep, Func, Instantiable, Module, Op, StaticInit,
 };
 use crate::coerce::coerce_to_hint;
 use crate::hir::{BinOp, CastKind, ClassId, Line, Slot, TypeHint, UnOp, Visibility};
@@ -281,6 +281,20 @@ enum MagicKind {
     Unset,
 }
 
+/// A control transfer (`return` / `break` / `continue`) parked while a `finally`
+/// block runs, resumed at [`Op::EndFinally`] (EXC-2b). A `break`/`continue`
+/// crossing a finally is pre-resolved to the loop's target address at compile
+/// time, so resuming is a plain jump.
+#[derive(Debug, Clone)]
+enum Transfer {
+    /// `return <value>`: the value is carried so [`Op::EndFinally`] can push it
+    /// and fall through to the function's `Ret`.
+    Return(Zval),
+    /// `break` / `continue`: jump to the loop's (already-patched) break/continue
+    /// target once the finally completes.
+    Jump(Addr),
+}
+
 /// One activation record: the function being run, its instruction pointer, its
 /// slot array (named locals) and its operand stack. This is the unit that would
 /// be parked to suspend a generator — `ip` + `slots` + `stack`, all owned, no
@@ -324,6 +338,11 @@ struct Frame<'m> {
     /// An exception parked while a `finally` block runs (EXC-2): set when an
     /// exception propagates into a finally region, re-raised at [`Op::EndFinally`].
     pending_throw: Option<Zval>,
+    /// A `return` / `break` / `continue` parked while a `finally` block runs
+    /// (EXC-2b): a control transfer crossing a finally is delayed until the finally
+    /// completes, then resumed at [`Op::EndFinally`] — unless the finally itself
+    /// transfers control (which executes directly and discards this).
+    pending_transfer: Option<Transfer>,
     /// The generator handle id this frame belongs to (GEN), or `None` for an
     /// ordinary frame. Set when a generator frame is created; read by
     /// [`Op::Yield`] to park the frame back into [`Vm::generators`] under its id.
@@ -363,6 +382,7 @@ impl<'m> Frame<'m> {
             guard_release: None,
             iters: Vec::new(),
             pending_throw: None,
+            pending_transfer: None,
             gen_id: None,
             yield_from: None,
             argc: 0,
@@ -1161,12 +1181,33 @@ impl<'m> Vm<'m> {
                     }
                     // else: fall through to the next CatchMatch / Rethrow.
                 }
-                Op::EndFinally => {
-                    // EXC-2: if an exception was propagating through this finally,
-                    // re-raise it now; otherwise fall through past the `try`.
+                Op::EndFinally { after } => {
+                    // EXC-2/2b: resolve the finally's pending action. A propagating
+                    // exception wins; then a parked return (push the value and fall
+                    // through to the trailing `Ret`); then a parked break/continue
+                    // (jump to its loop target); otherwise skip past the `try`.
                     if let Some(v) = self.frames[top].pending_throw.take() {
                         return Err(PhpError::Thrown(v));
                     }
+                    match self.frames[top].pending_transfer.take() {
+                        Some(Transfer::Return(val)) => {
+                            self.frames[top].stack.push(val);
+                            // fall through to the `Ret` emitted right after this op
+                        }
+                        Some(Transfer::Jump(addr)) => {
+                            self.frames[top].ip = addr as usize;
+                        }
+                        None => {
+                            self.frames[top].ip = after as usize;
+                        }
+                    }
+                }
+                Op::ParkReturn => {
+                    let v = self.frames[top].stack.pop().unwrap_or(Zval::Null);
+                    self.frames[top].pending_transfer = Some(Transfer::Return(v));
+                }
+                Op::ParkJump(addr) => {
+                    self.frames[top].pending_transfer = Some(Transfer::Jump(addr));
                 }
                 Op::DerefTop => {
                     // REF-4b: copy a by-ref return used in value context.
@@ -7051,6 +7092,42 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php function f() { try { throw new Exception('x'); } finally { echo 'fin'; } } try { f(); } catch (Exception $e) { echo 'outer'; }"),
             b"finouter"
+        );
+    }
+
+    #[test]
+    fn finally_runs_then_completes_return() {
+        // `return` in try runs the finally, then the return completes (EXC-2b).
+        assert_eq!(
+            vm_stdout(b"<?php function f(){ try { return 't'; } finally { echo 'f'; } } echo f();"),
+            b"ft"
+        );
+    }
+
+    #[test]
+    fn finally_return_overrides_try_return_and_exception() {
+        // A `return` in finally wins over a try-side return…
+        assert_eq!(
+            vm_stdout(b"<?php function f(){ try { return 'try'; } finally { return 'fin'; } } echo f();"),
+            b"fin"
+        );
+        // …and swallows an in-flight exception.
+        assert_eq!(
+            vm_stdout(b"<?php function f(){ try { throw new Exception('x'); } finally { return 'ok'; } } echo f();"),
+            b"ok"
+        );
+    }
+
+    #[test]
+    fn finally_runs_then_completes_break_and_continue() {
+        // break/continue crossing a finally run it first, then transfer (EXC-2b).
+        assert_eq!(
+            vm_stdout(b"<?php for($i=0;$i<3;$i++){ try { if($i==1) break; echo $i; } finally { echo 'f'; } }"),
+            b"0ff"
+        );
+        assert_eq!(
+            vm_stdout(b"<?php for($i=0;$i<3;$i++){ try { if($i==1) continue; echo $i; } finally { echo 'f'; } }"),
+            b"0ff2f"
         );
     }
 

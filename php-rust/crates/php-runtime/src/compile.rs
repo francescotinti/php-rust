@@ -633,6 +633,23 @@ struct FnCompiler<'a> {
     /// Protected `try` regions accumulated while compiling this body (EXC); each
     /// is appended when its `try` finishes, so inner regions precede outer ones.
     exc_regions: Vec<ExcRegion>,
+    /// Active `finally` scopes (EXC-2b), innermost last. A `return`/`break`/
+    /// `continue` compiled while one is active is routed through the finally
+    /// (parked, then a jump to the finally entry recorded for patching).
+    finally_scopes: Vec<FinallyScope>,
+}
+
+/// One active `finally` block, while its protected body/catches are compiled
+/// (EXC-2b). Collects the jump sites of control transfers that must run this
+/// finally first; they are patched to the finally entry once it is known.
+#[derive(Default)]
+struct FinallyScope {
+    /// `Op::Jump` sites that should land at the finally entry.
+    sites: Vec<Addr>,
+    /// `self.loops.len()` when this finally was entered: a `break`/`continue`
+    /// whose target loop index is `< loop_depth` exits past this finally (so it
+    /// is routed through it); a deeper target stays inside the protected body.
+    loop_depth: usize,
 }
 
 /// One enclosing loop's unresolved jump sites. `break` jumps land at the loop
@@ -642,6 +659,11 @@ struct FnCompiler<'a> {
 struct LoopCtx {
     break_sites: Vec<Addr>,
     continue_sites: Vec<Addr>,
+    /// `Op::ParkJump` sites (break/continue that cross a finally): patched to the
+    /// loop target like the plain sites, but with `ParkJump` so the jump runs
+    /// after the finally (EXC-2b).
+    parked_break_sites: Vec<Addr>,
+    parked_continue_sites: Vec<Addr>,
     /// `true` for a `foreach`: a `break`/`continue` that leaves this loop must
     /// first emit an [`Op::IterPop`] to free the iterator (Zend's `FE_FREE`).
     has_iter: bool,
@@ -670,6 +692,7 @@ impl<'a> FnCompiler<'a> {
             n_temps_cur: 0,
             n_temps_max: 0,
             exc_regions: Vec::new(),
+            finally_scopes: Vec::new(),
         }
     }
 
@@ -892,7 +915,16 @@ impl<'a> FnCompiler<'a> {
                         self.emit(Op::PushConst(null));
                     }
                 }
-                self.emit(Op::Ret);
+                // A `return` inside a try-with-finally runs the (innermost) finally
+                // first: park the value, jump to the finally entry; `EndFinally`
+                // then performs the return (EXC-2b).
+                if !self.finally_scopes.is_empty() {
+                    self.emit(Op::ParkReturn);
+                    let jmp = self.emit(Op::Jump(Addr::MAX));
+                    self.finally_scopes.last_mut().unwrap().sites.push(jmp);
+                } else {
+                    self.emit(Op::Ret);
+                }
             }
             StmtKind::ReturnRef(place) => {
                 // `function &f()` returning an lvalue (REF-4b): push a reference
@@ -997,6 +1029,14 @@ impl<'a> FnCompiler<'a> {
         for at in ctx.continue_sites {
             self.patch(at, Op::Jump(continue_target));
         }
+        // Sites that cross a `finally` resume at the loop target via `ParkJump`,
+        // run by `EndFinally` after the finally completes (EXC-2b).
+        for at in ctx.parked_break_sites {
+            self.patch(at, Op::ParkJump(break_target));
+        }
+        for at in ctx.parked_continue_sites {
+            self.patch(at, Op::ParkJump(continue_target));
+        }
     }
 
     /// Emit a `break N` / `continue N` as a placeholder `Jump`, registered with
@@ -1018,6 +1058,21 @@ impl<'a> FnCompiler<'a> {
         let pops = self.loops[first..depth].iter().filter(|l| l.has_iter).count();
         for _ in 0..pops {
             self.emit(Op::IterPop);
+        }
+        // If this jump exits past an enclosing `finally` (the target loop sits
+        // outside it), route it through that finally: park the loop target, then
+        // jump to the finally entry; `EndFinally` performs the jump afterwards
+        // (EXC-2b). Single-finally crossing; the innermost crossed finally runs.
+        if let Some(scope_i) = self.finally_scopes.iter().rposition(|s| idx < s.loop_depth) {
+            let park = self.emit(Op::ParkJump(Addr::MAX));
+            if is_break {
+                self.loops[idx].parked_break_sites.push(park);
+            } else {
+                self.loops[idx].parked_continue_sites.push(park);
+            }
+            let jmp = self.emit(Op::Jump(Addr::MAX));
+            self.finally_scopes[scope_i].sites.push(jmp);
+            return Ok(());
         }
         let at = self.emit(Op::Jump(Addr::MAX));
         if is_break {
@@ -2333,16 +2388,22 @@ impl<'a> FnCompiler<'a> {
     /// crossing a `finally` is out of slice (falls back to the evaluator).
     fn try_stmt(&mut self, body: &[Stmt], catches: &[CatchClause], finally: &[Stmt]) -> R<()> {
         let has_finally = !finally.is_empty();
+        // `return`/`break`/`continue` crossing a finally are handled (EXC-2b); a
+        // `goto` crossing one is still out of slice (rare, jump-table-shaped).
         if has_finally
-            && (stmts_transfer_control(body)
-                || catches.iter().any(|c| stmts_transfer_control(&c.body))
-                || stmts_transfer_control(finally))
+            && (stmts_have_goto(body)
+                || catches.iter().any(|c| stmts_have_goto(&c.body))
+                || stmts_have_goto(finally))
         {
             return Err(CompileError::Unsupported(
-                "try/finally with return/break/continue/goto in a protected block".into(),
+                "try/finally with goto crossing the finally".into(),
             ));
         }
         let start = self.here();
+        if has_finally {
+            // Route control transfers in the body/catches through this finally.
+            self.finally_scopes.push(FinallyScope { sites: Vec::new(), loop_depth: self.loops.len() });
+        }
         self.block(body)?;
         let body_end = self.here();
         let after_body = self.emit(Op::Jump(Addr::MAX)); // normal completion → finally / after
@@ -2370,7 +2431,14 @@ impl<'a> FnCompiler<'a> {
             catch_end_jumps.push(self.emit(Op::Jump(Addr::MAX)));
         }
         let finally_entry = self.here();
+        let after;
         if has_finally {
+            // Every parked control transfer (return/break/continue in the body or
+            // catches) lands at the finally entry now that it is known (EXC-2b).
+            let scope = self.finally_scopes.pop().expect("finally scope");
+            for site in scope.sites {
+                self.patch(site, Op::Jump(finally_entry));
+            }
             // Covers the body, the catch dispatch, and the catch bodies — an
             // exception anywhere before `finally_entry` runs `finally` then
             // re-propagates. Pushed after the catch region so catches win first.
@@ -2381,9 +2449,17 @@ impl<'a> FnCompiler<'a> {
                 is_finally: true,
             });
             self.block(finally)?;
-            self.emit(Op::EndFinally);
+            // On normal completion `EndFinally` jumps to `after` (skipping the
+            // trailing `Ret`); for a parked return it pushes the value and falls
+            // through to that `Ret`; for a parked break/continue it jumps to the
+            // loop target.
+            let endf = self.emit(Op::EndFinally { after: Addr::MAX });
+            self.emit(Op::Ret);
+            after = self.here();
+            self.patch(endf, Op::EndFinally { after });
+        } else {
+            after = self.here();
         }
-        let after = self.here();
         let normal_target = if has_finally { finally_entry } else { after };
         self.patch(after_body, Op::Jump(normal_target));
         for j in catch_end_jumps {
@@ -2858,34 +2934,32 @@ fn dim_base(place: &Place) -> R<DimBase> {
 
 /// Whether any statement (recursively, but not into nested closures — those are
 /// separate bodies) performs a control transfer that could cross a `finally`:
-/// `return`/`break`/`continue`/`goto` (EXC-2). Conservative — a `break` confined
-/// to a loop inside the `try` also trips it, forcing a fallback to the evaluator.
-fn stmts_transfer_control(stmts: &[Stmt]) -> bool {
-    stmts.iter().any(stmt_transfers_control)
+/// Whether any statement (recursively) is a `goto` — the one control transfer
+/// the VM does not route through a `finally` (EXC-2b handles return/break/
+/// continue). Conservative: a `goto` whose label stays inside the `try` also
+/// trips it, forcing a fallback to the evaluator.
+fn stmts_have_goto(stmts: &[Stmt]) -> bool {
+    stmts.iter().any(stmt_has_goto)
 }
 
-fn stmt_transfers_control(s: &Stmt) -> bool {
+fn stmt_has_goto(s: &Stmt) -> bool {
     match &s.kind {
-        StmtKind::Return(_)
-        | StmtKind::ReturnRef(_)
-        | StmtKind::Break(_)
-        | StmtKind::Continue(_)
-        | StmtKind::Goto(_) => true,
-        StmtKind::Block(b) => stmts_transfer_control(b),
+        StmtKind::Goto(_) => true,
+        StmtKind::Block(b) => stmts_have_goto(b),
         StmtKind::If { then, elseifs, otherwise, .. } => {
-            stmts_transfer_control(then)
-                || elseifs.iter().any(|(_, b)| stmts_transfer_control(b))
-                || stmts_transfer_control(otherwise)
+            stmts_have_goto(then)
+                || elseifs.iter().any(|(_, b)| stmts_have_goto(b))
+                || stmts_have_goto(otherwise)
         }
         StmtKind::While { body, .. }
         | StmtKind::DoWhile { body, .. }
         | StmtKind::For { body, .. }
-        | StmtKind::Foreach { body, .. } => stmts_transfer_control(body),
-        StmtKind::Switch { cases, .. } => cases.iter().any(|c| stmts_transfer_control(&c.body)),
+        | StmtKind::Foreach { body, .. } => stmts_have_goto(body),
+        StmtKind::Switch { cases, .. } => cases.iter().any(|c| stmts_have_goto(&c.body)),
         StmtKind::Try { body, catches, finally } => {
-            stmts_transfer_control(body)
-                || catches.iter().any(|c| stmts_transfer_control(&c.body))
-                || stmts_transfer_control(finally)
+            stmts_have_goto(body)
+                || catches.iter().any(|c| stmts_have_goto(&c.body))
+                || stmts_have_goto(finally)
         }
         _ => false,
     }

@@ -282,11 +282,22 @@ pub enum Op {
     /// if present) and jump to `body`; otherwise leave it and fall through to the
     /// next `CatchMatch` / `Rethrow`.
     CatchMatch { types: Box<[ClassId]>, var: Option<Slot>, body: Addr },
-    /// `[] -> []` — the end of a `finally` block (EXC-2). If the frame carries a
-    /// pending exception (the `finally` ran while an exception was propagating
-    /// through it), re-raise it now so it resumes unwinding to an outer handler;
-    /// otherwise fall through to the code after the `try`.
-    EndFinally,
+    /// `[] -> []` — the end of a `finally` block (EXC-2). Resolves the finally's
+    /// pending action, in order: (1) a parked exception → re-raise it (resume
+    /// unwinding to an outer handler); (2) a parked `return` → push its value and
+    /// fall through to the function `Ret` that immediately follows; (3) a parked
+    /// `break`/`continue` → jump to its loop target; (4) nothing → jump to `after`
+    /// (the code past the `try`, skipping that trailing `Ret`).
+    EndFinally { after: Addr },
+    /// `[v] -> []` — park `v` as a pending `return` value while a `finally` runs
+    /// (EXC-2b): a `return` inside a try-with-finally compiles to this plus a jump
+    /// to the finally; [`Op::EndFinally`] performs the actual return afterwards.
+    ParkReturn,
+    /// `[] -> []` — park a pending `break`/`continue` whose loop target is `addr`
+    /// (EXC-2b), while a `finally` runs. The `break`/`continue` inside a
+    /// try-with-finally compiles to this plus a jump to the finally; the loop
+    /// target is patched in like a normal break/continue site.
+    ParkJump(Addr),
 
     // ----- operators (semantics delegated to php_types::ops / ::convert) -----
     /// `[lhs, rhs] -> [result]` — pop rhs then lhs, push `lhs <op> rhs`.
