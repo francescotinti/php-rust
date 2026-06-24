@@ -89,14 +89,26 @@ impl<'f> Lowerer<'f> {
 
             Statement::Foreach(node) => {
                 let iter = self.lower_expr(node.expression)?;
-                let (key, (value, by_ref)) = match &node.target {
-                    ForeachTarget::Value(v) => (None, self.foreach_value_slot(v.value, line)?),
-                    ForeachTarget::KeyValue(kv) => (
-                        Some(self.foreach_slot(kv.key, line)?),
-                        self.foreach_value_slot(kv.value, line)?,
-                    ),
+                let (key, value_target) = match &node.target {
+                    ForeachTarget::Value(v) => (None, v.value),
+                    ForeachTarget::KeyValue(kv) => {
+                        (Some(self.foreach_slot(kv.key, line)?), kv.value)
+                    }
                 };
-                let body = self.lower_stmts(node.body.statements())?;
+                // `as [$a,$b]` / `as list(...)`: bind the element to a temp and
+                // destructure it at the top of the body (step 51).
+                let (value, by_ref, prelude) =
+                    match self.foreach_destructure(value_target, line)? {
+                        Some((temp, stmt)) => (temp, false, Some(stmt)),
+                        None => {
+                            let (v, r) = self.foreach_value_slot(value_target, line)?;
+                            (v, r, None)
+                        }
+                    };
+                let mut body = self.lower_stmts(node.body.statements())?;
+                if let Some(stmt) = prelude {
+                    body.insert(0, stmt);
+                }
                 StmtKind::Foreach {
                     iter,
                     key,

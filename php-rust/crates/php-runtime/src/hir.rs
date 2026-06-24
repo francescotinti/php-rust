@@ -588,6 +588,17 @@ pub enum ExprKind {
     /// Reading `base[index]` (`$a[k]`, also a string offset read).
     Index { base: Box<Expr>, index: Box<Expr> },
 
+    /// `[$a, $b] = rhs` / `list(...) = rhs` array destructuring (step 51).
+    /// Desugared by the lowerer: `rhs` is stored once into `temp`, each `assign`
+    /// reads `temp[key]` and writes one (possibly nested) sub-target, and the whole
+    /// expression yields the stored `rhs` value (`$x = [$a,$b] = $arr` sets `$x` to
+    /// the array).
+    ListAssign {
+        temp: Slot,
+        rhs: Box<Expr>,
+        assigns: Vec<Expr>,
+    },
+
     /// `place = rhs` where `place` indexes into an array (`$a[k] = v`,
     /// `$a[] = v`, nested). Plain `$x = v` keeps the lighter [`ExprKind::Assign`].
     AssignPlace(Place, Box<Expr>),

@@ -1308,6 +1308,17 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::Dup); // assignment is an expression valued by the RHS
                 self.emit(Op::StoreSlot(*slot));
             }
+            ExprKind::ListAssign { temp, rhs, assigns } => {
+                // `[$a,$b] = rhs`: stash rhs once, run each sub-assignment (which
+                // reads `temp[key]`), then leave the stored rhs as the value.
+                self.expr(rhs)?;
+                self.emit(Op::StoreSlot(*temp));
+                for a in assigns {
+                    self.expr(a)?;
+                    self.emit(Op::Pop); // each sub-assignment's value is discarded
+                }
+                self.emit(Op::LoadSlot(*temp));
+            }
             ExprKind::AssignOp(op, slot, rhs) => {
                 self.emit(Op::LoadSlot(*slot));
                 self.expr(rhs)?;
@@ -3364,6 +3375,7 @@ fn expr_name(k: &ExprKind) -> String {
         ExprKind::Spread(_) => "Spread",
         ExprKind::Array(_) => "Array",
         ExprKind::Index { .. } => "Index",
+        ExprKind::ListAssign { .. } => "ListAssign",
         ExprKind::AssignPlace(..) => "AssignPlace",
         ExprKind::AssignOpPlace(..) => "AssignOpPlace",
         ExprKind::AssignCoalescePlace(..) => "AssignCoalescePlace",

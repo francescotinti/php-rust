@@ -143,6 +143,31 @@ impl<'f> Lowerer<'f> {
                         },
                     });
                 }
+                // `[$a, $b] = rhs` / `list($a, $b) = rhs` array destructuring: the
+                // LHS is an array/list *pattern*, only valid with plain `=` (step 51).
+                if let AssignmentOperator::Assign(_) = a.operator {
+                    match a.lhs {
+                        Expression::Array(arr) => {
+                            return Ok(Expr {
+                                line,
+                                kind: self.lower_destructure_assign(arr.elements.iter(), a.rhs, line)?,
+                            })
+                        }
+                        Expression::List(l) => {
+                            return Ok(Expr {
+                                line,
+                                kind: self.lower_destructure_assign(l.elements.iter(), a.rhs, line)?,
+                            })
+                        }
+                        Expression::LegacyArray(la) => {
+                            return Ok(Expr {
+                                line,
+                                kind: self.lower_destructure_assign(la.elements.iter(), a.rhs, line)?,
+                            })
+                        }
+                        _ => {}
+                    }
+                }
                 let place = self.lower_place(a.lhs, line)?;
                 let rhs = Box::new(self.lower_expr(a.rhs)?);
                 // A bare variable keeps the slot-based encoding (lighter, and
@@ -1017,5 +1042,135 @@ impl<'f> Lowerer<'f> {
             }
         }
         Ok(out)
+    }
+
+    /// Lower `[targets] = rhs` / `list(targets) = rhs` array destructuring (step
+    /// 51): evaluate `rhs` once, then destructure it into the target list.
+    pub(super) fn lower_destructure_assign<'a, I>(
+        &mut self,
+        elements: I,
+        rhs: &Expression,
+        line: Line,
+    ) -> Result<ExprKind, LowerError>
+    where
+        I: Iterator<Item = &'a ArrayElement<'a>>,
+    {
+        let source = self.lower_expr(rhs)?;
+        let kind = self.destructure_into(elements, source, line)?.kind;
+        Ok(kind)
+    }
+
+    /// Build a [`ExprKind::ListAssign`] that destructures the already-lowered
+    /// `source` value into `elements`. Each target reads `temp[key]`; a nested
+    /// list target recurses (its source is that `temp[key]`).
+    fn destructure_into<'a, I>(
+        &mut self,
+        elements: I,
+        source: Expr,
+        line: Line,
+    ) -> Result<Expr, LowerError>
+    where
+        I: Iterator<Item = &'a ArrayElement<'a>>,
+    {
+        let temp = self.fresh_list_temp();
+        let mut assigns = Vec::new();
+        let mut pos: i64 = 0;
+        for el in elements {
+            match el {
+                // `[, $b]`: a hole still advances the positional index.
+                ArrayElement::Missing(_) => pos += 1,
+                ArrayElement::Value(v) => {
+                    let key = Expr { line, kind: ExprKind::Int(pos) };
+                    pos += 1;
+                    assigns.push(self.destructure_target(v.value, temp, key, line)?);
+                }
+                ArrayElement::KeyValue(kv) => {
+                    let key = self.lower_expr(kv.key)?;
+                    assigns.push(self.destructure_target(kv.value, temp, key, line)?);
+                }
+                ArrayElement::Variadic(_) => {
+                    return Err(LowerError::Unsupported { what: "spread in destructuring", line })
+                }
+            }
+        }
+        Ok(Expr {
+            line,
+            kind: ExprKind::ListAssign { temp, rhs: Box::new(source), assigns },
+        })
+    }
+
+    /// Build the assignment for one destructuring target `tgt = temp[key]`. A
+    /// nested `[...]`/`list(...)` recurses; a by-reference target `&$x` is deferred.
+    fn destructure_target(
+        &mut self,
+        target: &Expression,
+        temp: Slot,
+        key: Expr,
+        line: Line,
+    ) -> Result<Expr, LowerError> {
+        // `[&$x] = …` would have to alias the source's element, but the temp holds
+        // a value copy — defer it rather than silently diverge.
+        if let Expression::UnaryPrefix(u) = target {
+            if let UnaryPrefixOperator::Reference(_) = u.operator {
+                return Err(LowerError::Unsupported { what: "by-reference destructuring", line });
+            }
+        }
+        // The value read `temp[key]`.
+        let elem = Expr {
+            line,
+            kind: ExprKind::Index {
+                base: Box::new(Expr { line, kind: ExprKind::Var(temp) }),
+                index: Box::new(key),
+            },
+        };
+        // A nested list/array target destructures `temp[key]` in turn.
+        match target {
+            Expression::Array(arr) => return self.destructure_into(arr.elements.iter(), elem, line),
+            Expression::List(l) => return self.destructure_into(l.elements.iter(), elem, line),
+            Expression::LegacyArray(la) => {
+                return self.destructure_into(la.elements.iter(), elem, line)
+            }
+            _ => {}
+        }
+        // A leaf lvalue (`$x`, `$a[i]`, `$o->p`) gets a plain assignment.
+        let place = self.lower_place(target, line)?;
+        let kind = if let (PlaceBase::Local(slot), true) = (place.base, place.steps.is_empty()) {
+            ExprKind::Assign(slot, Box::new(elem))
+        } else {
+            ExprKind::AssignPlace(place, Box::new(elem))
+        };
+        Ok(Expr { line, kind })
+    }
+
+    /// `foreach (… as [$a,$b])` / `as list(...)`: when the value target is a list
+    /// pattern, bind the element to a fresh temp and return that temp plus the
+    /// destructuring statement to prepend to the loop body (step 51). Returns
+    /// `None` for an ordinary (single-variable) value target.
+    pub(super) fn foreach_destructure(
+        &mut self,
+        target: &Expression,
+        line: Line,
+    ) -> Result<Option<(Slot, crate::hir::Stmt)>, LowerError> {
+        if !matches!(
+            target,
+            Expression::Array(_) | Expression::List(_) | Expression::LegacyArray(_)
+        ) {
+            return Ok(None);
+        }
+        let temp = self.fresh_list_temp();
+        let src = Expr { line, kind: ExprKind::Var(temp) };
+        let kind = match target {
+            Expression::Array(arr) => self.destructure_into(arr.elements.iter(), src, line)?.kind,
+            Expression::List(l) => self.destructure_into(l.elements.iter(), src, line)?.kind,
+            Expression::LegacyArray(la) => {
+                self.destructure_into(la.elements.iter(), src, line)?.kind
+            }
+            _ => unreachable!(),
+        };
+        let stmt = crate::hir::Stmt {
+            line,
+            kind: crate::hir::StmtKind::Expr(Expr { line, kind }),
+        };
+        Ok(Some((temp, stmt)))
     }
 }

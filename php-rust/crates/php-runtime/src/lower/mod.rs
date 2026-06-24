@@ -769,6 +769,10 @@ struct Lowerer<'f> {
     /// Set when the hook body currently being lowered accesses its own backing
     /// (`$this-><hook_prop>`), making the property backed rather than virtual.
     hook_backed: bool,
+    /// Monotonic counter for the synthetic temp slots that array destructuring
+    /// (`[$a,$b] = …`) stashes its right-hand side into (step 51). Names use a `@`
+    /// prefix, which no PHP variable can have, so they never collide with locals.
+    list_temp: u32,
 }
 
 /// One constructor-promoted parameter: its property name, declared visibility, the
@@ -824,7 +828,17 @@ impl<'f> Lowerer<'f> {
             promoted: Vec::new(),
             hook_prop: None,
             hook_backed: false,
+            list_temp: 0,
         }
+    }
+
+    /// Allocate a fresh synthetic local slot for a destructuring temp (step 51).
+    /// The `@`-prefixed name is unique and unreachable from PHP source.
+    fn fresh_list_temp(&mut self) -> Slot {
+        let n = self.list_temp;
+        self.list_temp += 1;
+        let name = format!("@list{n}");
+        self.slot_for(name.as_bytes())
     }
 
     /// Note a `$this-><name>` access seen while lowering a property-hook body: if
