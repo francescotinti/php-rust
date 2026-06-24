@@ -14,12 +14,18 @@ full port semantico del solo `zend_operators.c`).
 
 ## Stato attuale
 
-**Steps 0–68 completati · 1.402 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+**Steps 0–68 + Sessione F completati · 1.496 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
 
-**Migrazione VM (Fase 4, in corso).** In parallelo all'evaluator tree-walk — che resta il motore
-di produzione e tiene il differential a 0 mismatch — è in costruzione una **VM a bytecode**
-(`compile.rs` HIR→bytecode + `vm.rs` dispatch loop), presupposto per generatori/Fiber senza
-`corosensei`/`unsafe`. Coperto finora, validato da test unitari VM-side: espressioni e control-flow,
+> **✅ Migrazione VM completata (Sessione F).** La **VM a bytecode** (`compile.rs` HIR→bytecode +
+> `vm/` dispatch loop) è ora **l'unico motore di produzione**. Il tree-walker (`eval/`, ~7.000 righe),
+> la dipendenza `corosensei` e l'unico `unsafe` non-FFI del runtime sono stati **eliminati**: il payoff
+> progettato è realizzato — generatori e Fiber girano su uno **stack di frame esplicito** (park dell'`ip`
+> in una side-table del `Vm`), senza coroutine stackful né reborrow `*mut Evaluator`. L'harness di parità
+> dual-engine VM↔eval ha esaurito il suo scopo ed è stato rimosso; la fedeltà resta ancorata al PHP 8.5.7
+> reale via `differential.rs`. Le sezioni *«in corso»* qui sotto sono il **registro storico** di come la
+> VM è stata portata a parità prima dello switch.
+
+**Come la VM è stata costruita (storico).** Coperto e validato da test unitari VM-side: espressioni e control-flow,
 chiamate, array, **OOP completo** (classi, `$this`, proprietà/visibility, metodi, `static` + LSB,
 costanti di classe, magic `__get`/`__set`/`__isset`/`__unset`/`__toString`/`__destruct`, nullsafe
 `?->`), e e il **blocco reference completo** — **REF-1** (`$a = &$b` fra variabili bare, `global`), **REF-2**
@@ -49,7 +55,7 @@ così completo** nella VM. E sono partiti i **generatori** (**GEN-1**): nella VM
 `current`/`key`/`next`/`valid`/`rewind`, chiavi auto/esplicite con bump del contatore,
 closure-generator. Il dispatch è ora un *bounded runner* (`run_loop(baseline)`): `yield` sospende
 ritornando su per lo stack Rust, `resume` ripristina — **niente `corosensei`, niente `unsafe`** (il
-payoff della migrazione; tree-walker e VM coesistono finché non si elimina `eval/`). **GEN-2** aggiunge
+payoff della migrazione, poi realizzato eliminando `eval/` alla Sessione F). **GEN-2** aggiunge
 `send()` (ping-pong: il valore arriva come risultato del `yield` sospeso, con priming automatico),
 `return`/`getReturn()` e la fedeltà a PHP sulle eccezioni di misuso (rewind-dopo-run e
 getReturn-troppo-presto sono `Exception`, dove il tree-walker usa `Error`). **GEN-3** aggiunge
@@ -62,10 +68,10 @@ propagazione delle eccezioni fuori dalla fiber. A differenza di un generatore (u
 suspend` può essere chiamata da *qualsiasi profondità* dello stack della fiber, quindi la sospensione
 parcheggia l'**intero segmento di frame** in una side-table del `Vm` e lo ripristina al resume — di
 nuovo senza `corosensei`/`unsafe`. Scope-out dichiarati: `Fiber::throw()` e il nesting patologico
-fiber-dentro-generator. Roadmap residua: GEN-5/CLEANUP (switch del motore in `lib.rs`, rimozione di
-`eval/` e di `corosensei`). Piano completo: vedi il file di piano del progetto.
+fiber-dentro-generator. **GEN-5/CLEANUP — fatto (Sessione F):** switch del motore in `lib.rs`,
+eliminazione di `eval/` e drop di `corosensei` + del trait `GenDriver`/dell'`unsafe`.
 
-**Parità VM (in corso).** Con i generatori/Fiber completi, è iniziato il lavoro per portare la VM alla
+**Parità VM (storico).** Con i generatori/Fiber completi, è iniziato il lavoro per portare la VM alla
 parità di copertura con l'eval (pre-requisito per spegnere `eval/`). Primo blocco: **parametri di
 default + arità** — un *prologo* per-funzione (`Op::FillDefault`) riempie gli argomenti opzionali
 omessi nel frame del chiamato (così un default può riferirsi a parametri precedenti), e il binding
@@ -101,7 +107,7 @@ con nome su **metodi d'istanza** `$obj->m()`, spread su metodi/`new`/static, `$c
 edge. **Non sono problemi della VM ma del *lowering* (condivisi con l'eval)**: spread in array literal
 `[...$a]` e nomi di membro dinamici `$o->{expr}`/`$o->$n` (rifiutati in `member_name`/lowering).
 
-**Builtin host (in corso).** Il grosso del divario di copertura residuo non è semantica di linguaggio
+**Builtin host (storico).** Il grosso del divario di copertura residuo non è semantica di linguaggio
 ma *funzioni che finora solo l'evaluator implementava*: la VM le sta assorbendo come **builtin host**
 (`Op::CallHostBuiltin`, più la variante by-ref-first `Op::CallHostBuiltinRef` per chi muta il primo
 argomento), molti dei quali richiamano codice utente in modo sincrono tramite un *runner annidato*
@@ -264,6 +270,7 @@ i pass salgono **2 → 63**. Step 53 ha aggiunto `strstr`/`strrchr`/`stristr`,
 | 66 | **fix interleaving diag/output dei builtin**: in `dispatch_value_builtin` i diagnostici sollevati da un builtin che scrive su stdout (`printf`/`vprintf`) sono ora resi su `rendered` **prima** del suo output — il warning nasce durante la formattazione, prima della scrittura (es. `Array to string conversion` precede il risultato di printf, come PHP). Byte-identico all'oracle su casi multipli | ✅ |
 | 67 | **harness: materializza lo script su disco** prima di eseguirlo (come run-tests.php) → `__FILE__`/`fopen(__FILE__)`/`include __FILE__` risolvono contro un file reale. Guardato: crea solo se assente, rimuove solo ciò che ha creato (mai sovrascrive file companion). Toglie i warning `fopen` spuri da decine di test | ✅ |
 | 68 | **`%s` di sprintf/printf onora `__toString`**: la famiglia `sprintf`/`printf`/`vsprintf`/`vprintf`/`fprintf`/`vfprintf` è ora evaluator-dispatched — gli argomenti oggetto sono risolti via `__toString` (o lanciano il fatale corretto se assente) prima del motore di formato puro, ricorsivamente negli array dei `v*`. `strings` 290→292 pass; 1 D-NEW (`%d`/`%f` su oggetto-con-`__toString`) | ✅ |
+| **F** | **Switch del motore al bytecode VM + eliminazione del tree-walker.** F1: `run_source`/`Outcome` → VM. Long-tail (chiusura gap VM): `@`/exit/goto, `json_decode`, `mb_split`/`mb_regex`, `sscanf`/`fscanf` (ABI out-param variadici by-ref), famiglia `mb_ereg*` (13 fn), introspezione `[parameter]` delle Closure, funzione indefinita = fatale a runtime, `goto`-attraverso-`finally` + scope-out `goto`-dentro-blocco (D-45.1). F2: eliminato `eval/` (~7.000 righe) + il dual-engine del runner. F3: drop `corosensei` + trait `GenDriver`/`unsafe`. **1.496 test verdi, zero `unsafe` non-FFI, VM motore unico** | ✅ |
 
 > Lo step 6 è stato eseguito **dopo** lo step 7 (deciso con l'utente: gli array
 > rendono il phpt-runner molto più utile, quintuplicando i test in-scope).
@@ -284,7 +291,7 @@ literale intero gigante → `INF` #74947) e 1 divergenza ereditata da mago (`\u{
 
 | Sottosistema Zend | LOC C | Sostituto Rust | LOC Rust |
 |---|---|---|---|
-| VM generata (`zend_vm_execute.h`) + `zend_execute.c` | ~146.000 | evaluator tree-walk su HIR (produzione) **+ VM a bytecode** (`compile.rs` + `vm/`, motore di domani) | 3–5K + ~9.5K |
+| VM generata (`zend_vm_execute.h`) + `zend_execute.c` | ~146.000 | **VM a bytecode** (`compile.rs` HIR→bytecode + `vm/` dispatch loop, motore unico) | ~9.5K |
 | `zend_compile.c` (AST→opcodes) | 12.400 | lowering AST→HIR | 1–2K |
 | lexer re2c + parser Bison + AST | ~25.000 | dipendenza `mago` + bridge | ~500 |
 | `zend_alloc` / `zend_gc` / TSRM / Optimizer / opcache / win32 | ~88.000 | ownership, `Rc`+COW, `Send`/`Sync`, processo residente | ~0 |
@@ -292,28 +299,26 @@ literale intero gigante → `INF` #74947) e 1 divergenza ereditata da mago (`\u{
 
 ~280K LOC del core → ~8–10K LOC Rust stimati.
 
-> **Due motori, una semantica.** Il progetto è partito con un *tree-walker* su HIR — sufficiente a
-> riprodurre l'output osservabile di PHP e tuttora il motore di produzione che tiene il differential a
-> 0 mismatch. Ma generatori, `yield from` e `Fiber` richiederebbero, su un tree-walker, coroutine
-> stackful (`corosensei`) e `unsafe`. Per evitarlo è stata costruita una **VM a bytecode**: avanzando
-> un instruction pointer esplicito su uno stream di `Op`, sospendere un generatore è *parcheggiare un
-> `Frame`* e il salto non-strutturato è un'istruzione ordinaria — niente coroutine, niente `unsafe`.
-> Da qui la scelta, inizialmente accantonata, di **introdurre comunque una VM**: i due motori coesistono
-> e si validano a vicenda finché la VM non raggiunge la piena parità di copertura, dopodiché `eval/` e
-> `corosensei` verranno rimossi e la VM diventerà l'unico motore.
+> **Da due motori a uno.** Il progetto è partito con un *tree-walker* su HIR — sufficiente a riprodurre
+> l'output osservabile di PHP. Ma generatori, `yield from` e `Fiber` richiederebbero, su un tree-walker,
+> coroutine stackful (`corosensei`) e `unsafe`. Per evitarlo è stata costruita una **VM a bytecode**:
+> avanzando un instruction pointer esplicito su uno stream di `Op`, sospendere un generatore è
+> *parcheggiare un `Frame`* e il salto non-strutturato è un'istruzione ordinaria — niente coroutine,
+> niente `unsafe`. I due motori sono coesistiti e si sono validati a vicenda finché la VM non ha
+> raggiunto la piena parità di copertura; **alla Sessione F lo switch è stato completato**: `eval/` e
+> `corosensei` sono stati rimossi e la VM è ora l'unico motore.
 
 ## Struttura
 
 ```
 php-rust/crates/
   php-types      Zval / PhpStr / PhpArray / Object + operatori (zero dep interne)
-  php-runtime    HIR, lowering da mago, evaluator tree-walk (OOP, eccezioni,
-                 enum, closure, __destruct, interpolazione; json_decode +
-                 preg_* intercettati; stack-trace) + VM a bytecode in
-                 migrazione. lowering in lower/{mod,stmt,class,expr}.rs;
-                 evaluator in eval/{mod,expr,stmt,calls,class,builtins}.rs;
-                 VM in compile.rs (HIR→bytecode) + vm/{mod,exceptions,
-                 coroutines,arrays,oop,calls}.rs
+  php-runtime    HIR, lowering da mago, e la VM a bytecode (motore unico):
+                 compile.rs (HIR→bytecode) + vm/{mod,exceptions,coroutines,
+                 arrays,oop,calls}.rs. Copre OOP, eccezioni, enum, closure,
+                 generatori/Fiber (su frame espliciti, senza corosensei/unsafe),
+                 __destruct, interpolazione, json_decode/preg_*/mb_*, stack-trace.
+                 lowering in lower/{mod,stmt,class,expr}.rs
   php-builtins   registry ~243 builtin (var_dump/print_r, array_*, string,
                  sprintf/printf, math, json_encode, file/stream, mbstring,
                  hash/encoding: base64/md5/sha1/crc32/hash, pack/unpack, crypt,
@@ -361,7 +366,7 @@ PHP_RUST_TRACE=all   phpr s.php   # HIR + trace d'esecuzione
 
 ### phpt-runner
 
-Esegue i `.phpt` ufficiali attraverso l'evaluator, con capability scan e
+Esegue i `.phpt` ufficiali attraverso la VM a bytecode, con capability scan e
 classificazione PASS/FAIL/SKIP (i fuori-scope sono SKIP motivati):
 
 ```bash
