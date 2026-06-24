@@ -1094,11 +1094,7 @@ impl<'a> FnCompiler<'a> {
             ExprKind::AssignOpPlace(op, place, rhs) => self.assign_op_place(*op, place, rhs)?,
             ExprKind::IncDecPlace { place, inc, pre } => self.incdec_place(place, *inc, *pre)?,
             ExprKind::Isset(places) => self.isset(places)?,
-            ExprKind::Empty(place) => {
-                let base = dim_base(place)?;
-                let nkeys = self.test_path_steps(place)?;
-                self.emit(Op::EmptyPath { base, nkeys });
-            }
+            ExprKind::Empty(place) => self.empty(place)?,
             ExprKind::Coalesce(a, b) => {
                 // `$o->p ?? d`: a property is read isset-aware — `__isset` decides
                 // and `__get` runs only when set, so an unset magic property never
@@ -2456,8 +2452,14 @@ impl<'a> FnCompiler<'a> {
     /// Compile a compound element write `$a[…][k] op= rhs`.
     fn assign_op_place(&mut self, op: crate::hir::BinOp, place: &Place, rhs: &Expr) -> R<()> {
         if let Some(name) = self.prop_place(place)? {
+            // `$o->p op= rhs` as read-modify-write so a magic property routes
+            // through `__get` then `__set` (each op leaves its result for the
+            // next): [obj] → Dup → PropGet → rhs → Binary → PropSet → [result].
+            self.emit(Op::Dup);
+            self.emit(Op::PropGet { name: name.clone() });
             self.expr(rhs)?;
-            self.emit(Op::PropOpSet { name, op });
+            self.emit(Op::Binary(op));
+            self.emit(Op::PropSet { name });
             return Ok(());
         }
         if place_has_prop(place) {
@@ -2548,6 +2550,36 @@ impl<'a> FnCompiler<'a> {
         for j in to_false {
             self.patch(j, Op::JumpIfFalse(false_at));
         }
+        Ok(())
+    }
+
+    /// Compile `empty($place)`. A single property is `__isset`-then-silent-`__get`
+    /// (`empty` is `!isset || !truthy(value)`), so an unset magic property never
+    /// warns or calls `__get`; other places use the array `EmptyPath`.
+    fn empty(&mut self, place: &Place) -> R<()> {
+        if let Some(name) = self.prop_place(place)? {
+            // stack: [obj]
+            self.emit(Op::Dup); // [obj, obj]
+            self.emit(Op::PropIsset { name: name.clone() }); // [obj, isset]
+            let to_true = self.emit(Op::JumpIfFalse(Addr::MAX)); // unset → empty=true; [obj]
+            self.emit(Op::PropGetSilent { name }); // [value]
+            self.emit(Op::Unary(crate::hir::UnOp::Not)); // [empty = !truthy(value)]
+            let to_end = self.emit(Op::Jump(Addr::MAX));
+            let true_at = self.here();
+            self.patch(to_true, Op::JumpIfFalse(true_at));
+            self.emit(Op::Pop); // drop the kept object
+            let t = self.konst(Const::Bool(true));
+            self.emit(Op::PushConst(t)); // [true]
+            let end = self.here();
+            self.patch(to_end, Op::Jump(end));
+            return Ok(());
+        }
+        if place_has_prop(place) {
+            return Err(CompileError::Unsupported("empty() on a nested property path".into()));
+        }
+        let base = dim_base(place)?;
+        let nkeys = self.test_path_steps(place)?;
+        self.emit(Op::EmptyPath { base, nkeys });
         Ok(())
     }
 

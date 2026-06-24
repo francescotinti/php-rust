@@ -485,6 +485,11 @@ pub enum Op {
     /// `[obj] -> [bool]` — `isset($o->p)`: true iff the property exists and is not
     /// null (silent, no warning).
     PropIsset { name: Box<[u8]> },
+    /// `[obj] -> [v]` — read property `name` like [`Op::PropGet`] but *silently*:
+    /// a missing property yields NULL with no "Undefined property" warning and no
+    /// visibility error (the read context of `empty()` / `??`). A `__get` accessor
+    /// still runs when present.
+    PropGetSilent { name: Box<[u8]> },
     /// `[obj] -> []` — `unset($o->p)`: remove the property (no-op if absent).
     PropUnset { name: Box<[u8]> },
     /// `[obj, arg0, …, arg{argc-1}] -> [result]` — instance method call resolved

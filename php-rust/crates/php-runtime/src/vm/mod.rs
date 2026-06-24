@@ -1638,6 +1638,24 @@ impl<'m> Vm<'m> {
                     let v = read_property(&target, &name, &mut self.diags);
                     self.frames[top].stack.push(v);
                 }
+                Op::PropGetSilent { name } => {
+                    // Like PropGet but with no "Undefined property" warning and no
+                    // visibility error (the read context of `empty()` / `??`).
+                    let obj = self.frames[top].stack.pop().expect("PropGetSilent object");
+                    let cur = self.frames[top].class;
+                    let target = obj.deref_clone();
+                    if let Zval::Object(o) = &target {
+                        if let Some((defc, midx, oid)) =
+                            self.magic_applies(o, &name, cur, MagicKind::Get, b"__get")
+                        {
+                            self.push_magic_prop(defc, midx, oid, MagicKind::Get, target.clone(), &name, None, None, false);
+                            continue;
+                        }
+                    }
+                    let mut sink = Diags::new();
+                    let v = read_property(&target, &name, &mut sink);
+                    self.frames[top].stack.push(v);
+                }
                 Op::PropSet { name } => {
                     let value = self.frames[top].stack.pop().expect("PropSet value");
                     let obj = self.frames[top].stack.pop().expect("PropSet object");
@@ -9437,6 +9455,30 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php class C { function __isset($n){return false;} function __get($n){echo 'G'; return 1;} } $c=new C(); echo ($c->x ?? 'D');"),
             b"D"
+        );
+    }
+
+    #[test]
+    fn empty_and_compound_assign_on_properties() {
+        // empty() on a declared property: set+truthy vs null/unset.
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $x=5; public $y=null; } $c=new C; echo empty($c->x)?'D':'d'; echo empty($c->y)?'E':'e'; echo empty($c->z)?'F':'f';"),
+            b"dEF"
+        );
+        // empty() with __isset true but no __get: value is null → empty (silent).
+        assert_eq!(
+            vm_stdout(b"<?php class C { private $d=['foo'=>'']; function __isset($n){return isset($this->d[$n]);} } $c=new C(); echo empty($c->foo)?'E':'N';"),
+            b"E"
+        );
+        // empty() with __isset then __get.
+        assert_eq!(
+            vm_stdout(b"<?php class C { private $d=['z'=>0,'v'=>5]; function __isset($n){return isset($this->d[$n]);} function __get($n){return $this->d[$n];} } $c=new C(); echo empty($c->z)?'1':'0'; echo empty($c->v)?'1':'0'; echo empty($c->missing)?'1':'0';"),
+            b"101"
+        );
+        // Compound `+=` on a magic property routes through __get then __set.
+        assert_eq!(
+            vm_stdout(b"<?php class C { private $d=['n'=>10]; function __get($k){return $this->d[$k];} function __set($k,$v){$this->d[$k]=$v;} } $c=new C(); $c->n += 5; echo $c->n;"),
+            b"15"
         );
     }
 }
