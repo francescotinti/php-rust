@@ -8186,6 +8186,20 @@ mod tests {
     }
 
     #[test]
+    fn enum_case_value_from_inherited_interface_const() {
+        // A backed case value may reference an inherited interface constant
+        // (I::A) or self:: (resolving through the implemented interface).
+        assert_eq!(
+            vm_stdout(
+                b"<?php interface I { const A = 'A'; const B = 'B'; } \
+                  enum E: string implements I { case C = I::A; case D = self::B; } \
+                  echo E::A, E::B, E::C->value, E::D->value;"
+            ),
+            b"ABAB"
+        );
+    }
+
+    #[test]
     fn enum_backed_string_case() {
         assert_eq!(
             vm_stdout(b"<?php enum E: string { case A = 'x'; } echo E::A->name,'/',E::A->value;"),

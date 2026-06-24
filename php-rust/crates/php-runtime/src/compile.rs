@@ -398,7 +398,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         .iter()
         .map(|c| CompiledEnumCase {
             name: c.name.clone(),
-            value: c.value.as_ref().and_then(const_eval),
+            value: c.value.as_ref().and_then(|e| const_eval_in_class(e, cid, ctx, 0)),
         })
         .collect();
 
@@ -523,6 +523,58 @@ fn const_eval(e: &Expr) -> Option<Const> {
         ExprKind::Str(s) => Some(Const::Str(s.clone())),
         _ => None,
     }
+}
+
+
+/// Like [`const_eval`] but able to resolve a class-constant reference
+/// (`Self::C`, `Iface::C`, `Parent::C`) against the HIR class table, evaluated in
+/// the *declaring* class's context. Used to const-fold enum case backing values
+/// that name an inherited interface constant (e.g. `case C = I::A;`), which a
+/// context-free fold cannot reach. Walks the parent chain then interfaces
+/// (transitively), mirroring `find_class_const`. `depth` guards against a cyclic
+/// constant definition (a PHP error in its own right).
+fn const_eval_in_class(e: &Expr, cur: ClassId, ctx: &ProgramCtx, depth: u32) -> Option<Const> {
+    if depth > 32 {
+        return None;
+    }
+    if let ExprKind::ClassConst { class, name } = &e.kind {
+        if name.eq_ignore_ascii_case(b"class") {
+            return None; // `E::class` is the class name string; not folded here.
+        }
+        let target = match class {
+            ClassRef::Named(n) => *ctx.class_index.get(&n.to_ascii_lowercase())?,
+            ClassRef::SelfClass => cur,
+            ClassRef::Parent => ctx.classes[cur].parent?,
+            ClassRef::Static | ClassRef::Dynamic(_) => return None,
+        };
+        let (decl_cid, value) = find_const_decl(target, name, ctx)?;
+        return const_eval_in_class(value, decl_cid, ctx, depth + 1);
+    }
+    const_eval(e)
+}
+
+/// Find the constant `name` (case-sensitive, like PHP) reachable from class
+/// `cid`: own constants and the parent chain first, then implemented interfaces
+/// transitively. Returns the *declaring* class id and the constant's value
+/// expression, so it can be folded in that class's context.
+fn find_const_decl<'a>(cid: ClassId, name: &[u8], ctx: &'a ProgramCtx<'a>) -> Option<(ClassId, &'a Expr)> {
+    let mut c = Some(cid);
+    while let Some(x) = c {
+        if let Some(k) = ctx.classes[x].consts.iter().find(|k| k.name.as_ref() == name) {
+            return Some((x, &k.value));
+        }
+        c = ctx.classes[x].parent;
+    }
+    let mut c = Some(cid);
+    while let Some(x) = c {
+        for &i in &ctx.classes[x].interfaces {
+            if let Some(r) = find_const_decl(i, name, ctx) {
+                return Some(r);
+            }
+        }
+        c = ctx.classes[x].parent;
+    }
+    None
 }
 
 /// Per-function emit state: the growing instruction stream, the constant pool,
@@ -2125,7 +2177,7 @@ impl<'a> FnCompiler<'a> {
         let case = &cd.enum_cases[i];
         let materialisable = match &case.value {
             None => true,
-            Some(e) => const_eval(e).is_some(),
+            Some(e) => const_eval_in_class(e, cid, self.ctx, 0).is_some(),
         };
         materialisable.then_some(i as u32)
     }
