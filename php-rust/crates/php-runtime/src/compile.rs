@@ -1162,6 +1162,18 @@ impl<'a> FnCompiler<'a> {
                         self.push_value_args(args)?;
                         self.emit(Op::StaticCallDynamic { method: method.clone(), argc: args.len() as u32 });
                     }
+                } else if matches!(class, ClassRef::Named(n) if n.eq_ignore_ascii_case(b"Closure")) {
+                    // `Closure::bind` / `Closure::fromCallable` are built-in statics
+                    // — there is no compiled `Closure` class to resolve against.
+                    if !named.is_empty()
+                        || args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_)))
+                    {
+                        return Err(CompileError::Unsupported(
+                            "named/spread arguments on `Closure::m()`".into(),
+                        ));
+                    }
+                    self.push_value_args(args)?;
+                    self.emit(Op::ClosureStatic { method: method.clone(), argc: args.len() as u32 });
                 } else {
                     let (target, forwarding) = self.resolve_target(class)?;
                     if named.is_empty() {

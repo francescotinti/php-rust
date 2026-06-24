@@ -302,6 +302,105 @@ impl<'m> Vm<'m> {
         self.drive_to_return(baseline)
     }
 
+    /// Normalise the `$newThis` argument of `bindTo`/`bind`/`call`: an object
+    /// binds, `null` (or anything else) clears the binding (step 19-6).
+    fn closure_this_arg(v: Option<Zval>) -> Option<Zval> {
+        match v.map(|v| v.deref_clone()) {
+            Some(o @ Zval::Object(_)) => Some(o),
+            _ => None,
+        }
+    }
+
+    /// Build a copy of `cl` with a new bound `$this` and a fresh object id
+    /// (step 19-6, mirrors `eval::rebind_closure`).
+    fn rebind_closure(&mut self, cl: &Closure, bound_this: Option<Zval>) -> Zval {
+        let id = self.next_id();
+        Zval::Closure(Rc::new(Closure {
+            fn_idx: cl.fn_idx,
+            captures: cl.captures.clone(),
+            named: cl.named.clone(),
+            bound_this,
+            id,
+            info: Rc::clone(&cl.info),
+        }))
+    }
+
+    /// Built-in methods on a closure value: `$c->bindTo($newThis)` (rebind) and
+    /// `$c->call($newThis, ...$args)` (rebind then invoke). Mirrors
+    /// `eval::closure_method`.
+    pub(super) fn closure_instance_method(
+        &mut self,
+        cl: &Closure,
+        method: &[u8],
+        args: Vec<Zval>,
+    ) -> Result<Zval, PhpError> {
+        if method.eq_ignore_ascii_case(b"bindTo") {
+            let new_this = Self::closure_this_arg(args.into_iter().next());
+            Ok(self.rebind_closure(cl, new_this))
+        } else if method.eq_ignore_ascii_case(b"call") {
+            let mut it = args.into_iter();
+            let new_this = Self::closure_this_arg(it.next());
+            let rest: Vec<Zval> = it.collect();
+            let bound = self.rebind_closure(cl, new_this);
+            self.call_callable(bound, rest)
+        } else {
+            Err(PhpError::Error(format!(
+                "Call to undefined method Closure::{}()",
+                String::from_utf8_lossy(method)
+            )))
+        }
+    }
+
+    /// Static methods on the `Closure` class: `Closure::bind($c, $newThis)` and
+    /// `Closure::fromCallable($callable)`. Mirrors `eval::closure_static`.
+    pub(super) fn closure_static_method(
+        &mut self,
+        method: &[u8],
+        args: Vec<Zval>,
+    ) -> Result<Zval, PhpError> {
+        if method.eq_ignore_ascii_case(b"bind") {
+            let mut it = args.into_iter();
+            let target = it.next().map(|v| v.deref_clone());
+            let new_this = Self::closure_this_arg(it.next());
+            match target {
+                Some(Zval::Closure(cl)) => Ok(self.rebind_closure(&cl, new_this)),
+                _ => Err(PhpError::Error(
+                    "Closure::bind(): Argument #1 ($closure) must be of type Closure".to_string(),
+                )),
+            }
+        } else if method.eq_ignore_ascii_case(b"fromCallable") {
+            match args.into_iter().next().map(|v| v.deref_clone()) {
+                // An existing closure passes through unchanged.
+                Some(Zval::Closure(cl)) => Ok(Zval::Closure(cl)),
+                // A function-name string becomes a named (first-class-callable)
+                // closure, like `Op::MakeFcc`.
+                Some(Zval::Str(s)) => {
+                    let id = self.next_id();
+                    let info = Rc::new(ClosureInfo {
+                        kind: ClosureRender::Function(s.clone()),
+                        params: Vec::new(),
+                    });
+                    Ok(Zval::Closure(Rc::new(Closure {
+                        fn_idx: 0,
+                        captures: Vec::new(),
+                        named: Some(s),
+                        bound_this: None,
+                        id,
+                        info,
+                    })))
+                }
+                _ => Err(PhpError::Error(
+                    "Closure::fromCallable(): Argument #1 ($callback) is not callable".to_string(),
+                )),
+            }
+        } else {
+            Err(PhpError::Error(format!(
+                "Call to undefined method Closure::{}()",
+                String::from_utf8_lossy(method)
+            )))
+        }
+    }
+
     /// Drive a *nested* bounded [`Self::run_loop`] from `baseline` (the frame count
     /// before a callee frame was pushed) until that callee returns, propagating an
     /// uncaught exception out with its frames dropped. Shared by [`Self::call_callable`]

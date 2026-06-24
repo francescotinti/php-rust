@@ -531,6 +531,11 @@ pub enum Op {
     /// `forwarding` (self/parent/static) else the start class, and `$this` is
     /// propagated per PHP's forwarding rules.
     StaticCall { target: ClassTarget, method: Box<[u8]>, forwarding: bool, argc: u32 },
+    /// `[args…] -> [ret]` — a built-in static on the `Closure` class:
+    /// `Closure::bind($c, $newThis)` or `Closure::fromCallable($callable)`. The
+    /// `Closure` "class" has no compiled entry, so these are dispatched natively
+    /// rather than through normal static-method resolution (step 19-6).
+    ClosureStatic { method: Box<[u8]>, argc: u32 },
     /// `[argsArray] -> [ret]` — like [`Op::StaticCall`] but the arguments are the
     /// values of a runtime array (spread call `C::m(...$a)`, Session A): string
     /// keys dropped, values bound positionally.

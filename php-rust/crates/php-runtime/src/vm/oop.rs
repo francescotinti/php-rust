@@ -421,6 +421,14 @@ impl<'m> Vm<'m> {
                 return Ok(());
             }
         }
+        // A closure value's built-in methods (`$c->bindTo(...)`, `$c->call(...)`)
+        // are dispatched natively — a closure is not a user object (step 19-6).
+        if let Zval::Closure(cl) = &this {
+            let cl = Rc::clone(cl);
+            let result = self.closure_instance_method(&cl, method, args)?;
+            self.frames[top].stack.push(result);
+            return Ok(());
+        }
         let cid = match &this {
             Zval::Object(o) => o.borrow().class_id as usize,
             other => {

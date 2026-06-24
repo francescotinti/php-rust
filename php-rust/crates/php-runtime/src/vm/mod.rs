@@ -1777,6 +1777,12 @@ impl<'m> Vm<'m> {
                     }
                     self.dispatch_static_call(top, start, &method, forwarding, args)?;
                 }
+                Op::ClosureStatic { method, argc } => {
+                    // `Closure::bind(...)` / `Closure::fromCallable(...)` (step 19-6).
+                    let args = self.pop_keys(top, argc); // source order
+                    let result = self.closure_static_method(&method, args)?;
+                    self.frames[top].stack.push(result);
+                }
                 Op::StaticCallArgs { target, method, forwarding } => {
                     // Spread `C::m(...$a)` (Session A): args from a runtime array.
                     let argsval = self.frames[top].stack.pop().expect("StaticCallArgs array");
@@ -9094,6 +9100,25 @@ mod tests {
         assert_eq!(vm_stdout(b"<?php $x=1; function f(){ $GLOBALS['x'] += 4; } f(); echo $x;"), b"5");
         // Top-level $GLOBALS write aliases the plain variable.
         assert_eq!(vm_stdout(b"<?php $GLOBALS['x']=7; echo $x;"), b"7");
+    }
+
+    #[test]
+    fn closure_bind_bindto_and_fromcallable() {
+        // Closure::bind rebinds $this and returns a new closure.
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $v = 3; } $f = function() { return $this->v; }; $g = Closure::bind($f, new C); echo $g();"),
+            b"3"
+        );
+        // $closure->bindTo(...) is the instance-method form.
+        assert_eq!(
+            vm_stdout(b"<?php class C { public $v = 9; } $f = function() { return $this->v; }; $g = $f->bindTo(new C); echo $g();"),
+            b"9"
+        );
+        // Closure::fromCallable wraps a function name into an invokable closure.
+        assert_eq!(
+            vm_stdout(b"<?php function dbl($x){ return $x*2; } $f = Closure::fromCallable('dbl'); echo $f(21);"),
+            b"42"
+        );
     }
 }
 
