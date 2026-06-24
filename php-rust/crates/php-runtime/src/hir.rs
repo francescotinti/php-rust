@@ -338,6 +338,12 @@ pub struct Stmt {
 pub enum StmtKind {
     /// `echo a, b, c;` and the `<?= ... ?>` short tag.
     Echo(Vec<Expr>),
+
+    /// `const A = 1, B = 2;` top-level / namespaced constant declaration (step 51):
+    /// each name is already resolved to its fully-qualified form. Executed in order
+    /// at run time (a later item may reference an earlier one); redefining warns and
+    /// keeps the first value, exactly like `define()`.
+    ConstDecl(Vec<(Box<[u8]>, Expr)>),
     /// Literal HTML / text outside `<?php ?>` (emitted verbatim).
     InlineHtml(Box<[u8]>),
     /// An expression evaluated for its side effects (`$x = 1;`, `f();`).

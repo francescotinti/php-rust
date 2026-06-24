@@ -48,6 +48,19 @@ impl<'f> Lowerer<'f> {
             Statement::Echo(echo) => StmtKind::Echo(self.lower_expr_list(echo.values.iter())?),
             Statement::EchoTag(echo) => StmtKind::Echo(self.lower_expr_list(echo.values.iter())?),
 
+            // `const A = 1, B = 2;` top-level / namespaced constant declaration
+            // (step 51): register each under its fully-qualified name (so an
+            // unqualified read inside the namespace finds it, like other decls).
+            Statement::Constant(node) => {
+                let mut items = Vec::new();
+                for it in node.items.iter() {
+                    let name = join_ns(&self.cur_namespace, it.name.value);
+                    let value = self.lower_expr(it.value)?;
+                    items.push((name, value));
+                }
+                StmtKind::ConstDecl(items)
+            }
+
             Statement::Expression(es) => StmtKind::Expr(self.lower_expr(es.expression)?),
             Statement::Block(block) => StmtKind::Block(self.lower_stmts(block.statements.as_slice())?),
 

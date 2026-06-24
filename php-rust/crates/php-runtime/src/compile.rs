@@ -883,6 +883,12 @@ impl<'a> FnCompiler<'a> {
                     self.emit(Op::Echo);
                 }
             }
+            StmtKind::ConstDecl(items) => {
+                for (name, value) in items {
+                    self.expr(value)?;
+                    self.emit(Op::DefineConst { name: name.clone() });
+                }
+            }
             StmtKind::InlineHtml(bytes) => {
                 // Raw text outside `<?php … ?>` (and the newline after a closing
                 // tag): emitted verbatim, like `eval`'s `emit(bytes)`. Reuses the

@@ -803,6 +803,19 @@ impl<'m> Vm<'m> {
                         })?;
                     self.frames[top].stack.push(v);
                 }
+                Op::DefineConst { name } => {
+                    // `const NAME = value;` — register the constant, warning and
+                    // keeping the first value on redefinition (like `define()`).
+                    let value = self.frames[top].stack.pop().expect("DefineConst value");
+                    if self.constant_known(&name) {
+                        self.diags.push(Diag::Warning(format!(
+                            "Constant {} already defined, this will be an error in PHP 9",
+                            String::from_utf8_lossy(&name)
+                        )));
+                    } else {
+                        self.constants.insert(name.to_vec(), value);
+                    }
+                }
                 Op::Pop => {
                     self.frames[top].stack.pop();
                 }

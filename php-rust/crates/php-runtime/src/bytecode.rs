@@ -450,6 +450,11 @@ pub enum Op {
     /// (`PHP_INT_MAX`, …) are folded at lowering and never reach here; an unknown
     /// name is the catchable `Error` "Undefined constant \"name\"".
     ConstFetch { name: Box<[u8]>, fallback: Option<Box<[u8]>> },
+    /// `[value] -> []` — declare a user constant `name` (a top-level / namespaced
+    /// `const NAME = value`), step 51. Pops the value and registers it in the VM's
+    /// constant table; redefining an existing constant warns and keeps the first
+    /// value, exactly like `define()`.
+    DefineConst { name: Box<[u8]> },
     /// `[rest0, …, rest{argc-1}] -> [result]` — call a by-reference-first builtin
     /// (`sort`, `array_push`, …): its first argument is the variable in `slot`,
     /// handed to the builtin as `&mut Zval` (write-through), and `argc` is the
