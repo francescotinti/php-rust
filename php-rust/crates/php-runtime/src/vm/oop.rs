@@ -501,7 +501,7 @@ impl<'m> Vm<'m> {
                 frame.this = Some(this);
                 frame.class = Some(defc);
                 frame.static_class = Some(cid); // LSB = receiver's actual class
-                self.enter_callee(frame);
+                self.enter_callee(frame)?;
             }
             None => match resolve_method_runtime(module, cid, b"__call") {
                 Some((cdefc, cmidx)) => {

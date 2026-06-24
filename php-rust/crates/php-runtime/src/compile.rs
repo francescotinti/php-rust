@@ -31,7 +31,7 @@ use crate::bytecode::{
 };
 use crate::hir::{
     BinOp, Case, CatchClause, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, Line, MatchArm,
-    Param, Place, PlaceBase, PlaceStep, Program, StaticAssignOp, Stmt, StmtKind, Visibility,
+    Param, Place, PlaceBase, PlaceStep, Program, StaticAssignOp, Stmt, StmtKind, TypeHint, Visibility,
 };
 
 /// A construct the proof-slice compiler does not yet lower. Carries the HIR
@@ -102,7 +102,7 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
         .iter()
         .map(|fd| compile_fndecl(fd, &ctx).unwrap_or_else(|e| stub_func(fd, &e)))
         .collect();
-    let main = compile_body(b"", &program.body, program.slots.len() as u32, &[], &program.slots, false, false, &ctx, None, true)?;
+    let main = compile_body(b"", &program.body, program.slots.len() as u32, &[], &program.slots, false, false, None, 0, &ctx, None, true)?;
     // Classes are compiled tolerantly too (see `compile_class`).
     let classes = program
         .classes
@@ -119,6 +119,7 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
         file: program.file.clone(),
         class_index,
         static_count: program.static_count,
+        strict: program.strict,
     })
 }
 
@@ -155,6 +156,8 @@ fn compile_fndecl(fd: &FnDecl, ctx: &ProgramCtx) -> R<Func> {
         &fd.slots,
         fd.by_ref,
         fd.is_generator,
+        fd.ret_hint,
+        fd.line,
         ctx,
         None,
         false,
@@ -173,6 +176,8 @@ fn compile_body(
     slot_names: &[Box<[u8]>],
     by_ref: bool,
     is_generator: bool,
+    ret_hint: Option<TypeHint>,
+    def_line: Line,
     ctx: &ProgramCtx,
     cur_class: Option<ClassId>,
     is_main: bool,
@@ -208,10 +213,12 @@ fn compile_body(
             .map(|p| p.default.is_none() && !p.variadic)
             .collect(),
         param_by_ref: params.iter().map(|p| p.by_ref).collect(),
+        param_hints: params.iter().map(|p| p.hint).collect(),
+        ret_hint,
         variadic_slot: params.iter().find(|p| p.variadic).map(|p| p.slot),
         by_ref,
         is_generator,
-        line: 0,
+        line: def_line,
         exc_table: c.exc_regions,
     })
 }
@@ -243,6 +250,8 @@ fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
             .map(|p| p.default.is_none() && !p.variadic)
             .collect(),
         param_by_ref: fd.params.iter().map(|p| p.by_ref).collect(),
+        param_hints: fd.params.iter().map(|p| p.hint).collect(),
+        ret_hint: fd.ret_hint,
         variadic_slot: fd.params.iter().find(|p| p.variadic).map(|p| p.slot),
         by_ref: fd.by_ref,
         is_generator: fd.is_generator,
@@ -343,6 +352,8 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
                 &m.decl.slots,
                 m.decl.by_ref,
                 m.decl.is_generator,
+                m.decl.ret_hint,
+                m.decl.line,
                 ctx,
                 Some(cid),
                 false,
@@ -446,6 +457,8 @@ fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassI
         param_names: Box::default(),
         param_required: Box::default(),
         param_by_ref: Box::default(),
+        param_hints: Box::default(),
+        ret_hint: None,
         variadic_slot: None,
         by_ref: false,
         is_generator: false,
@@ -470,6 +483,8 @@ fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, decl_class: 
         param_names: Box::default(),
         param_required: Box::default(),
         param_by_ref: Box::default(),
+        param_hints: Box::default(),
+        ret_hint: None,
         variadic_slot: None,
         by_ref: false,
         is_generator: false,
@@ -492,6 +507,8 @@ fn const_stub(name: &[u8], err: &CompileError) -> Func {
         param_names: Box::default(),
         param_required: Box::default(),
         param_by_ref: Box::default(),
+        param_hints: Box::default(),
+        ret_hint: None,
         variadic_slot: None,
         by_ref: false,
         is_generator: false,
@@ -715,6 +732,11 @@ impl<'a> FnCompiler<'a> {
             let fill = self.emit(Op::FillDefault { slot: p.slot, skip: Addr::MAX });
             self.expr(default)?;
             self.emit(Op::StoreSlot(p.slot));
+            // A scalar-hinted default is coerced to its type (`float $n = 0` →
+            // 0.0, D-NEW-6); an unhinted / non-scalar param keeps the value.
+            if let Some(hint) = p.hint {
+                self.emit(Op::CoerceParam { slot: p.slot, hint });
+            }
             let here = self.here();
             self.patch(fill, Op::FillDefault { slot: p.slot, skip: here });
         }

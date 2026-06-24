@@ -203,10 +203,7 @@ impl<'m> Vm<'m> {
     pub(super) fn invoke_value(&mut self, callee: Zval, args: Vec<Zval>) -> Result<(), PhpError> {
         match callee {
             Zval::Closure(cl) => match &cl.named {
-                None => {
-                    self.push_closure_frame(&cl, args);
-                    Ok(())
-                }
+                None => self.push_closure_frame(&cl, args),
                 Some(name) => {
                     let name = name.as_bytes().to_vec();
                     self.invoke_named(&name, args)
@@ -436,7 +433,7 @@ impl<'m> Vm<'m> {
             let callee = &self.module.functions[idx];
             let mut frame = Frame::new(callee);
             bind_params(&mut frame, args);
-            self.enter_callee(frame);
+            self.enter_callee(frame)?;
             return Ok(());
         }
         match self.registry.get(name) {
@@ -463,7 +460,39 @@ impl<'m> Vm<'m> {
     /// materialise a `Generator` handle on the caller's operand stack instead of
     /// running it (GEN); otherwise push it to run. The caller is the current top
     /// frame, so this is called *before* `frame` is pushed.
-    pub(super) fn enter_callee(&mut self, frame: Frame<'m>) {
+    pub(super) fn enter_callee(&mut self, mut frame: Frame<'m>) -> Result<(), PhpError> {
+        // Single chokepoint for entering a fresh user-function frame: coerce each
+        // by-value argument to its declared scalar hint under weak typing (or
+        // check it under `declare(strict_types=1)`) before the body runs (step
+        // 14 / 16). The caller is still the top frame, so its current line is the
+        // call site reported in the TypeError. By-reference and variadic slots are
+        // left untouched; an omitted (`Undef`) optional argument is coerced later,
+        // when the default prologue fills it.
+        if frame.func.param_hints.iter().any(Option::is_some) {
+            let call_line = self.cur_line(self.frames.len() - 1);
+            let strict = self.module.strict;
+            for i in 0..frame.func.n_params as usize {
+                if Some(i as Slot) == frame.func.variadic_slot {
+                    continue;
+                }
+                if frame.func.param_by_ref.get(i).copied().unwrap_or(false) {
+                    continue;
+                }
+                let Some(hint) = frame.func.param_hints.get(i).copied().flatten() else {
+                    continue;
+                };
+                if matches!(frame.slots[i], Zval::Undef) {
+                    continue;
+                }
+                let val = frame.slots[i].clone();
+                match coerce_to_hint(val, &hint, &mut self.diags, strict) {
+                    Ok(c) => frame.slots[i] = c,
+                    Err(given) => {
+                        return Err(self.arg_type_error(frame.func, i, &hint, given, call_line))
+                    }
+                }
+            }
+        }
         if frame.func.is_generator {
             let gen = self.make_generator(frame);
             let top = self.frames.len() - 1;
@@ -471,5 +500,52 @@ impl<'m> Vm<'m> {
         } else {
             self.frames.push(frame);
         }
+        Ok(())
+    }
+
+    /// The catchable `TypeError` PHP raises for a return value that failed scalar
+    /// coercion (step 14). The wording differs from the argument one: no call site,
+    /// suffix `returned in <file>:<defline>`.
+    pub(super) fn return_type_error(&self, f: &Func, hint: &TypeHint, given: &str) -> PhpError {
+        PhpError::TypeError(format!(
+            "{}(): Return value must be of type {}, {} returned in {}:{}",
+            String::from_utf8_lossy(&f.name),
+            hint.display_name(),
+            given,
+            String::from_utf8_lossy(&self.module.file),
+            f.line,
+        ))
+    }
+
+    /// The catchable `TypeError` PHP raises for an argument that failed scalar
+    /// coercion, matching PHP's exact wording (step 14): the call site's file/line
+    /// and the callee's definition file/line.
+    fn arg_type_error(
+        &self,
+        f: &Func,
+        i: usize,
+        hint: &TypeHint,
+        given: &str,
+        call_line: Line,
+    ) -> PhpError {
+        let file = String::from_utf8_lossy(&self.module.file);
+        let pname = f
+            .param_names
+            .get(i)
+            .map(|n| String::from_utf8_lossy(n).into_owned())
+            .unwrap_or_default();
+        PhpError::TypeError(format!(
+            "{}(): Argument #{} (${}) must be of type {}, {} given, \
+             called in {} on line {} and defined in {}:{}",
+            String::from_utf8_lossy(&f.name),
+            i + 1,
+            pname,
+            hint.display_name(),
+            given,
+            file,
+            call_line,
+            file,
+            f.line,
+        ))
     }
 }

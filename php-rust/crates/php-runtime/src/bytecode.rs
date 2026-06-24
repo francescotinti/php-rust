@@ -82,7 +82,7 @@ use std::rc::Rc;
 
 use php_types::{ObjectInfo, PhpStr, Zval};
 
-use crate::hir::{BinOp, Capture, CastKind, ClassId, Line, Slot, UnOp, Visibility};
+use crate::hir::{BinOp, Capture, CastKind, ClassId, Line, Slot, TypeHint, UnOp, Visibility};
 
 /// Index into a [`Func`]'s instruction vector ([`Func::ops`]); also the form a
 /// jump target takes. `u32` is plenty (PHP function bodies are tiny) and keeps
@@ -184,6 +184,12 @@ pub enum Op {
     /// through to evaluate the default expression and `StoreSlot` it. Emitted at
     /// function entry for each parameter that has a default.
     FillDefault { slot: Slot, skip: Addr },
+    /// Coerce a just-filled default parameter value in `slot` to its scalar type
+    /// `hint` (step 14, D-NEW-6): `function f(float $n = 0)` stores `0.0`, not `0`.
+    /// Emitted in the prologue right after a hinted optional parameter's default is
+    /// stored. Best-effort — a valid constant default always coerces, so on the
+    /// unreachable failure the stored value is left as-is (no TypeError here).
+    CoerceParam { slot: Slot, hint: TypeHint },
     /// Arity guard (PAR), emitted at function entry when there is at least one
     /// required parameter: if fewer than `required` arguments were passed, raise
     /// an `ArgumentCountError`. `exactly` selects the wording ("exactly N" when
@@ -765,6 +771,16 @@ pub struct Func {
     /// — `array_walk` (Session C) passes the element by reference only when the
     /// callback's first parameter is by-reference, so element mutations propagate.
     pub param_by_ref: Box<[bool]>,
+    /// The declared scalar type hint of each formal parameter (length `n_params`,
+    /// parallel to `param_names`), or `None` for an unhinted / non-scalar
+    /// parameter. The call binder coerces a by-value argument to its hint under
+    /// weak typing (raising `TypeError` on failure), or checks it under
+    /// `declare(strict_types=1)` (step 14 / 16).
+    pub param_hints: Box<[Option<TypeHint>]>,
+    /// The declared scalar return type hint (step 14), enforced on the returned
+    /// value at [`Op::Ret`]. `None` for an absent / non-scalar return type, and
+    /// left unenforced for a by-reference function (which returns an alias).
+    pub ret_hint: Option<TypeHint>,
     /// The slot of a trailing `...$rest` variadic parameter (PAR), or `None`.
     /// When set, the call binder fills slots `0..variadic_slot` from the leading
     /// arguments and collects every remaining argument into an array in this
@@ -994,4 +1010,8 @@ pub struct Module {
     /// size the VM's persistent `statics` storage. Carried from
     /// [`crate::hir::Program::static_count`].
     pub static_count: usize,
+    /// `declare(strict_types=1)` is in effect for this file — scalar type hints
+    /// are checked exactly (no coercion, `int`→`float` widening aside) at every
+    /// call and return. Carried from [`crate::hir::Program::strict`] (step 16).
+    pub strict: bool,
 }

@@ -29,7 +29,8 @@ use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
 use crate::bytecode::{
     ClassTarget, DimBase, FieldBase, FieldStep, Func, Instantiable, Module, Op, StaticInit,
 };
-use crate::hir::{BinOp, CastKind, ClassId, Line, Slot, UnOp, Visibility};
+use crate::coerce::coerce_to_hint;
+use crate::hir::{BinOp, CastKind, ClassId, Line, Slot, TypeHint, UnOp, Visibility};
 
 mod arrays;
 mod calls;
@@ -789,6 +790,14 @@ impl<'m> Vm<'m> {
                         self.frames[top].ip = skip as usize;
                     }
                 }
+                Op::CoerceParam { slot, hint } => {
+                    // Coerce a just-filled scalar-hinted default (step 14). A valid
+                    // constant default always coerces; keep the value otherwise.
+                    let v = self.frames[top].slots[slot as usize].clone();
+                    if let Ok(c) = coerce_to_hint(v, &hint, &mut self.diags, self.module.strict) {
+                        self.frames[top].slots[slot as usize] = c;
+                    }
+                }
                 Op::CheckArity { required, exactly } => {
                     let argc = self.frames[top].argc;
                     if argc < required {
@@ -1330,7 +1339,7 @@ impl<'m> Vm<'m> {
                     args.reverse();
                     let mut frame = Frame::new(callee);
                     bind_params(&mut frame, args);
-                    self.enter_callee(frame);
+                    self.enter_callee(frame)?;
                 }
                 Op::CallArgs { func } => {
                     // Spread call `f(...$arr)` (PAR): the arguments are the values
@@ -1341,7 +1350,7 @@ impl<'m> Vm<'m> {
                     let callee = &self.module.functions[func as usize];
                     let mut frame = Frame::new(callee);
                     bind_params(&mut frame, args);
-                    self.enter_callee(frame);
+                    self.enter_callee(frame)?;
                 }
                 Op::CallNamed { func, positional, names } => {
                     // Named function call bound at run time (unknown/overwrite/
@@ -1356,7 +1365,7 @@ impl<'m> Vm<'m> {
                     let qn = String::from_utf8_lossy(&callee.name).into_owned();
                     let frame =
                         build_named_frame(callee, &self.module.file, line, &qn, pos, named)?;
-                    self.enter_callee(frame);
+                    self.enter_callee(frame)?;
                 }
                 Op::CallSpread { func, spreads, names } => {
                     // Pop explicit named values (source order), then one value per
@@ -1408,7 +1417,7 @@ impl<'m> Vm<'m> {
                         positional,
                         named,
                     )?;
-                    self.enter_callee(frame);
+                    self.enter_callee(frame)?;
                 }
                 Op::CallBuiltin { name, argc } => {
                     let f = match self.registry.get(&name[..]) {
@@ -1473,7 +1482,22 @@ impl<'m> Vm<'m> {
                     self.frames[top].stack.push(result);
                 }
                 Op::Ret => {
-                    let ret = self.frames[top].stack.pop().unwrap_or(Zval::Null);
+                    let mut ret = self.frames[top].stack.pop().unwrap_or(Zval::Null);
+                    // Coerce the returned value to a scalar return hint (weak, or
+                    // checked under strict_types) — step 14. A by-reference function
+                    // returns an alias, so its return type stays unenforced; the
+                    // init-thunk / magic path (`ret_cell`) carries no hint either.
+                    let func = self.frames[top].func;
+                    if let Some(hint) = func.ret_hint {
+                        if !func.by_ref && self.frames[top].ret_cell.is_none() {
+                            match coerce_to_hint(ret, &hint, &mut self.diags, self.module.strict) {
+                                Ok(c) => ret = c,
+                                Err(given) => {
+                                    return Err(self.return_type_error(func, &hint, given))
+                                }
+                            }
+                        }
+                    }
                     let ret_cell = self.frames[top].ret_cell.take();
                     let ret_bool = self.frames[top].ret_bool;
                     let ret_stringify = self.frames[top].ret_stringify;
@@ -1831,7 +1855,7 @@ impl<'m> Vm<'m> {
                     frame.this = Some(this);
                     frame.class = Some(class);
                     frame.static_class = Some(lsb);
-                    self.enter_callee(frame);
+                    self.enter_callee(frame)?;
                 }
                 Op::InstanceOf { class } => {
                     let v = self.frames[top].stack.pop().expect("InstanceOf operand");
@@ -3952,7 +3976,7 @@ impl<'m> Vm<'m> {
     /// Install a frame for an anonymous closure: bind its captured variables into
     /// their slots, then the call arguments into the leading parameter slots, and
     /// the bound `$this`. Mirrors `eval::call_closure` (captures before params).
-    fn push_closure_frame(&mut self, cl: &Closure, args: Vec<Zval>) {
+    fn push_closure_frame(&mut self, cl: &Closure, args: Vec<Zval>) -> Result<(), PhpError> {
         let callee = &self.module.closures[cl.fn_idx];
         let mut frame = Frame::new(callee);
         for (slot, val) in &cl.captures {
@@ -3960,7 +3984,7 @@ impl<'m> Vm<'m> {
         }
         bind_params(&mut frame, args);
         frame.this = cl.bound_this.clone();
-        self.enter_callee(frame);
+        self.enter_callee(frame)
     }
 
     /// Like [`Self::push_magic_call`] but the forwarded `$args` array also carries
@@ -4022,7 +4046,7 @@ impl<'m> Vm<'m> {
                 frame.this = Some(this);
                 frame.class = Some(defc);
                 frame.static_class = Some(cid); // LSB = receiver's actual class
-                self.enter_callee(frame);
+                self.enter_callee(frame)?;
             }
             // Missing or inaccessible: route to `__call` if defined, else the
             // original fatal (visibility / undefined method).
@@ -4117,7 +4141,7 @@ impl<'m> Vm<'m> {
                 frame.this = this;
                 frame.class = Some(defc);
                 frame.static_class = Some(static_class);
-                self.enter_callee(frame);
+                self.enter_callee(frame)?;
             }
             None => {
                 // In object context (a `$this` in the hierarchy) a missing /
@@ -6492,6 +6516,79 @@ mod tests {
             ),
             b"inc(): Argument #1 ($x) could not be passed by reference"
         );
+    }
+
+    // ----- step 14 / 16: scalar parameter & return type hints (vs PHP 8.5.7) -----
+
+    #[test]
+    fn scalar_param_hint_coerces_weak() {
+        // Weak mode coerces the argument to the declared scalar type; `===` proves
+        // the coerced *type*.
+        assert_eq!(vm_stdout(b"<?php function f(int $x){ echo $x === 123 ? 'Y':'N'; } f('123');"), b"Y");
+        assert_eq!(vm_stdout(b"<?php function f(float $x){ echo $x === 7.0 ? 'Y':'N'; } f(7);"), b"Y");
+        assert_eq!(vm_stdout(b"<?php function f(string $x){ echo $x === '42' ? 'Y':'N'; } f(42);"), b"Y");
+    }
+
+    #[test]
+    fn scalar_param_hint_type_error_message() {
+        let out = vm_outcome(b"<?php function f(int $x){ return $x; } f('abc');");
+        assert!(matches!(
+            &out.fatal,
+            Some(PhpError::TypeError(m))
+                if m == "f(): Argument #1 ($x) must be of type int, string given, \
+                         called in test.php on line 1 and defined in test.php:1"
+        ), "got {:?}", out.fatal);
+    }
+
+    #[test]
+    fn nullable_param_hint_accepts_null_else_coerces() {
+        assert_eq!(vm_stdout(b"<?php function f(?int $x){ echo $x === null ? 'Y':'N'; } f(null);"), b"Y");
+        assert_eq!(vm_stdout(b"<?php function f(?int $x){ echo $x === 5 ? 'Y':'N'; } f('5');"), b"Y");
+    }
+
+    #[test]
+    fn strict_types_rejects_coercion_but_widens_int_to_float() {
+        // Under strict_types a numeric string for `int` is a TypeError, but int→float
+        // widening is allowed.
+        let out = vm_outcome(b"<?php declare(strict_types=1); function f(int $x){} f('5');");
+        assert!(matches!(&out.fatal, Some(PhpError::TypeError(m)) if m.contains("must be of type int, string given")));
+        assert_eq!(
+            vm_stdout(b"<?php declare(strict_types=1); function f(float $x){ echo $x === 5.0 ? 'Y':'N'; } f(5);"),
+            b"Y"
+        );
+    }
+
+    #[test]
+    fn default_value_coerced_to_param_hint() {
+        // `float $n = 0` stores 0.0 when the default is used (D-NEW-6).
+        assert_eq!(vm_stdout(b"<?php function f(float $n = 0){ echo $n === 0.0 ? 'Y':'N'; } f();"), b"Y");
+    }
+
+    #[test]
+    fn return_type_hint_coerces_and_errors() {
+        assert_eq!(vm_stdout(b"<?php function f(): int { return '5'; } echo f() === 5 ? 'Y':'N';"), b"Y");
+        let out = vm_outcome(b"<?php function f(): int { return 'x'; } f();");
+        assert!(matches!(
+            &out.fatal,
+            Some(PhpError::TypeError(m))
+                if m == "f(): Return value must be of type int, string returned in test.php:1"
+        ), "got {:?}", out.fatal);
+    }
+
+    #[test]
+    fn engine_type_error_is_catchable() {
+        assert_eq!(
+            vm_stdout(b"<?php function f(int $x){ return $x; } try { f([]); } catch (TypeError $e) { echo 'T'; }"),
+            b"T"
+        );
+    }
+
+    #[test]
+    fn lossy_float_to_int_param_deprecates() {
+        // A lossy float→int coercion is a deprecation, not a fatal.
+        let out = vm_outcome(b"<?php function f(int $x){} f(3.7);");
+        assert!(out.fatal.is_none(), "unexpected fatal: {:?}", out.fatal);
+        assert!(rendered_has(&out, b"Implicit conversion from float 3.7 to int loses precision"));
     }
 
     #[test]
