@@ -1584,6 +1584,20 @@ impl<'m> Vm<'m> {
                         continue;
                     }
                     if let Zval::Object(o) = &target {
+                        // An enum case is immutable: every property is readonly and
+                        // no dynamic property may be created (step 23).
+                        {
+                            let ob = o.borrow();
+                            if ob.info.is_enum_case {
+                                let cls = String::from_utf8_lossy(ob.class_name.as_bytes()).into_owned();
+                                let prop = String::from_utf8_lossy(&name).into_owned();
+                                return Err(PhpError::Error(if ob.props.contains(&name) {
+                                    format!("Cannot modify readonly property {cls}::${prop}")
+                                } else {
+                                    format!("Cannot create dynamic property {cls}::${prop}")
+                                }));
+                            }
+                        }
                         if let Some((defc, midx, oid)) =
                             self.magic_applies(o, &name, cur, MagicKind::Set, b"__set")
                         {
@@ -1653,6 +1667,15 @@ impl<'m> Vm<'m> {
                     let cur = self.frames[top].class;
                     let target = obj.deref_clone();
                     if let Zval::Object(o) = &target {
+                        // An enum case property is readonly — it cannot be unset.
+                        if o.borrow().info.is_enum_case {
+                            let ob = o.borrow();
+                            let cls = String::from_utf8_lossy(ob.class_name.as_bytes()).into_owned();
+                            let prop = String::from_utf8_lossy(&name).into_owned();
+                            return Err(PhpError::Error(format!(
+                                "Cannot unset readonly property {cls}::${prop}"
+                            )));
+                        }
                         if let Some((defc, midx, oid)) =
                             self.magic_applies(o, &name, cur, MagicKind::Unset, b"__unset")
                         {
@@ -3851,6 +3874,27 @@ impl<'m> Vm<'m> {
         args: Vec<Zval>,
     ) -> Result<(), PhpError> {
         let module = self.module;
+        // Enum built-in statics (`cases` / `from` / `tryFrom`) are reserved names
+        // that shadow user resolution and produce a value directly rather than
+        // entering a frame (step 23). `cases` is on every enum; `from`/`tryFrom`
+        // only on a backed one.
+        if !module.classes[start].enum_cases.is_empty() {
+            if method.eq_ignore_ascii_case(b"cases") {
+                let v = self.vm_enum_cases(start);
+                self.frames[top].stack.push(v);
+                return Ok(());
+            }
+            let backed = module.classes[start].enum_cases.iter().any(|c| c.value.is_some());
+            if backed {
+                let try_from = method.eq_ignore_ascii_case(b"tryFrom");
+                if try_from || method.eq_ignore_ascii_case(b"from") {
+                    let arg = args.into_iter().next();
+                    let v = self.vm_enum_from(start, arg, try_from)?;
+                    self.frames[top].stack.push(v);
+                    return Ok(());
+                }
+            }
+        }
         let resolved = resolve_method_runtime(module, start, method);
         let usable = resolved.filter(|&(defc, midx)| {
             visible_from(module, self.frames[top].class, module.classes[defc].methods[midx].visibility, defc)
@@ -4020,6 +4064,59 @@ impl<'m> Vm<'m> {
         let rc = Rc::new(RefCell::new(obj));
         self.enum_cache.insert((class, case), Rc::clone(&rc));
         rc
+    }
+
+    /// `E::cases()` (step 23): a sequential array of every case singleton in
+    /// declaration order. Works on pure and backed enums alike. Mirrors
+    /// `eval::enum_cases`.
+    fn vm_enum_cases(&mut self, cid: ClassId) -> Zval {
+        let n = self.module.classes[cid].enum_cases.len();
+        let mut arr = PhpArray::new();
+        for i in 0..n {
+            let case = self.enum_case(cid, i as u32);
+            let _ = arr.append(Zval::Object(case));
+        }
+        Zval::Array(Rc::new(arr))
+    }
+
+    /// `BackedEnum::from($v)` / `tryFrom($v)` (step 23): return the singleton whose
+    /// backing `value` is identical (`===`) to `$v`. `from` raises a catchable
+    /// `ValueError` on no match; `tryFrom` returns `null`. Mirrors `eval::enum_from`.
+    fn vm_enum_from(
+        &mut self,
+        cid: ClassId,
+        arg: Option<Zval>,
+        try_from: bool,
+    ) -> Result<Zval, PhpError> {
+        let arg = arg.unwrap_or(Zval::Null).deref_clone();
+        let n = self.module.classes[cid].enum_cases.len();
+        for i in 0..n {
+            let case = self.enum_case(cid, i as u32);
+            let hit = case
+                .borrow()
+                .props
+                .get(b"value")
+                .is_some_and(|v| ops::identical(v, &arg));
+            if hit {
+                return Ok(Zval::Object(case));
+            }
+        }
+        if try_from {
+            return Ok(Zval::Null);
+        }
+        // PHP quotes a string backing value but not an integer one.
+        let repr = match &arg {
+            Zval::Str(s) => format!("\"{}\"", String::from_utf8_lossy(s.as_bytes())),
+            Zval::Long(l) => l.to_string(),
+            other => {
+                let z = convert::to_zstr(other, &mut self.diags);
+                String::from_utf8_lossy(z.as_bytes()).into_owned()
+            }
+        };
+        Err(PhpError::ValueError(format!(
+            "{repr} is not a valid backing value for enum {}",
+            String::from_utf8_lossy(&self.module.classes[cid].name)
+        )))
     }
 
     /// The source line of the instruction that just ran (or faulted) in frame
@@ -9118,6 +9215,41 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php function dbl($x){ return $x*2; } $f = Closure::fromCallable('dbl'); echo $f(21);"),
             b"42"
+        );
+    }
+
+    #[test]
+    fn enum_static_methods_cases_from_tryfrom() {
+        // cases() returns the singletons in declaration order.
+        assert_eq!(
+            vm_stdout(b"<?php enum Suit { case Hearts; case Spades; } $n=0; foreach (Suit::cases() as $c){ echo $c->name; $n++; } echo $n;"),
+            b"HeartsSpades2"
+        );
+        // cases() yields the same singletons as direct case access.
+        assert_eq!(vm_stdout(b"<?php enum Suit { case Hearts; case Spades; } echo Suit::cases()[0] === Suit::Hearts ? 'y':'n';"), b"y");
+        // from() matches a backing value; tryFrom() returns null on a miss.
+        assert_eq!(
+            vm_stdout(b"<?php enum S:string { case A='x'; case B='y'; } echo S::from('y')===S::B?'y':'n'; echo S::tryFrom('z')===null?'y':'n';"),
+            b"yy"
+        );
+    }
+
+    #[test]
+    fn enum_from_miss_is_valueerror_and_cases_are_readonly() {
+        // from() on a miss raises a catchable ValueError with PHP's message.
+        assert_eq!(
+            vm_stdout(b"<?php enum Size:int { case S=1; case L=3; } try { Size::from(9); } catch (\\ValueError $e) { echo $e->getMessage(); }"),
+            b"9 is not a valid backing value for enum Size"
+        );
+        // A backed case is immutable: modifying an existing property is an Error.
+        assert_eq!(
+            vm_stdout(b"<?php enum St:string { case A='A'; } $a=St::A; try { $a->value='Z'; } catch (\\Error $e) { echo $e->getMessage(); }"),
+            b"Cannot modify readonly property St::$value"
+        );
+        // Creating a dynamic property on a case is an Error.
+        assert_eq!(
+            vm_stdout(b"<?php enum St:string { case A='A'; } $a=St::A; try { $a->nope=1; } catch (\\Error $e) { echo $e->getMessage(); }"),
+            b"Cannot create dynamic property St::$nope"
         );
     }
 }
