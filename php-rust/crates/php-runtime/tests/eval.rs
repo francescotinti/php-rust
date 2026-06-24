@@ -172,13 +172,15 @@ fn division_by_zero_is_fatal_after_partial_output() {
 #[test]
 fn string_increment_value_and_deprecation_captured() {
     // 'a'++ yields 'b' (correct value) and, in PHP 8.5, a Deprecated diagnostic.
-    // We capture the diagnostic in `diags`; rendering it onto stdout is step 9.
+    // Inc/dec now raises its diagnostic synchronously through the error-handler
+    // chokepoint (so a `set_error_handler` runs before the write-back), which
+    // renders it into `rendered` rather than buffering it in `diags`.
     let o = run_source(b"t.php", b"<?php $x = 'a'; $x++; echo $x;").expect("lowers");
     assert_eq!(o.stdout, b"b");
+    let rendered = String::from_utf8(o.rendered).expect("utf8");
     assert!(
-        o.diags.iter().any(|d| matches!(d, Diag::Deprecated(_))),
-        "expected a Deprecated diag, got {:?}",
-        o.diags
+        rendered.contains("Increment on non-numeric string is deprecated"),
+        "expected a Deprecated render, got {rendered:?}",
     );
 }
 

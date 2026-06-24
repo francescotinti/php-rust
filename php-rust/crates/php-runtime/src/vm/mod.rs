@@ -590,6 +590,38 @@ impl<'m> Vm<'m> {
         Ok(())
     }
 
+    /// Apply increment/decrement to a *copy* of the operand, returning the new
+    /// value and any diagnostics it produced (rather than rendering them). This
+    /// lets the caller raise the diagnostics — and run a `set_error_handler` — at
+    /// the right moment, before committing the result. For scalars the copy is by
+    /// value (pure); a reference operand still mutates its shared cell, matching the
+    /// pre-existing behaviour for that rare case.
+    fn compute_incdec(&mut self, mut v: Zval, inc: bool) -> Result<(Zval, Vec<Diag>), PhpError> {
+        let mut diags = Vec::new();
+        if inc {
+            ops::increment(&mut v, &mut diags)?;
+        } else {
+            ops::decrement(&mut v, &mut diags)?;
+        }
+        Ok((v, diags))
+    }
+
+    /// Raise a batch of just-produced diagnostics synchronously through the shared
+    /// chokepoint (so a `set_error_handler` runs *now*, and can throw or mutate
+    /// state before the caller commits its result). Used by inc/dec, where PHP
+    /// raises the diagnostic before writing the new value back to the variable.
+    fn raise_diags(&mut self, diags: Vec<Diag>, line: Line) -> Result<(), PhpError> {
+        for d in diags {
+            let (errno, message) = match d {
+                Diag::Warning(m) => (2, m),
+                Diag::Notice(m) => (8, m),
+                Diag::Deprecated(m) => (8192, m),
+            };
+            self.raise_diagnostic(errno, &message, line)?;
+        }
+        Ok(())
+    }
+
     /// The single routing chokepoint for every diagnostic (Session 2). If a
     /// `set_error_handler` callback is active and its level mask matches `errno`,
     /// the handler is invoked with `(errno, message, file, line)`; its return value
@@ -824,16 +856,14 @@ impl<'m> Vm<'m> {
                     if matches!(self.frames[0].slots[i], Zval::Undef) {
                         self.frames[0].slots[i] = Zval::Null;
                     }
-                    let old = if pre { None } else { Some(self.frames[0].slots[i].clone()) };
-                    {
-                        let cell = &mut self.frames[0].slots[i];
-                        if inc {
-                            ops::increment(cell, &mut self.diags)?;
-                        } else {
-                            ops::decrement(cell, &mut self.diags)?;
-                        }
-                    }
-                    let pushed = old.unwrap_or_else(|| self.frames[0].slots[i].clone());
+                    let old = self.frames[0].slots[i].clone();
+                    let (newv, diags) = self.compute_incdec(old.clone(), inc)?;
+                    // PHP raises the diagnostic *before* writing the result back, so a
+                    // `set_error_handler` runs here (it may throw, unwinding this op, or
+                    // mutate the variable — which the write-back below then overwrites).
+                    self.raise_diags(diags, self.cur_line(top))?;
+                    self.frames[0].slots[i] = newv;
+                    let pushed = if pre { self.frames[0].slots[i].clone() } else { old };
                     self.frames[top].stack.push(pushed);
                 }
                 Op::PushUndef => {
@@ -887,16 +917,12 @@ impl<'m> Vm<'m> {
                     if matches!(self.frames[top].slots[i], Zval::Undef) {
                         self.frames[top].slots[i] = Zval::Null;
                     }
-                    let old = if pre { None } else { Some(self.frames[top].slots[i].clone()) };
-                    {
-                        let cell = &mut self.frames[top].slots[i];
-                        if inc {
-                            ops::increment(cell, &mut self.diags)?;
-                        } else {
-                            ops::decrement(cell, &mut self.diags)?;
-                        }
-                    }
-                    let pushed = old.unwrap_or_else(|| self.frames[top].slots[i].clone());
+                    let old = self.frames[top].slots[i].clone();
+                    let (newv, diags) = self.compute_incdec(old.clone(), inc)?;
+                    // Raise before write-back (see IncDecGlobal).
+                    self.raise_diags(diags, self.cur_line(top))?;
+                    self.frames[top].slots[i] = newv;
+                    let pushed = if pre { self.frames[top].slots[i].clone() } else { old };
                     self.frames[top].stack.push(pushed);
                 }
                 Op::Binary(b) => {
