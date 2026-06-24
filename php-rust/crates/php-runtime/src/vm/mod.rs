@@ -5136,8 +5136,15 @@ impl<'m> Vm<'m> {
                 s.extend_from_slice(c);
                 s.extend_from_slice(if is_static { b"::" } else { b"->" });
             }
+            // PHP renders each frame's call arguments inline (`f(42, 'x')`),
+            // scalars literal and strings quoted/truncated (`format_bt_arg`).
+            let frame_args = self.current_frame_args(k);
             s.extend_from_slice(&frame.func.name);
-            s.extend_from_slice(b"()\n");
+            s.push(b'(');
+            let joined =
+                frame_args.iter().map(format_bt_arg).collect::<Vec<_>>().join(", ");
+            s.extend_from_slice(joined.as_bytes());
+            s.extend_from_slice(b")\n");
 
             let mut fr = PhpArray::new();
             fr.insert(Key::from_bytes(b"file"), Zval::Str(PhpStr::new(file.to_vec())));
@@ -5151,7 +5158,11 @@ impl<'m> Vm<'m> {
                 let ty: &[u8] = if is_static { b"::" } else { b"->" };
                 fr.insert(Key::from_bytes(b"type"), Zval::Str(PhpStr::new(ty.to_vec())));
             }
-            fr.insert(Key::from_bytes(b"args"), Zval::Array(Rc::new(PhpArray::new())));
+            let mut argsarr = PhpArray::new();
+            for a in frame_args {
+                let _ = argsarr.append(a);
+            }
+            fr.insert(Key::from_bytes(b"args"), Zval::Array(Rc::new(argsarr)));
             let _ = arr.append(Zval::Array(Rc::new(fr)));
         }
         s.extend_from_slice(format!("#{} {{main}}", n - 1).as_bytes());
