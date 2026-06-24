@@ -2080,3 +2080,68 @@ respinti a monte di `dispatch_higher_order`.
 sweep `strings` **290→292 pass / 163→161 fail**, zero regressioni; **952 test** verdi, clippy
 pulito. Unica divergenza nuova **D-68.1** (specifier numerico su oggetto-con-`__toString`,
 patologica) in `04-divergences.md`.
+
+## Sessione F — switch del motore al bytecode VM ed eliminazione del tree-walker
+
+Conclude la migrazione: il **bytecode VM** (`compile.rs` + `vm/`), costruito incrementalmente
+fino alla parità comportamentale con il tree-walker (`eval/`), diventa l'**unico motore di
+produzione**; `eval/` viene eliminato e con esso `corosensei` e l'unico `unsafe` non-FFI del
+runtime. Il payoff progettato fin dal disegno della bytecode (header `bytecode.rs`) è realizzato:
+generatori e Fiber girano su uno **stack di frame esplicito** (park dell'`ip` in una tabella del
+VM), senza coroutine stackful né reborrow `*mut Evaluator`.
+
+**F1 — switch del motore** (`b45e52f`): `php_runtime::{run_source, run_source_with, Outcome}` ora
+risolvono al VM; la suite linguaggio (`tests/eval.rs`, 472 test), la CLI e `differential.rs` (vs
+oracle PHP 8.5.7 reale) girano sul VM. Tre test risultano **VM-più-corretto** e vengono adeguati
+(argument-count → `ArgumentCountError`, generator-rewind → `Thrown`). `b45e52f` espone però gaps
+che `eval.rs` non copriva: `builtins.rs` (registry builtins, engine-agnostici) esercita costrutti
+che il compilatore bytecode ancora rifiutava → suite **pinnata temporaneamente** a `eval` con
+l'elenco esplicito dei blocker.
+
+**Long-tail — chiusura di tutti i gap VM** (commit per pezzo): operatore `@` di soppressione
+(`827bd2d`), `exit`/`die` come espressione (`8c4c574`), `goto`/label base + within-finally
+(`a1aaba1`), poi i builtin un tempo evaluator-only — `json_decode` con `stdClass` via
+`alloc_stdclass` (`b5bd6e9`), `mb_split`/`mb_regex_encoding`/`mb_regex_set_options` con lo stato
+`MbRegexState` sul `Vm` (`8efefcf`), `sscanf`/`fscanf` con una nuova ABI per out-param **variadici
+by-ref** (`Op::CallHostBuiltinScanf`, `bce4370`), l'intera famiglia `mb_ereg*` (13 builtin,
+inclusi `&$regs` by-ref e il callback higher-order via `call_callable`, `a539336`). Infine tre
+divergenze emerse facendo girare l'**intera** `builtins.rs` sul VM: l'introspezione `[parameter]`
+delle Closure per `var_dump`/`print_r` (`a7a510c`), la funzione indefinita come **fatale a runtime**
+anziché compile-reject (PHP la differisce: il nome diventa una stringa-callable + `Op::CallValue`,
+`invoke_named` solleva l'`Error` al call-site dopo l'output, `abe647c`), e il routing del `goto`
+attraverso un `finally` + lo scope-out del `goto` **dentro** un blocco (D-45.1, `f34d8d5`).
+Quest'ultimo ha richiesto di tracciare un **percorso di scope per blocco**: un `goto` può solo
+puntare a un label il cui scope è prefisso del proprio; il router del finally usa il range di
+indirizzi per «goto dentro la regione» ma la **profondità di scope** per «label fuori» — un label
+marker subito prima di un `try` condivide l'indirizzo di start del try (non emette op), e un test
+solo-su-indirizzi lo leggeva erroneamente come interno producendo un salto all'indietro infinito.
+Con questo, **tutti i 384 test di `builtins.rs` passano sul VM**.
+
+**F2 — eliminazione di `eval/`** (`d9dbd64`, `d1e6353`): rimosso il pin di `builtins.rs` (ora sul
+VM, 411 test verdi), poi cancellate ~7000 righe del tree-walker (`pub mod eval` + la directory
+`eval/`) e tutto il machinery dual-engine di `phpt-runner` (`Engine{Eval,Vm}`, flag `--engine`,
+forwarding al child) — l'harness di parità VM↔eval ha esaurito il suo scopo, `run_phpt`/`run_path`
+usano sempre il VM. Il test di isolamento (`--isolate`) attendeva un SIGABRT da overflow dello
+stack nativo: con lo stack di frame esplicito la ricorsione illimitata è ora un fatale pulito
+**«Maximum call stack depth»**, e il test lo verifica.
+
+**F3 — drop di `corosensei` e della macchina `GenDriver`/`unsafe`** (`eb9e1d2`): rimossi il trait
+`GenDriver`, l'enum `GenStep` e il campo `GenState.driver` (eval-only — il VM parcheggia il frame
+sospeso nella propria tabella `generators`), la dipendenza `corosensei` (Cargo.toml + lockfile), e
+aggiornati i doc dei moduli `bytecode`/`vm`/`generator` allo stato a motore unico (con fix dei
+link intra-doc `crate::eval` ora rotti).
+
+**Verifica (F4)**: `grep` di `unsafe` su `php-runtime`/`php-types` **vuoto** (l'unico `unsafe` del
+workspace è l'FFI `libc` in `php-builtins`); `corosensei`/`GenDriver`/`GenStep` **assenti** da
+codice e `Cargo.lock`. Workspace **1496 test verdi, 1 ignored**; clippy pulito; `differential.rs`
+(VM vs PHP 8.5.7) verde; `phpt-runner` gira VM-only end-to-end. Il corpus esterno Zend/tests non è
+presente in-tree, quindi il pass-count E4 non è rimisurabile, ma la parità dual-engine è ora moot
+(motore unico) e la fedeltà è ancorata al PHP reale via `differential.rs`.
+
+> **Nota metodologica** (richiesta dall'utente): provata la modalità *Serena-first rigorosa*. Su
+> file UTF-8 puliti `find_symbol --include_body`/`insert_after_symbol` sono precisi e mirati, ma
+> Serena ha fallito ripetutamente sui punti critici — `UnicodeDecodeError` sui file `eval/`
+> (byte non-UTF8 nelle fixture) e indice LSP **stale** dopo l'eliminazione di `eval/` (continuava
+> a cercare `eval/mod.rs`), proprio dove servivano i `find_referencing_symbols` di F3. Guadagno
+> non degno di nota a fronte dell'attrito → ritorno alla modalità ibrida `grep`+`Read`, come
+> concordato.
