@@ -6406,6 +6406,19 @@ mod tests {
     }
 
     #[test]
+    fn by_ref_param_nonvariable_is_catchable_error() {
+        // Passing a literal to a by-ref parameter is a catchable \Error at run
+        // time (not a compile rejection), with PHP's exact message.
+        assert_eq!(
+            vm_stdout(
+                b"<?php function inc(&$x){$x++;} \
+                  try { inc(5); } catch (\\Error $e) { echo $e->getMessage(); }"
+            ),
+            b"inc(): Argument #1 ($x) could not be passed by reference"
+        );
+    }
+
+    #[test]
     fn by_ref_param_swap() {
         assert_eq!(
             vm_stdout(b"<?php function swap(&$a, &$b) { $t = $a; $a = $b; $b = $t; } $x = 1; $y = 2; swap($x, $y); echo $x . $y;"),
@@ -6464,6 +6477,16 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php $a = [1, 2, 3]; foreach ($a as &$v) { $v = $v * 2; } echo $a[0]; echo $a[1]; echo $a[2];"),
             b"246"
+        );
+    }
+
+    #[test]
+    fn foreach_by_ref_over_temporary_is_tolerated() {
+        // PHP does not error on `foreach (<non-lvalue> as &$v)`: it degrades to
+        // by-value iteration (the writes land nowhere observable). Must run clean.
+        assert_eq!(
+            vm_stdout(b"<?php foreach ([1, 2, 3] as &$v) { $v *= 2; } echo 'ok';"),
+            b"ok"
         );
     }
 

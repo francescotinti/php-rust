@@ -801,26 +801,25 @@ impl<'a> FnCompiler<'a> {
             StmtKind::Foreach { iter, key, value, by_ref, body } => {
                 if *by_ref {
                     // REF-3: by-ref iteration needs an lvalue source to write back
-                    // to. Over a plain variable we rebind each element live; any
-                    // other source is out of slice (the tree-walker degrades it to
-                    // by-value, which writes nowhere observable).
-                    let ExprKind::Var(slot) = iter.kind else {
-                        return Err(CompileError::Unsupported(
-                            "foreach by-reference over a non-variable source".into(),
-                        ));
-                    };
-                    self.emit(Op::IterInitRef(slot));
-                    let cont = self.here();
-                    let fetch = self.emit(Op::IterNextRef { value: *value, key: *key, end: Addr::MAX });
-                    self.loops.push(LoopCtx { has_iter: true, ..LoopCtx::default() });
-                    self.block(body)?;
-                    self.emit(Op::Jump(cont));
-                    let exhaust = self.here();
-                    self.patch(fetch, Op::IterNextRef { value: *value, key: *key, end: exhaust });
-                    self.emit(Op::IterPop);
-                    let after = self.here();
-                    self.close_loop(cont, after);
-                    return Ok(());
+                    // to. Over a plain variable we rebind each element live. Over
+                    // any other (non-lvalue) source PHP does NOT error: it degrades
+                    // to by-value iteration, where writes to `$value` land nowhere
+                    // observable. So only the `Var` source takes the by-ref path;
+                    // everything else falls through to the by-value loop below.
+                    if let ExprKind::Var(slot) = iter.kind {
+                        self.emit(Op::IterInitRef(slot));
+                        let cont = self.here();
+                        let fetch = self.emit(Op::IterNextRef { value: *value, key: *key, end: Addr::MAX });
+                        self.loops.push(LoopCtx { has_iter: true, ..LoopCtx::default() });
+                        self.block(body)?;
+                        self.emit(Op::Jump(cont));
+                        let exhaust = self.here();
+                        self.patch(fetch, Op::IterNextRef { value: *value, key: *key, end: exhaust });
+                        self.emit(Op::IterPop);
+                        let after = self.here();
+                        self.close_loop(cont, after);
+                        return Ok(());
+                    }
                 }
                 self.expr(iter)?;
                 self.emit(Op::IterInit);
@@ -1480,8 +1479,10 @@ impl<'a> FnCompiler<'a> {
             // Snapshot the by-ref mask so the immutable borrow of `callee` ends
             // before `push_call_args` borrows `self` mutably (REF-2).
             let by_ref: Vec<bool> = callee.params.iter().map(|p| p.by_ref).collect();
+            let pnames: Vec<Box<[u8]>> =
+                callee.params.iter().map(|p| callee.slots[p.slot as usize].clone()).collect();
             let returns_ref = callee.by_ref;
-            self.push_call_args(args, &by_ref)?;
+            self.push_call_args(args, &by_ref, name, &pnames)?;
             self.emit(Op::Call { func: idx as u32, argc: args.len() as u32 });
             // A `function &f()` used in value context yields a copy, not an alias
             // (REF-4b). `$y = &f()` takes the raw ref via `AssignRefCall` instead.
@@ -1593,6 +1594,9 @@ impl<'a> FnCompiler<'a> {
         // (honouring by-ref), then one value per named arg (by-ref when its target
         // parameter is), and let `build_named_frame` bind them.
         let by_ref: Vec<bool> = fd.params.iter().map(|p| p.by_ref).collect();
+        let fname: Box<[u8]> = fd.name.clone();
+        let pnames: Vec<Box<[u8]>> =
+            fd.params.iter().map(|p| fd.slots[p.slot as usize].clone()).collect();
         let named_by_ref: Vec<bool> = named
             .iter()
             .map(|(nm, _)| {
@@ -1602,7 +1606,7 @@ impl<'a> FnCompiler<'a> {
                     .is_some_and(|p| p.by_ref)
             })
             .collect();
-        self.push_call_args(args, &by_ref)?;
+        self.push_call_args(args, &by_ref, &fname, &pnames)?;
         for ((_, expr), &br) in named.iter().zip(&named_by_ref) {
             match (&expr.kind, br) {
                 (ExprKind::Var(slot), true) => {
@@ -1767,20 +1771,38 @@ impl<'a> FnCompiler<'a> {
     /// parameters (REF-2): a by-ref position whose argument is a plain variable
     /// is passed by [`Op::PushRef`] (the callee slot aliases the caller's cell);
     /// every other position is pushed by value. A by-ref position with a
-    /// non-variable argument is out of slice — the tree-walker raises the proper
-    /// catchable `Error` ("could not be passed by reference").
-    fn push_call_args(&mut self, args: &[Expr], by_ref: &[bool]) -> R<()> {
+    /// non-variable argument (e.g. a literal) is a *run-time* catchable `Error` in
+    /// PHP — `fname(): Argument #N ($p) could not be passed by reference` — so it
+    /// compiles to an [`Op::Fatal`] in place rather than a compile rejection.
+    /// `fname` is the callee's display name and `pnames` its parameter names
+    /// (indexed positionally) for that message.
+    fn push_call_args(
+        &mut self,
+        args: &[Expr],
+        by_ref: &[bool],
+        fname: &[u8],
+        pnames: &[Box<[u8]>],
+    ) -> R<()> {
         for (i, a) in args.iter().enumerate() {
             if matches!(a.kind, ExprKind::Spread(_)) {
                 return Err(CompileError::Unsupported("argument unpacking (spread)".into()));
             }
             if by_ref.get(i).copied().unwrap_or(false) {
                 match &a.kind {
-                    ExprKind::Var(slot) => self.emit(Op::PushRef(*slot)),
+                    ExprKind::Var(slot) => {
+                        self.emit(Op::PushRef(*slot));
+                    }
                     _ => {
-                        return Err(CompileError::Unsupported(
-                            "by-reference argument that is not a plain variable".into(),
-                        ))
+                        let pname = pnames.get(i).map(|n| n.as_ref()).unwrap_or(b"");
+                        let msg = format!(
+                            "{}(): Argument #{} (${}) could not be passed by reference",
+                            String::from_utf8_lossy(fname),
+                            i + 1,
+                            String::from_utf8_lossy(pname),
+                        );
+                        let k = self.konst(Const::Str(msg.into_bytes().into()));
+                        self.emit(Op::Fatal(k));
+                        return Ok(());
                     }
                 };
             } else {
@@ -2473,8 +2495,10 @@ impl<'a> FnCompiler<'a> {
             return Err(CompileError::Unsupported("reference call arity mismatch".into()));
         }
         let by_ref: Vec<bool> = callee.params.iter().map(|p| p.by_ref).collect();
+        let pnames: Vec<Box<[u8]>> =
+            callee.params.iter().map(|p| callee.slots[p.slot as usize].clone()).collect();
         let (base, steps) = self.field_path(target)?; // target index keys first…
-        self.push_call_args(args, &by_ref)?; // …then the call args…
+        self.push_call_args(args, &by_ref, name, &pnames)?; // …then the call args…
         self.emit(Op::Call { func: idx as u32, argc: args.len() as u32 }); // …leaving the raw ref on top
         self.emit(Op::BindRefTo { base, steps: steps.into() });
         Ok(())
