@@ -33,9 +33,18 @@ impl<'m> Vm<'m> {
                 "#0 {main}".to_string(),
             ),
         };
-        let block = format!(
-            "\nFatal error: Uncaught {class}: {message} in {file}:{line}\nStack trace:\n{trace}\n  thrown in {file} on line {line}\n",
-        );
+        // An argument / return type error already carries its own trailing location
+        // ("…called in F on line C and defined in F:D" / "…returned in F:D"), so PHP
+        // does *not* append the usual " in {file}:{line}" — doing so would duplicate
+        // it. Detect those messages and render them verbatim.
+        let self_located = matches!(err, PhpError::TypeError(_))
+            && (message.contains(" and defined in ") || message.contains(" returned in "));
+        let head = if self_located {
+            format!("\nFatal error: Uncaught {class}: {message}\n")
+        } else {
+            format!("\nFatal error: Uncaught {class}: {message} in {file}:{line}\n")
+        };
+        let block = format!("{head}Stack trace:\n{trace}\n  thrown in {file} on line {line}\n");
         self.rendered.extend_from_slice(block.as_bytes());
     }
 
