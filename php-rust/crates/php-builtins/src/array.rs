@@ -30,7 +30,7 @@ pub fn count(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
         other => {
             return Err(PhpError::TypeError(format!(
                 "count(): Argument #1 ($value) must be of type Countable|array, {} given",
-                other.error_type_name()
+                other.type_name_for_error()
             )))
         }
     };
@@ -70,7 +70,7 @@ fn arr_arg<'a>(args: &'a [Zval], fname: &str) -> Result<&'a PhpArray, PhpError> 
         Some(Zval::Array(a)) => Ok(a),
         Some(other) => Err(PhpError::TypeError(format!(
             "{fname}(): Argument #1 ($array) must be of type array, {} given",
-            other.error_type_name()
+            other.type_name_for_error()
         ))),
         None => Err(PhpError::Error(format!(
             "{fname}() expects at least 1 argument, 0 given"
@@ -117,7 +117,7 @@ pub fn in_array(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
         Some(other) => {
             return Err(PhpError::TypeError(format!(
                 "in_array(): Argument #2 ($haystack) must be of type array, {} given",
-                other.error_type_name()
+                other.type_name_for_error()
             )))
         }
         None => {
@@ -147,7 +147,7 @@ pub fn array_merge(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
             return Err(PhpError::TypeError(format!(
                 "array_merge(): Argument #{} must be of type array, {} given",
                 i + 1,
-                arg.error_type_name()
+                arg.type_name_for_error()
             )));
         };
         for (k, v) in a.iter() {
@@ -444,7 +444,7 @@ fn as_array_mut<'a>(arr: &'a mut Zval, fname: &str) -> Result<&'a mut Rc<PhpArra
         Zval::Array(rc) => Ok(rc),
         other => Err(PhpError::TypeError(format!(
             "{fname}(): Argument #1 ($array) must be of type array, {} given",
-            other.error_type_name()
+            other.type_name_for_error()
         ))),
     }
 }
@@ -543,7 +543,7 @@ pub fn array_key_exists(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> 
         Some(other) => {
             return Err(PhpError::TypeError(format!(
                 "array_key_exists(): Argument #2 ($array) must be of type array, {} given",
-                other.error_type_name()
+                other.type_name_for_error()
             )))
         }
         None => {
@@ -567,7 +567,7 @@ pub fn array_search(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
         Some(other) => {
             return Err(PhpError::TypeError(format!(
                 "array_search(): Argument #2 ($haystack) must be of type array, {} given",
-                other.error_type_name()
+                other.type_name_for_error()
             )))
         }
         None => {
@@ -772,7 +772,7 @@ fn string_sets(
                 return Err(PhpError::TypeError(format!(
                     "{fname}(): Argument #{} must be of type array, {} given",
                     i + 2,
-                    other.error_type_name()
+                    other.type_name_for_error()
                 )))
             }
         }
@@ -792,7 +792,7 @@ fn arr_nth<'a>(
         Some(other) => Err(PhpError::TypeError(format!(
             "{fname}(): Argument #{} (${pname}) must be of type array, {} given",
             idx + 1,
-            other.error_type_name()
+            other.type_name_for_error()
         ))),
         None => Err(PhpError::Error(format!(
             "{fname}() expects at least {} arguments, {} given",
@@ -818,7 +818,7 @@ fn other_arrays<'a>(
                 return Err(PhpError::TypeError(format!(
                     "{fname}(): Argument #{} must be of type array, {} given",
                     i + 2,
-                    other.error_type_name()
+                    other.type_name_for_error()
                 )))
             }
         }

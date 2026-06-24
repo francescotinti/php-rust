@@ -41,7 +41,7 @@ fn num_arg(args: &[Zval], idx: usize, fname: &str, n: usize, pname: &str) -> Res
     as_number(v).ok_or_else(|| {
         PhpError::TypeError(format!(
             "{fname}(): Argument #{n} (${pname}) must be of type int|float, {} given",
-            v.error_type_name()
+            v.type_name_for_error()
         ))
     })
 }
@@ -90,7 +90,7 @@ fn to_int_arg(
         },
         _ => Err(PhpError::TypeError(format!(
             "{fname}(): Argument #{n} (${pname}) must be of type int, {} given",
-            v.error_type_name()
+            v.type_name_for_error()
         ))),
     }
 }
@@ -172,7 +172,7 @@ fn double_arg(args: &[Zval], fname: &str) -> Result<f64, PhpError> {
     as_double(v).ok_or_else(|| {
         PhpError::TypeError(format!(
             "{fname}(): Argument #1 ($num) must be of type int|float, {} given",
-            v.error_type_name()
+            v.type_name_for_error()
         ))
     })
 }
@@ -202,7 +202,7 @@ pub fn abs(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
         Some(Num::Double(d)) => Ok(Zval::Double(d.abs())),
         None => Err(PhpError::TypeError(format!(
             "abs(): Argument #1 ($num) must be of type int|float, {} given",
-            v.error_type_name()
+            v.type_name_for_error()
         ))),
     }
 }
@@ -229,7 +229,7 @@ fn extreme(args: &[Zval], fname: &str, want_max: bool) -> Result<Zval, PhpError>
         let Zval::Array(a) = &args[0] else {
             return Err(PhpError::TypeError(format!(
                 "{fname}(): Argument #1 ($value) must be of type array, {} given",
-                args[0].error_type_name()
+                args[0].type_name_for_error()
             )));
         };
         if a.is_empty() {

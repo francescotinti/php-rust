@@ -16,7 +16,7 @@ pub fn implode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         [only] => {
             return Err(PhpError::TypeError(format!(
                 "implode(): Argument #1 ($array) must be of type array, {} given",
-                only.error_type_name()
+                only.type_name_for_error()
             )))
         }
         [sep, rest @ ..] => {
@@ -31,7 +31,7 @@ pub fn implode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
                 Some(other) => {
                     return Err(PhpError::TypeError(format!(
                         "implode(): Argument #2 ($array) must be of type array, {} given",
-                        other.error_type_name()
+                        other.type_name_for_error()
                     )))
                 }
                 None => unreachable!("rest has at least one element"),

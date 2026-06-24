@@ -1691,7 +1691,7 @@ impl<'m> Vm<'m> {
                             other => {
                                 return Err(PhpError::Error(format!(
                                     "Can use \"yield from\" only with arrays and Traversables, {} given",
-                                    other.error_type_name()
+                                    other.type_name_for_error()
                                 )))
                             }
                         }
@@ -2137,7 +2137,7 @@ impl<'m> Vm<'m> {
                             other => {
                                 return Err(PhpError::TypeError(format!(
                                     "Cannot use \"::class\" on {}",
-                                    other.error_type_name()
+                                    other.type_name_for_error()
                                 )))
                             }
                         }
@@ -2951,7 +2951,7 @@ impl<'m> Vm<'m> {
                     other => {
                         return Err(PhpError::TypeError(format!(
                             "fscanf(): Argument #1 ($stream) must be of type resource, {} given",
-                            other.error_type_name()
+                            other.type_name_for_error()
                         )))
                     }
                 };
@@ -3050,7 +3050,7 @@ impl<'m> Vm<'m> {
             other => {
                 return Err(PhpError::TypeError(format!(
                     "call_user_func_array(): Argument #2 ($args) must be of type array, {} given",
-                    other.error_type_name()
+                    other.type_name_for_error()
                 )))
             }
         };
@@ -3078,7 +3078,7 @@ impl<'m> Vm<'m> {
                     return Err(PhpError::TypeError(format!(
                         "array_map(): Argument #{} must be of type array, {} given",
                         i + 2,
-                        other.error_type_name()
+                        other.type_name_for_error()
                     )))
                 }
             }
@@ -3131,7 +3131,7 @@ impl<'m> Vm<'m> {
             other => {
                 return Err(PhpError::TypeError(format!(
                     "array_filter(): Argument #1 ($array) must be of type array, {} given",
-                    other.error_type_name()
+                    other.type_name_for_error()
                 )))
             }
         };
@@ -3185,7 +3185,7 @@ impl<'m> Vm<'m> {
             other => {
                 return Err(PhpError::TypeError(format!(
                     "array_reduce(): Argument #1 ($array) must be of type array, {} given",
-                    other.error_type_name()
+                    other.type_name_for_error()
                 )))
             }
         };
@@ -3229,7 +3229,7 @@ impl<'m> Vm<'m> {
             Zval::Closure(_) => Ok(Zval::Str(PhpStr::new(b"Closure".to_vec()))),
             other => Err(PhpError::TypeError(format!(
                 "get_class(): Argument #1 ($object) must be of type object, {} given",
-                other.error_type_name()
+                other.type_name_for_error()
             ))),
         }
     }
@@ -3269,7 +3269,7 @@ impl<'m> Vm<'m> {
             Zval::Ref(r) => self.class_arg_to_id(r.borrow().clone(), fname),
             other => Err(PhpError::TypeError(format!(
                 "{fname}(): Argument #1 ($object_or_class) must be an object or a valid class name, {} given",
-                other.error_type_name()
+                other.type_name_for_error()
             ))),
         }
     }
@@ -3289,7 +3289,7 @@ impl<'m> Vm<'m> {
         let Zval::Object(o) = v else {
             return Err(PhpError::TypeError(format!(
                 "get_object_vars(): Argument #1 ($object) must be of type object, {} given",
-                v.error_type_name()
+                v.type_name_for_error()
             )));
         };
         let cur = self.frames[self.frames.len() - 1].class;
@@ -4422,7 +4422,7 @@ impl<'m> Vm<'m> {
             other => {
                 return Err(PhpError::TypeError(format!(
                     "array_walk(): Argument #1 ($array) must be of type array, {} given",
-                    other.error_type_name()
+                    other.type_name_for_error()
                 )))
             }
         };
@@ -4506,7 +4506,7 @@ impl<'m> Vm<'m> {
             other => {
                 return Err(PhpError::TypeError(format!(
                     "usort(): Argument #1 ($array) must be of type array, {} given",
-                    other.error_type_name()
+                    other.type_name_for_error()
                 )))
             }
         };
@@ -4996,7 +4996,7 @@ impl<'m> Vm<'m> {
             }
             other => Err(PhpError::TypeError(format!(
                 "Only arrays and Traversables can be unpacked, {} given",
-                other.error_type_name()
+                other.type_name_for_error()
             ))),
         }
     }
@@ -5415,7 +5415,7 @@ fn array_pointer_apply(target: &mut Zval, op: PtrOp) -> Result<Zval, PhpError> {
         return Err(PhpError::TypeError(format!(
             "{}(): Argument #1 ($array) must be of type array, {} given",
             op.name(),
-            target.error_type_name()
+            target.type_name_for_error()
         )));
     };
     Ok(match op {

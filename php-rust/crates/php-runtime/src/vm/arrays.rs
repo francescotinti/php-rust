@@ -117,7 +117,7 @@ pub(super) fn field_write(
                     diags.push(Diag::Warning(format!(
                         "Attempt to assign property \"{}\" on {}",
                         String::from_utf8_lossy(name),
-                        other.error_type_name()
+                        other.type_name_for_error()
                     )));
                 }
             }

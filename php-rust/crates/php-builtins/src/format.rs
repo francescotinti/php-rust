@@ -40,7 +40,7 @@ fn vformat(args: &[Zval], fname: &str, diags: &mut Diags) -> Result<Vec<u8>, Php
     let Zval::Array(arr) = &args[1] else {
         return Err(PhpError::TypeError(format!(
             "{fname}(): Argument #2 ($values) must be of type array, {} given",
-            args[1].error_type_name()
+            args[1].type_name_for_error()
         )));
     };
     let mut vals: Vec<Zval> = vec![Zval::Null];

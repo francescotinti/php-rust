@@ -28,7 +28,7 @@ pub(super) fn read_property(recv: &Zval, name: &[u8], diags: &mut Diags) -> Zval
             let prop = String::from_utf8_lossy(name).into_owned();
             diags.push(Diag::Warning(format!(
                 "Attempt to read property \"{prop}\" on {}",
-                other.error_type_name()
+                other.type_name_for_error()
             )));
             Zval::Null
         }
@@ -47,7 +47,7 @@ pub(super) fn write_property(recv: &Zval, name: &[u8], value: Zval) -> Result<()
         other => Err(PhpError::Error(format!(
             "Attempt to assign property \"{}\" on {}",
             String::from_utf8_lossy(name),
-            other.error_type_name()
+            other.type_name_for_error()
         ))),
     }
 }
@@ -442,7 +442,7 @@ impl<'m> Vm<'m> {
                 return Err(PhpError::Error(format!(
                     "Call to a member function {}() on {}",
                     String::from_utf8_lossy(method),
-                    other.error_type_name()
+                    other.type_name_for_error()
                 )))
             }
         };
@@ -473,7 +473,7 @@ impl<'m> Vm<'m> {
                 return Err(PhpError::Error(format!(
                     "Call to a member function {}() on {}",
                     String::from_utf8_lossy(method),
-                    other.error_type_name()
+                    other.type_name_for_error()
                 )))
             }
         };

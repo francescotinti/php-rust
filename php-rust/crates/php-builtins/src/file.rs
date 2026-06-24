@@ -33,7 +33,7 @@ fn stream_arg<'a>(
         }
         Some(other) => Err(PhpError::TypeError(format!(
             "{fname}(): Argument #1 ($stream) must be of type resource, {} given",
-            other.error_type_name()
+            other.type_name_for_error()
         ))),
         None => Err(PhpError::ArgumentCountError(format!(
             "{fname}() expects at least 1 argument, 0 given"
@@ -907,7 +907,7 @@ pub fn get_resource_type(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError
         Some(Zval::Resource(r)) => Ok(Zval::Str(PhpStr::from_str(r.borrow().dump_type()))),
         Some(other) => Err(PhpError::TypeError(format!(
             "get_resource_type(): Argument #1 ($resource) must be of type resource, {} given",
-            other.error_type_name()
+            other.type_name_for_error()
         ))),
         None => Err(PhpError::ArgumentCountError(
             "get_resource_type() expects exactly 1 argument, 0 given".to_string(),
@@ -958,7 +958,7 @@ pub fn vfprintf(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let Zval::Array(a) = &argv[2] else {
         return Err(PhpError::TypeError(format!(
             "vfprintf(): Argument #3 ($values) must be of type array, {} given",
-            argv[2].error_type_name()
+            argv[2].type_name_for_error()
         )));
     };
     // Slot 0 is the (ignored) format placeholder; the array values follow.
@@ -1037,7 +1037,7 @@ fn dir_arg<'a>(argv: &'a [Zval], fname: &str) -> Result<&'a Rc<RefCell<Resource>
         Some(Zval::Resource(r)) => Ok(r),
         Some(other) => Err(PhpError::TypeError(format!(
             "{fname}(): Argument #1 ($dir_handle) must be of type resource, {} given",
-            other.error_type_name()
+            other.type_name_for_error()
         ))),
         None => Err(PhpError::ArgumentCountError(format!(
             "{fname}() expects exactly 1 argument, 0 given"
@@ -1159,7 +1159,7 @@ pub fn fstat(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
         Some(other) => {
             return Err(PhpError::TypeError(format!(
                 "fstat(): Argument #1 ($stream) must be of type resource, {} given",
-                other.error_type_name()
+                other.type_name_for_error()
             )))
         }
         None => {

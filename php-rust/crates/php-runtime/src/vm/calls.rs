@@ -243,7 +243,7 @@ impl<'m> Vm<'m> {
             }
             other => Err(PhpError::Error(format!(
                 "Value of type {} is not callable",
-                other.error_type_name()
+                other.type_name_for_error()
             ))),
         }
     }
