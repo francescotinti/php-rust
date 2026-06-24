@@ -2,9 +2,8 @@
 
 use mago_span::HasSpan;
 use mago_syntax::ast::{
-    Class,
-    DeclareBody, Enum,
-    Expression, ForeachTarget, Function, Interface, Literal, Statement, StaticItem, Variable,
+    DeclareBody,
+    Expression, ForeachTarget, Function, Literal, Statement, StaticItem, Variable,
 };
 
 use crate::hir::{
@@ -211,7 +210,8 @@ impl<'f> Lowerer<'f> {
             // *not* hoisted is nested inside a branch/block — PHP defines it
             // conditionally, which is outside step 8 scope.
             Statement::Function(func) => {
-                if self.fn_index.contains_key(&func.name.value.to_ascii_lowercase()) {
+                let key = join_ns(&self.cur_namespace, func.name.value).to_ascii_lowercase();
+                if self.fn_index.contains_key(&key) {
                     return Ok(None);
                 }
                 return Err(LowerError::Unsupported {
@@ -225,7 +225,8 @@ impl<'f> Lowerer<'f> {
             // nested inside a branch/block is a conditional declaration, outside
             // Tier-1 scope.
             Statement::Class(class) => {
-                if self.class_index.contains_key(&class.name.value.to_ascii_lowercase()) {
+                let key = join_ns(&self.cur_namespace, class.name.value).to_ascii_lowercase();
+                if self.class_index.contains_key(&key) {
                     return Ok(None);
                 }
                 return Err(LowerError::Unsupported {
@@ -234,7 +235,8 @@ impl<'f> Lowerer<'f> {
                 });
             }
             Statement::Interface(iface) => {
-                if self.class_index.contains_key(&iface.name.value.to_ascii_lowercase()) {
+                let key = join_ns(&self.cur_namespace, iface.name.value).to_ascii_lowercase();
+                if self.class_index.contains_key(&key) {
                     return Ok(None);
                 }
                 return Err(LowerError::Unsupported {
@@ -243,7 +245,8 @@ impl<'f> Lowerer<'f> {
                 });
             }
             Statement::Enum(en) => {
-                if self.class_index.contains_key(&en.name.value.to_ascii_lowercase()) {
+                let key = join_ns(&self.cur_namespace, en.name.value).to_ascii_lowercase();
+                if self.class_index.contains_key(&key) {
                     return Ok(None);
                 }
                 return Err(LowerError::Unsupported {
@@ -264,7 +267,7 @@ impl<'f> Lowerer<'f> {
                 let mut catches = Vec::with_capacity(node.catch_clauses.len());
                 for c in node.catch_clauses.iter() {
                     let mut types = Vec::new();
-                    collect_catch_types(&c.hint, line, &mut types)?;
+                    collect_catch_types(self, &c.hint, line, &mut types)?;
                     let var = c
                         .variable
                         .as_ref()
@@ -297,6 +300,31 @@ impl<'f> Lowerer<'f> {
             Statement::Label(node) => {
                 StmtKind::Label(node.name.value.to_vec().into_boxed_slice())
             }
+
+            // `namespace Foo;` / `namespace Foo { ... }` (step 50). Names were
+            // already hoisted fully-qualified; here we lower the block's executable
+            // body with the namespace + its `use` imports active, then restore the
+            // surrounding scope. Declarations inside lower to no-ops, as ever.
+            Statement::Namespace(ns) => {
+                let body = ns.statements().as_slice();
+                let saved_ns =
+                    std::mem::replace(&mut self.cur_namespace, ns_name_of(ns.name.as_ref()));
+                let saved_c = std::mem::take(&mut self.use_classes);
+                let saved_f = std::mem::take(&mut self.use_functions);
+                let saved_k = std::mem::take(&mut self.use_consts);
+                self.collect_uses(body);
+                let lowered = self.lower_stmts(body);
+                self.cur_namespace = saved_ns;
+                self.use_classes = saved_c;
+                self.use_functions = saved_f;
+                self.use_consts = saved_k;
+                StmtKind::Block(lowered?)
+            }
+
+            // `use A\B;` / `use A\B as C;` / grouped / `use function|const` (step 50):
+            // a compile-time import, already recorded into the `use_*` tables when
+            // the enclosing scope was entered (`collect_uses`). No runtime effect.
+            Statement::Use(_) => StmtKind::Nop,
 
             _ => {
                 return Err(LowerError::Unsupported {
@@ -352,19 +380,27 @@ impl<'f> Lowerer<'f> {
 
     // --- classes (step 19) ---
 
-    /// Hoist top-level class declarations in two passes: first reserve every
-    /// class name → index (so a method body / `new` can reference a class
-    /// declared later), then lower each body now that all names resolve
-    /// (D-19.3).
+    /// Hoist class/interface/enum declarations across all namespace blocks in two
+    /// global passes (step 19/50): first reserve every name (as a fully-qualified
+    /// name → index) so a method body / `new` / `extends` may reference a class
+    /// declared later in *any* namespace, then lower each body now that all names
+    /// resolve (D-19.3). Names are reserved in the same order the bodies are
+    /// pushed, so each reserved index equals its eventual position in `classes`.
     pub(super) fn hoist_classes(&mut self, stmts: &[Statement]) -> Result<(), LowerError> {
-        // Both classes and interfaces share one table, so a class can implement
-        // an interface declared later and vice versa (step 19-5).
-        enum Pending<'a> {
-            Class(&'a Class<'a>),
-            Interface(&'a Interface<'a>),
-            Enum(&'a Enum<'a>),
-        }
-        let mut pending: Vec<Pending> = Vec::new();
+        let mut counter = 0usize;
+        self.for_blocks(stmts, |lo, body| lo.reserve_class_names(body, &mut counter))?;
+        self.for_blocks(stmts, |lo, body| lo.lower_class_bodies(body))?;
+        Ok(())
+    }
+
+    /// Reserve `class_index` entries for every class/interface/enum in one
+    /// namespace block. `counter` is the running global declaration count so the
+    /// reserved index matches the order bodies are later pushed.
+    fn reserve_class_names(
+        &mut self,
+        stmts: &[Statement],
+        counter: &mut usize,
+    ) -> Result<(), LowerError> {
         for s in stmts {
             let (name, span) = match s {
                 Statement::Class(c) => (c.name.value, c.span()),
@@ -372,31 +408,30 @@ impl<'f> Lowerer<'f> {
                 Statement::Enum(e) => (e.name.value, e.span()),
                 _ => continue,
             };
-            let key = name.to_ascii_lowercase();
+            let key = join_ns(&self.cur_namespace, name).to_ascii_lowercase();
             if self.class_index.contains_key(&key) {
                 return Err(LowerError::Unsupported {
                     what: "class/interface redeclaration",
                     line: self.line_of(span),
                 });
             }
-            // One entry per `pending` slot, pushed below in the same order, so the
-            // index equals the eventual position in `self.classes`. Offset by the
-            // current table length so user classes follow the injected built-in
-            // exception prelude (step 20), keeping their ids contiguous after it.
-            self.class_index
-                .insert(key, self.classes.len() + pending.len());
-            pending.push(match s {
-                Statement::Class(c) => Pending::Class(c),
-                Statement::Interface(i) => Pending::Interface(i),
-                Statement::Enum(e) => Pending::Enum(e),
-                _ => unreachable!(),
-            });
+            // Offset by the current table length so user classes follow the
+            // injected built-in exception prelude (step 20).
+            self.class_index.insert(key, self.classes.len() + *counter);
+            *counter += 1;
         }
-        for p in pending {
-            let decl = match p {
-                Pending::Class(c) => self.lower_class(c)?,
-                Pending::Interface(i) => self.lower_interface(i)?,
-                Pending::Enum(e) => self.lower_enum(e)?,
+        Ok(())
+    }
+
+    /// Lower the bodies of every class/interface/enum in one namespace block and
+    /// append them to `classes`, in declaration order (matching reservation).
+    fn lower_class_bodies(&mut self, stmts: &[Statement]) -> Result<(), LowerError> {
+        for s in stmts {
+            let decl = match s {
+                Statement::Class(c) => self.lower_class(c)?,
+                Statement::Interface(i) => self.lower_interface(i)?,
+                Statement::Enum(e) => self.lower_enum(e)?,
+                _ => continue,
             };
             self.classes.push(decl);
         }

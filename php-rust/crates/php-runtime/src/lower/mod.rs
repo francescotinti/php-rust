@@ -22,7 +22,8 @@ use mago_span::Span;
 use mago_syntax::ast::{
     AssignmentOperator, BinaryOperator, ClassLikeMemberSelector,
     Expression, Extends, Hint,
-    Identifier, Literal, LiteralInteger, Modifier, Node, Statement, Variable,
+    Identifier, Literal, LiteralInteger, Modifier, Node, Statement,
+    Use, UseItems, UseType, Variable,
 };
 use mago_syntax::parser::parse_file;
 
@@ -94,21 +95,28 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
     // the classes, call sites resolve by name, so no index fix-up is needed.
     low.functions = pfunctions;
     low.fn_index = pfn_index;
-    // Hoist top-level function declarations first, so a call may textually
-    // precede its definition (PHP's function hoisting). Bodies are lowered here;
-    // the main pass below skips the declaration statements (they are no-ops).
-    // Classes are hoisted in two passes (names first, then bodies) so a method
-    // body / `extends` may reference a class declared later (step 19, D-19.3).
-    for s in program.statements.as_slice() {
-        if let Statement::Function(func) = s {
-            low.hoist_function(func)?;
+    // Hoist function declarations first, so a call may textually precede its
+    // definition (PHP's function hoisting). Bodies are lowered here; the main
+    // pass below skips the declaration statements (they are no-ops). Each hoist
+    // pass descends into `namespace` blocks (step 50) via `for_blocks`, so names
+    // are registered fully-qualified and bodies resolve against the right imports.
+    let stmts = program.statements.as_slice();
+    low.for_blocks(stmts, |lo, body| {
+        for s in body {
+            if let Statement::Function(func) = s {
+                lo.hoist_function(func)?;
+            }
         }
-    }
+        Ok(())
+    })?;
     // Lower traits before classes, so a class's `use T` finds T fully resolved
     // (step 21). Traits stay in the Lowerer; they never enter the class table.
-    low.lower_traits(program.statements.as_slice())?;
-    low.hoist_classes(program.statements.as_slice())?;
-    let body = low.lower_stmts(program.statements.as_slice())?;
+    low.for_blocks(stmts, |lo, body| lo.lower_traits(body))?;
+    low.hoist_classes(stmts)?;
+    // Seed global-namespace imports for the main pass (a no-`namespace` file may
+    // still carry top-level `use`s); each `namespace` arm re-scopes its own.
+    low.collect_uses(stmts);
+    let body = low.lower_stmts(stmts)?;
     // `goto`/label validation (step 45): the top-level script body is its own
     // function scope. Each user function / method / closure validates its own
     // body where it is lowered (`lower_function`/`lower_method`/`lower_closure`).
@@ -735,6 +743,19 @@ struct Lowerer<'f> {
     cur_class: Option<Box<[u8]>>,
     cur_function: Option<Box<[u8]>>,
     cur_trait: Option<Box<[u8]>>,
+    /// The namespace currently being lowered, e.g. `b"Foo\\Bar"` (empty = global),
+    /// step 50. Names are resolved against this at compile time: PHP namespaces are
+    /// a pure compile-time name-resolution feature, so once every declaration and
+    /// reference speaks fully-qualified names the existing by-name lookups in
+    /// `compile.rs` / `vm` keep working unchanged. Saved/restored around each
+    /// `namespace` block (PHP forbids nested namespaces, so one level deep).
+    cur_namespace: Vec<u8>,
+    /// Active `use` imports for the current namespace block, keyed by ASCII-lowercased
+    /// alias → fully-qualified target (no leading `\`). PHP keeps three independent
+    /// import tables (class/namespace, function, const); all three reset per block.
+    use_classes: HashMap<Vec<u8>, Vec<u8>>,
+    use_functions: HashMap<Vec<u8>, Vec<u8>>,
+    use_consts: HashMap<Vec<u8>, Vec<u8>>,
 }
 
 /// A trait whose members have been lowered and whose own `use` clauses have been
@@ -771,6 +792,184 @@ impl<'f> Lowerer<'f> {
             cur_class: None,
             cur_function: None,
             cur_trait: None,
+            cur_namespace: Vec::new(),
+            use_classes: HashMap::new(),
+            use_functions: HashMap::new(),
+            use_consts: HashMap::new(),
+        }
+    }
+
+    // --- namespace name resolution (step 50) ---
+
+    /// Resolve a qualified name (`A\B\c`) by substituting an imported first
+    /// segment if `A` was `use`d as a namespace/class alias, else prefixing the
+    /// current namespace. Shared by class, function and const qualified forms.
+    fn resolve_qualified(&self, raw: &[u8]) -> Box<[u8]> {
+        let first = first_segment(raw);
+        let rest = &raw[first.len()..]; // includes the leading `\` of the remainder
+        match self.use_classes.get(&first.to_ascii_lowercase()) {
+            Some(fqn) => {
+                let mut v = fqn.clone();
+                v.extend_from_slice(rest);
+                v.into()
+            }
+            None => join_ns(&self.cur_namespace, raw),
+        }
+    }
+
+    /// Resolve a class/interface/trait/enum name reference to its fully-qualified
+    /// form. Unqualified names resolve against the class import table then the
+    /// current namespace (PHP gives class names **no** global fallback).
+    fn resolve_class(&self, id: &Identifier) -> Box<[u8]> {
+        match id {
+            Identifier::FullyQualified(f) => strip_leading_backslash(f.value).into(),
+            Identifier::Qualified(q) => self.resolve_qualified(q.value),
+            Identifier::Local(l) => match self.use_classes.get(&l.value.to_ascii_lowercase()) {
+                Some(fqn) => fqn.clone().into(),
+                None => join_ns(&self.cur_namespace, l.value),
+            },
+        }
+    }
+
+    /// Resolve a called function's name. Unlike classes, an **unqualified** name
+    /// falls back to the global function: `foo()` in namespace `N` calls `N\foo`
+    /// if such a user function was hoisted, otherwise global `foo` (a builtin or a
+    /// runtime-resolved name). Qualified/fully-qualified forms never fall back.
+    fn resolve_fn_name(&self, id: &Identifier) -> Box<[u8]> {
+        match id {
+            Identifier::FullyQualified(f) => strip_leading_backslash(f.value).into(),
+            Identifier::Qualified(q) => self.resolve_qualified(q.value),
+            Identifier::Local(l) => {
+                if let Some(fqn) = self.use_functions.get(&l.value.to_ascii_lowercase()) {
+                    return fqn.clone().into();
+                }
+                if self.cur_namespace.is_empty() {
+                    return l.value.into();
+                }
+                let cand = join_ns(&self.cur_namespace, l.value);
+                if self.fn_index.contains_key(&cand.to_ascii_lowercase()) {
+                    cand
+                } else {
+                    l.value.into() // fall back to the global function
+                }
+            }
+        }
+    }
+
+    /// Resolve a constant-fetch name. Like functions, an unqualified name falls
+    /// back to global (we don't yet declare namespaced constants, so the global /
+    /// engine constant is what resolves at runtime). Qualified/FQ forms keep their
+    /// path so an explicit `\Ns\C` looks up that exact key.
+    fn resolve_const_name(&self, id: &Identifier) -> Box<[u8]> {
+        match id {
+            Identifier::FullyQualified(f) => strip_leading_backslash(f.value).into(),
+            Identifier::Qualified(q) => self.resolve_qualified(q.value),
+            Identifier::Local(l) => match self.use_consts.get(&l.value.to_ascii_lowercase()) {
+                Some(fqn) => fqn.clone().into(),
+                None => l.value.into(), // unqualified → global fallback
+            },
+        }
+    }
+
+    /// Run `f` once per namespace scope in `stmts`, with `cur_namespace` and the
+    /// three `use` tables set for that scope. PHP forbids nested namespaces, so
+    /// each `namespace` block is one level deep; a file with no `namespace` at all
+    /// runs `f` once over the whole list in the global namespace. Context is saved
+    /// and restored around each block. Used by the hoisting passes (step 50).
+    fn for_blocks<F>(&mut self, stmts: &[Statement], mut f: F) -> Result<(), LowerError>
+    where
+        F: FnMut(&mut Self, &[Statement]) -> Result<(), LowerError>,
+    {
+        let mut had_block = false;
+        for s in stmts {
+            if let Statement::Namespace(ns) = s {
+                had_block = true;
+                let body = ns.statements().as_slice();
+                let saved_ns =
+                    std::mem::replace(&mut self.cur_namespace, ns_name_of(ns.name.as_ref()));
+                let saved_c = std::mem::take(&mut self.use_classes);
+                let saved_f = std::mem::take(&mut self.use_functions);
+                let saved_k = std::mem::take(&mut self.use_consts);
+                self.collect_uses(body);
+                let r = f(self, body);
+                self.cur_namespace = saved_ns;
+                self.use_classes = saved_c;
+                self.use_functions = saved_f;
+                self.use_consts = saved_k;
+                r?;
+            }
+        }
+        if !had_block {
+            // No `namespace` blocks: the whole file is the global namespace.
+            self.cur_namespace.clear();
+            self.collect_uses(stmts);
+            f(self, stmts)?;
+        }
+        Ok(())
+    }
+
+    /// Reset and repopulate the three `use` import tables from a namespace block's
+    /// statements (PHP scopes imports to their namespace block). Called when a
+    /// block is entered in every pass that resolves names inside it.
+    fn collect_uses(&mut self, stmts: &[Statement]) {
+        self.use_classes.clear();
+        self.use_functions.clear();
+        self.use_consts.clear();
+        for s in stmts {
+            if let Statement::Use(u) = s {
+                self.add_use(u);
+            }
+        }
+    }
+
+    /// Insert one import: `kind` is `None` for a class/namespace import, or the
+    /// `function`/`const` discriminator. `fqn` is the absolute target (no leading
+    /// `\`), `alias` the bare local name it is reached by.
+    fn insert_use(&mut self, kind: Option<&UseType>, fqn: Vec<u8>, alias: &[u8]) {
+        let key = alias.to_ascii_lowercase();
+        match kind {
+            Some(UseType::Function(_)) => self.use_functions.insert(key, fqn),
+            Some(UseType::Const(_)) => self.use_consts.insert(key, fqn),
+            None => self.use_classes.insert(key, fqn),
+        };
+    }
+
+    /// Record one `use` statement's imports into the appropriate table. Handles
+    /// plain, typed (`use function`/`use const`), and grouped (`use Foo\{A, B}`)
+    /// forms, including the mixed-type group `use Foo\{function f, const C}`.
+    fn add_use(&mut self, u: &Use) {
+        match &u.items {
+            UseItems::Sequence(seq) => {
+                for it in seq.items.iter() {
+                    let fqn = strip_leading_backslash(it.name.value()).to_vec();
+                    let alias = it.alias.as_ref().map_or_else(|| it.name.last_segment(), |a| a.identifier.value);
+                    self.insert_use(None, fqn, alias);
+                }
+            }
+            UseItems::TypedSequence(seq) => {
+                for it in seq.items.iter() {
+                    let fqn = strip_leading_backslash(it.name.value()).to_vec();
+                    let alias = it.alias.as_ref().map_or_else(|| it.name.last_segment(), |a| a.identifier.value);
+                    self.insert_use(Some(&seq.r#type), fqn, alias);
+                }
+            }
+            UseItems::TypedList(list) => {
+                let prefix = strip_leading_backslash(list.namespace.value()).to_vec();
+                for it in list.items.iter() {
+                    let fqn = join_ns(&prefix, it.name.value()).into_vec();
+                    let alias = it.alias.as_ref().map_or_else(|| it.name.last_segment(), |a| a.identifier.value);
+                    self.insert_use(Some(&list.r#type), fqn, alias);
+                }
+            }
+            UseItems::MixedList(list) => {
+                let prefix = strip_leading_backslash(list.namespace.value()).to_vec();
+                for mit in list.items.iter() {
+                    let it = &mit.item;
+                    let fqn = join_ns(&prefix, it.name.value()).into_vec();
+                    let alias = it.alias.as_ref().map_or_else(|| it.name.last_segment(), |a| a.identifier.value);
+                    self.insert_use(mit.r#type.as_ref(), fqn, alias);
+                }
+            }
         }
     }
 
@@ -936,18 +1135,19 @@ fn dedent_literal(lit: &[u8], indent: usize, mut at_line_start: bool) -> (Vec<u8
 }
 
 fn collect_catch_types(
+    lo: &Lowerer,
     hint: &Hint,
     line: Line,
     out: &mut Vec<Box<[u8]>>,
 ) -> Result<(), LowerError> {
     match hint {
         Hint::Identifier(id) => {
-            out.push(function_name(id).into());
+            out.push(lo.resolve_class(id));
             Ok(())
         }
         Hint::Union(u) => {
-            collect_catch_types(u.left, line, out)?;
-            collect_catch_types(u.right, line, out)
+            collect_catch_types(lo, u.left, line, out)?;
+            collect_catch_types(lo, u.right, line, out)
         }
         _ => Err(LowerError::Unsupported {
             what: "catch type",
@@ -984,15 +1184,46 @@ fn member_name_sets(
     )
 }
 
-fn function_name<'a>(id: &Identifier<'a>) -> &'a [u8] {
-    let raw = match id {
-        Identifier::Local(l) => l.value,
-        Identifier::Qualified(q) => q.value,
-        Identifier::FullyQualified(f) => f.value,
-    };
-    match raw.iter().rposition(|&b| b == b'\\') {
-        Some(i) => &raw[i + 1..],
-        None => raw,
+/// The last `\`-separated segment of a name (`A\B\c` → `c`), discarding any
+/// namespace prefix. Used only where a bareword is genuinely *not* a namespaced
+/// name — e.g. an interpolated array-key barewords inside a double-quoted string.
+fn bare_last_segment<'a>(id: &Identifier<'a>) -> &'a [u8] {
+    id.last_segment()
+}
+
+/// Drop a single leading namespace separator (`\Foo\Bar` → `Foo\Bar`).
+fn strip_leading_backslash(s: &[u8]) -> &[u8] {
+    s.strip_prefix(b"\\").unwrap_or(s)
+}
+
+/// Join a namespace and a relative name into a fully-qualified name with no
+/// leading separator (`Foo\Bar` + `Baz` → `Foo\Bar\Baz`; empty ns → `Baz`).
+fn join_ns(ns: &[u8], name: &[u8]) -> Box<[u8]> {
+    if ns.is_empty() {
+        return name.into();
+    }
+    let mut v = Vec::with_capacity(ns.len() + 1 + name.len());
+    v.extend_from_slice(ns);
+    v.push(b'\\');
+    v.extend_from_slice(name);
+    v.into()
+}
+
+/// The first `\`-separated segment of a name (`A\B\c` → `A`). For an unqualified
+/// name this is the whole thing.
+fn first_segment(s: &[u8]) -> &[u8] {
+    match s.iter().position(|&b| b == b'\\') {
+        Some(i) => &s[..i],
+        None => s,
+    }
+}
+
+/// The namespace name a `namespace` declaration introduces (`None`/`namespace {}`
+/// → the global namespace, empty bytes; a leading `\` is dropped).
+fn ns_name_of(name: Option<&Identifier>) -> Vec<u8> {
+    match name {
+        Some(id) => strip_leading_backslash(id.value()).to_vec(),
+        None => Vec::new(),
     }
 }
 
@@ -1010,10 +1241,11 @@ fn member_name<'a>(sel: &ClassLikeMemberSelector<'a>, line: Line) -> Result<&'a 
 }
 
 /// The single parent class name in an `extends` clause (PHP classes are
-/// single-inheritance, so only the first type matters), step 19-3.
-fn parent_name<'a>(ext: &Extends<'a>, line: Line) -> Result<&'a [u8], LowerError> {
+/// single-inheritance, so only the first type matters), step 19-3. Resolved to a
+/// fully-qualified name against the current namespace + imports (step 50).
+fn parent_name(lo: &Lowerer, ext: &Extends, line: Line) -> Result<Box<[u8]>, LowerError> {
     match ext.types.iter().next() {
-        Some(id) => Ok(function_name(id)),
+        Some(id) => Ok(lo.resolve_class(id)),
         None => Err(LowerError::Unsupported {
             what: "empty extends clause",
             line,
@@ -1329,7 +1561,7 @@ fn is_returnable_lvalue(e: &Expression) -> bool {
 /// Map an AST type hint to an enforced [`TypeHint`], or `None` for any hint that
 /// step 14 does not enforce (class, union, array, mixed, …). Only the four
 /// scalar hints and their nullable forms are enforced (D-14.1/D-14.2).
-fn lower_hint(hint: &Hint) -> Option<TypeHint> {
+fn lower_hint(lo: &Lowerer, hint: &Hint) -> Option<TypeHint> {
     let kind = match hint {
         Hint::Integer(_) => HintKind::Scalar(ScalarType::Int),
         Hint::Float(_) => HintKind::Scalar(ScalarType::Float),
@@ -1344,16 +1576,16 @@ fn lower_hint(hint: &Hint) -> Option<TypeHint> {
         // …, which PHP rejects as "must be unqualified") is left unenforced rather
         // than mistaken for a class.
         Hint::Identifier(id) => {
-            let name = function_name(id);
-            let bare = name.strip_prefix(b"\\").unwrap_or(&name);
-            if is_reserved_type_name(bare) {
+            // A reserved scalar/type keyword is decided on the *bare* last segment
+            // (`\int` → `int`); a real class hint resolves to its FQN (step 50).
+            if is_reserved_type_name(bare_last_segment(id)) {
                 return None;
             }
-            HintKind::Class(name.into())
+            HintKind::Class(lo.resolve_class(id))
         }
         Hint::Nullable(n) => {
             // `?T`: enforce only when the inner hint is itself enforced.
-            let inner = lower_hint(n.hint)?;
+            let inner = lower_hint(lo, n.hint)?;
             return Some(TypeHint { nullable: true, ..inner });
         }
         // Union / intersection / `self`/`parent`/`static` / `mixed` / `void` /

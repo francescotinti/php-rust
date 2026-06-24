@@ -240,10 +240,13 @@ impl<'f> Lowerer<'f> {
             // here (D-18.7); any other name becomes a runtime `Const` read,
             // resolved against `define()`'d constants at eval time (step 49c).
             Expression::ConstantAccess(ca) => {
-                let name = function_name(&ca.name);
-                match resolve_constant(name) {
+                // Resolve namespace context: unqualified / fully-qualified names fold
+                // engine constants (`true`/`PHP_INT_MAX`/… — global, case-insensitive
+                // for the language ones); a namespaced `Ns\C` stays a runtime read.
+                let name = self.resolve_const_name(&ca.name);
+                match resolve_constant(&name) {
                     Some(kind) => kind,
-                    None => ExprKind::Const(name.to_vec().into_boxed_slice()),
+                    None => ExprKind::Const(name),
                 }
             }
 
@@ -265,7 +268,7 @@ impl<'f> Lowerer<'f> {
                         // the unquoted key to an identifier; it is a string key,
                         // not a constant (step 25).
                         Expression::Identifier(id) => {
-                            Expr { line, kind: ExprKind::Str(function_name(id).into()) }
+                            Expr { line, kind: ExprKind::Str(bare_last_segment(id).into()) }
                         }
                         other => self.lower_expr(other)?,
                     };
@@ -601,7 +604,7 @@ impl<'f> Lowerer<'f> {
         // A non-identifier callee (`$f(...)`, `$a['k'](...)`, an IIFE) is a
         // dynamic call dispatched on the runtime callee value (step 18, D-18.5).
         let name = match fc.function {
-            Expression::Identifier(id) => function_name(id),
+            Expression::Identifier(id) => self.resolve_fn_name(id),
             other => {
                 let callee = Box::new(self.lower_expr(other)?);
                 let args = self.lower_positional_args(&fc.argument_list, line)?;
@@ -610,7 +613,7 @@ impl<'f> Lowerer<'f> {
         };
         let (args, named) = self.lower_args(&fc.argument_list, line)?;
         Ok(ExprKind::Call {
-            name: name.into(),
+            name,
             args,
             named,
         })
@@ -625,7 +628,7 @@ impl<'f> Lowerer<'f> {
             Expression::Self_(_) => Ok(ClassRef::SelfClass),
             Expression::Parent(_) => Ok(ClassRef::Parent),
             Expression::Static(_) => Ok(ClassRef::Static),
-            Expression::Identifier(id) => Ok(ClassRef::Named(function_name(id).into())),
+            Expression::Identifier(id) => Ok(ClassRef::Named(self.resolve_class(id))),
             other => Ok(ClassRef::Dynamic(Box::new(self.lower_expr(other)?))),
         }
     }
@@ -707,7 +710,7 @@ impl<'f> Lowerer<'f> {
             }
         };
         let name = match func.function {
-            Expression::Identifier(id) => function_name(id),
+            Expression::Identifier(id) => self.resolve_fn_name(id),
             _ => {
                 return Err(LowerError::Unsupported {
                     what: "dynamic first-class callable",
@@ -715,7 +718,7 @@ impl<'f> Lowerer<'f> {
                 })
             }
         };
-        Ok(ExprKind::FirstClassCallable(name.into()))
+        Ok(ExprKind::FirstClassCallable(name))
     }
 
     /// Lower a call's argument list, accepting only plain positional arguments

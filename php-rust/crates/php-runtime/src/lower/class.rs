@@ -102,7 +102,7 @@ impl<'f> Lowerer<'f> {
         // Resolve any nested traits before flattening their members in.
         for u in &uses {
             for tn in u.trait_names.iter() {
-                let nk = function_name(tn).to_ascii_lowercase();
+                let nk = bare_last_segment(tn).to_ascii_lowercase();
                 self.resolve_trait(&nk, asts, in_progress)?;
             }
         }
@@ -187,13 +187,13 @@ impl<'f> Lowerer<'f> {
                             let m_lc = p.method_reference.method_name.value.to_ascii_lowercase();
                             for loser in p.trait_names.iter() {
                                 excluded
-                                    .insert((function_name(loser).to_ascii_lowercase(), m_lc.clone()));
+                                    .insert((bare_last_segment(loser).to_ascii_lowercase(), m_lc.clone()));
                             }
                         }
                         TraitUseAdaptation::Alias(a) => {
                             let (trait_lc, method_lc) = match &a.method_reference {
                                 TraitUseMethodReference::Absolute(abs) => (
-                                    Some(function_name(&abs.trait_name).to_ascii_lowercase()),
+                                    Some(bare_last_segment(&abs.trait_name).to_ascii_lowercase()),
                                     abs.method_name.value.to_ascii_lowercase(),
                                 ),
                                 TraitUseMethodReference::Identifier(id) => {
@@ -219,8 +219,8 @@ impl<'f> Lowerer<'f> {
         let mut seen_c = own_c.clone();
         for u in uses {
             for tn in u.trait_names.iter() {
-                let tkey = function_name(tn).to_ascii_lowercase();
-                let torig: Box<[u8]> = function_name(tn).into();
+                let tkey = bare_last_segment(tn).to_ascii_lowercase();
+                let torig: Box<[u8]> = bare_last_segment(tn).into();
                 let lt = self.traits.get(&tkey).ok_or(LowerError::Unsupported {
                     what: "use of undefined trait",
                     line,
@@ -318,7 +318,7 @@ impl<'f> Lowerer<'f> {
         }
         for u in uses {
             for tn in u.trait_names.iter() {
-                let tkey = function_name(tn).to_ascii_lowercase();
+                let tkey = bare_last_segment(tn).to_ascii_lowercase();
                 if let Some(found) = self.traits.get(&tkey).and_then(pick) {
                     return Some(found);
                 }
@@ -329,7 +329,7 @@ impl<'f> Lowerer<'f> {
 
     /// Resolve a list of interface names (`implements`/interface `extends`) to
     /// their class ids (step 19-5). Unknown interfaces are out of scope.
-    fn resolve_interfaces(&self, names: &[&[u8]], line: Line) -> Result<Vec<usize>, LowerError> {
+    fn resolve_interfaces(&self, names: &[Box<[u8]>], line: Line) -> Result<Vec<usize>, LowerError> {
         let mut out = Vec::new();
         for n in names {
             match self.class_index.get(&n.to_ascii_lowercase()) {
@@ -352,7 +352,7 @@ impl<'f> Lowerer<'f> {
         let line = self.line_of(iface.span());
         let interfaces = match &iface.extends {
             Some(ext) => {
-                let names: Vec<&[u8]> = ext.types.iter().map(function_name).collect();
+                let names: Vec<Box<[u8]>> = ext.types.iter().map(|id| self.resolve_class(id)).collect();
                 self.resolve_interfaces(&names, line)?
             }
             None => Vec::new(),
@@ -374,7 +374,7 @@ impl<'f> Lowerer<'f> {
             }
         }
         Ok(ClassDecl {
-            name: iface.name.value.into(),
+            name: join_ns(&self.cur_namespace, iface.name.value),
             parent: None,
             interfaces,
             is_abstract: true,
@@ -401,7 +401,7 @@ impl<'f> Lowerer<'f> {
         // pass 1 of `hoist_classes`, so forward references work, D-19.10).
         let parent = match &class.extends {
             Some(ext) => {
-                let pname = parent_name(ext, line)?;
+                let pname = parent_name(self, ext, line)?;
                 match self.class_index.get(&pname.to_ascii_lowercase()) {
                     Some(&i) => Some(i),
                     None => {
@@ -417,13 +417,13 @@ impl<'f> Lowerer<'f> {
         // Resolve `implements I, J` to interface ids (step 19-5).
         let interfaces = match &class.implements {
             Some(imp) => {
-                let names: Vec<&[u8]> = imp.types.iter().map(function_name).collect();
+                let names: Vec<Box<[u8]>> = imp.types.iter().map(|id| self.resolve_class(id)).collect();
                 self.resolve_interfaces(&names, line)?
             }
             None => Vec::new(),
         };
         let is_abstract = class.modifiers.iter().any(|m| m.is_abstract());
-        let name: Box<[u8]> = class.name.value.into();
+        let name: Box<[u8]> = join_ns(&self.cur_namespace, class.name.value);
         let mut props = Vec::new();
         let mut static_props = Vec::new();
         let mut consts = Vec::new();
@@ -535,7 +535,7 @@ impl<'f> Lowerer<'f> {
     /// Every enum implements `UnitEnum` (backed ones also `BackedEnum`, D-23.7).
     pub(super) fn lower_enum(&mut self, en: &Enum) -> Result<ClassDecl, LowerError> {
         let line = self.line_of(en.span());
-        let name: Box<[u8]> = en.name.value.into();
+        let name: Box<[u8]> = join_ns(&self.cur_namespace, en.name.value);
         // Backing type (`: int` / `: string`), if any (D-23.10).
         let enum_backing = match &en.backing_type_hint {
             Some(bt) => Some(match &bt.hint {
@@ -550,13 +550,14 @@ impl<'f> Lowerer<'f> {
             }),
             None => None,
         };
-        // Marker interfaces (D-23.7) + any user `implements`.
-        let mut iface_names: Vec<&[u8]> = vec![b"UnitEnum"];
+        // Marker interfaces (D-23.7) + any user `implements`. The markers are the
+        // global `UnitEnum`/`BackedEnum`; user interfaces resolve in-namespace.
+        let mut iface_names: Vec<Box<[u8]>> = vec![(b"UnitEnum" as &[u8]).into()];
         if enum_backing.is_some() {
-            iface_names.push(b"BackedEnum");
+            iface_names.push((b"BackedEnum" as &[u8]).into());
         }
         if let Some(imp) = &en.implements {
-            iface_names.extend(imp.types.iter().map(function_name));
+            iface_names.extend(imp.types.iter().map(|id| self.resolve_class(id)));
         }
         let interfaces = self.resolve_interfaces(&iface_names, line)?;
 
@@ -749,7 +750,7 @@ impl<'f> Lowerer<'f> {
         let ret_hint = method
             .return_type_hint
             .as_ref()
-            .and_then(|r| lower_hint(&r.hint));
+            .and_then(|r| lower_hint(self, &r.hint));
         let _ = class_line;
         Ok(MethodDecl {
             visibility,
@@ -772,7 +773,7 @@ impl<'f> Lowerer<'f> {
     /// on error so the caller's slot table is never corrupted.
     pub(super) fn lower_function(&mut self, func: &Function) -> Result<FnDecl, LowerError> {
         let line = self.line_of(func.span());
-        let name: Box<[u8]> = func.name.value.into();
+        let name: Box<[u8]> = join_ns(&self.cur_namespace, func.name.value);
         let by_ref = func.ampersand.is_some();
 
         // Install a fresh local overlay; the global scope stays reachable so a
@@ -804,7 +805,7 @@ impl<'f> Lowerer<'f> {
         let ret_hint = func
             .return_type_hint
             .as_ref()
-            .and_then(|r| lower_hint(&r.hint));
+            .and_then(|r| lower_hint(self, &r.hint));
         Ok(FnDecl {
             name,
             params,
@@ -844,7 +845,9 @@ impl<'f> Lowerer<'f> {
                 (Some(_), None) => s(func),
             },
             MagicConstant::Trait(_) => s(self.cur_trait.as_deref().unwrap_or(b"")),
-            MagicConstant::Namespace(_) => s(b""),
+            // `__NAMESPACE__` is the current namespace name without separators
+            // (`""` in the global namespace), resolved at compile time (step 50).
+            MagicConstant::Namespace(_) => s(&self.cur_namespace),
             MagicConstant::Property(_) => s(b""),
         }
     }
@@ -890,7 +893,7 @@ impl<'f> Lowerer<'f> {
                 default,
                 by_ref,
                 variadic,
-                hint: p.hint.as_ref().and_then(lower_hint),
+                hint: p.hint.as_ref().and_then(|h| lower_hint(self, h)),
             });
         }
         Ok(params)
@@ -953,7 +956,7 @@ impl<'f> Lowerer<'f> {
         let ret_hint = closure
             .return_type_hint
             .as_ref()
-            .and_then(|r| lower_hint(&r.hint));
+            .and_then(|r| lower_hint(self, &r.hint));
         let fn_idx =
             self.push_closure(params, body, local_scope.slots, by_ref, ret_hint, is_generator, line);
         Ok(ExprKind::Closure {
@@ -1076,7 +1079,7 @@ impl<'f> Lowerer<'f> {
         let ret_hint = af
             .return_type_hint
             .as_ref()
-            .and_then(|r| lower_hint(&r.hint));
+            .and_then(|r| lower_hint(self, &r.hint));
         let fn_idx =
             self.push_closure(params, body, local_scope.slots, false, ret_hint, is_generator, line);
         // An arrow function is never `static` here (rejected above), so it binds
