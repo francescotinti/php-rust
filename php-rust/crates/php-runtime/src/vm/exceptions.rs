@@ -52,6 +52,15 @@ impl<'m> Vm<'m> {
     /// exception uncaught inside the generator surfaces at the resume site (the
     /// resumer then pops the dead generator frame).
     pub(super) fn unwind(&mut self, e: PhpError, floor: usize) -> Option<PhpError> {
+        // A throwable propagating out of an `@` abandons that suppression region
+        // (its `Op::SuppressEnd` is skipped): drop the diagnostics raised under it
+        // and reset, so a later `catch` resumes with suppression cleared (step 48;
+        // `@` silences warnings, not engine errors / thrown objects).
+        if let Some(&outer) = self.suppress_marks.first() {
+            self.diags.truncate(outer);
+            self.suppress_marks.clear();
+            self.suppress_depth = 0;
+        }
         // The in-flight Throwable object. A user `throw` of an object is itself
         // (EXC-1). An engine error (EXC-3a) is resolved to its prelude class by
         // name and a Throwable is synthesized carrying its message; if the class

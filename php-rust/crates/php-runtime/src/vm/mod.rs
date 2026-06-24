@@ -223,6 +223,8 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         error_handlers: Vec::new(),
         in_error_handler: false,
         final_flush: false,
+        suppress_depth: 0,
+        suppress_marks: Vec::new(),
         frames: Vec::new(),
         next_object_id: 1,
         next_resource_id: 5,
@@ -479,6 +481,14 @@ struct Vm<'m> {
     /// `render_fatal`, and shutdown destructors must render raw and never call a
     /// user error handler. Load-bearing guard in [`Vm::raise_diagnostic`].
     final_flush: bool,
+    /// `@` error-suppression nesting depth (step 48): while `> 0`, `flush_diags`
+    /// renders nothing, and the diagnostics raised inside are dropped when the
+    /// suppressed expression finishes (`Op::SuppressEnd`).
+    suppress_depth: u32,
+    /// Saved `diags` lengths, one per active `@` (innermost last): `Op::SuppressEnd`
+    /// truncates back to its mark, dropping the diagnostics raised under it. An
+    /// unwind past an active `@` truncates to the outermost mark and resets both.
+    suppress_marks: Vec<usize>,
     frames: Vec<Frame<'m>>,
     /// Monotonic object-handle counter (`#N` in `var_dump`), starting at 1 like
     /// the tree-walker's `next_object_id`.
@@ -549,6 +559,11 @@ impl<'m> Vm<'m> {
     /// stamped with `line` and the module file (E1; mirrors `eval::flush_diags`):
     /// `\n{Severity}: {message} in {file} on line {line}\n`.
     fn flush_diags(&mut self, line: Line) -> Result<(), PhpError> {
+        // Under `@` (step 48) nothing renders; the suppressed diagnostics are
+        // dropped at `Op::SuppressEnd` once the expression finishes.
+        if self.suppress_depth > 0 {
+            return Ok(());
+        }
         while self.diags_rendered < self.diags.len() {
             // Map each built-in diagnostic to its E_* number, then route through the
             // shared chokepoint. The message is cloned and `diags_rendered` advanced
@@ -2312,6 +2327,18 @@ impl<'m> Vm<'m> {
                     if let crate::bytecode::Const::Str(b) = &self.frames[top].func.consts[i as usize] {
                         let msg = String::from_utf8_lossy(b).into_owned();
                         self.diags.push(Diag::Notice(msg));
+                    }
+                }
+                Op::SuppressBegin => {
+                    self.suppress_marks.push(self.diags.len());
+                    self.suppress_depth += 1;
+                }
+                Op::SuppressEnd => {
+                    self.suppress_depth = self.suppress_depth.saturating_sub(1);
+                    if let Some(saved) = self.suppress_marks.pop() {
+                        // Drop the diagnostics raised under `@` (never rendered, as
+                        // `flush_diags` was a no-op while suppressed).
+                        self.diags.truncate(saved);
                     }
                 }
                 Op::MatchError(slot) => {
@@ -5801,6 +5828,36 @@ mod tests {
             b"a\nWarning: Undefined variable $undef in test.php on line 3\nb".to_vec()
         );
         assert_eq!(out.stdout, b"ab");
+    }
+
+    #[test]
+    fn error_suppression_silences_warnings_only() {
+        // `@$x` yields NULL with the undefined-variable warning dropped.
+        let out = vm_outcome(b"<?php echo @$x === null ? 'N' : '?';");
+        assert_eq!(out.stdout, b"N");
+        assert!(!String::from_utf8_lossy(&out.rendered).contains("Undefined"));
+        // Control: without `@`, the warning renders.
+        let ctl = vm_outcome(b"<?php echo $y === null ? 'N' : '?';");
+        assert!(String::from_utf8_lossy(&ctl.rendered).contains("Undefined variable $y"));
+    }
+
+    #[test]
+    fn error_suppression_does_not_swallow_throwable() {
+        // `@` silences warnings, not engine errors: a DivisionByZeroError from
+        // `@(1 % 0)` still propagates to the catch, and suppression is cleared.
+        assert_eq!(
+            vm_stdout(
+                b"<?php try { echo @(1 % 0); } catch (\\DivisionByZeroError $e) { echo 'caught'; } \
+                  echo $z;"
+            ),
+            b"caught"
+        );
+        // The trailing `echo $z` warns normally — suppression did not leak past
+        // the abandoned `@`.
+        let out = vm_outcome(
+            b"<?php try { echo @(1 % 0); } catch (\\DivisionByZeroError $e) {} echo $z;",
+        );
+        assert!(String::from_utf8_lossy(&out.rendered).contains("Undefined variable $z"));
     }
 
     #[test]

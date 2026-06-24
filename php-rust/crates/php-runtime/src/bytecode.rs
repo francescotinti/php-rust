@@ -729,6 +729,15 @@ pub enum Op {
     /// raises but does not abort on.
     EmitNotice(ConstIdx),
 
+    /// `[] -> []` — enter an `@` error-suppression region (step 48): mark the
+    /// current diagnostics length and raise the suppress depth so `flush_diags`
+    /// renders nothing until the matching [`Op::SuppressEnd`].
+    SuppressBegin,
+    /// `[] -> []` — leave an `@` region: lower the suppress depth and drop every
+    /// diagnostic raised since the matching [`Op::SuppressBegin`]. The suppressed
+    /// expression's value is already on the stack and is untouched.
+    SuppressEnd,
+
     /// Release every tracked object the program can no longer reach
     /// (`Rc::strong_count == 1`), running `__destruct` on each, to a fixpoint
     /// (OOP-3d). Emitted by the compiler after each top-level (`main`) statement,

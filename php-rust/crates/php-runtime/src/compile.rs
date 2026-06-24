@@ -1181,6 +1181,14 @@ impl<'a> FnCompiler<'a> {
                     }
                 }
             }
+            ExprKind::Suppress(e) => {
+                // `@expr` (step 48): suppress diagnostics raised while evaluating
+                // `expr`, leaving its value on the stack. Engine errors / thrown
+                // objects still propagate (the unwind clears suppression).
+                self.emit(Op::SuppressBegin);
+                self.expr(e)?;
+                self.emit(Op::SuppressEnd);
+            }
             ExprKind::And(a, b) => self.short_circuit(a, b, false)?,
             ExprKind::Or(a, b) => self.short_circuit(a, b, true)?,
             ExprKind::Xor(a, b) => {
