@@ -24,5 +24,8 @@ pub mod scanf;
 pub mod unserialize;
 
 pub use builtin::{Builtin, BuiltinFn, BuiltinRefFn, Ctx, Registry};
-pub use eval::{run, run_source, run_source_with, run_with, Outcome};
+// Session F switch: the bytecode VM is the production engine. `run_source` /
+// `run_source_with` / `Outcome` now resolve to the VM (the tree-walker in
+// `eval` is retained only for the corpus `--engine=eval` baseline until F2).
 pub use lower::{lower_source, LowerError};
+pub use vm::{run_source, run_source_with, VmOutcome as Outcome, VmRunError};

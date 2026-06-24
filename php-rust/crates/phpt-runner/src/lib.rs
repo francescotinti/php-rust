@@ -24,7 +24,7 @@ use std::fs;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
-use php_runtime::{run_source_with, LowerError, Registry};
+use php_runtime::{LowerError, Registry};
 use regex::Regex;
 
 /// The classification of a single `.phpt` file.
@@ -209,7 +209,9 @@ pub fn run_phpt_with(src: &[u8], name: &[u8], reg: &Registry, engine: Engine) ->
     // and an optional fatal message; the VM additionally reports a construct its
     // bytecode compiler rejects (a VM-vs-eval coverage gap), skipped distinctly.
     let run: Result<(Vec<u8>, Option<String>), TestResult> = match engine {
-        Engine::Eval => match run_source_with(name, source, reg) {
+        // Session F: `run_source_with` is now the VM, so the `--engine=eval`
+        // baseline calls the tree-walker explicitly (retained until F2).
+        Engine::Eval => match php_runtime::eval::run_source_with(name, source, reg) {
             Ok(o) => Ok((o.rendered, o.fatal.as_ref().map(|e| e.message().to_string()))),
             Err(e) => Err(TestResult::skip("parse", format!("lower error: {e}"))),
         },
