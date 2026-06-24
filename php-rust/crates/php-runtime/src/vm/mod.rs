@@ -237,6 +237,7 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         fiber_stack: Vec::new(),
         fiber_class_id: module.class_index.get(&b"fiber"[..]).copied(),
         throwable_id: module.class_index.get(&b"throwable"[..]).copied(),
+        arrayaccess_id: module.class_index.get(&b"arrayaccess"[..]).copied(),
         enum_cache: HashMap::new(),
         constants: HashMap::new(),
         mb_regex: crate::mbregex::MbRegexState::default(),
@@ -548,6 +549,10 @@ struct Vm<'m> {
     /// (EXC-3b). Used to recognise a `new`-constructed exception so its
     /// `line`/`file` are stamped at allocation time, as PHP does.
     throwable_id: Option<ClassId>,
+    /// The `ArrayAccess` interface id, so `$o[$k]` read/write/isset/unset on an
+    /// implementing object dispatches `offsetGet`/`offsetSet`/`offsetExists`/
+    /// `offsetUnset` instead of the array path (step 51).
+    arrayaccess_id: Option<ClassId>,
     /// Interned enum case singletons, keyed by (enum class id, case index), so
     /// `E::Case === E::Case` (Session A). Materialised lazily on first `E::Case`.
     enum_cache: HashMap<(ClassId, u32), Rc<RefCell<Object>>>,
@@ -1120,6 +1125,11 @@ impl<'m> Vm<'m> {
                 Op::FetchDim => {
                     let key = self.frames[top].stack.pop().expect("FetchDim key");
                     let base = self.frames[top].stack.pop().expect("FetchDim base");
+                    // `$o[$k]` on an ArrayAccess object dispatches `offsetGet` (step 51).
+                    if let Some(recv) = self.as_arrayaccess(&base) {
+                        self.enter_offset_call(recv, b"offsetGet", vec![key], false)?;
+                        continue;
+                    }
                     let v = read_dim_warn(&base, &key, &mut self.diags);
                     self.frames[top].stack.push(v);
                 }
@@ -1131,6 +1141,16 @@ impl<'m> Vm<'m> {
                 Op::AssignPath { base, nkeys, append } => {
                     let value = self.frames[top].stack.pop().expect("AssignPath value");
                     let mut keys = self.pop_keys(top, nkeys);
+                    // `$o[$k] = v` / `$o[] = v` on an ArrayAccess object dispatches
+                    // `offsetSet` (a single step only); the expression yields `v`.
+                    if nkeys + append as u32 == 1 {
+                        if let Some(recv) = self.as_arrayaccess(self.base_cell(base, top)) {
+                            let key = if append { Zval::Null } else { keys.pop().expect("set key") };
+                            self.frames[top].stack.push(value.clone());
+                            self.enter_offset_call(recv, b"offsetSet", vec![key, value], true)?;
+                            continue;
+                        }
+                    }
                     let last = if append {
                         Last::Append { value }
                     } else {
@@ -1154,6 +1174,15 @@ impl<'m> Vm<'m> {
                 }
                 Op::IssetPath { base, nkeys } => {
                     let keys = self.pop_keys(top, nkeys);
+                    // `isset($o[$k])` on an ArrayAccess object is `offsetExists($k)`
+                    // (a single step only; it does not call `offsetGet`).
+                    if nkeys == 1 {
+                        if let Some(recv) = self.as_arrayaccess(self.base_cell(base, top)) {
+                            let key = keys.into_iter().next().expect("isset key");
+                            self.enter_offset_call(recv, b"offsetExists", vec![key], false)?;
+                            continue;
+                        }
+                    }
                     let set = matches!(
                         silent_get_path(self.base_cell(base, top), &keys),
                         Some(v) if !matches!(v, Zval::Null | Zval::Undef)
@@ -1170,6 +1199,15 @@ impl<'m> Vm<'m> {
                 }
                 Op::UnsetPath { base, nkeys } => {
                     let keys = self.pop_keys(top, nkeys);
+                    // `unset($o[$k])` on an ArrayAccess object is `offsetUnset($k)`
+                    // (a single step only).
+                    if nkeys == 1 {
+                        if let Some(recv) = self.as_arrayaccess(self.base_cell(base, top)) {
+                            let key = keys.into_iter().next().expect("unset key");
+                            self.enter_offset_call(recv, b"offsetUnset", vec![key], true)?;
+                            continue;
+                        }
+                    }
                     let cell = match base {
                         DimBase::Local(s) => &mut self.frames[top].slots[s as usize],
                         DimBase::Global(s) => &mut self.frames[0].slots[s as usize],
@@ -2681,6 +2719,48 @@ impl<'m> Vm<'m> {
             DimBase::Local(s) => &self.frames[top].slots[s as usize],
             DimBase::Global(s) => &self.frames[0].slots[s as usize],
         }
+    }
+
+    /// If `v` (deref'd) is an object implementing `ArrayAccess`, return it as a
+    /// receiver value for an `offset*` dispatch; otherwise `None` (step 51).
+    fn as_arrayaccess(&self, v: &Zval) -> Option<Zval> {
+        let aa = self.arrayaccess_id?;
+        match v.deref_clone() {
+            Zval::Object(o)
+                if is_instance_of(self.module, o.borrow().class_id as usize, aa) =>
+            {
+                Some(Zval::Object(o))
+            }
+            _ => None,
+        }
+    }
+
+    /// Enter an `ArrayAccess` `offset*` method frame on `recv` with `args` bound
+    /// (step 51). `discard` routes the return into a throwaway cell (the `void`
+    /// `offsetSet`/`offsetUnset`); otherwise it flows to the caller's stack (the
+    /// value of `offsetGet`/`offsetExists`). The receiver implements ArrayAccess,
+    /// so the method always resolves.
+    fn enter_offset_call(
+        &mut self,
+        recv: Zval,
+        method: &[u8],
+        args: Vec<Zval>,
+        discard: bool,
+    ) -> Result<(), PhpError> {
+        let cid = object_class_id(&recv).expect("ArrayAccess receiver is an object");
+        let module = self.module;
+        let (defc, midx) = resolve_method_runtime(module, cid, method)
+            .expect("ArrayAccess implementor defines the offset method");
+        let callee = &module.classes[defc].methods[midx].func;
+        let mut frame = Frame::new(callee);
+        bind_params(&mut frame, args);
+        frame.this = Some(recv);
+        frame.class = Some(defc);
+        frame.static_class = Some(cid);
+        if discard {
+            frame.ret_cell = Some(Rc::new(RefCell::new(Zval::Null)));
+        }
+        self.enter_callee(frame)
     }
 
     /// Pop `n` index values off the current frame, restoring source order.
