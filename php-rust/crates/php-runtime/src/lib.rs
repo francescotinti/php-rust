@@ -11,6 +11,7 @@
 
 pub mod builtin;
 pub mod bytecode;
+pub mod coerce;
 pub mod compile;
 pub mod eval;
 pub mod hir;
