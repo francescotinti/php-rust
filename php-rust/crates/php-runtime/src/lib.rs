@@ -1,9 +1,10 @@
-//! PHP runtime: HIR, the mago→HIR lowering bridge, and (later) the evaluator.
+//! PHP runtime: HIR, the mago→HIR lowering bridge, the bytecode compiler, and the
+//! bytecode VM (the production execution engine).
 //!
 //! Architecture (see plan / diary 02-mapping-table, D-G8/D-G9):
 //!
 //! ```text
-//! PHP source ──mago──► AST ──lower──► HIR ──► evaluator (tree-walk)
+//! PHP source ──mago──► AST ──lower──► HIR ──compile──► bytecode ──► VM
 //! ```
 //!
 //! This crate owns the AST→HIR boundary so the rest of the runtime never sees
@@ -13,7 +14,6 @@ pub mod builtin;
 pub mod bytecode;
 pub mod coerce;
 pub mod compile;
-pub mod eval;
 pub mod hir;
 pub mod json;
 pub mod lower;
@@ -24,8 +24,8 @@ pub mod scanf;
 pub mod unserialize;
 
 pub use builtin::{Builtin, BuiltinFn, BuiltinRefFn, Ctx, Registry};
-// Session F switch: the bytecode VM is the production engine. `run_source` /
-// `run_source_with` / `Outcome` now resolve to the VM (the tree-walker in
-// `eval` is retained only for the corpus `--engine=eval` baseline until F2).
+// Session F: the bytecode VM is the sole production engine. `run_source` /
+// `run_source_with` / `Outcome` resolve to the VM; the tree-walking `eval` module
+// was deleted once every construct it handled became VM-native (F2).
 pub use lower::{lower_source, LowerError};
 pub use vm::{run_source, run_source_with, VmOutcome as Outcome, VmRunError};

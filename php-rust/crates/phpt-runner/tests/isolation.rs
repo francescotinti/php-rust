@@ -1,6 +1,9 @@
 //! `--isolate` mode: each `.phpt` runs in its own child process, so a crash
-//! (native stack overflow → SIGABRT, or a panic) is contained as one reported
-//! failure instead of aborting the whole batch (DevEx hardening).
+//! (a panic, OOM, or a runtime that aborts) is contained as one reported failure
+//! instead of aborting the whole batch (DevEx hardening). The bytecode VM runs
+//! pure PHP recursion iteratively (an explicit frame stack), so unbounded
+//! recursion no longer overflows the native stack — it is caught as a clean
+//! "Maximum call stack depth" fatal, which the runner still reports per-test.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -16,8 +19,9 @@ fn isolate_contains_a_crashing_test_and_still_runs_the_rest() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("mkdir");
 
-    // `aa_*` sorts first: an unbounded closure recursion overflows the native
-    // stack (SIGABRT) — a crash vector the in-process runner cannot survive.
+    // `aa_*` sorts first: an unbounded closure recursion. The VM contains it as a
+    // clean "Maximum call stack depth" fatal (an explicit frame stack, no native
+    // overflow), so it surfaces as a normal per-test failure, not a host crash.
     write(
         &dir,
         "aa_crash.phpt",
@@ -40,12 +44,13 @@ fn isolate_contains_a_crashing_test_and_still_runs_the_rest() {
     let _ = std::fs::remove_dir_all(&dir);
 
     let stdout = String::from_utf8_lossy(&out.stdout);
-    // The batch completes: the normal test passed (so the crash did not abort
-    // the run), and the crashing test is recorded as one contained failure.
+    // The batch completes: the normal test passed (so the runaway did not abort
+    // the run), and the runaway test is recorded as one contained failure with the
+    // VM's call-depth fatal in its detail.
     assert!(stdout.contains("pass:    1"), "stdout:\n{stdout}");
     assert!(stdout.contains("fail:    1"), "stdout:\n{stdout}");
     assert!(
-        stdout.contains("isolated worker crashed"),
-        "expected a contained crash, stdout:\n{stdout}"
+        stdout.contains("Maximum call stack depth"),
+        "expected a contained call-depth fatal, stdout:\n{stdout}"
     );
 }
