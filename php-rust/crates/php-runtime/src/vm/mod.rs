@@ -238,6 +238,8 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         fiber_class_id: module.class_index.get(&b"fiber"[..]).copied(),
         throwable_id: module.class_index.get(&b"throwable"[..]).copied(),
         arrayaccess_id: module.class_index.get(&b"arrayaccess"[..]).copied(),
+        iterator_id: module.class_index.get(&b"iterator"[..]).copied(),
+        iteratoraggregate_id: module.class_index.get(&b"iteratoraggregate"[..]).copied(),
         enum_cache: HashMap::new(),
         constants: HashMap::new(),
         mb_regex: crate::mbregex::MbRegexState::default(),
@@ -429,6 +431,38 @@ enum IterState {
     /// is false until the first `IterNext` (which starts the generator rather than
     /// advancing it), matching the tree-walker's read-then-resume order.
     Gen { rc: Rc<RefCell<GenState>>, primed: bool },
+    /// `foreach` over an object implementing `Iterator` / `IteratorAggregate`
+    /// (step 51): the protocol methods are driven by a re-entrant state machine in
+    /// `IterNext` (see [`ObjStage`]). `pending` is the cell the last protocol call
+    /// wrote into; `cur_val` holds `current()` while `key()` is fetched.
+    Object { it: Zval, stage: ObjStage, pending: Option<Rc<RefCell<Zval>>>, cur_val: Option<Zval> },
+}
+
+/// The step the object-iterator state machine is about to perform (step 51). A
+/// `NeedX` stage *issues* the protocol call; the paired `AfterX` *consumes* its
+/// captured result when `IterNext` re-runs.
+#[derive(Clone, Copy, PartialEq)]
+enum ObjStage {
+    Start,
+    AfterAggregate,
+    NeedRewind,
+    NeedValid,
+    AfterValid,
+    NeedCurrent,
+    AfterCurrent,
+    NeedKey,
+    AfterKey,
+    NeedNext,
+}
+
+/// Where a protocol method's return value is routed (see [`Vm::enter_object_method`]).
+enum RetMode {
+    /// Flow to the caller's operand stack (a value getter like `offsetGet`).
+    Stack,
+    /// Drop it (a `void` method like `offsetSet`/`rewind`/`next`).
+    Discard,
+    /// Write it into this cell — the re-entrant iterator reads it back.
+    Capture(Rc<RefCell<Zval>>),
 }
 
 /// In-progress `yield from` delegation (GEN-3), parked on the generator frame so
@@ -553,6 +587,10 @@ struct Vm<'m> {
     /// implementing object dispatches `offsetGet`/`offsetSet`/`offsetExists`/
     /// `offsetUnset` instead of the array path (step 51).
     arrayaccess_id: Option<ClassId>,
+    /// The `Iterator` / `IteratorAggregate` interface ids, so `foreach` over an
+    /// implementing object drives the iterator protocol (step 51).
+    iterator_id: Option<ClassId>,
+    iteratoraggregate_id: Option<ClassId>,
     /// Interned enum case singletons, keyed by (enum class id, case index), so
     /// `E::Case === E::Case` (Session A). Materialised lazily on first `E::Case`.
     enum_cache: HashMap<(ClassId, u32), Rc<RefCell<Object>>>,
@@ -1127,7 +1165,7 @@ impl<'m> Vm<'m> {
                     let base = self.frames[top].stack.pop().expect("FetchDim base");
                     // `$o[$k]` on an ArrayAccess object dispatches `offsetGet` (step 51).
                     if let Some(recv) = self.as_arrayaccess(&base) {
-                        self.enter_offset_call(recv, b"offsetGet", vec![key], false)?;
+                        self.enter_object_method(recv, b"offsetGet", vec![key], RetMode::Stack)?;
                         continue;
                     }
                     let v = read_dim_warn(&base, &key, &mut self.diags);
@@ -1147,7 +1185,7 @@ impl<'m> Vm<'m> {
                         if let Some(recv) = self.as_arrayaccess(self.base_cell(base, top)) {
                             let key = if append { Zval::Null } else { keys.pop().expect("set key") };
                             self.frames[top].stack.push(value.clone());
-                            self.enter_offset_call(recv, b"offsetSet", vec![key, value], true)?;
+                            self.enter_object_method(recv, b"offsetSet", vec![key, value], RetMode::Discard)?;
                             continue;
                         }
                     }
@@ -1179,7 +1217,7 @@ impl<'m> Vm<'m> {
                     if nkeys == 1 {
                         if let Some(recv) = self.as_arrayaccess(self.base_cell(base, top)) {
                             let key = keys.into_iter().next().expect("isset key");
-                            self.enter_offset_call(recv, b"offsetExists", vec![key], false)?;
+                            self.enter_object_method(recv, b"offsetExists", vec![key], RetMode::Stack)?;
                             continue;
                         }
                     }
@@ -1204,7 +1242,7 @@ impl<'m> Vm<'m> {
                     if nkeys == 1 {
                         if let Some(recv) = self.as_arrayaccess(self.base_cell(base, top)) {
                             let key = keys.into_iter().next().expect("unset key");
-                            self.enter_offset_call(recv, b"offsetUnset", vec![key], true)?;
+                            self.enter_object_method(recv, b"offsetUnset", vec![key], RetMode::Discard)?;
                             continue;
                         }
                     }
@@ -1390,18 +1428,24 @@ impl<'m> Vm<'m> {
                 }
                 Op::IterInit => {
                     let iterable = self.frames[top].stack.pop().expect("IterInit iterable");
-                    // A generator iterates live (no snapshot); an array/other is
-                    // snapshotted by value as before (GEN).
-                    if let Zval::Generator(gs) = iterable.deref_clone() {
-                        self.frames[top]
-                            .iters
-                            .push(IterState::Gen { rc: gs, primed: false });
-                    } else {
-                        self.frames[top].iters.push(IterState::ByVal {
-                            entries: snapshot_entries(&iterable),
-                            pos: 0,
-                        });
-                    }
+                    let deref = iterable.deref_clone();
+                    // A generator iterates live (no snapshot); an `Iterator` /
+                    // `IteratorAggregate` object drives the protocol via the
+                    // re-entrant state machine in `IterNext` (step 51); an array /
+                    // plain object is snapshotted by value (GEN).
+                    let it_state = match &deref {
+                        Zval::Generator(gs) => IterState::Gen { rc: Rc::clone(gs), primed: false },
+                        Zval::Object(o) if self.is_traversable(o.borrow().class_id as usize) => {
+                            IterState::Object {
+                                it: deref.clone(),
+                                stage: ObjStage::Start,
+                                pending: None,
+                                cur_val: None,
+                            }
+                        }
+                        _ => IterState::ByVal { entries: snapshot_entries(&iterable), pos: 0 },
+                    };
+                    self.frames[top].iters.push(it_state);
                 }
                 Op::IterNext { value, key, end } => {
                     // A generator step: prime on the first visit, otherwise resume
@@ -1435,6 +1479,102 @@ impl<'m> Vm<'m> {
                             }
                         }
                         continue;
+                    }
+                    // Object iterator (Iterator / IteratorAggregate): a re-entrant
+                    // state machine drives the protocol methods one per re-entry,
+                    // each call's return captured via `ret_cell` (step 51).
+                    let obj_stage = match self.frames[top].iters.last() {
+                        Some(IterState::Object { stage, .. }) => Some(*stage),
+                        _ => None,
+                    };
+                    if let Some(stage) = obj_stage {
+                        match stage {
+                            ObjStage::Start => {
+                                let it = self.obj_iter_value(top);
+                                let cid = object_class_id(&it).unwrap_or(0);
+                                if self.is_aggregate(cid) {
+                                    self.issue_iter_call(top, ip, b"getIterator", vec![], true, ObjStage::AfterAggregate)?;
+                                } else {
+                                    self.set_obj_stage(top, ObjStage::NeedRewind);
+                                    self.frames[top].ip = ip;
+                                }
+                                continue;
+                            }
+                            ObjStage::AfterAggregate => {
+                                let inner = self.take_obj_pending(top).deref_clone();
+                                let it_obj_cid = object_class_id(&inner);
+                                let new_state = match &inner {
+                                    Zval::Generator(gs) => IterState::Gen { rc: Rc::clone(gs), primed: false },
+                                    Zval::Object(_) if it_obj_cid.is_some_and(|c| self.is_traversable(c)) => {
+                                        IterState::Object { it: inner.clone(), stage: ObjStage::Start, pending: None, cur_val: None }
+                                    }
+                                    _ => {
+                                        let cls = String::from_utf8_lossy(&self.module.classes[object_class_id(&self.obj_iter_value(top)).unwrap_or(0)].name).into_owned();
+                                        return Err(PhpError::Error(format!(
+                                            "Objects returned by {cls}::getIterator() must be traversable or implement interface Iterator"
+                                        )));
+                                    }
+                                };
+                                *self.frames[top].iters.last_mut().expect("object iterator") = new_state;
+                                self.frames[top].ip = ip; // re-run with the resolved iterator
+                                continue;
+                            }
+                            ObjStage::NeedRewind => {
+                                self.issue_iter_call(top, ip, b"rewind", vec![], false, ObjStage::NeedValid)?;
+                                continue;
+                            }
+                            ObjStage::NeedValid => {
+                                self.issue_iter_call(top, ip, b"valid", vec![], true, ObjStage::AfterValid)?;
+                                continue;
+                            }
+                            ObjStage::AfterValid => {
+                                let v = self.take_obj_pending(top);
+                                let valid = convert::to_bool(&v, &mut self.diags);
+                                if valid {
+                                    self.set_obj_stage(top, ObjStage::NeedCurrent);
+                                    self.frames[top].ip = ip;
+                                } else {
+                                    self.frames[top].ip = end as usize;
+                                }
+                                continue;
+                            }
+                            ObjStage::NeedCurrent => {
+                                self.issue_iter_call(top, ip, b"current", vec![], true, ObjStage::AfterCurrent)?;
+                                continue;
+                            }
+                            ObjStage::AfterCurrent => {
+                                let v = self.take_obj_pending(top);
+                                if let Some(IterState::Object { cur_val, stage, .. }) = self.frames[top].iters.last_mut() {
+                                    *cur_val = Some(v);
+                                    *stage = ObjStage::NeedKey;
+                                }
+                                self.frames[top].ip = ip;
+                                continue;
+                            }
+                            ObjStage::NeedKey => {
+                                self.issue_iter_call(top, ip, b"key", vec![], true, ObjStage::AfterKey)?;
+                                continue;
+                            }
+                            ObjStage::AfterKey => {
+                                let k = self.take_obj_pending(top);
+                                let v = match self.frames[top].iters.last_mut() {
+                                    Some(IterState::Object { cur_val, stage, .. }) => {
+                                        *stage = ObjStage::NeedNext;
+                                        cur_val.take().unwrap_or(Zval::Null)
+                                    }
+                                    _ => Zval::Null,
+                                };
+                                store_slot(&mut self.frames[top].slots[value as usize], v.deref_clone());
+                                if let Some(ks) = key {
+                                    store_slot(&mut self.frames[top].slots[ks as usize], k.deref_clone());
+                                }
+                                continue; // ip is already past IterNext: run the body
+                            }
+                            ObjStage::NeedNext => {
+                                self.issue_iter_call(top, ip, b"next", vec![], false, ObjStage::NeedValid)?;
+                                continue;
+                            }
+                        }
                     }
                     // Read the cursor and bump it in a scoped borrow, then touch
                     // the slots — keeping the `iters` and `slots` borrows disjoint.
@@ -2721,6 +2861,19 @@ impl<'m> Vm<'m> {
         }
     }
 
+    /// Whether class `cid` implements `Iterator` or `IteratorAggregate` (i.e. a
+    /// `foreach` over it drives the iterator protocol), step 51.
+    fn is_traversable(&self, cid: usize) -> bool {
+        self.iterator_id.is_some_and(|i| is_instance_of(self.module, cid, i))
+            || self.iteratoraggregate_id.is_some_and(|i| is_instance_of(self.module, cid, i))
+    }
+
+    /// Whether class `cid` implements `IteratorAggregate` (foreach calls
+    /// `getIterator()` first), step 51.
+    fn is_aggregate(&self, cid: usize) -> bool {
+        self.iteratoraggregate_id.is_some_and(|i| is_instance_of(self.module, cid, i))
+    }
+
     /// If `v` (deref'd) is an object implementing `ArrayAccess`, return it as a
     /// receiver value for an `offset*` dispatch; otherwise `None` (step 51).
     fn as_arrayaccess(&self, v: &Zval) -> Option<Zval> {
@@ -2735,32 +2888,98 @@ impl<'m> Vm<'m> {
         }
     }
 
-    /// Enter an `ArrayAccess` `offset*` method frame on `recv` with `args` bound
-    /// (step 51). `discard` routes the return into a throwaway cell (the `void`
-    /// `offsetSet`/`offsetUnset`); otherwise it flows to the caller's stack (the
-    /// value of `offsetGet`/`offsetExists`). The receiver implements ArrayAccess,
-    /// so the method always resolves.
-    fn enter_offset_call(
+    /// Enter a protocol method frame (`offset*` for ArrayAccess, `rewind`/`valid`/
+    /// `current`/`key`/`next`/`getIterator` for the iterator protocol) on `recv`
+    /// with `args` bound (step 51). [`RetMode`] selects where the return goes:
+    /// `Stack` flows it to the caller's operand stack (a value getter), `Discard`
+    /// drops it (a `void` method), `Capture` writes it into the caller's cell (the
+    /// re-entrant iterator state machine reads it back).
+    fn enter_object_method(
         &mut self,
         recv: Zval,
         method: &[u8],
         args: Vec<Zval>,
-        discard: bool,
+        ret: RetMode,
     ) -> Result<(), PhpError> {
-        let cid = object_class_id(&recv).expect("ArrayAccess receiver is an object");
+        let cid = object_class_id(&recv).expect("protocol receiver is an object");
         let module = self.module;
-        let (defc, midx) = resolve_method_runtime(module, cid, method)
-            .expect("ArrayAccess implementor defines the offset method");
+        let (defc, midx) = resolve_method_runtime(module, cid, method).ok_or_else(|| {
+            PhpError::Error(format!(
+                "Call to undefined method {}::{}()",
+                String::from_utf8_lossy(&module.classes[cid].name),
+                String::from_utf8_lossy(method)
+            ))
+        })?;
         let callee = &module.classes[defc].methods[midx].func;
         let mut frame = Frame::new(callee);
         bind_params(&mut frame, args);
         frame.this = Some(recv);
         frame.class = Some(defc);
         frame.static_class = Some(cid);
-        if discard {
-            frame.ret_cell = Some(Rc::new(RefCell::new(Zval::Null)));
-        }
+        frame.ret_cell = match ret {
+            RetMode::Stack => None,
+            RetMode::Discard => Some(Rc::new(RefCell::new(Zval::Null))),
+            RetMode::Capture(cell) => Some(cell),
+        };
         self.enter_callee(frame)
+    }
+
+    /// Issue one object-iterator protocol call from `IterNext`: advance the active
+    /// `IterState::Object` to `next` stage, rewind the loop frame's `ip` so
+    /// `IterNext` re-runs once the call returns, and enter the method (step 51).
+    /// `capture` keeps the return (read back via `pending`); otherwise it is a
+    /// `void` call (`rewind`/`next`).
+    fn issue_iter_call(
+        &mut self,
+        top: usize,
+        ip: usize,
+        method: &[u8],
+        args: Vec<Zval>,
+        capture: bool,
+        next: ObjStage,
+    ) -> Result<(), PhpError> {
+        let cell = if capture { Some(Rc::new(RefCell::new(Zval::Null))) } else { None };
+        let it = {
+            let Some(IterState::Object { it, stage, pending, .. }) =
+                self.frames[top].iters.last_mut()
+            else {
+                unreachable!("issue_iter_call without an object iterator");
+            };
+            *stage = next;
+            *pending = cell.clone();
+            it.clone()
+        };
+        self.frames[top].ip = ip; // re-run IterNext after the protocol call returns
+        let ret = match cell {
+            Some(c) => RetMode::Capture(c),
+            None => RetMode::Discard,
+        };
+        self.enter_object_method(it, method, args, ret)
+    }
+
+    /// The receiver of the active object iterator (the `Iterator`/aggregate value).
+    fn obj_iter_value(&self, top: usize) -> Zval {
+        match self.frames[top].iters.last() {
+            Some(IterState::Object { it, .. }) => it.clone(),
+            _ => Zval::Null,
+        }
+    }
+
+    /// Set the active object iterator's stage.
+    fn set_obj_stage(&mut self, top: usize, stage: ObjStage) {
+        if let Some(IterState::Object { stage: s, .. }) = self.frames[top].iters.last_mut() {
+            *s = stage;
+        }
+    }
+
+    /// Take the value the last protocol call captured into the iterator's `pending`
+    /// cell (NULL if absent).
+    fn take_obj_pending(&mut self, top: usize) -> Zval {
+        let cell = match self.frames[top].iters.last_mut() {
+            Some(IterState::Object { pending, .. }) => pending.take(),
+            _ => None,
+        };
+        cell.map(|c| c.borrow().clone()).unwrap_or(Zval::Null)
     }
 
     /// Pop `n` index values off the current frame, restoring source order.

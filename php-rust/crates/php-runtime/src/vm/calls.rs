@@ -507,10 +507,18 @@ impl<'m> Vm<'m> {
         // A generator function materialises a `Generator` handle instead of running:
         // pop the (checked) frame back off and hand it to `make_generator`.
         if func.is_generator {
-            let frame = self.frames.pop().expect("just-pushed generator frame");
+            let mut frame = self.frames.pop().expect("just-pushed generator frame");
+            // Honour a return cell (e.g. an `IteratorAggregate::getIterator()` that
+            // is itself a generator): the handle goes to the cell, not the stack.
+            let ret_cell = frame.ret_cell.take();
             let gen = self.make_generator(frame);
-            let caller = self.frames.len() - 1;
-            self.frames[caller].stack.push(gen);
+            match ret_cell {
+                Some(cell) => *cell.borrow_mut() = gen,
+                None => {
+                    let caller = self.frames.len() - 1;
+                    self.frames[caller].stack.push(gen);
+                }
+            }
         }
         Ok(())
     }
