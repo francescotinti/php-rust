@@ -155,12 +155,23 @@ impl Zval {
             Zval::Ref(cell) => cell.borrow().error_type_name(),
             Zval::Closure(_) => "Closure",
             Zval::Generator(_) => "Generator",
-            // PHP uses the actual class name here; this funnel returns a
-            // `&'static str`, so we render the generic name and let the evaluator
-            // (which has the class table) build class-specific messages where it
-            // matters (step 19-1 simplification; refine if the corpus needs it).
+            // A user object: the generic name. Use [`Self::type_name_for_error`]
+            // where PHP names it by class (operand / type errors).
             Zval::Object(_) => "object",
             Zval::Resource(r) => r.borrow().type_name(),
+        }
+    }
+
+    /// Like [`Self::error_type_name`] but names an object by its **class** — as
+    /// PHP's `zend_zval_type_name` does in operand and type errors ("stdClass",
+    /// not "object"). Returns an owned `String` since a class name is dynamic.
+    pub fn type_name_for_error(&self) -> String {
+        match self {
+            Zval::Object(o) => {
+                String::from_utf8_lossy(o.borrow().class_name.as_bytes()).into_owned()
+            }
+            Zval::Ref(cell) => cell.borrow().type_name_for_error(),
+            other => other.error_type_name().to_string(),
         }
     }
 }

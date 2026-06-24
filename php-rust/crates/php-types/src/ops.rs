@@ -28,9 +28,9 @@ fn threeway(a: f64, b: f64) -> i32 {
 fn type_pair_error(a: &Zval, b: &Zval, sym: &str) -> PhpError {
     PhpError::TypeError(format!(
         "Unsupported operand types: {} {} {}",
-        a.error_type_name(),
+        a.type_name_for_error(),
         sym,
-        b.error_type_name()
+        b.type_name_for_error()
     ))
 }
 
@@ -343,13 +343,14 @@ pub fn bw_not(a: &Zval, diags: &mut Diags) -> OpResult {
         Zval::Long(l) => Ok(Zval::Long(!l)),
         Zval::Double(d) => Ok(Zval::Long(!dval_to_lval_safe(*d, diags))),
         Zval::Ref(c) => bw_not(&c.borrow(), diags),
-        // zend_zval_value_name: bools spell out their value (oracle: ~true).
+        // zend_zval_value_name: bools spell out their value (oracle: ~true), an
+        // object is named by its class.
         _ => Err(PhpError::TypeError(format!(
             "Cannot perform bitwise not on {}",
             match a {
-                Zval::Bool(true) => "true",
-                Zval::Bool(false) => "false",
-                other => other.error_type_name(),
+                Zval::Bool(true) => "true".to_string(),
+                Zval::Bool(false) => "false".to_string(),
+                other => other.type_name_for_error(),
             }
         ))),
     }
