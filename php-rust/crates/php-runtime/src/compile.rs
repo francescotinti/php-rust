@@ -2323,8 +2323,7 @@ impl<'a> FnCompiler<'a> {
             to_end.push(self.emit(Op::Jump(Addr::MAX)));
         }
         let unhandled = self.here();
-        let msg = self.konst(Const::Str(b"Unhandled match case".to_vec().into()));
-        self.emit(Op::Fatal(msg));
+        self.emit(Op::MatchError(t));
         let end = self.here();
         for (i, j) in to_body {
             self.patch(j, Op::JumpIfTrue(body_addrs[i]));

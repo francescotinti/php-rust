@@ -2203,6 +2203,13 @@ impl<'m> Vm<'m> {
                     };
                     return Err(PhpError::Error(msg));
                 }
+                Op::MatchError(slot) => {
+                    let subj = read_slot(&self.frames[top].slots[slot as usize]);
+                    return Err(PhpError::Error(format!(
+                        "Unhandled match case {}",
+                        match_case_repr(&subj)
+                    )));
+                }
                 Op::Sweep => {
                     let module = self.module;
                     // Release every now-unreachable tracked object, running one
@@ -4992,6 +4999,31 @@ fn apply_cast(kind: CastKind, a: &Zval, d: &mut Diags) -> Zval {
         },
         // `(object)` is lowered to a stub by the compiler (it needs VM state).
         CastKind::Object => unreachable!("VM saw an unported (object) cast"),
+    }
+}
+
+/// Render a `match` subject for the `UnhandledMatchError` message (mirrors
+/// `eval::match_case_repr`): scalars print their value (strings quoted), and
+/// composite/object values print `of type <name>`.
+fn match_case_repr(v: &Zval) -> String {
+    match v {
+        Zval::Long(i) => i.to_string(),
+        Zval::Bool(true) => "true".to_string(),
+        Zval::Bool(false) => "false".to_string(),
+        Zval::Null | Zval::Undef => "NULL".to_string(),
+        Zval::Double(d) => {
+            String::from_utf8_lossy(&php_types::dtoa::double_to_shortest(*d)).into_owned()
+        }
+        Zval::Str(s) => format!("'{}'", String::from_utf8_lossy(s.as_bytes())),
+        Zval::Array(_) => "of type array".to_string(),
+        Zval::Closure(_) => "of type Closure".to_string(),
+        Zval::Object(o) => format!(
+            "of type {}",
+            String::from_utf8_lossy(o.borrow().class_name.as_bytes())
+        ),
+        Zval::Generator(_) => "of type Generator".to_string(),
+        Zval::Resource(_) => "of type resource".to_string(),
+        Zval::Ref(c) => match_case_repr(&c.borrow()),
     }
 }
 
@@ -9479,6 +9511,23 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php class C { private $d=['n'=>10]; function __get($k){return $this->d[$k];} function __set($k,$v){$this->d[$k]=$v;} } $c=new C(); $c->n += 5; echo $c->n;"),
             b"15"
+        );
+    }
+
+    #[test]
+    fn match_unhandled_includes_subject_and_stringable_instanceof() {
+        // UnhandledMatchError carries the subject value in its message.
+        let program = lower_source(b"t.php", b"<?php echo match (5) { 1 => 'a' };").expect("lower");
+        let module = compile_program(&program, &Registry::new()).expect("compile");
+        let out = run_module(&module, &Registry::new());
+        match out.fatal {
+            Some(PhpError::Error(m)) => assert_eq!(m, "Unhandled match case 5"),
+            other => panic!("expected UnhandledMatchError, got {other:?}"),
+        }
+        // A class with __toString auto-implements Stringable.
+        assert_eq!(
+            vm_stdout(b"<?php class A { function __toString():string { return 'x'; } } class B {} echo ((new A) instanceof Stringable)?'1':'0', ((new B) instanceof Stringable)?'1':'0';"),
+            b"10"
         );
     }
 }

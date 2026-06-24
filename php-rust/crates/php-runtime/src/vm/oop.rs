@@ -242,6 +242,13 @@ pub(super) fn method_access_error(
 /// any ancestor, or any implemented interface (transitively), mirroring the
 /// tree-walker's `is_instance_of` (OOP-1 omits the `Stringable` auto-impl).
 pub(super) fn is_instance_of(module: &Module, class_id: ClassId, target: ClassId) -> bool {
+    // `Stringable` is auto-implemented (step 24-1): any class with a resolvable
+    // `__toString` satisfies it, even without an explicit `implements Stringable`.
+    if module.class_index.get(b"stringable".as_slice()) == Some(&target)
+        && resolve_method_runtime(module, class_id, b"__toString").is_some()
+    {
+        return true;
+    }
     let mut cur = Some(class_id);
     while let Some(c) = cur {
         if c == target {

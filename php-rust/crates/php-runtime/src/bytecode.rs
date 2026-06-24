@@ -490,6 +490,10 @@ pub enum Op {
     /// visibility error (the read context of `empty()` / `??`). A `__get` accessor
     /// still runs when present.
     PropGetSilent { name: Box<[u8]> },
+    /// `[] -> !` — raise `UnhandledMatchError` for a `match` with no matching arm
+    /// and no `default`, formatting the subject in `slot` into the message
+    /// ("Unhandled match case <repr>"). Like [`Op::Fatal`] but value-aware.
+    MatchError(Slot),
     /// `[obj] -> []` — `unset($o->p)`: remove the property (no-op if absent).
     PropUnset { name: Box<[u8]> },
     /// `[obj, arg0, …, arg{argc-1}] -> [result]` — instance method call resolved
