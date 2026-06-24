@@ -1339,8 +1339,18 @@ fn lower_hint(hint: &Hint) -> Option<TypeHint> {
         Hint::Callable(_) => HintKind::Callable,
         Hint::Iterable(_) => HintKind::Iterable,
         Hint::Object(_) => HintKind::Object,
-        // A class / interface name → an `instanceof` check at the binder.
-        Hint::Identifier(id) => HintKind::Class(function_name(id).into()),
+        // A class / interface name → an `instanceof` check at the binder. A name
+        // that is actually a reserved type keyword (a *qualified* `\int`, `\bool`,
+        // …, which PHP rejects as "must be unqualified") is left unenforced rather
+        // than mistaken for a class.
+        Hint::Identifier(id) => {
+            let name = function_name(id);
+            let bare = name.strip_prefix(b"\\").unwrap_or(&name);
+            if is_reserved_type_name(bare) {
+                return None;
+            }
+            HintKind::Class(name.into())
+        }
         Hint::Nullable(n) => {
             // `?T`: enforce only when the inner hint is itself enforced.
             let inner = lower_hint(n.hint)?;
@@ -1351,6 +1361,17 @@ fn lower_hint(hint: &Hint) -> Option<TypeHint> {
         _ => return None,
     };
     Some(TypeHint { kind, nullable: false })
+}
+
+/// Whether `name` (case-insensitive) is a reserved type keyword rather than a
+/// class name — so a qualified form like `\int` is not mistaken for a class.
+fn is_reserved_type_name(name: &[u8]) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_slice(),
+        b"int" | b"float" | b"string" | b"bool" | b"array" | b"object" | b"callable"
+            | b"iterable" | b"void" | b"never" | b"mixed" | b"null" | b"false" | b"true"
+            | b"self" | b"parent" | b"static"
+    )
 }
 
 fn strip_dollar(name: &[u8]) -> &[u8] {

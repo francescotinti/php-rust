@@ -1608,7 +1608,11 @@ impl<'m> Vm<'m> {
                     // returns an alias, so its return type stays unenforced; the
                     // init-thunk / magic path (`ret_cell`) carries no hint either.
                     let func = self.frames[top].func;
-                    if let Some(hint) = func.ret_hint.clone() {
+                    // A generator function's declared type (`: Generator`/`iterable`)
+                    // describes the returned *generator*, not its internal `return`
+                    // value — so it is never checked here (the body's `return` sets
+                    // `getReturn`).
+                    if let Some(hint) = func.ret_hint.clone().filter(|_| !func.is_generator) {
                         if !func.by_ref && self.frames[top].ret_cell.is_none() {
                             let strict = self.module.strict;
                             match self.coerce_or_check_hint(ret, &hint, strict) {
@@ -4637,16 +4641,14 @@ impl<'m> Vm<'m> {
                 }
             }
             HintKind::Iterable => {
-                if matches!(v, Zval::Array(_) | Zval::Generator(_))
-                    || self.value_instanceof_name(&v, b"Traversable")
-                {
+                if matches!(v, Zval::Array(_)) || self.value_satisfies_class(&v, b"Traversable") {
                     Ok(value)
                 } else {
                     Err(v.type_name_for_error())
                 }
             }
             HintKind::Class(name) => {
-                if self.value_instanceof_name(&v, name) {
+                if self.value_satisfies_class(&v, name) {
                     Ok(value)
                 } else {
                     Err(v.type_name_for_error())
@@ -4656,14 +4658,23 @@ impl<'m> Vm<'m> {
     }
 
     /// Whether `v` is an instance of the class/interface `name` (the `instanceof`
-    /// check behind a class type hint): resolve the name to a class id, then walk
-    /// `v`'s ancestry. A non-object or an unknown class name is `false`.
-    fn value_instanceof_name(&self, v: &Zval, name: &[u8]) -> bool {
-        let raw = name.strip_prefix(b"\\").unwrap_or(name);
-        let Some(&target) = self.module.class_index.get(&raw.to_ascii_lowercase()[..]) else {
-            return false;
-        };
-        matches!(object_class_id(v), Some(ocid) if class_is_a(self.module, ocid, target))
+    /// check behind a class type hint). A `Closure`/`Generator` value satisfies its
+    /// implicit class (`Closure`; `Generator`/`Iterator`/`Traversable`); a real
+    /// object walks its ancestry. A non-object or an unknown name is `false`.
+    fn value_satisfies_class(&self, v: &Zval, name: &[u8]) -> bool {
+        let lc = name.strip_prefix(b"\\").unwrap_or(name).to_ascii_lowercase();
+        match v {
+            Zval::Closure(_) => lc == b"closure",
+            Zval::Generator(_) => {
+                matches!(&lc[..], b"generator" | b"iterator" | b"traversable")
+            }
+            Zval::Object(o) => {
+                matches!(self.module.class_index.get(&lc[..]),
+                    Some(&target) if class_is_a(self.module, o.borrow().class_id as usize, target))
+            }
+            Zval::Ref(r) => self.value_satisfies_class(&r.borrow(), name),
+            _ => false,
+        }
     }
 
     /// Whether a bare name is callable: a user function, any registry builtin, or a
