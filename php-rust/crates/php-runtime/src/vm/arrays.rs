@@ -74,6 +74,13 @@ pub(super) fn unset_into(cell: &mut Zval, keys: &[Zval]) {
 /// is navigated *in place* (no copy-on-write, shared `Rc<RefCell>`); an array
 /// element auto-vivifies and copy-on-writes. `Index` steps consume `keys` in
 /// source order.
+/// The property name of a [`FieldStep::PropDyn`] step: the next stack-sourced key
+/// coerced to a string (step 51).
+pub(super) fn prop_dyn_name(keys: &mut std::vec::IntoIter<Zval>, diags: &mut Diags) -> Box<[u8]> {
+    let key = keys.next().expect("field prop-dyn name");
+    convert::to_zstr(&key, diags).as_bytes().into()
+}
+
 pub(super) fn field_write(
     target: &mut Zval,
     steps: &[FieldStep],
@@ -90,7 +97,15 @@ pub(super) fn field_write(
         return Ok(());
     };
     match first {
-        FieldStep::Prop(name) => {
+        FieldStep::Prop(_) | FieldStep::PropDyn => {
+            let owned;
+            let name: &[u8] = match first {
+                FieldStep::Prop(n) => n,
+                _ => {
+                    owned = prop_dyn_name(keys, diags);
+                    &owned
+                }
+            };
             match target {
                 Zval::Object(o) => {
                     let mut obj = o.borrow_mut();
@@ -176,16 +191,26 @@ pub(super) fn field_get(cell: &Zval, steps: &[FieldStep], keys: &mut std::vec::I
             other => Some(other.deref_clone()),
         },
         Some((first, rest)) => match first {
-            FieldStep::Prop(name) => match cell {
-                Zval::Object(o) => {
-                    let obj = o.borrow();
-                    match obj.props.get(name) {
-                        Some(v) => field_get(v, rest, keys),
-                        None => None,
+            FieldStep::Prop(_) | FieldStep::PropDyn => {
+                let owned;
+                let name: &[u8] = match first {
+                    FieldStep::Prop(n) => n,
+                    _ => {
+                        owned = prop_dyn_name(keys, &mut Diags::new());
+                        &owned
                     }
+                };
+                match cell {
+                    Zval::Object(o) => {
+                        let obj = o.borrow();
+                        match obj.props.get(name) {
+                            Some(v) => field_get(v, rest, keys),
+                            None => None,
+                        }
+                    }
+                    _ => None,
                 }
-                _ => None,
-            },
+            }
             FieldStep::Index => {
                 let key = keys.next()?;
                 match cell {
@@ -215,7 +240,15 @@ pub(super) fn field_unset(target: &mut Zval, steps: &[FieldStep], keys: &mut std
         return;
     };
     match first {
-        FieldStep::Prop(name) => {
+        FieldStep::Prop(_) | FieldStep::PropDyn => {
+            let owned;
+            let name: &[u8] = match first {
+                FieldStep::Prop(n) => n,
+                _ => {
+                    owned = prop_dyn_name(keys, &mut Diags::new());
+                    &owned
+                }
+            };
             if let Zval::Object(o) = target {
                 if rest.is_empty() {
                     o.borrow_mut().props.remove(name);

@@ -528,6 +528,15 @@ pub enum Op {
     /// visibility error (the read context of `empty()` / `??`). A `__get` accessor
     /// still runs when present.
     PropGetSilent { name: Box<[u8]> },
+    /// `[obj, name] -> [value]` — dynamic property read `$o->$n` / `$o->{expr}`:
+    /// the property name is popped from the stack (coerced to a string) and read
+    /// exactly like [`Op::PropGet`] (warns + NULL if missing; hooks/`__get` apply),
+    /// step 51.
+    PropGetDynamic,
+    /// `[obj, name] -> [value]` — dynamic property read like [`Op::PropGetDynamic`]
+    /// but *silently* (no "Undefined property" warning), the read context of `??`
+    /// on a dynamic name, step 51.
+    PropGetDynamicSilent,
     /// `[] -> !` — raise `UnhandledMatchError` for a `match` with no matching arm
     /// and no `default`, formatting the subject in `slot` into the message
     /// ("Unhandled match case <repr>"). Like [`Op::Fatal`] but value-aware.
@@ -544,6 +553,15 @@ pub enum Op {
     /// string keys are dropped, values bound positionally. Resolves the method at
     /// run time exactly as [`Op::MethodCall`] (including `Generator`/`Fiber`).
     MethodCallArgs { method: Box<[u8]> },
+    /// `[obj, arg0, …, arg{argc-1}, name] -> [ret]` — dynamic instance method call
+    /// `$obj->$m(args)` / `$obj->{expr}(args)`: the method-name string is popped
+    /// from the top of the stack, then dispatched exactly like [`Op::MethodCall`]
+    /// on the remaining `[obj, args…]`, step 51.
+    MethodCallDynamic { argc: u32 },
+    /// `[obj, argsArray, name] -> [ret]` — like [`Op::MethodCallDynamic`] but the
+    /// arguments come from a runtime array (spread `$obj->$m(...$a)`), dispatched
+    /// like [`Op::MethodCallArgs`] after popping the name, step 51.
+    MethodCallDynamicArgs,
     /// `[obj, pos0, …, pos{positional-1}, named0, …, named{k-1}] -> [ret]` — an
     /// instance method call with **named arguments** `$obj->m(p…, n: v, …)`
     /// (Session A). The `positional` leading values fill the callee's first slots;
@@ -871,6 +889,10 @@ pub enum FieldStep {
     Index,
     Append,
     Prop(Box<[u8]>),
+    /// `->$n` / `->{expr}` — a dynamic property step whose name is taken from the
+    /// operand stack at run time (pushed in source order, like an `Index` key),
+    /// step 51.
+    PropDyn,
 }
 
 /// The class a `::`-qualified op ([`Op::StaticCall`], `instanceof static`) starts

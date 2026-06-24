@@ -1508,6 +1508,21 @@ impl<'a> FnCompiler<'a> {
                         return Ok(());
                     }
                 }
+                // `$o->$n ?? d`: read the dynamic property *silently* (a missing or
+                // null property both take the default, exactly as `??` requires) so
+                // no "Undefined property" warning leaks.
+                if let ExprKind::PropGetDyn { object, name, nullsafe } = &a.kind {
+                    if !nullsafe {
+                        self.expr(object)?; // [obj]
+                        self.expr(name)?; // [obj, name]
+                        self.emit(Op::PropGetDynamicSilent); // [value-or-null]
+                        let to_end = self.emit(Op::JumpIfNotNull(Addr::MAX));
+                        self.expr(b)?; // [default]
+                        let end = self.here();
+                        self.patch(to_end, Op::JumpIfNotNull(end));
+                        return Ok(());
+                    }
+                }
                 // `$x[k] ?? d`: read the element isset-aware so a missing array key
                 // OR an out-of-range/non-integer string offset takes the default
                 // (a plain read of a string offset yields "", not null).
@@ -1570,6 +1585,30 @@ impl<'a> FnCompiler<'a> {
                     self.patch(skip, Op::JumpIfNull(end));
                 } else {
                     self.emit_method_call(method, args, named)?;
+                }
+            }
+            ExprKind::PropGetDyn { object, name, nullsafe } => {
+                self.expr(object)?;
+                if *nullsafe {
+                    let skip = self.emit(Op::JumpIfNull(Addr::MAX));
+                    self.expr(name)?; // [obj, name]
+                    self.emit(Op::PropGetDynamic);
+                    let end = self.here();
+                    self.patch(skip, Op::JumpIfNull(end));
+                } else {
+                    self.expr(name)?; // [obj, name]
+                    self.emit(Op::PropGetDynamic);
+                }
+            }
+            ExprKind::MethodCallDyn { object, method, args, named, nullsafe } => {
+                self.expr(object)?;
+                if *nullsafe {
+                    let skip = self.emit(Op::JumpIfNull(Addr::MAX));
+                    self.emit_method_call_dyn(method, args, named)?;
+                    let end = self.here();
+                    self.patch(skip, Op::JumpIfNull(end));
+                } else {
+                    self.emit_method_call_dyn(method, args, named)?;
                 }
             }
             ExprKind::InstanceOf { expr, class } => self.instance_of(expr, class)?,
@@ -2238,6 +2277,35 @@ impl<'a> FnCompiler<'a> {
         Ok(())
     }
 
+    /// Emit a dynamic instance method call `$obj->$m(args)` / `$obj->{expr}(args)`
+    /// (the receiver is already on the stack). The method-name expression is pushed
+    /// last — on top of the positional args / args-array — so the VM pops the name,
+    /// then dispatches on the same `[obj, args…]` layout as the static path (step
+    /// 51). Named arguments on a dynamic call fall back to the evaluator.
+    fn emit_method_call_dyn(
+        &mut self,
+        method: &Expr,
+        args: &[Expr],
+        named: &[(Box<[u8]>, Expr)],
+    ) -> R<()> {
+        if !named.is_empty() {
+            return Err(CompileError::Unsupported(
+                "named arguments on a dynamic method call".into(),
+            ));
+        }
+        let has_spread = args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_)));
+        if has_spread {
+            self.build_args_array(args)?; // [obj, argsArray]
+            self.expr(method)?; // [obj, argsArray, name]
+            self.emit(Op::MethodCallDynamicArgs);
+        } else {
+            self.push_value_args(args)?; // [obj, arg0…]
+            self.expr(method)?; // [obj, arg0…, name]
+            self.emit(Op::MethodCallDynamic { argc: args.len() as u32 });
+        }
+        Ok(())
+    }
+
     /// Push each positional argument's value (source order); reject spreads.
     fn push_value_args(&mut self, args: &[Expr]) -> R<()> {
         for a in args {
@@ -2787,6 +2855,13 @@ impl<'a> FnCompiler<'a> {
                     steps.push(FieldStep::Index);
                 }
                 PlaceStep::Prop(name) => steps.push(FieldStep::Prop(name.clone())),
+                // `->$n` / `->{expr}`: the name expression is emitted here (in source
+                // order, consumed at run time beneath the value, like an index key)
+                // and the VM resolves it to a property name (step 51).
+                PlaceStep::PropDyn(name) => {
+                    self.expr(name)?;
+                    steps.push(FieldStep::PropDyn);
+                }
                 // `[]` autovivifies a fresh array and descends into it (the VM's
                 // `field_write` recurses through an appended child), so an
                 // intermediate `$a[][] = …` is valid here, not just as the last step.
@@ -3207,7 +3282,7 @@ impl<'a> FnCompiler<'a> {
                 PlaceStep::Append => {
                     return Err(CompileError::Unsupported("`[]` is only valid as the last step".into()))
                 }
-                PlaceStep::Prop(_) => {
+                PlaceStep::Prop(_) | PlaceStep::PropDyn(_) => {
                     return Err(CompileError::Unsupported("object property step".into()))
                 }
             }
@@ -3219,7 +3294,7 @@ impl<'a> FnCompiler<'a> {
 /// Whether a place contains an object-property step — routing it to the mixed
 /// field-path opcodes (OOP-2c) rather than the array-only path opcodes.
 fn place_has_prop(place: &Place) -> bool {
-    place.steps.iter().any(|s| matches!(s, PlaceStep::Prop(_)))
+    place.steps.iter().any(|s| matches!(s, PlaceStep::Prop(_) | PlaceStep::PropDyn(_)))
 }
 
 /// Whether a place has an `[]` append anywhere but the last step (`$a[][] = …`):
@@ -3300,7 +3375,9 @@ fn expr_name(k: &ExprKind) -> String {
         ExprKind::Match { .. } => "Match",
         ExprKind::New { .. } => "New",
         ExprKind::MethodCall { .. } => "MethodCall",
+        ExprKind::MethodCallDyn { .. } => "MethodCallDyn",
         ExprKind::PropGet { .. } => "PropGet",
+        ExprKind::PropGetDyn { .. } => "PropGetDyn",
         ExprKind::This => "This",
         ExprKind::StaticCall { .. } => "StaticCall",
         ExprKind::ClassConst { .. } => "ClassConst",

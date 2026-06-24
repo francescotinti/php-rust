@@ -650,6 +650,25 @@ pub enum ExprKind {
         nullsafe: bool,
     },
 
+    /// `$obj->$name` / `$obj->{expr}` dynamic property read (step 51). `name` is
+    /// evaluated to a string at runtime; otherwise identical to [`PropGet`].
+    PropGetDyn {
+        object: Box<Expr>,
+        name: Box<Expr>,
+        nullsafe: bool,
+    },
+
+    /// `$obj->$method(args...)` / `$obj->{expr}(args...)` dynamic method call
+    /// (step 51). `method` is evaluated to a string at runtime; otherwise identical
+    /// to [`MethodCall`].
+    MethodCallDyn {
+        object: Box<Expr>,
+        method: Box<Expr>,
+        args: Vec<Expr>,
+        named: Vec<(Box<[u8]>, Expr)>,
+        nullsafe: bool,
+    },
+
     /// `$this` (step 19, D-19.5): the current object inside a method. Outside any
     /// method context the evaluator raises the fatal "Using $this when not in
     /// object context".
@@ -774,6 +793,9 @@ pub enum PlaceStep {
     /// array steps, this enters the shared `Rc<RefCell<Object>>` in place (no
     /// copy-on-write write-back). A missing property is created on write.
     Prop(Box<[u8]>),
+    /// `->$name` / `->{expr}` — dynamic property step (step 51): `name` is
+    /// evaluated to a string at runtime, otherwise identical to [`PlaceStep::Prop`].
+    PropDyn(Expr),
 }
 
 /// Binary operators whose semantics live in `php_types::ops`.

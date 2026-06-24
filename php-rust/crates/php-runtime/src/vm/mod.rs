@@ -1888,6 +1888,52 @@ impl<'m> Vm<'m> {
                     let v = read_property(&target, &name, &mut sink);
                     self.frames[top].stack.push(v);
                 }
+                Op::PropGetDynamic => {
+                    // `$o->$n` / `$o->{expr}`: pop the property name (coerced to a
+                    // string) then read exactly like `Op::PropGet` (step 51).
+                    let nameval = self.frames[top].stack.pop().expect("PropGetDynamic name");
+                    let name = convert::to_zstr(&nameval, &mut self.diags).as_bytes().to_vec();
+                    let obj = self.frames[top].stack.pop().expect("PropGetDynamic object");
+                    let cur = self.frames[top].class;
+                    let target = obj.deref_clone();
+                    if let Zval::Object(o) = &target {
+                        let (oid, cid) = { let b = o.borrow(); (b.id, b.class_id as usize) };
+                        if !self.hook_guarded(oid, &name) {
+                            if let Some(func) = self.prop_hook(cid, &name, false) {
+                                self.push_hook(func, target.clone(), oid, &name, None);
+                                continue;
+                            }
+                        }
+                        if let Some((defc, midx, oid)) =
+                            self.magic_applies(o, &name, cur, MagicKind::Get, b"__get")
+                        {
+                            self.push_magic_prop(defc, midx, oid, MagicKind::Get, target.clone(), &name, None, None, false);
+                            continue;
+                        }
+                        check_prop_access(self.module, cur, o.borrow().class_id as usize, &name)?;
+                    }
+                    let v = read_property(&target, &name, &mut self.diags);
+                    self.frames[top].stack.push(v);
+                }
+                Op::PropGetDynamicSilent => {
+                    // Like `Op::PropGetDynamic` but silent (the `??` read context).
+                    let nameval = self.frames[top].stack.pop().expect("PropGetDynamicSilent name");
+                    let name = convert::to_zstr(&nameval, &mut self.diags).as_bytes().to_vec();
+                    let obj = self.frames[top].stack.pop().expect("PropGetDynamicSilent object");
+                    let cur = self.frames[top].class;
+                    let target = obj.deref_clone();
+                    if let Zval::Object(o) = &target {
+                        if let Some((defc, midx, oid)) =
+                            self.magic_applies(o, &name, cur, MagicKind::Get, b"__get")
+                        {
+                            self.push_magic_prop(defc, midx, oid, MagicKind::Get, target.clone(), &name, None, None, false);
+                            continue;
+                        }
+                    }
+                    let mut sink = Diags::new();
+                    let v = read_property(&target, &name, &mut sink);
+                    self.frames[top].stack.push(v);
+                }
                 Op::PropSet { name } => {
                     let value = self.frames[top].stack.pop().expect("PropSet value");
                     let obj = self.frames[top].stack.pop().expect("PropSet object");
@@ -2049,6 +2095,26 @@ impl<'m> Vm<'m> {
                     let argsval = self.frames[top].stack.pop().expect("MethodCallArgs array");
                     let args = args_from_array_value(argsval);
                     let recv = self.frames[top].stack.pop().expect("MethodCallArgs receiver");
+                    let this = recv.deref_clone();
+                    self.method_call(top, this, &method, args)?;
+                }
+                Op::MethodCallDynamic { argc } => {
+                    // `$obj->$m(args)`: the method name sits on top, the positional
+                    // args beneath it, the receiver at the bottom (step 51).
+                    let nameval = self.frames[top].stack.pop().expect("MethodCallDynamic name");
+                    let method = convert::to_zstr(&nameval, &mut self.diags).as_bytes().to_vec();
+                    let args = self.pop_keys(top, argc);
+                    let recv = self.frames[top].stack.pop().expect("MethodCallDynamic receiver");
+                    let this = recv.deref_clone();
+                    self.method_call(top, this, &method, args)?;
+                }
+                Op::MethodCallDynamicArgs => {
+                    // Spread `$obj->$m(...$a)`: name on top, args array beneath it.
+                    let nameval = self.frames[top].stack.pop().expect("MethodCallDynamicArgs name");
+                    let method = convert::to_zstr(&nameval, &mut self.diags).as_bytes().to_vec();
+                    let argsval = self.frames[top].stack.pop().expect("MethodCallDynamicArgs array");
+                    let args = args_from_array_value(argsval);
+                    let recv = self.frames[top].stack.pop().expect("MethodCallDynamicArgs receiver");
                     let this = recv.deref_clone();
                     self.method_call(top, this, &method, args)?;
                 }
@@ -5323,10 +5389,13 @@ impl<'m> Vm<'m> {
         }
     }
 
-    /// Pop the operand-stack keys for a field path's `Index` steps (one per
-    /// `Index`), restoring source order.
+    /// Pop the operand-stack keys for a field path's `Index` / `PropDyn` steps
+    /// (one value per such step), restoring source order.
     fn pop_field_keys(&mut self, top: usize, steps: &[FieldStep]) -> Vec<Zval> {
-        let n = steps.iter().filter(|s| matches!(s, FieldStep::Index)).count();
+        let n = steps
+            .iter()
+            .filter(|s| matches!(s, FieldStep::Index | FieldStep::PropDyn))
+            .count();
         let mut keys: Vec<Zval> =
             (0..n).map(|_| self.frames[top].stack.pop().expect("field index key")).collect();
         keys.reverse();
@@ -5911,9 +5980,17 @@ fn field_cell(
         return field_cell(inner, steps, keys);
     }
     match first {
-        FieldStep::Prop(name) => {
-            // `&$o->prop` (Session A): promote the property to a shared cell. A
-            // non-object yields a detached cell (PHP warns / does nothing).
+        FieldStep::Prop(_) | FieldStep::PropDyn => {
+            // `&$o->prop` / `&$o->$n` (Session A / step 51): promote the property to
+            // a shared cell. A non-object yields a detached cell (PHP warns).
+            let owned;
+            let name: &[u8] = match first {
+                FieldStep::Prop(n) => n,
+                _ => {
+                    owned = prop_dyn_name(keys, &mut Diags::new());
+                    &owned
+                }
+            };
             let Zval::Object(o) = target else {
                 return Rc::new(RefCell::new(Zval::Null));
             };

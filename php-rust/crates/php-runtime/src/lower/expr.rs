@@ -4,7 +4,8 @@
 
 use mago_span::HasSpan;
 use mago_syntax::ast::{
-    Access, Argument, ArrayElement, AssignmentOperator, BinaryOperator, Call, ClassLikeConstantSelector,
+    Access, Argument, ArrayElement, AssignmentOperator, BinaryOperator, Call,
+    ClassLikeConstantSelector, ClassLikeMemberSelector,
     CompositeString, Construct, DocumentIndentation, DocumentKind, DocumentString,
     Expression, Instantiation, Literal,
     MatchArm as AstMatchArm, PartialApplication,
@@ -17,6 +18,13 @@ use crate::hir::{
 
 
 use super::*;
+
+/// The lowered form of a member selector (`->name`): a compile-time static name
+/// or a runtime-evaluated dynamic name (`$obj->$n` / `$obj->{expr}`), step 51.
+enum MemberSel {
+    Static(Box<[u8]>),
+    Dynamic(Expr),
+}
 
 impl<'f> Lowerer<'f> {
     // --- expressions ---
@@ -562,6 +570,68 @@ impl<'f> Lowerer<'f> {
         }
     }
 
+    /// Lower a member selector (`->name`) that may be dynamic. A static identifier
+    /// yields [`MemberSel::Static`]; a `$obj->$n` / `$obj->{expr}` form is lowered
+    /// to an expression evaluated to the member name at runtime (step 51).
+    fn member_sel(
+        &mut self,
+        sel: &ClassLikeMemberSelector,
+        line: Line,
+    ) -> Result<MemberSel, LowerError> {
+        match sel {
+            ClassLikeMemberSelector::Identifier(id) => Ok(MemberSel::Static(id.value.into())),
+            ClassLikeMemberSelector::Variable(v) => {
+                // `$obj->$n`: the selector is a plain variable. A variable-variable
+                // selector (`$obj->$$x`) stays unsupported.
+                let kind = match v {
+                    Variable::Direct(d) => {
+                        let nm = strip_dollar(d.name);
+                        if nm == b"this" {
+                            ExprKind::This
+                        } else {
+                            ExprKind::Var(self.slot_for(nm))
+                        }
+                    }
+                    _ => {
+                        return Err(LowerError::Unsupported {
+                            what: "variable variable member name",
+                            line,
+                        })
+                    }
+                };
+                Ok(MemberSel::Dynamic(Expr { line, kind }))
+            }
+            ClassLikeMemberSelector::Expression(e) => {
+                Ok(MemberSel::Dynamic(self.lower_expr(e.expression)?))
+            }
+            ClassLikeMemberSelector::Missing(_) => Err(LowerError::Unsupported {
+                what: "missing member selector",
+                line,
+            }),
+        }
+    }
+
+    /// Build the right method-call HIR node from a (possibly dynamic) selector.
+    fn method_call_kind(
+        &mut self,
+        object: Box<Expr>,
+        method: MemberSel,
+        args: Vec<Expr>,
+        named: Vec<(Box<[u8]>, Expr)>,
+        nullsafe: bool,
+    ) -> ExprKind {
+        match method {
+            MemberSel::Static(method) => ExprKind::MethodCall { object, method, args, named, nullsafe },
+            MemberSel::Dynamic(method) => ExprKind::MethodCallDyn {
+                object,
+                method: Box::new(method),
+                args,
+                named,
+                nullsafe,
+            },
+        }
+    }
+
     /// Lower a call. Tier 1 supports only direct calls to a named function with
     /// positional arguments (builtins); methods, static calls, dynamic callees,
     /// and named/variadic arguments are deferred.
@@ -571,27 +641,15 @@ impl<'f> Lowerer<'f> {
             // `$obj->method(args)` instance call (step 19, D-19.7).
             Call::Method(mc) => {
                 let object = Box::new(self.lower_expr(mc.object)?);
-                let method = member_name(&mc.method, line)?;
+                let method = self.member_sel(&mc.method, line)?;
                 let (args, named) = self.lower_args(&mc.argument_list, line)?;
-                return Ok(ExprKind::MethodCall {
-                    object,
-                    method: method.into(),
-                    args,
-                    named,
-                    nullsafe: false,
-                });
+                return Ok(self.method_call_kind(object, method, args, named, false));
             }
             Call::NullSafeMethod(mc) => {
                 let object = Box::new(self.lower_expr(mc.object)?);
-                let method = member_name(&mc.method, line)?;
+                let method = self.member_sel(&mc.method, line)?;
                 let (args, named) = self.lower_args(&mc.argument_list, line)?;
-                return Ok(ExprKind::MethodCall {
-                    object,
-                    method: method.into(),
-                    args,
-                    named,
-                    nullsafe: true,
-                });
+                return Ok(self.method_call_kind(object, method, args, named, true));
             }
             // `Class::m()` / `self::m()` / `parent::m()` / `static::m()`.
             Call::StaticMethod(sm) => {
@@ -659,17 +717,31 @@ impl<'f> Lowerer<'f> {
         match access {
             Access::Property(p) => {
                 let object = self.lower_expr(p.object)?;
-                let name: Box<[u8]> = member_name(&p.property, line)?.into();
-                if matches!(object.kind, ExprKind::This) {
-                    self.note_this_prop(&name); // backing read inside a hook (step 50)
+                match self.member_sel(&p.property, line)? {
+                    MemberSel::Static(name) => {
+                        if matches!(object.kind, ExprKind::This) {
+                            self.note_this_prop(&name); // backing read inside a hook (step 50)
+                        }
+                        Ok(ExprKind::PropGet { object: Box::new(object), name, nullsafe: false })
+                    }
+                    MemberSel::Dynamic(name) => Ok(ExprKind::PropGetDyn {
+                        object: Box::new(object),
+                        name: Box::new(name),
+                        nullsafe: false,
+                    }),
                 }
-                Ok(ExprKind::PropGet { object: Box::new(object), name, nullsafe: false })
             }
-            Access::NullSafeProperty(p) => Ok(ExprKind::PropGet {
-                object: Box::new(self.lower_expr(p.object)?),
-                name: member_name(&p.property, line)?.into(),
-                nullsafe: true,
-            }),
+            Access::NullSafeProperty(p) => {
+                let object = Box::new(self.lower_expr(p.object)?);
+                match self.member_sel(&p.property, line)? {
+                    MemberSel::Static(name) => Ok(ExprKind::PropGet { object, name, nullsafe: true }),
+                    MemberSel::Dynamic(name) => Ok(ExprKind::PropGetDyn {
+                        object,
+                        name: Box::new(name),
+                        nullsafe: true,
+                    }),
+                }
+            }
             // `Class::CONST` / `self::CONST` / `Class::class` (step 19-4).
             Access::ClassConstant(cc) => {
                 let class = self.class_ref_of(cc.class, line)?;
@@ -874,11 +946,15 @@ impl<'f> Lowerer<'f> {
             // base's own `lower_place`.
             Expression::Access(Access::Property(p)) => {
                 let mut place = self.lower_place(p.object, line)?;
-                let name: Box<[u8]> = member_name(&p.property, line)?.into();
-                if matches!(place.base, PlaceBase::This) && place.steps.is_empty() {
-                    self.note_this_prop(&name); // backing write inside a hook (step 50)
+                match self.member_sel(&p.property, line)? {
+                    MemberSel::Static(name) => {
+                        if matches!(place.base, PlaceBase::This) && place.steps.is_empty() {
+                            self.note_this_prop(&name); // backing write inside a hook (step 50)
+                        }
+                        place.steps.push(PlaceStep::Prop(name));
+                    }
+                    MemberSel::Dynamic(name) => place.steps.push(PlaceStep::PropDyn(name)),
                 }
-                place.steps.push(PlaceStep::Prop(name));
                 Ok(place)
             }
             _ => Err(LowerError::Unsupported {
