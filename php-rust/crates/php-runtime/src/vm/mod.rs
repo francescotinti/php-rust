@@ -240,6 +240,7 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         enum_cache: HashMap::new(),
         constants: HashMap::new(),
         mb_regex: crate::mbregex::MbRegexState::default(),
+        uncaught_throwable: None,
     };
     vm.frames.push(Frame::new(&module.main));
     // `exit`/`die` is a clean termination (the exit code is surfaced, not a fatal);
@@ -549,6 +550,11 @@ struct Vm<'m> {
     /// the global `mb_regex_encoding`/`mb_regex_set_options` and the `mb_ereg_search`
     /// cursor. Survives across `mb_*` calls for the whole run.
     mb_regex: crate::mbregex::MbRegexState,
+    /// The throwable synthesized for an *uncaught* error, stashed by `unwind` while
+    /// the faulting frames are still live so `render_fatal` can show the real stack
+    /// trace (an engine error reaches the renderer after its frames are popped).
+    /// Cleared when an exception is caught; the deepest capture is kept.
+    uncaught_throwable: Option<Zval>,
 }
 
 impl<'m> Vm<'m> {

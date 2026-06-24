@@ -8,8 +8,15 @@ impl<'m> Vm<'m> {
     /// `fault_line`.
     pub(super) fn render_fatal(&mut self, err: &PhpError, fault_line: Line) {
         let file = String::from_utf8_lossy(&self.module.file).into_owned();
-        let (class, message, line, trace) = match err {
-            PhpError::Thrown(Zval::Object(o)) => {
+        // Prefer the throwable `unwind` synthesized for this fatal (its `trace` was
+        // captured while the faulting frames were live); fall back to a user-thrown
+        // object, then to the raw error with a bare `#0 {main}` trace.
+        let throwable = self.uncaught_throwable.take().or_else(|| match err {
+            PhpError::Thrown(v @ Zval::Object(_)) => Some(v.clone()),
+            _ => None,
+        });
+        let (class, message, line, trace) = match throwable {
+            Some(Zval::Object(o)) => {
                 let b = o.borrow();
                 let class = String::from_utf8_lossy(b.class_name.as_bytes()).into_owned();
                 let message = match b.props.get(b"message") {
@@ -26,9 +33,9 @@ impl<'m> Vm<'m> {
                 };
                 (class, message, line, trace)
             }
-            other => (
-                other.class_name().to_string(),
-                other.message().to_string(),
+            _ => (
+                err.class_name().to_string(),
+                err.message().to_string(),
                 fault_line as i64,
                 "#0 {main}".to_string(),
             ),
@@ -37,7 +44,7 @@ impl<'m> Vm<'m> {
         // ("…called in F on line C and defined in F:D" / "…returned in F:D"), so PHP
         // does *not* append the usual " in {file}:{line}" — doing so would duplicate
         // it. Detect those messages and render them verbatim.
-        let self_located = matches!(err, PhpError::TypeError(_))
+        let self_located = class == "TypeError"
             && (message.contains(" and defined in ") || message.contains(" returned in "));
         let head = if self_located {
             format!("\nFatal error: Uncaught {class}: {message}\n")
@@ -100,6 +107,9 @@ impl<'m> Vm<'m> {
                 .find(|r| faulting >= r.start as usize && faulting < r.end as usize)
                 .copied();
             if let Some(r) = region {
+                // Caught: any earlier "uncaught" trace stashed by a deeper unwind is
+                // void (the exception is handled after all).
+                self.uncaught_throwable = None;
                 // Statement boundaries leave the operand stack at its baseline, so
                 // clearing any partial-expression values restores it for the
                 // handler. A catch region parks the exception on the stack for
@@ -118,8 +128,15 @@ impl<'m> Vm<'m> {
                 return None;
             }
             if top == floor {
-                // The floor frame had no matching handler: propagate, leaving the
-                // floor frame on the stack for the caller to dispose of.
+                // The floor frame had no matching handler: propagate. Stash the
+                // *synthesized* throwable — its `trace` was captured above, while the
+                // frames (incl. the callee whose argument check failed) were still
+                // live — so `render_fatal` can show the real stack even though the
+                // frames are gone by then. Keep the deepest capture (store once); a
+                // later catch clears it. The floor frame is left for the caller.
+                if self.uncaught_throwable.is_none() {
+                    self.uncaught_throwable = Some(obj);
+                }
                 return Some(e);
             }
             self.frames.pop();

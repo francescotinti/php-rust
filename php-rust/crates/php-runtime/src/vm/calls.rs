@@ -467,45 +467,50 @@ impl<'m> Vm<'m> {
     /// materialise a `Generator` handle on the caller's operand stack instead of
     /// running it (GEN); otherwise push it to run. The caller is the current top
     /// frame, so this is called *before* `frame` is pushed.
-    pub(super) fn enter_callee(&mut self, mut frame: Frame<'m>) -> Result<(), PhpError> {
-        // Single chokepoint for entering a fresh user-function frame: coerce each
-        // by-value argument to its declared scalar hint under weak typing (or
-        // check it under `declare(strict_types=1)`) before the body runs (step
-        // 14 / 16). The caller is still the top frame, so its current line is the
-        // call site reported in the TypeError. By-reference and variadic slots are
-        // left untouched; an omitted (`Undef`) optional argument is coerced later,
-        // when the default prologue fills it.
-        if frame.func.param_hints.iter().any(Option::is_some) {
-            let call_line = self.cur_line(self.frames.len() - 1);
+    pub(super) fn enter_callee(&mut self, frame: Frame<'m>) -> Result<(), PhpError> {
+        // The call site is the caller's current line, reported in an arg TypeError
+        // (captured before the callee frame is pushed).
+        let call_line = self.cur_line(self.frames.len() - 1);
+        // Push the callee frame, then coerce/check each by-value argument against
+        // its declared hint *within* that frame (step 14 / 16): PHP throws an
+        // argument TypeError inside the function, so its stack trace shows this call
+        // and "thrown in" reports the definition line. By-reference and variadic
+        // slots are left untouched; an omitted (`Undef`) optional argument is
+        // coerced later, when the default prologue fills it.
+        self.frames.push(frame);
+        let top = self.frames.len() - 1;
+        let func = self.frames[top].func;
+        if func.param_hints.iter().any(Option::is_some) {
             let strict = self.module.strict;
-            for i in 0..frame.func.n_params as usize {
-                if Some(i as Slot) == frame.func.variadic_slot {
+            for i in 0..func.n_params as usize {
+                if Some(i as Slot) == func.variadic_slot {
                     continue;
                 }
-                if frame.func.param_by_ref.get(i).copied().unwrap_or(false) {
+                if func.param_by_ref.get(i).copied().unwrap_or(false) {
                     continue;
                 }
-                let Some(hint) = frame.func.param_hints.get(i).cloned().flatten() else {
+                let Some(hint) = func.param_hints.get(i).cloned().flatten() else {
                     continue;
                 };
-                if matches!(frame.slots[i], Zval::Undef) {
+                if matches!(self.frames[top].slots[i], Zval::Undef) {
                     continue;
                 }
-                let val = frame.slots[i].clone();
+                let val = self.frames[top].slots[i].clone();
                 match self.coerce_or_check_hint(val, &hint, strict) {
-                    Ok(c) => frame.slots[i] = c,
-                    Err(given) => {
-                        return Err(self.arg_type_error(frame.func, i, &hint, &given, call_line))
-                    }
+                    // The frame stays pushed on the error path so the unwind's trace
+                    // capture includes this call; unwind then pops it.
+                    Ok(c) => self.frames[top].slots[i] = c,
+                    Err(given) => return Err(self.arg_type_error(func, i, &hint, &given, call_line)),
                 }
             }
         }
-        if frame.func.is_generator {
+        // A generator function materialises a `Generator` handle instead of running:
+        // pop the (checked) frame back off and hand it to `make_generator`.
+        if func.is_generator {
+            let frame = self.frames.pop().expect("just-pushed generator frame");
             let gen = self.make_generator(frame);
-            let top = self.frames.len() - 1;
-            self.frames[top].stack.push(gen);
-        } else {
-            self.frames.push(frame);
+            let caller = self.frames.len() - 1;
+            self.frames[caller].stack.push(gen);
         }
         Ok(())
     }
