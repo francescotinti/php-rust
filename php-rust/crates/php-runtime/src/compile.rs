@@ -1716,6 +1716,27 @@ impl<'a> FnCompiler<'a> {
             });
             return Ok(());
         }
+        // Host builtins with variadic by-reference output parameters (`sscanf`/
+        // `fscanf`'s `...&$vars` from index 2): push the two fixed arguments by
+        // value and capture each trailing out argument's slot (a non-variable
+        // target becomes `None`, silently skipped at run time, D-54.1).
+        if let Some(canon) = crate::vm::host_builtin_scanf(name) {
+            let fixed = args.len().min(2);
+            self.push_value_args(&args[..fixed])?;
+            let out_slots = args[fixed..]
+                .iter()
+                .map(|e| match &e.kind {
+                    ExprKind::Var(slot) => Some(*slot),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            self.emit(Op::CallHostBuiltinScanf {
+                name: canon.into(),
+                argc: fixed as u32,
+                out_slots: out_slots.into(),
+            });
+            return Ok(());
+        }
         // By-reference-first host builtins (`usort`, …): first argument is an array
         // variable taken by reference, the rest by value (Session C).
         if let Some(canon) = crate::vm::host_builtin_ref_first(name) {

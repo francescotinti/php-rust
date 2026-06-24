@@ -435,6 +435,15 @@ pub enum Op {
     /// variable, following a reference) before pushing `result`. `out_slot` is
     /// `None` when the out-param argument was omitted (e.g. `preg_match($p,$s)`).
     CallHostBuiltinOut { name: Box<[u8]>, out_slot: Option<Slot>, out_index: u32, argc: u32 },
+    /// `[arg0, arg1] -> [result]` — call a host builtin with **variadic** by-reference
+    /// output parameters (`sscanf`/`fscanf`'s `...&$vars`). The two fixed arguments
+    /// (string/stream + format) are pushed by value; `argc` is how many were actually
+    /// supplied (the VM raises an ArgumentCountError when < 2). Each variadic out
+    /// argument becomes one entry in `out_slots` (`Some(slot)` for a plain variable,
+    /// `None` for a non-variable target, which is silently skipped, D-54.1). With no
+    /// out slots the builtin returns the parsed array; otherwise it assigns each slot
+    /// and returns the successful-conversion count (`fscanf` returns `false` at EOF).
+    CallHostBuiltinScanf { name: Box<[u8]>, argc: u32, out_slots: Box<[Option<Slot>]> },
     /// `[] -> [value]` — read a *user-defined* constant `name` (from `define()`),
     /// resolved at run time from the VM's constant table (B3). Engine constants
     /// (`PHP_INT_MAX`, …) are folded at lowering and never reach here; an unknown

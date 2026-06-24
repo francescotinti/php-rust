@@ -1535,6 +1535,48 @@ impl<'m> Vm<'m> {
                     }
                     self.frames[top].stack.push(result);
                 }
+                Op::CallHostBuiltinScanf { name, argc, out_slots } => {
+                    // `sscanf`/`fscanf` with variadic by-reference out-params: dispatch
+                    // the two fixed value args, then assign each conversion into its
+                    // slot. With no out slots the parsed array is returned instead.
+                    let args = self.pop_keys(top, argc);
+                    let scanned = self.dispatch_host_builtin_scanf(&name, args)?;
+                    let top = self.frames.len() - 1;
+                    let result = match scanned {
+                        // `fscanf` at EOF: `false`, no assignments.
+                        None => Zval::Bool(false),
+                        Some(results) if out_slots.is_empty() => {
+                            let mut arr = PhpArray::new();
+                            for v in results {
+                                let _ = arr.append(v.unwrap_or(Zval::Null));
+                            }
+                            Zval::Array(Rc::new(arr))
+                        }
+                        Some(results) => {
+                            // Iterate over results (matching `eval::scanf_finish`): out
+                            // vars beyond the result count are left unchanged.
+                            let mut count = 0i64;
+                            for (i, slot) in results.iter().enumerate() {
+                                let Some(out) = out_slots.get(i) else { break };
+                                let val = match slot {
+                                    Some(v) => {
+                                        count += 1;
+                                        v.clone()
+                                    }
+                                    None => Zval::Null,
+                                };
+                                if let Some(s) = out {
+                                    match &mut self.frames[top].slots[*s as usize] {
+                                        Zval::Ref(rc) => *rc.borrow_mut() = val,
+                                        cell => *cell = val,
+                                    }
+                                }
+                            }
+                            Zval::Long(count)
+                        }
+                    };
+                    self.frames[top].stack.push(result);
+                }
                 Op::CallBuiltinRef { name, slot, argc } => {
                     let f = match self.registry.get(&name[..]) {
                         Some(Builtin::RefFirst(f)) => *f,
@@ -2611,6 +2653,66 @@ impl<'m> Vm<'m> {
                 }
                 Ok(Zval::Str(PhpStr::new(prev)))
             }
+        }
+    }
+
+    /// Run `sscanf`/`fscanf` (F2): parse the two fixed value args and return the
+    /// per-conversion slots, or `None` for `fscanf` at end-of-file. The variadic
+    /// out-param assignment / array-vs-count return is done by the op handler.
+    /// Mirrors `eval::ho_sscanf` / `eval::ho_fscanf` (sans `scanf_finish`).
+    fn dispatch_host_builtin_scanf(
+        &mut self,
+        name: &[u8],
+        args: Vec<Zval>,
+    ) -> Result<Option<Vec<Option<Zval>>>, PhpError> {
+        match name {
+            b"sscanf" => {
+                if args.len() < 2 {
+                    return Err(PhpError::ArgumentCountError(
+                        "sscanf() expects at least 2 arguments".to_string(),
+                    ));
+                }
+                let input =
+                    convert::to_zstr(&args[0].deref_clone(), &mut self.diags).as_bytes().to_vec();
+                let fmt =
+                    convert::to_zstr(&args[1].deref_clone(), &mut self.diags).as_bytes().to_vec();
+                Ok(Some(crate::scanf::run_scanf(&input, &fmt)))
+            }
+            b"fscanf" => {
+                if args.len() < 2 {
+                    return Err(PhpError::ArgumentCountError(
+                        "fscanf() expects at least 2 arguments".to_string(),
+                    ));
+                }
+                let stream_v = args[0].deref_clone();
+                let line = match &stream_v {
+                    Zval::Resource(r) => {
+                        let mut res = r.borrow_mut();
+                        match res.as_stream_mut() {
+                            Some(s) => match s.read_line(None) {
+                                Ok(Some(l)) => l,
+                                _ => return Ok(None), // EOF or read error → false
+                            },
+                            None => {
+                                return Err(PhpError::TypeError(
+                                    "fscanf(): Argument #1 ($stream) must be an open stream resource"
+                                        .to_string(),
+                                ))
+                            }
+                        }
+                    }
+                    other => {
+                        return Err(PhpError::TypeError(format!(
+                            "fscanf(): Argument #1 ($stream) must be of type resource, {} given",
+                            other.error_type_name()
+                        )))
+                    }
+                };
+                let fmt =
+                    convert::to_zstr(&args[1].deref_clone(), &mut self.diags).as_bytes().to_vec();
+                Ok(Some(crate::scanf::run_scanf(&line, &fmt)))
+            }
+            _ => Err(undefined_builtin(name)),
         }
     }
 
@@ -5079,6 +5181,15 @@ pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usiz
         .map(|&(h, i)| (h, i))
 }
 
+/// Host builtins with **variadic** by-reference output parameters from a fixed
+/// index onward (`sscanf`/`fscanf`'s `...&$vars` at index 2). The compiler emits
+/// [`crate::bytecode::Op::CallHostBuiltinScanf`] for these; [`Vm::dispatch_host_builtin_scanf`]
+/// produces the per-conversion slots and the VM assigns them.
+pub(crate) fn host_builtin_scanf(name: &[u8]) -> Option<&'static [u8]> {
+    const HOST_SCANF: &[&[u8]] = &[b"sscanf", b"fscanf"];
+    HOST_SCANF.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
+}
+
 pub(crate) fn host_builtin_ref_first(name: &[u8]) -> Option<&'static [u8]> {
     const HOST_REF: &[&[u8]] = &[
         b"usort",
@@ -5616,6 +5727,25 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php echo mb_regex_set_options('i'), '|', mb_regex_set_options();"),
             b"pr|i"
+        );
+    }
+
+    #[test]
+    fn sscanf_byref_and_array_mode() {
+        // by-ref mode: assigns each conversion and returns the success count.
+        assert_eq!(
+            vm_stdout(b"<?php $n=sscanf('12 f0 0x1A 777','%d %x %x %o',$a,$b,$c,$d); echo \"$n|$a|$b|$c|$d\";"),
+            b"4|12|240|26|511"
+        );
+        // failed conversion: count reflects successes, the out vars become null.
+        assert_eq!(
+            vm_stdout(b"<?php $n=sscanf('only','%d %s',$a,$b); echo $n,'/',($a===null?'N':'?'),($b===null?'N':'?');"),
+            b"0/NN"
+        );
+        // array mode (no out vars): returns the parsed array.
+        assert_eq!(
+            vm_stdout(b"<?php $r=sscanf('age:42 pi:3.14 name:bob','age:%d pi:%f name:%s'); echo $r[0],'/',$r[2];"),
+            b"42/bob"
         );
     }
 
