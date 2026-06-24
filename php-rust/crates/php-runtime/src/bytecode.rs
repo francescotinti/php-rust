@@ -553,6 +553,11 @@ pub enum Op {
     /// object whose class is used) and the operand; an unknown class name yields
     /// `false` (PHP does not error here).
     InstanceOfDynamic,
+    /// `[value] -> [bool]` — `value instanceof <built-in interface>` for an
+    /// interface that has no `ClassId` (not registered in the prelude). Membership
+    /// is decided by the operand's runtime `Zval` type: a `Zval::Generator`
+    /// satisfies `Traversable`/`Iterator`/`Generator`; everything else is `false`.
+    InstanceOfBuiltin(BuiltinIface),
 
     // ----- OOP-2a: class context (self/parent/static), constants, static calls -----
     /// `[arg0, …, arg{argc-1}] -> [ret]` — `Class::m()` / `self::m()` /
@@ -814,6 +819,20 @@ pub enum ClassTarget {
     Class(ClassId),
     /// `static::` — resolved at run time from the frame's LSB class.
     Static,
+}
+
+
+/// A built-in PHP interface that has no `ClassId` because it is not registered in
+/// the prelude. Membership is determined by the operand's runtime `Zval` type
+/// rather than by the class table (see [`Op::InstanceOfBuiltin`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuiltinIface {
+    /// `Traversable` — the root iteration marker; satisfied by generators.
+    Traversable,
+    /// `Iterator` — satisfied by generators.
+    Iterator,
+    /// `Generator` — the concrete generator type.
+    Generator,
 }
 
 /// Whether a class can be instantiated, and if not, why — so [`Op::Alloc`] can

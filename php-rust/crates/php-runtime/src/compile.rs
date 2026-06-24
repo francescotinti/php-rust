@@ -26,7 +26,7 @@ use php_types::{ObjectInfo, PhpStr, PropVis};
 
 use crate::builtin::{Builtin, Registry};
 use crate::bytecode::{
-    Addr, ClassTarget, CompiledClass, CompiledConst, CompiledEnumCase, CompiledMethod, CompiledStaticProp, Const,
+    Addr, BuiltinIface, ClassTarget, CompiledClass, CompiledConst, CompiledEnumCase, CompiledMethod, CompiledStaticProp, Const,
     ConstIdx, DimBase, ExcRegion, FieldBase, FieldStep, Func, Instantiable, Module, Op, StaticInit,
 };
 use crate::hir::{
@@ -120,6 +120,27 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
         class_index,
         static_count: program.static_count,
     })
+}
+
+/// Map a class name that does not resolve to a `ClassId` onto a built-in
+/// interface, if it is one. These (`Generator`/`Iterator`/`Traversable`) are not
+/// registered in the prelude, so `instanceof` against them is decided by the
+/// operand's runtime type instead of the class table. The namespace prefix is
+/// stripped and the comparison is case-insensitive, matching PHP name resolution.
+fn builtin_iface_for(name: &[u8]) -> Option<BuiltinIface> {
+    let bare = match name.iter().rposition(|&b| b == b'\\') {
+        Some(i) => &name[i + 1..],
+        None => name,
+    };
+    if bare.eq_ignore_ascii_case(b"Generator") {
+        Some(BuiltinIface::Generator)
+    } else if bare.eq_ignore_ascii_case(b"Iterator") {
+        Some(BuiltinIface::Iterator)
+    } else if bare.eq_ignore_ascii_case(b"Traversable") {
+        Some(BuiltinIface::Traversable)
+    } else {
+        None
+    }
 }
 
 /// Compile a user [`FnDecl`] into a [`Func`], resolving calls in its body against
@@ -1949,11 +1970,16 @@ impl<'a> FnCompiler<'a> {
                 self.expr(expr)?;
                 match self.resolve_class(name) {
                     Some(cid) => self.emit(Op::InstanceOf { class: cid }),
-                    None => {
-                        self.emit(Op::Pop);
-                        let f = self.konst(Const::Bool(false));
-                        self.emit(Op::PushConst(f))
-                    }
+                    None => match builtin_iface_for(name) {
+                        // A built-in interface (Generator/Iterator/Traversable)
+                        // has no ClassId; decide membership by runtime type.
+                        Some(iface) => self.emit(Op::InstanceOfBuiltin(iface)),
+                        None => {
+                            self.emit(Op::Pop);
+                            let f = self.konst(Const::Bool(false));
+                            self.emit(Op::PushConst(f))
+                        }
+                    },
                 };
             }
             ClassRef::SelfClass | ClassRef::Parent => {

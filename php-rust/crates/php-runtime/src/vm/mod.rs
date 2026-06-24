@@ -1852,6 +1852,14 @@ impl<'m> Vm<'m> {
                     };
                     self.frames[top].stack.push(Zval::Bool(result));
                 }
+                Op::InstanceOfBuiltin(_iface) => {
+                    // Generator/Iterator/Traversable have no ClassId; a generator
+                    // value satisfies all three, nothing else among the value
+                    // types does (objects against these names already test false).
+                    let v = self.frames[top].stack.pop().expect("InstanceOfBuiltin operand");
+                    let result = matches!(v.deref_clone(), Zval::Generator(_));
+                    self.frames[top].stack.push(Zval::Bool(result));
+                }
                 Op::StaticCall { target, method, forwarding, argc } => {
                     let args = self.pop_keys(top, argc);
                     let start = match target {
@@ -2315,6 +2323,7 @@ impl<'m> Vm<'m> {
             b"opendir" => self.ho_opendir(args),
             b"preg_replace" => self.ho_preg_replace(args),
             b"preg_quote" => self.ho_preg_quote(args),
+            b"preg_split" => self.ho_preg_split(args),
             b"debug_backtrace" => self.ho_debug_backtrace(args),
             b"debug_print_backtrace" => self.ho_debug_print_backtrace(),
             b"preg_replace_callback" => self.ho_preg_replace_callback(args),
@@ -2887,6 +2896,68 @@ impl<'m> Vm<'m> {
             None => None,
         };
         Ok(Zval::Str(PhpStr::new(crate::preg::quote(&s, delim))))
+    }
+
+    /// `preg_split($pattern, $subject, $limit = -1, $flags = 0)`: split `$subject`
+    /// on matches of `$pattern`. Returns `false` on a bad pattern. Mirrors
+    /// `eval::ho_preg_split` on the shared `crate::preg` engine (no-empty /
+    /// delim-capture / offset-capture flags honoured; positive limit caps pieces).
+    fn ho_preg_split(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if args.len() < 2 {
+            return Err(PhpError::ArgumentCountError(
+                "preg_split() expects at least 2 arguments".to_string(),
+            ));
+        }
+        let pat = convert::to_zstr_cast(&args[0].deref_clone(), &mut self.diags).as_bytes().to_vec();
+        let subject =
+            convert::to_zstr_cast(&args[1].deref_clone(), &mut self.diags).as_bytes().to_vec();
+        let limit = match args.get(2) {
+            Some(a) => convert::to_long_cast(&a.deref_clone(), &mut self.diags),
+            None => -1,
+        };
+        let flags = match args.get(3) {
+            Some(a) => convert::to_long_cast(&a.deref_clone(), &mut self.diags),
+            None => 0,
+        };
+        let Some(re) = crate::preg::compile(&pat) else {
+            return Ok(Zval::Bool(false));
+        };
+        let no_empty = flags & 1 != 0;
+        let delim_capture = flags & 2 != 0;
+        let offset_capture = flags & 4 != 0;
+        let subj = String::from_utf8_lossy(&subject).into_owned();
+        let mut arr = PhpArray::new();
+        let mut last = 0usize;
+        let push = |arr: &mut PhpArray, text: &str, off: usize| {
+            if no_empty && text.is_empty() {
+                return;
+            }
+            if offset_capture {
+                let _ = arr.append(crate::preg::offset_pair(
+                    Zval::Str(PhpStr::new(text.as_bytes().to_vec())),
+                    off as i64,
+                ));
+            } else {
+                let _ = arr.append(Zval::Str(PhpStr::new(text.as_bytes().to_vec())));
+            }
+        };
+        for (idx, caps) in re.captures_iter(&subj).into_iter().enumerate() {
+            let m0 = caps.get(0).unwrap();
+            if limit > 0 && idx as i64 + 1 >= limit {
+                break;
+            }
+            push(&mut arr, &subj[last..m0.start], last);
+            if delim_capture {
+                for g in 1..caps.len() {
+                    if let Some(mm) = caps.get(g) {
+                        push(&mut arr, mm.text.as_str(), mm.start);
+                    }
+                }
+            }
+            last = m0.end;
+        }
+        push(&mut arr, &subj[last..], last);
+        Ok(Zval::Array(Rc::new(arr)))
     }
 
     /// Dispatch a host builtin with a by-reference output parameter (Session:
@@ -4564,6 +4635,7 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"opendir",
         b"preg_replace",
         b"preg_quote",
+        b"preg_split",
         b"debug_backtrace",
         b"debug_print_backtrace",
         b"preg_replace_callback",
@@ -5736,6 +5808,19 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php class C {} $x = 5; echo ($x instanceof C) ? '1' : '0';"),
             b"0"
+        );
+    }
+
+    #[test]
+    fn instanceof_generator_builtin_interfaces() {
+        // A generator is a Generator/Iterator/Traversable, but not Countable.
+        assert_eq!(
+            vm_stdout(
+                b"<?php function g(){yield 1;} $g=g(); \
+                  echo ($g instanceof Generator)?'1':'0', ($g instanceof Iterator)?'1':'0', \
+                  ($g instanceof Traversable)?'1':'0', ($g instanceof Countable)?'1':'0';"
+            ),
+            b"1110"
         );
     }
 
@@ -8599,6 +8684,31 @@ mod tests {
     fn preg_quote_escapes_metachars_and_delimiter() {
         assert_eq!(vm_stdout(b"<?php echo preg_quote('a.b*c+');"), b"a\\.b\\*c\\+");
         assert_eq!(vm_stdout(b"<?php echo preg_quote('a/b', '/');"), b"a\\/b");
+    }
+
+    #[test]
+    fn preg_split_basic_delim_and_lookahead() {
+        // Plain split, zero-width lookahead split, and PREG_SPLIT_NO_EMPTY (=1).
+        assert_eq!(
+            vm_stdout(b"<?php $p = preg_split('/,/', 'a,b,c'); echo $p[0], $p[1], $p[2];"),
+            b"abc"
+        );
+        assert_eq!(
+            vm_stdout(b"<?php $p = preg_split('/(?=,)/', 'a,b,c'); echo $p[0], '~', $p[1], '~', $p[2];"),
+            b"a~,b~,c"
+        );
+        assert_eq!(
+            vm_stdout(b"<?php $p = preg_split('/,/', 'a,,b', -1, 1); echo $p[0], $p[1], isset($p[2]) ? 'X' : '.';"),
+            b"ab."
+        );
+    }
+
+    #[test]
+    fn preg_split_bad_pattern_is_false() {
+        assert_eq!(
+            vm_stdout(b"<?php echo preg_split('/[/', 'abc') === false ? 'FALSE' : '?';"),
+            b"FALSE"
+        );
     }
 
     #[test]
