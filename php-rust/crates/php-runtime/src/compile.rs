@@ -179,6 +179,7 @@ fn compile_body(
 ) -> R<Func> {
     let n_params = params.len() as u32;
     let mut c = FnCompiler::new(ctx, n_locals, cur_class, is_main);
+    c.returns_ref = by_ref;
     // Default-parameter prologue (PAR): fill any omitted optional parameter with
     // its default before the body runs. Runs in the callee frame, so a default
     // may reference earlier parameters.
@@ -599,6 +600,10 @@ struct FnCompiler<'a> {
     /// ([`Op::Sweep`]) is emitted after each of its statements, mirroring the
     /// tree-walker's global-scope sweep (OOP-3d). Never set for functions/methods.
     is_main: bool,
+    /// True when compiling a `function &f()` body — a plain `return <expr>;` (or
+    /// bare `return;`) then raises the "Only variable references should be returned
+    /// by reference" notice (the operand is a non-lvalue). Set by `compile_body`.
+    returns_ref: bool,
     /// Number of named locals (HIR slots); compiler temporaries are allocated
     /// above this, so the frame's slot array is `n_locals + n_temps_max` wide.
     n_locals: u32,
@@ -632,6 +637,7 @@ impl<'a> FnCompiler<'a> {
             ctx,
             cur_class,
             is_main,
+            returns_ref: false,
             n_locals,
             n_temps_cur: 0,
             n_temps_max: 0,
@@ -837,6 +843,15 @@ impl<'a> FnCompiler<'a> {
             StmtKind::Break(n) => self.loop_jump(*n, true)?,
             StmtKind::Continue(n) => self.loop_jump(*n, false)?,
             StmtKind::Return(opt) => {
+                // A plain `return <expr>;` (or bare `return;`) inside a `function
+                // &f()` means the operand is a non-lvalue: PHP raises a notice and
+                // returns by value (D-13.4). The condition is known at compile time.
+                if self.returns_ref {
+                    let k = self.konst(Const::Str(
+                        b"Only variable references should be returned by reference"[..].into(),
+                    ));
+                    self.emit(Op::EmitNotice(k));
+                }
                 match opt {
                     Some(e) => self.expr(e)?,
                     None => {
@@ -2495,11 +2510,21 @@ impl<'a> FnCompiler<'a> {
             return Err(CompileError::Unsupported("reference call arity mismatch".into()));
         }
         let by_ref: Vec<bool> = callee.params.iter().map(|p| p.by_ref).collect();
+        let callee_by_ref = callee.by_ref;
         let pnames: Vec<Box<[u8]>> =
             callee.params.iter().map(|p| callee.slots[p.slot as usize].clone()).collect();
         let (base, steps) = self.field_path(target)?; // target index keys first…
         self.push_call_args(args, &by_ref, name, &pnames)?; // …then the call args…
         self.emit(Op::Call { func: idx as u32, argc: args.len() as u32 }); // …leaving the raw ref on top
+        // Aliasing a non-reference-returning function copies the value and raises a
+        // notice (D-13.5). A by-ref callee that returned a non-place already raised
+        // its own "returned by reference" notice from inside `f`, so suppress here.
+        if !callee_by_ref {
+            let k = self.konst(Const::Str(
+                b"Only variables should be assigned by reference"[..].into(),
+            ));
+            self.emit(Op::EmitNotice(k));
+        }
         self.emit(Op::BindRefTo { base, steps: steps.into() });
         Ok(())
     }

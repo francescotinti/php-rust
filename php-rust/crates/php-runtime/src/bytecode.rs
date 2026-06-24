@@ -699,6 +699,13 @@ pub enum Op {
     /// script — the fatal fires only if such a function is actually called.
     Fatal(ConstIdx),
 
+    /// Queue an `E_NOTICE` diagnostic carrying `consts[idx]` (a string) as its
+    /// message, then continue. Used for the run-time-shaped but compile-time-known
+    /// by-reference notices ("Only variables should be assigned by reference" /
+    /// "Only variable references should be returned by reference"), which PHP
+    /// raises but does not abort on.
+    EmitNotice(ConstIdx),
+
     /// Release every tracked object the program can no longer reach
     /// (`Rc::strong_count == 1`), running `__destruct` on each, to a fixpoint
     /// (OOP-3d). Emitted by the compiler after each top-level (`main`) statement,

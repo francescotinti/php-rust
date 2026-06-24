@@ -2216,6 +2216,12 @@ impl<'m> Vm<'m> {
                     };
                     return Err(PhpError::Error(msg));
                 }
+                Op::EmitNotice(i) => {
+                    if let crate::bytecode::Const::Str(b) = &self.frames[top].func.consts[i as usize] {
+                        let msg = String::from_utf8_lossy(b).into_owned();
+                        self.diags.push(Diag::Notice(msg));
+                    }
+                }
                 Op::MatchError(slot) => {
                     let subj = read_slot(&self.frames[top].slots[slot as usize]);
                     return Err(PhpError::Error(format!(
@@ -5646,6 +5652,30 @@ mod tests {
         );
         // stdout stays the pure output (no diagnostic text).
         assert_eq!(out.stdout, b"Array");
+    }
+
+    #[test]
+    fn rendered_assign_ref_to_non_ref_function_notice() {
+        // `$y = &f()` where f is NOT by-reference: copy the value and raise a
+        // notice (rendered, interleaved before the echo). stdout stays clean.
+        let out = vm_outcome(b"<?php function f(){ return 5; } $y = &f(); echo $y;");
+        assert_eq!(
+            out.rendered,
+            b"\nNotice: Only variables should be assigned by reference in test.php on line 1\n5".to_vec()
+        );
+        assert_eq!(out.stdout, b"5");
+    }
+
+    #[test]
+    fn rendered_return_by_ref_non_lvalue_notice() {
+        // A by-ref function returning a non-lvalue raises the return-side notice
+        // and still yields the value.
+        let out = vm_outcome(b"<?php function &f(){ return 1 + 2; } $y = &f(); echo $y;");
+        assert_eq!(
+            out.rendered,
+            b"\nNotice: Only variable references should be returned by reference in test.php on line 1\n3".to_vec()
+        );
+        assert_eq!(out.stdout, b"3");
     }
 
     #[test]
