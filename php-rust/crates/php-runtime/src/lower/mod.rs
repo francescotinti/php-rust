@@ -630,6 +630,52 @@ function date_interval_create_from_date_string($datetime) {
     $iv->h = $p['h']; $iv->i = $p['i']; $iv->s = $p['s'];
     return $iv;
 }
+
+// --- SPL iterator classes (step 56): the two by-far most-demanded SPL types in
+// the Zend/tests corpus (ArrayIterator 32 files, ArrayObject 28). Implemented
+// entirely in PHP, backed by a plain `array $__storage`, reusing the working
+// Iterator + ArrayAccess protocols + the array builtins. Zero VM changes.
+// `__keys` is a key snapshot taken at rewind() so the integer `__pos` cursor is
+// order-preserving and survives mutation, matching SPL semantics.
+class ArrayIterator implements Iterator, ArrayAccess, Countable {
+    private $__storage = [];
+    private $__keys = [];
+    private $__pos = 0;
+    public function __construct($array = []) {
+        $this->__storage = (array)$array;
+        $this->__keys = array_keys($this->__storage);
+    }
+    public function rewind() { $this->__keys = array_keys($this->__storage); $this->__pos = 0; }
+    public function valid() { return $this->__pos < count($this->__keys); }
+    public function current() { return $this->__storage[$this->__keys[$this->__pos]]; }
+    public function key() { return $this->__keys[$this->__pos]; }
+    public function next() { $this->__pos++; }
+    public function offsetExists($key) { return isset($this->__storage[$key]); }
+    public function offsetGet($key) { return $this->__storage[$key] ?? null; }
+    public function offsetSet($key, $value) {
+        if ($key === null) { $this->__storage[] = $value; }
+        else { $this->__storage[$key] = $value; }
+    }
+    public function offsetUnset($key) { unset($this->__storage[$key]); }
+    public function count() { return count($this->__storage); }
+    public function getArrayCopy() { return $this->__storage; }
+    public function append($value) { $this->__storage[] = $value; }
+}
+class ArrayObject implements IteratorAggregate, ArrayAccess, Countable {
+    private $__storage = [];
+    public function __construct($array = []) { $this->__storage = (array)$array; }
+    public function getIterator() { return new ArrayIterator($this->__storage); }
+    public function offsetExists($key) { return isset($this->__storage[$key]); }
+    public function offsetGet($key) { return $this->__storage[$key] ?? null; }
+    public function offsetSet($key, $value) {
+        if ($key === null) { $this->__storage[] = $value; }
+        else { $this->__storage[$key] = $value; }
+    }
+    public function offsetUnset($key) { unset($this->__storage[$key]); }
+    public function count() { return count($this->__storage); }
+    public function getArrayCopy() { return $this->__storage; }
+    public function append($value) { $this->__storage[] = $value; }
+}
 "##;
 
 /// The four owned products of lowering [`PRELUDE_SRC`]: the class table + its

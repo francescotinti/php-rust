@@ -240,6 +240,7 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         arrayaccess_id: module.class_index.get(&b"arrayaccess"[..]).copied(),
         iterator_id: module.class_index.get(&b"iterator"[..]).copied(),
         iteratoraggregate_id: module.class_index.get(&b"iteratoraggregate"[..]).copied(),
+        countable_id: module.class_index.get(&b"countable"[..]).copied(),
         enum_cache: HashMap::new(),
         constants: HashMap::new(),
         mb_regex: crate::mbregex::MbRegexState::default(),
@@ -591,6 +592,9 @@ struct Vm<'m> {
     /// implementing object drives the iterator protocol (step 51).
     iterator_id: Option<ClassId>,
     iteratoraggregate_id: Option<ClassId>,
+    /// The `Countable` interface id, so `count($obj)`/`sizeof($obj)` dispatches
+    /// the user `count()` method instead of erroring (step 56).
+    countable_id: Option<ClassId>,
     /// Interned enum case singletons, keyed by (enum class id, case index), so
     /// `E::Case === E::Case` (Session A). Materialised lazily on first `E::Case`.
     enum_cache: HashMap<(ClassId, u32), Rc<RefCell<Object>>>,
@@ -1144,6 +1148,11 @@ impl<'m> Vm<'m> {
                                 self.resume_generator(&rc, Zval::Null)?;
                             }
                             out
+                        }
+                        obj @ Zval::Object(_)
+                            if object_class_id(&obj).is_some_and(|c| self.is_traversable(c)) =>
+                        {
+                            self.collect_traversable(obj)?
                         }
                         _ => Vec::new(),
                     };
@@ -1744,6 +1753,19 @@ impl<'m> Vm<'m> {
                         _ => return Err(undefined_builtin(&name)),
                     };
                     let args = self.pop_keys(top, argc); // pops argc, source order
+                    // `count($obj)`/`sizeof($obj)` on a Countable dispatches its
+                    // user `count()` method (step 56); the builtin only handles
+                    // arrays. A non-Countable object still TypeErrors in the
+                    // builtin below, matching PHP.
+                    if argc == 1
+                        && (name[..] == *b"count" || name[..] == *b"sizeof")
+                    {
+                        if let Some(obj) = self.as_countable(&args[0]) {
+                            let n = self.call_method_sync(obj, b"count", Vec::new())?;
+                            self.frames[top].stack.push(n);
+                            continue;
+                        }
+                    }
                     let line = self.cur_line(top);
                     let result = self.run_value_builtin(f, &args, line)?;
                     self.frames[top].stack.push(result);
@@ -2888,6 +2910,20 @@ impl<'m> Vm<'m> {
         }
     }
 
+    /// If `v` (deref'd) is an object implementing `Countable`, return it as a
+    /// receiver for a `count()` dispatch; otherwise `None` (step 56).
+    fn as_countable(&self, v: &Zval) -> Option<Zval> {
+        let c = self.countable_id?;
+        match v.deref_clone() {
+            Zval::Object(o)
+                if is_instance_of(self.module, o.borrow().class_id as usize, c) =>
+            {
+                Some(Zval::Object(o))
+            }
+            _ => None,
+        }
+    }
+
     /// Enter a protocol method frame (`offset*` for ArrayAccess, `rewind`/`valid`/
     /// `current`/`key`/`next`/`getIterator` for the iterator protocol) on `recv`
     /// with `args` bound (step 51). [`RetMode`] selects where the return goes:
@@ -2922,6 +2958,56 @@ impl<'m> Vm<'m> {
             RetMode::Capture(cell) => Some(cell),
         };
         self.enter_callee(frame)
+    }
+
+    /// Call `recv->method(args)` *synchronously* and return its value, driving a
+    /// nested bounded dispatch loop to completion (mirrors `call_callable`). Used
+    /// by spread (`[...$traversable]`) where the iterator protocol must be driven
+    /// inline inside a single op rather than via the re-entrant `IterNext` state
+    /// machine (step 56).
+    fn call_method_sync(
+        &mut self,
+        recv: Zval,
+        method: &[u8],
+        args: Vec<Zval>,
+    ) -> Result<Zval, PhpError> {
+        let baseline = self.frames.len();
+        self.enter_object_method(recv, method, args, RetMode::Stack)?;
+        if self.frames.len() == baseline {
+            // A builtin/non-frame method left its result on the caller stack.
+            return Ok(self.frames[baseline - 1]
+                .stack
+                .pop()
+                .expect("sync method result on caller stack"));
+        }
+        self.drive_to_return(baseline)
+    }
+
+    /// Synchronously collect the `(key, value)` pairs of a `Traversable` object
+    /// (step 56), used by both spread paths. An `IteratorAggregate` is resolved
+    /// via `getIterator()` first (its result may be an array, a Generator, or an
+    /// `Iterator` object); an `Iterator` object is driven through
+    /// `rewind`/`valid`/`current`/`key`/`next`.
+    fn collect_traversable(&mut self, obj: Zval) -> Result<Vec<(Key, Zval)>, PhpError> {
+        let cid = object_class_id(&obj).expect("collect_traversable receiver is an object");
+        if self.is_aggregate(cid) {
+            let inner = self.call_method_sync(obj, b"getIterator", Vec::new())?;
+            return self.spread_pairs(inner);
+        }
+        let mut out = Vec::new();
+        self.call_method_sync(obj.clone(), b"rewind", Vec::new())?;
+        loop {
+            let valid = self.call_method_sync(obj.clone(), b"valid", Vec::new())?;
+            if !convert::to_bool(&valid, &mut self.diags) {
+                break;
+            }
+            let val = self.call_method_sync(obj.clone(), b"current", Vec::new())?;
+            let key = self.call_method_sync(obj.clone(), b"key", Vec::new())?;
+            let k = coerce_key_silent(&key).unwrap_or(Key::Int(0));
+            out.push((k, val));
+            self.call_method_sync(obj.clone(), b"next", Vec::new())?;
+        }
+        Ok(out)
     }
 
     /// Issue one object-iterator protocol call from `IterNext`: advance the active
@@ -5592,6 +5678,11 @@ impl<'m> Vm<'m> {
                     self.resume_generator(&rc, Zval::Null)?;
                 }
                 Ok(out)
+            }
+            obj @ Zval::Object(_)
+                if object_class_id(&obj).is_some_and(|c| self.is_traversable(c)) =>
+            {
+                self.collect_traversable(obj)
             }
             other => Err(PhpError::TypeError(format!(
                 "Only arrays and Traversables can be unpacked, {} given",
