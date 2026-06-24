@@ -153,6 +153,12 @@ pub enum Op {
     /// follows PHP's "undefined variable" semantics in the VM (warning + NULL),
     /// matching the tree-walker.
     LoadSlot(Slot),
+    /// `[] -> [v]` — like [`Op::LoadSlot`] but for a *source-level* variable read
+    /// (`$x` in value position): when the slot is `Undef`, raise
+    /// `Warning: Undefined variable $name` (`consts[name]` is the bare name) before
+    /// yielding NULL. `LoadSlot` stays silent for compiler temporaries and contexts
+    /// PHP does not warn in (`isset`/`??`/`empty`/`@`).
+    LoadVar { slot: Slot, name: ConstIdx },
     /// `[] -> [Undef]` — push the `Undef` sentinel, used to leave a skipped
     /// optional parameter unbound in a named call (PAR) so the callee's default
     /// prologue fills it.

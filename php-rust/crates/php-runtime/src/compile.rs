@@ -178,7 +178,7 @@ fn compile_body(
     is_main: bool,
 ) -> R<Func> {
     let n_params = params.len() as u32;
-    let mut c = FnCompiler::new(ctx, n_locals, cur_class, is_main);
+    let mut c = FnCompiler::new(ctx, n_locals, cur_class, is_main, slot_names);
     c.returns_ref = by_ref;
     // Default-parameter prologue (PAR): fill any omitted optional parameter with
     // its default before the body runs. Runs in the callee frame, so a default
@@ -426,7 +426,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
 /// the new object (see [`Op::InitProps`]); compiled in the class's own context so
 /// a `self::CONST` default resolves.
 fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassId) -> R<Func> {
-    let mut c = FnCompiler::new(ctx, 0, Some(cid), false);
+    let mut c = FnCompiler::new(ctx, 0, Some(cid), false, &[]);
     for (name, expr) in items {
         c.emit(Op::This);
         c.expr(expr)?;
@@ -457,7 +457,7 @@ fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassI
 /// Compile a class-constant value expression into a thunk [`Func`] (`<expr>; Ret`)
 /// evaluated in `decl_class`'s context (so a `self::OTHER` inside resolves).
 fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, decl_class: ClassId) -> R<Func> {
-    let mut c = FnCompiler::new(ctx, 0, Some(decl_class), false);
+    let mut c = FnCompiler::new(ctx, 0, Some(decl_class), false, &[]);
     c.expr(value)?;
     c.emit(Op::Ret);
     Ok(Func {
@@ -604,6 +604,10 @@ struct FnCompiler<'a> {
     /// bare `return;`) then raises the "Only variable references should be returned
     /// by reference" notice (the operand is a non-lvalue). Set by `compile_body`.
     returns_ref: bool,
+    /// Names of the HIR-allocated local slots (without the leading `$`), used to
+    /// label the "Undefined variable" warning at a source-level `$x` read. Empty
+    /// for bodies with no named locals (const / prop-init thunks).
+    slot_names: &'a [Box<[u8]>],
     /// Number of named locals (HIR slots); compiler temporaries are allocated
     /// above this, so the frame's slot array is `n_locals + n_temps_max` wide.
     n_locals: u32,
@@ -627,7 +631,13 @@ struct LoopCtx {
 }
 
 impl<'a> FnCompiler<'a> {
-    fn new(ctx: &'a ProgramCtx<'a>, n_locals: u32, cur_class: Option<ClassId>, is_main: bool) -> Self {
+    fn new(
+        ctx: &'a ProgramCtx<'a>,
+        n_locals: u32,
+        cur_class: Option<ClassId>,
+        is_main: bool,
+        slot_names: &'a [Box<[u8]>],
+    ) -> Self {
         FnCompiler {
             ops: Vec::new(),
             lines: Vec::new(),
@@ -638,6 +648,7 @@ impl<'a> FnCompiler<'a> {
             cur_class,
             is_main,
             returns_ref: false,
+            slot_names,
             n_locals,
             n_temps_cur: 0,
             n_temps_max: 0,
@@ -1024,7 +1035,18 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::ConstFetch { name: name.clone() });
             }
             ExprKind::Var(slot) => {
-                self.emit(Op::LoadSlot(*slot));
+                // A source-level read warns on an undefined slot (PHP 8). The bare
+                // name (no `$`) is taken from the slot table; a slot without a name
+                // (shouldn't happen for a source var) degrades to a silent load.
+                match self.slot_names.get(*slot as usize) {
+                    Some(name) => {
+                        let k = self.konst(Const::Str(name.clone()));
+                        self.emit(Op::LoadVar { slot: *slot, name: k });
+                    }
+                    None => {
+                        self.emit(Op::LoadSlot(*slot));
+                    }
+                }
             }
             ExprKind::GlobalVar(slot) => {
                 // `$GLOBALS['x']` read — a resolved script-frame slot (step 12-3),
@@ -1216,8 +1238,13 @@ impl<'a> FnCompiler<'a> {
                     self.patch(to_end, Op::JumpIfNotNull(end));
                     return Ok(());
                 }
-                // Left read silently (Var/Index reads don't warn); right only if null.
-                self.expr(a)?;
+                // Left read silently — `??` suppresses the undefined-variable
+                // warning, so a plain `$x` uses the silent LoadSlot, not LoadVar.
+                if let ExprKind::Var(slot) = &a.kind {
+                    self.emit(Op::LoadSlot(*slot));
+                } else {
+                    self.expr(a)?;
+                }
                 let to_end = self.emit(Op::JumpIfNotNull(Addr::MAX));
                 self.expr(b)?;
                 let end = self.here();

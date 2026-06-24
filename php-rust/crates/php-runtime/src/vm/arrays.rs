@@ -307,6 +307,34 @@ pub(super) fn read_dim(base: &Zval, key: &Zval) -> Zval {
     }
 }
 
+
+/// Like [`read_dim`] but raises `Warning: Undefined array key K` when an array
+/// key is absent (the warning-ful read context — `Op::FetchDim`, e.g. `echo
+/// $a[5]`). String-offset and other bases delegate to the silent [`read_dim`]
+/// (no failing parity case needs the "Uninitialized string offset" warning yet).
+pub(super) fn read_dim_warn(base: &Zval, key: &Zval, diags: &mut Diags) -> Zval {
+    match base {
+        Zval::Array(a) => match coerce_key_silent(key) {
+            Some(k) => match a.get(&k) {
+                Some(v) => v.deref_clone(),
+                None => {
+                    let msg = match &k {
+                        Key::Int(i) => format!("Undefined array key {i}"),
+                        Key::Str(s) => {
+                            format!("Undefined array key \"{}\"", String::from_utf8_lossy(s.as_bytes()))
+                        }
+                    };
+                    diags.push(Diag::Warning(msg));
+                    Zval::Null
+                }
+            },
+            None => Zval::Null,
+        },
+        Zval::Ref(rc) => read_dim_warn(&rc.borrow(), key, diags),
+        _ => read_dim(base, key),
+    }
+}
+
 /// String byte-offset read `$s[i]` (silent): integer index, negatives count from
 /// the end, out-of-range yields `""`.
 pub(super) fn read_string_offset(s: &PhpStr, key: &Zval) -> Zval {

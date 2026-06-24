@@ -705,10 +705,25 @@ impl<'m> Vm<'m> {
                     self.frames[top].stack.push(v);
                 }
                 Op::LoadSlot(s) => {
-                    // An unset local reads as NULL (the curated corpus is
-                    // warning-free; the "Undefined variable" notice rides the
-                    // diagnostics-ordering work). A reference slot is followed.
+                    // An unset local reads as NULL (silent — used for compiler
+                    // temporaries and PHP's warning-free contexts). A reference
+                    // slot is followed. Source-level `$x` reads use `LoadVar`.
                     let v = read_slot(&self.frames[top].slots[s as usize]);
+                    self.frames[top].stack.push(v);
+                }
+                Op::LoadVar { slot, name } => {
+                    // A source-level `$x` read: an `Undef` slot raises the PHP 8
+                    // "Undefined variable" warning (queued; flushed at the next
+                    // emit point with the reading op's line) and yields NULL.
+                    if matches!(self.frames[top].slots[slot as usize], Zval::Undef) {
+                        if let crate::bytecode::Const::Str(b) =
+                            &self.frames[top].func.consts[name as usize]
+                        {
+                            let msg = format!("Undefined variable ${}", String::from_utf8_lossy(b));
+                            self.diags.push(Diag::Warning(msg));
+                        }
+                    }
+                    let v = read_slot(&self.frames[top].slots[slot as usize]);
                     self.frames[top].stack.push(v);
                 }
                 Op::StoreSlot(s) => {
@@ -984,7 +999,8 @@ impl<'m> Vm<'m> {
                 Op::FetchDim => {
                     let key = self.frames[top].stack.pop().expect("FetchDim key");
                     let base = self.frames[top].stack.pop().expect("FetchDim base");
-                    self.frames[top].stack.push(read_dim(&base, &key));
+                    let v = read_dim_warn(&base, &key, &mut self.diags);
+                    self.frames[top].stack.push(v);
                 }
                 Op::CoalesceFetchDim => {
                     let key = self.frames[top].stack.pop().expect("CoalesceFetchDim key");
@@ -5676,6 +5692,36 @@ mod tests {
             b"\nNotice: Only variable references should be returned by reference in test.php on line 1\n3".to_vec()
         );
         assert_eq!(out.stdout, b"3");
+    }
+
+    #[test]
+    fn rendered_undefined_variable_warning() {
+        // Reading an unset variable warns (PHP 8) and yields NULL; the warning is
+        // flushed at the echo with that line, interleaved before the output.
+        let out = vm_outcome(b"<?php\necho 'a';\necho $undef;\necho 'b';\n");
+        assert_eq!(
+            out.rendered,
+            b"a\nWarning: Undefined variable $undef in test.php on line 3\nb".to_vec()
+        );
+        assert_eq!(out.stdout, b"ab");
+    }
+
+    #[test]
+    fn rendered_undefined_array_key_warning() {
+        // Reading a missing array key warns "Undefined array key 5" and yields NULL.
+        let out = vm_outcome(b"<?php\n$a = [1];\necho $a[5];\n");
+        assert_eq!(
+            out.rendered,
+            b"\nWarning: Undefined array key 5 in test.php on line 3\n".to_vec()
+        );
+    }
+
+    #[test]
+    fn coalesce_and_isset_suppress_undefined_variable_warning() {
+        // `??`, isset, and `@` must NOT raise the undefined-variable warning.
+        let out = vm_outcome(b"<?php $y = $x ?? 'd'; echo $y; echo isset($z) ? 'S' : 'U';");
+        assert_eq!(out.rendered, b"dU".to_vec());
+        assert_eq!(out.stdout, b"dU");
     }
 
     #[test]
