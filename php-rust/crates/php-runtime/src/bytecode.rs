@@ -513,6 +513,11 @@ pub enum Op {
     /// `[] -> [this]` — push the current frame's bound object. Fatal "Using $this
     /// when not in object context" if the frame has no `this`.
     This,
+    /// `[obj] -> [clone]` — `clone $obj`: shallow-copy the object (new handle, each
+    /// property cloned by value so nested objects are shared and arrays copy on
+    /// write), push the copy, then run `__clone` on it if the class defines one
+    /// (its return discarded). A non-object receiver is a catchable `Error`.
+    Clone,
     /// `[obj] -> [value]` — read property `name` (deref-clone); a missing property
     /// (or a non-object receiver) warns and yields NULL, matching the tree-walker.
     PropGet { name: Box<[u8]> },

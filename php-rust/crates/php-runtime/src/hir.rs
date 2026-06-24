@@ -632,6 +632,11 @@ pub enum ExprKind {
     /// (exit code 0); no argument means code 0. Raised as `PhpError::Exit`.
     Exit(Option<Box<Expr>>),
 
+    /// `clone $obj` (step 51) — a shallow copy of the object (new handle, each
+    /// property copied by value; nested objects are shared, arrays copy-on-write),
+    /// then `__clone` is run on the copy if the class defines it.
+    Clone(Box<Expr>),
+
     /// `match ($subject) { conds => body, ..., default => body }`. Strict `===`
     /// matching; an arm with empty `conditions` is the `default` arm.
     Match {

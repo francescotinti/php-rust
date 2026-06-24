@@ -1856,6 +1856,44 @@ impl<'m> Vm<'m> {
                         ))
                     }
                 },
+                Op::Clone => {
+                    let src = self.frames[top].stack.pop().expect("Clone operand").deref_clone();
+                    let Zval::Object(o) = &src else {
+                        return Err(PhpError::TypeError(format!(
+                            "clone(): Argument #1 ($object) must be of type object, {} given",
+                            src.type_name_for_error()
+                        )));
+                    };
+                    // Shallow copy: a fresh handle, properties cloned by value
+                    // (nested objects share their handle, arrays copy on write).
+                    let clone_rc = {
+                        let b = o.borrow();
+                        let obj = Object {
+                            class_id: b.class_id,
+                            class_name: Rc::clone(&b.class_name),
+                            props: b.props.clone(),
+                            id: self.next_id(),
+                            info: Rc::clone(&b.info),
+                        };
+                        Rc::new(RefCell::new(obj))
+                    };
+                    self.created.push(Rc::clone(&clone_rc));
+                    let cid = clone_rc.borrow().class_id as usize;
+                    let clone_val = Zval::Object(clone_rc);
+                    self.frames[top].stack.push(clone_val.clone());
+                    // Run `__clone` on the copy if defined (return discarded), so it
+                    // can deep-copy what it needs (PHP OOP).
+                    if let Some((defc, midx)) = resolve_method_runtime(self.module, cid, b"__clone") {
+                        let callee = &self.module.classes[defc].methods[midx].func;
+                        let mut frame = Frame::new(callee);
+                        frame.this = Some(clone_val);
+                        frame.class = Some(defc);
+                        frame.static_class = Some(cid);
+                        frame.ret_cell = Some(Rc::new(RefCell::new(Zval::Null)));
+                        self.frames.push(frame);
+                        continue;
+                    }
+                }
                 Op::PropGet { name } => {
                     let obj = self.frames[top].stack.pop().expect("PropGet object");
                     let cur = self.frames[top].class;

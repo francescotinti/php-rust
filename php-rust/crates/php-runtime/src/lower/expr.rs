@@ -227,6 +227,9 @@ impl<'f> Lowerer<'f> {
             // `new class(args) extends P implements I { … }` (step 51).
             Expression::AnonymousClass(anon) => self.lower_anonymous_class(anon, line)?,
 
+            // `clone $obj` (step 51).
+            Expression::Clone(c) => ExprKind::Clone(Box::new(self.lower_expr(c.object)?)),
+
             // `throw <expr>` (step 20). Valid as a statement or, in PHP 8, an
             // expression (`$x ?? throw new …`); both reach here.
             Expression::Throw(t) => ExprKind::Throw(Box::new(self.lower_expr(t.exception)?)),
