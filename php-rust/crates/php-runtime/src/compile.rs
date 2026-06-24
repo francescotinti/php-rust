@@ -30,8 +30,9 @@ use crate::bytecode::{
     ConstIdx, DimBase, ExcRegion, FieldBase, FieldStep, Func, Instantiable, Module, Op, StaticInit,
 };
 use crate::hir::{
-    BinOp, Case, CatchClause, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, Line, MatchArm,
-    Param, Place, PlaceBase, PlaceStep, Program, StaticAssignOp, Stmt, StmtKind, TypeHint, Visibility,
+    BinOp, Case, CatchClause, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, HintKind, Line,
+    MatchArm, Param, Place, PlaceBase, PlaceStep, Program, StaticAssignOp, Stmt, StmtKind, TypeHint,
+    Visibility,
 };
 
 /// A construct the proof-slice compiler does not yet lower. Carries the HIR
@@ -156,7 +157,7 @@ fn compile_fndecl(fd: &FnDecl, ctx: &ProgramCtx) -> R<Func> {
         &fd.slots,
         fd.by_ref,
         fd.is_generator,
-        fd.ret_hint,
+        fd.ret_hint.clone(),
         fd.line,
         ctx,
         None,
@@ -214,7 +215,7 @@ fn compile_body(
             .map(|p| p.default.is_none() && !p.variadic)
             .collect(),
         param_by_ref: params.iter().map(|p| p.by_ref).collect(),
-        param_hints: params.iter().map(|p| p.hint).collect(),
+        param_hints: params.iter().map(|p| p.hint.clone()).collect(),
         ret_hint,
         variadic_slot: params.iter().find(|p| p.variadic).map(|p| p.slot),
         by_ref,
@@ -251,8 +252,8 @@ fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
             .map(|p| p.default.is_none() && !p.variadic)
             .collect(),
         param_by_ref: fd.params.iter().map(|p| p.by_ref).collect(),
-        param_hints: fd.params.iter().map(|p| p.hint).collect(),
-        ret_hint: fd.ret_hint,
+        param_hints: fd.params.iter().map(|p| p.hint.clone()).collect(),
+        ret_hint: fd.ret_hint.clone(),
         variadic_slot: fd.params.iter().find(|p| p.variadic).map(|p| p.slot),
         by_ref: fd.by_ref,
         is_generator: fd.is_generator,
@@ -353,7 +354,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
                 &m.decl.slots,
                 m.decl.by_ref,
                 m.decl.is_generator,
-                m.decl.ret_hint,
+                m.decl.ret_hint.clone(),
                 m.decl.line,
                 ctx,
                 Some(cid),
@@ -785,8 +786,10 @@ impl<'a> FnCompiler<'a> {
             self.emit(Op::StoreSlot(p.slot));
             // A scalar-hinted default is coerced to its type (`float $n = 0` →
             // 0.0, D-NEW-6); an unhinted / non-scalar param keeps the value.
-            if let Some(hint) = p.hint {
-                self.emit(Op::CoerceParam { slot: p.slot, hint });
+            // Only a scalar-hinted default needs coercion; a non-scalar hint is a
+            // run-time check on passed args, not on a (constant) default value.
+            if let Some(hint @ TypeHint { kind: HintKind::Scalar(_), .. }) = &p.hint {
+                self.emit(Op::CoerceParam { slot: p.slot, hint: hint.clone() });
             }
             let here = self.here();
             self.patch(fill, Op::FillDefault { slot: p.slot, skip: here });

@@ -8,7 +8,7 @@
 
 use php_types::{convert, numstr, Diag, Diags, Zval};
 
-use crate::hir::{ScalarType, TypeHint};
+use crate::hir::{HintKind, ScalarType, TypeHint};
 
 /// Coerce `value` to scalar type `hint` under PHP's *weak* typing rules
 /// (step 14). On success returns the coerced value (emitting the lossy-float
@@ -25,6 +25,12 @@ pub(crate) fn coerce_to_hint(
         let inner = c.borrow().clone();
         return coerce_to_hint(inner, hint, diags, strict);
     }
+    // Only scalar hints coerce here; non-scalar hints (array/callable/object/class)
+    // are *checked* by the VM binder (which has the class table), so leave the
+    // value untouched if one reaches this funnel.
+    let HintKind::Scalar(scalar) = &hint.kind else {
+        return Ok(value);
+    };
     if matches!(value, Zval::Null | Zval::Undef) {
         return if hint.nullable {
             Ok(Zval::Null)
@@ -34,9 +40,9 @@ pub(crate) fn coerce_to_hint(
     }
     let given = php_type_name(&value);
     if strict {
-        return coerce_strict(value, hint).ok_or(given);
+        return coerce_strict(value, *scalar).ok_or(given);
     }
-    match hint.kind {
+    match scalar {
         ScalarType::Int => coerce_to_int(value, diags),
         ScalarType::Float => coerce_to_float(value),
         ScalarType::String => coerce_to_string(value, diags),
@@ -48,8 +54,8 @@ pub(crate) fn coerce_to_hint(
 /// Strict-mode (`declare(strict_types=1)`) scalar check: the value's type must
 /// match the hint exactly, with the single exception of `int` → `float`
 /// widening. No coercion, no deprecations (step 16, D-16.3).
-fn coerce_strict(value: Zval, hint: &TypeHint) -> Option<Zval> {
-    match (hint.kind, &value) {
+fn coerce_strict(value: Zval, scalar: ScalarType) -> Option<Zval> {
+    match (scalar, &value) {
         (ScalarType::Int, Zval::Long(_))
         | (ScalarType::Float, Zval::Double(_))
         | (ScalarType::String, Zval::Str(_))

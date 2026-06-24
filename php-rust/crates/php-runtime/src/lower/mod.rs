@@ -27,7 +27,7 @@ use mago_syntax::ast::{
 use mago_syntax::parser::parse_file;
 
 use crate::hir::{
-    BinOp, Capture, ClassDecl, ExprKind, FnDecl, Line, MethodDecl, Param, Program,
+    BinOp, Capture, ClassDecl, ExprKind, FnDecl, HintKind, Line, MethodDecl, Param, Program,
     PropDecl, ScalarType, Slot, StaticAssignOp, Stmt, StmtKind, TypeHint,
     Visibility,
 };
@@ -1330,25 +1330,27 @@ fn is_returnable_lvalue(e: &Expression) -> bool {
 /// step 14 does not enforce (class, union, array, mixed, …). Only the four
 /// scalar hints and their nullable forms are enforced (D-14.1/D-14.2).
 fn lower_hint(hint: &Hint) -> Option<TypeHint> {
-    let scalar = match hint {
-        Hint::Integer(_) => ScalarType::Int,
-        Hint::Float(_) => ScalarType::Float,
-        Hint::String(_) => ScalarType::String,
-        Hint::Bool(_) => ScalarType::Bool,
+    let kind = match hint {
+        Hint::Integer(_) => HintKind::Scalar(ScalarType::Int),
+        Hint::Float(_) => HintKind::Scalar(ScalarType::Float),
+        Hint::String(_) => HintKind::Scalar(ScalarType::String),
+        Hint::Bool(_) => HintKind::Scalar(ScalarType::Bool),
+        Hint::Array(_) => HintKind::Array,
+        Hint::Callable(_) => HintKind::Callable,
+        Hint::Iterable(_) => HintKind::Iterable,
+        Hint::Object(_) => HintKind::Object,
+        // A class / interface name → an `instanceof` check at the binder.
+        Hint::Identifier(id) => HintKind::Class(function_name(id).into()),
         Hint::Nullable(n) => {
-            // `?int` etc.: enforce only when the inner hint is itself scalar.
+            // `?T`: enforce only when the inner hint is itself enforced.
             let inner = lower_hint(n.hint)?;
-            return Some(TypeHint {
-                nullable: true,
-                ..inner
-            });
+            return Some(TypeHint { nullable: true, ..inner });
         }
+        // Union / intersection / `self`/`parent`/`static` / `mixed` / `void` /
+        // literal types stay unenforced (lowered to `None`) for now.
         _ => return None,
     };
-    Some(TypeHint {
-        kind: scalar,
-        nullable: false,
-    })
+    Some(TypeHint { kind, nullable: false })
 }
 
 fn strip_dollar(name: &[u8]) -> &[u8] {

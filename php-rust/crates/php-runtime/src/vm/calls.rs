@@ -485,17 +485,17 @@ impl<'m> Vm<'m> {
                 if frame.func.param_by_ref.get(i).copied().unwrap_or(false) {
                     continue;
                 }
-                let Some(hint) = frame.func.param_hints.get(i).copied().flatten() else {
+                let Some(hint) = frame.func.param_hints.get(i).cloned().flatten() else {
                     continue;
                 };
                 if matches!(frame.slots[i], Zval::Undef) {
                     continue;
                 }
                 let val = frame.slots[i].clone();
-                match coerce_to_hint(val, &hint, &mut self.diags, strict) {
+                match self.coerce_or_check_hint(val, &hint, strict) {
                     Ok(c) => frame.slots[i] = c,
                     Err(given) => {
-                        return Err(self.arg_type_error(frame.func, i, &hint, given, call_line))
+                        return Err(self.arg_type_error(frame.func, i, &hint, &given, call_line))
                     }
                 }
             }

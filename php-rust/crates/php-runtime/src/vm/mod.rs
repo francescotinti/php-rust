@@ -31,7 +31,7 @@ use crate::bytecode::{
     Addr, ClassTarget, DimBase, FieldBase, FieldStep, Func, Instantiable, Module, Op, StaticInit,
 };
 use crate::coerce::coerce_to_hint;
-use crate::hir::{BinOp, CastKind, ClassId, Line, Slot, TypeHint, UnOp, Visibility};
+use crate::hir::{BinOp, CastKind, ClassId, HintKind, Line, Slot, TypeHint, UnOp, Visibility};
 
 mod arrays;
 mod calls;
@@ -1608,12 +1608,13 @@ impl<'m> Vm<'m> {
                     // returns an alias, so its return type stays unenforced; the
                     // init-thunk / magic path (`ret_cell`) carries no hint either.
                     let func = self.frames[top].func;
-                    if let Some(hint) = func.ret_hint {
+                    if let Some(hint) = func.ret_hint.clone() {
                         if !func.by_ref && self.frames[top].ret_cell.is_none() {
-                            match coerce_to_hint(ret, &hint, &mut self.diags, self.module.strict) {
+                            let strict = self.module.strict;
+                            match self.coerce_or_check_hint(ret, &hint, strict) {
                                 Ok(c) => ret = c,
                                 Err(given) => {
-                                    return Err(self.return_type_error(func, &hint, given))
+                                    return Err(self.return_type_error(func, &hint, &given))
                                 }
                             }
                         }
@@ -4600,6 +4601,71 @@ impl<'m> Vm<'m> {
         }
     }
 
+    /// Coerce / check a by-value argument or return value against a single declared
+    /// type hint (step 14, non-scalar extension). A scalar hint coerces under weak
+    /// typing (or checks under `strict_types`); `array` / `callable` / `iterable` /
+    /// `object` / a class name are *checked* (no coercion). `null` satisfies a
+    /// nullable hint. On a mismatch, returns the class-named type of the value for
+    /// the TypeError message.
+    pub(super) fn coerce_or_check_hint(
+        &mut self,
+        value: Zval,
+        hint: &TypeHint,
+        strict: bool,
+    ) -> Result<Zval, String> {
+        let v = value.deref_clone();
+        if matches!(v, Zval::Null | Zval::Undef) {
+            return if hint.nullable { Ok(Zval::Null) } else { Err("null".to_string()) };
+        }
+        match &hint.kind {
+            HintKind::Scalar(_) => {
+                coerce_to_hint(value, hint, &mut self.diags, strict).map_err(str::to_string)
+            }
+            HintKind::Array => match v {
+                Zval::Array(_) => Ok(value),
+                other => Err(other.type_name_for_error()),
+            },
+            HintKind::Object => match v {
+                Zval::Object(_) | Zval::Closure(_) | Zval::Generator(_) => Ok(value),
+                other => Err(other.type_name_for_error()),
+            },
+            HintKind::Callable => {
+                if self.is_value_callable(&v) {
+                    Ok(value)
+                } else {
+                    Err(v.type_name_for_error())
+                }
+            }
+            HintKind::Iterable => {
+                if matches!(v, Zval::Array(_) | Zval::Generator(_))
+                    || self.value_instanceof_name(&v, b"Traversable")
+                {
+                    Ok(value)
+                } else {
+                    Err(v.type_name_for_error())
+                }
+            }
+            HintKind::Class(name) => {
+                if self.value_instanceof_name(&v, name) {
+                    Ok(value)
+                } else {
+                    Err(v.type_name_for_error())
+                }
+            }
+        }
+    }
+
+    /// Whether `v` is an instance of the class/interface `name` (the `instanceof`
+    /// check behind a class type hint): resolve the name to a class id, then walk
+    /// `v`'s ancestry. A non-object or an unknown class name is `false`.
+    fn value_instanceof_name(&self, v: &Zval, name: &[u8]) -> bool {
+        let raw = name.strip_prefix(b"\\").unwrap_or(name);
+        let Some(&target) = self.module.class_index.get(&raw.to_ascii_lowercase()[..]) else {
+            return false;
+        };
+        matches!(object_class_id(v), Some(ocid) if class_is_a(self.module, ocid, target))
+    }
+
     /// Whether a bare name is callable: a user function, any registry builtin, or a
     /// host builtin (mirrors `eval::is_name_callable`).
     fn is_name_callable(&self, name: &[u8]) -> bool {
@@ -7491,6 +7557,35 @@ mod tests {
     fn default_value_coerced_to_param_hint() {
         // `float $n = 0` stores 0.0 when the default is used (D-NEW-6).
         assert_eq!(vm_stdout(b"<?php function f(float $n = 0){ echo $n === 0.0 ? 'Y':'N'; } f();"), b"Y");
+    }
+
+    #[test]
+    fn non_scalar_param_hints_are_checked() {
+        // array / object / class hints accept the right value and run the body.
+        assert_eq!(vm_stdout(b"<?php function f(array $a){ echo $a[0], $a[1]; } f([7, 8]);"), b"78");
+        assert_eq!(
+            vm_stdout(b"<?php class A {} class B extends A { function n(){ return 'B'; } } function f(A $a){ echo $a->n(); } f(new B());"),
+            b"B"
+        );
+        // a class hint rejects an unrelated object, naming both classes.
+        let out = vm_outcome(b"<?php class A {} function f(A $a){} f(new stdClass());");
+        assert!(matches!(
+            &out.fatal,
+            Some(PhpError::TypeError(m)) if m.contains("must be of type A, stdClass given")
+        ), "got {:?}", out.fatal);
+        // an array hint rejects an int.
+        let out = vm_outcome(b"<?php function f(array $a){} f(123);");
+        assert!(matches!(
+            &out.fatal,
+            Some(PhpError::TypeError(m)) if m.contains("must be of type array, int given")
+        ), "got {:?}", out.fatal);
+        // `?Foo` accepts null.
+        assert_eq!(
+            vm_stdout(b"<?php class A {} function f(?A $a){ echo $a===null?'N':'O'; } f(null);"),
+            b"N"
+        );
+        // callable hint accepts a closure, rejects a plain string non-callable.
+        assert_eq!(vm_stdout(b"<?php function f(callable $c){ echo $c(); } f(fn()=>'ok');"), b"ok");
     }
 
     #[test]

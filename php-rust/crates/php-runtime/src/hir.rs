@@ -270,29 +270,51 @@ pub enum ScalarType {
     Bool,
 }
 
-/// A scalar type hint, optionally nullable (`?int`). Only these are enforced;
-/// every other hint (class, union, array, mixed, …) lowers to `None` (step 14,
-/// D-14.1/D-14.2).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// A single (non-union) type hint, optionally nullable (`?int`, `?Foo`). Scalars
+/// are *coerced* under weak typing; the rest are *checked* at the call binder.
+/// Union / intersection / `mixed` / `void` still lower to `None` (unenforced).
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeHint {
-    pub kind: ScalarType,
+    pub kind: HintKind,
     pub nullable: bool,
 }
 
+/// The kind of a [`TypeHint`]. Scalars carry their coercible type; `Class` carries
+/// the declared class/interface name for an `instanceof` check.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HintKind {
+    Scalar(ScalarType),
+    /// `array` — accepts any PHP array.
+    Array,
+    /// `callable` — accepts any value `is_callable` accepts.
+    Callable,
+    /// `iterable` — accepts an array or a `Traversable` instance.
+    Iterable,
+    /// `object` — accepts any object.
+    Object,
+    /// A class/interface name — accepts an instance that is `instanceof` it.
+    Class(Box<[u8]>),
+}
+
 impl TypeHint {
-    /// The hint as written, for diagnostics: `int`, `float`, `string`, `bool`,
-    /// with a leading `?` when nullable.
+    /// The hint as written, for diagnostics (`int`, `array`, `Foo`), with a leading
+    /// `?` when nullable.
     pub fn display_name(&self) -> String {
-        let base = match self.kind {
-            ScalarType::Int => "int",
-            ScalarType::Float => "float",
-            ScalarType::String => "string",
-            ScalarType::Bool => "bool",
+        let base: std::borrow::Cow<'_, str> = match &self.kind {
+            HintKind::Scalar(ScalarType::Int) => "int".into(),
+            HintKind::Scalar(ScalarType::Float) => "float".into(),
+            HintKind::Scalar(ScalarType::String) => "string".into(),
+            HintKind::Scalar(ScalarType::Bool) => "bool".into(),
+            HintKind::Array => "array".into(),
+            HintKind::Callable => "callable".into(),
+            HintKind::Iterable => "iterable".into(),
+            HintKind::Object => "object".into(),
+            HintKind::Class(name) => String::from_utf8_lossy(name).into_owned().into(),
         };
         if self.nullable {
             format!("?{base}")
         } else {
-            base.to_string()
+            base.into_owned()
         }
     }
 }
