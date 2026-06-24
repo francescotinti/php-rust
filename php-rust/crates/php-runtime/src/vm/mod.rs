@@ -6009,6 +6009,42 @@ mod tests {
     }
 
     #[test]
+    fn goto_out_of_try_runs_finally() {
+        // Jumping out of a try body runs its finally first, then lands on the
+        // target (skipping the code between the try and the label). Corpus
+        // finally_goto: "tfD".
+        assert_eq!(
+            vm_stdout(b"<?php try { echo 't'; goto done; } finally { echo 'f'; } echo 'X'; done: echo 'D';"),
+            b"tfD"
+        );
+    }
+
+    #[test]
+    fn goto_back_to_label_before_try_runs_finally() {
+        // Corpus finally_goto_005: the label is before the try; the goto inside the
+        // body jumps out, so finally runs and its `return` ends the function.
+        assert_eq!(
+            vm_stdout(b"<?php function f(){ label: try { goto label; } finally { echo 'success'; return; } } f();"),
+            b"success"
+        );
+    }
+
+    #[test]
+    fn goto_into_transparent_block_is_runtime_fatal() {
+        // D-45.1: jumping *into* an if/try/plain block is scoped out — a run-time
+        // Error matching the tree-walker (no output, since the goto fires first).
+        let o = vm_outcome(b"<?php goto a; if (true) { a: echo 'x'; }");
+        assert!(o.stdout.is_empty(), "expected no output, got {:?}", o.stdout);
+        match o.fatal {
+            Some(PhpError::Error(m)) => assert!(
+                m.contains("'goto' into a block is not supported") && m.contains("D-45.1"),
+                "message was: {m}"
+            ),
+            other => panic!("expected goto-into-block Error, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn undefined_function_is_runtime_fatal_after_output() {
         // PHP defers "Call to undefined function" to run time: the preceding output
         // is flushed, then a catchable Error is raised at the call site.

@@ -638,11 +638,28 @@ struct FnCompiler<'a> {
     /// `continue` compiled while one is active is routed through the finally
     /// (parked, then a jump to the finally entry recorded for patching).
     finally_scopes: Vec<FinallyScope>,
-    /// Resolved `label:` positions in this function body (step 45), by name.
-    labels: HashMap<Vec<u8>, Addr>,
+    /// Resolved `label:` positions in this function body (step 45), by name: the
+    /// op address and the block-scope path (innermost last) where the label sits,
+    /// used to detect a `goto` *into* a transparent block (D-45.1).
+    labels: HashMap<Vec<u8>, (Addr, Vec<u32>)>,
     /// `goto` jump sites awaiting their label, patched once the whole body is
-    /// compiled (labels may be forward references).
-    pending_gotos: Vec<(Box<[u8]>, Addr)>,
+    /// compiled (labels may be forward references). Each records the two-op site
+    /// (a placeholder + a trailing slot for finally routing) and the goto's
+    /// block-scope path.
+    pending_gotos: Vec<(Box<[u8]>, Addr, Vec<u32>)>,
+    /// Block-nesting path of the statement currently being compiled (a fresh id per
+    /// `block()`), innermost last. A `goto` may only target a label whose scope is a
+    /// prefix of the goto's (same block or an enclosing one); a deeper/divergent
+    /// target is a jump *into* a transparent block (D-45.1).
+    scope_path: Vec<u32>,
+    /// Monotonic block-scope id source for `scope_path`.
+    next_scope: u32,
+    /// One entry per compiled `try` with a `finally`: the protected op range, the
+    /// finally entry address, and the scope depth *outside* the try (its own level).
+    /// `resolve_gotos` uses it to route a `goto` that leaves the protected region
+    /// through the finally — the target is "outside" iff its scope depth is `<=` the
+    /// outer depth (an address test breaks on a label marker at the try's boundary).
+    goto_finally_meta: Vec<(std::ops::Range<Addr>, Addr, usize)>,
 }
 
 /// One active `finally` block, while its protected body/catches are compiled
@@ -701,6 +718,9 @@ impl<'a> FnCompiler<'a> {
             finally_scopes: Vec::new(),
             labels: HashMap::new(),
             pending_gotos: Vec::new(),
+            scope_path: Vec::new(),
+            next_scope: 0,
+            goto_finally_meta: Vec::new(),
         }
     }
 
@@ -775,6 +795,13 @@ impl<'a> FnCompiler<'a> {
     }
 
     fn block(&mut self, stmts: &[Stmt]) -> R<()> {
+        // Open a fresh block scope so a `goto` *into* this block (from a shallower
+        // scope) can be detected at `resolve_gotos` (D-45.1). Every compound body
+        // (if/else, try/catch/finally, loops, plain `{ }`) and the function root
+        // funnel through here, so sibling statements share one scope.
+        let id = self.next_scope;
+        self.next_scope += 1;
+        self.scope_path.push(id);
         for s in stmts {
             self.stmt(s)?;
             // At global scope, sweep unreachable objects after each statement
@@ -783,6 +810,7 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::Sweep);
             }
         }
+        self.scope_path.pop();
         Ok(())
     }
 
@@ -908,15 +936,20 @@ impl<'a> FnCompiler<'a> {
             StmtKind::Continue(n) => self.loop_jump(*n, false)?,
             StmtKind::Label(name) => {
                 // `label:` (step 45) marks a jump target; the lowerer already
-                // validated that no `goto` jumps *into* a loop/switch/finally.
-                self.labels.insert(name.to_vec(), self.here());
+                // validated that no `goto` jumps *into* a loop/switch. Record the
+                // scope so `resolve_gotos` can reject a jump into a transparent block.
+                let here = self.here();
+                self.labels.insert(name.to_vec(), (here, self.scope_path.clone()));
             }
             StmtKind::Goto(name) => {
-                // Unconditional jump to a (possibly forward) label, patched once
-                // the whole body is compiled. A `goto` crossing a finally is still
-                // rejected by `try_stmt` (it routes through `stmts_have_goto`).
+                // Unconditional jump to a (possibly forward) label, patched once the
+                // whole body is compiled. Two op slots are reserved: a `goto` that
+                // crosses a `finally` is patched to `ParkJump(target)` + a jump to the
+                // finally entry (the finally runs, then `EndFinally` performs the
+                // parked jump, EXC-2b); a plain or into-block goto only uses the first.
                 let site = self.emit(Op::Jump(Addr::MAX));
-                self.pending_gotos.push((name.clone(), site));
+                self.emit(Op::Jump(Addr::MAX));
+                self.pending_gotos.push((name.clone(), site, self.scope_path.clone()));
             }
             StmtKind::Return(opt) => {
                 // A plain `return <expr>;` (or bare `return;`) inside a `function
@@ -1044,15 +1077,55 @@ impl<'a> FnCompiler<'a> {
     /// been caught at lowering, but is surfaced defensively (step 45).
     fn resolve_gotos(&mut self) -> R<()> {
         let gotos = std::mem::take(&mut self.pending_gotos);
-        for (name, site) in gotos {
-            match self.labels.get(name.as_ref()) {
-                Some(&target) => self.patch(site, Op::Jump(target)),
-                None => {
-                    return Err(CompileError::Unsupported(format!(
-                        "goto to undefined label '{}'",
+        for (name, site, goto_scope) in gotos {
+            let Some((target, label_scope)) = self.labels.get(name.as_ref()).cloned() else {
+                return Err(CompileError::Unsupported(format!(
+                    "goto to undefined label '{}'",
+                    String::from_utf8_lossy(&name)
+                )));
+            };
+            // A `goto` may only target a label in its own block or an enclosing one
+            // (the label scope must be a prefix of the goto scope). A deeper or
+            // divergent target is a jump *into* a transparent block, which the
+            // tree-walker scopes out — match it with the same run-time fatal (D-45.1),
+            // raised in place so output before the goto still flushes.
+            let into_block = label_scope.len() > goto_scope.len()
+                || goto_scope[..label_scope.len()] != label_scope[..];
+            if into_block {
+                let k = self.konst(Const::Str(
+                    format!(
+                        "'goto' into a block is not supported (label '{}', D-45.1)",
                         String::from_utf8_lossy(&name)
-                    )))
+                    )
+                    .into_bytes()
+                    .into(),
+                ));
+                self.patch(site, Op::Fatal(k));
+                continue;
+            }
+            // If the goto leaves a `finally`'s protected region (the target sits
+            // outside it), route it through that finally like break/continue: park
+            // the target, jump to the finally entry; `EndFinally` performs the parked
+            // jump afterwards (EXC-2b). The innermost crossed finally runs.
+            // "goto inside the protected region" is decided by address (a real op);
+            // "label outside the region" by scope, not address — a `label:` marker
+            // just before the try shares the try's start address (it emits no op), so
+            // an address test would wrongly read it as inside. The label is outside
+            // the body iff its scope is at or above the try's own level.
+            let crossed = self
+                .goto_finally_meta
+                .iter()
+                .filter(|(protected, _entry, outer_len)| {
+                    protected.contains(&site) && label_scope.len() <= *outer_len
+                })
+                .min_by_key(|(protected, _, _)| protected.end - protected.start)
+                .map(|(_, entry, _)| *entry);
+            match crossed {
+                Some(finally_entry) => {
+                    self.patch(site, Op::ParkJump(target));
+                    self.patch(site + 1, Op::Jump(finally_entry));
                 }
+                None => self.patch(site, Op::Jump(target)),
             }
         }
         Ok(())
@@ -2494,17 +2567,12 @@ impl<'a> FnCompiler<'a> {
     /// crossing a `finally` is out of slice (falls back to the evaluator).
     fn try_stmt(&mut self, body: &[Stmt], catches: &[CatchClause], finally: &[Stmt]) -> R<()> {
         let has_finally = !finally.is_empty();
-        // `return`/`break`/`continue` crossing a finally are handled (EXC-2b); a
-        // `goto` in the body/catches that could cross the finally is still out of
-        // slice (rare). A `goto` confined to the *finally* body does not cross it,
-        // so it is allowed (compiled as a plain jump once the scope is popped).
-        if has_finally
-            && (stmts_have_goto(body) || catches.iter().any(|c| stmts_have_goto(&c.body)))
-        {
-            return Err(CompileError::Unsupported(
-                "try/finally with goto crossing the finally".into(),
-            ));
-        }
+        // `return`/`break`/`continue` and now `goto` crossing a finally are handled
+        // (EXC-2b): `resolve_gotos` routes a goto that leaves a finally's protected
+        // region through it. A goto confined to the finally body does not cross it.
+        // Snapshot the scope depth outside the try (its own level) so the goto router
+        // can tell an outside-the-body target from an inside-the-body one.
+        let outer_scope_len = self.scope_path.len();
         let start = self.here();
         if has_finally {
             // Route control transfers in the body/catches through this finally.
@@ -2554,6 +2622,8 @@ impl<'a> FnCompiler<'a> {
                 target: finally_entry,
                 is_finally: true,
             });
+            // Record the protected range for `goto`-through-finally routing (EXC-2b).
+            self.goto_finally_meta.push((start..finally_entry, finally_entry, outer_scope_len));
             self.block(finally)?;
             // On normal completion `EndFinally` jumps to `after` (skipping the
             // trailing `Ret`); for a parked return it pushes the value and falls
@@ -3051,40 +3121,6 @@ fn dim_base(place: &Place) -> R<DimBase> {
         PlaceBase::This => Err(CompileError::Unsupported("$this property write".into())),
     }
 }
-
-/// Whether any statement (recursively, but not into nested closures — those are
-/// separate bodies) performs a control transfer that could cross a `finally`:
-/// Whether any statement (recursively) is a `goto` — the one control transfer
-/// the VM does not route through a `finally` (EXC-2b handles return/break/
-/// continue). Conservative: a `goto` whose label stays inside the `try` also
-/// trips it, forcing a fallback to the evaluator.
-fn stmts_have_goto(stmts: &[Stmt]) -> bool {
-    stmts.iter().any(stmt_has_goto)
-}
-
-fn stmt_has_goto(s: &Stmt) -> bool {
-    match &s.kind {
-        StmtKind::Goto(_) => true,
-        StmtKind::Block(b) => stmts_have_goto(b),
-        StmtKind::If { then, elseifs, otherwise, .. } => {
-            stmts_have_goto(then)
-                || elseifs.iter().any(|(_, b)| stmts_have_goto(b))
-                || stmts_have_goto(otherwise)
-        }
-        StmtKind::While { body, .. }
-        | StmtKind::DoWhile { body, .. }
-        | StmtKind::For { body, .. }
-        | StmtKind::Foreach { body, .. } => stmts_have_goto(body),
-        StmtKind::Switch { cases, .. } => cases.iter().any(|c| stmts_have_goto(&c.body)),
-        StmtKind::Try { body, catches, finally } => {
-            stmts_have_goto(body)
-                || catches.iter().any(|c| stmts_have_goto(&c.body))
-                || stmts_have_goto(finally)
-        }
-        _ => false,
-    }
-}
-
 
 /// ASCII-case-insensitive byte-string equality — PHP resolves function names
 /// case-insensitively in ASCII (`STRLEN` == `strlen`).
