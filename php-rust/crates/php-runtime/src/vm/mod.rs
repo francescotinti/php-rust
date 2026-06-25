@@ -213,6 +213,7 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         module,
         classes: module.classes.iter().collect(),
         class_index: module.class_index.clone(),
+        linked_functions: HashMap::new(),
         registry,
         stdout: Vec::new(),
         rendered: Vec::new(),
@@ -503,6 +504,11 @@ struct Vm<'m> {
     classes: Vec<&'m CompiledClass>,
     /// Global case-insensitive class-name → [`ClassId`] index over `classes`.
     class_index: HashMap<Vec<u8>, ClassId>,
+    /// User functions declared by a linked `eval`/`include` unit (step 57, Phase
+    /// 1c-2): lowercased name → (defining module, index into its `functions`), so
+    /// they are callable by name after the unit returns. The defining module is
+    /// kept so the function's frame resolves its own bytecode indices.
+    linked_functions: HashMap<Vec<u8>, (&'m Module, usize)>,
     /// Builtin registry, injected by the caller (php-runtime can't build a
     /// populated one — that lives in php-builtins, which depends on php-runtime).
     registry: &'m Registry,
@@ -3074,6 +3080,16 @@ impl<'m> Vm<'m> {
         self.frames.push(Frame::new(&leaked.main, leaked));
         let outcome = self.drive_to_return(baseline);
         self.module = saved;
+        // Register the eval unit's user functions (those not already provided by
+        // the caller's module — i.e. not prelude/builtin duplicates) so they are
+        // callable by name after the eval returns (step 57, Phase 1c-2). Functions
+        // are hoisted at unit load, so do this even if the body later threw.
+        for (idx, f) in leaked.functions.iter().enumerate() {
+            let already = saved.functions.iter().any(|cf| name_eq_ignore_case(&cf.name, &f.name));
+            if !already {
+                self.linked_functions.entry(f.name.to_ascii_lowercase()).or_insert((leaked, idx));
+            }
+        }
         outcome
     }
 
@@ -5541,6 +5557,7 @@ impl<'m> Vm<'m> {
     /// host builtin (mirrors `eval::is_name_callable`).
     fn is_name_callable(&self, name: &[u8]) -> bool {
         self.module.functions.iter().any(|f| name_eq_ignore_case(&f.name, name))
+            || self.linked_functions.contains_key(&name.to_ascii_lowercase())
             || self.registry.get(name).is_some()
             || host_builtin_canonical(name).is_some()
             || host_builtin_ref_first(name).is_some()

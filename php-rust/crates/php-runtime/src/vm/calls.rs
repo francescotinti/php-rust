@@ -444,6 +444,15 @@ impl<'m> Vm<'m> {
             self.enter_callee(frame)?;
             return Ok(());
         }
+        // A function declared by a linked eval/include unit (step 57): resolve it
+        // and run its frame in the module that defined it.
+        if let Some(&(fmod, idx)) = self.linked_functions.get(&name.to_ascii_lowercase()) {
+            let callee = &fmod.functions[idx];
+            let mut frame = Frame::new(callee, fmod);
+            bind_params(&mut frame, args);
+            self.enter_callee(frame)?;
+            return Ok(());
+        }
         match self.registry.get(name) {
             Some(Builtin::Value(f)) => {
                 let f = *f;
