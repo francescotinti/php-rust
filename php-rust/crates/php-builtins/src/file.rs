@@ -548,7 +548,7 @@ pub fn ftruncate(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
             c.get_mut().resize(size as usize, 0);
             true
         }
-        StreamBackend::Stdout | StreamBackend::Stderr => false,
+        StreamBackend::Stdin | StreamBackend::Stdout | StreamBackend::Stderr => false,
     };
     Ok(Zval::Bool(ok))
 }
@@ -1184,7 +1184,7 @@ pub fn fstat(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
             v[7] = c.get_ref().len() as i64; // size
             v
         }
-        StreamBackend::Stdout | StreamBackend::Stderr => {
+        StreamBackend::Stdin | StreamBackend::Stdout | StreamBackend::Stderr => {
             let mut v = [0i64; 13];
             v[2] = 0o100_666;
             v[3] = 1;

@@ -283,6 +283,17 @@ pub(crate) fn run_module_with_hir<'m>(
     for (idx, f) in module.functions.iter().enumerate() {
         vm.linked_functions.insert(f.name.to_ascii_lowercase(), (module, idx));
     }
+    // Predefined CLI stream constants `STDIN`/`STDOUT`/`STDERR` (resource ids
+    // #1/#2/#3, as the PHP CLI SAPI), so a script can `fwrite(STDERR, …)` (step 57).
+    let std_stream = |id: u32, backend: StreamBackend, readable: bool, writable: bool| {
+        Zval::Resource(Rc::new(RefCell::new(Resource::new(
+            id,
+            Stream { backend, readable, writable, eof: false },
+        ))))
+    };
+    vm.constants.insert(b"STDIN".to_vec(), std_stream(1, StreamBackend::Stdin, true, false));
+    vm.constants.insert(b"STDOUT".to_vec(), std_stream(2, StreamBackend::Stdout, false, true));
+    vm.constants.insert(b"STDERR".to_vec(), std_stream(3, StreamBackend::Stderr, false, true));
     vm.frames.push(Frame::new(&module.main, module));
     // `exit`/`die` is a clean termination (the exit code is surfaced, not a fatal);
     // any other `Err` is an uncaught fatal. A `Ok` carries the top-level return.

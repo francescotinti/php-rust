@@ -65,6 +65,9 @@ pub enum StreamBackend {
     File(std::fs::File),
     /// `php://memory` / `php://temp` (step 51b). Backed by an in-process buffer.
     Memory(Cursor<Vec<u8>>),
+    /// The process's standard input — backs the predefined `STDIN` constant and
+    /// `php://stdin` (step 57). Reads pull from `std::io::stdin`.
+    Stdin,
     Stdout,
     Stderr,
 }
@@ -127,6 +130,7 @@ impl Stream {
             let got = match &mut self.backend {
                 StreamBackend::File(f) => f.read(&mut buf[filled..])?,
                 StreamBackend::Memory(c) => c.read(&mut buf[filled..])?,
+                StreamBackend::Stdin => std::io::stdin().read(&mut buf[filled..])?,
                 StreamBackend::Stdout | StreamBackend::Stderr => 0,
             };
             if got == 0 {
@@ -152,6 +156,7 @@ impl Stream {
             let got = match &mut self.backend {
                 StreamBackend::File(f) => f.read(&mut one)?,
                 StreamBackend::Memory(c) => c.read(&mut one)?,
+                StreamBackend::Stdin => std::io::stdin().read(&mut one)?,
                 StreamBackend::Stdout | StreamBackend::Stderr => 0,
             };
             if got == 0 {
@@ -174,6 +179,8 @@ impl Stream {
         match &mut self.backend {
             StreamBackend::File(f) => f.write(data),
             StreamBackend::Memory(c) => c.write(data),
+            // Writing to STDIN is not permitted; report zero bytes written.
+            StreamBackend::Stdin => Ok(0),
             StreamBackend::Stdout => {
                 let mut o = std::io::stdout();
                 o.write_all(data)?;
@@ -191,6 +198,7 @@ impl Stream {
         match &mut self.backend {
             StreamBackend::File(f) => f.flush(),
             StreamBackend::Memory(c) => c.flush(),
+            StreamBackend::Stdin => Ok(()),
             StreamBackend::Stdout => std::io::stdout().flush(),
             StreamBackend::Stderr => std::io::stderr().flush(),
         }
@@ -201,7 +209,7 @@ impl Stream {
         let r = match &mut self.backend {
             StreamBackend::File(f) => f.seek(pos).is_ok(),
             StreamBackend::Memory(c) => c.seek(pos).is_ok(),
-            StreamBackend::Stdout | StreamBackend::Stderr => false,
+            StreamBackend::Stdin | StreamBackend::Stdout | StreamBackend::Stderr => false,
         };
         if r {
             self.eof = false;
@@ -216,7 +224,7 @@ impl Stream {
         match &mut self.backend {
             StreamBackend::File(f) => f.stream_position().ok(),
             StreamBackend::Memory(c) => c.stream_position().ok(),
-            StreamBackend::Stdout | StreamBackend::Stderr => None,
+            StreamBackend::Stdin | StreamBackend::Stdout | StreamBackend::Stderr => None,
         }
     }
 }
@@ -240,6 +248,8 @@ pub fn mode_caps(mode: &[u8]) -> Option<(bool, bool)> {
 pub fn open_php_stream(spec: &[u8], mode: &[u8]) -> Option<Stream> {
     let backend = if spec == b"memory" || spec == b"temp" || spec.starts_with(b"temp/") {
         StreamBackend::Memory(Cursor::new(Vec::new()))
+    } else if spec == b"stdin" {
+        StreamBackend::Stdin
     } else if spec == b"stdout" {
         StreamBackend::Stdout
     } else if spec == b"stderr" {
@@ -248,6 +258,7 @@ pub fn open_php_stream(spec: &[u8], mode: &[u8]) -> Option<Stream> {
         return None;
     };
     let (readable, writable) = match backend {
+        StreamBackend::Stdin => (true, false),
         StreamBackend::Stdout | StreamBackend::Stderr => (false, true),
         _ => mode_caps(mode).unwrap_or((true, true)),
     };
