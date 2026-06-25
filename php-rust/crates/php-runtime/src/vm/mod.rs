@@ -4034,17 +4034,63 @@ impl<'m> Vm<'m> {
             )));
         };
         let cur = self.frames[self.frames.len() - 1].class;
-        let obj = o.borrow();
-        let cid = obj.class_id as usize;
+        let (cid, oid) = {
+            let b = o.borrow();
+            (b.class_id as usize, b.id)
+        };
+        // Declared-property order, parent-first (root → derived), de-duplicated so
+        // a redeclared property keeps its inherited position. `own_prop_vis`
+        // includes *virtual* hooked properties (which have no instance storage),
+        // unlike the instance prop store — so iterating it lets a `get`-only
+        // hooked property surface (step 56c, GH-16725).
+        let mut chain: Vec<usize> = Vec::new();
+        let mut c = Some(cid);
+        while let Some(ci) = c {
+            chain.push(ci);
+            c = self.module.classes[ci].parent;
+        }
+        let mut order: Vec<Box<[u8]>> = Vec::new();
+        let mut declared: HashSet<Box<[u8]>> = HashSet::new();
+        for ci in chain.iter().rev() {
+            for (name, _) in &self.module.classes[*ci].own_prop_vis {
+                if declared.insert(name.clone()) {
+                    order.push(name.clone());
+                }
+            }
+        }
         let mut arr = PhpArray::new();
-        for (name, val) in obj.props.iter() {
+        for name in &order {
             let visible = match resolve_prop_decl(self.module, cid, name) {
                 Some((vis, decl)) => visible_from(self.module, cur, vis, decl),
-                None => true, // dynamic / undeclared property is public
+                None => true,
             };
-            if visible {
-                arr.insert(Key::from_bytes(name), val.clone());
+            if !visible {
+                continue;
             }
+            // A hooked property (backed or virtual) surfaces through its `get`
+            // hook; a plain property reads from the instance store. An
+            // uninitialised typed property (neither hooked nor stored) is omitted.
+            if let Some(func) = self.prop_hook(cid, name, false) {
+                let baseline = self.frames.len();
+                self.push_hook(func, Zval::Object(o.clone()), oid, name, None);
+                let val = self.drive_to_return(baseline)?;
+                arr.insert(Key::from_bytes(name), val);
+            } else if let Some(val) = o.borrow().props.get(name).cloned() {
+                arr.insert(Key::from_bytes(name), val);
+            }
+        }
+        // Dynamic (undeclared) properties keep instance order, after the declared
+        // set; they are always public.
+        let dynamic: Vec<(Box<[u8]>, Zval)> = {
+            let b = o.borrow();
+            b.props
+                .iter()
+                .filter(|(name, _)| !declared.contains(*name))
+                .map(|(name, val)| (name.to_vec().into_boxed_slice(), val.clone()))
+                .collect()
+        };
+        for (name, val) in dynamic {
+            arr.insert(Key::from_bytes(&name), val);
         }
         Ok(Zval::Array(Rc::new(arr)))
     }
