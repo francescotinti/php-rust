@@ -1366,6 +1366,25 @@ impl<'m> Vm<'m> {
                 }
                 Op::EmptyPath { base, nkeys } => {
                     let keys = self.pop_keys(top, nkeys);
+                    // `empty($o[$k])` on an ArrayAccess object: `!offsetExists($k)`
+                    // short-circuits to empty (so `offsetGet` — which may throw for
+                    // an absent key, e.g. WeakMap — is skipped); otherwise
+                    // `!truthy(offsetGet($k))`. A single step only.
+                    if nkeys == 1 {
+                        if let Some(recv) = self.as_arrayaccess(self.base_cell(base, top)) {
+                            let key = keys.into_iter().next().expect("empty key");
+                            let exists =
+                                self.call_method_sync(recv.clone(), b"offsetExists", vec![key.clone()])?;
+                            let empty = if convert::is_true_silent(&exists) {
+                                let v = self.call_method_sync(recv, b"offsetGet", vec![key])?;
+                                !convert::is_true_silent(&v)
+                            } else {
+                                true
+                            };
+                            self.frames[top].stack.push(Zval::Bool(empty));
+                            continue;
+                        }
+                    }
                     let empty = match silent_get_path(self.base_cell(base, top), &keys) {
                         Some(v) => !convert::is_true_silent(&v),
                         None => true,
@@ -3651,6 +3670,8 @@ impl<'m> Vm<'m> {
             b"array_filter" => self.ho_array_filter(args),
             b"array_reduce" => self.ho_array_reduce(args),
             b"get_class" => self.ho_get_class(args),
+            b"spl_object_id" => self.ho_spl_object_id(args),
+            b"spl_object_hash" => self.ho_spl_object_hash(args),
             b"get_parent_class" => self.ho_get_parent_class(args),
             b"get_object_vars" => self.ho_get_object_vars(args),
             b"get_class_methods" => self.ho_get_class_methods(args),
@@ -4401,6 +4422,40 @@ impl<'m> Vm<'m> {
                 other.type_name_for_error()
             ))),
         }
+    }
+
+    /// The unique per-object handle (`#N`) of an object value, shared by
+    /// `spl_object_id` and `spl_object_hash`. Objects, closures and generators all
+    /// carry a handle; anything else is a `TypeError` (matching PHP's `object`
+    /// parameter type).
+    fn object_handle_id(v: &Zval, fname: &str) -> Result<u32, PhpError> {
+        match v {
+            Zval::Object(o) => Ok(o.borrow().id),
+            Zval::Closure(c) => Ok(c.id),
+            Zval::Generator(g) => Ok(g.borrow().id),
+            Zval::Ref(r) => Self::object_handle_id(&r.borrow(), fname),
+            other => Err(PhpError::TypeError(format!(
+                "{}(): Argument #1 ($object) must be of type object, {} given",
+                fname,
+                other.type_name_for_error()
+            ))),
+        }
+    }
+
+    /// `spl_object_id($object)` — the object's integer handle (its `#N`). Unique
+    /// among live objects; reusable after an object is freed (as in PHP).
+    fn ho_spl_object_id(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let v = args.into_iter().next().unwrap_or(Zval::Null).deref_clone();
+        Ok(Zval::Long(Self::object_handle_id(&v, "spl_object_id")? as i64))
+    }
+
+    /// `spl_object_hash($object)` — a 32-hex-digit string unique to the object for
+    /// its lifetime. PHP derives it from the handle; we render the handle as the
+    /// low bytes of the 32-char hash, which preserves per-object uniqueness.
+    fn ho_spl_object_hash(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let v = args.into_iter().next().unwrap_or(Zval::Null).deref_clone();
+        let id = Self::object_handle_id(&v, "spl_object_hash")?;
+        Ok(Zval::Str(PhpStr::new(format!("{:032x}", id).into_bytes())))
     }
 
     /// `get_parent_class($object_or_class = null)` (Session B2): the parent class
@@ -6761,6 +6816,8 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"array_filter",
         b"array_reduce",
         b"get_class",
+        b"spl_object_id",
+        b"spl_object_hash",
         b"get_parent_class",
         b"get_object_vars",
         b"get_class_methods",

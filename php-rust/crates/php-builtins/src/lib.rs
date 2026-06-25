@@ -455,6 +455,47 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
                 seen.pop();
                 return;
             }
+            // A WeakMap renders as its key/value pairs, not its internal storage
+            // property: `[i] => array(2){ ["key"]=>K, ["value"]=>V }`, in
+            // insertion order (mirrors PHP's native handler). The backing
+            // `__entries` array maps spl_object_id => [key, value].
+            if obj.class_name.as_bytes() == b"WeakMap" {
+                let entries: Vec<Zval> = match obj.props.get(b"__entries") {
+                    Some(Zval::Array(a)) => a.iter().map(|(_, v)| v.clone()).collect(),
+                    _ => Vec::new(),
+                };
+                out.extend_from_slice(
+                    format!("object(WeakMap)#{} ({}) {{\n", obj.id, entries.len()).as_bytes(),
+                );
+                for (i, entry) in entries.iter().enumerate() {
+                    let (key, value) = match entry {
+                        Zval::Array(pair) => {
+                            let mut it = pair.iter().map(|(_, v)| v.clone());
+                            (it.next().unwrap_or(Zval::Null), it.next().unwrap_or(Zval::Null))
+                        }
+                        _ => (Zval::Null, Zval::Null),
+                    };
+                    spaces(out, indent + 2);
+                    out.extend_from_slice(format!("[{i}]=>\n").as_bytes());
+                    spaces(out, indent + 2);
+                    out.extend_from_slice(b"array(2) {\n");
+                    spaces(out, indent + 4);
+                    out.extend_from_slice(b"[\"key\"]=>\n");
+                    spaces(out, indent + 4);
+                    dump(out, &key, indent + 4, seen);
+                    spaces(out, indent + 4);
+                    out.extend_from_slice(b"[\"value\"]=>\n");
+                    spaces(out, indent + 4);
+                    dump(out, &value, indent + 4, seen);
+                    spaces(out, indent + 2);
+                    out.extend_from_slice(b"}\n");
+                }
+                drop(obj);
+                seen.pop();
+                spaces(out, indent);
+                out.extend_from_slice(b"}\n");
+                return;
+            }
             out.extend_from_slice(b"object(");
             // An anonymous class's name is `class@anonymous\0…`; displays show only
             // the part before the NUL (`class@anonymous`), like PHP. A no-op for

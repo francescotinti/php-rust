@@ -541,6 +541,45 @@ class Fiber {
     private $callable;
     public function __construct($callable) { $this->callable = $callable; }
 }
+class WeakMap implements ArrayAccess, Countable, IteratorAggregate {
+    // id => [object, value]. The object is held *strongly* (no true weakness:
+    // our VM has no tracing GC, so entries persist until explicitly unset). Keyed
+    // by spl_object_id so distinct objects map to distinct entries.
+    private $__entries = [];
+    public function offsetExists($object) {
+        // isset()/empty() on an ArrayAccess element use offsetExists as the
+        // backend; PHP reports a null-valued key as not set, so mirror that.
+        $id = spl_object_id($object);
+        return isset($this->__entries[$id]) && $this->__entries[$id][1] !== null;
+    }
+    public function offsetGet($object) {
+        if (!is_object($object)) {
+            throw new TypeError("WeakMap key must be an object");
+        }
+        $id = spl_object_id($object);
+        if (!array_key_exists($id, $this->__entries)) {
+            throw new Error("Object " . get_class($object) . "#" . $id . " not contained in WeakMap");
+        }
+        return $this->__entries[$id][1];
+    }
+    public function offsetSet($object, $value) {
+        if (!is_object($object)) {
+            throw new TypeError("WeakMap key must be an object");
+        }
+        $this->__entries[spl_object_id($object)] = [$object, $value];
+    }
+    public function offsetUnset($object) {
+        unset($this->__entries[spl_object_id($object)]);
+    }
+    public function count() {
+        return count($this->__entries);
+    }
+    public function getIterator() {
+        foreach ($this->__entries as $entry) {
+            yield $entry[0] => $entry[1];
+        }
+    }
+}
 interface DateTimeInterface {}
 class DateTime implements DateTimeInterface {
     private $__ts = 0;
