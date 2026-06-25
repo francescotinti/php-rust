@@ -129,6 +129,7 @@ pub(super) fn unknown_named_param(named: &[(Box<[u8]>, Zval)]) -> PhpError {
 /// are set by the caller.
 pub(super) fn build_named_frame<'m>(
     callee: &'m Func,
+    module: &'m Module,
     file: &[u8],
     line: Line,
     display_name: &str,
@@ -142,7 +143,7 @@ pub(super) fn build_named_frame<'m>(
     };
     let has_variadic = callee.variadic_slot.is_some();
     let passed = positional.len() + named.len();
-    let mut frame = Frame::new(callee);
+    let mut frame = Frame::new(callee, module);
     let mut variadic = PhpArray::new();
     // Positional args fill the leading fixed slots; surplus goes to the variadic.
     for (i, a) in positional.into_iter().enumerate() {
@@ -438,7 +439,7 @@ impl<'m> Vm<'m> {
             self.module.functions.iter().position(|f| name_eq_ignore_case(&f.name, name))
         {
             let callee = &self.module.functions[idx];
-            let mut frame = Frame::new(callee);
+            let mut frame = Frame::new(callee, self.module);
             bind_params(&mut frame, args);
             self.enter_callee(frame)?;
             return Ok(());

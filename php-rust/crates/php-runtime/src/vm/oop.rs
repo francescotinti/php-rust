@@ -382,7 +382,7 @@ impl<'m> Vm<'m> {
             if let Some((defc, midx)) = resolve_method_runtime(module, cid, b"__destruct") {
                 self.destructed.insert(id);
                 let callee = &module.classes[defc].methods[midx].func;
-                let mut frame = Frame::new(callee);
+                let mut frame = Frame::new(callee, self.module);
                 frame.this = Some(Zval::Object(Rc::clone(&o)));
                 frame.class = Some(defc);
                 frame.static_class = Some(cid);
@@ -497,7 +497,7 @@ impl<'m> Vm<'m> {
                 );
                 let line = self.cur_line(top);
                 let mut frame =
-                    build_named_frame(callee, &module.file, line, &qn, positional, named)?;
+                    build_named_frame(callee, module, &module.file, line, &qn, positional, named)?;
                 frame.this = Some(this);
                 frame.class = Some(defc);
                 frame.static_class = Some(cid); // LSB = receiver's actual class

@@ -247,7 +247,7 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         mb_regex: crate::mbregex::MbRegexState::default(),
         uncaught_throwable: None,
     };
-    vm.frames.push(Frame::new(&module.main));
+    vm.frames.push(Frame::new(&module.main, module));
     // `exit`/`die` is a clean termination (the exit code is surfaced, not a fatal);
     // any other `Err` is an uncaught fatal. A `Ok` carries the top-level return.
     let mut exit_code = None;
@@ -324,6 +324,12 @@ enum Transfer {
 /// Rust stack involved.
 struct Frame<'m> {
     func: &'m Func,
+    /// The module (translation unit) this frame executes in (step 57). Module-
+    /// relative bytecode indices — `Op::Call`'s function index, `__FILE__`, the
+    /// strict-types flag — resolve against *this* module, not a single global one,
+    /// so a frame from an `include`d / `eval`'d unit reads its own metadata. With
+    /// a single compiled unit every frame's module is the same `main` module.
+    module: &'m Module,
     ip: usize,
     slots: Vec<Zval>,
     stack: Vec<Zval>,
@@ -394,9 +400,10 @@ struct Frame<'m> {
 }
 
 impl<'m> Frame<'m> {
-    fn new(func: &'m Func) -> Self {
+    fn new(func: &'m Func, module: &'m Module) -> Self {
         Frame {
             func,
+            module,
             ip: 0,
             slots: vec![Zval::Undef; func.n_slots as usize],
             stack: Vec::new(),
@@ -1064,7 +1071,7 @@ impl<'m> Vm<'m> {
                                 // __toString's (stringified) return flows back via Ret.
                                 Some((defc, midx)) => {
                                     let callee = &self.module.classes[defc].methods[midx].func;
-                                    let mut frame = Frame::new(callee);
+                                    let mut frame = Frame::new(callee, self.module);
                                     frame.this = Some(target.clone());
                                     frame.class = Some(defc);
                                     frame.static_class = Some(cid);
@@ -1292,11 +1299,12 @@ impl<'m> Vm<'m> {
                         bound.push((cap.dst, val));
                     }
                     let bound_this = if bind_this { self.frames[top].this.clone() } else { None };
-                    let func = &self.module.closures[fn_idx as usize];
+                    let m = self.frames[top].module;
+                    let func = &m.closures[fn_idx as usize];
                     let info = Rc::new(ClosureInfo {
                         kind: ClosureRender::Closure {
                             name: PhpStr::new(func.name.to_vec()),
-                            file: PhpStr::new(self.module.file.to_vec()),
+                            file: PhpStr::new(m.file.to_vec()),
                             line: func.line,
                         },
                         params: closure_params(func),
@@ -1658,7 +1666,8 @@ impl<'m> Vm<'m> {
                     self.frames[top].iters.pop();
                 }
                 Op::Call { func, argc } => {
-                    let callee = &self.module.functions[func as usize];
+                    let m = self.frames[top].module;
+                    let callee = &m.functions[func as usize];
                     // Pop argc args (pushed left-to-right) and bind them to the
                     // callee's leading slots. The caller's `ip` is already past
                     // the Call, so it resumes correctly once the callee returns.
@@ -1668,7 +1677,7 @@ impl<'m> Vm<'m> {
                         args.push(self.frames[top].stack.pop().expect("call argument"));
                     }
                     args.reverse();
-                    let mut frame = Frame::new(callee);
+                    let mut frame = Frame::new(callee, m);
                     bind_params(&mut frame, args);
                     self.enter_callee(frame)?;
                 }
@@ -1678,8 +1687,9 @@ impl<'m> Vm<'m> {
                     // compose via the binder).
                     let argsval = self.frames[top].stack.pop().expect("CallArgs array");
                     let args = args_from_array_value(argsval);
-                    let callee = &self.module.functions[func as usize];
-                    let mut frame = Frame::new(callee);
+                    let m = self.frames[top].module;
+                    let callee = &m.functions[func as usize];
+                    let mut frame = Frame::new(callee, m);
                     bind_params(&mut frame, args);
                     self.enter_callee(frame)?;
                 }
@@ -1692,10 +1702,11 @@ impl<'m> Vm<'m> {
                         names.iter().cloned().zip(named_vals).collect();
                     let pos = self.pop_keys(top, positional);
                     let line = self.cur_line(top);
-                    let callee = &self.module.functions[func as usize];
+                    let m = self.frames[top].module;
+                    let callee = &m.functions[func as usize];
                     let qn = String::from_utf8_lossy(&callee.name).into_owned();
                     let frame =
-                        build_named_frame(callee, &self.module.file, line, &qn, pos, named)?;
+                        build_named_frame(callee, m, &m.file, line, &qn, pos, named)?;
                     self.enter_callee(frame)?;
                 }
                 Op::CallSpread { func, spreads, names } => {
@@ -1738,11 +1749,13 @@ impl<'m> Vm<'m> {
                         named.push((label, v));
                     }
                     let line = self.cur_line(top);
-                    let callee = &self.module.functions[func as usize];
+                    let m = self.frames[top].module;
+                    let callee = &m.functions[func as usize];
                     let qn = String::from_utf8_lossy(&callee.name).into_owned();
                     let frame = build_named_frame(
                         callee,
-                        &self.module.file,
+                        m,
+                        &m.file,
                         line,
                         &qn,
                         positional,
@@ -2129,7 +2142,7 @@ impl<'m> Vm<'m> {
                     // can deep-copy what it needs (PHP OOP).
                     if let Some((defc, midx)) = resolve_method_runtime(self.module, cid, b"__clone") {
                         let callee = &self.module.classes[defc].methods[midx].func;
-                        let mut frame = Frame::new(callee);
+                        let mut frame = Frame::new(callee, self.module);
                         frame.this = Some(clone_val);
                         frame.class = Some(defc);
                         frame.static_class = Some(cid);
@@ -2431,7 +2444,7 @@ impl<'m> Vm<'m> {
                     let this = recv.deref_clone();
                     let lsb = object_class_id(&this).unwrap_or(class);
                     let callee = &module.classes[class].methods[method_idx as usize].func;
-                    let mut frame = Frame::new(callee);
+                    let mut frame = Frame::new(callee, self.module);
                     bind_params(&mut frame, args);
                     frame.this = Some(this);
                     frame.class = Some(class);
@@ -2569,7 +2582,7 @@ impl<'m> Vm<'m> {
                     // class's context; its `Ret` leaves the value on the caller's
                     // stack.
                     let thunk = &self.module.classes[class].consts[idx as usize].func;
-                    let mut frame = Frame::new(thunk);
+                    let mut frame = Frame::new(thunk, self.module);
                     frame.class = Some(class);
                     frame.static_class = Some(class);
                     self.frames.push(frame);
@@ -2587,7 +2600,7 @@ impl<'m> Vm<'m> {
                         )));
                     };
                     let thunk = &module.classes[decl].consts[idx].func;
-                    let mut frame = Frame::new(thunk);
+                    let mut frame = Frame::new(thunk, self.module);
                     frame.class = Some(decl);
                     frame.static_class = Some(decl);
                     self.frames.push(frame);
@@ -2621,7 +2634,7 @@ impl<'m> Vm<'m> {
                             )));
                         };
                         let thunk = &module.classes[decl].consts[idx].func;
-                        let mut frame = Frame::new(thunk);
+                        let mut frame = Frame::new(thunk, self.module);
                         frame.class = Some(decl);
                         frame.static_class = Some(decl);
                         self.frames.push(frame);
@@ -2647,7 +2660,7 @@ impl<'m> Vm<'m> {
                     match resolve_method_runtime(module, cid, b"__construct") {
                         Some((defc, midx)) => {
                             let callee = &module.classes[defc].methods[midx].func;
-                            let mut frame = Frame::new(callee);
+                            let mut frame = Frame::new(callee, self.module);
                             bind_params(&mut frame, args);
                             frame.this = Some(this);
                             frame.class = Some(defc);
@@ -2671,7 +2684,7 @@ impl<'m> Vm<'m> {
                     match resolve_method_runtime(module, cid, b"__construct") {
                         Some((defc, midx)) => {
                             let callee = &module.classes[defc].methods[midx].func;
-                            let mut frame = Frame::new(callee);
+                            let mut frame = Frame::new(callee, self.module);
                             bind_params(&mut frame, args);
                             frame.this = Some(this);
                             frame.class = Some(defc);
@@ -2687,7 +2700,7 @@ impl<'m> Vm<'m> {
                     let cid = object_class_id(&recv).expect("InitProps on a non-object");
                     match &module.classes[cid].prop_init {
                         Some(func) => {
-                            let mut frame = Frame::new(func);
+                            let mut frame = Frame::new(func, self.module);
                             frame.this = Some(recv.deref_clone());
                             frame.class = Some(cid);
                             frame.static_class = Some(cid);
@@ -2901,7 +2914,7 @@ impl<'m> Vm<'m> {
                         if let Some((defc, midx)) = resolve_method_runtime(module, cid, b"__destruct") {
                             self.destructed.insert(id);
                             let callee = &module.classes[defc].methods[midx].func;
-                            let mut frame = Frame::new(callee);
+                            let mut frame = Frame::new(callee, self.module);
                             frame.this = Some(Zval::Object(Rc::clone(&o)));
                             frame.class = Some(defc);
                             frame.static_class = Some(cid);
@@ -2991,7 +3004,7 @@ impl<'m> Vm<'m> {
             ))
         })?;
         let callee = &module.classes[defc].methods[midx].func;
-        let mut frame = Frame::new(callee);
+        let mut frame = Frame::new(callee, self.module);
         bind_params(&mut frame, args);
         frame.this = Some(recv);
         frame.class = Some(defc);
@@ -5127,7 +5140,7 @@ impl<'m> Vm<'m> {
                     Some((defc, midx)) => {
                         let callee = &self.module.classes[defc].methods[midx].func;
                         let baseline = self.frames.len();
-                        let mut frame = Frame::new(callee);
+                        let mut frame = Frame::new(callee, self.module);
                         frame.this = Some(v.clone());
                         frame.class = Some(defc);
                         frame.static_class = Some(cid);
@@ -5476,7 +5489,7 @@ impl<'m> Vm<'m> {
     /// the bound `$this`. Mirrors `eval::call_closure` (captures before params).
     fn push_closure_frame(&mut self, cl: &Closure, args: Vec<Zval>) -> Result<(), PhpError> {
         let callee = &self.module.closures[cl.fn_idx];
-        let mut frame = Frame::new(callee);
+        let mut frame = Frame::new(callee, self.module);
         for (slot, val) in &cl.captures {
             frame.slots[*slot as usize] = val.clone();
         }
@@ -5500,7 +5513,7 @@ impl<'m> Vm<'m> {
         named: Vec<(Box<[u8]>, Zval)>,
     ) {
         let callee = &self.module.classes[defc].methods[midx].func;
-        let mut frame = Frame::new(callee);
+        let mut frame = Frame::new(callee, self.module);
         frame.argc = callee.n_params;
         if !frame.slots.is_empty() {
             frame.slots[0] = Zval::Str(PhpStr::new(method.to_vec()));
@@ -5539,7 +5552,7 @@ impl<'m> Vm<'m> {
         match usable {
             Some((defc, midx)) => {
                 let callee = &module.classes[defc].methods[midx].func;
-                let mut frame = Frame::new(callee);
+                let mut frame = Frame::new(callee, self.module);
                 bind_params(&mut frame, args);
                 frame.this = Some(this);
                 frame.class = Some(defc);
@@ -5634,7 +5647,7 @@ impl<'m> Vm<'m> {
         match usable {
             Some((defc, midx)) => {
                 let callee = &module.classes[defc].methods[midx].func;
-                let mut frame = Frame::new(callee);
+                let mut frame = Frame::new(callee, self.module);
                 bind_params(&mut frame, args);
                 frame.this = this;
                 frame.class = Some(defc);
@@ -6004,7 +6017,7 @@ impl<'m> Vm<'m> {
                 // so the access re-reads the filled cell on the next iteration.
                 let cell = Rc::new(RefCell::new(Zval::Null));
                 self.static_props.insert(key, Rc::clone(&cell));
-                let mut frame = Frame::new(func);
+                let mut frame = Frame::new(func, self.module);
                 frame.class = Some(decl);
                 frame.static_class = Some(decl);
                 frame.ret_cell = Some(Rc::clone(&cell));
@@ -6065,7 +6078,7 @@ impl<'m> Vm<'m> {
         args: Vec<Zval>,
     ) {
         let callee = &self.module.classes[defc].methods[midx].func;
-        let mut frame = Frame::new(callee);
+        let mut frame = Frame::new(callee, self.module);
         // A magic accessor is always invoked with exactly its declared
         // parameters, so the arity guard (PAR) sees a full argument count.
         frame.argc = callee.n_params;
@@ -6100,7 +6113,7 @@ impl<'m> Vm<'m> {
     ) {
         let lsb = object_class_id(&recv).unwrap_or(defc);
         let callee = &self.module.classes[defc].methods[midx].func;
-        let mut frame = Frame::new(callee);
+        let mut frame = Frame::new(callee, self.module);
         // A magic accessor is always invoked with exactly its declared
         // parameters, so the arity guard (PAR) sees a full argument count.
         frame.argc = callee.n_params;
@@ -6150,7 +6163,7 @@ impl<'m> Vm<'m> {
     fn push_hook(&mut self, func: &'m Func, recv: Zval, oid: u32, name: &[u8], set_value: Option<Zval>) {
         let cid = object_class_id(&recv).unwrap_or(0);
         let is_set = set_value.is_some();
-        let mut frame = Frame::new(func);
+        let mut frame = Frame::new(func, self.module);
         frame.argc = func.n_params;
         if let Some(v) = set_value {
             if !frame.slots.is_empty() {
