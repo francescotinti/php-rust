@@ -267,6 +267,15 @@ pub(crate) fn run_module_with_hir<'m>(
         mb_regex: crate::mbregex::MbRegexState::default(),
         uncaught_throwable: None,
     };
+    // Register the caller module's own functions in the global link table so a
+    // call made from inside an `eval()` (where `self.module` is the eval unit,
+    // not `main`) still resolves them — and runs each in its defining module, so
+    // `__FILE__`/backtrace stay attributed to the caller's file (step 57, Phase
+    // 1c-2c). Normal (non-eval) calls hit `self.module.functions` first, so these
+    // entries only matter across the eval boundary.
+    for (idx, f) in module.functions.iter().enumerate() {
+        vm.linked_functions.insert(f.name.to_ascii_lowercase(), (module, idx));
+    }
     vm.frames.push(Frame::new(&module.main, module));
     // `exit`/`die` is a clean termination (the exit code is surfaced, not a fatal);
     // any other `Err` is an uncaught fatal. A `Ok` carries the top-level return.
@@ -417,6 +426,12 @@ struct Frame<'m> {
     /// check and `__set` — a subclass thunk initialises an inherited *private*
     /// default (e.g. `Exception::$trace = []`) without a "cannot access" fatal.
     init_props: bool,
+    /// Set on an `eval()` unit's top (`main`) frame to its *call site* — the file
+    /// and line where `eval()` was invoked (step 57, Phase 1c-2c). A backtrace
+    /// renders this frame's function as `eval` and presents code called from
+    /// within it under the composite `<file>(<line>) : eval()'d code` file name,
+    /// matching PHP. `None` for an ordinary frame.
+    eval_origin: Option<(Box<[u8]>, Line)>,
 }
 
 impl<'m> Frame<'m> {
@@ -443,6 +458,7 @@ impl<'m> Frame<'m> {
             argc: 0,
             extra_args: Vec::new(),
             init_props: false,
+            eval_origin: None,
         }
     }
 }
@@ -3158,7 +3174,16 @@ impl<'m> Vm<'m> {
         let saved = self.module;
         self.module = leaked;
         let baseline = self.frames.len();
-        self.frames.push(Frame::new(&leaked.main, leaked));
+        // Record the eval()'s call site (the file/line of the frame invoking it) so
+        // a backtrace can render this unit as `eval()` and attribute code it calls
+        // to "<file>(<line>) : eval()'d code" (Phase 1c-2c).
+        let origin = {
+            let caller = self.frames.len() - 1;
+            (self.frames[caller].module.file.clone(), self.cur_line(caller))
+        };
+        let mut eval_frame = Frame::new(&leaked.main, leaked);
+        eval_frame.eval_origin = Some(origin);
+        self.frames.push(eval_frame);
         let outcome = self.drive_to_return(baseline);
         self.module = saved;
         // Register the eval unit's user functions (those not already provided by
@@ -4881,22 +4906,31 @@ impl<'m> Vm<'m> {
         Zval::Object(rc)
     }
 
-    /// Walk the call stack into structured backtrace entries (shared by
-    /// `debug_backtrace` / `debug_print_backtrace`). Reports the frames from the
-    /// caller of the `debug_*` builtin (the top frame — the builtin pushes none)
-    /// down to, but excluding, the top-level script body (frame 0). Each entry's
-    /// `line` is the *call-site* line: the caller frame's current line, which —
-    /// because `run_loop` advances `ip` past the `Call` op before dispatching it —
-    /// `cur_line(i - 1)` resolves to the `Call` op's own line.
     fn collect_backtrace(&self) -> Vec<BtFrame> {
         let top = self.frames.len() - 1;
         let mut out = Vec::new();
         for i in (1..=top).rev() {
             let f = &self.frames[i];
-            let function = if f.func.name.is_empty() {
+            // An `eval()` unit's frame renders as `eval`; an anonymous frame as
+            // `{closure}`; otherwise its own name.
+            let function = if f.eval_origin.is_some() {
+                b"eval".to_vec()
+            } else if f.func.name.is_empty() {
                 b"{closure}".to_vec()
             } else {
                 f.func.name.to_vec()
+            };
+            // The call was made from the *caller* frame (i-1): its file, unless that
+            // caller is itself an eval unit, in which case PHP names it
+            // `<file>(<line>) : eval()'d code`.
+            let caller = &self.frames[i - 1];
+            let file = match &caller.eval_origin {
+                Some((ofile, oline)) => {
+                    let mut s = ofile.to_vec();
+                    s.extend_from_slice(format!("({oline}) : eval()'d code").as_bytes());
+                    s
+                }
+                None => caller.module.file.to_vec(),
             };
             let (class, object) = match f.class {
                 // Resolve the class id in the frame's own module (an eval'd /
@@ -4906,27 +4940,25 @@ impl<'m> Vm<'m> {
             };
             out.push(BtFrame {
                 function,
+                file,
                 line: self.cur_line(i - 1),
                 class,
                 // A method with no bound `$this` is a static call ("::"); otherwise "->".
                 is_static: f.class.is_some() && f.this.is_none(),
                 object,
                 args: self.current_frame_args(i),
+                is_eval: f.eval_origin.is_some(),
             });
         }
         out
     }
 
-    /// `debug_backtrace()`: the call stack as an array of per-frame arrays with
-    /// `file`/`line`/`function`/`args` (plus `class`/`object`/`type` for a method).
-    /// Pure VM gain — the tree-walker has no equivalent. Options args are a scope-out.
     fn ho_debug_backtrace(&mut self, _args: Vec<Zval>) -> Result<Zval, PhpError> {
         let frames = self.collect_backtrace();
-        let file = self.module.file.to_vec();
         let mut outer = PhpArray::new();
         for bt in frames {
             let mut e = PhpArray::new();
-            e.insert(Key::from_bytes(b"file"), Zval::Str(PhpStr::new(file.clone())));
+            e.insert(Key::from_bytes(b"file"), Zval::Str(PhpStr::new(bt.file.clone())));
             e.insert(Key::from_bytes(b"line"), Zval::Long(bt.line as i64));
             e.insert(Key::from_bytes(b"function"), Zval::Str(PhpStr::new(bt.function)));
             if let Some(cls) = bt.class {
@@ -4937,25 +4969,24 @@ impl<'m> Vm<'m> {
                 let ty: &[u8] = if bt.is_static { b"::" } else { b"->" };
                 e.insert(Key::from_bytes(b"type"), Zval::Str(PhpStr::new(ty.to_vec())));
             }
-            let mut argsarr = PhpArray::new();
-            for a in bt.args {
-                let _ = argsarr.append(a);
+            // PHP's `eval` frame carries no `args` entry.
+            if !bt.is_eval {
+                let mut argsarr = PhpArray::new();
+                for a in bt.args {
+                    let _ = argsarr.append(a);
+                }
+                e.insert(Key::from_bytes(b"args"), Zval::Array(Rc::new(argsarr)));
             }
-            e.insert(Key::from_bytes(b"args"), Zval::Array(Rc::new(argsarr)));
             let _ = outer.append(Zval::Array(Rc::new(e)));
         }
         Ok(Zval::Array(Rc::new(outer)))
     }
 
-    /// `debug_print_backtrace()`: print the call stack as
-    /// `#N file(line): callee(args)` lines. Args render in PHP's compact form
-    /// (scalars literal, strings single-quoted+truncated, arrays `Array`, objects
-    /// `Object(Class)`). Pure VM gain.
     fn ho_debug_print_backtrace(&mut self) -> Result<Zval, PhpError> {
         let frames = self.collect_backtrace();
-        let file = String::from_utf8_lossy(&self.module.file).into_owned();
         let mut s = String::new();
         for (n, bt) in frames.iter().enumerate() {
+            let file = String::from_utf8_lossy(&bt.file);
             let callee = match &bt.class {
                 Some(cls) => format!(
                     "{}{}{}",
@@ -6462,11 +6493,16 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
 /// One reconstructed call-stack entry (see [`Vm::collect_backtrace`]).
 struct BtFrame {
     function: Vec<u8>,
+    /// The file the call was made *from* (the caller frame's unit), or — when the
+    /// caller is an `eval()` unit — the composite `<file>(<line>) : eval()'d code`.
+    file: Vec<u8>,
     line: Line,
     class: Option<Vec<u8>>,
     is_static: bool,
     object: Option<Zval>,
     args: Vec<Zval>,
+    /// True for an `eval()` unit's frame: rendered with no `args` in the array form.
+    is_eval: bool,
 }
 
 /// Format one argument the way `debug_print_backtrace` does: scalars literal,
