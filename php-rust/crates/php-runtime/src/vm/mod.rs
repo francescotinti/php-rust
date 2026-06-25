@@ -1005,6 +1005,11 @@ impl<'m> Vm<'m> {
                     let v = self.frames[top].stack.last().expect("Dup on empty stack").clone();
                     self.frames[top].stack.push(v);
                 }
+                Op::Swap => {
+                    let st = &mut self.frames[top].stack;
+                    let n = st.len();
+                    st.swap(n - 1, n - 2);
+                }
                 Op::LoadSlot(s) => {
                     // An unset local reads as NULL (silent — used for compiler
                     // temporaries and PHP's warning-free contexts). A reference

@@ -167,6 +167,10 @@ pub enum Op {
     /// `[v] -> []` — pop and store into local `slot`. To use an assignment as an
     /// expression, the compiler emits [`Op::Dup`] before this.
     StoreSlot(Slot),
+    /// `[a, b] -> [b, a]` — swap the top two stack entries. Used to realise the
+    /// pipe operator `$x |> $f`, whose operands evaluate left-to-right (input then
+    /// callable) but must reach [`Op::CallValue`] in callee-then-arg stack order.
+    Swap,
 
     // ----- globals (`$GLOBALS['literal']`, addressed in the script frame) -----
     /// `[] -> [v]` — push the value of global `slot` (a slot in the script/main

@@ -220,6 +220,14 @@ impl<'f> Lowerer<'f> {
 
             Expression::Call(call) => self.lower_call(call, line)?,
 
+            // `input |> callable` (PHP 8.5): `callable(input)`, operands evaluated
+            // left-to-right. The callable is any expression resolving to a callable
+            // (string name, closure, first-class callable, `[obj, m]`).
+            Expression::Pipe(p) => ExprKind::Pipe {
+                input: Box::new(self.lower_expr(p.input)?),
+                callable: Box::new(self.lower_expr(p.callable)?),
+            },
+
             // `new ClassName(args)` (step 19, D-19.6). Tier-1 resolves the class
             // as a literal identifier; `new $var` / `new self` / `new static`
             // arrive in later sub-steps.

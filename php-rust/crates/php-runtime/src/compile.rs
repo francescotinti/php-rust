@@ -1503,6 +1503,15 @@ impl<'a> FnCompiler<'a> {
                 }
                 self.emit(Op::CallValue { argc: args.len() as u32 });
             }
+            ExprKind::Pipe { input, callable } => {
+                // `input |> callable` == `callable(input)`, but the operands evaluate
+                // left-to-right: push the input first, then the callable, then swap
+                // so the stack is [callable, input] as `CallValue` expects.
+                self.expr(input)?;
+                self.expr(callable)?;
+                self.emit(Op::Swap);
+                self.emit(Op::CallValue { argc: 1 });
+            }
             ExprKind::AssignOpPlace(op, place, rhs) => self.assign_op_place(*op, place, rhs)?,
             ExprKind::IncDecPlace { place, inc, pre } => self.incdec_place(place, *inc, *pre)?,
             ExprKind::Isset(places) => self.isset(places)?,
@@ -3589,6 +3598,7 @@ fn expr_name(k: &ExprKind) -> String {
         ExprKind::Closure { .. } => "Closure",
         ExprKind::FirstClassCallable(_) => "FirstClassCallable",
         ExprKind::CallDynamic { .. } => "CallDynamic",
+        ExprKind::Pipe { .. } => "Pipe",
         ExprKind::Spread(_) => "Spread",
         ExprKind::Array(_) => "Array",
         ExprKind::Index { .. } => "Index",

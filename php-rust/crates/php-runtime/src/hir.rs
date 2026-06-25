@@ -614,6 +614,13 @@ pub enum ExprKind {
     /// dispatches on the callee value (closure / string name).
     CallDynamic { callee: Box<Expr>, args: Vec<Expr> },
 
+    /// The pipe operator `input |> callable` (PHP 8.5): evaluates `input`, then
+    /// `callable` (a value that must resolve to a callable), then calls it with the
+    /// input as the sole positional argument — i.e. `callable(input)`. Distinct
+    /// from [`ExprKind::CallDynamic`] because the operands evaluate left-to-right
+    /// (input before callable), the opposite of a call's callee-before-args order.
+    Pipe { input: Box<Expr>, callable: Box<Expr> },
+
     /// Argument unpacking `...$e` (step 40). Only valid as a direct element of a
     /// call's argument list, where the evaluator expands it: int keys (and
     /// float keys, lossily) become positional arguments in iteration order, and
