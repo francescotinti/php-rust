@@ -32,7 +32,9 @@ use crate::bytecode::{
     StaticInit,
 };
 use crate::coerce::coerce_to_hint;
-use crate::hir::{BinOp, CastKind, ClassId, HintKind, Line, Program, Slot, TypeHint, UnOp, Visibility};
+use crate::hir::{
+    BinOp, CastKind, ClassId, HintKind, IncludeMode, Line, Program, Slot, TypeHint, UnOp, Visibility,
+};
 
 mod arrays;
 mod calls;
@@ -229,6 +231,7 @@ pub(crate) fn run_module_with_hir<'m>(
         class_module: vec![module; module.classes.len()],
         main_hir,
         linked_functions: HashMap::new(),
+        included_files: HashSet::new(),
         registry,
         stdout: Vec::new(),
         rendered: Vec::new(),
@@ -554,6 +557,10 @@ struct Vm<'m> {
     /// they are callable by name after the unit returns. The defining module is
     /// kept so the function's frame resolves its own bytecode indices.
     linked_functions: HashMap<Vec<u8>, (&'m Module, usize)>,
+    /// Resolved (canonical) paths already loaded by `include_once`/`require_once`
+    /// (step 57, Phase 2), so a repeat `_once` of the same file no-ops and returns
+    /// `true` without re-running it.
+    included_files: HashSet<Vec<u8>>,
     /// Builtin registry, injected by the caller (php-runtime can't build a
     /// populated one — that lives in php-builtins, which depends on php-runtime).
     registry: &'m Registry,
@@ -1432,10 +1439,22 @@ impl<'m> Vm<'m> {
                     let v = self.frames[top].stack.pop().expect("rethrow operand");
                     return Err(PhpError::Thrown(v));
                 }
-                Op::CatchMatch { types, var, body } => {
+                Op::CatchMatch { types, names, var, body } => {
                     let exc = self.frames[top].stack.last().expect("in-flight exception").clone();
-                    let caught = object_class_id(&exc)
-                        .is_some_and(|ec| types.iter().any(|&t| is_instance_of(&self.classes, self.stringable_id, ec, t)));
+                    let caught = object_class_id(&exc).is_some_and(|ec| {
+                        types
+                            .iter()
+                            .any(|&t| is_instance_of(&self.classes, self.stringable_id, ec, t))
+                            // Classes declared after compile time (by eval/include) are
+                            // resolved by name against the live class table (Phase 2).
+                            || names.iter().any(|n| {
+                                self.class_index
+                                    .get(&n.to_ascii_lowercase())
+                                    .is_some_and(|&t| {
+                                        is_instance_of(&self.classes, self.stringable_id, ec, t)
+                                    })
+                            })
+                    });
                     if caught {
                         self.frames[top].stack.pop();
                         if let Some(slot) = var {
@@ -2187,6 +2206,12 @@ impl<'m> Vm<'m> {
                     let mut src = b"<?php ".to_vec();
                     src.extend_from_slice(code_str.as_bytes());
                     let result = self.run_eval(&src)?;
+                    let top = self.frames.len() - 1;
+                    self.frames[top].stack.push(result);
+                }
+                Op::Include { mode } => {
+                    let path_val = self.frames[top].stack.pop().expect("include path");
+                    let result = self.run_include(path_val, mode)?;
                     let top = self.frames.len() - 1;
                     self.frames[top].stack.push(result);
                 }
@@ -3096,17 +3121,12 @@ impl<'m> Vm<'m> {
     }
 
     /// `eval($code)` (step 57, Phase 1): compile `src` (already `<?php`-prefixed)
-    /// as its own translation unit at run time, relocate its compile-time class ids
-    /// into the VM's global id space (Phase 1c-2b), leak it so its `&'m` bytecode
-    /// outlives this call, and run its `main` to completion. Classes the eval
-    /// declares are appended to the global table, so `new`/`instanceof`/method
-    /// dispatch on them (inside and after the eval) and `class_exists()` all work;
-    /// user functions it declares are linked too (Phase 1c-2a). When the caller's
-    /// HIR is retained (`main_hir`, the normal `run_source` path), the eval is
-    /// lowered *against the image* (Phase 1c-2c): it sees the caller's user
-    /// classes, so `eval("class Bar extends Foo {}")` flattens `Bar`'s inherited
-    /// layout from `Foo`. Returns the unit's `return` value (or `null`); a
-    /// parse/compile error yields `false` (MVP — PHP throws `ParseError`).
+    /// as its own translation unit at run time and run it via [`Self::drive_unit`].
+    /// When the caller's HIR is retained (`main_hir`, the normal `run_source`
+    /// path), the eval is lowered *against the image* (Phase 1c-2c): it sees the
+    /// caller's user classes, so `eval("class Bar extends Foo {}")` flattens `Bar`'s
+    /// inherited layout from `Foo`. Returns the unit's `return` value (or `null`);
+    /// a parse/compile error yields `false` (MVP — PHP throws `ParseError`).
     /// Limitations (MVP): the eval'd unit does not share the caller's variable
     /// scope, and (with no retained HIR, e.g. unit tests via `run_module`) it
     /// compiles standalone and cannot extend a caller's user class.
@@ -3121,26 +3141,38 @@ impl<'m> Vm<'m> {
             Ok(p) => p,
             Err(_) => return Ok(Zval::Bool(false)),
         };
-        let mut module = match crate::compile::compile_program(&program, self.registry) {
+        let module = match crate::compile::compile_program(&program, self.registry) {
             Ok(m) => m,
             Err(_) => return Ok(Zval::Bool(false)),
         };
-        // --- Phase 1c-2b: class-id relocation -------------------------------
-        // Build a remap from each eval-local class id to a GLOBAL id: a class whose
-        // name already exists in the global table (the shared prelude, a class
-        // linked by an earlier unit, or — when compiling against the image — the
-        // caller's seeded classes) dedups to the existing id; a genuinely new user
-        // class is appended. `new_locals` lists the eval-local ids of the new
-        // classes in the order their global ids were assigned, so they append in
-        // matching order. (Against the image, the dedup is an identity for every
-        // shared class, leaving only the eval's own declarations to relocate.)
-        //
-        // Static-cell ids: push every static id in the eval unit past the live
-        // `self.statics` range so nothing collides with the caller's (or an earlier
-        // eval's) cells. Seeding carries the caller's `static_count`, so the eval's
-        // *new* statics already start past the recompiled (discarded) caller-class
-        // statics inside this unit; this offset then lifts the whole unit clear of
-        // the live range.
+        // Record the eval()'s call site (the file/line of the frame invoking it) so
+        // a backtrace can render this unit as `eval()` and attribute code it calls
+        // to "<file>(<line>) : eval()'d code" (Phase 1c-2c).
+        let origin = {
+            let caller = self.frames.len() - 1;
+            (self.frames[caller].module.file.clone(), self.cur_line(caller))
+        };
+        self.drive_unit(module, Some(origin))
+    }
+
+    /// Link a freshly-compiled `eval`/`include` unit into the running VM and drive
+    /// its `main` to completion (step 57). Shared by [`Self::run_eval`] and
+    /// [`Self::run_include`]. Relocates the unit's compile-time class ids into the
+    /// global table (Phase 1c-2b), offsets its static-cell ids past the live range,
+    /// leaks it so its `&'m` bytecode outlives the call, appends its genuinely-new
+    /// classes (so they stay visible afterwards) and links its new user functions
+    /// (Phase 1c-2a/2). `eval_origin` marks the pushed frame as an `eval()` unit for
+    /// backtraces; `None` for an `include` (its frame is the real file). Returns the
+    /// unit's top-level `return` value (or `null` on fall-through).
+    fn drive_unit(
+        &mut self,
+        mut module: Module,
+        eval_origin: Option<(Box<[u8]>, Line)>,
+    ) -> Result<Zval, PhpError> {
+        // Build the eval-local -> global class-id remap: a name already in the
+        // global table dedups to the existing id, a genuinely new user class is
+        // appended. Against the caller image the dedup is an identity for every
+        // shared class, leaving only this unit's own declarations to relocate.
         let static_off = self.statics.len();
         let mut class_remap: Vec<ClassId> = Vec::with_capacity(module.classes.len());
         let mut new_locals: Vec<usize> = Vec::new();
@@ -3155,15 +3187,13 @@ impl<'m> Vm<'m> {
             }
         }
         // Rewrite every op / class-metadata id in place (the module is still owned),
-        // and offset the eval's static-cell ids past the live `self.statics` range.
+        // and offset the unit's static-cell ids past the live `self.statics` range.
         relocate_module_class_ids(&mut module, &class_remap, static_off);
-        // Grow the persistent static storage to hold the eval unit's cells.
         self.statics.resize(static_off + module.static_count, None);
 
         let leaked: &'m Module = Box::leak(Box::new(module));
         // Append the new user classes to the global table (dedup'd prelude /
-        // caller-image classes were already mapped to existing ids and are NOT
-        // re-added).
+        // caller-image classes were already mapped to existing ids).
         for &i in &new_locals {
             self.classes.push(&leaked.classes[i]);
             self.class_module.push(leaked);
@@ -3174,23 +3204,14 @@ impl<'m> Vm<'m> {
         let saved = self.module;
         self.module = leaked;
         let baseline = self.frames.len();
-        // Record the eval()'s call site (the file/line of the frame invoking it) so
-        // a backtrace can render this unit as `eval()` and attribute code it calls
-        // to "<file>(<line>) : eval()'d code" (Phase 1c-2c).
-        let origin = {
-            let caller = self.frames.len() - 1;
-            (self.frames[caller].module.file.clone(), self.cur_line(caller))
-        };
-        let mut eval_frame = Frame::new(&leaked.main, leaked);
-        eval_frame.eval_origin = Some(origin);
-        self.frames.push(eval_frame);
+        let mut frame = Frame::new(&leaked.main, leaked);
+        frame.eval_origin = eval_origin;
+        self.frames.push(frame);
         let outcome = self.drive_to_return(baseline);
         self.module = saved;
-        // Register the eval unit's user functions (those not already provided by
-        // the caller's module — i.e. not prelude/builtin duplicates, and not the
-        // caller's own functions re-seeded by the image) so they are callable by
-        // name after the eval returns (step 57, Phase 1c-2). Functions are hoisted
-        // at unit load, so do this even if the body later threw.
+        // Register the unit's user functions (those not already provided by the
+        // caller's module) so they are callable by name afterwards. Functions are
+        // hoisted at unit load, so do this even if the body later threw.
         for (idx, f) in leaked.functions.iter().enumerate() {
             let already = saved.functions.iter().any(|cf| name_eq_ignore_case(&cf.name, &f.name));
             if !already {
@@ -3198,6 +3219,111 @@ impl<'m> Vm<'m> {
             }
         }
         outcome
+    }
+
+    /// Resolve an `include`/`require` path to a real file (step 57, Phase 2): an
+    /// absolute path is used directly; a relative one is tried against the
+    /// including file's directory first, then the process CWD (a minimal
+    /// `include_path` — the full search list is a scope-out). Returns the canonical
+    /// path, or `None` if no readable file matches.
+    fn resolve_include_path(&self, path: &[u8]) -> Option<std::path::PathBuf> {
+        use std::os::unix::ffi::OsStrExt;
+        let p = std::path::Path::new(std::ffi::OsStr::from_bytes(path));
+        let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+        if p.is_absolute() {
+            candidates.push(p.to_path_buf());
+        } else {
+            let cur = self.frames.last().map(|f| f.module.file.to_vec()).unwrap_or_default();
+            if let Some(dir) = std::path::Path::new(std::ffi::OsStr::from_bytes(&cur)).parent() {
+                candidates.push(dir.join(p));
+            }
+            candidates.push(p.to_path_buf());
+        }
+        candidates
+            .into_iter()
+            .find(|c| c.is_file())
+            .map(|c| std::fs::canonicalize(&c).unwrap_or(c))
+    }
+
+    /// `include`/`require`(`_once`) the file named by `path_val` (step 57, Phase 2).
+    /// Loads and runs the file as its own unit via [`Self::drive_unit`], returning
+    /// its top-level `return` value (or `int(1)` on fall-through). A `_once` re-load
+    /// returns `true` without re-running. A missing/unreadable/unparsable file is a
+    /// fatal for `require*` and a warning + `false` for `include*`.
+    fn run_include(&mut self, path_val: Zval, mode: IncludeMode) -> Result<Zval, PhpError> {
+        use std::os::unix::ffi::OsStrExt;
+        let pstr = convert::to_zstr(&path_val, &mut self.diags);
+        let path = pstr.as_bytes().to_vec();
+        let Some(real) = self.resolve_include_path(&path) else {
+            return self.include_open_failed(&path, mode);
+        };
+        let key = real.as_os_str().as_bytes().to_vec();
+        if mode.is_once() && self.included_files.contains(&key) {
+            return Ok(Zval::Bool(true));
+        }
+        let content = match std::fs::read(&real) {
+            Ok(c) => c,
+            Err(_) => return self.include_open_failed(&path, mode),
+        };
+        // Mark loaded before running, so a `_once` re-entry during the file's own
+        // execution (mutual includes) sees it and short-circuits.
+        self.included_files.insert(key.clone());
+        let lowered = match self.main_hir {
+            Some(seed) => crate::lower_source_seeded(&key, &content, seed),
+            None => crate::lower_source(&key, &content),
+        };
+        let program = match lowered {
+            Ok(p) => p,
+            Err(_) => return self.include_compile_failed(&key, mode),
+        };
+        let module = match crate::compile::compile_program(&program, self.registry) {
+            Ok(m) => m,
+            Err(_) => return self.include_compile_failed(&key, mode),
+        };
+        let ret = self.drive_unit(module, None)?;
+        // A file with no top-level `return` yields int(1); an explicit return passes
+        // through (a literal `return null;` is the accepted edge that also yields 1).
+        Ok(if matches!(ret, Zval::Null) { Zval::Long(1) } else { ret })
+    }
+
+    /// The shared failure path for a file that could not be opened: two warnings
+    /// then `false` for `include*`, a stream warning then a fatal for `require*`
+    /// (step 57, Phase 2), mirroring PHP's diagnostics. Warnings go through the
+    /// deferred `diags` buffer so `@` suppression (and the stamped line) apply.
+    fn include_open_failed(&mut self, path: &[u8], mode: IncludeMode) -> Result<Zval, PhpError> {
+        let line = self.cur_line(self.frames.len() - 1);
+        let pstr = String::from_utf8_lossy(path).into_owned();
+        let kw = mode.keyword();
+        self.diags.push(Diag::Warning(format!(
+            "{kw}({pstr}): Failed to open stream: No such file or directory"
+        )));
+        if !mode.is_require() {
+            self.diags.push(Diag::Warning(format!(
+                "{kw}(): Failed opening '{pstr}' for inclusion (include_path='.:')"
+            )));
+        }
+        self.flush_diags(line)?;
+        if mode.is_require() {
+            self.fatal_line = line;
+            Err(PhpError::Error(format!(
+                "Failed opening required '{pstr}' (include_path='.:')"
+            )))
+        } else {
+            Ok(Zval::Bool(false))
+        }
+    }
+
+    /// Failure path for a file that opened but failed to parse/compile (step 57,
+    /// Phase 2): a fatal regardless of `require`/`include`, as PHP raises a
+    /// `ParseError`/compile fatal in the loaded unit.
+    fn include_compile_failed(&mut self, name: &[u8], mode: IncludeMode) -> Result<Zval, PhpError> {
+        let line = self.cur_line(self.frames.len() - 1);
+        self.fatal_line = line;
+        Err(PhpError::Error(format!(
+            "{}(): Failed to compile '{}'",
+            mode.keyword(),
+            String::from_utf8_lossy(name)
+        )))
     }
 
     /// Call `recv->method(args)` *synchronously* and return its value, driving a

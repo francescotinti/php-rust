@@ -55,6 +55,37 @@ pub struct Program {
 /// Index into [`Program::classes`] (step 19, D-19.3).
 pub type ClassId = usize;
 
+/// Which file-loading construct produced an [`ExprKind::Include`] (step 57,
+/// Phase 2). `*_once` variants skip a file already loaded; `require*` fatals on a
+/// load failure where `include*` only warns and yields `false`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IncludeMode {
+    Include,
+    IncludeOnce,
+    Require,
+    RequireOnce,
+}
+
+impl IncludeMode {
+    /// `include_once` / `require_once`: load at most once per resolved path.
+    pub fn is_once(self) -> bool {
+        matches!(self, IncludeMode::IncludeOnce | IncludeMode::RequireOnce)
+    }
+    /// `require` / `require_once`: a load failure is fatal (vs a warning).
+    pub fn is_require(self) -> bool {
+        matches!(self, IncludeMode::Require | IncludeMode::RequireOnce)
+    }
+    /// The construct keyword, for diagnostics (`require`, `include_once`, …).
+    pub fn keyword(self) -> &'static str {
+        match self {
+            IncludeMode::Include => "include",
+            IncludeMode::IncludeOnce => "include_once",
+            IncludeMode::Require => "require",
+            IncludeMode::RequireOnce => "require_once",
+        }
+    }
+}
+
 /// Member visibility (step 19, D-19.13). Defaults to `Public`. Used both for
 /// access enforcement and for `var_dump`'s `:protected` / `:"C":private`
 /// annotations.
@@ -642,6 +673,14 @@ pub enum ExprKind {
     /// (or `null`). The eval'd unit runs as its own module: instanceof, method
     /// resolution and `var_dump` of its objects resolve against it.
     Eval(Box<Expr>),
+
+    /// `include`/`include_once`/`require`/`require_once <expr>` (step 57, Phase 2)
+    /// — resolve the operand to a path, load and run that file as its own
+    /// translation unit, and yield its top-level `return` value (or `int(1)` if it
+    /// has none). Reuses the eval machinery (class/function merge, compile against
+    /// the caller image). `_once` variants no-op when the file was already loaded;
+    /// a missing file is a fatal for `require*`, a warning + `false` for `include*`.
+    Include { mode: IncludeMode, path: Box<Expr> },
 
     /// `match ($subject) { conds => body, ..., default => body }`. Strict `===`
     /// matching; an arm with empty `conditions` is the `default` arm.

@@ -1589,6 +1589,10 @@ impl<'a> FnCompiler<'a> {
                 self.expr(e)?;
                 self.emit(Op::Eval);
             }
+            ExprKind::Include { mode, path } => {
+                self.expr(path)?;
+                self.emit(Op::Include { mode: *mode });
+            }
             ExprKind::PropGet { object, name, nullsafe } => {
                 self.expr(object)?;
                 if *nullsafe {
@@ -2830,11 +2834,16 @@ impl<'a> FnCompiler<'a> {
         }
         // Catch dispatch: one `CatchMatch` per clause (body forward-referenced),
         // then `Rethrow` if none matched.
-        let mut sites: Vec<(Addr, Vec<ClassId>, Option<crate::hir::Slot>)> = Vec::new();
+        let mut sites: Vec<(Addr, Vec<ClassId>, Vec<Box<[u8]>>, Option<crate::hir::Slot>)> = Vec::new();
         for c in catches {
-            let cids = self.resolve_catch_types(&c.types);
-            let at = self.emit(Op::CatchMatch { types: cids.clone().into(), var: c.var, body: Addr::MAX });
-            sites.push((at, cids, c.var));
+            let (cids, cnames) = self.resolve_catch_types(&c.types);
+            let at = self.emit(Op::CatchMatch {
+                types: cids.clone().into(),
+                names: cnames.clone().into(),
+                var: c.var,
+                body: Addr::MAX,
+            });
+            sites.push((at, cids, cnames, c.var));
         }
         if !catches.is_empty() {
             self.emit(Op::Rethrow);
@@ -2842,8 +2851,13 @@ impl<'a> FnCompiler<'a> {
         let mut catch_end_jumps = Vec::new();
         for (i, c) in catches.iter().enumerate() {
             let body_at = self.here();
-            let (at, cids, var) = &sites[i];
-            self.patch(*at, Op::CatchMatch { types: cids.clone().into(), var: *var, body: body_at });
+            let (at, cids, cnames, var) = &sites[i];
+            self.patch(*at, Op::CatchMatch {
+                types: cids.clone().into(),
+                names: cnames.clone().into(),
+                var: *var,
+                body: body_at,
+            });
             self.block(&c.body)?;
             catch_end_jumps.push(self.emit(Op::Jump(Addr::MAX)));
         }
@@ -2887,10 +2901,21 @@ impl<'a> FnCompiler<'a> {
         Ok(())
     }
 
-    /// Resolve a catch clause's type names to class ids (compile time); a name the
-    /// program doesn't define is dropped — it can never match a thrown object.
-    fn resolve_catch_types(&self, names: &[Box<[u8]>]) -> Vec<ClassId> {
-        names.iter().filter_map(|n| self.resolve_class(n)).collect()
+    /// Split a catch clause's class names into those resolvable at compile time
+    /// (returned as [`ClassId`]s) and those not yet declared — left as names for
+    /// the VM to resolve against the live class table at run time (step 57, Phase
+    /// 2), so a `catch (E)` where `E` is provided by an `eval`/`include` still
+    /// matches.
+    fn resolve_catch_types(&self, names: &[Box<[u8]>]) -> (Vec<ClassId>, Vec<Box<[u8]>>) {
+        let mut ids = Vec::new();
+        let mut unresolved = Vec::new();
+        for n in names {
+            match self.resolve_class(n) {
+                Some(id) => ids.push(id),
+                None => unresolved.push(n.clone()),
+            }
+        }
+        (ids, unresolved)
     }
 
     fn field_path(&mut self, place: &Place) -> R<(FieldBase, Vec<FieldStep>)> {
@@ -3427,6 +3452,7 @@ fn expr_name(k: &ExprKind) -> String {
         ExprKind::Exit(_) => "Exit",
         ExprKind::Clone(_) => "Clone",
         ExprKind::Eval(_) => "Eval",
+        ExprKind::Include { .. } => "Include",
         ExprKind::Match { .. } => "Match",
         ExprKind::New { .. } => "New",
         ExprKind::MethodCall { .. } => "MethodCall",

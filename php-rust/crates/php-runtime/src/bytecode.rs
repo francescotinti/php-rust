@@ -83,7 +83,7 @@ use std::rc::Rc;
 
 use php_types::{ObjectInfo, PhpStr, Zval};
 
-use crate::hir::{BinOp, Capture, CastKind, ClassId, Line, Slot, TypeHint, UnOp, Visibility};
+use crate::hir::{BinOp, Capture, CastKind, ClassId, IncludeMode, Line, Slot, TypeHint, UnOp, Visibility};
 
 /// Index into a [`Func`]'s instruction vector ([`Func::ops`]); also the form a
 /// jump target takes. `u32` is plenty (PHP function bodies are tiny) and keeps
@@ -281,8 +281,10 @@ pub enum Op {
     /// `[exc] -> [exc] | []` — catch dispatch. The in-flight exception is on top:
     /// if its class is `instanceof` any of `types`, pop it (binding it into `var`
     /// if present) and jump to `body`; otherwise leave it and fall through to the
-    /// next `CatchMatch` / `Rethrow`.
-    CatchMatch { types: Box<[ClassId]>, var: Option<Slot>, body: Addr },
+    /// next `CatchMatch` / `Rethrow`. `names` carries any caught class *not* known
+    /// at compile time (declared later by `eval`/`include`), resolved by name
+    /// against the live class table at run time (step 57, Phase 2).
+    CatchMatch { types: Box<[ClassId]>, names: Box<[Box<[u8]>]>, var: Option<Slot>, body: Addr },
     /// `[] -> []` — the end of a `finally` block (EXC-2). Resolves the finally's
     /// pending action, in order: (1) a parked exception → re-raise it (resume
     /// unwinding to an outer handler); (2) a parked `return` → push its value and
@@ -531,6 +533,12 @@ pub enum Op {
     /// a PHP unit at run time, execute it as its own module, and push its `return`
     /// value (or `null`). A compile/parse error yields `false`.
     Eval,
+    /// `[path] -> [value]` — `include`/`require`(`_once`) the file named by the
+    /// popped path (step 57, Phase 2): load and run it as its own module (reusing
+    /// the eval machinery), pushing its top-level `return` value or `int(1)`. A
+    /// missing/failed file fatals for `require*`, warns + pushes `false` for
+    /// `include*`; a `_once` re-load pushes `true` without re-running.
+    Include { mode: IncludeMode },
     /// `[obj] -> [value]` — read property `name` (deref-clone); a missing property
     /// (or a non-object receiver) warns and yields NULL, matching the tree-walker.
     PropGet { name: Box<[u8]> },

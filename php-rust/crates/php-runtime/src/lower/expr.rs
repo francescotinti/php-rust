@@ -350,12 +350,22 @@ impl<'f> Lowerer<'f> {
                     ExprKind::Exit(self.lower_exit_arg(d.arguments.as_ref(), line)?)
                 }
                 Construct::Eval(ev) => ExprKind::Eval(Box::new(self.lower_expr(ev.value)?)),
-                _ => {
-                    return Err(LowerError::Unsupported {
-                        what: "language construct",
-                        line,
-                    })
-                }
+                Construct::Include(i) => ExprKind::Include {
+                    mode: crate::hir::IncludeMode::Include,
+                    path: Box::new(self.lower_expr(i.value)?),
+                },
+                Construct::IncludeOnce(i) => ExprKind::Include {
+                    mode: crate::hir::IncludeMode::IncludeOnce,
+                    path: Box::new(self.lower_expr(i.value)?),
+                },
+                Construct::Require(r) => ExprKind::Include {
+                    mode: crate::hir::IncludeMode::Require,
+                    path: Box::new(self.lower_expr(r.value)?),
+                },
+                Construct::RequireOnce(r) => ExprKind::Include {
+                    mode: crate::hir::IncludeMode::RequireOnce,
+                    path: Box::new(self.lower_expr(r.value)?),
+                },
             },
 
             Expression::Match(m) => {
