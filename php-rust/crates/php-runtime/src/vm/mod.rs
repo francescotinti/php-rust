@@ -2660,7 +2660,23 @@ impl<'m> Vm<'m> {
                     let result = match (object_class_id(&operand), self.class_id_from_value(&classval))
                     {
                         (Some(ocid), Some(tcid)) => is_instance_of(&self.classes, self.stringable_id, ocid, tcid),
-                        _ => false,
+                        // `Closure`/`Generator` have no `ClassId`; match by the
+                        // operand's value type against the (string) class name
+                        // (`$c instanceof Closure`, `$g instanceof Iterator`).
+                        _ => match classval.deref_clone() {
+                            Zval::Str(s) => {
+                                let raw = s.as_bytes();
+                                let lc = raw.strip_prefix(b"\\").unwrap_or(raw).to_ascii_lowercase();
+                                match operand.deref_clone() {
+                                    Zval::Closure(_) => lc == b"closure",
+                                    Zval::Generator(_) => {
+                                        matches!(&lc[..], b"generator" | b"iterator" | b"traversable")
+                                    }
+                                    _ => false,
+                                }
+                            }
+                            _ => false,
+                        },
                     };
                     self.frames[top].stack.push(Zval::Bool(result));
                 }
