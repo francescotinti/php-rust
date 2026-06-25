@@ -492,7 +492,16 @@ class Exception implements Throwable {
     public function getFile() { return $this->file; }
     public function getTrace() { return $this->trace; }
     public function getTraceAsString() { return $this->traceString; }
-    public function __toString() { return $this->message; }
+    public function __toString() {
+        $r = "";
+        if ($this->previous !== null) {
+            $r = $this->previous->__toString() . "\n\nNext ";
+        }
+        $msg = $this->message === "" ? "" : ": " . $this->message;
+        $sep = (strpos($this->message, ", called in ") !== false) ? " and defined in " : " in ";
+        $r .= get_class($this) . $msg . $sep . $this->file . ":" . $this->line . "\nStack trace:\n" . $this->traceString;
+        return $r;
+    }
 }
 class Error implements Throwable {
     protected $message = "";
@@ -514,7 +523,16 @@ class Error implements Throwable {
     public function getFile() { return $this->file; }
     public function getTrace() { return $this->trace; }
     public function getTraceAsString() { return $this->traceString; }
-    public function __toString() { return $this->message; }
+    public function __toString() {
+        $r = "";
+        if ($this->previous !== null) {
+            $r = $this->previous->__toString() . "\n\nNext ";
+        }
+        $msg = $this->message === "" ? "" : ": " . $this->message;
+        $sep = (strpos($this->message, ", called in ") !== false) ? " and defined in " : " in ";
+        $r .= get_class($this) . $msg . $sep . $this->file . ":" . $this->line . "\nStack trace:\n" . $this->traceString;
+        return $r;
+    }
 }
 class ErrorException extends Exception {}
 class LogicException extends Exception {}
