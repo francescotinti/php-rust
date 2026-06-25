@@ -232,6 +232,8 @@ pub(crate) fn run_module_with_hir<'m>(
         main_hir,
         linked_functions: HashMap::new(),
         included_files: HashSet::new(),
+        autoloaders: Vec::new(),
+        autoloading: HashSet::new(),
         registry,
         stdout: Vec::new(),
         rendered: Vec::new(),
@@ -561,6 +563,15 @@ struct Vm<'m> {
     /// (step 57, Phase 2), so a repeat `_once` of the same file no-ops and returns
     /// `true` without re-running it.
     included_files: HashSet<Vec<u8>>,
+    /// Autoload callbacks registered by `spl_autoload_register` (step 57, Phase 3),
+    /// in registration order. Consulted when a class name fails to resolve (a `new`
+    /// / static reference / `class_exists` of an undeclared class), each given the
+    /// requested name; one that loads the class (typically via `require`) ends the
+    /// search.
+    autoloaders: Vec<Zval>,
+    /// Class names (lowercased) currently mid-autoload, to break recursion if an
+    /// autoloader (transitively) references the same name (step 57, Phase 3).
+    autoloading: HashSet<Vec<u8>>,
     /// Builtin registry, injected by the caller (php-runtime can't build a
     /// populated one — that lives in php-builtins, which depends on php-runtime).
     registry: &'m Registry,
@@ -3532,6 +3543,10 @@ impl<'m> Vm<'m> {
     /// lowercased name from [`host_builtin_canonical`].
     fn dispatch_host_builtin(&mut self, name: &[u8], args: Vec<Zval>) -> Result<Zval, PhpError> {
         match name {
+            b"spl_autoload_register" => self.ho_spl_autoload_register(args),
+            b"spl_autoload_unregister" => self.ho_spl_autoload_unregister(args),
+            b"spl_autoload_functions" => self.ho_spl_autoload_functions(),
+            b"spl_autoload_call" => self.ho_spl_autoload_call(args),
             b"call_user_func" => self.ho_call_user_func(args),
             b"call_user_func_array" => self.ho_call_user_func_array(args),
             b"iterator_to_array" => self.ho_iterator_to_array(args),
@@ -4464,35 +4479,35 @@ impl<'m> Vm<'m> {
         Ok(Zval::Bool(self.is_name_callable(name)))
     }
 
-    /// Resolve a class-name *string* argument to a [`ClassId`] via the class index
-    /// (leading `\` stripped, case-insensitive). `None` if absent or unknown.
-    /// Shared by the `*_exists` predicates (Session B4).
-    fn resolve_class_name(&mut self, arg: Option<&Zval>) -> Option<ClassId> {
-        let a = arg?;
-        let raw = convert::to_zstr_cast(&a.deref_clone(), &mut self.diags);
-        let b = raw.as_bytes();
-        let name = b.strip_prefix(b"\\").unwrap_or(b);
-        self.class_index.get(&name.to_ascii_lowercase()).copied()
-    }
-
-    /// `class_exists($name, $autoload = true)` (Session B4): whether `name` names a
-    /// declared class — including `abstract` and `enum`, but NOT an interface
-    /// (matching PHP 8.5). The autoload flag is a no-op (no autoloading is modelled).
     fn ho_class_exists(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
-        let exists = match self.resolve_class_name(args.first()) {
-            Some(cid) => self.classes[cid].instantiable != Instantiable::Interface,
-            None => false,
-        };
+        let cid = self.resolve_named_class_with_autoload(&args)?;
+        let exists = matches!(cid, Some(c) if self.classes[c].instantiable != Instantiable::Interface);
         Ok(Zval::Bool(exists))
     }
 
-    /// `interface_exists($name, $autoload = true)` (Session B4): whether `name`
-    /// names a declared interface.
+    /// Resolve `args[0]` as a class name for the `*_exists` family (step 57, Phase
+    /// 3): when `args[1]` (the `$autoload` flag, default `true`) is set, a miss runs
+    /// the registered autoloaders before the final lookup, so `class_exists("X")`
+    /// triggers loading exactly as PHP does.
+    fn resolve_named_class_with_autoload(
+        &mut self,
+        args: &[Zval],
+    ) -> Result<Option<ClassId>, PhpError> {
+        let Some(a) = args.first() else { return Ok(None) };
+        let autoload = args.get(1).is_none_or(|v| convert::to_bool(v, &mut self.diags));
+        let raw = convert::to_zstr_cast(&a.deref_clone(), &mut self.diags);
+        let b = raw.as_bytes();
+        let name = b.strip_prefix(b"\\").unwrap_or(b).to_vec();
+        if autoload {
+            self.resolve_class_autoload(&name)
+        } else {
+            Ok(self.class_index.get(&name.to_ascii_lowercase()).copied())
+        }
+    }
+
     fn ho_interface_exists(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
-        let is_iface = matches!(
-            self.resolve_class_name(args.first()),
-            Some(cid) if self.classes[cid].instantiable == Instantiable::Interface
-        );
+        let cid = self.resolve_named_class_with_autoload(&args)?;
+        let is_iface = matches!(cid, Some(c) if self.classes[c].instantiable == Instantiable::Interface);
         Ok(Zval::Bool(is_iface))
     }
 
@@ -6010,27 +6025,118 @@ impl<'m> Vm<'m> {
         Ok(())
     }
 
-    /// Like [`Self::class_id_from_value`] but for contexts that must error rather
-    /// than yield `false` (`new $cls`, `$cls::m()`): an unknown name is a
-    /// catchable `Error` ("Class \"X\" not found") and a non-string/object is an
-    /// `Error` ("Class name must be a valid object or a string").
-    fn resolve_dynamic_class(&self, v: &Zval) -> Result<ClassId, PhpError> {
+    fn resolve_dynamic_class(&mut self, v: &Zval) -> Result<ClassId, PhpError> {
         match v.deref_clone() {
             Zval::Object(o) => Ok(o.borrow().class_id as usize),
             Zval::Str(s) => {
                 let raw = s.as_bytes();
                 let name = raw.strip_prefix(b"\\").unwrap_or(raw);
-                self.class_index.get(&name.to_ascii_lowercase()).copied().ok_or_else(|| {
-                    PhpError::Error(format!(
+                // Try the live table, then autoload (Phase 3) and retry, before the
+                // catchable "Class not found".
+                match self.resolve_class_autoload(name)? {
+                    Some(id) => Ok(id),
+                    None => Err(PhpError::Error(format!(
                         "Class \"{}\" not found",
                         String::from_utf8_lossy(name)
-                    ))
-                })
+                    ))),
+                }
             }
             _ => Err(PhpError::Error(
                 "Class name must be a valid object or a string".to_string(),
             )),
         }
+    }
+
+    /// Resolve a class `name` to its id, running the registered autoloaders on a
+    /// miss and retrying (step 57, Phase 3). Returns `None` if still undefined
+    /// after autoloading; a throwing autoloader propagates.
+    fn resolve_class_autoload(&mut self, name: &[u8]) -> Result<Option<ClassId>, PhpError> {
+        let bare = name.strip_prefix(b"\\").unwrap_or(name);
+        let key = bare.to_ascii_lowercase();
+        if let Some(&id) = self.class_index.get(&key) {
+            return Ok(Some(id));
+        }
+        self.try_autoload(bare, &key)?;
+        Ok(self.class_index.get(&key).copied())
+    }
+
+    /// Run the registered `spl_autoload_register` callbacks for `name` (already
+    /// stripped of a leading `\`, with `key` its lowercased form), each given the
+    /// class name, until one defines it or all are tried (step 57, Phase 3). A
+    /// recursion guard prevents an autoloader that references the same name from
+    /// looping. A throwing autoloader propagates.
+    fn try_autoload(&mut self, name: &[u8], key: &[u8]) -> Result<(), PhpError> {
+        if self.autoloaders.is_empty() || self.autoloading.contains(key) {
+            return Ok(());
+        }
+        self.autoloading.insert(key.to_vec());
+        let arg = Zval::Str(PhpStr::new(name.to_vec()));
+        let loaders = self.autoloaders.clone();
+        let mut outcome = Ok(());
+        for loader in loaders {
+            if let Err(e) = self.call_callable(loader, vec![arg.clone()]) {
+                outcome = Err(e);
+                break;
+            }
+            if self.class_index.contains_key(key) {
+                break;
+            }
+        }
+        self.autoloading.remove(key);
+        outcome
+    }
+
+    /// `spl_autoload_register(?callable $callback = null, bool $throw = true,
+    /// bool $prepend = false)` (step 57, Phase 3): register `$callback` as an
+    /// autoloader (prepended when `$prepend`). With no callback PHP registers its
+    /// default file-based loader, which we don't model — a no-op that still
+    /// succeeds. The break-on-found in `try_autoload` makes a duplicate harmless,
+    /// so registration is not deduplicated. Always returns `true`.
+    fn ho_spl_autoload_register(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        match args.first() {
+            None | Some(Zval::Null) => Ok(Zval::Bool(true)),
+            Some(cb) => {
+                let prepend = args.get(2).is_some_and(|v| convert::to_bool(v, &mut self.diags));
+                if prepend {
+                    self.autoloaders.insert(0, cb.clone());
+                } else {
+                    self.autoloaders.push(cb.clone());
+                }
+                Ok(Zval::Bool(true))
+            }
+        }
+    }
+
+    /// `spl_autoload_unregister(callable $callback)` (step 57, Phase 3): remove a
+    /// previously registered autoloader. Matches string and closure callables;
+    /// returns whether one was removed.
+    fn ho_spl_autoload_unregister(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(cb) = args.first() else { return Ok(Zval::Bool(false)) };
+        let before = self.autoloaders.len();
+        self.autoloaders.retain(|a| !callable_eq(a, cb));
+        Ok(Zval::Bool(self.autoloaders.len() != before))
+    }
+
+    /// `spl_autoload_functions()` (step 57, Phase 3): the registered autoloaders as
+    /// an array, in call order.
+    fn ho_spl_autoload_functions(&mut self) -> Result<Zval, PhpError> {
+        let mut arr = PhpArray::new();
+        for a in &self.autoloaders {
+            let _ = arr.append(a.clone());
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// `spl_autoload_call(string $class)` (step 57, Phase 3): run the registered
+    /// autoloaders for `$class` (no-op if it is already defined).
+    fn ho_spl_autoload_call(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if let Some(a) = args.first() {
+            let raw = convert::to_zstr_cast(&a.deref_clone(), &mut self.diags);
+            let b = raw.as_bytes();
+            let name = b.strip_prefix(b"\\").unwrap_or(b).to_vec();
+            let _ = self.resolve_class_autoload(&name)?;
+        }
+        Ok(Zval::Null)
     }
 
     /// Build a fresh instance of class `cid`: its declared property defaults
@@ -6543,6 +6649,10 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
     // B1: the call-a-callable family. B3: the define family. Sessions C/D grow
     // this list (array_map, usort, sprintf, get_class, …).
     const HOST: &[&[u8]] = &[
+        b"spl_autoload_register",
+        b"spl_autoload_unregister",
+        b"spl_autoload_functions",
+        b"spl_autoload_call",
         b"call_user_func",
         b"call_user_func_array",
         b"is_callable",
@@ -6751,6 +6861,17 @@ pub(crate) fn host_builtin_ref_first(name: &[u8]) -> Option<&'static [u8]> {
 /// case-insensitively in ASCII (mirrors the compiler's resolution).
 fn name_eq_ignore_case(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.eq_ignore_ascii_case(y))
+}
+
+/// Best-effort equality of two callable [`Zval`]s for `spl_autoload_unregister`
+/// (step 57, Phase 3): a function-name string (case-insensitive) or the same
+/// closure handle. Other callable shapes (`[$obj, 'm']`) compare unequal.
+fn callable_eq(a: &Zval, b: &Zval) -> bool {
+    match (a, b) {
+        (Zval::Str(x), Zval::Str(y)) => x.as_bytes().eq_ignore_ascii_case(y.as_bytes()),
+        (Zval::Closure(x), Zval::Closure(y)) => Rc::ptr_eq(x, y),
+        _ => false,
+    }
 }
 
 /// Rewrite every compile-time class id in a freshly-compiled `eval`/`include`
