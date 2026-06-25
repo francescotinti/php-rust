@@ -2530,8 +2530,10 @@ impl<'a> FnCompiler<'a> {
     }
 
     /// Compile `expr instanceof ClassRef`. `Named`/`self`/`parent` resolve to a
-    /// compile-time id; `static` tests the run-time LSB class. An unknown named
-    /// class is simply not matched (PHP, CLI without autoloading).
+    /// compile-time id; `static` tests the run-time LSB class. A named class not
+    /// known at compile time is resolved by name at run time (so a class later
+    /// provided by `eval`/`include`, or a conditional declaration, is honoured) —
+    /// an unresolvable name still tests false, as PHP does.
     fn instance_of(&mut self, expr: &Expr, class: &ClassRef) -> R<()> {
         // Evaluate the operand first (PHP order), then test the class.
         match class {
@@ -2544,9 +2546,11 @@ impl<'a> FnCompiler<'a> {
                         // has no ClassId; decide membership by runtime type.
                         Some(iface) => self.emit(Op::InstanceOfBuiltin(iface)),
                         None => {
-                            self.emit(Op::Pop);
-                            let f = self.konst(Const::Bool(false));
-                            self.emit(Op::PushConst(f))
+                            // Unknown at compile time: push the name and resolve it
+                            // against the live class table at run time.
+                            let n = self.konst(Const::Str(name.clone()));
+                            self.emit(Op::PushConst(n));
+                            self.emit(Op::InstanceOfDynamic)
                         }
                     },
                 };

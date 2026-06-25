@@ -213,6 +213,7 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         module,
         classes: module.classes.iter().collect(),
         class_index: module.class_index.clone(),
+        class_module: vec![module; module.classes.len()],
         linked_functions: HashMap::new(),
         registry,
         stdout: Vec::new(),
@@ -504,6 +505,13 @@ struct Vm<'m> {
     classes: Vec<&'m CompiledClass>,
     /// Global case-insensitive class-name → [`ClassId`] index over `classes`.
     class_index: HashMap<Vec<u8>, ClassId>,
+    /// Defining [`Module`] of each class in `classes`, parallel to it (step 57,
+    /// Phase 1c-2b). For a class linked by an `eval`/`include` unit this is that
+    /// unit's leaked module, so a method frame entered for the class resolves its
+    /// own bytecode indices (`Op::Call` funcidx, `MakeClosure`, `__FILE__`) in the
+    /// module that compiled it, not the currently-executing one. For `main`'s own
+    /// classes it is `main` (≡ `self.module` while main runs).
+    class_module: Vec<&'m Module>,
     /// User functions declared by a linked `eval`/`include` unit (step 57, Phase
     /// 1c-2): lowercased name → (defining module, index into its `functions`), so
     /// they are callable by name after the unit returns. The defining module is
@@ -1094,7 +1102,7 @@ impl<'m> Vm<'m> {
                                 // __toString's (stringified) return flows back via Ret.
                                 Some((defc, midx)) => {
                                     let callee = &self.classes[defc].methods[midx].func;
-                                    let mut frame = Frame::new(callee, self.module);
+                                    let mut frame = Frame::new(callee, self.class_mod(defc));
                                     frame.this = Some(target.clone());
                                     frame.class = Some(defc);
                                     frame.static_class = Some(cid);
@@ -2174,7 +2182,7 @@ impl<'m> Vm<'m> {
                     // can deep-copy what it needs (PHP OOP).
                     if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, b"__clone") {
                         let callee = &self.classes[defc].methods[midx].func;
-                        let mut frame = Frame::new(callee, self.module);
+                        let mut frame = Frame::new(callee, self.class_mod(defc));
                         frame.this = Some(clone_val);
                         frame.class = Some(defc);
                         frame.static_class = Some(cid);
@@ -2470,13 +2478,12 @@ impl<'m> Vm<'m> {
                     self.dispatch_instance_call_named(top, this, &method, pos, named)?;
                 }
                 Op::InvokeMethod { class, method_idx, argc } => {
-                    let module = self.module;
                     let args = self.pop_keys(top, argc);
                     let recv = self.frames[top].stack.pop().expect("InvokeMethod receiver");
                     let this = recv.deref_clone();
                     let lsb = object_class_id(&this).unwrap_or(class);
-                    let callee = &module.classes[class].methods[method_idx as usize].func;
-                    let mut frame = Frame::new(callee, self.module);
+                    let callee = &self.classes[class].methods[method_idx as usize].func;
+                    let mut frame = Frame::new(callee, self.class_mod(class));
                     bind_params(&mut frame, args);
                     frame.this = Some(this);
                     frame.class = Some(class);
@@ -2614,25 +2621,24 @@ impl<'m> Vm<'m> {
                     // class's context; its `Ret` leaves the value on the caller's
                     // stack.
                     let thunk = &self.classes[class].consts[idx as usize].func;
-                    let mut frame = Frame::new(thunk, self.module);
+                    let mut frame = Frame::new(thunk, self.class_mod(class));
                     frame.class = Some(class);
                     frame.static_class = Some(class);
                     self.frames.push(frame);
                 }
                 Op::ClassConstDyn { name } => {
-                    let module = self.module;
                     let start = self.frames[top].static_class.ok_or_else(|| {
                         PhpError::Error("Cannot use \"static\" outside class context".to_string())
                     })?;
                     let Some((decl, idx)) = find_const_runtime(&self.classes, start, &name) else {
                         return Err(PhpError::Error(format!(
                             "Undefined constant {}::{}",
-                            String::from_utf8_lossy(&module.classes[start].name),
+                            String::from_utf8_lossy(&self.classes[start].name),
                             String::from_utf8_lossy(&name)
                         )));
                     };
-                    let thunk = &module.classes[decl].consts[idx].func;
-                    let mut frame = Frame::new(thunk, self.module);
+                    let thunk = &self.classes[decl].consts[idx].func;
+                    let mut frame = Frame::new(thunk, self.class_mod(decl));
                     frame.class = Some(decl);
                     frame.static_class = Some(decl);
                     self.frames.push(frame);
@@ -2657,16 +2663,15 @@ impl<'m> Vm<'m> {
                         }
                     } else {
                         let cid = self.resolve_dynamic_class(&classval)?;
-                        let module = self.module;
                         let Some((decl, idx)) = find_const_runtime(&self.classes, cid, &name) else {
                             return Err(PhpError::Error(format!(
                                 "Undefined constant {}::{}",
-                                String::from_utf8_lossy(&module.classes[cid].name),
+                                String::from_utf8_lossy(&self.classes[cid].name),
                                 String::from_utf8_lossy(&name)
                             )));
                         };
-                        let thunk = &module.classes[decl].consts[idx].func;
-                        let mut frame = Frame::new(thunk, self.module);
+                        let thunk = &self.classes[decl].consts[idx].func;
+                        let mut frame = Frame::new(thunk, self.class_mod(decl));
                         frame.class = Some(decl);
                         frame.static_class = Some(decl);
                         self.frames.push(frame);
@@ -2684,15 +2689,14 @@ impl<'m> Vm<'m> {
                     self.frames[top].stack.push(Zval::Object(obj));
                 }
                 Op::InvokeCtor { argc } => {
-                    let module = self.module;
                     let args = self.pop_keys(top, argc);
                     let recv = self.frames[top].stack.pop().expect("InvokeCtor receiver");
                     let this = recv.deref_clone();
                     let cid = object_class_id(&this).expect("InvokeCtor on a non-object");
                     match resolve_method_runtime(&self.classes, cid, b"__construct") {
                         Some((defc, midx)) => {
-                            let callee = &module.classes[defc].methods[midx].func;
-                            let mut frame = Frame::new(callee, self.module);
+                            let callee = &self.classes[defc].methods[midx].func;
+                            let mut frame = Frame::new(callee, self.class_mod(defc));
                             bind_params(&mut frame, args);
                             frame.this = Some(this);
                             frame.class = Some(defc);
@@ -2707,7 +2711,6 @@ impl<'m> Vm<'m> {
                 Op::InvokeCtorArgs => {
                     // Spread `new C(...$a)` / `new $cls(...)` / `new static(...)`
                     // (Session A): constructor arguments come from a runtime array.
-                    let module = self.module;
                     let argsval = self.frames[top].stack.pop().expect("InvokeCtorArgs array");
                     let args = args_from_array_value(argsval);
                     let recv = self.frames[top].stack.pop().expect("InvokeCtorArgs receiver");
@@ -2715,8 +2718,8 @@ impl<'m> Vm<'m> {
                     let cid = object_class_id(&this).expect("InvokeCtorArgs on a non-object");
                     match resolve_method_runtime(&self.classes, cid, b"__construct") {
                         Some((defc, midx)) => {
-                            let callee = &module.classes[defc].methods[midx].func;
-                            let mut frame = Frame::new(callee, self.module);
+                            let callee = &self.classes[defc].methods[midx].func;
+                            let mut frame = Frame::new(callee, self.class_mod(defc));
                             bind_params(&mut frame, args);
                             frame.this = Some(this);
                             frame.class = Some(defc);
@@ -2727,12 +2730,11 @@ impl<'m> Vm<'m> {
                     }
                 }
                 Op::InitProps => {
-                    let module = self.module;
                     let recv = self.frames[top].stack.pop().expect("InitProps receiver");
                     let cid = object_class_id(&recv).expect("InitProps on a non-object");
-                    match &module.classes[cid].prop_init {
+                    match &self.classes[cid].prop_init {
                         Some(func) => {
-                            let mut frame = Frame::new(func, self.module);
+                            let mut frame = Frame::new(func, self.class_mod(cid));
                             frame.this = Some(recv.deref_clone());
                             frame.class = Some(cid);
                             frame.static_class = Some(cid);
@@ -2925,7 +2927,6 @@ impl<'m> Vm<'m> {
                     )));
                 }
                 Op::Sweep => {
-                    let module = self.module;
                     // Release every now-unreachable tracked object, running one
                     // destructor per pass. A destructor is a frame: schedule it and
                     // rewind so this Sweep re-runs (to a fixpoint) once it returns.
@@ -2945,8 +2946,8 @@ impl<'m> Vm<'m> {
                         // re-runs to a fixpoint after it returns).
                         if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, b"__destruct") {
                             self.destructed.insert(id);
-                            let callee = &module.classes[defc].methods[midx].func;
-                            let mut frame = Frame::new(callee, self.module);
+                            let callee = &self.classes[defc].methods[midx].func;
+                            let mut frame = Frame::new(callee, self.class_mod(defc));
                             frame.this = Some(Zval::Object(Rc::clone(&o)));
                             frame.class = Some(defc);
                             frame.static_class = Some(cid);
@@ -3027,16 +3028,15 @@ impl<'m> Vm<'m> {
         ret: RetMode,
     ) -> Result<(), PhpError> {
         let cid = object_class_id(&recv).expect("protocol receiver is an object");
-        let module = self.module;
         let (defc, midx) = resolve_method_runtime(&self.classes, cid, method).ok_or_else(|| {
             PhpError::Error(format!(
                 "Call to undefined method {}::{}()",
-                String::from_utf8_lossy(&module.classes[cid].name),
+                String::from_utf8_lossy(&self.classes[cid].name),
                 String::from_utf8_lossy(method)
             ))
         })?;
-        let callee = &module.classes[defc].methods[midx].func;
-        let mut frame = Frame::new(callee, self.module);
+        let callee = &self.classes[defc].methods[midx].func;
+        let mut frame = Frame::new(callee, self.class_mod(defc));
         bind_params(&mut frame, args);
         frame.this = Some(recv);
         frame.class = Some(defc);
@@ -3049,31 +3049,73 @@ impl<'m> Vm<'m> {
         self.enter_callee(frame)
     }
 
+    /// The [`Module`] that *defines* class `defc`, used as a method/thunk frame's
+    /// module so its own bytecode indices resolve in the right unit (step 57, Phase
+    /// 1c-2b). Falls back to `self.module` defensively (a class id should always be
+    /// in range, and for `main`'s classes the answer equals `self.module`).
+    #[inline]
+    fn class_mod(&self, defc: ClassId) -> &'m Module {
+        self.class_module.get(defc).copied().unwrap_or(self.module)
+    }
+
     /// `eval($code)` (step 57, Phase 1): compile `src` (already `<?php`-prefixed)
-    /// as its own translation unit at run time, leak it so its `&'m` bytecode
-    /// outlives this call, and run its `main` to completion — temporarily pointing
-    /// `self.module` at the eval unit so instanceof / method resolution / var_dump
-    /// of objects the eval creates resolve against it. Returns the unit's `return`
-    /// value (or `null`); a parse/compile error yields `false` (MVP — PHP throws
-    /// `ParseError`). Limitations (MVP): the eval'd unit does not share the
-    /// caller's variable scope, and classes/functions it declares are not visible
-    /// after it returns (a later phase merges them into the global image).
+    /// as its own translation unit at run time, relocate its compile-time class ids
+    /// into the VM's global id space (Phase 1c-2b), leak it so its `&'m` bytecode
+    /// outlives this call, and run its `main` to completion. Classes the eval
+    /// declares are appended to the global table, so `new`/`instanceof`/method
+    /// dispatch on them (inside and after the eval) and `class_exists()` all work;
+    /// user functions it declares are linked too (Phase 1c-2a). Returns the unit's
+    /// `return` value (or `null`); a parse/compile error yields `false` (MVP — PHP
+    /// throws `ParseError`). Limitations (MVP): the eval'd unit does not share the
+    /// caller's variable scope, and a class it declares cannot `extend` a
+    /// *user-defined* class of the caller (it compiles standalone, so it only sees
+    /// the prelude).
     fn run_eval(&mut self, src: &[u8]) -> Result<Zval, PhpError> {
         let program = match crate::lower_source(b"eval()'d code", src) {
             Ok(p) => p,
             Err(_) => return Ok(Zval::Bool(false)),
         };
-        let module = match crate::compile::compile_program(&program, self.registry) {
+        let mut module = match crate::compile::compile_program(&program, self.registry) {
             Ok(m) => m,
             Err(_) => return Ok(Zval::Bool(false)),
         };
-        let leaked: &'m Module = Box::leak(Box::new(module));
-        // The eval unit's static-var slots index `self.statics`; make room (its
-        // indices share the main range — `static $x` inside eval may collide,
-        // an accepted MVP limitation).
-        if leaked.static_count > self.statics.len() {
-            self.statics.resize(leaked.static_count, None);
+        // --- Phase 1c-2b: class-id relocation -------------------------------
+        // The eval unit was compiled standalone, so its class ids live in its own
+        // 0.. space (prelude first, then user classes). Build a remap from each
+        // eval-local id to a GLOBAL id: a class whose name already exists in the
+        // global table (the shared prelude, or a class linked by an earlier unit)
+        // dedups to the existing id; a genuinely new user class is appended.
+        // `new_locals` lists the eval-local ids of the new classes in the order
+        // their global ids were assigned, so they append in matching order.
+        let base_static = self.statics.len();
+        let mut class_remap: Vec<ClassId> = Vec::with_capacity(module.classes.len());
+        let mut new_locals: Vec<usize> = Vec::new();
+        for (i, cc) in module.classes.iter().enumerate() {
+            let lower = cc.name.to_ascii_lowercase();
+            if let Some(&existing) = self.class_index.get(&lower) {
+                class_remap.push(existing);
+            } else {
+                let new_id = self.classes.len() + new_locals.len();
+                class_remap.push(new_id);
+                new_locals.push(i);
+            }
         }
+        // Rewrite every op / class-metadata id in place (the module is still owned),
+        // and offset the eval's static-cell ids past the live `self.statics` range.
+        relocate_module_class_ids(&mut module, &class_remap, base_static);
+        // Grow the persistent static storage to hold the eval unit's cells.
+        self.statics.resize(base_static + module.static_count, None);
+
+        let leaked: &'m Module = Box::leak(Box::new(module));
+        // Append the new user classes to the global table (dedup'd prelude classes
+        // were already mapped to existing ids above and are NOT re-added).
+        for &i in &new_locals {
+            self.classes.push(&leaked.classes[i]);
+            self.class_module.push(leaked);
+            self.class_index
+                .insert(leaked.classes[i].name.to_ascii_lowercase(), self.classes.len() - 1);
+        }
+
         let saved = self.module;
         self.module = leaked;
         let baseline = self.frames.len();
@@ -4774,18 +4816,17 @@ impl<'m> Vm<'m> {
     /// props instead of declared defaults). An unknown class falls back to
     /// `stdClass` (D-50).
     fn vm_make_unserialized_object(&mut self, class: &[u8], fields: Vec<(Vec<u8>, Zval)>) -> Zval {
-        let module = self.module; // &'m Module: detach from the `self` borrow.
         let lower = class.to_ascii_lowercase();
-        let cid = module
+        let cid = self
             .class_index
             .get(lower.as_slice())
-            .or_else(|| module.class_index.get(&b"stdclass"[..]))
+            .or_else(|| self.class_index.get(&b"stdclass"[..]))
             .copied();
         let Some(cid) = cid else {
             // No stdClass in the prelude (should never happen) — degrade gracefully.
             return Zval::Null;
         };
-        let cc = &module.classes[cid];
+        let cc = self.classes[cid];
         let class_name = Rc::clone(&cc.class_name);
         let info = Rc::clone(&cc.info);
         let mut props = Props::new();
@@ -5218,7 +5259,7 @@ impl<'m> Vm<'m> {
                     Some((defc, midx)) => {
                         let callee = &self.classes[defc].methods[midx].func;
                         let baseline = self.frames.len();
-                        let mut frame = Frame::new(callee, self.module);
+                        let mut frame = Frame::new(callee, self.class_mod(defc));
                         frame.this = Some(v.clone());
                         frame.class = Some(defc);
                         frame.static_class = Some(cid);
@@ -5600,7 +5641,7 @@ impl<'m> Vm<'m> {
         named: Vec<(Box<[u8]>, Zval)>,
     ) {
         let callee = &self.classes[defc].methods[midx].func;
-        let mut frame = Frame::new(callee, self.module);
+        let mut frame = Frame::new(callee, self.class_mod(defc));
         frame.argc = callee.n_params;
         if !frame.slots.is_empty() {
             frame.slots[0] = Zval::Str(PhpStr::new(method.to_vec()));
@@ -5630,7 +5671,6 @@ impl<'m> Vm<'m> {
         method: &[u8],
         args: Vec<Zval>,
     ) -> Result<(), PhpError> {
-        let module = self.module;
         let resolved = resolve_method_runtime(&self.classes, cid, method);
         // Usable only if found *and* visible from the caller's scope.
         let usable = resolved.filter(|&(defc, midx)| {
@@ -5638,8 +5678,8 @@ impl<'m> Vm<'m> {
         });
         match usable {
             Some((defc, midx)) => {
-                let callee = &module.classes[defc].methods[midx].func;
-                let mut frame = Frame::new(callee, self.module);
+                let callee = &self.classes[defc].methods[midx].func;
+                let mut frame = Frame::new(callee, self.class_mod(defc));
                 bind_params(&mut frame, args);
                 frame.this = Some(this);
                 frame.class = Some(defc);
@@ -5685,18 +5725,17 @@ impl<'m> Vm<'m> {
         forwarding: bool,
         args: Vec<Zval>,
     ) -> Result<(), PhpError> {
-        let module = self.module;
         // Enum built-in statics (`cases` / `from` / `tryFrom`) are reserved names
         // that shadow user resolution and produce a value directly rather than
         // entering a frame (step 23). `cases` is on every enum; `from`/`tryFrom`
         // only on a backed one.
-        if !module.classes[start].enum_cases.is_empty() {
+        if !self.classes[start].enum_cases.is_empty() {
             if method.eq_ignore_ascii_case(b"cases") {
                 let v = self.vm_enum_cases(start);
                 self.frames[top].stack.push(v);
                 return Ok(());
             }
-            let backed = module.classes[start].enum_cases.iter().any(|c| c.value.is_some());
+            let backed = self.classes[start].enum_cases.iter().any(|c| c.value.is_some());
             if backed {
                 let try_from = method.eq_ignore_ascii_case(b"tryFrom");
                 if try_from || method.eq_ignore_ascii_case(b"from") {
@@ -5733,8 +5772,8 @@ impl<'m> Vm<'m> {
         };
         match usable {
             Some((defc, midx)) => {
-                let callee = &module.classes[defc].methods[midx].func;
-                let mut frame = Frame::new(callee, self.module);
+                let callee = &self.classes[defc].methods[midx].func;
+                let mut frame = Frame::new(callee, self.class_mod(defc));
                 bind_params(&mut frame, args);
                 frame.this = this;
                 frame.class = Some(defc);
@@ -5802,8 +5841,8 @@ impl<'m> Vm<'m> {
     /// Fatal if the class is non-instantiable (abstract / interface / enum) or
     /// could not be compiled. Shared by [`Op::Alloc`] and [`Op::AllocStatic`].
     fn alloc_object(&mut self, cid: ClassId) -> Result<Zval, PhpError> {
-        let module = self.module; // &'m Module: detach from `self` borrow
-        let cc = &module.classes[cid];
+        let cc = self.classes[cid]; // &'m CompiledClass: detach from `self` borrow
+
         match cc.instantiable {
             Instantiable::Yes => {}
             Instantiable::Abstract => {
@@ -6073,7 +6112,6 @@ impl<'m> Vm<'m> {
         top: usize,
         ip: usize,
     ) -> Result<Option<Rc<RefCell<Zval>>>, PhpError> {
-        let module = self.module;
         let start = match target {
             ClassTarget::Class(cid) => cid,
             ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
@@ -6083,11 +6121,14 @@ impl<'m> Vm<'m> {
         let Some((decl, idx)) = find_static_prop(&self.classes, start, name) else {
             return Err(PhpError::Error(format!(
                 "Access to undeclared static property {}::${}",
-                String::from_utf8_lossy(&module.classes[start].name),
+                String::from_utf8_lossy(&self.classes[start].name),
                 String::from_utf8_lossy(name)
             )));
         };
-        let entry = &module.classes[decl].static_props[idx];
+        // Detach the declaring class as `&'m` so `entry`/the thunk `func` don't
+        // borrow `self` across the later `&mut self` (`static_props`/`frames`) uses.
+        let decl_cc = self.classes[decl];
+        let entry = &decl_cc.static_props[idx];
         if !visible_from(&self.classes, self.frames[top].class, entry.visibility, decl) {
             return Err(prop_access_error(&self.classes, decl, name, entry.visibility));
         }
@@ -6106,7 +6147,7 @@ impl<'m> Vm<'m> {
                 // so the access re-reads the filled cell on the next iteration.
                 let cell = Rc::new(RefCell::new(Zval::Null));
                 self.static_props.insert(key, Rc::clone(&cell));
-                let mut frame = Frame::new(func, self.module);
+                let mut frame = Frame::new(func, self.class_mod(decl));
                 frame.class = Some(decl);
                 frame.static_class = Some(decl);
                 frame.ret_cell = Some(Rc::clone(&cell));
@@ -6167,7 +6208,7 @@ impl<'m> Vm<'m> {
         args: Vec<Zval>,
     ) {
         let callee = &self.classes[defc].methods[midx].func;
-        let mut frame = Frame::new(callee, self.module);
+        let mut frame = Frame::new(callee, self.class_mod(defc));
         // A magic accessor is always invoked with exactly its declared
         // parameters, so the arity guard (PAR) sees a full argument count.
         frame.argc = callee.n_params;
@@ -6202,7 +6243,7 @@ impl<'m> Vm<'m> {
     ) {
         let lsb = object_class_id(&recv).unwrap_or(defc);
         let callee = &self.classes[defc].methods[midx].func;
-        let mut frame = Frame::new(callee, self.module);
+        let mut frame = Frame::new(callee, self.class_mod(defc));
         // A magic accessor is always invoked with exactly its declared
         // parameters, so the arity guard (PAR) sees a full argument count.
         frame.argc = callee.n_params;
@@ -6252,7 +6293,7 @@ impl<'m> Vm<'m> {
     fn push_hook(&mut self, func: &'m Func, recv: Zval, oid: u32, name: &[u8], set_value: Option<Zval>) {
         let cid = object_class_id(&recv).unwrap_or(0);
         let is_set = set_value.is_some();
-        let mut frame = Frame::new(func, self.module);
+        let mut frame = Frame::new(func, self.class_mod(cid));
         frame.argc = func.n_params;
         if let Some(v) = set_value {
             if !frame.slots.is_empty() {
@@ -6508,6 +6549,90 @@ pub(crate) fn host_builtin_ref_first(name: &[u8]) -> Option<&'static [u8]> {
 /// case-insensitively in ASCII (mirrors the compiler's resolution).
 fn name_eq_ignore_case(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.eq_ignore_ascii_case(y))
+}
+
+/// Rewrite every compile-time class id in a freshly-compiled `eval`/`include`
+/// module into the VM's GLOBAL id space (step 57, Phase 1c-2b), and offset its
+/// `static $x` cell ids past the live `self.statics` range. `remap[local]` is the
+/// global id for each eval-local class id; `static_base` is added to every
+/// static-cell id. The module must still be owned (pre-leak) so its bytecode and
+/// class metadata are mutable.
+fn relocate_module_class_ids(module: &mut Module, remap: &[ClassId], static_base: usize) {
+    // 1. Every function body (main, free functions, closures, and each class's
+    //    methods / property-init thunk / const thunks / non-const static-prop
+    //    thunks / property-hook get & set bodies).
+    relocate_func(&mut module.main, remap, static_base);
+    for f in &mut module.functions {
+        relocate_func(f, remap, static_base);
+    }
+    for f in &mut module.closures {
+        relocate_func(f, remap, static_base);
+    }
+    for cc in &mut module.classes {
+        // 2. Class metadata: superclass and implemented interfaces.
+        if let Some(p) = cc.parent.as_mut() {
+            *p = remap[*p];
+        }
+        for i in cc.interfaces.iter_mut() {
+            *i = remap[*i];
+        }
+        for m in &mut cc.methods {
+            relocate_func(&mut m.func, remap, static_base);
+        }
+        if let Some(pi) = cc.prop_init.as_mut() {
+            relocate_func(pi, remap, static_base);
+        }
+        for c in &mut cc.consts {
+            relocate_func(&mut c.func, remap, static_base);
+        }
+        for sp in &mut cc.static_props {
+            if let StaticInit::Thunk(f) = &mut sp.init {
+                relocate_func(f, remap, static_base);
+            }
+        }
+        for hooks in cc.prop_hooks.values_mut() {
+            if let Some(g) = hooks.get.as_mut() {
+                relocate_func(g, remap, static_base);
+            }
+            if let Some(s) = hooks.set.as_mut() {
+                relocate_func(s, remap, static_base);
+            }
+        }
+    }
+}
+
+/// Apply [`relocate_module_class_ids`] to one function body: remap every
+/// class-id-carrying op and offset every static-cell op.
+fn relocate_func(func: &mut Func, remap: &[ClassId], static_base: usize) {
+    let base = static_base as u32;
+    for op in func.ops.iter_mut() {
+        match op {
+            Op::Alloc { class }
+            | Op::InstanceOf { class }
+            | Op::InvokeMethod { class, .. }
+            | Op::ClassConst { class, .. }
+            | Op::EnumCase { class, .. } => *class = remap[*class],
+            Op::CatchMatch { types, .. } => {
+                for t in types.iter_mut() {
+                    *t = remap[*t];
+                }
+            }
+            Op::StaticCall { target, .. }
+            | Op::StaticCallArgs { target, .. }
+            | Op::StaticPropGet { target, .. }
+            | Op::StaticPropSet { target, .. }
+            | Op::StaticPropOpSet { target, .. }
+            | Op::StaticPropIncDec { target, .. } => {
+                if let ClassTarget::Class(c) = target {
+                    *c = remap[*c];
+                }
+            }
+            Op::StaticGuard { id, .. } | Op::StaticStore { id } | Op::StaticAlias { id, .. } => {
+                *id += base;
+            }
+            _ => {}
+        }
+    }
 }
 
 /// The `[parameter]` pseudo-property descriptors for a function/closure body

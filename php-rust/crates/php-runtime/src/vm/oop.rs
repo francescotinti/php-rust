@@ -385,7 +385,7 @@ impl<'m> Vm<'m> {
             if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, b"__destruct") {
                 self.destructed.insert(id);
                 let callee = &self.classes[defc].methods[midx].func;
-                let mut frame = Frame::new(callee, self.module);
+                let mut frame = Frame::new(callee, self.class_mod(defc));
                 frame.this = Some(Zval::Object(Rc::clone(&o)));
                 frame.class = Some(defc);
                 frame.static_class = Some(cid);
