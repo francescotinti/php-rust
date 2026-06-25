@@ -28,7 +28,8 @@ use php_types::{
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
 use crate::bytecode::{
-    Addr, ClassTarget, DimBase, FieldBase, FieldStep, Func, Instantiable, Module, Op, StaticInit,
+    Addr, ClassTarget, CompiledClass, DimBase, FieldBase, FieldStep, Func, Instantiable, Module, Op,
+    StaticInit,
 };
 use crate::coerce::coerce_to_hint;
 use crate::hir::{BinOp, CastKind, ClassId, HintKind, Line, Slot, TypeHint, UnOp, Visibility};
@@ -210,6 +211,8 @@ fn compile_fatal_outcome(file: &[u8], message: &str, line: Line) -> VmOutcome {
 pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
     let mut vm = Vm {
         module,
+        classes: module.classes.iter().collect(),
+        class_index: module.class_index.clone(),
         registry,
         stdout: Vec::new(),
         rendered: Vec::new(),
@@ -241,6 +244,7 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
         iterator_id: module.class_index.get(&b"iterator"[..]).copied(),
         iteratoraggregate_id: module.class_index.get(&b"iteratoraggregate"[..]).copied(),
         countable_id: module.class_index.get(&b"countable"[..]).copied(),
+        stringable_id: module.class_index.get(&b"stringable"[..]).copied(),
         jsonserializable_id: module.class_index.get(&b"jsonserializable"[..]).copied(),
         enum_cache: HashMap::new(),
         constants: HashMap::new(),
@@ -490,6 +494,15 @@ enum YieldFromState {
 /// recursion cannot overflow the host stack, and a frame is suspendable.
 struct Vm<'m> {
     module: &'m Module,
+    /// The **global class table** (step 57, Phase 1c): every loaded module's
+    /// classes flattened into one id space, so `ClassId` is global and an object's
+    /// `class_id` resolves the same regardless of which module is executing. Built
+    /// from `main`'s classes (ids identical) and grown as `eval`/`include` units
+    /// link. All class lookups (`is_instance_of`, method/const/prop resolution) go
+    /// through this, not `self.classes`.
+    classes: Vec<&'m CompiledClass>,
+    /// Global case-insensitive class-name → [`ClassId`] index over `classes`.
+    class_index: HashMap<Vec<u8>, ClassId>,
     /// Builtin registry, injected by the caller (php-runtime can't build a
     /// populated one — that lives in php-builtins, which depends on php-runtime).
     registry: &'m Registry,
@@ -603,6 +616,10 @@ struct Vm<'m> {
     /// The `Countable` interface id, so `count($obj)`/`sizeof($obj)` dispatches
     /// the user `count()` method instead of erroring (step 56).
     countable_id: Option<ClassId>,
+    /// The `Stringable` interface id, so `is_instance_of` can apply the
+    /// auto-implementation (a class with `__toString` is `Stringable`) without a
+    /// `class_index` lookup (step 57).
+    stringable_id: Option<ClassId>,
     /// The `JsonSerializable` interface id, so `json_encode()` calls a value's
     /// `jsonSerialize()` method instead of encoding its properties (step 56c).
     jsonserializable_id: Option<ClassId>,
@@ -980,7 +997,7 @@ impl<'m> Vm<'m> {
                         let name = match self.frames[top].class {
                             Some(cid) => format!(
                                 "{}::{}",
-                                String::from_utf8_lossy(&self.module.classes[cid].name),
+                                String::from_utf8_lossy(&self.classes[cid].name),
                                 String::from_utf8_lossy(&func_name)
                             ),
                             None => String::from_utf8_lossy(&func_name).into_owned(),
@@ -1067,10 +1084,10 @@ impl<'m> Vm<'m> {
                     match &target {
                         Zval::Object(o) => {
                             let cid = o.borrow().class_id as usize;
-                            match resolve_method_runtime(self.module, cid, b"__toString") {
+                            match resolve_method_runtime(&self.classes, cid, b"__toString") {
                                 // __toString's (stringified) return flows back via Ret.
                                 Some((defc, midx)) => {
-                                    let callee = &self.module.classes[defc].methods[midx].func;
+                                    let callee = &self.classes[defc].methods[midx].func;
                                     let mut frame = Frame::new(callee, self.module);
                                     frame.this = Some(target.clone());
                                     frame.class = Some(defc);
@@ -1367,7 +1384,7 @@ impl<'m> Vm<'m> {
                 Op::CatchMatch { types, var, body } => {
                     let exc = self.frames[top].stack.last().expect("in-flight exception").clone();
                     let caught = object_class_id(&exc)
-                        .is_some_and(|ec| types.iter().any(|&t| is_instance_of(self.module, ec, t)));
+                        .is_some_and(|ec| types.iter().any(|&t| is_instance_of(&self.classes, self.stringable_id, ec, t)));
                     if caught {
                         self.frames[top].stack.pop();
                         if let Some(slot) = var {
@@ -1530,7 +1547,7 @@ impl<'m> Vm<'m> {
                                         IterState::Object { it: inner.clone(), stage: ObjStage::Start, pending: None, cur_val: None }
                                     }
                                     _ => {
-                                        let cls = String::from_utf8_lossy(&self.module.classes[object_class_id(&self.obj_iter_value(top)).unwrap_or(0)].name).into_owned();
+                                        let cls = String::from_utf8_lossy(&self.classes[object_class_id(&self.obj_iter_value(top)).unwrap_or(0)].name).into_owned();
                                         return Err(PhpError::Error(format!(
                                             "Objects returned by {cls}::getIterator() must be traversable or implement interface Iterator"
                                         )));
@@ -2149,8 +2166,8 @@ impl<'m> Vm<'m> {
                     self.frames[top].stack.push(clone_val.clone());
                     // Run `__clone` on the copy if defined (return discarded), so it
                     // can deep-copy what it needs (PHP OOP).
-                    if let Some((defc, midx)) = resolve_method_runtime(self.module, cid, b"__clone") {
-                        let callee = &self.module.classes[defc].methods[midx].func;
+                    if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, b"__clone") {
+                        let callee = &self.classes[defc].methods[midx].func;
                         let mut frame = Frame::new(callee, self.module);
                         frame.this = Some(clone_val);
                         frame.class = Some(defc);
@@ -2182,7 +2199,7 @@ impl<'m> Vm<'m> {
                             self.push_magic_prop(defc, midx, oid, MagicKind::Get, target.clone(), &name, None, None, false);
                             continue;
                         }
-                        check_prop_access(self.module, cur, o.borrow().class_id as usize, &name)?;
+                        check_prop_access(&self.classes, cur, o.borrow().class_id as usize, &name)?;
                     }
                     let v = read_property(&target, &name, &mut self.diags);
                     self.frames[top].stack.push(v);
@@ -2227,7 +2244,7 @@ impl<'m> Vm<'m> {
                             self.push_magic_prop(defc, midx, oid, MagicKind::Get, target.clone(), &name, None, None, false);
                             continue;
                         }
-                        check_prop_access(self.module, cur, o.borrow().class_id as usize, &name)?;
+                        check_prop_access(&self.classes, cur, o.borrow().class_id as usize, &name)?;
                     }
                     let v = read_property(&target, &name, &mut self.diags);
                     self.frames[top].stack.push(v);
@@ -2300,7 +2317,7 @@ impl<'m> Vm<'m> {
                             self.push_magic_prop(defc, midx, oid, MagicKind::Set, target.clone(), &name, Some(value), Some(discard), false);
                             continue;
                         }
-                        check_prop_access(self.module, cur, o.borrow().class_id as usize, &name)?;
+                        check_prop_access(&self.classes, cur, o.borrow().class_id as usize, &name)?;
                     }
                     write_property(&target, &name, value.clone())?;
                     self.frames[top].stack.push(value);
@@ -2309,7 +2326,7 @@ impl<'m> Vm<'m> {
                     let rhs = self.frames[top].stack.pop().expect("PropOpSet rhs");
                     let obj = self.frames[top].stack.pop().expect("PropOpSet object");
                     if let Some(ocid) = object_class_id(&obj) {
-                        check_prop_access(self.module, self.frames[top].class, ocid, &name)?;
+                        check_prop_access(&self.classes, self.frames[top].class, ocid, &name)?;
                     }
                     let old = read_property(&obj, &name, &mut self.diags);
                     let result = apply_binop(op, &old, &rhs, &mut self.diags)?;
@@ -2319,7 +2336,7 @@ impl<'m> Vm<'m> {
                 Op::PropIncDec { name, inc, pre } => {
                     let obj = self.frames[top].stack.pop().expect("PropIncDec object");
                     if let Some(ocid) = object_class_id(&obj) {
-                        check_prop_access(self.module, self.frames[top].class, ocid, &name)?;
+                        check_prop_access(&self.classes, self.frames[top].class, ocid, &name)?;
                     }
                     let old = read_property(&obj, &name, &mut self.diags);
                     let mut newv = old.clone();
@@ -2355,8 +2372,8 @@ impl<'m> Vm<'m> {
                             continue;
                         }
                         // No magic: an inaccessible declared property reads as not-set.
-                        match resolve_prop_decl(self.module, o.borrow().class_id as usize, &name) {
-                            Some((vis, decl)) if !visible_from(self.module, cur, vis, decl) => false,
+                        match resolve_prop_decl(&self.classes, o.borrow().class_id as usize, &name) {
+                            Some((vis, decl)) if !visible_from(&self.classes, cur, vis, decl) => false,
                             _ => prop_isset(&target, &name),
                         }
                     } else {
@@ -2396,7 +2413,7 @@ impl<'m> Vm<'m> {
                             self.push_magic_prop(defc, midx, oid, MagicKind::Unset, target.clone(), &name, None, Some(discard), false);
                             continue;
                         }
-                        check_prop_access(self.module, cur, o.borrow().class_id as usize, &name)?;
+                        check_prop_access(&self.classes, cur, o.borrow().class_id as usize, &name)?;
                     }
                     prop_unset(&target, &name);
                 }
@@ -2464,13 +2481,13 @@ impl<'m> Vm<'m> {
                     let v = self.frames[top].stack.pop().expect("InstanceOf operand");
                     let result = match v.deref_clone() {
                         Zval::Object(o) => {
-                            is_instance_of(self.module, o.borrow().class_id as usize, class)
+                            is_instance_of(&self.classes, self.stringable_id, o.borrow().class_id as usize, class)
                         }
                         // A generator has no ClassId but is-a Iterator/Traversable
                         // (now real prelude interfaces); nothing else among the
                         // value types satisfies these.
                         Zval::Generator(_) => {
-                            let n = &self.module.classes[class].name;
+                            let n = &self.classes[class].name;
                             n.eq_ignore_ascii_case(b"Iterator")
                                 || n.eq_ignore_ascii_case(b"Traversable")
                         }
@@ -2485,7 +2502,7 @@ impl<'m> Vm<'m> {
                     })?;
                     let result = match v.deref_clone() {
                         Zval::Object(o) => {
-                            is_instance_of(self.module, o.borrow().class_id as usize, target)
+                            is_instance_of(&self.classes, self.stringable_id, o.borrow().class_id as usize, target)
                         }
                         _ => false,
                     };
@@ -2498,7 +2515,7 @@ impl<'m> Vm<'m> {
                     let operand = self.frames[top].stack.pop().expect("InstanceOfDynamic operand");
                     let result = match (object_class_id(&operand), self.class_id_from_value(&classval))
                     {
-                        (Some(ocid), Some(tcid)) => is_instance_of(self.module, ocid, tcid),
+                        (Some(ocid), Some(tcid)) => is_instance_of(&self.classes, self.stringable_id, ocid, tcid),
                         _ => false,
                     };
                     self.frames[top].stack.push(Zval::Bool(result));
@@ -2590,7 +2607,7 @@ impl<'m> Vm<'m> {
                     // Run the constant's value thunk as a frame in its declaring
                     // class's context; its `Ret` leaves the value on the caller's
                     // stack.
-                    let thunk = &self.module.classes[class].consts[idx as usize].func;
+                    let thunk = &self.classes[class].consts[idx as usize].func;
                     let mut frame = Frame::new(thunk, self.module);
                     frame.class = Some(class);
                     frame.static_class = Some(class);
@@ -2601,7 +2618,7 @@ impl<'m> Vm<'m> {
                     let start = self.frames[top].static_class.ok_or_else(|| {
                         PhpError::Error("Cannot use \"static\" outside class context".to_string())
                     })?;
-                    let Some((decl, idx)) = find_const_runtime(module, start, &name) else {
+                    let Some((decl, idx)) = find_const_runtime(&self.classes, start, &name) else {
                         return Err(PhpError::Error(format!(
                             "Undefined constant {}::{}",
                             String::from_utf8_lossy(&module.classes[start].name),
@@ -2622,7 +2639,7 @@ impl<'m> Vm<'m> {
                         // any non-object) is a TypeError in PHP 8.
                         match classval.deref_clone() {
                             Zval::Object(o) => {
-                                let cls = self.module.classes[o.borrow().class_id as usize].name.to_vec();
+                                let cls = self.classes[o.borrow().class_id as usize].name.to_vec();
                                 self.frames[top].stack.push(Zval::Str(PhpStr::new(cls)));
                             }
                             other => {
@@ -2635,7 +2652,7 @@ impl<'m> Vm<'m> {
                     } else {
                         let cid = self.resolve_dynamic_class(&classval)?;
                         let module = self.module;
-                        let Some((decl, idx)) = find_const_runtime(module, cid, &name) else {
+                        let Some((decl, idx)) = find_const_runtime(&self.classes, cid, &name) else {
                             return Err(PhpError::Error(format!(
                                 "Undefined constant {}::{}",
                                 String::from_utf8_lossy(&module.classes[cid].name),
@@ -2653,7 +2670,7 @@ impl<'m> Vm<'m> {
                     let start = self.frames[top].static_class.ok_or_else(|| {
                         PhpError::Error("Cannot use \"static\" outside class context".to_string())
                     })?;
-                    let name = self.module.classes[start].name.to_vec();
+                    let name = self.classes[start].name.to_vec();
                     self.frames[top].stack.push(Zval::Str(PhpStr::new(name)));
                 }
                 Op::EnumCase { class, case } => {
@@ -2666,7 +2683,7 @@ impl<'m> Vm<'m> {
                     let recv = self.frames[top].stack.pop().expect("InvokeCtor receiver");
                     let this = recv.deref_clone();
                     let cid = object_class_id(&this).expect("InvokeCtor on a non-object");
-                    match resolve_method_runtime(module, cid, b"__construct") {
+                    match resolve_method_runtime(&self.classes, cid, b"__construct") {
                         Some((defc, midx)) => {
                             let callee = &module.classes[defc].methods[midx].func;
                             let mut frame = Frame::new(callee, self.module);
@@ -2690,7 +2707,7 @@ impl<'m> Vm<'m> {
                     let recv = self.frames[top].stack.pop().expect("InvokeCtorArgs receiver");
                     let this = recv.deref_clone();
                     let cid = object_class_id(&this).expect("InvokeCtorArgs on a non-object");
-                    match resolve_method_runtime(module, cid, b"__construct") {
+                    match resolve_method_runtime(&self.classes, cid, b"__construct") {
                         Some((defc, midx)) => {
                             let callee = &module.classes[defc].methods[midx].func;
                             let mut frame = Frame::new(callee, self.module);
@@ -2920,7 +2937,7 @@ impl<'m> Vm<'m> {
                         // A destructor-less object just drops here; one with a
                         // `__destruct` runs it in a pushed frame (rewind so Sweep
                         // re-runs to a fixpoint after it returns).
-                        if let Some((defc, midx)) = resolve_method_runtime(module, cid, b"__destruct") {
+                        if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, b"__destruct") {
                             self.destructed.insert(id);
                             let callee = &module.classes[defc].methods[midx].func;
                             let mut frame = Frame::new(callee, self.module);
@@ -2952,14 +2969,14 @@ impl<'m> Vm<'m> {
     /// Whether class `cid` implements `Iterator` or `IteratorAggregate` (i.e. a
     /// `foreach` over it drives the iterator protocol), step 51.
     fn is_traversable(&self, cid: usize) -> bool {
-        self.iterator_id.is_some_and(|i| is_instance_of(self.module, cid, i))
-            || self.iteratoraggregate_id.is_some_and(|i| is_instance_of(self.module, cid, i))
+        self.iterator_id.is_some_and(|i| is_instance_of(&self.classes, self.stringable_id, cid, i))
+            || self.iteratoraggregate_id.is_some_and(|i| is_instance_of(&self.classes, self.stringable_id, cid, i))
     }
 
     /// Whether class `cid` implements `IteratorAggregate` (foreach calls
     /// `getIterator()` first), step 51.
     fn is_aggregate(&self, cid: usize) -> bool {
-        self.iteratoraggregate_id.is_some_and(|i| is_instance_of(self.module, cid, i))
+        self.iteratoraggregate_id.is_some_and(|i| is_instance_of(&self.classes, self.stringable_id, cid, i))
     }
 
     /// If `v` (deref'd) is an object implementing `ArrayAccess`, return it as a
@@ -2968,7 +2985,7 @@ impl<'m> Vm<'m> {
         let aa = self.arrayaccess_id?;
         match v.deref_clone() {
             Zval::Object(o)
-                if is_instance_of(self.module, o.borrow().class_id as usize, aa) =>
+                if is_instance_of(&self.classes, self.stringable_id, o.borrow().class_id as usize, aa) =>
             {
                 Some(Zval::Object(o))
             }
@@ -2982,7 +2999,7 @@ impl<'m> Vm<'m> {
         let c = self.countable_id?;
         match v.deref_clone() {
             Zval::Object(o)
-                if is_instance_of(self.module, o.borrow().class_id as usize, c) =>
+                if is_instance_of(&self.classes, self.stringable_id, o.borrow().class_id as usize, c) =>
             {
                 Some(Zval::Object(o))
             }
@@ -3005,7 +3022,7 @@ impl<'m> Vm<'m> {
     ) -> Result<(), PhpError> {
         let cid = object_class_id(&recv).expect("protocol receiver is an object");
         let module = self.module;
-        let (defc, midx) = resolve_method_runtime(module, cid, method).ok_or_else(|| {
+        let (defc, midx) = resolve_method_runtime(&self.classes, cid, method).ok_or_else(|| {
             PhpError::Error(format!(
                 "Call to undefined method {}::{}()",
                 String::from_utf8_lossy(&module.classes[cid].name),
@@ -3173,7 +3190,7 @@ impl<'m> Vm<'m> {
             }
             Zval::Object(_) => {
                 let cid = object_class_id(&v).expect("object has a class id");
-                if self.jsonserializable_id.is_some_and(|j| is_instance_of(self.module, cid, j)) {
+                if self.jsonserializable_id.is_some_and(|j| is_instance_of(&self.classes, self.stringable_id, cid, j)) {
                     let r = self.call_method_sync(v, b"jsonSerialize", Vec::new())?;
                     self.json_normalize(r)
                 } else {
@@ -4042,8 +4059,8 @@ impl<'m> Vm<'m> {
             Some(a) => Some(self.class_arg_to_id(a.deref_clone(), "get_parent_class")?),
             None => self.frames[top].class,
         };
-        match cid.and_then(|c| self.module.classes[c].parent) {
-            Some(p) => Ok(Zval::Str(PhpStr::new(self.module.classes[p].name.to_vec()))),
+        match cid.and_then(|c| self.classes[c].parent) {
+            Some(p) => Ok(Zval::Str(PhpStr::new(self.classes[p].name.to_vec()))),
             None => Ok(Zval::Bool(false)),
         }
     }
@@ -4057,7 +4074,7 @@ impl<'m> Vm<'m> {
             Zval::Str(s) => {
                 let raw = s.as_bytes();
                 let name = raw.strip_prefix(b"\\").unwrap_or(raw);
-                self.module.class_index.get(&name.to_ascii_lowercase()).copied().ok_or_else(|| {
+                self.class_index.get(&name.to_ascii_lowercase()).copied().ok_or_else(|| {
                     PhpError::TypeError(format!(
                         "{fname}(): Argument #1 ($object_or_class) must be an object or a valid class name, string given"
                     ))
@@ -4103,12 +4120,12 @@ impl<'m> Vm<'m> {
         let mut c = Some(cid);
         while let Some(ci) = c {
             chain.push(ci);
-            c = self.module.classes[ci].parent;
+            c = self.classes[ci].parent;
         }
         let mut order: Vec<Box<[u8]>> = Vec::new();
         let mut declared: HashSet<Box<[u8]>> = HashSet::new();
         for ci in chain.iter().rev() {
-            for (name, _) in &self.module.classes[*ci].own_prop_vis {
+            for (name, _) in &self.classes[*ci].own_prop_vis {
                 if declared.insert(name.clone()) {
                     order.push(name.clone());
                 }
@@ -4116,8 +4133,8 @@ impl<'m> Vm<'m> {
         }
         let mut arr = PhpArray::new();
         for name in &order {
-            let visible = match resolve_prop_decl(self.module, cid, name) {
-                Some((vis, decl)) => visible_from(self.module, cur, vis, decl),
+            let visible = match resolve_prop_decl(&self.classes, cid, name) {
+                Some((vis, decl)) => visible_from(&self.classes, cur, vis, decl),
                 None => true,
             };
             if !visible {
@@ -4169,17 +4186,17 @@ impl<'m> Vm<'m> {
         let mut seen: Vec<Vec<u8>> = Vec::new();
         let mut c = Some(start);
         while let Some(cc) = c {
-            for m in &self.module.classes[cc].methods {
+            for m in &self.classes[cc].methods {
                 let lname = m.name.to_ascii_lowercase();
                 if seen.contains(&lname) {
                     continue; // a more-derived class already defined this name
                 }
                 seen.push(lname);
-                if visible_from(self.module, cur, m.visibility, cc) {
+                if visible_from(&self.classes, cur, m.visibility, cc) {
                     let _ = arr.append(Zval::Str(PhpStr::new(m.name.to_vec())));
                 }
             }
-            c = self.module.classes[cc].parent;
+            c = self.classes[cc].parent;
         }
         Ok(Zval::Array(Rc::new(arr)))
     }
@@ -4206,7 +4223,7 @@ impl<'m> Vm<'m> {
         let raw = convert::to_zstr_cast(&a.deref_clone(), &mut self.diags);
         let b = raw.as_bytes();
         let name = b.strip_prefix(b"\\").unwrap_or(b);
-        self.module.class_index.get(&name.to_ascii_lowercase()).copied()
+        self.class_index.get(&name.to_ascii_lowercase()).copied()
     }
 
     /// `class_exists($name, $autoload = true)` (Session B4): whether `name` names a
@@ -4214,7 +4231,7 @@ impl<'m> Vm<'m> {
     /// (matching PHP 8.5). The autoload flag is a no-op (no autoloading is modelled).
     fn ho_class_exists(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let exists = match self.resolve_class_name(args.first()) {
-            Some(cid) => self.module.classes[cid].instantiable != Instantiable::Interface,
+            Some(cid) => self.classes[cid].instantiable != Instantiable::Interface,
             None => false,
         };
         Ok(Zval::Bool(exists))
@@ -4225,7 +4242,7 @@ impl<'m> Vm<'m> {
     fn ho_interface_exists(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let is_iface = matches!(
             self.resolve_class_name(args.first()),
-            Some(cid) if self.module.classes[cid].instantiable == Instantiable::Interface
+            Some(cid) if self.classes[cid].instantiable == Instantiable::Interface
         );
         Ok(Zval::Bool(is_iface))
     }
@@ -4243,7 +4260,7 @@ impl<'m> Vm<'m> {
             return Ok(Zval::Bool(false));
         };
         let m = convert::to_zstr_cast(&a1.deref_clone(), &mut self.diags);
-        Ok(Zval::Bool(resolve_method_runtime(self.module, cid, m.as_bytes()).is_some()))
+        Ok(Zval::Bool(resolve_method_runtime(&self.classes, cid, m.as_bytes()).is_some()))
     }
 
     /// `property_exists($object_or_class, $property)` (Session B4): whether the class
@@ -4262,8 +4279,8 @@ impl<'m> Vm<'m> {
         };
         let pname_z = convert::to_zstr_cast(&a1.deref_clone(), &mut self.diags);
         let pname = pname_z.as_bytes();
-        if resolve_prop_decl(self.module, cid, pname).is_some()
-            || find_static_prop(self.module, cid, pname).is_some()
+        if resolve_prop_decl(&self.classes, cid, pname).is_some()
+            || find_static_prop(&self.classes, cid, pname).is_some()
         {
             return Ok(Zval::Bool(true));
         }
@@ -4280,7 +4297,7 @@ impl<'m> Vm<'m> {
     fn ho_get_called_class(&mut self) -> Result<Zval, PhpError> {
         let top = self.frames.len() - 1;
         match self.frames[top].static_class {
-            Some(cid) => Ok(Zval::Str(PhpStr::new(self.module.classes[cid].name.to_vec()))),
+            Some(cid) => Ok(Zval::Str(PhpStr::new(self.classes[cid].name.to_vec()))),
             None => Err(PhpError::Error(
                 "get_called_class() must be called from within a class".to_string(),
             )),
@@ -4787,7 +4804,7 @@ impl<'m> Vm<'m> {
             let (class, object) = match f.class {
                 // Resolve the class id in the frame's own module (an eval'd /
                 // included frame may differ from `self.module`).
-                Some(cid) => (Some(f.module.classes[cid].name.to_vec()), f.this.clone()),
+                Some(cid) => (Some(self.classes[cid].name.to_vec()), f.this.clone()),
                 None => (None, None),
             };
             out.push(BtFrame {
@@ -5146,7 +5163,7 @@ impl<'m> Vm<'m> {
             }
             Zval::Object(o) => {
                 let cid = o.borrow().class_id as usize;
-                if resolve_method_runtime(self.module, cid, b"__toString").is_some() {
+                if resolve_method_runtime(&self.classes, cid, b"__toString").is_some() {
                     let s = self.vm_stringify(&v)?;
                     let bytes = s.as_bytes().to_vec();
                     self.emit_str(top, &bytes)?;
@@ -5164,7 +5181,7 @@ impl<'m> Vm<'m> {
     fn exit_type_error(&self, v: &Zval) -> PhpError {
         let given = match v {
             Zval::Object(o) => String::from_utf8_lossy(
-                &self.module.classes[o.borrow().class_id as usize].name,
+                &self.classes[o.borrow().class_id as usize].name,
             )
             .into_owned(),
             other => crate::coerce::php_type_name(other).to_string(),
@@ -5181,9 +5198,9 @@ impl<'m> Vm<'m> {
         match v {
             Zval::Object(o) => {
                 let cid = o.borrow().class_id as usize;
-                match resolve_method_runtime(self.module, cid, b"__toString") {
+                match resolve_method_runtime(&self.classes, cid, b"__toString") {
                     Some((defc, midx)) => {
-                        let callee = &self.module.classes[defc].methods[midx].func;
+                        let callee = &self.classes[defc].methods[midx].func;
                         let baseline = self.frames.len();
                         let mut frame = Frame::new(callee, self.module);
                         frame.this = Some(v.clone());
@@ -5419,7 +5436,7 @@ impl<'m> Vm<'m> {
                 let b = s.as_bytes();
                 if let Some(pos) = b.windows(2).position(|w| w == b"::") {
                     self.class_id_from_value(&Zval::Str(PhpStr::new(b[..pos].to_vec())))
-                        .map(|cid| resolve_method_runtime(self.module, cid, &b[pos + 2..]).is_some())
+                        .map(|cid| resolve_method_runtime(&self.classes, cid, &b[pos + 2..]).is_some())
                         .unwrap_or(false)
                 } else {
                     self.is_name_callable(b)
@@ -5432,13 +5449,13 @@ impl<'m> Vm<'m> {
                 }
                 let Zval::Str(m) = &elems[1] else { return false };
                 match self.class_id_from_value(&elems[0]) {
-                    Some(cid) => resolve_method_runtime(self.module, cid, m.as_bytes()).is_some(),
+                    Some(cid) => resolve_method_runtime(&self.classes, cid, m.as_bytes()).is_some(),
                     None => false,
                 }
             }
             Zval::Object(o) => {
                 let cid = o.borrow().class_id as usize;
-                resolve_method_runtime(self.module, cid, b"__invoke").is_some()
+                resolve_method_runtime(&self.classes, cid, b"__invoke").is_some()
             }
             Zval::Ref(r) => self.is_value_callable(&r.borrow()),
             _ => false,
@@ -5512,8 +5529,8 @@ impl<'m> Vm<'m> {
                 // A value satisfies a class/interface type hint if it is-a that
                 // type — including implemented interfaces (transitively), not just
                 // the parent chain. Mirrors `instanceof` (`is_instance_of`).
-                matches!(self.module.class_index.get(&lc[..]),
-                    Some(&target) if is_instance_of(self.module, o.borrow().class_id as usize, target))
+                matches!(self.class_index.get(&lc[..]),
+                    Some(&target) if is_instance_of(&self.classes, self.stringable_id, o.borrow().class_id as usize, target))
             }
             Zval::Ref(r) => self.value_satisfies_class(&r.borrow(), name),
             _ => false,
@@ -5565,7 +5582,7 @@ impl<'m> Vm<'m> {
         positional: Vec<Zval>,
         named: Vec<(Box<[u8]>, Zval)>,
     ) {
-        let callee = &self.module.classes[defc].methods[midx].func;
+        let callee = &self.classes[defc].methods[midx].func;
         let mut frame = Frame::new(callee, self.module);
         frame.argc = callee.n_params;
         if !frame.slots.is_empty() {
@@ -5597,10 +5614,10 @@ impl<'m> Vm<'m> {
         args: Vec<Zval>,
     ) -> Result<(), PhpError> {
         let module = self.module;
-        let resolved = resolve_method_runtime(module, cid, method);
+        let resolved = resolve_method_runtime(&self.classes, cid, method);
         // Usable only if found *and* visible from the caller's scope.
         let usable = resolved.filter(|&(defc, midx)| {
-            visible_from(module, self.frames[top].class, module.classes[defc].methods[midx].visibility, defc)
+            visible_from(&self.classes, self.frames[top].class, self.classes[defc].methods[midx].visibility, defc)
         });
         match usable {
             Some((defc, midx)) => {
@@ -5614,20 +5631,20 @@ impl<'m> Vm<'m> {
             }
             // Missing or inaccessible: route to `__call` if defined, else the
             // original fatal (visibility / undefined method).
-            None => match resolve_method_runtime(module, cid, b"__call") {
+            None => match resolve_method_runtime(&self.classes, cid, b"__call") {
                 Some((cdefc, cmidx)) => {
                     self.push_magic_call(cdefc, cmidx, Some(this), cid, method, args);
                 }
                 None => {
                     return Err(match resolved {
                         Some((defc, midx)) => method_access_error(
-                            module,
+                            &self.classes,
                             defc,
                             method,
                             self.frames[top].class,
-                            module.classes[defc].methods[midx].visibility,
+                            self.classes[defc].methods[midx].visibility,
                         ),
-                        None => undefined_method(module, cid, method),
+                        None => undefined_method(&self.classes, cid, method),
                     })
                 }
             },
@@ -5673,9 +5690,9 @@ impl<'m> Vm<'m> {
                 }
             }
         }
-        let resolved = resolve_method_runtime(module, start, method);
+        let resolved = resolve_method_runtime(&self.classes, start, method);
         let usable = resolved.filter(|&(defc, midx)| {
-            visible_from(module, self.frames[top].class, module.classes[defc].methods[midx].visibility, defc)
+            visible_from(&self.classes, self.frames[top].class, self.classes[defc].methods[midx].visibility, defc)
         });
         // LSB: a forwarding call keeps the caller's; a named/dynamic call rebinds.
         let static_class = if forwarding {
@@ -5688,7 +5705,7 @@ impl<'m> Vm<'m> {
         let this = match &self.frames[top].this {
             Some(t) => {
                 let keep = forwarding
-                    || matches!(object_class_id(t), Some(ocid) if class_is_a(module, ocid, start));
+                    || matches!(object_class_id(t), Some(ocid) if class_is_a(&self.classes, ocid, start));
                 if keep {
                     Some(t.clone())
                 } else {
@@ -5715,24 +5732,24 @@ impl<'m> Vm<'m> {
                     .as_ref()
                     .and_then(|t| object_class_id(t).map(|oc| (t.clone(), oc)))
                     .and_then(|(tv, oc)| {
-                        resolve_method_runtime(module, oc, b"__call").map(|(d, m)| (tv, oc, d, m))
+                        resolve_method_runtime(&self.classes, oc, b"__call").map(|(d, m)| (tv, oc, d, m))
                     });
                 if let Some((tv, oc, cdefc, cmidx)) = via_call {
                     self.push_magic_call(cdefc, cmidx, Some(tv), oc, method, args);
                 } else if let Some((cdefc, cmidx)) =
-                    resolve_method_runtime(module, start, b"__callStatic")
+                    resolve_method_runtime(&self.classes, start, b"__callStatic")
                 {
                     self.push_magic_call(cdefc, cmidx, None, start, method, args);
                 } else {
                     return Err(match resolved {
                         Some((defc, midx)) => method_access_error(
-                            module,
+                            &self.classes,
                             defc,
                             method,
                             self.frames[top].class,
-                            module.classes[defc].methods[midx].visibility,
+                            self.classes[defc].methods[midx].visibility,
                         ),
-                        None => undefined_method(module, start, method),
+                        None => undefined_method(&self.classes, start, method),
                     });
                 }
             }
@@ -5750,7 +5767,7 @@ impl<'m> Vm<'m> {
             Zval::Str(s) => {
                 let raw = s.as_bytes();
                 let name = raw.strip_prefix(b"\\").unwrap_or(raw);
-                self.module.class_index.get(&name.to_ascii_lowercase()).copied().ok_or_else(|| {
+                self.class_index.get(&name.to_ascii_lowercase()).copied().ok_or_else(|| {
                     PhpError::Error(format!(
                         "Class \"{}\" not found",
                         String::from_utf8_lossy(name)
@@ -5822,7 +5839,7 @@ impl<'m> Vm<'m> {
         if let Some(o) = self.enum_cache.get(&(class, case)) {
             return Rc::clone(o);
         }
-        let cc = &self.module.classes[class];
+        let cc = self.classes[class];
         let decl = &cc.enum_cases[case as usize];
         let mut props = Props::new();
         let mut entries: Vec<(Box<[u8]>, PropVis)> = vec![(Box::from(&b"name"[..]), PropVis::Public)];
@@ -5848,7 +5865,7 @@ impl<'m> Vm<'m> {
     /// declaration order. Works on pure and backed enums alike. Mirrors
     /// `eval::enum_cases`.
     fn vm_enum_cases(&mut self, cid: ClassId) -> Zval {
-        let n = self.module.classes[cid].enum_cases.len();
+        let n = self.classes[cid].enum_cases.len();
         let mut arr = PhpArray::new();
         for i in 0..n {
             let case = self.enum_case(cid, i as u32);
@@ -5867,7 +5884,7 @@ impl<'m> Vm<'m> {
         try_from: bool,
     ) -> Result<Zval, PhpError> {
         let arg = arg.unwrap_or(Zval::Null).deref_clone();
-        let n = self.module.classes[cid].enum_cases.len();
+        let n = self.classes[cid].enum_cases.len();
         for i in 0..n {
             let case = self.enum_case(cid, i as u32);
             let hit = case
@@ -5893,7 +5910,7 @@ impl<'m> Vm<'m> {
         };
         Err(PhpError::ValueError(format!(
             "{repr} is not a valid backing value for enum {}",
-            String::from_utf8_lossy(&self.module.classes[cid].name)
+            String::from_utf8_lossy(&self.classes[cid].name)
         )))
     }
 
@@ -5950,7 +5967,7 @@ impl<'m> Vm<'m> {
         let Some(throwable_id) = self.throwable_id else { return };
         let Zval::Object(o) = obj else { return };
         let cid = o.borrow().class_id as ClassId;
-        if !is_instance_of(self.module, cid, throwable_id) {
+        if !is_instance_of(&self.classes, self.stringable_id, cid, throwable_id) {
             return;
         }
         let line = self.cur_line(self.frames.len() - 1);
@@ -5984,7 +6001,7 @@ impl<'m> Vm<'m> {
             // currently executing `self.module`).
             let class: Option<&[u8]> = frame
                 .static_class
-                .map(|cid| frame.module.classes[cid].name.as_ref());
+                .map(|cid| self.classes[cid].name.as_ref());
             let is_static = frame.this.is_none();
 
             s.extend_from_slice(format!("#{i} ").as_bytes());
@@ -6046,7 +6063,7 @@ impl<'m> Vm<'m> {
                 PhpError::Error("Cannot use \"static\" outside class context".to_string())
             })?,
         };
-        let Some((decl, idx)) = find_static_prop(module, start, name) else {
+        let Some((decl, idx)) = find_static_prop(&self.classes, start, name) else {
             return Err(PhpError::Error(format!(
                 "Access to undeclared static property {}::${}",
                 String::from_utf8_lossy(&module.classes[start].name),
@@ -6054,8 +6071,8 @@ impl<'m> Vm<'m> {
             )));
         };
         let entry = &module.classes[decl].static_props[idx];
-        if !visible_from(module, self.frames[top].class, entry.visibility, decl) {
-            return Err(prop_access_error(module, decl, name, entry.visibility));
+        if !visible_from(&self.classes, self.frames[top].class, entry.visibility, decl) {
+            return Err(prop_access_error(&self.classes, decl, name, entry.visibility));
         }
         let key = (decl, name.to_vec());
         if let Some(cell) = self.static_props.get(&key) {
@@ -6132,7 +6149,7 @@ impl<'m> Vm<'m> {
         method: &[u8],
         args: Vec<Zval>,
     ) {
-        let callee = &self.module.classes[defc].methods[midx].func;
+        let callee = &self.classes[defc].methods[midx].func;
         let mut frame = Frame::new(callee, self.module);
         // A magic accessor is always invoked with exactly its declared
         // parameters, so the arity guard (PAR) sees a full argument count.
@@ -6167,7 +6184,7 @@ impl<'m> Vm<'m> {
         ret_bool: bool,
     ) {
         let lsb = object_class_id(&recv).unwrap_or(defc);
-        let callee = &self.module.classes[defc].methods[midx].func;
+        let callee = &self.classes[defc].methods[midx].func;
         let mut frame = Frame::new(callee, self.module);
         // A magic accessor is always invoked with exactly its declared
         // parameters, so the arity guard (PAR) sees a full argument count.
@@ -6195,7 +6212,7 @@ impl<'m> Vm<'m> {
     /// (step 50). The table is flattened parent-first, so the most-derived hook is
     /// already in `cid`'s entry. The returned ref lives as long as the module.
     fn prop_hook(&self, cid: usize, name: &[u8], set: bool) -> Option<&'m Func> {
-        let h = self.module.classes[cid].prop_hooks.get(name)?;
+        let h = self.classes[cid].prop_hooks.get(name)?;
         if set {
             h.set.as_ref()
         } else {

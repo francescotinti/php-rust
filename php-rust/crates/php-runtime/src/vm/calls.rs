@@ -228,13 +228,13 @@ impl<'m> Vm<'m> {
             Zval::Object(ref o) => {
                 // An object is callable iff its class defines `__invoke` (D-22.7).
                 let cid = o.borrow().class_id as usize;
-                if resolve_method_runtime(self.module, cid, b"__invoke").is_some() {
+                if resolve_method_runtime(&self.classes, cid, b"__invoke").is_some() {
                     let top = self.frames.len() - 1;
                     self.dispatch_instance_call(top, cid, callee.clone(), b"__invoke", args)
                 } else {
                     Err(PhpError::Error(format!(
                         "Object of type {} is not callable",
-                        String::from_utf8_lossy(&self.module.classes[cid].name)
+                        String::from_utf8_lossy(&self.classes[cid].name)
                     )))
                 }
             }
