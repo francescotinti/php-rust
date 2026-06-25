@@ -153,7 +153,7 @@ pub(crate) fn php_type_name(v: &Zval) -> &'static str {
         Zval::Double(_) => "float",
         Zval::Str(_) => "string",
         Zval::Array(_) => "array",
-        Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) => "object",
+        Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) | Zval::WeakHandle(_) => "object",
         Zval::Resource(_) => "resource",
         Zval::Ref(c) => php_type_name(&c.borrow()),
     }

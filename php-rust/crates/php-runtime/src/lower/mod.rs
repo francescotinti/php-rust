@@ -542,10 +542,10 @@ class Fiber {
     public function __construct($callable) { $this->callable = $callable; }
 }
 final class WeakReference {
-    // Holds the referent *strongly* (no tracing GC, so no true weakness yet): get()
-    // returns the object while this WeakReference is alive. The native PHP class
-    // exposes the referent as an "object" property in var_dump, so name it so.
-    public $object;
+    // `__h` is an internal weak handle (see __weak_create/__weak_get): it does
+    // NOT keep the referent alive, so get() returns the object while a strong
+    // reference exists elsewhere and null once it is collected (true weakness).
+    private $__h;
     private function __construct() {}
     public static function create($object) {
         if (!is_object($object)) {
@@ -554,30 +554,48 @@ final class WeakReference {
             throw new TypeError("WeakReference::create(): Argument #1 (\$object) must be of type object, $t given");
         }
         $ref = new self();
-        $ref->object = $object;
+        $ref->__h = __weak_create($object);
         return $ref;
     }
     public function get() {
-        return $this->object;
+        return __weak_get($this->__h);
     }
 }
 class WeakMap implements ArrayAccess, Countable, IteratorAggregate {
-    // id => [object, value]. The object is held *strongly* (no true weakness:
-    // our VM has no tracing GC, so entries persist until explicitly unset). Keyed
-    // by spl_object_id so distinct objects map to distinct entries.
+    // id => [weak-handle, value]. Keys are held *weakly* (via __weak_create): an
+    // entry whose key has been collected is pruned lazily on access (__prune /
+    // __live), giving true weakness without a tracing GC. Keyed by spl_object_id.
     private $__entries = [];
+    private function __live($id) {
+        // The live key object for $id, pruning the entry if it has been collected.
+        if (!isset($this->__entries[$id])) {
+            return null;
+        }
+        $o = __weak_get($this->__entries[$id][0]);
+        if ($o === null) {
+            unset($this->__entries[$id]);
+        }
+        return $o;
+    }
+    private function __prune() {
+        foreach ($this->__entries as $id => $entry) {
+            if (__weak_get($entry[0]) === null) {
+                unset($this->__entries[$id]);
+            }
+        }
+    }
     public function offsetExists($object) {
         // isset()/empty() on an ArrayAccess element use offsetExists as the
-        // backend; PHP reports a null-valued key as not set, so mirror that.
+        // backend; PHP reports a null-valued (or collected) key as not set.
         $id = spl_object_id($object);
-        return isset($this->__entries[$id]) && $this->__entries[$id][1] !== null;
+        return $this->__live($id) !== null && $this->__entries[$id][1] !== null;
     }
     public function offsetGet($object) {
         if (!is_object($object)) {
             throw new TypeError("WeakMap key must be an object");
         }
         $id = spl_object_id($object);
-        if (!array_key_exists($id, $this->__entries)) {
+        if ($this->__live($id) === null) {
             throw new Error("Object " . get_class($object) . "#" . $id . " not contained in WeakMap");
         }
         return $this->__entries[$id][1];
@@ -586,17 +604,22 @@ class WeakMap implements ArrayAccess, Countable, IteratorAggregate {
         if (!is_object($object)) {
             throw new TypeError("WeakMap key must be an object");
         }
-        $this->__entries[spl_object_id($object)] = [$object, $value];
+        $this->__entries[spl_object_id($object)] = [__weak_create($object), $value];
     }
     public function offsetUnset($object) {
         unset($this->__entries[spl_object_id($object)]);
     }
     public function count() {
+        $this->__prune();
         return count($this->__entries);
     }
     public function getIterator() {
+        $this->__prune();
         foreach ($this->__entries as $entry) {
-            yield $entry[0] => $entry[1];
+            $o = __weak_get($entry[0]);
+            if ($o !== null) {
+                yield $o => $entry[1];
+            }
         }
     }
 }

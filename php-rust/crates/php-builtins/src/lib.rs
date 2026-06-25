@@ -455,26 +455,51 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
                 seen.pop();
                 return;
             }
-            // A WeakMap renders as its key/value pairs, not its internal storage
-            // property: `[i] => array(2){ ["key"]=>K, ["value"]=>V }`, in
-            // insertion order (mirrors PHP's native handler). The backing
-            // `__entries` array maps spl_object_id => [key, value].
-            if obj.class_name.as_bytes() == b"WeakMap" {
-                let entries: Vec<Zval> = match obj.props.get(b"__entries") {
-                    Some(Zval::Array(a)) => a.iter().map(|(_, v)| v.clone()).collect(),
-                    _ => Vec::new(),
-                };
+            // A WeakReference renders its (weak) referent under an "object" key —
+            // the upgraded object, or NULL once it has been collected. The backing
+            // `__h` property is the internal weak handle.
+            if obj.class_name.as_bytes() == b"WeakReference" {
+                let inner = obj.props.get(b"__h").cloned().unwrap_or(Zval::Null);
                 out.extend_from_slice(
-                    format!("object(WeakMap)#{} ({}) {{\n", obj.id, entries.len()).as_bytes(),
+                    format!("object(WeakReference)#{} (1) {{\n", obj.id).as_bytes(),
                 );
-                for (i, entry) in entries.iter().enumerate() {
-                    let (key, value) = match entry {
-                        Zval::Array(pair) => {
+                spaces(out, indent + 2);
+                out.extend_from_slice(b"[\"object\"]=>\n");
+                spaces(out, indent + 2);
+                dump(out, &inner, indent + 2, seen); // WeakHandle arm: object or NULL
+                drop(obj);
+                seen.pop();
+                spaces(out, indent);
+                out.extend_from_slice(b"}\n");
+                return;
+            }
+            // A WeakMap renders as its *live* key/value pairs, not its internal
+            // storage property: `[i] => array(2){ ["key"]=>K, ["value"]=>V }`, in
+            // insertion order, with collected keys pruned (mirrors PHP's native
+            // handler). The backing `__entries` maps spl_object_id => [weak, value].
+            if obj.class_name.as_bytes() == b"WeakMap" {
+                let mut live: Vec<(Zval, Zval)> = Vec::new();
+                if let Some(Zval::Array(a)) = obj.props.get(b"__entries") {
+                    for (_, entry) in a.iter() {
+                        if let Zval::Array(pair) = entry {
                             let mut it = pair.iter().map(|(_, v)| v.clone());
-                            (it.next().unwrap_or(Zval::Null), it.next().unwrap_or(Zval::Null))
+                            let h = it.next().unwrap_or(Zval::Null);
+                            let value = it.next().unwrap_or(Zval::Null);
+                            match h {
+                                Zval::WeakHandle(w) => {
+                                    if let Some(o) = w.upgrade() {
+                                        live.push((Zval::Object(o), value));
+                                    }
+                                }
+                                other => live.push((other, value)), // strong fallback
+                            }
                         }
-                        _ => (Zval::Null, Zval::Null),
-                    };
+                    }
+                }
+                out.extend_from_slice(
+                    format!("object(WeakMap)#{} ({}) {{\n", obj.id, live.len()).as_bytes(),
+                );
+                for (i, (key, value)) in live.iter().enumerate() {
                     spaces(out, indent + 2);
                     out.extend_from_slice(format!("[{i}]=>\n").as_bytes());
                     spaces(out, indent + 2);
@@ -482,11 +507,11 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
                     spaces(out, indent + 4);
                     out.extend_from_slice(b"[\"key\"]=>\n");
                     spaces(out, indent + 4);
-                    dump(out, &key, indent + 4, seen);
+                    dump(out, key, indent + 4, seen);
                     spaces(out, indent + 4);
                     out.extend_from_slice(b"[\"value\"]=>\n");
                     spaces(out, indent + 4);
-                    dump(out, &value, indent + 4, seen);
+                    dump(out, value, indent + 4, seen);
                     spaces(out, indent + 2);
                     out.extend_from_slice(b"}\n");
                 }
@@ -523,6 +548,12 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
             spaces(out, indent);
             out.extend_from_slice(b"}\n");
         }
+        // A bare weak handle (only reached if one ever escapes the WeakReference/
+        // WeakMap special-casing): the live object, or NULL once collected.
+        Zval::WeakHandle(w) => match w.upgrade() {
+            Some(o) => dump(out, &Zval::Object(o), indent, seen),
+            None => out.extend_from_slice(b"NULL\n"),
+        },
     }
 }
 
@@ -664,7 +695,7 @@ fn export_into(out: &mut Vec<u8>, v: &Zval, level: usize, seen: &mut Vec<usize>,
         }
         // Closures / generators / resources have no `var_export` form
         // (D-47.1 scope-out; PHP warns and yields NULL for a resource).
-        Zval::Closure(_) | Zval::Generator(_) | Zval::Resource(_) => {
+        Zval::Closure(_) | Zval::Generator(_) | Zval::Resource(_) | Zval::WeakHandle(_) => {
             out.extend_from_slice(b"NULL")
         }
     }

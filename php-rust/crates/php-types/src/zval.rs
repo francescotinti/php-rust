@@ -52,6 +52,13 @@ pub enum Zval {
     /// byte stream itself lives in [`crate::Resource`]; only `fopen` (which owns
     /// the id counter) mints these, in the evaluator (D-51.3).
     Resource(Rc<RefCell<crate::Resource>>),
+    /// A weak reference to an object (the backing of `WeakReference`/`WeakMap`).
+    /// Holds a `Weak` so it does *not* keep the object alive; `upgrade()` yields
+    /// the object while at least one strong handle remains, else `None` (true
+    /// weakness). Never surfaces to user code — `WeakReference::get()` /
+    /// `WeakMap` offsets upgrade it to an object or `null` via the internal
+    /// `__weak_get` builtin, and `var_dump` special-cases the two classes.
+    WeakHandle(std::rc::Weak<RefCell<Object>>),
 }
 
 /// A lowered-and-captured closure value (step 18). `fn_idx` selects the body
@@ -147,7 +154,7 @@ impl Zval {
             Zval::Str(_) => "string",
             Zval::Array(_) => "array",
             Zval::Ref(cell) => cell.borrow().gettype(),
-            Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) => "object",
+            Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) | Zval::WeakHandle(_) => "object",
             // "resource" while open, "resource (closed)" after fclose (D-51.1).
             Zval::Resource(r) => r.borrow().type_name(),
         }
@@ -167,7 +174,7 @@ impl Zval {
             Zval::Generator(_) => "Generator",
             // A user object: the generic name. Use [`Self::type_name_for_error`]
             // where PHP names it by class (operand / type errors).
-            Zval::Object(_) => "object",
+            Zval::Object(_) | Zval::WeakHandle(_) => "object",
             Zval::Resource(r) => r.borrow().type_name(),
         }
     }

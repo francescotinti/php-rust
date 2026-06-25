@@ -57,7 +57,7 @@ fn try_to_number(v: &Zval, diags: &mut Diags) -> Option<Num> {
         // An object (closure or instance) has no numeric value: the caller raises
         // the op's TypeError ("Unsupported operand types: ...", step 18/19). A
         // resource is the same (oracle: `$fp + 1` → TypeError, step 51).
-        Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) | Zval::Resource(_) => None,
+        Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) | Zval::WeakHandle(_) | Zval::Resource(_) => None,
         // A reference is converted as its target (deref-on-read should make this
         // unreachable, but recursing keeps the op correct if one slips through).
         Zval::Ref(c) => try_to_number(&c.borrow(), diags),
@@ -105,7 +105,7 @@ fn try_to_long(v: &Zval, diags: &mut Diags) -> Option<i64> {
             }
         }
         Zval::Array(_) => None,
-        Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) | Zval::Resource(_) => None,
+        Zval::Closure(_) | Zval::Object(_) | Zval::Generator(_) | Zval::WeakHandle(_) | Zval::Resource(_) => None,
         Zval::Ref(c) => try_to_long(&c.borrow(), diags),
     }
 }
@@ -773,6 +773,9 @@ pub fn increment(v: &mut Zval, diags: &mut Diags) -> Result<(), PhpError> {
         Zval::Resource(_) => {
             return Err(PhpError::TypeError("Cannot increment resource".to_string()));
         }
+        Zval::WeakHandle(_) => {
+            return Err(PhpError::TypeError("Cannot increment WeakReference".to_string()));
+        }
         Zval::Ref(cell) => {
             let inner = &mut *cell.borrow_mut();
             return increment(inner, diags);
@@ -904,6 +907,9 @@ pub fn decrement(v: &mut Zval, diags: &mut Diags) -> Result<(), PhpError> {
         }
         Zval::Resource(_) => {
             return Err(PhpError::TypeError("Cannot decrement resource".to_string()));
+        }
+        Zval::WeakHandle(_) => {
+            return Err(PhpError::TypeError("Cannot decrement WeakReference".to_string()));
         }
         Zval::Ref(cell) => {
             let inner = &mut *cell.borrow_mut();

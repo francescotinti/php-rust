@@ -107,6 +107,11 @@ fn ser_into(out: &mut Vec<u8>, v: &Zval) -> Result<(), PhpError> {
         }
         // PHP serializes a resource as the integer 0 (step 51, D-51.5).
         Zval::Resource(_) => out.extend_from_slice(b"i:0;"),
+        Zval::WeakHandle(_) => {
+            return Err(PhpError::Error(
+                "Serialization of 'WeakReference' is not allowed".into(),
+            ))
+        }
     }
     Ok(())
 }

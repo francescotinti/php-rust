@@ -3672,6 +3672,8 @@ impl<'m> Vm<'m> {
             b"get_class" => self.ho_get_class(args),
             b"spl_object_id" => self.ho_spl_object_id(args),
             b"spl_object_hash" => self.ho_spl_object_hash(args),
+            b"__weak_create" => self.ho_weak_create(args),
+            b"__weak_get" => self.ho_weak_get(args),
             b"get_parent_class" => self.ho_get_parent_class(args),
             b"get_object_vars" => self.ho_get_object_vars(args),
             b"get_class_methods" => self.ho_get_class_methods(args),
@@ -4456,6 +4458,30 @@ impl<'m> Vm<'m> {
         let v = args.into_iter().next().unwrap_or(Zval::Null).deref_clone();
         let id = Self::object_handle_id(&v, "spl_object_hash")?;
         Ok(Zval::Str(PhpStr::new(format!("{:032x}", id).into_bytes())))
+    }
+
+    /// `__weak_create($object)` (internal): build a weak handle to an object so
+    /// it can be held without keeping it alive — the backing of `WeakReference` /
+    /// `WeakMap`. A non-object passes through unchanged (a `Closure`/`Generator`
+    /// referent degrades to a strong hold, a rare edge), so `__weak_get` round-
+    /// trips it. Not a public PHP function.
+    fn ho_weak_create(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let v = args.into_iter().next().unwrap_or(Zval::Null).deref_clone();
+        Ok(match v {
+            Zval::Object(rc) => Zval::WeakHandle(Rc::downgrade(&rc)),
+            other => other,
+        })
+    }
+
+    /// `__weak_get($handle)` (internal): upgrade a weak handle to its object, or
+    /// `null` once the last strong reference is gone (true weakness). A non-handle
+    /// value (the strong-fallback case) passes through.
+    fn ho_weak_get(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let v = args.into_iter().next().unwrap_or(Zval::Null).deref_clone();
+        Ok(match v {
+            Zval::WeakHandle(w) => w.upgrade().map(Zval::Object).unwrap_or(Zval::Null),
+            other => other,
+        })
     }
 
     /// `get_parent_class($object_or_class = null)` (Session B2): the parent class
@@ -6818,6 +6844,8 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"get_class",
         b"spl_object_id",
         b"spl_object_hash",
+        b"__weak_create",
+        b"__weak_get",
         b"get_parent_class",
         b"get_object_vars",
         b"get_class_methods",
@@ -6920,6 +6948,7 @@ fn format_bt_arg(v: &Zval) -> String {
         Zval::Closure(_) => "Object(Closure)".to_string(),
         Zval::Generator(_) => "Object(Generator)".to_string(),
         Zval::Resource(r) => format!("Resource id #{}", r.borrow().id),
+        Zval::WeakHandle(_) => "Object(WeakReference)".to_string(),
         Zval::Ref(rc) => format_bt_arg(&rc.borrow()),
     }
 }
@@ -7466,6 +7495,7 @@ fn match_case_repr(v: &Zval) -> String {
         ),
         Zval::Generator(_) => "of type Generator".to_string(),
         Zval::Resource(_) => "of type resource".to_string(),
+        Zval::WeakHandle(_) => "of type WeakReference".to_string(),
         Zval::Ref(c) => match_case_repr(&c.borrow()),
     }
 }
