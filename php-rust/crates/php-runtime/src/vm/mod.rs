@@ -3677,6 +3677,8 @@ impl<'m> Vm<'m> {
             b"__weak_create" => self.ho_weak_create(args),
             b"__weak_get" => self.ho_weak_get(args),
             b"get_parent_class" => self.ho_get_parent_class(args),
+            b"class_parents" => self.ho_class_parents(args),
+            b"class_implements" => self.ho_class_implements(args),
             b"get_object_vars" => self.ho_get_object_vars(args),
             b"get_class_methods" => self.ho_get_class_methods(args),
             b"func_num_args" => self.ho_func_num_args(),
@@ -4500,6 +4502,84 @@ impl<'m> Vm<'m> {
         match cid.and_then(|c| self.classes[c].parent) {
             Some(p) => Ok(Zval::Str(PhpStr::new(self.classes[p].name.to_vec()))),
             None => Ok(Zval::Bool(false)),
+        }
+    }
+
+    /// "object or class-name string" -> [`ClassId`] for `class_parents` /
+    /// `class_implements`: an object yields its class; a string is resolved against
+    /// the class table, and an unresolved one warns ("Class X does not exist and
+    /// could not be loaded") and yields `None` (the caller returns `false`). A
+    /// non-object/non-string also yields `None`.
+    fn class_arg_or_warn(&mut self, v: Zval, fname: &str) -> Option<ClassId> {
+        match v.deref_clone() {
+            Zval::Object(o) => Some(o.borrow().class_id as usize),
+            Zval::Str(s) => {
+                let raw = s.as_bytes();
+                let name = raw.strip_prefix(b"\\").unwrap_or(raw);
+                match self.class_index.get(&name.to_ascii_lowercase()).copied() {
+                    Some(c) => Some(c),
+                    None => {
+                        self.diags.push(Diag::Warning(format!(
+                            "{fname}(): Class {} does not exist and could not be loaded",
+                            String::from_utf8_lossy(name)
+                        )));
+                        None
+                    }
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// `class_parents($object_or_class)` — the ancestor classes from the immediate
+    /// parent upward, as a `name => name` array (insertion order = nearest first);
+    /// `false` for a bad argument. Interfaces/traits are excluded (see
+    /// `class_implements`).
+    fn ho_class_parents(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(cid) = args.into_iter().next().and_then(|v| self.class_arg_or_warn(v, "class_parents")) else {
+            return Ok(Zval::Bool(false));
+        };
+        let mut arr = php_types::PhpArray::new();
+        let mut cur = self.classes[cid].parent;
+        while let Some(p) = cur {
+            let name = self.classes[p].name.to_vec();
+            arr.insert(Key::Str(PhpStr::new(name.clone())), Zval::Str(PhpStr::new(name)));
+            cur = self.classes[p].parent;
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// `class_implements($object_or_class)` — every interface the class implements,
+    /// transitively (its own and its ancestors', plus interfaces those interfaces
+    /// extend), as a `name => name` array; `false` for a bad argument.
+    fn ho_class_implements(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(cid) = args.into_iter().next().and_then(|v| self.class_arg_or_warn(v, "class_implements")) else {
+            return Ok(Zval::Bool(false));
+        };
+        let mut arr = php_types::PhpArray::new();
+        let mut seen: HashSet<ClassId> = HashSet::new();
+        let mut klass = Some(cid);
+        while let Some(c) = klass {
+            let ifaces = self.classes[c].interfaces.clone();
+            for i in ifaces {
+                self.collect_iface(i, &mut arr, &mut seen);
+            }
+            klass = self.classes[c].parent;
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// Add interface `i` and the interfaces it extends to `arr` (name => name),
+    /// transitively, skipping duplicates (helper for `class_implements`).
+    fn collect_iface(&self, i: ClassId, arr: &mut php_types::PhpArray, seen: &mut HashSet<ClassId>) {
+        if !seen.insert(i) {
+            return;
+        }
+        let name = self.classes[i].name.to_vec();
+        arr.insert(Key::Str(PhpStr::new(name.clone())), Zval::Str(PhpStr::new(name)));
+        let parents = self.classes[i].interfaces.clone();
+        for p in parents {
+            self.collect_iface(p, arr, seen);
         }
     }
 
@@ -6846,6 +6926,8 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"get_class",
         b"spl_object_id",
         b"spl_object_hash",
+        b"class_parents",
+        b"class_implements",
         b"__weak_create",
         b"__weak_get",
         b"get_parent_class",
