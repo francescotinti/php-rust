@@ -95,6 +95,31 @@ fn to_int_arg(
     }
 }
 
+/// fdiv($num1, $num2): IEEE-754 floating-point division. Unlike `/`, it never
+/// raises `DivisionByZeroError`: `x / 0` yields `±INF` and `0 / 0` yields `NAN`,
+/// exactly as Rust's `f64` division does.
+pub fn fdiv(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let a = fdiv_arg(args, 0, 1, "num1")?;
+    let b = fdiv_arg(args, 1, 2, "num2")?;
+    Ok(Zval::Double(a / b))
+}
+
+/// `fdiv` coerces each argument to float (its parameters are typed `float`).
+fn fdiv_arg(args: &[Zval], idx: usize, n: usize, pname: &str) -> Result<f64, PhpError> {
+    let v = args.get(idx).ok_or_else(|| {
+        PhpError::ArgumentCountError(format!(
+            "fdiv() expects exactly 2 arguments, {} given",
+            args.len()
+        ))
+    })?;
+    as_double(v).ok_or_else(|| {
+        PhpError::TypeError(format!(
+            "fdiv(): Argument #{n} (${pname}) must be of type float, {} given",
+            v.type_name_for_error()
+        ))
+    })
+}
+
 /// pow($base, $exp): an int when both operands are ints and `$exp >= 0` (with
 /// overflow promoting to float), otherwise a float.
 pub fn pow(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {

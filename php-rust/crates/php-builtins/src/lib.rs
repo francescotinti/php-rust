@@ -257,6 +257,7 @@ pub fn registry() -> Registry {
     add(b"max", math::max);
     add(b"min", math::min);
     add(b"intdiv", math::intdiv);
+    add(b"fdiv", math::fdiv);
     add(b"pow", math::pow);
     add(b"sqrt", math::sqrt);
     add(b"floor", math::floor);
