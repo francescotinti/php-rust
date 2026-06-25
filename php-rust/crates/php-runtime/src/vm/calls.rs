@@ -309,9 +309,16 @@ impl<'m> Vm<'m> {
         }
     }
 
-    /// Build a copy of `cl` with a new bound `$this` and a fresh object id
-    /// (step 19-6, mirrors `eval::rebind_closure`).
-    fn rebind_closure(&mut self, cl: &Closure, bound_this: Option<Zval>) -> Zval {
+    /// Build a copy of `cl` with a new bound `$this`, optional new class scope,
+    /// and a fresh object id (step 19-6, mirrors `eval::rebind_closure`).
+    /// `new_scope` of `None` keeps the closure's current scope; `Some(s)` sets it
+    /// (where `s` of `None` means *unscoped*). The defining module id is preserved.
+    fn rebind_closure(
+        &mut self,
+        cl: &Closure,
+        bound_this: Option<Zval>,
+        new_scope: Option<Option<usize>>,
+    ) -> Zval {
         let id = self.next_id();
         Zval::Closure(Rc::new(Closure {
             fn_idx: cl.fn_idx,
@@ -320,7 +327,28 @@ impl<'m> Vm<'m> {
             bound_this,
             id,
             info: Rc::clone(&cl.info),
+            module_id: cl.module_id,
+            scope: new_scope.unwrap_or(cl.scope),
         }))
+    }
+
+    /// Resolve the `$newScope` argument of `Closure::bind`/`bindTo`. Returns
+    /// `None` to *keep* the closure's current scope (argument omitted, or the
+    /// sentinel string `"static"`); `Some(None)` for an explicit unscoped binding;
+    /// and `Some(Some(class_id))` for an object (its class) or a class-name string.
+    fn resolve_scope_arg(&self, v: Option<Zval>) -> Option<Option<usize>> {
+        match v.map(|v| v.deref_clone()) {
+            None => None,
+            Some(Zval::Str(s)) if s.as_bytes().eq_ignore_ascii_case(b"static") => None,
+            Some(Zval::Null) => Some(None),
+            Some(Zval::Object(o)) => Some(Some(o.borrow().class_id as usize)),
+            Some(Zval::Str(s)) => {
+                let b = s.as_bytes();
+                let lc = b.strip_prefix(b"\\").unwrap_or(b).to_ascii_lowercase();
+                Some(self.class_index.get(&lc[..]).copied())
+            }
+            Some(_) => None,
+        }
     }
 
     /// Built-in methods on a closure value: `$c->bindTo($newThis)` (rebind) and
@@ -333,13 +361,18 @@ impl<'m> Vm<'m> {
         args: Vec<Zval>,
     ) -> Result<Zval, PhpError> {
         if method.eq_ignore_ascii_case(b"bindTo") {
-            let new_this = Self::closure_this_arg(args.into_iter().next());
-            Ok(self.rebind_closure(cl, new_this))
-        } else if method.eq_ignore_ascii_case(b"call") {
             let mut it = args.into_iter();
             let new_this = Self::closure_this_arg(it.next());
+            let scope = self.resolve_scope_arg(it.next());
+            Ok(self.rebind_closure(cl, new_this, scope))
+        } else if method.eq_ignore_ascii_case(b"call") {
+            // `$c->call($newThis, ...$args)` rebinds `$this` *and* the scope to the
+            // class of `$newThis`, then invokes (step 19-6).
+            let mut it = args.into_iter();
+            let new_this = Self::closure_this_arg(it.next());
+            let scope = Some(new_this.as_ref().and_then(object_class_id));
             let rest: Vec<Zval> = it.collect();
-            let bound = self.rebind_closure(cl, new_this);
+            let bound = self.rebind_closure(cl, new_this, scope);
             self.call_callable(bound, rest)
         } else {
             Err(PhpError::Error(format!(
@@ -360,8 +393,9 @@ impl<'m> Vm<'m> {
             let mut it = args.into_iter();
             let target = it.next().map(|v| v.deref_clone());
             let new_this = Self::closure_this_arg(it.next());
+            let scope = self.resolve_scope_arg(it.next());
             match target {
-                Some(Zval::Closure(cl)) => Ok(self.rebind_closure(&cl, new_this)),
+                Some(Zval::Closure(cl)) => Ok(self.rebind_closure(&cl, new_this, scope)),
                 _ => Err(PhpError::Error(
                     "Closure::bind(): Argument #1 ($closure) must be of type Closure".to_string(),
                 )),
@@ -392,6 +426,8 @@ impl<'m> Vm<'m> {
                         bound_this: None,
                         id,
                         info,
+                        module_id: 0,
+                        scope: None,
                     })))
                 }
                 _ => Err(PhpError::Error(

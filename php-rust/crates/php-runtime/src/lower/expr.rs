@@ -193,7 +193,8 @@ impl<'f> Lowerer<'f> {
                 // (and the existing diagnostics path). A `$GLOBALS['x']` target
                 // has empty steps too but a global base, so it must take the
                 // Place-based variant to reach the global frame (D-12.3).
-                if let (PlaceBase::Local(slot), true) = (place.base, place.steps.is_empty()) {
+                if let (PlaceBase::Local(slot), true) = (&place.base, place.steps.is_empty()) {
+                    let slot = *slot;
                     match op {
                         None => ExprKind::Assign(slot, rhs),
                         Some(AssignFlavour::Coalesce) => ExprKind::AssignCoalesce(slot, rhs),
@@ -972,6 +973,20 @@ impl<'f> Lowerer<'f> {
                         steps: Vec::new(),
                     });
                 }
+                // `Class::$arr[k]` — an *indexed* static-property target. Only the
+                // indexed form roots a `Place` at a static property (a bare
+                // `Class::$p` write goes through `StaticPropAssign`, and a bare
+                // read/`isset` stays unsupported as a place), so the base is built
+                // here rather than in a standalone `lower_place` arm (step 19-4).
+                if let Expression::Access(Access::StaticProperty(sp)) = aa.array {
+                    let class = self.class_ref_of(sp.class, line)?;
+                    let name = static_prop_name(&sp.property, line)?.into();
+                    let index = PlaceStep::Index(self.lower_expr(aa.index)?);
+                    return Ok(Place {
+                        base: PlaceBase::StaticProp { class, name },
+                        steps: vec![index],
+                    });
+                }
                 let mut place = self.lower_place(aa.array, line)?;
                 place.steps.push(PlaceStep::Index(self.lower_expr(aa.index)?));
                 Ok(place)
@@ -1162,8 +1177,8 @@ impl<'f> Lowerer<'f> {
         }
         // A leaf lvalue (`$x`, `$a[i]`, `$o->p`) gets a plain assignment.
         let place = self.lower_place(target, line)?;
-        let kind = if let (PlaceBase::Local(slot), true) = (place.base, place.steps.is_empty()) {
-            ExprKind::Assign(slot, Box::new(elem))
+        let kind = if let (PlaceBase::Local(slot), true) = (&place.base, place.steps.is_empty()) {
+            ExprKind::Assign(*slot, Box::new(elem))
         } else {
             ExprKind::AssignPlace(place, Box::new(elem))
         };

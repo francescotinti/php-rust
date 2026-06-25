@@ -839,15 +839,21 @@ pub struct Place {
     pub steps: Vec<PlaceStep>,
 }
 
-/// The base a [`Place`] is rooted at: a slot in the active local frame, or a
-/// slot in the global frame for a `$GLOBALS['literal']` target (step 12-3).
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// The base a [`Place`] is rooted at: a slot in the active local frame, a slot
+/// in the global frame for a `$GLOBALS['literal']` target (step 12-3), or a
+/// static class property for an indexed write target (`self::$arr[k] = …`).
+#[derive(Debug, Clone, PartialEq)]
 pub enum PlaceBase {
     Local(Slot),
     Global(Slot),
     /// `$this` as the root of a property write target (`$this->x = …`), step 19.
     /// Resolved against the evaluator's current-object context, not a slot.
     This,
+    /// `Class::$prop` as the root of an indexed write/unset target
+    /// (`self::$arr[k] = v`, `unset(self::$arr[k])`). The per-class cell is read
+    /// into a temp, mutated, and written back at compile time — value-correct for
+    /// PHP arrays (copy-on-write).
+    StaticProp { class: ClassRef, name: Box<[u8]> },
 }
 
 #[derive(Debug, Clone, PartialEq)]

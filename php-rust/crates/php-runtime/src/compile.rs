@@ -1053,16 +1053,7 @@ impl<'a> FnCompiler<'a> {
             }
             StmtKind::Unset(places) => {
                 for place in places {
-                    if let Some(name) = self.prop_place(place)? {
-                        self.emit(Op::PropUnset { name });
-                    } else if place_has_prop(place) {
-                        let (base, steps) = self.field_path(place)?;
-                        self.emit(Op::FieldUnset { base, steps: steps.into() });
-                    } else {
-                        let base = dim_base(place)?;
-                        let nkeys = self.test_path_steps(place)?;
-                        self.emit(Op::UnsetPath { base, nkeys });
-                    }
+                    self.unset_place(place)?;
                 }
             }
             StmtKind::Switch { subject, cases } => self.switch(subject, cases)?,
@@ -2794,8 +2785,9 @@ impl<'a> FnCompiler<'a> {
             PlaceBase::Local(s) => {
                 self.emit(Op::LoadSlot(s));
             }
-            // A `$GLOBALS`-rooted property write goes through the field path.
-            PlaceBase::Global(_) => return Ok(None),
+            // A `$GLOBALS`-rooted property write goes through the field path; an
+            // indexed static-property target is rewritten before reaching here.
+            PlaceBase::Global(_) | PlaceBase::StaticProp { .. } => return Ok(None),
         }
         Ok(Some(name.clone()))
     }
@@ -2923,6 +2915,11 @@ impl<'a> FnCompiler<'a> {
             PlaceBase::Local(s) => FieldBase::Local(s),
             PlaceBase::Global(s) => FieldBase::Global(s),
             PlaceBase::This => FieldBase::This,
+            // Indexed static-property targets are rewritten into a temp before
+            // reaching the field-path walker (see `static_prop_rmw`).
+            PlaceBase::StaticProp { .. } => {
+                return Err(CompileError::Unsupported("static property field path".into()))
+            }
         };
         let mut steps = Vec::with_capacity(place.steps.len());
         for step in &place.steps {
@@ -3109,6 +3106,12 @@ impl<'a> FnCompiler<'a> {
     /// object-property write `$o->p = rhs` / `$this->p = rhs` (OOP-1). Mixed
     /// property+index chains (`$o->a[$k] = …`) remain out of slice.
     fn assign_place(&mut self, place: &Place, rhs: &Expr) -> R<()> {
+        if let PlaceBase::StaticProp { class, name } = &place.base {
+            let (class, name) = (class.clone(), name.clone());
+            return self.static_prop_rmw(&class, &name, &place.steps, true, |s, p| {
+                s.assign_place(p, rhs)
+            });
+        }
         if let Some(name) = self.prop_place(place)? {
             self.expr(rhs)?;
             self.emit(Op::PropSet { name });
@@ -3142,12 +3145,119 @@ impl<'a> FnCompiler<'a> {
         Ok(())
     }
 
+    /// Compile a single `unset(place)`: a `->prop` routes to `PropUnset`, a mixed
+    /// object/array path to `FieldUnset`, a plain array element to `UnsetPath`, and
+    /// an indexed static property is read-modify-written through a temp.
+    fn unset_place(&mut self, place: &Place) -> R<()> {
+        if let PlaceBase::StaticProp { class, name } = &place.base {
+            let (class, name) = (class.clone(), name.clone());
+            return self.static_prop_rmw(&class, &name, &place.steps, false, |s, p| {
+                s.unset_place(p)
+            });
+        }
+        if let Some(name) = self.prop_place(place)? {
+            self.emit(Op::PropUnset { name });
+        } else if place_has_prop(place) {
+            let (base, steps) = self.field_path(place)?;
+            self.emit(Op::FieldUnset { base, steps: steps.into() });
+        } else {
+            let base = dim_base(place)?;
+            let nkeys = self.test_path_steps(place)?;
+            self.emit(Op::UnsetPath { base, nkeys });
+        }
+        Ok(())
+    }
+
+    /// Read-modify-write wrapper for an indexed static-property target
+    /// (`self::$arr[k] = v`, `unset(self::$arr[k])`). The property value is loaded
+    /// into a temp, `core` runs over a `Local`-rooted place on that temp, then the
+    /// temp is written back into the static property — value-correct for PHP
+    /// arrays (copy-on-write). When `leaves_value` is set, `core` leaves the
+    /// expression's result on the stack and it is preserved across the write-back.
+    /// Dynamic class references (`$cls::$arr[k]`) are out of scope.
+    fn static_prop_rmw(
+        &mut self,
+        class: &ClassRef,
+        name: &[u8],
+        steps: &[PlaceStep],
+        leaves_value: bool,
+        core: impl FnOnce(&mut Self, &Place) -> R<()>,
+    ) -> R<()> {
+        if self.is_runtime_class(class) {
+            return Err(CompileError::Unsupported(
+                "indexed write to dynamic static property".into(),
+            ));
+        }
+        let (target, _) = self.resolve_target(class)?;
+        let nm: Box<[u8]> = name.into();
+        let t = self.alloc_temp();
+        self.emit(Op::StaticPropGet { target, name: nm.clone() });
+        self.emit(Op::StoreSlot(t));
+        let local = Place {
+            base: PlaceBase::Local(t),
+            steps: steps.to_vec(),
+        };
+        if leaves_value {
+            core(self, &local)?; // [result]
+            let t2 = self.alloc_temp();
+            self.emit(Op::StoreSlot(t2)); // []
+            self.emit(Op::LoadSlot(t));
+            self.emit(Op::StaticPropSet { target, name: nm }); // [arr]
+            self.emit(Op::Pop);
+            self.emit(Op::LoadSlot(t2)); // [result]
+            self.free_temp(); // t2
+        } else {
+            core(self, &local)?; // []
+            self.emit(Op::LoadSlot(t));
+            self.emit(Op::StaticPropSet { target, name: nm }); // [arr]
+            self.emit(Op::Pop);
+        }
+        self.free_temp(); // t
+        Ok(())
+    }
+
+    /// Materialise an indexed static property into a temp for a *read-only*
+    /// operation (`isset`/`empty`): load the value, run `core` over a
+    /// `Local`-rooted place on the temp, then free the temp. No write-back — the
+    /// property is not modified, so this also avoids a visibility-checked
+    /// `StaticPropSet` on an out-of-scope read.
+    fn static_prop_read(
+        &mut self,
+        class: &ClassRef,
+        name: &[u8],
+        steps: &[PlaceStep],
+        core: impl FnOnce(&mut Self, &Place) -> R<()>,
+    ) -> R<()> {
+        if self.is_runtime_class(class) {
+            return Err(CompileError::Unsupported(
+                "indexed read of dynamic static property".into(),
+            ));
+        }
+        let (target, _) = self.resolve_target(class)?;
+        let t = self.alloc_temp();
+        self.emit(Op::StaticPropGet { target, name: name.into() });
+        self.emit(Op::StoreSlot(t));
+        let local = Place {
+            base: PlaceBase::Local(t),
+            steps: steps.to_vec(),
+        };
+        core(self, &local)?;
+        self.free_temp();
+        Ok(())
+    }
+
     /// Compile `$o->p ??= rhs` on a single property (magic-aware). Read via
     /// `__isset`; if already set, the existing value (`__get`) is the result and
     /// no write happens; if unset, assign `rhs` (`__set`) and yield it. Each magic
     /// op leaves its result for the next, so the composition works for both magic
     /// and declared properties.
     fn assign_coalesce_place(&mut self, place: &Place, rhs: &Expr) -> R<()> {
+        if let PlaceBase::StaticProp { class, name } = &place.base {
+            let (class, name) = (class.clone(), name.clone());
+            return self.static_prop_rmw(&class, &name, &place.steps, true, |s, p| {
+                s.assign_coalesce_place(p, rhs)
+            });
+        }
         if let Some(name) = self.prop_place(place)? {
             // stack: [obj]
             self.emit(Op::Dup); // [obj, obj]
@@ -3199,6 +3309,12 @@ impl<'a> FnCompiler<'a> {
 
     /// Compile a compound element write `$a[…][k] op= rhs`.
     fn assign_op_place(&mut self, op: crate::hir::BinOp, place: &Place, rhs: &Expr) -> R<()> {
+        if let PlaceBase::StaticProp { class, name } = &place.base {
+            let (class, name) = (class.clone(), name.clone());
+            return self.static_prop_rmw(&class, &name, &place.steps, true, |s, p| {
+                s.assign_op_place(op, p, rhs)
+            });
+        }
         if let Some(name) = self.prop_place(place)? {
             // `$o->p op= rhs` as read-modify-write so a magic property routes
             // through `__get` then `__set` (each op leaves its result for the
@@ -3239,6 +3355,12 @@ impl<'a> FnCompiler<'a> {
 
     /// Compile `++`/`--` on an array element `$a[…][k]`.
     fn incdec_place(&mut self, place: &Place, inc: bool, pre: bool) -> R<()> {
+        if let PlaceBase::StaticProp { class, name } = &place.base {
+            let (class, name) = (class.clone(), name.clone());
+            return self.static_prop_rmw(&class, &name, &place.steps, true, |s, p| {
+                s.incdec_place(p, inc, pre)
+            });
+        }
         if let Some(name) = self.prop_place(place)? {
             self.emit(Op::PropIncDec { name, inc, pre });
             return Ok(());
@@ -3271,16 +3393,7 @@ impl<'a> FnCompiler<'a> {
         let last = places.len() - 1;
         let mut to_false = Vec::new();
         for (i, place) in places.iter().enumerate() {
-            if let Some(name) = self.prop_place(place)? {
-                self.emit(Op::PropIsset { name });
-            } else if place_has_prop(place) {
-                let (base, steps) = self.field_path(place)?;
-                self.emit(Op::FieldIsset { base, steps: steps.into() });
-            } else {
-                let base = dim_base(place)?;
-                let nkeys = self.test_path_steps(place)?;
-                self.emit(Op::IssetPath { base, nkeys });
-            }
+            self.isset_one(place)?;
             if i != last {
                 // [bi]: if false, jump to the shared false-result; else discard.
                 to_false.push(self.emit(Op::JumpIfFalse(Addr::MAX)));
@@ -3301,10 +3414,35 @@ impl<'a> FnCompiler<'a> {
         Ok(())
     }
 
+    /// Push a single place's `isset` boolean: a `->prop` via `PropIsset`, a mixed
+    /// object/array path via `FieldIsset`, a plain array element via `IssetPath`,
+    /// and an indexed static property via a read-only temp.
+    fn isset_one(&mut self, place: &Place) -> R<()> {
+        if let PlaceBase::StaticProp { class, name } = &place.base {
+            let (class, name) = (class.clone(), name.clone());
+            return self.static_prop_read(&class, &name, &place.steps, |s, p| s.isset_one(p));
+        }
+        if let Some(name) = self.prop_place(place)? {
+            self.emit(Op::PropIsset { name });
+        } else if place_has_prop(place) {
+            let (base, steps) = self.field_path(place)?;
+            self.emit(Op::FieldIsset { base, steps: steps.into() });
+        } else {
+            let base = dim_base(place)?;
+            let nkeys = self.test_path_steps(place)?;
+            self.emit(Op::IssetPath { base, nkeys });
+        }
+        Ok(())
+    }
+
     /// Compile `empty($place)`. A single property is `__isset`-then-silent-`__get`
     /// (`empty` is `!isset || !truthy(value)`), so an unset magic property never
     /// warns or calls `__get`; other places use the array `EmptyPath`.
     fn empty(&mut self, place: &Place) -> R<()> {
+        if let PlaceBase::StaticProp { class, name } = &place.base {
+            let (class, name) = (class.clone(), name.clone());
+            return self.static_prop_read(&class, &name, &place.steps, |s, p| s.empty(p));
+        }
         if let Some(name) = self.prop_place(place)? {
             // stack: [obj]
             self.emit(Op::Dup); // [obj, obj]
@@ -3394,6 +3532,9 @@ fn dim_base(place: &Place) -> R<DimBase> {
         PlaceBase::Local(s) => Ok(DimBase::Local(s)),
         PlaceBase::Global(s) => Ok(DimBase::Global(s)),
         PlaceBase::This => Err(CompileError::Unsupported("$this property write".into())),
+        PlaceBase::StaticProp { .. } => {
+            Err(CompileError::Unsupported("static property dim base".into()))
+        }
     }
 }
 

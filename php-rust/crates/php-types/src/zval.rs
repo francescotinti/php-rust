@@ -75,6 +75,16 @@ pub struct Closure {
     pub id: u32,
     /// Shared render metadata for `var_dump` / `print_r` (step 18-7, D-18.9).
     pub info: Rc<ClosureInfo>,
+    /// Stable id of the module that defined this closure, into the VM's module
+    /// registry. Keeps the closure callable after control leaves its defining
+    /// module — e.g. a closure created in an `include`/`eval` unit and invoked
+    /// later (Composer's `autoload_static` initializer). `0` is `main`.
+    pub module_id: usize,
+    /// The class *scope* the closure body runs in (a VM `ClassId`), governing
+    /// `private`/`protected` member access and `self::`/`static::`. Set at
+    /// creation to the defining class, or overridden by `Closure::bind`/`bindTo`'s
+    /// `$newScope` argument. `None` for an unscoped (top-level) closure.
+    pub scope: Option<usize>,
 }
 
 /// What `var_dump` / `print_r` print for a closure value (step 18-7, D-18.9).

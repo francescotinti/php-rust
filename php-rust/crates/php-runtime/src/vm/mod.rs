@@ -229,6 +229,7 @@ pub(crate) fn run_module_with_hir<'m>(
         classes: module.classes.iter().collect(),
         class_index: module.class_index.clone(),
         class_module: vec![module; module.classes.len()],
+        modules: vec![module],
         main_hir,
         seed_classes: main_hir.map(|p| p.classes.clone()).unwrap_or_default(),
         seed_static: main_hir.map_or(0, |p| p.static_count),
@@ -560,6 +561,14 @@ struct Vm<'m> {
     /// module that compiled it, not the currently-executing one. For `main`'s own
     /// classes it is `main` (≡ `self.module` while main runs).
     class_module: Vec<&'m Module>,
+    /// Registry of every leaked [`Module`] the VM has seen, indexed by a stable
+    /// `module_id`. A [`Closure`] value records the id of its defining module here
+    /// so it stays callable after control leaves that module — a closure created
+    /// in an `eval`/`include` unit and invoked later (e.g. Composer's
+    /// `autoload_static` initializer run via `call_user_func`) resolves its
+    /// bytecode against the module that compiled it, not the running one. Id 0 is
+    /// `main`; populated lazily by [`Self::module_id`].
+    modules: Vec<&'m Module>,
     /// The caller's lowered HIR (`main`), retained so an `eval()` unit can be
     /// compiled *against the image* (step 57, Phase 1c-2c): its class/function
     /// tables seed the eval's lowering, letting an eval class `extend`/`implement`
@@ -1418,6 +1427,8 @@ impl<'m> Vm<'m> {
                         params: closure_params(func),
                     });
                     let id = self.next_id();
+                    let module_id = self.module_id(m);
+                    let scope = self.frames[top].class;
                     let cl = Closure {
                         fn_idx: fn_idx as usize,
                         captures: bound,
@@ -1425,6 +1436,8 @@ impl<'m> Vm<'m> {
                         bound_this,
                         id,
                         info,
+                        module_id,
+                        scope,
                     };
                     self.frames[top].stack.push(Zval::Closure(Rc::new(cl)));
                 }
@@ -1451,6 +1464,8 @@ impl<'m> Vm<'m> {
                         bound_this: None,
                         id,
                         info,
+                        module_id: 0,
+                        scope: None,
                     };
                     self.frames[top].stack.push(Zval::Closure(Rc::new(cl)));
                 }
@@ -3151,6 +3166,18 @@ impl<'m> Vm<'m> {
     #[inline]
     fn class_mod(&self, defc: ClassId) -> &'m Module {
         self.class_module.get(defc).copied().unwrap_or(self.module)
+    }
+
+    /// Find or assign the stable `module_id` of a leaked module (by pointer
+    /// identity), registering it in `self.modules` on first sight. Stored in
+    /// [`Closure`] values so they stay callable across module boundaries.
+    fn module_id(&mut self, m: &'m Module) -> usize {
+        if let Some(i) = self.modules.iter().position(|x| std::ptr::eq(*x, m)) {
+            i
+        } else {
+            self.modules.push(m);
+            self.modules.len() - 1
+        }
     }
 
     /// `eval($code)` (step 57, Phase 1): compile `src` (already `<?php`-prefixed)
@@ -5884,21 +5911,28 @@ impl<'m> Vm<'m> {
     /// their slots, then the call arguments into the leading parameter slots, and
     /// the bound `$this`. Mirrors `eval::call_closure` (captures before params).
     fn push_closure_frame(&mut self, cl: &Closure, args: Vec<Zval>) -> Result<(), PhpError> {
-        // A closure carries a module-local `fn_idx`; if it was defined in a
-        // different module than the one currently executing (an `eval` unit),
-        // `self.module` may not contain it. Degrade to a catchable error instead
-        // of panicking until closures carry their defining module (step 57).
-        let Some(callee) = self.module.closures.get(cl.fn_idx) else {
+        // A closure carries a module-local `fn_idx` plus the `module_id` of the
+        // unit that defined it, so it stays callable after control leaves that
+        // module (e.g. a closure made in an `include`/`eval` unit and invoked
+        // later). Resolve the body against its *defining* module, not the running
+        // one.
+        let m = self.modules.get(cl.module_id).copied().unwrap_or(self.module);
+        let Some(callee) = m.closures.get(cl.fn_idx) else {
             return Err(PhpError::Error(
                 "closure is not callable in this context".to_string(),
             ));
         };
-        let mut frame = Frame::new(callee, self.module);
+        let mut frame = Frame::new(callee, m);
         for (slot, val) in &cl.captures {
             frame.slots[*slot as usize] = val.clone();
         }
         bind_params(&mut frame, args);
         frame.this = cl.bound_this.clone();
+        // The closure's class scope governs private/protected access and
+        // `self::`/`static::` inside the body (set at creation or by
+        // `Closure::bind`'s `$newScope`).
+        frame.class = cl.scope;
+        frame.static_class = cl.scope.or_else(|| cl.bound_this.as_ref().and_then(object_class_id));
         self.enter_callee(frame)
     }
 
