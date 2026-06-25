@@ -541,6 +541,26 @@ class Fiber {
     private $callable;
     public function __construct($callable) { $this->callable = $callable; }
 }
+final class WeakReference {
+    // Holds the referent *strongly* (no tracing GC, so no true weakness yet): get()
+    // returns the object while this WeakReference is alive. The native PHP class
+    // exposes the referent as an "object" property in var_dump, so name it so.
+    public $object;
+    private function __construct() {}
+    public static function create($object) {
+        if (!is_object($object)) {
+            $t = gettype($object);
+            $t = ["integer" => "int", "double" => "float", "boolean" => "bool", "NULL" => "null"][$t] ?? $t;
+            throw new TypeError("WeakReference::create(): Argument #1 (\$object) must be of type object, $t given");
+        }
+        $ref = new self();
+        $ref->object = $object;
+        return $ref;
+    }
+    public function get() {
+        return $this->object;
+    }
+}
 class WeakMap implements ArrayAccess, Countable, IteratorAggregate {
     // id => [object, value]. The object is held *strongly* (no true weakness:
     // our VM has no tracing GC, so entries persist until explicitly unset). Keyed
