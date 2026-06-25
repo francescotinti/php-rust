@@ -2113,6 +2113,15 @@ impl<'m> Vm<'m> {
                         ))
                     }
                 },
+                Op::Eval => {
+                    let code = self.frames[top].stack.pop().expect("eval code");
+                    let code_str = convert::to_zstr(&code, &mut self.diags);
+                    let mut src = b"<?php ".to_vec();
+                    src.extend_from_slice(code_str.as_bytes());
+                    let result = self.run_eval(&src)?;
+                    let top = self.frames.len() - 1;
+                    self.frames[top].stack.push(result);
+                }
                 Op::Clone => {
                     let src = self.frames[top].stack.pop().expect("Clone operand").deref_clone();
                     let Zval::Object(o) = &src else {
@@ -3015,6 +3024,40 @@ impl<'m> Vm<'m> {
             RetMode::Capture(cell) => Some(cell),
         };
         self.enter_callee(frame)
+    }
+
+    /// `eval($code)` (step 57, Phase 1): compile `src` (already `<?php`-prefixed)
+    /// as its own translation unit at run time, leak it so its `&'m` bytecode
+    /// outlives this call, and run its `main` to completion — temporarily pointing
+    /// `self.module` at the eval unit so instanceof / method resolution / var_dump
+    /// of objects the eval creates resolve against it. Returns the unit's `return`
+    /// value (or `null`); a parse/compile error yields `false` (MVP — PHP throws
+    /// `ParseError`). Limitations (MVP): the eval'd unit does not share the
+    /// caller's variable scope, and classes/functions it declares are not visible
+    /// after it returns (a later phase merges them into the global image).
+    fn run_eval(&mut self, src: &[u8]) -> Result<Zval, PhpError> {
+        let program = match crate::lower_source(b"eval()'d code", src) {
+            Ok(p) => p,
+            Err(_) => return Ok(Zval::Bool(false)),
+        };
+        let module = match crate::compile::compile_program(&program, self.registry) {
+            Ok(m) => m,
+            Err(_) => return Ok(Zval::Bool(false)),
+        };
+        let leaked: &'m Module = Box::leak(Box::new(module));
+        // The eval unit's static-var slots index `self.statics`; make room (its
+        // indices share the main range — `static $x` inside eval may collide,
+        // an accepted MVP limitation).
+        if leaked.static_count > self.statics.len() {
+            self.statics.resize(leaked.static_count, None);
+        }
+        let saved = self.module;
+        self.module = leaked;
+        let baseline = self.frames.len();
+        self.frames.push(Frame::new(&leaked.main, leaked));
+        let outcome = self.drive_to_return(baseline);
+        self.module = saved;
+        outcome
     }
 
     /// Call `recv->method(args)` *synchronously* and return its value, driving a

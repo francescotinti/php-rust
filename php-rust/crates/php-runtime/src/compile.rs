@@ -1585,6 +1585,10 @@ impl<'a> FnCompiler<'a> {
                 self.expr(e)?;
                 self.emit(Op::Clone);
             }
+            ExprKind::Eval(e) => {
+                self.expr(e)?;
+                self.emit(Op::Eval);
+            }
             ExprKind::PropGet { object, name, nullsafe } => {
                 self.expr(object)?;
                 if *nullsafe {
@@ -3418,6 +3422,7 @@ fn expr_name(k: &ExprKind) -> String {
         ExprKind::Print(_) => "Print",
         ExprKind::Exit(_) => "Exit",
         ExprKind::Clone(_) => "Clone",
+        ExprKind::Eval(_) => "Eval",
         ExprKind::Match { .. } => "Match",
         ExprKind::New { .. } => "New",
         ExprKind::MethodCall { .. } => "MethodCall",

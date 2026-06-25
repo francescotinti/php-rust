@@ -637,6 +637,12 @@ pub enum ExprKind {
     /// then `__clone` is run on the copy if the class defines it.
     Clone(Box<Expr>),
 
+    /// `eval($code)` (step 57, Phase 1) — compile the string operand as a PHP
+    /// translation unit at run time and execute it, yielding its `return` value
+    /// (or `null`). The eval'd unit runs as its own module: instanceof, method
+    /// resolution and `var_dump` of its objects resolve against it.
+    Eval(Box<Expr>),
+
     /// `match ($subject) { conds => body, ..., default => body }`. Strict `===`
     /// matching; an arm with empty `conditions` is the `default` arm.
     Match {

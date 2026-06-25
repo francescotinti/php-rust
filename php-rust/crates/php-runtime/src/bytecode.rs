@@ -527,6 +527,10 @@ pub enum Op {
     /// write), push the copy, then run `__clone` on it if the class defines one
     /// (its return discarded). A non-object receiver is a catchable `Error`.
     Clone,
+    /// `[code] -> [value]` — `eval($code)` (step 57): compile the popped string as
+    /// a PHP unit at run time, execute it as its own module, and push its `return`
+    /// value (or `null`). A compile/parse error yields `false`.
+    Eval,
     /// `[obj] -> [value]` — read property `name` (deref-clone); a missing property
     /// (or a non-object receiver) warns and yields NULL, matching the tree-walker.
     PropGet { name: Box<[u8]> },

@@ -349,6 +349,7 @@ impl<'f> Lowerer<'f> {
                 Construct::Die(d) => {
                     ExprKind::Exit(self.lower_exit_arg(d.arguments.as_ref(), line)?)
                 }
+                Construct::Eval(ev) => ExprKind::Eval(Box::new(self.lower_expr(ev.value)?)),
                 _ => {
                     return Err(LowerError::Unsupported {
                         what: "language construct",
