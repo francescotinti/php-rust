@@ -5,3 +5,4 @@ Cargo.lock
 ._*
 /oracle-build/
 .serena/
+.vexp/
