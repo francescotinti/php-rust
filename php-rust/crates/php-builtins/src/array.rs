@@ -185,6 +185,40 @@ pub fn array_push(arr: &mut Zval, values: &[Zval], _ctx: &mut Ctx) -> Result<Zva
 }
 
 /// `sort(array &$array, int $flags = SORT_REGULAR): true` — sort the values in
+/// settype(&$var, string $type): convert `$var` to `$type` in place, returning
+/// `true`. The coercion rules mirror the corresponding cast; an unknown type name
+/// is a `ValueError`. (`object` is not yet supported — it needs VM state to mint a
+/// stdClass — and reports the invalid-type error.)
+pub fn settype(var: &mut Zval, args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let ty = args.first().ok_or_else(|| {
+        PhpError::ArgumentCountError("settype() expects exactly 2 arguments, 1 given".into())
+    })?;
+    let lc = convert::to_zstr(ty, ctx.diags).as_bytes().to_ascii_lowercase();
+    let new = match lc.as_slice() {
+        b"int" | b"integer" => Zval::Long(convert::to_long_cast(var, ctx.diags)),
+        b"float" | b"double" => Zval::Double(convert::to_double(var)),
+        b"string" => Zval::Str(convert::to_zstr_cast(var, ctx.diags)),
+        b"bool" | b"boolean" => Zval::Bool(convert::to_bool(var, ctx.diags)),
+        b"array" => match var.deref_clone() {
+            arr @ Zval::Array(_) => arr,
+            Zval::Null | Zval::Undef => Zval::Array(Rc::new(PhpArray::new())),
+            scalar => {
+                let mut arr = PhpArray::new();
+                arr.insert(Key::Int(0), scalar);
+                Zval::Array(Rc::new(arr))
+            }
+        },
+        b"null" => Zval::Null,
+        _ => {
+            return Err(PhpError::ValueError(
+                "settype(): Argument #2 ($type) must be a valid type".into(),
+            ))
+        }
+    };
+    *var = new;
+    Ok(Zval::Bool(true))
+}
+
 /// place with the default (SORT_REGULAR) comparison and reindex from 0, dropping
 /// the original keys. `$flags` is accepted but not honoured (Tier 1 scope).
 pub fn sort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {

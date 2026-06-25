@@ -304,6 +304,7 @@ pub fn registry() -> Registry {
         r.insert(name.to_vec(), Builtin::RefFirst(f));
     };
     add_ref(b"array_push", array::array_push);
+    add_ref(b"settype", array::settype);
     add_ref(b"sort", array::sort);
     add_ref(b"array_pop", array::array_pop);
     add_ref(b"array_shift", array::array_shift);
