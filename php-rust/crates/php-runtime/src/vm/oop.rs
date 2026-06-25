@@ -82,14 +82,15 @@ pub(super) fn prop_unset(recv: &Zval, name: &[u8]) {
 pub(super) fn resolve_method_runtime(module: &Module, start: ClassId, name: &[u8]) -> Option<(ClassId, usize)> {
     let mut cid = Some(start);
     while let Some(c) = cid {
-        if let Some(i) = module.classes[c]
-            .methods
-            .iter()
-            .position(|m| m.name.eq_ignore_ascii_case(name))
-        {
+        // `.get` rather than `[c]`: during an `eval` the resolving module may be
+        // the eval unit while `c` is a class id from another module (a caller
+        // object reaching this path). Degrade to "not found" instead of panicking
+        // until cross-module class ids share one global table (step 57, Phase 1c).
+        let class = module.classes.get(c)?;
+        if let Some(i) = class.methods.iter().position(|m| m.name.eq_ignore_ascii_case(name)) {
             return Some((c, i));
         }
-        cid = module.classes[c].parent;
+        cid = class.parent;
     }
     None
 }

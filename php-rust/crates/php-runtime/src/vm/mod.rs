@@ -4785,7 +4785,9 @@ impl<'m> Vm<'m> {
                 f.func.name.to_vec()
             };
             let (class, object) = match f.class {
-                Some(cid) => (Some(self.module.classes[cid].name.to_vec()), f.this.clone()),
+                // Resolve the class id in the frame's own module (an eval'd /
+                // included frame may differ from `self.module`).
+                Some(cid) => (Some(f.module.classes[cid].name.to_vec()), f.this.clone()),
                 None => (None, None),
             };
             out.push(BtFrame {
@@ -5531,7 +5533,15 @@ impl<'m> Vm<'m> {
     /// their slots, then the call arguments into the leading parameter slots, and
     /// the bound `$this`. Mirrors `eval::call_closure` (captures before params).
     fn push_closure_frame(&mut self, cl: &Closure, args: Vec<Zval>) -> Result<(), PhpError> {
-        let callee = &self.module.closures[cl.fn_idx];
+        // A closure carries a module-local `fn_idx`; if it was defined in a
+        // different module than the one currently executing (an `eval` unit),
+        // `self.module` may not contain it. Degrade to a catchable error instead
+        // of panicking until closures carry their defining module (step 57).
+        let Some(callee) = self.module.closures.get(cl.fn_idx) else {
+            return Err(PhpError::Error(
+                "closure is not callable in this context".to_string(),
+            ));
+        };
         let mut frame = Frame::new(callee, self.module);
         for (slot, val) in &cl.captures {
             frame.slots[*slot as usize] = val.clone();
@@ -5969,10 +5979,12 @@ impl<'m> Vm<'m> {
             let frame = &self.frames[k];
             let line = self.cur_line(k - 1) as i64;
             // The class shown is the late-static-binding (called) class, like the
-            // tree-walker; absent for a free-function frame.
+            // tree-walker; absent for a free-function frame. The id is resolved in
+            // the frame's own module (an eval'd/included frame may differ from the
+            // currently executing `self.module`).
             let class: Option<&[u8]> = frame
                 .static_class
-                .map(|cid| self.module.classes[cid].name.as_ref());
+                .map(|cid| frame.module.classes[cid].name.as_ref());
             let is_static = frame.this.is_none();
 
             s.extend_from_slice(format!("#{i} ").as_bytes());
