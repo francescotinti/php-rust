@@ -221,6 +221,11 @@ pub struct PropDecl {
     /// hooked property is *backed* only if a hook body reads/writes its own
     /// `$this->name` (else it is *virtual*: no slot, omitted from `var_dump`).
     pub backed: bool,
+    /// `readonly` (PHP 8.1): the property may be written *once*, from within the
+    /// declaring class scope, and never modified again (step: readonly). A second
+    /// write — or an out-of-scope write — is a fatal `Error`. Also set for every
+    /// property of a `readonly class` (8.2) and for promoted `readonly` params.
+    pub readonly: bool,
 }
 
 /// One method (step 19, D-19.5). Wraps an ordinary [`FnDecl`] (so method calls

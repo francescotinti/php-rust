@@ -436,6 +436,15 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
 
     let own_prop_vis = cd.props.iter().map(|p| (p.name.clone(), p.visibility)).collect();
 
+    // Names of readonly instance properties declared on this class (readonly
+    // enforcement). Walked parent-first at run time to find the declaring class.
+    let readonly_props = cd
+        .props
+        .iter()
+        .filter(|p| p.readonly)
+        .map(|p| p.name.clone())
+        .collect();
+
     // Enum cases, 1:1 with the source order (so `Op::EnumCase`'s index lines up).
     // `value` is the folded backing value, or `None` for a pure case *and* for a
     // backed case whose value did not const-fold — the latter never reaches the VM
@@ -460,6 +469,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         methods,
         own_prop_vis,
         static_props,
+        readonly_props,
         prop_init,
         consts,
         enum_cases,

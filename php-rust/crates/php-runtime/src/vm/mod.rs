@@ -451,6 +451,12 @@ struct Frame<'m> {
     /// within it under the composite `<file>(<line>) : eval()'d code` file name,
     /// matching PHP. `None` for an ordinary frame.
     eval_origin: Option<(Box<[u8]>, Line)>,
+    /// Set on the `__clone` frame that the `clone` operator pushes (PHP 8.3
+    /// readonly-clone amendment): while it runs, `$this`'s readonly properties may
+    /// each be re-initialised once. On this frame's `Ret` the per-object
+    /// permission (`Object::readonly_clone_writable`) is revoked, so a *manual*
+    /// `$o->__clone()` call (no permission) still fatals on a readonly write.
+    clone_init: bool,
 }
 
 impl<'m> Frame<'m> {
@@ -478,6 +484,7 @@ impl<'m> Frame<'m> {
             extra_args: Vec::new(),
             init_props: false,
             eval_origin: None,
+            clone_init: false,
         }
     }
 }
@@ -2103,6 +2110,14 @@ impl<'m> Vm<'m> {
                     let ret_isset = self.frames[top].ret_isset;
                     let ret_stringify = self.frames[top].ret_stringify;
                     let guard = self.frames[top].guard_release.take();
+                    // A `clone`-driven `__clone` is finishing: revoke any remaining
+                    // readonly re-init permission on the copy (PHP 8.3), so writes
+                    // after the clone — or via a manual `__clone()` — fatal again.
+                    if self.frames[top].clone_init {
+                        if let Some(Zval::Object(o)) = self.frames[top].this.clone() {
+                            o.borrow_mut().readonly_clone_writable.clear();
+                        }
+                    }
                     self.frames.pop();
                     if let Some(key) = guard {
                         self.magic_guard.remove(&key);
@@ -2302,22 +2317,39 @@ impl<'m> Vm<'m> {
                             props: b.props.clone(),
                             id: self.next_id(),
                             info: Rc::clone(&b.info),
+                            // A clone keeps the source's readonly props initialised.
+                            readonly_init: b.readonly_init.clone(),
+                            // Granted below if `__clone` runs (one re-init each).
+                            readonly_clone_writable: Vec::new(),
                         };
                         Rc::new(RefCell::new(obj))
                     };
                     self.created.push(Rc::clone(&clone_rc));
                     let cid = clone_rc.borrow().class_id as usize;
-                    let clone_val = Zval::Object(clone_rc);
+                    let clone_val = Zval::Object(clone_rc.clone());
                     self.frames[top].stack.push(clone_val.clone());
                     // Run `__clone` on the copy if defined (return discarded), so it
                     // can deep-copy what it needs (PHP OOP).
                     if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, b"__clone") {
+                        // PHP 8.3 amendment: while `__clone` runs, each readonly
+                        // property of the copy may be re-initialised once. Grant the
+                        // permission now; the `__clone` frame revokes it on return so
+                        // a manual `$o->__clone()` (no grant) still fatals on a write.
+                        let writable: Vec<Box<[u8]>> = clone_rc
+                            .borrow()
+                            .props
+                            .iter()
+                            .map(|(n, _)| n.to_vec().into_boxed_slice())
+                            .filter(|n| resolve_readonly_decl(&self.classes, cid, n).is_some())
+                            .collect();
+                        clone_rc.borrow_mut().readonly_clone_writable = writable;
                         let callee = &self.classes[defc].methods[midx].func;
                         let mut frame = Frame::new(callee, self.class_mod(defc));
                         frame.this = Some(clone_val);
                         frame.class = Some(defc);
                         frame.static_class = Some(cid);
                         frame.ret_cell = Some(Rc::new(RefCell::new(Zval::Null)));
+                        frame.clone_init = true;
                         self.frames.push(frame);
                         continue;
                     }
@@ -2345,6 +2377,9 @@ impl<'m> Vm<'m> {
                             continue;
                         }
                         check_prop_access(&self.classes, cur, o.borrow().class_id as usize, &name)?;
+                        if let Some(err) = self.uninit_readonly_read(o, &name) {
+                            return Err(err);
+                        }
                     }
                     let v = read_property(&target, &name, &mut self.diags);
                     self.frames[top].stack.push(v);
@@ -2390,6 +2425,9 @@ impl<'m> Vm<'m> {
                             continue;
                         }
                         check_prop_access(&self.classes, cur, o.borrow().class_id as usize, &name)?;
+                        if let Some(err) = self.uninit_readonly_read(o, &name) {
+                            return Err(err);
+                        }
                     }
                     let v = read_property(&target, &name, &mut self.diags);
                     self.frames[top].stack.push(v);
@@ -2463,6 +2501,25 @@ impl<'m> Vm<'m> {
                             continue;
                         }
                         check_prop_access(&self.classes, cur, o.borrow().class_id as usize, &name)?;
+                        // Readonly write-once enforcement (after the visibility check,
+                        // so a private/protected readonly reports the access error
+                        // first, matching PHP). A permitted first initialisation is
+                        // recorded so any later write fatals.
+                        let ocid = o.borrow().class_id as usize;
+                        if let Some(decl) = resolve_readonly_decl(&self.classes, ocid, &name) {
+                            if o.borrow().readonly_clone_writable(&name) {
+                                // Permitted re-initialisation during `__clone` (8.3).
+                                let mut ob = o.borrow_mut();
+                                ob.consume_clone_writable(&name);
+                                ob.mark_readonly_init(&name);
+                            } else {
+                                let inited = o.borrow().is_readonly_init(&name);
+                                if let Some(err) = readonly_write_error(&self.classes, cur, decl, &name, inited) {
+                                    return Err(err);
+                                }
+                                o.borrow_mut().mark_readonly_init(&name);
+                            }
+                        }
                     }
                     write_property(&target, &name, value.clone())?;
                     self.frames[top].stack.push(value);
@@ -2473,6 +2530,9 @@ impl<'m> Vm<'m> {
                     if let Some(ocid) = object_class_id(&obj) {
                         check_prop_access(&self.classes, self.frames[top].class, ocid, &name)?;
                     }
+                    if let Some(err) = self.readonly_rmw_error(&obj, &name) {
+                        return Err(err);
+                    }
                     let old = read_property(&obj, &name, &mut self.diags);
                     let result = apply_binop(op, &old, &rhs, &mut self.diags)?;
                     write_property(&obj, &name, result.clone())?;
@@ -2482,6 +2542,9 @@ impl<'m> Vm<'m> {
                     let obj = self.frames[top].stack.pop().expect("PropIncDec object");
                     if let Some(ocid) = object_class_id(&obj) {
                         check_prop_access(&self.classes, self.frames[top].class, ocid, &name)?;
+                    }
+                    if let Some(err) = self.readonly_rmw_error(&obj, &name) {
+                        return Err(err);
                     }
                     let old = read_property(&obj, &name, &mut self.diags);
                     let mut newv = old.clone();
@@ -2559,6 +2622,23 @@ impl<'m> Vm<'m> {
                             continue;
                         }
                         check_prop_access(&self.classes, cur, o.borrow().class_id as usize, &name)?;
+                        // A readonly property can never be unset (after the
+                        // visibility check, so a private/protected one reports the
+                        // access error first, matching PHP) — except during `__clone`,
+                        // where an `unset` returns it to the re-assignable uninitialised
+                        // state (8.3).
+                        let ocid = o.borrow().class_id as usize;
+                        if let Some(decl) = resolve_readonly_decl(&self.classes, ocid, &name) {
+                            if o.borrow().readonly_clone_writable(&name) {
+                                o.borrow_mut().clear_readonly_init(&name);
+                            } else {
+                                let cls = String::from_utf8_lossy(&self.classes[decl].name).into_owned();
+                                let prop = String::from_utf8_lossy(&name).into_owned();
+                                return Err(PhpError::Error(format!(
+                                    "Cannot unset readonly property {cls}::${prop}"
+                                )));
+                            }
+                        }
                     }
                     prop_unset(&target, &name);
                 }
@@ -5306,11 +5386,17 @@ impl<'m> Vm<'m> {
         let class_name = Rc::clone(&cc.class_name);
         let info = Rc::clone(&cc.info);
         let mut props = Props::new();
+        // A restored readonly property counts as already initialised (so a later
+        // write fatals, and a read does not raise the before-initialization error).
+        let mut readonly_init: Vec<Box<[u8]>> = Vec::new();
         for (k, v) in fields {
+            if resolve_readonly_decl(&self.classes, cid, &k).is_some() {
+                readonly_init.push(k.as_slice().into());
+            }
             props.set(&k, v);
         }
         let id = self.next_id();
-        let obj = Object { class_id: cid as u32, class_name, props, id, info };
+        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init, readonly_clone_writable: Vec::new() };
         let rc = Rc::new(RefCell::new(obj));
         // Track for `__destruct` (OOP-3d), like every other freshly minted object.
         self.created.push(Rc::clone(&rc));
@@ -6420,6 +6506,47 @@ impl<'m> Vm<'m> {
     /// materialised, a fresh handle id, shared class-name / visibility metadata.
     /// Fatal if the class is non-instantiable (abstract / interface / enum) or
     /// could not be compiled. Shared by [`Op::Alloc`] and [`Op::AllocStatic`].
+    /// The "Typed property C::$p must not be accessed before initialization" fatal
+    /// when reading a `readonly` property that has not yet been initialised on this
+    /// instance; `None` for a non-readonly or already-initialised property.
+    fn uninit_readonly_read(&self, o: &Rc<RefCell<Object>>, name: &[u8]) -> Option<PhpError> {
+        let ocid = o.borrow().class_id as usize;
+        let decl = resolve_readonly_decl(&self.classes, ocid, name)?;
+        if o.borrow().is_readonly_init(name) {
+            return None;
+        }
+        let cls = String::from_utf8_lossy(&self.classes[decl].name).into_owned();
+        let prop = String::from_utf8_lossy(name).into_owned();
+        Some(PhpError::Error(format!(
+            "Typed property {cls}::${prop} must not be accessed before initialization"
+        )))
+    }
+
+    /// The fatal raised by a compound write (`+=`, `++`, …) to a `readonly`
+    /// property: always an error — "Cannot modify readonly property" once
+    /// initialised, or the before-initialization fatal if the implicit read of an
+    /// uninitialised one comes first. `None` for a non-readonly property.
+    fn readonly_rmw_error(&self, obj: &Zval, name: &[u8]) -> Option<PhpError> {
+        let target = obj.deref_clone();
+        let Zval::Object(o) = &target else { return None };
+        let ocid = o.borrow().class_id as usize;
+        let decl = resolve_readonly_decl(&self.classes, ocid, name)?;
+        // A compound write during `__clone` is the permitted one re-init (8.3).
+        if o.borrow().readonly_clone_writable(name) {
+            let mut ob = o.borrow_mut();
+            ob.consume_clone_writable(name);
+            ob.mark_readonly_init(name);
+            return None;
+        }
+        let cls = String::from_utf8_lossy(&self.classes[decl].name).into_owned();
+        let prop = String::from_utf8_lossy(name).into_owned();
+        Some(PhpError::Error(if o.borrow().is_readonly_init(name) {
+            format!("Cannot modify readonly property {cls}::${prop}")
+        } else {
+            format!("Typed property {cls}::${prop} must not be accessed before initialization")
+        }))
+    }
+
     fn alloc_object(&mut self, cid: ClassId) -> Result<Zval, PhpError> {
         let cc = self.classes[cid]; // &'m CompiledClass: detach from `self` borrow
 
@@ -6457,7 +6584,7 @@ impl<'m> Vm<'m> {
         let class_name = Rc::clone(&cc.class_name);
         let info = Rc::clone(&cc.info);
         let id = self.next_id();
-        let obj = Object { class_id: cid as u32, class_name, props, id, info };
+        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init: Vec::new(), readonly_clone_writable: Vec::new() };
         let rc = Rc::new(RefCell::new(obj));
         // Track for `__destruct` (OOP-3d): the extra strong ref drives the sweep.
         self.created.push(Rc::clone(&rc));
@@ -6491,6 +6618,9 @@ impl<'m> Vm<'m> {
             props,
             id,
             info: Rc::new(ObjectInfo::enum_case(entries)),
+            // Enum-case immutability has its own dedicated check (is_enum_case).
+            readonly_init: Vec::new(),
+            readonly_clone_writable: Vec::new(),
         };
         let rc = Rc::new(RefCell::new(obj));
         self.enum_cache.insert((class, case), Rc::clone(&rc));

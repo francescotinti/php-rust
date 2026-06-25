@@ -1059,6 +1059,7 @@ struct PromotedParam {
     get_hook: Option<FnDecl>,
     set_hook: Option<FnDecl>,
     backed: bool,
+    readonly: bool,
 }
 
 /// A trait whose members have been lowered and whose own `use` clauses have been

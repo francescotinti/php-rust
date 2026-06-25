@@ -1051,6 +1051,11 @@ pub struct CompiledClass {
     /// Static properties declared *on this class* (OOP-2b); resolution walks the
     /// parent chain. The live cells are keyed by (declaring class, name) in the VM.
     pub static_props: Vec<CompiledStaticProp>,
+    /// Names of `readonly` instance properties declared *directly on this class*
+    /// (readonly enforcement). Resolution walks the parent chain like
+    /// [`CompiledClass::own_prop_vis`]; the class found is the *declaring* class,
+    /// used in the "Cannot modify readonly property C::$p" fatal.
+    pub readonly_props: Vec<Box<[u8]>>,
     /// Thunk that materialises this class's *non-constant* instance-property
     /// defaults (`This; <expr>; PropSet; …`), run with `$this` = the new object by
     /// [`Op::InitProps`]. `None` when every default folded to a constant. Covers

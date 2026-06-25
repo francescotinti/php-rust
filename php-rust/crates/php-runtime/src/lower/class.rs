@@ -399,14 +399,22 @@ impl<'f> Lowerer<'f> {
         let line = self.line_of(class.span());
         let is_abstract = class.modifiers.iter().any(|m| m.is_abstract());
         let name: Box<[u8]> = join_ns(&self.cur_namespace, class.name.value);
-        self.lower_class_body(
+        let mut decl = self.lower_class_body(
             name,
             &class.extends,
             &class.implements,
             is_abstract,
             class.members.iter(),
             line,
-        )
+        )?;
+        // A `readonly class` (PHP 8.2): every (non-static) instance property is
+        // readonly, including promoted and trait-supplied ones.
+        if class.modifiers.iter().any(|m| m.is_readonly()) {
+            for p in &mut decl.props {
+                p.readonly = true;
+            }
+        }
+        Ok(decl)
     }
 
     /// Shared class-body lowering for both named classes and anonymous classes
@@ -573,7 +581,7 @@ impl<'f> Lowerer<'f> {
         nm.extend_from_slice(format!("{n}").as_bytes());
         let name: Box<[u8]> = nm.into();
         let is_abstract = anon.modifiers.iter().any(|m| m.is_abstract());
-        let decl = self.lower_class_body(
+        let mut decl = self.lower_class_body(
             name.clone(),
             &anon.extends,
             &anon.implements,
@@ -581,6 +589,11 @@ impl<'f> Lowerer<'f> {
             anon.members.iter(),
             line,
         )?;
+        if anon.modifiers.iter().any(|m| m.is_readonly()) {
+            for p in &mut decl.props {
+                p.readonly = true;
+            }
+        }
         self.anon_classes.push(decl);
         let (args, named) = match &anon.argument_list {
             Some(list) => self.lower_args(list, line)?,
@@ -737,6 +750,7 @@ impl<'f> Lowerer<'f> {
             Property::Plain(p) => p,
             Property::Hooked(h) => {
                 let visibility = visibility_of(h.modifiers.iter());
+                let readonly = h.modifiers.iter().any(|m| m.is_readonly());
                 let (var, default) = match &h.item {
                     PropertyItem::Abstract(a) => (&a.variable, None),
                     PropertyItem::Concrete(c) => (&c.variable, Some(self.lower_expr(c.value)?)),
@@ -747,12 +761,13 @@ impl<'f> Lowerer<'f> {
                 // A property is backed iff it has a default, or a hook reads/writes
                 // its own `$this->name`; otherwise it is virtual (no storage).
                 let backed = default.is_some() || hooks_backing;
-                out.push(PropDecl { name, visibility, default, get_hook, set_hook, backed });
+                out.push(PropDecl { name, visibility, default, get_hook, set_hook, backed, readonly });
                 return Ok(());
             }
         };
         let is_static = plain.modifiers.iter().any(|m| m.is_static());
         let visibility = visibility_of(plain.modifiers.iter());
+        let readonly = plain.modifiers.iter().any(|m| m.is_readonly());
         for item in plain.items.iter() {
             let (var, default) = match item {
                 PropertyItem::Abstract(a) => (&a.variable, None),
@@ -773,6 +788,7 @@ impl<'f> Lowerer<'f> {
                     get_hook: None,
                     set_hook: None,
                     backed: true,
+                    readonly,
                 });
             }
         }
@@ -993,6 +1009,7 @@ impl<'f> Lowerer<'f> {
                 get_hook: p.get_hook,
                 set_hook: p.set_hook,
                 backed: p.backed,
+                readonly: p.readonly,
             });
         }
         validate_goto(&body)?; // step 45: function-scoped goto/label check
@@ -1146,6 +1163,7 @@ impl<'f> Lowerer<'f> {
                     get_hook,
                     set_hook,
                     backed,
+                    readonly: p.modifiers.iter().any(|m| m.is_readonly()),
                 });
             }
             let default = match &p.default_value {

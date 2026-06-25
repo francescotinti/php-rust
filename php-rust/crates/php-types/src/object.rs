@@ -27,6 +27,51 @@ pub struct Object {
     /// `print_r` can annotate `:protected` / `:"C":private` without the class
     /// table (step 19-7, D-19.20). Shared (`Rc`) by all instances of a class.
     pub info: Rc<ObjectInfo>,
+    /// Names of `readonly` properties that have been **initialised** on this
+    /// instance (readonly enforcement). A readonly property is write-once: the
+    /// first in-scope write records its name here; any later write fatals with
+    /// "Cannot modify readonly property", and a read before initialisation fatals
+    /// with "must not be accessed before initialization". Empty for objects with
+    /// no readonly properties, so the common case costs nothing.
+    pub readonly_init: Vec<Box<[u8]>>,
+    /// Readonly properties that may be **re-initialised once** right now (PHP 8.3
+    /// readonly-clone amendment): populated by the `clone` operator before it runs
+    /// `__clone`, one entry per readonly property, and revoked when that `__clone`
+    /// frame returns. A write consumes the matching entry; a manual `__clone()`
+    /// call leaves this empty, so a readonly write there still fatals. Empty for
+    /// every object outside an active clone, so the common case costs nothing.
+    pub readonly_clone_writable: Vec<Box<[u8]>>,
+}
+
+impl Object {
+    /// Whether readonly property `name` has been initialised on this instance.
+    pub fn is_readonly_init(&self, name: &[u8]) -> bool {
+        self.readonly_init.iter().any(|n| n.as_ref() == name)
+    }
+
+    /// Record that readonly property `name` has now been initialised (idempotent).
+    pub fn mark_readonly_init(&mut self, name: &[u8]) {
+        if !self.is_readonly_init(name) {
+            self.readonly_init.push(name.into());
+        }
+    }
+
+    /// Drop `name` from the initialised set (an `unset` during `__clone`, which
+    /// returns a readonly property to the uninitialised state).
+    pub fn clear_readonly_init(&mut self, name: &[u8]) {
+        self.readonly_init.retain(|n| n.as_ref() != name);
+    }
+
+    /// Whether readonly property `name` may be (re-)initialised once right now —
+    /// i.e. `clone` granted a write permission still pending consumption.
+    pub fn readonly_clone_writable(&self, name: &[u8]) -> bool {
+        self.readonly_clone_writable.iter().any(|n| n.as_ref() == name)
+    }
+
+    /// Consume the clone-write permission for `name` (a no-op if absent).
+    pub fn consume_clone_writable(&mut self, name: &[u8]) {
+        self.readonly_clone_writable.retain(|n| n.as_ref() != name);
+    }
 }
 
 /// Visibility of a declared property as rendered by `var_dump` / `print_r`

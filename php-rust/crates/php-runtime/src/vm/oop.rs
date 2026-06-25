@@ -178,6 +178,28 @@ pub(super) fn resolve_prop_decl(classes: &[&CompiledClass], class: ClassId, name
     None
 }
 
+/// If instance property `name` is declared `readonly` anywhere up `class`'s parent
+/// chain, return its *declaring* class id (child→ancestor, most-derived wins).
+/// `None` for a non-readonly or dynamic property. Used by readonly write-once
+/// enforcement and the "Cannot modify readonly property" fatal.
+pub(super) fn resolve_readonly_decl(classes: &[&CompiledClass], class: ClassId, name: &[u8]) -> Option<ClassId> {
+    let mut cid = Some(class);
+    while let Some(c) = cid {
+        let cc = classes.get(c)?;
+        if cc.readonly_props.iter().any(|n| n.as_ref() == name) {
+            return Some(c);
+        }
+        // A non-readonly redeclaration in a more-derived class shadows an inherited
+        // readonly one (the most-derived declaration wins): stop if this class
+        // declares the property at all.
+        if cc.own_prop_vis.iter().any(|(n, _)| n.as_ref() == name) {
+            return None;
+        }
+        cid = cc.parent;
+    }
+    None
+}
+
 /// Resolve a static property to its declaring class and index, walking the parent
 /// chain (OOP-2b).
 pub(super) fn find_static_prop(classes: &[&CompiledClass], start: ClassId, name: &[u8]) -> Option<(ClassId, usize)> {
@@ -235,6 +257,39 @@ pub(super) fn method_access_error(
         String::from_utf8_lossy(&classes[decl].name),
         String::from_utf8_lossy(method)
     ))
+}
+
+/// Decide whether writing readonly property `decl::$name` from scope `cur` is
+/// allowed, given whether the property is already initialised on the instance.
+/// Returns the fatal to raise, or `None` if the write is a permitted first
+/// initialisation. Mirrors PHP 8.4: an already-initialised readonly property
+/// cannot be modified from *any* scope; an uninitialised one carries implicit
+/// `protected(set)` visibility, so it may only be initialised from within the
+/// declaring class hierarchy (else "from <scope>").
+pub(super) fn readonly_write_error(
+    classes: &[&CompiledClass],
+    cur: Option<ClassId>,
+    decl: ClassId,
+    name: &[u8],
+    initialized: bool,
+) -> Option<PhpError> {
+    let cls = String::from_utf8_lossy(&classes[decl].name);
+    let prop = String::from_utf8_lossy(name);
+    if initialized {
+        return Some(PhpError::Error(format!("Cannot modify readonly property {cls}::${prop}")));
+    }
+    // Uninitialised: allowed only from the declaring class or a subclass
+    // (protected(set) semantics).
+    if visible_from(classes, cur, Visibility::Protected, decl) {
+        return None;
+    }
+    let scope = match cur {
+        Some(c) => format!("scope {}", String::from_utf8_lossy(&classes[c].name)),
+        None => "global scope".to_string(),
+    };
+    Some(PhpError::Error(format!(
+        "Cannot modify protected(set) readonly property {cls}::${prop} from {scope}"
+    )))
 }
 
 /// Whether an object of `class_id` is an instance of `target`: the class itself,
