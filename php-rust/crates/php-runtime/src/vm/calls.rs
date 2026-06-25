@@ -596,23 +596,40 @@ impl<'m> Vm<'m> {
         Ok(())
     }
 
+    /// The callee's name as PHP renders it in a type error: `Class::method` for a
+    /// method (the running callee frame's class), or the bare function name
+    /// otherwise. The callee frame is the current top frame at both error sites.
+    fn qualified_callee_name(&self, f: &Func) -> String {
+        let fname = String::from_utf8_lossy(&f.name);
+        match self.frames.last().and_then(|fr| fr.class) {
+            Some(cid) => format!(
+                "{}::{}",
+                String::from_utf8_lossy(&self.classes[cid].name),
+                fname
+            ),
+            None => fname.into_owned(),
+        }
+    }
+
     /// The catchable `TypeError` PHP raises for a return value that failed scalar
-    /// coercion (step 14). The wording differs from the argument one: no call site,
-    /// suffix `returned in <file>:<defline>`.
+    /// coercion (step 14). `getMessage()` carries no location ("…returned"); the
+    /// throwable's file/line are left to default to the faulting `return`
+    /// statement's site (PHP reports the *return* line, not the declaration), which
+    /// `__toString` renders as the standard "… in <file>:<line>" suffix.
     pub(super) fn return_type_error(&self, f: &Func, hint: &TypeHint, given: &str) -> PhpError {
         PhpError::TypeError(format!(
-            "{}(): Return value must be of type {}, {} returned in {}:{}",
-            String::from_utf8_lossy(&f.name),
+            "{}(): Return value must be of type {}, {} returned",
+            self.qualified_callee_name(f),
             hint.display_name(),
             given,
-            String::from_utf8_lossy(&self.module.file),
-            f.line,
         ))
     }
 
     /// The catchable `TypeError` PHP raises for an argument that failed scalar
-    /// coercion, matching PHP's exact wording (step 14): the call site's file/line
-    /// and the callee's definition file/line.
+    /// coercion, matching PHP's exact wording (step 14). `getMessage()` names the
+    /// *call* site ("… called in <file> on line <N>"); the throwable's file/line
+    /// report the *definition* site, which `__toString` renders as the special
+    /// "… and defined in <file>:<line>" suffix.
     fn arg_type_error(
         &self,
         f: &Func,
@@ -621,24 +638,25 @@ impl<'m> Vm<'m> {
         given: &str,
         call_line: Line,
     ) -> PhpError {
-        let file = String::from_utf8_lossy(&self.module.file);
+        let file = String::from_utf8_lossy(&self.module.file).into_owned();
         let pname = f
             .param_names
             .get(i)
             .map(|n| String::from_utf8_lossy(n).into_owned())
             .unwrap_or_default();
-        PhpError::TypeError(format!(
-            "{}(): Argument #{} (${}) must be of type {}, {} given, \
-             called in {} on line {} and defined in {}:{}",
-            String::from_utf8_lossy(&f.name),
-            i + 1,
-            pname,
-            hint.display_name(),
-            given,
-            file,
-            call_line,
-            file,
-            f.line,
-        ))
+        PhpError::TypeErrorAt {
+            msg: format!(
+                "{}(): Argument #{} (${}) must be of type {}, {} given, called in {} on line {}",
+                self.qualified_callee_name(f),
+                i + 1,
+                pname,
+                hint.display_name(),
+                given,
+                file,
+                call_line,
+            ),
+            file: self.module.file.to_vec().into_boxed_slice(),
+            line: f.line,
+        }
     }
 }

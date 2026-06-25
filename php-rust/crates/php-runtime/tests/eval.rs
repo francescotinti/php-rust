@@ -677,7 +677,7 @@ fn return_type_hint_error_message() {
     match &o.fatal {
         Some(PhpError::TypeError(m)) => assert_eq!(
             m,
-            "f(): Return value must be of type int, string returned in t.php:1"
+            "f(): Return value must be of type int, string returned"
         ),
         other => panic!("expected TypeError, got {other:?}"),
     }
@@ -777,7 +777,7 @@ fn strict_types_rejects_coercible_string() {
     )
     .expect("lowers");
     assert!(
-        matches!(&o.fatal, Some(PhpError::TypeError(m)) if m.contains("must be of type int, string given")),
+        matches!(&o.fatal, Some(PhpError::TypeErrorAt { msg: m, .. }) if m.contains("must be of type int, string given")),
         "got {:?}",
         o.fatal
     );
@@ -791,7 +791,7 @@ fn strict_types_rejects_float_to_int() {
     )
     .expect("lowers");
     assert!(
-        matches!(&o.fatal, Some(PhpError::TypeError(m)) if m.contains("must be of type int, float given")),
+        matches!(&o.fatal, Some(PhpError::TypeErrorAt { msg: m, .. }) if m.contains("must be of type int, float given")),
         "got {:?}",
         o.fatal
     );
@@ -805,7 +805,7 @@ fn strict_types_rejects_int_to_string() {
     )
     .expect("lowers");
     assert!(
-        matches!(&o.fatal, Some(PhpError::TypeError(m)) if m.contains("must be of type string, int given")),
+        matches!(&o.fatal, Some(PhpError::TypeErrorAt { msg: m, .. }) if m.contains("must be of type string, int given")),
         "got {:?}",
         o.fatal
     );
@@ -896,10 +896,10 @@ fn scalar_hint_type_error_message() {
     )
     .expect("lowers");
     match &o.fatal {
-        Some(PhpError::TypeError(m)) => assert_eq!(
-            m,
+        Some(PhpError::TypeErrorAt { msg, .. }) => assert_eq!(
+            msg,
             "f(): Argument #1 ($x) must be of type int, string given, \
-             called in t.php on line 1 and defined in t.php:1"
+             called in t.php on line 1"
         ),
         other => panic!("expected TypeError, got {other:?}"),
     }
@@ -910,13 +910,13 @@ fn scalar_hint_type_error_null_and_array() {
     // null and array report their PHP type names in the message.
     let o = run_source(b"t.php", b"<?php function f(int $x){} f(null);").expect("lowers");
     assert!(
-        matches!(&o.fatal, Some(PhpError::TypeError(m)) if m.contains("must be of type int, null given")),
+        matches!(&o.fatal, Some(PhpError::TypeErrorAt { msg: m, .. }) if m.contains("must be of type int, null given")),
         "got {:?}",
         o.fatal
     );
     let o = run_source(b"t.php", b"<?php function f(int $x){} f([1]);").expect("lowers");
     assert!(
-        matches!(&o.fatal, Some(PhpError::TypeError(m)) if m.contains("must be of type int, array given")),
+        matches!(&o.fatal, Some(PhpError::TypeErrorAt { msg: m, .. }) if m.contains("must be of type int, array given")),
         "got {:?}",
         o.fatal
     );
@@ -927,7 +927,7 @@ fn nullable_hint_type_error_shows_question_mark() {
     // The nullable hint is rendered with its `?` in the error message.
     let o = run_source(b"t.php", b"<?php function f(?int $x){} f('z');").expect("lowers");
     assert!(
-        matches!(&o.fatal, Some(PhpError::TypeError(m)) if m.contains("must be of type ?int, string given")),
+        matches!(&o.fatal, Some(PhpError::TypeErrorAt { msg: m, .. }) if m.contains("must be of type ?int, string given")),
         "got {:?}",
         o.fatal
     );

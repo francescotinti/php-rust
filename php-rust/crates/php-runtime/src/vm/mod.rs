@@ -9370,11 +9370,14 @@ mod tests {
     #[test]
     fn scalar_param_hint_type_error_message() {
         let out = vm_outcome(b"<?php function f(int $x){ return $x; } f('abc');");
+        // getMessage() names the call site only; the " and defined in F:L" suffix is
+        // appended at render time from the throwable's (definition) file/line.
         assert!(matches!(
             &out.fatal,
-            Some(PhpError::TypeError(m))
-                if m == "f(): Argument #1 ($x) must be of type int, string given, \
-                         called in test.php on line 1 and defined in test.php:1"
+            Some(PhpError::TypeErrorAt { msg, line, .. })
+                if msg == "f(): Argument #1 ($x) must be of type int, string given, \
+                         called in test.php on line 1"
+                    && *line == 1
         ), "got {:?}", out.fatal);
     }
 
@@ -9389,7 +9392,7 @@ mod tests {
         // Under strict_types a numeric string for `int` is a TypeError, but int→float
         // widening is allowed.
         let out = vm_outcome(b"<?php declare(strict_types=1); function f(int $x){} f('5');");
-        assert!(matches!(&out.fatal, Some(PhpError::TypeError(m)) if m.contains("must be of type int, string given")));
+        assert!(matches!(&out.fatal, Some(PhpError::TypeErrorAt { msg, .. }) if msg.contains("must be of type int, string given")));
         assert_eq!(
             vm_stdout(b"<?php declare(strict_types=1); function f(float $x){ echo $x === 5.0 ? 'Y':'N'; } f(5);"),
             b"Y"
@@ -9414,13 +9417,13 @@ mod tests {
         let out = vm_outcome(b"<?php class A {} function f(A $a){} f(new stdClass());");
         assert!(matches!(
             &out.fatal,
-            Some(PhpError::TypeError(m)) if m.contains("must be of type A, stdClass given")
+            Some(PhpError::TypeErrorAt { msg, .. }) if msg.contains("must be of type A, stdClass given")
         ), "got {:?}", out.fatal);
         // an array hint rejects an int.
         let out = vm_outcome(b"<?php function f(array $a){} f(123);");
         assert!(matches!(
             &out.fatal,
-            Some(PhpError::TypeError(m)) if m.contains("must be of type array, int given")
+            Some(PhpError::TypeErrorAt { msg, .. }) if msg.contains("must be of type array, int given")
         ), "got {:?}", out.fatal);
         // `?Foo` accepts null.
         assert_eq!(
@@ -9435,10 +9438,12 @@ mod tests {
     fn return_type_hint_coerces_and_errors() {
         assert_eq!(vm_stdout(b"<?php function f(): int { return '5'; } echo f() === 5 ? 'Y':'N';"), b"Y");
         let out = vm_outcome(b"<?php function f(): int { return 'x'; } f();");
+        // getMessage() carries no location; the throwable's line defaults to the
+        // `return` statement site (a plain TypeError, not TypeErrorAt).
         assert!(matches!(
             &out.fatal,
             Some(PhpError::TypeError(m))
-                if m == "f(): Return value must be of type int, string returned in test.php:1"
+                if m == "f(): Return value must be of type int, string returned"
         ), "got {:?}", out.fatal);
     }
 

@@ -38,6 +38,12 @@ pub enum PhpError {
     /// The base `Error` class (e.g. "Call to undefined function f()").
     Error(String),
     TypeError(String),
+    /// A `TypeError` whose throwable `getFile()`/`getLine()` must report the
+    /// callee's *definition* site rather than the faulting op (an argument or
+    /// return type error, step 14): PHP sets these to the function's declaration
+    /// file/line, while the message itself names the *call* site. Carries that
+    /// definition location so [`crate::Object`] synthesis can stamp it.
+    TypeErrorAt { msg: String, file: Box<[u8]>, line: u32 },
     ValueError(String),
     /// Subclass of TypeError; the class name is still "ArgumentCountError".
     ArgumentCountError(String),
@@ -64,7 +70,7 @@ impl PhpError {
     pub fn class_name(&self) -> &'static str {
         match self {
             PhpError::Error(_) => "Error",
-            PhpError::TypeError(_) => "TypeError",
+            PhpError::TypeError(_) | PhpError::TypeErrorAt { .. } => "TypeError",
             PhpError::ValueError(_) => "ValueError",
             PhpError::ArgumentCountError(_) => "ArgumentCountError",
             PhpError::DivisionByZeroError(_) => "DivisionByZeroError",
@@ -81,12 +87,23 @@ impl PhpError {
         match self {
             PhpError::Error(m) => m,
             PhpError::TypeError(m) => m,
+            PhpError::TypeErrorAt { msg, .. } => msg,
             PhpError::ValueError(m) => m,
             PhpError::ArgumentCountError(m) => m,
             PhpError::DivisionByZeroError(m) => m,
             PhpError::ArithmeticError(m) => m,
             PhpError::Thrown(_) => "",
             PhpError::Exit(_) => "",
+        }
+    }
+
+    /// The definition file/line a synthesized throwable must report for its
+    /// `getFile()`/`getLine()`, overriding the faulting-op location. Only an
+    /// argument/return [`PhpError::TypeErrorAt`] carries one.
+    pub fn loc_override(&self) -> Option<(&[u8], u32)> {
+        match self {
+            PhpError::TypeErrorAt { file, line, .. } => Some((file, *line)),
+            _ => None,
         }
     }
 }

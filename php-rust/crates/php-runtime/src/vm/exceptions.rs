@@ -40,12 +40,6 @@ impl<'m> Vm<'m> {
                 "#0 {main}".to_string(),
             ),
         };
-        // An argument / return type error already carries its own trailing location
-        // ("…called in F on line C and defined in F:D" / "…returned in F:D"), so PHP
-        // does *not* append the usual " in {file}:{line}" — doing so would duplicate
-        // it. Detect those messages and render them verbatim.
-        let self_located = class == "TypeError"
-            && (message.contains(" and defined in ") || message.contains(" returned in "));
         // PHP omits the ": <message>" segment entirely when the throwable carries an
         // empty message, rendering "Uncaught Exception in F:L" rather than
         // "Uncaught Exception:  in F:L" (note the doubled space).
@@ -54,8 +48,14 @@ impl<'m> Vm<'m> {
         } else {
             format!("Uncaught {class}: {message}")
         };
-        let head = if self_located {
-            format!("\nFatal error: {label}\n")
+        // An *argument* TypeError names the call site in its message ("…called in F
+        // on line N") and reports the *definition* site here as " and defined in
+        // F:L"; every other throwable (including a return TypeError, whose message
+        // ends "…returned") uses the standard " in F:L". `file`/`line` are the
+        // throwable's, which for these errors are the definition site.
+        let arg_type_err = class == "TypeError" && message.contains(", called in ");
+        let head = if arg_type_err {
+            format!("\nFatal error: {label} and defined in {file}:{line}\n")
         } else {
             format!("\nFatal error: {label} in {file}:{line}\n")
         };
@@ -96,8 +96,11 @@ impl<'m> Vm<'m> {
             engine => {
                 let name = engine.class_name().to_ascii_lowercase();
                 let msg = engine.message().to_owned();
+                // An argument/return TypeError overrides its file/line with the
+                // callee's definition site (step 14).
+                let loc = engine.loc_override().map(|(f, l)| (f.to_vec(), l));
                 match self.class_index.get(name.as_bytes()).copied() {
-                    Some(cid) => match self.synthesize_throwable(cid, &msg) {
+                    Some(cid) => match self.synthesize_throwable_at(cid, &msg, loc) {
                         Ok(v) => v,
                         Err(_) => return Some(e),
                     },
@@ -195,11 +198,27 @@ impl<'m> Vm<'m> {
     /// `line`/`file`/`trace` stay at their prelude defaults here — they are
     /// filled by the line-tracking (EXC-3b) and stack-trace (EXC-3c) steps.
     pub(super) fn synthesize_throwable(&mut self, cid: ClassId, message: &str) -> Result<Zval, PhpError> {
+        self.synthesize_throwable_at(cid, message, None)
+    }
+
+    /// Like [`Self::synthesize_throwable`] but with an explicit `(file, line)`
+    /// override for `getFile()`/`getLine()` — used by an argument/return TypeError,
+    /// whose throwable reports the callee's *definition* site, not the faulting op.
+    pub(super) fn synthesize_throwable_at(
+        &mut self,
+        cid: ClassId,
+        message: &str,
+        loc: Option<(Vec<u8>, u32)>,
+    ) -> Result<Zval, PhpError> {
         let value = self.alloc_object(cid)?;
         // The line of the op that faulted (`ip-1` in the faulting frame), the
         // module's file, and the current stack trace — mirroring
-        // `eval::synthesize_throwable` (EXC-3b/3c).
-        let line = self.cur_line(self.frames.len() - 1);
+        // `eval::synthesize_throwable` (EXC-3b/3c). An explicit `loc` overrides the
+        // first two (the definition site of a type error).
+        let (file, line) = match loc {
+            Some((f, l)) => (f, l),
+            None => (self.module.file.to_vec(), self.cur_line(self.frames.len() - 1)),
+        };
         let (trace, trace_string) = self.capture_trace();
         if let Zval::Object(o) = &value {
             let mut b = o.borrow_mut();
@@ -207,7 +226,7 @@ impl<'m> Vm<'m> {
                 .set(b"message", Zval::Str(PhpStr::new(message.as_bytes().to_vec())));
             b.props.set(b"line", Zval::Long(line as i64));
             b.props
-                .set(b"file", Zval::Str(PhpStr::new(self.module.file.to_vec())));
+                .set(b"file", Zval::Str(PhpStr::new(file)));
             b.props.set(b"trace", trace);
             b.props
                 .set(b"traceString", Zval::Str(PhpStr::new(trace_string)));
