@@ -1457,6 +1457,7 @@ impl<'m> Vm<'m> {
                         info,
                         module_id,
                         scope,
+                        is_static: !bind_this,
                     };
                     self.frames[top].stack.push(Zval::Closure(Rc::new(cl)));
                 }
@@ -1485,6 +1486,7 @@ impl<'m> Vm<'m> {
                         info,
                         module_id: 0,
                         scope: None,
+                        is_static: false,
                     };
                     self.frames[top].stack.push(Zval::Closure(Rc::new(cl)));
                 }

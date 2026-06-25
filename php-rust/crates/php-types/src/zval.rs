@@ -92,6 +92,10 @@ pub struct Closure {
     /// creation to the defining class, or overridden by `Closure::bind`/`bindTo`'s
     /// `$newScope` argument. `None` for an unscoped (top-level) closure.
     pub scope: Option<usize>,
+    /// `static function () {}` — a static closure never binds `$this`, so
+    /// `bindTo`/`Closure::bind`/`call` with a non-null instance warns and yields
+    /// `null` (step 19-6). `false` for an ordinary closure or first-class callable.
+    pub is_static: bool,
 }
 
 /// What `var_dump` / `print_r` print for a closure value (step 18-7, D-18.9).

@@ -329,6 +329,7 @@ impl<'m> Vm<'m> {
             info: Rc::clone(&cl.info),
             module_id: cl.module_id,
             scope: new_scope.unwrap_or(cl.scope),
+            is_static: cl.is_static,
         }))
     }
 
@@ -351,6 +352,20 @@ impl<'m> Vm<'m> {
         }
     }
 
+    /// A static closure cannot take an instance `$this`; `bindTo`/`bind`/`call`
+    /// with a non-null instance warns and yields `null` (step 19-6, PHP 8.x).
+    fn reject_static_bind(&mut self, cl: &Closure, new_this: &Option<Zval>) -> bool {
+        if cl.is_static && new_this.is_some() {
+            self.diags.push(Diag::Warning(
+                "Cannot bind an instance to a static closure, this will be an error in PHP 9"
+                    .to_string(),
+            ));
+            true
+        } else {
+            false
+        }
+    }
+
     /// Built-in methods on a closure value: `$c->bindTo($newThis)` (rebind) and
     /// `$c->call($newThis, ...$args)` (rebind then invoke). Mirrors
     /// `eval::closure_method`.
@@ -364,12 +379,18 @@ impl<'m> Vm<'m> {
             let mut it = args.into_iter();
             let new_this = Self::closure_this_arg(it.next());
             let scope = self.resolve_scope_arg(it.next());
+            if self.reject_static_bind(cl, &new_this) {
+                return Ok(Zval::Null);
+            }
             Ok(self.rebind_closure(cl, new_this, scope))
         } else if method.eq_ignore_ascii_case(b"call") {
             // `$c->call($newThis, ...$args)` rebinds `$this` *and* the scope to the
             // class of `$newThis`, then invokes (step 19-6).
             let mut it = args.into_iter();
             let new_this = Self::closure_this_arg(it.next());
+            if self.reject_static_bind(cl, &new_this) {
+                return Ok(Zval::Null);
+            }
             let scope = Some(new_this.as_ref().and_then(object_class_id));
             let rest: Vec<Zval> = it.collect();
             let bound = self.rebind_closure(cl, new_this, scope);
@@ -395,7 +416,12 @@ impl<'m> Vm<'m> {
             let new_this = Self::closure_this_arg(it.next());
             let scope = self.resolve_scope_arg(it.next());
             match target {
-                Some(Zval::Closure(cl)) => Ok(self.rebind_closure(&cl, new_this, scope)),
+                Some(Zval::Closure(cl)) => {
+                    if self.reject_static_bind(&cl, &new_this) {
+                        return Ok(Zval::Null);
+                    }
+                    Ok(self.rebind_closure(&cl, new_this, scope))
+                }
                 _ => Err(PhpError::Error(
                     "Closure::bind(): Argument #1 ($closure) must be of type Closure".to_string(),
                 )),
@@ -428,6 +454,7 @@ impl<'m> Vm<'m> {
                         info,
                         module_id: 0,
                         scope: None,
+                        is_static: false,
                     })))
                 }
                 _ => Err(PhpError::Error(
