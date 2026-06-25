@@ -96,7 +96,7 @@ impl<'m> Vm<'m> {
             engine => {
                 let name = engine.class_name().to_ascii_lowercase();
                 let msg = engine.message().to_owned();
-                match self.module.class_index.get(name.as_bytes()).copied() {
+                match self.class_index.get(name.as_bytes()).copied() {
                     Some(cid) => match self.synthesize_throwable(cid, &msg) {
                         Ok(v) => v,
                         Err(_) => return Some(e),
@@ -162,7 +162,7 @@ impl<'m> Vm<'m> {
             engine => {
                 let name = engine.class_name().to_ascii_lowercase();
                 let msg = engine.message().to_owned();
-                let cid = self.module.class_index.get(name.as_bytes()).copied()?;
+                let cid = self.class_index.get(name.as_bytes()).copied()?;
                 self.synthesize_throwable(cid, &msg).ok()
             }
         }

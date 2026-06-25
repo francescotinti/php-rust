@@ -144,7 +144,7 @@ impl<'m> Vm<'m> {
     /// — the tree-walker raises these as `Error`; the VM matches real PHP. Falls
     /// back to an engine `Error` if the prelude has no `Exception`.
     pub(super) fn gen_exception(&mut self, msg: &str) -> PhpError {
-        match self.module.class_index.get(&b"exception"[..]).copied() {
+        match self.class_index.get(&b"exception"[..]).copied() {
             Some(cid) => match self.synthesize_throwable(cid, msg) {
                 Ok(obj) => PhpError::Thrown(obj),
                 Err(e) => e,
