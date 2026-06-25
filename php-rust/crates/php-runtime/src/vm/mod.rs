@@ -230,6 +230,8 @@ pub(crate) fn run_module_with_hir<'m>(
         class_index: module.class_index.clone(),
         class_module: vec![module; module.classes.len()],
         main_hir,
+        seed_classes: main_hir.map(|p| p.classes.clone()).unwrap_or_default(),
+        seed_static: main_hir.map_or(0, |p| p.static_count),
         linked_functions: HashMap::new(),
         included_files: HashSet::new(),
         autoloaders: Vec::new(),
@@ -554,6 +556,15 @@ struct Vm<'m> {
     /// when the VM was started from an already-compiled module (e.g. unit tests
     /// via [`run_module`]), in which case eval falls back to standalone lowering.
     main_hir: Option<&'m Program>,
+    /// The accumulating HIR class image used to seed every `eval`/`include` unit
+    /// (step 57, Phase 3). Starts as `main`'s classes and grows by each loaded
+    /// unit's *new* classes, so a later unit can `extend`/`implement` a class an
+    /// earlier one (or an autoloaded one) declared. Ids stay aligned with the
+    /// global compiled table. Empty (and unused) when no HIR is retained.
+    seed_classes: Vec<crate::hir::ClassDecl>,
+    /// The static-cell id high-water mark carried into a seeded unit's lowering, so
+    /// its `static $x` cells get ids past every already-loaded unit's (Phase 3).
+    seed_static: usize,
     /// User functions declared by a linked `eval`/`include` unit (step 57, Phase
     /// 1c-2): lowercased name → (defining module, index into its `functions`), so
     /// they are callable by name after the unit returns. The defining module is
@@ -3142,16 +3153,14 @@ impl<'m> Vm<'m> {
     /// scope, and (with no retained HIR, e.g. unit tests via `run_module`) it
     /// compiles standalone and cannot extend a caller's user class.
     fn run_eval(&mut self, src: &[u8]) -> Result<Zval, PhpError> {
-        // Compile against the caller's image when its HIR is retained, so an eval
-        // class can extend/implement a caller user class; otherwise stand alone.
-        let lowered = match self.main_hir {
-            Some(seed) => crate::lower_source_seeded(b"eval()'d code", src, seed),
-            None => crate::lower_source(b"eval()'d code", src),
-        };
-        let program = match lowered {
+        // Compile against the accumulating image when an HIR is retained, so an
+        // eval class can extend/implement an already-loaded (or autoloaded) class;
+        // otherwise stand alone.
+        let program = match self.lower_unit(b"eval()'d code", src)? {
             Ok(p) => p,
             Err(_) => return Ok(Zval::Bool(false)),
         };
+        self.accumulate_seed(&program);
         let module = match crate::compile::compile_program(&program, self.registry) {
             Ok(m) => m,
             Err(_) => return Ok(Zval::Bool(false)),
@@ -3232,6 +3241,53 @@ impl<'m> Vm<'m> {
         outcome
     }
 
+    /// Lower an `eval`/`include` unit against the accumulating class image,
+    /// autoloading any `extends`/`implements` target not yet loaded and retrying
+    /// (step 57, Phase 3) — so a lazily-autoloaded `class Dog extends Animal`
+    /// loads `Animal` first. With no retained image it lowers standalone. The outer
+    /// `Result` carries a throwing autoloader's exception; the inner one a genuine
+    /// lower failure (parse / unsupported / still-undefined parent).
+    fn lower_unit(
+        &mut self,
+        name: &[u8],
+        src: &[u8],
+    ) -> Result<Result<Program, crate::LowerError>, PhpError> {
+        if self.main_hir.is_none() {
+            return Ok(crate::lower_source(name, src));
+        }
+        loop {
+            match crate::lower_source_seeded(name, src, &self.seed_classes, self.seed_static) {
+                Err(crate::LowerError::UndefinedClass { name: pname, line }) => {
+                    match self.resolve_class_autoload(&pname)? {
+                        Some(_) => continue,
+                        None => {
+                            return Ok(Err(crate::LowerError::UndefinedClass {
+                                name: pname,
+                                line,
+                            }))
+                        }
+                    }
+                }
+                other => return Ok(other),
+            }
+        }
+    }
+
+    /// Fold a freshly-lowered unit's *new* classes into the accumulating seed image
+    /// so later units can reference them (step 57, Phase 3). The unit was lowered
+    /// from `seed_classes`, so its `program.classes` is `[seed…, new…]`; the tail
+    /// past the current seed length is appended (ids already aligned).
+    fn accumulate_seed(&mut self, program: &Program) {
+        if self.main_hir.is_none() {
+            return;
+        }
+        let l = self.seed_classes.len();
+        if program.classes.len() > l {
+            self.seed_classes.extend_from_slice(&program.classes[l..]);
+        }
+        self.seed_static = program.static_count;
+    }
+
     /// Resolve an `include`/`require` path to a real file (step 57, Phase 2): an
     /// absolute path is used directly; a relative one is tried against the
     /// including file's directory first, then the process CWD (a minimal
@@ -3279,14 +3335,11 @@ impl<'m> Vm<'m> {
         // Mark loaded before running, so a `_once` re-entry during the file's own
         // execution (mutual includes) sees it and short-circuits.
         self.included_files.insert(key.clone());
-        let lowered = match self.main_hir {
-            Some(seed) => crate::lower_source_seeded(&key, &content, seed),
-            None => crate::lower_source(&key, &content),
-        };
-        let program = match lowered {
+        let program = match self.lower_unit(&key, &content)? {
             Ok(p) => p,
             Err(_) => return self.include_compile_failed(&key, mode),
         };
+        self.accumulate_seed(&program);
         let module = match crate::compile::compile_program(&program, self.registry) {
             Ok(m) => m,
             Err(_) => return self.include_compile_failed(&key, mode),

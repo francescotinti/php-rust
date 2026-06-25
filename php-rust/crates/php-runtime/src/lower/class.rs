@@ -338,10 +338,7 @@ impl<'f> Lowerer<'f> {
             match self.class_index.get(&n.to_ascii_lowercase()) {
                 Some(&i) => out.push(i),
                 None => {
-                    return Err(LowerError::Unsupported {
-                        what: "implements/extends undefined interface",
-                        line,
-                    })
+                    return Err(LowerError::UndefinedClass { name: n.clone(), line })
                 }
             }
         }
@@ -436,10 +433,7 @@ impl<'f> Lowerer<'f> {
                 match self.class_index.get(&pname.to_ascii_lowercase()) {
                     Some(&i) => Some(i),
                     None => {
-                        return Err(LowerError::Unsupported {
-                            what: "extends undefined class",
-                            line,
-                        })
+                        return Err(LowerError::UndefinedClass { name: pname, line })
                     }
                 }
             }

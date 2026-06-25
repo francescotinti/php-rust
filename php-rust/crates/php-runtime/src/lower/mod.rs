@@ -44,6 +44,10 @@ pub enum LowerError {
     Parse(String),
     /// A construct that is valid PHP but outside the current Tier 1 scope.
     Unsupported { what: &'static str, line: Line },
+    /// A class declaration `extends`/`implements` a class/interface not yet known
+    /// (step 57, Phase 3). When lowering an `eval`/`include` unit the VM resolves
+    /// `name` via autoload and retries; at top level it is the usual fatal.
+    UndefinedClass { name: Box<[u8]>, line: Line },
     /// A program that PHP *compiles* but rejects with a `Fatal error:` at link
     /// time — e.g. an unresolved trait-method collision (step 21, D-21.5). Unlike
     /// `Unsupported`, this is faithful PHP behaviour: `run_source` turns it into
@@ -58,6 +62,9 @@ impl std::fmt::Display for LowerError {
             LowerError::Unsupported { what, line } => {
                 write!(f, "unsupported construct ({what}) on line {line}")
             }
+            LowerError::UndefinedClass { name, line } => {
+                write!(f, "undefined class {} on line {line}", String::from_utf8_lossy(name))
+            }
             LowerError::Fatal { message, line } => write!(f, "{message} on line {line}"),
         }
     }
@@ -71,19 +78,29 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
     lower_source_impl(name, source, None)
 }
 
-/// Like [`lower_source`] but seeds the class/function tables (and the static-id
-/// counter) from `seed` instead of just the built-in prelude — "compile against
-/// image" (step 57, Phase 1c-2c). An `eval()` unit lowered this way resolves and
-/// **inherits** from its caller's user classes/functions: `eval("class Bar
-/// extends Foo {}")` sees `Foo`, so its layout flattens correctly. `seed` must
-/// itself already embed the prelude (a `Program` lowered normally does), so the
-/// prelude is not re-seeded; the eval's own classes hoist contiguously after the
-/// seeded ones, keeping their ids aligned with the caller's global table.
-pub fn lower_source_seeded(name: &[u8], source: &[u8], seed: &Program) -> Result<Program, LowerError> {
-    lower_source_impl(name, source, Some(seed))
+/// Like [`lower_source`] but seeds the class table (and the static-id counter)
+/// from `seed_classes`/`seed_static` instead of just the built-in prelude —
+/// "compile against image" (step 57, Phase 1c-2c/3). An `eval`/`include` unit
+/// lowered this way resolves and **inherits** from classes already loaded
+/// (`eval("class Bar extends Foo {}")` sees `Foo`). `seed_classes` must already
+/// embed the prelude classes (the VM's accumulating image does), so the prelude
+/// is not re-seeded; the unit's own classes hoist contiguously after the seeded
+/// ones, keeping their ids aligned with the VM's global table. The prelude
+/// *functions* are always (re-)seeded.
+pub fn lower_source_seeded(
+    name: &[u8],
+    source: &[u8],
+    seed_classes: &[crate::hir::ClassDecl],
+    seed_static: usize,
+) -> Result<Program, LowerError> {
+    lower_source_impl(name, source, Some((seed_classes, seed_static)))
 }
 
-fn lower_source_impl(name: &[u8], source: &[u8], seed: Option<&Program>) -> Result<Program, LowerError> {
+fn lower_source_impl(
+    name: &[u8],
+    source: &[u8],
+    seed: Option<(&[crate::hir::ClassDecl], usize)>,
+) -> Result<Program, LowerError> {
     let arena = Bump::new();
     let file = File::ephemeral(Cow::Owned(name.to_vec()), Cow::Owned(source.to_vec()));
     let program = parse_file(&arena, &file);
@@ -128,17 +145,17 @@ fn lower_source_impl(name: &[u8], source: &[u8], seed: Option<&Program>) -> Resu
         // `__FILE__`/backtrace to "eval()'d code". Calling a caller user function
         // from eval therefore remains unsupported here (a later phase resolves it
         // against the caller module instead of re-emitting).
-        Some(s) => {
-            low.classes = s.classes.clone();
+        Some((sclasses, sstatic)) => {
+            low.classes = sclasses.to_vec();
             let mut ci: HashMap<Vec<u8>, usize> = HashMap::new();
-            for (i, cd) in s.classes.iter().enumerate() {
+            for (i, cd) in sclasses.iter().enumerate() {
                 ci.entry(cd.name.to_ascii_lowercase()).or_insert(i);
             }
             low.class_index = ci;
             let (_pclasses, _pindex, pfunctions, pfn_index) = lower_prelude();
             low.functions = pfunctions;
             low.fn_index = pfn_index;
-            low.static_count = s.static_count;
+            low.static_count = sstatic;
         }
     }
     // Hoist function declarations first, so a call may textually precede its
