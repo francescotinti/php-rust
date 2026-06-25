@@ -32,7 +32,7 @@ use crate::bytecode::{
     StaticInit,
 };
 use crate::coerce::coerce_to_hint;
-use crate::hir::{BinOp, CastKind, ClassId, HintKind, Line, Slot, TypeHint, UnOp, Visibility};
+use crate::hir::{BinOp, CastKind, ClassId, HintKind, Line, Program, Slot, TypeHint, UnOp, Visibility};
 
 mod arrays;
 mod calls;
@@ -183,7 +183,9 @@ pub fn run_source_with(
     };
     let module = crate::compile::compile_program(&program, registry)
         .map_err(|crate::compile::CompileError::Unsupported(what)| VmRunError::Unsupported(what))?;
-    Ok(run_module(&module, registry))
+    // Retain the lowered HIR so an `eval()` in the script can be compiled against
+    // the image (step 57, Phase 1c-2c): both borrows outlive the run.
+    Ok(run_module_with_hir(&module, registry, Some(&program)))
 }
 
 /// Lower `source`, compile it, and run it on the VM with no builtins registered.
@@ -207,13 +209,25 @@ fn compile_fatal_outcome(file: &[u8], message: &str, line: Line) -> VmOutcome {
 }
 
 /// Compile-and-run is the caller's job ([`crate::compile`]); this takes the
-/// already-compiled module and executes its `main`.
+/// already-compiled module and executes its `main`. Started without a retained
+/// HIR, so an `eval()` here lowers standalone (no compile-against-image).
 pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
+    run_module_with_hir(module, registry, None)
+}
+
+/// [`run_module`] with the caller's lowered HIR retained (`main_hir`), so an
+/// `eval()` in the script compiles against the image (step 57, Phase 1c-2c).
+pub(crate) fn run_module_with_hir<'m>(
+    module: &'m Module,
+    registry: &'m Registry,
+    main_hir: Option<&'m Program>,
+) -> VmOutcome {
     let mut vm = Vm {
         module,
         classes: module.classes.iter().collect(),
         class_index: module.class_index.clone(),
         class_module: vec![module; module.classes.len()],
+        main_hir,
         linked_functions: HashMap::new(),
         registry,
         stdout: Vec::new(),
@@ -512,6 +526,13 @@ struct Vm<'m> {
     /// module that compiled it, not the currently-executing one. For `main`'s own
     /// classes it is `main` (≡ `self.module` while main runs).
     class_module: Vec<&'m Module>,
+    /// The caller's lowered HIR (`main`), retained so an `eval()` unit can be
+    /// compiled *against the image* (step 57, Phase 1c-2c): its class/function
+    /// tables seed the eval's lowering, letting an eval class `extend`/`implement`
+    /// a caller's user class and flatten its inherited layout correctly. `None`
+    /// when the VM was started from an already-compiled module (e.g. unit tests
+    /// via [`run_module`]), in which case eval falls back to standalone lowering.
+    main_hir: Option<&'m Program>,
     /// User functions declared by a linked `eval`/`include` unit (step 57, Phase
     /// 1c-2): lowercased name → (defining module, index into its `functions`), so
     /// they are callable by name after the unit returns. The defining module is
@@ -3064,14 +3085,23 @@ impl<'m> Vm<'m> {
     /// outlives this call, and run its `main` to completion. Classes the eval
     /// declares are appended to the global table, so `new`/`instanceof`/method
     /// dispatch on them (inside and after the eval) and `class_exists()` all work;
-    /// user functions it declares are linked too (Phase 1c-2a). Returns the unit's
-    /// `return` value (or `null`); a parse/compile error yields `false` (MVP — PHP
-    /// throws `ParseError`). Limitations (MVP): the eval'd unit does not share the
-    /// caller's variable scope, and a class it declares cannot `extend` a
-    /// *user-defined* class of the caller (it compiles standalone, so it only sees
-    /// the prelude).
+    /// user functions it declares are linked too (Phase 1c-2a). When the caller's
+    /// HIR is retained (`main_hir`, the normal `run_source` path), the eval is
+    /// lowered *against the image* (Phase 1c-2c): it sees the caller's user
+    /// classes, so `eval("class Bar extends Foo {}")` flattens `Bar`'s inherited
+    /// layout from `Foo`. Returns the unit's `return` value (or `null`); a
+    /// parse/compile error yields `false` (MVP — PHP throws `ParseError`).
+    /// Limitations (MVP): the eval'd unit does not share the caller's variable
+    /// scope, and (with no retained HIR, e.g. unit tests via `run_module`) it
+    /// compiles standalone and cannot extend a caller's user class.
     fn run_eval(&mut self, src: &[u8]) -> Result<Zval, PhpError> {
-        let program = match crate::lower_source(b"eval()'d code", src) {
+        // Compile against the caller's image when its HIR is retained, so an eval
+        // class can extend/implement a caller user class; otherwise stand alone.
+        let lowered = match self.main_hir {
+            Some(seed) => crate::lower_source_seeded(b"eval()'d code", src, seed),
+            None => crate::lower_source(b"eval()'d code", src),
+        };
+        let program = match lowered {
             Ok(p) => p,
             Err(_) => return Ok(Zval::Bool(false)),
         };
@@ -3080,14 +3110,22 @@ impl<'m> Vm<'m> {
             Err(_) => return Ok(Zval::Bool(false)),
         };
         // --- Phase 1c-2b: class-id relocation -------------------------------
-        // The eval unit was compiled standalone, so its class ids live in its own
-        // 0.. space (prelude first, then user classes). Build a remap from each
-        // eval-local id to a GLOBAL id: a class whose name already exists in the
-        // global table (the shared prelude, or a class linked by an earlier unit)
-        // dedups to the existing id; a genuinely new user class is appended.
-        // `new_locals` lists the eval-local ids of the new classes in the order
-        // their global ids were assigned, so they append in matching order.
-        let base_static = self.statics.len();
+        // Build a remap from each eval-local class id to a GLOBAL id: a class whose
+        // name already exists in the global table (the shared prelude, a class
+        // linked by an earlier unit, or — when compiling against the image — the
+        // caller's seeded classes) dedups to the existing id; a genuinely new user
+        // class is appended. `new_locals` lists the eval-local ids of the new
+        // classes in the order their global ids were assigned, so they append in
+        // matching order. (Against the image, the dedup is an identity for every
+        // shared class, leaving only the eval's own declarations to relocate.)
+        //
+        // Static-cell ids: push every static id in the eval unit past the live
+        // `self.statics` range so nothing collides with the caller's (or an earlier
+        // eval's) cells. Seeding carries the caller's `static_count`, so the eval's
+        // *new* statics already start past the recompiled (discarded) caller-class
+        // statics inside this unit; this offset then lifts the whole unit clear of
+        // the live range.
+        let static_off = self.statics.len();
         let mut class_remap: Vec<ClassId> = Vec::with_capacity(module.classes.len());
         let mut new_locals: Vec<usize> = Vec::new();
         for (i, cc) in module.classes.iter().enumerate() {
@@ -3102,13 +3140,14 @@ impl<'m> Vm<'m> {
         }
         // Rewrite every op / class-metadata id in place (the module is still owned),
         // and offset the eval's static-cell ids past the live `self.statics` range.
-        relocate_module_class_ids(&mut module, &class_remap, base_static);
+        relocate_module_class_ids(&mut module, &class_remap, static_off);
         // Grow the persistent static storage to hold the eval unit's cells.
-        self.statics.resize(base_static + module.static_count, None);
+        self.statics.resize(static_off + module.static_count, None);
 
         let leaked: &'m Module = Box::leak(Box::new(module));
-        // Append the new user classes to the global table (dedup'd prelude classes
-        // were already mapped to existing ids above and are NOT re-added).
+        // Append the new user classes to the global table (dedup'd prelude /
+        // caller-image classes were already mapped to existing ids and are NOT
+        // re-added).
         for &i in &new_locals {
             self.classes.push(&leaked.classes[i]);
             self.class_module.push(leaked);
@@ -3123,9 +3162,10 @@ impl<'m> Vm<'m> {
         let outcome = self.drive_to_return(baseline);
         self.module = saved;
         // Register the eval unit's user functions (those not already provided by
-        // the caller's module — i.e. not prelude/builtin duplicates) so they are
-        // callable by name after the eval returns (step 57, Phase 1c-2). Functions
-        // are hoisted at unit load, so do this even if the body later threw.
+        // the caller's module — i.e. not prelude/builtin duplicates, and not the
+        // caller's own functions re-seeded by the image) so they are callable by
+        // name after the eval returns (step 57, Phase 1c-2). Functions are hoisted
+        // at unit load, so do this even if the body later threw.
         for (idx, f) in leaked.functions.iter().enumerate() {
             let already = saved.functions.iter().any(|cf| name_eq_ignore_case(&cf.name, &f.name));
             if !already {

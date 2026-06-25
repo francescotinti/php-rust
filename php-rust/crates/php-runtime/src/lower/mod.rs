@@ -65,8 +65,25 @@ impl std::fmt::Display for LowerError {
 
 impl std::error::Error for LowerError {}
 
-/// Parse `source` (named `name` for diagnostics) and lower it to HIR.
+/// Parse `source` (named `name` for diagnostics) and lower it to HIR, seeding the
+/// class/function tables with the built-in prelude only.
 pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
+    lower_source_impl(name, source, None)
+}
+
+/// Like [`lower_source`] but seeds the class/function tables (and the static-id
+/// counter) from `seed` instead of just the built-in prelude — "compile against
+/// image" (step 57, Phase 1c-2c). An `eval()` unit lowered this way resolves and
+/// **inherits** from its caller's user classes/functions: `eval("class Bar
+/// extends Foo {}")` sees `Foo`, so its layout flattens correctly. `seed` must
+/// itself already embed the prelude (a `Program` lowered normally does), so the
+/// prelude is not re-seeded; the eval's own classes hoist contiguously after the
+/// seeded ones, keeping their ids aligned with the caller's global table.
+pub fn lower_source_seeded(name: &[u8], source: &[u8], seed: &Program) -> Result<Program, LowerError> {
+    lower_source_impl(name, source, Some(seed))
+}
+
+fn lower_source_impl(name: &[u8], source: &[u8], seed: Option<&Program>) -> Result<Program, LowerError> {
     let arena = Bump::new();
     let file = File::ephemeral(Cow::Owned(name.to_vec()), Cow::Owned(source.to_vec()));
     let program = parse_file(&arena, &file);
@@ -82,19 +99,48 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
     }
 
     let mut low = Lowerer::new(&file, name);
-    // Seed the built-in exception hierarchy (Throwable/Exception/Error + the SPL
-    // subclasses) at the front of the class table (ids 0..N), before any user
-    // class is hoisted (step 20). This makes `extends Exception`, `instanceof`,
-    // `new RuntimeException(...)`, property init and `parent::__construct` reuse
-    // the whole step-19 class machinery with no special-casing.
-    let (pclasses, pindex, pfunctions, pfn_index) = lower_prelude();
-    low.classes = pclasses;
-    low.class_index = pindex;
-    // Seed the prelude's global functions (step 35: the procedural date API)
-    // ahead of the user's, so user functions get ids contiguous after them. Like
-    // the classes, call sites resolve by name, so no index fix-up is needed.
-    low.functions = pfunctions;
-    low.fn_index = pfn_index;
+    match seed {
+        // Seed the built-in exception hierarchy (Throwable/Exception/Error + the
+        // SPL subclasses) at the front of the class table (ids 0..N), before any
+        // user class is hoisted (step 20). This makes `extends Exception`,
+        // `instanceof`, `new RuntimeException(...)`, property init and
+        // `parent::__construct` reuse the whole step-19 class machinery with no
+        // special-casing. The prelude's global functions (step 35: the procedural
+        // date API) are seeded ahead of the user's too, so user functions get ids
+        // contiguous after them. Call sites resolve by name, so no fix-up needed.
+        None => {
+            let (pclasses, pindex, pfunctions, pfn_index) = lower_prelude();
+            low.classes = pclasses;
+            low.class_index = pindex;
+            low.functions = pfunctions;
+            low.fn_index = pfn_index;
+        }
+        // Compile-against-image: seed the caller's *class* image (which already
+        // embeds the prelude's classes), so an eval class can `extend`/`implement`
+        // a caller user class and flatten its inherited layout. Ids equal the
+        // caller's, so the eval's own classes hoist after and the VM's class-id
+        // relocation stays an identity for the shared ones. `static_count` is
+        // carried so the eval's new `static $x` cells get ids past the caller's
+        // range. The prelude's *functions* are still seeded (the eval needs the
+        // date API etc.), but the caller's user functions are deliberately NOT
+        // seeded: re-emitting them into the eval unit would make a call like
+        // `eval("foo();")` run the recompiled copy and mis-attribute its
+        // `__FILE__`/backtrace to "eval()'d code". Calling a caller user function
+        // from eval therefore remains unsupported here (a later phase resolves it
+        // against the caller module instead of re-emitting).
+        Some(s) => {
+            low.classes = s.classes.clone();
+            let mut ci: HashMap<Vec<u8>, usize> = HashMap::new();
+            for (i, cd) in s.classes.iter().enumerate() {
+                ci.entry(cd.name.to_ascii_lowercase()).or_insert(i);
+            }
+            low.class_index = ci;
+            let (_pclasses, _pindex, pfunctions, pfn_index) = lower_prelude();
+            low.functions = pfunctions;
+            low.fn_index = pfn_index;
+            low.static_count = s.static_count;
+        }
+    }
     // Hoist function declarations first, so a call may textually precede its
     // definition (PHP's function hoisting). Bodies are lowered here; the main
     // pass below skips the declaration statements (they are no-ops). Each hoist
