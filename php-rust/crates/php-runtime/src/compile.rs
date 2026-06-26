@@ -1319,6 +1319,11 @@ impl<'a> FnCompiler<'a> {
                 // reachable from inside a function.
                 self.emit(Op::LoadGlobal(*slot));
             }
+            ExprKind::Superglobal(idx) => {
+                // `$_SERVER` (&c.) read — resolved by name in the VM superglobal
+                // store, so it reads correctly from any unit/frame.
+                self.emit(Op::LoadSuperglobal(*idx));
+            }
             ExprKind::Assign(slot, rhs) => {
                 self.expr(rhs)?;
                 self.emit(Op::Dup); // assignment is an expression valued by the RHS
@@ -2895,6 +2900,7 @@ impl<'a> FnCompiler<'a> {
             // class-constant test base is materialised into a temp before any
             // property step, so it never reaches here either.
             PlaceBase::Global(_)
+            | PlaceBase::Superglobal(_)
             | PlaceBase::StaticProp { .. }
             | PlaceBase::ClassConst { .. } => return Ok(None),
         }
@@ -3033,6 +3039,11 @@ impl<'a> FnCompiler<'a> {
             // isset/empty before any field walk, so it never reaches here.
             PlaceBase::ClassConst { .. } => {
                 return Err(CompileError::Unsupported("class constant field path".into()))
+            }
+            // A superglobal is an array; a `->prop` field path rooted at one is not
+            // valid PHP and never arises from a real program.
+            PlaceBase::Superglobal(_) => {
+                return Err(CompileError::Unsupported("superglobal field path".into()))
             }
         };
         let mut steps = Vec::with_capacity(place.steps.len());
@@ -3249,6 +3260,15 @@ impl<'a> FnCompiler<'a> {
                 return Ok(());
             }
         }
+        if let PlaceBase::Superglobal(i) = place.base {
+            if place.steps.is_empty() {
+                // `$_SERVER = rhs`: a direct superglobal write (no array steps).
+                self.expr(rhs)?;
+                self.emit(Op::Dup);
+                self.emit(Op::StoreSuperglobal(i));
+                return Ok(());
+            }
+        }
         let base = dim_base(place)?;
         let (nkeys, append) = self.push_index_steps(&place.steps)?;
         if nkeys == 0 && !append {
@@ -3427,6 +3447,7 @@ impl<'a> FnCompiler<'a> {
                 match base {
                     DimBase::Local(s) => self.emit(Op::LoadSlot(s)),
                     DimBase::Global(s) => self.emit(Op::LoadGlobal(s)),
+                    DimBase::Superglobal(i) => self.emit(Op::LoadSuperglobal(i)),
                 };
                 self.emit(Op::LoadSlot(t_key)); // [baseval, key]
                 self.emit(Op::FetchDim); // [value]
@@ -3481,6 +3502,17 @@ impl<'a> FnCompiler<'a> {
                 return Ok(());
             }
         }
+        if let PlaceBase::Superglobal(i) = place.base {
+            if place.steps.is_empty() {
+                // `$_SERVER op= rhs`.
+                self.emit(Op::LoadSuperglobal(i));
+                self.expr(rhs)?;
+                self.emit(Op::Binary(op));
+                self.emit(Op::Dup);
+                self.emit(Op::StoreSuperglobal(i));
+                return Ok(());
+            }
+        }
         let base = dim_base(place)?;
         let (nkeys, append) = self.push_index_steps(&place.steps)?;
         if append || nkeys == 0 {
@@ -3512,6 +3544,13 @@ impl<'a> FnCompiler<'a> {
             if place.steps.is_empty() {
                 // `$GLOBALS['x']++` / `--$GLOBALS['x']`.
                 self.emit(Op::IncDecGlobal { slot: s, inc, pre });
+                return Ok(());
+            }
+        }
+        if let PlaceBase::Superglobal(i) = place.base {
+            if place.steps.is_empty() {
+                // `$_SERVER++` / `--$_SERVER` (degenerate, but mirror the global form).
+                self.emit(Op::IncDecSuperglobal { idx: i, inc, pre });
                 return Ok(());
             }
         }
@@ -3693,6 +3732,7 @@ fn expr_field_place(e: &Expr) -> Option<Place> {
     match &e.kind {
         ExprKind::Var(s) => Some(Place { base: PlaceBase::Local(*s), steps: Vec::new() }),
         ExprKind::GlobalVar(s) => Some(Place { base: PlaceBase::Global(*s), steps: Vec::new() }),
+        ExprKind::Superglobal(i) => Some(Place { base: PlaceBase::Superglobal(*i), steps: Vec::new() }),
         ExprKind::This => Some(Place { base: PlaceBase::This, steps: Vec::new() }),
         ExprKind::Index { base, index } => {
             let mut place = expr_field_place(base)?;
@@ -3717,6 +3757,7 @@ fn dim_base(place: &Place) -> R<DimBase> {
     match place.base {
         PlaceBase::Local(s) => Ok(DimBase::Local(s)),
         PlaceBase::Global(s) => Ok(DimBase::Global(s)),
+        PlaceBase::Superglobal(i) => Ok(DimBase::Superglobal(i)),
         PlaceBase::This => Err(CompileError::Unsupported("$this property write".into())),
         PlaceBase::StaticProp { .. } => {
             Err(CompileError::Unsupported("static property dim base".into()))
@@ -3749,6 +3790,7 @@ fn expr_name(k: &ExprKind) -> String {
         ExprKind::Const { .. } => "Const",
         ExprKind::Var(_) => "Var",
         ExprKind::GlobalVar(_) => "GlobalVar",
+        ExprKind::Superglobal(_) => "Superglobal",
         ExprKind::Binary(..) => "Binary",
         ExprKind::And(..) => "And",
         ExprKind::Or(..) => "Or",

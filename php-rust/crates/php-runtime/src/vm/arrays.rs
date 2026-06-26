@@ -426,6 +426,7 @@ impl<'m> Vm<'m> {
         let cell = match base {
             DimBase::Local(s) => &mut self.frames[top].slots[s as usize],
             DimBase::Global(s) => &mut self.frames[0].slots[s as usize],
+            DimBase::Superglobal(i) => &mut self.superglobals[i as usize],
         };
         path_apply(cell, &keys, last, &mut self.diags)
     }

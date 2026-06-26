@@ -239,12 +239,20 @@ pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
     run_module_with_hir(module, registry, None, None)
 }
 
-/// Seed the CLI superglobals into the script frame's global slots: `$_SERVER`
-/// (the environment plus `argv`/`argc`/`SCRIPT_NAME`/`SCRIPT_FILENAME`/`PHP_SELF`),
-/// `$argv`, `$argc`, and `$_ENV`. Only slots the script actually references exist
-/// (allocated by name during lowering), so the rest are skipped — a script that
-/// never mentions `$_SERVER` is unaffected. `argv[0]` is the script path.
-fn seed_cli_superglobals(slots: &mut [Zval], names: &[Box<[u8]>], argv: &[&[u8]]) {
+/// Seed the CLI superglobals into the VM superglobal store (`$_SERVER` with the
+/// environment plus `argv`/`argc`/`SCRIPT_NAME`/`SCRIPT_FILENAME`/`PHP_SELF`,
+/// `$_ENV` with the environment, and `$_GET`/`$_POST`/`$_FILES`/`$_COOKIE`/
+/// `$_REQUEST` as empty arrays — matching PHP CLI's default `variables_order`;
+/// `$_SESSION` stays unset until `session_start`). The plain `$argv`/`$argc`
+/// globals still live in the script frame's slots (they are ordinary variables,
+/// not data superglobals), seeded by name only where the script references them.
+/// `argv[0]` is the script path.
+fn seed_cli_superglobals(
+    superglobals: &mut [Zval; 8],
+    slots: &mut [Zval],
+    names: &[Box<[u8]>],
+    argv: &[&[u8]],
+) {
     use std::os::unix::ffi::OsStrExt;
     let env_array = || {
         let mut a = PhpArray::new();
@@ -265,20 +273,31 @@ fn seed_cli_superglobals(slots: &mut [Zval], names: &[Box<[u8]>], argv: &[&[u8]]
     };
     let script = argv.first().copied().unwrap_or(b"");
     let str_zval = |b: &[u8]| Zval::Str(PhpStr::new(b.to_vec()));
+    let server_array = || {
+        let mut s = env_array();
+        s.insert(Key::from_bytes(b"argv"), Zval::Array(Rc::new(argv_array())));
+        s.insert(Key::from_bytes(b"argc"), Zval::Long(argv.len() as i64));
+        s.insert(Key::from_bytes(b"SCRIPT_NAME"), str_zval(script));
+        s.insert(Key::from_bytes(b"SCRIPT_FILENAME"), str_zval(script));
+        s.insert(Key::from_bytes(b"PHP_SELF"), str_zval(script));
+        s
+    };
+    // Seed the data superglobals by their fixed store index (see SUPERGLOBAL_NAMES).
+    for (i, name) in crate::bytecode::SUPERGLOBAL_NAMES.iter().enumerate() {
+        superglobals[i] = match *name {
+            b"_SERVER" => Zval::Array(Rc::new(server_array())),
+            b"_ENV" => Zval::Array(Rc::new(env_array())),
+            // `$_SESSION` is not populated by the CLI SAPI (only after session_start).
+            b"_SESSION" => Zval::Undef,
+            // `$_GET`/`$_POST`/`$_FILES`/`$_COOKIE`/`$_REQUEST`: empty arrays in CLI.
+            _ => Zval::Array(Rc::new(PhpArray::new())),
+        };
+    }
+    // Plain `$argv` / `$argc` globals (ordinary variables) in the script frame.
     for (i, name) in names.iter().enumerate() {
         match &name[..] {
-            b"_SERVER" => {
-                let mut s = env_array();
-                s.insert(Key::from_bytes(b"argv"), Zval::Array(Rc::new(argv_array())));
-                s.insert(Key::from_bytes(b"argc"), Zval::Long(argv.len() as i64));
-                s.insert(Key::from_bytes(b"SCRIPT_NAME"), str_zval(script));
-                s.insert(Key::from_bytes(b"SCRIPT_FILENAME"), str_zval(script));
-                s.insert(Key::from_bytes(b"PHP_SELF"), str_zval(script));
-                slots[i] = Zval::Array(Rc::new(s));
-            }
             b"argv" => slots[i] = Zval::Array(Rc::new(argv_array())),
             b"argc" => slots[i] = Zval::Long(argv.len() as i64),
-            b"_ENV" => slots[i] = Zval::Array(Rc::new(env_array())),
             _ => {}
         }
     }
@@ -319,6 +338,7 @@ pub(crate) fn run_module_with_hir<'m>(
         final_flush: false,
         suppress_depth: 0,
         suppress_marks: Vec::new(),
+        superglobals: std::array::from_fn(|_| Zval::Undef),
         frames: Vec::new(),
         next_object_id: 1,
         next_resource_id: 5,
@@ -374,7 +394,7 @@ pub(crate) fn run_module_with_hir<'m>(
     // `None`, leaving them undefined as before. Only slots the script references
     // exist, so a script that never mentions `$_SERVER` is unaffected.
     if let (Some(argv), Some(prog)) = (argv, main_hir) {
-        seed_cli_superglobals(&mut vm.frames[0].slots, &prog.slots, argv);
+        seed_cli_superglobals(&mut vm.superglobals, &mut vm.frames[0].slots, &prog.slots, argv);
     }
     // `exit`/`die` is a clean termination (the exit code is surfaced, not a fatal);
     // any other `Err` is an uncaught fatal. A `Ok` carries the top-level return.
@@ -746,6 +766,11 @@ struct Vm<'m> {
     /// truncates back to its mark, dropping the diagnostics raised under it. An
     /// unwind past an active `@` truncates to the outermost mark and resets both.
     suppress_marks: Vec<usize>,
+    /// The data superglobals (`$_SERVER`, …), indexed by
+    /// [`crate::bytecode::SUPERGLOBAL_NAMES`]. Stored VM-wide (not per-frame) so a
+    /// superglobal resolves by name from any unit/frame — an included file reads
+    /// the same `$_SERVER` as the main script. Unseeded entries are `Undef`.
+    superglobals: [Zval; 8],
     frames: Vec<Frame<'m>>,
     /// Monotonic object-handle counter (`#N` in `var_dump`), starting at 1 like
     /// the tree-walker's `next_object_id`.
@@ -1170,6 +1195,29 @@ impl<'m> Vm<'m> {
                     let pushed = if pre { self.frames[0].slots[i].clone() } else { old };
                     self.frames[top].stack.push(pushed);
                 }
+                Op::LoadSuperglobal(idx) => {
+                    // `$_SERVER` (&c.) read: the value lives in the VM-level store,
+                    // resolved by name — correct from any unit/frame. Silent like
+                    // `LoadGlobal`.
+                    let v = read_slot(&self.superglobals[idx as usize]);
+                    self.frames[top].stack.push(v);
+                }
+                Op::StoreSuperglobal(idx) => {
+                    let v = self.frames[top].stack.pop().expect("StoreSuperglobal on empty stack");
+                    store_slot(&mut self.superglobals[idx as usize], v);
+                }
+                Op::IncDecSuperglobal { idx, inc, pre } => {
+                    let i = idx as usize;
+                    if matches!(self.superglobals[i], Zval::Undef) {
+                        self.superglobals[i] = Zval::Null;
+                    }
+                    let old = self.superglobals[i].clone();
+                    let (newv, diags) = self.compute_incdec(old.clone(), inc)?;
+                    self.raise_diags(diags, self.cur_line(top))?;
+                    self.superglobals[i] = newv;
+                    let pushed = if pre { self.superglobals[i].clone() } else { old };
+                    self.frames[top].stack.push(pushed);
+                }
                 Op::PushUndef => {
                     self.frames[top].stack.push(Zval::Undef);
                 }
@@ -1504,6 +1552,7 @@ impl<'m> Vm<'m> {
                     let cell = match base {
                         DimBase::Local(s) => &mut self.frames[top].slots[s as usize],
                         DimBase::Global(s) => &mut self.frames[0].slots[s as usize],
+                        DimBase::Superglobal(i) => &mut self.superglobals[i as usize],
                     };
                     unset_into(cell, &keys);
                 }
@@ -3338,6 +3387,7 @@ impl<'m> Vm<'m> {
         match base {
             DimBase::Local(s) => &self.frames[top].slots[s as usize],
             DimBase::Global(s) => &self.frames[0].slots[s as usize],
+            DimBase::Superglobal(i) => &self.superglobals[i as usize],
         }
     }
 
@@ -7772,6 +7822,9 @@ fn ref_base_mut<'f>(frames: &'f mut [Frame<'_>], top: usize, base: DimBase) -> &
     match base {
         DimBase::Local(s) => &mut frames[top].slots[s as usize],
         DimBase::Global(s) => &mut frames[0].slots[s as usize],
+        // `BindRef` is only emitted for `global $x` declarations (always a
+        // `DimBase::Global` source); a data superglobal is never a `BindRef` base.
+        DimBase::Superglobal(_) => unreachable!("superglobal is never a BindRef base"),
     }
 }
 

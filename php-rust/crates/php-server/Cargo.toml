@@ -1,0 +1,12 @@
+[package]
+name = "php-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+axum = "0.7"
+tokio = { version = "1.37", features = ["full"] }
+php-types.workspace = true
+php-runtime.workspace = true
+php-builtins.workspace = true

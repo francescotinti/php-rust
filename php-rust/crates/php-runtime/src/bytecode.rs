@@ -131,6 +131,23 @@ impl Const {
 pub enum DimBase {
     Local(Slot),
     Global(Slot),
+    /// A data superglobal (`$_SERVER[$k] = …`), addressed by name via the
+    /// VM-level superglobal store so it persists across units/frames. The `u8` is
+    /// an index into [`SUPERGLOBAL_NAMES`].
+    Superglobal(u8),
+}
+
+/// The fixed PHP data superglobals, indexed by the id carried in superglobal
+/// HIR/bytecode nodes and the VM's superglobal store. `$GLOBALS` is excluded —
+/// it has its own dedicated machinery (the script-frame slots).
+pub const SUPERGLOBAL_NAMES: [&[u8]; 8] = [
+    b"_SERVER", b"_GET", b"_POST", b"_ENV", b"_FILES", b"_COOKIE", b"_REQUEST", b"_SESSION",
+];
+
+/// The superglobal store index for `name` (`_SERVER` → 0, …), or `None` if the
+/// name is not a data superglobal.
+pub fn superglobal_index(name: &[u8]) -> Option<u8> {
+    SUPERGLOBAL_NAMES.iter().position(|n| *n == name).map(|i| i as u8)
 }
 
 /// One VM instruction. Operands are immediate (slots, constant-pool indices,
@@ -184,6 +201,17 @@ pub enum Op {
     /// `[] -> [v]` — `++`/`--` on global `slot` (`$GLOBALS['x']++`), pushing the
     /// pre- or post-value. The global analogue of [`Op::IncDecSlot`].
     IncDecGlobal { slot: Slot, inc: bool, pre: bool },
+    // ----- data superglobals (`$_SERVER`, …, addressed by name) -----
+    /// `[] -> [v]` — push the value of data superglobal `idx` (an index into
+    /// [`SUPERGLOBAL_NAMES`]). Unlike [`Op::LoadGlobal`] this resolves by name in
+    /// the VM-level superglobal store, so it reads correctly from any unit/frame
+    /// (e.g. an included file). Silent like `LoadGlobal`.
+    LoadSuperglobal(u8),
+    /// `[v] -> []` — pop and store into data superglobal `idx`. The write form of
+    /// `$_SERVER = …`; the compiler emits [`Op::Dup`] first to value the assignment.
+    StoreSuperglobal(u8),
+    /// `[] -> [v]` — `++`/`--` on data superglobal `idx`, pushing the pre/post-value.
+    IncDecSuperglobal { idx: u8, inc: bool, pre: bool },
     /// Default-parameter prologue (PAR): if `slot` already holds an argument
     /// (it is not `Undef`), jump to `skip` (past the default); otherwise fall
     /// through to evaluate the default expression and `StoreSlot` it. Emitted at

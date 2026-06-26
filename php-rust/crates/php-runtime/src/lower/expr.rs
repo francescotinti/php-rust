@@ -56,11 +56,12 @@ impl<'f> Lowerer<'f> {
                 // object context (step 19, D-19.5).
                 if name == b"this" {
                     ExprKind::This
-                } else if is_data_superglobal(name) {
-                    // Superglobals (`$_SERVER`, …) are auto-global: in any scope they
-                    // read the script-frame slot, not a fresh local (the CLI seeds
-                    // them there). `$GLOBALS` keeps its own dedicated handling.
-                    ExprKind::GlobalVar(self.globals.slot_for(name))
+                } else if let Some(idx) = crate::bytecode::superglobal_index(name) {
+                    // Superglobals (`$_SERVER`, …) are auto-global: in any scope
+                    // they read the VM-level superglobal store by name, so they
+                    // resolve identically across units/frames (incl. included
+                    // files). `$GLOBALS` keeps its own dedicated slot handling.
+                    ExprKind::Superglobal(idx)
                 } else {
                     ExprKind::Var(self.slot_for(name))
                 }
@@ -318,7 +319,13 @@ impl<'f> Lowerer<'f> {
                 // `$GLOBALS['x'][k]` becomes `Index { base: GlobalVar, .. }`
                 // since the inner access lowers to `GlobalVar` (D-12.3).
                 if let Some(key) = globals_key(aa.array, aa.index) {
-                    ExprKind::GlobalVar(self.globals.slot_for(&key))
+                    // `$GLOBALS['_SERVER']` aliases the data superglobal store so
+                    // it stays consistent with a bare `$_SERVER`.
+                    if let Some(idx) = crate::bytecode::superglobal_index(&key) {
+                        ExprKind::Superglobal(idx)
+                    } else {
+                        ExprKind::GlobalVar(self.globals.slot_for(&key))
+                    }
                 } else {
                     let index = match aa.index {
                         // A bare identifier as an array index only arises from
@@ -1071,10 +1078,10 @@ impl<'f> Lowerer<'f> {
                 let name = strip_dollar(d.name);
                 let base = if name == b"this" {
                     PlaceBase::This
-                } else if is_data_superglobal(name) {
+                } else if let Some(idx) = crate::bytecode::superglobal_index(name) {
                     // Auto-global: `$_SERVER[$k] = …` inside any scope writes the
-                    // script-frame array (mirrors the read path).
-                    PlaceBase::Global(self.globals.slot_for(name))
+                    // VM-level superglobal store by name (mirrors the read path).
+                    PlaceBase::Superglobal(idx)
                 } else {
                     PlaceBase::Local(self.slot_for(name))
                 };
@@ -1087,10 +1094,12 @@ impl<'f> Lowerer<'f> {
                 // `$GLOBALS['x']` is a global base with no steps; `$GLOBALS['x'][k]`
                 // recurses so the global base carries the `[k]` step (D-12.3).
                 if let Some(key) = globals_key(aa.array, aa.index) {
-                    return Ok(Place {
-                        base: PlaceBase::Global(self.globals.slot_for(&key)),
-                        steps: Vec::new(),
-                    });
+                    let base = if let Some(idx) = crate::bytecode::superglobal_index(&key) {
+                        PlaceBase::Superglobal(idx)
+                    } else {
+                        PlaceBase::Global(self.globals.slot_for(&key))
+                    };
+                    return Ok(Place { base, steps: Vec::new() });
                 }
                 // `Class::$arr[k]` — an *indexed* static-property target. Only the
                 // indexed form roots a `Place` at a static property (a bare

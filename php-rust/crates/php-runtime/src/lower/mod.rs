@@ -1994,23 +1994,6 @@ fn strip_dollar(name: &[u8]) -> &[u8] {
     }
 }
 
-/// The auto-global *data* superglobals (PHP's `$_SERVER`, `$_GET`, …): visible in
-/// every scope, reading/writing the script frame's slot rather than a local. The
-/// symbol-table `$GLOBALS` is excluded — it has its own dedicated lowering.
-pub(super) fn is_data_superglobal(name: &[u8]) -> bool {
-    matches!(
-        name,
-        b"_SERVER"
-            | b"_GET"
-            | b"_POST"
-            | b"_ENV"
-            | b"_FILES"
-            | b"_COOKIE"
-            | b"_REQUEST"
-            | b"_SESSION"
-    )
-}
-
 /// PHP integer literal → HIR. Values exceeding `i64::MAX` promote to float,
 /// matching PHP's lexer. A literal too large even for `u64` (mago clamps its
 /// `value` to `u64::MAX`) is re-parsed from its own decimal text, so a

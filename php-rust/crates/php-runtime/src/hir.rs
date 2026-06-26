@@ -547,6 +547,11 @@ pub enum ExprKind {
     /// even from inside a function (step 12-3, D-12.3). `$GLOBALS['x'][k]` reads
     /// as `Index { base: GlobalVar(x), index: k }`.
     GlobalVar(Slot),
+    /// `$_SERVER` (and the other data superglobals) read — addressed by name (an
+    /// index into [`crate::bytecode::SUPERGLOBAL_NAMES`]) via the VM-level
+    /// superglobal store, so it resolves identically in every unit/frame
+    /// (including included files), unlike a unit-local `GlobalVar` slot.
+    Superglobal(u8),
 
     /// Binary op with eager left-then-right operand evaluation, dispatched to
     /// `php_types::ops` by the evaluator. Excludes short-circuit and coalesce.
@@ -869,6 +874,11 @@ pub struct Place {
 pub enum PlaceBase {
     Local(Slot),
     Global(Slot),
+    /// A data superglobal (`$_SERVER[$k] = …`) as a write/test target, addressed
+    /// by name (index into [`crate::bytecode::SUPERGLOBAL_NAMES`]) via the
+    /// VM-level superglobal store. Mirrors [`ExprKind::Superglobal`] on the read
+    /// side; resolves identically across units/frames.
+    Superglobal(u8),
     /// `$this` as the root of a property write target (`$this->x = …`), step 19.
     /// Resolved against the evaluator's current-object context, not a slot.
     This,
