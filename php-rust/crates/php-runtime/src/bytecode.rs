@@ -924,6 +924,12 @@ pub struct Func {
     /// `function &f()` — returns by reference (carried through for the by-ref
     /// call/return path, ported later).
     pub by_ref: bool,
+    /// Per-parameter default-value thunk (parallel to `param_names`), or `None` for
+    /// a required / variadic / non-compilable default. Run in the function's class
+    /// context by `ReflectionParameter::getDefaultValue()` (so an array, constant or
+    /// `self::C` default evaluates as written). Not used by the call ABI, which has
+    /// its own inline default prologue.
+    pub param_defaults: Box<[Option<Func>]>,
     /// The body contains a `yield` — calling it produces a `Generator` rather
     /// than running the body. Drives generator setup once `Yield` is wired in.
     pub is_generator: bool,
@@ -1023,6 +1029,8 @@ pub struct CompiledMethod {
     pub name: Box<[u8]>,
     /// Declared visibility, enforced against the calling frame's class (OOP-2b).
     pub visibility: Visibility,
+    /// `static` method (for `ReflectionMethod::isStatic`).
+    pub is_static: bool,
     pub func: Func,
 }
 

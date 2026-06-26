@@ -232,6 +232,18 @@ fn compile_body(
             .collect(),
         param_by_ref: params.iter().map(|p| p.by_ref).collect(),
         param_hints: params.iter().map(|p| p.hint.clone()).collect(),
+        // Default-value thunks for `ReflectionParameter::getDefaultValue()` (run in
+        // this body's class context). A required/variadic param, or a default that
+        // does not compile, has `None`.
+        param_defaults: params
+            .iter()
+            .map(|p| {
+                p.default
+                    .as_ref()
+                    .filter(|_| !p.variadic)
+                    .and_then(|e| compile_default_thunk(e, ctx, cur_class))
+            })
+            .collect(),
         ret_hint,
         variadic_slot: params.iter().find(|p| p.variadic).map(|p| p.slot),
         by_ref,
@@ -269,6 +281,7 @@ fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
             .collect(),
         param_by_ref: fd.params.iter().map(|p| p.by_ref).collect(),
         param_hints: fd.params.iter().map(|p| p.hint.clone()).collect(),
+        param_defaults: fd.params.iter().map(|_| None).collect(),
         ret_hint: fd.ret_hint.clone(),
         variadic_slot: fd.params.iter().find(|p| p.variadic).map(|p| p.slot),
         by_ref: fd.by_ref,
@@ -413,7 +426,12 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
                 Ok(f) => f,
                 Err(e) => stub_func(&m.decl, &e),
             };
-            CompiledMethod { name: m.decl.name.clone(), visibility: m.visibility, func }
+            CompiledMethod {
+                name: m.decl.name.clone(),
+                visibility: m.visibility,
+                is_static: m.is_static,
+                func,
+            }
         })
         .collect();
 
@@ -561,12 +579,43 @@ fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassI
         param_required: Box::default(),
         param_by_ref: Box::default(),
         param_hints: Box::default(),
+        param_defaults: Box::default(),
         ret_hint: None,
         variadic_slot: None,
         by_ref: false,
         is_generator: false,
         line: 0,
         exc_table: c.exc_regions,
+    })
+}
+
+/// Compile a parameter default expression into a value thunk (`<expr>; Ret`) run
+/// in the function's class context (`cur_class`, `None` for a free function so
+/// `self::` is unavailable — as it is in PHP). Returns `None` if the expression
+/// does not compile, so the parameter simply reports no available default rather
+/// than failing the whole class. Used only by reflection, never the call ABI.
+fn compile_default_thunk(value: &Expr, ctx: &ProgramCtx, cur_class: Option<ClassId>) -> Option<Func> {
+    let mut c = FnCompiler::new(ctx, 0, cur_class, false, &[]);
+    c.expr(value).ok()?;
+    c.emit(Op::Ret);
+    Some(Func {
+        name: Box::default(),
+        ops: c.ops,
+        lines: c.lines,
+        consts: c.consts,
+        n_slots: c.n_temps_max,
+        n_params: 0,
+        param_names: Box::default(),
+        param_required: Box::default(),
+        param_by_ref: Box::default(),
+        param_hints: Box::default(),
+        param_defaults: Box::default(),
+        ret_hint: None,
+        variadic_slot: None,
+        by_ref: false,
+        is_generator: false,
+        line: 0,
+        exc_table: Vec::new(),
     })
 }
 
@@ -587,6 +636,7 @@ fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, decl_class: 
         param_required: Box::default(),
         param_by_ref: Box::default(),
         param_hints: Box::default(),
+        param_defaults: Box::default(),
         ret_hint: None,
         variadic_slot: None,
         by_ref: false,
@@ -611,6 +661,7 @@ fn const_stub(name: &[u8], err: &CompileError) -> Func {
         param_required: Box::default(),
         param_by_ref: Box::default(),
         param_hints: Box::default(),
+        param_defaults: Box::default(),
         ret_hint: None,
         variadic_slot: None,
         by_ref: false,

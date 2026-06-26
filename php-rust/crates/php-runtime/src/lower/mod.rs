@@ -984,6 +984,145 @@ class ReflectionClass {
         return $out;
     }
     public function getTraitAliases() { return []; }
+    public function getMethod($name) { return new ReflectionMethod($this->name, $name); }
+    public function getConstructor() {
+        return method_exists($this->name, '__construct')
+            ? new ReflectionMethod($this->name, '__construct') : null;
+    }
+    public function getMethods() {
+        $out = [];
+        foreach (get_class_methods($this->name) as $m) { $out[] = new ReflectionMethod($this->name, $m); }
+        return $out;
+    }
+    public function hasMethod($name) { return method_exists($this->name, $name); }
+}
+class ReflectionNamedType {
+    public $__name; public $__builtin; public $__nullable;
+    public function getName() { return $this->__name; }
+    public function allowsNull() { return $this->__nullable; }
+    public function isBuiltin() { return $this->__builtin; }
+    public function __toString() {
+        $q = ($this->__nullable && $this->__name !== 'mixed' && $this->__name !== 'null') ? '?' : '';
+        return $q . $this->__name;
+    }
+    public static function __fromInfo($t) {
+        if ($t === false) { return null; }
+        $r = new ReflectionNamedType();
+        $r->__name = $t['name']; $r->__builtin = $t['builtin']; $r->__nullable = $t['nullable'];
+        return $r;
+    }
+}
+class ReflectionParameter {
+    public $name;
+    public $__pos; public $__optional; public $__variadic; public $__byref;
+    public $__type; public $__hasDefault; public $__default;
+    public function __construct($function = null, $param = null) {
+        if ($function === null) { return; } // internal factory path (__fromInfo)
+        $info = is_array($function)
+            ? __reflect_method_info($function[0], $function[1])
+            : __reflect_func_info($function);
+        if ($info === false) { throw new ReflectionException('The function does not exist'); }
+        foreach ($info['params'] as $p) {
+            if ((is_int($param) && $p['position'] === $param) || $p['name'] === $param) {
+                $this->__init($p); return;
+            }
+        }
+        throw new ReflectionException('The parameter specified does not exist');
+    }
+    public function __init($p) {
+        $this->name = $p['name']; $this->__pos = $p['position'];
+        $this->__optional = $p['optional']; $this->__variadic = $p['variadic'];
+        $this->__byref = $p['byref']; $this->__type = $p['type'];
+        $this->__hasDefault = $p['hasDefault']; $this->__default = $p['default'];
+    }
+    public static function __fromInfo($p) { $r = new ReflectionParameter(); $r->__init($p); return $r; }
+    public function getName() { return $this->name; }
+    public function getPosition() { return $this->__pos; }
+    public function isOptional() { return $this->__optional; }
+    public function isVariadic() { return $this->__variadic; }
+    public function isPassedByReference() { return $this->__byref; }
+    public function canBePassedByValue() { return !$this->__byref; }
+    public function hasType() { return $this->__type !== false; }
+    public function getType() { return ReflectionNamedType::__fromInfo($this->__type); }
+    public function allowsNull() { return $this->__type === false ? true : $this->__type['nullable']; }
+    public function isDefaultValueAvailable() { return $this->__hasDefault; }
+    public function getDefaultValue() {
+        if (!$this->__hasDefault) {
+            throw new ReflectionException('Internal error: Failed to retrieve the default value');
+        }
+        return $this->__default;
+    }
+}
+class ReflectionFunction {
+    public $name;
+    public $__info;
+    public function __construct($name) {
+        $this->name = is_string($name) ? $name : '{closure}';
+        $this->__info = __reflect_func_info($this->name);
+        if ($this->__info === false) {
+            throw new ReflectionException(sprintf('Function %s() does not exist', $this->name));
+        }
+    }
+    public function getName() { return $this->name; }
+    public function getParameters() {
+        $out = [];
+        foreach ($this->__info['params'] as $p) { $out[] = ReflectionParameter::__fromInfo($p); }
+        return $out;
+    }
+    public function getNumberOfParameters() { return count($this->__info['params']); }
+    public function getNumberOfRequiredParameters() {
+        $n = 0;
+        foreach ($this->__info['params'] as $p) { if (!$p['optional']) { $n++; } }
+        return $n;
+    }
+    public function getReturnType() { return ReflectionNamedType::__fromInfo($this->__info['returnType']); }
+    public function hasReturnType() { return $this->__info['returnType'] !== false; }
+    public function invoke(...$args) { return call_user_func_array($this->name, $args); }
+    public function invokeArgs($args) { return call_user_func_array($this->name, $args); }
+}
+class ReflectionMethod {
+    public $name;
+    public $class;
+    public $__info;
+    public function getName() { return $this->name; }
+    public function getParameters() {
+        $out = [];
+        foreach ($this->__info['params'] as $p) { $out[] = ReflectionParameter::__fromInfo($p); }
+        return $out;
+    }
+    public function getNumberOfParameters() { return count($this->__info['params']); }
+    public function getNumberOfRequiredParameters() {
+        $n = 0;
+        foreach ($this->__info['params'] as $p) { if (!$p['optional']) { $n++; } }
+        return $n;
+    }
+    public function getReturnType() { return ReflectionNamedType::__fromInfo($this->__info['returnType']); }
+    public function hasReturnType() { return $this->__info['returnType'] !== false; }
+    public function __construct($objectOrClass, $method = null) {
+        if ($method === null && is_string($objectOrClass) && strpos($objectOrClass, '::') !== false) {
+            $parts = explode('::', $objectOrClass, 2);
+            $objectOrClass = $parts[0]; $method = $parts[1];
+        }
+        $this->class = is_object($objectOrClass) ? get_class($objectOrClass) : $objectOrClass;
+        $this->name = $method;
+        $this->__info = __reflect_method_info($this->class, $method);
+        if ($this->__info === false) {
+            throw new ReflectionException(sprintf('Method %s::%s() does not exist', $this->class, $method));
+        }
+    }
+    public function getDeclaringClass() { return new ReflectionClass($this->__info['declaringClass']); }
+    public function isStatic() { return $this->__info['static']; }
+    public function isAbstract() { return $this->__info['abstract']; }
+    public function isPublic() { return $this->__info['visibility'] === 'public'; }
+    public function isProtected() { return $this->__info['visibility'] === 'protected'; }
+    public function isPrivate() { return $this->__info['visibility'] === 'private'; }
+    public function setAccessible($accessible) {}
+    public function invoke($object, ...$args) {
+        return call_user_func_array([$object === null ? $this->class : $object, $this->name], $args);
+    }
+    public function invokeArgs($object, $args) {
+        return call_user_func_array([$object === null ? $this->class : $object, $this->name], $args);
+    }
 }
 class ReflectionProperty {
     public $name;

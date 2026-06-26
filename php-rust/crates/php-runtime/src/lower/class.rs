@@ -1299,12 +1299,21 @@ impl<'f> Lowerer<'f> {
                 Some(d) => Some(self.lower_expr(d.value)?),
                 None => None,
             };
+            // A typed parameter with a literal `null` default is implicitly
+            // nullable (`T $x = null` behaves as `?T $x = null`): it accepts null
+            // both at the binder and via Reflection's `allowsNull()` (PHP 8.0+).
+            let mut hint = p.hint.as_ref().and_then(|h| lower_hint(self, h));
+            if let Some(h) = &mut hint {
+                if matches!(default.as_ref().map(|e| &e.kind), Some(ExprKind::Null)) {
+                    h.nullable = true;
+                }
+            }
             params.push(Param {
                 slot,
                 default,
                 by_ref,
                 variadic,
-                hint: p.hint.as_ref().and_then(|h| lower_hint(self, h)),
+                hint,
             });
         }
         Ok(params)

@@ -28,12 +28,13 @@ use php_types::{
 
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
 use crate::bytecode::{
-    Addr, ClassTarget, CompiledClass, DimBase, FieldBase, FieldStep, Func, Instantiable, Module, Op,
-    StaticInit,
+    Addr, ClassTarget, CompiledClass, CompiledMethod, DimBase, FieldBase, FieldStep, Func,
+    Instantiable, Module, Op, StaticInit,
 };
 use crate::coerce::coerce_to_hint;
 use crate::hir::{
-    BinOp, CastKind, ClassId, HintKind, IncludeMode, Line, Program, Slot, TypeHint, UnOp, Visibility,
+    BinOp, CastKind, ClassId, HintKind, IncludeMode, Line, Program, ScalarType, Slot, TypeHint, UnOp,
+    Visibility,
 };
 
 mod arrays;
@@ -4047,6 +4048,8 @@ impl<'m> Vm<'m> {
             b"__reflect_attr_newinstance" => self.ho_reflect_attr_newinstance(args),
             b"__reflect_attr_arguments" => self.ho_reflect_attr_arguments(args),
             b"__reflect_prop_declaring_class" => self.ho_reflect_prop_declaring_class(args),
+            b"__reflect_func_info" => self.ho_reflect_func_info(args),
+            b"__reflect_method_info" => self.ho_reflect_method_info(args),
             b"get_object_vars" => self.ho_get_object_vars(args),
             b"get_class_vars" => self.ho_get_class_vars(args),
             b"register_shutdown_function" => self.ho_register_shutdown_function(args),
@@ -5025,6 +5028,120 @@ impl<'m> Vm<'m> {
             let _ = arr.append(Zval::Str(PhpStr::new(t.name.to_vec())));
         }
         Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// Resolve a user function by name (case-insensitive, leading `\` stripped) to
+    /// its [`Func`], searching the running module then any linked (eval/include)
+    /// unit. `None` for an unknown function or a builtin (no retained signature).
+    fn find_user_function(&self, name: &[u8]) -> Option<&'m Func> {
+        let lc = name.strip_prefix(b"\\").unwrap_or(name).to_ascii_lowercase();
+        if let Some(f) = self.module.functions.iter().find(|f| f.name.to_ascii_lowercase() == lc) {
+            return Some(f);
+        }
+        self.linked_functions.get(&lc).map(|&(m, idx)| &m.functions[idx])
+    }
+
+    /// Resolve a method by walking `cid`'s ancestry; returns the compiled method and
+    /// the class that declares it (for `ReflectionMethod::getDeclaringClass`).
+    fn find_method_reflect(&self, cid: ClassId, method: &[u8]) -> Option<(&'m CompiledMethod, ClassId)> {
+        let lc = method.to_ascii_lowercase();
+        let mut cur = Some(cid);
+        while let Some(c) = cur {
+            if let Some(m) = self.classes[c].methods.iter().find(|m| m.name.to_ascii_lowercase() == lc) {
+                return Some((m, c));
+            }
+            cur = self.classes[c].parent;
+        }
+        None
+    }
+
+    /// Run a value thunk (a constant/default `<expr>; Ret`) in an optional class
+    /// context and return its value. Mirrors the attribute-thunk path.
+    fn run_value_thunk(&mut self, thunk: &'m Func, cur_class: Option<ClassId>) -> Result<Zval, PhpError> {
+        let baseline = self.frames.len();
+        let module = cur_class.map(|c| self.class_mod(c)).unwrap_or(self.module);
+        let mut frame = Frame::new(thunk, module);
+        frame.class = cur_class;
+        frame.static_class = cur_class;
+        self.frames.push(frame);
+        self.drive_to_return(baseline)
+    }
+
+    /// Build the signature descriptor array a `ReflectionFunction`/`ReflectionMethod`
+    /// is constructed from: `name`, `returnType` and a `params` list (each a
+    /// descriptor of name/position/optional/variadic/byref/type and any evaluated
+    /// default). `cur_class` is the method's class (for `self::`-typed defaults).
+    fn build_func_descriptor(&mut self, func: &'m Func, cur_class: Option<ClassId>) -> Result<php_types::PhpArray, PhpError> {
+        let mut params = php_types::PhpArray::new();
+        for i in 0..func.n_params as usize {
+            let name = func.param_names.get(i).map(|b| b.to_vec()).unwrap_or_default();
+            let is_variadic = func.variadic_slot == Some(i as u32);
+            let required = func.param_required.get(i).copied().unwrap_or(true);
+            let by_ref = func.param_by_ref.get(i).copied().unwrap_or(false);
+            let ty = func.param_hints.get(i).map(typehint_descriptor).unwrap_or(Zval::Bool(false));
+            let (has_default, default_val) = match func.param_defaults.get(i).and_then(|o| o.as_ref()) {
+                Some(thunk) => (true, self.run_value_thunk(thunk, cur_class)?),
+                None => (false, Zval::Null),
+            };
+            let mut p = php_types::PhpArray::new();
+            let put = |a: &mut php_types::PhpArray, k: &[u8], v: Zval| {
+                a.insert(Key::Str(PhpStr::new(k.to_vec())), v);
+            };
+            put(&mut p, b"name", Zval::Str(PhpStr::new(name)));
+            put(&mut p, b"position", Zval::Long(i as i64));
+            put(&mut p, b"optional", Zval::Bool(!required || is_variadic));
+            put(&mut p, b"variadic", Zval::Bool(is_variadic));
+            put(&mut p, b"byref", Zval::Bool(by_ref));
+            put(&mut p, b"type", ty);
+            put(&mut p, b"hasDefault", Zval::Bool(has_default));
+            put(&mut p, b"default", default_val);
+            let _ = params.append(Zval::Array(Rc::new(p)));
+        }
+        let mut d = php_types::PhpArray::new();
+        d.insert(Key::Str(PhpStr::new(b"name".to_vec())), Zval::Str(PhpStr::new(func.name.to_vec())));
+        d.insert(Key::Str(PhpStr::new(b"returnType".to_vec())), typehint_descriptor(&func.ret_hint));
+        d.insert(Key::Str(PhpStr::new(b"params".to_vec())), Zval::Array(Rc::new(params)));
+        Ok(d)
+    }
+
+    /// `__reflect_func_info($name)`: the signature descriptor of a user function, or
+    /// `false` if it is unknown (or a builtin, whose signature is not retained).
+    fn ho_reflect_func_info(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(first) = args.first() else { return Ok(Zval::Bool(false)) };
+        let name = convert::to_zstr_cast(first, &mut self.diags).as_bytes().to_vec();
+        let Some(func) = self.find_user_function(&name) else { return Ok(Zval::Bool(false)) };
+        Ok(Zval::Array(Rc::new(self.build_func_descriptor(func, None)?)))
+    }
+
+    /// `__reflect_method_info($class, $method)`: the signature descriptor of a method
+    /// plus `static`/`visibility`/`abstract`/`declaringClass`, or `false` if unknown.
+    fn ho_reflect_method_info(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let cname = match args.first().map(|v| v.deref_clone()) {
+            Some(Zval::Str(s)) => s.as_bytes().to_vec(),
+            _ => return Ok(Zval::Bool(false)),
+        };
+        let mname = match args.get(1).map(|v| v.deref_clone()) {
+            Some(Zval::Str(s)) => s.as_bytes().to_vec(),
+            _ => return Ok(Zval::Bool(false)),
+        };
+        let key = cname.strip_prefix(b"\\").unwrap_or(&cname).to_ascii_lowercase();
+        let Some(&cid) = self.class_index.get(&key) else { return Ok(Zval::Bool(false)) };
+        let Some((m, decl)) = self.find_method_reflect(cid, &mname) else {
+            return Ok(Zval::Bool(false));
+        };
+        let is_static = m.is_static;
+        let vis: &[u8] = match m.visibility {
+            Visibility::Public => b"public",
+            Visibility::Protected => b"protected",
+            Visibility::Private => b"private",
+        };
+        let decl_name = self.classes[decl].name.to_vec();
+        let mut d = self.build_func_descriptor(&m.func, Some(decl))?;
+        d.insert(Key::Str(PhpStr::new(b"static".to_vec())), Zval::Bool(is_static));
+        d.insert(Key::Str(PhpStr::new(b"visibility".to_vec())), Zval::Str(PhpStr::new(vis.to_vec())));
+        d.insert(Key::Str(PhpStr::new(b"abstract".to_vec())), Zval::Bool(false));
+        d.insert(Key::Str(PhpStr::new(b"declaringClass".to_vec())), Zval::Str(PhpStr::new(decl_name)));
+        Ok(Zval::Array(Rc::new(d)))
     }
 
     /// `__reflect_class_attributes($class, $filter = null)`: the host backing of
@@ -7788,6 +7905,30 @@ fn errno_label(errno: i64) -> &'static str {
     }
 }
 
+/// Encode a [`TypeHint`] as the descriptor `ReflectionNamedType` is built from:
+/// `false` for no type, else `['name' => str, 'builtin' => bool, 'nullable' =>
+/// bool]`. Union/intersection/`self`/`void`/… hints lower to `None` upstream, so
+/// they reflect as no type (a documented limitation).
+fn typehint_descriptor(hint: &Option<TypeHint>) -> Zval {
+    let Some(h) = hint else { return Zval::Bool(false) };
+    let (name, builtin): (&[u8], bool) = match &h.kind {
+        HintKind::Scalar(ScalarType::Int) => (b"int", true),
+        HintKind::Scalar(ScalarType::Float) => (b"float", true),
+        HintKind::Scalar(ScalarType::String) => (b"string", true),
+        HintKind::Scalar(ScalarType::Bool) => (b"bool", true),
+        HintKind::Array => (b"array", true),
+        HintKind::Callable => (b"callable", true),
+        HintKind::Iterable => (b"iterable", true),
+        HintKind::Object => (b"object", true),
+        HintKind::Class(c) => (c, false),
+    };
+    let mut a = php_types::PhpArray::new();
+    a.insert(Key::Str(PhpStr::new(b"name".to_vec())), Zval::Str(PhpStr::new(name.to_vec())));
+    a.insert(Key::Str(PhpStr::new(b"builtin".to_vec())), Zval::Bool(builtin));
+    a.insert(Key::Str(PhpStr::new(b"nullable".to_vec())), Zval::Bool(h.nullable));
+    Zval::Array(Rc::new(a))
+}
+
 pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
     // B1: the call-a-callable family. B3: the define family. Sessions C/D grow
     // this list (array_map, usort, sprintf, get_class, …).
@@ -7819,6 +7960,8 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"__reflect_attr_newinstance",
         b"__reflect_attr_arguments",
         b"__reflect_prop_declaring_class",
+        b"__reflect_func_info",
+        b"__reflect_method_info",
         b"__weak_create",
         b"__weak_get",
         b"get_parent_class",
