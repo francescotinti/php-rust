@@ -1730,6 +1730,19 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"LC_NUMERIC" => ExprKind::Int(4),
         b"LC_TIME" => ExprKind::Int(5),
         b"LC_MESSAGES" => ExprKind::Int(6),
+        // ext/filter validate/sanitize selectors + flags (`filter_var`). The
+        // oracle build lacks ext/filter, but Composer's symfony polyfill and
+        // ErrorHandler reference these, so we define them with the canonical values.
+        b"FILTER_DEFAULT" => ExprKind::Int(516),
+        b"FILTER_VALIDATE_INT" => ExprKind::Int(257),
+        b"FILTER_VALIDATE_BOOLEAN" | b"FILTER_VALIDATE_BOOL" => ExprKind::Int(258),
+        b"FILTER_VALIDATE_FLOAT" => ExprKind::Int(259),
+        b"FILTER_VALIDATE_REGEXP" => ExprKind::Int(272),
+        b"FILTER_VALIDATE_DOMAIN" => ExprKind::Int(277),
+        b"FILTER_VALIDATE_URL" => ExprKind::Int(273),
+        b"FILTER_VALIDATE_EMAIL" => ExprKind::Int(274),
+        b"FILTER_VALIDATE_IP" => ExprKind::Int(275),
+        b"FILTER_NULL_ON_FAILURE" => ExprKind::Int(134217728),
         // Stream seek whence (step 51b): `fseek($f, $offset, $whence)`.
         b"SEEK_SET" => ExprKind::Int(0),
         b"SEEK_CUR" => ExprKind::Int(1),

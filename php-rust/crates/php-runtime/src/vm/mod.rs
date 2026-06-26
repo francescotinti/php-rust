@@ -3908,6 +3908,7 @@ impl<'m> Vm<'m> {
             b"iterator_count" => self.ho_iterator_count(args),
             b"json_encode" => self.ho_json_encode(args),
             b"is_callable" => self.ho_is_callable(args),
+            b"is_iterable" => self.ho_is_iterable(args),
             b"define" => self.ho_define(args),
             b"defined" => self.ho_defined(args),
             b"constant" => self.ho_constant(args),
@@ -6312,6 +6313,24 @@ impl<'m> Vm<'m> {
         Ok(Zval::Bool(self.is_value_callable(&v.deref_clone())))
     }
 
+    /// `is_iterable($v)`: an array, a generator, or an object implementing
+    /// `Traversable` (i.e. `Iterator` or `IteratorAggregate`).
+    fn ho_is_iterable(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let v = args.first().map_or(Zval::Null, |v| v.deref_clone());
+        let result = match v {
+            Zval::Array(_) | Zval::Generator(_) => true,
+            Zval::Object(o) => {
+                let cid = o.borrow().class_id as usize;
+                self.is_traversable(cid)
+                    || self.iteratoraggregate_id.is_some_and(|i| {
+                        is_instance_of(&self.classes, self.stringable_id, cid, i)
+                    })
+            }
+            _ => false,
+        };
+        Ok(Zval::Bool(result))
+    }
+
     /// Whether `v` is callable (the predicate behind `is_callable`), without
     /// invoking it.
     fn is_value_callable(&self, v: &Zval) -> bool {
@@ -7329,6 +7348,7 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"call_user_func",
         b"call_user_func_array",
         b"is_callable",
+        b"is_iterable",
         b"define",
         b"defined",
         b"constant",

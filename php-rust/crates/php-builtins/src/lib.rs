@@ -289,6 +289,7 @@ pub fn registry() -> Registry {
     add(b"setlocale", setlocale);
     add(b"extension_loaded", extension_loaded);
     add(b"boolval", boolval);
+    add(b"filter_var", filter_var);
     add(b"print_r", print_r);
     // Environment / runtime-introspection stubs (no real engine state modelled).
     add(b"gc_collect_cycles", env::gc_collect_cycles);
@@ -981,6 +982,54 @@ fn strval(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 
 fn boolval(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Bool(convert::to_bool(arg1(args, "boolval")?, ctx.diags)))
+}
+
+/// `filter_var($value, $filter = FILTER_DEFAULT, $options = 0)` — the validate
+/// filters Composer and its dependencies use. The oracle build lacks ext/filter,
+/// so this is implemented to the documented PHP semantics rather than diffed.
+/// `$options` accepts the flags int or an `array{flags?: int}`; only the
+/// `FILTER_NULL_ON_FAILURE` flag affects a validation miss here.
+fn filter_var(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    const FILTER_DEFAULT: i64 = 516;
+    const VALIDATE_INT: i64 = 257;
+    const VALIDATE_BOOL: i64 = 258;
+    const VALIDATE_FLOAT: i64 = 259;
+    const NULL_ON_FAILURE: i64 = 134_217_728;
+    let value = arg1(args, "filter_var")?;
+    let filter = args.get(1).map_or(FILTER_DEFAULT, |f| convert::to_long_cast(f, ctx.diags));
+    let flags = match args.get(2) {
+        Some(Zval::Array(a)) => a
+            .get(&Key::from_bytes(b"flags"))
+            .map_or(0, |v| convert::to_long_cast(v, ctx.diags)),
+        Some(other) => convert::to_long_cast(other, ctx.diags),
+        None => 0,
+    };
+    let miss = || if flags & NULL_ON_FAILURE != 0 { Zval::Null } else { Zval::Bool(false) };
+    let s = convert::to_zstr_cast(value, ctx.diags);
+    let text = String::from_utf8_lossy(s.as_bytes());
+    let trimmed = text.trim();
+    match filter {
+        VALIDATE_BOOL => {
+            // Recognised true/false words (case-insensitive, trimmed); anything else
+            // is the validation miss (false, or null under FILTER_NULL_ON_FAILURE).
+            match trimmed.to_ascii_lowercase().as_str() {
+                "1" | "true" | "on" | "yes" => Ok(Zval::Bool(true)),
+                "0" | "false" | "off" | "no" | "" => Ok(Zval::Bool(false)),
+                _ => Ok(miss()),
+            }
+        }
+        VALIDATE_INT => match trimmed.parse::<i64>() {
+            Ok(n) => Ok(Zval::Long(n)),
+            Err(_) => Ok(miss()),
+        },
+        VALIDATE_FLOAT => match trimmed.parse::<f64>() {
+            Ok(f) => Ok(Zval::Double(f)),
+            Err(_) => Ok(miss()),
+        },
+        // FILTER_DEFAULT / FILTER_UNSAFE_RAW and the unimplemented validators return
+        // the value as a string (no sanitisation), the documented default behaviour.
+        _ => Ok(Zval::Str(s)),
+    }
 }
 
 /// extension_loaded($name): whether a PHP extension is available. We report the
