@@ -312,6 +312,11 @@ pub fn registry() -> Registry {
     add_ref(b"array_push", array::array_push);
     add_ref(b"settype", array::settype);
     add_ref(b"sort", array::sort);
+    add_ref(b"rsort", array::rsort);
+    add_ref(b"asort", array::asort);
+    add_ref(b"arsort", array::arsort);
+    add_ref(b"ksort", array::ksort);
+    add_ref(b"krsort", array::krsort);
     add_ref(b"array_pop", array::array_pop);
     add_ref(b"array_shift", array::array_shift);
     add_ref(b"array_unshift", array::array_unshift);

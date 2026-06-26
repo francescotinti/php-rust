@@ -233,6 +233,66 @@ pub fn sort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpE
     Ok(Zval::Bool(true))
 }
 
+/// `rsort(array &$array, int $flags = SORT_REGULAR): true` — like [`sort`] but
+/// descending. Reindexes from 0, dropping the original keys.
+pub fn rsort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let rc = as_array_mut(arr, "rsort")?;
+    let mut vals: Vec<Zval> = rc.iter().map(|(_, v)| v.clone()).collect();
+    vals.sort_by(|a, b| ops::compare(b, a).cmp(&0));
+    let mut out = PhpArray::new();
+    for v in vals {
+        let _ = out.append(v);
+    }
+    *arr = Zval::Array(Rc::new(out));
+    Ok(Zval::Bool(true))
+}
+
+/// Sort the `(key, value)` pairs in place, preserving the key→value association,
+/// and rebuild the array in the sorted order. `cmp` compares two pairs. Shared by
+/// `asort`/`arsort`/`ksort`/`krsort` (the association-preserving sorts).
+fn sort_assoc<F>(arr: &mut Zval, fname: &str, mut cmp: F) -> Result<Zval, PhpError>
+where
+    F: FnMut(&(Key, Zval), &(Key, Zval)) -> std::cmp::Ordering,
+{
+    let rc = as_array_mut(arr, fname)?;
+    let mut pairs: Vec<(Key, Zval)> = rc.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    pairs.sort_by(|a, b| cmp(a, b));
+    let mut out = PhpArray::new();
+    for (k, v) in pairs {
+        out.insert(k, v);
+    }
+    *arr = Zval::Array(Rc::new(out));
+    Ok(Zval::Bool(true))
+}
+
+/// `asort(array &$array, int $flags = SORT_REGULAR): true` — sort by value
+/// ascending, preserving keys.
+pub fn asort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    sort_assoc(arr, "asort", |a, b| ops::compare(&a.1, &b.1).cmp(&0))
+}
+
+/// `arsort(array &$array, int $flags = SORT_REGULAR): true` — sort by value
+/// descending, preserving keys.
+pub fn arsort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    sort_assoc(arr, "arsort", |a, b| ops::compare(&b.1, &a.1).cmp(&0))
+}
+
+/// `ksort(array &$array, int $flags = SORT_REGULAR): true` — sort by key
+/// ascending, preserving the key→value association.
+pub fn ksort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    sort_assoc(arr, "ksort", |a, b| {
+        ops::compare(&key_to_zval(&a.0), &key_to_zval(&b.0)).cmp(&0)
+    })
+}
+
+/// `krsort(array &$array, int $flags = SORT_REGULAR): true` — sort by key
+/// descending, preserving the key→value association.
+pub fn krsort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    sort_assoc(arr, "krsort", |a, b| {
+        ops::compare(&key_to_zval(&b.0), &key_to_zval(&a.0)).cmp(&0)
+    })
+}
+
 /// `array_pop(array &$array): mixed` — remove and return the last element
 /// (keys of the remaining elements are left unchanged); NULL on an empty array.
 pub fn array_pop(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
