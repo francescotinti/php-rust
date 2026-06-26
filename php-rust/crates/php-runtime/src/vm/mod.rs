@@ -1619,7 +1619,17 @@ impl<'m> Vm<'m> {
                     }
                     let bound_this = if bind_this { self.frames[top].this.clone() } else { None };
                     let m = self.frames[top].module;
-                    let func = &m.closures[fn_idx as usize];
+                    // A closure index always resolves in the unit that compiled the
+                    // body — except a trait method flattened into a class from
+                    // *another* unit: its closure indices point at the trait's unit,
+                    // not the consumer's (cross-unit trait-closure relocation is not
+                    // yet implemented). Surface a catchable error rather than panic.
+                    let Some(func) = m.closures.get(fn_idx as usize) else {
+                        return Err(PhpError::Error(
+                            "closure from a trait used across files is not yet supported"
+                                .to_string(),
+                        ));
+                    };
                     let info = Rc::new(ClosureInfo {
                         kind: ClosureRender::Closure {
                             name: PhpStr::new(func.name.to_vec()),
