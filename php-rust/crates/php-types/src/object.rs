@@ -90,6 +90,11 @@ pub struct ObjectInfo {
     /// Declared property name → visibility, in declaration order. Dynamic
     /// properties are absent and default to `Public`.
     entries: Vec<(Box<[u8]>, PropVis)>,
+    /// Declared property name → its type as displayed (`int`, `?Foo`, …), for the
+    /// typed properties that have one. Used by `var_dump`/`print_r` to render an
+    /// uninitialized typed property as `uninitialized(type)`. Empty when the class
+    /// has no typed properties.
+    types: Vec<(Box<[u8]>, Box<[u8]>)>,
     /// `true` when this instance is an enum case singleton, so `var_dump` /
     /// `print_r` render it as `enum(Name::Case)` rather than `object(...)`
     /// (step 23, D-23.5).
@@ -98,13 +103,22 @@ pub struct ObjectInfo {
 
 impl ObjectInfo {
     pub fn from_entries(entries: Vec<(Box<[u8]>, PropVis)>) -> Self {
-        ObjectInfo { entries, is_enum_case: false }
+        ObjectInfo { entries, types: Vec::new(), is_enum_case: false }
+    }
+
+    /// Like [`Self::from_entries`] but carrying the declared property type displays
+    /// (for uninitialized-property rendering).
+    pub fn from_entries_typed(
+        entries: Vec<(Box<[u8]>, PropVis)>,
+        types: Vec<(Box<[u8]>, Box<[u8]>)>,
+    ) -> Self {
+        ObjectInfo { entries, types, is_enum_case: false }
     }
 
     /// `ObjectInfo` for an enum case singleton (step 23, D-23.5). The synthetic
     /// `name`/`value` properties are public.
     pub fn enum_case(entries: Vec<(Box<[u8]>, PropVis)>) -> Self {
-        ObjectInfo { entries, is_enum_case: true }
+        ObjectInfo { entries, types: Vec::new(), is_enum_case: true }
     }
 
     /// The visibility of property `name`, defaulting to `Public` for a dynamic
@@ -115,6 +129,12 @@ impl ObjectInfo {
             .find(|(k, _)| k.as_ref() == name)
             .map(|(_, v)| v.clone())
             .unwrap_or(PropVis::Public)
+    }
+
+    /// The displayed type of declared property `name` (`int`, `?Foo`), if it is a
+    /// typed property — used to render `uninitialized(type)`.
+    pub fn type_of(&self, name: &[u8]) -> Option<&[u8]> {
+        self.types.iter().find(|(k, _)| k.as_ref() == name).map(|(_, t)| t.as_ref())
     }
 }
 

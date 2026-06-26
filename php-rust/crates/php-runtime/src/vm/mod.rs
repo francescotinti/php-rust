@@ -2613,7 +2613,7 @@ impl<'m> Vm<'m> {
                             continue;
                         }
                         check_prop_access(&self.classes, cur, o.borrow().class_id as usize, &name)?;
-                        if let Some(err) = self.uninit_readonly_read(o, &name) {
+                        if let Some(err) = self.uninit_typed_read(o, &name) {
                             return Err(err);
                         }
                     }
@@ -2661,7 +2661,7 @@ impl<'m> Vm<'m> {
                             continue;
                         }
                         check_prop_access(&self.classes, cur, o.borrow().class_id as usize, &name)?;
-                        if let Some(err) = self.uninit_readonly_read(o, &name) {
+                        if let Some(err) = self.uninit_typed_read(o, &name) {
                             return Err(err);
                         }
                     }
@@ -2773,6 +2773,11 @@ impl<'m> Vm<'m> {
                     if let Some(err) = self.readonly_rmw_error(&obj, &name) {
                         return Err(err);
                     }
+                    if let Zval::Object(o) = &obj.deref_clone() {
+                        if let Some(err) = self.uninit_typed_read(o, &name) {
+                            return Err(err);
+                        }
+                    }
                     let old = read_property(&obj, &name, &mut self.diags);
                     let mut result = apply_binop(op, &old, &rhs, &mut self.diags)?;
                     if let Some(ocid) = object_class_id(&obj) {
@@ -2788,6 +2793,11 @@ impl<'m> Vm<'m> {
                     }
                     if let Some(err) = self.readonly_rmw_error(&obj, &name) {
                         return Err(err);
+                    }
+                    if let Zval::Object(o) = &obj.deref_clone() {
+                        if let Some(err) = self.uninit_typed_read(o, &name) {
+                            return Err(err);
+                        }
                     }
                     let old = read_property(&obj, &name, &mut self.diags);
                     let mut newv = old.clone();
@@ -5381,7 +5391,10 @@ impl<'m> Vm<'m> {
                 let val = self.drive_to_return(baseline)?;
                 arr.insert(Key::from_bytes(name), val);
             } else if let Some(val) = o.borrow().props.get(name).cloned() {
-                arr.insert(Key::from_bytes(name), val);
+                // An uninitialized typed property (`Undef`) is omitted.
+                if !matches!(val, Zval::Undef) {
+                    arr.insert(Key::from_bytes(name), val);
+                }
             }
         }
         // Dynamic (undeclared) properties keep instance order, after the declared
@@ -6994,7 +7007,7 @@ impl<'m> Vm<'m> {
                 "Cannot assign {given} to property {}::${} of type {}",
                 String::from_utf8_lossy(&self.classes[decl].name),
                 String::from_utf8_lossy(name),
-                type_hint_display(&hint),
+                hint.display_name(),
             ))),
         }
     }
@@ -7386,23 +7399,23 @@ impl<'m> Vm<'m> {
         Ok(Zval::Null)
     }
 
-    /// Build a fresh instance of class `cid`: its declared property defaults
-    /// materialised, a fresh handle id, shared class-name / visibility metadata.
-    /// Fatal if the class is non-instantiable (abstract / interface / enum) or
-    /// could not be compiled. Shared by [`Op::Alloc`] and [`Op::AllocStatic`].
-    /// The "Typed property C::$p must not be accessed before initialization" fatal
-    /// when reading a `readonly` property that has not yet been initialised on this
-    /// instance; `None` for a non-readonly or already-initialised property.
-    fn uninit_readonly_read(&self, o: &Rc<RefCell<Object>>, name: &[u8]) -> Option<PhpError> {
-        let ocid = o.borrow().class_id as usize;
-        let decl = resolve_readonly_decl(&self.classes, ocid, name)?;
-        if o.borrow().is_readonly_init(name) {
+    /// The "must not be accessed before initialization" fatal for reading a typed
+    /// property that is still uninitialized (its slot holds `Zval::Undef`). Covers
+    /// both plain and readonly typed properties (a readonly one is always typed and
+    /// default-less, so it too starts `Undef`). `None` if the property is absent or
+    /// holds a real value. The message names the *declaring* class.
+    fn uninit_typed_read(&self, o: &Rc<RefCell<Object>>, name: &[u8]) -> Option<PhpError> {
+        let b = o.borrow();
+        if !matches!(b.props.get(name), Some(Zval::Undef)) {
             return None;
         }
-        let cls = String::from_utf8_lossy(&self.classes[decl].name).into_owned();
-        let prop = String::from_utf8_lossy(name).into_owned();
+        let ocid = b.class_id as usize;
+        drop(b);
+        let decl = resolve_prop_type(&self.classes, ocid, name).map(|(c, _)| c).unwrap_or(ocid);
         Some(PhpError::Error(format!(
-            "Typed property {cls}::${prop} must not be accessed before initialization"
+            "Typed property {}::${} must not be accessed before initialization",
+            String::from_utf8_lossy(&self.classes[decl].name),
+            String::from_utf8_lossy(name),
         )))
     }
 
@@ -7431,6 +7444,10 @@ impl<'m> Vm<'m> {
         }))
     }
 
+    /// Build a fresh instance of class `cid`: its declared property defaults
+    /// materialised, a fresh handle id, shared class-name / visibility metadata.
+    /// Fatal if the class is non-instantiable (abstract / interface / enum) or
+    /// could not be compiled. Shared by [`Op::Alloc`] and [`Op::AllocStatic`].
     fn alloc_object(&mut self, cid: ClassId) -> Result<Zval, PhpError> {
         let cc = self.classes[cid]; // &'m CompiledClass: detach from `self` borrow
 
@@ -7464,6 +7481,12 @@ impl<'m> Vm<'m> {
         let mut props = Props::new();
         for (name, c) in &cc.prop_defaults {
             props.set(name, c.to_zval());
+        }
+        // A typed property with no default starts uninitialized: overwrite its NULL
+        // placeholder with `Undef` (kept in declaration order). Reading it errors;
+        // `var_dump` renders `uninitialized(T)`; `isset` is false.
+        for name in &cc.uninit_props {
+            props.set(name, Zval::Undef);
         }
         let class_name = Rc::clone(&cc.class_name);
         let info = Rc::clone(&cc.info);
@@ -7933,26 +7956,6 @@ fn errno_label(errno: i64) -> &'static str {
         2 | 512 => "Warning",        // E_WARNING / E_USER_WARNING
         8192 | 16384 => "Deprecated", // E_DEPRECATED / E_USER_DEPRECATED
         _ => "Notice",                // E_NOTICE (8) / E_USER_NOTICE (1024)
-    }
-}
-
-/// Render a [`TypeHint`] as PHP displays it in a type error (`int`, `?Foo`, …).
-fn type_hint_display(h: &TypeHint) -> String {
-    let base: String = match &h.kind {
-        HintKind::Scalar(ScalarType::Int) => "int".into(),
-        HintKind::Scalar(ScalarType::Float) => "float".into(),
-        HintKind::Scalar(ScalarType::String) => "string".into(),
-        HintKind::Scalar(ScalarType::Bool) => "bool".into(),
-        HintKind::Array => "array".into(),
-        HintKind::Callable => "callable".into(),
-        HintKind::Iterable => "iterable".into(),
-        HintKind::Object => "object".into(),
-        HintKind::Class(c) => String::from_utf8_lossy(c).into_owned(),
-    };
-    if h.nullable {
-        format!("?{base}")
-    } else {
-        base
     }
 }
 

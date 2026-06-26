@@ -317,7 +317,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
     // inherited position but taking the most-derived default / visibility. Build
     // the visibility shape here; resolve defaults (const vs init-thunk) below.
     let mut ok = true;
-    let mut flat_defaults: Vec<(Box<[u8]>, Option<&Expr>)> = Vec::new();
+    let mut flat_defaults: Vec<(Box<[u8]>, Option<&Expr>, Option<&crate::hir::TypeHint>)> = Vec::new();
     let mut vis_entries: Vec<(Box<[u8]>, PropVis)> = Vec::new();
     // Property hooks (step 50), flattened parent-first like the layout: a
     // most-derived `get`/`set` overrides the inherited one. A *virtual* hooked
@@ -349,9 +349,12 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
             // instance layout (not allocated, not dumped). Backed ones stay.
             let virtual_prop = (p.get_hook.is_some() || p.set_hook.is_some()) && !p.backed;
             if !virtual_prop {
-                match flat_defaults.iter_mut().find(|(k, _)| k.as_ref() == p.name.as_ref()) {
-                    Some(e) => e.1 = p.default.as_ref(),
-                    None => flat_defaults.push((p.name.clone(), p.default.as_ref())),
+                match flat_defaults.iter_mut().find(|(k, _, _)| k.as_ref() == p.name.as_ref()) {
+                    Some(e) => {
+                        e.1 = p.default.as_ref();
+                        e.2 = p.hint.as_ref();
+                    }
+                    None => flat_defaults.push((p.name.clone(), p.default.as_ref(), p.hint.as_ref())),
                 }
                 let vis = match p.visibility {
                     Visibility::Public => PropVis::Public,
@@ -365,7 +368,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
             } else {
                 // A virtual property that shadowed an inherited backed one must
                 // also drop the inherited storage entry.
-                flat_defaults.retain(|(k, _)| k.as_ref() != p.name.as_ref());
+                flat_defaults.retain(|(k, _, _)| k.as_ref() != p.name.as_ref());
                 vis_entries.retain(|(k, _)| k.as_ref() != p.name.as_ref());
             }
         }
@@ -376,9 +379,23 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
     // the prop-init thunk.
     let mut prop_defaults: Vec<(Box<[u8]>, Const)> = Vec::new();
     let mut init_items: Vec<(Box<[u8]>, &Expr)> = Vec::new();
-    for (name, default) in &flat_defaults {
+    // A typed property with no default starts *uninitialized* (PHP 8.0): stored as
+    // `Zval::Undef` at `new` time, reads error, `var_dump` shows `uninitialized(T)`.
+    let mut uninit_props: Vec<Box<[u8]>> = Vec::new();
+    // Type displays for the typed properties, for the uninitialized rendering.
+    let mut prop_type_displays: Vec<(Box<[u8]>, Box<[u8]>)> = Vec::new();
+    for (name, default, hint) in &flat_defaults {
+        if let Some(h) = hint {
+            prop_type_displays.push((name.clone(), h.display_name().into_bytes().into()));
+        }
         match default {
-            None => prop_defaults.push((name.clone(), Const::Null)),
+            None => {
+                prop_defaults.push((name.clone(), Const::Null));
+                // Typed-without-default → uninitialized; untyped → NULL.
+                if hint.is_some() {
+                    uninit_props.push(name.clone());
+                }
+            }
             Some(e) => match const_eval(e) {
                 Some(c) => prop_defaults.push((name.clone(), c)),
                 None => {
@@ -523,7 +540,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         interfaces: cd.interfaces.clone(),
         instantiable,
         prop_defaults,
-        info: Rc::new(ObjectInfo::from_entries(vis_entries)),
+        info: Rc::new(ObjectInfo::from_entries_typed(vis_entries, prop_type_displays)),
         methods,
         own_prop_vis,
         static_props,
@@ -534,6 +551,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         attributes,
         uses_traits: cd.uses_traits.clone(),
         prop_types,
+        uninit_props,
         ok,
         prop_hooks,
     }

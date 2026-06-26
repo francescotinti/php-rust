@@ -1149,6 +1149,10 @@ pub struct CompiledClass {
     /// [`CompiledClass::own_prop_vis`]; the class found is the *declaring* class
     /// (used in the "Cannot assign … of type …" TypeError). Empty when none.
     pub prop_types: Vec<(Box<[u8]>, TypeHint)>,
+    /// Names of the (flattened) typed instance properties that have no default, so
+    /// start *uninitialized*: `new` stores `Zval::Undef` for these instead of NULL.
+    /// Empty when the class has no such property.
+    pub uninit_props: Vec<Box<[u8]>>,
     /// `false` if the class could not be fully compiled (e.g. a non-constant
     /// property default): [`Op::Alloc`] on it fatals instead of producing a
     /// wrong instance, mirroring the function-stub discipline.

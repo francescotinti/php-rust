@@ -540,7 +540,9 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
             // the part before the NUL (`class@anonymous`), like PHP. A no-op for
             // ordinary class names.
             out.extend_from_slice(class_display_name(obj.class_name.as_bytes()));
-            out.extend_from_slice(format!(")#{} ({}) {{\n", obj.id, obj.props.len()).as_bytes());
+            // The header count excludes uninitialized typed properties (PHP).
+            let count = obj.props.iter().filter(|(_, v)| !matches!(v, Zval::Undef)).count();
+            out.extend_from_slice(format!(")#{} ({}) {{\n", obj.id, count).as_bytes());
             for (k, val) in obj.props.iter() {
                 spaces(out, indent + 2);
                 out.extend_from_slice(b"[\"");
@@ -555,7 +557,14 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
                     }
                 }
                 spaces(out, indent + 2);
-                dump(out, val, indent + 2, seen);
+                // An uninitialized typed property renders as `uninitialized(type)`.
+                if matches!(val, Zval::Undef) {
+                    out.extend_from_slice(b"uninitialized(");
+                    out.extend_from_slice(obj.info.type_of(k).unwrap_or(b"mixed"));
+                    out.extend_from_slice(b")\n");
+                } else {
+                    dump(out, val, indent + 2, seen);
+                }
             }
             drop(obj);
             seen.pop();
