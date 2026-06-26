@@ -319,6 +319,7 @@ pub(crate) fn run_module_with_hir<'m>(
         modules: vec![module],
         main_hir,
         seed_classes: main_hir.map(|p| p.classes.clone()).unwrap_or_default(),
+        seed_traits: main_hir.map(|p| p.traits.clone()).unwrap_or_default(),
         seed_static: main_hir.map_or(0, |p| p.static_count),
         linked_functions: HashMap::new(),
         included_files: HashSet::new(),
@@ -703,6 +704,11 @@ struct Vm<'m> {
     /// earlier one (or an autoloaded one) declared. Ids stay aligned with the
     /// global compiled table. Empty (and unused) when no HIR is retained.
     seed_classes: Vec<crate::hir::ClassDecl>,
+    /// The accumulating trait image (step 21, trait analogue of `seed_classes`):
+    /// every loaded unit's declared traits, keyed by bare lowercase name, so a
+    /// later (e.g. autoloaded) unit's `use T` resolves a trait an earlier unit
+    /// declared. Traits never enter the class table, hence a separate image.
+    seed_traits: Vec<(Vec<u8>, crate::hir::LoweredTrait)>,
     /// The static-cell id high-water mark carried into a seeded unit's lowering, so
     /// its `static $x` cells get ids past every already-loaded unit's (Phase 3).
     seed_static: usize,
@@ -3637,17 +3643,21 @@ impl<'m> Vm<'m> {
             return Ok(crate::lower_source(name, src));
         }
         loop {
-            match crate::lower_source_seeded(name, src, &self.seed_classes, self.seed_static) {
+            match crate::lower_source_seeded(
+                name,
+                src,
+                &self.seed_classes,
+                self.seed_static,
+                &self.seed_traits,
+            ) {
                 Err(crate::LowerError::UndefinedClass { name: pname, line }) => {
-                    match self.resolve_class_autoload(&pname)? {
-                        Some(_) => continue,
-                        None => {
-                            return Ok(Err(crate::LowerError::UndefinedClass {
-                                name: pname,
-                                line,
-                            }))
-                        }
+                    // An undefined name may be a class/interface *or* a trait used
+                    // by a class being lowered; autoload it (which may load a trait
+                    // file into `seed_traits`) and retry.
+                    if self.resolve_name_autoload(&pname)? {
+                        continue;
                     }
+                    return Ok(Err(crate::LowerError::UndefinedClass { name: pname, line }));
                 }
                 other => return Ok(other),
             }
@@ -3667,6 +3677,13 @@ impl<'m> Vm<'m> {
             self.seed_classes.extend_from_slice(&program.classes[l..]);
         }
         self.seed_static = program.static_count;
+        // Fold the unit's new traits into the cross-unit trait image (a trait file
+        // loaded via autoload makes its trait available to the unit that needed it).
+        for (k, t) in &program.traits {
+            if !self.seed_traits.iter().any(|(ek, _)| ek == k) {
+                self.seed_traits.push((k.clone(), t.clone()));
+            }
+        }
     }
 
     /// Resolve an `include`/`require` path to a real file (step 57, Phase 2): an
@@ -6927,6 +6944,24 @@ impl<'m> Vm<'m> {
         }
         self.try_autoload(bare, &key)?;
         Ok(self.class_index.get(&key).copied())
+    }
+
+    /// Whether `name` resolves (after autoload) to a class/interface *or* a trait.
+    /// Used by the include-time lowering retry: an undefined name surfaced during
+    /// lowering may be a parent/interface class or a `use`d trait, and a trait
+    /// lands in `seed_traits` (keyed by bare lowercase name), not `class_index`.
+    fn resolve_name_autoload(&mut self, name: &[u8]) -> Result<bool, PhpError> {
+        let bare = name.strip_prefix(b"\\").unwrap_or(name);
+        let key = bare.to_ascii_lowercase();
+        let trait_key = bare.rsplit(|&b| b == b'\\').next().unwrap_or(bare).to_ascii_lowercase();
+        let known = |s: &Self| {
+            s.class_index.contains_key(&key) || s.seed_traits.iter().any(|(k, _)| *k == trait_key)
+        };
+        if known(self) {
+            return Ok(true);
+        }
+        self.try_autoload(bare, &key)?;
+        Ok(known(self))
     }
 
     /// Run the registered `spl_autoload_register` callbacks for `name` (already

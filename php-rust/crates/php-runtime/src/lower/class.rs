@@ -12,7 +12,7 @@ use mago_syntax::ast::{
 };
 
 use crate::hir::{
-    Capture, ClassDecl, ClassRef, Expr, ExprKind, FnDecl, Line, MethodDecl, Param,
+    Capture, ClassDecl, ClassRef, Expr, ExprKind, FnDecl, Line, LoweredTrait, MethodDecl, Param,
     Place, PlaceBase, PlaceStep, PropDecl, Slot, Stmt, StmtKind, TypeHint,
     Visibility,
 };
@@ -58,10 +58,19 @@ impl<'f> Lowerer<'f> {
         if self.traits.contains_key(key) {
             return Ok(());
         }
-        let t = *asts.get(key).ok_or(LowerError::Unsupported {
-            what: "use of undefined trait",
-            line: 0,
-        })?;
+        // Not in this unit's trait ASTs and not already seeded → surface it as an
+        // undefined *class* so the include-time autoload retry (lower_unit) can
+        // load the trait's file, then re-lower. The name is qualified with the
+        // current namespace (best effort for a same-namespace trait).
+        let t = match asts.get(key) {
+            Some(t) => *t,
+            None => {
+                return Err(LowerError::UndefinedClass {
+                    name: join_ns(&self.cur_namespace, key),
+                    line: 0,
+                })
+            }
+        };
         let line = self.line_of(t.span());
         if !in_progress.insert(key.to_vec()) {
             return Err(LowerError::Unsupported {
@@ -224,10 +233,17 @@ impl<'f> Lowerer<'f> {
             for tn in u.trait_names.iter() {
                 let tkey = bare_last_segment(tn).to_ascii_lowercase();
                 let torig: Box<[u8]> = bare_last_segment(tn).into();
-                let lt = self.traits.get(&tkey).ok_or(LowerError::Unsupported {
-                    what: "use of undefined trait",
-                    line,
-                })?;
+                // Unknown trait → surface as an undefined class (with its resolved
+                // FQN) so lower_unit's autoload retry can load the trait's file.
+                let lt = match self.traits.get(&tkey) {
+                    Some(lt) => lt,
+                    None => {
+                        return Err(LowerError::UndefinedClass {
+                            name: self.resolve_class(tn),
+                            line,
+                        })
+                    }
+                };
                 for m in &lt.methods {
                     let m_lc = m.decl.name.to_ascii_lowercase();
                     // `insteadof` loser, or the consumer overrides it → drop.
@@ -395,6 +411,22 @@ impl<'f> Lowerer<'f> {
     /// instance properties and methods are in 19-1 scope; `extends`/`implements`,
     /// static members, constants, and other member kinds arrive in later
     /// sub-steps and lower to [`LowerError::Unsupported`] for now.
+    /// Whether any ancestor (walking `parent` up the already-lowered class image)
+    /// declares a *concrete* method named `name_lc` (lowercased). Used so an
+    /// abstract method required by a trait counts as satisfied when a base class
+    /// implements it — PHP resolves abstract requirements against the full
+    /// inheritance chain, not just the declaring class.
+    fn ancestor_has_concrete_method(&self, mut parent: Option<crate::hir::ClassId>, name_lc: &[u8]) -> bool {
+        while let Some(cid) = parent {
+            let c = &self.classes[cid];
+            if c.methods.iter().any(|m| m.decl.name.to_ascii_lowercase() == name_lc) {
+                return true;
+            }
+            parent = c.parent;
+        }
+        false
+    }
+
     pub(super) fn lower_class(&mut self, class: &Class) -> Result<ClassDecl, LowerError> {
         let line = self.line_of(class.span());
         let is_abstract = class.modifiers.iter().any(|m| m.is_abstract());
@@ -522,7 +554,9 @@ impl<'f> Lowerer<'f> {
             let mut missing: Vec<&[u8]> = Vec::new();
             for req in &abstract_req {
                 let req_lc = req.to_ascii_lowercase();
-                if methods.iter().any(|m| m.decl.name.to_ascii_lowercase() == req_lc) {
+                if methods.iter().any(|m| m.decl.name.to_ascii_lowercase() == req_lc)
+                    || self.ancestor_has_concrete_method(parent, &req_lc)
+                {
                     continue;
                 }
                 if !missing.iter().any(|m| m.eq_ignore_ascii_case(req)) {
@@ -541,6 +575,7 @@ impl<'f> Lowerer<'f> {
             .filter(|req| {
                 let lc = req.to_ascii_lowercase();
                 !methods.iter().any(|m| m.decl.name.to_ascii_lowercase() == lc)
+                    && !self.ancestor_has_concrete_method(parent, &lc)
             })
             .cloned()
             .collect();

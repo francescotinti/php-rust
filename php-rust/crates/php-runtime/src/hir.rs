@@ -56,6 +56,24 @@ pub struct Program {
     /// An [`ExprKind::New`] / method dispatch resolves a class by name against
     /// this table (step 19, D-19.3).
     pub classes: Vec<ClassDecl>,
+    /// Traits defined by this unit, keyed by their bare lowercase name (step 21).
+    /// Traits are flattened into using classes, so they never enter `classes`;
+    /// they are carried here so a later unit (an autoloaded file) can resolve a
+    /// `use T` against a trait declared in an earlier unit (the trait analogue of
+    /// `seed_classes`). Holds only this unit's *new* traits, not seeded ones.
+    pub traits: Vec<(Vec<u8>, LoweredTrait)>,
+}
+
+/// A trait lowered to its flattened members (step 21). Stored owned so it can be
+/// copied into each consuming class and carried across units via [`Program::traits`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct LoweredTrait {
+    pub methods: Vec<MethodDecl>,
+    pub props: Vec<PropDecl>,
+    pub static_props: Vec<StaticPropDecl>,
+    pub consts: Vec<ClassConstDecl>,
+    /// Names of `abstract` methods the trait requires the consumer to implement.
+    pub abstract_methods: Vec<Box<[u8]>>,
 }
 
 /// Index into [`Program::classes`] (step 19, D-19.3).

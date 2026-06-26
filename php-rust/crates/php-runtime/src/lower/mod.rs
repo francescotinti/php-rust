@@ -28,8 +28,8 @@ use mago_syntax::ast::{
 use mago_syntax::parser::parse_file;
 
 use crate::hir::{
-    BinOp, Capture, ClassDecl, ExprKind, FnDecl, HintKind, Line, MethodDecl, Param, Program,
-    PropDecl, ScalarType, Slot, StaticAssignOp, Stmt, StmtKind, TypeHint,
+    BinOp, Capture, ClassDecl, ExprKind, FnDecl, HintKind, Line, LoweredTrait, MethodDecl, Param,
+    Program, PropDecl, ScalarType, Slot, StaticAssignOp, Stmt, StmtKind, TypeHint,
     Visibility,
 };
 
@@ -92,14 +92,15 @@ pub fn lower_source_seeded(
     source: &[u8],
     seed_classes: &[crate::hir::ClassDecl],
     seed_static: usize,
+    seed_traits: &[(Vec<u8>, LoweredTrait)],
 ) -> Result<Program, LowerError> {
-    lower_source_impl(name, source, Some((seed_classes, seed_static)))
+    lower_source_impl(name, source, Some((seed_classes, seed_static, seed_traits)))
 }
 
 fn lower_source_impl(
     name: &[u8],
     source: &[u8],
-    seed: Option<(&[crate::hir::ClassDecl], usize)>,
+    seed: Option<(&[crate::hir::ClassDecl], usize, &[(Vec<u8>, LoweredTrait)])>,
 ) -> Result<Program, LowerError> {
     let arena = Bump::new();
     let file = File::ephemeral(Cow::Owned(name.to_vec()), Cow::Owned(source.to_vec()));
@@ -145,19 +146,25 @@ fn lower_source_impl(
         // `__FILE__`/backtrace to "eval()'d code". Calling a caller user function
         // from eval therefore remains unsupported here (a later phase resolves it
         // against the caller module instead of re-emitting).
-        Some((sclasses, sstatic)) => {
+        Some((sclasses, sstatic, straits)) => {
             low.classes = sclasses.to_vec();
             let mut ci: HashMap<Vec<u8>, usize> = HashMap::new();
             for (i, cd) in sclasses.iter().enumerate() {
                 ci.entry(cd.name.to_ascii_lowercase()).or_insert(i);
             }
             low.class_index = ci;
+            // Seed already-loaded traits so a `use T` here resolves against a trait
+            // declared in an earlier (e.g. autoloaded) unit (step 21, trait analogue
+            // of seed_classes). The keys are recorded so only this unit's *new*
+            // traits are re-emitted in `Program::traits`.
+            low.traits = straits.iter().cloned().collect();
             let (_pclasses, _pindex, pfunctions, pfn_index) = lower_prelude();
             low.functions = pfunctions;
             low.fn_index = pfn_index;
             low.static_count = sstatic;
         }
     }
+    let seeded_trait_keys: HashSet<Vec<u8>> = low.traits.keys().cloned().collect();
     // Hoist function declarations first, so a call may textually precede its
     // definition (PHP's function hoisting). Bodies are lowered here; the main
     // pass below skips the declaration statements (they are no-ops). Each hoist
@@ -202,6 +209,13 @@ fn lower_source_impl(
         static_count: low.static_count,
         strict: low.strict,
         classes: low.classes,
+        // Carry only the traits *this* unit declared (not the seeded ones), so the
+        // VM can accumulate them into its cross-unit trait image.
+        traits: low
+            .traits
+            .into_iter()
+            .filter(|(k, _)| !seeded_trait_keys.contains(k))
+            .collect(),
     })
 }
 
@@ -1145,16 +1159,6 @@ struct PromotedParam {
 /// A trait whose members have been lowered and whose own `use` clauses have been
 /// flattened in (step 21). Copied member-by-member into each consuming class so
 /// the step-19 runtime machinery is reused with no evaluator changes.
-struct LoweredTrait {
-    methods: Vec<MethodDecl>,
-    props: Vec<PropDecl>,
-    static_props: Vec<crate::hir::StaticPropDecl>,
-    consts: Vec<crate::hir::ClassConstDecl>,
-    /// Names of `abstract` methods the trait requires the consumer to implement
-    /// (D-21.11; enforcement arrives in 21-4).
-    abstract_methods: Vec<Box<[u8]>>,
-}
-
 impl<'f> Lowerer<'f> {
     fn new(file: &'f File, prog_name: &[u8]) -> Self {
         Lowerer {
