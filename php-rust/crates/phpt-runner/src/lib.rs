@@ -427,6 +427,9 @@ pub struct Summary {
     pub vm_unsupported_by_what: std::collections::BTreeMap<String, usize>,
     /// `(path, detail)` for each failure, for reporting.
     pub failures: Vec<(PathBuf, String)>,
+    /// `(path, "category\tdetail")` for each skip, for `--list-skips` (so the
+    /// specific tests behind an `unsupported`/`builtin` bucket can be inspected).
+    pub skips: Vec<(PathBuf, String)>,
 }
 
 /// Bucket a `vm-unsupported` detail (a bytecode-compiler rejection message) by
@@ -462,6 +465,7 @@ impl Summary {
             }
             Status::Skip => {
                 self.skip += 1;
+                self.skips.push((path.to_path_buf(), format!("{}\t{}", r.category, r.detail)));
                 *self.skip_by_category.entry(r.category.to_string()).or_insert(0) += 1;
                 match r.category {
                     "unsupported" => {

@@ -50,10 +50,15 @@ fn main() -> ExitCode {
     }
 
     let mut list_fails = false;
+    let mut list_skips = false;
     let mut isolate = false;
     args.retain(|a| match a.as_str() {
         "--list-fails" => {
             list_fails = true;
+            false
+        }
+        "--list-skips" => {
+            list_skips = true;
             false
         }
         "--isolate" => {
@@ -64,26 +69,26 @@ fn main() -> ExitCode {
     });
 
     if args.is_empty() {
-        eprintln!("usage: phpt-runner [--list-fails] [--isolate] <path>...");
+        eprintln!("usage: phpt-runner [--list-fails] [--list-skips] [--isolate] <path>...");
         return ExitCode::from(2);
     }
 
     if isolate {
         // The parent only spawns children, so it needs no large stack itself.
-        return run_isolated(&args, list_fails);
+        return run_isolated(&args, list_fails, list_skips);
     }
 
     // In-process (fast) path: run the whole job on a generous-stack worker.
     std::thread::Builder::new()
         .stack_size(WORKER_STACK)
-        .spawn(move || run_in_process(&args, list_fails))
+        .spawn(move || run_in_process(&args, list_fails, list_skips))
         .expect("spawn worker")
         .join()
         .expect("worker panicked")
 }
 
 /// Run every test in-process under one big-stack worker thread (the default).
-fn run_in_process(args: &[String], list_fails: bool) -> ExitCode {
+fn run_in_process(args: &[String], list_fails: bool, list_skips: bool) -> ExitCode {
     let reg = registry();
     let mut total = Summary::default();
     for arg in args {
@@ -95,14 +100,14 @@ fn run_in_process(args: &[String], list_fails: bool) -> ExitCode {
             }
         }
     }
-    print_summary(&total, list_fails);
+    print_summary(&total, list_fails, list_skips);
     exit_for(&total)
 }
 
 /// Run each test in its own child process (`--run-one`). A child that exits
 /// abnormally (signal from a stack overflow, or a panic) is recorded as one
 /// FAIL with the cause, instead of aborting the whole batch (DevEx hardening).
-fn run_isolated(args: &[String], list_fails: bool) -> ExitCode {
+fn run_isolated(args: &[String], list_fails: bool, list_skips: bool) -> ExitCode {
     let exe = match std::env::current_exe() {
         Ok(p) => p,
         Err(e) => {
@@ -139,6 +144,7 @@ fn run_isolated(args: &[String], list_fails: bool) -> ExitCode {
                         }
                         (Some("SKIP"), Some(cat)) => {
                             total.skip += 1;
+                            total.skips.push((path.clone(), format!("{cat}\t{detail}")));
                             *total.skip_by_category.entry(cat.to_string()).or_insert(0) += 1;
                             // Same breakdown as the in-process path, so --isolate
                             // (crash-surviving) also reports it (step 48).
@@ -197,7 +203,7 @@ fn run_isolated(args: &[String], list_fails: bool) -> ExitCode {
             }
         }
     }
-    print_summary(&total, list_fails);
+    print_summary(&total, list_fails, list_skips);
     exit_for(&total)
 }
 
@@ -319,6 +325,7 @@ fn merge(into: &mut Summary, other: Summary) {
         *into.vm_unsupported_by_what.entry(k).or_insert(0) += v;
     }
     into.failures.extend(other.failures);
+    into.skips.extend(other.skips);
 }
 
 /// Print the top entries of a count map (descending, ties broken by key).
@@ -334,7 +341,15 @@ fn print_top(title: &str, map: &std::collections::BTreeMap<String, usize>, top: 
     }
 }
 
-fn print_summary(s: &Summary, list_fails: bool) {
+fn print_summary(s: &Summary, list_fails: bool, list_skips: bool) {
+    // With `--list-skips`, emit every skipped test's path + `category\tdetail` so a
+    // specific bucket (e.g. `unsupported`/assignment target) can be inspected.
+    if list_skips {
+        println!("\n=== skips: {} ===", s.skips.len());
+        for (path, detail) in &s.skips {
+            println!("{}\t{}", path.display(), detail);
+        }
+    }
     let total = s.total();
     let runnable = s.pass + s.fail;
     println!("\n=== phpt-runner ===");
