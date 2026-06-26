@@ -1524,6 +1524,14 @@ impl<'m> Vm<'m> {
                     let callee = self.frames[top].stack.pop().expect("CallValue callee");
                     self.invoke_value(callee, args)?;
                 }
+                Op::CallValueArgs => {
+                    // Spread `$f(...$a)`: the arguments are the values of a runtime
+                    // array (the callee sits beneath it), expanded in order.
+                    let argsval = self.frames[top].stack.pop().expect("CallValueArgs array");
+                    let args = args_from_array_value(argsval);
+                    let callee = self.frames[top].stack.pop().expect("CallValueArgs callee");
+                    self.invoke_value(callee, args)?;
+                }
                 Op::Throw => {
                     let v = self.frames[top].stack.pop().expect("throw operand");
                     return Err(PhpError::Thrown(v.deref_clone()));

@@ -272,6 +272,12 @@ pub enum Op {
     /// callee value: an anonymous closure runs `closures[fn_idx]` (binding captures
     /// then params); a named closure / string names a user function or builtin.
     CallValue { argc: u32 },
+    /// `[callee, argsArray] -> [result]` — a dynamic call with argument unpacking
+    /// `$f(...$a)` (CLO). Pop the runtime argument array (its values become the
+    /// positional arguments, in order) and the callee beneath it, then dispatch
+    /// exactly like [`Op::CallValue`]. The spread variant of `CallValue`, mirroring
+    /// [`Op::MethodCallDynamicArgs`] for `$obj->$m(...$a)`.
+    CallValueArgs,
 
     // ----- exceptions (EXC) -----
     /// `[exc] -> ` (diverges) — pop the operand and unwind with

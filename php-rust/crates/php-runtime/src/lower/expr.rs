@@ -852,22 +852,41 @@ impl<'f> Lowerer<'f> {
         Ok(ExprKind::FirstClassCallable(name))
     }
 
-    /// Lower a call's argument list, accepting only plain positional arguments
-    /// (named / variadic-spread arguments stay out of scope).
+    /// Lower a dynamic call's argument list: plain positional arguments plus
+    /// variadic spread (`$cb(...$a)`, expanded at run time into an argument
+    /// array). Named arguments on a dynamic call stay out of scope (the callee's
+    /// parameters are unknown at compile time). A positional after a spread is a
+    /// PHP compile-time Fatal, surfaced here.
     fn lower_positional_args(
         &mut self,
         list: &mago_syntax::ast::ArgumentList,
         line: Line,
     ) -> Result<Vec<Expr>, LowerError> {
         let mut args = Vec::new();
+        let mut saw_spread = false;
         for arg in list.arguments.iter() {
             match arg {
-                Argument::Positional(p) if p.ellipsis.is_none() => {
+                Argument::Positional(p) if p.ellipsis.is_some() => {
+                    saw_spread = true;
+                    let inner = self.lower_expr(p.value)?;
+                    args.push(Expr {
+                        kind: ExprKind::Spread(Box::new(inner)),
+                        line,
+                    });
+                }
+                Argument::Positional(p) => {
+                    if saw_spread {
+                        return Err(LowerError::Fatal {
+                            message: "Cannot use positional argument after argument unpacking"
+                                .to_string(),
+                            line,
+                        });
+                    }
                     args.push(self.lower_expr(p.value)?);
                 }
-                _ => {
+                Argument::Named(_) => {
                     return Err(LowerError::Unsupported {
-                        what: "named or variadic argument",
+                        what: "named argument on a dynamic call",
                         line,
                     })
                 }

@@ -1501,16 +1501,20 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::Throw);
             }
             ExprKind::CallDynamic { callee, args } => {
-                // Push the callee, then the arguments by value; `CallValue`
-                // dispatches on the callee at run time.
+                // Push the callee, then the arguments; `CallValue` dispatches on the
+                // callee at run time. With argument unpacking (`$f(...$a)`) the
+                // arguments are built into a runtime array and expanded by
+                // `CallValueArgs` (the value-callee analogue of `MethodCallDynamicArgs`).
                 self.expr(callee)?;
-                for a in args {
-                    if matches!(a.kind, ExprKind::Spread(_)) {
-                        return Err(CompileError::Unsupported("argument unpacking (spread)".into()));
+                if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
+                    self.build_args_array(args)?;
+                    self.emit(Op::CallValueArgs);
+                } else {
+                    for a in args {
+                        self.expr(a)?;
                     }
-                    self.expr(a)?;
+                    self.emit(Op::CallValue { argc: args.len() as u32 });
                 }
-                self.emit(Op::CallValue { argc: args.len() as u32 });
             }
             ExprKind::Pipe { input, callable } => {
                 // `input |> callable` == `callable(input)`, but the operands evaluate
