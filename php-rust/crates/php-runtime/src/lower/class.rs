@@ -921,6 +921,7 @@ impl<'f> Lowerer<'f> {
                 slots: local_scope.slots,
                 by_ref: false,
                 ret_hint: None,
+                defining_class: None,
                 line,
             },
             hook_backed,
@@ -1029,6 +1030,7 @@ impl<'f> Lowerer<'f> {
                 slots: local_scope.slots,
                 by_ref,
                 ret_hint,
+                defining_class: None,
                 line,
             },
         })
@@ -1080,6 +1082,7 @@ impl<'f> Lowerer<'f> {
             slots: local_scope.slots,
             by_ref,
             ret_hint,
+            defining_class: None,
             line,
         })
     }
@@ -1277,6 +1280,9 @@ impl<'f> Lowerer<'f> {
             slots,
             by_ref,
             ret_hint,
+            // A closure/arrow inherits the lexically enclosing class so its body
+            // can use `self::`/`parent::`/`new self` (resolved at compile time).
+            defining_class: self.cur_class.clone(),
             line,
         });
         idx

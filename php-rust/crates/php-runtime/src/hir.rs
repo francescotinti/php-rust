@@ -273,6 +273,12 @@ pub struct FnDecl {
     /// (step 39). Calling it does not run the body: it returns a `Generator`
     /// object whose body executes lazily. Computed by a body walk at lowering.
     pub is_generator: bool,
+    /// For a closure/arrow defined lexically inside a class, the name of that
+    /// class — so the compiler can set `cur_class` for the closure body and
+    /// resolve `self::`/`parent::`/`new self` at compile time (a closure inherits
+    /// the defining class's scope). `None` for free functions, methods (compiled
+    /// with their class directly), and closures defined outside any class.
+    pub defining_class: Option<Box<[u8]>>,
     pub line: Line,
 }
 

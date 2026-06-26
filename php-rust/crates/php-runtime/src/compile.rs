@@ -155,6 +155,13 @@ fn builtin_iface_for(name: &[u8]) -> Option<BuiltinIface> {
 /// the program context (for forward references and recursion). A free function
 /// has no enclosing class (`cur_class = None`).
 fn compile_fndecl(fd: &FnDecl, ctx: &ProgramCtx) -> R<Func> {
+    // A closure/arrow inherits its lexically enclosing class (recorded by the
+    // lowerer) so `self::`/`parent::`/`new self` in its body resolve at compile
+    // time. Free functions carry no defining class → `cur_class = None`.
+    let cur_class = fd
+        .defining_class
+        .as_ref()
+        .and_then(|n| ctx.class_index.get(&n.to_ascii_lowercase()).copied());
     compile_body(
         &fd.name,
         &fd.body,
@@ -166,7 +173,7 @@ fn compile_fndecl(fd: &FnDecl, ctx: &ProgramCtx) -> R<Func> {
         fd.ret_hint.clone(),
         fd.line,
         ctx,
-        None,
+        cur_class,
         false,
     )
 }
