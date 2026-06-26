@@ -197,6 +197,7 @@ fn lower_source_impl(
         file: name.into(),
         slots: low.globals.slots,
         functions: low.functions,
+        conditional_fns: low.conditional_fns,
         closures: low.closures,
         static_count: low.static_count,
         strict: low.strict,
@@ -991,6 +992,9 @@ struct Lowerer<'f> {
     /// since PHP function names are case-insensitive).
     functions: Vec<FnDecl>,
     fn_index: HashMap<Vec<u8>, usize>,
+    /// Indices into `functions` that are *conditional* declarations (registered at
+    /// run time by `DeclareFn`, not resolvable by name eagerly).
+    conditional_fns: HashSet<usize>,
     /// Anonymous/arrow function bodies, in one flat table (step 18, D-18.2). An
     /// [`ExprKind::Closure`] indexes into this by position.
     closures: Vec<FnDecl>,
@@ -1102,6 +1106,7 @@ impl<'f> Lowerer<'f> {
             after_closing_tag: false,
             functions: Vec::new(),
             fn_index: HashMap::new(),
+            conditional_fns: HashSet::new(),
             closures: Vec::new(),
             prog_name: prog_name.into(),
             fn_by_ref: false,
@@ -1714,6 +1719,14 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"PHP_SAPI" => str_lit(b"cli"),
         b"DIRECTORY_SEPARATOR" => str_lit(b"/"),
         b"PATH_SEPARATOR" => str_lit(b":"),
+        // setlocale() category selectors (macOS values, matching the oracle).
+        b"LC_ALL" => ExprKind::Int(0),
+        b"LC_COLLATE" => ExprKind::Int(1),
+        b"LC_CTYPE" => ExprKind::Int(2),
+        b"LC_MONETARY" => ExprKind::Int(3),
+        b"LC_NUMERIC" => ExprKind::Int(4),
+        b"LC_TIME" => ExprKind::Int(5),
+        b"LC_MESSAGES" => ExprKind::Int(6),
         // Stream seek whence (step 51b): `fseek($f, $offset, $whence)`.
         b"SEEK_SET" => ExprKind::Int(0),
         b"SEEK_CUR" => ExprKind::Int(1),

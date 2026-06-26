@@ -285,6 +285,7 @@ pub fn registry() -> Registry {
     add(b"floatval", floatval);
     add(b"doubleval", floatval);
     add(b"strval", strval);
+    add(b"setlocale", setlocale);
     add(b"boolval", boolval);
     add(b"print_r", print_r);
     // Environment / runtime-introspection stubs (no real engine state modelled).
@@ -978,4 +979,36 @@ fn strval(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 
 fn boolval(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Bool(convert::to_bool(arg1(args, "boolval")?, ctx.diags)))
+}
+
+/// setlocale($category, ...$locales): we do not model real C locales — accept the
+/// first non-empty candidate locale (a string arg, or an element of an array arg)
+/// and echo it back; an empty / "0" locale (a query) yields the default "C".
+fn setlocale(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let accept = |z: &Zval, ctx: &mut Ctx| -> Option<Zval> {
+        let s = convert::to_zstr(z, ctx.diags);
+        let b = s.as_bytes();
+        if b.is_empty() || b == b"0" {
+            None
+        } else {
+            Some(Zval::Str(PhpStr::new(b.to_vec())))
+        }
+    };
+    for a in args.iter().skip(1) {
+        match a.deref_clone() {
+            Zval::Array(arr) => {
+                for (_, v) in arr.iter() {
+                    if let Some(z) = accept(&v, ctx) {
+                        return Ok(z);
+                    }
+                }
+            }
+            v => {
+                if let Some(z) = accept(&v, ctx) {
+                    return Ok(z);
+                }
+            }
+        }
+    }
+    Ok(Zval::str_from("C"))
 }
