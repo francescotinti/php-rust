@@ -124,8 +124,8 @@ pub fn run_phpt(src: &[u8], name: &[u8], reg: &Registry) -> TestResult {
         (ExpectKind::Exact, w)
     } else if let Some(w) = find(&sections, "EXPECTF") {
         (ExpectKind::Format, w)
-    } else if find(&sections, "EXPECTREGEX").is_some() {
-        return TestResult::skip("expectregex", "--EXPECTREGEX-- not supported".to_string());
+    } else if let Some(w) = find(&sections, "EXPECTREGEX") {
+        (ExpectKind::Regex, w)
     } else {
         return TestResult::skip("malformed", "no --EXPECT(F)-- section".to_string());
     };
@@ -262,6 +262,15 @@ pub fn run_phpt(src: &[u8], name: &[u8], reg: &Registry) -> TestResult {
             // test failure; surface it as a skip with the reason.
             Err(e) => return TestResult::skip("expectf-build", format!("regex build: {e}")),
         },
+        // The section body *is* a regex, matched against the whole output anchored
+        // and dot-matches-newline, exactly as run-tests.php does
+        // (`preg_match("/^$wanted$/s", $output)`). A pattern using PCRE features the
+        // Rust `regex` crate lacks (backrefs, lookaround) fails to build → skip with
+        // the reason rather than a false divergence.
+        ExpectKind::Regex => match Regex::new(&format!("(?s)^{want}$")) {
+            Ok(re) => re.is_match(&got),
+            Err(e) => return TestResult::skip("expectregex-build", format!("regex build: {e}")),
+        },
     };
 
     if matched {
@@ -281,6 +290,9 @@ fn lines_match(want_line: &str, got_line: &str, kind: &ExpectKind) -> bool {
         ExpectKind::Format => Regex::new(&expectf_to_regex(want_line))
             .map(|re| re.is_match(got_line))
             .unwrap_or(false),
+        // The whole-output regex doesn't decompose per line; for the cosmetic
+        // failure diff fall back to a literal line comparison.
+        ExpectKind::Regex => want_line == got_line,
     }
 }
 
@@ -330,6 +342,7 @@ fn unified_diff(want: &str, got: &str, kind: &ExpectKind) -> String {
     let tag = match kind {
         ExpectKind::Exact => "EXPECT",
         ExpectKind::Format => "EXPECTF",
+        ExpectKind::Regex => "EXPECTREGEX",
     };
     format!("@@ {} first diff at line {} @@\n{}", tag, p + 1, out.trim_end())
 }
@@ -337,6 +350,7 @@ fn unified_diff(want: &str, got: &str, kind: &ExpectKind) -> String {
 enum ExpectKind {
     Exact,
     Format,
+    Regex,
 }
 
 /// Normalise output for comparison: CRLF→LF and trim surrounding whitespace

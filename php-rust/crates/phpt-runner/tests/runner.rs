@@ -104,10 +104,14 @@ fn uncaught_fatal_is_rendered_and_matched() {
 }
 
 #[test]
-fn expectregex_is_skipped() {
-    let (st, cat) = status("--TEST--\nt\n--FILE--\n<?php echo 1;\n--EXPECTREGEX--\n\\d\n");
-    assert_eq!(st, Status::Skip);
-    assert_eq!(cat, "expectregex");
+fn expectregex_matches_whole_output() {
+    // The EXPECTREGEX body is a regex matched against the whole output, anchored
+    // and dot-matches-newline (run-tests.php's `preg_match("/^$wanted$/s", ...)`).
+    let (st, _cat) = status("--TEST--\nt\n--FILE--\n<?php echo 1;\n--EXPECTREGEX--\n\\d\n");
+    assert_eq!(st, Status::Pass);
+    // A non-matching pattern is a real divergence (fail), no longer a skip.
+    let (st2, _) = status("--TEST--\nt\n--FILE--\n<?php echo 'abc';\n--EXPECTREGEX--\n\\d+\n");
+    assert_eq!(st2, Status::Fail);
 }
 
 #[test]
