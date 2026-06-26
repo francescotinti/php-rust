@@ -343,11 +343,11 @@ impl<'f> Lowerer<'f> {
                 Construct::Isset(is) => {
                     let mut places = Vec::new();
                     for v in is.values.iter() {
-                        places.push(self.lower_place(v, line)?);
+                        places.push(self.lower_test_place(v, line)?);
                     }
                     ExprKind::Isset(places)
                 }
-                Construct::Empty(em) => ExprKind::Empty(self.lower_place(em.value, line)?),
+                Construct::Empty(em) => ExprKind::Empty(self.lower_test_place(em.value, line)?),
                 // `print expr` — an expression that emits then yields int(1).
                 Construct::Print(p) => ExprKind::Print(Box::new(self.lower_expr(p.value)?)),
                 // `exit`/`die [arg]` — `die` is an exact alias of `exit`. Both
@@ -957,6 +957,40 @@ impl<'f> Lowerer<'f> {
     /// Resolve an lvalue: a base variable plus a chain of index steps. `$x`
     /// yields an empty step list; `$a[k]`, `$a[]`, and nested forms append
     /// [`PlaceStep`]s. Property and `list()` targets stay out of Tier 1 scope.
+    /// Lower an `isset()` / `empty()` operand. A *bare* static property reached
+    /// through `self::`/`parent::`/`static::` (`empty(self::$stack)`) is a valid
+    /// read-only test place: the class is statically resolved and the property is
+    /// always visible from the current scope, so the compiler can read it through
+    /// `static_prop_read` (no `StaticPropSet`, so no visibility-checked write on a
+    /// read) without risking a fatal that `isset`/`empty` must never raise.
+    ///
+    /// A *named* (`A::$priv`) or *dynamic* (`$cls::$p`) class is deliberately left
+    /// to the general path: `isset` must stay silent about an inaccessible private
+    /// or an undefined dynamic class name, which a plain static read would not be,
+    /// and a bare static property is not a general lvalue anyway (a write goes
+    /// through `StaticPropAssign`). Every other operand defers to `lower_place`.
+    pub(super) fn lower_test_place(
+        &mut self,
+        e: &Expression,
+        line: Line,
+    ) -> Result<Place, LowerError> {
+        if let Expression::Access(Access::StaticProperty(sp)) = e {
+            // Only the same-hierarchy keywords guarantee a fatal-free read.
+            if matches!(
+                sp.class,
+                Expression::Self_(_) | Expression::Parent(_) | Expression::Static(_)
+            ) {
+                let class = self.class_ref_of(sp.class, line)?;
+                let name = static_prop_name(&sp.property, line)?.into();
+                return Ok(Place {
+                    base: PlaceBase::StaticProp { class, name },
+                    steps: Vec::new(),
+                });
+            }
+        }
+        self.lower_place(e, line)
+    }
+
     pub(super) fn lower_place(&mut self, lhs: &Expression, line: Line) -> Result<Place, LowerError> {
         match lhs {
             Expression::Parenthesized(p) => self.lower_place(p.expression, line),
