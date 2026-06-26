@@ -6249,6 +6249,7 @@ impl<'m> Vm<'m> {
         match name {
             b"usort" => self.ho_usort(slot, rest),
             b"array_walk" => self.ho_array_walk(slot, rest),
+            b"array_walk_recursive" => self.ho_array_walk_recursive(slot, rest),
             b"reset" => self.ho_array_pointer(slot, PtrOp::Reset),
             b"end" => self.ho_array_pointer(slot, PtrOp::End),
             b"next" => self.ho_array_pointer(slot, PtrOp::Next),
@@ -6328,6 +6329,80 @@ impl<'m> Vm<'m> {
         let top = self.frames.len() - 1;
         self.frames[top].slots[slot as usize] = Zval::Array(Rc::new(out));
         Ok(Zval::Bool(true))
+    }
+
+    /// `array_walk_recursive(&$array, $callback, $arg = null)`: like `array_walk`
+    /// but descends into nested arrays, invoking `$callback` only on the leaf
+    /// (non-array) values. The structure is preserved; a by-ref first parameter
+    /// lets the callback mutate leaves in place. Returns true.
+    fn ho_array_walk_recursive(&mut self, slot: Slot, rest: Vec<Zval>) -> Result<Zval, PhpError> {
+        let mut it = rest.into_iter();
+        let Some(callback) = it.next() else {
+            return Err(PhpError::ArgumentCountError(
+                "array_walk_recursive() expects at least 2 arguments, 1 given".to_string(),
+            ));
+        };
+        let callback = callback.deref_clone();
+        let extra = it.next().map(|e| e.deref_clone());
+        let by_ref = self.callable_first_by_ref(&callback);
+        let top = self.frames.len() - 1;
+        let arr = match self.frames[top].slots[slot as usize].deref_clone() {
+            Zval::Array(a) => a,
+            other => {
+                return Err(PhpError::TypeError(format!(
+                    "array_walk_recursive(): Argument #1 ($array) must be of type array, {} given",
+                    other.type_name_for_error()
+                )))
+            }
+        };
+        let walked = self.walk_recursive(&arr, &callback, &extra, by_ref)?;
+        let top = self.frames.len() - 1;
+        self.frames[top].slots[slot as usize] = Zval::Array(Rc::new(walked));
+        Ok(Zval::Bool(true))
+    }
+
+    /// Recursive worker for `array_walk_recursive`: rebuild `arr`, recursing into
+    /// array elements (the callback never sees an array node) and applying the
+    /// callback to each leaf (by value or, if `by_ref`, through a shared cell).
+    fn walk_recursive(
+        &mut self,
+        arr: &PhpArray,
+        callback: &Zval,
+        extra: &Option<Zval>,
+        by_ref: bool,
+    ) -> Result<PhpArray, PhpError> {
+        let entries: Vec<(Key, Zval)> =
+            arr.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect();
+        let mut out = PhpArray::new();
+        for (k, v) in entries {
+            let new_v = match v {
+                Zval::Array(inner) => {
+                    Zval::Array(Rc::new(self.walk_recursive(&inner, callback, extra, by_ref)?))
+                }
+                leaf => {
+                    let key_z = key_to_zval(&k);
+                    if by_ref {
+                        let vcell = Rc::new(RefCell::new(leaf));
+                        let mut argv = vec![Zval::Ref(Rc::clone(&vcell)), key_z];
+                        if let Some(e) = extra {
+                            argv.push(e.clone());
+                        }
+                        self.call_callable(callback.clone(), argv)?;
+                        let updated = vcell.borrow().clone();
+                        updated
+                    } else {
+                        let mut argv = vec![leaf.clone(), key_z];
+                        if let Some(e) = extra {
+                            argv.push(e.clone());
+                        }
+                        self.call_callable(callback.clone(), argv)?;
+                        leaf
+                    }
+                }
+            };
+            out.insert(k, new_v);
+        }
+        Ok(out)
     }
 
     /// Whether a callable's first parameter is declared by-reference (`&$x`).
@@ -7674,6 +7749,7 @@ pub(crate) fn host_builtin_ref_first(name: &[u8]) -> Option<&'static [u8]> {
     const HOST_REF: &[&[u8]] = &[
         b"usort",
         b"array_walk",
+        b"array_walk_recursive",
         // Array internal-pointer family (Session: array-pointer). Each takes the
         // array by reference (mutating/reading its internal cursor).
         b"reset",
