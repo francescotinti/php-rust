@@ -259,6 +259,7 @@ pub(crate) fn run_module_with_hir<'m>(
         magic_guard: HashSet::new(),
         created: Vec::new(),
         destructed: HashSet::new(),
+        shutdown_fns: Vec::new(),
         generators: HashMap::new(),
         fibers: HashMap::new(),
         fiber_stack: Vec::new(),
@@ -323,6 +324,9 @@ pub(crate) fn run_module_with_hir<'m>(
     if let Some(err) = &fatal {
         vm.render_fatal(err, line);
     }
+    // `register_shutdown_function` callbacks run after the main script (and any
+    // uncaught-fatal banner), before object destructors (PHP shutdown sequence).
+    vm.run_shutdown_functions();
     // End-of-script destructors (LIFO over the objects still tracked), run after
     // `main` returns — or after a fatal, on a cleared stack (OOP-3d). Their output
     // flows through `emit_str`, so it lands in `rendered` after the fatal block.
@@ -691,6 +695,10 @@ struct Vm<'m> {
     created: Vec<Rc<RefCell<Object>>>,
     /// Object handles whose `__destruct` has already run, guarding double calls.
     destructed: HashSet<u32>,
+    /// Callbacks registered with `register_shutdown_function`, each with its bound
+    /// arguments, run in registration order at script end — after the main run (and
+    /// any uncaught-fatal banner), before object destructors.
+    shutdown_fns: Vec<(Zval, Vec<Zval>)>,
     /// Suspended generator frames, keyed by generator handle id (GEN). A frame
     /// lives here while the generator is `NotStarted` or `Suspended`; it is moved
     /// onto the main `frames` stack while running (resumed), and parked back on
@@ -3782,6 +3790,7 @@ impl<'m> Vm<'m> {
             b"class_implements" => self.ho_class_implements(args),
             b"get_object_vars" => self.ho_get_object_vars(args),
             b"get_class_vars" => self.ho_get_class_vars(args),
+            b"register_shutdown_function" => self.ho_register_shutdown_function(args),
             b"get_class_methods" => self.ho_get_class_methods(args),
             b"func_num_args" => self.ho_func_num_args(),
             b"func_get_args" => self.ho_func_get_args(),
@@ -4882,6 +4891,21 @@ impl<'m> Vm<'m> {
             }
         }
         Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// `register_shutdown_function(callable $callback, mixed ...$args)`: queue
+    /// `$callback` (with any bound `$args`) to run at script end, in registration
+    /// order. Returns `null`.
+    fn ho_register_shutdown_function(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let mut it = args.into_iter();
+        let Some(cb) = it.next() else {
+            return Err(PhpError::ArgumentCountError(
+                "register_shutdown_function() expects at least 1 argument, 0 given".to_string(),
+            ));
+        };
+        let bound: Vec<Zval> = it.map(|a| a.deref_clone()).collect();
+        self.shutdown_fns.push((cb.deref_clone(), bound));
+        Ok(Zval::Null)
     }
 
     /// `get_class_methods($object_or_class)` (Session B2): the class's method names,
@@ -7181,6 +7205,7 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"get_parent_class",
         b"get_object_vars",
         b"get_class_vars",
+        b"register_shutdown_function",
         b"get_class_methods",
         b"func_num_args",
         b"func_get_args",

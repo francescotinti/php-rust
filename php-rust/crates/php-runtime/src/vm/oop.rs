@@ -426,6 +426,27 @@ impl<'m> Vm<'m> {
     /// Run `__destruct` on every object still tracked at the end of the script,
     /// in reverse creation order (PHP shutdown is LIFO), step OOP-3d. The frame
     /// stack is cleared first so this works even after a fatal unwound `main`.
+    /// Run `register_shutdown_function` callbacks in registration order at script
+    /// end — after the main run (and any uncaught-fatal banner), before object
+    /// destructors. A synthetic `main` frame gives `call_callable` a caller frame
+    /// for value-builtin results. A throw inside a callback is swallowed (PHP turns
+    /// it into a separate shutdown-time fatal, not modelled here).
+    pub(super) fn run_shutdown_functions(&mut self) {
+        if self.shutdown_fns.is_empty() {
+            return;
+        }
+        self.frames.clear();
+        self.frames.push(Frame::new(&self.module.main, self.module));
+        for (cb, args) in std::mem::take(&mut self.shutdown_fns) {
+            // `exit`/`die` in a shutdown callback aborts the remaining callbacks
+            // (PHP). Other throws are swallowed (a separate fatal is not modelled).
+            if let Err(PhpError::Exit(_)) = self.call_callable(cb, args) {
+                break;
+            }
+        }
+        self.frames.clear();
+    }
+
     pub(super) fn run_shutdown_destructors(&mut self) {
         self.frames.clear();
         let survivors = std::mem::take(&mut self.created);
