@@ -1935,8 +1935,12 @@ impl<'a> FnCompiler<'a> {
             return Ok(());
         }
         // Host builtins with a by-reference *output* parameter (`preg_match`'s
-        // `&$matches` at index 2): push every argument by value, capture the
-        // out-param's slot, and let the VM write the produced value back.
+        // `&$matches` at index 2): capture the out-param's slot and let the VM
+        // write the produced value back. The out-param is a *write* target, so its
+        // argument is NOT evaluated by value — pushing it would read the (usually
+        // undefined) variable and emit a spurious "Undefined variable" warning the
+        // real PHP never raises. Push `null` in its place (the builtin ignores the
+        // input value there).
         if let Some((canon, out_idx)) = crate::vm::host_builtin_out_param(name) {
             let out_slot = match args.get(out_idx) {
                 None => None, // out-param omitted (e.g. `preg_match($p, $s)`)
@@ -1949,7 +1953,16 @@ impl<'a> FnCompiler<'a> {
                     }
                 },
             };
-            self.push_value_args(args)?;
+            for (i, a) in args.iter().enumerate() {
+                if i == out_idx {
+                    let k = self.konst(Const::Null);
+                    self.emit(Op::PushConst(k));
+                } else if matches!(a.kind, ExprKind::Spread(_)) {
+                    return Err(CompileError::Unsupported("argument unpacking (spread)".into()));
+                } else {
+                    self.expr(a)?;
+                }
+            }
             self.emit(Op::CallHostBuiltinOut {
                 name: canon.into(),
                 out_slot,
