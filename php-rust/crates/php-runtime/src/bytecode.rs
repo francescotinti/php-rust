@@ -1031,6 +1031,8 @@ pub struct CompiledMethod {
     pub visibility: Visibility,
     /// `static` method (for `ReflectionMethod::isStatic`).
     pub is_static: bool,
+    /// `final` method (for `ReflectionMethod::isFinal`).
+    pub is_final: bool,
     pub func: Func,
 }
 
@@ -1105,6 +1107,10 @@ pub struct CompiledClass {
     pub interfaces: Vec<ClassId>,
     /// Whether `new` on this class is allowed, and the fatal reason if not.
     pub instantiable: Instantiable,
+    /// `final class` / enum (for `ReflectionClass::isFinal`).
+    pub is_final: bool,
+    /// `abstract class` / interface (for `ReflectionClass::isAbstract`).
+    pub is_abstract: bool,
     /// Effective instance properties, parent-first and flattened (a redeclared
     /// property keeps its inherited position with the most-derived default), each
     /// with its constant default materialised by [`Const::to_zval`].

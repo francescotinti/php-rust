@@ -447,6 +447,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
                 name: m.decl.name.clone(),
                 visibility: m.visibility,
                 is_static: m.is_static,
+                is_final: m.is_final,
                 func,
             }
         })
@@ -539,6 +540,8 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         parent: cd.parent,
         interfaces: cd.interfaces.clone(),
         instantiable,
+        is_final: cd.is_final,
+        is_abstract: cd.is_abstract,
         prop_defaults,
         info: Rc::new(ObjectInfo::from_entries_typed(vis_entries, prop_type_displays)),
         methods,

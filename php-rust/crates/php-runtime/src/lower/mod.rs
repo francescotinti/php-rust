@@ -962,6 +962,8 @@ class ReflectionClass {
     public function newInstanceArgs($args = []) { return new $this->name(...$args); }
     public function isInstantiable() { return class_exists($this->name); }
     public function isInterface() { return interface_exists($this->name); }
+    public function isFinal() { return __reflect_class_modifiers($this->name)['final']; }
+    public function isAbstract() { return __reflect_class_modifiers($this->name)['abstract']; }
     public function hasMethod($name) { return method_exists($this->name, $name); }
     public function hasProperty($name) { return property_exists($this->name, $name); }
     public function hasConstant($name) { return defined($this->name . '::' . $name); }
@@ -1112,6 +1114,7 @@ class ReflectionMethod {
     }
     public function getDeclaringClass() { return new ReflectionClass($this->__info['declaringClass']); }
     public function isStatic() { return $this->__info['static']; }
+    public function isFinal() { return $this->__info['final']; }
     public function isAbstract() { return $this->__info['abstract']; }
     public function isPublic() { return $this->__info['visibility'] === 'public'; }
     public function isProtected() { return $this->__info['visibility'] === 'protected'; }

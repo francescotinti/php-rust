@@ -4086,6 +4086,7 @@ impl<'m> Vm<'m> {
             b"__reflect_prop_declaring_class" => self.ho_reflect_prop_declaring_class(args),
             b"__reflect_func_info" => self.ho_reflect_func_info(args),
             b"__reflect_method_info" => self.ho_reflect_method_info(args),
+            b"__reflect_class_modifiers" => self.ho_reflect_class_modifiers(args),
             b"get_object_vars" => self.ho_get_object_vars(args),
             b"get_class_vars" => self.ho_get_class_vars(args),
             b"register_shutdown_function" => self.ho_register_shutdown_function(args),
@@ -5166,6 +5167,7 @@ impl<'m> Vm<'m> {
             return Ok(Zval::Bool(false));
         };
         let is_static = m.is_static;
+        let is_final = m.is_final;
         let vis: &[u8] = match m.visibility {
             Visibility::Public => b"public",
             Visibility::Protected => b"protected",
@@ -5174,10 +5176,33 @@ impl<'m> Vm<'m> {
         let decl_name = self.classes[decl].name.to_vec();
         let mut d = self.build_func_descriptor(&m.func, Some(decl))?;
         d.insert(Key::Str(PhpStr::new(b"static".to_vec())), Zval::Bool(is_static));
+        d.insert(Key::Str(PhpStr::new(b"final".to_vec())), Zval::Bool(is_final));
         d.insert(Key::Str(PhpStr::new(b"visibility".to_vec())), Zval::Str(PhpStr::new(vis.to_vec())));
         d.insert(Key::Str(PhpStr::new(b"abstract".to_vec())), Zval::Bool(false));
         d.insert(Key::Str(PhpStr::new(b"declaringClass".to_vec())), Zval::Str(PhpStr::new(decl_name)));
         Ok(Zval::Array(Rc::new(d)))
+    }
+
+    /// `__reflect_class_modifiers($class)`: `['final' => bool, 'abstract' => bool]`
+    /// for `ReflectionClass::isFinal()`/`isAbstract()`. Empty (both false) if the
+    /// class is unknown.
+    fn ho_reflect_class_modifiers(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let (mut is_final, mut is_abstract) = (false, false);
+        if let Some(first) = args.first() {
+            let raw = convert::to_zstr_cast(first, &mut self.diags).as_bytes().to_vec();
+            let key = raw.strip_prefix(b"\\").unwrap_or(&raw).to_ascii_lowercase();
+            if let Some(&cid) = self.class_index.get(&key) {
+                let cc = self.classes[cid];
+                is_final = cc.is_final;
+                // An interface is not reported as abstract by Reflection (only an
+                // abstract *class* is), though it carries `is_abstract` internally.
+                is_abstract = cc.is_abstract && !matches!(cc.instantiable, Instantiable::Interface);
+            }
+        }
+        let mut a = php_types::PhpArray::new();
+        a.insert(Key::Str(PhpStr::new(b"final".to_vec())), Zval::Bool(is_final));
+        a.insert(Key::Str(PhpStr::new(b"abstract".to_vec())), Zval::Bool(is_abstract));
+        Ok(Zval::Array(Rc::new(a)))
     }
 
     /// `__reflect_class_attributes($class, $filter = null)`: the host backing of
@@ -8053,6 +8078,7 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"__reflect_prop_declaring_class",
         b"__reflect_func_info",
         b"__reflect_method_info",
+        b"__reflect_class_modifiers",
         b"__weak_create",
         b"__weak_get",
         b"get_parent_class",
