@@ -1144,6 +1144,11 @@ pub struct CompiledClass {
     /// Names of the traits this class uses directly (resolved, original case) —
     /// read by `class_uses()` / `ReflectionClass::getTraitNames()`. Empty when none.
     pub uses_traits: Vec<Box<[u8]>>,
+    /// Declared types of this class's *own* typed instance properties (name →
+    /// hint), for write enforcement. Resolution walks the parent chain like
+    /// [`CompiledClass::own_prop_vis`]; the class found is the *declaring* class
+    /// (used in the "Cannot assign … of type …" TypeError). Empty when none.
+    pub prop_types: Vec<(Box<[u8]>, TypeHint)>,
     /// `false` if the class could not be fully compiled (e.g. a non-constant
     /// property default): [`Op::Alloc`] on it fatals instead of producing a
     /// wrong instance, mirroring the function-stub discipline.

@@ -471,6 +471,13 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
 
     let own_prop_vis = cd.props.iter().map(|p| (p.name.clone(), p.visibility)).collect();
 
+    // Declared types of this class's own typed properties, for write enforcement.
+    let prop_types = cd
+        .props
+        .iter()
+        .filter_map(|p| p.hint.clone().map(|h| (p.name.clone(), h)))
+        .collect();
+
     // Names of readonly instance properties declared on this class (readonly
     // enforcement). Walked parent-first at run time to find the declaring class.
     let readonly_props = cd
@@ -526,6 +533,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         enum_cases,
         attributes,
         uses_traits: cd.uses_traits.clone(),
+        prop_types,
         ok,
         prop_hooks,
     }

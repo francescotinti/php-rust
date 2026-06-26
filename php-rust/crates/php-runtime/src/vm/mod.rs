@@ -2688,7 +2688,7 @@ impl<'m> Vm<'m> {
                     self.frames[top].stack.push(v);
                 }
                 Op::PropSet { name } => {
-                    let value = self.frames[top].stack.pop().expect("PropSet value");
+                    let mut value = self.frames[top].stack.pop().expect("PropSet value");
                     let obj = self.frames[top].stack.pop().expect("PropSet object");
                     let cur = self.frames[top].class;
                     let target = obj.deref_clone();
@@ -2756,6 +2756,10 @@ impl<'m> Vm<'m> {
                                 o.borrow_mut().mark_readonly_init(&name);
                             }
                         }
+                        // Typed-property write enforcement: coerce the value to the
+                        // property's declared type (or TypeError). The assignment
+                        // expression yields the coerced value.
+                        value = self.coerce_typed_prop_write(ocid, &name, value)?;
                     }
                     write_property(&target, &name, value.clone())?;
                     self.frames[top].stack.push(value);
@@ -2770,7 +2774,10 @@ impl<'m> Vm<'m> {
                         return Err(err);
                     }
                     let old = read_property(&obj, &name, &mut self.diags);
-                    let result = apply_binop(op, &old, &rhs, &mut self.diags)?;
+                    let mut result = apply_binop(op, &old, &rhs, &mut self.diags)?;
+                    if let Some(ocid) = object_class_id(&obj) {
+                        result = self.coerce_typed_prop_write(ocid, &name, result)?;
+                    }
                     write_property(&obj, &name, result.clone())?;
                     self.frames[top].stack.push(result);
                 }
@@ -2788,6 +2795,9 @@ impl<'m> Vm<'m> {
                         ops::increment(&mut newv, &mut self.diags)?;
                     } else {
                         ops::decrement(&mut newv, &mut self.diags)?;
+                    }
+                    if let Some(ocid) = object_class_id(&obj) {
+                        newv = self.coerce_typed_prop_write(ocid, &name, newv)?;
                     }
                     write_property(&obj, &name, newv.clone())?;
                     self.frames[top].stack.push(if pre { newv } else { old });
@@ -6968,6 +6978,27 @@ impl<'m> Vm<'m> {
         }
     }
 
+    /// Enforce a typed instance property's declared type on a write (step: typed
+    /// properties). Returns the value coerced to the declared type (weak typing) or
+    /// a `TypeError` ("Cannot assign … to property C::$p of type T"). An untyped /
+    /// dynamic property passes the value through unchanged. The strict-types mode of
+    /// the *writing* frame governs coercion, mirroring the parameter binder.
+    fn coerce_typed_prop_write(&mut self, ocid: ClassId, name: &[u8], value: Zval) -> Result<Zval, PhpError> {
+        let Some((decl, hint)) = resolve_prop_type(&self.classes, ocid, name) else {
+            return Ok(value);
+        };
+        let strict = self.module.strict;
+        match self.coerce_or_check_hint(value, &hint, strict) {
+            Ok(v) => Ok(v),
+            Err(given) => Err(PhpError::TypeError(format!(
+                "Cannot assign {given} to property {}::${} of type {}",
+                String::from_utf8_lossy(&self.classes[decl].name),
+                String::from_utf8_lossy(name),
+                type_hint_display(&hint),
+            ))),
+        }
+    }
+
     /// Whether `v` is an instance of the class/interface `name` (the `instanceof`
     /// check behind a class type hint). A `Closure`/`Generator` value satisfies its
     /// implicit class (`Closure`; `Generator`/`Iterator`/`Traversable`); a real
@@ -7902,6 +7933,26 @@ fn errno_label(errno: i64) -> &'static str {
         2 | 512 => "Warning",        // E_WARNING / E_USER_WARNING
         8192 | 16384 => "Deprecated", // E_DEPRECATED / E_USER_DEPRECATED
         _ => "Notice",                // E_NOTICE (8) / E_USER_NOTICE (1024)
+    }
+}
+
+/// Render a [`TypeHint`] as PHP displays it in a type error (`int`, `?Foo`, …).
+fn type_hint_display(h: &TypeHint) -> String {
+    let base: String = match &h.kind {
+        HintKind::Scalar(ScalarType::Int) => "int".into(),
+        HintKind::Scalar(ScalarType::Float) => "float".into(),
+        HintKind::Scalar(ScalarType::String) => "string".into(),
+        HintKind::Scalar(ScalarType::Bool) => "bool".into(),
+        HintKind::Array => "array".into(),
+        HintKind::Callable => "callable".into(),
+        HintKind::Iterable => "iterable".into(),
+        HintKind::Object => "object".into(),
+        HintKind::Class(c) => String::from_utf8_lossy(c).into_owned(),
+    };
+    if h.nullable {
+        format!("?{base}")
+    } else {
+        base
     }
 }
 

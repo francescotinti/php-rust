@@ -200,6 +200,26 @@ pub(super) fn resolve_readonly_decl(classes: &[&CompiledClass], class: ClassId, 
     None
 }
 
+/// Resolve a typed property to its declaring class and declared type, walking the
+/// parent chain. A more-derived (untyped or typed) redeclaration shadows an
+/// inherited type — the most-derived declaration wins. `None` for an untyped or
+/// undeclared (dynamic) property. Mirrors [`resolve_readonly_decl`].
+pub(super) fn resolve_prop_type(classes: &[&CompiledClass], class: ClassId, name: &[u8]) -> Option<(ClassId, TypeHint)> {
+    let mut cid = Some(class);
+    while let Some(c) = cid {
+        let cc = classes.get(c)?;
+        if let Some((_, h)) = cc.prop_types.iter().find(|(n, _)| n.as_ref() == name) {
+            return Some((c, h.clone()));
+        }
+        // Declared untyped here → shadows any inherited typed declaration.
+        if cc.own_prop_vis.iter().any(|(n, _)| n.as_ref() == name) {
+            return None;
+        }
+        cid = cc.parent;
+    }
+    None
+}
+
 /// Resolve a static property to its declaring class and index, walking the parent
 /// chain (OOP-2b).
 pub(super) fn find_static_prop(classes: &[&CompiledClass], start: ClassId, name: &[u8]) -> Option<(ClassId, usize)> {

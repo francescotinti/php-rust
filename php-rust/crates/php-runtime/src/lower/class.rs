@@ -884,7 +884,8 @@ impl<'f> Lowerer<'f> {
                 // A property is backed iff it has a default, or a hook reads/writes
                 // its own `$this->name`; otherwise it is virtual (no storage).
                 let backed = default.is_some() || hooks_backing;
-                out.push(PropDecl { name, visibility, default, get_hook, set_hook, backed, readonly });
+                let hint = self.lower_prop_hint(h.hint.as_ref(), &default);
+                out.push(PropDecl { name, visibility, default, get_hook, set_hook, backed, readonly, hint });
                 return Ok(());
             }
         };
@@ -904,6 +905,7 @@ impl<'f> Lowerer<'f> {
                     default,
                 });
             } else {
+                let hint = self.lower_prop_hint(plain.hint.as_ref(), &default);
                 out.push(PropDecl {
                     name,
                     visibility,
@@ -912,10 +914,26 @@ impl<'f> Lowerer<'f> {
                     set_hook: None,
                     backed: true,
                     readonly,
+                    hint,
                 });
             }
         }
         Ok(())
+    }
+
+    /// Lower a property's declared type to an enforceable [`TypeHint`], applying the
+    /// implicit-nullable rule (`int $x = null` behaves as `?int`, PHP 8.0). `None`
+    /// for an untyped property or a type phpr does not enforce (union/`self`/…).
+    fn lower_prop_hint(
+        &self,
+        hint: Option<&Hint>,
+        default: &Option<Expr>,
+    ) -> Option<TypeHint> {
+        let mut h = hint.and_then(|h| lower_hint(self, h))?;
+        if matches!(default.as_ref().map(|e| &e.kind), Some(ExprKind::Null)) {
+            h.nullable = true;
+        }
+        Some(h)
     }
 
     /// Lower a property's `{ get … set … }` hook list (PHP 8.4, step 50) into an
@@ -1127,6 +1145,9 @@ impl<'f> Lowerer<'f> {
         // Surface the promoted properties to the class (declared at the
         // constructor's position among members → correct dump order).
         for p in promoted {
+            // A promoted property inherits its constructor parameter's declared
+            // type (the param's hint already carries any implicit nullability).
+            let hint = params.iter().find(|pr| pr.slot == p.slot).and_then(|pr| pr.hint.clone());
             props.push(PropDecl {
                 name: p.name,
                 visibility: p.visibility,
@@ -1135,6 +1156,7 @@ impl<'f> Lowerer<'f> {
                 set_hook: p.set_hook,
                 backed: p.backed,
                 readonly: p.readonly,
+                hint,
             });
         }
         validate_goto(&body)?; // step 45: function-scoped goto/label check

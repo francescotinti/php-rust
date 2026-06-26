@@ -277,6 +277,10 @@ pub struct PropDecl {
     pub name: Box<[u8]>,
     pub visibility: Visibility,
     pub default: Option<Expr>,
+    /// Declared type (`public int $x`), enforced on write (coerced under weak
+    /// typing, `TypeError` otherwise). `None` for an untyped property. A literal
+    /// `null` default makes a non-nullable type implicitly nullable (PHP 8.0).
+    pub hint: Option<TypeHint>,
     /// PHP 8.4 property hooks (step 50). A `get`/`set` hook is a method-like body
     /// dispatched on read/write; `None` for a plain property. The `set` hook's
     /// `FnDecl` has one parameter (`$value` or the explicit `set($x)` param).
