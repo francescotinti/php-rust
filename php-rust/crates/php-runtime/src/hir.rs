@@ -74,6 +74,17 @@ pub struct LoweredTrait {
     pub consts: Vec<ClassConstDecl>,
     /// Names of `abstract` methods the trait requires the consumer to implement.
     pub abstract_methods: Vec<Box<[u8]>>,
+    /// The closures (and arrow functions) referenced by this trait's own methods,
+    /// in their original unit's index order, so a consumer in another unit can
+    /// re-append them and shift the method bodies' closure indices. Empty for a
+    /// trait with no closures.
+    pub closures: Vec<FnDecl>,
+    /// The index of `closures[0]` in the trait's original unit closure table (the
+    /// base used to compute the per-consumer shift).
+    pub closure_base: u32,
+    /// True when this trait was seeded from another unit (so its closures are NOT
+    /// in the current unit's table and must be re-appended on flatten).
+    pub external: bool,
 }
 
 /// Index into [`Program::classes`] (step 19, D-19.3).
@@ -297,6 +308,12 @@ pub struct FnDecl {
     /// the defining class's scope). `None` for free functions, methods (compiled
     /// with their class directly), and closures defined outside any class.
     pub defining_class: Option<Box<[u8]>>,
+    /// Amount added to every `ExprKind::Closure` index when this body is compiled.
+    /// Non-zero only for a trait method/closure flattened into a class from a
+    /// *different* unit: the trait's closures are re-appended to the consumer
+    /// unit's closure table, so the indices baked into the body must shift by the
+    /// append offset (the cross-unit trait-closure fix). 0 for everything else.
+    pub closure_shift: i32,
     pub line: Line,
 }
 

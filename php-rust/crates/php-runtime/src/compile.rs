@@ -108,7 +108,7 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
         .iter()
         .map(|fd| compile_fndecl(fd, &ctx).unwrap_or_else(|e| stub_func(fd, &e)))
         .collect();
-    let main = compile_body(b"", &program.body, program.slots.len() as u32, &[], &program.slots, false, false, None, 0, &ctx, None, true)?;
+    let main = compile_body(b"", &program.body, program.slots.len() as u32, &[], &program.slots, false, false, None, 0, &ctx, None, true, 0)?;
     // Classes are compiled tolerantly too (see `compile_class`).
     let classes = program
         .classes
@@ -175,6 +175,7 @@ fn compile_fndecl(fd: &FnDecl, ctx: &ProgramCtx) -> R<Func> {
         ctx,
         cur_class,
         false,
+        fd.closure_shift,
     )
 }
 
@@ -195,10 +196,12 @@ fn compile_body(
     ctx: &ProgramCtx,
     cur_class: Option<ClassId>,
     is_main: bool,
+    closure_shift: i32,
 ) -> R<Func> {
     let n_params = params.len() as u32;
     let mut c = FnCompiler::new(ctx, n_locals, cur_class, is_main, slot_names);
     c.returns_ref = by_ref;
+    c.closure_shift = closure_shift;
     // Default-parameter prologue (PAR): fill any omitted optional parameter with
     // its default before the body runs. Runs in the callee frame, so a default
     // may reference earlier parameters.
@@ -405,6 +408,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
                 ctx,
                 Some(cid),
                 false,
+                m.decl.closure_shift,
             ) {
                 Ok(f) => f,
                 Err(e) => stub_func(&m.decl, &e),
@@ -508,6 +512,7 @@ fn compile_hook(fd: &crate::hir::FnDecl, ctx: &ProgramCtx, cid: ClassId) -> Func
         ctx,
         Some(cid),
         false,
+        fd.closure_shift,
     )
     .unwrap_or_else(|e| stub_func(fd, &e))
 }
@@ -693,6 +698,9 @@ struct FnCompiler<'a> {
     /// resolving `self::` / `parent::` at compile time; `None` for the script
     /// body and free functions.
     cur_class: Option<ClassId>,
+    /// Added to every emitted closure index (see [`FnDecl::closure_shift`]); 0
+    /// except for a trait body flattened in from another unit.
+    closure_shift: i32,
     /// True only for the top-level script body: a destruction sweep
     /// ([`Op::Sweep`]) is emitted after each of its statements, mirroring the
     /// tree-walker's global-scope sweep (OOP-3d). Never set for functions/methods.
@@ -787,6 +795,7 @@ impl<'a> FnCompiler<'a> {
             loops: Vec::new(),
             ctx,
             cur_class,
+            closure_shift: 0,
             is_main,
             returns_ref: false,
             slot_names,
@@ -1496,8 +1505,11 @@ impl<'a> FnCompiler<'a> {
             ExprKind::AssignRef { target, source } => self.assign_ref(target, source)?,
             ExprKind::AssignRefCall { target, call } => self.assign_ref_call(target, call)?,
             ExprKind::Closure { fn_idx, captures, bind_this } => {
+                // `closure_shift` is non-zero only for a trait body flattened from
+                // another unit, whose closures were re-appended to this unit's table.
+                let idx = (*fn_idx as i64 + self.closure_shift as i64) as u32;
                 self.emit(Op::MakeClosure {
-                    fn_idx: *fn_idx as u32,
+                    fn_idx: idx,
                     captures: captures.clone().into_boxed_slice(),
                     bind_this: *bind_this,
                 });

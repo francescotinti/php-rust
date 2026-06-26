@@ -84,6 +84,10 @@ impl<'f> Lowerer<'f> {
         let mut consts = Vec::new();
         let mut abstract_methods: Vec<Box<[u8]>> = Vec::new();
         let mut uses: Vec<&TraitUse> = Vec::new();
+        // Closures lowered while lowering this trait's own methods occupy a
+        // contiguous range [clo_start, clo_end) in the unit closure table; captured
+        // so a consumer in another unit can re-append and shift them.
+        let clo_start = self.closures.len();
         // `__TRAIT__` in any method body resolves to this trait name (step 49).
         // `__CLASS__` inside a trait method is the *using* class in PHP, which is
         // unknown here (members are lowered once, then copied per consumer); it
@@ -111,6 +115,7 @@ impl<'f> Lowerer<'f> {
             }
         }
         self.cur_trait = saved_trait;
+        let trait_closures: Vec<FnDecl> = self.closures[clo_start..].to_vec();
         // Resolve any nested traits before flattening their members in.
         for u in &uses {
             for tn in u.trait_names.iter() {
@@ -147,6 +152,9 @@ impl<'f> Lowerer<'f> {
                 static_props,
                 consts,
                 abstract_methods,
+                closures: trait_closures,
+                closure_base: clo_start as u32,
+                external: false,
             },
         );
         Ok(())
@@ -159,7 +167,7 @@ impl<'f> Lowerer<'f> {
     /// `self.traits`, which the caller has ensured is fully resolved.
     #[allow(clippy::type_complexity)]
     fn flatten_into(
-        &self,
+        &mut self,
         uses: &[&TraitUse],
         consumer_name: &[u8],
         own: (
@@ -236,13 +244,26 @@ impl<'f> Lowerer<'f> {
                 // Unknown trait → surface as an undefined class (with its resolved
                 // FQN) so lower_unit's autoload retry can load the trait's file.
                 let lt = match self.traits.get(&tkey) {
-                    Some(lt) => lt,
+                    Some(lt) => lt.clone(),
                     None => {
                         return Err(LowerError::UndefinedClass {
                             name: self.resolve_class(tn),
                             line,
                         })
                     }
+                };
+                // A trait seeded from another unit carries its own closures: append
+                // them to this unit's table and shift the method bodies' closure
+                // indices by the append offset (cross-unit trait-closure fix).
+                let mshift: i32 = if lt.external && !lt.closures.is_empty() {
+                    let delta = self.closures.len() as i32 - lt.closure_base as i32;
+                    for mut c in lt.closures.iter().cloned() {
+                        c.closure_shift = delta;
+                        self.closures.push(c);
+                    }
+                    delta
+                } else {
+                    0
                 };
                 for m in &lt.methods {
                     let m_lc = m.decl.name.to_ascii_lowercase();
@@ -266,7 +287,9 @@ impl<'f> Lowerer<'f> {
                         });
                     }
                     from_trait.insert(m_lc, (torig.clone(), m.decl.name.clone()));
-                    methods.push(m.clone());
+                    let mut m = m.clone();
+                    m.decl.closure_shift = mshift;
+                    methods.push(m);
                 }
                 for p in &lt.props {
                     if seen_p.insert(p.name.to_ascii_lowercase()) {
@@ -957,6 +980,7 @@ impl<'f> Lowerer<'f> {
                 by_ref: false,
                 ret_hint: None,
                 defining_class: None,
+                closure_shift: 0,
                 line,
             },
             hook_backed,
@@ -1066,6 +1090,7 @@ impl<'f> Lowerer<'f> {
                 by_ref,
                 ret_hint,
                 defining_class: None,
+                closure_shift: 0,
                 line,
             },
         })
@@ -1118,6 +1143,7 @@ impl<'f> Lowerer<'f> {
             by_ref,
             ret_hint,
             defining_class: None,
+                closure_shift: 0,
             line,
         })
     }
@@ -1318,6 +1344,7 @@ impl<'f> Lowerer<'f> {
             // A closure/arrow inherits the lexically enclosing class so its body
             // can use `self::`/`parent::`/`new self` (resolved at compile time).
             defining_class: self.cur_class.clone(),
+                closure_shift: 0,
             line,
         });
         idx

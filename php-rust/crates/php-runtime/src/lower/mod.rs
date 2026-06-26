@@ -157,7 +157,16 @@ fn lower_source_impl(
             // declared in an earlier (e.g. autoloaded) unit (step 21, trait analogue
             // of seed_classes). The keys are recorded so only this unit's *new*
             // traits are re-emitted in `Program::traits`.
-            low.traits = straits.iter().cloned().collect();
+            low.traits = straits
+                .iter()
+                .map(|(k, t)| {
+                    let mut t = t.clone();
+                    // Seeded from another unit: its closures aren't in this unit's
+                    // table, so flatten must re-append and shift them.
+                    t.external = true;
+                    (k.clone(), t)
+                })
+                .collect();
             let (_pclasses, _pindex, pfunctions, pfn_index) = lower_prelude();
             low.functions = pfunctions;
             low.fn_index = pfn_index;
