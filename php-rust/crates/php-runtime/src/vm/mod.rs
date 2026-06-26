@@ -5434,8 +5434,25 @@ impl<'m> Vm<'m> {
             Some(a) => convert::to_long_cast(&a.deref_clone(), &mut self.diags),
             None => 0,
         };
+        // 5th arg `$offset`: byte offset to start matching at (negative counts
+        // from the end). The whole subject stays visible so `^`/lookbehind anchor
+        // to the true start; an out-of-range offset just yields no match.
+        let off = match args.get(4) {
+            Some(a) => convert::to_long_cast(&a.deref_clone(), &mut self.diags),
+            None => 0,
+        };
+        let start = if off < 0 {
+            // A negative offset counts from the end and clamps to the start.
+            (subject.len() as i64 + off).max(0) as usize
+        } else {
+            // A positive offset past the end is an error → `false` (PHP).
+            if off as usize > subject.len() {
+                return Ok((Zval::Bool(false), Zval::Null));
+            }
+            off as usize
+        };
         let subj = String::from_utf8_lossy(&subject);
-        let (ret, matches) = match re.captures(&subj) {
+        let (ret, matches) = match re.captures_at(&subj, start) {
             Some(caps) => (1, crate::preg::captures_array(&re, &caps, flags)),
             None => (0, Zval::Array(Rc::new(PhpArray::new()))),
         };

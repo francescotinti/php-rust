@@ -111,6 +111,20 @@ impl Engine {
         }
     }
 
+    /// First match at or after byte offset `start` (PHP's `preg_match` 5th
+    /// `$offset` argument). The whole `text` is still visible to the engine, so
+    /// `^`/`\A`/lookbehind anchor relative to the true start and reported offsets
+    /// stay absolute — matching PCRE. A `start` past the end yields no match.
+    pub fn captures_at(&self, text: &str, start: usize) -> Option<Caps> {
+        if start > text.len() {
+            return None;
+        }
+        match self {
+            Engine::Regex(r) => r.captures_at(text, start).map(|c| caps_from_regex(&c)),
+            Engine::Fancy(r) => r.captures_from_pos(text, start).ok().flatten().map(|c| caps_from_fancy(&c)),
+        }
+    }
+
     /// All non-overlapping matches in `text`, eagerly materialised.
     ///
     /// On a `fancy-regex` runtime error (e.g. backtrack-limit exceeded on a
