@@ -112,6 +112,24 @@ pub fn fwrite(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     }
 }
 
+/// `stream_isatty($stream)`: whether the stream is connected to a terminal. The
+/// three standard streams report the real process tty state (`false` when piped /
+/// redirected, as in the test harness and Composer's non-interactive runs); any
+/// other backend (file, memory) is never a tty.
+pub fn stream_isatty(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::io::IsTerminal;
+    let r = stream_arg(argv, "stream_isatty")?;
+    let mut res = r.borrow_mut();
+    let stream = res.as_stream_mut().expect("open stream checked in stream_arg");
+    let tty = match stream.backend {
+        StreamBackend::Stdin => std::io::stdin().is_terminal(),
+        StreamBackend::Stdout => std::io::stdout().is_terminal(),
+        StreamBackend::Stderr => std::io::stderr().is_terminal(),
+        _ => false,
+    };
+    Ok(Zval::Bool(tty))
+}
+
 /// `fclose($stream)`: drop the backend and mark the handle closed; the same
 /// `Rc` is shared, so every alias of the resource now reads as closed.
 pub fn fclose(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {

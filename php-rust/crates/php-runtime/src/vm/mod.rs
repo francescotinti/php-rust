@@ -187,7 +187,29 @@ pub fn run_source_with(
         .map_err(|crate::compile::CompileError::Unsupported(what)| VmRunError::Unsupported(what))?;
     // Retain the lowered HIR so an `eval()` in the script can be compiled against
     // the image (step 57, Phase 1c-2c): both borrows outlive the run.
-    Ok(run_module_with_hir(&module, registry, Some(&program)))
+    Ok(run_module_with_hir(&module, registry, Some(&program), None))
+}
+
+/// Like [`run_source_with`] but for a real CLI invocation: seed the CLI
+/// superglobals (`$_SERVER`/`$argv`/`$argc`/`$_ENV`) from `argv` (element 0 is the
+/// script path). The plain [`run_source_with`] passes `None`, so the test harness
+/// and library callers keep the previous behaviour (those superglobals undefined).
+pub fn run_source_with_argv(
+    name: &[u8],
+    source: &[u8],
+    registry: &Registry,
+    argv: &[&[u8]],
+) -> Result<VmOutcome, VmRunError> {
+    let program = match crate::lower_source(name, source) {
+        Ok(p) => p,
+        Err(crate::LowerError::Fatal { message, line }) => {
+            return Ok(compile_fatal_outcome(name, &message, line))
+        }
+        Err(e) => return Err(VmRunError::Lower(e)),
+    };
+    let module = crate::compile::compile_program(&program, registry)
+        .map_err(|crate::compile::CompileError::Unsupported(what)| VmRunError::Unsupported(what))?;
+    Ok(run_module_with_hir(&module, registry, Some(&program), Some(argv)))
 }
 
 /// Lower `source`, compile it, and run it on the VM with no builtins registered.
@@ -214,7 +236,52 @@ fn compile_fatal_outcome(file: &[u8], message: &str, line: Line) -> VmOutcome {
 /// already-compiled module and executes its `main`. Started without a retained
 /// HIR, so an `eval()` here lowers standalone (no compile-against-image).
 pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
-    run_module_with_hir(module, registry, None)
+    run_module_with_hir(module, registry, None, None)
+}
+
+/// Seed the CLI superglobals into the script frame's global slots: `$_SERVER`
+/// (the environment plus `argv`/`argc`/`SCRIPT_NAME`/`SCRIPT_FILENAME`/`PHP_SELF`),
+/// `$argv`, `$argc`, and `$_ENV`. Only slots the script actually references exist
+/// (allocated by name during lowering), so the rest are skipped — a script that
+/// never mentions `$_SERVER` is unaffected. `argv[0]` is the script path.
+fn seed_cli_superglobals(slots: &mut [Zval], names: &[Box<[u8]>], argv: &[&[u8]]) {
+    use std::os::unix::ffi::OsStrExt;
+    let env_array = || {
+        let mut a = PhpArray::new();
+        for (k, v) in std::env::vars_os() {
+            a.insert(
+                Key::from_bytes(k.as_os_str().as_bytes()),
+                Zval::Str(PhpStr::new(v.as_os_str().as_bytes().to_vec())),
+            );
+        }
+        a
+    };
+    let argv_array = || {
+        let mut a = PhpArray::new();
+        for arg in argv {
+            let _ = a.append(Zval::Str(PhpStr::new(arg.to_vec())));
+        }
+        a
+    };
+    let script = argv.first().copied().unwrap_or(b"");
+    let str_zval = |b: &[u8]| Zval::Str(PhpStr::new(b.to_vec()));
+    for (i, name) in names.iter().enumerate() {
+        match &name[..] {
+            b"_SERVER" => {
+                let mut s = env_array();
+                s.insert(Key::from_bytes(b"argv"), Zval::Array(Rc::new(argv_array())));
+                s.insert(Key::from_bytes(b"argc"), Zval::Long(argv.len() as i64));
+                s.insert(Key::from_bytes(b"SCRIPT_NAME"), str_zval(script));
+                s.insert(Key::from_bytes(b"SCRIPT_FILENAME"), str_zval(script));
+                s.insert(Key::from_bytes(b"PHP_SELF"), str_zval(script));
+                slots[i] = Zval::Array(Rc::new(s));
+            }
+            b"argv" => slots[i] = Zval::Array(Rc::new(argv_array())),
+            b"argc" => slots[i] = Zval::Long(argv.len() as i64),
+            b"_ENV" => slots[i] = Zval::Array(Rc::new(env_array())),
+            _ => {}
+        }
+    }
 }
 
 /// [`run_module`] with the caller's lowered HIR retained (`main_hir`), so an
@@ -223,6 +290,7 @@ pub(crate) fn run_module_with_hir<'m>(
     module: &'m Module,
     registry: &'m Registry,
     main_hir: Option<&'m Program>,
+    argv: Option<&[&[u8]]>,
 ) -> VmOutcome {
     let mut vm = Vm {
         module,
@@ -301,6 +369,13 @@ pub(crate) fn run_module_with_hir<'m>(
     vm.constants.insert(b"STDOUT".to_vec(), std_stream(2, StreamBackend::Stdout, false, true));
     vm.constants.insert(b"STDERR".to_vec(), std_stream(3, StreamBackend::Stderr, false, true));
     vm.frames.push(Frame::new(&module.main, module));
+    // Seed the CLI superglobals (`$_SERVER`/`$argv`/`$argc`/`$_ENV`) into the
+    // script frame's global slots for a real CLI run; the test harness passes
+    // `None`, leaving them undefined as before. Only slots the script references
+    // exist, so a script that never mentions `$_SERVER` is unaffected.
+    if let (Some(argv), Some(prog)) = (argv, main_hir) {
+        seed_cli_superglobals(&mut vm.frames[0].slots, &prog.slots, argv);
+    }
     // `exit`/`die` is a clean termination (the exit code is surfaced, not a fatal);
     // any other `Err` is an uncaught fatal. A `Ok` carries the top-level return.
     let mut exit_code = None;

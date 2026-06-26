@@ -56,6 +56,11 @@ impl<'f> Lowerer<'f> {
                 // object context (step 19, D-19.5).
                 if name == b"this" {
                     ExprKind::This
+                } else if is_data_superglobal(name) {
+                    // Superglobals (`$_SERVER`, …) are auto-global: in any scope they
+                    // read the script-frame slot, not a fresh local (the CLI seeds
+                    // them there). `$GLOBALS` keeps its own dedicated handling.
+                    ExprKind::GlobalVar(self.globals.slot_for(name))
                 } else {
                     ExprKind::Var(self.slot_for(name))
                 }
@@ -1066,6 +1071,10 @@ impl<'f> Lowerer<'f> {
                 let name = strip_dollar(d.name);
                 let base = if name == b"this" {
                     PlaceBase::This
+                } else if is_data_superglobal(name) {
+                    // Auto-global: `$_SERVER[$k] = …` inside any scope writes the
+                    // script-frame array (mirrors the read path).
+                    PlaceBase::Global(self.globals.slot_for(name))
                 } else {
                     PlaceBase::Local(self.slot_for(name))
                 };

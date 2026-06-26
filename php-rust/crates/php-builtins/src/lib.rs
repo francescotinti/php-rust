@@ -71,6 +71,7 @@ pub fn registry() -> Registry {
     // File / stream builtins (step 51; `fopen` is evaluator-dispatched).
     add(b"fread", file::fread);
     add(b"fwrite", file::fwrite);
+    add(b"stream_isatty", file::stream_isatty);
     add(b"fputs", file::fwrite);
     add(b"fclose", file::fclose);
     add(b"fgets", file::fgets);

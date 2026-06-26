@@ -7,10 +7,11 @@
 //! `exit`/`die` code when present, `255` for an uncaught fatal, otherwise `0`.
 
 use std::io::Write;
+use std::os::unix::ffi::OsStrExt;
 use std::process::ExitCode;
 
 use php_builtins::registry;
-use php_runtime::run_source_with;
+use php_runtime::run_source_with_argv;
 
 fn main() -> ExitCode {
     let Some(path) = std::env::args_os().nth(1) else {
@@ -28,7 +29,14 @@ fn main() -> ExitCode {
 
     let name = path.to_string_lossy();
     let registry = registry();
-    match run_source_with(name.as_bytes(), &source, &registry) {
+    // PHP CLI `$argv` / `$_SERVER['argv']`: element 0 is the script path, the rest
+    // are the arguments after it (`phpr script.php a b` → ['script.php','a','b']).
+    let argv_owned: Vec<Vec<u8>> = std::env::args_os()
+        .skip(1)
+        .map(|a| a.as_os_str().as_bytes().to_vec())
+        .collect();
+    let argv_refs: Vec<&[u8]> = argv_owned.iter().map(|v| v.as_slice()).collect();
+    match run_source_with_argv(name.as_bytes(), &source, &registry, &argv_refs) {
         Ok(outcome) => {
             let mut stdout = std::io::stdout().lock();
             let _ = stdout.write_all(&outcome.rendered);
