@@ -1717,6 +1717,9 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"PHP_RELEASE_VERSION" => ExprKind::Int(7),
         b"PHP_VERSION_ID" => ExprKind::Int(80507),
         b"PHP_SAPI" => str_lit(b"cli"),
+        // Platform identity (macOS oracle, matching `DIRECTORY_SEPARATOR`).
+        b"PHP_OS" => str_lit(b"Darwin"),
+        b"PHP_OS_FAMILY" => str_lit(b"Darwin"),
         b"DIRECTORY_SEPARATOR" => str_lit(b"/"),
         b"PATH_SEPARATOR" => str_lit(b":"),
         // setlocale() category selectors (macOS values, matching the oracle).
