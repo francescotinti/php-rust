@@ -286,6 +286,7 @@ pub fn registry() -> Registry {
     add(b"doubleval", floatval);
     add(b"strval", strval);
     add(b"setlocale", setlocale);
+    add(b"extension_loaded", extension_loaded);
     add(b"boolval", boolval);
     add(b"print_r", print_r);
     // Environment / runtime-introspection stubs (no real engine state modelled).
@@ -979,6 +980,18 @@ fn strval(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 
 fn boolval(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Bool(convert::to_bool(arg1(args, "boolval")?, ctx.diags)))
+}
+
+/// extension_loaded($name): whether a PHP extension is available. We report the
+/// set the oracle build exposes (so polyfill/feature guards take the same branch):
+/// Core, standard, SPL, pcre, json, mbstring, hash, date. Case-insensitive.
+fn extension_loaded(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let name = convert::to_zstr(arg1(args, "extension_loaded")?, ctx.diags);
+    let lc = name.as_bytes().to_ascii_lowercase();
+    const LOADED: &[&[u8]] = &[
+        b"core", b"standard", b"spl", b"pcre", b"json", b"mbstring", b"hash", b"date",
+    ];
+    Ok(Zval::Bool(LOADED.contains(&lc.as_slice())))
 }
 
 /// setlocale($category, ...$locales): we do not model real C locales — accept the

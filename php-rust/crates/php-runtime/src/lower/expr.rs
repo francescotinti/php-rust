@@ -1000,6 +1000,16 @@ impl<'f> Lowerer<'f> {
                 Ok(place)
             }
             Expression::ArrayAppend(ap) => {
+                // `Class::$arr[]` — append to a static-property array (mirrors the
+                // indexed `Class::$arr[k]` target above).
+                if let Expression::Access(Access::StaticProperty(sp)) = ap.array {
+                    let class = self.class_ref_of(sp.class, line)?;
+                    let name = static_prop_name(&sp.property, line)?.into();
+                    return Ok(Place {
+                        base: PlaceBase::StaticProp { class, name },
+                        steps: vec![PlaceStep::Append],
+                    });
+                }
                 let mut place = self.lower_place(ap.array, line)?;
                 place.steps.push(PlaceStep::Append);
                 Ok(place)
