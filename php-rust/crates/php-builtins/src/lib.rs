@@ -314,6 +314,7 @@ pub fn registry() -> Registry {
     add_ref(b"sort", array::sort);
     add_ref(b"array_pop", array::array_pop);
     add_ref(b"array_shift", array::array_shift);
+    add_ref(b"array_unshift", array::array_unshift);
     add_ref(b"array_splice", array::array_splice);
     r
 }

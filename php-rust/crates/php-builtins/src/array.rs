@@ -267,6 +267,28 @@ pub fn array_shift(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zva
     Ok(shifted)
 }
 
+/// `array_unshift(array &$array, mixed ...$values): int` — prepend `$values` to
+/// the front of the referenced array, reindexing integer keys from 0 (string
+/// keys are preserved, after the prepended values), returning the new count.
+pub fn array_unshift(arr: &mut Zval, values: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let rc = as_array_mut(arr, "array_unshift")?;
+    let mut out = PhpArray::new();
+    for v in values {
+        let _ = out.append(v.clone());
+    }
+    for (key, val) in rc.iter() {
+        match key {
+            Key::Int(_) => {
+                let _ = out.append(val.clone());
+            }
+            Key::Str(_) => out.insert(key.clone(), val.clone()),
+        }
+    }
+    let n = out.len() as i64;
+    *arr = Zval::Array(Rc::new(out));
+    Ok(Zval::Long(n))
+}
+
 // --- step 17-5: range / slice / reverse / unique / sum ---
 
 /// A numeric value coerced for `range`: `(value, is_float)`. `is_float` is set
