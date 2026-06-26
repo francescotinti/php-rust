@@ -4099,6 +4099,7 @@ impl<'m> Vm<'m> {
             }
             b"function_exists" => self.ho_function_exists(args),
             b"class_exists" => self.ho_class_exists(args),
+            b"class_alias" => self.ho_class_alias(args),
             b"interface_exists" => self.ho_interface_exists(args),
             b"method_exists" => self.ho_method_exists(args),
             b"property_exists" => self.ho_property_exists(args),
@@ -5616,6 +5617,47 @@ impl<'m> Vm<'m> {
         let cid = self.resolve_named_class_with_autoload(&args)?;
         let exists = matches!(cid, Some(c) if self.classes[c].instantiable != Instantiable::Interface);
         Ok(Zval::Bool(exists))
+    }
+
+    /// `class_alias(string $class, string $alias, bool $autoload = true): bool` —
+    /// register `$alias` as another name for the existing class/interface `$class`
+    /// by pointing it at the same class id, so `new $alias`, `instanceof`,
+    /// `class_exists($alias)` and static access all resolve identically (instances
+    /// still report the original class name). `false` (with a warning) if `$class`
+    /// does not exist or `$alias` is already taken.
+    fn ho_class_alias(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let (Some(a0), Some(a1)) = (args.first(), args.get(1)) else {
+            return Err(PhpError::ArgumentCountError(
+                "class_alias() expects at least 2 arguments".to_string(),
+            ));
+        };
+        let autoload = args.get(2).is_none_or(|v| convert::to_bool(v, &mut self.diags));
+        let orig_s = convert::to_zstr_cast(&a0.deref_clone(), &mut self.diags);
+        let orig = orig_s.as_bytes().strip_prefix(b"\\").unwrap_or(orig_s.as_bytes()).to_vec();
+        let alias_s = convert::to_zstr_cast(&a1.deref_clone(), &mut self.diags);
+        let alias = alias_s.as_bytes().strip_prefix(b"\\").unwrap_or(alias_s.as_bytes()).to_vec();
+        let cid = if autoload {
+            self.resolve_class_autoload(&orig)?
+        } else {
+            self.class_index.get(&orig.to_ascii_lowercase()).copied()
+        };
+        let Some(cid) = cid else {
+            self.diags.push(Diag::Warning(format!(
+                "Class \"{}\" not found",
+                String::from_utf8_lossy(&orig)
+            )));
+            return Ok(Zval::Bool(false));
+        };
+        let alias_key = alias.to_ascii_lowercase();
+        if self.class_index.contains_key(&alias_key) {
+            self.diags.push(Diag::Warning(format!(
+                "Cannot declare class {}, because the name is already in use",
+                String::from_utf8_lossy(&alias)
+            )));
+            return Ok(Zval::Bool(false));
+        }
+        self.class_index.insert(alias_key, cid);
+        Ok(Zval::Bool(true))
     }
 
     /// Resolve `args[0]` as a class name for the `*_exists` family (step 57, Phase
@@ -8097,6 +8139,7 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"vfprintf",
         b"function_exists",
         b"class_exists",
+        b"class_alias",
         b"interface_exists",
         b"method_exists",
         b"property_exists",
