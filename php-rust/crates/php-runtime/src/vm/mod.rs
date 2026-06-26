@@ -2122,6 +2122,33 @@ impl<'m> Vm<'m> {
                     let result = result?;
                     self.frames[top].stack.push(result);
                 }
+                Op::CallBuiltinRefCell { name, argc } => {
+                    // By-ref-first builtin on a non-variable place (`array_pop($o->q)`):
+                    // the target is a `Zval::Ref` cell (from `MakeRef`) beneath the
+                    // by-value rest args; mutate it in place, writing through to the
+                    // property / array element.
+                    let f = match self.registry.get(&name[..]) {
+                        Some(Builtin::RefFirst(f)) => *f,
+                        _ => return Err(undefined_builtin(&name)),
+                    };
+                    let rest = self.pop_keys(top, argc);
+                    let cell = match self.frames[top].stack.pop().expect("CallBuiltinRefCell ref") {
+                        Zval::Ref(rc) => rc,
+                        other => Rc::new(RefCell::new(other)),
+                    };
+                    let line = self.cur_line(top);
+                    self.flush_diags(line)?;
+                    let pre = self.stdout.len();
+                    let result = {
+                        let mut leaf = cell.borrow_mut();
+                        builtin_ref_call(f, &mut leaf, &rest, &mut self.stdout, &mut self.diags)
+                    };
+                    let produced = self.stdout[pre..].to_vec();
+                    self.rendered.extend_from_slice(&produced);
+                    self.flush_diags(line)?;
+                    let result = result?;
+                    self.frames[top].stack.push(result);
+                }
                 Op::Ret => {
                     let mut ret = self.frames[top].stack.pop().unwrap_or(Zval::Null);
                     // Coerce the returned value to a scalar return hint (weak, or

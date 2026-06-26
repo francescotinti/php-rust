@@ -486,6 +486,14 @@ pub enum Op {
     /// handed to the builtin as `&mut Zval` (write-through), and `argc` is the
     /// count of the remaining by-value arguments on the stack.
     CallBuiltinRef { name: Box<[u8]>, slot: Slot, argc: u32 },
+    /// `[ref, rest0, …, rest{argc-1}] -> [result]` — call a by-reference-first
+    /// builtin whose first argument is a non-variable place (`array_pop($this->q)`,
+    /// `sort($data['list'])`). The by-ref target is a [`Zval::Ref`] cell produced by
+    /// [`Op::MakeRef`] and sitting beneath the `argc` by-value arguments; the
+    /// builtin mutates the cell in place (write-through to the property / element).
+    /// Registry `RefFirst` builtins only — host by-ref builtins (callback-driven)
+    /// keep the slot/temp paths.
+    CallBuiltinRefCell { name: Box<[u8]>, argc: u32 },
     /// `[v] -> ` (frame ends) — pop the return value and unwind the current
     /// frame to the caller, which receives it on *its* operand stack. A function
     /// body with no explicit `return` ends with `PushConst(null); Ret`.

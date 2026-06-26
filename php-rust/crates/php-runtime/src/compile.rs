@@ -2450,9 +2450,25 @@ impl<'a> FnCompiler<'a> {
                     Ok(())
                 })
             }
-            _ => Err(CompileError::Unsupported(
-                "by-reference builtin whose first argument is not a plain variable".into(),
-            )),
+            // An instance property or array element (`array_pop($this->q)`,
+            // `sort($data['list'])`, `array_push($a[0], $x)`): produce a reference
+            // cell to the place with `MakeRef` (single evaluation of the index
+            // keys), push the rest by value, and let the builtin mutate the cell in
+            // place (write-through). Mirrors how a by-ref *parameter* takes such an
+            // argument; the plain-variable and static-property fast paths above
+            // avoid the extra cell.
+            _ => {
+                let Some(place) = expr_field_place(first) else {
+                    return Err(CompileError::Unsupported(
+                        "by-reference builtin whose first argument is not a plain variable".into(),
+                    ));
+                };
+                let (base, steps) = self.field_path(&place)?;
+                self.emit(Op::MakeRef { base, steps: steps.into() });
+                self.push_value_args(rest)?;
+                self.emit(Op::CallBuiltinRefCell { name: name.into(), argc: rest.len() as u32 });
+                Ok(())
+            }
         }
     }
 
@@ -3651,6 +3667,36 @@ fn local_slot(place: &Place) -> crate::hir::Slot {
     match place.base {
         PlaceBase::Local(s) if place.steps.is_empty() => s,
         _ => unreachable!("static_prop_rmw builds a step-less Local place for the by-ref builtin"),
+    }
+}
+
+/// Convert a read expression into a `FieldBase`-rooted [`Place`] (local/global/
+/// `$this` base plus property/index steps), for taking a non-variable place by
+/// reference (`MakeRef`) as a by-ref builtin's first argument. Returns `None` for
+/// anything not rooted at an addressable location (a call result, a literal, a
+/// static property — handled separately, &c.). Nullsafe property reads are
+/// excluded: `?->` is not an assignable place.
+fn expr_field_place(e: &Expr) -> Option<Place> {
+    match &e.kind {
+        ExprKind::Var(s) => Some(Place { base: PlaceBase::Local(*s), steps: Vec::new() }),
+        ExprKind::GlobalVar(s) => Some(Place { base: PlaceBase::Global(*s), steps: Vec::new() }),
+        ExprKind::This => Some(Place { base: PlaceBase::This, steps: Vec::new() }),
+        ExprKind::Index { base, index } => {
+            let mut place = expr_field_place(base)?;
+            place.steps.push(PlaceStep::Index((**index).clone()));
+            Some(place)
+        }
+        ExprKind::PropGet { object, name, nullsafe: false } => {
+            let mut place = expr_field_place(object)?;
+            place.steps.push(PlaceStep::Prop(name.clone()));
+            Some(place)
+        }
+        ExprKind::PropGetDyn { object, name, nullsafe: false } => {
+            let mut place = expr_field_place(object)?;
+            place.steps.push(PlaceStep::PropDyn((**name).clone()));
+            Some(place)
+        }
+        _ => None,
     }
 }
 
