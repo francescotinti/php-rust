@@ -1049,6 +1049,83 @@ pub fn mb_convert_encoding(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpErro
     Ok(Zval::Str(PhpStr::new(encode_str(&to.codec, &decoded))))
 }
 
+/// Encode `s` to `codec` for `iconv`: `//IGNORE` drops a char the target cannot
+/// represent, `//TRANSLIT` substitutes a placeholder (`?`); with neither, an
+/// unmappable char fails the whole conversion (returns `None`, → `false`).
+fn iconv_encode(codec: &Codec, s: &str, ignore: bool, translit: bool) -> Option<Vec<u8>> {
+    let mut out = Vec::new();
+    let mut buf = [0u8; 4];
+    for c in s.chars() {
+        let mapped: Option<Vec<u8>> = match codec {
+            Codec::Utf8 => Some(c.encode_utf8(&mut buf).as_bytes().to_vec()),
+            Codec::Ascii => ((c as u32) < 0x80).then(|| vec![c as u8]),
+            Codec::Latin1 => ((c as u32) <= 0xFF).then(|| vec![c as u8]),
+            Codec::Utf16Be => {
+                let mut u = [0u16; 2];
+                Some(c.encode_utf16(&mut u).iter().flat_map(|x| x.to_be_bytes()).collect())
+            }
+            Codec::Utf16Le => {
+                let mut u = [0u16; 2];
+                Some(c.encode_utf16(&mut u).iter().flat_map(|x| x.to_le_bytes()).collect())
+            }
+            Codec::Rs(e) => {
+                let (bytes, _, unmappable) = e.encode(c.encode_utf8(&mut buf));
+                (!unmappable).then(|| bytes.into_owned())
+            }
+        };
+        match mapped {
+            Some(b) => out.extend_from_slice(&b),
+            None if ignore => continue,
+            None if translit => out.push(b'?'),
+            None => return None,
+        }
+    }
+    Some(out)
+}
+
+/// `iconv($from_encoding, $to_encoding, $string)`: convert `$string` between
+/// charsets. `$to_encoding` may carry `//TRANSLIT` and/or `//IGNORE` suffixes. An
+/// unknown charset warns and returns false; an unmappable char (without a suffix)
+/// warns and returns false too. Reuses the mbstring [`Codec`] tables.
+pub fn iconv(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    if args.len() < 3 {
+        return Err(PhpError::ArgumentCountError(format!(
+            "iconv() expects exactly 3 arguments, {} given",
+            args.len()
+        )));
+    }
+    let from = convert::to_zstr(&args[0], ctx.diags);
+    let to_raw = convert::to_zstr(&args[1], ctx.diags);
+    let s = convert::to_zstr(&args[2], ctx.diags);
+    let tb = to_raw.as_bytes();
+    let (base, flags) = match tb.windows(2).position(|w| w == b"//") {
+        Some(p) => (&tb[..p], tb[p..].to_ascii_uppercase()),
+        None => (tb, Vec::new()),
+    };
+    let ignore = flags.windows(6).any(|w| w == b"IGNORE");
+    let translit = flags.windows(8).any(|w| w == b"TRANSLIT");
+    let from_enc = resolve_encoding(from.as_bytes());
+    let to_enc = resolve_encoding(base);
+    let (Some(from_enc), Some(to_enc)) = (from_enc, to_enc) else {
+        ctx.diags.push(php_types::Diag::Warning(format!(
+            "iconv(): Wrong charset, conversion from \"{}\" to \"{}\" is not allowed",
+            String::from_utf8_lossy(from.as_bytes()),
+            String::from_utf8_lossy(tb)
+        )));
+        return Ok(Zval::Bool(false));
+    };
+    let decoded = decode_bytes(&from_enc.codec, s.as_bytes());
+    match iconv_encode(&to_enc.codec, &decoded, ignore, translit) {
+        Some(out) => Ok(Zval::Str(PhpStr::new(out))),
+        None => {
+            ctx.diags.push(php_types::Diag::Warning(
+                "iconv(): Detected an illegal character in input string".to_string(),
+            ));
+            Ok(Zval::Bool(false))
+        }
+    }
+}
+
 /// mb_detect_encoding($string[, $encodings=null[, $strict=false]]): return the
 /// canonical name of the first candidate under which `$string` is valid. The
 /// default candidate order is ASCII, UTF-8. Non-strict mode falls back to the

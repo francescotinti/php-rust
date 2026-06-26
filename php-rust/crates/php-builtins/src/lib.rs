@@ -249,6 +249,7 @@ pub fn registry() -> Registry {
     add(b"mb_strimwidth", mbstring::mb_strimwidth);
     add(b"mb_strcut", mbstring::mb_strcut);
     add(b"mb_convert_encoding", mbstring::mb_convert_encoding);
+    add(b"iconv", mbstring::iconv);
     add(b"mb_detect_encoding", mbstring::mb_detect_encoding);
     add(b"number_format", string::number_format);
     add(b"sprintf", format::sprintf);

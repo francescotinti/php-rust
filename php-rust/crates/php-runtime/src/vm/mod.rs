@@ -389,6 +389,16 @@ pub(crate) fn run_module_with_hir<'m>(
     vm.constants.insert(b"STDIN".to_vec(), std_stream(1, StreamBackend::Stdin, true, false));
     vm.constants.insert(b"STDOUT".to_vec(), std_stream(2, StreamBackend::Stdout, false, true));
     vm.constants.insert(b"STDERR".to_vec(), std_stream(3, StreamBackend::Stderr, false, true));
+    // `PHP_BINARY`: absolute path to the running interpreter (PHP predefines it).
+    // Composer and symfony reference it (e.g. xdebug-handler restart); a missing
+    // constant otherwise fatals during `bin/composer`.
+    {
+        use std::os::unix::ffi::OsStrExt;
+        let path = std::env::current_exe()
+            .map(|p| p.as_os_str().as_bytes().to_vec())
+            .unwrap_or_else(|_| b"php".to_vec());
+        vm.constants.insert(b"PHP_BINARY".to_vec(), Zval::Str(PhpStr::new(path)));
+    }
     vm.frames.push(Frame::new(&module.main, module));
     // Seed the CLI superglobals (`$_SERVER`/`$argv`/`$argc`/`$_ENV`) into the
     // script frame's global slots for a real CLI run; the test harness passes
