@@ -147,6 +147,7 @@ impl<'f> Lowerer<'f> {
         self.traits.insert(
             key.to_vec(),
             LoweredTrait {
+                name: join_ns(&self.cur_namespace, t.name.value),
                 methods,
                 props,
                 static_props,
@@ -427,6 +428,7 @@ impl<'f> Lowerer<'f> {
             enum_backing: None,
             enum_cases: Vec::new(),
             attributes: Vec::new(),
+            uses_traits: Vec::new(),
             line,
         })
     }
@@ -649,6 +651,13 @@ impl<'f> Lowerer<'f> {
             })
             .cloned()
             .collect();
+        // The directly-used traits' resolved names, kept for `class_uses()` /
+        // `ReflectionClass::getTraitNames()` (the members are already flattened in).
+        let uses_traits: Vec<Box<[u8]>> = uses
+            .iter()
+            .flat_map(|u| u.trait_names.iter())
+            .map(|tn| self.resolve_class(tn))
+            .collect();
         Ok(ClassDecl {
             name,
             parent,
@@ -664,6 +673,7 @@ impl<'f> Lowerer<'f> {
             enum_backing: None,
             enum_cases: Vec::new(),
             attributes: Vec::new(),
+            uses_traits,
             line,
         })
     }
@@ -804,6 +814,11 @@ impl<'f> Lowerer<'f> {
                 });
             }
         }
+        let uses_traits: Vec<Box<[u8]>> = uses
+            .iter()
+            .flat_map(|u| u.trait_names.iter())
+            .map(|tn| self.resolve_class(tn))
+            .collect();
         Ok(ClassDecl {
             name,
             parent: None,
@@ -821,6 +836,7 @@ impl<'f> Lowerer<'f> {
             enum_backing,
             enum_cases,
             attributes: self.lower_attributes(&en.attribute_lists, line)?,
+            uses_traits,
             line,
         })
     }

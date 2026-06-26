@@ -1133,6 +1133,9 @@ pub struct CompiledClass {
     /// Attributes declared on this class (`#[Foo(args)]`), in source order — read
     /// by `ReflectionClass::getAttributes()`. Empty for the common case.
     pub attributes: Vec<CompiledAttribute>,
+    /// Names of the traits this class uses directly (resolved, original case) —
+    /// read by `class_uses()` / `ReflectionClass::getTraitNames()`. Empty when none.
+    pub uses_traits: Vec<Box<[u8]>>,
     /// `false` if the class could not be fully compiled (e.g. a non-constant
     /// property default): [`Op::Alloc`] on it fatals instead of producing a
     /// wrong instance, mirroring the function-stub discipline.

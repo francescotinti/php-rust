@@ -68,6 +68,11 @@ pub struct Program {
 /// copied into each consuming class and carried across units via [`Program::traits`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct LoweredTrait {
+    /// The trait's name as written (original case, namespace-qualified). Kept so
+    /// runtime trait metadata (`get_declared_traits`, `trait_exists`,
+    /// `ReflectionClass::getTraitNames`) can report the real name even though the
+    /// trait is flattened into its consumers and keyed by bare lowercase name.
+    pub name: Box<[u8]>,
     pub methods: Vec<MethodDecl>,
     pub props: Vec<PropDecl>,
     pub static_props: Vec<StaticPropDecl>,
@@ -185,6 +190,11 @@ pub struct ClassDecl {
     /// getAttributes()` + `ReflectionAttribute::newInstance()` work (the path
     /// Symfony Console uses to read `#[AsCommand]`). Empty for the common case.
     pub attributes: Vec<HirAttribute>,
+    /// Names (original case, namespace-qualified) of the traits this class uses
+    /// *directly* (`use T;`), in source order. Traits are flattened into the class,
+    /// but the identities are kept so `class_uses()` / `ReflectionClass::
+    /// getTraitNames()` can report them. Empty when the class uses no traits.
+    pub uses_traits: Vec<Box<[u8]>>,
     pub line: Line,
 }
 

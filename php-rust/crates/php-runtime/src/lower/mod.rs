@@ -977,6 +977,13 @@ class ReflectionClass {
         $p = get_parent_class($this->name);
         return $p === false ? false : new ReflectionClass($p);
     }
+    public function getTraitNames() { return array_values(class_uses($this->name)); }
+    public function getTraits() {
+        $out = [];
+        foreach (class_uses($this->name) as $t) { $out[$t] = new ReflectionClass($t); }
+        return $out;
+    }
+    public function getTraitAliases() { return []; }
 }
 class ReflectionProperty {
     public $name;

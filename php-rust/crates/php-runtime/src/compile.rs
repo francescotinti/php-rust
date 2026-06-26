@@ -507,6 +507,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         consts,
         enum_cases,
         attributes,
+        uses_traits: cd.uses_traits.clone(),
         ok,
         prop_hooks,
     }

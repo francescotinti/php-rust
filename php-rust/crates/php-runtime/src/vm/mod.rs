@@ -4040,6 +4040,9 @@ impl<'m> Vm<'m> {
             b"get_parent_class" => self.ho_get_parent_class(args),
             b"class_parents" => self.ho_class_parents(args),
             b"class_implements" => self.ho_class_implements(args),
+            b"class_uses" => self.ho_class_uses(args),
+            b"trait_exists" => self.ho_trait_exists(args),
+            b"get_declared_traits" => self.ho_get_declared_traits(),
             b"__reflect_class_attributes" => self.ho_reflect_class_attributes(args),
             b"__reflect_attr_newinstance" => self.ho_reflect_attr_newinstance(args),
             b"__reflect_attr_arguments" => self.ho_reflect_attr_arguments(args),
@@ -4971,6 +4974,55 @@ impl<'m> Vm<'m> {
                 self.collect_iface(i, &mut arr, &mut seen);
             }
             klass = self.classes[c].parent;
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// `class_uses($class, $autoload = true)`: the traits used *directly* by the
+    /// class (not inherited from parents), as a `name => name` array in source
+    /// order. `false` if the class does not exist. Mirrors PHP, which reports only
+    /// the directly-`use`d traits.
+    fn ho_class_uses(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(cid) = args.into_iter().next().and_then(|v| self.class_arg_or_warn(v, "class_uses"))
+        else {
+            return Ok(Zval::Bool(false));
+        };
+        let mut arr = php_types::PhpArray::new();
+        for t in &self.classes[cid].uses_traits {
+            let name = t.to_vec();
+            arr.insert(Key::Str(PhpStr::new(name.clone())), Zval::Str(PhpStr::new(name)));
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// `trait_exists($name, $autoload = true)`: whether `$name` names a declared
+    /// trait. PHP does NOT namespace-resolve the argument: it is matched as a
+    /// fully-qualified name (case-insensitively, a leading `\` stripped) against
+    /// each trait's real name — so `trait_exists('IFoo')` inside namespace `foo`
+    /// is `false` even when `foo\IFoo` exists. Autoload is attempted when allowed.
+    fn ho_trait_exists(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(first) = args.first() else { return Ok(Zval::Bool(false)) };
+        let raw = convert::to_zstr_cast(first, &mut self.diags).as_bytes().to_vec();
+        let want = raw.strip_prefix(b"\\").unwrap_or(&raw).to_ascii_lowercase();
+        let autoload = !matches!(args.get(1).map(|v| v.deref_clone()), Some(Zval::Bool(false)));
+        let present = |s: &Self| {
+            s.seed_traits.iter().any(|(_, t)| t.name.to_ascii_lowercase() == want)
+        };
+        if present(self) {
+            return Ok(Zval::Bool(true));
+        }
+        if autoload {
+            self.try_autoload(&want, &want)?;
+        }
+        Ok(Zval::Bool(present(self)))
+    }
+
+    /// `get_declared_traits()`: the names (original case) of every declared trait,
+    /// in declaration order.
+    fn ho_get_declared_traits(&mut self) -> Result<Zval, PhpError> {
+        let mut arr = php_types::PhpArray::new();
+        for (_, t) in &self.seed_traits {
+            let _ = arr.append(Zval::Str(PhpStr::new(t.name.to_vec())));
         }
         Ok(Zval::Array(Rc::new(arr)))
     }
@@ -7760,6 +7812,9 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"spl_object_hash",
         b"class_parents",
         b"class_implements",
+        b"class_uses",
+        b"trait_exists",
+        b"get_declared_traits",
         b"__reflect_class_attributes",
         b"__reflect_attr_newinstance",
         b"__reflect_attr_arguments",
