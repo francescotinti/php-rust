@@ -2756,6 +2756,22 @@ impl<'m> Vm<'m> {
                                 o.borrow_mut().mark_readonly_init(&name);
                             }
                         }
+                        // PHP 8.2: creating an *undeclared* property on a class that
+                        // does not allow dynamic properties is deprecated (the
+                        // property is still created). `__set`/hooks already
+                        // short-circuited above. A *declared* property that was
+                        // `unset` is absent from the store yet is not a dynamic
+                        // creation when re-assigned, so check the class layout too.
+                        if !o.borrow().props.contains(&name)
+                            && resolve_prop_decl(&self.classes, ocid, &name).is_none()
+                            && !self.allows_dynamic_props(ocid)
+                        {
+                            let cls = String::from_utf8_lossy(&self.classes[ocid].name).into_owned();
+                            let prop = String::from_utf8_lossy(&name).into_owned();
+                            self.diags.push(Diag::Deprecated(format!(
+                                "Creation of dynamic property {cls}::${prop} is deprecated"
+                            )));
+                        }
                         // Typed-property write enforcement: coerce the value to the
                         // property's declared type (or TypeError). The assignment
                         // expression yields the coerced value.
@@ -6989,6 +7005,27 @@ impl<'m> Vm<'m> {
                 }
             }
         }
+    }
+
+    /// Whether class `cid` permits dynamic (undeclared) properties without the
+    /// PHP 8.2 deprecation: `stdClass` (and internal classes modelled on it) and
+    /// any class carrying `#[AllowDynamicProperties]`, which is inherited — so the
+    /// check walks the parent chain.
+    fn allows_dynamic_props(&self, cid: ClassId) -> bool {
+        let mut c = Some(cid);
+        while let Some(x) = c {
+            let cc = self.classes[x];
+            if cc.name.eq_ignore_ascii_case(b"stdClass") {
+                return true;
+            }
+            if cc.attributes.iter().any(|a| {
+                a.name.strip_prefix(b"\\").unwrap_or(&a.name).eq_ignore_ascii_case(b"AllowDynamicProperties")
+            }) {
+                return true;
+            }
+            c = cc.parent;
+        }
+        false
     }
 
     /// Enforce a typed instance property's declared type on a write (step: typed
