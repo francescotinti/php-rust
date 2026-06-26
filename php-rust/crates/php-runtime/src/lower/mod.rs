@@ -902,6 +902,64 @@ class SplFixedArray implements ArrayAccess, Countable, Iterator {
         return $a;
     }
 }
+class ReflectionException extends Exception {}
+class ReflectionClass {
+    public $name;
+    public function __construct($objectOrClass) {
+        $this->name = is_object($objectOrClass) ? get_class($objectOrClass) : $objectOrClass;
+        if (!class_exists($this->name) && !interface_exists($this->name)) {
+            throw new ReflectionException(sprintf('Class "%s" does not exist', $this->name));
+        }
+    }
+    public function getName() { return $this->name; }
+    public function getShortName() {
+        $p = strrpos($this->name, '\\');
+        return $p === false ? $this->name : substr($this->name, $p + 1);
+    }
+    // phpr does not retain attributes, so a class never reports any (Composer's
+    // commands carry none, so this is also semantically correct for it).
+    public function getAttributes($name = null, $flags = 0) { return []; }
+    public function newInstance(...$args) { return new $this->name(...$args); }
+    public function newInstanceArgs($args = []) { return new $this->name(...$args); }
+    public function isInstantiable() { return class_exists($this->name); }
+    public function isInterface() { return interface_exists($this->name); }
+    public function hasMethod($name) { return method_exists($this->name, $name); }
+    public function hasProperty($name) { return property_exists($this->name, $name); }
+    public function hasConstant($name) { return defined($this->name . '::' . $name); }
+    public function getConstant($name) { return constant($this->name . '::' . $name); }
+    public function implementsInterface($interface) {
+        return in_array($interface, class_implements($this->name), true);
+    }
+    public function isSubclassOf($class) {
+        return in_array($class, class_parents($this->name), true)
+            || in_array($class, class_implements($this->name), true);
+    }
+    public function getParentClass() {
+        $p = get_parent_class($this->name);
+        return $p === false ? false : new ReflectionClass($p);
+    }
+}
+class ReflectionProperty {
+    public $name;
+    public $class;
+    public function __construct($class, $property) {
+        $cls = is_object($class) ? get_class($class) : $class;
+        if (!property_exists($cls, $property)) {
+            throw new ReflectionException(sprintf('Property %s::$%s does not exist', $cls, $property));
+        }
+        // The declaring class is the topmost ancestor that still has the property
+        // (a child redeclaration shadows it); mirrors ReflectionProperty::$class.
+        $decl = $cls;
+        $c = $cls;
+        while ($c !== false && property_exists($c, $property)) {
+            $decl = $c;
+            $c = get_parent_class($c);
+        }
+        $this->name = $property;
+        $this->class = $decl;
+    }
+    public function getName() { return $this->name; }
+}
 "##;
 
 /// The four owned products of lowering [`PRELUDE_SRC`]: the class table + its

@@ -1039,15 +1039,20 @@ impl<'f> Lowerer<'f> {
         line: Line,
     ) -> Result<Option<Place>, LowerError> {
         match e {
-            // Only the same-hierarchy keywords guarantee the constant is visible
-            // from the current scope: PHP raises a fatal on an inaccessible
-            // constant (unlike a static property, where `isset` stays silent), so a
-            // *named* (`Foo::C`) or *dynamic* (`$c::C`) class is left to the general
-            // path rather than risk a wrong, non-fatal answer.
+            // `self`/`parent`/`static` always; a *named* class (`Foo::C[...]`) too
+            // — class constants are public by default and `isset(Foo::C[$k])` is a
+            // common pattern (Composer's `BasePackage::STABILITIES[$k]`). A
+            // *dynamic* class (`$c::C`) stays on the general path. Constant
+            // visibility is not enforced here, so an `isset` on an inaccessible
+            // private constant returns silently instead of PHP's fatal — a rare
+            // edge accepted for the common public-constant case.
             Expression::Access(Access::ClassConstant(cc))
                 if matches!(
                     cc.class,
-                    Expression::Self_(_) | Expression::Parent(_) | Expression::Static(_)
+                    Expression::Self_(_)
+                        | Expression::Parent(_)
+                        | Expression::Static(_)
+                        | Expression::Identifier(_)
                 ) =>
             {
                 let name = match &cc.constant {

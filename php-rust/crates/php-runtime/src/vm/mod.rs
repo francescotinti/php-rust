@@ -3718,12 +3718,22 @@ impl<'m> Vm<'m> {
         self.included_files.insert(key.clone());
         let program = match self.lower_unit(&key, &content)? {
             Ok(p) => p,
-            Err(_) => return self.include_compile_failed(&key, mode),
+            Err(e) => {
+                if std::env::var_os("PHPR_DEBUG_INCLUDE").is_some() {
+                    eprintln!("[PHPR_INC_LOWER_FAIL] {} :: {:?}", String::from_utf8_lossy(&key), e);
+                }
+                return self.include_compile_failed(&key, mode);
+            }
         };
         self.accumulate_seed(&program);
         let module = match crate::compile::compile_program(&program, self.registry) {
             Ok(m) => m,
-            Err(_) => return self.include_compile_failed(&key, mode),
+            Err(e) => {
+                if std::env::var_os("PHPR_DEBUG_INCLUDE").is_some() {
+                    eprintln!("[PHPR_INC_COMPILE_FAIL] {} :: {:?}", String::from_utf8_lossy(&key), e);
+                }
+                return self.include_compile_failed(&key, mode);
+            }
         };
         let ret = self.drive_unit(module, None)?;
         // A file with no top-level `return` yields int(1); an explicit return passes
