@@ -1007,7 +1007,56 @@ impl<'f> Lowerer<'f> {
                 });
             }
         }
+        // `isset(self::TABLE[$k])` / `empty(Foo::MAP[$k])` — an index into a class
+        // constant array. A class constant is a read-only container, so it is a
+        // valid test place: root the place at the constant and carry the index
+        // steps; the compiler materialises the value and tests the offset.
+        if let Some(place) = self.class_const_test_place(e, line)? {
+            return Ok(place);
+        }
         self.lower_place(e, line)
+    }
+
+    /// Recognise a class-constant-rooted read path for [`Self::lower_test_place`]:
+    /// `Class::CONST` optionally followed by `[k]` index steps. Returns `None` for
+    /// anything else (including a dynamic `Class::{$e}` constant name), so the
+    /// caller falls back to the general lvalue path.
+    fn class_const_test_place(
+        &mut self,
+        e: &Expression,
+        line: Line,
+    ) -> Result<Option<Place>, LowerError> {
+        match e {
+            // Only the same-hierarchy keywords guarantee the constant is visible
+            // from the current scope: PHP raises a fatal on an inaccessible
+            // constant (unlike a static property, where `isset` stays silent), so a
+            // *named* (`Foo::C`) or *dynamic* (`$c::C`) class is left to the general
+            // path rather than risk a wrong, non-fatal answer.
+            Expression::Access(Access::ClassConstant(cc))
+                if matches!(
+                    cc.class,
+                    Expression::Self_(_) | Expression::Parent(_) | Expression::Static(_)
+                ) =>
+            {
+                let name = match &cc.constant {
+                    ClassLikeConstantSelector::Identifier(id) => id.value,
+                    _ => return Ok(None),
+                };
+                let class = self.class_ref_of(cc.class, line)?;
+                Ok(Some(Place {
+                    base: PlaceBase::ClassConst { class, name: name.into() },
+                    steps: Vec::new(),
+                }))
+            }
+            Expression::ArrayAccess(aa) => {
+                let Some(mut place) = self.class_const_test_place(aa.array, line)? else {
+                    return Ok(None);
+                };
+                place.steps.push(PlaceStep::Index(self.lower_expr(aa.index)?));
+                Ok(Some(place))
+            }
+            _ => Ok(None),
+        }
     }
 
     pub(super) fn lower_place(&mut self, lhs: &Expression, line: Line) -> Result<Place, LowerError> {

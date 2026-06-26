@@ -877,6 +877,11 @@ pub enum PlaceBase {
     /// into a temp, mutated, and written back at compile time — value-correct for
     /// PHP arrays (copy-on-write).
     StaticProp { class: ClassRef, name: Box<[u8]> },
+    /// `Class::CONST` as the root of an `isset()`/`empty()` *read* test
+    /// (`isset(self::TABLE[$k])`). The constant value is materialised into a temp
+    /// and the index path tested on it — read-only, so this base never reaches a
+    /// write/unset path (only `lower_test_place` produces it).
+    ClassConst { class: ClassRef, name: Box<[u8]> },
 }
 
 #[derive(Debug, Clone, PartialEq)]

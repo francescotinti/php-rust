@@ -2862,8 +2862,12 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::LoadSlot(s));
             }
             // A `$GLOBALS`-rooted property write goes through the field path; an
-            // indexed static-property target is rewritten before reaching here.
-            PlaceBase::Global(_) | PlaceBase::StaticProp { .. } => return Ok(None),
+            // indexed static-property target is rewritten before reaching here. A
+            // class-constant test base is materialised into a temp before any
+            // property step, so it never reaches here either.
+            PlaceBase::Global(_)
+            | PlaceBase::StaticProp { .. }
+            | PlaceBase::ClassConst { .. } => return Ok(None),
         }
         Ok(Some(name.clone()))
     }
@@ -2995,6 +2999,11 @@ impl<'a> FnCompiler<'a> {
             // reaching the field-path walker (see `static_prop_rmw`).
             PlaceBase::StaticProp { .. } => {
                 return Err(CompileError::Unsupported("static property field path".into()))
+            }
+            // A class-constant base is read-only and materialised into a temp for
+            // isset/empty before any field walk, so it never reaches here.
+            PlaceBase::ClassConst { .. } => {
+                return Err(CompileError::Unsupported("class constant field path".into()))
             }
         };
         let mut steps = Vec::with_capacity(place.steps.len());
@@ -3322,6 +3331,30 @@ impl<'a> FnCompiler<'a> {
         Ok(())
     }
 
+    /// Materialise a class constant into a temp for a read-only `isset`/`empty`
+    /// test on an index into it (`isset(self::TABLE[$k])`): evaluate the constant,
+    /// run `core` over a `Local`-rooted place carrying the index steps, then free
+    /// the temp. The constant is a value (never written), mirroring
+    /// [`Self::static_prop_read`] but reading via [`Self::class_const`].
+    fn class_const_read(
+        &mut self,
+        class: &ClassRef,
+        name: &[u8],
+        steps: &[PlaceStep],
+        core: impl FnOnce(&mut Self, &Place) -> R<()>,
+    ) -> R<()> {
+        let t = self.alloc_temp();
+        self.class_const(class, name)?;
+        self.emit(Op::StoreSlot(t));
+        let local = Place {
+            base: PlaceBase::Local(t),
+            steps: steps.to_vec(),
+        };
+        core(self, &local)?;
+        self.free_temp();
+        Ok(())
+    }
+
     /// Compile `$o->p ??= rhs` on a single property (magic-aware). Read via
     /// `__isset`; if already set, the existing value (`__get`) is the result and
     /// no write happens; if unset, assign `rhs` (`__set`) and yield it. Each magic
@@ -3498,6 +3531,10 @@ impl<'a> FnCompiler<'a> {
             let (class, name) = (class.clone(), name.clone());
             return self.static_prop_read(&class, &name, &place.steps, |s, p| s.isset_one(p));
         }
+        if let PlaceBase::ClassConst { class, name } = &place.base {
+            let (class, name) = (class.clone(), name.clone());
+            return self.class_const_read(&class, &name, &place.steps, |s, p| s.isset_one(p));
+        }
         if let Some(name) = self.prop_place(place)? {
             self.emit(Op::PropIsset { name });
         } else if place_has_prop(place) {
@@ -3515,6 +3552,10 @@ impl<'a> FnCompiler<'a> {
     /// (`empty` is `!isset || !truthy(value)`), so an unset magic property never
     /// warns or calls `__get`; other places use the array `EmptyPath`.
     fn empty(&mut self, place: &Place) -> R<()> {
+        if let PlaceBase::ClassConst { class, name } = &place.base {
+            let (class, name) = (class.clone(), name.clone());
+            return self.class_const_read(&class, &name, &place.steps, |s, p| s.empty(p));
+        }
         if let PlaceBase::StaticProp { class, name } = &place.base {
             let (class, name) = (class.clone(), name.clone());
             return self.static_prop_read(&class, &name, &place.steps, |s, p| s.empty(p));
@@ -3620,6 +3661,9 @@ fn dim_base(place: &Place) -> R<DimBase> {
         PlaceBase::This => Err(CompileError::Unsupported("$this property write".into())),
         PlaceBase::StaticProp { .. } => {
             Err(CompileError::Unsupported("static property dim base".into()))
+        }
+        PlaceBase::ClassConst { .. } => {
+            Err(CompileError::Unsupported("class constant dim base".into()))
         }
     }
 }
