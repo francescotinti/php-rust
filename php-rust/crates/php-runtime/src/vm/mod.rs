@@ -3985,6 +3985,7 @@ impl<'m> Vm<'m> {
             b"array_filter" => self.ho_array_filter(args),
             b"array_reduce" => self.ho_array_reduce(args),
             b"get_class" => self.ho_get_class(args),
+            b"get_debug_type" => self.ho_get_debug_type(args),
             b"spl_object_id" => self.ho_spl_object_id(args),
             b"spl_object_hash" => self.ho_spl_object_hash(args),
             b"__weak_create" => self.ho_weak_create(args),
@@ -4743,6 +4744,45 @@ impl<'m> Vm<'m> {
                 other.type_name_for_error()
             ))),
         }
+    }
+
+    /// `get_debug_type($value)` (PHP 8.0): the modern type name — `null`/`bool`/
+    /// `int`/`float`/`string`/`array`, the class name for an object, `Closure`/
+    /// `Generator`, or `resource (TYPE)` / `resource (closed)`. Unlike `gettype`
+    /// it returns the canonical scalar names and the concrete class.
+    fn ho_get_debug_type(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let v = args
+            .into_iter()
+            .next()
+            .ok_or_else(|| {
+                PhpError::ArgumentCountError(
+                    "get_debug_type() expects exactly 1 argument, 0 given".to_string(),
+                )
+            })?
+            .deref_clone();
+        let name: String = match &v {
+            Zval::Undef | Zval::Null => "null".to_string(),
+            Zval::Bool(_) => "bool".to_string(),
+            Zval::Long(_) => "int".to_string(),
+            Zval::Double(_) => "float".to_string(),
+            Zval::Str(_) => "string".to_string(),
+            Zval::Array(_) => "array".to_string(),
+            Zval::Closure(_) => "Closure".to_string(),
+            Zval::Generator(_) => "Generator".to_string(),
+            Zval::Object(o) => String::from_utf8_lossy(o.borrow().class_name.as_bytes()).into_owned(),
+            // An internal weak handle never surfaces to user code as a value.
+            Zval::WeakHandle(_) => "object".to_string(),
+            Zval::Resource(r) => {
+                let rb = r.borrow();
+                if rb.is_open() {
+                    format!("resource ({})", rb.dump_type())
+                } else {
+                    "resource (closed)".to_string()
+                }
+            }
+            Zval::Ref(_) => unreachable!("deref_clone strips Ref"),
+        };
+        Ok(Zval::Str(PhpStr::new(name.into_bytes())))
     }
 
     /// The unique per-object handle (`#N`) of an object value, shared by
@@ -7442,6 +7482,7 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"array_filter",
         b"array_reduce",
         b"get_class",
+        b"get_debug_type",
         b"spl_object_id",
         b"spl_object_hash",
         b"class_parents",

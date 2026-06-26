@@ -838,6 +838,30 @@ pub fn bin2hex(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Str(PhpStr::new(out)))
 }
 
+/// `random_bytes($length)`: `$length` cryptographically-secure random bytes from
+/// the OS CSPRNG (`/dev/urandom`). `$length < 1` is a `ValueError`; a source
+/// failure is an `Error` (PHP raises `Random\RandomException`, which we model as a
+/// plain `Error` until that class exists).
+pub fn random_bytes(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::io::Read;
+    let len = convert::to_long_cast(
+        args.first().ok_or_else(|| {
+            PhpError::Error("random_bytes() expects exactly 1 argument, 0 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    if len < 1 {
+        return Err(PhpError::ValueError(
+            "random_bytes(): Argument #1 ($length) must be greater than 0".to_string(),
+        ));
+    }
+    let mut buf = vec![0u8; len as usize];
+    std::fs::File::open("/dev/urandom")
+        .and_then(|mut f| f.read_exact(&mut buf))
+        .map_err(|_| PhpError::Error("Cannot open source device".to_string()))?;
+    Ok(Zval::Str(PhpStr::new(buf)))
+}
+
 /// `hex2bin($string)`: inverse of `bin2hex`. Odd length or a non-hex byte → false
 /// + "Input string must be hexadecimal string" Warning.
 pub fn hex2bin(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {

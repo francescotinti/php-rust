@@ -189,6 +189,7 @@ pub fn registry() -> Registry {
     add(b"strrchr", string::strrchr);
     add(b"bin2hex", string::bin2hex);
     add(b"hex2bin", string::hex2bin);
+    add(b"random_bytes", string::random_bytes);
     add(b"addslashes", string::addslashes);
     add(b"stripslashes", string::stripslashes);
     add(b"substr_replace", string::substr_replace);
