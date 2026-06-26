@@ -237,12 +237,18 @@ impl<'f> Lowerer<'f> {
             Statement::Function(func) => {
                 let key = join_ns(&self.cur_namespace, func.name.value).to_ascii_lowercase();
                 if self.fn_index.contains_key(&key) {
+                    // Already hoisted (a top-level declaration): the hoist pass
+                    // compiled it, so the statement itself is a no-op here.
                     return Ok(None);
                 }
-                return Err(LowerError::Unsupported {
-                    what: "conditional function declaration",
-                    line,
-                });
+                // A *conditional* declaration (inside a branch/block): compile its
+                // body now (appended past the hoisted watermark) and emit a runtime
+                // `DeclareFn` that registers it when this statement is reached.
+                let decl = self.lower_function(func)?;
+                let idx = self.functions.len();
+                self.functions.push(decl);
+                self.conditional_fns.insert(idx);
+                StmtKind::DeclareFn(idx)
             }
 
             // A class declaration carries no runtime behaviour: the top-level

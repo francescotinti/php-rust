@@ -282,8 +282,12 @@ pub(crate) fn run_module_with_hir<'m>(
     // `__FILE__`/backtrace stay attributed to the caller's file (step 57, Phase
     // 1c-2c). Normal (non-eval) calls hit `self.module.functions` first, so these
     // entries only matter across the eval boundary.
+    // Only the unconditionally-hoisted functions are pre-registered; a conditional
+    // declaration registers itself via its `Op::DeclareFn` when reached.
     for (idx, f) in module.functions.iter().enumerate() {
-        vm.linked_functions.insert(f.name.to_ascii_lowercase(), (module, idx));
+        if !module.conditional_fns.contains(&idx) {
+            vm.linked_functions.insert(f.name.to_ascii_lowercase(), (module, idx));
+        }
     }
     // Predefined CLI stream constants `STDIN`/`STDOUT`/`STDERR` (resource ids
     // #1/#2/#3, as the PHP CLI SAPI), so a script can `fwrite(STDERR, …)` (step 57).
@@ -1840,6 +1844,20 @@ impl<'m> Vm<'m> {
                 }
                 Op::IterPop => {
                     self.frames[top].iters.pop();
+                }
+                Op::DeclareFn { func } => {
+                    // A conditional `function` statement was reached: register it in
+                    // the runtime table so it is callable by name from here on.
+                    let m = self.frames[top].module;
+                    let idx = func as usize;
+                    let name = m.functions[idx].name.clone();
+                    if self.is_name_callable(&name) {
+                        return Err(PhpError::Error(format!(
+                            "Cannot redeclare function {}()",
+                            String::from_utf8_lossy(&name)
+                        )));
+                    }
+                    self.linked_functions.insert(name.to_ascii_lowercase(), (m, idx));
                 }
                 Op::Call { func, argc } => {
                     let m = self.frames[top].module;
@@ -3400,7 +3418,13 @@ impl<'m> Vm<'m> {
         // Register the unit's user functions (those not already provided by the
         // caller's module) so they are callable by name afterwards. Functions are
         // hoisted at unit load, so do this even if the body later threw.
+        // Only the unconditionally-hoisted functions are registered here; a
+        // conditional declaration registers itself via its `Op::DeclareFn` when the
+        // unit body reaches it (so a guarded polyfill respects its condition).
         for (idx, f) in leaked.functions.iter().enumerate() {
+            if leaked.conditional_fns.contains(&idx) {
+                continue;
+            }
             let already = saved.functions.iter().any(|cf| name_eq_ignore_case(&cf.name, &f.name));
             if !already {
                 self.linked_functions.entry(f.name.to_ascii_lowercase()).or_insert((leaked, idx));
@@ -6291,7 +6315,13 @@ impl<'m> Vm<'m> {
     /// Whether a bare name is callable: a user function, any registry builtin, or a
     /// host builtin (mirrors `eval::is_name_callable`).
     fn is_name_callable(&self, name: &[u8]) -> bool {
-        self.module.functions.iter().any(|f| name_eq_ignore_case(&f.name, name))
+        // Conditional declarations are callable only once registered in
+        // `linked_functions` by their `Op::DeclareFn`.
+        self.module
+            .functions
+            .iter()
+            .enumerate()
+            .any(|(i, f)| !self.module.conditional_fns.contains(&i) && name_eq_ignore_case(&f.name, name))
             || self.linked_functions.contains_key(&name.to_ascii_lowercase())
             || self.registry.get(name).is_some()
             || host_builtin_canonical(name).is_some()

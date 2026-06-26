@@ -19,7 +19,7 @@
 //! Calls, arrays, references, OOP and generators are deliberately out of slice;
 //! `Module::functions` / `closures` are left empty until the call opcode lands.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use php_types::{ObjectInfo, PhpStr, PropVis};
@@ -59,6 +59,10 @@ type R<T> = Result<T, CompileError>;
 /// [`ClassRef::Named`]). Bundled so a body's compiler can borrow it whole.
 struct ProgramCtx<'a> {
     funcs: &'a [FnDecl],
+    /// Indices into `funcs` that are conditional declarations: they do NOT resolve
+    /// a call by name at compile time (dispatched dynamically, callable only once
+    /// their `DeclareFn` runs).
+    conditional_fns: &'a HashSet<usize>,
     registry: &'a Registry,
     classes: &'a [ClassDecl],
     class_index: &'a HashMap<Vec<u8>, ClassId>,
@@ -78,6 +82,7 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
     }
     let ctx = ProgramCtx {
         funcs: &program.functions,
+        conditional_fns: &program.conditional_fns,
         registry,
         classes: &program.classes,
         class_index: &class_index,
@@ -115,6 +120,7 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
     Ok(Module {
         main,
         functions,
+        conditional_fns: program.conditional_fns.clone(),
         closures,
         classes,
         file: program.file.clone(),
@@ -886,6 +892,9 @@ impl<'a> FnCompiler<'a> {
         self.cur_line = s.line;
         match &s.kind {
             StmtKind::Nop => {}
+            StmtKind::DeclareFn(idx) => {
+                self.emit(Op::DeclareFn { func: *idx as u32 });
+            }
             StmtKind::Echo(values) => {
                 for e in values {
                     self.expr(e)?;
@@ -1864,8 +1873,17 @@ impl<'a> FnCompiler<'a> {
     /// the tree-walker. Named/spread arguments and user by-ref/variadic params are
     /// likewise deferred.
     fn call(&mut self, name: &[u8], args: &[Expr], named: &[(Box<[u8]>, Expr)]) -> R<()> {
-        // User functions shadow builtins.
-        if let Some(idx) = self.ctx.funcs.iter().position(|f| ascii_eq_ignore_case(&f.name, name)) {
+        // User functions shadow builtins — but only *hoisted* ones bind statically;
+        // a conditional declaration is dispatched dynamically (callable only after
+        // its `DeclareFn` runs).
+        if let Some(idx) = self
+            .ctx
+            .funcs
+            .iter()
+            .enumerate()
+            .find(|(i, f)| !self.ctx.conditional_fns.contains(i) && ascii_eq_ignore_case(&f.name, name))
+            .map(|(i, _)| i)
+        {
             // Named arguments are resolved to parameter slots at compile time
             // (the callee is known), PAR.
             // A spread anywhere (`f(...$src)`, with or without named args) needs

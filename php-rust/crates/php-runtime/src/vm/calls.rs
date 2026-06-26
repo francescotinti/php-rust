@@ -498,9 +498,13 @@ impl<'m> Vm<'m> {
     /// callable / named closure): a user function (case-insensitive, shadows
     /// builtins) installs a frame; a value builtin runs and pushes its result.
     pub(super) fn invoke_named(&mut self, name: &[u8], args: Vec<Zval>) -> Result<(), PhpError> {
-        if let Some(idx) =
-            self.module.functions.iter().position(|f| name_eq_ignore_case(&f.name, name))
-        {
+        // Only unconditionally-hoisted functions resolve by name eagerly;
+        // conditional declarations become callable through `linked_functions`
+        // once their `Op::DeclareFn` has run.
+        if let Some(idx) = self.module.functions.iter().enumerate().find_map(|(i, f)| {
+            (!self.module.conditional_fns.contains(&i) && name_eq_ignore_case(&f.name, name))
+                .then_some(i)
+        }) {
             let callee = &self.module.functions[idx];
             let mut frame = Frame::new(callee, self.module);
             bind_params(&mut frame, args);

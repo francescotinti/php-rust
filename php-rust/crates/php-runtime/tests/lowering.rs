@@ -401,11 +401,35 @@ fn variadic_param_lowers_with_flag() {
 }
 
 #[test]
-fn conditional_function_declaration_is_unsupported() {
-    // A function defined inside a branch is not hoisted; lowering reports it
-    // rather than silently registering it unconditionally.
-    assert!(matches!(
-        err("<?php if (true) { function f() {} }"),
-        LowerError::Unsupported { .. }
-    ));
+fn conditional_function_declaration_lowers_to_declare_fn() {
+    // A function defined inside a branch is not hoisted: it is appended past the
+    // hoisted watermark and emitted as a runtime `DeclareFn` inside the branch, so
+    // it becomes callable only when that branch executes.
+    // A conditionally-declared `f` lowers successfully (no longer an Unsupported
+    // error) and is appended *past* the hoisted watermark — so it is dispatched
+    // dynamically and only becomes callable when its `DeclareFn` runs at run time.
+    let p = lower("<?php if (!function_exists('f')) { function f() {} }");
+    let f_idx = p
+        .functions
+        .iter()
+        .position(|fd| &*fd.name == b"f")
+        .expect("f present in functions");
+    assert!(
+        p.conditional_fns.contains(&f_idx),
+        "conditional fn must be marked conditional"
+    );
+    // The matching runtime `DeclareFn(f_idx)` is emitted somewhere in the body.
+    fn has_declare(stmts: &[Stmt], target: usize) -> bool {
+        stmts.iter().any(|s| match &s.kind {
+            StmtKind::DeclareFn(i) => *i == target,
+            StmtKind::If { then, elseifs, otherwise, .. } => {
+                has_declare(then, target)
+                    || elseifs.iter().any(|(_, b)| has_declare(b, target))
+                    || has_declare(otherwise, target)
+            }
+            StmtKind::Block(b) => has_declare(b, target),
+            _ => false,
+        })
+    }
+    assert!(has_declare(&p.body, f_idx), "a DeclareFn(f) must be emitted");
 }

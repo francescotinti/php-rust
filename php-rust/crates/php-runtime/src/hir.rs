@@ -34,6 +34,12 @@ pub struct Program {
     /// precede the declaration (PHP's function hoisting). Resolved by the
     /// evaluator's call path before the builtin registry (step 8).
     pub functions: Vec<FnDecl>,
+    /// Indices into `functions` that are **conditional** declarations (a `function`
+    /// inside a branch/block, possibly nested in another function/method body):
+    /// they are not resolvable by name until their [`StmtKind::DeclareFn`] runs, so
+    /// name resolution (compile-time and runtime) skips them. A simple prefix count
+    /// can't express this because such declarations interleave with body lowering.
+    pub conditional_fns: std::collections::HashSet<usize>,
     /// Anonymous functions and arrow functions, lowered into one flat table
     /// (step 18, D-18.2). A [`ExprKind::Closure`] selects its body by index;
     /// closures nest by appending to this same vector.
@@ -466,6 +472,11 @@ pub enum StmtKind {
     Goto(Box<[u8]>),
     /// A lone `;`.
     Nop,
+    /// Conditional function declaration: register `functions[idx]` in the runtime
+    /// function table when this statement is reached (a `function` inside a
+    /// branch/block — not hoisted). `idx` is in [`Program::functions`], at or past
+    /// [`Program::hoisted_fn_count`].
+    DeclareFn(usize),
 }
 
 /// One `catch (T1 | T2 $e) { body }` clause (step 20). `types` are the caught

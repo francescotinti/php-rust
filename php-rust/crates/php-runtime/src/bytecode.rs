@@ -414,6 +414,11 @@ pub enum Op {
     /// callee runs in its own pushed [`crate::vm`] frame, so this is *not* a Rust
     /// recursion — PHP recursion grows the explicit frame stack instead.
     Call { func: u32, argc: u32 },
+    /// `[] -> []` — declare conditional function `functions[func]` (a `function`
+    /// statement reached inside a branch/block): register it in the runtime
+    /// function table so it becomes callable by name from here on. Re-declaring an
+    /// already-defined function is the PHP "Cannot redeclare function" fatal.
+    DeclareFn { func: u32 },
     /// `[arg0, …, arg{argc-1}] -> [result]` — call the by-value builtin named
     /// `name` (resolved in the [`crate::builtin::Registry`] at run time, as the
     /// tree-walker does). Arguments are popped into a `&[Zval]`; the builtin runs
@@ -1106,6 +1111,11 @@ pub struct Module {
     /// Top-level user-defined functions, hoisted — same index space as
     /// [`crate::hir::Program::functions`].
     pub functions: Vec<Func>,
+    /// Indices into `functions` that are **conditional** declarations (a `function`
+    /// statement inside a branch/block, possibly nested in another body): not
+    /// resolvable by name until their [`Op::DeclareFn`] runs (which registers them
+    /// in the VM's runtime function table), so name resolution skips these indices.
+    pub conditional_fns: std::collections::HashSet<usize>,
     /// Anonymous / arrow-function bodies — same index space as
     /// [`crate::hir::Program::closures`].
     pub closures: Vec<Func>,
