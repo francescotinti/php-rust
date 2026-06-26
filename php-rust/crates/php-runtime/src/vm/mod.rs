@@ -339,6 +339,7 @@ pub(crate) fn run_module_with_hir<'m>(
         suppress_depth: 0,
         suppress_marks: Vec::new(),
         superglobals: std::array::from_fn(|_| Zval::Undef),
+        preg_cache: HashMap::new(),
         frames: Vec::new(),
         next_object_id: 1,
         next_resource_id: 5,
@@ -771,6 +772,12 @@ struct Vm<'m> {
     /// superglobal resolves by name from any unit/frame — an included file reads
     /// the same `$_SERVER` as the main script. Unseeded entries are `Undef`.
     superglobals: [Zval; 8],
+    /// Compiled-regex cache, keyed by the raw PHP pattern (delimiters + flags),
+    /// mirroring PCRE's per-request pattern cache. Composer/symfony call e.g.
+    /// `preg_match('/.{1,10000}/u', …)` in a loop; without this each call would
+    /// rebuild the (large, Unicode) NFA from scratch. `None` caches a pattern that
+    /// failed to compile so it isn't retried.
+    preg_cache: HashMap<Vec<u8>, Option<Rc<crate::preg::Engine>>>,
     frames: Vec<Frame<'m>>,
     /// Monotonic object-handle counter (`#N` in `var_dump`), starting at 1 like
     /// the tree-walker's `next_object_id`.
@@ -871,6 +878,18 @@ impl<'m> Vm<'m> {
     /// Render every diagnostic raised since the last flush into `rendered`,
     /// stamped with `line` and the module file (E1; mirrors `eval::flush_diags`):
     /// `\n{Severity}: {message} in {file} on line {line}\n`.
+    /// Compile a PHP regex, memoising the result per raw pattern (PCRE keeps a
+    /// per-request pattern cache). Returns a shared handle; `None` (also cached)
+    /// means the pattern is invalid.
+    fn preg_compile(&mut self, pat: &[u8]) -> Option<Rc<crate::preg::Engine>> {
+        if let Some(hit) = self.preg_cache.get(pat) {
+            return hit.clone();
+        }
+        let engine = crate::preg::compile(pat).map(Rc::new);
+        self.preg_cache.insert(pat.to_vec(), engine.clone());
+        engine
+    }
+
     fn flush_diags(&mut self, line: Line) -> Result<(), PhpError> {
         // Under `@` (step 48) nothing renders; the suppressed diagnostics are
         // dropped at `Op::SuppressEnd` once the expression finishes.
@@ -5245,7 +5264,7 @@ impl<'m> Vm<'m> {
         let callback = args[1].deref_clone();
         let subject =
             convert::to_zstr_cast(&args[2].deref_clone(), &mut self.diags).as_bytes().to_vec();
-        let Some(re) = crate::preg::compile(&pat) else {
+        let Some(re) = self.preg_compile(&pat) else {
             return Ok(Zval::Null);
         };
         let subj = String::from_utf8_lossy(&subject).into_owned();
@@ -5287,7 +5306,7 @@ impl<'m> Vm<'m> {
         let repl = convert::to_zstr_cast(&args[1].deref_clone(), &mut self.diags).as_bytes().to_vec();
         let subject =
             convert::to_zstr_cast(&args[2].deref_clone(), &mut self.diags).as_bytes().to_vec();
-        let Some(re) = crate::preg::compile(&pat) else {
+        let Some(re) = self.preg_compile(&pat) else {
             return Ok(Zval::Null);
         };
         let repl = String::from_utf8_lossy(&crate::preg::translate_replacement(&repl)).into_owned();
@@ -5336,7 +5355,7 @@ impl<'m> Vm<'m> {
             Some(a) => convert::to_long_cast(&a.deref_clone(), &mut self.diags),
             None => 0,
         };
-        let Some(re) = crate::preg::compile(&pat) else {
+        let Some(re) = self.preg_compile(&pat) else {
             return Ok(Zval::Bool(false));
         };
         let no_empty = flags & 1 != 0;
@@ -5408,7 +5427,7 @@ impl<'m> Vm<'m> {
         let pat = convert::to_zstr_cast(&args[0].deref_clone(), &mut self.diags).as_bytes().to_vec();
         let subject =
             convert::to_zstr_cast(&args[1].deref_clone(), &mut self.diags).as_bytes().to_vec();
-        let Some(re) = crate::preg::compile(&pat) else {
+        let Some(re) = self.preg_compile(&pat) else {
             return Ok((Zval::Bool(false), Zval::Null));
         };
         let flags = match args.get(3) {
@@ -5437,7 +5456,7 @@ impl<'m> Vm<'m> {
         let pat = convert::to_zstr_cast(&args[0].deref_clone(), &mut self.diags).as_bytes().to_vec();
         let subject =
             convert::to_zstr_cast(&args[1].deref_clone(), &mut self.diags).as_bytes().to_vec();
-        let Some(re) = crate::preg::compile(&pat) else {
+        let Some(re) = self.preg_compile(&pat) else {
             return Ok((Zval::Bool(false), Zval::Null));
         };
         let flags = match args.get(3) {
