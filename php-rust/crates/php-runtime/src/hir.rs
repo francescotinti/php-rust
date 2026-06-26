@@ -153,6 +153,9 @@ pub struct ClassDecl {
     pub interfaces: Vec<ClassId>,
     /// `abstract class` / `interface` — cannot be instantiated (step 19-5).
     pub is_abstract: bool,
+    /// `final class` — cannot be extended (enforced at lowering; `ReflectionClass::
+    /// isFinal`).
+    pub is_final: bool,
     /// `interface` declaration (vs `class`), step 19-5.
     pub is_interface: bool,
     /// Instance properties *declared on this class* (not the inherited ones), in
@@ -304,6 +307,9 @@ pub struct PropDecl {
 pub struct MethodDecl {
     pub visibility: Visibility,
     pub is_static: bool,
+    /// `final` method — cannot be overridden by a subclass (enforced at lowering;
+    /// `ReflectionMethod::isFinal`).
+    pub is_final: bool,
     /// Name / parameters / body / local slots — exactly as a free function.
     /// `$this` is *not* a slot: it lowers to [`ExprKind::This`] and is read from
     /// the evaluator's current-object context (D-19.5).

@@ -418,6 +418,7 @@ impl<'f> Lowerer<'f> {
             parent: None,
             interfaces,
             is_abstract: true,
+            is_final: false,
             is_interface: true,
             props: Vec::new(),
             static_props: Vec::new(),
@@ -453,6 +454,22 @@ impl<'f> Lowerer<'f> {
         false
     }
 
+    /// The most-derived ancestor that declares method `name_lc`, returned only when
+    /// that declaration is `final` (so overriding it is the PHP fatal). A closer
+    /// non-final override means the method is legitimately overridable here. `None`
+    /// if no ancestor declares it.
+    fn final_ancestor_method(&self, mut parent: Option<crate::hir::ClassId>, name_lc: &[u8]) -> Option<crate::hir::ClassId> {
+        while let Some(cid) = parent {
+            // A forward-declared ancestor may not be lowered yet — stop the walk.
+            let c = self.classes.get(cid)?;
+            if let Some(m) = c.methods.iter().find(|m| m.decl.name.to_ascii_lowercase() == name_lc) {
+                return m.is_final.then_some(cid);
+            }
+            parent = c.parent;
+        }
+        None
+    }
+
     pub(super) fn lower_class(&mut self, class: &Class) -> Result<ClassDecl, LowerError> {
         let line = self.line_of(class.span());
         let is_abstract = class.modifiers.iter().any(|m| m.is_abstract());
@@ -472,6 +489,7 @@ impl<'f> Lowerer<'f> {
                 p.readonly = true;
             }
         }
+        decl.is_final = class.modifiers.iter().any(|m| m.is_final());
         decl.attributes = self.lower_attributes(&class.attribute_lists, line)?;
         Ok(decl)
     }
@@ -551,6 +569,32 @@ impl<'f> Lowerer<'f> {
             }
             None => None,
         };
+        // A `final` class (or an enum, which is implicitly final) cannot be
+        // extended — PHP fatal at the subclass's site, with a distinct message for
+        // an enum parent. A forward-declared parent may not be lowered yet (its id
+        // is registered but its `ClassDecl` not built); `.get` skips it (the rarer
+        // forward-final-parent case is left to runtime, as before).
+        if let Some(p) = parent.and_then(|pid| self.classes.get(pid)) {
+            if p.is_enum {
+                return Err(LowerError::Fatal {
+                    message: format!(
+                        "Class {} cannot extend enum {}",
+                        String::from_utf8_lossy(&name),
+                        String::from_utf8_lossy(&p.name)
+                    ),
+                    line,
+                });
+            } else if p.is_final {
+                return Err(LowerError::Fatal {
+                    message: format!(
+                        "Class {} cannot extend final class {}",
+                        String::from_utf8_lossy(&name),
+                        String::from_utf8_lossy(&p.name)
+                    ),
+                    line,
+                });
+            }
+        }
         // Resolve `implements I, J` to interface ids (step 19-5).
         let interfaces = match implements {
             Some(imp) => {
@@ -619,6 +663,22 @@ impl<'f> Lowerer<'f> {
             static_props.extend(t_static);
             consts.extend(t_consts);
         }
+        // A `final` method in an ancestor cannot be overridden (PHP fatal). Check
+        // each method this class defines against the most-derived ancestor that
+        // declares the same name.
+        for m in &methods {
+            let name_lc = m.decl.name.to_ascii_lowercase();
+            if let Some(decl) = self.final_ancestor_method(parent, &name_lc) {
+                return Err(LowerError::Fatal {
+                    message: format!(
+                        "Cannot override final method {}::{}()",
+                        String::from_utf8_lossy(&self.classes[decl].name),
+                        String::from_utf8_lossy(&m.decl.name)
+                    ),
+                    line,
+                });
+            }
+        }
         // A concrete class must implement every abstract method it carries (own or
         // trait-supplied); otherwise PHP fatals at link time (D-21.11). Abstract
         // classes and interfaces legitimately leave them open.
@@ -663,6 +723,7 @@ impl<'f> Lowerer<'f> {
             parent,
             interfaces,
             is_abstract,
+            is_final: false,
             is_interface: false,
             props,
             static_props,
@@ -710,6 +771,7 @@ impl<'f> Lowerer<'f> {
                 p.readonly = true;
             }
         }
+        decl.is_final = anon.modifiers.iter().any(|m| m.is_final());
         self.anon_classes.push(decl);
         let (args, named) = match &anon.argument_list {
             Some(list) => self.lower_args(list, line)?,
@@ -824,6 +886,8 @@ impl<'f> Lowerer<'f> {
             parent: None,
             interfaces,
             is_abstract: false,
+            // Enums are implicitly final (cannot be extended; ReflectionClass::isFinal).
+            is_final: true,
             is_interface: false,
             props: Vec::new(),
             static_props: Vec::new(),
@@ -1082,6 +1146,7 @@ impl<'f> Lowerer<'f> {
     ) -> Result<MethodDecl, LowerError> {
         let line = self.line_of(method.span());
         let is_static = method.modifiers.iter().any(|m| m.is_static());
+        let is_final = method.modifiers.iter().any(|m| m.is_final());
         let body = match &method.body {
             MethodBody::Concrete(block) => block,
             MethodBody::Abstract(_) => {
@@ -1168,6 +1233,7 @@ impl<'f> Lowerer<'f> {
         Ok(MethodDecl {
             visibility,
             is_static,
+            is_final,
             decl: FnDecl {
                 name,
                 params,
