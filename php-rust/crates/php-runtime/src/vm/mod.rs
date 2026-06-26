@@ -3781,6 +3781,7 @@ impl<'m> Vm<'m> {
             b"class_parents" => self.ho_class_parents(args),
             b"class_implements" => self.ho_class_implements(args),
             b"get_object_vars" => self.ho_get_object_vars(args),
+            b"get_class_vars" => self.ho_get_class_vars(args),
             b"get_class_methods" => self.ho_get_class_methods(args),
             b"func_num_args" => self.ho_func_num_args(),
             b"func_get_args" => self.ho_func_get_args(),
@@ -4783,6 +4784,102 @@ impl<'m> Vm<'m> {
         };
         for (name, val) in dynamic {
             arr.insert(Key::from_bytes(&name), val);
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// `get_class_vars(string $class)`: the class's default property values as an
+    /// associative `name => default` array, filtered by visibility from the calling
+    /// scope. Instance properties come first (most-derived class first, declaration
+    /// order, a redeclaration keeping the derived position), then static properties.
+    /// Values are the *declared* defaults — a since-modified static cell is ignored,
+    /// matching PHP. An unknown class is the PHP 8 TypeError.
+    fn ho_get_class_vars(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(a) = args.into_iter().next() else {
+            return Err(PhpError::ArgumentCountError(
+                "get_class_vars() expects exactly 1 argument, 0 given".to_string(),
+            ));
+        };
+        let raw = convert::to_zstr_cast(&a.deref_clone(), &mut self.diags);
+        let name = raw.as_bytes();
+        let key = name.strip_prefix(b"\\").unwrap_or(name).to_ascii_lowercase();
+        let Some(&cid) = self.class_index.get(key.as_slice()) else {
+            return Err(PhpError::TypeError(format!(
+                "get_class_vars(): Argument #1 ($class) must be a valid class name, {} given",
+                String::from_utf8_lossy(name)
+            )));
+        };
+        let cur = self.frames[self.frames.len() - 1].class;
+        // Materialise the *evaluated* instance defaults via a throwaway instance:
+        // constants come from `alloc_object`, non-constant defaults (arrays, `1+2`,
+        // …) from the prop-init thunk. The instance is untracked for `__destruct`.
+        let created_mark = self.created.len();
+        let temp = self.alloc_object(cid)?;
+        let cc = self.classes[cid];
+        if let Some(func) = cc.prop_init.as_ref() {
+            let baseline = self.frames.len();
+            let mut frame = Frame::new(func, self.class_mod(cid));
+            frame.this = Some(temp.clone());
+            frame.class = Some(cid);
+            frame.static_class = Some(cid);
+            frame.init_props = true;
+            // No `ret_cell`: the thunk's `Ret` must hit the `frames.len() == baseline`
+            // check so `drive_to_return` stops here instead of resuming the caller.
+            self.frames.push(frame);
+            self.drive_to_return(baseline)?; // returns the thunk's NULL — ignored
+        }
+        let defaults: Vec<(Box<[u8]>, Zval)> = match &temp {
+            Zval::Object(o) => o
+                .borrow()
+                .props
+                .iter()
+                .map(|(n, v)| (n.to_vec().into_boxed_slice(), v.deref_clone()))
+                .collect(),
+            _ => Vec::new(),
+        };
+        self.created.truncate(created_mark); // discard the throwaway, no __destruct
+        // Inheritance chain, most-derived first.
+        let mut chain: Vec<usize> = Vec::new();
+        let mut c = Some(cid);
+        while let Some(ci) = c {
+            chain.push(ci);
+            c = self.classes[ci].parent;
+        }
+        let mut arr = PhpArray::new();
+        let mut seen: Vec<Box<[u8]>> = Vec::new();
+        // Instance properties first, in most-derived-then-inherited order.
+        for &ci in &chain {
+            for (pname, vis) in &self.classes[ci].own_prop_vis {
+                if seen.iter().any(|n| n == pname) {
+                    continue;
+                }
+                seen.push(pname.clone());
+                if !visible_from(&self.classes, cur, *vis, ci) {
+                    continue;
+                }
+                // A *virtual* hooked property has no backing storage (absent from the
+                // instance), so it is excluded — only backed properties are listed.
+                if let Some((_, val)) = defaults.iter().find(|(n, _)| n == pname) {
+                    arr.insert(Key::from_bytes(pname), val.clone());
+                }
+            }
+        }
+        // Then static properties, in their declared-default value.
+        for &ci in &chain {
+            for sp in &self.classes[ci].static_props {
+                if seen.iter().any(|n| *n == sp.name) {
+                    continue;
+                }
+                seen.push(sp.name.clone());
+                if !visible_from(&self.classes, cur, sp.visibility, ci) {
+                    continue;
+                }
+                let val = match &sp.init {
+                    StaticInit::Const(k) => k.to_zval(),
+                    StaticInit::Thunk(_) => Zval::Null,
+                };
+                arr.insert(Key::from_bytes(&sp.name), val);
+            }
         }
         Ok(Zval::Array(Rc::new(arr)))
     }
@@ -7083,6 +7180,7 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"__weak_get",
         b"get_parent_class",
         b"get_object_vars",
+        b"get_class_vars",
         b"get_class_methods",
         b"func_num_args",
         b"func_get_args",
