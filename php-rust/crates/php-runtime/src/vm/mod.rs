@@ -4040,6 +4040,10 @@ impl<'m> Vm<'m> {
             b"get_parent_class" => self.ho_get_parent_class(args),
             b"class_parents" => self.ho_class_parents(args),
             b"class_implements" => self.ho_class_implements(args),
+            b"__reflect_class_attributes" => self.ho_reflect_class_attributes(args),
+            b"__reflect_attr_newinstance" => self.ho_reflect_attr_newinstance(args),
+            b"__reflect_attr_arguments" => self.ho_reflect_attr_arguments(args),
+            b"__reflect_prop_declaring_class" => self.ho_reflect_prop_declaring_class(args),
             b"get_object_vars" => self.ho_get_object_vars(args),
             b"get_class_vars" => self.ho_get_class_vars(args),
             b"register_shutdown_function" => self.ho_register_shutdown_function(args),
@@ -4969,6 +4973,135 @@ impl<'m> Vm<'m> {
             klass = self.classes[c].parent;
         }
         Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// `__reflect_class_attributes($class, $filter = null)`: the host backing of
+    /// `ReflectionClass::getAttributes()`. Returns an array of `ReflectionAttribute`
+    /// objects, one per `#[…]` declared on `$class` (optionally filtered by
+    /// attribute name). Each carries `name` plus the private handle (`__class`,
+    /// `__index`) the other reflection builtins use to materialise it lazily.
+    fn ho_reflect_class_attributes(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let empty = || Ok(Zval::Array(Rc::new(php_types::PhpArray::new())));
+        let Some(first) = args.first() else { return empty() };
+        let cname = convert::to_zstr_cast(first, &mut self.diags).as_bytes().to_vec();
+        let key = cname.strip_prefix(b"\\").unwrap_or(&cname).to_ascii_lowercase();
+        let Some(&cid) = self.class_index.get(&key) else { return empty() };
+        let Some(&ra_cid) = self.class_index.get(&b"reflectionattribute"[..]) else {
+            return empty();
+        };
+        // A non-empty string second argument restricts the result to that attribute
+        // class (case-insensitively, leading `\` stripped) — `getAttributes($name)`.
+        let filter: Option<Vec<u8>> = match args.get(1).map(|v| v.deref_clone()) {
+            Some(Zval::Str(s)) => {
+                let raw = s.as_bytes();
+                Some(raw.strip_prefix(b"\\").unwrap_or(raw).to_vec())
+            }
+            _ => None,
+        };
+        let matches: Vec<(usize, Vec<u8>)> = self.classes[cid]
+            .attributes
+            .iter()
+            .enumerate()
+            .filter(|(_, a)| match &filter {
+                None => true,
+                Some(f) => a.name.strip_prefix(b"\\").unwrap_or(&a.name).eq_ignore_ascii_case(f),
+            })
+            .map(|(i, a)| (i, a.name.to_vec()))
+            .collect();
+        let target = self.classes[cid].name.to_vec();
+        let mut arr = php_types::PhpArray::new();
+        for (idx, name) in matches {
+            let obj = self.alloc_object(ra_cid)?;
+            if let Zval::Object(o) = &obj {
+                let mut b = o.borrow_mut();
+                b.props.set(b"name", Zval::Str(PhpStr::new(name)));
+                b.props.set(b"__class", Zval::Str(PhpStr::new(target.clone())));
+                b.props.set(b"__index", Zval::Long(idx as i64));
+            }
+            let _ = arr.append(obj);
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// Resolve an attribute handle (`$class` name + `$index`) to its
+    /// `(ClassId, index)`, bounds-checked. Shared by `newInstance`/`getArguments`.
+    fn reflect_attr_handle(&self, args: &[Zval]) -> Result<(ClassId, usize), PhpError> {
+        let cname = match args.first().map(|v| v.deref_clone()) {
+            Some(Zval::Str(s)) => s.as_bytes().to_vec(),
+            _ => return Err(PhpError::Error("ReflectionAttribute: invalid handle".to_string())),
+        };
+        let idx = match args.get(1).map(|v| v.deref_clone()) {
+            Some(Zval::Long(n)) if n >= 0 => n as usize,
+            _ => return Err(PhpError::Error("ReflectionAttribute: invalid handle".to_string())),
+        };
+        let key = cname.strip_prefix(b"\\").unwrap_or(&cname).to_ascii_lowercase();
+        let cid = self
+            .class_index
+            .get(&key)
+            .copied()
+            .ok_or_else(|| PhpError::Error("ReflectionAttribute: class missing".to_string()))?;
+        if idx >= self.classes[cid].attributes.len() {
+            return Err(PhpError::Error("ReflectionAttribute: index out of range".to_string()));
+        }
+        Ok((cid, idx))
+    }
+
+    /// `__reflect_attr_newinstance($class, $index)`: build the attribute object by
+    /// running its retained `new Attr(args)` thunk in the attributed class's context
+    /// (so `self::`/constants in the argument list resolve as written).
+    fn ho_reflect_attr_newinstance(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let (cid, idx) = self.reflect_attr_handle(&args)?;
+        let cc = self.classes[cid];
+        let thunk = &cc.attributes[idx].new_thunk;
+        let baseline = self.frames.len();
+        let mut frame = Frame::new(thunk, self.class_mod(cid));
+        frame.class = Some(cid);
+        frame.static_class = Some(cid);
+        self.frames.push(frame);
+        self.drive_to_return(baseline)
+    }
+
+    /// `__reflect_attr_arguments($class, $index)`: run the attribute's argument-array
+    /// thunk (positional args int-keyed, named args string-keyed) — `getArguments()`.
+    fn ho_reflect_attr_arguments(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let (cid, idx) = self.reflect_attr_handle(&args)?;
+        let cc = self.classes[cid];
+        let thunk = &cc.attributes[idx].args_thunk;
+        let baseline = self.frames.len();
+        let mut frame = Frame::new(thunk, self.class_mod(cid));
+        frame.class = Some(cid);
+        frame.static_class = Some(cid);
+        self.frames.push(frame);
+        self.drive_to_return(baseline)
+    }
+
+    /// `__reflect_prop_declaring_class($class, $prop)`: the class that *declares*
+    /// `$prop` — the most-derived class in `$class`'s ancestry whose own (instance
+    /// or static) property list contains it. A child that redeclares an inherited
+    /// property shadows the parent, so this returns the child, matching
+    /// `ReflectionProperty::$class`. `false` if no class declares it.
+    fn ho_reflect_prop_declaring_class(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let cname = match args.first().map(|v| v.deref_clone()) {
+            Some(Zval::Str(s)) => s.as_bytes().to_vec(),
+            _ => return Ok(Zval::Bool(false)),
+        };
+        let pname = match args.get(1).map(|v| v.deref_clone()) {
+            Some(Zval::Str(s)) => s.as_bytes().to_vec(),
+            _ => return Ok(Zval::Bool(false)),
+        };
+        let key = cname.strip_prefix(b"\\").unwrap_or(&cname).to_ascii_lowercase();
+        let Some(&cid) = self.class_index.get(&key) else { return Ok(Zval::Bool(false)) };
+        let mut cur = Some(cid);
+        while let Some(c) = cur {
+            let cc = self.classes[c];
+            let declares = cc.own_prop_vis.iter().any(|(n, _)| n.as_ref() == pname.as_slice())
+                || cc.static_props.iter().any(|sp| sp.name.as_ref() == pname.as_slice());
+            if declares {
+                return Ok(Zval::Str(PhpStr::new(cc.name.to_vec())));
+            }
+            cur = cc.parent;
+        }
+        Ok(Zval::Bool(false))
     }
 
     /// Add interface `i` and the interfaces it extends to `arr` (name => name),
@@ -7627,6 +7760,10 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"spl_object_hash",
         b"class_parents",
         b"class_implements",
+        b"__reflect_class_attributes",
+        b"__reflect_attr_newinstance",
+        b"__reflect_attr_arguments",
+        b"__reflect_prop_declaring_class",
         b"__weak_create",
         b"__weak_get",
         b"get_parent_class",

@@ -180,7 +180,27 @@ pub struct ClassDecl {
     /// The `case` members of an enum, in declaration order (step 23, D-23.1).
     /// Empty for non-enums.
     pub enum_cases: Vec<EnumCaseDecl>,
+    /// Attributes declared on this class (`#[Foo(args)]`), in source order. Each
+    /// is retained as a constructible `new`-expression so `ReflectionClass::
+    /// getAttributes()` + `ReflectionAttribute::newInstance()` work (the path
+    /// Symfony Console uses to read `#[AsCommand]`). Empty for the common case.
+    pub attributes: Vec<HirAttribute>,
     pub line: Line,
+}
+
+/// One class attribute `#[Name(args...)]` retained for runtime reflection. The
+/// arguments are kept as lowered expressions (evaluated lazily by the VM), so a
+/// named/spread argument list reflects exactly as written.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HirAttribute {
+    /// Resolved fully-qualified attribute class name (for `getName()` and the
+    /// `getAttributes($name)` filter).
+    pub name: Box<[u8]>,
+    /// `new Name(args...)` — run by `newInstance()` to build the attribute object.
+    pub new_expr: Expr,
+    /// An array literal of the arguments (positional → int key, named → string
+    /// key) — run by `getArguments()`.
+    pub args_expr: Expr,
 }
 
 /// Backing scalar type of a backed enum (step 23, D-23.10).

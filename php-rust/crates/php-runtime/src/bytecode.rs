@@ -1056,6 +1056,17 @@ pub struct CompiledConst {
     pub func: Func,
 }
 
+/// One class attribute retained for reflection (mirrors one
+/// [`crate::hir::HirAttribute`]): the attribute class name plus two thunks — one
+/// that builds the attribute object (`newInstance()`) and one that yields its
+/// argument array (`getArguments()`). Both run in the *attributed* class's context.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompiledAttribute {
+    pub name: Box<[u8]>,
+    pub new_thunk: Func,
+    pub args_thunk: Func,
+}
+
 /// One enum `case` the VM can materialise (Session A): its name and, for a backed
 /// enum, the folded backing value (`None` for a pure case — only a `name`
 /// property). A backed case whose value did not const-fold is *omitted* from
@@ -1119,6 +1130,9 @@ pub struct CompiledClass {
     /// Enum cases the VM can materialise as singletons (Session A); empty for a
     /// non-enum. Indexed by [`Op::EnumCase`]'s `case`.
     pub enum_cases: Vec<CompiledEnumCase>,
+    /// Attributes declared on this class (`#[Foo(args)]`), in source order — read
+    /// by `ReflectionClass::getAttributes()`. Empty for the common case.
+    pub attributes: Vec<CompiledAttribute>,
     /// `false` if the class could not be fully compiled (e.g. a non-constant
     /// property default): [`Op::Alloc`] on it fatals instead of producing a
     /// wrong instance, mirroring the function-stub discipline.

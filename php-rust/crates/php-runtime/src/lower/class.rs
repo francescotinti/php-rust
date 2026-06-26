@@ -426,6 +426,7 @@ impl<'f> Lowerer<'f> {
             is_enum: false,
             enum_backing: None,
             enum_cases: Vec::new(),
+            attributes: Vec::new(),
             line,
         })
     }
@@ -469,7 +470,53 @@ impl<'f> Lowerer<'f> {
                 p.readonly = true;
             }
         }
+        decl.attributes = self.lower_attributes(&class.attribute_lists, line)?;
         Ok(decl)
+    }
+
+    /// Lower the `#[Foo(args), Bar]` attribute lists declared on a class/enum into
+    /// retained [`HirAttribute`]s. Each attribute becomes a `new Foo(args)`
+    /// expression (run by `ReflectionAttribute::newInstance()`) plus an array
+    /// literal of its arguments (run by `getArguments()`). Argument expressions are
+    /// lowered in the surrounding context so `self::`/constants resolve as written.
+    fn lower_attributes(
+        &mut self,
+        lists: &mago_syntax::ast::Sequence<mago_syntax::ast::AttributeList>,
+        line: Line,
+    ) -> Result<Vec<crate::hir::HirAttribute>, LowerError> {
+        let mut out = Vec::new();
+        for list in lists.iter() {
+            for attr in list.attributes.iter() {
+                let name = self.resolve_class(&attr.name);
+                let (args, named) = match &attr.argument_list {
+                    Some(l) => self.lower_args(l, line)?,
+                    None => (Vec::new(), Vec::new()),
+                };
+                let new_expr = Expr {
+                    kind: ExprKind::New {
+                        class: ClassRef::Named(name.clone()),
+                        args: args.clone(),
+                        named: named.clone(),
+                    },
+                    line,
+                };
+                // Build the `getArguments()` array: positional args keyless (int
+                // keys 0..), named args keyed by their string name.
+                let mut elems: Vec<crate::hir::ArrayElem> = args
+                    .into_iter()
+                    .map(|value| crate::hir::ArrayElem { key: None, value })
+                    .collect();
+                for (k, value) in named {
+                    elems.push(crate::hir::ArrayElem {
+                        key: Some(Expr { kind: ExprKind::Str(k), line }),
+                        value,
+                    });
+                }
+                let args_expr = Expr { kind: ExprKind::Array(elems), line };
+                out.push(crate::hir::HirAttribute { name, new_expr, args_expr });
+            }
+        }
+        Ok(out)
     }
 
     /// Shared class-body lowering for both named classes and anonymous classes
@@ -616,6 +663,7 @@ impl<'f> Lowerer<'f> {
             is_enum: false,
             enum_backing: None,
             enum_cases: Vec::new(),
+            attributes: Vec::new(),
             line,
         })
     }
@@ -772,6 +820,7 @@ impl<'f> Lowerer<'f> {
             is_enum: true,
             enum_backing,
             enum_cases,
+            attributes: self.lower_attributes(&en.attribute_lists, line)?,
             line,
         })
     }

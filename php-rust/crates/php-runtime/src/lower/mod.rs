@@ -926,6 +926,20 @@ class SplFixedArray implements ArrayAccess, Countable, Iterator {
     }
 }
 class ReflectionException extends Exception {}
+class ReflectionAttribute {
+    public $name;
+    // Private handle to the owning class + the attribute's position in it, used by
+    // the host builtins to materialise the attribute lazily.
+    public $__class;
+    public $__index;
+    public function getName() { return $this->name; }
+    public function getArguments() {
+        return __reflect_attr_arguments($this->__class, $this->__index);
+    }
+    public function newInstance() {
+        return __reflect_attr_newinstance($this->__class, $this->__index);
+    }
+}
 class ReflectionClass {
     public $name;
     public function __construct($objectOrClass) {
@@ -939,9 +953,11 @@ class ReflectionClass {
         $p = strrpos($this->name, '\\');
         return $p === false ? $this->name : substr($this->name, $p + 1);
     }
-    // phpr does not retain attributes, so a class never reports any (Composer's
-    // commands carry none, so this is also semantically correct for it).
-    public function getAttributes($name = null, $flags = 0) { return []; }
+    // Attributes are retained at lowering; the host builds one ReflectionAttribute
+    // per attribute declared on the class (optionally filtered by name).
+    public function getAttributes($name = null, $flags = 0) {
+        return __reflect_class_attributes($this->name, $name);
+    }
     public function newInstance(...$args) { return new $this->name(...$args); }
     public function newInstanceArgs($args = []) { return new $this->name(...$args); }
     public function isInstantiable() { return class_exists($this->name); }
@@ -970,16 +986,13 @@ class ReflectionProperty {
         if (!property_exists($cls, $property)) {
             throw new ReflectionException(sprintf('Property %s::$%s does not exist', $cls, $property));
         }
-        // The declaring class is the topmost ancestor that still has the property
-        // (a child redeclaration shadows it); mirrors ReflectionProperty::$class.
-        $decl = $cls;
-        $c = $cls;
-        while ($c !== false && property_exists($c, $property)) {
-            $decl = $c;
-            $c = get_parent_class($c);
-        }
+        // The declaring class is the most-derived class that declares the property
+        // itself (a child redeclaration shadows the parent's); mirrors
+        // ReflectionProperty::$class. The host resolves it from the per-class
+        // declared-property lists, which `property_exists` (inherited too) can't.
         $this->name = $property;
-        $this->class = $decl;
+        $decl = __reflect_prop_declaring_class($cls, $property);
+        $this->class = $decl === false ? $cls : $decl;
     }
     public function getName() { return $this->name; }
 }

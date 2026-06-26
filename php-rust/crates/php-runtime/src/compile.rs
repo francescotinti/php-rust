@@ -26,7 +26,7 @@ use php_types::{ObjectInfo, PhpStr, PropVis};
 
 use crate::builtin::{Builtin, Registry};
 use crate::bytecode::{
-    Addr, BuiltinIface, ClassTarget, CompiledClass, CompiledConst, CompiledEnumCase, CompiledMethod, CompiledStaticProp, Const,
+    Addr, BuiltinIface, ClassTarget, CompiledAttribute, CompiledClass, CompiledConst, CompiledEnumCase, CompiledMethod, CompiledStaticProp, Const,
     ConstIdx, DimBase, ExcRegion, FieldBase, FieldStep, Func, Instantiable, Module, Op, PropHooks, StaticInit,
 };
 use crate::hir::{
@@ -475,6 +475,22 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         })
         .collect();
 
+    // Class attributes (`#[Foo(args)]`): each compiles to two thunks run in this
+    // class's context — one that constructs `new Foo(args)` (newInstance), one that
+    // builds the argument array (getArguments). A thunk that doesn't compile
+    // becomes a fatal stub, hit only if reflected on.
+    let attributes = cd
+        .attributes
+        .iter()
+        .map(|a| {
+            let new_thunk = compile_const_thunk(&a.name, &a.new_expr, ctx, cid)
+                .unwrap_or_else(|e| const_stub(&a.name, &e));
+            let args_thunk = compile_const_thunk(&a.name, &a.args_expr, ctx, cid)
+                .unwrap_or_else(|e| const_stub(&a.name, &e));
+            CompiledAttribute { name: a.name.clone(), new_thunk, args_thunk }
+        })
+        .collect();
+
     CompiledClass {
         name: cd.name.clone(),
         class_name: PhpStr::new(cd.name.to_vec()),
@@ -490,6 +506,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         prop_init,
         consts,
         enum_cases,
+        attributes,
         ok,
         prop_hooks,
     }
