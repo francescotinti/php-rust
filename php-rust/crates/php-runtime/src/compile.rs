@@ -1983,19 +1983,39 @@ impl<'a> FnCompiler<'a> {
                     "by-reference host builtin called with no arguments".into(),
                 ));
             };
-            let ExprKind::Var(slot) = &first.kind else {
-                return Err(CompileError::Unsupported(
-                    "by-reference host builtin whose first argument is not a plain variable".into(),
-                ));
-            };
-            let slot = *slot;
-            self.push_value_args(rest)?;
-            self.emit(Op::CallHostBuiltinRef {
-                name: canon.into(),
-                slot,
-                argc: rest.len() as u32,
-            });
-            return Ok(());
+            match &first.kind {
+                ExprKind::Var(slot) => {
+                    let slot = *slot;
+                    self.push_value_args(rest)?;
+                    self.emit(Op::CallHostBuiltinRef {
+                        name: canon.into(),
+                        slot,
+                        argc: rest.len() as u32,
+                    });
+                    return Ok(());
+                }
+                // Bare static property (`usort(self::$items, $cb)`): RMW through a
+                // temp, mirroring the registry by-ref path.
+                ExprKind::StaticProp { class, name: prop } => {
+                    let canon: Box<[u8]> = canon.into();
+                    return self.static_prop_rmw(class, prop, &[], true, |c, place| {
+                        let slot = local_slot(place);
+                        c.push_value_args(rest)?;
+                        c.emit(Op::CallHostBuiltinRef {
+                            name: canon,
+                            slot,
+                            argc: rest.len() as u32,
+                        });
+                        Ok(())
+                    });
+                }
+                _ => {
+                    return Err(CompileError::Unsupported(
+                        "by-reference host builtin whose first argument is not a plain variable"
+                            .into(),
+                    ))
+                }
+            }
         }
         // Builtins: classify by-value vs by-reference-first via the registry.
         match self.ctx.registry.get(name) {
@@ -2406,15 +2426,30 @@ impl<'a> FnCompiler<'a> {
                 "by-reference builtin called with no arguments".into(),
             ));
         };
-        let ExprKind::Var(slot) = &first.kind else {
-            return Err(CompileError::Unsupported(
+        match &first.kind {
+            ExprKind::Var(slot) => {
+                let slot = *slot;
+                self.push_value_args(rest)?;
+                self.emit(Op::CallBuiltinRef { name: name.into(), slot, argc: rest.len() as u32 });
+                Ok(())
+            }
+            // A bare static property as the by-reference argument
+            // (`array_pop(self::$stack)`): read-modify-write through a temp — load
+            // the property, run the builtin in place on the temp slot (leaving its
+            // result), then write the mutated temp back into the property.
+            ExprKind::StaticProp { class, name: prop } => {
+                let nm: Box<[u8]> = name.into();
+                self.static_prop_rmw(class, prop, &[], true, |c, place| {
+                    let slot = local_slot(place);
+                    c.push_value_args(rest)?;
+                    c.emit(Op::CallBuiltinRef { name: nm, slot, argc: rest.len() as u32 });
+                    Ok(())
+                })
+            }
+            _ => Err(CompileError::Unsupported(
                 "by-reference builtin whose first argument is not a plain variable".into(),
-            ));
-        };
-        let slot = *slot;
-        self.push_value_args(rest)?;
-        self.emit(Op::CallBuiltinRef { name: name.into(), slot, argc: rest.len() as u32 });
-        Ok(())
+            )),
+        }
     }
 
     /// Emit the run-time constructor invocation for `new static` / `new $cls` (the
@@ -3564,6 +3599,16 @@ fn place_has_intermediate_append(place: &Place) -> bool {
 /// Map a [`Place`]'s base to the VM's write-cell selector. Only a single-step
 /// array write on a local / `$GLOBALS` slot is in slice; `$this` and deeper
 /// chains are rejected so the VM never sees an opcode it can't honour.
+/// Extract the local slot from a `Local`-rooted, step-less place. Used by the
+/// static-property by-reference-builtin RMW path, which materialises the
+/// property into a temp local before running the in-place builtin on it.
+fn local_slot(place: &Place) -> crate::hir::Slot {
+    match place.base {
+        PlaceBase::Local(s) if place.steps.is_empty() => s,
+        _ => unreachable!("static_prop_rmw builds a step-less Local place for the by-ref builtin"),
+    }
+}
+
 fn dim_base(place: &Place) -> R<DimBase> {
     match place.base {
         PlaceBase::Local(s) => Ok(DimBase::Local(s)),
