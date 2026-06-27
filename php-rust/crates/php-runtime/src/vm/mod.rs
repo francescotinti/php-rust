@@ -936,11 +936,11 @@ impl<'m> Vm<'m> {
     /// fall, push them onto `gc_roots` so the next [`Op::Sweep`] re-examines
     /// them (mirrors Zend's `gc_possible_root`). Over-noting is safe — the sweep
     /// re-checks `Rc::strong_count` — whereas under-noting delays a destructor,
-    /// so this errs generous. A `Ref`/`Array` is descended only when this is its
-    /// last holder (`strong_count == 1`), i.e. dropping it really releases its
-    /// contents. An `Object`'s own properties are *not* descended here: they only
-    /// lose their references when the object is actually freed, which the sweep
-    /// handles via its cascade.
+    /// so this errs generous. A `Ref`/`Array`/`Closure` is descended only when
+    /// this is its last holder (`strong_count == 1`), i.e. dropping it really
+    /// releases its contents. An `Object`'s own properties are *not* descended
+    /// here: they only lose their references when the object is actually freed,
+    /// which the sweep handles via its cascade.
     fn gc_note(&mut self, v: &Zval) {
         match v {
             Zval::Object(rc) => {
@@ -960,11 +960,21 @@ impl<'m> Vm<'m> {
             }
             Zval::Array(a) => {
                 if Rc::strong_count(a) == 1 {
-                    // Copy the element handles out so no borrow of `a` is held
-                    // across the recursive `&mut self` call (cheap Rc bumps).
-                    let vals: Vec<Zval> = a.iter().map(|(_, ev)| ev.clone()).collect();
-                    for ev in &vals {
+                    for (_, ev) in a.iter() {
                         self.gc_note(ev);
+                    }
+                }
+            }
+            Zval::Closure(cl) => {
+                // Dropping the last handle to a closure frees its captured values
+                // and bound `$this` — which may hold the last reference to an
+                // object (e.g. a closure created in a method outliving its owner).
+                if Rc::strong_count(cl) == 1 {
+                    for (_, cv) in &cl.captures {
+                        self.gc_note(cv);
+                    }
+                    if let Some(bt) = &cl.bound_this {
+                        self.gc_note(bt);
                     }
                 }
             }
@@ -979,29 +989,79 @@ impl<'m> Vm<'m> {
             self.created.len(),
             self.gc_roots.len()
         );
+        let verify = gc_verify_enabled();
         loop {
-            let pos = {
-                let roots = &self.gc_root_ids;
-                self.created.iter().rposition(|o| {
-                    let extra = roots.contains(&o.borrow().id) as usize;
-                    Rc::strong_count(o) - extra == 1
-                })
+            // Candidate selection (the O(candidates) win): a possible root is
+            // collectable when its only strong references are `created` (1) and
+            // its own buffer clone (1). Pick the newest (highest id) to match the
+            // legacy newest-first order — object ids, and `created`, are monotonic
+            // in creation order.
+            let cand_id = self
+                .gc_roots
+                .iter()
+                .filter(|o| Rc::strong_count(o) == 2)
+                .map(|o| o.borrow().id)
+                .max();
+
+            let chosen_id = if verify {
+                // Authoritative full scan, cross-checking buffer completeness.
+                let full_id = {
+                    let roots = &self.gc_root_ids;
+                    self.created
+                        .iter()
+                        .filter(|o| {
+                            let extra = roots.contains(&o.borrow().id) as usize;
+                            Rc::strong_count(o) - extra == 1
+                        })
+                        .map(|o| o.borrow().id)
+                        .max()
+                };
+                if full_id != cand_id {
+                    // `full_id` is collectable but the candidate buffer did not
+                    // surface it: a reference-drop site is missing a `gc_note`.
+                    if let Some(fid) = full_id {
+                        let name = self
+                            .created
+                            .iter()
+                            .find(|o| o.borrow().id == fid)
+                            .map(|o| self.classes[o.borrow().class_id as usize].name.clone())
+                            .unwrap_or_default();
+                        log::error!(
+                            target: "phpr::gc",
+                            "VERIFY under-note: collectable {}#{} absent from candidates (cand={:?})",
+                            String::from_utf8_lossy(&name), fid, cand_id
+                        );
+                        eprintln!(
+                            "GC_VERIFY under-note: {}#{}",
+                            String::from_utf8_lossy(&name), fid
+                        );
+                    }
+                }
+                full_id
+            } else {
+                cand_id
             };
-            let Some(i) = pos else {
+
+            let Some(id) = chosen_id else {
                 // Nothing more to collect this round: drop the candidate buffer.
                 self.gc_roots.clear();
                 self.gc_root_ids.clear();
                 break;
             };
-            let o = self.created.remove(i);
-            let (cid, id) = {
-                let b = o.borrow();
-                (b.class_id as usize, b.id)
+
+            // Take ownership of the chosen object out of `created` and the buffer.
+            // A candidate not in `created` is an object the GC never tracked (e.g.
+            // an interned enum-case singleton that was noted on a value drop): its
+            // `strong_count == 2` is a false positive, so just drop it from the
+            // buffer and move on.
+            let Some(ci) = self.created.iter().position(|o| o.borrow().id == id) else {
+                self.gc_unnote(id);
+                continue;
             };
-            // Drop this object's own candidate clone, if any: otherwise the buffer
-            // would keep it alive past `created.remove`, delaying its free (and so
-            // its cascade) until the end-of-sweep drain.
+            let o = self.created.remove(ci);
             self.gc_unnote(id);
+            let cid = o.borrow().class_id as usize;
+
             if self.destructed.contains(&id) {
                 // Already destructed: it just drops here. Note what it held so
                 // those objects' falling refcounts are reconsidered next pass.
@@ -1022,8 +1082,7 @@ impl<'m> Vm<'m> {
                 self.frames[top].ip = ip; // re-run Sweep after it returns
                 self.frames.push(frame);
                 // `o` stays alive via `frame.this`; it is freed (and its contents
-                // cascaded by the `Ret` hook) when that frame returns. Do not
-                // drain the buffer here — more may be collectable on rewind.
+                // cascaded by the `Ret` hook) when that frame returns.
                 break;
             }
             // Destructor-less object: note what it held, then drop it.
@@ -1053,17 +1112,40 @@ impl<'m> Vm<'m> {
         }
     }
 
+    /// Track a freshly created object as a possible root. A temporary that is
+    /// created and then dropped within a single statement (e.g.
+    /// `Foo::make()->bar`) is consumed off the operand stack by ops we do not
+    /// individually hook; seeding it here means it is already in the buffer and
+    /// gets collected at that statement's sweep, just like the legacy full scan
+    /// caught it. Objects that survive (stored in a variable/property) are simply
+    /// drained and re-noted when they later lose a reference.
+    fn gc_track(&mut self, rc: &Rc<RefCell<Object>>) {
+        let id = rc.borrow().id;
+        if self.gc_root_ids.insert(id) {
+            self.gc_roots.push(Rc::clone(rc));
+        }
+    }
+
     /// Note every object held by a frame that is being dropped (a returning or
-    /// unwinding frame): its locals, leftover operand stack and bound `$this`
-    /// all release their references, so any tracked object reached only through
-    /// them may now be collectable. Not for *parked* frames (a suspended
-    /// generator keeps its slots alive).
+    /// unwinding frame): its locals, leftover operand stack, bound `$this`, live
+    /// `foreach` iterators, surplus args and any parked exception all release
+    /// their references, so a tracked object reached only through them may now be
+    /// collectable. Not for *parked* frames (a suspended generator keeps these).
     fn gc_note_frame(&mut self, frame: &Frame<'m>) {
         for v in &frame.slots {
             self.gc_note(v);
         }
         for v in &frame.stack {
             self.gc_note(v);
+        }
+        for v in &frame.extra_args {
+            self.gc_note(v);
+        }
+        for it in &frame.iters {
+            self.gc_note_iter(it);
+        }
+        if let Some(exc) = &frame.pending_throw {
+            self.gc_note(exc);
         }
         if let Some(this) = &frame.this {
             // A finished `__destruct`'s receiver has already been removed from
@@ -1076,6 +1158,32 @@ impl<'m> Vm<'m> {
                 }
             }
             self.gc_note(this);
+        }
+    }
+
+    /// Note the objects a dropped `foreach` iterator releases. By-reference
+    /// iterators alias a frame slot (noted with the frame), so only the value-
+    /// carrying variants need walking.
+    fn gc_note_iter(&mut self, it: &IterState) {
+        match it {
+            IterState::ByVal { entries, .. } => {
+                for (k, v) in entries {
+                    self.gc_note(k);
+                    self.gc_note(v);
+                }
+            }
+            IterState::ObjVals { obj, .. } | IterState::ObjRefs { obj, .. } => {
+                self.gc_note(obj);
+            }
+            IterState::Object { it, cur_val, .. } => {
+                self.gc_note(it);
+                if let Some(cv) = cur_val {
+                    self.gc_note(cv);
+                }
+            }
+            // `ByRef` aliases a frame slot; `Gen` holds a generator whose frame is
+            // tracked separately — neither owns a value to release here.
+            IterState::ByRef { .. } | IterState::Gen { .. } => {}
         }
     }
 
@@ -1466,7 +1574,10 @@ impl<'m> Vm<'m> {
                             .as_ref()
                             .expect("StaticAlias reached before its StaticStore"),
                     );
-                    self.frames[top].slots[slot as usize] = Zval::Ref(cell);
+                    // Rebinding the slot to the static cell drops whatever it held
+                    // (`$x = new T; static $x;` discards the temporary T here).
+                    let old = std::mem::replace(&mut self.frames[top].slots[slot as usize], Zval::Ref(cell));
+                    self.gc_note(&old);
                 }
                 Op::LoadGlobal(s) => {
                     // `$GLOBALS['x']` read: the global lives in the script frame.
@@ -1849,12 +1960,29 @@ impl<'m> Vm<'m> {
                             continue;
                         }
                     }
-                    let cell = match base {
-                        DimBase::Local(s) => &mut self.frames[top].slots[s as usize],
-                        DimBase::Global(s) => &mut self.frames[0].slots[s as usize],
-                        DimBase::Superglobal(i) => &mut self.superglobals[i as usize],
+                    // `unset($x)` drops the variable's value: capture and note it
+                    // (it may hold the last reference to an object with a
+                    // destructor, which then runs at this point). A nested
+                    // `unset($x[$k])` removes a deep element — left to the cascade
+                    // / full scan.
+                    let dropped = if keys.is_empty() {
+                        Some(match base {
+                            DimBase::Local(s) => std::mem::replace(&mut self.frames[top].slots[s as usize], Zval::Undef),
+                            DimBase::Global(s) => std::mem::replace(&mut self.frames[0].slots[s as usize], Zval::Undef),
+                            DimBase::Superglobal(i) => std::mem::replace(&mut self.superglobals[i as usize], Zval::Undef),
+                        })
+                    } else {
+                        let cell = match base {
+                            DimBase::Local(s) => &mut self.frames[top].slots[s as usize],
+                            DimBase::Global(s) => &mut self.frames[0].slots[s as usize],
+                            DimBase::Superglobal(i) => &mut self.superglobals[i as usize],
+                        };
+                        unset_into(cell, &keys);
+                        None
                     };
-                    unset_into(cell, &keys);
+                    if let Some(old) = dropped {
+                        self.gc_note(&old);
+                    }
                 }
                 Op::BindRef { target, source } => {
                     // REF-1: promote `source` to a shared cell, alias `target` to
@@ -2374,7 +2502,11 @@ impl<'m> Vm<'m> {
                     }
                 }
                 Op::IterPop => {
-                    self.frames[top].iters.pop();
+                    // The iterator (and the object it holds, e.g. `foreach (new A
+                    // as $v)`) is dropped here; note what it releases.
+                    if let Some(it) = self.frames[top].iters.pop() {
+                        self.gc_note_iter(&it);
+                    }
                 }
                 Op::DeclareFn { func } => {
                     // A conditional `function` statement was reached: register it in
@@ -2918,6 +3050,7 @@ impl<'m> Vm<'m> {
                         Rc::new(RefCell::new(obj))
                     };
                     self.created.push(Rc::clone(&clone_rc));
+                    self.gc_track(&clone_rc);
                     let cid = clone_rc.borrow().class_id as usize;
                     let clone_val = Zval::Object(clone_rc.clone());
                     self.frames[top].stack.push(clone_val.clone());
@@ -6854,6 +6987,7 @@ impl<'m> Vm<'m> {
         let rc = Rc::new(RefCell::new(obj));
         // Track for `__destruct` (OOP-3d), like every other freshly minted object.
         self.created.push(Rc::clone(&rc));
+        self.gc_track(&rc);
         Zval::Object(rc)
     }
 
@@ -8233,6 +8367,7 @@ impl<'m> Vm<'m> {
         let rc = Rc::new(RefCell::new(obj));
         // Track for `__destruct` (OOP-3d): the extra strong ref drives the sweep.
         self.created.push(Rc::clone(&rc));
+        self.gc_track(&rc);
         Ok(Zval::Object(rc))
     }
 
@@ -9139,10 +9274,10 @@ pub(super) fn closure_params(func: &Func) -> Vec<ClosureParam> {
 /// Drill through `keys` from `cell` (following references, auto-vivifying and
 /// copy-on-writing each level), then apply `last` at the leaf. Recursion (not a
 /// reassigned `&mut` in a loop) keeps the nested borrows well-formed.
-fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags) -> Result<Zval, PhpError> {
+fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags, dropped: &mut Vec<Zval>) -> Result<Zval, PhpError> {
     if let Zval::Ref(rc) = cell {
         let mut inner = rc.borrow_mut();
-        return path_apply(&mut inner, keys, last, diags);
+        return path_apply(&mut inner, keys, last, diags, dropped);
     }
     match keys.split_first() {
         Some((k, rest)) => {
@@ -9155,14 +9290,14 @@ fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags) -> 
                 arr.insert(key.clone(), Zval::Null);
             }
             let child = arr.get_mut(&key).expect("just inserted");
-            path_apply(child, rest, last, diags)
+            path_apply(child, rest, last, diags, dropped)
         }
-        None => apply_last(cell, last, diags),
+        None => apply_last(cell, last, diags, dropped),
     }
 }
 
 /// Apply the leaf step to the parent cell (which must hold the target array).
-fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags) -> Result<Zval, PhpError> {
+fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Vec<Zval>) -> Result<Zval, PhpError> {
     ensure_array(parent)?;
     let Zval::Array(rc) = parent else { unreachable!("ensured array") };
     let arr = Rc::make_mut(rc);
@@ -9174,10 +9309,9 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags) -> Result<Zval, 
             // sees the update; otherwise overwrite / insert.
             match arr.get_mut(&k) {
                 Some(slot) => {
-                    // Drops the displaced element; an object it held may now be
-                    // unreachable (a free-fn site — the sweep's full scan / the
-                    // enclosing op's own `gc_note` covers it).
-                    let _old = store_slot(slot, value.clone());
+                    // The displaced element is handed back via `dropped` so the
+                    // caller can note it (an object it held may now be unreachable).
+                    dropped.push(store_slot(slot, value.clone()));
                 }
                 None => arr.insert(k, value.clone()),
             }
@@ -9200,7 +9334,7 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags) -> Result<Zval, 
             // Write through an existing reference element (REF-4).
             match arr.get_mut(&k) {
                 Some(slot) => {
-                    let _old = store_slot(slot, result.clone());
+                    dropped.push(store_slot(slot, result.clone()));
                 }
                 None => arr.insert(k, result.clone()),
             }
@@ -9391,6 +9525,16 @@ fn field_cell(
             field_cell(child, rest, keys)
         }
     }
+}
+
+/// Whether `PHPR_GC_VERIFY` is set: a diagnostic mode in which [`Vm::gc_sweep`]
+/// also runs the authoritative full scan and reports any collectable object the
+/// candidate buffer failed to surface (an un-hooked reference-drop site). Off in
+/// normal runs (the candidate buffer alone drives the sweep). Read once.
+fn gc_verify_enabled() -> bool {
+    use std::sync::OnceLock;
+    static V: OnceLock<bool> = OnceLock::new();
+    *V.get_or_init(|| std::env::var_os("PHPR_GC_VERIFY").is_some())
 }
 
 /// Write `v` into a local cell. A reference slot writes *through* its shared

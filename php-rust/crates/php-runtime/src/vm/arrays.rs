@@ -87,13 +87,15 @@ pub(super) fn field_write(
     keys: &mut std::vec::IntoIter<Zval>,
     value: Zval,
     diags: &mut Diags,
+    dropped: &mut Vec<Zval>,
 ) -> Result<(), PhpError> {
     if let Zval::Ref(cell) = target {
         let inner = &mut *cell.borrow_mut();
-        return field_write(inner, steps, keys, value, diags);
+        return field_write(inner, steps, keys, value, diags, dropped);
     }
     let Some((first, rest)) = steps.split_first() else {
-        *target = value;
+        // Leaf overwrite: hand the displaced value back for GC noting.
+        dropped.push(std::mem::replace(target, value));
         return Ok(());
     };
     match first {
@@ -119,13 +121,15 @@ pub(super) fn field_write(
                         }));
                     }
                     if rest.is_empty() {
-                        obj.props.set(name, value);
+                        if let Some(old) = obj.props.replace(name, value) {
+                            dropped.push(old);
+                        }
                     } else {
                         if !obj.props.contains(name) {
                             obj.props.set(name, Zval::Array(Rc::new(PhpArray::new())));
                         }
                         let child = obj.props.get_mut(name).expect("property just inserted");
-                        field_write(child, rest, keys, value, diags)?;
+                        field_write(child, rest, keys, value, diags, dropped)?;
                     }
                 }
                 other => {
@@ -149,7 +153,7 @@ pub(super) fn field_write(
                 // Overwrite a plain element, but write *through* an existing
                 // reference element (the recursive call derefs at its top).
                 match arr.get_mut(&k) {
-                    Some(child) => field_write(child, rest, keys, value, diags)?,
+                    Some(child) => field_write(child, rest, keys, value, diags, dropped)?,
                     None => arr.insert(k, value),
                 }
             } else {
@@ -157,7 +161,7 @@ pub(super) fn field_write(
                     arr.insert(k.clone(), Zval::Array(Rc::new(PhpArray::new())));
                 }
                 let child = arr.get_mut(&k).expect("key just inserted");
-                field_write(child, rest, keys, value, diags)?;
+                field_write(child, rest, keys, value, diags, dropped)?;
             }
             Ok(())
         }
@@ -171,7 +175,7 @@ pub(super) fn field_write(
                 arr.append(value).map_err(|_| occupied())?;
             } else {
                 let mut child = Zval::Array(Rc::new(PhpArray::new()));
-                field_write(&mut child, rest, keys, value, diags)?;
+                field_write(&mut child, rest, keys, value, diags, dropped)?;
                 arr.append(child).map_err(|_| occupied())?;
             }
             Ok(())
@@ -428,7 +432,15 @@ impl<'m> Vm<'m> {
             DimBase::Global(s) => &mut self.frames[0].slots[s as usize],
             DimBase::Superglobal(i) => &mut self.superglobals[i as usize],
         };
-        path_apply(cell, &keys, last, &mut self.diags)
+        // Elements displaced by the write (e.g. `$a[0] = new X` overwriting the
+        // old `$a[0]`) are collected here, then noted as possible GC roots once
+        // the borrow of the base cell ends.
+        let mut dropped = Vec::new();
+        let result = path_apply(cell, &keys, last, &mut self.diags, &mut dropped);
+        for d in &dropped {
+            self.gc_note(d);
+        }
+        result
     }
 
     /// Write `value` through a mixed field path. The base cell borrows
@@ -449,6 +461,11 @@ impl<'m> Vm<'m> {
                 PhpError::Error("Using $this when not in object context".to_string())
             })?,
         };
-        field_write(cell, steps, &mut keys.into_iter(), value, &mut self.diags)
+        let mut dropped = Vec::new();
+        let r = field_write(cell, steps, &mut keys.into_iter(), value, &mut self.diags, &mut dropped);
+        for d in &dropped {
+            self.gc_note(d);
+        }
+        r
     }
 }
