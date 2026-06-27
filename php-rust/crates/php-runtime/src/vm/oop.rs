@@ -196,6 +196,15 @@ pub(super) fn prop_readonly_decl(classes: &[&CompiledClass], class: ClassId, nam
     prop_info(classes, class, name).filter(|pi| pi.readonly).map(|pi| pi.declaring_class)
 }
 
+/// `prop_info`-backed equivalent of [`resolve_prop_type`]: a typed instance
+/// property's declaring class and declared type, or `None` if untyped / dynamic.
+/// The untyped-redeclaration-cancels-type shadowing is already baked into
+/// `PropInfo.type_hint` at compile time.
+pub(super) fn prop_type_decl(classes: &[&CompiledClass], class: ClassId, name: &[u8]) -> Option<(ClassId, TypeHint)> {
+    let pi = prop_info(classes, class, name)?;
+    pi.type_hint.clone().map(|h| (pi.declaring_class, h))
+}
+
 /// If instance property `name` is declared `readonly` anywhere up `class`'s parent
 /// chain, return its *declaring* class id (child→ancestor, most-derived wins).
 /// `None` for a non-readonly or dynamic property. Superseded at runtime by
@@ -224,7 +233,9 @@ pub(super) fn resolve_readonly_decl(classes: &[&CompiledClass], class: ClassId, 
 /// Resolve a typed property to its declaring class and declared type, walking the
 /// parent chain. A more-derived (untyped or typed) redeclaration shadows an
 /// inherited type — the most-derived declaration wins. `None` for an untyped or
-/// undeclared (dynamic) property. Mirrors [`resolve_readonly_decl`].
+/// undeclared (dynamic) property. Superseded at runtime by [`prop_type_decl`];
+/// retained as the equivalence-test oracle until Stage 5.
+#[allow(dead_code)]
 pub(super) fn resolve_prop_type(classes: &[&CompiledClass], class: ClassId, name: &[u8]) -> Option<(ClassId, TypeHint)> {
     let mut cid = Some(class);
     while let Some(c) = cid {

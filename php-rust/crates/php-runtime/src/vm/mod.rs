@@ -7278,7 +7278,7 @@ impl<'m> Vm<'m> {
     /// dynamic property passes the value through unchanged. The strict-types mode of
     /// the *writing* frame governs coercion, mirroring the parameter binder.
     fn coerce_typed_prop_write(&mut self, ocid: ClassId, name: &[u8], value: Zval) -> Result<Zval, PhpError> {
-        let Some((decl, hint)) = resolve_prop_type(&self.classes, ocid, name) else {
+        let Some((decl, hint)) = prop_type_decl(&self.classes, ocid, name) else {
             return Ok(value);
         };
         let strict = self.module.strict;
@@ -7692,7 +7692,7 @@ impl<'m> Vm<'m> {
         }
         let ocid = b.class_id as usize;
         drop(b);
-        let decl = resolve_prop_type(&self.classes, ocid, name).map(|(c, _)| c).unwrap_or(ocid);
+        let decl = prop_type_decl(&self.classes, ocid, name).map(|(c, _)| c).unwrap_or(ocid);
         Some(PhpError::Error(format!(
             "Typed property {}::${} must not be accessed before initialization",
             String::from_utf8_lossy(&self.classes[decl].name),
