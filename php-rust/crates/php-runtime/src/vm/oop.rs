@@ -52,6 +52,20 @@ pub(super) fn write_property(recv: &Zval, name: &[u8], value: Zval) -> Result<()
     }
 }
 
+/// The shared storage cell for object property `name`, promoting it to a
+/// `Zval::Ref` in place if it is a plain value (so a `foreach ($o as &$v)` binds
+/// `$v` to the property and writes through it). The property must already exist.
+pub(super) fn prop_ref_cell(o: &Rc<RefCell<Object>>, name: &[u8]) -> Rc<RefCell<Zval>> {
+    let mut b = o.borrow_mut();
+    if let Some(Zval::Ref(rc)) = b.props.get(name) {
+        return Rc::clone(rc);
+    }
+    let cur = b.props.get(name).cloned().unwrap_or(Zval::Null);
+    let cell = Rc::new(RefCell::new(cur));
+    b.props.set(name, Zval::Ref(Rc::clone(&cell)));
+    cell
+}
+
 /// `isset($o->name)`: true iff the property exists and is not null/undefined
 /// (silent), following a reference receiver.
 pub(super) fn prop_isset(recv: &Zval, name: &[u8]) -> bool {

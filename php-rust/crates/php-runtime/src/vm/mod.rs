@@ -621,6 +621,15 @@ impl<'m> Frame<'m> {
 enum IterState {
     ByVal { entries: Vec<(Zval, Zval)>, pos: usize },
     ByRef { source: Slot, keys: Vec<Key>, pos: usize },
+    /// `foreach` over a plain (non-Traversable) object: the visible property key set
+    /// is fixed at loop start, but each value is read *live* from the object at the
+    /// step (object handle semantics — a property mutated in the body is observed; a
+    /// key removed mid-loop is skipped).
+    ObjVals { obj: Zval, keys: Vec<Box<[u8]>>, pos: usize },
+    /// `foreach ($obj as &$v)` over a plain object: like [`IterState::ObjVals`] but
+    /// each step binds `$v` *by reference* to the property's storage cell, so writes
+    /// through `$v` mutate the property.
+    ObjRefs { obj: Zval, keys: Vec<Box<[u8]>>, pos: usize },
     /// `foreach` over a generator (GEN): no snapshot — each step reads the
     /// generator's current `(key, value)` and resumes it for the next. `primed`
     /// is false until the first `IterNext` (which starts the generator rather than
@@ -1838,6 +1847,7 @@ impl<'m> Vm<'m> {
                     // `IteratorAggregate` object drives the protocol via the
                     // re-entrant state machine in `IterNext` (step 51); an array /
                     // plain object is snapshotted by value (GEN).
+                    let scope = self.frames[top].class;
                     let it_state = match &deref {
                         Zval::Generator(gs) => IterState::Gen { rc: Rc::clone(gs), primed: false },
                         Zval::Object(o) if self.is_traversable(o.borrow().class_id as usize) => {
@@ -1847,6 +1857,12 @@ impl<'m> Vm<'m> {
                                 pending: None,
                                 cur_val: None,
                             }
+                        }
+                        // A plain (non-Traversable) object iterates its visible
+                        // properties (declared first, then dynamic): the key set is
+                        // fixed here, values are read live at each step.
+                        Zval::Object(o) => {
+                            IterState::ObjVals { obj: deref.clone(), keys: self.object_iter_keys(o, scope), pos: 0 }
                         }
                         _ => IterState::ByVal { entries: snapshot_entries(&iterable), pos: 0 },
                     };
@@ -1881,6 +1897,43 @@ impl<'m> Vm<'m> {
                             store_slot(&mut self.frames[top].slots[value as usize], v.deref_clone());
                             if let Some(ks) = key {
                                 store_slot(&mut self.frames[top].slots[ks as usize], k);
+                            }
+                        }
+                        continue;
+                    }
+                    // Plain-object foreach: read the next visible property's value
+                    // live from the object, skipping any key removed since loop start.
+                    if matches!(self.frames[top].iters.last(), Some(IterState::ObjVals { .. })) {
+                        let pair = loop {
+                            let (obj, keyname) = {
+                                let Some(IterState::ObjVals { obj, keys, pos }) =
+                                    self.frames[top].iters.last_mut()
+                                else {
+                                    unreachable!("ObjVals iterator")
+                                };
+                                if *pos >= keys.len() {
+                                    break None;
+                                }
+                                let k = keys[*pos].clone();
+                                *pos += 1;
+                                (obj.clone(), k)
+                            };
+                            if let Zval::Object(o) = &obj {
+                                let v = o.borrow().props.get(&keyname).cloned();
+                                if let Some(v) = v {
+                                    if !matches!(v, Zval::Undef) {
+                                        break Some((Zval::Str(PhpStr::new(keyname.to_vec())), v.deref_clone()));
+                                    }
+                                }
+                            }
+                        };
+                        match pair {
+                            None => self.frames[top].ip = end as usize,
+                            Some((k, v)) => {
+                                store_slot(&mut self.frames[top].slots[value as usize], v);
+                                if let Some(ks) = key {
+                                    store_slot(&mut self.frames[top].slots[ks as usize], k);
+                                }
                             }
                         }
                         continue;
@@ -2011,12 +2064,57 @@ impl<'m> Vm<'m> {
                     }
                 }
                 Op::IterInitRef(source) => {
-                    // REF-3: snapshot the source array's keys once; each step
-                    // rebinds the live element by reference.
+                    // REF-3: snapshot the source's keys once; each step rebinds the
+                    // live element/property by reference. A plain object binds each
+                    // visible property by reference (ObjRefs); an array uses ByRef.
+                    let src = self.frames[top].slots[source as usize].deref_clone();
+                    if let Zval::Object(o) = &src {
+                        if !self.is_traversable(o.borrow().class_id as usize) {
+                            let scope = self.frames[top].class;
+                            let keys = self.object_iter_keys(o, scope);
+                            self.frames[top].iters.push(IterState::ObjRefs { obj: src.clone(), keys, pos: 0 });
+                            continue;
+                        }
+                    }
                     let keys = ref_array_keys(&self.frames[top].slots[source as usize]);
                     self.frames[top].iters.push(IterState::ByRef { source, keys, pos: 0 });
                 }
                 Op::IterNextRef { value, key, end } => {
+                    // A plain-object by-ref foreach: bind `$v` to the property's
+                    // storage cell (skipping keys removed since loop start).
+                    if matches!(self.frames[top].iters.last(), Some(IterState::ObjRefs { .. })) {
+                        let bound = loop {
+                            let (obj, keyname) = {
+                                let Some(IterState::ObjRefs { obj, keys, pos }) =
+                                    self.frames[top].iters.last_mut()
+                                else {
+                                    unreachable!("ObjRefs iterator")
+                                };
+                                if *pos >= keys.len() {
+                                    break None;
+                                }
+                                let k = keys[*pos].clone();
+                                *pos += 1;
+                                (obj.clone(), k)
+                            };
+                            if let Zval::Object(o) = &obj {
+                                if o.borrow().props.get(&keyname).is_some() {
+                                    let cell = prop_ref_cell(o, &keyname);
+                                    break Some((cell, keyname));
+                                }
+                            }
+                        };
+                        match bound {
+                            None => self.frames[top].ip = end as usize,
+                            Some((cell, keyname)) => {
+                                if let Some(ks) = key {
+                                    store_slot(&mut self.frames[top].slots[ks as usize], Zval::Str(PhpStr::new(keyname.to_vec())));
+                                }
+                                self.frames[top].slots[value as usize] = Zval::Ref(cell);
+                            }
+                        }
+                        continue;
+                    }
                     let next = {
                         let it = self.frames[top].iters.last_mut().expect("IterNextRef without iterator");
                         let IterState::ByRef { source, keys, pos } = it else {
@@ -5593,6 +5691,53 @@ impl<'m> Vm<'m> {
     /// from outside only `public`, from within the class the `protected`/`private`
     /// ones too. Dynamic properties are public. Insertion order is preserved.
     /// Mirrors `eval::ci_get_object_vars`.
+    /// The property *keys* a `foreach` over a plain (non-Traversable) object yields,
+    /// in iteration order: properties visible from `scope` (public always;
+    /// protected/private per the class hierarchy), declared first in declaration
+    /// order (parent-first, a redeclaration keeping its position), then dynamic ones
+    /// in insertion order. The key set is fixed at loop start; values are read live
+    /// at each step (PHP object foreach has handle semantics, not a value snapshot),
+    /// so a property mutated in the loop body is observed. Mirrors
+    /// `get_object_vars`'s visibility view.
+    fn object_iter_keys(&self, o: &Rc<RefCell<Object>>, scope: Option<ClassId>) -> Vec<Box<[u8]>> {
+        let cid = o.borrow().class_id as usize;
+        let mut chain: Vec<usize> = Vec::new();
+        let mut c = Some(cid);
+        while let Some(ci) = c {
+            chain.push(ci);
+            c = self.classes[ci].parent;
+        }
+        let mut order: Vec<Box<[u8]>> = Vec::new();
+        let mut declared: HashSet<Box<[u8]>> = HashSet::new();
+        for ci in chain.iter().rev() {
+            for (name, _) in &self.classes[*ci].own_prop_vis {
+                if declared.insert(name.clone()) {
+                    order.push(name.clone());
+                }
+            }
+        }
+        let b = o.borrow();
+        let mut keys: Vec<Box<[u8]>> = Vec::new();
+        for name in &order {
+            let visible = match prop_vis_decl(&self.classes, cid, name) {
+                Some((vis, decl)) => visible_from(&self.classes, scope, vis, decl),
+                None => true,
+            };
+            // Skip a property the scope can't see and one that is uninitialised
+            // (typed-no-default `Undef`); both are absent from a foreach view.
+            if visible && !matches!(b.props.get(name), None | Some(Zval::Undef)) {
+                keys.push(name.clone());
+            }
+        }
+        // Dynamic (undeclared) properties, always public, in insertion order.
+        for (name, _) in b.props.iter() {
+            if !declared.contains(name) {
+                keys.push(name.to_vec().into_boxed_slice());
+            }
+        }
+        keys
+    }
+
     fn ho_get_object_vars(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let Some(a) = args.into_iter().next() else {
             return Err(PhpError::ArgumentCountError(
@@ -9171,6 +9316,23 @@ mod tests {
         echo $s->f;
         "#;
         assert_eq!(vm_stdout(src), b"105");
+    }
+
+    /// `foreach` over a plain object iterates the properties visible from the loop's
+    /// scope (public from outside, all from inside the class); a `&$v` loop binds by
+    /// reference so writes mutate the property.
+    #[test]
+    fn foreach_over_plain_object() {
+        let src = br#"<?php
+        class C { public $a=1; public $b=2; private $p=3;
+          function inside(){ $o=''; foreach($this as $k=>$v) $o.="$k=$v;"; return $o; } }
+        $c=new C();
+        $s=''; foreach($c as $k=>$v) $s.="$k=$v;"; echo $s;
+        echo "|", $c->inside();
+        foreach($c as &$v){ $v+=10; } unset($v);
+        echo "|", $c->a, ",", $c->b;
+        "#;
+        assert_eq!(vm_stdout(src), b"a=1;b=2;|a=1;b=2;p=3;|11,12");
     }
 
     // --- fake builtins, to exercise the VM's dispatch mechanism without the
