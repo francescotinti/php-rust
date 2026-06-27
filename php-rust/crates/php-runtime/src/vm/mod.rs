@@ -29,7 +29,7 @@ use php_types::{
 use crate::builtin::{Builtin, BuiltinRefFn, Ctx, Registry};
 use crate::bytecode::{
     Addr, ClassTarget, CompiledClass, CompiledMethod, DimBase, FieldBase, FieldStep, Func,
-    Instantiable, Module, Op, StaticInit,
+    Instantiable, Module, Op, PropInfo, StaticInit,
 };
 use crate::coerce::coerce_to_hint;
 use crate::hir::{
@@ -8583,6 +8583,20 @@ fn relocate_module_class_ids(module: &mut Module, remap: &[ClassId], static_base
                 relocate_func(s, remap, static_base);
             }
         }
+        // The unified per-property metadata carries the declaring class id and a
+        // copy of each property's hook funcs — both must be relocated into the
+        // global id space, exactly like `parent`/`interfaces` and `prop_hooks`.
+        for pi in cc.prop_info.values_mut() {
+            pi.declaring_class = remap[pi.declaring_class];
+            if let Some(hooks) = pi.hooks.as_mut() {
+                if let Some(g) = hooks.get.as_mut() {
+                    relocate_func(g, remap, static_base);
+                }
+                if let Some(s) = hooks.set.as_mut() {
+                    relocate_func(s, remap, static_base);
+                }
+            }
+        }
     }
 }
 
@@ -9003,6 +9017,75 @@ mod tests {
         let out = run_module(&module, reg);
         assert!(out.fatal.is_none(), "unexpected fatal: {:?}", out.fatal);
         out
+    }
+
+    /// Stage-0 safety net for the property-metadata consolidation: the unified
+    /// compile-time `prop_info` table must agree, for every compiled class and
+    /// every declared property, with the legacy parent-chain resolvers it will
+    /// replace (`resolve_prop_decl` / `resolve_readonly_decl` / `resolve_prop_type`
+    /// and `prop_hooks`). Runs over a rich hierarchy *plus* all prelude classes,
+    /// so a transcription error in the flattening is caught before any call-site
+    /// is migrated.
+    #[test]
+    fn prop_info_matches_legacy_resolvers() {
+        let src = br#"<?php
+        trait T {
+            public int $fromTrait = 9;
+            protected ?string $maybe = null;
+        }
+        class Base {
+            use T;
+            public int $a = 1;
+            protected readonly int $r;
+            private string $p = "x";
+            public int $hooked { get => $this->a; }
+            public int $virt { get => 1; }
+        }
+        class Child extends Base {
+            public float $c = 2.0;
+            private int $p = 5;
+        }
+        interface I { }
+        abstract class AbsBase implements I {
+            public readonly string $name;
+        }
+        class Concrete extends AbsBase {
+            public int $extra = 0;
+        }
+        "#;
+        let program = lower_source(b"test.php", src).expect("lower");
+        let reg = Registry::new();
+        let module = compile_program(&program, &reg).expect("compile");
+        let classes: Vec<&super::CompiledClass> = module.classes.iter().collect();
+
+        for (c, cc) in classes.iter().enumerate() {
+            // The flattened key set, plus a guaranteed-dynamic name.
+            let mut names: Vec<Box<[u8]>> = cc.prop_info.keys().cloned().collect();
+            names.push(b"definitely_not_a_declared_prop".to_vec().into_boxed_slice());
+            for name in &names {
+                let pi = super::prop_info(&classes, c, name);
+
+                // 1. visibility + declaring class
+                let new_decl = pi.map(|p| (p.visibility, p.declaring_class));
+                let old_decl = super::resolve_prop_decl(&classes, c, name);
+                assert_eq!(new_decl, old_decl, "decl mismatch class {c} prop {:?}", String::from_utf8_lossy(name));
+
+                // 2. readonly declaring class
+                let new_ro = pi.filter(|p| p.readonly).map(|p| p.declaring_class);
+                let old_ro = super::resolve_readonly_decl(&classes, c, name);
+                assert_eq!(new_ro, old_ro, "readonly mismatch class {c} prop {:?}", String::from_utf8_lossy(name));
+
+                // 3. type hint + declaring class (only meaningful when typed)
+                let new_ty = pi.and_then(|p| p.type_hint.clone().map(|h| (p.declaring_class, h)));
+                let old_ty = super::resolve_prop_type(&classes, c, name);
+                assert_eq!(new_ty, old_ty, "type mismatch class {c} prop {:?}", String::from_utf8_lossy(name));
+
+                // 4. hooks
+                let new_hooks = pi.and_then(|p| p.hooks.as_ref());
+                let old_hooks = cc.prop_hooks.get(name);
+                assert_eq!(new_hooks, old_hooks, "hooks mismatch class {c} prop {:?}", String::from_utf8_lossy(name));
+            }
+        }
     }
 
     // --- fake builtins, to exercise the VM's dispatch mechanism without the

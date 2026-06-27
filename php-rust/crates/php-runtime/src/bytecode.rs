@@ -1168,6 +1168,13 @@ pub struct CompiledClass {
     /// `PropGet`/`PropSet` route through its hook (taking precedence over magic),
     /// and a *virtual* one (`backed == false`) has no entry in `prop_defaults`.
     pub prop_hooks: std::collections::HashMap<Box<[u8]>, PropHooks>,
+    /// Unified, parent-resolved per-property metadata (the property-layout
+    /// consolidation): name → [`PropInfo`], flattened parent-first at compile time.
+    /// Read at run time via `prop_info(class, name)` — a single lookup replacing the
+    /// `resolve_prop_decl` / `resolve_readonly_decl` / `resolve_prop_type` parent
+    /// walks. Built alongside (and currently mirroring) `own_prop_vis` /
+    /// `readonly_props` / `prop_types` / `prop_hooks`, which it will supersede.
+    pub prop_info: std::collections::HashMap<Box<[u8]>, PropInfo>,
 }
 
 /// The compiled `get`/`set` hooks of one property (step 50). Each hook is a
@@ -1180,6 +1187,38 @@ pub struct PropHooks {
     /// Whether the property has backing storage (false = virtual: no slot, omitted
     /// from `var_dump`; a `$this->name` inside its own hook reaches the backing).
     pub backed: bool,
+}
+
+/// Unified, compile-time-resolved metadata for one declared instance property
+/// (the property-layout consolidation). Built once per class in `compile_class`
+/// by flattening the parent chain parent-first (most-derived declaration wins),
+/// so every shadowing rule that the runtime `resolve_*` walks used to re-derive
+/// on each access is baked in here: a more-derived untyped redeclaration clears
+/// `type_hint`, a more-derived non-`readonly` redeclaration clears `readonly`.
+/// Subsumes `own_prop_vis` + `readonly_props` + `prop_types` + `prop_hooks`; the
+/// runtime reads it with a single `prop_info(class, name)` lookup. Storage is
+/// unchanged (`Object.props` stays name-keyed and insertion-ordered).
+#[derive(Debug, Clone, PartialEq)]
+pub struct PropInfo {
+    /// Declared visibility (subsumes `own_prop_vis`).
+    pub visibility: Visibility,
+    /// The most-derived class that (re)declares this property — the class named in
+    /// access / readonly / type error messages and by `ReflectionProperty::$class`.
+    pub declaring_class: ClassId,
+    /// `true` iff the most-derived declaration is `readonly` (subsumes
+    /// `readonly_props`, with the non-readonly-redeclaration shadow already applied).
+    pub readonly: bool,
+    /// Declared type of the most-derived declaration (`None` = untyped; an untyped
+    /// redeclaration shadows an inherited type). Subsumes `prop_types`.
+    pub type_hint: Option<TypeHint>,
+    /// Property hooks (`None` = not hooked). Subsumes `prop_hooks`; a virtual
+    /// (`backed == false`) hooked property has an entry here but no `prop_defaults`
+    /// slot.
+    pub hooks: Option<PropHooks>,
+    /// The key under which the value lives in `Object.props`. Equal to the property
+    /// name today; reserved as the future target for private-property name mangling
+    /// (so a subclass's `private $x` can shadow a parent's without colliding).
+    pub storage_key: Box<[u8]>,
 }
 
 /// A whole compiled program: the script body plus the flat function / closure /

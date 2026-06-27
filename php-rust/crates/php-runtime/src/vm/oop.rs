@@ -178,6 +178,16 @@ pub(super) fn resolve_prop_decl(classes: &[&CompiledClass], class: ClassId, name
     None
 }
 
+/// Look up the unified, compile-time-resolved metadata for a declared instance
+/// property — a single hashmap lookup that replaces the parent-chain walks of
+/// [`resolve_prop_decl`] / [`resolve_readonly_decl`] / [`resolve_prop_type`]
+/// (the flattening already happened in `compile_class`). `None` for a dynamic /
+/// undeclared property. The `.get(class)?` mirrors the defensive guard the
+/// readonly/type resolvers use against a partially-seeded class table.
+pub(super) fn prop_info<'a>(classes: &[&'a CompiledClass], class: ClassId, name: &[u8]) -> Option<&'a PropInfo> {
+    classes.get(class)?.prop_info.get(name)
+}
+
 /// If instance property `name` is declared `readonly` anywhere up `class`'s parent
 /// chain, return its *declaring* class id (child→ancestor, most-derived wins).
 /// `None` for a non-readonly or dynamic property. Used by readonly write-once

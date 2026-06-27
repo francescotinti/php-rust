@@ -27,7 +27,7 @@ use php_types::{ObjectInfo, PhpStr, PropVis};
 use crate::builtin::{Builtin, Registry};
 use crate::bytecode::{
     Addr, BuiltinIface, ClassTarget, CompiledAttribute, CompiledClass, CompiledConst, CompiledEnumCase, CompiledMethod, CompiledStaticProp, Const,
-    ConstIdx, DimBase, ExcRegion, FieldBase, FieldStep, Func, Instantiable, Module, Op, PropHooks, StaticInit,
+    ConstIdx, DimBase, ExcRegion, FieldBase, FieldStep, Func, Instantiable, Module, Op, PropHooks, PropInfo, StaticInit,
 };
 use crate::hir::{
     BinOp, Case, CatchClause, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, HintKind, Line,
@@ -534,6 +534,35 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         })
         .collect();
 
+    // Unified per-property metadata, flattened parent-first so the most-derived
+    // (re)declaration wins — baking in the shadowing rules the runtime `resolve_*`
+    // walks used to re-derive on each access. Mirrors `own_prop_vis` / `prop_types`
+    // / `readonly_props` (assigned unconditionally per class, so an untyped or
+    // non-readonly redeclaration clears the inherited type / readonly), and then
+    // folds in the already-flattened `prop_hooks`. Every declared property (backed
+    // or virtual) gets an entry; storage stays name-keyed via `storage_key`.
+    let mut prop_info: HashMap<Box<[u8]>, PropInfo> = HashMap::new();
+    for &x in &chain {
+        for p in &ctx.classes[x].props {
+            prop_info.insert(
+                p.name.clone(),
+                PropInfo {
+                    visibility: p.visibility,
+                    declaring_class: x,
+                    readonly: p.readonly,
+                    type_hint: p.hint.clone(),
+                    hooks: None,
+                    storage_key: p.name.clone(),
+                },
+            );
+        }
+    }
+    for (name, hooks) in &prop_hooks {
+        if let Some(pi) = prop_info.get_mut(name) {
+            pi.hooks = Some(hooks.clone());
+        }
+    }
+
     CompiledClass {
         name: cd.name.clone(),
         class_name: PhpStr::new(cd.name.to_vec()),
@@ -557,6 +586,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         uninit_props,
         ok,
         prop_hooks,
+        prop_info,
     }
 }
 
