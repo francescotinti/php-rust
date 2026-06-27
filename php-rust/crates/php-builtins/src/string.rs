@@ -368,6 +368,92 @@ pub fn str_repeat(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Str(PhpStr::new(s.as_bytes().repeat(times as usize))))
 }
 
+/// `ZEND_THREEWAY_COMPARE`: clamp an ordering to -1 / 0 / 1.
+fn normalize_bool(n: i64) -> i64 {
+    (n > 0) as i64 - (n < 0) as i64
+}
+
+/// Core of the `strcmp` family (`zend_binary_strcmp`/`strncmp` and case
+/// variants): compare the first `cap` bytes (all when `None`), case-folded as
+/// ASCII when `ci`. Returns the raw byte difference at the first mismatch — PHP
+/// surfaces `memcmp`'s / `c1 - c2` value, not a clamped sign — but when every
+/// compared byte is equal, the *effective length* difference is normalized to
+/// -1/0/1 (`ZEND_THREEWAY_COMPARE`).
+fn zend_strcmp(a: &[u8], b: &[u8], cap: Option<usize>, ci: bool) -> i64 {
+    let eff_a = cap.map_or(a.len(), |c| a.len().min(c));
+    let eff_b = cap.map_or(b.len(), |c| b.len().min(c));
+    let n = eff_a.min(eff_b);
+    for i in 0..n {
+        let (mut c1, mut c2) = (a[i], b[i]);
+        if ci {
+            c1 = c1.to_ascii_lowercase();
+            c2 = c2.to_ascii_lowercase();
+        }
+        if c1 != c2 {
+            return c1 as i64 - c2 as i64;
+        }
+    }
+    normalize_bool(eff_a as i64 - eff_b as i64)
+}
+
+fn cmp_arg_str(args: &[Zval], i: usize, name: &str, ctx: &mut Ctx) -> Result<Rc<PhpStr>, PhpError> {
+    let v = args.get(i).ok_or_else(|| {
+        PhpError::Error(format!("{name}() expects at least {} arguments, {} given", i + 1, args.len()))
+    })?;
+    Ok(convert::to_zstr(v, ctx.diags))
+}
+
+/// `strcmp($s1, $s2)`: binary-safe byte comparison.
+pub fn strcmp(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let a = cmp_arg_str(args, 0, "strcmp", ctx)?;
+    let b = cmp_arg_str(args, 1, "strcmp", ctx)?;
+    Ok(Zval::Long(zend_strcmp(a.as_bytes(), b.as_bytes(), None, false)))
+}
+
+/// `strcasecmp($s1, $s2)`: case-insensitive (ASCII) byte comparison.
+pub fn strcasecmp(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let a = cmp_arg_str(args, 0, "strcasecmp", ctx)?;
+    let b = cmp_arg_str(args, 1, "strcasecmp", ctx)?;
+    Ok(Zval::Long(zend_strcmp(a.as_bytes(), b.as_bytes(), None, true)))
+}
+
+/// `strncmp($s1, $s2, $length)`: compare at most `$length` bytes; a negative
+/// length is a `ValueError`.
+pub fn strncmp(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let a = cmp_arg_str(args, 0, "strncmp", ctx)?;
+    let b = cmp_arg_str(args, 1, "strncmp", ctx)?;
+    let length = convert::to_long_cast(
+        args.get(2).ok_or_else(|| {
+            PhpError::Error("strncmp() expects exactly 3 arguments, 2 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    if length < 0 {
+        return Err(PhpError::ValueError(
+            "strncmp(): Argument #3 ($length) must be greater than or equal to 0".to_string(),
+        ));
+    }
+    Ok(Zval::Long(zend_strcmp(a.as_bytes(), b.as_bytes(), Some(length as usize), false)))
+}
+
+/// `strncasecmp($s1, $s2, $length)`: case-insensitive `strncmp`.
+pub fn strncasecmp(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let a = cmp_arg_str(args, 0, "strncasecmp", ctx)?;
+    let b = cmp_arg_str(args, 1, "strncasecmp", ctx)?;
+    let length = convert::to_long_cast(
+        args.get(2).ok_or_else(|| {
+            PhpError::Error("strncasecmp() expects exactly 3 arguments, 2 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    if length < 0 {
+        return Err(PhpError::ValueError(
+            "strncasecmp(): Argument #3 ($length) must be greater than or equal to 0".to_string(),
+        ));
+    }
+    Ok(Zval::Long(zend_strcmp(a.as_bytes(), b.as_bytes(), Some(length as usize), true)))
+}
+
 /// str_pad($string, $length, $pad_string = " ", $pad_type = STR_PAD_RIGHT).
 ///
 /// `$pad_type`: 0 = left, 1 = right (default), 2 = both (extra char on the
