@@ -544,10 +544,11 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
             let count = obj.props.iter().filter(|(_, v)| !matches!(v, Zval::Undef)).count();
             out.extend_from_slice(format!(")#{} ({}) {{\n", obj.id, count).as_bytes());
             for (k, val) in obj.props.iter() {
+                let (disp, vis) = php_types::unmangle_prop_key(k, &obj.info);
                 spaces(out, indent + 2);
                 out.extend_from_slice(b"[\"");
-                out.extend_from_slice(k);
-                match obj.info.vis_of(k) {
+                out.extend_from_slice(disp);
+                match vis {
                     PropVis::Public => out.extend_from_slice(b"\"]=>\n"),
                     PropVis::Protected => out.extend_from_slice(b"\":protected]=>\n"),
                     PropVis::Private(cls) => {
@@ -560,7 +561,7 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
                 // An uninitialized typed property renders as `uninitialized(type)`.
                 if matches!(val, Zval::Undef) {
                     out.extend_from_slice(b"uninitialized(");
-                    out.extend_from_slice(obj.info.type_of(k).unwrap_or(b"mixed"));
+                    out.extend_from_slice(obj.info.type_of(disp).unwrap_or(b"mixed"));
                     out.extend_from_slice(b")\n");
                 } else {
                     dump(out, val, indent + 2, seen);
@@ -699,10 +700,12 @@ fn export_into(out: &mut Vec<u8>, v: &Zval, level: usize, seen: &mut Vec<usize>,
                 out.extend_from_slice(class_display_name(obj.class_name.as_bytes()));
                 out.extend_from_slice(b"::__set_state(array(\n");
             }
-            // All properties are exported by value, with no visibility markers.
+            // All properties are exported by value, with no visibility markers
+            // (a private property is exported under its plain, unmangled name).
             for (k, val) in obj.props.iter() {
+                let (disp, _) = php_types::unmangle_prop_key(k, &obj.info);
                 spaces(out, level + 2);
-                export_str(out, k);
+                export_str(out, disp);
                 out.extend_from_slice(b" => ");
                 export_into(out, val, level + 2, seen, diags);
                 out.extend_from_slice(b",\n");
@@ -868,10 +871,11 @@ fn print_r_into(out: &mut Vec<u8>, v: &Zval, indent: usize, ctx: &mut Ctx, seen:
             }
             seen.push(ptr);
             for (k, val) in obj.props.iter() {
+                let (disp, vis) = php_types::unmangle_prop_key(k, &obj.info);
                 spaces(out, indent + 4);
                 out.push(b'[');
-                out.extend_from_slice(k);
-                match obj.info.vis_of(k) {
+                out.extend_from_slice(disp);
+                match vis {
                     PropVis::Public => {}
                     PropVis::Protected => out.extend_from_slice(b":protected"),
                     PropVis::Private(cls) => {

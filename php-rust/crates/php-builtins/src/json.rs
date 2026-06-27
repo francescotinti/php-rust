@@ -103,12 +103,15 @@ fn encode_array(a: &PhpArray, flags: i64, depth: usize, out: &mut Vec<u8>) -> Re
 }
 
 fn encode_object(o: &Object, flags: i64, depth: usize, out: &mut Vec<u8>) -> Result<(), ()> {
-    // Only public properties are serialised, in declaration / insertion order.
+    // Only public properties are serialised, in declaration / insertion order
+    // (a mangled private key unmangles to Private and is filtered out).
     let entries: Vec<(Vec<u8>, &Zval)> = o
         .props
         .iter()
-        .filter(|(name, _)| matches!(o.info.vis_of(name), PropVis::Public))
-        .map(|(name, v)| (name.to_vec(), v))
+        .filter_map(|(key, v)| {
+            let (disp, vis) = php_types::unmangle_prop_key(key, &o.info);
+            matches!(vis, PropVis::Public).then(|| (disp.to_vec(), v))
+        })
         .collect();
     if entries.is_empty() {
         out.extend_from_slice(b"{}");

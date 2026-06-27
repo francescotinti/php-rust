@@ -74,6 +74,27 @@ impl Object {
     }
 }
 
+/// Split a stored property key into its display name and visibility. A `private`
+/// property is stored under a *mangled* key `\0Class\0prop` (the declaring class
+/// embedded), so this returns (`prop`, `Private(Class)`); a `\0*\0prop` key is
+/// `Protected`. Any other key is a plain name whose visibility comes from the
+/// class's [`ObjectInfo`] (`Public` for a dynamic / undeclared property). Used by
+/// every consumer that iterates an object's stored slots for display
+/// (`var_dump`/`print_r`/`var_export`/`json_encode`/`serialize`) or scope views.
+pub fn unmangle_prop_key<'a>(key: &'a [u8], info: &ObjectInfo) -> (&'a [u8], PropVis) {
+    if let Some(rest) = key.strip_prefix(b"\0") {
+        if let Some(sep) = rest.iter().position(|&b| b == 0) {
+            let class = &rest[..sep];
+            let prop = &rest[sep + 1..];
+            if class == b"*" {
+                return (prop, PropVis::Protected);
+            }
+            return (prop, PropVis::Private(PhpStr::new(class.to_vec())));
+        }
+    }
+    (key, info.vis_of(key))
+}
+
 /// Visibility of a declared property as rendered by `var_dump` / `print_r`
 /// (step 19-7). A dynamic (undeclared) property is treated as `Public`.
 #[derive(Debug, Clone, PartialEq)]
