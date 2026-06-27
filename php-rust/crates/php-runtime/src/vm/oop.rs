@@ -35,14 +35,13 @@ pub(super) fn read_property(recv: &Zval, name: &[u8], diags: &mut Diags) -> Zval
     }
 }
 
-/// Write `value` into object property `name` (created if absent), in place through
-/// the shared object cell. A non-object receiver is a fatal, matching PHP 8.
-pub(super) fn write_property(recv: &Zval, name: &[u8], value: Zval) -> Result<(), PhpError> {
+/// Write `value` into property `name` of `recv` (following a `Ref` receiver),
+/// returning the value it displaced (`None` if the property was newly created).
+/// Callers that track destruction timing pass the displaced value to
+/// [`Vm::gc_note`]; the others drop it (unchanged behaviour).
+pub(super) fn write_property(recv: &Zval, name: &[u8], value: Zval) -> Result<Option<Zval>, PhpError> {
     match recv {
-        Zval::Object(o) => {
-            o.borrow_mut().props.set(name, value);
-            Ok(())
-        }
+        Zval::Object(o) => Ok(o.borrow_mut().props.replace(name, value)),
         Zval::Ref(rc) => write_property(&rc.borrow(), name, value),
         other => Err(PhpError::Error(format!(
             "Attempt to assign property \"{}\" on {}",

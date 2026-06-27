@@ -353,6 +353,8 @@ pub(crate) fn run_module_with_hir<'m>(
         magic_guard: HashSet::new(),
         created: Vec::new(),
         destructed: HashSet::new(),
+        gc_roots: Vec::new(),
+        gc_root_ids: HashSet::new(),
         shutdown_fns: Vec::new(),
         generators: HashMap::new(),
         fibers: HashMap::new(),
@@ -849,6 +851,17 @@ struct Vm<'m> {
     created: Vec<Rc<RefCell<Object>>>,
     /// Object handles whose `__destruct` has already run, guarding double calls.
     destructed: HashSet<u32>,
+    /// Possible-roots buffer for the destruction sweep: objects that have just
+    /// lost a reference and so *might* now be unreachable (mirrors Zend's
+    /// `gc_possible_root` buffer). [`Op::Sweep`] re-examines only these instead
+    /// of all of `created`, turning the per-statement O(created) scan into
+    /// O(candidates) — the fix for the O(n²) blow-up on large cyclic graphs.
+    /// Holds one strong clone per object id, so a buffered candidate's
+    /// `Rc::strong_count` is inflated by exactly 1; `gc_root_ids` dedupes by id.
+    /// Both are drained at each sweep (objects still referenced get re-noted the
+    /// next time they lose a reference), keeping the buffer small.
+    gc_roots: Vec<Rc<RefCell<Object>>>,
+    gc_root_ids: HashSet<u32>,
     /// Callbacks registered with `register_shutdown_function`, each with its bound
     /// arguments, run in registration order at script end — after the main run (and
     /// any uncaught-fatal banner), before object destructors.
@@ -916,6 +929,154 @@ impl<'m> Vm<'m> {
         let id = self.next_object_id;
         self.next_object_id += 1;
         id
+    }
+
+    /// Record a value that is about to be dropped as a possible GC root: if it
+    /// (transitively) still holds tracked objects whose refcount is about to
+    /// fall, push them onto `gc_roots` so the next [`Op::Sweep`] re-examines
+    /// them (mirrors Zend's `gc_possible_root`). Over-noting is safe — the sweep
+    /// re-checks `Rc::strong_count` — whereas under-noting delays a destructor,
+    /// so this errs generous. A `Ref`/`Array` is descended only when this is its
+    /// last holder (`strong_count == 1`), i.e. dropping it really releases its
+    /// contents. An `Object`'s own properties are *not* descended here: they only
+    /// lose their references when the object is actually freed, which the sweep
+    /// handles via its cascade.
+    fn gc_note(&mut self, v: &Zval) {
+        match v {
+            Zval::Object(rc) => {
+                let id = rc.borrow().id;
+                if self.destructed.contains(&id) {
+                    return;
+                }
+                if self.gc_root_ids.insert(id) {
+                    self.gc_roots.push(Rc::clone(rc));
+                }
+            }
+            Zval::Ref(r) => {
+                if Rc::strong_count(r) == 1 {
+                    let inner = r.borrow();
+                    self.gc_note(&inner);
+                }
+            }
+            Zval::Array(a) => {
+                if Rc::strong_count(a) == 1 {
+                    // Copy the element handles out so no borrow of `a` is held
+                    // across the recursive `&mut self` call (cheap Rc bumps).
+                    let vals: Vec<Zval> = a.iter().map(|(_, ev)| ev.clone()).collect();
+                    for ev in &vals {
+                        self.gc_note(ev);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn gc_sweep(&mut self, top: usize, ip: usize) {
+        log::trace!(
+            target: "phpr::gc",
+            "sweep: {} tracked / {} candidate objects",
+            self.created.len(),
+            self.gc_roots.len()
+        );
+        loop {
+            let pos = {
+                let roots = &self.gc_root_ids;
+                self.created.iter().rposition(|o| {
+                    let extra = roots.contains(&o.borrow().id) as usize;
+                    Rc::strong_count(o) - extra == 1
+                })
+            };
+            let Some(i) = pos else {
+                // Nothing more to collect this round: drop the candidate buffer.
+                self.gc_roots.clear();
+                self.gc_root_ids.clear();
+                break;
+            };
+            let o = self.created.remove(i);
+            let (cid, id) = {
+                let b = o.borrow();
+                (b.class_id as usize, b.id)
+            };
+            // Drop this object's own candidate clone, if any: otherwise the buffer
+            // would keep it alive past `created.remove`, delaying its free (and so
+            // its cascade) until the end-of-sweep drain.
+            self.gc_unnote(id);
+            if self.destructed.contains(&id) {
+                // Already destructed: it just drops here. Note what it held so
+                // those objects' falling refcounts are reconsidered next pass.
+                self.gc_cascade(&o);
+                continue;
+            }
+            if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, b"__destruct") {
+                log::debug!(target: "phpr::gc", "destruct: {}#{}", String::from_utf8_lossy(&self.classes[cid].name), id);
+                self.destructed.insert(id);
+                let callee = &self.classes[defc].methods[midx].func;
+                let mut frame = Frame::new(callee, self.class_mod(defc));
+                frame.this = Some(Zval::Object(Rc::clone(&o)));
+                frame.class = Some(defc);
+                frame.static_class = Some(cid);
+                // Discard the destructor's return (don't disturb the caller's
+                // operand stack).
+                frame.ret_cell = Some(Rc::new(RefCell::new(Zval::Null)));
+                self.frames[top].ip = ip; // re-run Sweep after it returns
+                self.frames.push(frame);
+                // `o` stays alive via `frame.this`; it is freed (and its contents
+                // cascaded by the `Ret` hook) when that frame returns. Do not
+                // drain the buffer here — more may be collectable on rewind.
+                break;
+            }
+            // Destructor-less object: note what it held, then drop it.
+            self.gc_cascade(&o);
+        }
+    }
+
+    /// Note every object held one level down in `o`'s properties as a possible
+    /// GC root: when `o` is freed those property references vanish, so the
+    /// objects behind them may become collectable on the next pass (this replays
+    /// the refcount cascade Zend gets for free from per-field DTORs).
+    fn gc_cascade(&mut self, o: &Rc<RefCell<Object>>) {
+        let b = o.borrow();
+        for (_, v) in b.props.iter() {
+            self.gc_note(v);
+        }
+    }
+
+    /// Remove object `id`'s candidate clone from the possible-roots buffer (if
+    /// present), so the buffer no longer keeps it alive. Called when the sweep
+    /// takes ownership of an object it is about to free.
+    fn gc_unnote(&mut self, id: u32) {
+        if self.gc_root_ids.remove(&id) {
+            if let Some(gi) = self.gc_roots.iter().position(|o| o.borrow().id == id) {
+                self.gc_roots.swap_remove(gi);
+            }
+        }
+    }
+
+    /// Note every object held by a frame that is being dropped (a returning or
+    /// unwinding frame): its locals, leftover operand stack and bound `$this`
+    /// all release their references, so any tracked object reached only through
+    /// them may now be collectable. Not for *parked* frames (a suspended
+    /// generator keeps its slots alive).
+    fn gc_note_frame(&mut self, frame: &Frame<'m>) {
+        for v in &frame.slots {
+            self.gc_note(v);
+        }
+        for v in &frame.stack {
+            self.gc_note(v);
+        }
+        if let Some(this) = &frame.this {
+            // A finished `__destruct`'s receiver has already been removed from
+            // `created`, so the sweep cannot cascade it: if this frame holds its
+            // last reference, do that cascade here before it is freed (otherwise
+            // objects it owned would never be re-examined).
+            if let Zval::Object(o) = this {
+                if Rc::strong_count(o) == 1 && self.destructed.contains(&o.borrow().id) {
+                    self.gc_cascade(o);
+                }
+            }
+            self.gc_note(this);
+        }
     }
 
     /// Render every diagnostic raised since the last flush into `rendered`,
@@ -1239,7 +1400,9 @@ impl<'m> Vm<'m> {
                     }
                 }
                 Op::Pop => {
-                    self.frames[top].stack.pop();
+                    if let Some(v) = self.frames[top].stack.pop() {
+                        self.gc_note(&v);
+                    }
                 }
                 Op::Dup => {
                     let v = self.frames[top].stack.last().expect("Dup on empty stack").clone();
@@ -1274,7 +1437,8 @@ impl<'m> Vm<'m> {
                 }
                 Op::StoreSlot(s) => {
                     let v = self.frames[top].stack.pop().expect("StoreSlot on empty stack");
-                    store_slot(&mut self.frames[top].slots[s as usize], v);
+                    let old = store_slot(&mut self.frames[top].slots[s as usize], v);
+                    self.gc_note(&old);
                 }
                 Op::StaticGuard { id, skip } => {
                     // First execution of this `static` declaration falls through to
@@ -1285,7 +1449,13 @@ impl<'m> Vm<'m> {
                 }
                 Op::StaticStore { id } => {
                     let v = self.frames[top].stack.pop().expect("StaticStore on empty stack");
-                    self.statics[id as usize] = Some(Rc::new(RefCell::new(v)));
+                    let old = self.statics[id as usize].replace(Rc::new(RefCell::new(v)));
+                    if let Some(cell) = old {
+                        if Rc::strong_count(&cell) == 1 {
+                            let inner = cell.borrow();
+                            self.gc_note(&inner);
+                        }
+                    }
                 }
                 Op::StaticAlias { slot, id } => {
                     // Alias the local slot to the persistent cell: reads/writes of
@@ -1306,7 +1476,8 @@ impl<'m> Vm<'m> {
                 Op::StoreGlobal(s) => {
                     // `$GLOBALS['x'] = …`: write/create the global in the script frame.
                     let v = self.frames[top].stack.pop().expect("StoreGlobal on empty stack");
-                    store_slot(&mut self.frames[0].slots[s as usize], v);
+                    let old = store_slot(&mut self.frames[0].slots[s as usize], v);
+                    self.gc_note(&old);
                 }
                 Op::IncDecGlobal { slot, inc, pre } => {
                     let i = slot as usize;
@@ -1332,7 +1503,8 @@ impl<'m> Vm<'m> {
                 }
                 Op::StoreSuperglobal(idx) => {
                     let v = self.frames[top].stack.pop().expect("StoreSuperglobal on empty stack");
-                    store_slot(&mut self.superglobals[idx as usize], v);
+                    let old = store_slot(&mut self.superglobals[idx as usize], v);
+                    self.gc_note(&old);
                 }
                 Op::IncDecSuperglobal { idx, inc, pre } => {
                     let i = idx as usize;
@@ -2533,7 +2705,13 @@ impl<'m> Vm<'m> {
                             o.borrow_mut().readonly_clone_writable.clear();
                         }
                     }
-                    self.frames.pop();
+                    let dead = self.frames.pop().expect("Ret pops the active frame");
+                    // The returning frame's locals, leftover operands and `$this`
+                    // release their references now: note any tracked objects so
+                    // the next sweep reconsiders them (drives destruction of an
+                    // object whose last reference was a returning function's local).
+                    self.gc_note_frame(&dead);
+                    drop(dead);
                     if let Some(key) = guard {
                         self.magic_guard.remove(&key);
                     }
@@ -2890,7 +3068,9 @@ impl<'m> Vm<'m> {
                             Some(ocid) => self.prop_decl_storage_key(ocid, &name),
                             None => name.to_vec(),
                         };
-                        write_property(&target, &key, value.clone())?;
+                        if let Some(old) = write_property(&target, &key, value.clone())? {
+                            self.gc_note(&old);
+                        }
                         self.frames[top].stack.push(value);
                         continue;
                     }
@@ -2978,7 +3158,9 @@ impl<'m> Vm<'m> {
                         // expression yields the coerced value.
                         value = self.coerce_typed_prop_write(ocid, &name, value)?;
                     }
-                    write_property(&target, &key, value.clone())?;
+                    if let Some(old) = write_property(&target, &key, value.clone())? {
+                        self.gc_note(&old);
+                    }
                     self.frames[top].stack.push(value);
                 }
                 Op::PropOpSet { name, op } => {
@@ -3005,7 +3187,9 @@ impl<'m> Vm<'m> {
                     if let Some(ocid) = object_class_id(&obj) {
                         result = self.coerce_typed_prop_write(ocid, &name, result)?;
                     }
-                    write_property(&obj, &key, result.clone())?;
+                    if let Some(dropped) = write_property(&obj, &key, result.clone())? {
+                        self.gc_note(&dropped);
+                    }
                     self.frames[top].stack.push(result);
                 }
                 Op::PropIncDec { name, inc, pre } => {
@@ -3036,7 +3220,9 @@ impl<'m> Vm<'m> {
                     if let Some(ocid) = object_class_id(&obj) {
                         newv = self.coerce_typed_prop_write(ocid, &name, newv)?;
                     }
-                    write_property(&obj, &key, newv.clone())?;
+                    if let Some(dropped) = write_property(&obj, &key, newv.clone())? {
+                        self.gc_note(&dropped);
+                    }
                     self.frames[top].stack.push(if pre { newv } else { old });
                 }
                 Op::PropIsset { name } => {
@@ -3643,40 +3829,7 @@ impl<'m> Vm<'m> {
                     )));
                 }
                 Op::Sweep => {
-                    // Release every now-unreachable tracked object, running one
-                    // destructor per pass. A destructor is a frame: schedule it and
-                    // rewind so this Sweep re-runs (to a fixpoint) once it returns.
-                    log::trace!(target: "phpr::gc", "sweep: {} tracked objects", self.created.len());
-                    while let Some(i) =
-                        self.created.iter().rposition(|o| Rc::strong_count(o) == 1)
-                    {
-                        let o = self.created.remove(i);
-                        let (cid, id) = {
-                            let b = o.borrow();
-                            (b.class_id as usize, b.id)
-                        };
-                        if self.destructed.contains(&id) {
-                            continue; // `o` drops here, freeing what it held
-                        }
-                        // A destructor-less object just drops here; one with a
-                        // `__destruct` runs it in a pushed frame (rewind so Sweep
-                        // re-runs to a fixpoint after it returns).
-                        if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, b"__destruct") {
-                            log::debug!(target: "phpr::gc", "destruct: {}#{}", String::from_utf8_lossy(&self.classes[cid].name), id);
-                            self.destructed.insert(id);
-                            let callee = &self.classes[defc].methods[midx].func;
-                            let mut frame = Frame::new(callee, self.class_mod(defc));
-                            frame.this = Some(Zval::Object(Rc::clone(&o)));
-                            frame.class = Some(defc);
-                            frame.static_class = Some(cid);
-                            // Discard the destructor's return (don't disturb the
-                            // caller's operand stack).
-                            frame.ret_cell = Some(Rc::new(RefCell::new(Zval::Null)));
-                            self.frames[top].ip = ip; // re-run Sweep after it returns
-                            self.frames.push(frame);
-                            break;
-                        }
-                    }
+                    self.gc_sweep(top, ip);
                 }
                 Op::Nop => {}
             }
@@ -9020,7 +9173,12 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags) -> Result<Zval, 
             // Write *through* an existing reference element (REF-4) so an alias
             // sees the update; otherwise overwrite / insert.
             match arr.get_mut(&k) {
-                Some(slot) => store_slot(slot, value.clone()),
+                Some(slot) => {
+                    // Drops the displaced element; an object it held may now be
+                    // unreachable (a free-fn site — the sweep's full scan / the
+                    // enclosing op's own `gc_note` covers it).
+                    let _old = store_slot(slot, value.clone());
+                }
                 None => arr.insert(k, value.clone()),
             }
             Ok(value)
@@ -9041,7 +9199,9 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags) -> Result<Zval, 
             let result = apply_binop(op, &old, &rhs, diags)?;
             // Write through an existing reference element (REF-4).
             match arr.get_mut(&k) {
-                Some(slot) => store_slot(slot, result.clone()),
+                Some(slot) => {
+                    let _old = store_slot(slot, result.clone());
+                }
                 None => arr.insert(k, result.clone()),
             }
             Ok(result)
@@ -9236,11 +9396,16 @@ fn field_cell(
 /// Write `v` into a local cell. A reference slot writes *through* its shared
 /// cell (so aliases see the update); a plain slot is overwritten. This mirrors
 /// the tree-walker's write-through discipline (`Zval::Ref`, D-R3).
-fn store_slot(cell: &mut Zval, v: Zval) {
+/// Write `v` into `cell` (following a `Ref` to its shared cell), returning the
+/// value it displaced. Callers that care about destruction timing pass the
+/// returned old value to [`Vm::gc_note`] so a now-unreachable object enters the
+/// possible-roots buffer; callers that don't simply drop it (unchanged
+/// behaviour). The return value is deliberately not `#[must_use]`.
+fn store_slot(cell: &mut Zval, v: Zval) -> Zval {
     if let Zval::Ref(r) = cell {
-        *r.borrow_mut() = v;
+        std::mem::replace(&mut *r.borrow_mut(), v)
     } else {
-        *cell = v;
+        std::mem::replace(cell, v)
     }
 }
 

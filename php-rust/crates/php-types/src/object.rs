@@ -203,6 +203,19 @@ impl Props {
         }
     }
 
+    /// Set property `name` (updating in place / appending, like [`Props::set`]),
+    /// returning the value it displaced — or `None` when newly inserted. Used by
+    /// the property write path to hand the dropped value to the GC's
+    /// possible-roots tracking.
+    pub fn replace(&mut self, name: &[u8], value: Zval) -> Option<Zval> {
+        if let Some(slot) = self.get_mut(name) {
+            Some(std::mem::replace(slot, value))
+        } else {
+            self.entries.push((name.into(), value));
+            None
+        }
+    }
+
     /// Remove property `name`; returns whether it was present.
     pub fn remove(&mut self, name: &[u8]) -> bool {
         if let Some(pos) = self.entries.iter().position(|(k, _)| k.as_ref() == name) {
