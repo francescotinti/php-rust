@@ -8165,10 +8165,11 @@ impl<'m> Vm<'m> {
     }
 
     /// The compiled `get`/`set` hook of property `name` on class `cid`, if any
-    /// (step 50). The table is flattened parent-first, so the most-derived hook is
-    /// already in `cid`'s entry. The returned ref lives as long as the module.
+    /// (step 50). Read from the unified, parent-flattened `prop_info` table, so the
+    /// most-derived hook is already in `cid`'s entry. The returned ref lives as long
+    /// as the module.
     fn prop_hook(&self, cid: usize, name: &[u8], set: bool) -> Option<&'m Func> {
-        let h = self.classes[cid].prop_hooks.get(name)?;
+        let h = self.classes[cid].prop_info.get(name)?.hooks.as_ref()?;
         if set {
             h.set.as_ref()
         } else {
