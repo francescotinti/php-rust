@@ -188,10 +188,21 @@ pub(super) fn prop_info<'a>(classes: &[&'a CompiledClass], class: ClassId, name:
     classes.get(class)?.prop_info.get(name)
 }
 
+/// `prop_info`-backed equivalent of [`resolve_readonly_decl`]: the declaring class
+/// of a `readonly` instance property, or `None` if non-readonly / dynamic. The
+/// shadowing (a more-derived non-readonly redeclaration cancels) is already baked
+/// into `PropInfo.readonly` at compile time.
+pub(super) fn prop_readonly_decl(classes: &[&CompiledClass], class: ClassId, name: &[u8]) -> Option<ClassId> {
+    prop_info(classes, class, name).filter(|pi| pi.readonly).map(|pi| pi.declaring_class)
+}
+
 /// If instance property `name` is declared `readonly` anywhere up `class`'s parent
 /// chain, return its *declaring* class id (child→ancestor, most-derived wins).
-/// `None` for a non-readonly or dynamic property. Used by readonly write-once
-/// enforcement and the "Cannot modify readonly property" fatal.
+/// `None` for a non-readonly or dynamic property. Superseded at runtime by
+/// [`prop_readonly_decl`] (over the compile-time `PropInfo` table); retained as
+/// the independent oracle for the `prop_info_matches_legacy_resolvers` test until
+/// the legacy fields are removed (Stage 5).
+#[allow(dead_code)]
 pub(super) fn resolve_readonly_decl(classes: &[&CompiledClass], class: ClassId, name: &[u8]) -> Option<ClassId> {
     let mut cid = Some(class);
     while let Some(c) = cid {

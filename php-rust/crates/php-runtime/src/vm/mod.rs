@@ -2600,7 +2600,7 @@ impl<'m> Vm<'m> {
                             .props
                             .iter()
                             .map(|(n, _)| n.to_vec().into_boxed_slice())
-                            .filter(|n| resolve_readonly_decl(&self.classes, cid, n).is_some())
+                            .filter(|n| prop_readonly_decl(&self.classes, cid, n).is_some())
                             .collect();
                         clone_rc.borrow_mut().readonly_clone_writable = writable;
                         let callee = &self.classes[defc].methods[midx].func;
@@ -2766,7 +2766,7 @@ impl<'m> Vm<'m> {
                         // first, matching PHP). A permitted first initialisation is
                         // recorded so any later write fatals.
                         let ocid = o.borrow().class_id as usize;
-                        if let Some(decl) = resolve_readonly_decl(&self.classes, ocid, &name) {
+                        if let Some(decl) = prop_readonly_decl(&self.classes, ocid, &name) {
                             if o.borrow().readonly_clone_writable(&name) {
                                 // Permitted re-initialisation during `__clone` (8.3).
                                 let mut ob = o.borrow_mut();
@@ -2924,7 +2924,7 @@ impl<'m> Vm<'m> {
                         // where an `unset` returns it to the re-assignable uninitialised
                         // state (8.3).
                         let ocid = o.borrow().class_id as usize;
-                        if let Some(decl) = resolve_readonly_decl(&self.classes, ocid, &name) {
+                        if let Some(decl) = prop_readonly_decl(&self.classes, ocid, &name) {
                             if o.borrow().readonly_clone_writable(&name) {
                                 o.borrow_mut().clear_readonly_init(&name);
                             } else {
@@ -6410,7 +6410,7 @@ impl<'m> Vm<'m> {
         // write fatals, and a read does not raise the before-initialization error).
         let mut readonly_init: Vec<Box<[u8]>> = Vec::new();
         for (k, v) in fields {
-            if resolve_readonly_decl(&self.classes, cid, &k).is_some() {
+            if prop_readonly_decl(&self.classes, cid, &k).is_some() {
                 readonly_init.push(k.as_slice().into());
             }
             props.set(&k, v);
@@ -7708,7 +7708,7 @@ impl<'m> Vm<'m> {
         let target = obj.deref_clone();
         let Zval::Object(o) = &target else { return None };
         let ocid = o.borrow().class_id as usize;
-        let decl = resolve_readonly_decl(&self.classes, ocid, name)?;
+        let decl = prop_readonly_decl(&self.classes, ocid, name)?;
         // A compound write during `__clone` is the permitted one re-init (8.3).
         if o.borrow().readonly_clone_writable(name) {
             let mut ob = o.borrow_mut();
