@@ -16,6 +16,7 @@ pub mod coerce;
 pub mod compile;
 pub mod hir;
 pub mod json;
+pub mod logging;
 pub mod lower;
 pub mod vm;
 pub mod mbregex;

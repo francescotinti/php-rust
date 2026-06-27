@@ -14,6 +14,7 @@ use php_builtins::registry;
 use php_runtime::run_source_with_argv;
 
 fn main() -> ExitCode {
+    php_runtime::logging::init();
     let Some(path) = std::env::args_os().nth(1) else {
         eprintln!("usage: phpr <script.php>");
         return ExitCode::from(1);

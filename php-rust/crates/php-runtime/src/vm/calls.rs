@@ -557,6 +557,14 @@ impl<'m> Vm<'m> {
         self.frames.push(frame);
         let top = self.frames.len() - 1;
         let func = self.frames[top].func;
+        if log::log_enabled!(target: "phpr::call", log::Level::Trace) {
+            log::trace!(
+                target: "phpr::call",
+                "enter {}() (depth {})",
+                String::from_utf8_lossy(&func.name),
+                self.frames.len()
+            );
+        }
         if func.param_hints.iter().any(Option::is_some) {
             let strict = self.module.strict;
             for i in 0..func.n_params as usize {

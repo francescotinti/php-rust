@@ -76,6 +76,13 @@ impl<'m> Vm<'m> {
     /// exception uncaught inside the generator surfaces at the resume site (the
     /// resumer then pops the dead generator frame).
     pub(super) fn unwind(&mut self, e: PhpError, floor: usize) -> Option<PhpError> {
+        log::debug!(
+            target: "phpr::exc",
+            "unwind: {} (floor {}, depth {})",
+            e.class_name(),
+            floor,
+            self.frames.len()
+        );
         // A throwable propagating out of an `@` abandons that suppression region
         // (its `Op::SuppressEnd` is skipped): drop the diagnostics raised under it
         // and reset, so a later `catch` resumes with suppression cleared (step 48;

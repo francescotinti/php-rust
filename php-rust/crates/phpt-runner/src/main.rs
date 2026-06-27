@@ -40,6 +40,7 @@ fn isolate_timeout() -> Option<Duration> {
 }
 
 fn main() -> ExitCode {
+    php_runtime::logging::init();
     let mut args: Vec<String> = std::env::args().skip(1).collect();
 
     // Hidden child mode: run exactly one test and serialise its result, so the

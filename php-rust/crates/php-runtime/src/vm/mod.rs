@@ -201,6 +201,7 @@ pub fn run_source_with_argv(
     registry: &Registry,
     argv: &[&[u8]],
 ) -> Result<VmOutcome, VmRunError> {
+    log::info!(target: "phpr::run", "run {} ({} bytes)", String::from_utf8_lossy(name), source.len());
     let program = match crate::lower_source(name, source) {
         Ok(p) => p,
         Err(crate::LowerError::Fatal { message, line }) => {
@@ -210,6 +211,7 @@ pub fn run_source_with_argv(
     };
     let module = crate::compile::compile_program(&program, registry)
         .map_err(|crate::compile::CompileError::Unsupported(what)| VmRunError::Unsupported(what))?;
+    log::debug!(target: "phpr::compile", "compiled {}: {} functions, {} classes", String::from_utf8_lossy(name), module.functions.len(), module.classes.len());
     Ok(run_module_with_hir(&module, registry, Some(&program), Some(argv)))
 }
 
@@ -3644,6 +3646,7 @@ impl<'m> Vm<'m> {
                     // Release every now-unreachable tracked object, running one
                     // destructor per pass. A destructor is a frame: schedule it and
                     // rewind so this Sweep re-runs (to a fixpoint) once it returns.
+                    log::trace!(target: "phpr::gc", "sweep: {} tracked objects", self.created.len());
                     while let Some(i) =
                         self.created.iter().rposition(|o| Rc::strong_count(o) == 1)
                     {
@@ -3659,6 +3662,7 @@ impl<'m> Vm<'m> {
                         // `__destruct` runs it in a pushed frame (rewind so Sweep
                         // re-runs to a fixpoint after it returns).
                         if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, b"__destruct") {
+                            log::debug!(target: "phpr::gc", "destruct: {}#{}", String::from_utf8_lossy(&self.classes[cid].name), id);
                             self.destructed.insert(id);
                             let callee = &self.classes[defc].methods[midx].func;
                             let mut frame = Frame::new(callee, self.class_mod(defc));
@@ -3995,12 +3999,11 @@ impl<'m> Vm<'m> {
         // Mark loaded before running, so a `_once` re-entry during the file's own
         // execution (mutual includes) sees it and short-circuits.
         self.included_files.insert(key.clone());
+        log::debug!(target: "phpr::include", "{:?} {}", mode, String::from_utf8_lossy(&key));
         let program = match self.lower_unit(&key, &content)? {
             Ok(p) => p,
             Err(e) => {
-                if std::env::var_os("PHPR_DEBUG_INCLUDE").is_some() {
-                    eprintln!("[PHPR_INC_LOWER_FAIL] {} :: {:?}", String::from_utf8_lossy(&key), e);
-                }
+                log::warn!(target: "phpr::include", "lower failed for {}: {:?}", String::from_utf8_lossy(&key), e);
                 return self.include_compile_failed(&key, mode);
             }
         };
@@ -4008,9 +4011,7 @@ impl<'m> Vm<'m> {
         let module = match crate::compile::compile_program(&program, self.registry) {
             Ok(m) => m,
             Err(e) => {
-                if std::env::var_os("PHPR_DEBUG_INCLUDE").is_some() {
-                    eprintln!("[PHPR_INC_COMPILE_FAIL] {} :: {:?}", String::from_utf8_lossy(&key), e);
-                }
+                log::warn!(target: "phpr::include", "compile failed for {}: {:?}", String::from_utf8_lossy(&key), e);
                 return self.include_compile_failed(&key, mode);
             }
         };

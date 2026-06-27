@@ -18,3 +18,7 @@ authors = ["php-rust-experiment"]
 php-types = { path = "crates/php-types" }
 php-runtime = { path = "crates/php-runtime" }
 php-builtins = { path = "crates/php-builtins" }
+# Developer logging: the `log` facade is used across the runtime; `log4rs` is the
+# configurable backend installed by the binaries (see `php_runtime::logging`).
+log = "0.4"
+log4rs = "1.3"
