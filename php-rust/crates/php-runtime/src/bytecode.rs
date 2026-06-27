@@ -1120,18 +1120,13 @@ pub struct CompiledClass {
     /// Methods declared *on this class* (resolution walks `parent` at run time).
     pub methods: Vec<CompiledMethod>,
     /// Instance properties *declared directly on this class* with their
-    /// visibility, in declaration order (OOP-2b). Visibility resolution
-    /// (`$o->p` access checks) walks the parent chain looking at each class's own
-    /// list; the *declaring* class is the one whose list contains the property.
+    /// visibility, in declaration order (OOP-2b). Used only for the *ordered*
+    /// per-class enumeration in `get_object_vars` / `get_class_vars`; the
+    /// visibility / readonly / type *lookups* go through [`CompiledClass::prop_info`].
     pub own_prop_vis: Vec<(Box<[u8]>, Visibility)>,
     /// Static properties declared *on this class* (OOP-2b); resolution walks the
     /// parent chain. The live cells are keyed by (declaring class, name) in the VM.
     pub static_props: Vec<CompiledStaticProp>,
-    /// Names of `readonly` instance properties declared *directly on this class*
-    /// (readonly enforcement). Resolution walks the parent chain like
-    /// [`CompiledClass::own_prop_vis`]; the class found is the *declaring* class,
-    /// used in the "Cannot modify readonly property C::$p" fatal.
-    pub readonly_props: Vec<Box<[u8]>>,
     /// Thunk that materialises this class's *non-constant* instance-property
     /// defaults (`This; <expr>; PropSet; …`), run with `$this` = the new object by
     /// [`Op::InitProps`]. `None` when every default folded to a constant. Covers
@@ -1140,6 +1135,7 @@ pub struct CompiledClass {
     /// Class constants declared *on this class* (same index space as the source
     /// [`crate::hir::ClassDecl::consts`]); resolution walks `parent` then
     /// interfaces at run time.
+    // (typed-property declared types now live in `prop_info`.)
     pub consts: Vec<CompiledConst>,
     /// Enum cases the VM can materialise as singletons (Session A); empty for a
     /// non-enum. Indexed by [`Op::EnumCase`]'s `case`.
@@ -1150,11 +1146,6 @@ pub struct CompiledClass {
     /// Names of the traits this class uses directly (resolved, original case) —
     /// read by `class_uses()` / `ReflectionClass::getTraitNames()`. Empty when none.
     pub uses_traits: Vec<Box<[u8]>>,
-    /// Declared types of this class's *own* typed instance properties (name →
-    /// hint), for write enforcement. Resolution walks the parent chain like
-    /// [`CompiledClass::own_prop_vis`]; the class found is the *declaring* class
-    /// (used in the "Cannot assign … of type …" TypeError). Empty when none.
-    pub prop_types: Vec<(Box<[u8]>, TypeHint)>,
     /// Names of the (flattened) typed instance properties that have no default, so
     /// start *uninitialized*: `new` stores `Zval::Undef` for these instead of NULL.
     /// Empty when the class has no such property.
@@ -1163,17 +1154,13 @@ pub struct CompiledClass {
     /// property default): [`Op::Alloc`] on it fatals instead of producing a
     /// wrong instance, mirroring the function-stub discipline.
     pub ok: bool,
-    /// PHP 8.4 property hooks (step 50), flattened parent-first so the most-derived
-    /// `get`/`set` wins. Keyed by property name. A property present here is hooked;
-    /// `PropGet`/`PropSet` route through its hook (taking precedence over magic),
-    /// and a *virtual* one (`backed == false`) has no entry in `prop_defaults`.
-    pub prop_hooks: std::collections::HashMap<Box<[u8]>, PropHooks>,
     /// Unified, parent-resolved per-property metadata (the property-layout
     /// consolidation): name → [`PropInfo`], flattened parent-first at compile time.
-    /// Read at run time via `prop_info(class, name)` — a single lookup replacing the
+    /// The single source for the visibility / readonly / type / hook *lookups* at
+    /// run time (`prop_info(class, name)`), replacing the former scattered
+    /// `readonly_props` / `prop_types` / `prop_hooks` fields and the
     /// `resolve_prop_decl` / `resolve_readonly_decl` / `resolve_prop_type` parent
-    /// walks. Built alongside (and currently mirroring) `own_prop_vis` /
-    /// `readonly_props` / `prop_types` / `prop_hooks`, which it will supersede.
+    /// walks. (`own_prop_vis` is kept solely for ordered per-class enumeration.)
     pub prop_info: std::collections::HashMap<Box<[u8]>, PropInfo>,
 }
 

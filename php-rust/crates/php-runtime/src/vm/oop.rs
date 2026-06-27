@@ -164,100 +164,34 @@ pub(super) fn visible_from(classes: &[&CompiledClass], cur: Option<ClassId>, vis
     }
 }
 
-/// Resolve a declared instance property's visibility and declaring class by
-/// walking `class`'s parent chain child→ancestor. `None` for a dynamic /
-/// undeclared property (effectively public). Superseded at runtime by
-/// [`prop_vis_decl`]; retained as the equivalence-test oracle until Stage 5.
-#[allow(dead_code)]
-pub(super) fn resolve_prop_decl(classes: &[&CompiledClass], class: ClassId, name: &[u8]) -> Option<(Visibility, ClassId)> {
-    let mut cid = Some(class);
-    while let Some(c) = cid {
-        if let Some((_, vis)) = classes[c].own_prop_vis.iter().find(|(n, _)| n.as_ref() == name) {
-            return Some((*vis, c));
-        }
-        cid = classes[c].parent;
-    }
-    None
-}
-
 /// Look up the unified, compile-time-resolved metadata for a declared instance
-/// property — a single hashmap lookup that replaces the parent-chain walks of
-/// [`resolve_prop_decl`] / [`resolve_readonly_decl`] / [`resolve_prop_type`]
-/// (the flattening already happened in `compile_class`). `None` for a dynamic /
-/// undeclared property. The `.get(class)?` mirrors the defensive guard the
-/// readonly/type resolvers use against a partially-seeded class table.
+/// property — a single hashmap lookup over the parent-flattened `prop_info` table
+/// (the flattening, with all shadowing rules applied, happened in `compile_class`).
+/// `None` for a dynamic / undeclared property. The `.get(class)?` is defensive
+/// against a partially-seeded class table.
 pub(super) fn prop_info<'a>(classes: &[&'a CompiledClass], class: ClassId, name: &[u8]) -> Option<&'a PropInfo> {
     classes.get(class)?.prop_info.get(name)
 }
 
-/// `prop_info`-backed equivalent of [`resolve_readonly_decl`]: the declaring class
-/// of a `readonly` instance property, or `None` if non-readonly / dynamic. The
-/// shadowing (a more-derived non-readonly redeclaration cancels) is already baked
-/// into `PropInfo.readonly` at compile time.
+/// The declaring class of a `readonly` instance property, or `None` if
+/// non-readonly / dynamic. The shadowing (a more-derived non-readonly
+/// redeclaration cancels) is already baked into `PropInfo.readonly`.
 pub(super) fn prop_readonly_decl(classes: &[&CompiledClass], class: ClassId, name: &[u8]) -> Option<ClassId> {
     prop_info(classes, class, name).filter(|pi| pi.readonly).map(|pi| pi.declaring_class)
 }
 
-/// `prop_info`-backed equivalent of [`resolve_prop_type`]: a typed instance
-/// property's declaring class and declared type, or `None` if untyped / dynamic.
-/// The untyped-redeclaration-cancels-type shadowing is already baked into
-/// `PropInfo.type_hint` at compile time.
+/// A typed instance property's declaring class and declared type, or `None` if
+/// untyped / dynamic. The untyped-redeclaration-cancels-type shadowing is already
+/// baked into `PropInfo.type_hint`.
 pub(super) fn prop_type_decl(classes: &[&CompiledClass], class: ClassId, name: &[u8]) -> Option<(ClassId, TypeHint)> {
     let pi = prop_info(classes, class, name)?;
     pi.type_hint.clone().map(|h| (pi.declaring_class, h))
 }
 
-/// `prop_info`-backed equivalent of [`resolve_prop_decl`]: a declared instance
-/// property's visibility and declaring class, or `None` if dynamic / undeclared.
+/// A declared instance property's visibility and declaring class, or `None` if
+/// dynamic / undeclared.
 pub(super) fn prop_vis_decl(classes: &[&CompiledClass], class: ClassId, name: &[u8]) -> Option<(Visibility, ClassId)> {
     prop_info(classes, class, name).map(|pi| (pi.visibility, pi.declaring_class))
-}
-
-/// If instance property `name` is declared `readonly` anywhere up `class`'s parent
-/// chain, return its *declaring* class id (child→ancestor, most-derived wins).
-/// `None` for a non-readonly or dynamic property. Superseded at runtime by
-/// [`prop_readonly_decl`] (over the compile-time `PropInfo` table); retained as
-/// the independent oracle for the `prop_info_matches_legacy_resolvers` test until
-/// the legacy fields are removed (Stage 5).
-#[allow(dead_code)]
-pub(super) fn resolve_readonly_decl(classes: &[&CompiledClass], class: ClassId, name: &[u8]) -> Option<ClassId> {
-    let mut cid = Some(class);
-    while let Some(c) = cid {
-        let cc = classes.get(c)?;
-        if cc.readonly_props.iter().any(|n| n.as_ref() == name) {
-            return Some(c);
-        }
-        // A non-readonly redeclaration in a more-derived class shadows an inherited
-        // readonly one (the most-derived declaration wins): stop if this class
-        // declares the property at all.
-        if cc.own_prop_vis.iter().any(|(n, _)| n.as_ref() == name) {
-            return None;
-        }
-        cid = cc.parent;
-    }
-    None
-}
-
-/// Resolve a typed property to its declaring class and declared type, walking the
-/// parent chain. A more-derived (untyped or typed) redeclaration shadows an
-/// inherited type — the most-derived declaration wins. `None` for an untyped or
-/// undeclared (dynamic) property. Superseded at runtime by [`prop_type_decl`];
-/// retained as the equivalence-test oracle until Stage 5.
-#[allow(dead_code)]
-pub(super) fn resolve_prop_type(classes: &[&CompiledClass], class: ClassId, name: &[u8]) -> Option<(ClassId, TypeHint)> {
-    let mut cid = Some(class);
-    while let Some(c) = cid {
-        let cc = classes.get(c)?;
-        if let Some((_, h)) = cc.prop_types.iter().find(|(n, _)| n.as_ref() == name) {
-            return Some((c, h.clone()));
-        }
-        // Declared untyped here → shadows any inherited typed declaration.
-        if cc.own_prop_vis.iter().any(|(n, _)| n.as_ref() == name) {
-            return None;
-        }
-        cid = cc.parent;
-    }
-    None
 }
 
 /// Resolve a static property to its declaring class and index, walking the parent

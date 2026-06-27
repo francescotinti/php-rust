@@ -487,23 +487,10 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         })
         .collect();
 
+    // Own declared properties, in declaration order — used only for the *ordered*
+    // per-class enumeration in `get_object_vars` / `get_class_vars`. The readonly /
+    // typed / visibility *lookups* now go through the flattened `prop_info` table.
     let own_prop_vis = cd.props.iter().map(|p| (p.name.clone(), p.visibility)).collect();
-
-    // Declared types of this class's own typed properties, for write enforcement.
-    let prop_types = cd
-        .props
-        .iter()
-        .filter_map(|p| p.hint.clone().map(|h| (p.name.clone(), h)))
-        .collect();
-
-    // Names of readonly instance properties declared on this class (readonly
-    // enforcement). Walked parent-first at run time to find the declaring class.
-    let readonly_props = cd
-        .props
-        .iter()
-        .filter(|p| p.readonly)
-        .map(|p| p.name.clone())
-        .collect();
 
     // Enum cases, 1:1 with the source order (so `Op::EnumCase`'s index lines up).
     // `value` is the folded backing value, or `None` for a pure case *and* for a
@@ -576,16 +563,13 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         methods,
         own_prop_vis,
         static_props,
-        readonly_props,
         prop_init,
         consts,
         enum_cases,
         attributes,
         uses_traits: cd.uses_traits.clone(),
-        prop_types,
         uninit_props,
         ok,
-        prop_hooks,
         prop_info,
     }
 }
