@@ -8190,9 +8190,15 @@ impl<'m> Vm<'m> {
     /// `(oid, Hook, name)` is released on `Ret`, so `$this->name` inside the hook
     /// reaches the backing store.
     fn push_hook(&mut self, func: &'m Func, recv: Zval, oid: u32, name: &[u8], set_value: Option<Zval>) {
-        let cid = object_class_id(&recv).unwrap_or(0);
+        let lsb = object_class_id(&recv).unwrap_or(0);
+        // A hook runs in the scope of the class that *declared* it (so it can reach
+        // that class's private/protected members even when invoked on a subclass
+        // instance), while late static binding stays the object's runtime class —
+        // mirroring `push_magic_prop`. The hook body's bytecode is relative to the
+        // declaring class's module.
+        let decl = prop_info(&self.classes, lsb, name).map(|pi| pi.declaring_class).unwrap_or(lsb);
         let is_set = set_value.is_some();
-        let mut frame = Frame::new(func, self.class_mod(cid));
+        let mut frame = Frame::new(func, self.class_mod(decl));
         frame.argc = func.n_params;
         if let Some(v) = set_value {
             if !frame.slots.is_empty() {
@@ -8200,8 +8206,8 @@ impl<'m> Vm<'m> {
             }
         }
         frame.this = Some(recv);
-        frame.class = Some(cid);
-        frame.static_class = Some(cid);
+        frame.class = Some(decl);
+        frame.static_class = Some(lsb);
         if is_set {
             // A `set` hook's own return value is discarded (like `__set`).
             frame.ret_cell = Some(Rc::new(RefCell::new(Zval::Null)));
@@ -9084,6 +9090,26 @@ mod tests {
 
         // A dynamic / undeclared name resolves to nothing.
         assert!(super::prop_info(&classes, child, b"not_a_prop").is_none());
+    }
+
+    /// A property hook inherited by a subclass runs in its *declaring* class's
+    /// scope, so it can reach that class's private members even when invoked on a
+    /// subclass instance (regression: previously the hook ran in the object's class
+    /// scope and a `$this->private` access from the inherited hook fatally failed
+    /// with "Cannot access private property").
+    #[test]
+    fn inherited_hook_reaches_declaring_class_private() {
+        let src = br#"<?php
+        class Temp {
+            private int $c = 0;
+            public int $f { get => $this->c + 100; set => $this->c = $value; }
+        }
+        class Sub extends Temp {}
+        $s = new Sub();
+        $s->f = 5;
+        echo $s->f;
+        "#;
+        assert_eq!(vm_stdout(src), b"105");
     }
 
     // --- fake builtins, to exercise the VM's dispatch mechanism without the
