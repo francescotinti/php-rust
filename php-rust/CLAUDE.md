@@ -21,9 +21,18 @@ e (2) **riprovare ancora con Serena** la stessa operazione. Ripetere se ricompai
 grep/Read diretti NON sono un fallback accettabile per evitare Serena.
 
 ## Build & test (regole)
+- **⚠️ FILESYSTEM — il volume esterno "Extreme Pro" NON supporta la compilazione
+  incrementale di Rust** (non sa hard-linkare la cache → cargo stampa "hard linking
+  files … failed" e può lasciare binari stale/incoerenti). Per questo TUTTI gli
+  artefatti di build vivono sul **volume principale** (`/Users/francescotinti/Claude/php-rust-output`).
+  Questo è già imposto da `php-rust/.cargo/config.toml` (`target-dir = …`), quindi
+  un semplice `cargo build --release` basta. **MAI** ridirigere il `target-dir`
+  sul volume esterno né usare il `target/` in-repo. Sorgente e corpus stanno sul
+  volume esterno ma sono solo letti (nessun artefatto di compilazione lì).
 - Build: `CARGO_TARGET_DIR=$HOME/Claude/php-rust-output cargo build --release`
-  (il `target/` in-repo è stale; non usarlo).
-- Unit: `CARGO_TARGET_DIR=$HOME/Claude/php-rust-output cargo test --release` → deve restare **1499 passed**.
+  (equivalente al config.toml; l'env è ridondante ma innocuo).
+- Unit: `CARGO_TARGET_DIR=$HOME/Claude/php-rust-output cargo test --release` → i test
+  lib di `php-runtime` devono restare **554 passed** (più gli altri crate verdi); non regredire.
 - Corpus: `$HOME/Claude/php-rust-output/release/phpt-runner --list-fails --isolate "/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests"` (foreground, timeout 600000). Delta vs baseline con `comm`; disciplina **zero pass→fail**.
 - Oracle: `$HOME/Claude/php-oracle/php-src/sapi/cli/php`; CLI nostro `phpr` = `$HOME/Claude/php-rust-output/release/phpr`. Metodo: `diff <(oracle x.php) <(phpr x.php)` finché IDENTICAL.
 - Commit **e** push a ogni step concluso (no chiedere).
