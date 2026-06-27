@@ -166,7 +166,9 @@ pub(super) fn visible_from(classes: &[&CompiledClass], cur: Option<ClassId>, vis
 
 /// Resolve a declared instance property's visibility and declaring class by
 /// walking `class`'s parent chain child→ancestor. `None` for a dynamic /
-/// undeclared property (effectively public).
+/// undeclared property (effectively public). Superseded at runtime by
+/// [`prop_vis_decl`]; retained as the equivalence-test oracle until Stage 5.
+#[allow(dead_code)]
 pub(super) fn resolve_prop_decl(classes: &[&CompiledClass], class: ClassId, name: &[u8]) -> Option<(Visibility, ClassId)> {
     let mut cid = Some(class);
     while let Some(c) = cid {
@@ -203,6 +205,12 @@ pub(super) fn prop_readonly_decl(classes: &[&CompiledClass], class: ClassId, nam
 pub(super) fn prop_type_decl(classes: &[&CompiledClass], class: ClassId, name: &[u8]) -> Option<(ClassId, TypeHint)> {
     let pi = prop_info(classes, class, name)?;
     pi.type_hint.clone().map(|h| (pi.declaring_class, h))
+}
+
+/// `prop_info`-backed equivalent of [`resolve_prop_decl`]: a declared instance
+/// property's visibility and declaring class, or `None` if dynamic / undeclared.
+pub(super) fn prop_vis_decl(classes: &[&CompiledClass], class: ClassId, name: &[u8]) -> Option<(Visibility, ClassId)> {
+    prop_info(classes, class, name).map(|pi| (pi.visibility, pi.declaring_class))
 }
 
 /// If instance property `name` is declared `readonly` anywhere up `class`'s parent
@@ -273,7 +281,7 @@ pub(super) fn check_prop_access(
     obj_class: ClassId,
     name: &[u8],
 ) -> Result<(), PhpError> {
-    if let Some((vis, decl)) = resolve_prop_decl(classes, obj_class, name) {
+    if let Some((vis, decl)) = prop_vis_decl(classes, obj_class, name) {
         if !visible_from(classes, cur, vis, decl) {
             return Err(prop_access_error(classes, decl, name, vis));
         }
@@ -459,7 +467,7 @@ impl<'m> Vm<'m> {
         let (cid, oid, present, accessible) = {
             let obj = o.borrow();
             let cid = obj.class_id as usize;
-            let accessible = match resolve_prop_decl(&self.classes, cid, name) {
+            let accessible = match prop_vis_decl(&self.classes, cid, name) {
                 Some((vis, dc)) => visible_from(&self.classes, cur_class, vis, dc),
                 None => true,
             };

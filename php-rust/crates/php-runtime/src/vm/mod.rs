@@ -2787,7 +2787,7 @@ impl<'m> Vm<'m> {
                         // `unset` is absent from the store yet is not a dynamic
                         // creation when re-assigned, so check the class layout too.
                         if !o.borrow().props.contains(&name)
-                            && resolve_prop_decl(&self.classes, ocid, &name).is_none()
+                            && prop_vis_decl(&self.classes, ocid, &name).is_none()
                             && !self.allows_dynamic_props(ocid)
                         {
                             let cls = String::from_utf8_lossy(&self.classes[ocid].name).into_owned();
@@ -2876,7 +2876,7 @@ impl<'m> Vm<'m> {
                             continue;
                         }
                         // No magic: an inaccessible declared property reads as not-set.
-                        match resolve_prop_decl(&self.classes, o.borrow().class_id as usize, &name) {
+                        match prop_vis_decl(&self.classes, o.borrow().class_id as usize, &name) {
                             Some((vis, decl)) if !visible_from(&self.classes, cur, vis, decl) => false,
                             _ => prop_isset(&target, &name),
                         }
@@ -5595,7 +5595,7 @@ impl<'m> Vm<'m> {
         }
         let mut arr = PhpArray::new();
         for name in &order {
-            let visible = match resolve_prop_decl(&self.classes, cid, name) {
+            let visible = match prop_vis_decl(&self.classes, cid, name) {
                 Some((vis, decl)) => visible_from(&self.classes, cur, vis, decl),
                 None => true,
             };
@@ -5896,7 +5896,7 @@ impl<'m> Vm<'m> {
         };
         let pname_z = convert::to_zstr_cast(&a1.deref_clone(), &mut self.diags);
         let pname = pname_z.as_bytes();
-        if resolve_prop_decl(&self.classes, cid, pname).is_some()
+        if prop_vis_decl(&self.classes, cid, pname).is_some()
             || find_static_prop(&self.classes, cid, pname).is_some()
         {
             return Ok(Zval::Bool(true));
