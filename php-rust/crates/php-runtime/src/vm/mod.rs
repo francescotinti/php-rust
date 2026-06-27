@@ -1053,7 +1053,7 @@ impl<'m> Vm<'m> {
     fn emit_str(&mut self, top: usize, bytes: &[u8]) -> Result<(), PhpError> {
         let line = self.cur_line(top);
         self.flush_diags(line)?;
-        self.write_output(bytes);
+        self.write_output(bytes)?;
         Ok(())
     }
 
@@ -1061,12 +1061,67 @@ impl<'m> Vm<'m> {
     /// (`ob_start`) when one is active, otherwise the real `stdout`/`rendered`
     /// streams. Diagnostics are *not* captured by output buffering, so they keep
     /// flowing through `flush_diags` into `rendered` at their point of occurrence.
-    fn write_output(&mut self, bytes: &[u8]) {
+    fn write_output(&mut self, bytes: &[u8]) -> Result<(), PhpError> {
         if let Some(buf) = self.ob_stack.last_mut() {
             buf.content.extend_from_slice(bytes);
+            // A `chunk_size` buffer auto-flushes to its parent (handler phase
+            // `PHP_OUTPUT_HANDLER_WRITE` = 0) the moment a write makes it reach the
+            // threshold — PHP flushes the whole accumulated content at once, not in
+            // chunk-sized pieces.
+            let cs = buf.chunk_size;
+            if cs > 0 && buf.content.len() >= cs {
+                self.emit_buffer_op(0)?;
+            }
         } else {
             self.stdout.extend_from_slice(bytes);
             self.rendered.extend_from_slice(bytes);
+        }
+        Ok(())
+    }
+
+    /// Flush the topmost buffer's content to its *parent* sink while keeping the
+    /// buffer active (emptied) — the shared engine for a `chunk_size` auto-flush
+    /// (`op` = 0) and a manual `ob_flush` (`op` = `PHP_OUTPUT_HANDLER_FLUSH` = 4).
+    /// The handler phase gains `PHP_OUTPUT_HANDLER_START` (1) on the first flush of
+    /// this buffer. The buffer is detached during the callback + parent write so
+    /// that any output the handler itself produces goes to the parent, then pushed
+    /// back emptied.
+    fn emit_buffer_op(&mut self, op: i64) -> Result<(), PhpError> {
+        let Some(mut buf) = self.ob_stack.pop() else { return Ok(()) };
+        let content = std::mem::take(&mut buf.content);
+        let mut phase = op;
+        if !buf.started {
+            phase |= 1;
+            buf.started = true;
+        }
+        let out = self.apply_ob_callback(&buf.callback, content, phase)?;
+        let r = self.write_output(&out);
+        self.ob_stack.push(buf);
+        r
+    }
+
+    /// Run an output buffer's handler (if any) over `content` with the given phase
+    /// bitmask, returning the bytes to forward to the parent sink: the handler's
+    /// non-`false` return cast to a string, or the original content when there is
+    /// no handler or it returns `false`.
+    fn apply_ob_callback(
+        &mut self,
+        callback: &Option<Zval>,
+        content: Vec<u8>,
+        phase: i64,
+    ) -> Result<Vec<u8>, PhpError> {
+        match callback {
+            Some(cb) => {
+                let r = self.call_callable(
+                    cb.clone(),
+                    vec![Zval::Str(PhpStr::new(content.clone())), Zval::Long(phase)],
+                )?;
+                Ok(match r.deref_clone() {
+                    Zval::Bool(false) => content,
+                    other => convert::to_zstr_cast(&other, &mut self.diags).as_bytes().to_vec(),
+                })
+            }
+            None => Ok(content),
         }
     }
 
@@ -1088,7 +1143,7 @@ impl<'m> Vm<'m> {
             f(args, &mut ctx)
         };
         self.flush_diags(line)?;
-        self.write_output(&produced);
+        self.write_output(&produced)?;
         res
     }
 
@@ -2410,7 +2465,7 @@ impl<'m> Vm<'m> {
                     self.flush_diags(line)?;
                     let mut produced = Vec::new();
                     let result = builtin_ref_call(f, &mut self.frames[top].slots[slot as usize], &rest, &mut produced, &mut self.diags);
-                    self.write_output(&produced);
+                    self.write_output(&produced)?;
                     self.flush_diags(line)?;
                     let result = result?;
                     self.frames[top].stack.push(result);
@@ -2436,7 +2491,7 @@ impl<'m> Vm<'m> {
                         let mut leaf = cell.borrow_mut();
                         builtin_ref_call(f, &mut leaf, &rest, &mut produced, &mut self.diags)
                     };
-                    self.write_output(&produced);
+                    self.write_output(&produced)?;
                     self.flush_diags(line)?;
                     let result = result?;
                     self.frames[top].stack.push(result);
@@ -4215,11 +4270,17 @@ impl<'m> Vm<'m> {
     /// `ob_get_clean`/`ob_end_*`. The optional callback is invoked with the
     /// buffered content when the buffer is flushed. Returns `true`.
     fn ho_ob_start(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
-        let callback = match args.into_iter().next() {
+        let callback = match args.first() {
             Some(Zval::Null) | None => None,
-            Some(cb) => Some(cb),
+            Some(cb) => Some(cb.clone()),
         };
-        self.ob_stack.push(OutputBuffer { content: Vec::new(), callback });
+        // `chunk_size`: a negative or absent value means "no chunking" (0).
+        let chunk_size = match args.get(1) {
+            Some(v) => convert::to_long_cast(v, &mut self.diags).max(0) as usize,
+            None => 0,
+        };
+        self.ob_stack
+            .push(OutputBuffer { content: Vec::new(), callback, chunk_size, started: false });
         Ok(Zval::Bool(true))
     }
 
@@ -4284,13 +4345,10 @@ impl<'m> Vm<'m> {
     /// keep the buffer active (cleared). `true` on success, `false` (with a notice)
     /// if no buffer is active.
     fn ho_ob_flush(&mut self) -> Result<Zval, PhpError> {
-        // Pop while flushing so the content lands in the *parent* sink, not back
-        // into this same buffer; then push the emptied buffer back (still active).
-        if let Some(mut buf) = self.ob_stack.pop() {
-            let content = std::mem::take(&mut buf.content);
-            let callback = buf.callback.clone();
-            self.flush_buffer(OutputBuffer { content, callback })?;
-            self.ob_stack.push(buf);
+        // A manual flush runs the handler with `PHP_OUTPUT_HANDLER_FLUSH` (4) (plus
+        // START on the first flush) and keeps the buffer active, emptied.
+        if self.ob_stack.last().is_some() {
+            self.emit_buffer_op(4)?;
             Ok(Zval::Bool(true))
         } else {
             self.ob_no_buffer_notice("ob_flush(): Failed to flush buffer. No buffer to flush")?;
@@ -4318,25 +4376,17 @@ impl<'m> Vm<'m> {
     }
 
     /// Write a popped buffer's content to the underlying sink (the next buffer
-    /// down, or the real `stdout`/`rendered` streams). If the buffer has a
-    /// callback, it is invoked with the content first and its non-false string
-    /// return replaces the output (PHP's output handler contract; `chunk_size`
-    /// and the phase argument are simplified to a single final call).
-    fn flush_buffer(&mut self, buf: OutputBuffer) -> Result<(), PhpError> {
-        let out = match buf.callback {
-            Some(cb) => {
-                // PHP_OUTPUT_HANDLER_START | _END = 0 | 8 = 8 for a single final
-                // call (the whole buffer at once).
-                let phase = Zval::Long(8);
-                let r = self.call_callable(cb, vec![Zval::Str(PhpStr::new(buf.content.clone())), phase])?;
-                match r.deref_clone() {
-                    Zval::Bool(false) => buf.content,
-                    other => convert::to_zstr_cast(&other, &mut self.diags).as_bytes().to_vec(),
-                }
-            }
-            None => buf.content,
-        };
-        self.write_output(&out);
+    /// down, or the real `stdout`/`rendered` streams) as the buffer's *final*
+    /// flush. The handler (if any) runs with `PHP_OUTPUT_HANDLER_FINAL` (8), plus
+    /// `PHP_OUTPUT_HANDLER_START` (1) when this buffer was never flushed before (so
+    /// a plain `ob_start` + `ob_end_flush` yields phase 9, while a buffer already
+    /// chunk-flushed yields phase 8). The buffer is already popped, so the parent
+    /// write lands in the next sink down.
+    fn flush_buffer(&mut self, mut buf: OutputBuffer) -> Result<(), PhpError> {
+        let content = std::mem::take(&mut buf.content);
+        let phase = if buf.started { 8 } else { 8 | 1 };
+        let out = self.apply_ob_callback(&buf.callback, content, phase)?;
+        self.write_output(&out)?;
         Ok(())
     }
 
@@ -6604,7 +6654,7 @@ impl<'m> Vm<'m> {
         // append to both streams (this is ordinary output, like an echo).
         let line = self.cur_line(self.frames.len() - 1);
         self.flush_diags(line)?;
-        self.write_output(s.as_bytes());
+        self.write_output(s.as_bytes())?;
         Ok(Zval::Null)
     }
 
@@ -8377,9 +8427,15 @@ fn typehint_descriptor(hint: &Option<TypeHint>) -> Zval {
 /// the captured output; `callback` is the optional user handler passed to
 /// `ob_start(callable $callback)`, invoked with the buffer content when the
 /// buffer is flushed (its non-false string return replaces the output).
+/// `chunk_size` (0 = none) auto-flushes the buffer to its parent as soon as a
+/// write makes `content` reach it. `started` records whether the handler has been
+/// invoked at least once, so the phase bitmask passed to it carries
+/// `PHP_OUTPUT_HANDLER_START` (1) on the first call only.
 struct OutputBuffer {
     content: Vec<u8>,
     callback: Option<Zval>,
+    chunk_size: usize,
+    started: bool,
 }
 
 /// Single source of truth for the *call-a-callable / introspection* host-builtin
@@ -9258,6 +9314,37 @@ mod tests {
         echo "|", $c->a, ",", $c->b;
         "#;
         assert_eq!(vm_stdout(src), b"a=1;b=2;|a=1;b=2;p=3;|11,12");
+    }
+
+    /// `ob_start($cb, $chunk_size)`: a chunk_size buffer auto-flushes through its
+    /// handler the moment a write reaches the threshold (phase START=1 on the first
+    /// flush, FINAL=8 on the closing one); the handler's return replaces the output.
+    /// The wrapping callback records the phase so both the chunking and the phase
+    /// bitmask are exercised with builtin-free PHP.
+    #[test]
+    fn ob_start_chunk_size_and_phase() {
+        let src = br#"<?php
+        $cb = function($s, $p) { return "[$p:$s]"; };
+        ob_start($cb, 4);
+        echo "ab";   // 2 < 4: buffered
+        echo "cde";  // 5 >= 4: flush, phase START(1)
+        echo "f";    // 1 < 4: buffered
+        ob_end_flush(); // flush, phase FINAL(8)
+        "#;
+        // First flush START=1 over "abcde", final FINAL=8 over "f".
+        assert_eq!(vm_stdout(src), b"[1:abcde][8:f]");
+    }
+
+    /// A plain `ob_start` + `ob_end_flush` (no chunking, never pre-flushed) invokes
+    /// the handler once with phase START|FINAL = 9.
+    #[test]
+    fn ob_start_single_call_phase_is_start_final() {
+        let src = br#"<?php
+        ob_start(function($s, $p) { return "<$p>$s"; });
+        echo "hi";
+        ob_end_flush();
+        "#;
+        assert_eq!(vm_stdout(src), b"<9>hi");
     }
 
     // --- fake builtins, to exercise the VM's dispatch mechanism without the
