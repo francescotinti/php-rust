@@ -12,6 +12,7 @@
 mod array;
 mod crypto;
 mod csv;
+mod ctype;
 mod date;
 mod encoding;
 mod env;
@@ -175,6 +176,17 @@ pub fn registry() -> Registry {
     add(b"strncmp", string::strncmp);
     add(b"strcasecmp", string::strcasecmp);
     add(b"strncasecmp", string::strncasecmp);
+    add(b"ctype_alnum", ctype::ctype_alnum);
+    add(b"ctype_alpha", ctype::ctype_alpha);
+    add(b"ctype_cntrl", ctype::ctype_cntrl);
+    add(b"ctype_digit", ctype::ctype_digit);
+    add(b"ctype_lower", ctype::ctype_lower);
+    add(b"ctype_graph", ctype::ctype_graph);
+    add(b"ctype_print", ctype::ctype_print);
+    add(b"ctype_punct", ctype::ctype_punct);
+    add(b"ctype_space", ctype::ctype_space);
+    add(b"ctype_upper", ctype::ctype_upper);
+    add(b"ctype_xdigit", ctype::ctype_xdigit);
     add(b"substr", string::substr);
     add(b"strpos", string::strpos);
     add(b"strrpos", string::strrpos);
