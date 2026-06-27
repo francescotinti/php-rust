@@ -4889,6 +4889,148 @@ impl<'m> Vm<'m> {
         self.constants.contains_key(name) || crate::lower::resolve_constant(name).is_some()
     }
 
+    /// Resolve a callable value to the data the `call_user_func[_array]`
+    /// by-reference warning needs: the callee's display name, its per-parameter
+    /// by-ref mask, and parameter names. Only user functions/methods/closures
+    /// reachable here resolve; builtins and unresolvable shapes return `None`
+    /// (they simply get no warning). Mirrors the resolution in [`Self::invoke_value`].
+    fn callee_byref_sig(&self, callee: &Zval) -> Option<(String, Vec<bool>, Vec<Vec<u8>>)> {
+        let pack = |display: String, f: &Func| {
+            (
+                display,
+                f.param_by_ref.to_vec(),
+                f.param_names.iter().map(|n| n.to_vec()).collect(),
+            )
+        };
+        let method_sig = |cid: usize, method: &[u8], display_class: &[u8]| {
+            let (rcid, idx) = resolve_method_runtime(&self.classes, cid, method)?;
+            let m = &self.classes[rcid].methods[idx];
+            let display = format!(
+                "{}::{}",
+                String::from_utf8_lossy(display_class),
+                String::from_utf8_lossy(&m.name)
+            );
+            Some(pack(display, &m.func))
+        };
+        match callee {
+            Zval::Ref(c) => self.callee_byref_sig(&c.borrow()),
+            Zval::Closure(cl) => match &cl.named {
+                Some(name) => self.named_byref_sig(name.as_bytes()),
+                None => {
+                    let f = self.module.closures.get(cl.fn_idx)?;
+                    Some(pack(String::from_utf8_lossy(&f.name).into_owned(), f))
+                }
+            },
+            Zval::Str(s) => {
+                let b = s.as_bytes();
+                if let Some(pos) = b.windows(2).position(|w| w == b"::") {
+                    let cls = &b[..pos];
+                    let cid = self.class_index.get(&cls.to_ascii_lowercase()).copied()?;
+                    method_sig(cid, &b[pos + 2..], &self.classes[cid].name)
+                } else {
+                    self.named_byref_sig(b)
+                }
+            }
+            Zval::Array(a) => {
+                let elems: Vec<Zval> = a.iter().map(|(_, v)| v.deref_clone()).collect();
+                if elems.len() != 2 {
+                    return None;
+                }
+                let method = match &elems[1] {
+                    Zval::Str(s) => s.as_bytes().to_vec(),
+                    _ => return None,
+                };
+                match &elems[0] {
+                    // A closure (or any object) under `[$obj, '__invoke']` resolves to
+                    // the invoked body; PHP names it `Closure::__invoke` for a closure.
+                    Zval::Closure(cl) if method == b"__invoke" => {
+                        let f = match &cl.named {
+                            Some(_) => return self.named_byref_sig(b"__invoke").or(None),
+                            None => self.module.closures.get(cl.fn_idx)?,
+                        };
+                        Some(pack("Closure::__invoke".to_string(), f))
+                    }
+                    Zval::Object(o) => {
+                        let cid = o.borrow().class_id as usize;
+                        let cname = self.classes[cid].name.clone();
+                        method_sig(cid, &method, &cname)
+                    }
+                    Zval::Str(s) => {
+                        let cid = self.class_index.get(&s.as_bytes().to_ascii_lowercase()).copied()?;
+                        method_sig(cid, &method, &self.classes[cid].name.clone())
+                    }
+                    _ => None,
+                }
+            }
+            Zval::Object(o) => {
+                let cid = o.borrow().class_id as usize;
+                let cname = self.classes[cid].name.clone();
+                method_sig(cid, b"__invoke", &cname)
+            }
+            _ => None,
+        }
+    }
+
+    /// By-ref signature of a named user function (case-insensitive), including
+    /// functions declared by a linked eval/include unit. See [`Self::callee_byref_sig`].
+    fn named_byref_sig(&self, name: &[u8]) -> Option<(String, Vec<bool>, Vec<Vec<u8>>)> {
+        let pack = |f: &Func| {
+            (
+                String::from_utf8_lossy(&f.name).into_owned(),
+                f.param_by_ref.to_vec(),
+                f.param_names.iter().map(|n| n.to_vec()).collect(),
+            )
+        };
+        if let Some(f) = self
+            .module
+            .functions
+            .iter()
+            .enumerate()
+            .find(|(i, f)| !self.module.conditional_fns.contains(i) && name_eq_ignore_case(&f.name, name))
+            .map(|(_, f)| f)
+        {
+            return Some(pack(f));
+        }
+        let &(fmod, idx) = self.linked_functions.get(&name.to_ascii_lowercase())?;
+        Some(pack(&fmod.functions[idx]))
+    }
+
+    /// Emit the E_WARNING `call_user_func[_array]` raises for each by-reference
+    /// parameter that receives a value: the trampoline forwards arguments by value,
+    /// so a by-ref parameter can only bind when the supplied argument was itself a
+    /// reference (`arg_is_ref[i]` — always false for `call_user_func`, true for an
+    /// `_array` element that is a reference). The argument is then passed by value.
+    fn warn_trampoline_byref(
+        &mut self,
+        callee: &Zval,
+        argc: usize,
+        arg_is_ref: &[bool],
+    ) -> Result<(), PhpError> {
+        let Some((display, by_ref, names)) = self.callee_byref_sig(callee) else {
+            return Ok(());
+        };
+        let line = self.cur_line(self.frames.len() - 1);
+        for i in 0..argc.min(by_ref.len()) {
+            if by_ref[i] && !arg_is_ref.get(i).copied().unwrap_or(false) {
+                let msg = match names.get(i) {
+                    Some(n) if !n.is_empty() => format!(
+                        "{}(): Argument #{} (${}) must be passed by reference, value given",
+                        display,
+                        i + 1,
+                        String::from_utf8_lossy(n)
+                    ),
+                    _ => format!(
+                        "{}(): Argument #{} must be passed by reference, value given",
+                        display,
+                        i + 1
+                    ),
+                };
+                self.raise_diagnostic(2, &msg, line)?;
+            }
+        }
+        Ok(())
+    }
+
     /// `call_user_func($callable, ...$args)`: forward the remaining arguments by
     /// value to the callable (mirrors `eval::ho_call_user_func`).
     fn ho_call_user_func(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
@@ -4899,7 +5041,10 @@ impl<'m> Vm<'m> {
             ));
         };
         let argv: Vec<Zval> = it.map(|v| v.deref_clone()).collect();
-        self.call_callable(callee.deref_clone(), argv)
+        let callee = callee.deref_clone();
+        // `call_user_func` always passes by value, so every by-ref parameter warns.
+        self.warn_trampoline_byref(&callee, argv.len(), &[])?;
+        self.call_callable(callee, argv)
     }
 
     /// `call_user_func_array($callable, $args)`: the second argument is an array
@@ -4913,8 +5058,13 @@ impl<'m> Vm<'m> {
             )));
         }
         let callee = args[0].deref_clone();
-        let argv: Vec<Zval> = match args[1].deref_clone() {
-            Zval::Array(a) => a.iter().map(|(_, v)| v.deref_clone()).collect(),
+        // Track which elements were references: `_array` can pass those by reference,
+        // so only the *non*-reference elements at by-ref positions warn.
+        let (argv, arg_is_ref): (Vec<Zval>, Vec<bool>) = match args[1].deref_clone() {
+            Zval::Array(a) => a
+                .iter()
+                .map(|(_, v)| (v.deref_clone(), matches!(v, Zval::Ref(_))))
+                .unzip(),
             other => {
                 return Err(PhpError::TypeError(format!(
                     "call_user_func_array(): Argument #2 ($args) must be of type array, {} given",
@@ -4922,6 +5072,7 @@ impl<'m> Vm<'m> {
                 )))
             }
         };
+        self.warn_trampoline_byref(&callee, argv.len(), &arg_is_ref)?;
         self.call_callable(callee, argv)
     }
 
@@ -9346,6 +9497,31 @@ mod tests {
         ob_end_flush();
         "#;
         assert_eq!(vm_stdout(src), b"<9>hi");
+    }
+
+    /// `call_user_func` forwards arguments by value, so a callee by-reference
+    /// parameter that receives a value raises the E_WARNING "must be passed by
+    /// reference, value given" (and is then passed by value). The signature is
+    /// resolved at the trampoline against the named callee.
+    #[test]
+    fn call_user_func_by_ref_param_warns() {
+        let out = vm_outcome(b"<?php function f(&$x){} call_user_func('f', 1); echo 'done';");
+        assert_eq!(
+            out.rendered,
+            b"\nWarning: f(): Argument #1 ($x) must be passed by reference, value given in test.php on line 1\ndone".to_vec()
+        );
+        assert_eq!(out.stdout, b"done");
+    }
+
+    /// `call_user_func_array` with a plain (non-reference) element at a by-ref
+    /// position warns just like `call_user_func`.
+    #[test]
+    fn call_user_func_array_value_element_warns() {
+        let out = vm_outcome(b"<?php function f(&$x){} call_user_func_array('f', [1]); echo 'done';");
+        assert_eq!(
+            out.rendered,
+            b"\nWarning: f(): Argument #1 ($x) must be passed by reference, value given in test.php on line 1\ndone".to_vec()
+        );
     }
 
     // --- fake builtins, to exercise the VM's dispatch mechanism without the
