@@ -8,10 +8,23 @@
 
 use std::io::Write;
 use std::os::unix::ffi::OsStrExt;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::process::ExitCode;
 
 use php_builtins::registry;
 use php_runtime::run_source_with_argv;
+
+/// Best-effort human text from a caught panic payload (the common `&str` /
+/// `String` cases; anything else is reported opaquely).
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
+    if let Some(s) = payload.downcast_ref::<&str>() {
+        (*s).to_string()
+    } else if let Some(s) = payload.downcast_ref::<String>() {
+        s.clone()
+    } else {
+        "<non-string panic payload>".to_string()
+    }
+}
 
 fn main() -> ExitCode {
     php_runtime::logging::init();
@@ -37,8 +50,16 @@ fn main() -> ExitCode {
         .map(|a| a.as_os_str().as_bytes().to_vec())
         .collect();
     let argv_refs: Vec<&[u8]> = argv_owned.iter().map(|v| v.as_slice()).collect();
-    match run_source_with_argv(name.as_bytes(), &source, &registry, &argv_refs) {
-        Ok(outcome) => {
+    // Panic boundary: a bug in the runtime (a reachable `expect`, a broken VM
+    // invariant) must not abort the host with a raw Rust panic — turn it into
+    // PHP's uncaught-fatal exit status (255) with a labelled stderr line, like the
+    // isolated phpt worker already does per test. AssertUnwindSafe is sound here
+    // because on panic we discard the runtime state and exit rather than reuse it.
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        run_source_with_argv(name.as_bytes(), &source, &registry, &argv_refs)
+    }));
+    match result {
+        Ok(Ok(outcome)) => {
             let mut stdout = std::io::stdout().lock();
             let _ = stdout.write_all(&outcome.rendered);
             let _ = stdout.flush();
@@ -48,10 +69,19 @@ fn main() -> ExitCode {
                 None => ExitCode::SUCCESS,
             }
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             // A non-`Fatal` lowering error (e.g. a hard parse failure) — PHP would
             // print a Parse error and exit 255.
             eprintln!("PHP Parse error: {e:?}");
+            ExitCode::from(255)
+        }
+        Err(panic) => {
+            // The default panic hook has already printed the payload + location to
+            // stderr (honouring RUST_BACKTRACE); add a labelled line, mirror it to
+            // the log when enabled, and exit 255 instead of aborting.
+            let msg = panic_message(panic.as_ref());
+            log::error!(target: "phpr::vm", "runtime panicked: {msg}");
+            eprintln!("[phpr] internal error: the runtime panicked: {msg}");
             ExitCode::from(255)
         }
     }

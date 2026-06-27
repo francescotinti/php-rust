@@ -12,3 +12,4 @@ path = "src/main.rs"
 php-types.workspace = true
 php-runtime.workspace = true
 php-builtins.workspace = true
+log.workspace = true
