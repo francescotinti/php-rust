@@ -1,1 +1,9 @@
 crates/php-server/
+
+# macOS AppleDouble / metadata sidecars. On the external work volume these are
+# created next to every file; they confuse Serena's indexer and can be staged by
+# accident. (The copies git itself writes under .git/objects are git-internal and
+# not covered by .gitignore — `scripts/clean-appledouble.sh` clears those.)
+._*
+**/._*
+.DS_Store
