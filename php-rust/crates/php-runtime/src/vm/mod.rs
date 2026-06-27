@@ -2618,6 +2618,9 @@ impl<'m> Vm<'m> {
                     let obj = self.frames[top].stack.pop().expect("PropGet object");
                     let cur = self.frames[top].class;
                     let target = obj.deref_clone();
+                    // Storage slot to read (the plain name for a dynamic/non-object
+                    // target; a mangled key for an accessible private — set below).
+                    let mut key = name.to_vec();
                     if let Zval::Object(o) = &target {
                         // A `get` hook takes precedence over `__get` and direct read
                         // (step 50). Skip it while a hook for this property is active
@@ -2637,11 +2640,12 @@ impl<'m> Vm<'m> {
                             continue;
                         }
                         check_prop_access(&self.classes, cur, o.borrow().class_id as usize, &name)?;
-                        if let Some(err) = self.uninit_typed_read(o, &name) {
+                        key = self.prop_storage_key(o.borrow().class_id as usize, &name, cur);
+                        if let Some(err) = self.uninit_typed_read(o, &key, &name) {
                             return Err(err);
                         }
                     }
-                    let v = read_property(&target, &name, &mut self.diags);
+                    let v = read_property(&target, &key, &mut self.diags);
                     self.frames[top].stack.push(v);
                 }
                 Op::PropGetSilent { name } => {
@@ -2650,6 +2654,7 @@ impl<'m> Vm<'m> {
                     let obj = self.frames[top].stack.pop().expect("PropGetSilent object");
                     let cur = self.frames[top].class;
                     let target = obj.deref_clone();
+                    let mut key = name.to_vec();
                     if let Zval::Object(o) = &target {
                         if let Some((defc, midx, oid)) =
                             self.magic_applies(o, &name, cur, MagicKind::Get, b"__get")
@@ -2657,9 +2662,10 @@ impl<'m> Vm<'m> {
                             self.push_magic_prop(defc, midx, oid, MagicKind::Get, target.clone(), &name, None, None, false);
                             continue;
                         }
+                        key = self.prop_storage_key(o.borrow().class_id as usize, &name, cur);
                     }
                     let mut sink = Diags::new();
-                    let v = read_property(&target, &name, &mut sink);
+                    let v = read_property(&target, &key, &mut sink);
                     self.frames[top].stack.push(v);
                 }
                 Op::PropGetDynamic => {
@@ -2670,6 +2676,7 @@ impl<'m> Vm<'m> {
                     let obj = self.frames[top].stack.pop().expect("PropGetDynamic object");
                     let cur = self.frames[top].class;
                     let target = obj.deref_clone();
+                    let mut key = name.to_vec();
                     if let Zval::Object(o) = &target {
                         let (oid, cid) = { let b = o.borrow(); (b.id, b.class_id as usize) };
                         if !self.hook_guarded(oid, &name) {
@@ -2685,11 +2692,12 @@ impl<'m> Vm<'m> {
                             continue;
                         }
                         check_prop_access(&self.classes, cur, o.borrow().class_id as usize, &name)?;
-                        if let Some(err) = self.uninit_typed_read(o, &name) {
+                        key = self.prop_storage_key(o.borrow().class_id as usize, &name, cur);
+                        if let Some(err) = self.uninit_typed_read(o, &key, &name) {
                             return Err(err);
                         }
                     }
-                    let v = read_property(&target, &name, &mut self.diags);
+                    let v = read_property(&target, &key, &mut self.diags);
                     self.frames[top].stack.push(v);
                 }
                 Op::PropGetDynamicSilent => {
@@ -2699,6 +2707,7 @@ impl<'m> Vm<'m> {
                     let obj = self.frames[top].stack.pop().expect("PropGetDynamicSilent object");
                     let cur = self.frames[top].class;
                     let target = obj.deref_clone();
+                    let mut key = name.to_vec();
                     if let Zval::Object(o) = &target {
                         if let Some((defc, midx, oid)) =
                             self.magic_applies(o, &name, cur, MagicKind::Get, b"__get")
@@ -2706,9 +2715,10 @@ impl<'m> Vm<'m> {
                             self.push_magic_prop(defc, midx, oid, MagicKind::Get, target.clone(), &name, None, None, false);
                             continue;
                         }
+                        key = self.prop_storage_key(o.borrow().class_id as usize, &name, cur);
                     }
                     let mut sink = Diags::new();
-                    let v = read_property(&target, &name, &mut sink);
+                    let v = read_property(&target, &key, &mut sink);
                     self.frames[top].stack.push(v);
                 }
                 Op::PropSet { name } => {
@@ -2718,11 +2728,20 @@ impl<'m> Vm<'m> {
                     let target = obj.deref_clone();
                     // A `prop_init` thunk writes defaults directly: no `__set`, no
                     // visibility check (so a subclass can set an inherited private).
+                    // The slot is the declared one (unconditional, mangled for a
+                    // private) regardless of the running scope.
                     if self.frames[top].init_props {
-                        write_property(&target, &name, value.clone())?;
+                        let key = match object_class_id(&target) {
+                            Some(ocid) => self.prop_decl_storage_key(ocid, &name),
+                            None => name.to_vec(),
+                        };
+                        write_property(&target, &key, value.clone())?;
                         self.frames[top].stack.push(value);
                         continue;
                     }
+                    // Storage slot to write (plain name for a dynamic/non-object
+                    // target; a mangled key for an accessible private — set below).
+                    let mut key = name.to_vec();
                     if let Zval::Object(o) = &target {
                         // An enum case is immutable: every property is readonly and
                         // no dynamic property may be created (step 23).
@@ -2761,23 +2780,26 @@ impl<'m> Vm<'m> {
                             continue;
                         }
                         check_prop_access(&self.classes, cur, o.borrow().class_id as usize, &name)?;
+                        let ocid = o.borrow().class_id as usize;
+                        // Storage slot (mangled for an accessible private); per-instance
+                        // state (props, readonly tracking) is keyed by it.
+                        key = self.prop_storage_key(ocid, &name, cur);
                         // Readonly write-once enforcement (after the visibility check,
                         // so a private/protected readonly reports the access error
                         // first, matching PHP). A permitted first initialisation is
                         // recorded so any later write fatals.
-                        let ocid = o.borrow().class_id as usize;
                         if let Some(decl) = prop_readonly_decl(&self.classes, ocid, &name) {
-                            if o.borrow().readonly_clone_writable(&name) {
+                            if o.borrow().readonly_clone_writable(&key) {
                                 // Permitted re-initialisation during `__clone` (8.3).
                                 let mut ob = o.borrow_mut();
-                                ob.consume_clone_writable(&name);
-                                ob.mark_readonly_init(&name);
+                                ob.consume_clone_writable(&key);
+                                ob.mark_readonly_init(&key);
                             } else {
-                                let inited = o.borrow().is_readonly_init(&name);
+                                let inited = o.borrow().is_readonly_init(&key);
                                 if let Some(err) = readonly_write_error(&self.classes, cur, decl, &name, inited) {
                                     return Err(err);
                                 }
-                                o.borrow_mut().mark_readonly_init(&name);
+                                o.borrow_mut().mark_readonly_init(&key);
                             }
                         }
                         // PHP 8.2: creating an *undeclared* property on a class that
@@ -2786,7 +2808,7 @@ impl<'m> Vm<'m> {
                         // short-circuited above. A *declared* property that was
                         // `unset` is absent from the store yet is not a dynamic
                         // creation when re-assigned, so check the class layout too.
-                        if !o.borrow().props.contains(&name)
+                        if !o.borrow().props.contains(&key)
                             && prop_vis_decl(&self.classes, ocid, &name).is_none()
                             && !self.allows_dynamic_props(ocid)
                         {
@@ -2801,45 +2823,55 @@ impl<'m> Vm<'m> {
                         // expression yields the coerced value.
                         value = self.coerce_typed_prop_write(ocid, &name, value)?;
                     }
-                    write_property(&target, &name, value.clone())?;
+                    write_property(&target, &key, value.clone())?;
                     self.frames[top].stack.push(value);
                 }
                 Op::PropOpSet { name, op } => {
                     let rhs = self.frames[top].stack.pop().expect("PropOpSet rhs");
                     let obj = self.frames[top].stack.pop().expect("PropOpSet object");
-                    if let Some(ocid) = object_class_id(&obj) {
-                        check_prop_access(&self.classes, self.frames[top].class, ocid, &name)?;
-                    }
-                    if let Some(err) = self.readonly_rmw_error(&obj, &name) {
+                    let cur = self.frames[top].class;
+                    let key = match object_class_id(&obj) {
+                        Some(ocid) => {
+                            check_prop_access(&self.classes, cur, ocid, &name)?;
+                            self.prop_storage_key(ocid, &name, cur)
+                        }
+                        None => name.to_vec(),
+                    };
+                    if let Some(err) = self.readonly_rmw_error(&obj, &key, &name) {
                         return Err(err);
                     }
                     if let Zval::Object(o) = &obj.deref_clone() {
-                        if let Some(err) = self.uninit_typed_read(o, &name) {
+                        if let Some(err) = self.uninit_typed_read(o, &key, &name) {
                             return Err(err);
                         }
                     }
-                    let old = read_property(&obj, &name, &mut self.diags);
+                    let old = read_property(&obj, &key, &mut self.diags);
                     let mut result = apply_binop(op, &old, &rhs, &mut self.diags)?;
                     if let Some(ocid) = object_class_id(&obj) {
                         result = self.coerce_typed_prop_write(ocid, &name, result)?;
                     }
-                    write_property(&obj, &name, result.clone())?;
+                    write_property(&obj, &key, result.clone())?;
                     self.frames[top].stack.push(result);
                 }
                 Op::PropIncDec { name, inc, pre } => {
                     let obj = self.frames[top].stack.pop().expect("PropIncDec object");
-                    if let Some(ocid) = object_class_id(&obj) {
-                        check_prop_access(&self.classes, self.frames[top].class, ocid, &name)?;
-                    }
-                    if let Some(err) = self.readonly_rmw_error(&obj, &name) {
+                    let cur = self.frames[top].class;
+                    let key = match object_class_id(&obj) {
+                        Some(ocid) => {
+                            check_prop_access(&self.classes, cur, ocid, &name)?;
+                            self.prop_storage_key(ocid, &name, cur)
+                        }
+                        None => name.to_vec(),
+                    };
+                    if let Some(err) = self.readonly_rmw_error(&obj, &key, &name) {
                         return Err(err);
                     }
                     if let Zval::Object(o) = &obj.deref_clone() {
-                        if let Some(err) = self.uninit_typed_read(o, &name) {
+                        if let Some(err) = self.uninit_typed_read(o, &key, &name) {
                             return Err(err);
                         }
                     }
-                    let old = read_property(&obj, &name, &mut self.diags);
+                    let old = read_property(&obj, &key, &mut self.diags);
                     let mut newv = old.clone();
                     if inc {
                         ops::increment(&mut newv, &mut self.diags)?;
@@ -2849,7 +2881,7 @@ impl<'m> Vm<'m> {
                     if let Some(ocid) = object_class_id(&obj) {
                         newv = self.coerce_typed_prop_write(ocid, &name, newv)?;
                     }
-                    write_property(&obj, &name, newv.clone())?;
+                    write_property(&obj, &key, newv.clone())?;
                     self.frames[top].stack.push(if pre { newv } else { old });
                 }
                 Op::PropIsset { name } => {
@@ -2876,9 +2908,13 @@ impl<'m> Vm<'m> {
                             continue;
                         }
                         // No magic: an inaccessible declared property reads as not-set.
-                        match prop_vis_decl(&self.classes, o.borrow().class_id as usize, &name) {
+                        let ocid = o.borrow().class_id as usize;
+                        match prop_vis_decl(&self.classes, ocid, &name) {
                             Some((vis, decl)) if !visible_from(&self.classes, cur, vis, decl) => false,
-                            _ => prop_isset(&target, &name),
+                            _ => {
+                                let key = self.prop_storage_key(ocid, &name, cur);
+                                prop_isset(&target, &key)
+                            }
                         }
                     } else {
                         prop_isset(&target, &name)
@@ -2889,6 +2925,7 @@ impl<'m> Vm<'m> {
                     let obj = self.frames[top].stack.pop().expect("PropUnset object");
                     let cur = self.frames[top].class;
                     let target = obj.deref_clone();
+                    let mut key = name.to_vec();
                     if let Zval::Object(o) = &target {
                         // An enum case property is readonly — it cannot be unset.
                         if o.borrow().info.is_enum_case {
@@ -2924,9 +2961,10 @@ impl<'m> Vm<'m> {
                         // where an `unset` returns it to the re-assignable uninitialised
                         // state (8.3).
                         let ocid = o.borrow().class_id as usize;
+                        key = self.prop_storage_key(ocid, &name, cur);
                         if let Some(decl) = prop_readonly_decl(&self.classes, ocid, &name) {
-                            if o.borrow().readonly_clone_writable(&name) {
-                                o.borrow_mut().clear_readonly_init(&name);
+                            if o.borrow().readonly_clone_writable(&key) {
+                                o.borrow_mut().clear_readonly_init(&key);
                             } else {
                                 let cls = String::from_utf8_lossy(&self.classes[decl].name).into_owned();
                                 let prop = String::from_utf8_lossy(&name).into_owned();
@@ -2936,7 +2974,7 @@ impl<'m> Vm<'m> {
                             }
                         }
                     }
-                    prop_unset(&target, &name);
+                    prop_unset(&target, &key);
                 }
                 Op::MethodCall { method, argc } => {
                     let args = self.pop_keys(top, argc); // source order
@@ -7685,9 +7723,12 @@ impl<'m> Vm<'m> {
     /// both plain and readonly typed properties (a readonly one is always typed and
     /// default-less, so it too starts `Undef`). `None` if the property is absent or
     /// holds a real value. The message names the *declaring* class.
-    fn uninit_typed_read(&self, o: &Rc<RefCell<Object>>, name: &[u8]) -> Option<PhpError> {
+    /// The "must not be accessed before initialization" fatal for an uninitialised
+    /// typed property, or `None` if it is set. `key` is the storage slot (mangled
+    /// for a private); `name` is the plain name used for the type lookup and message.
+    fn uninit_typed_read(&self, o: &Rc<RefCell<Object>>, key: &[u8], name: &[u8]) -> Option<PhpError> {
         let b = o.borrow();
-        if !matches!(b.props.get(name), Some(Zval::Undef)) {
+        if !matches!(b.props.get(key), Some(Zval::Undef)) {
             return None;
         }
         let ocid = b.class_id as usize;
@@ -7700,25 +7741,45 @@ impl<'m> Vm<'m> {
         )))
     }
 
+    /// The storage key for an instance-property access `obj(ocid)->name` from
+    /// `scope`: the plain name today, a mangled `\0Class\0name` for an accessible
+    /// private once mangling is on. Per-instance state (props, readonly tracking)
+    /// is keyed by this; visibility is enforced separately via
+    /// [`resolve_prop_access`] / `check_prop_access`.
+    fn prop_storage_key(&self, ocid: ClassId, name: &[u8], scope: Option<ClassId>) -> Vec<u8> {
+        match resolve_prop_access(&self.classes, ocid, name, scope) {
+            PropAccess::Slot(k) => k,
+            PropAccess::Dynamic | PropAccess::Denied { .. } => name.to_vec(),
+        }
+    }
+
+    /// Unconditional storage key for the most-derived declaration of `name` on
+    /// `ocid`, ignoring accessing scope/visibility — for a write that must target
+    /// the declared slot regardless of scope (the property-init thunk). Falls back
+    /// to the plain name for an undeclared property.
+    fn prop_decl_storage_key(&self, ocid: ClassId, name: &[u8]) -> Vec<u8> {
+        prop_info(&self.classes, ocid, name).map(|pi| pi.storage_key.to_vec()).unwrap_or_else(|| name.to_vec())
+    }
+
     /// The fatal raised by a compound write (`+=`, `++`, …) to a `readonly`
     /// property: always an error — "Cannot modify readonly property" once
     /// initialised, or the before-initialization fatal if the implicit read of an
     /// uninitialised one comes first. `None` for a non-readonly property.
-    fn readonly_rmw_error(&self, obj: &Zval, name: &[u8]) -> Option<PhpError> {
+    fn readonly_rmw_error(&self, obj: &Zval, key: &[u8], name: &[u8]) -> Option<PhpError> {
         let target = obj.deref_clone();
         let Zval::Object(o) = &target else { return None };
         let ocid = o.borrow().class_id as usize;
         let decl = prop_readonly_decl(&self.classes, ocid, name)?;
         // A compound write during `__clone` is the permitted one re-init (8.3).
-        if o.borrow().readonly_clone_writable(name) {
+        if o.borrow().readonly_clone_writable(key) {
             let mut ob = o.borrow_mut();
-            ob.consume_clone_writable(name);
-            ob.mark_readonly_init(name);
+            ob.consume_clone_writable(key);
+            ob.mark_readonly_init(key);
             return None;
         }
         let cls = String::from_utf8_lossy(&self.classes[decl].name).into_owned();
         let prop = String::from_utf8_lossy(name).into_owned();
-        Some(PhpError::Error(if o.borrow().is_readonly_init(name) {
+        Some(PhpError::Error(if o.borrow().is_readonly_init(key) {
             format!("Cannot modify readonly property {cls}::${prop}")
         } else {
             format!("Typed property {cls}::${prop} must not be accessed before initialization")

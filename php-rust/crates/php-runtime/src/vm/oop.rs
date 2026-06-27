@@ -173,6 +173,41 @@ pub(super) fn prop_info<'a>(classes: &[&'a CompiledClass], class: ClassId, name:
     classes.get(class)?.prop_info.get(name)
 }
 
+/// Outcome of resolving a property access `obj->name` from a given `scope`
+/// (the property-mangling resolver). Decides both *which storage slot* an access
+/// targets and *whether* it is permitted.
+pub(super) enum PropAccess {
+    /// An accessible declared property: read/write under this storage key (the
+    /// plain name today; a mangled `\0Class\0name` for a private once mangling is on).
+    Slot(Vec<u8>),
+    /// No accessible declared property of this name — an undeclared (dynamic)
+    /// property, or (once mangling lands) a private declared only by an ancestor and
+    /// invisible to a related scope. Behaves as a dynamic property under the plain
+    /// name (a read warns "Undefined property", a write creates it).
+    Dynamic,
+    /// Declared but not accessible from `scope`: the caller raises the visibility
+    /// error (after first offering a magic accessor).
+    Denied { decl: ClassId, vis: Visibility },
+}
+
+/// Resolve a property access `obj_class->name` from `scope`. Single source of truth
+/// for both the storage key and the visibility decision (replacing the
+/// `check_prop_access` + name-as-key pair). Behaviour today mirrors
+/// `check_prop_access` exactly (storage key == name); the private-mangling stage
+/// changes only this function's internals.
+pub(super) fn resolve_prop_access(classes: &[&CompiledClass], obj_class: ClassId, name: &[u8], scope: Option<ClassId>) -> PropAccess {
+    match prop_info(classes, obj_class, name) {
+        None => PropAccess::Dynamic,
+        Some(pi) => {
+            if visible_from(classes, scope, pi.visibility, pi.declaring_class) {
+                PropAccess::Slot(pi.storage_key.to_vec())
+            } else {
+                PropAccess::Denied { decl: pi.declaring_class, vis: pi.visibility }
+            }
+        }
+    }
+}
+
 /// The declaring class of a `readonly` instance property, or `None` if
 /// non-readonly / dynamic. The shadowing (a more-derived non-readonly
 /// redeclaration cancels) is already baked into `PropInfo.readonly`.
