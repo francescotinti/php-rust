@@ -329,6 +329,7 @@ pub(crate) fn run_module_with_hir<'m>(
         registry,
         stdout: Vec::new(),
         rendered: Vec::new(),
+        ob_stack: Vec::new(),
         diags: Diags::new(),
         diags_rendered: 0,
         fatal_line: 1,
@@ -434,6 +435,9 @@ pub(crate) fn run_module_with_hir<'m>(
     // `final_flush` is set, so routing is skipped and this never errs.
     let _ = vm.flush_diags(line);
     if let Some(err) = &fatal {
+        // PHP flushes any active output buffers *before* printing the fatal banner,
+        // so the script's buffered output precedes the "Fatal error:" block.
+        vm.flush_all_output_buffers();
         vm.render_fatal(err, line);
     }
     // `register_shutdown_function` callbacks run after the main script (and any
@@ -443,6 +447,10 @@ pub(crate) fn run_module_with_hir<'m>(
     // `main` returns — or after a fatal, on a cleared stack (OOP-3d). Their output
     // flows through `emit_str`, so it lands in `rendered` after the fatal block.
     vm.run_shutdown_destructors();
+    // Flush any output buffers the script left open (PHP flushes the buffer stack
+    // at request shutdown). Done last, so shutdown-function and destructor output
+    // produced while a buffer was active is captured then emitted in order.
+    vm.flush_all_output_buffers();
     VmOutcome {
         stdout: vm.stdout,
         rendered: vm.rendered,
@@ -739,6 +747,13 @@ struct Vm<'m> {
     /// flushed into it (stamped with the current line) at each output point, and an
     /// uncaught fatal is rendered at the tail. Mirrors `eval::Evaluator::rendered`.
     rendered: Vec<u8>,
+    /// Output-buffering stack (`ob_start` family). When non-empty, `echo`/`print`
+    /// and output-producing builtins append to the topmost buffer instead of
+    /// `stdout`/`rendered`; the buffer surfaces via `ob_get_contents`/`ob_get_clean`
+    /// and is written to the underlying sink (the next buffer down, or the real
+    /// streams) on flush. Empty in the common case, so a script that never calls
+    /// `ob_start` is unaffected.
+    ob_stack: Vec<OutputBuffer>,
     diags: Diags,
     /// How many entries of `diags` have already been rendered into `rendered`
     /// (the flush cursor), mirroring `eval`'s `diags_rendered`.
@@ -1029,9 +1044,21 @@ impl<'m> Vm<'m> {
     fn emit_str(&mut self, top: usize, bytes: &[u8]) -> Result<(), PhpError> {
         let line = self.cur_line(top);
         self.flush_diags(line)?;
-        self.stdout.extend_from_slice(bytes);
-        self.rendered.extend_from_slice(bytes);
+        self.write_output(bytes);
         Ok(())
+    }
+
+    /// Route program output to the active sink: the topmost output buffer
+    /// (`ob_start`) when one is active, otherwise the real `stdout`/`rendered`
+    /// streams. Diagnostics are *not* captured by output buffering, so they keep
+    /// flowing through `flush_diags` into `rendered` at their point of occurrence.
+    fn write_output(&mut self, bytes: &[u8]) {
+        if let Some(buf) = self.ob_stack.last_mut() {
+            buf.content.extend_from_slice(bytes);
+        } else {
+            self.stdout.extend_from_slice(bytes);
+            self.rendered.extend_from_slice(bytes);
+        }
     }
 
     /// Run a by-value builtin, mirroring its fresh stdout into `rendered` and
@@ -1046,14 +1073,13 @@ impl<'m> Vm<'m> {
         line: Line,
     ) -> Result<Zval, PhpError> {
         self.flush_diags(line)?;
-        let pre = self.stdout.len();
+        let mut produced = Vec::new();
         let res = {
-            let mut ctx = Ctx { out: &mut self.stdout, diags: &mut self.diags };
+            let mut ctx = Ctx { out: &mut produced, diags: &mut self.diags };
             f(args, &mut ctx)
         };
-        let produced = self.stdout[pre..].to_vec();
         self.flush_diags(line)?;
-        self.rendered.extend_from_slice(&produced);
+        self.write_output(&produced);
         res
     }
 
@@ -2284,10 +2310,9 @@ impl<'m> Vm<'m> {
                     // the builtin's output, then flush its own warnings.
                     let line = self.cur_line(top);
                     self.flush_diags(line)?;
-                    let pre = self.stdout.len();
-                    let result = builtin_ref_call(f, &mut self.frames[top].slots[slot as usize], &rest, &mut self.stdout, &mut self.diags);
-                    let produced = self.stdout[pre..].to_vec();
-                    self.rendered.extend_from_slice(&produced);
+                    let mut produced = Vec::new();
+                    let result = builtin_ref_call(f, &mut self.frames[top].slots[slot as usize], &rest, &mut produced, &mut self.diags);
+                    self.write_output(&produced);
                     self.flush_diags(line)?;
                     let result = result?;
                     self.frames[top].stack.push(result);
@@ -2308,13 +2333,12 @@ impl<'m> Vm<'m> {
                     };
                     let line = self.cur_line(top);
                     self.flush_diags(line)?;
-                    let pre = self.stdout.len();
+                    let mut produced = Vec::new();
                     let result = {
                         let mut leaf = cell.borrow_mut();
-                        builtin_ref_call(f, &mut leaf, &rest, &mut self.stdout, &mut self.diags)
+                        builtin_ref_call(f, &mut leaf, &rest, &mut produced, &mut self.diags)
                     };
-                    let produced = self.stdout[pre..].to_vec();
-                    self.rendered.extend_from_slice(&produced);
+                    self.write_output(&produced);
                     self.flush_diags(line)?;
                     let result = result?;
                     self.frames[top].stack.push(result);
@@ -4136,7 +4160,161 @@ impl<'m> Vm<'m> {
             b"mb_ereg_search_getregs" => self.ho_mb_ereg_search_getregs(),
             b"mb_ereg_search_getpos" => Ok(Zval::Long(self.mb_regex.search_pos as i64)),
             b"mb_ereg_search_setpos" => self.ho_mb_ereg_search_setpos(args),
+            b"ob_start" => self.ho_ob_start(args),
+            b"ob_get_contents" => self.ho_ob_get_contents(),
+            b"ob_get_clean" => self.ho_ob_get_clean(),
+            b"ob_get_flush" => self.ho_ob_get_flush(),
+            b"ob_end_clean" => self.ho_ob_end_clean(),
+            b"ob_end_flush" => self.ho_ob_end_flush(),
+            b"ob_flush" => self.ho_ob_flush(),
+            b"ob_clean" => self.ho_ob_clean(),
+            b"ob_get_level" => Ok(Zval::Long(self.ob_stack.len() as i64)),
+            b"ob_get_length" => Ok(match self.ob_stack.last() {
+                Some(b) => Zval::Long(b.content.len() as i64),
+                None => Zval::Bool(false),
+            }),
+            b"flush" => Ok(Zval::Null),
             _ => Err(undefined_builtin(name)),
+        }
+    }
+
+    /// `ob_start($callback = null, $chunk_size = 0, $flags = ...)`: push a new
+    /// output buffer. Subsequent output is captured into it until a matching
+    /// `ob_get_clean`/`ob_end_*`. The optional callback is invoked with the
+    /// buffered content when the buffer is flushed. Returns `true`.
+    fn ho_ob_start(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let callback = match args.into_iter().next() {
+            Some(Zval::Null) | None => None,
+            Some(cb) => Some(cb),
+        };
+        self.ob_stack.push(OutputBuffer { content: Vec::new(), callback });
+        Ok(Zval::Bool(true))
+    }
+
+    /// `ob_get_contents()`: the current buffer's content as a string, or `false`
+    /// if output buffering is not active.
+    fn ho_ob_get_contents(&mut self) -> Result<Zval, PhpError> {
+        Ok(match self.ob_stack.last() {
+            Some(b) => Zval::Str(PhpStr::new(b.content.clone())),
+            None => Zval::Bool(false),
+        })
+    }
+
+    /// `ob_get_clean()`: return the current buffer's content and discard the
+    /// buffer (no flush to the parent). `false` if no buffer is active.
+    fn ho_ob_get_clean(&mut self) -> Result<Zval, PhpError> {
+        Ok(match self.ob_stack.pop() {
+            Some(b) => Zval::Str(PhpStr::new(b.content)),
+            None => Zval::Bool(false),
+        })
+    }
+
+    /// `ob_get_flush()`: return the current buffer's content *and* flush it to the
+    /// underlying sink, then remove the buffer. `false` (with a notice) if none is
+    /// active.
+    fn ho_ob_get_flush(&mut self) -> Result<Zval, PhpError> {
+        let Some(buf) = self.ob_stack.pop() else {
+            self.ob_no_buffer_notice("ob_get_flush(): Failed to delete and flush buffer. No buffer to delete or flush")?;
+            return Ok(Zval::Bool(false));
+        };
+        let content = buf.content.clone();
+        self.flush_buffer(buf)?;
+        Ok(Zval::Str(PhpStr::new(content)))
+    }
+
+    /// `ob_end_clean()`: discard the current buffer (no flush). `true` on success,
+    /// `false` (with a notice) if no buffer is active.
+    fn ho_ob_end_clean(&mut self) -> Result<Zval, PhpError> {
+        if self.ob_stack.pop().is_some() {
+            Ok(Zval::Bool(true))
+        } else {
+            self.ob_no_buffer_notice("ob_end_clean(): Failed to delete buffer. No buffer to delete")?;
+            Ok(Zval::Bool(false))
+        }
+    }
+
+    /// `ob_end_flush()`: flush the current buffer to the underlying sink and
+    /// remove it. `true` on success, `false` (with a notice) if no buffer is active.
+    fn ho_ob_end_flush(&mut self) -> Result<Zval, PhpError> {
+        match self.ob_stack.pop() {
+            Some(buf) => {
+                self.flush_buffer(buf)?;
+                Ok(Zval::Bool(true))
+            }
+            None => {
+                self.ob_no_buffer_notice("ob_end_flush(): Failed to delete and flush buffer. No buffer to delete or flush")?;
+                Ok(Zval::Bool(false))
+            }
+        }
+    }
+
+    /// `ob_flush()`: send the current buffer's content to the underlying sink but
+    /// keep the buffer active (cleared). `true` on success, `false` (with a notice)
+    /// if no buffer is active.
+    fn ho_ob_flush(&mut self) -> Result<Zval, PhpError> {
+        // Pop while flushing so the content lands in the *parent* sink, not back
+        // into this same buffer; then push the emptied buffer back (still active).
+        if let Some(mut buf) = self.ob_stack.pop() {
+            let content = std::mem::take(&mut buf.content);
+            let callback = buf.callback.clone();
+            self.flush_buffer(OutputBuffer { content, callback })?;
+            self.ob_stack.push(buf);
+            Ok(Zval::Bool(true))
+        } else {
+            self.ob_no_buffer_notice("ob_flush(): Failed to flush buffer. No buffer to flush")?;
+            Ok(Zval::Bool(false))
+        }
+    }
+
+    /// `ob_clean()`: discard the current buffer's content but keep the buffer
+    /// active. `true` on success, `false` (with a notice) if no buffer is active.
+    fn ho_ob_clean(&mut self) -> Result<Zval, PhpError> {
+        if let Some(buf) = self.ob_stack.last_mut() {
+            buf.content.clear();
+            Ok(Zval::Bool(true))
+        } else {
+            self.ob_no_buffer_notice("ob_clean(): Failed to delete buffer. No buffer to delete")?;
+            Ok(Zval::Bool(false))
+        }
+    }
+
+    /// Emit the E_NOTICE PHP raises when an `ob_*` flush/clean operation finds no
+    /// active buffer, stamped with the calling line.
+    fn ob_no_buffer_notice(&mut self, msg: &str) -> Result<(), PhpError> {
+        let line = self.cur_line(self.frames.len() - 1);
+        self.raise_diagnostic(8, msg, line)
+    }
+
+    /// Write a popped buffer's content to the underlying sink (the next buffer
+    /// down, or the real `stdout`/`rendered` streams). If the buffer has a
+    /// callback, it is invoked with the content first and its non-false string
+    /// return replaces the output (PHP's output handler contract; `chunk_size`
+    /// and the phase argument are simplified to a single final call).
+    fn flush_buffer(&mut self, buf: OutputBuffer) -> Result<(), PhpError> {
+        let out = match buf.callback {
+            Some(cb) => {
+                // PHP_OUTPUT_HANDLER_START | _END = 0 | 8 = 8 for a single final
+                // call (the whole buffer at once).
+                let phase = Zval::Long(8);
+                let r = self.call_callable(cb, vec![Zval::Str(PhpStr::new(buf.content.clone())), phase])?;
+                match r.deref_clone() {
+                    Zval::Bool(false) => buf.content,
+                    other => convert::to_zstr_cast(&other, &mut self.diags).as_bytes().to_vec(),
+                }
+            }
+            None => buf.content,
+        };
+        self.write_output(&out);
+        Ok(())
+    }
+
+    /// Flush every still-active output buffer at request shutdown (PHP implicitly
+    /// flushes the buffer stack top-down, each into the next, finally to the SAPI).
+    /// A flushing callback that throws is swallowed here (shutdown is past the point
+    /// where a fatal can be reported).
+    fn flush_all_output_buffers(&mut self) {
+        while let Some(buf) = self.ob_stack.pop() {
+            let _ = self.flush_buffer(buf);
         }
     }
 
@@ -6347,8 +6525,7 @@ impl<'m> Vm<'m> {
         // append to both streams (this is ordinary output, like an echo).
         let line = self.cur_line(self.frames.len() - 1);
         self.flush_diags(line)?;
-        self.stdout.extend_from_slice(s.as_bytes());
-        self.rendered.extend_from_slice(s.as_bytes());
+        self.write_output(s.as_bytes());
         Ok(Zval::Null)
     }
 
@@ -8087,6 +8264,15 @@ fn typehint_descriptor(hint: &Option<TypeHint>) -> Zval {
     Zval::Array(Rc::new(a))
 }
 
+/// One frame of the output-buffering stack (`ob_start`). `content` accumulates
+/// the captured output; `callback` is the optional user handler passed to
+/// `ob_start(callable $callback)`, invoked with the buffer content when the
+/// buffer is flushed (its non-false string return replaces the output).
+struct OutputBuffer {
+    content: Vec<u8>,
+    callback: Option<Zval>,
+}
+
 pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
     // B1: the call-a-callable family. B3: the define family. Sessions C/D grow
     // this list (array_map, usort, sprintf, get_class, …).
@@ -8180,6 +8366,17 @@ pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
         b"iterator_to_array",
         b"iterator_count",
         b"json_encode",
+        b"ob_start",
+        b"ob_get_contents",
+        b"ob_get_clean",
+        b"ob_get_flush",
+        b"ob_end_clean",
+        b"ob_end_flush",
+        b"ob_flush",
+        b"ob_clean",
+        b"ob_get_level",
+        b"ob_get_length",
+        b"flush",
     ];
     HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
 }
