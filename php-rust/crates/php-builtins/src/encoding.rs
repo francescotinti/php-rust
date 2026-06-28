@@ -9,7 +9,8 @@
 
 use md5::Md5;
 use sha1::Sha1;
-use sha2::{Sha256, Sha384, Sha512};
+use sha2::{Sha224, Sha256, Sha384, Sha512, Sha512_224, Sha512_256};
+use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
 use sha1::Digest; // the `Digest` trait is re-exported by every RustCrypto crate
 
 use php_runtime::Ctx;
@@ -243,23 +244,38 @@ pub fn hash(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let algo = algo.as_bytes();
     let data = data.as_bytes();
 
-    let raw: Vec<u8> = match algo.to_ascii_lowercase().as_slice() {
+    let raw = hash_raw(algo, data).ok_or_else(|| {
+        PhpError::ValueError(format!(
+            "hash(): Argument #1 ($algo) must be a valid hashing algorithm, \"{}\" given",
+            String::from_utf8_lossy(algo)
+        ))
+    })?;
+
+    Ok(render_digest(&raw, binary))
+}
+
+/// Raw digest of `data` under `algo` (case-insensitive ASCII name), or `None`
+/// for an unknown algorithm. Covers the RustCrypto digests we link plus the
+/// zlib/IEEE `crc32b`; shared by `hash`/`hash_file`.
+pub(crate) fn hash_raw(algo: &[u8], data: &[u8]) -> Option<Vec<u8>> {
+    let raw = match algo.to_ascii_lowercase().as_slice() {
         b"md5" => Md5::digest(data).to_vec(),
         b"sha1" => Sha1::digest(data).to_vec(),
+        b"sha224" => Sha224::digest(data).to_vec(),
         b"sha256" => Sha256::digest(data).to_vec(),
         b"sha384" => Sha384::digest(data).to_vec(),
         b"sha512" => Sha512::digest(data).to_vec(),
+        b"sha512/224" => Sha512_224::digest(data).to_vec(),
+        b"sha512/256" => Sha512_256::digest(data).to_vec(),
+        b"sha3-224" => Sha3_224::digest(data).to_vec(),
+        b"sha3-256" => Sha3_256::digest(data).to_vec(),
+        b"sha3-384" => Sha3_384::digest(data).to_vec(),
+        b"sha3-512" => Sha3_512::digest(data).to_vec(),
         // hash('crc32b') == the zlib/crc32() function output.
         b"crc32b" => crc_be(crc32fast::hash(data)).to_vec(),
-        _ => {
-            return Err(PhpError::ValueError(format!(
-                "hash(): Argument #1 ($algo) must be a valid hashing algorithm, \"{}\" given",
-                String::from_utf8_lossy(algo)
-            )))
-        }
+        _ => return None,
     };
-
-    Ok(render_digest(&raw, binary))
+    Some(raw)
 }
 
 /// `hash_equals($known_string, $user_string)`: timing-attack-safe string
