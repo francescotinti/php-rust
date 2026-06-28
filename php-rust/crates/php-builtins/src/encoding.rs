@@ -278,6 +278,68 @@ pub(crate) fn hash_raw(algo: &[u8], data: &[u8]) -> Option<Vec<u8>> {
     Some(raw)
 }
 
+/// Raw HMAC of `data` under `algo` keyed by `key`, or `None` for an algorithm
+/// that has no HMAC construction (a non-cryptographic hash like crc32, or an
+/// unknown name). `SimpleHmac` works for any block hash and hashes over-long
+/// keys per the HMAC spec, so it never rejects a key length.
+pub(crate) fn hmac_raw(algo: &[u8], key: &[u8], data: &[u8]) -> Option<Vec<u8>> {
+    use hmac::{Mac, SimpleHmac};
+    macro_rules! mac {
+        ($H:ty) => {{
+            let mut m = SimpleHmac::<$H>::new_from_slice(key).expect("HMAC accepts any key length");
+            m.update(data);
+            Some(m.finalize().into_bytes().to_vec())
+        }};
+    }
+    match algo.to_ascii_lowercase().as_slice() {
+        b"md5" => mac!(Md5),
+        b"sha1" => mac!(Sha1),
+        b"sha224" => mac!(Sha224),
+        b"sha256" => mac!(Sha256),
+        b"sha384" => mac!(Sha384),
+        b"sha512" => mac!(Sha512),
+        b"sha512/224" => mac!(Sha512_224),
+        b"sha512/256" => mac!(Sha512_256),
+        b"sha3-224" => mac!(Sha3_224),
+        b"sha3-256" => mac!(Sha3_256),
+        b"sha3-384" => mac!(Sha3_384),
+        b"sha3-512" => mac!(Sha3_512),
+        _ => None,
+    }
+}
+
+/// `hash_hmac($algo, $data, $key, $binary = false)`: keyed-hash message
+/// authentication code. A non-cryptographic / unknown algorithm is a
+/// `ValueError` (PHP's "valid cryptographic hashing algorithm").
+pub fn hash_hmac(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let algo = convert::to_zstr(
+        args.first().ok_or_else(|| {
+            PhpError::Error("hash_hmac() expects at least 3 arguments, 0 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let data = convert::to_zstr(
+        args.get(1).ok_or_else(|| {
+            PhpError::Error("hash_hmac() expects at least 3 arguments, 1 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let key = convert::to_zstr(
+        args.get(2).ok_or_else(|| {
+            PhpError::Error("hash_hmac() expects at least 3 arguments, 2 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let binary = binary_flag(args, 3);
+    let raw = hmac_raw(algo.as_bytes(), key.as_bytes(), data.as_bytes()).ok_or_else(|| {
+        PhpError::ValueError(
+            "hash_hmac(): Argument #1 ($algo) must be a valid cryptographic hashing algorithm"
+                .to_string(),
+        )
+    })?;
+    Ok(render_digest(&raw, binary))
+}
+
 /// `hash_equals($known_string, $user_string)`: timing-attack-safe string
 /// comparison. Both arguments must be strings (`TypeError` otherwise, argument
 /// #1 checked first); strings of different length are unequal, and equal-length
