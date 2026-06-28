@@ -262,6 +262,50 @@ pub fn hash(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(render_digest(&raw, binary))
 }
 
+/// `hash_equals($known_string, $user_string)`: timing-attack-safe string
+/// comparison. Both arguments must be strings (`TypeError` otherwise, argument
+/// #1 checked first); strings of different length are unequal, and equal-length
+/// strings are compared in constant time (no early exit on the first mismatch).
+pub fn hash_equals(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let known = match args.first() {
+        Some(Zval::Str(s)) => s,
+        Some(o) => {
+            return Err(PhpError::TypeError(format!(
+                "hash_equals(): Argument #1 ($known_string) must be of type string, {} given",
+                o.type_name_for_error()
+            )))
+        }
+        None => {
+            return Err(PhpError::Error(
+                "hash_equals() expects exactly 2 arguments, 0 given".to_string(),
+            ))
+        }
+    };
+    let user = match args.get(1) {
+        Some(Zval::Str(s)) => s,
+        Some(o) => {
+            return Err(PhpError::TypeError(format!(
+                "hash_equals(): Argument #2 ($user_string) must be of type string, {} given",
+                o.type_name_for_error()
+            )))
+        }
+        None => {
+            return Err(PhpError::Error(
+                "hash_equals() expects exactly 2 arguments, 1 given".to_string(),
+            ))
+        }
+    };
+    let (a, b) = (known.as_bytes(), user.as_bytes());
+    let equal = a.len() == b.len() && {
+        let mut diff = 0u8;
+        for (x, y) in a.iter().zip(b) {
+            diff |= x ^ y;
+        }
+        diff == 0
+    };
+    Ok(Zval::Bool(equal))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

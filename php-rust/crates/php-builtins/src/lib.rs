@@ -66,6 +66,7 @@ pub fn registry() -> Registry {
     add(b"sha1", encoding::sha1);
     add(b"crc32", encoding::crc32);
     add(b"hash", encoding::hash);
+    add(b"hash_equals", encoding::hash_equals);
     add(b"pack", pack::pack);
     add(b"unpack", pack::unpack);
     add(b"crypt", crypto::crypt);
