@@ -6,7 +6,7 @@ use mago_syntax::ast::{
     AnonymousClass, ArrowFunction,
     Class, ClassLikeMember, Closure, Enum, EnumCaseItem, Extends, Function, Implements,
     FunctionLikeParameterList, Hint, Interface, MagicConstant, Method,
-    MethodBody, Property, PropertyHook, PropertyHookBody, PropertyHookConcreteBody,
+    MethodBody, Modifier, Property, PropertyHook, PropertyHookBody, PropertyHookConcreteBody,
     PropertyHookList, PropertyItem, Statement, Trait, TraitUse, TraitUseAdaptation,
     TraitUseMethodReference, TraitUseSpecification,
 };
@@ -961,6 +961,32 @@ impl<'f> Lowerer<'f> {
             Property::Hooked(h) => {
                 let visibility = visibility_of(h.modifiers.iter());
                 let readonly = h.modifiers.iter().any(|m| m.is_readonly());
+                // PHP 8.4 hook-modifier validity, checked here (before the
+                // class-level abstract enforcement) so the property-specific fatal
+                // wins, matching PHP's compile order.
+                let is_private = matches!(visibility, Visibility::Private);
+                let is_abstract = h.modifiers.iter().any(|m| m.is_abstract());
+                // `final` on the property itself vs on an individual hook
+                // (`{ final get; }`) yields different diagnostics.
+                let prop_final = h.modifiers.iter().any(|m| m.is_final());
+                let hook_final =
+                    h.hook_list.hooks.iter().any(|hk| hk.modifiers.iter().any(|m| m.is_final()));
+                let fatal = |message: &str| LowerError::Fatal { message: message.into(), line };
+                if h.modifiers.iter().any(|m| m.is_static()) {
+                    return Err(fatal("Cannot declare hooks for static property"));
+                }
+                if is_abstract && prop_final {
+                    return Err(fatal("Cannot use the final modifier on an abstract property"));
+                }
+                if is_abstract && is_private {
+                    return Err(fatal("Property hook cannot be both abstract and private"));
+                }
+                if is_abstract && hook_final {
+                    return Err(fatal("Property hook cannot be both abstract and final"));
+                }
+                if (prop_final || hook_final) && is_private {
+                    return Err(fatal("Property hook cannot be both final and private"));
+                }
                 let (var, default) = match &h.item {
                     PropertyItem::Abstract(a) => (&a.variable, None),
                     PropertyItem::Concrete(c) => (&c.variable, Some(self.lower_expr(c.value)?)),
@@ -1041,6 +1067,19 @@ impl<'f> Lowerer<'f> {
         let mut backed = false;
         let mut abstract_hooks = Vec::new();
         for hook in list.hooks.iter() {
+            // A visibility modifier on the hook itself (`public get;`) is invalid —
+            // the hook inherits the property's visibility (PHP 8.4).
+            if let Some(m) = hook.modifiers.iter().find(|m| m.is_visibility()) {
+                let kw = match m {
+                    Modifier::Protected(_) | Modifier::ProtectedSet(_) => "protected",
+                    Modifier::Private(_) | Modifier::PrivateSet(_) => "private",
+                    _ => "public",
+                };
+                return Err(LowerError::Fatal {
+                    message: format!("Cannot use the {kw} modifier on a property hook"),
+                    line,
+                });
+            }
             // `&get`/`&set` (by-reference) hooks are out of this step's scope.
             if hook.ampersand.is_some() {
                 return Err(LowerError::Unsupported { what: "by-reference property hook", line });
