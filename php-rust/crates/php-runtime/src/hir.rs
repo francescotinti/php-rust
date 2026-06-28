@@ -40,6 +40,14 @@ pub struct Program {
     /// name resolution (compile-time and runtime) skips them. A simple prefix count
     /// can't express this because such declarations interleave with body lowering.
     pub conditional_fns: std::collections::HashSet<usize>,
+    /// Indices into `classes` that are **conditional** declarations (a `class` /
+    /// `interface` / `enum` inside a branch/block or a function/method body): the
+    /// class body is compiled eagerly (so it has a stable `ClassId`), but its name
+    /// is not registered until its [`StmtKind::DeclareClass`] runs. Name resolution
+    /// (compile-time `class_index` and the runtime clone) skips these, so a `new X`
+    /// / static reference before the declaration resolves dynamically (autoload or
+    /// "Class not found"), exactly as PHP defers a conditional class to run time.
+    pub conditional_classes: std::collections::HashSet<usize>,
     /// Anonymous functions and arrow functions, lowered into one flat table
     /// (step 18, D-18.2). A [`ExprKind::Closure`] selects its body by index;
     /// closures nest by appending to this same vector.
@@ -558,6 +566,11 @@ pub enum StmtKind {
     /// branch/block — not hoisted). `idx` is in [`Program::functions`], at or past
     /// [`Program::hoisted_fn_count`].
     DeclareFn(usize),
+    /// Conditional class/interface/enum declaration: register `classes[idx]`'s name
+    /// in the runtime class index when this statement is reached (a declaration
+    /// inside a branch/block — not hoisted). `idx` is in [`Program::classes`] and is
+    /// listed in [`Program::conditional_classes`].
+    DeclareClass(usize),
 }
 
 /// One `catch (T1 | T2 $e) { body }` clause (step 20). `types` are the caught

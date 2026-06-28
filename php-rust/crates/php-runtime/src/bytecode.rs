@@ -453,6 +453,11 @@ pub enum Op {
     /// function table so it becomes callable by name from here on. Re-declaring an
     /// already-defined function is the PHP "Cannot redeclare function" fatal.
     DeclareFn { func: u32 },
+    /// `[] -> []` — declare conditional class/interface/enum `classes[class]` (a
+    /// declaration statement reached inside a branch/block): register its name in
+    /// the runtime class index so it resolves by name from here on. Re-declaring an
+    /// already-defined name is the PHP "Cannot declare class … already in use" fatal.
+    DeclareClass { class: ClassId },
     /// `[arg0, …, arg{argc-1}] -> [result]` — call the by-value builtin named
     /// `name` (resolved in the [`crate::builtin::Registry`] at run time, as the
     /// tree-walker does). Arguments are popped into a `&[Zval]`; the builtin runs
@@ -1224,6 +1229,12 @@ pub struct Module {
     /// resolvable by name until their [`Op::DeclareFn`] runs (which registers them
     /// in the VM's runtime function table), so name resolution skips these indices.
     pub conditional_fns: std::collections::HashSet<usize>,
+    /// Indices into `classes` that are **conditional** declarations (a class /
+    /// interface / enum statement inside a branch/block or a function/method body):
+    /// not resolvable by name until their [`Op::DeclareClass`] runs (which registers
+    /// the name in the VM's runtime class index), so the eager `class_index` and its
+    /// runtime clone skip these indices.
+    pub conditional_classes: std::collections::HashSet<usize>,
     /// Anonymous / arrow-function bodies — same index space as
     /// [`crate::hir::Program::closures`].
     pub closures: Vec<Func>,

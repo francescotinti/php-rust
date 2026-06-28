@@ -78,6 +78,12 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
     // declaration of a name wins (PHP forbids redeclaration).
     let mut class_index: HashMap<Vec<u8>, ClassId> = HashMap::new();
     for (i, cd) in program.classes.iter().enumerate() {
+        // A conditional declaration is not resolvable by name until its
+        // `Op::DeclareClass` runs, so it stays out of the eager index (its
+        // `new X` / static reference resolves dynamically at run time).
+        if program.conditional_classes.contains(&i) {
+            continue;
+        }
         class_index.entry(cd.name.to_ascii_lowercase()).or_insert(i);
     }
     let ctx = ProgramCtx {
@@ -121,6 +127,7 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
         main,
         functions,
         conditional_fns: program.conditional_fns.clone(),
+        conditional_classes: program.conditional_classes.clone(),
         closures,
         classes,
         file: program.file.clone(),
@@ -1022,6 +1029,9 @@ impl<'a> FnCompiler<'a> {
             StmtKind::Nop => {}
             StmtKind::DeclareFn(idx) => {
                 self.emit(Op::DeclareFn { func: *idx as u32 });
+            }
+            StmtKind::DeclareClass(idx) => {
+                self.emit(Op::DeclareClass { class: *idx });
             }
             StmtKind::Echo(values) => {
                 for e in values {

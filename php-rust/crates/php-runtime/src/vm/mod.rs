@@ -2522,6 +2522,25 @@ impl<'m> Vm<'m> {
                     }
                     self.linked_functions.insert(name.to_ascii_lowercase(), (m, idx));
                 }
+                Op::DeclareClass { class } => {
+                    // A conditional class/interface/enum statement was reached:
+                    // register its name in the runtime class index so it resolves by
+                    // name (and `class_exists` reports it) from here on. The op's id
+                    // was already relocated to the global table, so it indexes
+                    // `self.classes` directly. A name already in use is the PHP fatal.
+                    let cid = class;
+                    let cc = self.classes[cid];
+                    let key = cc.name.to_ascii_lowercase();
+                    if self.class_index.contains_key(&key) {
+                        let kind = if cc.enum_cases.is_empty() { "class" } else { "enum" };
+                        return Err(PhpError::Error(format!(
+                            "Cannot declare {} {}, because the name is already in use",
+                            kind,
+                            String::from_utf8_lossy(&cc.name)
+                        )));
+                    }
+                    self.class_index.insert(key, cid);
+                }
                 Op::Call { func, argc } => {
                     let m = self.frames[top].module;
                     let callee = &m.functions[func as usize];
@@ -4146,12 +4165,18 @@ impl<'m> Vm<'m> {
 
         let leaked: &'m Module = Box::leak(Box::new(module));
         // Append the new user classes to the global table (dedup'd prelude /
-        // caller-image classes were already mapped to existing ids).
+        // caller-image classes were already mapped to existing ids). A conditional
+        // declaration still gets its global slot/id (so its ops relocate), but its
+        // name is *not* registered until the unit body reaches its `Op::DeclareClass`
+        // — so a guarded polyfill (`if (!class_exists(X)) { class X {} }`) respects
+        // its condition, exactly as conditional functions do above.
         for &i in &new_locals {
             self.classes.push(&leaked.classes[i]);
             self.class_module.push(leaked);
-            self.class_index
-                .insert(leaked.classes[i].name.to_ascii_lowercase(), self.classes.len() - 1);
+            if !leaked.conditional_classes.contains(&i) {
+                self.class_index
+                    .insert(leaked.classes[i].name.to_ascii_lowercase(), self.classes.len() - 1);
+            }
         }
 
         let saved = self.module;
@@ -9234,6 +9259,7 @@ fn relocate_func(func: &mut Func, remap: &[ClassId], static_base: usize) {
         match op {
             Op::Alloc { class }
             | Op::InstanceOf { class }
+            | Op::DeclareClass { class }
             | Op::InvokeMethod { class, .. }
             | Op::ClassConst { class, .. }
             | Op::EnumCase { class, .. } => *class = remap[*class],

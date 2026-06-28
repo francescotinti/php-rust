@@ -251,39 +251,35 @@ impl<'f> Lowerer<'f> {
                 StmtKind::DeclareFn(idx)
             }
 
-            // A class declaration carries no runtime behaviour: the top-level
-            // ones were already hoisted into `classes` (step 19, D-19.3). A class
-            // nested inside a branch/block is a conditional declaration, outside
-            // Tier-1 scope.
+            // A class declaration: the top-level ones were already hoisted into
+            // `classes` (step 19, D-19.3), so the statement is a no-op. A class
+            // nested inside a branch/block was *not* hoisted (its name is absent
+            // from `class_index`); compile its body now (appended past the hoisted
+            // watermark) and emit a runtime `DeclareClass` that registers its name
+            // when this statement is reached — PHP's conditional class declaration.
             Statement::Class(class) => {
                 let key = join_ns(&self.cur_namespace, class.name.value).to_ascii_lowercase();
                 if self.class_index.contains_key(&key) {
                     return Ok(None);
                 }
-                return Err(LowerError::Unsupported {
-                    what: "conditional class declaration",
-                    line,
-                });
+                let decl = self.lower_class(class)?;
+                StmtKind::DeclareClass(self.push_conditional_class(decl))
             }
             Statement::Interface(iface) => {
                 let key = join_ns(&self.cur_namespace, iface.name.value).to_ascii_lowercase();
                 if self.class_index.contains_key(&key) {
                     return Ok(None);
                 }
-                return Err(LowerError::Unsupported {
-                    what: "conditional interface declaration",
-                    line,
-                });
+                let decl = self.lower_interface(iface)?;
+                StmtKind::DeclareClass(self.push_conditional_class(decl))
             }
             Statement::Enum(en) => {
                 let key = join_ns(&self.cur_namespace, en.name.value).to_ascii_lowercase();
                 if self.class_index.contains_key(&key) {
                     return Ok(None);
                 }
-                return Err(LowerError::Unsupported {
-                    what: "conditional enum declaration",
-                    line,
-                });
+                let decl = self.lower_enum(en)?;
+                StmtKind::DeclareClass(self.push_conditional_class(decl))
             }
             // A trait declaration carries no runtime behaviour: the top-level
             // ones were lowered into `self.traits` and flattened into their
@@ -407,6 +403,18 @@ impl<'f> Lowerer<'f> {
         self.fn_index.insert(key, idx);
         self.functions.push(decl);
         Ok(())
+    }
+
+    /// Append a conditionally-declared class/interface/enum body to the global
+    /// class table (past the hoisted watermark) and record its index as conditional,
+    /// returning that index for the emitted [`StmtKind::DeclareClass`]. Its name is
+    /// deliberately *not* inserted into `class_index`, so it stays unresolvable by
+    /// name until its `DeclareClass` runs (mirrors `conditional_fns`).
+    fn push_conditional_class(&mut self, decl: ClassDecl) -> usize {
+        let idx = self.classes.len();
+        self.classes.push(decl);
+        self.conditional_classes.insert(idx);
+        idx
     }
 
     // --- classes (step 19) ---

@@ -214,6 +214,7 @@ fn lower_source_impl(
         slots: low.globals.slots,
         functions: low.functions,
         conditional_fns: low.conditional_fns,
+        conditional_classes: low.conditional_classes,
         closures: low.closures,
         static_count: low.static_count,
         strict: low.strict,
@@ -1238,6 +1239,9 @@ struct Lowerer<'f> {
     /// Indices into `functions` that are *conditional* declarations (registered at
     /// run time by `DeclareFn`, not resolvable by name eagerly).
     conditional_fns: HashSet<usize>,
+    /// Indices into `classes` that are *conditional* declarations (registered at
+    /// run time by `DeclareClass`, not resolvable by name eagerly).
+    conditional_classes: HashSet<usize>,
     /// Anonymous/arrow function bodies, in one flat table (step 18, D-18.2). An
     /// [`ExprKind::Closure`] indexes into this by position.
     closures: Vec<FnDecl>,
@@ -1340,6 +1344,7 @@ impl<'f> Lowerer<'f> {
             functions: Vec::new(),
             fn_index: HashMap::new(),
             conditional_fns: HashSet::new(),
+            conditional_classes: HashSet::new(),
             closures: Vec::new(),
             prog_name: prog_name.into(),
             fn_by_ref: false,
