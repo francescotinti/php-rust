@@ -679,6 +679,22 @@ impl<'f> Lowerer<'f> {
                 });
             }
         }
+        // Abstract property hooks this class declares directly (`public abstract $p
+        // { get; }`, PHP 8.4): each is a contract `$p::get`/`$p::set` that, like an
+        // abstract method, must not appear in a non-abstract class. (Inherited
+        // abstract hooks from a parent are a later sub-step.)
+        let abstract_hook_req: Vec<Box<[u8]>> = props
+            .iter()
+            .flat_map(|p| {
+                p.abstract_hooks.iter().map(move |h| {
+                    let mut v = b"$".to_vec();
+                    v.extend_from_slice(&p.name);
+                    v.extend_from_slice(b"::");
+                    v.extend_from_slice(h);
+                    v.into_boxed_slice()
+                })
+            })
+            .collect();
         // A concrete class must implement every abstract method it carries (own or
         // trait-supplied); otherwise PHP fatals at link time (D-21.11). Abstract
         // classes and interfaces legitimately leave them open.
@@ -691,6 +707,13 @@ impl<'f> Lowerer<'f> {
                 {
                     continue;
                 }
+                if !missing.iter().any(|m| m.eq_ignore_ascii_case(req)) {
+                    missing.push(req);
+                }
+            }
+            // An abstract hook declared here is never implemented here (it has no
+            // body), so every one is reported (PHP counts it as an abstract method).
+            for req in &abstract_hook_req {
                 if !missing.iter().any(|m| m.eq_ignore_ascii_case(req)) {
                     missing.push(req);
                 }
@@ -943,13 +966,15 @@ impl<'f> Lowerer<'f> {
                     PropertyItem::Concrete(c) => (&c.variable, Some(self.lower_expr(c.value)?)),
                 };
                 let name: Box<[u8]> = strip_dollar(var.name).into();
-                let (get_hook, set_hook, hooks_backing) =
+                let (get_hook, set_hook, hooks_backing, abstract_hooks) =
                     self.lower_hooks(&h.hook_list, &name, line)?;
                 // A property is backed iff it has a default, or a hook reads/writes
                 // its own `$this->name`; otherwise it is virtual (no storage).
                 let backed = default.is_some() || hooks_backing;
                 let hint = self.lower_prop_hint(h.hint.as_ref(), &default);
-                out.push(PropDecl { name, visibility, default, get_hook, set_hook, backed, readonly, hint });
+                out.push(PropDecl {
+                    name, visibility, default, get_hook, set_hook, backed, readonly, hint, abstract_hooks,
+                });
                 return Ok(());
             }
         };
@@ -979,6 +1004,7 @@ impl<'f> Lowerer<'f> {
                     backed: true,
                     readonly,
                     hint,
+                    abstract_hooks: Vec::new(),
                 });
             }
         }
@@ -1009,16 +1035,23 @@ impl<'f> Lowerer<'f> {
         list: &PropertyHookList,
         prop_name: &[u8],
         line: Line,
-    ) -> Result<(Option<FnDecl>, Option<FnDecl>, bool), LowerError> {
+    ) -> Result<(Option<FnDecl>, Option<FnDecl>, bool, Vec<Box<[u8]>>), LowerError> {
         let mut get_hook = None;
         let mut set_hook = None;
         let mut backed = false;
+        let mut abstract_hooks = Vec::new();
         for hook in list.hooks.iter() {
             // `&get`/`&set` (by-reference) hooks are out of this step's scope.
             if hook.ampersand.is_some() {
                 return Err(LowerError::Unsupported { what: "by-reference property hook", line });
             }
             let is_set = hook.name.value.eq_ignore_ascii_case(b"set");
+            // An abstract hook (`get;` / `set;`) is a contract with no body: record
+            // its name for abstract-method enforcement and emit no `FnDecl`.
+            if matches!(hook.body, PropertyHookBody::Abstract(_)) {
+                abstract_hooks.push((if is_set { &b"set"[..] } else { &b"get"[..] }).into());
+                continue;
+            }
             let (fd, hook_backed) = self.lower_one_hook(hook, prop_name, is_set, line)?;
             backed |= hook_backed;
             if is_set {
@@ -1027,7 +1060,7 @@ impl<'f> Lowerer<'f> {
                 get_hook = Some(fd);
             }
         }
-        Ok((get_hook, set_hook, backed))
+        Ok((get_hook, set_hook, backed, abstract_hooks))
     }
 
     /// Lower a single property hook body into an [`FnDecl`] in a fresh local scope
@@ -1222,6 +1255,7 @@ impl<'f> Lowerer<'f> {
                 backed: p.backed,
                 readonly: p.readonly,
                 hint,
+                abstract_hooks: Vec::new(),
             });
         }
         validate_goto(&body)?; // step 45: function-scoped goto/label check
@@ -1369,9 +1403,11 @@ impl<'f> Lowerer<'f> {
                 // also declares an instance property assigned from the param. The
                 // promoted property may itself carry hooks (`public $x { get … }`).
                 let pname: Box<[u8]> = strip_dollar(p.variable.name).into();
-                let (get_hook, set_hook, backed) = match &p.hooks {
+                // A promoted constructor property cannot be abstract (the class is
+                // instantiable), so any abstract-hook list is ignored here.
+                let (get_hook, set_hook, backed, _abstract) = match &p.hooks {
                     Some(list) => self.lower_hooks(list, &pname, _line)?,
-                    None => (None, None, true),
+                    None => (None, None, true, Vec::new()),
                 };
                 self.promoted.push(PromotedParam {
                     name: pname,

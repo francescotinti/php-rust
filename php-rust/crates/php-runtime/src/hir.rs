@@ -297,6 +297,12 @@ pub struct PropDecl {
     /// `FnDecl` has one parameter (`$value` or the explicit `set($x)` param).
     pub get_hook: Option<FnDecl>,
     pub set_hook: Option<FnDecl>,
+    /// Abstract property hooks declared as a contract only (`public abstract $p {
+    /// get; set; }`, PHP 8.4) — the hook names (`get`/`set`) with no body. A
+    /// concrete subclass must implement them; a non-abstract class that declares
+    /// one is itself a fatal (treated like an abstract method). Empty for an
+    /// ordinary or fully-concrete property.
+    pub abstract_hooks: Vec<Box<[u8]>>,
     /// Whether the property has backing storage. A plain property is backed; a
     /// hooked property is *backed* only if a hook body reads/writes its own
     /// `$this->name` (else it is *virtual*: no slot, omitted from `var_dump`).
