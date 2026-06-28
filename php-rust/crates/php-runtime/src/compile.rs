@@ -1469,7 +1469,8 @@ impl<'a> FnCompiler<'a> {
             }
             ExprKind::ListAssign { temp, rhs, assigns } => {
                 // `[$a,$b] = rhs`: stash rhs once, run each sub-assignment (which
-                // reads `temp[key]`), then leave the stored rhs as the value.
+                // reads `temp[key]`, or for a `&$x` target aliases the real source
+                // element), then leave the stored rhs as the value.
                 self.expr(rhs)?;
                 self.emit(Op::StoreSlot(*temp));
                 for a in assigns {

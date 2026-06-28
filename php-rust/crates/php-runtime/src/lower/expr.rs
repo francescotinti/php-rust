@@ -1231,7 +1231,10 @@ impl<'f> Lowerer<'f> {
     }
 
     /// Lower `[targets] = rhs` / `list(targets) = rhs` array destructuring (step
-    /// 51): evaluate `rhs` once, then destructure it into the target list.
+    /// 51): evaluate `rhs` once, then destructure it into the target list. When the
+    /// pattern binds any target by reference (`[&$x] = …`) and `rhs` is itself a
+    /// place, the source place is threaded through so the references write back into
+    /// the source array (list-reference semantics).
     pub(super) fn lower_destructure_assign<'a, I>(
         &mut self,
         elements: I,
@@ -1239,45 +1242,66 @@ impl<'f> Lowerer<'f> {
         line: Line,
     ) -> Result<ExprKind, LowerError>
     where
-        I: Iterator<Item = &'a ArrayElement<'a>>,
+        I: Iterator<Item = &'a ArrayElement<'a>> + Clone,
     {
+        // A by-reference target needs the source as a navigable place; only attempt
+        // it when `rhs` is an lvalue (a non-place rhs — e.g. `[&$v] = f()` — aliases
+        // the value copy instead, with no writeback).
+        let src_place = if elements.clone().any(elem_has_ref) {
+            self.lower_place(rhs, line).ok()
+        } else {
+            None
+        };
         let source = self.lower_expr(rhs)?;
-        let kind = self.destructure_into(elements, source, line)?.kind;
+        let kind = self.destructure_into(elements, source, src_place, line)?.kind;
         Ok(kind)
     }
 
     /// Build a [`ExprKind::ListAssign`] that destructures the already-lowered
     /// `source` value into `elements`. Each target reads `temp[key]`; a nested
-    /// list target recurses (its source is that `temp[key]`).
+    /// list target recurses (its source is that `temp[key]`). When `src_place` is
+    /// given and the pattern (here or nested) binds a target by reference, `temp` is
+    /// aliased to `src_place` so a `&temp[key]` promotes the real source element.
     fn destructure_into<'a, I>(
         &mut self,
         elements: I,
         source: Expr,
+        src_place: Option<Place>,
         line: Line,
     ) -> Result<Expr, LowerError>
     where
-        I: Iterator<Item = &'a ArrayElement<'a>>,
+        I: Iterator<Item = &'a ArrayElement<'a>> + Clone,
     {
         let temp = self.fresh_list_temp();
         let mut assigns = Vec::new();
         let mut pos: i64 = 0;
         for el in elements {
-            match el {
+            let (target, key) = match el {
                 // `[, $b]`: a hole still advances the positional index.
-                ArrayElement::Missing(_) => pos += 1,
+                ArrayElement::Missing(_) => {
+                    pos += 1;
+                    continue;
+                }
                 ArrayElement::Value(v) => {
                     let key = Expr { line, kind: ExprKind::Int(pos) };
                     pos += 1;
-                    assigns.push(self.destructure_target(v.value, temp, key, line)?);
+                    (v.value, key)
                 }
-                ArrayElement::KeyValue(kv) => {
-                    let key = self.lower_expr(kv.key)?;
-                    assigns.push(self.destructure_target(kv.value, temp, key, line)?);
-                }
+                ArrayElement::KeyValue(kv) => (kv.value, self.lower_expr(kv.key)?),
                 ArrayElement::Variadic(_) => {
                     return Err(LowerError::Unsupported { what: "spread in destructuring", line })
                 }
-            }
+            };
+            // The real source element for this target: `rhs_place[key]` when `rhs`
+            // is a place (so a `&$x` leaf promotes the actual element, navigating
+            // only the leaf — not the intermediate levels). `None` when `rhs` was a
+            // value (refs then alias `temp[key]` instead, with no writeback).
+            let child_src = src_place.as_ref().map(|p| {
+                let mut q = p.clone();
+                q.steps.push(PlaceStep::Index(key.clone()));
+                q
+            });
+            assigns.push(self.destructure_target(target, temp, key, child_src, line)?);
         }
         Ok(Expr {
             line,
@@ -1285,20 +1309,32 @@ impl<'f> Lowerer<'f> {
         })
     }
 
-    /// Build the assignment for one destructuring target `tgt = temp[key]`. A
-    /// nested `[...]`/`list(...)` recurses; a by-reference target `&$x` is deferred.
+    /// Build the assignment for one destructuring target. A nested `[...]`/`list(...)`
+    /// recurses; a by-reference leaf `&$x` binds `$x` to the real source element
+    /// `src` (the original `$arr[key]` when known, else the value copy `temp[key]`);
+    /// a plain leaf copies `temp[key]`.
     fn destructure_target(
         &mut self,
         target: &Expression,
         temp: Slot,
         key: Expr,
+        src: Option<Place>,
         line: Line,
     ) -> Result<Expr, LowerError> {
-        // `[&$x] = …` would have to alias the source's element, but the temp holds
-        // a value copy — defer it rather than silently diverge.
+        // `[&$x] = …`: bind `$x` as a reference to the source element. When `src`
+        // names the real source array element, the reference is promoted there
+        // (list-reference writeback); otherwise it aliases the value copy `temp[key]`.
         if let Expression::UnaryPrefix(u) = target {
             if let UnaryPrefixOperator::Reference(_) = u.operator {
-                return Err(LowerError::Unsupported { what: "by-reference destructuring", line });
+                let tgt_place = self.lower_place(u.operand, line)?;
+                let source = src.unwrap_or_else(|| Place {
+                    base: PlaceBase::Local(temp),
+                    steps: vec![PlaceStep::Index(key.clone())],
+                });
+                return Ok(Expr {
+                    line,
+                    kind: ExprKind::AssignRef { target: tgt_place, source },
+                });
             }
         }
         // The value read `temp[key]`.
@@ -1309,12 +1345,13 @@ impl<'f> Lowerer<'f> {
                 index: Box::new(key),
             },
         };
-        // A nested list/array target destructures `temp[key]` in turn.
+        // A nested list/array target destructures `temp[key]` in turn; its real
+        // source (for by-reference grandchildren) is `src` = `rhs_place[key]`.
         match target {
-            Expression::Array(arr) => return self.destructure_into(arr.elements.iter(), elem, line),
-            Expression::List(l) => return self.destructure_into(l.elements.iter(), elem, line),
+            Expression::Array(arr) => return self.destructure_into(arr.elements.iter(), elem, src, line),
+            Expression::List(l) => return self.destructure_into(l.elements.iter(), elem, src, line),
             Expression::LegacyArray(la) => {
-                return self.destructure_into(la.elements.iter(), elem, line)
+                return self.destructure_into(la.elements.iter(), elem, src, line)
             }
             _ => {}
         }
@@ -1343,13 +1380,25 @@ impl<'f> Lowerer<'f> {
         ) {
             return Ok(None);
         }
+        // A by-reference target inside a `foreach` value pattern (`foreach ($a as
+        // [&$x])`) needs the loop to iterate by reference so the destructure can
+        // write back; that combination is unsupported, so keep the whole test a skip
+        // rather than silently iterating a value copy (no writeback).
+        if target_has_ref(target) {
+            return Err(LowerError::Unsupported { what: "by-reference destructuring", line });
+        }
         let temp = self.fresh_list_temp();
         let src = Expr { line, kind: ExprKind::Var(temp) };
+        // `foreach` binds the element into `temp` by value, so list-reference
+        // targets inside the pattern have no source place to write back to (passed
+        // as `None`); a `&$x` leaf there stays unsupported via `lower_place`.
         let kind = match target {
-            Expression::Array(arr) => self.destructure_into(arr.elements.iter(), src, line)?.kind,
-            Expression::List(l) => self.destructure_into(l.elements.iter(), src, line)?.kind,
+            Expression::Array(arr) => {
+                self.destructure_into(arr.elements.iter(), src, None, line)?.kind
+            }
+            Expression::List(l) => self.destructure_into(l.elements.iter(), src, None, line)?.kind,
             Expression::LegacyArray(la) => {
-                self.destructure_into(la.elements.iter(), src, line)?.kind
+                self.destructure_into(la.elements.iter(), src, None, line)?.kind
             }
             _ => unreachable!(),
         };
@@ -1358,5 +1407,27 @@ impl<'f> Lowerer<'f> {
             kind: crate::hir::StmtKind::Expr(Expr { line, kind }),
         };
         Ok(Some((temp, stmt)))
+    }
+}
+
+/// Whether a destructuring element binds (or nests) a by-reference target
+/// (`&$x`) — decides whether `lower_destructure_assign` must thread the source as
+/// a place so the references can write back into it.
+fn elem_has_ref(el: &ArrayElement) -> bool {
+    match el {
+        ArrayElement::Value(v) => target_has_ref(v.value),
+        ArrayElement::KeyValue(kv) => target_has_ref(kv.value),
+        _ => false,
+    }
+}
+
+/// Whether a destructuring *target* is, or recursively contains, a `&$x` leaf.
+fn target_has_ref(target: &Expression) -> bool {
+    match target {
+        Expression::UnaryPrefix(u) => matches!(u.operator, UnaryPrefixOperator::Reference(_)),
+        Expression::Array(arr) => arr.elements.iter().any(elem_has_ref),
+        Expression::List(l) => l.elements.iter().any(elem_has_ref),
+        Expression::LegacyArray(la) => la.elements.iter().any(elem_has_ref),
+        _ => false,
     }
 }

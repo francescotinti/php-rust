@@ -752,6 +752,12 @@ pub enum ExprKind {
     /// reads `temp[key]` and writes one (possibly nested) sub-target, and the whole
     /// expression yields the stored `rhs` value (`$x = [$a,$b] = $arr` sets `$x` to
     /// the array).
+    ///
+    /// By-reference destructuring (`[&$a, &$b] = $arr`): a `&$x` sub-target lowers to
+    /// an [`ExprKind::AssignRef`] in `assigns` whose source is the real source
+    /// element (`$arr[0]`, navigated from `rhs` as a place), so the reference is
+    /// promoted in the source array — PHP's list-reference writeback. A non-place
+    /// rhs (`[&$v] = f()`) aliases the value copy in `temp` instead (no writeback).
     ListAssign {
         temp: Slot,
         rhs: Box<Expr>,
