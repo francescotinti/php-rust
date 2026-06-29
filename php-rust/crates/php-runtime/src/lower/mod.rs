@@ -964,6 +964,8 @@ class ReflectionClass {
     public function newInstanceWithoutConstructor() { return __reflect_new_no_ctor($this->name); }
     public function newLazyGhost(callable $initializer, int $options = 0) { return __reflect_new_lazy_ghost($this->name, $initializer); }
     public function newLazyProxy(callable $factory, int $options = 0) { return __reflect_new_lazy_proxy($this->name, $factory); }
+    public function resetAsLazyGhost($object, callable $initializer, int $options = 0) { return __reflect_reset_lazy($this->name, $object, false, $initializer); }
+    public function resetAsLazyProxy($object, callable $factory, int $options = 0) { return __reflect_reset_lazy($this->name, $object, true, $factory); }
     public function isUninitializedLazyObject($object) { return __lazy_is_uninitialized($object); }
     public function initializeLazyObject($object) { return __lazy_initialize($object); }
     public function isInstantiable() { return class_exists($this->name); }

@@ -6132,6 +6132,43 @@ impl<'m> Vm<'m> {
         self.alloc_lazy(cid, factory, LazyKind::Proxy)
     }
 
+
+    /// `__reflect_reset_lazy($class, $obj, $is_proxy, $init)`: reset an existing
+    /// instance back to an uninitialized lazy object (PHP 8.4
+    /// `ReflectionClass::resetAsLazyGhost` / `resetAsLazyProxy`). `$obj` must be
+    /// an instance of the reflected `$class` (or a subclass) — else a `TypeError`
+    /// naming both classes. Returns the (now lazy) object.
+    fn ho_reflect_reset_lazy(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let raw = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let key = raw.strip_prefix(b"\\").unwrap_or(&raw).to_ascii_lowercase();
+        let cid = *self.class_index.get(&key).ok_or_else(|| {
+            PhpError::Error(format!("Class \"{}\" does not exist", String::from_utf8_lossy(&raw)))
+        })?;
+        let obj = args.get(1).cloned().unwrap_or(Zval::Null);
+        let is_proxy = convert::to_bool(args.get(2).unwrap_or(&Zval::Null), &mut self.diags);
+        let op = if is_proxy { "resetAsLazyProxy" } else { "resetAsLazyGhost" };
+        let Some(rc) = deref_object(&obj) else {
+            return Err(PhpError::TypeError(format!(
+                "ReflectionClass::{op}(): Argument #1 ($object) must be of type {}, {} given",
+                String::from_utf8_lossy(&self.classes[cid].name),
+                args.get(1).unwrap_or(&Zval::Null).type_name_for_error(),
+            )));
+        };
+        let ocid = rc.borrow().class_id as usize;
+        if !is_instance_of(&self.classes, self.stringable_id, ocid, cid) {
+            return Err(PhpError::TypeError(format!(
+                "ReflectionClass::{op}(): Argument #1 ($object) must be of type {}, {} given",
+                String::from_utf8_lossy(&self.classes[cid].name),
+                String::from_utf8_lossy(&self.classes[ocid].name),
+            )));
+        }
+        let kind = if is_proxy { LazyKind::Proxy } else { LazyKind::Ghost };
+        let init = args.get(3).cloned().unwrap_or(Zval::Null);
+        // Reset on the object's *own* class layout (it may be a subclass).
+        self.install_lazy(&rc, ocid, kind, init);
+        Ok(obj)
+    }
+
     /// `__lazy_is_uninitialized($obj)`: whether `$obj` is an uninitialized lazy
     /// object — PHP 8.4 `ReflectionClass::isUninitializedLazyObject`. A ghost
     /// clears its marker on init; an initialized proxy keeps `Some(Proxy)` but
@@ -8734,31 +8771,43 @@ impl<'m> Vm<'m> {
     fn alloc_lazy(&mut self, cid: ClassId, init: Zval, kind: LazyKind) -> Result<Zval, PhpError> {
         let v = self.alloc_object(cid)?;
         if let Zval::Object(rc) = &v {
-            let cc = self.classes[cid];
-            let mut props = Props::new();
-            for (name, _c) in &cc.prop_defaults {
-                if prop_type_decl(&self.classes, cid, name).is_some() {
-                    props.set(name, Zval::Undef);
-                }
-            }
-            for name in &cc.uninit_props {
-                props.set(name, Zval::Undef);
-            }
-            // Every eligible (non-static, non-virtual) declared instance property
-            // starts lazy; `prop_defaults` already lists them flattened in
-            // declaration order. A skip / raw-set later removes one.
-            let still_lazy: Vec<Box<[u8]>> =
-                cc.prop_defaults.iter().map(|(n, _)| n.clone()).collect();
-            let oid = {
-                let mut b = rc.borrow_mut();
-                b.props = props;
-                b.lazy = Some(kind);
-                b.id
-            };
-            self.lazy_init.insert(oid, init);
-            self.lazy_props.insert(oid, still_lazy);
+            self.install_lazy(rc, cid, kind, init);
         }
         Ok(v)
+    }
+
+    /// Turn an existing object handle `rc` (of class `cid`) into an
+    /// *uninitialized* lazy object: rebuild its properties to the lazy layout
+    /// (typed → `uninitialized(T)`, untyped absent), clear any proxy instance,
+    /// set the lazy marker, and stash the initializer/factory + per-property
+    /// still-lazy set. Shared by [`Self::alloc_lazy`] (fresh alloc) and the
+    /// `resetAsLazy*` reflection path (an already-live instance).
+    fn install_lazy(&mut self, rc: &Rc<RefCell<Object>>, cid: ClassId, kind: LazyKind, init: Zval) {
+        let cc = self.classes[cid];
+        let mut props = Props::new();
+        for (name, _c) in &cc.prop_defaults {
+            if prop_type_decl(&self.classes, cid, name).is_some() {
+                props.set(name, Zval::Undef);
+            }
+        }
+        for name in &cc.uninit_props {
+            props.set(name, Zval::Undef);
+        }
+        // Every eligible (non-static, non-virtual) declared instance property
+        // starts lazy; `prop_defaults` already lists them flattened in
+        // declaration order. A skip / raw-set later removes one.
+        let still_lazy: Vec<Box<[u8]>> =
+            cc.prop_defaults.iter().map(|(n, _)| n.clone()).collect();
+        let oid = {
+            let mut b = rc.borrow_mut();
+            b.props = props;
+            b.proxy_instance = None;
+            b.lazy = Some(kind);
+            b.readonly_init.clear();
+            b.id
+        };
+        self.lazy_init.insert(oid, init);
+        self.lazy_props.insert(oid, still_lazy);
     }
 
     /// Initialize a lazy object (PHP 8.4). A **ghost** gets the class's real
@@ -9607,6 +9656,7 @@ host_builtins! {
     b"__reflect_new_no_ctor" => vm.ho_reflect_new_no_ctor(args),
     b"__reflect_new_lazy_ghost" => vm.ho_reflect_new_lazy_ghost(args),
     b"__reflect_new_lazy_proxy" => vm.ho_reflect_new_lazy_proxy(args),
+    b"__reflect_reset_lazy" => vm.ho_reflect_reset_lazy(args),
     b"__lazy_is_uninitialized" => vm.ho_lazy_is_uninitialized(args),
     b"__lazy_initialize" => vm.ho_lazy_initialize(args),
     b"__lazy_skip_init" => vm.ho_lazy_skip_init(args),
