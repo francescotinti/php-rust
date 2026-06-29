@@ -399,12 +399,21 @@ impl<'f> Lowerer<'f> {
         };
         let mut consts = Vec::new();
         let mut abstract_methods = Vec::new();
+        let mut props = Vec::new();
+        let mut static_props = Vec::new();
         for member in iface.members.iter() {
             match member {
                 ClassLikeMember::Constant(c) => self.lower_class_const(c, &mut consts)?,
                 // Interface methods are signatures only (abstract) — no body to
                 // run, but their names are reported by `get_class_methods`.
                 ClassLikeMember::Method(m) => abstract_methods.push(m.name.value.into()),
+                // PHP 8.4 interface properties (`public $p { get; set; }`): a hook
+                // contract every implementer must satisfy. Lowered like an
+                // abstract-class property — its `get;`/`set;` become abstract hooks
+                // and the interface (always abstract) carries them as a contract.
+                ClassLikeMember::Property(p) => {
+                    self.lower_property(p, &mut props, &mut static_props, line)?
+                }
                 _ => {
                     return Err(LowerError::Unsupported {
                         what: "interface member",
@@ -420,8 +429,8 @@ impl<'f> Lowerer<'f> {
             is_abstract: true,
             is_final: false,
             is_interface: true,
-            props: Vec::new(),
-            static_props: Vec::new(),
+            props,
+            static_props,
             consts,
             methods: Vec::new(),
             abstract_methods,
