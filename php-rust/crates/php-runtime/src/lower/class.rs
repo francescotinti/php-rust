@@ -1161,6 +1161,18 @@ impl<'f> Lowerer<'f> {
                     }
                 }
             } else {
+                // A `get` hook takes no parameters — even an empty `get()` list is
+                // a compile error (PHP 8.4, `zend_compile.c`).
+                if hook.parameter_list.is_some() {
+                    return Err(LowerError::Fatal {
+                        message: format!(
+                            "get hook of property {}::${} must not have a parameter list",
+                            String::from_utf8_lossy(self.cur_class.as_deref().unwrap_or(b"")),
+                            String::from_utf8_lossy(prop_name),
+                        ),
+                        line,
+                    });
+                }
                 Vec::new()
             };
             let body = match body_ast {

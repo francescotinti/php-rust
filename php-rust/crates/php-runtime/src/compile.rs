@@ -330,16 +330,25 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
     // most-derived `get`/`set` overrides the inherited one. A *virtual* hooked
     // property (no backing) is excluded from the object layout below.
     let mut prop_hooks: HashMap<Box<[u8]>, PropHooks> = HashMap::new();
+    // Property names that have backing storage somewhere in the chain (a plain
+    // declaration, or a backed hooked one). A hooked property that overrides an
+    // inherited *plain* property is itself backed — so it is not "virtual" and a
+    // hook-less read/write reaches the backing rather than being write/read-only.
+    let mut backed_seen: HashSet<Box<[u8]>> = HashSet::new();
     for &x in &chain {
         let cname = PhpStr::new(ctx.classes[x].name.to_vec());
         for p in &ctx.classes[x].props {
             if p.get_hook.is_some() || p.set_hook.is_some() {
+                let inherited_backed = backed_seen.contains(p.name.as_ref());
                 let entry = prop_hooks.entry(p.name.clone()).or_insert(PropHooks {
                     get: None,
                     set: None,
                     backed: p.backed,
                 });
-                entry.backed = p.backed;
+                entry.backed = p.backed || inherited_backed;
+                if entry.backed {
+                    backed_seen.insert(p.name.clone());
+                }
                 // Compile each hook in its *declaring* class's context (so `self::`
                 // resolves there), even though it is stored in the leaf's table.
                 if let Some(g) = &p.get_hook {
@@ -351,6 +360,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
             } else {
                 // A plain (re)declaration shadows any inherited hook and is backed.
                 prop_hooks.remove(p.name.as_ref());
+                backed_seen.insert(p.name.clone());
             }
             // A virtual hooked property has no backing storage: keep it out of the
             // instance layout (not allocated, not dumped). Backed ones stay.

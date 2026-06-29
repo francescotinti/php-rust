@@ -3124,6 +3124,14 @@ impl<'m> Vm<'m> {
                                 self.push_hook(func, target.clone(), oid, &name, None);
                                 continue;
                             }
+                            // A virtual hooked property with no get hook is write-only.
+                            if self.is_virtual_hooked(cid, &name) {
+                                return Err(PhpError::Error(format!(
+                                    "Property {}::${} is write-only",
+                                    String::from_utf8_lossy(&self.classes[cid].name),
+                                    String::from_utf8_lossy(&name),
+                                )));
+                            }
                         }
                         if let Some((defc, midx, oid)) =
                             self.magic_applies(o, &name, cur, MagicKind::Get, b"__get")
@@ -3262,6 +3270,14 @@ impl<'m> Vm<'m> {
                                 self.frames[top].stack.push(value.clone());
                                 self.push_hook(func, target.clone(), oid, &name, Some(value));
                                 continue;
+                            }
+                            // A virtual hooked property with no set hook is read-only.
+                            if self.is_virtual_hooked(cid, &name) {
+                                return Err(PhpError::Error(format!(
+                                    "Property {}::${} is read-only",
+                                    String::from_utf8_lossy(&self.classes[cid].name),
+                                    String::from_utf8_lossy(&name),
+                                )));
                             }
                         }
                         if let Some((defc, midx, oid)) =
@@ -8901,6 +8917,19 @@ impl<'m> Vm<'m> {
     /// access to that property must reach the backing store directly (step 50).
     fn hook_guarded(&self, oid: u32, name: &[u8]) -> bool {
         self.magic_guard.contains(&(oid, MagicKind::Hook, name.to_vec()))
+    }
+
+    /// Whether `name` on `cid` is a *virtual* hooked property — it has hooks but
+    /// no backing slot. Such a property is read-only when it has no `set` hook
+    /// (a direct write throws "is read-only") and write-only when it has no `get`
+    /// hook (a direct read throws "is write-only"), PHP 8.4. A *backed* hooked
+    /// property instead reads/writes its backing store when a hook is absent.
+    fn is_virtual_hooked(&self, cid: usize, name: &[u8]) -> bool {
+        self.classes[cid]
+            .prop_info
+            .get(name)
+            .and_then(|pi| pi.hooks.as_ref())
+            .map_or(false, |h| !h.backed)
     }
 
     /// Dispatch a property `get`/`set` hook as a frame, mirroring
