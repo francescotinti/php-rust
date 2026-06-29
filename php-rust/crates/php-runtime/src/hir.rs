@@ -885,6 +885,18 @@ pub enum ExprKind {
         named: Vec<(Box<[u8]>, Expr)>,
     },
 
+    /// PHP 8.4 parent property-hook call: `parent::$prop::get()` /
+    /// `parent::$prop::set($value)` (also `self::`/`static::`/`Named::`). Invokes
+    /// the named class's `get`/`set` hook for `prop` on the current `$this`; when
+    /// that class's property has no user hook the *implicit* hook reads/writes the
+    /// backing store directly. `set` carries the new value as its single argument.
+    ParentHookCall {
+        class: ClassRef,
+        prop: Box<[u8]>,
+        set: bool,
+        args: Vec<Expr>,
+    },
+
     /// `Class::CONST` / `self::CONST` / `parent::CONST` / `static::CONST`, and the
     /// special `Class::class` (which yields the class name string), step 19-4,
     /// D-19.15.

@@ -1878,6 +1878,24 @@ impl<'a> FnCompiler<'a> {
                     }
                 }
             }
+            ExprKind::ParentHookCall { class, prop, set, args } => {
+                // `parent::$prop::get()` / `parent::$prop::set($v)` (PHP 8.4). The
+                // class resolves like any `::`-qualified op; a dynamic class
+                // (`$cls::$prop::get()`) is not supported.
+                if self.is_runtime_class(class) {
+                    return Err(CompileError::Unsupported(
+                        "parent hook call on a dynamic class".into(),
+                    ));
+                }
+                let (target, _) = self.resolve_target(class)?;
+                self.push_value_args(args)?;
+                self.emit(Op::HookCall {
+                    target,
+                    prop: prop.clone(),
+                    set: *set,
+                    argc: args.len() as u32,
+                });
+            }
             ExprKind::ClassConst { class, name } => self.class_const(class, name)?,
             ExprKind::StaticProp { class, name } => {
                 if self.is_runtime_class(class) {
@@ -3976,6 +3994,7 @@ fn expr_name(k: &ExprKind) -> String {
         ExprKind::PropGetDyn { .. } => "PropGetDyn",
         ExprKind::This => "This",
         ExprKind::StaticCall { .. } => "StaticCall",
+        ExprKind::ParentHookCall { .. } => "ParentHookCall",
         ExprKind::ClassConst { .. } => "ClassConst",
         ExprKind::StaticProp { .. } => "StaticProp",
         ExprKind::StaticPropAssign { .. } => "StaticPropAssign",

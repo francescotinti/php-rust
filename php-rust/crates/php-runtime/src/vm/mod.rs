@@ -3633,6 +3633,73 @@ impl<'m> Vm<'m> {
                     }
                     self.dispatch_static_call(top, start, &method, forwarding, args)?;
                 }
+                Op::HookCall { target, prop, set, argc } => {
+                    // PHP 8.4 `parent::$prop::get()` / `parent::$prop::set($v)`.
+                    let args = self.pop_keys(top, argc);
+                    let recv = self.frames[top].this.clone().ok_or_else(|| {
+                        PhpError::Error(format!(
+                            "Cannot call ::${}::{} outside object context",
+                            String::from_utf8_lossy(&prop),
+                            if set { "set" } else { "get" },
+                        ))
+                    })?;
+                    let oid = object_id(&recv);
+                    let start = match target {
+                        ClassTarget::Class(cid) => cid,
+                        ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
+                            PhpError::Error("Cannot use \"static\" outside class context".to_string())
+                        })?,
+                    };
+                    // A user `get`/`set` hook on the named class runs as a frame.
+                    // Extra arguments are ignored — it is an ordinary user function.
+                    if let Some(func) = self.prop_hook(start, &prop, set) {
+                        let set_value =
+                            if set { Some(args.into_iter().next().unwrap_or(Zval::Null)) } else { None };
+                        if set {
+                            // A user set hook discards its body return; the call yields NULL.
+                            self.frames[top].stack.push(Zval::Null);
+                        }
+                        self.push_parent_hook(func, recv, oid, &prop, start, set_value);
+                        continue;
+                    }
+                    // No user hook: the *implicit* hook reaches the backing store
+                    // directly. The property must be declared on the named class.
+                    if prop_info(&self.classes, start, &prop).is_none() {
+                        return Err(PhpError::Error(format!(
+                            "Undefined property {}::${}",
+                            String::from_utf8_lossy(&self.classes[start].name),
+                            String::from_utf8_lossy(&prop),
+                        )));
+                    }
+                    // The implicit hook is an internal function with fixed arity.
+                    let expected = if set { 1usize } else { 0 };
+                    if args.len() != expected {
+                        return Err(PhpError::Error(format!(
+                            "{}::${}::{}() expects exactly {} argument{}, {} given",
+                            String::from_utf8_lossy(&self.classes[start].name),
+                            String::from_utf8_lossy(&prop),
+                            if set { "set" } else { "get" },
+                            expected,
+                            if expected == 1 { "" } else { "s" },
+                            args.len(),
+                        )));
+                    }
+                    let ocid = object_class_id(&recv).unwrap_or(start);
+                    let key = self.prop_storage_key(ocid, &prop, Some(start));
+                    if set {
+                        let v = args.into_iter().next().unwrap_or(Zval::Null);
+                        write_property(&recv, &key, v.clone())?;
+                        self.frames[top].stack.push(v);
+                    } else {
+                        if let Zval::Object(o) = &recv {
+                            if let Some(err) = self.uninit_typed_read(o, &key, &prop) {
+                                return Err(err);
+                            }
+                        }
+                        let v = read_property(&recv, &key, &mut self.diags);
+                        self.frames[top].stack.push(v);
+                    }
+                }
                 Op::ClosureStatic { method, argc } => {
                     // `Closure::bind(...)` / `Closure::fromCallable(...)` (step 19-6).
                     let args = self.pop_keys(top, argc); // source order
@@ -8830,8 +8897,53 @@ impl<'m> Vm<'m> {
             frame.ret_cell = Some(Rc::new(RefCell::new(Zval::Null)));
         }
         let key = (oid, MagicKind::Hook, name.to_vec());
-        self.magic_guard.insert(key.clone());
-        frame.guard_release = Some(key);
+        // Only the frame that first guards `(oid, name)` releases it on `Ret`. A
+        // nested explicit hook call re-entering the same property (a parent hook
+        // calling its own parent) must not release the outer hook's guard early.
+        if self.magic_guard.insert(key.clone()) {
+            frame.guard_release = Some(key);
+        }
+        self.frames.push(frame);
+    }
+
+    /// Dispatch an *explicit* parent/self property-hook call
+    /// (`parent::$name::get()` / `self::$name::set($v)`, PHP 8.4). Unlike
+    /// [`Self::push_hook`], the hook's defining class is taken from `start` — the
+    /// statically-resolved class the call names — rather than the receiver's
+    /// runtime class, so an overridden hook still runs in its own scope. Late
+    /// static binding stays the receiver's class. A `set` hook's body return is
+    /// discarded (the caller pushes the call result itself).
+    fn push_parent_hook(
+        &mut self,
+        func: &'m Func,
+        recv: Zval,
+        oid: u32,
+        name: &[u8],
+        start: usize,
+        set_value: Option<Zval>,
+    ) {
+        let lsb = object_class_id(&recv).unwrap_or(start);
+        let decl = prop_info(&self.classes, start, name)
+            .map(|pi| pi.declaring_class)
+            .unwrap_or(start);
+        let is_set = set_value.is_some();
+        let mut frame = Frame::new(func, self.class_mod(decl));
+        frame.argc = func.n_params;
+        if let Some(v) = set_value {
+            if !frame.slots.is_empty() {
+                frame.slots[0] = v;
+            }
+        }
+        frame.this = Some(recv);
+        frame.class = Some(decl);
+        frame.static_class = Some(lsb);
+        if is_set {
+            frame.ret_cell = Some(Rc::new(RefCell::new(Zval::Null)));
+        }
+        let key = (oid, MagicKind::Hook, name.to_vec());
+        if self.magic_guard.insert(key.clone()) {
+            frame.guard_release = Some(key);
+        }
         self.frames.push(frame);
     }
 
@@ -9269,6 +9381,7 @@ fn relocate_func(func: &mut Func, remap: &[ClassId], static_base: usize) {
                 }
             }
             Op::StaticCall { target, .. }
+            | Op::HookCall { target, .. }
             | Op::StaticCallArgs { target, .. }
             | Op::StaticPropGet { target, .. }
             | Op::StaticPropSet { target, .. }

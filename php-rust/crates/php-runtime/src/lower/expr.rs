@@ -716,6 +716,25 @@ impl<'f> Lowerer<'f> {
             }
             // `Class::m()` / `self::m()` / `parent::m()` / `static::m()`.
             Call::StaticMethod(sm) => {
+                // PHP 8.4 parent property-hook call: the class position is itself a
+                // static-property access (`parent::$prop`) and the method is
+                // `get`/`set` — `parent::$prop::get()` / `parent::$prop::set($v)`.
+                if let Expression::Access(Access::StaticProperty(sp)) = sm.class {
+                    let m = member_name(&sm.method, line)?;
+                    let is_get = m.eq_ignore_ascii_case(b"get");
+                    let is_set = m.eq_ignore_ascii_case(b"set");
+                    if is_get || is_set {
+                        let class = self.class_ref_of(sp.class, line)?;
+                        let prop = static_prop_name(&sp.property, line)?;
+                        let (args, _named) = self.lower_args(&sm.argument_list, line)?;
+                        return Ok(ExprKind::ParentHookCall {
+                            class,
+                            prop: prop.into(),
+                            set: is_set,
+                            args,
+                        });
+                    }
+                }
                 let class = self.class_ref_of(sm.class, line)?;
                 let method = member_name(&sm.method, line)?;
                 let (args, named) = self.lower_args(&sm.argument_list, line)?;

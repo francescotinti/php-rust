@@ -116,6 +116,16 @@ pub(super) fn object_class_id(v: &Zval) -> Option<ClassId> {
     }
 }
 
+/// The object id of a value (following a reference), or 0 for a non-object — the
+/// key the hook guard uses to mark an active property hook on an instance.
+pub(super) fn object_id(v: &Zval) -> u32 {
+    match v {
+        Zval::Object(o) => o.borrow().id,
+        Zval::Ref(rc) => object_id(&rc.borrow()),
+        _ => 0,
+    }
+}
+
 /// Whether class `a` is `b` or descends from it (parent chain only) — the test
 /// behind forwarding `$this` propagation for `Parent::m()`-style calls.
 pub(super) fn class_is_a(classes: &[&CompiledClass], a: ClassId, b: ClassId) -> bool {

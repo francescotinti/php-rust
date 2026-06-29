@@ -705,6 +705,15 @@ pub enum Op {
     /// `forwarding` (self/parent/static) else the start class, and `$this` is
     /// propagated per PHP's forwarding rules.
     StaticCall { target: ClassTarget, method: Box<[u8]>, forwarding: bool, argc: u32 },
+    /// `[arg0, …] -> [ret]` — PHP 8.4 parent property-hook call
+    /// `parent::$prop::get()` / `parent::$prop::set($v)` (`self`/`static`/named
+    /// classes resolve the same way). Dispatches the `get`/`set` hook of `prop`
+    /// declared on `target` against the executing frame's `$this`; if that class's
+    /// property has no user hook the *implicit* hook reads/writes the backing store
+    /// directly (validating the argument count). `set`'s single argument is the new
+    /// value; a user hook's body return is discarded (the call yields the written
+    /// value for the implicit set, otherwise NULL).
+    HookCall { target: ClassTarget, prop: Box<[u8]>, set: bool, argc: u32 },
     /// `[args…] -> [ret]` — a built-in static on the `Closure` class:
     /// `Closure::bind($c, $newThis)` or `Closure::fromCallable($callable)`. The
     /// `Closure` "class" has no compiled entry, so these are dispatched natively
