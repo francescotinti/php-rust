@@ -31,7 +31,11 @@ Reimplementazione moderna di PHP 8.5 in Rust, guidata dal comportamento osservab
 - Runner .phpt: `cargo run -p phpt-runner -- <dir o file .phpt>` (`--isolate`, `--list-fails`)
 - Trace diagnostico: `PHP_RUST_TRACE=hir|body|exec|all` su stderr (lowering vs evaluation)
 
-> Build: il `target-dir` di cargo è dirottato fuori dal volume "Extreme Pro" via
-> `php-rust/.cargo/config.toml` (il filesystem esterno rompe la cache incrementale).
-> Evaluator in `php-runtime/src/eval/{mod,expr,stmt,calls,class,builtins}.rs`,
-> lowering in `lower/{mod,stmt,class,expr}.rs`.
+> **Build / filesystem:** il volume esterno "Extreme Pro" NON supporta la
+> compilazione incrementale di Rust (non hard-linka la cache). Il `target-dir` è
+> quindi dirottato sul volume principale (`/Users/francescotinti/Claude/php-rust-output`)
+> via `php-rust/.cargo/config.toml` → un semplice `cargo build --release` basta;
+> NON build sul volume esterno. Sorgente/corpus sul volume esterno sono solo letti.
+> Engine: VM a bytecode unico (pipeline mago AST→HIR→bytecode→VM); il vecchio
+> tree-walker `eval/` è stato eliminato. Lowering in `php-runtime/src/lower/`,
+> VM in `php-runtime/src/vm/` (mod.rs ~11k righe — usare Serena/Vexp).

@@ -553,6 +553,26 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
                 out.extend_from_slice(b"}\n");
                 return;
             }
+            // An *initialized* lazy proxy renders as a single synthetic
+            // `["instance"]` slot pointing at the real object it forwards to
+            // (PHP 8.4) — its own property slots are irrelevant once forwarding.
+            if matches!(obj.lazy, Some(php_types::LazyKind::Proxy)) {
+                if let Some(inst) = &obj.proxy_instance {
+                    out.extend_from_slice(b"lazy proxy object(");
+                    out.extend_from_slice(class_display_name(obj.class_name.as_bytes()));
+                    out.extend_from_slice(format!(")#{} (1) {{\n", obj.id).as_bytes());
+                    spaces(out, indent + 2);
+                    out.extend_from_slice(b"[\"instance\"]=>\n");
+                    spaces(out, indent + 2);
+                    let inst = (**inst).clone();
+                    drop(obj);
+                    dump(out, &inst, indent + 2, seen);
+                    seen.pop();
+                    spaces(out, indent);
+                    out.extend_from_slice(b"}\n");
+                    return;
+                }
+            }
             // An *uninitialized* lazy object is prefixed `lazy ghost `/`lazy proxy `
             // (PHP 8.4); var_dump itself does not trigger initialization.
             if let Some(kind) = obj.lazy {

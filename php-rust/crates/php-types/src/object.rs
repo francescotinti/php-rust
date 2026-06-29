@@ -41,12 +41,20 @@ pub struct Object {
     /// call leaves this empty, so a readonly write there still fatals. Empty for
     /// every object outside an active clone, so the common case costs nothing.
     pub readonly_clone_writable: Vec<Box<[u8]>>,
-    /// Lazy-object marker (PHP 8.4): `Some` only while the object is an
-    /// *uninitialized* lazy ghost/proxy, cleared to `None` on initialization. The
-    /// pending initializer closure lives in a VM-side table keyed by object id
-    /// (kept off the object so `Object` stays `PartialEq`). Drives `var_dump`'s
-    /// "lazy ghost"/"lazy proxy" rendering and the access-time init trigger.
+    /// Lazy-object marker (PHP 8.4): `Some` while the object is a lazy
+    /// ghost/proxy. A **ghost** clears this to `None` on initialization (it
+    /// becomes an ordinary object). A **proxy** keeps `Some(Proxy)` for life —
+    /// once initialized it forwards property access to the real instance held in
+    /// [`Self::proxy_instance`]. The pending initializer/factory closure lives in
+    /// a VM-side table keyed by object id. Drives `var_dump`'s "lazy ghost"/"lazy
+    /// proxy" rendering and the access-time init trigger.
     pub lazy: Option<LazyKind>,
+    /// The real instance a **lazy proxy** forwards to, set when the proxy is
+    /// initialized (its factory returns this object). `None` for every non-proxy
+    /// object and for an uninitialized proxy. A proxy with this `Some` is the
+    /// "initialized" state: property reads/writes redirect here and `var_dump`
+    /// renders a single synthetic `["instance"]` slot.
+    pub proxy_instance: Option<Box<Zval>>,
 }
 
 /// Which kind of uninitialized lazy object this is (PHP 8.4): a *ghost*

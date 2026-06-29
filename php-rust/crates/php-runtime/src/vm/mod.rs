@@ -3082,6 +3082,7 @@ impl<'m> Vm<'m> {
                             readonly_clone_writable: Vec::new(),
                             // A clone is a concrete copy; lazy state is not carried.
                             lazy: None,
+                            proxy_instance: None,
                         };
                         Rc::new(RefCell::new(obj))
                     };
@@ -3120,8 +3121,10 @@ impl<'m> Vm<'m> {
                     let obj = self.frames[top].stack.pop().expect("PropGet object");
                     let cur = self.frames[top].class;
                     let target = obj.deref_clone();
-                    // A read of a lazy object initializes it first (PHP 8.4).
+                    // A read of a lazy object initializes it first (PHP 8.4); an
+                    // initialized proxy then forwards the read to its real instance.
                     self.trigger_lazy(&target)?;
+                    let target = self.proxy_redirect(target);
                     // Storage slot to read (the plain name for a dynamic/non-object
                     // target; a mangled key for an accessible private — set below).
                     let mut key = name.to_vec();
@@ -3165,7 +3168,8 @@ impl<'m> Vm<'m> {
                     // visibility error (the read context of `empty()` / `??`).
                     let obj = self.frames[top].stack.pop().expect("PropGetSilent object");
                     let cur = self.frames[top].class;
-                    let target = obj.deref_clone();
+                    // An initialized proxy forwards the (silent) read to its instance.
+                    let target = self.proxy_redirect(obj.deref_clone());
                     let mut key = name.to_vec();
                     if let Zval::Object(o) = &target {
                         if let Some((defc, midx, oid)) =
@@ -3240,9 +3244,13 @@ impl<'m> Vm<'m> {
                     let target = obj.deref_clone();
                     // A write to a lazy object initializes it first (PHP 8.4); a no-op
                     // during the object's own construction (it is no longer lazy then).
-                    if !self.frames[top].init_props {
+                    let target = if !self.frames[top].init_props {
                         self.trigger_lazy(&target)?;
-                    }
+                        // An initialized proxy forwards the write to its real instance.
+                        self.proxy_redirect(target)
+                    } else {
+                        target
+                    };
                     // A `prop_init` thunk writes defaults directly: no `__set`, no
                     // visibility check (so a subclass can set an inherited private).
                     // The slot is the declared one (unconditional, mangled for a
@@ -6094,16 +6102,35 @@ impl<'m> Vm<'m> {
             PhpError::Error(format!("Class \"{}\" does not exist", String::from_utf8_lossy(&raw)))
         })?;
         let init = args.get(1).cloned().unwrap_or(Zval::Null);
-        self.alloc_ghost(cid, init)
+        self.alloc_lazy(cid, init, LazyKind::Ghost)
+    }
+
+    /// `__reflect_new_lazy_proxy($class, $factory)`: allocate an uninitialized
+    /// lazy proxy of `$class` whose `$factory` runs on first access and returns
+    /// the real instance the proxy forwards to — PHP 8.4
+    /// `ReflectionClass::newLazyProxy`.
+    fn ho_reflect_new_lazy_proxy(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let raw = match args.first() {
+            Some(v) => convert::to_zstr_cast(v, &mut self.diags).as_bytes().to_vec(),
+            None => return Err(PhpError::Error("newLazyProxy() expects a class name".to_string())),
+        };
+        let key = raw.strip_prefix(b"\\").unwrap_or(&raw).to_ascii_lowercase();
+        let cid = *self.class_index.get(&key).ok_or_else(|| {
+            PhpError::Error(format!("Class \"{}\" does not exist", String::from_utf8_lossy(&raw)))
+        })?;
+        let factory = args.get(1).cloned().unwrap_or(Zval::Null);
+        self.alloc_lazy(cid, factory, LazyKind::Proxy)
     }
 
     /// `__lazy_is_uninitialized($obj)`: whether `$obj` is an uninitialized lazy
-    /// object — PHP 8.4 `ReflectionClass::isUninitializedLazyObject`.
+    /// object — PHP 8.4 `ReflectionClass::isUninitializedLazyObject`. A ghost
+    /// clears its marker on init; an initialized proxy keeps `Some(Proxy)` but
+    /// carries a `proxy_instance`, so the "uninitialized" test excludes it.
     fn ho_lazy_is_uninitialized(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let is = args
             .first()
             .and_then(deref_object)
-            .map_or(false, |o| o.borrow().lazy.is_some());
+            .map_or(false, |o| { let b = o.borrow(); b.lazy.is_some() && b.proxy_instance.is_none() });
         Ok(Zval::Bool(is))
     }
 
@@ -7194,7 +7221,7 @@ impl<'m> Vm<'m> {
             props.set(&k, v);
         }
         let id = self.next_id();
-        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init, readonly_clone_writable: Vec::new(), lazy: None };
+        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init, readonly_clone_writable: Vec::new(), lazy: None, proxy_instance: None };
         let rc = Rc::new(RefCell::new(obj));
         // Track for `__destruct` (OOP-3d), like every other freshly minted object.
         self.created.push(Rc::clone(&rc));
@@ -8574,7 +8601,7 @@ impl<'m> Vm<'m> {
         let class_name = Rc::clone(&cc.class_name);
         let info = Rc::clone(&cc.info);
         let id = self.next_id();
-        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init: Vec::new(), readonly_clone_writable: Vec::new(), lazy: None };
+        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init: Vec::new(), readonly_clone_writable: Vec::new(), lazy: None, proxy_instance: None };
         let rc = Rc::new(RefCell::new(obj));
         // Track for `__destruct` (OOP-3d): the extra strong ref drives the sweep.
         self.created.push(Rc::clone(&rc));
@@ -8582,13 +8609,14 @@ impl<'m> Vm<'m> {
         Ok(Zval::Object(rc))
     }
 
-    /// Allocate an *uninitialized* lazy ghost of `cid` (PHP 8.4
-    /// `ReflectionClass::newLazyGhost`): a real instance whose declared
-    /// properties are all left uninitialized — typed ones as `uninitialized(T)`,
-    /// untyped ones absent — with no default applied yet. The instantiability
-    /// check and `#id` assignment are a normal alloc; the initializer is stashed
-    /// in `lazy_init` and runs on first access (see [`Self::realize_lazy`]).
-    fn alloc_ghost(&mut self, cid: ClassId, initializer: Zval) -> Result<Zval, PhpError> {
+    /// Allocate an *uninitialized* lazy object of `cid` (PHP 8.4
+    /// `ReflectionClass::newLazyGhost` / `newLazyProxy`): a real instance whose
+    /// declared properties are all left uninitialized — typed ones as
+    /// `uninitialized(T)`, untyped ones absent — with no default applied yet. The
+    /// instantiability check and `#id` assignment are a normal alloc; the
+    /// initializer/factory is stashed in `lazy_init` and runs on first access
+    /// (see [`Self::realize_lazy`]). `kind` selects ghost vs proxy semantics.
+    fn alloc_lazy(&mut self, cid: ClassId, init: Zval, kind: LazyKind) -> Result<Zval, PhpError> {
         let v = self.alloc_object(cid)?;
         if let Zval::Object(rc) = &v {
             let cc = self.classes[cid];
@@ -8604,48 +8632,82 @@ impl<'m> Vm<'m> {
             let oid = {
                 let mut b = rc.borrow_mut();
                 b.props = props;
-                b.lazy = Some(LazyKind::Ghost);
+                b.lazy = Some(kind);
                 b.id
             };
-            self.lazy_init.insert(oid, initializer);
+            self.lazy_init.insert(oid, init);
         }
         Ok(v)
     }
 
-    /// Initialize a lazy object in place (PHP 8.4): apply the class's real
-    /// property defaults, clear the lazy marker, then run the pending ghost
-    /// initializer with the object. A no-op for a non-lazy / already-initialized
-    /// object. (Proxy realization is not yet implemented.)
+    /// Initialize a lazy object (PHP 8.4). A **ghost** gets the class's real
+    /// property defaults applied, its lazy marker cleared, then runs its pending
+    /// initializer with the object (becoming an ordinary instance). A **proxy**
+    /// calls its factory (which returns the real instance), stashes that in
+    /// `proxy_instance`, and keeps its `Some(Proxy)` marker for life — later
+    /// property access forwards to the instance. A no-op for a non-lazy or
+    /// already-initialized object.
     fn realize_lazy(&mut self, v: &Zval) -> Result<(), PhpError> {
         let Some(rc) = deref_object(v) else { return Ok(()) };
-        let (oid, cid) = {
+        let (oid, cid, kind) = {
             let b = rc.borrow();
-            if b.lazy.is_none() {
-                return Ok(());
+            match b.lazy {
+                // Uninitialized: a ghost (lazy set), or a proxy with no instance yet.
+                Some(k) if b.proxy_instance.is_none() => (b.id, b.class_id as usize, k),
+                // Non-lazy, or an already-initialized proxy.
+                _ => return Ok(()),
             }
-            (b.id, b.class_id as usize)
         };
-        {
-            let cc = self.classes[cid];
-            // Rebuild the property layout in declaration order (the ghost held only
-            // the typed placeholders, so an incremental `set` would mis-order the
-            // untyped ones appended on top).
-            let mut props = Props::new();
-            for (name, c) in &cc.prop_defaults {
-                props.set(name, c.to_zval());
+        match kind {
+            LazyKind::Ghost => {
+                {
+                    let cc = self.classes[cid];
+                    // Rebuild the property layout in declaration order (the ghost held
+                    // only the typed placeholders, so an incremental `set` would
+                    // mis-order the untyped ones appended on top).
+                    let mut props = Props::new();
+                    for (name, c) in &cc.prop_defaults {
+                        props.set(name, c.to_zval());
+                    }
+                    for name in &cc.uninit_props {
+                        props.set(name, Zval::Undef);
+                    }
+                    let mut b = rc.borrow_mut();
+                    b.lazy = None;
+                    b.props = props;
+                }
+                if let Some(init) = self.lazy_init.remove(&oid) {
+                    // The ghost initializer populates the object; its return is ignored.
+                    self.call_callable(init, vec![v.clone()])?;
+                }
             }
-            for name in &cc.uninit_props {
-                props.set(name, Zval::Undef);
+            LazyKind::Proxy => {
+                // Remove the factory *before* invoking it so a re-entrant access on
+                // the proxy during the factory does not recurse (it sees no factory
+                // and bails). The factory's return is the real instance to forward to.
+                if let Some(factory) = self.lazy_init.remove(&oid) {
+                    let real = self.call_callable(factory, vec![v.clone()])?;
+                    rc.borrow_mut().proxy_instance = Some(Box::new(real));
+                }
             }
-            let mut b = rc.borrow_mut();
-            b.lazy = None;
-            b.props = props;
-        }
-        if let Some(init) = self.lazy_init.remove(&oid) {
-            // The ghost initializer populates the object; its return is ignored.
-            self.call_callable(init, vec![v.clone()])?;
         }
         Ok(())
+    }
+
+    /// If `v` is an *initialized* lazy proxy, the real instance it forwards to;
+    /// otherwise `v` itself. Property-access ops call this (after `trigger_lazy`)
+    /// so reads/writes land on the real object's slots, while method dispatch and
+    /// `get_class` keep operating on the proxy.
+    fn proxy_redirect(&self, v: Zval) -> Zval {
+        if let Some(rc) = deref_object(&v) {
+            let b = rc.borrow();
+            if matches!(b.lazy, Some(LazyKind::Proxy)) {
+                if let Some(inst) = &b.proxy_instance {
+                    return (**inst).clone();
+                }
+            }
+        }
+        v
     }
 
     /// Trigger lazy initialization before an access (property read/write, method
@@ -8691,6 +8753,7 @@ impl<'m> Vm<'m> {
             readonly_init: Vec::new(),
             readonly_clone_writable: Vec::new(),
             lazy: None,
+            proxy_instance: None,
         };
         let rc = Rc::new(RefCell::new(obj));
         self.enum_cache.insert((class, case), Rc::clone(&rc));
@@ -9377,6 +9440,7 @@ host_builtins! {
     b"__reflect_class_modifiers" => vm.ho_reflect_class_modifiers(args),
     b"__reflect_new_no_ctor" => vm.ho_reflect_new_no_ctor(args),
     b"__reflect_new_lazy_ghost" => vm.ho_reflect_new_lazy_ghost(args),
+    b"__reflect_new_lazy_proxy" => vm.ho_reflect_new_lazy_proxy(args),
     b"__lazy_is_uninitialized" => vm.ho_lazy_is_uninitialized(args),
     b"__lazy_initialize" => vm.ho_lazy_initialize(args),
     b"get_object_vars" => vm.ho_get_object_vars(args),
