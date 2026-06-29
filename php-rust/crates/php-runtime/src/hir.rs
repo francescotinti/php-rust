@@ -70,6 +70,10 @@ pub struct Program {
     /// `use T` against a trait declared in an earlier unit (the trait analogue of
     /// `seed_classes`). Holds only this unit's *new* traits, not seeded ones.
     pub traits: Vec<(Vec<u8>, LoweredTrait)>,
+    /// `#[Attr]` attributes on top-level `const` declarations, keyed by the
+    /// constant's fully-qualified name — retained for
+    /// `ReflectionConstant::getAttributes()`. Empty for the common case.
+    pub const_attributes: Vec<(Box<[u8]>, Vec<HirAttribute>)>,
 }
 
 /// A trait lowered to its flattened members (step 21). Stored owned so it can be

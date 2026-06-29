@@ -1275,4 +1275,7 @@ pub struct Module {
     /// are checked exactly (no coercion, `int`→`float` widening aside) at every
     /// call and return. Carried from [`crate::hir::Program::strict`] (step 16).
     pub strict: bool,
+    /// `#[Attr]` attributes on top-level `const` declarations, keyed by FQN —
+    /// read by `ReflectionConstant::getAttributes()`. Empty for the common case.
+    pub const_attributes: std::collections::HashMap<Box<[u8]>, Vec<CompiledAttribute>>,
 }

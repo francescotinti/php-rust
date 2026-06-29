@@ -508,7 +508,7 @@ impl<'f> Lowerer<'f> {
     /// expression (run by `ReflectionAttribute::newInstance()`) plus an array
     /// literal of its arguments (run by `getArguments()`). Argument expressions are
     /// lowered in the surrounding context so `self::`/constants resolve as written.
-    fn lower_attributes(
+    pub(super) fn lower_attributes(
         &mut self,
         lists: &mago_syntax::ast::Sequence<mago_syntax::ast::AttributeList>,
         line: Line,

@@ -505,6 +505,23 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
                 out.extend_from_slice(b"}\n");
                 return;
             }
+            // A ReflectionAttribute renders with only its public `name` — the
+            // private handle props (`__class`/`__index`/`__prop`/`__func`/
+            // `__method`) the reflection hosts use to materialise it lazily are
+            // internal and hidden, matching PHP's native single-property dump.
+            if obj.class_name.as_bytes() == b"ReflectionAttribute" {
+                let name = obj.props.get(b"name").cloned().unwrap_or(Zval::Null);
+                out.extend_from_slice(format!("object(ReflectionAttribute)#{} (1) {{\n", obj.id).as_bytes());
+                spaces(out, indent + 2);
+                out.extend_from_slice(b"[\"name\"]=>\n");
+                spaces(out, indent + 2);
+                drop(obj);
+                dump(out, &name, indent + 2, seen);
+                seen.pop();
+                spaces(out, indent);
+                out.extend_from_slice(b"}\n");
+                return;
+            }
             // A WeakMap renders as its *live* key/value pairs, not its internal
             // storage property: `[i] => array(2){ ["key"]=>K, ["value"]=>V }`, in
             // insertion order, with collected keys pruned (mirrors PHP's native

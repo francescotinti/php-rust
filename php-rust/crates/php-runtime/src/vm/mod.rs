@@ -6548,6 +6548,59 @@ impl<'m> Vm<'m> {
         self.run_method_attr(&args, true)
     }
 
+
+    /// `__reflect_const_attributes($const, $filter = null)` — backs
+    /// `ReflectionConstant::getAttributes()`. Top-level constants are
+    /// case-sensitive; the handle is `__const`.
+    fn ho_reflect_const_attributes(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let empty = || Ok(Zval::Array(Rc::new(php_types::PhpArray::new())));
+        let cname = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let key = cname.strip_prefix(b"\\").unwrap_or(&cname).to_vec();
+        let Some(attrs) = self.module.const_attributes.get(key.as_slice()) else { return empty() };
+        let Some(&ra_cid) = self.class_index.get(&b"reflectionattribute"[..]) else { return empty() };
+        let filter: Option<Vec<u8>> = match args.get(1).map(|v| v.deref_clone()) {
+            Some(Zval::Str(s)) => { let raw = s.as_bytes(); Some(raw.strip_prefix(b"\\").unwrap_or(raw).to_vec()) }
+            _ => None,
+        };
+        let matches: Vec<(usize, Vec<u8>)> = attrs.iter().enumerate()
+            .filter(|(_, a)| match &filter { None => true, Some(f) => a.name.strip_prefix(b"\\").unwrap_or(&a.name).eq_ignore_ascii_case(f) })
+            .map(|(i, a)| (i, a.name.to_vec())).collect();
+        let mut arr = php_types::PhpArray::new();
+        for (idx, name) in matches {
+            let obj = self.alloc_object(ra_cid)?;
+            if let Zval::Object(o) = &obj {
+                let mut b = o.borrow_mut();
+                b.props.set(b"name", Zval::Str(PhpStr::new(name)));
+                b.props.set(b"__const", Zval::Str(PhpStr::new(key.clone())));
+                b.props.set(b"__index", Zval::Long(idx as i64));
+            }
+            let _ = arr.append(obj);
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// Run a const-attribute thunk (`new`/`args`) by `($const, $index)`.
+    fn run_const_attr(&mut self, args: &[Zval], get_args: bool) -> Result<Zval, PhpError> {
+        let cname = match args.first() { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => return Ok(Zval::Null) };
+        let idx = match args.get(1) { Some(Zval::Long(i)) => *i as usize, _ => return Ok(Zval::Null) };
+        let key = cname.strip_prefix(b"\\").unwrap_or(&cname).to_vec();
+        let Some(attr) = self.module.const_attributes.get(key.as_slice()).and_then(|v| v.get(idx)) else { return Ok(Zval::Null) };
+        let thunk = if get_args { &attr.args_thunk } else { &attr.new_thunk };
+        let baseline = self.frames.len();
+        self.frames.push(Frame::new(thunk, self.module));
+        self.drive_to_return(baseline)
+    }
+
+    /// `__reflect_const_attr_new($const, $index)`.
+    fn ho_reflect_const_attr_new(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.run_const_attr(&args, false)
+    }
+
+    /// `__reflect_const_attr_args($const, $index)`.
+    fn ho_reflect_const_attr_args(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.run_const_attr(&args, true)
+    }
+
     /// Resolve the class for a per-property lazy op (skip / raw-set) and check
     /// `prop` is eligible: a declared, non-static, non-virtual instance property.
     /// `Ok(cid)` when usable; `Err(msg)` is the `ReflectionException` message the
@@ -10037,6 +10090,9 @@ host_builtins! {
     b"__reflect_method_attributes" => vm.ho_reflect_method_attributes(args),
     b"__reflect_method_attr_new" => vm.ho_reflect_method_attr_new(args),
     b"__reflect_method_attr_args" => vm.ho_reflect_method_attr_args(args),
+    b"__reflect_const_attributes" => vm.ho_reflect_const_attributes(args),
+    b"__reflect_const_attr_new" => vm.ho_reflect_const_attr_new(args),
+    b"__reflect_const_attr_args" => vm.ho_reflect_const_attr_args(args),
     b"get_object_vars" => vm.ho_get_object_vars(args),
     b"get_class_vars" => vm.ho_get_class_vars(args),
     b"register_shutdown_function" => vm.ho_register_shutdown_function(args),

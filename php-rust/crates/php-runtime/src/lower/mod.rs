@@ -226,6 +226,7 @@ fn lower_source_impl(
             .into_iter()
             .filter(|(k, _)| !seeded_trait_keys.contains(k))
             .collect(),
+        const_attributes: low.const_attributes,
     })
 }
 
@@ -937,6 +938,7 @@ class ReflectionAttribute {
     public $__prop;
     public $__func;
     public $__method;
+    public $__const;
     public function getName() { return $this->name; }
     public function getArguments() {
         if (isset($this->__prop)) {
@@ -947,6 +949,9 @@ class ReflectionAttribute {
         }
         if (isset($this->__method)) {
             return __reflect_method_attr_args($this->__class, $this->__method, $this->__index);
+        }
+        if (isset($this->__const)) {
+            return __reflect_const_attr_args($this->__const, $this->__index);
         }
         return __reflect_attr_arguments($this->__class, $this->__index);
     }
@@ -959,6 +964,9 @@ class ReflectionAttribute {
         }
         if (isset($this->__method)) {
             return __reflect_method_attr_new($this->__class, $this->__method, $this->__index);
+        }
+        if (isset($this->__const)) {
+            return __reflect_const_attr_new($this->__const, $this->__index);
         }
         return __reflect_attr_newinstance($this->__class, $this->__index);
     }
@@ -1106,6 +1114,19 @@ class ReflectionParameter {
     }
 }
 class ReflectionObject extends ReflectionClass {
+}
+class ReflectionConstant {
+    public $name;
+    public function __construct($name) {
+        if (!defined($name)) {
+            throw new ReflectionException(sprintf('Constant "%s" does not exist', $name));
+        }
+        $this->name = $name;
+    }
+    public function getName() { return $this->name; }
+    public function getValue() { return constant($this->name); }
+    public function getAttributes($name = null, $flags = 0) { return __reflect_const_attributes($this->name, $name); }
+    public function __toString() { return sprintf("Constant [ %s ]\n", $this->name); }
 }
 class ReflectionFunction {
     public $name;
@@ -1381,6 +1402,9 @@ struct Lowerer<'f> {
     anon_classes: Vec<ClassDecl>,
     /// Monotonic counter making each anonymous class's synthetic name unique.
     anon_count: u32,
+    /// `#[Attr]` attributes on top-level `const` declarations (FQN → attrs),
+    /// accumulated while lowering and surfaced in [`Program::const_attributes`].
+    const_attributes: Vec<(Box<[u8]>, Vec<crate::hir::HirAttribute>)>,
 }
 
 /// One constructor-promoted parameter: its property name, declared visibility, the
@@ -1433,6 +1457,7 @@ impl<'f> Lowerer<'f> {
             list_temp: 0,
             anon_classes: Vec::new(),
             anon_count: 0,
+            const_attributes: Vec::new(),
         }
     }
 

@@ -52,9 +52,15 @@ impl<'f> Lowerer<'f> {
             // (step 51): register each under its fully-qualified name (so an
             // unqualified read inside the namespace finds it, like other decls).
             Statement::Constant(node) => {
+                // `#[Attr]` on the declaration is shared by every `const A=1, B=2`
+                // item; retain it per constant for ReflectionConstant.
+                let attrs = self.lower_attributes(&node.attribute_lists, line)?;
                 let mut items = Vec::new();
                 for it in node.items.iter() {
                     let name = join_ns(&self.cur_namespace, it.name.value);
+                    if !attrs.is_empty() {
+                        self.const_attributes.push((name.clone(), attrs.clone()));
+                    }
                     let value = self.lower_expr(it.value)?;
                     items.push((name, value));
                 }

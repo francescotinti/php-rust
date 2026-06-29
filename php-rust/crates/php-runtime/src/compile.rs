@@ -123,6 +123,14 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
         .map(|(cid, cd)| compile_class(cid, cd, &ctx))
         .collect();
 
+    // Top-level `const` attributes, compiled name→thunks (free-function context,
+    // so `cur_class = None`).
+    let const_attributes = program
+        .const_attributes
+        .iter()
+        .map(|(name, attrs)| (name.clone(), compile_attrs(attrs, &ctx, None)))
+        .collect();
+
     Ok(Module {
         main,
         functions,
@@ -134,6 +142,7 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
         class_index,
         static_count: program.static_count,
         strict: program.strict,
+        const_attributes,
     })
 }
 
