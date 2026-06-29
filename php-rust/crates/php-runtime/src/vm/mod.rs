@@ -22,7 +22,7 @@ use std::rc::Rc;
 use php_types::{
     convert, open_file_stream, open_php_stream, ops, Closure, ClosureInfo, ClosureParam,
     ClosureRender, Diag,
-    Diags, DirHandle, GenKey, GenState, GenStatus, Key, Object, ObjectInfo, PhpArray, PhpError,
+    Diags, DirHandle, GenKey, GenState, GenStatus, Key, LazyKind, Object, ObjectInfo, PhpArray, PhpError,
     PhpStr, PropVis, Props, ResKind, Resource, Stream, StreamBackend, Zval,
 };
 
@@ -371,6 +371,7 @@ pub(crate) fn run_module_with_hir<'m>(
         constants: HashMap::new(),
         mb_regex: crate::mbregex::MbRegexState::default(),
         uncaught_throwable: None,
+        lazy_init: HashMap::new(),
     };
     // Register the caller module's own functions in the global link table so a
     // call made from inside an `eval()` (where `self.module` is the eval unit,
@@ -921,6 +922,12 @@ struct Vm<'m> {
     /// trace (an engine error reaches the renderer after its frames are popped).
     /// Cleared when an exception is caught; the deepest capture is kept.
     uncaught_throwable: Option<Zval>,
+    /// Pending initializer closures of *uninitialized* lazy objects (PHP 8.4),
+    /// keyed by object id. The `Object.lazy` marker says an object is lazy; this
+    /// holds the ghost initializer / proxy factory until the object is realized
+    /// (the entry is removed on initialization). Kept off `Object` so it can carry
+    /// a `Zval` (which is not `PartialEq`).
+    lazy_init: HashMap<u32, Zval>,
 }
 
 impl<'m> Vm<'m> {
@@ -3073,6 +3080,8 @@ impl<'m> Vm<'m> {
                             readonly_init: b.readonly_init.clone(),
                             // Granted below if `__clone` runs (one re-init each).
                             readonly_clone_writable: Vec::new(),
+                            // A clone is a concrete copy; lazy state is not carried.
+                            lazy: None,
                         };
                         Rc::new(RefCell::new(obj))
                     };
@@ -3111,6 +3120,8 @@ impl<'m> Vm<'m> {
                     let obj = self.frames[top].stack.pop().expect("PropGet object");
                     let cur = self.frames[top].class;
                     let target = obj.deref_clone();
+                    // A read of a lazy object initializes it first (PHP 8.4).
+                    self.trigger_lazy(&target)?;
                     // Storage slot to read (the plain name for a dynamic/non-object
                     // target; a mangled key for an accessible private — set below).
                     let mut key = name.to_vec();
@@ -3227,6 +3238,11 @@ impl<'m> Vm<'m> {
                     let obj = self.frames[top].stack.pop().expect("PropSet object");
                     let cur = self.frames[top].class;
                     let target = obj.deref_clone();
+                    // A write to a lazy object initializes it first (PHP 8.4); a no-op
+                    // during the object's own construction (it is no longer lazy then).
+                    if !self.frames[top].init_props {
+                        self.trigger_lazy(&target)?;
+                    }
                     // A `prop_init` thunk writes defaults directly: no `__set`, no
                     // visibility check (so a subclass can set an inherited private).
                     // The slot is the declared one (unconditional, mangled for a
@@ -6065,6 +6081,40 @@ impl<'m> Vm<'m> {
         self.alloc_object(cid)
     }
 
+    /// `__reflect_new_lazy_ghost($class, $init)`: allocate an uninitialized lazy
+    /// ghost of `$class` whose `$init` closure runs on first access — PHP 8.4
+    /// `ReflectionClass::newLazyGhost`.
+    fn ho_reflect_new_lazy_ghost(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let raw = match args.first() {
+            Some(v) => convert::to_zstr_cast(v, &mut self.diags).as_bytes().to_vec(),
+            None => return Err(PhpError::Error("newLazyGhost() expects a class name".to_string())),
+        };
+        let key = raw.strip_prefix(b"\\").unwrap_or(&raw).to_ascii_lowercase();
+        let cid = *self.class_index.get(&key).ok_or_else(|| {
+            PhpError::Error(format!("Class \"{}\" does not exist", String::from_utf8_lossy(&raw)))
+        })?;
+        let init = args.get(1).cloned().unwrap_or(Zval::Null);
+        self.alloc_ghost(cid, init)
+    }
+
+    /// `__lazy_is_uninitialized($obj)`: whether `$obj` is an uninitialized lazy
+    /// object — PHP 8.4 `ReflectionClass::isUninitializedLazyObject`.
+    fn ho_lazy_is_uninitialized(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let is = args
+            .first()
+            .and_then(deref_object)
+            .map_or(false, |o| o.borrow().lazy.is_some());
+        Ok(Zval::Bool(is))
+    }
+
+    /// `__lazy_initialize($obj)`: force initialization and return `$obj` — PHP 8.4
+    /// `ReflectionClass::initializeLazyObject`.
+    fn ho_lazy_initialize(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let v = args.first().cloned().unwrap_or(Zval::Null);
+        self.realize_lazy(&v)?;
+        Ok(v)
+    }
+
     /// `__reflect_class_attributes($class, $filter = null)`: the host backing of
     /// `ReflectionClass::getAttributes()`. Returns an array of `ReflectionAttribute`
     /// objects, one per `#[…]` declared on `$class` (optionally filtered by
@@ -7144,7 +7194,7 @@ impl<'m> Vm<'m> {
             props.set(&k, v);
         }
         let id = self.next_id();
-        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init, readonly_clone_writable: Vec::new() };
+        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init, readonly_clone_writable: Vec::new(), lazy: None };
         let rc = Rc::new(RefCell::new(obj));
         // Track for `__destruct` (OOP-3d), like every other freshly minted object.
         self.created.push(Rc::clone(&rc));
@@ -8524,12 +8574,90 @@ impl<'m> Vm<'m> {
         let class_name = Rc::clone(&cc.class_name);
         let info = Rc::clone(&cc.info);
         let id = self.next_id();
-        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init: Vec::new(), readonly_clone_writable: Vec::new() };
+        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init: Vec::new(), readonly_clone_writable: Vec::new(), lazy: None };
         let rc = Rc::new(RefCell::new(obj));
         // Track for `__destruct` (OOP-3d): the extra strong ref drives the sweep.
         self.created.push(Rc::clone(&rc));
         self.gc_track(&rc);
         Ok(Zval::Object(rc))
+    }
+
+    /// Allocate an *uninitialized* lazy ghost of `cid` (PHP 8.4
+    /// `ReflectionClass::newLazyGhost`): a real instance whose declared
+    /// properties are all left uninitialized — typed ones as `uninitialized(T)`,
+    /// untyped ones absent — with no default applied yet. The instantiability
+    /// check and `#id` assignment are a normal alloc; the initializer is stashed
+    /// in `lazy_init` and runs on first access (see [`Self::realize_lazy`]).
+    fn alloc_ghost(&mut self, cid: ClassId, initializer: Zval) -> Result<Zval, PhpError> {
+        let v = self.alloc_object(cid)?;
+        if let Zval::Object(rc) = &v {
+            let cc = self.classes[cid];
+            let mut props = Props::new();
+            for (name, _c) in &cc.prop_defaults {
+                if prop_type_decl(&self.classes, cid, name).is_some() {
+                    props.set(name, Zval::Undef);
+                }
+            }
+            for name in &cc.uninit_props {
+                props.set(name, Zval::Undef);
+            }
+            let oid = {
+                let mut b = rc.borrow_mut();
+                b.props = props;
+                b.lazy = Some(LazyKind::Ghost);
+                b.id
+            };
+            self.lazy_init.insert(oid, initializer);
+        }
+        Ok(v)
+    }
+
+    /// Initialize a lazy object in place (PHP 8.4): apply the class's real
+    /// property defaults, clear the lazy marker, then run the pending ghost
+    /// initializer with the object. A no-op for a non-lazy / already-initialized
+    /// object. (Proxy realization is not yet implemented.)
+    fn realize_lazy(&mut self, v: &Zval) -> Result<(), PhpError> {
+        let Some(rc) = deref_object(v) else { return Ok(()) };
+        let (oid, cid) = {
+            let b = rc.borrow();
+            if b.lazy.is_none() {
+                return Ok(());
+            }
+            (b.id, b.class_id as usize)
+        };
+        {
+            let cc = self.classes[cid];
+            // Rebuild the property layout in declaration order (the ghost held only
+            // the typed placeholders, so an incremental `set` would mis-order the
+            // untyped ones appended on top).
+            let mut props = Props::new();
+            for (name, c) in &cc.prop_defaults {
+                props.set(name, c.to_zval());
+            }
+            for name in &cc.uninit_props {
+                props.set(name, Zval::Undef);
+            }
+            let mut b = rc.borrow_mut();
+            b.lazy = None;
+            b.props = props;
+        }
+        if let Some(init) = self.lazy_init.remove(&oid) {
+            // The ghost initializer populates the object; its return is ignored.
+            self.call_callable(init, vec![v.clone()])?;
+        }
+        Ok(())
+    }
+
+    /// Trigger lazy initialization before an access (property read/write, method
+    /// call) when `v` is an uninitialized lazy object. Cheap for the common case:
+    /// a plain `Option` check on the object, no work for non-lazy objects.
+    fn trigger_lazy(&mut self, v: &Zval) -> Result<(), PhpError> {
+        if let Some(rc) = deref_object(v) {
+            if rc.borrow().lazy.is_some() {
+                self.realize_lazy(v)?;
+            }
+        }
+        Ok(())
     }
 
     /// Return the interned singleton object for enum `class`'s `case`-th case,
@@ -8562,6 +8690,7 @@ impl<'m> Vm<'m> {
             // Enum-case immutability has its own dedicated check (is_enum_case).
             readonly_init: Vec::new(),
             readonly_clone_writable: Vec::new(),
+            lazy: None,
         };
         let rc = Rc::new(RefCell::new(obj));
         self.enum_cache.insert((class, case), Rc::clone(&rc));
@@ -9247,6 +9376,9 @@ host_builtins! {
     b"__reflect_method_info" => vm.ho_reflect_method_info(args),
     b"__reflect_class_modifiers" => vm.ho_reflect_class_modifiers(args),
     b"__reflect_new_no_ctor" => vm.ho_reflect_new_no_ctor(args),
+    b"__reflect_new_lazy_ghost" => vm.ho_reflect_new_lazy_ghost(args),
+    b"__lazy_is_uninitialized" => vm.ho_lazy_is_uninitialized(args),
+    b"__lazy_initialize" => vm.ho_lazy_initialize(args),
     b"get_object_vars" => vm.ho_get_object_vars(args),
     b"get_class_vars" => vm.ho_get_class_vars(args),
     b"register_shutdown_function" => vm.ho_register_shutdown_function(args),

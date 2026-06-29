@@ -553,6 +553,14 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
                 out.extend_from_slice(b"}\n");
                 return;
             }
+            // An *uninitialized* lazy object is prefixed `lazy ghost `/`lazy proxy `
+            // (PHP 8.4); var_dump itself does not trigger initialization.
+            if let Some(kind) = obj.lazy {
+                out.extend_from_slice(match kind {
+                    php_types::LazyKind::Ghost => b"lazy ghost ".as_slice(),
+                    php_types::LazyKind::Proxy => b"lazy proxy ".as_slice(),
+                });
+            }
             out.extend_from_slice(b"object(");
             // An anonymous class's name is `class@anonymous\0…`; displays show only
             // the part before the NUL (`class@anonymous`), like PHP. A no-op for

@@ -962,6 +962,9 @@ class ReflectionClass {
     public function newInstance(...$args) { return new $this->name(...$args); }
     public function newInstanceArgs($args = []) { return new $this->name(...$args); }
     public function newInstanceWithoutConstructor() { return __reflect_new_no_ctor($this->name); }
+    public function newLazyGhost(callable $initializer, int $options = 0) { return __reflect_new_lazy_ghost($this->name, $initializer); }
+    public function isUninitializedLazyObject($object) { return __lazy_is_uninitialized($object); }
+    public function initializeLazyObject($object) { return __lazy_initialize($object); }
     public function isInstantiable() { return class_exists($this->name); }
     public function isInterface() { return interface_exists($this->name); }
     public function isFinal() { return __reflect_class_modifiers($this->name)['final']; }
