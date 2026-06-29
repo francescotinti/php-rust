@@ -1166,6 +1166,8 @@ class ReflectionProperty {
         $this->class = $decl === false ? $cls : $decl;
     }
     public function getName() { return $this->name; }
+    public function getValue($object = null) { return __reflect_prop_get($this->class, $this->name, $object); }
+    public function setValue($object, $value = null) { __reflect_prop_set($this->class, $this->name, $object, $value); }
     public function isStatic() { return __reflect_prop_is_static($this->class, $this->name); }
     public function skipLazyInitialization($object) {
         $msg = __lazy_skip_init($object, $this->class, $this->name);

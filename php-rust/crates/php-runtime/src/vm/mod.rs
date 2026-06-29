@@ -6282,6 +6282,45 @@ impl<'m> Vm<'m> {
         Ok(Zval::Bool(is))
     }
 
+
+    /// `__reflect_prop_get($class, $prop, $obj)`: read property `$prop` (declared
+    /// in `$class`) of `$obj` ignoring visibility — backs
+    /// `ReflectionProperty::getValue`. A lazy object initializes first; a proxy
+    /// forwards to its real instance.
+    fn ho_reflect_prop_get(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let class = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let prop = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let obj = self.realize_full(&args.get(2).cloned().unwrap_or(Zval::Null))?;
+        let lc = class.strip_prefix(b"\\").unwrap_or(&class).to_ascii_lowercase();
+        let cid = self.class_index.get(&lc).copied();
+        let key = match cid {
+            Some(c) => self.prop_decl_storage_key(c, &prop),
+            None => prop.clone(),
+        };
+        Ok(read_property(&obj, &key, &mut self.diags))
+    }
+
+    /// `__reflect_prop_set($class, $prop, $obj, $value)`: write `$value` into
+    /// property `$prop` (declared in `$class`) of `$obj` ignoring visibility —
+    /// backs `ReflectionProperty::setValue`. A lazy object initializes first; a
+    /// proxy forwards to its real instance.
+    fn ho_reflect_prop_set(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let class = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let prop = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let obj = self.realize_full(&args.get(2).cloned().unwrap_or(Zval::Null))?;
+        let value = args.get(3).cloned().unwrap_or(Zval::Null);
+        let lc = class.strip_prefix(b"\\").unwrap_or(&class).to_ascii_lowercase();
+        let cid = self.class_index.get(&lc).copied();
+        let key = match cid {
+            Some(c) => self.prop_decl_storage_key(c, &prop),
+            None => prop.clone(),
+        };
+        if let Some(old) = write_property(&obj, &key, value)? {
+            self.gc_note(&old);
+        }
+        Ok(Zval::Null)
+    }
+
     /// Resolve the class for a per-property lazy op (skip / raw-set) and check
     /// `prop` is eligible: a declared, non-static, non-virtual instance property.
     /// `Ok(cid)` when usable; `Err(msg)` is the `ReflectionException` message the
@@ -9760,6 +9799,8 @@ host_builtins! {
     b"__lazy_set_raw" => vm.ho_lazy_set_raw(args),
     b"__reflect_prop_names" => vm.ho_reflect_prop_names(args),
     b"__reflect_prop_is_static" => vm.ho_reflect_prop_is_static(args),
+    b"__reflect_prop_get" => vm.ho_reflect_prop_get(args),
+    b"__reflect_prop_set" => vm.ho_reflect_prop_set(args),
     b"get_object_vars" => vm.ho_get_object_vars(args),
     b"get_class_vars" => vm.ho_get_class_vars(args),
     b"register_shutdown_function" => vm.ho_register_shutdown_function(args),
