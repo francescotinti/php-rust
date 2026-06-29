@@ -2225,6 +2225,13 @@ impl<'m> Vm<'m> {
                 Op::IterInit => {
                     let iterable = self.frames[top].stack.pop().expect("IterInit iterable");
                     let deref = iterable.deref_clone();
+                    // foreach over a lazy object initializes it first (PHP 8.4); a
+                    // proxy then iterates its real instance's properties.
+                    let deref = if deref_object(&deref).is_some_and(|o| o.borrow().lazy.is_some()) {
+                        self.realize_full(&deref)?
+                    } else {
+                        deref
+                    };
                     // A generator iterates live (no snapshot); an `Iterator` /
                     // `IteratorAggregate` object drives the protocol via the
                     // re-entrant state machine in `IterNext` (step 51); an array /
@@ -4637,6 +4644,13 @@ impl<'m> Vm<'m> {
                 self.json_normalize(inner)
             }
             Zval::Object(_) => {
+                // A lazy object initializes before being encoded (PHP 8.4); a
+                // proxy forwards to its real instance. After realize the result is
+                // non-lazy, so the re-normalize does not recurse here again.
+                if deref_object(&v).is_some_and(|o| o.borrow().lazy.is_some()) {
+                    let real = self.realize_full(&v)?;
+                    return self.json_normalize(real);
+                }
                 let cid = object_class_id(&v).expect("object has a class id");
                 if self.jsonserializable_id.is_some_and(|j| is_instance_of(&self.classes, self.stringable_id, cid, j)) {
                     let r = self.call_method_sync(v, b"jsonSerialize", Vec::new())?;
@@ -6519,6 +6533,9 @@ impl<'m> Vm<'m> {
             ));
         };
         let v = a.deref_clone();
+        // A lazy object initializes before its properties are read (PHP 8.4); a
+        // proxy then forwards to its real instance.
+        let v = self.realize_full(&v)?;
         let Zval::Object(o) = v else {
             return Err(PhpError::TypeError(format!(
                 "get_object_vars(): Argument #1 ($object) must be of type object, {} given",
@@ -8900,6 +8917,18 @@ impl<'m> Vm<'m> {
             }
         }
         v
+    }
+
+
+    /// Fully initialize a lazy object — regardless of any per-property skip
+    /// state — and return the object a *whole-object* operation should read: the
+    /// real instance for an initialized proxy, else the object itself. Used by
+    /// operations that consume the entire object at once (`(array)` cast,
+    /// `get_object_vars`, `json_encode`, `serialize`, `var_export`, `foreach`,
+    /// comparison), all of which trigger initialization in PHP 8.4.
+    fn realize_full(&mut self, v: &Zval) -> Result<Zval, PhpError> {
+        self.realize_lazy(v)?;
+        Ok(self.proxy_redirect(v.clone()))
     }
 
     /// Trigger lazy initialization before an access to property `name` when `v`
