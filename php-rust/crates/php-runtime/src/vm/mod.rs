@@ -373,6 +373,7 @@ pub(crate) fn run_module_with_hir<'m>(
         uncaught_throwable: None,
         lazy_init: HashMap::new(),
         lazy_props: HashMap::new(),
+        lazy_initializing: HashSet::new(),
     };
     // Register the caller module's own functions in the global link table so a
     // call made from inside an `eval()` (where `self.module` is the eval unit,
@@ -938,6 +939,11 @@ struct Vm<'m> {
     /// initializer (every property is already materialized). Absent for a
     /// non-lazy object.
     lazy_props: HashMap<u32, Vec<Box<[u8]>>>,
+    /// Object ids whose initializer/factory is *currently running* (PHP 8.4):
+    /// re-entering `resetAsLazy*` on such an object is an error ("Can not reset an
+    /// object while it is being initialized"). Populated by `realize_lazy` around
+    /// the initializer call and cleared when it returns (even on throw).
+    lazy_initializing: HashSet<u32>,
 }
 
 impl<'m> Vm<'m> {
@@ -6225,6 +6231,18 @@ impl<'m> Vm<'m> {
         Ok(Zval::Bool(is))
     }
 
+
+    /// `__lazy_is_initializing($obj)`: whether `$obj`'s initializer/factory is
+    /// currently running — a re-entrant `resetAsLazy*` on it is forbidden (PHP
+    /// 8.4).
+    fn ho_lazy_is_initializing(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let is = args
+            .first()
+            .and_then(deref_object)
+            .is_some_and(|o| self.lazy_initializing.contains(&o.borrow().id));
+        Ok(Zval::Bool(is))
+    }
+
     /// `__lazy_initialize($obj)`: force initialization and return `$obj` — PHP 8.4
     /// `ReflectionClass::initializeLazyObject`.
     fn ho_lazy_initialize(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
@@ -8906,8 +8924,13 @@ impl<'m> Vm<'m> {
                 }
                 self.lazy_props.remove(&oid);
                 if let Some(init) = self.lazy_init.remove(&oid) {
-                    // The ghost initializer populates the object; its return is ignored.
-                    self.call_callable(init, vec![v.clone()])?;
+                    // The ghost initializer populates the object; its return is
+                    // ignored. The object is marked "initializing" so a re-entrant
+                    // `resetAsLazy*` on it errors (cleared even if it throws).
+                    self.lazy_initializing.insert(oid);
+                    let r = self.call_callable(init, vec![v.clone()]);
+                    self.lazy_initializing.remove(&oid);
+                    r?;
                 }
             }
             LazyKind::Proxy => {
@@ -8916,7 +8939,10 @@ impl<'m> Vm<'m> {
                 // the proxy during the factory does not recurse (it sees no factory
                 // and bails). The factory's return is the real instance to forward to.
                 if let Some(factory) = self.lazy_init.remove(&oid) {
-                    let real = self.call_callable(factory, vec![v.clone()])?;
+                    self.lazy_initializing.insert(oid);
+                    let r = self.call_callable(factory, vec![v.clone()]);
+                    self.lazy_initializing.remove(&oid);
+                    let real = r?;
                     rc.borrow_mut().proxy_instance = Some(Box::new(real));
                 }
             }
@@ -9728,6 +9754,7 @@ host_builtins! {
     b"__reflect_new_lazy_proxy" => vm.ho_reflect_new_lazy_proxy(args),
     b"__reflect_reset_lazy" => vm.ho_reflect_reset_lazy(args),
     b"__lazy_is_uninitialized" => vm.ho_lazy_is_uninitialized(args),
+    b"__lazy_is_initializing" => vm.ho_lazy_is_initializing(args),
     b"__lazy_initialize" => vm.ho_lazy_initialize(args),
     b"__lazy_skip_init" => vm.ho_lazy_skip_init(args),
     b"__lazy_set_raw" => vm.ho_lazy_set_raw(args),
