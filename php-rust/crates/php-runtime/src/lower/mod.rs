@@ -961,6 +961,7 @@ class ReflectionClass {
     }
     public function newInstance(...$args) { return new $this->name(...$args); }
     public function newInstanceArgs($args = []) { return new $this->name(...$args); }
+    public function newInstanceWithoutConstructor() { return __reflect_new_no_ctor($this->name); }
     public function isInstantiable() { return class_exists($this->name); }
     public function isInterface() { return interface_exists($this->name); }
     public function isFinal() { return __reflect_class_modifiers($this->name)['final']; }

@@ -6048,6 +6048,23 @@ impl<'m> Vm<'m> {
         Ok(Zval::Array(Rc::new(a)))
     }
 
+    /// `__reflect_new_no_ctor($class)`: allocate an instance of `$class` with its
+    /// declared property defaults (typed properties left uninitialized) but
+    /// *without* invoking the constructor — `ReflectionClass::newInstanceWithoutConstructor`.
+    fn ho_reflect_new_no_ctor(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let raw = match args.first() {
+            Some(v) => convert::to_zstr_cast(v, &mut self.diags).as_bytes().to_vec(),
+            None => return Err(PhpError::Error(
+                "newInstanceWithoutConstructor() expects a class name".to_string(),
+            )),
+        };
+        let key = raw.strip_prefix(b"\\").unwrap_or(&raw).to_ascii_lowercase();
+        let cid = *self.class_index.get(&key).ok_or_else(|| {
+            PhpError::Error(format!("Class \"{}\" does not exist", String::from_utf8_lossy(&raw)))
+        })?;
+        self.alloc_object(cid)
+    }
+
     /// `__reflect_class_attributes($class, $filter = null)`: the host backing of
     /// `ReflectionClass::getAttributes()`. Returns an array of `ReflectionAttribute`
     /// objects, one per `#[…]` declared on `$class` (optionally filtered by
@@ -9229,6 +9246,7 @@ host_builtins! {
     b"__reflect_func_info" => vm.ho_reflect_func_info(args),
     b"__reflect_method_info" => vm.ho_reflect_method_info(args),
     b"__reflect_class_modifiers" => vm.ho_reflect_class_modifiers(args),
+    b"__reflect_new_no_ctor" => vm.ho_reflect_new_no_ctor(args),
     b"get_object_vars" => vm.ho_get_object_vars(args),
     b"get_class_vars" => vm.ho_get_class_vars(args),
     b"register_shutdown_function" => vm.ho_register_shutdown_function(args),
