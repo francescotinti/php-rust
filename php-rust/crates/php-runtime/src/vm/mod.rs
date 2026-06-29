@@ -372,6 +372,7 @@ pub(crate) fn run_module_with_hir<'m>(
         mb_regex: crate::mbregex::MbRegexState::default(),
         uncaught_throwable: None,
         lazy_init: HashMap::new(),
+        lazy_props: HashMap::new(),
     };
     // Register the caller module's own functions in the global link table so a
     // call made from inside an `eval()` (where `self.module` is the eval unit,
@@ -928,6 +929,15 @@ struct Vm<'m> {
     /// (the entry is removed on initialization). Kept off `Object` so it can carry
     /// a `Zval` (which is not `PartialEq`).
     lazy_init: HashMap<u32, Zval>,
+    /// Per-property laziness of *uninitialized* lazy objects (PHP 8.4
+    /// `skipLazyInitialization` / `setRawValueWithoutLazyInitialization`), keyed
+    /// by object id: the declared instance properties (in declaration order) that
+    /// are *still lazy*, i.e. an access to one of them triggers initialization.
+    /// Seeded with every eligible property at alloc; a skip/raw-set removes one,
+    /// and when the set empties the object realizes *without* running its
+    /// initializer (every property is already materialized). Absent for a
+    /// non-lazy object.
+    lazy_props: HashMap<u32, Vec<Box<[u8]>>>,
 }
 
 impl<'m> Vm<'m> {
@@ -3123,7 +3133,7 @@ impl<'m> Vm<'m> {
                     let target = obj.deref_clone();
                     // A read of a lazy object initializes it first (PHP 8.4); an
                     // initialized proxy then forwards the read to its real instance.
-                    self.trigger_lazy(&target)?;
+                    self.trigger_lazy(&target, &name)?;
                     let target = self.proxy_redirect(target);
                     // Storage slot to read (the plain name for a dynamic/non-object
                     // target; a mangled key for an accessible private — set below).
@@ -3245,7 +3255,7 @@ impl<'m> Vm<'m> {
                     // A write to a lazy object initializes it first (PHP 8.4); a no-op
                     // during the object's own construction (it is no longer lazy then).
                     let target = if !self.frames[top].init_props {
-                        self.trigger_lazy(&target)?;
+                        self.trigger_lazy(&target, &name)?;
                         // An initialized proxy forwards the write to its real instance.
                         self.proxy_redirect(target)
                     } else {
@@ -6142,6 +6152,111 @@ impl<'m> Vm<'m> {
         Ok(v)
     }
 
+    /// `__reflect_prop_names($class)`: the declared instance properties of
+    /// `$class` (flattened, declaration order) as a list — backs
+    /// `ReflectionClass::getProperties`. Virtual/static properties are omitted
+    /// (only the `prop_defaults` slots).
+    fn ho_reflect_prop_names(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let mut a = php_types::PhpArray::new();
+        if let Some(first) = args.first() {
+            let raw = convert::to_zstr_cast(first, &mut self.diags).as_bytes().to_vec();
+            let key = raw.strip_prefix(b"\\").unwrap_or(&raw).to_ascii_lowercase();
+            if let Some(&cid) = self.class_index.get(&key) {
+                for (n, _) in &self.classes[cid].prop_defaults {
+                    let _ = a.append(Zval::Str(PhpStr::new(n.to_vec())));
+                }
+            }
+        }
+        Ok(Zval::Array(Rc::new(a)))
+    }
+
+    /// `__reflect_prop_is_static($class, $prop)`: whether `$prop` is a static
+    /// property of `$class` — backs `ReflectionProperty::isStatic`.
+    fn ho_reflect_prop_is_static(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let cls = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let prop = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let key = cls.strip_prefix(b"\\").unwrap_or(&cls).to_ascii_lowercase();
+        let is = self
+            .class_index
+            .get(&key)
+            .is_some_and(|&cid| self.classes[cid].static_props.iter().any(|sp| sp.name.as_ref() == prop.as_slice()));
+        Ok(Zval::Bool(is))
+    }
+
+    /// Resolve the class for a per-property lazy op (skip / raw-set) and check
+    /// `prop` is eligible: a declared, non-static, non-virtual instance property.
+    /// `Ok(cid)` when usable; `Err(msg)` is the `ReflectionException` message the
+    /// PHP wrapper throws (naming `op`, the public method name).
+    fn lazy_prop_target(&mut self, class: &Zval, prop: &[u8], op: &str) -> Result<ClassId, String> {
+        let raw = convert::to_zstr_cast(class, &mut self.diags).as_bytes().to_vec();
+        let key = raw.strip_prefix(b"\\").unwrap_or(&raw).to_ascii_lowercase();
+        let cid = match self.class_index.get(&key) {
+            Some(&c) => c,
+            None => return Err(format!("Class \"{}\" does not exist", String::from_utf8_lossy(&raw))),
+        };
+        if self.is_lazy_eligible_prop(cid, prop) {
+            return Ok(cid);
+        }
+        let cc = self.classes[cid];
+        let cname = String::from_utf8_lossy(&cc.name).into_owned();
+        let pname = String::from_utf8_lossy(prop).into_owned();
+        if cc.static_props.iter().any(|sp| sp.name.as_ref() == prop) {
+            Err(format!("Can not use {op} on static property {cname}::${pname}"))
+        } else if cc.prop_info.get(prop).and_then(|pi| pi.hooks.as_ref()).is_some_and(|h| !h.backed) {
+            Err(format!("Can not use {op} on virtual property {cname}::${pname}"))
+        } else {
+            Err(format!("Can not use {op} on dynamic property {cname}::${pname}"))
+        }
+    }
+
+    /// `__lazy_skip_init($obj, $class, $prop)`: mark a single declared property of
+    /// an uninitialized lazy object as non-lazy, materializing its declared
+    /// default without running the initializer (PHP 8.4
+    /// `ReflectionProperty::skipLazyInitialization`). Returns `null` on success
+    /// or a `string` ReflectionException message on an ineligible property.
+    fn ho_lazy_skip_init(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let obj = args.first().cloned().unwrap_or(Zval::Null);
+        let class = args.get(1).cloned().unwrap_or(Zval::Null);
+        let prop = convert::to_zstr_cast(args.get(2).unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let cid = match self.lazy_prop_target(&class, &prop, "skipLazyInitialization") {
+            Ok(c) => c,
+            Err(msg) => return Ok(Zval::Str(PhpStr::new(msg.into_bytes()))),
+        };
+        // The property's declared default: its const, but a typed property with no
+        // default stays uninitialized (`Undef`).
+        let cc = self.classes[cid];
+        let default = if cc.uninit_props.iter().any(|n| n.as_ref() == prop.as_slice()) {
+            Zval::Undef
+        } else {
+            cc.prop_defaults
+                .iter()
+                .find(|(n, _)| n.as_ref() == prop.as_slice())
+                .map(|(_, c)| c.to_zval())
+                .unwrap_or(Zval::Null)
+        };
+        self.lazy_materialize(&obj, &prop, default);
+        Ok(Zval::Null)
+    }
+
+    /// `__lazy_set_raw($obj, $class, $prop, $value)`: set a single declared
+    /// property of an uninitialized lazy object to `$value` without running the
+    /// initializer, marking it non-lazy (PHP 8.4
+    /// `ReflectionProperty::setRawValueWithoutLazyInitialization`). Returns `null`
+    /// on success or a `string` ReflectionException message on an ineligible
+    /// property.
+    fn ho_lazy_set_raw(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let obj = args.first().cloned().unwrap_or(Zval::Null);
+        let class = args.get(1).cloned().unwrap_or(Zval::Null);
+        let prop = convert::to_zstr_cast(args.get(2).unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let value = args.get(3).cloned().unwrap_or(Zval::Null);
+        match self.lazy_prop_target(&class, &prop, "setRawValueWithoutLazyInitialization") {
+            Ok(_) => {}
+            Err(msg) => return Ok(Zval::Str(PhpStr::new(msg.into_bytes()))),
+        }
+        self.lazy_materialize(&obj, &prop, value);
+        Ok(Zval::Null)
+    }
+
     /// `__reflect_class_attributes($class, $filter = null)`: the host backing of
     /// `ReflectionClass::getAttributes()`. Returns an array of `ReflectionAttribute`
     /// objects, one per `#[…]` declared on `$class` (optionally filtered by
@@ -8629,6 +8744,11 @@ impl<'m> Vm<'m> {
             for name in &cc.uninit_props {
                 props.set(name, Zval::Undef);
             }
+            // Every eligible (non-static, non-virtual) declared instance property
+            // starts lazy; `prop_defaults` already lists them flattened in
+            // declaration order. A skip / raw-set later removes one.
+            let still_lazy: Vec<Box<[u8]>> =
+                cc.prop_defaults.iter().map(|(n, _)| n.clone()).collect();
             let oid = {
                 let mut b = rc.borrow_mut();
                 b.props = props;
@@ -8636,6 +8756,7 @@ impl<'m> Vm<'m> {
                 b.id
             };
             self.lazy_init.insert(oid, init);
+            self.lazy_props.insert(oid, still_lazy);
         }
         Ok(v)
     }
@@ -8676,12 +8797,14 @@ impl<'m> Vm<'m> {
                     b.lazy = None;
                     b.props = props;
                 }
+                self.lazy_props.remove(&oid);
                 if let Some(init) = self.lazy_init.remove(&oid) {
                     // The ghost initializer populates the object; its return is ignored.
                     self.call_callable(init, vec![v.clone()])?;
                 }
             }
             LazyKind::Proxy => {
+                self.lazy_props.remove(&oid);
                 // Remove the factory *before* invoking it so a re-entrant access on
                 // the proxy during the factory does not recurse (it sees no factory
                 // and bails). The factory's return is the real instance to forward to.
@@ -8692,6 +8815,26 @@ impl<'m> Vm<'m> {
             }
         }
         Ok(())
+    }
+
+    /// Materialize a single property of an *uninitialized* lazy object without
+    /// running its initializer (PHP 8.4 `skipLazyInitialization` /
+    /// `setRawValueWithoutLazyInitialization`): write `value`, drop the property
+    /// from the still-lazy set, and — once that set empties — clear the lazy
+    /// marker so the object becomes ordinary (no initializer/factory runs; every
+    /// property is already set). The caller has validated `prop` is eligible.
+    fn lazy_materialize(&mut self, v: &Zval, prop: &[u8], value: Zval) {
+        let Some(rc) = deref_object(v) else { return };
+        let oid = rc.borrow().id;
+        rc.borrow_mut().props.set(prop, value);
+        if let Some(set) = self.lazy_props.get_mut(&oid) {
+            set.retain(|n| n.as_ref() != prop);
+            if set.is_empty() {
+                self.lazy_props.remove(&oid);
+                self.lazy_init.remove(&oid);
+                rc.borrow_mut().lazy = None;
+            }
+        }
     }
 
     /// If `v` is an *initialized* lazy proxy, the real instance it forwards to;
@@ -8710,16 +8853,39 @@ impl<'m> Vm<'m> {
         v
     }
 
-    /// Trigger lazy initialization before an access (property read/write, method
-    /// call) when `v` is an uninitialized lazy object. Cheap for the common case:
-    /// a plain `Option` check on the object, no work for non-lazy objects.
-    fn trigger_lazy(&mut self, v: &Zval) -> Result<(), PhpError> {
+    /// Trigger lazy initialization before an access to property `name` when `v`
+    /// is an uninitialized lazy object. Cheap for the common case: a plain
+    /// `Option` check, no work for non-lazy objects. A property that has been
+    /// individually materialized (skip / raw-set, so no longer in the still-lazy
+    /// set) does *not* trigger; an access to any still-lazy or dynamic property
+    /// does.
+    fn trigger_lazy(&mut self, v: &Zval, name: &[u8]) -> Result<(), PhpError> {
         if let Some(rc) = deref_object(v) {
-            if rc.borrow().lazy.is_some() {
-                self.realize_lazy(v)?;
+            let (lazy, oid, cid) = {
+                let b = rc.borrow();
+                (b.lazy.is_some(), b.id, b.class_id as usize)
+            };
+            if !lazy {
+                return Ok(());
             }
+            // A declared eligible property that is no longer in the still-lazy set
+            // has been materialized: reading/writing it must not initialize.
+            if let Some(set) = self.lazy_props.get(&oid) {
+                let still_lazy = set.iter().any(|n| n.as_ref() == name);
+                if !still_lazy && self.is_lazy_eligible_prop(cid, name) {
+                    return Ok(());
+                }
+            }
+            self.realize_lazy(v)?;
         }
         Ok(())
+    }
+
+    /// Whether `name` is a property eligible for per-property lazy control on
+    /// class `cid`: a declared, non-static, non-virtual instance property (those
+    /// are exactly the entries of `prop_defaults`).
+    fn is_lazy_eligible_prop(&self, cid: ClassId, name: &[u8]) -> bool {
+        self.classes[cid].prop_defaults.iter().any(|(n, _)| n.as_ref() == name)
     }
 
     /// Return the interned singleton object for enum `class`'s `case`-th case,
@@ -9443,6 +9609,10 @@ host_builtins! {
     b"__reflect_new_lazy_proxy" => vm.ho_reflect_new_lazy_proxy(args),
     b"__lazy_is_uninitialized" => vm.ho_lazy_is_uninitialized(args),
     b"__lazy_initialize" => vm.ho_lazy_initialize(args),
+    b"__lazy_skip_init" => vm.ho_lazy_skip_init(args),
+    b"__lazy_set_raw" => vm.ho_lazy_set_raw(args),
+    b"__reflect_prop_names" => vm.ho_reflect_prop_names(args),
+    b"__reflect_prop_is_static" => vm.ho_reflect_prop_is_static(args),
     b"get_object_vars" => vm.ho_get_object_vars(args),
     b"get_class_vars" => vm.ho_get_class_vars(args),
     b"register_shutdown_function" => vm.ho_register_shutdown_function(args),

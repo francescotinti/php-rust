@@ -972,6 +972,12 @@ class ReflectionClass {
     public function isAbstract() { return __reflect_class_modifiers($this->name)['abstract']; }
     public function hasMethod($name) { return method_exists($this->name, $name); }
     public function hasProperty($name) { return property_exists($this->name, $name); }
+    public function getProperty($name) { return new ReflectionProperty($this->name, $name); }
+    public function getProperties($filter = null) {
+        $out = [];
+        foreach (__reflect_prop_names($this->name) as $n) { $out[] = new ReflectionProperty($this->name, $n); }
+        return $out;
+    }
     public function hasConstant($name) { return defined($this->name . '::' . $name); }
     public function getConstant($name) { return constant($this->name . '::' . $name); }
     public function implementsInterface($interface) {
@@ -1150,6 +1156,15 @@ class ReflectionProperty {
         $this->class = $decl === false ? $cls : $decl;
     }
     public function getName() { return $this->name; }
+    public function isStatic() { return __reflect_prop_is_static($this->class, $this->name); }
+    public function skipLazyInitialization($object) {
+        $msg = __lazy_skip_init($object, $this->class, $this->name);
+        if ($msg !== null) { throw new ReflectionException($msg); }
+    }
+    public function setRawValueWithoutLazyInitialization($object, $value) {
+        $msg = __lazy_set_raw($object, $this->class, $this->name, $value);
+        if ($msg !== null) { throw new ReflectionException($msg); }
+    }
 }
 "##;
 
