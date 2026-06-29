@@ -1085,6 +1085,18 @@ impl<'m> Vm<'m> {
                 self.gc_cascade(&o);
                 continue;
             }
+            // A lazy *wrapper* (an uninitialized ghost, or a proxy whether or not
+            // it is initialized) does not run its own `__destruct` (PHP 8.4): an
+            // uninitialized object was never constructed, and a proxy forwards to
+            // its real instance, which is a separate tracked object that runs its
+            // own destructor. Treat the wrapper as destructor-less; the cascade
+            // releases the real instance so its `__destruct` fires next pass.
+            if o.borrow().lazy.is_some() {
+                self.lazy_init.remove(&id);
+                self.lazy_props.remove(&id);
+                self.gc_cascade(&o);
+                continue;
+            }
             if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, b"__destruct") {
                 log::debug!(target: "phpr::gc", "destruct: {}#{}", String::from_utf8_lossy(&self.classes[cid].name), id);
                 self.destructed.insert(id);
@@ -1115,6 +1127,12 @@ impl<'m> Vm<'m> {
         let b = o.borrow();
         for (_, v) in b.props.iter() {
             self.gc_note(v);
+        }
+        // A lazy proxy also holds its real instance off to the side (not in
+        // `props`); releasing the proxy releases that, so it may become
+        // collectable too — e.g. its own `__destruct` runs once the proxy goes.
+        if let Some(inst) = &b.proxy_instance {
+            self.gc_note(inst);
         }
     }
 
