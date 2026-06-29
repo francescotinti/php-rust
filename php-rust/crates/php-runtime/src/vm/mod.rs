@@ -2166,6 +2166,8 @@ impl<'m> Vm<'m> {
                     // REF-4: navigate to the place's leaf, promote it to a shared
                     // cell, and push a reference to it. Keys (for `Index` steps)
                     // were pushed in source order and sit on top of the stack.
+                    // Taking a reference *to* a hooked property is indirect modification.
+                    self.reject_indirect_hook(base, top, &steps)?;
                     let keys = self.pop_field_keys(top, &steps);
                     let cell = {
                         let base_cell = field_base_mut(&mut self.frames, top, base)?;
@@ -2180,6 +2182,12 @@ impl<'m> Vm<'m> {
                 Op::BindRefTo { base, steps } => {
                     // REF-4: pop the reference, bind the target place to its cell,
                     // and push the aliased value (the assignment's result).
+                    // Binding a reference *into* a hooked property is forbidden.
+                    if self.field_starts_at_hook(base, top, &steps) {
+                        return Err(PhpError::Error(
+                            "Cannot assign by reference to overloaded object".to_string(),
+                        ));
+                    }
                     let top_val = self.frames[top].stack.pop().expect("BindRefTo value");
                     let cell = match top_val {
                         Zval::Ref(rc) => rc,
@@ -3969,12 +3977,14 @@ impl<'m> Vm<'m> {
                     self.frames[top].stack.push(if pre { newv } else { old });
                 }
                 Op::FieldAssign { base, steps } => {
+                    self.reject_indirect_hook(base, top, &steps)?;
                     let value = self.frames[top].stack.pop().expect("FieldAssign value");
                     let keys = self.pop_field_keys(top, &steps);
                     self.field_set(base, top, &steps, keys, value.clone())?;
                     self.frames[top].stack.push(value);
                 }
                 Op::FieldAssignOp { base, steps, op } => {
+                    self.reject_indirect_hook(base, top, &steps)?;
                     let rhs = self.frames[top].stack.pop().expect("FieldAssignOp rhs");
                     let keys = self.pop_field_keys(top, &steps);
                     let old = self.field_value(base, top, &steps, keys.clone()).unwrap_or(Zval::Null);
@@ -3983,6 +3993,7 @@ impl<'m> Vm<'m> {
                     self.frames[top].stack.push(result);
                 }
                 Op::FieldIncDec { base, steps, inc, pre } => {
+                    self.reject_indirect_hook(base, top, &steps)?;
                     let keys = self.pop_field_keys(top, &steps);
                     let old = self.field_value(base, top, &steps, keys.clone()).unwrap_or(Zval::Null);
                     let mut newv = old.clone();
@@ -8945,6 +8956,81 @@ impl<'m> Vm<'m> {
             frame.guard_release = Some(key);
         }
         self.frames.push(frame);
+    }
+
+    /// If a mixed write/ref path starts by navigating *into* a property that has
+    /// a get/set hook, PHP rejects the indirect modification — a hooked
+    /// property's storage is not directly addressable (`zend_std_read_property`
+    /// with a write fetch). Returns the `(class name, prop name)` to name in the
+    /// error, or `None` when the path is allowed: the property is not hooked, or
+    /// its current value is an object (object handles stay mutable). A `&get`
+    /// by-reference hook would also allow it, but those are not yet supported.
+    fn indirect_hook_target(
+        &self,
+        base: FieldBase,
+        top: usize,
+        steps: &[FieldStep],
+    ) -> Option<(Vec<u8>, Vec<u8>)> {
+        let FieldStep::Prop(name) = steps.first()? else { return None };
+        let base_val = match base {
+            FieldBase::Local(s) => self.frames[top].slots.get(s as usize)?,
+            FieldBase::Global(s) => self.frames[0].slots.get(s as usize)?,
+            FieldBase::This => self.frames[top].this.as_ref()?,
+        };
+        let o = deref_object(base_val)?;
+        let cid = o.borrow().class_id as usize;
+        if self.prop_hook(cid, name, false).is_none() && self.prop_hook(cid, name, true).is_none() {
+            return None;
+        }
+        // Inside the property's own hook the access reaches the backing store
+        // directly (the hook guard is active), so it is not an indirect access.
+        if self.hook_guarded(o.borrow().id, name) {
+            return None;
+        }
+        // An object value remains modifiable through its handle (Zend allows it).
+        let key = self.prop_storage_key(cid, name, self.frames[top].class);
+        if matches!(o.borrow().props.get(&key).map(|v| v.deref_clone()), Some(Zval::Object(_))) {
+            return None;
+        }
+        Some((self.classes[cid].name.to_vec(), name.to_vec()))
+    }
+
+    /// Reject a write/ref path that indirectly modifies a hooked property
+    /// (`$o->hookedProp[...] = ...`, `$ref =& $o->hookedProp`). No-op when the
+    /// path is allowed (see [`Self::indirect_hook_target`]).
+    fn reject_indirect_hook(
+        &self,
+        base: FieldBase,
+        top: usize,
+        steps: &[FieldStep],
+    ) -> Result<(), PhpError> {
+        if let Some((cls, prop)) = self.indirect_hook_target(base, top, steps) {
+            return Err(PhpError::Error(format!(
+                "Indirect modification of {}::${} is not allowed",
+                String::from_utf8_lossy(&cls),
+                String::from_utf8_lossy(&prop),
+            )));
+        }
+        Ok(())
+    }
+
+    /// Whether a field path's first step writes *into* a hooked property —
+    /// binding a reference to it (`$o->hookedProp =& $r`) is rejected with
+    /// "Cannot assign by reference to overloaded object" regardless of value.
+    fn field_starts_at_hook(&self, base: FieldBase, top: usize, steps: &[FieldStep]) -> bool {
+        let Some(FieldStep::Prop(name)) = steps.first() else { return false };
+        let base_val = match base {
+            FieldBase::Local(s) => self.frames[top].slots.get(s as usize),
+            FieldBase::Global(s) => self.frames[0].slots.get(s as usize),
+            FieldBase::This => self.frames[top].this.as_ref(),
+        };
+        let Some(o) = base_val.and_then(deref_object) else { return false };
+        // Inside the property's own hook the backing store is addressed directly.
+        if self.hook_guarded(o.borrow().id, name) {
+            return false;
+        }
+        let cid = o.borrow().class_id as usize;
+        self.prop_hook(cid, name, false).is_some() || self.prop_hook(cid, name, true).is_some()
     }
 
 }

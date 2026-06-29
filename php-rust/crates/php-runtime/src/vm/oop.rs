@@ -116,6 +116,16 @@ pub(super) fn object_class_id(v: &Zval) -> Option<ClassId> {
     }
 }
 
+/// The object a value resolves to (following a reference), or `None` for a
+/// non-object — for inspecting a field-path base that may be a `Ref`.
+pub(super) fn deref_object(v: &Zval) -> Option<Rc<RefCell<Object>>> {
+    match v {
+        Zval::Object(o) => Some(o.clone()),
+        Zval::Ref(rc) => deref_object(&rc.borrow()),
+        _ => None,
+    }
+}
+
 /// The object id of a value (following a reference), or 0 for a non-object — the
 /// key the hook guard uses to mark an active property hook on an instance.
 pub(super) fn object_id(v: &Zval) -> u32 {
