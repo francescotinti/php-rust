@@ -6395,10 +6395,18 @@ impl<'m> Vm<'m> {
     /// attribute's `new Attr(args)` thunk (mirrors `__reflect_attr_newinstance`).
     fn ho_reflect_prop_attr_new(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let Some(thunk) = self.prop_attr_thunk(&args, false) else { return Ok(Zval::Null) };
-        let cid = self.class_index.get(&{
-            let c = match args.first() { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => Vec::new() };
-            c.strip_prefix(b"\\").unwrap_or(&c).to_ascii_lowercase()
-        }).copied().unwrap_or(0);
+        let cname = match args.first() { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => Vec::new() };
+        let cid = self.class_index.get(&cname.strip_prefix(b"\\").unwrap_or(&cname).to_ascii_lowercase()).copied().unwrap_or(0);
+        // Validate the property attribute's target/repeatability first.
+        let prop = match args.get(1) { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => Vec::new() };
+        let idx = match args.get(2) { Some(Zval::Long(i)) => *i as usize, _ => 0 };
+        if let Some(list) = self.classes[cid].prop_attributes.get(prop.as_slice()) {
+            if let Some(attr) = list.get(idx) {
+                let attr_name = attr.name.to_vec();
+                let siblings: Vec<Vec<u8>> = list.iter().map(|a| a.name.to_vec()).collect();
+                self.validate_attr(&attr_name, &siblings, 8, "property")?;
+            }
+        }
         let baseline = self.frames.len();
         let mut frame = Frame::new(thunk, self.class_mod(cid));
         frame.class = Some(cid);
@@ -6472,6 +6480,11 @@ impl<'m> Vm<'m> {
         let Some((func, fmod)) = self.user_function_with_mod(&fname) else { return Ok(Zval::Null) };
         let Some(attr) = func.attributes.get(idx) else { return Ok(Zval::Null) };
         let thunk = if get_args { &attr.args_thunk } else { &attr.new_thunk };
+        if !get_args {
+            let attr_name = attr.name.to_vec();
+            let siblings: Vec<Vec<u8>> = func.attributes.iter().map(|a| a.name.to_vec()).collect();
+            self.validate_attr(&attr_name, &siblings, 2, "function")?;
+        }
         let baseline = self.frames.len();
         self.frames.push(Frame::new(thunk, fmod));
         self.drive_to_return(baseline)
@@ -6530,6 +6543,11 @@ impl<'m> Vm<'m> {
         let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, &method) else { return Ok(Zval::Null) };
         let Some(attr) = self.classes[defc].methods[midx].func.attributes.get(idx) else { return Ok(Zval::Null) };
         let thunk = if get_args { &attr.args_thunk } else { &attr.new_thunk };
+        if !get_args {
+            let attr_name = attr.name.to_vec();
+            let siblings: Vec<Vec<u8>> = self.classes[defc].methods[midx].func.attributes.iter().map(|a| a.name.to_vec()).collect();
+            self.validate_attr(&attr_name, &siblings, 4, "method")?;
+        }
         let baseline = self.frames.len();
         let mut frame = Frame::new(thunk, self.class_mod(defc));
         frame.class = Some(defc);
@@ -6584,7 +6602,15 @@ impl<'m> Vm<'m> {
         let cname = match args.first() { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => return Ok(Zval::Null) };
         let idx = match args.get(1) { Some(Zval::Long(i)) => *i as usize, _ => return Ok(Zval::Null) };
         let key = cname.strip_prefix(b"\\").unwrap_or(&cname).to_vec();
-        let Some(attr) = self.module.const_attributes.get(key.as_slice()).and_then(|v| v.get(idx)) else { return Ok(Zval::Null) };
+        let Some(list) = self.module.const_attributes.get(key.as_slice()) else { return Ok(Zval::Null) };
+        let Some(attr) = list.get(idx) else { return Ok(Zval::Null) };
+        // `newInstance()` validates the attribute's target/repeatability first.
+        if !get_args {
+            let attr_name = attr.name.to_vec();
+            let siblings: Vec<Vec<u8>> = list.iter().map(|a| a.name.to_vec()).collect();
+            self.validate_attr(&attr_name, &siblings, 64, "constant")?;
+        }
+        let attr = self.module.const_attributes.get(key.as_slice()).and_then(|v| v.get(idx)).unwrap();
         let thunk = if get_args { &attr.args_thunk } else { &attr.new_thunk };
         let baseline = self.frames.len();
         self.frames.push(Frame::new(thunk, self.module));
@@ -6599,6 +6625,53 @@ impl<'m> Vm<'m> {
     /// `__reflect_const_attr_args($const, $index)`.
     fn ho_reflect_const_attr_args(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         self.run_const_attr(&args, true)
+    }
+
+
+    /// The `#[Attribute(flags)]` flag bitmask declared on attribute class
+    /// `attr_class`, by running its retained args thunk (`#[Attribute]` with no
+    /// args defaults to `TARGET_ALL = 127`). A class with no `#[Attribute]`
+    /// attribute, or an unknown class, is treated permissively (127).
+    fn attr_flags(&mut self, attr_class: &[u8]) -> i64 {
+        let lc = attr_class.strip_prefix(b"\\").unwrap_or(attr_class).to_ascii_lowercase();
+        let Some(&cid) = self.class_index.get(&lc) else { return 127 };
+        let cc = self.classes[cid];
+        let Some(pos) = cc.attributes.iter().position(|a| {
+            a.name.strip_prefix(b"\\").unwrap_or(&a.name).eq_ignore_ascii_case(b"Attribute")
+        }) else {
+            return 127;
+        };
+        let thunk = &cc.attributes[pos].args_thunk;
+        let baseline = self.frames.len();
+        self.frames.push(Frame::new(thunk, self.class_mod(cid)));
+        match self.drive_to_return(baseline) {
+            Ok(Zval::Array(a)) => match a.iter().next() {
+                Some((_, Zval::Long(n))) => *n,
+                _ => 127,
+            },
+            _ => 127,
+        }
+    }
+
+    /// Validate that attribute `attr_class` may be instantiated on its target
+    /// (PHP 8.4, at `newInstance()` time): its `#[Attribute]` flags must allow
+    /// `target_bit`, and — unless `IS_REPEATABLE` (128) — it must not appear more
+    /// than once among `siblings` (the attribute names on the same target).
+    fn validate_attr(&mut self, attr_class: &[u8], siblings: &[Vec<u8>], target_bit: i64, target_label: &str) -> Result<(), PhpError> {
+        let flags = self.attr_flags(attr_class);
+        let bare = attr_class.strip_prefix(b"\\").unwrap_or(attr_class);
+        let name = String::from_utf8_lossy(bare).into_owned();
+        let count = siblings.iter().filter(|s| s.strip_prefix(b"\\").unwrap_or(s).eq_ignore_ascii_case(bare)).count();
+        if count > 1 && (flags & 128) == 0 {
+            return Err(PhpError::Error(format!("Attribute \"{}\" must not be repeated", name)));
+        }
+        if (flags & target_bit) == 0 {
+            return Err(PhpError::Error(format!(
+                "Attribute \"{}\" cannot target {} (allowed targets: {})",
+                name, target_label, allowed_targets_str(flags)
+            )));
+        }
+        Ok(())
     }
 
     /// Resolve the class for a per-property lazy op (skip / raw-set) and check
@@ -6752,6 +6825,10 @@ impl<'m> Vm<'m> {
     fn ho_reflect_attr_newinstance(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let (cid, idx) = self.reflect_attr_handle(&args)?;
         let cc = self.classes[cid];
+        // Validate the class attribute's target/repeatability first.
+        let attr_name = cc.attributes[idx].name.to_vec();
+        let siblings: Vec<Vec<u8>> = cc.attributes.iter().map(|a| a.name.to_vec()).collect();
+        self.validate_attr(&attr_name, &siblings, 1, "class")?;
         let thunk = &cc.attributes[idx].new_thunk;
         let baseline = self.frames.len();
         let mut frame = Frame::new(thunk, self.class_mod(cid));
@@ -10174,6 +10251,20 @@ struct BtFrame {
     args: Vec<Zval>,
     /// True for an `eval()` unit's frame: rendered with no `args` in the array form.
     is_eval: bool,
+}
+
+/// The human-readable allowed-target list for an `#[Attribute(flags)]` bitmask,
+/// in PHP's order — used in the "cannot target X (allowed targets: …)" error.
+fn allowed_targets_str(flags: i64) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    if flags & 1 != 0 { parts.push("class"); }
+    if flags & 2 != 0 { parts.push("function"); }
+    if flags & 4 != 0 { parts.push("method"); }
+    if flags & 8 != 0 { parts.push("property"); }
+    if flags & 16 != 0 { parts.push("class constant"); }
+    if flags & 32 != 0 { parts.push("parameter"); }
+    if flags & 64 != 0 { parts.push("constant"); }
+    parts.join(", ")
 }
 
 /// Format one argument the way `debug_print_backtrace` does: scalars literal,

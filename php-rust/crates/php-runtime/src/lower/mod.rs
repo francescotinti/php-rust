@@ -488,6 +488,19 @@ fn stmt_variant_name(s: &Statement) -> &'static str {
 /// `file`/`line` are filled in by the evaluator at `new` time, not here.
 const PRELUDE_SRC: &[u8] = br##"<?php
 class stdClass {}
+class Attribute {
+    const TARGET_CLASS = 1;
+    const TARGET_FUNCTION = 2;
+    const TARGET_METHOD = 4;
+    const TARGET_PROPERTY = 8;
+    const TARGET_CLASS_CONSTANT = 16;
+    const TARGET_PARAMETER = 32;
+    const TARGET_CONSTANT = 64;
+    const TARGET_ALL = 127;
+    const IS_REPEATABLE = 128;
+    public int $flags;
+    public function __construct(int $flags = self::TARGET_ALL) { $this->flags = $flags; }
+}
 interface UnitEnum {}
 interface BackedEnum extends UnitEnum {}
 interface Stringable {}
