@@ -1153,7 +1153,22 @@ impl<'f> Lowerer<'f> {
         let inner = (|| {
             let params = if is_set {
                 match &hook.parameter_list {
-                    Some(pl) => self.lower_params(pl, line)?,
+                    Some(pl) => {
+                        // A set hook's value parameter must be by-value (PHP 8.4,
+                        // `zend_compile.c`).
+                        if let Some(p) = pl.parameters.iter().find(|p| p.ampersand.is_some()) {
+                            return Err(LowerError::Fatal {
+                                message: format!(
+                                    "Parameter ${} of set hook {}::${} must not be pass-by-reference",
+                                    String::from_utf8_lossy(strip_dollar(p.variable.name)),
+                                    String::from_utf8_lossy(self.cur_class.as_deref().unwrap_or(b"")),
+                                    String::from_utf8_lossy(prop_name),
+                                ),
+                                line,
+                            });
+                        }
+                        self.lower_params(pl, line)?
+                    }
                     None => {
                         // Implicit `$value` parameter.
                         let slot = self.slot_for(b"value");
