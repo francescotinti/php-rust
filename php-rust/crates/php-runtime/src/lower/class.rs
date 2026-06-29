@@ -1131,8 +1131,12 @@ impl<'f> Lowerer<'f> {
             }
             PropertyHookBody::Concrete(c) => c,
         };
+        // The hook's function name is `$prop::get` / `$prop::set` — the leading
+        // `$` is what `__FUNCTION__` / `__METHOD__` and back traces render (PHP
+        // 8.4). It is display-only; hook dispatch is keyed by the property name.
         let hook_name: Box<[u8]> = {
-            let mut v = prop_name.to_vec();
+            let mut v = vec![b'$'];
+            v.extend_from_slice(prop_name);
             v.extend_from_slice(if is_set { b"::set" } else { b"::get" });
             v.into()
         };

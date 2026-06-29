@@ -3344,6 +3344,19 @@ impl<'m> Vm<'m> {
                     }
                     let old = read_property(&obj, &key, &mut self.diags);
                     let mut result = apply_binop(op, &old, &rhs, &mut self.diags)?;
+                    // A `set` hook with no `get` hook (the backing read above is then
+                    // the property's own value) handles the write: dispatch it like
+                    // `$o->prop = result`, the compound's value being `result`.
+                    if let Zval::Object(o) = &obj.deref_clone() {
+                        let (oid, cid) = { let b = o.borrow(); (b.id, b.class_id as usize) };
+                        if !self.hook_guarded(oid, &name) && self.prop_hook(cid, &name, false).is_none() {
+                            if let Some(func) = self.prop_hook(cid, &name, true) {
+                                self.frames[top].stack.push(result.clone());
+                                self.push_hook(func, obj.deref_clone(), oid, &name, Some(result));
+                                continue;
+                            }
+                        }
+                    }
                     if let Some(ocid) = object_class_id(&obj) {
                         result = self.coerce_typed_prop_write(ocid, &name, result)?;
                     }
@@ -3376,6 +3389,18 @@ impl<'m> Vm<'m> {
                         ops::increment(&mut newv, &mut self.diags)?;
                     } else {
                         ops::decrement(&mut newv, &mut self.diags)?;
+                    }
+                    // A `set` hook (no `get` hook) handles the write; the inc/dec
+                    // expression still yields the pre/post value.
+                    if let Zval::Object(o) = &obj.deref_clone() {
+                        let (oid, cid) = { let b = o.borrow(); (b.id, b.class_id as usize) };
+                        if !self.hook_guarded(oid, &name) && self.prop_hook(cid, &name, false).is_none() {
+                            if let Some(func) = self.prop_hook(cid, &name, true) {
+                                self.frames[top].stack.push(if pre { newv.clone() } else { old });
+                                self.push_hook(func, obj.deref_clone(), oid, &name, Some(newv));
+                                continue;
+                            }
+                        }
                     }
                     if let Some(ocid) = object_class_id(&obj) {
                         newv = self.coerce_typed_prop_write(ocid, &name, newv)?;
