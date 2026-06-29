@@ -520,6 +520,13 @@ impl<'m> Vm<'m> {
             if self.destructed.contains(&id) {
                 continue;
             }
+            // A lazy *wrapper* (uninitialized ghost, or a proxy) never runs its own
+            // `__destruct` (PHP 8.4) — mirrors the `gc_sweep` rule for objects that
+            // survive to shutdown. The real instance behind a proxy is itself a
+            // tracked survivor and runs its destructor on its own turn.
+            if o.borrow().lazy.is_some() {
+                continue;
+            }
             if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, b"__destruct") {
                 self.destructed.insert(id);
                 let callee = &self.classes[defc].methods[midx].func;

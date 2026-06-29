@@ -8845,14 +8845,25 @@ impl<'m> Vm<'m> {
         // declaration order. A skip / raw-set later removes one.
         let still_lazy: Vec<Box<[u8]>> =
             cc.prop_defaults.iter().map(|(n, _)| n.clone()).collect();
-        let oid = {
+        let (oid, dropped) = {
             let mut b = rc.borrow_mut();
+            // The object's current contents are about to be discarded: capture its
+            // old property values (and any proxy instance) so their references can
+            // be released as possible GC roots. Resetting a *live* object thus runs
+            // the destructors of objects it held (nested destructors), matching PHP.
+            let mut dropped: Vec<Zval> = b.props.iter().map(|(_, v)| v.clone()).collect();
+            if let Some(inst) = &b.proxy_instance {
+                dropped.push((**inst).clone());
+            }
             b.props = props;
             b.proxy_instance = None;
             b.lazy = Some(kind);
             b.readonly_init.clear();
-            b.id
+            (b.id, dropped)
         };
+        for v in &dropped {
+            self.gc_note(v);
+        }
         self.lazy_init.insert(oid, init);
         self.lazy_props.insert(oid, still_lazy);
     }
