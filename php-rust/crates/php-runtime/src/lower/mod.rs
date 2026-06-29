@@ -488,6 +488,7 @@ fn stmt_variant_name(s: &Statement) -> &'static str {
 /// `file`/`line` are filled in by the evaluator at `new` time, not here.
 const PRELUDE_SRC: &[u8] = br##"<?php
 class stdClass {}
+#[Attribute(Attribute::TARGET_CLASS)]
 class Attribute {
     const TARGET_CLASS = 1;
     const TARGET_FUNCTION = 2;

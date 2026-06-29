@@ -6630,37 +6630,42 @@ impl<'m> Vm<'m> {
 
     /// The `#[Attribute(flags)]` flag bitmask declared on attribute class
     /// `attr_class`, by running its retained args thunk (`#[Attribute]` with no
-    /// args defaults to `TARGET_ALL = 127`). A class with no `#[Attribute]`
-    /// attribute, or an unknown class, is treated permissively (127).
-    fn attr_flags(&mut self, attr_class: &[u8]) -> i64 {
+    /// args defaults to `TARGET_ALL = 127`). `None` when the class is *known* but
+    /// carries no `#[Attribute]` — i.e. it is being used as an attribute but is
+    /// not one (a "non-attribute class" error). An unknown class is permissive
+    /// (`Some(127)`): the `new X()` thunk fails on its own with class-not-found.
+    fn attr_flags(&mut self, attr_class: &[u8]) -> Option<i64> {
         let lc = attr_class.strip_prefix(b"\\").unwrap_or(attr_class).to_ascii_lowercase();
-        let Some(&cid) = self.class_index.get(&lc) else { return 127 };
+        let Some(&cid) = self.class_index.get(&lc) else { return Some(127) };
         let cc = self.classes[cid];
-        let Some(pos) = cc.attributes.iter().position(|a| {
+        let pos = cc.attributes.iter().position(|a| {
             a.name.strip_prefix(b"\\").unwrap_or(&a.name).eq_ignore_ascii_case(b"Attribute")
-        }) else {
-            return 127;
-        };
+        })?;
         let thunk = &cc.attributes[pos].args_thunk;
         let baseline = self.frames.len();
         self.frames.push(Frame::new(thunk, self.class_mod(cid)));
-        match self.drive_to_return(baseline) {
+        Some(match self.drive_to_return(baseline) {
             Ok(Zval::Array(a)) => match a.iter().next() {
                 Some((_, Zval::Long(n))) => *n,
                 _ => 127,
             },
             _ => 127,
-        }
+        })
     }
 
     /// Validate that attribute `attr_class` may be instantiated on its target
-    /// (PHP 8.4, at `newInstance()` time): its `#[Attribute]` flags must allow
-    /// `target_bit`, and — unless `IS_REPEATABLE` (128) — it must not appear more
-    /// than once among `siblings` (the attribute names on the same target).
+    /// (PHP 8.4, at `newInstance()` time): it must be an attribute class at all,
+    /// its `#[Attribute]` flags must allow `target_bit`, and — without
+    /// `IS_REPEATABLE` (128) — it must not appear more than once among `siblings`
+    /// (the attribute names on the same target).
     fn validate_attr(&mut self, attr_class: &[u8], siblings: &[Vec<u8>], target_bit: i64, target_label: &str) -> Result<(), PhpError> {
-        let flags = self.attr_flags(attr_class);
         let bare = attr_class.strip_prefix(b"\\").unwrap_or(attr_class);
         let name = String::from_utf8_lossy(bare).into_owned();
+        let Some(flags) = self.attr_flags(attr_class) else {
+            return Err(PhpError::Error(format!(
+                "Attempting to use non-attribute class \"{}\" as attribute", name
+            )));
+        };
         let count = siblings.iter().filter(|s| s.strip_prefix(b"\\").unwrap_or(s).eq_ignore_ascii_case(bare)).count();
         if count > 1 && (flags & 128) == 0 {
             return Err(PhpError::Error(format!("Attribute \"{}\" must not be repeated", name)));
