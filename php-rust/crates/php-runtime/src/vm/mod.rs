@@ -5930,6 +5930,17 @@ impl<'m> Vm<'m> {
             }
             klass = self.classes[c].parent;
         }
+        // A class with a resolvable `__toString` auto-implements `Stringable`
+        // (step 24-1), even without an explicit `implements` — mirroring
+        // `is_instance_of`. Appended only if not already collected explicitly.
+        if let Some(sid) = self.stringable_id {
+            if !seen.contains(&sid)
+                && resolve_method_runtime(&self.classes, cid, b"__toString").is_some()
+            {
+                let name = self.classes[sid].name.to_vec();
+                arr.insert(Key::Str(PhpStr::new(name.clone())), Zval::Str(PhpStr::new(name)));
+            }
+        }
         Ok(Zval::Array(Rc::new(arr)))
     }
 

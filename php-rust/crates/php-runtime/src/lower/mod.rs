@@ -1001,6 +1001,12 @@ class ReflectionClass {
         $p = get_parent_class($this->name);
         return $p === false ? false : new ReflectionClass($p);
     }
+    public function getInterfaceNames() { return array_values(class_implements($this->name)); }
+    public function getInterfaces() {
+        $out = [];
+        foreach (class_implements($this->name) as $i) { $out[$i] = new ReflectionClass($i); }
+        return $out;
+    }
     public function getTraitNames() { return array_values(class_uses($this->name)); }
     public function getTraits() {
         $out = [];
@@ -1076,6 +1082,8 @@ class ReflectionParameter {
         }
         return $this->__default;
     }
+}
+class ReflectionObject extends ReflectionClass {
 }
 class ReflectionFunction {
     public $name;
