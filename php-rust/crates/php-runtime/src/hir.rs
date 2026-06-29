@@ -371,6 +371,10 @@ pub struct FnDecl {
     /// unit's closure table, so the indices baked into the body must shift by the
     /// append offset (the cross-unit trait-closure fix). 0 for everything else.
     pub closure_shift: i32,
+    /// `#[Attr(args)]` attributes on the `function`/method declaration, retained
+    /// for `ReflectionFunction`/`ReflectionMethod::getAttributes()` (empty for
+    /// closures, hooks, and unattributed functions).
+    pub attributes: Vec<HirAttribute>,
     pub line: Line,
 }
 

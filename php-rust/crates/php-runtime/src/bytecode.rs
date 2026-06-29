@@ -949,6 +949,10 @@ pub struct Func {
     pub is_generator: bool,
     /// Source line of the declaration, for diagnostics / stack traces.
     pub line: Line,
+    /// `#[Attr(args)]` attributes on the `function`/method declaration, retained
+    /// for `ReflectionFunction`/`ReflectionMethod::getAttributes()`. Empty for
+    /// closures, hooks, attribute thunks, and unattributed functions.
+    pub attributes: Vec<CompiledAttribute>,
     /// Protected `try` regions, innermost first (EXC). On an in-flight exception
     /// the VM finds the first region whose `[start, end)` op range contains the
     /// faulting instruction and jumps to its `catch` (the catch-dispatch block).

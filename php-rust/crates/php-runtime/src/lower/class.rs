@@ -1245,6 +1245,7 @@ impl<'f> Lowerer<'f> {
                 ret_hint: None,
                 defining_class: None,
                 closure_shift: 0,
+                attributes: Vec::new(),
                 line,
             },
             hook_backed,
@@ -1340,7 +1341,7 @@ impl<'f> Lowerer<'f> {
                 readonly: p.readonly,
                 hint,
                 abstract_hooks: Vec::new(),
-                attributes: Vec::new(),
+                attributes: p.attributes,
             });
         }
         validate_goto(&body)?; // step 45: function-scoped goto/label check
@@ -1349,6 +1350,7 @@ impl<'f> Lowerer<'f> {
             .as_ref()
             .and_then(|r| lower_hint(self, &r.hint));
         let _ = class_line;
+        let attributes = self.lower_attributes(&method.attribute_lists, line)?;
         Ok(MethodDecl {
             visibility,
             is_static,
@@ -1363,6 +1365,7 @@ impl<'f> Lowerer<'f> {
                 ret_hint,
                 defining_class: None,
                 closure_shift: 0,
+                attributes,
                 line,
             },
         })
@@ -1406,6 +1409,7 @@ impl<'f> Lowerer<'f> {
             .return_type_hint
             .as_ref()
             .and_then(|r| lower_hint(self, &r.hint));
+        let attributes = self.lower_attributes(&func.attribute_lists, line)?;
         Ok(FnDecl {
             name,
             params,
@@ -1416,6 +1420,7 @@ impl<'f> Lowerer<'f> {
             ret_hint,
             defining_class: None,
                 closure_shift: 0,
+            attributes,
             line,
         })
     }
@@ -1494,6 +1499,7 @@ impl<'f> Lowerer<'f> {
                     Some(list) => self.lower_hooks(list, &pname, _line)?,
                     None => (None, None, true, Vec::new()),
                 };
+                let attributes = self.lower_attributes(&p.attribute_lists, _line)?;
                 self.promoted.push(PromotedParam {
                     name: pname,
                     visibility: visibility_of(p.modifiers.iter()),
@@ -1502,6 +1508,7 @@ impl<'f> Lowerer<'f> {
                     set_hook,
                     backed,
                     readonly: p.modifiers.iter().any(|m| m.is_readonly()),
+                    attributes,
                 });
             }
             let default = match &p.default_value {
@@ -1628,6 +1635,7 @@ impl<'f> Lowerer<'f> {
             // can use `self::`/`parent::`/`new self` (resolved at compile time).
             defining_class: self.cur_class.clone(),
                 closure_shift: 0,
+            attributes: Vec::new(),
             line,
         });
         idx

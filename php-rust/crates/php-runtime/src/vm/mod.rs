@@ -6425,6 +6425,129 @@ impl<'m> Vm<'m> {
         self.drive_to_return(baseline)
     }
 
+
+    /// Resolve a user function by name to its [`Func`] *and* the module it lives
+    /// in (needed to run an attribute thunk it owns).
+    fn user_function_with_mod(&self, name: &[u8]) -> Option<(&'m Func, &'m Module)> {
+        let lc = name.strip_prefix(b"\\").unwrap_or(name).to_ascii_lowercase();
+        if let Some(f) = self.module.functions.iter().find(|f| f.name.to_ascii_lowercase() == lc) {
+            return Some((f, self.module));
+        }
+        self.linked_functions.get(&lc).map(|&(m, idx)| (&m.functions[idx], m))
+    }
+
+    /// `__reflect_func_attributes($func, $filter = null)` — backs
+    /// `ReflectionFunction::getAttributes()`. Each `ReflectionAttribute` carries
+    /// the `__func` handle the materializers below resolve.
+    fn ho_reflect_func_attributes(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let empty = || Ok(Zval::Array(Rc::new(php_types::PhpArray::new())));
+        let fname = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let Some(func) = self.find_user_function(&fname) else { return empty() };
+        let Some(&ra_cid) = self.class_index.get(&b"reflectionattribute"[..]) else { return empty() };
+        let filter: Option<Vec<u8>> = match args.get(1).map(|v| v.deref_clone()) {
+            Some(Zval::Str(s)) => { let raw = s.as_bytes(); Some(raw.strip_prefix(b"\\").unwrap_or(raw).to_vec()) }
+            _ => None,
+        };
+        let matches: Vec<(usize, Vec<u8>)> = func.attributes.iter().enumerate()
+            .filter(|(_, a)| match &filter { None => true, Some(f) => a.name.strip_prefix(b"\\").unwrap_or(&a.name).eq_ignore_ascii_case(f) })
+            .map(|(i, a)| (i, a.name.to_vec())).collect();
+        let mut arr = php_types::PhpArray::new();
+        for (idx, name) in matches {
+            let obj = self.alloc_object(ra_cid)?;
+            if let Zval::Object(o) = &obj {
+                let mut b = o.borrow_mut();
+                b.props.set(b"name", Zval::Str(PhpStr::new(name)));
+                b.props.set(b"__func", Zval::Str(PhpStr::new(fname.clone())));
+                b.props.set(b"__index", Zval::Long(idx as i64));
+            }
+            let _ = arr.append(obj);
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// Run a function-attribute thunk (`new`/`args`) by `($func, $index)`.
+    fn run_func_attr(&mut self, args: &[Zval], get_args: bool) -> Result<Zval, PhpError> {
+        let fname = match args.first() { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => return Ok(Zval::Null) };
+        let idx = match args.get(1) { Some(Zval::Long(i)) => *i as usize, _ => return Ok(Zval::Null) };
+        let Some((func, fmod)) = self.user_function_with_mod(&fname) else { return Ok(Zval::Null) };
+        let Some(attr) = func.attributes.get(idx) else { return Ok(Zval::Null) };
+        let thunk = if get_args { &attr.args_thunk } else { &attr.new_thunk };
+        let baseline = self.frames.len();
+        self.frames.push(Frame::new(thunk, fmod));
+        self.drive_to_return(baseline)
+    }
+
+    /// `__reflect_func_attr_new($func, $index)`.
+    fn ho_reflect_func_attr_new(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.run_func_attr(&args, false)
+    }
+
+    /// `__reflect_func_attr_args($func, $index)`.
+    fn ho_reflect_func_attr_args(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.run_func_attr(&args, true)
+    }
+
+    /// `__reflect_method_attributes($class, $method, $filter = null)` — backs
+    /// `ReflectionMethod::getAttributes()`. Handle: `__class` + `__method`.
+    fn ho_reflect_method_attributes(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let empty = || Ok(Zval::Array(Rc::new(php_types::PhpArray::new())));
+        let cname = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let method = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let key = cname.strip_prefix(b"\\").unwrap_or(&cname).to_ascii_lowercase();
+        let Some(&cid) = self.class_index.get(&key) else { return empty() };
+        let Some(&ra_cid) = self.class_index.get(&b"reflectionattribute"[..]) else { return empty() };
+        let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, &method) else { return empty() };
+        let filter: Option<Vec<u8>> = match args.get(2).map(|v| v.deref_clone()) {
+            Some(Zval::Str(s)) => { let raw = s.as_bytes(); Some(raw.strip_prefix(b"\\").unwrap_or(raw).to_vec()) }
+            _ => None,
+        };
+        let matches: Vec<(usize, Vec<u8>)> = self.classes[defc].methods[midx].func.attributes.iter().enumerate()
+            .filter(|(_, a)| match &filter { None => true, Some(f) => a.name.strip_prefix(b"\\").unwrap_or(&a.name).eq_ignore_ascii_case(f) })
+            .map(|(i, a)| (i, a.name.to_vec())).collect();
+        let target = self.classes[cid].name.to_vec();
+        let mut arr = php_types::PhpArray::new();
+        for (idx, name) in matches {
+            let obj = self.alloc_object(ra_cid)?;
+            if let Zval::Object(o) = &obj {
+                let mut b = o.borrow_mut();
+                b.props.set(b"name", Zval::Str(PhpStr::new(name)));
+                b.props.set(b"__class", Zval::Str(PhpStr::new(target.clone())));
+                b.props.set(b"__method", Zval::Str(PhpStr::new(method.clone())));
+                b.props.set(b"__index", Zval::Long(idx as i64));
+            }
+            let _ = arr.append(obj);
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// Run a method-attribute thunk (`new`/`args`) by `($class, $method, $index)`.
+    fn run_method_attr(&mut self, args: &[Zval], get_args: bool) -> Result<Zval, PhpError> {
+        let cname = match args.first() { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => return Ok(Zval::Null) };
+        let method = match args.get(1) { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => return Ok(Zval::Null) };
+        let idx = match args.get(2) { Some(Zval::Long(i)) => *i as usize, _ => return Ok(Zval::Null) };
+        let key = cname.strip_prefix(b"\\").unwrap_or(&cname).to_ascii_lowercase();
+        let Some(&cid) = self.class_index.get(&key) else { return Ok(Zval::Null) };
+        let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, &method) else { return Ok(Zval::Null) };
+        let Some(attr) = self.classes[defc].methods[midx].func.attributes.get(idx) else { return Ok(Zval::Null) };
+        let thunk = if get_args { &attr.args_thunk } else { &attr.new_thunk };
+        let baseline = self.frames.len();
+        let mut frame = Frame::new(thunk, self.class_mod(defc));
+        frame.class = Some(defc);
+        frame.static_class = Some(defc);
+        self.frames.push(frame);
+        self.drive_to_return(baseline)
+    }
+
+    /// `__reflect_method_attr_new($class, $method, $index)`.
+    fn ho_reflect_method_attr_new(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.run_method_attr(&args, false)
+    }
+
+    /// `__reflect_method_attr_args($class, $method, $index)`.
+    fn ho_reflect_method_attr_args(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.run_method_attr(&args, true)
+    }
+
     /// Resolve the class for a per-property lazy op (skip / raw-set) and check
     /// `prop` is eligible: a declared, non-static, non-virtual instance property.
     /// `Ok(cid)` when usable; `Err(msg)` is the `ReflectionException` message the
@@ -9908,6 +10031,12 @@ host_builtins! {
     b"__reflect_prop_attributes" => vm.ho_reflect_prop_attributes(args),
     b"__reflect_prop_attr_new" => vm.ho_reflect_prop_attr_new(args),
     b"__reflect_prop_attr_args" => vm.ho_reflect_prop_attr_args(args),
+    b"__reflect_func_attributes" => vm.ho_reflect_func_attributes(args),
+    b"__reflect_func_attr_new" => vm.ho_reflect_func_attr_new(args),
+    b"__reflect_func_attr_args" => vm.ho_reflect_func_attr_args(args),
+    b"__reflect_method_attributes" => vm.ho_reflect_method_attributes(args),
+    b"__reflect_method_attr_new" => vm.ho_reflect_method_attr_new(args),
+    b"__reflect_method_attr_args" => vm.ho_reflect_method_attr_args(args),
     b"get_object_vars" => vm.ho_get_object_vars(args),
     b"get_class_vars" => vm.ho_get_class_vars(args),
     b"register_shutdown_function" => vm.ho_register_shutdown_function(args),

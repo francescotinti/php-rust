@@ -184,6 +184,10 @@ fn compile_fndecl(fd: &FnDecl, ctx: &ProgramCtx) -> R<Func> {
         false,
         fd.closure_shift,
     )
+    .map(|mut f| {
+        f.attributes = compile_attrs(&fd.attributes, ctx, cur_class);
+        f
+    })
 }
 
 /// Compile one body (the script's, a function's, or a method's) into a [`Func`].
@@ -256,6 +260,7 @@ fn compile_body(
         by_ref,
         is_generator,
         line: def_line,
+        attributes: Vec::new(),
         exc_table: c.exc_regions,
     })
 }
@@ -294,6 +299,7 @@ fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
         by_ref: fd.by_ref,
         is_generator: fd.is_generator,
         line: fd.line,
+        attributes: Vec::new(),
         exc_table: Vec::new(),
     }
 }
@@ -460,6 +466,8 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
                 Ok(f) => f,
                 Err(e) => stub_func(&m.decl, &e),
             };
+            let mut func = func;
+            func.attributes = compile_attrs(&m.decl.attributes, ctx, Some(cid));
             CompiledMethod {
                 name: m.decl.name.clone(),
                 visibility: m.visibility,
@@ -667,6 +675,7 @@ fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassI
         by_ref: false,
         is_generator: false,
         line: 0,
+        attributes: Vec::new(),
         exc_table: c.exc_regions,
     })
 }
@@ -697,6 +706,7 @@ fn compile_default_thunk(value: &Expr, ctx: &ProgramCtx, cur_class: Option<Class
         by_ref: false,
         is_generator: false,
         line: 0,
+        attributes: Vec::new(),
         exc_table: Vec::new(),
     })
 }
@@ -724,8 +734,32 @@ fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, decl_class: 
         by_ref: false,
         is_generator: false,
         line: 0,
+        attributes: Vec::new(),
         exc_table: c.exc_regions,
     })
+}
+
+
+/// Compile a slice of HIR attributes into runtime [`CompiledAttribute`]s (the
+/// two-thunk `new`/`args` scheme), in `cur_class`'s context so a `self::CONST`
+/// in a method-attribute argument resolves. Shared by the function / method
+/// attribute reflection paths (class / property paths build them inline).
+fn compile_attrs(
+    attrs: &[crate::hir::HirAttribute],
+    ctx: &ProgramCtx,
+    cur_class: Option<ClassId>,
+) -> Vec<CompiledAttribute> {
+    let decl = cur_class.unwrap_or(0);
+    attrs
+        .iter()
+        .map(|a| {
+            let new_thunk = compile_const_thunk(&a.name, &a.new_expr, ctx, decl)
+                .unwrap_or_else(|e| const_stub(&a.name, &e));
+            let args_thunk = compile_const_thunk(&a.name, &a.args_expr, ctx, decl)
+                .unwrap_or_else(|e| const_stub(&a.name, &e));
+            CompiledAttribute { name: a.name.clone(), new_thunk, args_thunk }
+        })
+        .collect()
 }
 
 /// A placeholder thunk for a constant whose value couldn't be compiled: fatals
@@ -749,6 +783,7 @@ fn const_stub(name: &[u8], err: &CompileError) -> Func {
         by_ref: false,
         is_generator: false,
         line: 0,
+        attributes: Vec::new(),
         exc_table: Vec::new(),
     }
 }

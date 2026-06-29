@@ -935,16 +935,30 @@ class ReflectionAttribute {
     public $__class;
     public $__index;
     public $__prop;
+    public $__func;
+    public $__method;
     public function getName() { return $this->name; }
     public function getArguments() {
         if (isset($this->__prop)) {
             return __reflect_prop_attr_args($this->__class, $this->__prop, $this->__index);
+        }
+        if (isset($this->__func)) {
+            return __reflect_func_attr_args($this->__func, $this->__index);
+        }
+        if (isset($this->__method)) {
+            return __reflect_method_attr_args($this->__class, $this->__method, $this->__index);
         }
         return __reflect_attr_arguments($this->__class, $this->__index);
     }
     public function newInstance() {
         if (isset($this->__prop)) {
             return __reflect_prop_attr_new($this->__class, $this->__prop, $this->__index);
+        }
+        if (isset($this->__func)) {
+            return __reflect_func_attr_new($this->__func, $this->__index);
+        }
+        if (isset($this->__method)) {
+            return __reflect_method_attr_new($this->__class, $this->__method, $this->__index);
         }
         return __reflect_attr_newinstance($this->__class, $this->__index);
     }
@@ -1119,6 +1133,7 @@ class ReflectionFunction {
     public function hasReturnType() { return $this->__info['returnType'] !== false; }
     public function invoke(...$args) { return call_user_func_array($this->name, $args); }
     public function invokeArgs($args) { return call_user_func_array($this->name, $args); }
+    public function getAttributes($name = null, $flags = 0) { return __reflect_func_attributes($this->name, $name); }
 }
 class ReflectionMethod {
     public $name;
@@ -1164,6 +1179,7 @@ class ReflectionMethod {
     public function invokeArgs($object, $args) {
         return call_user_func_array([$object === null ? $this->class : $object, $this->name], $args);
     }
+    public function getAttributes($name = null, $flags = 0) { return __reflect_method_attributes($this->class, $this->name, $name); }
 }
 class ReflectionProperty {
     public $name;
@@ -1378,6 +1394,7 @@ struct PromotedParam {
     set_hook: Option<FnDecl>,
     backed: bool,
     readonly: bool,
+    attributes: Vec<crate::hir::HirAttribute>,
 }
 
 /// A trait whose members have been lowered and whose own `use` clauses have been
