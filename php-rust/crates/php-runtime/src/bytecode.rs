@@ -1157,6 +1157,11 @@ pub struct CompiledClass {
     /// Attributes declared on this class (`#[Foo(args)]`), in source order — read
     /// by `ReflectionClass::getAttributes()`. Empty for the common case.
     pub attributes: Vec<CompiledAttribute>,
+    /// `#[Attr]` attributes declared on each *own* property, keyed by property
+    /// name — read by `ReflectionProperty::getAttributes()`. A `ReflectionProperty`
+    /// resolves its declaring class, so this need not be flattened. Empty (and the
+    /// map absent of a key) for the common unattributed case.
+    pub prop_attributes: std::collections::HashMap<Box<[u8]>, Vec<CompiledAttribute>>,
     /// Names of the traits this class uses directly (resolved, original case) —
     /// read by `class_uses()` / `ReflectionClass::getTraitNames()`. Empty when none.
     pub uses_traits: Vec<Box<[u8]>>,

@@ -1007,8 +1007,9 @@ impl<'f> Lowerer<'f> {
                 // its own `$this->name`; otherwise it is virtual (no storage).
                 let backed = default.is_some() || hooks_backing;
                 let hint = self.lower_prop_hint(h.hint.as_ref(), &default);
+                let attributes = self.lower_attributes(&h.attribute_lists, line)?;
                 out.push(PropDecl {
-                    name, visibility, default, get_hook, set_hook, backed, readonly, hint, abstract_hooks,
+                    name, visibility, default, get_hook, set_hook, backed, readonly, hint, abstract_hooks, attributes,
                 });
                 return Ok(());
             }
@@ -1030,6 +1031,9 @@ impl<'f> Lowerer<'f> {
                 });
             } else {
                 let hint = self.lower_prop_hint(plain.hint.as_ref(), &default);
+                // The `#[Attr]` list precedes the whole declaration, so every item
+                // of a grouped `public $a, $b;` shares it.
+                let attributes = self.lower_attributes(&plain.attribute_lists, line)?;
                 out.push(PropDecl {
                     name,
                     visibility,
@@ -1040,6 +1044,7 @@ impl<'f> Lowerer<'f> {
                     readonly,
                     hint,
                     abstract_hooks: Vec::new(),
+                    attributes,
                 });
             }
         }
@@ -1335,6 +1340,7 @@ impl<'f> Lowerer<'f> {
                 readonly: p.readonly,
                 hint,
                 abstract_hooks: Vec::new(),
+                attributes: Vec::new(),
             });
         }
         validate_goto(&body)?; // step 45: function-scoped goto/label check

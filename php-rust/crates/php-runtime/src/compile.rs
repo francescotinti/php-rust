@@ -538,6 +538,27 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         })
         .collect();
 
+    // Per-property attributes (`#[Attr] public int $x`), same two-thunk scheme,
+    // keyed by the own property name (not flattened). Empty key absent.
+    let mut prop_attributes: HashMap<Box<[u8]>, Vec<CompiledAttribute>> = HashMap::new();
+    for p in &cd.props {
+        if p.attributes.is_empty() {
+            continue;
+        }
+        let attrs = p
+            .attributes
+            .iter()
+            .map(|a| {
+                let new_thunk = compile_const_thunk(&a.name, &a.new_expr, ctx, cid)
+                    .unwrap_or_else(|e| const_stub(&a.name, &e));
+                let args_thunk = compile_const_thunk(&a.name, &a.args_expr, ctx, cid)
+                    .unwrap_or_else(|e| const_stub(&a.name, &e));
+                CompiledAttribute { name: a.name.clone(), new_thunk, args_thunk }
+            })
+            .collect();
+        prop_attributes.insert(p.name.clone(), attrs);
+    }
+
     // Unified per-property metadata, flattened parent-first so the most-derived
     // (re)declaration wins — baking in the shadowing rules the runtime `resolve_*`
     // walks used to re-derive on each access. Mirrors `own_prop_vis` / `prop_types`
@@ -584,6 +605,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         consts,
         enum_cases,
         attributes,
+        prop_attributes,
         uses_traits: cd.uses_traits.clone(),
         uninit_props,
         ok,

@@ -930,14 +930,22 @@ class ReflectionException extends Exception {}
 class ReflectionAttribute {
     public $name;
     // Private handle to the owning class + the attribute's position in it, used by
-    // the host builtins to materialise the attribute lazily.
+    // the host builtins to materialise the attribute lazily. `__prop` is set for an
+    // attribute that decorates a property (vs the class itself).
     public $__class;
     public $__index;
+    public $__prop;
     public function getName() { return $this->name; }
     public function getArguments() {
+        if (isset($this->__prop)) {
+            return __reflect_prop_attr_args($this->__class, $this->__prop, $this->__index);
+        }
         return __reflect_attr_arguments($this->__class, $this->__index);
     }
     public function newInstance() {
+        if (isset($this->__prop)) {
+            return __reflect_prop_attr_new($this->__class, $this->__prop, $this->__index);
+        }
         return __reflect_attr_newinstance($this->__class, $this->__index);
     }
 }
@@ -1176,6 +1184,7 @@ class ReflectionProperty {
     public function getName() { return $this->name; }
     public function getValue($object = null) { return __reflect_prop_get($this->class, $this->name, $object); }
     public function setValue($object, $value = null) { __reflect_prop_set($this->class, $this->name, $object, $value); }
+    public function getAttributes($name = null, $flags = 0) { return __reflect_prop_attributes($this->class, $this->name, $name); }
     public function isStatic() { return __reflect_prop_is_static($this->class, $this->name); }
     public function skipLazyInitialization($object) {
         $msg = __lazy_skip_init($object, $this->class, $this->name);

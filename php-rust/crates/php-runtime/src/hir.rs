@@ -312,6 +312,9 @@ pub struct PropDecl {
     /// write — or an out-of-scope write — is a fatal `Error`. Also set for every
     /// property of a `readonly class` (8.2) and for promoted `readonly` params.
     pub readonly: bool,
+    /// `#[Attr(args)]` attributes declared on the property, retained for
+    /// `ReflectionProperty::getAttributes()` (empty for an unattributed property).
+    pub attributes: Vec<HirAttribute>,
 }
 
 /// One method (step 19, D-19.5). Wraps an ordinary [`FnDecl`] (so method calls

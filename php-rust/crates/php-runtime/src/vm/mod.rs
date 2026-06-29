@@ -6332,6 +6332,99 @@ impl<'m> Vm<'m> {
         Ok(Zval::Null)
     }
 
+
+    /// `__reflect_prop_attributes($class, $prop, $filter = null)`: the host backing
+    /// of `ReflectionProperty::getAttributes()`. Returns `ReflectionAttribute`s for
+    /// the `#[…]` declared on `$class::$prop`, each carrying the lazy handle
+    /// (`__class`, `__prop`, `__index`) the materializers below use.
+    fn ho_reflect_prop_attributes(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let empty = || Ok(Zval::Array(Rc::new(php_types::PhpArray::new())));
+        let cname = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let prop = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let key = cname.strip_prefix(b"\\").unwrap_or(&cname).to_ascii_lowercase();
+        let Some(&cid) = self.class_index.get(&key) else { return empty() };
+        let Some(&ra_cid) = self.class_index.get(&b"reflectionattribute"[..]) else { return empty() };
+        let filter: Option<Vec<u8>> = match args.get(2).map(|v| v.deref_clone()) {
+            Some(Zval::Str(s)) => {
+                let raw = s.as_bytes();
+                Some(raw.strip_prefix(b"\\").unwrap_or(raw).to_vec())
+            }
+            _ => None,
+        };
+        let matches: Vec<(usize, Vec<u8>)> = match self.classes[cid].prop_attributes.get(prop.as_slice()) {
+            Some(list) => list
+                .iter()
+                .enumerate()
+                .filter(|(_, a)| match &filter {
+                    None => true,
+                    Some(f) => a.name.strip_prefix(b"\\").unwrap_or(&a.name).eq_ignore_ascii_case(f),
+                })
+                .map(|(i, a)| (i, a.name.to_vec()))
+                .collect(),
+            None => return empty(),
+        };
+        let target = self.classes[cid].name.to_vec();
+        let mut arr = php_types::PhpArray::new();
+        for (idx, name) in matches {
+            let obj = self.alloc_object(ra_cid)?;
+            if let Zval::Object(o) = &obj {
+                let mut b = o.borrow_mut();
+                b.props.set(b"name", Zval::Str(PhpStr::new(name)));
+                b.props.set(b"__class", Zval::Str(PhpStr::new(target.clone())));
+                b.props.set(b"__prop", Zval::Str(PhpStr::new(prop.clone())));
+                b.props.set(b"__index", Zval::Long(idx as i64));
+            }
+            let _ = arr.append(obj);
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// Resolve `($class, $prop, $index)` from a property-attribute handle to the
+    /// `&'m Func` thunk at `field` (`new`/`args`), or `None` if absent.
+    fn prop_attr_thunk(&self, args: &[Zval], get_args: bool) -> Option<&'m Func> {
+        let cname = match args.first() { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => return None };
+        let prop = match args.get(1) { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => return None };
+        let idx = match args.get(2) { Some(Zval::Long(i)) => *i as usize, _ => return None };
+        let key = cname.strip_prefix(b"\\").unwrap_or(&cname).to_ascii_lowercase();
+        let &cid = self.class_index.get(&key)?;
+        let attr = self.classes[cid].prop_attributes.get(prop.as_slice())?.get(idx)?;
+        Some(if get_args { &attr.args_thunk } else { &attr.new_thunk })
+    }
+
+    /// `__reflect_prop_attr_new($class, $prop, $index)` — run the property
+    /// attribute's `new Attr(args)` thunk (mirrors `__reflect_attr_newinstance`).
+    fn ho_reflect_prop_attr_new(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(thunk) = self.prop_attr_thunk(&args, false) else { return Ok(Zval::Null) };
+        let cid = self.class_index.get(&{
+            let c = match args.first() { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => Vec::new() };
+            c.strip_prefix(b"\\").unwrap_or(&c).to_ascii_lowercase()
+        }).copied().unwrap_or(0);
+        let baseline = self.frames.len();
+        let mut frame = Frame::new(thunk, self.class_mod(cid));
+        frame.class = Some(cid);
+        frame.static_class = Some(cid);
+        self.frames.push(frame);
+        self.drive_to_return(baseline)
+    }
+
+    /// `__reflect_prop_attr_args($class, $prop, $index)` — run the property
+    /// attribute's argument-array thunk (mirrors `__reflect_attr_arguments`).
+    fn ho_reflect_prop_attr_args(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(thunk) = self.prop_attr_thunk(&args, true) else {
+            return Ok(Zval::Array(Rc::new(php_types::PhpArray::new())));
+        };
+        let cid = self.class_index.get(&{
+            let c = match args.first() { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => Vec::new() };
+            c.strip_prefix(b"\\").unwrap_or(&c).to_ascii_lowercase()
+        }).copied().unwrap_or(0);
+        let baseline = self.frames.len();
+        let mut frame = Frame::new(thunk, self.class_mod(cid));
+        frame.class = Some(cid);
+        frame.static_class = Some(cid);
+        self.frames.push(frame);
+        self.drive_to_return(baseline)
+    }
+
     /// Resolve the class for a per-property lazy op (skip / raw-set) and check
     /// `prop` is eligible: a declared, non-static, non-virtual instance property.
     /// `Ok(cid)` when usable; `Err(msg)` is the `ReflectionException` message the
@@ -9812,6 +9905,9 @@ host_builtins! {
     b"__reflect_prop_is_static" => vm.ho_reflect_prop_is_static(args),
     b"__reflect_prop_get" => vm.ho_reflect_prop_get(args),
     b"__reflect_prop_set" => vm.ho_reflect_prop_set(args),
+    b"__reflect_prop_attributes" => vm.ho_reflect_prop_attributes(args),
+    b"__reflect_prop_attr_new" => vm.ho_reflect_prop_attr_new(args),
+    b"__reflect_prop_attr_args" => vm.ho_reflect_prop_attr_args(args),
     b"get_object_vars" => vm.ho_get_object_vars(args),
     b"get_class_vars" => vm.ho_get_class_vars(args),
     b"register_shutdown_function" => vm.ho_register_shutdown_function(args),
