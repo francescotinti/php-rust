@@ -2558,6 +2558,10 @@ fn is_returnable_lvalue(e: &Expression) -> bool {
     match e {
         Expression::Variable(Variable::Direct(_)) => true,
         Expression::ArrayAccess(_) => true,
+        // `return $obj->prop;` / `return $this->$name;` — a (non-nullsafe) property
+        // access is a place `lower_place` accepts, so it returns a real reference
+        // (D-13.3) rather than copying with the by-ref Notice.
+        Expression::Access(mago_syntax::ast::Access::Property(_)) => true,
         Expression::Parenthesized(p) => is_returnable_lvalue(p.expression),
         _ => false,
     }
