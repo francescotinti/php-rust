@@ -340,3 +340,94 @@ pub fn parse_url(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     put(&mut arr, b"fragment", &r.fragment);
     Ok(Zval::Array(Rc::new(arr)))
 }
+
+
+// ---------------------------------------------------------------------------
+// urlencode / urldecode / rawurlencode / rawurldecode — ports of url.c.
+// ---------------------------------------------------------------------------
+
+#[inline]
+fn hex_digit(b: u8) -> u8 {
+    // High nibble first; uppercase, as PHP emits.
+    b"0123456789ABCDEF"[b as usize & 0xf]
+}
+
+#[inline]
+fn from_hex(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
+
+/// `urlencode`: application/x-www-form-urlencoded — space becomes `+`, and every
+/// byte outside `[A-Za-z0-9_.-]` becomes `%XX`.
+fn encode(bytes: &[u8], raw: bool) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    for &c in bytes {
+        let unreserved = c.is_ascii_alphanumeric()
+            || matches!(c, b'_' | b'-' | b'.')
+            || (raw && c == b'~');
+        if unreserved {
+            out.push(c);
+        } else if !raw && c == b' ' {
+            out.push(b'+');
+        } else {
+            out.push(b'%');
+            out.push(hex_digit(c >> 4));
+            out.push(hex_digit(c));
+        }
+    }
+    out
+}
+
+/// `urldecode`/`rawurldecode`: decode `%XX`; for the non-raw form a `+` also
+/// becomes a space. A `%` not followed by two hex digits is left verbatim.
+fn decode(bytes: &[u8], raw: bool) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        // `%XX` needs two following hex digits (PHP's `len >= 2` guard).
+        if c == b'%' && i + 2 < bytes.len() {
+            if let (Some(h), Some(l)) = (from_hex(bytes[i + 1]), from_hex(bytes[i + 2])) {
+                out.push((h << 4) | l);
+                i += 3;
+                continue;
+            }
+        }
+        if !raw && c == b'+' {
+            out.push(b' ');
+        } else {
+            out.push(c);
+        }
+        i += 1;
+    }
+    out
+}
+
+/// `urlencode($string)`.
+pub fn urlencode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = convert::to_zstr(&args[0], ctx.diags);
+    Ok(Zval::Str(PhpStr::new(encode(s.as_bytes(), false))))
+}
+
+/// `rawurlencode($string)`.
+pub fn rawurlencode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = convert::to_zstr(&args[0], ctx.diags);
+    Ok(Zval::Str(PhpStr::new(encode(s.as_bytes(), true))))
+}
+
+/// `urldecode($string)`.
+pub fn urldecode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = convert::to_zstr(&args[0], ctx.diags);
+    Ok(Zval::Str(PhpStr::new(decode(s.as_bytes(), false))))
+}
+
+/// `rawurldecode($string)`.
+pub fn rawurldecode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = convert::to_zstr(&args[0], ctx.diags);
+    Ok(Zval::Str(PhpStr::new(decode(s.as_bytes(), true))))
+}

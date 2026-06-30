@@ -273,6 +273,10 @@ pub fn registry() -> Registry {
     add(b"number_format", string::number_format);
     add(b"version_compare", string::version_compare);
     add(b"parse_url", url::parse_url);
+    add(b"urlencode", url::urlencode);
+    add(b"urldecode", url::urldecode);
+    add(b"rawurlencode", url::rawurlencode);
+    add(b"rawurldecode", url::rawurldecode);
     add(b"sprintf", format::sprintf);
     add(b"printf", format::printf);
     add(b"vsprintf", format::vsprintf);
