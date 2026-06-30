@@ -1964,8 +1964,37 @@ impl<'a> FnCompiler<'a> {
                             self.build_args_array(args)?;
                             self.emit(Op::StaticCallArgs { target, method: method.clone(), forwarding });
                         } else {
-                            self.push_value_args(args)?;
-                            self.emit(Op::StaticCall { target, method: method.clone(), forwarding, argc: args.len() as u32 });
+                            let argc = args.len() as u32;
+                            // For a statically-known class, honour the method's
+                            // by-reference parameters (REF-2) exactly like a free
+                            // function — pushing the caller's cell for a `&$p` slot.
+                            // `static::` / an unresolved method fall back to by-value
+                            // (their by-ref binding stays a separate gap).
+                            let resolved = match target {
+                                ClassTarget::Class(cid) => {
+                                    self.resolve_method_compile(cid, method).map(|r| (cid, r))
+                                }
+                                ClassTarget::Static => None,
+                            };
+                            let mut pushed_by_ref = false;
+                            if let Some((cid, (defc, midx))) = resolved {
+                                let decl = &self.ctx.classes[defc].methods[midx].decl;
+                                if decl.params.iter().any(|p| p.by_ref) {
+                                    let by_ref: Vec<bool> =
+                                        decl.params.iter().map(|p| p.by_ref).collect();
+                                    let pnames: Vec<Box<[u8]>> =
+                                        decl.slots.iter().take(decl.params.len()).cloned().collect();
+                                    let mut fname = self.ctx.classes[cid].name.to_vec();
+                                    fname.extend_from_slice(b"::");
+                                    fname.extend_from_slice(method);
+                                    self.push_call_args(args, &by_ref, &fname, &pnames)?;
+                                    pushed_by_ref = true;
+                                }
+                            }
+                            if !pushed_by_ref {
+                                self.push_value_args(args)?;
+                            }
+                            self.emit(Op::StaticCall { target, method: method.clone(), forwarding, argc });
                         }
                     } else {
                         // Named args: resolve the method at compile time against the
