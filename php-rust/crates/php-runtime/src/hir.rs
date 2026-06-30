@@ -261,6 +261,15 @@ pub struct StaticPropDecl {
 pub struct ClassConstDecl {
     pub name: Box<[u8]>,
     pub value: Expr,
+    /// Declared visibility (`public`/`protected`/`private`; default public) —
+    /// read by `ReflectionClassConstant::isPublic` etc. and the `getConstants`
+    /// visibility filter.
+    pub visibility: Visibility,
+    /// `final const` (PHP 8.1) — `ReflectionClassConstant::isFinal`.
+    pub is_final: bool,
+    /// Attributes declared on the constant (`#[Foo] const X = …`, PHP 8.3) —
+    /// `ReflectionClassConstant::getAttributes`. Empty for the common case.
+    pub attributes: Vec<HirAttribute>,
 }
 
 /// How a `::`-qualified reference (call, constant, static property, `new`) names

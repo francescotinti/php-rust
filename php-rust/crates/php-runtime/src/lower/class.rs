@@ -104,7 +104,7 @@ impl<'f> Lowerer<'f> {
                 ClassLikeMember::Method(m) => {
                     methods.push(self.lower_method(m, line, &mut props)?)
                 }
-                ClassLikeMember::Constant(c) => self.lower_class_const(c, &mut consts)?,
+                ClassLikeMember::Constant(c) => self.lower_class_const(c, &mut consts, line)?,
                 ClassLikeMember::TraitUse(u) => uses.push(u),
                 _ => {
                     return Err(LowerError::Unsupported {
@@ -403,7 +403,7 @@ impl<'f> Lowerer<'f> {
         let mut static_props = Vec::new();
         for member in iface.members.iter() {
             match member {
-                ClassLikeMember::Constant(c) => self.lower_class_const(c, &mut consts)?,
+                ClassLikeMember::Constant(c) => self.lower_class_const(c, &mut consts, line)?,
                 // Interface methods are signatures only (abstract) — no body to
                 // run, but their names are reported by `get_class_methods`.
                 ClassLikeMember::Method(m) => abstract_methods.push(m.name.value.into()),
@@ -637,7 +637,7 @@ impl<'f> Lowerer<'f> {
                 ClassLikeMember::Method(m) => {
                     methods.push(self.lower_method(m, line, &mut props)?)
                 }
-                ClassLikeMember::Constant(c) => self.lower_class_const(c, &mut consts)?,
+                ClassLikeMember::Constant(c) => self.lower_class_const(c, &mut consts, line)?,
                 ClassLikeMember::TraitUse(u) => uses.push(u),
                 _ => {
                     return Err(LowerError::Unsupported {
@@ -870,7 +870,7 @@ impl<'f> Lowerer<'f> {
                     // Enums have no instance properties, so promotion cannot occur.
                     methods.push(self.lower_method(m, line, &mut Vec::new())?)
                 }
-                ClassLikeMember::Constant(c) => self.lower_class_const(c, &mut consts)?,
+                ClassLikeMember::Constant(c) => self.lower_class_const(c, &mut consts, line)?,
                 ClassLikeMember::TraitUse(u) => uses.push(u),
                 // Enums may not declare properties (PHP fatal); we reject them.
                 ClassLikeMember::Property(_) => {
@@ -944,11 +944,20 @@ impl<'f> Lowerer<'f> {
         &mut self,
         konst: &mago_syntax::ast::ClassLikeConstant,
         out: &mut Vec<crate::hir::ClassConstDecl>,
+        line: Line,
     ) -> Result<(), LowerError> {
+        let visibility = visibility_of(konst.modifiers.iter());
+        let is_final = konst.modifiers.iter().any(|m| m.is_final());
+        // The `#[Attr]` list precedes the whole `const A = 1, B = 2;`, so every
+        // item shares it (mirrors `lower_property`).
+        let attributes = self.lower_attributes(&konst.attribute_lists, line)?;
         for item in konst.items.iter() {
             out.push(crate::hir::ClassConstDecl {
                 name: item.name.value.into(),
                 value: self.lower_expr(item.value)?,
+                visibility,
+                is_final,
+                attributes: attributes.clone(),
             });
         }
         Ok(())

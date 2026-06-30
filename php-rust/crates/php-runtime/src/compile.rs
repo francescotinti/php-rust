@@ -496,7 +496,13 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         .map(|k| {
             let func = compile_const_thunk(&k.name, &k.value, ctx, cid)
                 .unwrap_or_else(|e| const_stub(&k.name, &e));
-            CompiledConst { name: k.name.clone(), func }
+            CompiledConst {
+                name: k.name.clone(),
+                func,
+                visibility: k.visibility,
+                is_final: k.is_final,
+                attributes: compile_attrs(&k.attributes, ctx, Some(cid)),
+            }
         })
         .collect();
 

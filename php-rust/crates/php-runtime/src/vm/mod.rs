@@ -6017,6 +6017,225 @@ impl<'m> Vm<'m> {
         self.is_a_impl(args, true, false)
     }
 
+    /// Recursively collect an interface's constants (and those of the interfaces
+    /// it extends) into `order`, most-derived first — helper for
+    /// `__reflect_class_constants`. A name already in `seen` is shadowed.
+    fn collect_iface_consts(&self, iface: ClassId, seen: &mut HashSet<Vec<u8>>, order: &mut Vec<(Vec<u8>, ClassId, usize)>) {
+        for (i, k) in self.classes[iface].consts.iter().enumerate() {
+            let n = k.name.to_vec();
+            if seen.insert(n.clone()) {
+                order.push((n, iface, i));
+            }
+        }
+        for e in self.classes[iface].interfaces.clone() {
+            self.collect_iface_consts(e, seen, order);
+        }
+    }
+
+    /// `__reflect_class_constants($class, $filter = null)`: every class constant
+    /// visible on `$class` as a `name => value` array — backs
+    /// `ReflectionClass::getConstants`. `$filter` is a visibility bitmask
+    /// (IS_PUBLIC=1 / IS_PROTECTED=2 / IS_PRIVATE=4); `null` returns all. Values
+    /// come from running each declaring class's value thunk. (Enum cases are not
+    /// yet modelled.)
+    fn ho_reflect_class_constants(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let cls = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let key = cls.strip_prefix(b"\\").unwrap_or(&cls).to_ascii_lowercase();
+        let mut arr = php_types::PhpArray::new();
+        let Some(&start) = self.class_index.get(&key) else {
+            return Ok(Zval::Array(Rc::new(arr)));
+        };
+        let filter: Option<i64> = match args.get(1).map(|v| v.deref_clone()) {
+            Some(Zval::Long(n)) => Some(n),
+            _ => None,
+        };
+        for (name, decl, idx) in self.collect_class_consts(start) {
+            if let Some(bits) = filter {
+                let vbit = match self.classes[decl].consts[idx].visibility {
+                    crate::hir::Visibility::Public => 1,
+                    crate::hir::Visibility::Protected => 2,
+                    crate::hir::Visibility::Private => 4,
+                };
+                if bits & vbit == 0 {
+                    continue;
+                }
+            }
+            let thunk: &'m Func = &self.classes[decl].consts[idx].func;
+            let v = self.run_value_thunk(thunk, Some(decl))?;
+            arr.insert(Key::Str(PhpStr::new(name)), v);
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// Collect every class constant visible on `start`, most-derived first (own +
+    /// parent chain, then interfaces transitively; a child redeclaration shadows
+    /// the inherited one): `(name, declaring class, index in that class's consts)`.
+    fn collect_class_consts(&self, start: ClassId) -> Vec<(Vec<u8>, ClassId, usize)> {
+        let mut seen: HashSet<Vec<u8>> = HashSet::new();
+        let mut order: Vec<(Vec<u8>, ClassId, usize)> = Vec::new();
+        let mut c = Some(start);
+        while let Some(x) = c {
+            for (i, k) in self.classes[x].consts.iter().enumerate() {
+                let n = k.name.to_vec();
+                if seen.insert(n.clone()) {
+                    order.push((n, x, i));
+                }
+            }
+            c = self.classes[x].parent;
+        }
+        let mut c = Some(start);
+        while let Some(x) = c {
+            for iface in self.classes[x].interfaces.clone() {
+                self.collect_iface_consts(iface, &mut seen, &mut order);
+            }
+            c = self.classes[x].parent;
+        }
+        order
+    }
+
+    /// `__reflect_class_const_names($class)`: the names of every class constant
+    /// visible on `$class`, most-derived first — backs
+    /// `ReflectionClass::getReflectionConstants` (which wraps each in a
+    /// `ReflectionClassConstant`).
+    fn ho_reflect_class_const_names(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let cls = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let key = cls.strip_prefix(b"\\").unwrap_or(&cls).to_ascii_lowercase();
+        let mut arr = php_types::PhpArray::new();
+        if let Some(&start) = self.class_index.get(&key) {
+            for (name, _, _) in self.collect_class_consts(start) {
+                let _ = arr.append(Zval::Str(PhpStr::new(name)));
+            }
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// `__reflect_class_const_info($class, $name)`: descriptor array for one class
+    /// constant (`value`, `declaringClass`, `visibility`, `final`, `enumCase`), or
+    /// `false` if undeclared — backs the `ReflectionClassConstant` accessors. The
+    /// value is produced by the declaring class's thunk.
+    fn ho_reflect_class_const_info(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let cls = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let name = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let key = cls.strip_prefix(b"\\").unwrap_or(&cls).to_ascii_lowercase();
+        let Some(&cid) = self.class_index.get(&key) else { return Ok(Zval::Bool(false)) };
+        let Some((decl, idx)) = find_const_runtime(&self.classes, cid, &name) else {
+            return Ok(Zval::Bool(false));
+        };
+        let vis: &[u8] = match self.classes[decl].consts[idx].visibility {
+            crate::hir::Visibility::Public => b"public",
+            crate::hir::Visibility::Protected => b"protected",
+            crate::hir::Visibility::Private => b"private",
+        };
+        let is_final = self.classes[decl].consts[idx].is_final;
+        let decl_name = self.classes[decl].name.to_vec();
+        let thunk: &'m Func = &self.classes[decl].consts[idx].func;
+        let value = self.run_value_thunk(thunk, Some(decl))?;
+        let mut a = php_types::PhpArray::new();
+        a.insert(Key::Str(PhpStr::new(b"value".to_vec())), value);
+        a.insert(Key::Str(PhpStr::new(b"declaringClass".to_vec())), Zval::Str(PhpStr::new(decl_name)));
+        a.insert(Key::Str(PhpStr::new(b"visibility".to_vec())), Zval::Str(PhpStr::new(vis.to_vec())));
+        a.insert(Key::Str(PhpStr::new(b"final".to_vec())), Zval::Bool(is_final));
+        a.insert(Key::Str(PhpStr::new(b"enumCase".to_vec())), Zval::Bool(false));
+        Ok(Zval::Array(Rc::new(a)))
+    }
+
+    /// Resolve `($declClass, $name, $index)` from a class-constant attribute handle
+    /// to the `&'m Func` thunk at `field` (`new`/`args`), or `None` if absent.
+    fn classconst_attr_thunk(&self, args: &[Zval], get_args: bool) -> Option<&'m Func> {
+        let cname = match args.first() { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => return None };
+        let name = match args.get(1) { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => return None };
+        let idx = match args.get(2) { Some(Zval::Long(i)) => *i as usize, _ => return None };
+        let key = cname.strip_prefix(b"\\").unwrap_or(&cname).to_ascii_lowercase();
+        let &cid = self.class_index.get(&key)?;
+        let ci = self.classes[cid].consts.iter().position(|k| k.name.as_ref() == name.as_slice())?;
+        let attr = self.classes[cid].consts[ci].attributes.get(idx)?;
+        Some(if get_args { &attr.args_thunk } else { &attr.new_thunk })
+    }
+
+    /// `__reflect_classconst_attributes($declClass, $name, $filter = null)`: the
+    /// `ReflectionAttribute`s declared on `$declClass::$name`, each carrying the
+    /// lazy handle (`__class`, `__classconst`, `__index`).
+    fn ho_reflect_classconst_attributes(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let empty = || Ok(Zval::Array(Rc::new(php_types::PhpArray::new())));
+        let cname = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let name = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let key = cname.strip_prefix(b"\\").unwrap_or(&cname).to_ascii_lowercase();
+        let Some(&cid) = self.class_index.get(&key) else { return empty() };
+        let Some(&ra_cid) = self.class_index.get(&b"reflectionattribute"[..]) else { return empty() };
+        let Some(ci) = self.classes[cid].consts.iter().position(|k| k.name.as_ref() == name.as_slice()) else { return empty() };
+        let filter: Option<Vec<u8>> = match args.get(2).map(|v| v.deref_clone()) {
+            Some(Zval::Str(s)) => {
+                let raw = s.as_bytes();
+                Some(raw.strip_prefix(b"\\").unwrap_or(raw).to_vec())
+            }
+            _ => None,
+        };
+        let matches: Vec<(usize, Vec<u8>)> = self.classes[cid].consts[ci].attributes
+            .iter()
+            .enumerate()
+            .filter(|(_, a)| match &filter {
+                None => true,
+                Some(f) => a.name.strip_prefix(b"\\").unwrap_or(&a.name).eq_ignore_ascii_case(f),
+            })
+            .map(|(i, a)| (i, a.name.to_vec()))
+            .collect();
+        let target = self.classes[cid].name.to_vec();
+        let mut arr = php_types::PhpArray::new();
+        for (idx, aname) in matches {
+            let obj = self.alloc_object(ra_cid)?;
+            if let Zval::Object(o) = &obj {
+                let mut b = o.borrow_mut();
+                b.props.set(b"name", Zval::Str(PhpStr::new(aname)));
+                b.props.set(b"__class", Zval::Str(PhpStr::new(target.clone())));
+                b.props.set(b"__classconst", Zval::Str(PhpStr::new(name.clone())));
+                b.props.set(b"__index", Zval::Long(idx as i64));
+            }
+            let _ = arr.append(obj);
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// `__reflect_classconst_attr_new($declClass, $name, $index)` — run the class
+    /// constant attribute's `new Attr(args)` thunk (validates TARGET_CLASS_CONSTANT
+    /// / repeatability first).
+    fn ho_reflect_classconst_attr_new(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(thunk) = self.classconst_attr_thunk(&args, false) else { return Ok(Zval::Null) };
+        let cname = match args.first() { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => Vec::new() };
+        let cid = self.class_index.get(&cname.strip_prefix(b"\\").unwrap_or(&cname).to_ascii_lowercase()).copied().unwrap_or(0);
+        let name = match args.get(1) { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => Vec::new() };
+        let idx = match args.get(2) { Some(Zval::Long(i)) => *i as usize, _ => 0 };
+        if let Some(ci) = self.classes[cid].consts.iter().position(|k| k.name.as_ref() == name.as_slice()) {
+            let list = &self.classes[cid].consts[ci].attributes;
+            if let Some(attr) = list.get(idx) {
+                let attr_name = attr.name.to_vec();
+                let siblings: Vec<Vec<u8>> = list.iter().map(|a| a.name.to_vec()).collect();
+                self.validate_attr(&attr_name, &siblings, 16, "class constant")?;
+            }
+        }
+        let baseline = self.frames.len();
+        let mut frame = Frame::new(thunk, self.class_mod(cid));
+        frame.class = Some(cid);
+        frame.static_class = Some(cid);
+        self.frames.push(frame);
+        self.drive_to_return(baseline)
+    }
+
+    /// `__reflect_classconst_attr_args($declClass, $name, $index)` — run the class
+    /// constant attribute's argument-array thunk.
+    fn ho_reflect_classconst_attr_args(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(thunk) = self.classconst_attr_thunk(&args, true) else {
+            return Ok(Zval::Array(Rc::new(php_types::PhpArray::new())));
+        };
+        let cname = match args.first() { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => Vec::new() };
+        let cid = self.class_index.get(&cname.strip_prefix(b"\\").unwrap_or(&cname).to_ascii_lowercase()).copied().unwrap_or(0);
+        let baseline = self.frames.len();
+        let mut frame = Frame::new(thunk, self.class_mod(cid));
+        frame.class = Some(cid);
+        frame.static_class = Some(cid);
+        self.frames.push(frame);
+        self.drive_to_return(baseline)
+    }
+
     /// `class_uses($class, $autoload = true)`: the traits used *directly* by the
     /// class (not inherited from parents), as a `name => name` array in source
     /// order. `false` if the class does not exist. Mirrors PHP, which reports only
@@ -10404,6 +10623,12 @@ host_builtins! {
     b"class_implements" => vm.ho_class_implements(args),
     b"is_a" => vm.ho_is_a(args),
     b"is_subclass_of" => vm.ho_is_subclass_of(args),
+    b"__reflect_class_constants" => vm.ho_reflect_class_constants(args),
+    b"__reflect_class_const_names" => vm.ho_reflect_class_const_names(args),
+    b"__reflect_class_const_info" => vm.ho_reflect_class_const_info(args),
+    b"__reflect_classconst_attributes" => vm.ho_reflect_classconst_attributes(args),
+    b"__reflect_classconst_attr_new" => vm.ho_reflect_classconst_attr_new(args),
+    b"__reflect_classconst_attr_args" => vm.ho_reflect_classconst_attr_args(args),
     b"class_uses" => vm.ho_class_uses(args),
     b"trait_exists" => vm.ho_trait_exists(args),
     b"get_declared_traits" => vm.ho_get_declared_traits(),

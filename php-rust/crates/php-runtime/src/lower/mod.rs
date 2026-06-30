@@ -987,9 +987,13 @@ class ReflectionAttribute {
     public $__func;
     public $__method;
     public $__const;
+    public $__classconst;
     public $__closure_val;
     public function getName() { return $this->name; }
     public function getArguments() {
+        if (isset($this->__classconst)) {
+            return __reflect_classconst_attr_args($this->__class, $this->__classconst, $this->__index);
+        }
         if (isset($this->__prop)) {
             return __reflect_prop_attr_args($this->__class, $this->__prop, $this->__index);
         }
@@ -1008,6 +1012,9 @@ class ReflectionAttribute {
         return __reflect_attr_arguments($this->__class, $this->__index);
     }
     public function newInstance() {
+        if (isset($this->__classconst)) {
+            return __reflect_classconst_attr_new($this->__class, $this->__classconst, $this->__index);
+        }
         if (isset($this->__prop)) {
             return __reflect_prop_attr_new($this->__class, $this->__prop, $this->__index);
         }
@@ -1076,6 +1083,23 @@ class ReflectionClass {
     }
     public function hasConstant($name) { return defined($this->name . '::' . $name); }
     public function getConstant($name) { return constant($this->name . '::' . $name); }
+    public function getConstants($filter = null) {
+        return $filter === null
+            ? __reflect_class_constants($this->name)
+            : __reflect_class_constants($this->name, $filter);
+    }
+    public function getReflectionConstant($name) {
+        try { return new ReflectionClassConstant($this->name, $name); }
+        catch (ReflectionException $e) { return false; }
+    }
+    public function getReflectionConstants($filter = null) {
+        $out = [];
+        foreach (__reflect_class_const_names($this->name) as $n) {
+            $rc = new ReflectionClassConstant($this->name, $n);
+            if ($filter === null || ($rc->getModifiers() & $filter)) { $out[] = $rc; }
+        }
+        return $out;
+    }
     public function implementsInterface($interface) {
         return in_array($interface, class_implements($this->name), true);
     }
@@ -1186,6 +1210,45 @@ class ReflectionConstant {
         return ReflectionAttribute::__filter(__reflect_const_attributes($this->name, $hostName), $name, $flags, 'ReflectionConstant');
     }
     public function __toString() { return sprintf("Constant [ %s ]\n", $this->name); }
+}
+class ReflectionClassConstant {
+    const IS_PUBLIC = 1;
+    const IS_PROTECTED = 2;
+    const IS_PRIVATE = 4;
+    const IS_FINAL = 32;
+    public $name;
+    public $class;
+    public $__info;
+    public function __construct($class, $constant) {
+        $cls = is_object($class) ? get_class($class) : $class;
+        $info = __reflect_class_const_info($cls, $constant);
+        if ($info === false) {
+            throw new ReflectionException(sprintf('Constant %s::%s does not exist', $cls, $constant));
+        }
+        $this->name = $constant;
+        $this->class = $info['declaringClass'];
+        $this->__info = $info;
+    }
+    public function getName() { return $this->name; }
+    public function getValue() { return $this->__info['value']; }
+    public function getDeclaringClass() { return new ReflectionClass($this->class); }
+    public function isPublic() { return $this->__info['visibility'] === 'public'; }
+    public function isProtected() { return $this->__info['visibility'] === 'protected'; }
+    public function isPrivate() { return $this->__info['visibility'] === 'private'; }
+    public function isFinal() { return $this->__info['final']; }
+    public function isEnumCase() { return $this->__info['enumCase']; }
+    public function getModifiers() {
+        $m = 0;
+        if ($this->__info['visibility'] === 'public') { $m |= self::IS_PUBLIC; }
+        elseif ($this->__info['visibility'] === 'protected') { $m |= self::IS_PROTECTED; }
+        else { $m |= self::IS_PRIVATE; }
+        if ($this->__info['final']) { $m |= self::IS_FINAL; }
+        return $m;
+    }
+    public function getAttributes($name = null, $flags = 0) {
+        $hostName = ($flags & ReflectionAttribute::IS_INSTANCEOF) ? null : $name;
+        return ReflectionAttribute::__filter(__reflect_classconst_attributes($this->class, $this->name, $hostName), $name, $flags, 'ReflectionClassConstant');
+    }
 }
 class ReflectionFunction {
     public $name;

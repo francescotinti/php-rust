@@ -1082,6 +1082,14 @@ pub struct CompiledStaticProp {
 pub struct CompiledConst {
     pub name: Box<[u8]>,
     pub func: Func,
+    /// Declared visibility — `ReflectionClassConstant::isPublic` etc. and the
+    /// `ReflectionClass::getConstants($filter)` visibility filter.
+    pub visibility: Visibility,
+    /// `final const` — `ReflectionClassConstant::isFinal`.
+    pub is_final: bool,
+    /// Attributes declared on the constant (`#[Foo] const X = …`) —
+    /// `ReflectionClassConstant::getAttributes`. Empty for the common case.
+    pub attributes: Vec<CompiledAttribute>,
 }
 
 /// One class attribute retained for reflection (mirrors one
