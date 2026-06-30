@@ -5380,15 +5380,39 @@ impl<'m> Vm<'m> {
         if let Some(z) = crate::lower::resolve_constant(&cname).and_then(const_literal_to_zval) {
             return Ok(z);
         }
+        // `constant("Class::CONST")`: resolve the class constant through the
+        // parent/interface chain and evaluate its value thunk in the declaring
+        // class's context (the thunk ref is `'m`, so it survives `&mut self`).
+        if let Some((decl, idx)) = self.class_const_ref(&cname) {
+            let thunk: &'m Func = &self.classes[decl].consts[idx].func;
+            return self.run_value_thunk(thunk, Some(decl));
+        }
         Err(PhpError::Error(format!(
             "Undefined constant \"{}\"",
             String::from_utf8_lossy(&cname)
         )))
     }
 
-    /// Whether `name` is a known constant — a user `define()` or an engine constant.
+    /// Whether `name` is a known constant — a user `define()`, an engine constant,
+    /// or a `Class::CONST` class constant (resolved through parents/interfaces).
     fn constant_known(&self, name: &[u8]) -> bool {
+        if name.windows(2).any(|w| w == b"::") {
+            return self.class_const_ref(name).is_some();
+        }
         self.constants.contains_key(name) || crate::lower::resolve_constant(name).is_some()
+    }
+
+    /// Resolve a `Class::CONST` name (as passed to `constant()` / `defined()`) to
+    /// its declaring class id and constant index, walking the parent chain then
+    /// interfaces (via `find_const_runtime`). `None` if the name is not
+    /// `Class::CONST`, the class is unknown, or the constant is not declared.
+    fn class_const_ref(&self, name: &[u8]) -> Option<(ClassId, usize)> {
+        let pos = name.windows(2).position(|w| w == b"::")?;
+        let cls = &name[..pos];
+        let rest = &name[pos + 2..];
+        let cls = cls.strip_prefix(b"\\").unwrap_or(cls);
+        let cid = *self.class_index.get(&cls.to_ascii_lowercase())?;
+        find_const_runtime(&self.classes, cid, rest)
     }
 
     /// Resolve a callable value to the data the `call_user_func[_array]`
@@ -5942,6 +5966,55 @@ impl<'m> Vm<'m> {
             }
         }
         Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// Shared body of `is_a` / `is_subclass_of`. Resolves the subject to a
+    /// `ClassId` (an object's class always; a class-name string only when
+    /// `allow_string`) and the target class name to a `ClassId`, then reuses
+    /// `is_instance_of` (which honours the `Stringable` auto-impl and transitive
+    /// interfaces). For `is_subclass_of`, `allow_self` is false so the subject's
+    /// own class does not count. Unresolved subject/target, or a disallowed
+    /// string subject, yields `false` without warning.
+    fn is_a_impl(&mut self, args: Vec<Zval>, default_allow_string: bool, allow_self: bool) -> Result<Zval, PhpError> {
+        let allow_string = match args.get(2) {
+            Some(v) => convert::to_bool(v, &mut self.diags),
+            None => default_allow_string,
+        };
+        let subj_cid = match args.first().cloned().unwrap_or(Zval::Null).deref_clone() {
+            Zval::Object(o) => Some(o.borrow().class_id as usize),
+            Zval::Str(s) if allow_string => {
+                let raw = s.as_bytes();
+                let name = raw.strip_prefix(b"\\").unwrap_or(raw);
+                self.class_index.get(&name.to_ascii_lowercase()).copied()
+            }
+            _ => None,
+        };
+        let Some(subj_cid) = subj_cid else { return Ok(Zval::Bool(false)) };
+        let target = args.get(1).cloned().unwrap_or(Zval::Null);
+        let tbytes = convert::to_zstr_cast(&target, &mut self.diags).as_bytes().to_vec();
+        let tname = tbytes.strip_prefix(b"\\").unwrap_or(&tbytes);
+        let Some(&tgt_cid) = self.class_index.get(&tname.to_ascii_lowercase()) else {
+            return Ok(Zval::Bool(false));
+        };
+        if !allow_self && subj_cid == tgt_cid {
+            return Ok(Zval::Bool(false));
+        }
+        Ok(Zval::Bool(is_instance_of(&self.classes, self.stringable_id, subj_cid, tgt_cid)))
+    }
+
+    /// `is_a($object_or_class, $class, $allow_string = false)`: whether the subject
+    /// is an instance of `$class` (the class itself, an ancestor, or an
+    /// implemented interface). A class-name string subject is only accepted when
+    /// `$allow_string` is true.
+    fn ho_is_a(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.is_a_impl(args, false, true)
+    }
+
+    /// `is_subclass_of($object_or_class, $class, $allow_string = true)`: like
+    /// `is_a` but the subject's own class does not count — only a *proper*
+    /// subclass or an implemented interface returns true.
+    fn ho_is_subclass_of(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.is_a_impl(args, true, false)
     }
 
     /// `class_uses($class, $autoload = true)`: the traits used *directly* by the
@@ -10329,6 +10402,8 @@ host_builtins! {
     b"get_parent_class" => vm.ho_get_parent_class(args),
     b"class_parents" => vm.ho_class_parents(args),
     b"class_implements" => vm.ho_class_implements(args),
+    b"is_a" => vm.ho_is_a(args),
+    b"is_subclass_of" => vm.ho_is_subclass_of(args),
     b"class_uses" => vm.ho_class_uses(args),
     b"trait_exists" => vm.ho_trait_exists(args),
     b"get_declared_traits" => vm.ho_get_declared_traits(),
