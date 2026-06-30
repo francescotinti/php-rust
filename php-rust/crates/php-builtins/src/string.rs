@@ -1567,3 +1567,221 @@ pub fn levenshtein(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     }
     Ok(Zval::Long(prev[lb] as i64))
 }
+
+
+// ---------------------------------------------------------------------------
+// version_compare() — faithful port of ext/standard/versioning.c.
+// ---------------------------------------------------------------------------
+
+#[inline]
+fn vc_normalize(x: i64) -> i64 {
+    match x.cmp(&0) {
+        std::cmp::Ordering::Less => -1,
+        std::cmp::Ordering::Greater => 1,
+        std::cmp::Ordering::Equal => 0,
+    }
+}
+
+/// `php_canonicalize_version()`: collapse separators to `.` and insert a `.` at
+/// every digit<->non-digit boundary, so each `.`-delimited segment is
+/// homogeneous (all digits or all non-digits).
+fn canonicalize_version(version: &[u8]) -> Vec<u8> {
+    if version.is_empty() {
+        return Vec::new();
+    }
+    let isdigit = |x: u8| x.is_ascii_digit();
+    let isdig = |x: u8| isdigit(x) && x != b'.';
+    let isndig = |x: u8| !isdigit(x) && x != b'.';
+    let isspecial = |x: u8| x == b'-' || x == b'_' || x == b'+';
+    let mut q: Vec<u8> = Vec::with_capacity(version.len() * 2 + 1);
+    let mut lp = version[0];
+    q.push(lp);
+    for &p in &version[1..] {
+        let lq = *q.last().unwrap();
+        if isspecial(p) {
+            if lq != b'.' {
+                q.push(b'.');
+            }
+        } else if (isndig(lp) && isdig(p)) || (isdig(lp) && isndig(p)) {
+            if lq != b'.' {
+                q.push(b'.');
+            }
+            q.push(p);
+        } else if !p.is_ascii_alphanumeric() {
+            if lq != b'.' {
+                q.push(b'.');
+            }
+        } else {
+            q.push(p);
+        }
+        lp = p;
+    }
+    // Strip a single trailing dot (an empty last component).
+    if q.last() == Some(&b'.') {
+        q.pop();
+    }
+    q
+}
+
+/// `compare_special_version_forms()`: prefix-match each form against the ordered
+/// special-form table (first match wins); an unknown form ranks below `dev`.
+fn special_form_order(form: &[u8]) -> i64 {
+    const FORMS: &[(&[u8], i64)] = &[
+        (b"dev", 0),
+        (b"alpha", 1),
+        (b"a", 1),
+        (b"beta", 2),
+        (b"b", 2),
+        (b"RC", 3),
+        (b"rc", 3),
+        (b"#", 4),
+        (b"pl", 5),
+        (b"p", 5),
+    ];
+    for &(name, order) in FORMS {
+        if form.starts_with(name) {
+            return order;
+        }
+    }
+    -1
+}
+
+fn compare_special(f1: &[u8], f2: &[u8]) -> i64 {
+    vc_normalize(special_form_order(f1) - special_form_order(f2))
+}
+
+/// Split off the first `.`-delimited segment: `(segment, remainder, had_dot)`.
+fn vc_split(s: &[u8]) -> (&[u8], &[u8], bool) {
+    match s.iter().position(|&c| c == b'.') {
+        Some(i) => (&s[..i], &s[i + 1..], true),
+        None => (s, s, false),
+    }
+}
+
+fn vc_parse_long(seg: &[u8]) -> i64 {
+    // `strtol`: read the leading run of digits, saturating on overflow.
+    let mut acc: i64 = 0;
+    for &c in seg {
+        if !c.is_ascii_digit() {
+            break;
+        }
+        acc = acc
+            .saturating_mul(10)
+            .saturating_add((c - b'0') as i64);
+    }
+    acc
+}
+
+fn vc_compare_segments(p1: &[u8], p2: &[u8]) -> i64 {
+    let d1 = p1.first().is_some_and(|c| c.is_ascii_digit());
+    let d2 = p2.first().is_some_and(|c| c.is_ascii_digit());
+    if d1 && d2 {
+        vc_normalize(vc_parse_long(p1).cmp(&vc_parse_long(p2)) as i64)
+    } else if !d1 && !d2 {
+        compare_special(p1, p2)
+    } else if d1 {
+        compare_special(b"#N#", p2)
+    } else {
+        compare_special(p1, b"#N#")
+    }
+}
+
+/// Walk two canonical (or `#`-sentinel) version strings segment by segment.
+fn vc_walk(v1: &[u8], v2: &[u8]) -> i64 {
+    if v1.is_empty() || v2.is_empty() {
+        return if v1.is_empty() && v2.is_empty() {
+            0
+        } else if !v1.is_empty() {
+            1
+        } else {
+            -1
+        };
+    }
+    let mut p1 = v1;
+    let mut p2 = v2;
+    let mut compare = 0i64;
+    let mut n1_some = true;
+    let mut n2_some = true;
+    while !p1.is_empty() && !p2.is_empty() && n1_some && n2_some {
+        let (seg1, rest1, has1) = vc_split(p1);
+        let (seg2, rest2, has2) = vc_split(p2);
+        n1_some = has1;
+        n2_some = has2;
+        compare = vc_compare_segments(seg1, seg2);
+        if compare != 0 {
+            break;
+        }
+        if has1 {
+            p1 = rest1;
+        }
+        if has2 {
+            p2 = rest2;
+        }
+    }
+    if compare == 0 {
+        if n1_some {
+            if p1.first().is_some_and(|c| c.is_ascii_digit()) {
+                compare = 1;
+            } else {
+                compare = vc_walk(p1, b"#N#");
+            }
+        } else if n2_some {
+            if p2.first().is_some_and(|c| c.is_ascii_digit()) {
+                compare = -1;
+            } else {
+                compare = vc_walk(b"#N#", p2);
+            }
+        }
+    }
+    compare
+}
+
+/// `php_version_compare()`: canonicalize both (unless `#`-prefixed) then walk.
+fn php_version_compare(o1: &[u8], o2: &[u8]) -> i64 {
+    if o1.is_empty() || o2.is_empty() {
+        return if o1.is_empty() && o2.is_empty() {
+            0
+        } else if !o1.is_empty() {
+            1
+        } else {
+            -1
+        };
+    }
+    let v1 = if o1[0] == b'#' {
+        o1.to_vec()
+    } else {
+        canonicalize_version(o1)
+    };
+    let v2 = if o2[0] == b'#' {
+        o2.to_vec()
+    } else {
+        canonicalize_version(o2)
+    };
+    vc_walk(&v1, &v2)
+}
+
+/// `version_compare($v1, $v2, $operator = null)`.
+pub fn version_compare(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let v1 = convert::to_zstr(&args[0], ctx.diags);
+    let v2 = convert::to_zstr(&args[1], ctx.diags);
+    let cmp = php_version_compare(v1.as_bytes(), v2.as_bytes());
+    let op = match args.get(2) {
+        None | Some(Zval::Null) => return Ok(Zval::Long(cmp)),
+        Some(o) => convert::to_zstr(o, ctx.diags),
+    };
+    let result = match op.as_bytes() {
+        b"<" | b"lt" => cmp == -1,
+        b"<=" | b"le" => cmp != 1,
+        b">" | b"gt" => cmp == 1,
+        b">=" | b"ge" => cmp != -1,
+        b"==" | b"=" | b"eq" => cmp == 0,
+        b"!=" | b"<>" | b"ne" => cmp != 0,
+        _ => {
+            return Err(PhpError::ValueError(
+                "version_compare(): Argument #3 ($operator) must be a valid comparison operator"
+                    .to_string(),
+            ))
+        }
+    };
+    Ok(Zval::Bool(result))
+}

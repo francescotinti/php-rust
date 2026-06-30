@@ -2357,6 +2357,15 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"FILE_IGNORE_NEW_LINES" => ExprKind::Int(2),
         b"FILE_SKIP_EMPTY_LINES" => ExprKind::Int(4),
         b"FILE_APPEND" => ExprKind::Int(8),
+        // parse_url() component selectors.
+        b"PHP_URL_SCHEME" => ExprKind::Int(0),
+        b"PHP_URL_HOST" => ExprKind::Int(1),
+        b"PHP_URL_PORT" => ExprKind::Int(2),
+        b"PHP_URL_USER" => ExprKind::Int(3),
+        b"PHP_URL_PASS" => ExprKind::Int(4),
+        b"PHP_URL_PATH" => ExprKind::Int(5),
+        b"PHP_URL_QUERY" => ExprKind::Int(6),
+        b"PHP_URL_FRAGMENT" => ExprKind::Int(7),
         // pathinfo() component selectors (step 52a).
         b"PATHINFO_DIRNAME" => ExprKind::Int(1),
         b"PATHINFO_BASENAME" => ExprKind::Int(2),

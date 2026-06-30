@@ -25,6 +25,7 @@ mod mbstring;
 mod pack;
 mod serialize;
 mod string;
+mod url;
 
 use std::rc::Rc;
 
@@ -270,6 +271,8 @@ pub fn registry() -> Registry {
     add(b"iconv", mbstring::iconv);
     add(b"mb_detect_encoding", mbstring::mb_detect_encoding);
     add(b"number_format", string::number_format);
+    add(b"version_compare", string::version_compare);
+    add(b"parse_url", url::parse_url);
     add(b"sprintf", format::sprintf);
     add(b"printf", format::printf);
     add(b"vsprintf", format::vsprintf);
