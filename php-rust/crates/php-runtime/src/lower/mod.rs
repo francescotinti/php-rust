@@ -943,6 +943,40 @@ class SplFixedArray implements ArrayAccess, Countable, Iterator {
 }
 class ReflectionException extends Exception {}
 class ReflectionAttribute {
+    const IS_INSTANCEOF = 2;
+    // Validate the $flags argument and apply the IS_INSTANCEOF filter. `$label` is
+    // the Reflection class reported in the invalid-flag error (PHP reports the
+    // declaring scope, e.g. ReflectionFunctionAbstract for func/method). When the
+    // flag is set, `$all` was fetched unfiltered (host name = null) and we keep
+    // only attributes whose class is `$name` or a subclass/implementor of it; the
+    // filter class must exist (else PHP throws "Class X not found"). Without the
+    // flag the host already applied the exact-name filter, so `$all` is as-is.
+    public static function __filter($all, $name, $flags, $label) {
+        if ($flags !== 0 && $flags !== self::IS_INSTANCEOF) {
+            throw new Error($label . '::getAttributes(): Argument #2 ($flags) must be a valid attribute filter flag');
+        }
+        if (($flags & self::IS_INSTANCEOF) === 0 || $name === null) { return $all; }
+        if (!class_exists($name) && !interface_exists($name)) {
+            throw new Error('Class "' . $name . '" not found');
+        }
+        $want = strtolower($name);
+        $out = [];
+        foreach ($all as $a) {
+            $x = $a->getName();
+            $isa = strcasecmp($x, $name) === 0;
+            // Only walk the hierarchy for a class that actually exists; an
+            // unresolved attribute class is simply not an instance of anything but
+            // its own name (mirrors PHP, which emits no warning here).
+            if (!$isa && (class_exists($x) || interface_exists($x))) {
+                foreach (class_parents($x) as $p) { if (strtolower($p) === $want) { $isa = true; break; } }
+                if (!$isa) {
+                    foreach (class_implements($x) as $i) { if (strtolower($i) === $want) { $isa = true; break; } }
+                }
+            }
+            if ($isa) { $out[] = $a; }
+        }
+        return $out;
+    }
     public $name;
     // Private handle to the owning class + the attribute's position in it, used by
     // the host builtins to materialise the attribute lazily. `__prop` is set for an
@@ -1008,7 +1042,8 @@ class ReflectionClass {
     // Attributes are retained at lowering; the host builds one ReflectionAttribute
     // per attribute declared on the class (optionally filtered by name).
     public function getAttributes($name = null, $flags = 0) {
-        return __reflect_class_attributes($this->name, $name);
+        $hostName = ($flags & ReflectionAttribute::IS_INSTANCEOF) ? null : $name;
+        return ReflectionAttribute::__filter(__reflect_class_attributes($this->name, $hostName), $name, $flags, 'ReflectionClass');
     }
     public function newInstance(...$args) { return new $this->name(...$args); }
     public function newInstanceArgs($args = []) { return new $this->name(...$args); }
@@ -1146,7 +1181,10 @@ class ReflectionConstant {
     }
     public function getName() { return $this->name; }
     public function getValue() { return constant($this->name); }
-    public function getAttributes($name = null, $flags = 0) { return __reflect_const_attributes($this->name, $name); }
+    public function getAttributes($name = null, $flags = 0) {
+        $hostName = ($flags & ReflectionAttribute::IS_INSTANCEOF) ? null : $name;
+        return ReflectionAttribute::__filter(__reflect_const_attributes($this->name, $hostName), $name, $flags, 'ReflectionConstant');
+    }
     public function __toString() { return sprintf("Constant [ %s ]\n", $this->name); }
 }
 class ReflectionFunction {
@@ -1183,8 +1221,11 @@ class ReflectionFunction {
     public function invoke(...$args) { return call_user_func_array($this->name, $args); }
     public function invokeArgs($args) { return call_user_func_array($this->name, $args); }
     public function getAttributes($name = null, $flags = 0) {
-        if ($this->__closure !== null) { return __reflect_closure_attributes($this->__closure, $name); }
-        return __reflect_func_attributes($this->name, $name);
+        $hostName = ($flags & ReflectionAttribute::IS_INSTANCEOF) ? null : $name;
+        $all = $this->__closure !== null
+            ? __reflect_closure_attributes($this->__closure, $hostName)
+            : __reflect_func_attributes($this->name, $hostName);
+        return ReflectionAttribute::__filter($all, $name, $flags, 'ReflectionFunctionAbstract');
     }
 }
 class ReflectionMethod {
@@ -1231,7 +1272,10 @@ class ReflectionMethod {
     public function invokeArgs($object, $args) {
         return call_user_func_array([$object === null ? $this->class : $object, $this->name], $args);
     }
-    public function getAttributes($name = null, $flags = 0) { return __reflect_method_attributes($this->class, $this->name, $name); }
+    public function getAttributes($name = null, $flags = 0) {
+        $hostName = ($flags & ReflectionAttribute::IS_INSTANCEOF) ? null : $name;
+        return ReflectionAttribute::__filter(__reflect_method_attributes($this->class, $this->name, $hostName), $name, $flags, 'ReflectionFunctionAbstract');
+    }
 }
 class ReflectionProperty {
     const IS_STATIC = 16;
@@ -1261,7 +1305,10 @@ class ReflectionProperty {
     public function getName() { return $this->name; }
     public function getValue($object = null) { return __reflect_prop_get($this->class, $this->name, $object); }
     public function setValue($object, $value = null) { __reflect_prop_set($this->class, $this->name, $object, $value); }
-    public function getAttributes($name = null, $flags = 0) { return __reflect_prop_attributes($this->class, $this->name, $name); }
+    public function getAttributes($name = null, $flags = 0) {
+        $hostName = ($flags & ReflectionAttribute::IS_INSTANCEOF) ? null : $name;
+        return ReflectionAttribute::__filter(__reflect_prop_attributes($this->class, $this->name, $hostName), $name, $flags, 'ReflectionProperty');
+    }
     public function isStatic() { return __reflect_prop_is_static($this->class, $this->name); }
     public function hasType() { return __reflect_prop_type($this->class, $this->name) !== false; }
     public function getType() { return ReflectionNamedType::__fromInfo(__reflect_prop_type($this->class, $this->name)); }
