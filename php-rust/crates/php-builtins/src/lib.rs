@@ -1136,13 +1136,18 @@ fn filter_var(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 }
 
 /// extension_loaded($name): whether a PHP extension is available. We report the
-/// set the oracle build exposes (so polyfill/feature guards take the same branch):
-/// Core, standard, SPL, pcre, json, mbstring, hash, date. Case-insensitive.
+/// set phpr substantially models (so polyfill/feature guards take the same branch):
+/// Core, standard, SPL, pcre, json, mbstring, hash, date, openssl. Case-insensitive.
 fn extension_loaded(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let name = convert::to_zstr(arg1(args, "extension_loaded")?, ctx.diags);
     let lc = name.as_bytes().to_ascii_lowercase();
     const LOADED: &[&[u8]] = &[
         b"core", b"standard", b"spl", b"pcre", b"json", b"mbstring", b"hash", b"date",
+        // openssl: phpr models TLS via the rustls-backed http/https stream wrapper
+        // (the openssl/Composer-network filone). curl is deliberately *absent* so a
+        // dual-backend consumer (Composer's HttpDownloader) takes the stream-wrapper
+        // path rather than the much larger curl_multi surface.
+        b"openssl",
     ];
     Ok(Zval::Bool(LOADED.contains(&lc.as_slice())))
 }
