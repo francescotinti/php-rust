@@ -1229,8 +1229,6 @@ impl<'f> Lowerer<'f> {
         Ok((self.foreach_slot(target, line)?, false))
     }
 
-    /// Lower the elements of an array literal. Keyed and keyless elements are
-    /// supported; spread (`...$x`) and missing elements are deferred.
     fn lower_array_elements<'a, I>(&mut self, it: I, line: Line) -> Result<Vec<ArrayElem>, LowerError>
     where
         I: Iterator<Item = &'a ArrayElement<'a>>,
@@ -1238,14 +1236,15 @@ impl<'f> Lowerer<'f> {
         let mut out = Vec::new();
         for el in it {
             match el {
-                ArrayElement::KeyValue(kv) => out.push(ArrayElem {
-                    key: Some(self.lower_expr(kv.key)?),
-                    value: self.lower_expr(kv.value)?,
-                }),
-                ArrayElement::Value(v) => out.push(ArrayElem {
-                    key: None,
-                    value: self.lower_expr(v.value)?,
-                }),
+                ArrayElement::KeyValue(kv) => {
+                    let key = Some(self.lower_expr(kv.key)?);
+                    let (value, by_ref) = self.lower_array_value(kv.value, line)?;
+                    out.push(ArrayElem { key, value, by_ref });
+                }
+                ArrayElement::Value(v) => {
+                    let (value, by_ref) = self.lower_array_value(v.value, line)?;
+                    out.push(ArrayElem { key: None, value, by_ref });
+                }
                 // `[...$src]` array spread (PHP 8.1): a keyless element whose value
                 // is a `Spread`, expanded at run time (step 51).
                 ArrayElement::Variadic(v) => out.push(ArrayElem {
@@ -1254,6 +1253,7 @@ impl<'f> Lowerer<'f> {
                         line,
                         kind: ExprKind::Spread(Box::new(self.lower_expr(v.value)?)),
                     },
+                    by_ref: false,
                 }),
                 // A missing element `[, ]` is only valid in a destructuring pattern,
                 // not an array literal.
@@ -1266,6 +1266,30 @@ impl<'f> Lowerer<'f> {
             }
         }
         Ok(out)
+    }
+
+    /// Lower an array-element value, recognising a by-reference element
+    /// (`['k' => &$v]`): the element aliases the source variable's cell. Only a
+    /// bare variable source is in scope (it lowers to `Op::PushRef`, mirroring
+    /// by-ref call args); `&$a[0]` / `&$o->p` stay deferred.
+    fn lower_array_value(
+        &mut self,
+        value: &Expression,
+        line: Line,
+    ) -> Result<(Expr, bool), LowerError> {
+        if let Expression::UnaryPrefix(u) = value {
+            if let UnaryPrefixOperator::Reference(_) = u.operator {
+                let inner = self.lower_expr(u.operand)?;
+                if !matches!(inner.kind, ExprKind::Var(_)) {
+                    return Err(LowerError::Unsupported {
+                        what: "by-reference array element of non-variable",
+                        line,
+                    });
+                }
+                return Ok((inner, true));
+            }
+        }
+        Ok((self.lower_expr(value)?, false))
     }
 
     /// Lower `[targets] = rhs` / `list(targets) = rhs` array destructuring (step

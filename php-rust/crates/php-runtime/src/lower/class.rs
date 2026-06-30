@@ -533,12 +533,13 @@ impl<'f> Lowerer<'f> {
                 // keys 0..), named args keyed by their string name.
                 let mut elems: Vec<crate::hir::ArrayElem> = args
                     .into_iter()
-                    .map(|value| crate::hir::ArrayElem { key: None, value })
+                    .map(|value| crate::hir::ArrayElem { key: None, value, by_ref: false })
                     .collect();
                 for (k, value) in named {
                     elems.push(crate::hir::ArrayElem {
                         key: Some(Expr { kind: ExprKind::Str(k), line }),
                         value,
+                        by_ref: false,
                     });
                 }
                 let args_expr = Expr { kind: ExprKind::Array(elems), line };

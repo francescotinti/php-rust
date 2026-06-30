@@ -1033,6 +1033,10 @@ pub enum StaticAssignOp {
 pub struct ArrayElem {
     pub key: Option<Expr>,
     pub value: Expr,
+    /// By-reference element (`['k' => &$v]`): `value` is the source variable
+    /// (an `ExprKind::Var`) and the array element aliases its cell rather than
+    /// copying. Lowered only for bare variables (mirrors by-ref call args).
+    pub by_ref: bool,
 }
 
 /// One `match` arm. An empty `conditions` list marks the `default` arm.

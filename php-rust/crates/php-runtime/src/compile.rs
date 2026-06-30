@@ -1725,16 +1725,24 @@ impl<'a> FnCompiler<'a> {
                         self.emit(Op::ArrayAppendSpread);
                         continue;
                     }
-                    match &el.key {
-                        Some(k) => {
-                            self.expr(k)?;
-                            self.expr(&el.value)?;
-                            self.emit(Op::ArrayInsert);
+                    if let Some(k) = &el.key {
+                        self.expr(k)?;
+                    }
+                    // A by-reference element (`['k' => &$v]`) pushes a *reference*
+                    // to the source slot in place of the value, so the array
+                    // element aliases the variable's cell; `Op::ArrayInsert` /
+                    // `Op::ArrayPush` then store that `Ref` verbatim. Lowering
+                    // guarantees `value` is a bare `Var` when `by_ref`.
+                    match (el.by_ref, &el.value.kind) {
+                        (true, ExprKind::Var(slot)) => {
+                            self.emit(Op::PushRef(*slot));
                         }
-                        None => {
-                            self.expr(&el.value)?;
-                            self.emit(Op::ArrayPush);
-                        }
+                        _ => self.expr(&el.value)?,
+                    }
+                    if el.key.is_some() {
+                        self.emit(Op::ArrayInsert);
+                    } else {
+                        self.emit(Op::ArrayPush);
                     }
                 }
             }
