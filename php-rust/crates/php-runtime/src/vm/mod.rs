@@ -6384,6 +6384,23 @@ impl<'m> Vm<'m> {
         Ok(Zval::Bool(is))
     }
 
+    /// `__reflect_prop_type($class, $prop)`: the declared type of `$prop` as the
+    /// descriptor `ReflectionNamedType` is built from (`false` for an untyped
+    /// property) — backs `ReflectionProperty::getType` / `hasType`. `$class` is the
+    /// property's declaring class, so its (flattened) `prop_info` holds the
+    /// most-derived declaration's type.
+    fn ho_reflect_prop_type(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let cls = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let prop = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let key = cls.strip_prefix(b"\\").unwrap_or(&cls).to_ascii_lowercase();
+        let hint = self
+            .class_index
+            .get(&key)
+            .and_then(|&cid| self.classes[cid].prop_info.get(prop.as_slice()))
+            .and_then(|pi| pi.type_hint.clone());
+        Ok(typehint_descriptor(&hint))
+    }
+
 
     /// `__reflect_prop_get($class, $prop, $obj)`: read property `$prop` (declared
     /// in `$class`) of `$obj` ignoring visibility — backs
@@ -10259,6 +10276,7 @@ host_builtins! {
     b"__lazy_set_raw" => vm.ho_lazy_set_raw(args),
     b"__reflect_prop_names" => vm.ho_reflect_prop_names(args),
     b"__reflect_prop_is_static" => vm.ho_reflect_prop_is_static(args),
+    b"__reflect_prop_type" => vm.ho_reflect_prop_type(args),
     b"__reflect_prop_get" => vm.ho_reflect_prop_get(args),
     b"__reflect_prop_set" => vm.ho_reflect_prop_set(args),
     b"__reflect_prop_attributes" => vm.ho_reflect_prop_attributes(args),

@@ -1254,6 +1254,8 @@ class ReflectionProperty {
     public function setValue($object, $value = null) { __reflect_prop_set($this->class, $this->name, $object, $value); }
     public function getAttributes($name = null, $flags = 0) { return __reflect_prop_attributes($this->class, $this->name, $name); }
     public function isStatic() { return __reflect_prop_is_static($this->class, $this->name); }
+    public function hasType() { return __reflect_prop_type($this->class, $this->name) !== false; }
+    public function getType() { return ReflectionNamedType::__fromInfo(__reflect_prop_type($this->class, $this->name)); }
     public function skipLazyInitialization($object) {
         $msg = __lazy_skip_init($object, $this->class, $this->name);
         if ($msg !== null) { throw new ReflectionException($msg); }
