@@ -1080,6 +1080,7 @@ class ReflectionClass {
     public function initializeLazyObject($object) { return __lazy_initialize($object); }
     public function isInstantiable() { return class_exists($this->name); }
     public function isInterface() { return interface_exists($this->name); }
+    public function isEnum() { return in_array('UnitEnum', class_implements($this->name)); }
     public function isFinal() { return __reflect_class_modifiers($this->name)['final']; }
     public function isAbstract() { return __reflect_class_modifiers($this->name)['abstract']; }
     public function hasMethod($name) { return method_exists($this->name, $name); }
@@ -1309,6 +1310,42 @@ class ReflectionClassConstant {
         return ReflectionAttribute::__filter(__reflect_classconst_attributes($this->class, $this->name, $hostName), $name, $flags, 'ReflectionClassConstant');
     }
 }
+class ReflectionEnumUnitCase extends ReflectionClassConstant {
+    // getValue() is inherited: __reflect_class_const_info returns the case
+    // singleton as the constant's value.
+    public function getEnum() { return new ReflectionEnum($this->class); }
+}
+class ReflectionEnumBackedCase extends ReflectionEnumUnitCase {
+    public function getBackingValue() { return $this->getValue()->value; }
+}
+class ReflectionEnum extends ReflectionClass {
+    public function isBacked() { return in_array('BackedEnum', class_implements($this->name)); }
+    public function getBackingType() { return ReflectionNamedType::__fromInfo(__reflect_enum_backing($this->name)); }
+    public function hasCase($name) {
+        $cls = $this->name;
+        foreach ($cls::cases() as $c) { if ($c->name === $name) { return true; } }
+        return false;
+    }
+    public function getCase($name) {
+        if (!$this->hasCase($name)) {
+            throw new ReflectionException(sprintf('Case %s::%s does not exist', $this->name, $name));
+        }
+        return $this->isBacked()
+            ? new ReflectionEnumBackedCase($this->name, $name)
+            : new ReflectionEnumUnitCase($this->name, $name);
+    }
+    public function getCases() {
+        $out = [];
+        $cls = $this->name;
+        $backed = $this->isBacked();
+        foreach ($cls::cases() as $c) {
+            $out[] = $backed
+                ? new ReflectionEnumBackedCase($this->name, $c->name)
+                : new ReflectionEnumUnitCase($this->name, $c->name);
+        }
+        return $out;
+    }
+}
 class ReflectionFunction {
     public $name;
     public $__info;
@@ -1464,6 +1501,11 @@ class ReflectionProperty {
         $msg = __lazy_set_raw($object, $this->class, $this->name, $value);
         if ($msg !== null) { throw new ReflectionException($msg); }
     }
+}
+function enum_exists($enum, $autoload = true) {
+    // Reuse class_exists for the (autoload-aware) existence check, then confirm
+    // the class is an enum via its implicit UnitEnum interface.
+    return class_exists($enum, $autoload) && in_array('UnitEnum', class_implements($enum));
 }
 "##;
 

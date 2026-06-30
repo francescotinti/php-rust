@@ -754,6 +754,18 @@ fn export_into(out: &mut Vec<u8>, v: &Zval, level: usize, seen: &mut Vec<usize>,
                 out.push(b'\n');
                 spaces(out, level - 1);
             }
+            // An enum case exports as `\Enum::Case` (PHP 8.1), not `__set_state`.
+            if obj.info.is_enum_case {
+                out.push(b'\\');
+                out.extend_from_slice(class_display_name(obj.class_name.as_bytes()));
+                out.extend_from_slice(b"::");
+                if let Some(Zval::Str(s)) = obj.props.get(b"name") {
+                    out.extend_from_slice(s.as_bytes());
+                }
+                drop(obj);
+                seen.pop();
+                return;
+            }
             // `stdClass` renders as a cast; any other class via `__set_state`.
             let is_std = obj.class_name.as_bytes() == b"stdClass";
             if is_std {

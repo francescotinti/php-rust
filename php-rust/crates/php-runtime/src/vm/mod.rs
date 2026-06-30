@@ -5387,6 +5387,10 @@ impl<'m> Vm<'m> {
             let thunk: &'m Func = &self.classes[decl].consts[idx].func;
             return self.run_value_thunk(thunk, Some(decl));
         }
+        // `constant("Enum::Case")` materialises the case singleton.
+        if let Some((cid, ci)) = self.enum_case_ref(&cname) {
+            return Ok(Zval::Object(self.enum_case(cid, ci as u32)));
+        }
         Err(PhpError::Error(format!(
             "Undefined constant \"{}\"",
             String::from_utf8_lossy(&cname)
@@ -5397,7 +5401,7 @@ impl<'m> Vm<'m> {
     /// or a `Class::CONST` class constant (resolved through parents/interfaces).
     fn constant_known(&self, name: &[u8]) -> bool {
         if name.windows(2).any(|w| w == b"::") {
-            return self.class_const_ref(name).is_some();
+            return self.class_const_ref(name).is_some() || self.enum_case_ref(name).is_some();
         }
         self.constants.contains_key(name) || crate::lower::resolve_constant(name).is_some()
     }
@@ -5413,6 +5417,22 @@ impl<'m> Vm<'m> {
         let cls = cls.strip_prefix(b"\\").unwrap_or(cls);
         let cid = *self.class_index.get(&cls.to_ascii_lowercase())?;
         find_const_runtime(&self.classes, cid, rest)
+    }
+
+    /// The index of enum case `name` declared on class `cid`, if any.
+    fn enum_case_idx(&self, cid: ClassId, name: &[u8]) -> Option<usize> {
+        self.classes[cid].enum_cases.iter().position(|c| c.name.as_ref() == name)
+    }
+
+    /// Resolve a `Enum::Case` name to its class id and case index — the enum-case
+    /// counterpart of [`class_const_ref`] (enum cases live in `enum_cases`, not
+    /// `consts`, but are reachable as `Enum::Case` constants).
+    fn enum_case_ref(&self, name: &[u8]) -> Option<(ClassId, usize)> {
+        let pos = name.windows(2).position(|w| w == b"::")?;
+        let cls = name[..pos].strip_prefix(b"\\").unwrap_or(&name[..pos]);
+        let rest = &name[pos + 2..];
+        let cid = *self.class_index.get(&cls.to_ascii_lowercase())?;
+        self.enum_case_idx(cid, rest).map(|i| (cid, i))
     }
 
     /// Resolve a callable value to the data the `call_user_func[_array]`
@@ -6064,6 +6084,15 @@ impl<'m> Vm<'m> {
             let v = self.run_value_thunk(thunk, Some(decl))?;
             arr.insert(Key::Str(PhpStr::new(name)), v);
         }
+        // Enum cases are reported as (public) constants, value = the case singleton.
+        if filter.map_or(true, |bits| bits & 1 != 0) {
+            let n = self.classes[start].enum_cases.len();
+            for i in 0..n {
+                let name = self.classes[start].enum_cases[i].name.to_vec();
+                let inst = Zval::Object(self.enum_case(start, i as u32));
+                arr.insert(Key::Str(PhpStr::new(name)), inst);
+            }
+        }
         Ok(Zval::Array(Rc::new(arr)))
     }
 
@@ -6105,6 +6134,10 @@ impl<'m> Vm<'m> {
             for (name, _, _) in self.collect_class_consts(start) {
                 let _ = arr.append(Zval::Str(PhpStr::new(name)));
             }
+            // Enum cases are reported as constants too, after the real ones.
+            for c in &self.classes[start].enum_cases {
+                let _ = arr.append(Zval::Str(PhpStr::new(c.name.to_vec())));
+            }
         }
         Ok(Zval::Array(Rc::new(arr)))
     }
@@ -6119,6 +6152,19 @@ impl<'m> Vm<'m> {
         let key = cls.strip_prefix(b"\\").unwrap_or(&cls).to_ascii_lowercase();
         let Some(&cid) = self.class_index.get(&key) else { return Ok(Zval::Bool(false)) };
         let Some((decl, idx)) = find_const_runtime(&self.classes, cid, &name) else {
+            // An enum case is reachable as a class constant: its value is the case
+            // singleton, it is implicitly public and is flagged `enumCase`.
+            if let Some(ci) = self.enum_case_idx(cid, &name) {
+                let value = Zval::Object(self.enum_case(cid, ci as u32));
+                let decl_name = self.classes[cid].name.to_vec();
+                let mut a = php_types::PhpArray::new();
+                a.insert(Key::Str(PhpStr::new(b"value".to_vec())), value);
+                a.insert(Key::Str(PhpStr::new(b"declaringClass".to_vec())), Zval::Str(PhpStr::new(decl_name)));
+                a.insert(Key::Str(PhpStr::new(b"visibility".to_vec())), Zval::Str(PhpStr::new(b"public".to_vec())));
+                a.insert(Key::Str(PhpStr::new(b"final".to_vec())), Zval::Bool(false));
+                a.insert(Key::Str(PhpStr::new(b"enumCase".to_vec())), Zval::Bool(true));
+                return Ok(Zval::Array(Rc::new(a)));
+            }
             return Ok(Zval::Bool(false));
         };
         let vis: &[u8] = match self.classes[decl].consts[idx].visibility {
@@ -6138,6 +6184,27 @@ impl<'m> Vm<'m> {
         a.insert(Key::Str(PhpStr::new(b"enumCase".to_vec())), Zval::Bool(false));
         Ok(Zval::Array(Rc::new(a)))
     }
+
+    /// `__reflect_enum_backing($class)`: the backing scalar type of a backed enum
+    /// as a `ReflectionNamedType` descriptor (`int`/`string`), or `false` for a
+    /// pure enum. Derived from the (folded) case values.
+    fn ho_reflect_enum_backing(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let cls = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let key = cls.strip_prefix(b"\\").unwrap_or(&cls).to_ascii_lowercase();
+        let Some(&cid) = self.class_index.get(&key) else { return Ok(Zval::Bool(false)) };
+        let name: Option<&[u8]> = self.classes[cid].enum_cases.iter().find_map(|c| match &c.value {
+            Some(crate::bytecode::Const::Int(_)) => Some(&b"int"[..]),
+            Some(crate::bytecode::Const::Str(_)) => Some(&b"string"[..]),
+            _ => None,
+        });
+        let Some(name) = name else { return Ok(Zval::Bool(false)) };
+        let mut a = php_types::PhpArray::new();
+        a.insert(Key::Str(PhpStr::new(b"name".to_vec())), Zval::Str(PhpStr::new(name.to_vec())));
+        a.insert(Key::Str(PhpStr::new(b"builtin".to_vec())), Zval::Bool(true));
+        a.insert(Key::Str(PhpStr::new(b"nullable".to_vec())), Zval::Bool(false));
+        Ok(Zval::Array(Rc::new(a)))
+    }
+
 
     /// Resolve `($declClass, $name, $index)` from a class-constant attribute handle
     /// to the `&'m Func` thunk at `field` (`new`/`args`), or `None` if absent.
@@ -10812,6 +10879,7 @@ host_builtins! {
     b"__reflect_class_constants" => vm.ho_reflect_class_constants(args),
     b"__reflect_class_const_names" => vm.ho_reflect_class_const_names(args),
     b"__reflect_class_const_info" => vm.ho_reflect_class_const_info(args),
+    b"__reflect_enum_backing" => vm.ho_reflect_enum_backing(args),
     b"__reflect_classconst_attributes" => vm.ho_reflect_classconst_attributes(args),
     b"__reflect_classconst_attr_new" => vm.ho_reflect_classconst_attr_new(args),
     b"__reflect_classconst_attr_args" => vm.ho_reflect_classconst_attr_args(args),
