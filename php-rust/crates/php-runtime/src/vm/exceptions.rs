@@ -7,7 +7,10 @@ impl<'m> Vm<'m> {
     /// line and trace; an engine error uses its variant name and the captured
     /// `fault_line`.
     pub(super) fn render_fatal(&mut self, err: &PhpError, fault_line: Line) {
-        let file = String::from_utf8_lossy(&self.module.file).into_owned();
+        // The throwing-site file: taken from the throwable (its `file` prop was
+        // stamped at the construct/fault site, so it reports the defining file
+        // across includes); the bare-error fallback uses the executing frame.
+        let module_file = String::from_utf8_lossy(&self.module.file).into_owned();
         // Prefer the throwable `unwind` synthesized for this fatal (its `trace` was
         // captured while the faulting frames were live); fall back to a user-thrown
         // object, then to the raw error with a bare `#0 {main}` trace.
@@ -15,7 +18,7 @@ impl<'m> Vm<'m> {
             PhpError::Thrown(v @ Zval::Object(_)) => Some(v.clone()),
             _ => None,
         });
-        let (class, message, line, trace) = match throwable {
+        let (class, message, line, trace, file) = match throwable {
             Some(Zval::Object(o)) => {
                 let b = o.borrow();
                 let class = String::from_utf8_lossy(b.class_name.as_bytes()).into_owned();
@@ -31,13 +34,22 @@ impl<'m> Vm<'m> {
                     Some(Zval::Str(s)) => String::from_utf8_lossy(s.as_bytes()).into_owned(),
                     _ => "#0 {main}".to_string(),
                 };
-                (class, message, line, trace)
+                let file = match b.props.get(b"file") {
+                    Some(Zval::Str(s)) => String::from_utf8_lossy(s.as_bytes()).into_owned(),
+                    _ => module_file.clone(),
+                };
+                (class, message, line, trace, file)
             }
             _ => (
                 err.class_name().to_string(),
                 err.message().to_string(),
                 fault_line as i64,
                 "#0 {main}".to_string(),
+                self
+                    .frames
+                    .last()
+                    .map(|_| String::from_utf8_lossy(self.frame_file(self.frames.len() - 1)).into_owned())
+                    .unwrap_or_else(|| module_file.clone()),
             ),
         };
         // PHP omits the ": <message>" segment entirely when the throwable carries an
@@ -224,7 +236,10 @@ impl<'m> Vm<'m> {
         // first two (the definition site of a type error).
         let (file, line) = match loc {
             Some((f, l)) => (f, l),
-            None => (self.module.file.to_vec(), self.cur_line(self.frames.len() - 1)),
+            None => {
+                let top = self.frames.len() - 1;
+                (self.frame_file(top).to_vec(), self.cur_line(top))
+            }
         };
         let (trace, trace_string) = self.capture_trace();
         if let Zval::Object(o) = &value {

@@ -1939,6 +1939,13 @@ impl<'f> Lowerer<'f> {
         self.file.line_number(span.start.offset) + 1
     }
 
+
+    /// The unit's source path (matches `Program::file`), stamped onto each lowered
+    /// `FnDecl` so traces/`getFile()` report the defining file across includes.
+    fn unit_file(&self) -> Box<[u8]> {
+        self.file.name.as_ref().into()
+    }
+
     /// The active scope: the function-local overlay while a body is lowered,
     /// otherwise the script globals (D-12.1).
     fn scope_mut(&mut self) -> &mut Scope {

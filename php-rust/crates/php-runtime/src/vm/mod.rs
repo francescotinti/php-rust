@@ -10402,15 +10402,31 @@ impl<'m> Vm<'m> {
         if !is_instance_of(&self.classes, self.stringable_id, cid, throwable_id) {
             return;
         }
-        let line = self.cur_line(self.frames.len() - 1);
+        let top = self.frames.len() - 1;
+        let line = self.cur_line(top);
+        // The throwable's file is the defining file of the function where it was
+        // constructed (`new` site), not the entry module — so `getFile()` and the
+        // uncaught "in F:L" report the right file across includes.
+        let file = self.frame_file(top).to_vec();
         let (trace, trace_string) = self.capture_trace();
         let mut b = o.borrow_mut();
         b.props.set(b"line", Zval::Long(line as i64));
-        b.props
-            .set(b"file", Zval::Str(PhpStr::new(self.module.file.to_vec())));
+        b.props.set(b"file", Zval::Str(PhpStr::new(file)));
         b.props.set(b"trace", trace);
         b.props
             .set(b"traceString", Zval::Str(PhpStr::new(trace_string)));
+    }
+
+    /// The source file attributed to frame `i`: its function's defining file
+    /// (carried from the `FnDecl`), falling back to the entry module's file for a
+    /// synthetic stub / the script body that recorded no file.
+    fn frame_file(&self, i: usize) -> &[u8] {
+        let f = &self.frames[i].func.file;
+        if f.is_empty() {
+            &self.module.file
+        } else {
+            f
+        }
     }
 
     /// Snapshot the running frame stack as a Throwable's `(trace array, trace
@@ -10420,13 +10436,23 @@ impl<'m> Vm<'m> {
     /// *caller* (frame `k` was entered from frame `k-1`), recovered from the
     /// per-op line table (EXC-3b); `args` is empty, as the tree-walker leaves it.
     fn capture_trace(&self) -> (Zval, Vec<u8>) {
-        let file = &self.module.file;
         let mut arr = PhpArray::new();
         let mut s: Vec<u8> = Vec::new();
         let n = self.frames.len();
         for (i, k) in (1..n).rev().enumerate() {
             let frame = &self.frames[k];
             let line = self.cur_line(k - 1) as i64;
+            // The file/line are the *call site* in the caller (frame `k-1`): the
+            // file is the caller function's defining file, so a callee invoked
+            // across an include/autoload boundary still attributes to the right
+            // file (the frame's module is the caller's, not the callee's). An empty
+            // file (synthetic stub) falls back to the entry module.
+            let caller_file = &self.frames[k - 1].func.file;
+            let file: &[u8] = if caller_file.is_empty() {
+                &self.module.file
+            } else {
+                caller_file
+            };
             // The class shown is the late-static-binding (called) class, like the
             // tree-walker; absent for a free-function frame. The id is resolved in
             // the frame's own module (an eval'd/included frame may differ from the

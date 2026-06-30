@@ -1246,9 +1246,11 @@ impl<'f> Lowerer<'f> {
 
         let (params, body) = inner?;
         validate_goto(&body)?;
+        let file = self.unit_file();
         Ok((
             FnDecl {
                 name: hook_name,
+                file,
                 params,
                 body,
                 is_generator,
@@ -1371,12 +1373,14 @@ impl<'f> Lowerer<'f> {
             .and_then(|r| lower_reflect_type(self, &r.hint));
         let _ = class_line;
         let attributes = self.lower_attributes(&method.attribute_lists, line)?;
+        let file = self.unit_file();
         Ok(MethodDecl {
             visibility,
             is_static,
             is_final,
             decl: FnDecl {
                 name,
+                file,
                 params,
                 body,
                 is_generator,
@@ -1435,8 +1439,10 @@ impl<'f> Lowerer<'f> {
             .as_ref()
             .and_then(|r| lower_reflect_type(self, &r.hint));
         let attributes = self.lower_attributes(&func.attribute_lists, line)?;
+        let file = self.unit_file();
         Ok(FnDecl {
             name,
+            file,
             params,
             body,
             is_generator,
@@ -1661,8 +1667,10 @@ impl<'f> Lowerer<'f> {
         .into_bytes()
         .into_boxed_slice();
         let idx = self.closures.len();
+        let file = self.unit_file();
         self.closures.push(FnDecl {
             name,
+            file,
             params,
             body,
             is_generator,

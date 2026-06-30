@@ -898,6 +898,11 @@ pub struct Func {
     /// Name as written (original case); empty for the script body / an anonymous
     /// closure. Calls match it ASCII-case-insensitively, like the HIR.
     pub name: Box<[u8]>,
+    /// Source file this function was defined in (carried from its `FnDecl::file`),
+    /// so a stack trace / `getFile()` reports the *defining* file even across an
+    /// `include`/autoload boundary. Empty for synthetic stubs / the `{main}` body
+    /// (which fall back to the module file).
+    pub file: Box<[u8]>,
     /// The instruction stream. Jump targets are indices into this vector.
     pub ops: Vec<Op>,
     /// Source line of each op, parallel to `ops` (same length). The VM reads

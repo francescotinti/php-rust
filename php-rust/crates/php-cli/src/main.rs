@@ -41,7 +41,11 @@ fn main() -> ExitCode {
         }
     };
 
-    let name = path.to_string_lossy();
+    // PHP resolves the script's `__FILE__` (and getFile()/trace paths) to its
+    // realpath — an absolute, symlink-resolved path — so canonicalize the invoked
+    // path, falling back to it verbatim if that fails.
+    let canonical = std::fs::canonicalize(&path).unwrap_or_else(|_| std::path::PathBuf::from(&path));
+    let name = canonical.to_string_lossy();
     let registry = registry();
     // PHP CLI `$argv` / `$_SERVER['argv']`: element 0 is the script path, the rest
     // are the arguments after it (`phpr script.php a b` → ['script.php','a','b']).

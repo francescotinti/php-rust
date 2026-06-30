@@ -114,7 +114,7 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
         .iter()
         .map(|fd| compile_fndecl(fd, &ctx).unwrap_or_else(|e| stub_func(fd, &e)))
         .collect();
-    let main = compile_body(b"", &program.body, program.slots.len() as u32, &[], &program.slots, false, false, None, 0, &ctx, None, true, 0)?;
+    let main = compile_body(b"", &program.file, &program.body, program.slots.len() as u32, &[], &program.slots, false, false, None, 0, &ctx, None, true, 0)?;
     // Classes are compiled tolerantly too (see `compile_class`).
     let classes = program
         .classes
@@ -180,6 +180,7 @@ fn compile_fndecl(fd: &FnDecl, ctx: &ProgramCtx) -> R<Func> {
         .and_then(|n| ctx.class_index.get(&n.to_ascii_lowercase()).copied());
     compile_body(
         &fd.name,
+        &fd.file,
         &fd.body,
         fd.slots.len() as u32,
         &fd.params,
@@ -206,6 +207,7 @@ fn compile_fndecl(fd: &FnDecl, ctx: &ProgramCtx) -> R<Func> {
 #[allow(clippy::too_many_arguments)]
 fn compile_body(
     name: &[u8],
+    file: &[u8],
     body: &[Stmt],
     n_locals: u32,
     params: &[Param],
@@ -235,6 +237,7 @@ fn compile_body(
     c.emit(Op::Ret);
     Ok(Func {
         name: name.into(),
+        file: file.into(),
         ops: c.ops,
         lines: c.lines,
         consts: c.consts,
@@ -296,6 +299,7 @@ fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
     );
     Func {
         name: fd.name.clone(),
+        file: fd.file.clone(),
         ops: vec![Op::Fatal(0)],
         lines: vec![fd.line],
         consts: vec![Const::Str(msg.into_bytes().into())],
@@ -473,6 +477,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         .map(|m| {
             let func = match compile_body(
                 &m.decl.name,
+                &m.decl.file,
                 &m.decl.body,
                 m.decl.slots.len() as u32,
                 &m.decl.params,
@@ -658,6 +663,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
 fn compile_hook(fd: &crate::hir::FnDecl, ctx: &ProgramCtx, cid: ClassId) -> Func {
     compile_body(
         &fd.name,
+        &fd.file,
         &fd.body,
         fd.slots.len() as u32,
         &fd.params,
@@ -691,6 +697,7 @@ fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassI
     c.emit(Op::Ret);
     Ok(Func {
         name: Box::from(&b"{prop-init}"[..]),
+        file: Box::default(),
         ops: c.ops,
         lines: c.lines,
         consts: c.consts,
@@ -725,6 +732,7 @@ fn compile_default_thunk(value: &Expr, ctx: &ProgramCtx, cur_class: Option<Class
     c.emit(Op::Ret);
     Some(Func {
         name: Box::default(),
+        file: Box::default(),
         ops: c.ops,
         lines: c.lines,
         consts: c.consts,
@@ -756,6 +764,7 @@ fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, decl_class: 
     c.emit(Op::Ret);
     Ok(Func {
         name: name.into(),
+        file: Box::default(),
         ops: c.ops,
         lines: c.lines,
         consts: c.consts,
@@ -808,6 +817,7 @@ fn const_stub(name: &[u8], err: &CompileError) -> Func {
     let msg = format!("VM: constant `{}` — {}", String::from_utf8_lossy(name), err);
     Func {
         name: name.into(),
+        file: Box::default(),
         ops: vec![Op::Fatal(0)],
         lines: vec![0],
         consts: vec![Const::Str(msg.into_bytes().into())],

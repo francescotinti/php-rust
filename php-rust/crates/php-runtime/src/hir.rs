@@ -357,6 +357,11 @@ pub struct MethodDecl {
 pub struct FnDecl {
     /// Name as written (original case); calls match it ASCII-case-insensitively.
     pub name: Box<[u8]>,
+    /// Source file this function was lowered from (the unit's path), so a stack
+    /// trace / `getFile()` reports the *defining* file even when the function is
+    /// called across an `include`/autoload boundary (the executing frame carries
+    /// the caller's module, not the callee's). Empty for synthetic functions.
+    pub file: Box<[u8]>,
     /// Formal parameters, in declaration order. `params[i].slot == i`.
     pub params: Vec<Param>,
     pub body: Vec<Stmt>,

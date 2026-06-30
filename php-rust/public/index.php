@@ -120,5 +120,8 @@ echo "</body></html>";
 
 echo "<h3>Test ref</h3>";
 $a = "Valore";
-//print(&$a);
 
+$arr = ['Pera', 'Mela', 'Banana', 'Ananas'];
+foreach($arr as $chiave => $valore) {
+	echo "$chiave = $valore <br>";
+}
