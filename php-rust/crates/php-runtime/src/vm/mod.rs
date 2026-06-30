@@ -2251,6 +2251,35 @@ impl<'m> Vm<'m> {
                     }
                     self.frames[top].stack.push(value);
                 }
+                Op::BindRefToChecked { base, steps } => {
+                    // `$t = &m()` for a method/static call: the callee's by-ref-ness
+                    // is only known now. A non-`Ref` source means the callee did not
+                    // return by reference — raise the notice, then bind a copy.
+                    if self.field_starts_at_hook(base, top, &steps) {
+                        return Err(PhpError::Error(
+                            "Cannot assign by reference to overloaded object".to_string(),
+                        ));
+                    }
+                    let top_val = self.frames[top].stack.pop().expect("BindRefToChecked value");
+                    let cell = match top_val {
+                        Zval::Ref(rc) => rc,
+                        other => {
+                            self.diags.push(Diag::Notice(
+                                "Only variables should be assigned by reference".to_string(),
+                            ));
+                            Rc::new(RefCell::new(other))
+                        }
+                    };
+                    let value = cell.borrow().clone();
+                    let keys = self.pop_field_keys(top, &steps);
+                    if steps.is_empty() {
+                        let base_cell = field_base_mut(&mut self.frames, top, base)?;
+                        *base_cell = Zval::Ref(cell);
+                    } else {
+                        self.field_set(base, top, &steps, keys, Zval::Ref(cell))?;
+                    }
+                    self.frames[top].stack.push(value);
+                }
                 Op::IterInit => {
                     let iterable = self.frames[top].stack.pop().expect("IterInit iterable");
                     let deref = iterable.deref_clone();

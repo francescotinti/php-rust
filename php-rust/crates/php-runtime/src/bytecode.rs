@@ -280,6 +280,12 @@ pub enum Op {
     /// path where `f` is not by-reference). Pushes the aliased value as the
     /// assignment expression's result.
     BindRefTo { base: FieldBase, steps: Box<[FieldStep]> },
+    /// `[keys… ref] -> [value]` — like [`Op::BindRefTo`] but for `$t = &m()` where
+    /// the by-reference-ness of the callee is only known at run time (a method /
+    /// static call): when the source is **not** a [`Zval::Ref`] it raises the
+    /// "Only variables should be assigned by reference" notice before copying. The
+    /// free-function path emits that notice at compile time instead.
+    BindRefToChecked { base: FieldBase, steps: Box<[FieldStep]> },
     /// `[v] -> [v']` — if the top is a [`Zval::Ref`], replace it with a clone of
     /// its referent; otherwise leave it untouched (REF-4b). Emitted after a call
     /// to a `function &f()` used in a *value* context, so the reference it returns

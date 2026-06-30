@@ -3452,12 +3452,24 @@ impl<'a> FnCompiler<'a> {
         Ok(())
     }
 
-    /// `$target = &f(...)` (REF-4b): invoke the call *raw* (no `DerefTop`) so a
-    /// by-reference return's cell can be aliased, then bind the target to it. The
-    /// target's index expressions are emitted before the call (the tree-walker's
-    /// order) so the returned reference lands on top of them for `BindRefTo`. Only
-    /// user-function calls are in slice; anything else falls back to the evaluator.
     fn assign_ref_call(&mut self, target: &Place, call: &Expr) -> R<()> {
+        // `$t = &$obj->m(...)`: a method's by-reference-ness is only known at run
+        // time (dynamic dispatch), so emit the call and bind through the
+        // run-time-checked `BindRefToChecked` (alias a returned reference, else
+        // notice + copy). Target index keys are pushed first so the call result
+        // lands on top for the bind.
+        if let ExprKind::MethodCall { object, method, args, named, nullsafe } = &call.kind {
+            if *nullsafe {
+                return Err(CompileError::Unsupported(
+                    "reference bind from a nullsafe method call".into(),
+                ));
+            }
+            let (base, steps) = self.field_path(target)?;
+            self.expr(object)?;
+            self.emit_method_call(method, args, named)?;
+            self.emit(Op::BindRefToChecked { base, steps: steps.into() });
+            return Ok(());
+        }
         let ExprKind::Call { name, args, named } = &call.kind else {
             return Err(CompileError::Unsupported("reference assignment from a non-call".into()));
         };
