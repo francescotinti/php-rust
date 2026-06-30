@@ -261,7 +261,7 @@ pub fn file_get_contents(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
         ));
     };
     let name = convert::to_zstr(name_arg, ctx.diags);
-    let path = std::ffi::OsStr::from_bytes(name.as_bytes());
+    let path = std::ffi::OsStr::from_bytes(strip_file_wrapper(name.as_bytes()));
     let mut data = match std::fs::read(path) {
         Ok(d) => d,
         Err(e) => {
@@ -342,7 +342,7 @@ pub fn file_put_contents(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
         .map(|v| convert::to_long_cast(v, ctx.diags))
         .unwrap_or(0);
     let append = flags & 8 != 0; // FILE_APPEND
-    let path = std::ffi::OsStr::from_bytes(name.as_bytes());
+    let path = std::ffi::OsStr::from_bytes(strip_file_wrapper(name.as_bytes()));
     let mut opts = std::fs::OpenOptions::new();
     if append {
         opts.append(true).create(true);
@@ -766,11 +766,29 @@ pub fn pathinfo(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 
 // ---- step 52b: existence / type predicates + realpath + cwd ----
 
+/// Strip a leading `file://` stream-wrapper, yielding the local filesystem
+/// path. `file:///a/b` -> `/a/b`; `file://localhost/a/b` -> `/a/b` (the host
+/// component is dropped). Inputs without the wrapper are returned unchanged.
+/// Other schemes (http://, phar://, ...) are left intact for their own handling.
+pub(crate) fn strip_file_wrapper(p: &[u8]) -> &[u8] {
+    if let Some(rest) = p.strip_prefix(b"file://") {
+        if rest.first() == Some(&b'/') {
+            rest
+        } else if let Some(i) = rest.iter().position(|&c| c == b'/') {
+            &rest[i..]
+        } else {
+            rest
+        }
+    } else {
+        p
+    }
+}
+
 /// The OS path for a builtin's first argument (raw bytes → `OsString`).
 fn arg_os_path(argv: &[Zval], ctx: &mut Ctx) -> std::ffi::OsString {
     use std::os::unix::ffi::OsStrExt;
     let s = convert::to_zstr(&argv[0], ctx.diags);
-    std::ffi::OsStr::from_bytes(s.as_bytes()).to_os_string()
+    std::ffi::OsStr::from_bytes(strip_file_wrapper(s.as_bytes())).to_os_string()
 }
 
 /// `file_exists`: true if the path exists (following symlinks → a broken

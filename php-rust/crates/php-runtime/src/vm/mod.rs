@@ -4925,6 +4925,7 @@ impl<'m> Vm<'m> {
         }
     }
 
+
     /// Convert a parsed [`crate::json::Json`] tree into a `Zval`. Objects build a
     /// `stdClass` (one property per entry) unless `assoc`, in which case they build
     /// a PHP array. Mirrors `eval::json_to_zval`.
