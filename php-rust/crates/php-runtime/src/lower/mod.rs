@@ -595,6 +595,7 @@ class ValueError extends Error {}
 class ArithmeticError extends Error {}
 class DivisionByZeroError extends ArithmeticError {}
 class UnhandledMatchError extends Error {}
+class AssertionError extends Error {}
 class Fiber {
     private $callable;
     public function __construct($callable) { $this->callable = $callable; }

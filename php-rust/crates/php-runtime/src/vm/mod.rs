@@ -4709,6 +4709,40 @@ impl<'m> Vm<'m> {
         Ok(Zval::Str(PhpStr::new(msg.to_vec())))
     }
 
+
+    /// `assert($assertion, $description = null)`: when `$assertion` is falsy,
+    /// throw (the engine default `assert.exception=1`). A `Throwable` description
+    /// is rethrown as-is; any other description (including the source text the
+    /// lowerer injects for `assert($expr)`) becomes the `AssertionError` message.
+    /// A truthy assertion returns `true`.
+    fn ho_assert(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let assertion = args.first().cloned().unwrap_or(Zval::Null);
+        if convert::to_bool(&assertion, &mut self.diags) {
+            return Ok(Zval::Bool(true));
+        }
+        match args.get(1) {
+            // A Throwable description is thrown unchanged.
+            Some(obj @ Zval::Object(_)) => Err(PhpError::Thrown(obj.clone())),
+            Some(desc) => {
+                let msg = convert::to_zstr_cast(desc, &mut self.diags).as_bytes().to_vec();
+                self.throw_assertion_error(&msg)
+            }
+            None => self.throw_assertion_error(b"assert()"),
+        }
+    }
+
+    /// Build and throw an `AssertionError` carrying `message`.
+    fn throw_assertion_error(&mut self, message: &[u8]) -> Result<Zval, PhpError> {
+        let msg = String::from_utf8_lossy(message).into_owned();
+        match self.class_index.get(&b"assertionerror"[..]).copied() {
+            Some(cid) => {
+                let obj = self.synthesize_throwable(cid, &msg)?;
+                Err(PhpError::Thrown(obj))
+            }
+            None => Err(PhpError::Error(msg)),
+        }
+    }
+
     /// Recursively replace `JsonSerializable` objects with their `jsonSerialize()`
     /// return (itself normalised, so a returned JsonSerializable resolves too) and
     /// normalise array elements. A plain object is left untouched for the pure
@@ -11040,6 +11074,7 @@ host_builtins! {
     b"json_decode" => vm.ho_json_decode(args),
     b"json_last_error" => vm.ho_json_last_error(),
     b"json_last_error_msg" => vm.ho_json_last_error_msg(),
+    b"assert" => vm.ho_assert(args),
     b"mb_split" => vm.ho_mb_split(args),
     b"mb_regex_encoding" => vm.ho_mb_regex_encoding(args),
     b"mb_regex_set_options" => vm.ho_mb_regex_set_options(args),

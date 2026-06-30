@@ -756,7 +756,26 @@ impl<'f> Lowerer<'f> {
                 return Ok(ExprKind::CallDynamic { callee, args });
             }
         };
-        let (args, named) = self.lower_args(&fc.argument_list, line)?;
+        let (mut args, named) = self.lower_args(&fc.argument_list, line)?;
+        // `assert($expr)`: PHP's compiler injects the assertion's source text as the
+        // description, so an uncaught AssertionError reads "assert(<expr source>)".
+        // Mirror that when the caller passed no explicit description.
+        if named.is_empty() && args.len() == 1 && name.eq_ignore_ascii_case(b"assert") {
+            if let Some(Argument::Positional(p)) = fc.argument_list.arguments.first() {
+                if p.ellipsis.is_none() {
+                    let sp = p.value.span();
+                    let src =
+                        &self.file.contents[sp.start.offset as usize..sp.end.offset as usize];
+                    let mut desc = b"assert(".to_vec();
+                    desc.extend_from_slice(src);
+                    desc.push(b')');
+                    args.push(Expr {
+                        kind: ExprKind::Str(desc.into_boxed_slice()),
+                        line,
+                    });
+                }
+            }
+        }
         Ok(ExprKind::Call {
             name,
             args,
