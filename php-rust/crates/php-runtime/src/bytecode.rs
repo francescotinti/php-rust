@@ -836,6 +836,9 @@ pub enum Op {
     /// `[keys…] -> [bool]` — `isset()` of a mixed place: true iff every level
     /// exists and the leaf is non-null (silent).
     FieldIsset { base: FieldBase, steps: Box<[FieldStep]> },
+    /// `[keys…] -> [bool]` — `empty()` of a mixed place: true iff the leaf is
+    /// unreachable/null or falsy (silent, like `FieldIsset`).
+    FieldEmpty { base: FieldBase, steps: Box<[FieldStep]> },
     /// `[keys…] -> []` — `unset()` of a mixed place's leaf (silent no-op if absent).
     FieldUnset { base: FieldBase, steps: Box<[FieldStep]> },
 

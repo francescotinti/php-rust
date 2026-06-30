@@ -4124,6 +4124,18 @@ impl<'m> Vm<'m> {
                     );
                     self.frames[top].stack.push(Zval::Bool(set));
                 }
+                Op::FieldEmpty { base, steps } => {
+                    let keys = self.pop_field_keys(top, &steps);
+                    // empty == !isset || !truthy(value): an unreachable/null leaf is
+                    // empty; otherwise test the value's boolean.
+                    let empty = match self.field_value(base, top, &steps, keys) {
+                        Some(v) if !matches!(v, Zval::Null | Zval::Undef) => {
+                            !convert::to_bool(&v, &mut self.diags)
+                        }
+                        _ => true,
+                    };
+                    self.frames[top].stack.push(Zval::Bool(empty));
+                }
                 Op::FieldUnset { base, steps } => {
                     let keys = self.pop_field_keys(top, &steps);
                     self.field_remove(base, top, &steps, keys);

@@ -3916,7 +3916,9 @@ impl<'a> FnCompiler<'a> {
             return Ok(());
         }
         if place_has_prop(place) {
-            return Err(CompileError::Unsupported("empty() on a nested property path".into()));
+            let (base, steps) = self.field_path(place)?;
+            self.emit(Op::FieldEmpty { base, steps: steps.into() });
+            return Ok(());
         }
         let base = dim_base(place)?;
         let nkeys = self.test_path_steps(place)?;
