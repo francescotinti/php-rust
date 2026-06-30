@@ -22,6 +22,7 @@ mod format;
 mod json;
 mod math;
 mod mbstring;
+mod openssl;
 mod pack;
 mod serialize;
 mod string;
@@ -274,6 +275,7 @@ pub fn registry() -> Registry {
     add(b"mb_detect_encoding", mbstring::mb_detect_encoding);
     add(b"number_format", string::number_format);
     add(b"version_compare", string::version_compare);
+    add(b"openssl_x509_parse", openssl::openssl_x509_parse);
     add(b"parse_url", url::parse_url);
     add(b"urlencode", url::urlencode);
     add(b"urldecode", url::urldecode);
