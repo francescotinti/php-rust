@@ -264,6 +264,12 @@ fn compile_body(
                     .and_then(|e| compile_default_thunk(e, ctx, cur_class))
             })
             .collect(),
+        // Per-parameter `#[Attr]` thunks for `ReflectionParameter::getAttributes()`,
+        // compiled in this body's class context (so a `self::C` argument resolves).
+        param_attributes: params
+            .iter()
+            .map(|p| compile_attrs(&p.attributes, ctx, cur_class))
+            .collect(),
         ret_hint,
         variadic_slot: params.iter().find(|p| p.variadic).map(|p| p.slot),
         by_ref,
@@ -303,6 +309,7 @@ fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
         param_by_ref: fd.params.iter().map(|p| p.by_ref).collect(),
         param_hints: fd.params.iter().map(|p| p.hint.clone()).collect(),
         param_defaults: fd.params.iter().map(|_| None).collect(),
+        param_attributes: fd.params.iter().map(|_| Vec::new()).collect(),
         ret_hint: fd.ret_hint.clone(),
         variadic_slot: fd.params.iter().find(|p| p.variadic).map(|p| p.slot),
         by_ref: fd.by_ref,
@@ -685,6 +692,7 @@ fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassI
         param_by_ref: Box::default(),
         param_hints: Box::default(),
         param_defaults: Box::default(),
+        param_attributes: Box::default(),
         ret_hint: None,
         variadic_slot: None,
         by_ref: false,
@@ -716,6 +724,7 @@ fn compile_default_thunk(value: &Expr, ctx: &ProgramCtx, cur_class: Option<Class
         param_by_ref: Box::default(),
         param_hints: Box::default(),
         param_defaults: Box::default(),
+        param_attributes: Box::default(),
         ret_hint: None,
         variadic_slot: None,
         by_ref: false,
@@ -744,6 +753,7 @@ fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, decl_class: 
         param_by_ref: Box::default(),
         param_hints: Box::default(),
         param_defaults: Box::default(),
+        param_attributes: Box::default(),
         ret_hint: None,
         variadic_slot: None,
         by_ref: false,
@@ -793,6 +803,7 @@ fn const_stub(name: &[u8], err: &CompileError) -> Func {
         param_by_ref: Box::default(),
         param_hints: Box::default(),
         param_defaults: Box::default(),
+        param_attributes: Box::default(),
         ret_hint: None,
         variadic_slot: None,
         by_ref: false,

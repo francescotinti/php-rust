@@ -988,9 +988,15 @@ class ReflectionAttribute {
     public $__method;
     public $__const;
     public $__classconst;
+    public $__paramfunc;
+    public $__paramclass;
+    public $__parampos;
     public $__closure_val;
     public function getName() { return $this->name; }
     public function getArguments() {
+        if (isset($this->__paramfunc)) {
+            return __reflect_param_attr_args($this->__paramclass, $this->__paramfunc, $this->__parampos, $this->__index);
+        }
         if (isset($this->__classconst)) {
             return __reflect_classconst_attr_args($this->__class, $this->__classconst, $this->__index);
         }
@@ -1012,6 +1018,9 @@ class ReflectionAttribute {
         return __reflect_attr_arguments($this->__class, $this->__index);
     }
     public function newInstance() {
+        if (isset($this->__paramfunc)) {
+            return __reflect_param_attr_new($this->__paramclass, $this->__paramfunc, $this->__parampos, $this->__index);
+        }
         if (isset($this->__classconst)) {
             return __reflect_classconst_attr_new($this->__class, $this->__classconst, $this->__index);
         }
@@ -1156,6 +1165,7 @@ class ReflectionParameter {
     public $name;
     public $__pos; public $__optional; public $__variadic; public $__byref;
     public $__type; public $__hasDefault; public $__default;
+    public $__declClass; public $__declFunc;
     public function __construct($function = null, $param = null) {
         if ($function === null) { return; } // internal factory path (__fromInfo)
         $info = is_array($function)
@@ -1174,6 +1184,7 @@ class ReflectionParameter {
         $this->__optional = $p['optional']; $this->__variadic = $p['variadic'];
         $this->__byref = $p['byref']; $this->__type = $p['type'];
         $this->__hasDefault = $p['hasDefault']; $this->__default = $p['default'];
+        $this->__declClass = $p['declClass'] ?? ''; $this->__declFunc = $p['declFunc'] ?? '';
     }
     public static function __fromInfo($p) { $r = new ReflectionParameter(); $r->__init($p); return $r; }
     public function getName() { return $this->name; }
@@ -1191,6 +1202,10 @@ class ReflectionParameter {
             throw new ReflectionException('Internal error: Failed to retrieve the default value');
         }
         return $this->__default;
+    }
+    public function getAttributes($name = null, $flags = 0) {
+        $hostName = ($flags & ReflectionAttribute::IS_INSTANCEOF) ? null : $name;
+        return ReflectionAttribute::__filter(__reflect_param_attributes($this->__declClass, $this->__declFunc, $this->__pos, $hostName), $name, $flags, 'ReflectionParameter');
     }
 }
 class ReflectionObject extends ReflectionClass {

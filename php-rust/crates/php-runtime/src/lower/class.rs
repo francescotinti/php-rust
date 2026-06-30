@@ -1186,7 +1186,7 @@ impl<'f> Lowerer<'f> {
                     None => {
                         // Implicit `$value` parameter.
                         let slot = self.slot_for(b"value");
-                        vec![Param { slot, default: None, by_ref: false, variadic: false, hint: None }]
+                        vec![Param { slot, default: None, by_ref: false, variadic: false, hint: None, attributes: Vec::new() }]
                     }
                 }
             } else {
@@ -1497,6 +1497,9 @@ impl<'f> Lowerer<'f> {
             let by_ref = p.ampersand.is_some();
             let variadic = p.ellipsis.is_some();
             let slot = self.slot_for(strip_dollar(p.variable.name));
+            // The `#[Attr]` list on the parameter is shared by the parameter itself
+            // (ReflectionParameter) and, if promoted, the property it declares.
+            let attributes = self.lower_attributes(&p.attribute_lists, _line)?;
             if p.is_promoted_property() {
                 // `public int $x` in a constructor: still a real parameter, but it
                 // also declares an instance property assigned from the param. The
@@ -1508,7 +1511,6 @@ impl<'f> Lowerer<'f> {
                     Some(list) => self.lower_hooks(list, &pname, _line)?,
                     None => (None, None, true, Vec::new()),
                 };
-                let attributes = self.lower_attributes(&p.attribute_lists, _line)?;
                 self.promoted.push(PromotedParam {
                     name: pname,
                     visibility: visibility_of(p.modifiers.iter()),
@@ -1517,7 +1519,7 @@ impl<'f> Lowerer<'f> {
                     set_hook,
                     backed,
                     readonly: p.modifiers.iter().any(|m| m.is_readonly()),
-                    attributes,
+                    attributes: attributes.clone(),
                 });
             }
             let default = match &p.default_value {
@@ -1539,6 +1541,7 @@ impl<'f> Lowerer<'f> {
                 by_ref,
                 variadic,
                 hint,
+                attributes,
             });
         }
         Ok(params)

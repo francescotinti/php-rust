@@ -411,6 +411,10 @@ pub struct Param {
     /// Declared scalar type hint, enforced (weak mode) on the bound argument
     /// (step 14). `None` for an absent or non-scalar hint (no enforcement).
     pub hint: Option<TypeHint>,
+    /// `#[Attr]` attributes declared on this parameter (`function f(#[A] $x)`) —
+    /// retained for `ReflectionParameter::getAttributes()`. A promoted property
+    /// shares the same list. Empty for the common case.
+    pub attributes: Vec<HirAttribute>,
 }
 
 /// One captured variable of a closure (step 18, D-18.3). At closure *creation*

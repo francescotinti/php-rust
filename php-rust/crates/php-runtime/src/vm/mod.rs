@@ -6236,6 +6236,115 @@ impl<'m> Vm<'m> {
         self.drive_to_return(baseline)
     }
 
+    /// Resolve a parameter-attribute handle `($class, $func)` to the owning
+    /// `&'m Func` and the class context its thunks run in (`None` for a free
+    /// function). `$class` empty ⇒ a free function resolved by name; otherwise a
+    /// method resolved on that class.
+    fn resolve_param_owner(&self, class: &[u8], func: &[u8]) -> Option<(&'m Func, Option<ClassId>)> {
+        if class.is_empty() {
+            Some((self.find_user_function(func)?, None))
+        } else {
+            let key = class.strip_prefix(b"\\").unwrap_or(class).to_ascii_lowercase();
+            let &cid = self.class_index.get(&key)?;
+            let (m, decl) = self.find_method_reflect(cid, func)?;
+            Some((&m.func, Some(decl)))
+        }
+    }
+
+    /// `__reflect_param_attributes($class, $func, $pos, $filter = null)`: the
+    /// `ReflectionAttribute`s on parameter `$pos` of the callable, each carrying
+    /// the lazy handle (`__paramclass`, `__paramfunc`, `__parampos`, `__index`).
+    fn ho_reflect_param_attributes(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let empty = || Ok(Zval::Array(Rc::new(php_types::PhpArray::new())));
+        let class = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let func = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let pos = match args.get(2).map(|v| v.deref_clone()) { Some(Zval::Long(n)) => n as usize, _ => return empty() };
+        let Some(&ra_cid) = self.class_index.get(&b"reflectionattribute"[..]) else { return empty() };
+        let filter: Option<Vec<u8>> = match args.get(3).map(|v| v.deref_clone()) {
+            Some(Zval::Str(s)) => { let raw = s.as_bytes(); Some(raw.strip_prefix(b"\\").unwrap_or(raw).to_vec()) }
+            _ => None,
+        };
+        let Some((f, _)) = self.resolve_param_owner(&class, &func) else { return empty() };
+        let Some(list) = f.param_attributes.get(pos) else { return empty() };
+        let matches: Vec<(usize, Vec<u8>)> = list
+            .iter()
+            .enumerate()
+            .filter(|(_, a)| match &filter {
+                None => true,
+                Some(fl) => a.name.strip_prefix(b"\\").unwrap_or(&a.name).eq_ignore_ascii_case(fl),
+            })
+            .map(|(i, a)| (i, a.name.to_vec()))
+            .collect();
+        let mut arr = php_types::PhpArray::new();
+        for (idx, aname) in matches {
+            let obj = self.alloc_object(ra_cid)?;
+            if let Zval::Object(o) = &obj {
+                let mut b = o.borrow_mut();
+                b.props.set(b"name", Zval::Str(PhpStr::new(aname)));
+                b.props.set(b"__paramclass", Zval::Str(PhpStr::new(class.clone())));
+                b.props.set(b"__paramfunc", Zval::Str(PhpStr::new(func.clone())));
+                b.props.set(b"__parampos", Zval::Long(pos as i64));
+                b.props.set(b"__index", Zval::Long(idx as i64));
+            }
+            let _ = arr.append(obj);
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// Resolve `($class, $func, $pos, $index)` from a parameter-attribute handle to
+    /// the `&'m Func` thunk at `field` (`new`/`args`) plus the class context.
+    fn param_attr_thunk(&self, args: &[Zval], get_args: bool) -> Option<(&'m Func, Option<ClassId>)> {
+        let class = match args.first() { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => return None };
+        let func = match args.get(1) { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => return None };
+        let pos = match args.get(2) { Some(Zval::Long(i)) => *i as usize, _ => return None };
+        let idx = match args.get(3) { Some(Zval::Long(i)) => *i as usize, _ => return None };
+        let (f, ctx) = self.resolve_param_owner(&class, &func)?;
+        let attr = f.param_attributes.get(pos)?.get(idx)?;
+        Some((if get_args { &attr.args_thunk } else { &attr.new_thunk }, ctx))
+    }
+
+    /// `__reflect_param_attr_new($class, $func, $pos, $index)` — run the parameter
+    /// attribute's `new Attr(args)` thunk (validates TARGET_PARAMETER /
+    /// repeatability first).
+    fn ho_reflect_param_attr_new(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some((thunk, ctx)) = self.param_attr_thunk(&args, false) else { return Ok(Zval::Null) };
+        let class = match args.first() { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => Vec::new() };
+        let func = match args.get(1) { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => Vec::new() };
+        let pos = match args.get(2) { Some(Zval::Long(i)) => *i as usize, _ => 0 };
+        let idx = match args.get(3) { Some(Zval::Long(i)) => *i as usize, _ => 0 };
+        if let Some((f, _)) = self.resolve_param_owner(&class, &func) {
+            if let Some(list) = f.param_attributes.get(pos) {
+                if let Some(attr) = list.get(idx) {
+                    let attr_name = attr.name.to_vec();
+                    let siblings: Vec<Vec<u8>> = list.iter().map(|a| a.name.to_vec()).collect();
+                    self.validate_attr(&attr_name, &siblings, 32, "parameter")?;
+                }
+            }
+        }
+        let module = ctx.map(|c| self.class_mod(c)).unwrap_or(self.module);
+        let baseline = self.frames.len();
+        let mut frame = Frame::new(thunk, module);
+        frame.class = ctx;
+        frame.static_class = ctx;
+        self.frames.push(frame);
+        self.drive_to_return(baseline)
+    }
+
+    /// `__reflect_param_attr_args($class, $func, $pos, $index)` — run the parameter
+    /// attribute's argument-array thunk.
+    fn ho_reflect_param_attr_args(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some((thunk, ctx)) = self.param_attr_thunk(&args, true) else {
+            return Ok(Zval::Array(Rc::new(php_types::PhpArray::new())));
+        };
+        let module = ctx.map(|c| self.class_mod(c)).unwrap_or(self.module);
+        let baseline = self.frames.len();
+        let mut frame = Frame::new(thunk, module);
+        frame.class = ctx;
+        frame.static_class = ctx;
+        self.frames.push(frame);
+        self.drive_to_return(baseline)
+    }
+
     /// `class_uses($class, $autoload = true)`: the traits used *directly* by the
     /// class (not inherited from parents), as a `name => name` array in source
     /// order. `false` if the class does not exist. Mirrors PHP, which reports only
@@ -6328,6 +6437,11 @@ impl<'m> Vm<'m> {
     /// default). `cur_class` is the method's class (for `self::`-typed defaults).
     fn build_func_descriptor(&mut self, func: &'m Func, cur_class: Option<ClassId>) -> Result<php_types::PhpArray, PhpError> {
         let mut params = php_types::PhpArray::new();
+        // Owner identity stamped into every parameter descriptor so a
+        // `ReflectionParameter` can resolve its attributes back to this callable
+        // (empty class name for a free function).
+        let owner_class = cur_class.map(|c| self.classes[c].name.to_vec()).unwrap_or_default();
+        let owner_func = func.name.to_vec();
         for i in 0..func.n_params as usize {
             let name = func.param_names.get(i).map(|b| b.to_vec()).unwrap_or_default();
             let is_variadic = func.variadic_slot == Some(i as u32);
@@ -6350,6 +6464,8 @@ impl<'m> Vm<'m> {
             put(&mut p, b"type", ty);
             put(&mut p, b"hasDefault", Zval::Bool(has_default));
             put(&mut p, b"default", default_val);
+            put(&mut p, b"declClass", Zval::Str(PhpStr::new(owner_class.clone())));
+            put(&mut p, b"declFunc", Zval::Str(PhpStr::new(owner_func.clone())));
             let _ = params.append(Zval::Array(Rc::new(p)));
         }
         let mut d = php_types::PhpArray::new();
@@ -10629,6 +10745,9 @@ host_builtins! {
     b"__reflect_classconst_attributes" => vm.ho_reflect_classconst_attributes(args),
     b"__reflect_classconst_attr_new" => vm.ho_reflect_classconst_attr_new(args),
     b"__reflect_classconst_attr_args" => vm.ho_reflect_classconst_attr_args(args),
+    b"__reflect_param_attributes" => vm.ho_reflect_param_attributes(args),
+    b"__reflect_param_attr_new" => vm.ho_reflect_param_attr_new(args),
+    b"__reflect_param_attr_args" => vm.ho_reflect_param_attr_args(args),
     b"class_uses" => vm.ho_class_uses(args),
     b"trait_exists" => vm.ho_trait_exists(args),
     b"get_declared_traits" => vm.ho_get_declared_traits(),

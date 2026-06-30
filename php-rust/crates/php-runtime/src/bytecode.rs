@@ -944,6 +944,10 @@ pub struct Func {
     /// `self::C` default evaluates as written). Not used by the call ABI, which has
     /// its own inline default prologue.
     pub param_defaults: Box<[Option<Func>]>,
+    /// `#[Attr]` attributes on each formal parameter (length `n_params`, parallel
+    /// to `param_names`) — `ReflectionParameter::getAttributes()`. Each inner vec
+    /// is empty for an unattributed parameter (the common case).
+    pub param_attributes: Box<[Vec<CompiledAttribute>]>,
     /// The body contains a `yield` — calling it produces a `Generator` rather
     /// than running the body. Drives generator setup once `Yield` is wired in.
     pub is_generator: bool,
