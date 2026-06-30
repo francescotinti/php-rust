@@ -162,6 +162,80 @@ pub fn array_merge(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Array(Rc::new(out)))
 }
 
+/// Build the "Argument #N must be of type array" TypeError shared by the
+/// array_replace family (mirrors array_merge's wording).
+fn replace_arg_err(func: &str, n: usize, arg: &Zval) -> PhpError {
+    PhpError::TypeError(format!(
+        "{func}(): Argument #{n} must be of type array, {} given",
+        arg.type_name_for_error()
+    ))
+}
+
+/// array_replace($array, ...$replacements): replace entries of the first array
+/// by key with those of later arrays. Unlike array_merge, integer keys are NOT
+/// renumbered — every key (int or string) is matched and overwritten in place,
+/// preserving the first array's order; keys absent from it are appended. Later
+/// arrays win over earlier ones.
+pub fn array_replace(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let mut out = match args.first() {
+        Some(Zval::Array(a)) => (**a).clone(),
+        Some(other) => return Err(replace_arg_err("array_replace", 1, other)),
+        None => {
+            return Err(PhpError::Error(
+                "array_replace() expects at least 1 argument, 0 given".to_string(),
+            ))
+        }
+    };
+    for (i, arg) in args.iter().enumerate().skip(1) {
+        let Zval::Array(a) = arg else {
+            return Err(replace_arg_err("array_replace", i + 1, arg));
+        };
+        for (k, v) in a.iter() {
+            out.insert(k.clone(), v.clone());
+        }
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// array_replace_recursive($array, ...$replacements): like array_replace, but
+/// when a key holds an array on *both* the current result and a replacement,
+/// the two are merged recursively rather than replaced wholesale. If either
+/// side is a non-array, the replacement value wins outright (PHP semantics).
+pub fn array_replace_recursive(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let mut out = match args.first() {
+        Some(Zval::Array(a)) => (**a).clone(),
+        Some(other) => return Err(replace_arg_err("array_replace_recursive", 1, other)),
+        None => {
+            return Err(PhpError::Error(
+                "array_replace_recursive() expects at least 1 argument, 0 given".to_string(),
+            ))
+        }
+    };
+    for (i, arg) in args.iter().enumerate().skip(1) {
+        let Zval::Array(a) = arg else {
+            return Err(replace_arg_err("array_replace_recursive", i + 1, arg));
+        };
+        replace_recursive_into(&mut out, a);
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// Merge `repl` into `base` following array_replace_recursive semantics: a key
+/// that is an array on both sides recurses; anything else overwrites in place.
+fn replace_recursive_into(base: &mut PhpArray, repl: &PhpArray) {
+    for (k, v) in repl.iter() {
+        let new_val = match (base.get(k), v) {
+            (Some(Zval::Array(existing)), Zval::Array(incoming)) => {
+                let mut merged = (**existing).clone();
+                replace_recursive_into(&mut merged, incoming);
+                Zval::Array(Rc::new(merged))
+            }
+            _ => v.clone(),
+        };
+        base.insert(k.clone(), new_val);
+    }
+}
+
 // --- by-reference builtins (step 11c) ---
 //
 // These receive the caller's first-argument variable as `&mut Zval` (D-R7); the

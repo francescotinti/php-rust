@@ -150,6 +150,8 @@ pub fn registry() -> Registry {
     add(b"array_values", array::array_values);
     add(b"in_array", array::in_array);
     add(b"array_merge", array::array_merge);
+    add(b"array_replace", array::array_replace);
+    add(b"array_replace_recursive", array::array_replace_recursive);
     add(b"range", array::range);
     add(b"array_slice", array::array_slice);
     add(b"array_reverse", array::array_reverse);
