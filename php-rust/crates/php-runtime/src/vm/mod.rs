@@ -367,6 +367,7 @@ pub(crate) fn run_module_with_hir<'m>(
         countable_id: module.class_index.get(&b"countable"[..]).copied(),
         stringable_id: module.class_index.get(&b"stringable"[..]).copied(),
         jsonserializable_id: module.class_index.get(&b"jsonserializable"[..]).copied(),
+        json_last_error: 0,
         enum_cache: HashMap::new(),
         constants: HashMap::new(),
         mb_regex: crate::mbregex::MbRegexState::default(),
@@ -908,6 +909,10 @@ struct Vm<'m> {
     /// The `JsonSerializable` interface id, so `json_encode()` calls a value's
     /// `jsonSerialize()` method instead of encoding its properties (step 56c).
     jsonserializable_id: Option<ClassId>,
+    /// The error code of the most recent `json_encode()`/`json_decode()` call,
+    /// reported by `json_last_error()`/`json_last_error_msg()` (0 = JSON_ERROR_NONE,
+    /// 4 = SYNTAX, 11 = NON_BACKED_ENUM).
+    json_last_error: i64,
     /// Interned enum case singletons, keyed by (enum class id, case index), so
     /// `E::Case === E::Case` (Session A). Materialised lazily on first `E::Case`.
     enum_cache: HashMap<(ClassId, u32), Rc<RefCell<Object>>>,
@@ -4640,11 +4645,38 @@ impl<'m> Vm<'m> {
 
     /// `json_encode($value, $flags = 0)` (step 56c): first normalise the value so
     /// every `JsonSerializable` object is replaced by its `jsonSerialize()` result
-    /// (recursively), then hand off to the pure registry encoder which formats the
-    /// now-method-free value. Keeps the JSON-formatting logic in one place.
+    /// and every enum case by its backing value (recursively), then hand off to
+    /// the pure registry encoder which formats the now-method-free value. A
+    /// non-backed enum has no representation: `json_last_error()` becomes
+    /// `JSON_ERROR_NON_BACKED_ENUM` and the call returns `false`, or throws a
+    /// `JsonException` under `JSON_THROW_ON_ERROR`.
     fn ho_json_encode(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.json_last_error = 0; // JSON_ERROR_NONE
         let value = args.first().cloned().unwrap_or(Zval::Null);
-        let normalized = self.json_normalize(value)?;
+        let flags = args
+            .get(1)
+            .map(|v| convert::to_long_cast(v, &mut self.diags))
+            .unwrap_or(0);
+        let throw = flags & 4_194_304 != 0; // JSON_THROW_ON_ERROR
+        let normalized = match self.json_normalize(value) {
+            Ok(n) => n,
+            Err(e) => {
+                if self.json_last_error == 11 {
+                    // Non-backed enum: false, or a JsonException when requested.
+                    if throw {
+                        if let Some(cid) = self.class_index.get(&b"jsonexception"[..]).copied() {
+                            let obj = self.synthesize_throwable(
+                                cid,
+                                "Non-backed enums have no default serialization",
+                            )?;
+                            return Err(PhpError::Thrown(obj));
+                        }
+                    }
+                    return Ok(Zval::Bool(false));
+                }
+                return Err(e);
+            }
+        };
         let f = match self.registry.get(&b"json_encode"[..]) {
             Some(Builtin::Value(f)) => *f,
             _ => return Err(PhpError::Error("json_encode builtin unavailable".to_string())),
@@ -4655,6 +4687,26 @@ impl<'m> Vm<'m> {
         }
         let line = self.cur_line(self.frames.len() - 1);
         self.run_value_builtin(f, &call_args, line)
+    }
+
+    /// `json_last_error()`: the error code of the most recent JSON operation.
+    fn ho_json_last_error(&mut self) -> Result<Zval, PhpError> {
+        Ok(Zval::Long(self.json_last_error))
+    }
+
+    /// `json_last_error_msg()`: the human-readable message for that error code.
+    fn ho_json_last_error_msg(&mut self) -> Result<Zval, PhpError> {
+        let msg: &[u8] = match self.json_last_error {
+            0 => b"No error",
+            1 => b"Maximum stack depth exceeded",
+            2 => b"State mismatch (invalid or malformed JSON)",
+            3 => b"Control character error, possibly incorrectly encoded",
+            4 => b"Syntax error",
+            5 => b"Malformed UTF-8 characters, possibly incorrectly encoded",
+            11 => b"Non-backed enums have no default serialization",
+            _ => b"Unknown error",
+        };
+        Ok(Zval::Str(PhpStr::new(msg.to_vec())))
     }
 
     /// Recursively replace `JsonSerializable` objects with their `jsonSerialize()`
@@ -4679,6 +4731,23 @@ impl<'m> Vm<'m> {
                 if self.jsonserializable_id.is_some_and(|j| is_instance_of(&self.classes, self.stringable_id, cid, j)) {
                     let r = self.call_method_sync(v, b"jsonSerialize", Vec::new())?;
                     self.json_normalize(r)
+                } else if deref_object(&v).is_some_and(|o| o.borrow().info.is_enum_case) {
+                    // An enum case serialises as its backing value; a non-backed
+                    // enum has no JSON representation (JSON_ERROR_NON_BACKED_ENUM).
+                    let backing = deref_object(&v)
+                        .and_then(|o| o.borrow().props.get(b"value").cloned());
+                    match backing {
+                        Some(val) => self.json_normalize(val),
+                        None => {
+                            self.json_last_error = 11; // JSON_ERROR_NON_BACKED_ENUM
+                            // Unwinds to ho_json_encode, which detects the code 11
+                            // and turns it into `false` / a JsonException; the error
+                            // value itself is never surfaced.
+                            Err(PhpError::Error(
+                                "Non-backed enums have no default serialization".to_string(),
+                            ))
+                        }
+                    }
                 } else {
                     Ok(v)
                 }
@@ -4907,7 +4976,7 @@ impl<'m> Vm<'m> {
     /// [`crate::json`] parser, returning `null` on a parse error (JSON_THROW_ON_ERROR
     /// is a scope-out). Objects become arrays when `$assoc` is true, `stdClass`
     /// otherwise; the `depth`/`flags` arguments are ignored. Mirrors
-    /// `eval::ho_json_decode`.
+    /// `eval::ho_json_decode`. Records the JSON error state for `json_last_error()`.
     fn ho_json_decode(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let Some(first) = args.first() else {
             return Err(PhpError::ArgumentCountError(
@@ -4920,8 +4989,14 @@ impl<'m> Vm<'m> {
             None => false,
         };
         match crate::json::parse(&json) {
-            Some(j) => self.vm_json_to_zval(&j, assoc),
-            None => Ok(Zval::Null),
+            Some(j) => {
+                self.json_last_error = 0; // JSON_ERROR_NONE
+                self.vm_json_to_zval(&j, assoc)
+            }
+            None => {
+                self.json_last_error = 4; // JSON_ERROR_SYNTAX
+                Ok(Zval::Null)
+            }
         }
     }
 
@@ -10963,6 +11038,8 @@ host_builtins! {
     b"debug_print_backtrace" => vm.ho_debug_print_backtrace(),
     b"preg_replace_callback" => vm.ho_preg_replace_callback(args),
     b"json_decode" => vm.ho_json_decode(args),
+    b"json_last_error" => vm.ho_json_last_error(),
+    b"json_last_error_msg" => vm.ho_json_last_error_msg(),
     b"mb_split" => vm.ho_mb_split(args),
     b"mb_regex_encoding" => vm.ho_mb_regex_encoding(args),
     b"mb_regex_set_options" => vm.ho_mb_regex_set_options(args),
