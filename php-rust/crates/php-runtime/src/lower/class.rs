@@ -1593,8 +1593,9 @@ impl<'f> Lowerer<'f> {
             .return_type_hint
             .as_ref()
             .and_then(|r| lower_hint(self, &r.hint));
+        let attributes = self.lower_attributes(&closure.attribute_lists, line)?;
         let fn_idx =
-            self.push_closure(params, body, local_scope.slots, by_ref, ret_hint, is_generator, line);
+            self.push_closure(params, body, local_scope.slots, by_ref, ret_hint, is_generator, attributes, line);
         Ok(ExprKind::Closure {
             fn_idx,
             captures,
@@ -1613,6 +1614,7 @@ impl<'f> Lowerer<'f> {
         by_ref: bool,
         ret_hint: Option<TypeHint>,
         is_generator: bool,
+        attributes: Vec<crate::hir::HirAttribute>,
         line: Line,
     ) -> usize {
         let name = format!(
@@ -1635,7 +1637,7 @@ impl<'f> Lowerer<'f> {
             // can use `self::`/`parent::`/`new self` (resolved at compile time).
             defining_class: self.cur_class.clone(),
                 closure_shift: 0,
-            attributes: Vec::new(),
+            attributes,
             line,
         });
         idx
@@ -1722,7 +1724,7 @@ impl<'f> Lowerer<'f> {
             .as_ref()
             .and_then(|r| lower_hint(self, &r.hint));
         let fn_idx =
-            self.push_closure(params, body, local_scope.slots, false, ret_hint, is_generator, line);
+            self.push_closure(params, body, local_scope.slots, false, ret_hint, is_generator, Vec::new(), line);
         // An arrow function is never `static` here (rejected above), so it binds
         // `$this` like an ordinary closure (step 19-6).
         Ok(ExprKind::Closure {

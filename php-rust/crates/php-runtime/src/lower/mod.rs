@@ -953,6 +953,7 @@ class ReflectionAttribute {
     public $__func;
     public $__method;
     public $__const;
+    public $__closure_val;
     public function getName() { return $this->name; }
     public function getArguments() {
         if (isset($this->__prop)) {
@@ -966,6 +967,9 @@ class ReflectionAttribute {
         }
         if (isset($this->__const)) {
             return __reflect_const_attr_args($this->__const, $this->__index);
+        }
+        if ($this->__closure_val !== null) {
+            return __reflect_closure_attr_args($this->__closure_val, $this->__index);
         }
         return __reflect_attr_arguments($this->__class, $this->__index);
     }
@@ -981,6 +985,9 @@ class ReflectionAttribute {
         }
         if (isset($this->__const)) {
             return __reflect_const_attr_new($this->__const, $this->__index);
+        }
+        if ($this->__closure_val !== null) {
+            return __reflect_closure_attr_new($this->__closure_val, $this->__index);
         }
         return __reflect_attr_newinstance($this->__class, $this->__index);
     }
@@ -1145,9 +1152,16 @@ class ReflectionConstant {
 class ReflectionFunction {
     public $name;
     public $__info;
+    public $__closure;
     public function __construct($name) {
-        $this->name = is_string($name) ? $name : '{closure}';
-        $this->__info = __reflect_func_info($this->name);
+        if ($name instanceof Closure) {
+            $this->name = '{closure}';
+            $this->__closure = $name;
+            $this->__info = __reflect_closure_info($name);
+        } else {
+            $this->name = is_string($name) ? $name : '{closure}';
+            $this->__info = __reflect_func_info($this->name);
+        }
         if ($this->__info === false) {
             throw new ReflectionException(sprintf('Function %s() does not exist', $this->name));
         }
@@ -1168,7 +1182,10 @@ class ReflectionFunction {
     public function hasReturnType() { return $this->__info['returnType'] !== false; }
     public function invoke(...$args) { return call_user_func_array($this->name, $args); }
     public function invokeArgs($args) { return call_user_func_array($this->name, $args); }
-    public function getAttributes($name = null, $flags = 0) { return __reflect_func_attributes($this->name, $name); }
+    public function getAttributes($name = null, $flags = 0) {
+        if ($this->__closure !== null) { return __reflect_closure_attributes($this->__closure, $name); }
+        return __reflect_func_attributes($this->name, $name);
+    }
 }
 class ReflectionMethod {
     public $name;

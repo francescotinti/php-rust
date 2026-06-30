@@ -6067,6 +6067,97 @@ impl<'m> Vm<'m> {
         Ok(d)
     }
 
+
+    /// `__reflect_closure_info($closure)`: the signature descriptor of a closure
+    /// value, or `false`. A first-class callable (`strlen(...)`) reflects the
+    /// named function it wraps; an ordinary closure reflects its own body via the
+    /// module that compiled it.
+    fn ho_reflect_closure_info(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(Zval::Closure(cl)) = args.first().map(|v| v.deref_clone()) else {
+            return Ok(Zval::Bool(false));
+        };
+        if let Some(name) = &cl.named {
+            let nm = name.as_bytes().to_vec();
+            return match self.find_user_function(&nm) {
+                Some(func) => Ok(Zval::Array(Rc::new(self.build_func_descriptor(func, None)?))),
+                None => Ok(Zval::Bool(false)),
+            };
+        }
+        let m = self.modules[cl.module_id];
+        let Some(func) = m.closures.get(cl.fn_idx) else { return Ok(Zval::Bool(false)) };
+        Ok(Zval::Array(Rc::new(self.build_func_descriptor(func, None)?)))
+    }
+
+
+    /// The [`Func`] backing a closure value (its body, or the named function a
+    /// first-class callable wraps) plus the module that owns it (for running an
+    /// attribute thunk).
+    fn closure_func_mod(&self, cl: &php_types::Closure) -> Option<(&'m Func, &'m Module)> {
+        if let Some(name) = &cl.named {
+            return self.user_function_with_mod(name.as_bytes());
+        }
+        let m = self.modules[cl.module_id];
+        m.closures.get(cl.fn_idx).map(|f| (f, m))
+    }
+
+    /// `__reflect_closure_attributes($closure, $filter = null)` — backs
+    /// `ReflectionFunction::getAttributes()` for a closure. The handle carries the
+    /// closure value itself (`__closure_val`).
+    fn ho_reflect_closure_attributes(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let empty = || Ok(Zval::Array(Rc::new(php_types::PhpArray::new())));
+        let Some(clos) = args.first().map(|v| v.deref_clone()) else { return empty() };
+        let Zval::Closure(cl) = &clos else { return empty() };
+        let Some((func, _)) = self.closure_func_mod(cl) else { return empty() };
+        let Some(&ra_cid) = self.class_index.get(&b"reflectionattribute"[..]) else { return empty() };
+        let filter: Option<Vec<u8>> = match args.get(1).map(|v| v.deref_clone()) {
+            Some(Zval::Str(s)) => { let raw = s.as_bytes(); Some(raw.strip_prefix(b"\\").unwrap_or(raw).to_vec()) }
+            _ => None,
+        };
+        let matches: Vec<(usize, Vec<u8>)> = func.attributes.iter().enumerate()
+            .filter(|(_, a)| match &filter { None => true, Some(f) => a.name.strip_prefix(b"\\").unwrap_or(&a.name).eq_ignore_ascii_case(f) })
+            .map(|(i, a)| (i, a.name.to_vec())).collect();
+        let mut arr = php_types::PhpArray::new();
+        for (idx, name) in matches {
+            let obj = self.alloc_object(ra_cid)?;
+            if let Zval::Object(o) = &obj {
+                let mut b = o.borrow_mut();
+                b.props.set(b"name", Zval::Str(PhpStr::new(name)));
+                b.props.set(b"__closure_val", clos.clone());
+                b.props.set(b"__index", Zval::Long(idx as i64));
+            }
+            let _ = arr.append(obj);
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// Run a closure-attribute thunk (`new`/`args`) by `($closure, $index)`.
+    fn run_closure_attr(&mut self, args: &[Zval], get_args: bool) -> Result<Zval, PhpError> {
+        let Some(clos) = args.first().map(|v| v.deref_clone()) else { return Ok(Zval::Null) };
+        let Zval::Closure(cl) = &clos else { return Ok(Zval::Null) };
+        let idx = match args.get(1) { Some(Zval::Long(i)) => *i as usize, _ => return Ok(Zval::Null) };
+        let Some((func, fmod)) = self.closure_func_mod(cl) else { return Ok(Zval::Null) };
+        let Some(attr) = func.attributes.get(idx) else { return Ok(Zval::Null) };
+        let thunk = if get_args { &attr.args_thunk } else { &attr.new_thunk };
+        if !get_args {
+            let attr_name = attr.name.to_vec();
+            let siblings: Vec<Vec<u8>> = func.attributes.iter().map(|a| a.name.to_vec()).collect();
+            self.validate_attr(&attr_name, &siblings, 2, "function")?;
+        }
+        let baseline = self.frames.len();
+        self.frames.push(Frame::new(thunk, fmod));
+        self.drive_to_return(baseline)
+    }
+
+    /// `__reflect_closure_attr_new($closure, $index)`.
+    fn ho_reflect_closure_attr_new(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.run_closure_attr(&args, false)
+    }
+
+    /// `__reflect_closure_attr_args($closure, $index)`.
+    fn ho_reflect_closure_attr_args(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.run_closure_attr(&args, true)
+    }
+
     /// `__reflect_func_info($name)`: the signature descriptor of a user function, or
     /// `false` if it is unknown (or a builtin, whose signature is not retained).
     fn ho_reflect_func_info(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
@@ -6654,13 +6745,16 @@ impl<'m> Vm<'m> {
     }
 
     /// Validate that attribute `attr_class` may be instantiated on its target
-    /// (PHP 8.4, at `newInstance()` time): it must be an attribute class at all,
-    /// its `#[Attribute]` flags must allow `target_bit`, and — without
-    /// `IS_REPEATABLE` (128) — it must not appear more than once among `siblings`
-    /// (the attribute names on the same target).
+    /// (PHP 8.4, at `newInstance()` time): the class must exist and be an
+    /// attribute class, its `#[Attribute]` flags must allow `target_bit`, and —
+    /// without `IS_REPEATABLE` (128) — it must not appear more than once among
+    /// `siblings` (the attribute names on the same target).
     fn validate_attr(&mut self, attr_class: &[u8], siblings: &[Vec<u8>], target_bit: i64, target_label: &str) -> Result<(), PhpError> {
         let bare = attr_class.strip_prefix(b"\\").unwrap_or(attr_class);
         let name = String::from_utf8_lossy(bare).into_owned();
+        if !self.class_index.contains_key(&bare.to_ascii_lowercase()) {
+            return Err(PhpError::Error(format!("Attribute class \"{}\" not found", name)));
+        }
         let Some(flags) = self.attr_flags(attr_class) else {
             return Err(PhpError::Error(format!(
                 "Attempting to use non-attribute class \"{}\" as attribute", name
@@ -10148,6 +10242,10 @@ host_builtins! {
     b"__reflect_attr_arguments" => vm.ho_reflect_attr_arguments(args),
     b"__reflect_prop_declaring_class" => vm.ho_reflect_prop_declaring_class(args),
     b"__reflect_func_info" => vm.ho_reflect_func_info(args),
+    b"__reflect_closure_info" => vm.ho_reflect_closure_info(args),
+    b"__reflect_closure_attributes" => vm.ho_reflect_closure_attributes(args),
+    b"__reflect_closure_attr_new" => vm.ho_reflect_closure_attr_new(args),
+    b"__reflect_closure_attr_args" => vm.ho_reflect_closure_attr_args(args),
     b"__reflect_method_info" => vm.ho_reflect_method_info(args),
     b"__reflect_class_modifiers" => vm.ho_reflect_class_modifiers(args),
     b"__reflect_new_no_ctor" => vm.ho_reflect_new_no_ctor(args),
