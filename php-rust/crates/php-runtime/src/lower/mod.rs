@@ -1234,8 +1234,16 @@ class ReflectionMethod {
     public function getAttributes($name = null, $flags = 0) { return __reflect_method_attributes($this->class, $this->name, $name); }
 }
 class ReflectionProperty {
+    const IS_STATIC = 16;
+    const IS_PUBLIC = 1;
+    const IS_PROTECTED = 2;
+    const IS_PRIVATE = 4;
+    const IS_READONLY = 128;
+    const IS_PROTECTED_SET = 2048;
+    const IS_PRIVATE_SET = 4096;
     public $name;
     public $class;
+    public $__info;
     public function __construct($class, $property) {
         $cls = is_object($class) ? get_class($class) : $class;
         if (!property_exists($cls, $property)) {
@@ -1248,6 +1256,7 @@ class ReflectionProperty {
         $this->name = $property;
         $decl = __reflect_prop_declaring_class($cls, $property);
         $this->class = $decl === false ? $cls : $decl;
+        $this->__info = __reflect_prop_details($this->class, $this->name);
     }
     public function getName() { return $this->name; }
     public function getValue($object = null) { return __reflect_prop_get($this->class, $this->name, $object); }
@@ -1256,6 +1265,28 @@ class ReflectionProperty {
     public function isStatic() { return __reflect_prop_is_static($this->class, $this->name); }
     public function hasType() { return __reflect_prop_type($this->class, $this->name) !== false; }
     public function getType() { return ReflectionNamedType::__fromInfo(__reflect_prop_type($this->class, $this->name)); }
+    public function isPublic() { return $this->__info['visibility'] === 'public'; }
+    public function isProtected() { return $this->__info['visibility'] === 'protected'; }
+    public function isPrivate() { return $this->__info['visibility'] === 'private'; }
+    public function isReadOnly() { return $this->__info['readonly']; }
+    public function getModifiers() {
+        $m = 0;
+        if ($this->__info['visibility'] === 'public') { $m |= self::IS_PUBLIC; }
+        elseif ($this->__info['visibility'] === 'protected') { $m |= self::IS_PROTECTED; }
+        else { $m |= self::IS_PRIVATE; }
+        if ($this->__info['static']) { $m |= self::IS_STATIC; }
+        if ($this->__info['readonly']) {
+            $m |= self::IS_READONLY;
+            // PHP 8.4: a `public readonly` property's implicit set-visibility is
+            // downgraded to protected (asymmetric visibility), adding IS_PROTECTED_SET.
+            if ($this->__info['visibility'] === 'public') { $m |= self::IS_PROTECTED_SET; }
+        }
+        return $m;
+    }
+    public function getDeclaringClass() { return new ReflectionClass($this->__info['declaringClass']); }
+    public function hasDefaultValue() { return $this->__info['hasDefault']; }
+    public function getDefaultValue() { return $this->__info['default']; }
+    public function isInitialized($object = null) { return __reflect_prop_initialized($this->class, $this->name, $object); }
     public function skipLazyInitialization($object) {
         $msg = __lazy_skip_init($object, $this->class, $this->name);
         if ($msg !== null) { throw new ReflectionException($msg); }

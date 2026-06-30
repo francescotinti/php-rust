@@ -6401,6 +6401,84 @@ impl<'m> Vm<'m> {
         Ok(typehint_descriptor(&hint))
     }
 
+    /// `__reflect_prop_details($class, $prop)`: a descriptor array backing the
+    /// non-type `ReflectionProperty` accessors — `visibility`
+    /// (`public`/`protected`/`private`), `readonly`, `static`, `declaringClass`,
+    /// `hasDefault` and the constant `default` value. `$class` is the declaring
+    /// class, whose flattened `prop_info` / `prop_defaults` carry the resolved
+    /// shape; static properties fall back to their `static_props` entry.
+    fn ho_reflect_prop_details(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let cls = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let prop = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let key = cls.strip_prefix(b"\\").unwrap_or(&cls).to_ascii_lowercase();
+        let vis_str = |v: crate::hir::Visibility| -> &'static [u8] {
+            match v {
+                crate::hir::Visibility::Public => b"public",
+                crate::hir::Visibility::Protected => b"protected",
+                crate::hir::Visibility::Private => b"private",
+            }
+        };
+        let mut a = php_types::PhpArray::new();
+        let put = |a: &mut php_types::PhpArray, k: &[u8], v: Zval| {
+            a.insert(Key::Str(PhpStr::new(k.to_vec())), v);
+        };
+        if let Some(&cid) = self.class_index.get(&key) {
+            let c = &self.classes[cid];
+            if let Some(pi) = c.prop_info.get(prop.as_slice()) {
+                let vis = vis_str(pi.visibility).to_vec();
+                let readonly = pi.readonly;
+                let decl = self.classes[pi.declaring_class].name.to_vec();
+                let uninit = c.uninit_props.iter().any(|n| n.as_ref() == prop.as_slice());
+                let default = c.prop_defaults.iter().find(|(n, _)| n.as_ref() == prop.as_slice()).map(|(_, k)| k.to_zval());
+                put(&mut a, b"visibility", Zval::Str(PhpStr::new(vis)));
+                put(&mut a, b"readonly", Zval::Bool(readonly));
+                put(&mut a, b"static", Zval::Bool(false));
+                put(&mut a, b"declaringClass", Zval::Str(PhpStr::new(decl)));
+                put(&mut a, b"hasDefault", Zval::Bool(!uninit));
+                put(&mut a, b"default", default.unwrap_or(Zval::Null));
+                return Ok(Zval::Array(Rc::new(a)));
+            }
+            if let Some(sp) = c.static_props.iter().find(|sp| sp.name.as_ref() == prop.as_slice()) {
+                let vis = vis_str(sp.visibility).to_vec();
+                let decl = c.name.to_vec();
+                put(&mut a, b"visibility", Zval::Str(PhpStr::new(vis)));
+                put(&mut a, b"readonly", Zval::Bool(false));
+                put(&mut a, b"static", Zval::Bool(true));
+                put(&mut a, b"declaringClass", Zval::Str(PhpStr::new(decl)));
+                put(&mut a, b"hasDefault", Zval::Bool(true));
+                put(&mut a, b"default", Zval::Null);
+                return Ok(Zval::Array(Rc::new(a)));
+            }
+        }
+        put(&mut a, b"visibility", Zval::Str(PhpStr::new(b"public".to_vec())));
+        put(&mut a, b"readonly", Zval::Bool(false));
+        put(&mut a, b"static", Zval::Bool(false));
+        put(&mut a, b"declaringClass", Zval::Str(PhpStr::new(cls.clone())));
+        put(&mut a, b"hasDefault", Zval::Bool(true));
+        put(&mut a, b"default", Zval::Null);
+        Ok(Zval::Array(Rc::new(a)))
+    }
+
+    /// `__reflect_prop_initialized($class, $prop, $obj)`: whether `$prop` holds a
+    /// value on `$obj` (vs an uninitialized typed property) — backs
+    /// `ReflectionProperty::isInitialized`. Reads the raw slot without triggering
+    /// lazy initialization; a non-object (or absent slot) reads as initialized.
+    fn ho_reflect_prop_initialized(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let class = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let prop = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let obj = args.get(2).cloned().unwrap_or(Zval::Null);
+        if !matches!(obj, Zval::Object(_)) {
+            return Ok(Zval::Bool(true));
+        }
+        let lc = class.strip_prefix(b"\\").unwrap_or(&class).to_ascii_lowercase();
+        let key = match self.class_index.get(&lc).copied() {
+            Some(c) => self.prop_decl_storage_key(c, &prop),
+            None => prop.clone(),
+        };
+        let v = read_property(&obj, &key, &mut self.diags);
+        Ok(Zval::Bool(!matches!(v, Zval::Undef)))
+    }
+
 
     /// `__reflect_prop_get($class, $prop, $obj)`: read property `$prop` (declared
     /// in `$class`) of `$obj` ignoring visibility — backs
@@ -10277,6 +10355,8 @@ host_builtins! {
     b"__reflect_prop_names" => vm.ho_reflect_prop_names(args),
     b"__reflect_prop_is_static" => vm.ho_reflect_prop_is_static(args),
     b"__reflect_prop_type" => vm.ho_reflect_prop_type(args),
+    b"__reflect_prop_details" => vm.ho_reflect_prop_details(args),
+    b"__reflect_prop_initialized" => vm.ho_reflect_prop_initialized(args),
     b"__reflect_prop_get" => vm.ho_reflect_prop_get(args),
     b"__reflect_prop_set" => vm.ho_reflect_prop_set(args),
     b"__reflect_prop_attributes" => vm.ho_reflect_prop_attributes(args),
