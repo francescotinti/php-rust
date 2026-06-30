@@ -195,6 +195,7 @@ fn compile_fndecl(fd: &FnDecl, ctx: &ProgramCtx) -> R<Func> {
     )
     .map(|mut f| {
         f.attributes = compile_attrs(&fd.attributes, ctx, cur_class);
+        f.ret_reflect_type = fd.ret_reflect_type.clone();
         f
     })
 }
@@ -270,6 +271,10 @@ fn compile_body(
             .iter()
             .map(|p| compile_attrs(&p.attributes, ctx, cur_class))
             .collect(),
+        // Composite (union/intersection) reflection types; the return one is set by
+        // `compile_fndecl` (compile_body only sees a `TypeHint` return).
+        param_reflect_types: params.iter().map(|p| p.reflect_type.clone()).collect(),
+        ret_reflect_type: None,
         ret_hint,
         variadic_slot: params.iter().find(|p| p.variadic).map(|p| p.slot),
         by_ref,
@@ -310,6 +315,8 @@ fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
         param_hints: fd.params.iter().map(|p| p.hint.clone()).collect(),
         param_defaults: fd.params.iter().map(|_| None).collect(),
         param_attributes: fd.params.iter().map(|_| Vec::new()).collect(),
+        param_reflect_types: fd.params.iter().map(|p| p.reflect_type.clone()).collect(),
+        ret_reflect_type: fd.ret_reflect_type.clone(),
         ret_hint: fd.ret_hint.clone(),
         variadic_slot: fd.params.iter().find(|p| p.variadic).map(|p| p.slot),
         by_ref: fd.by_ref,
@@ -484,6 +491,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
             };
             let mut func = func;
             func.attributes = compile_attrs(&m.decl.attributes, ctx, Some(cid));
+            func.ret_reflect_type = m.decl.ret_reflect_type.clone();
             CompiledMethod {
                 name: m.decl.name.clone(),
                 visibility: m.visibility,
@@ -606,6 +614,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
                     declaring_class: x,
                     readonly: p.readonly,
                     type_hint: p.hint.clone(),
+                    reflect_type: p.reflect_type.clone(),
                     hooks: None,
                     storage_key: p.name.clone(),
                 },
@@ -693,6 +702,8 @@ fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassI
         param_hints: Box::default(),
         param_defaults: Box::default(),
         param_attributes: Box::default(),
+        param_reflect_types: Box::default(),
+        ret_reflect_type: None,
         ret_hint: None,
         variadic_slot: None,
         by_ref: false,
@@ -725,6 +736,8 @@ fn compile_default_thunk(value: &Expr, ctx: &ProgramCtx, cur_class: Option<Class
         param_hints: Box::default(),
         param_defaults: Box::default(),
         param_attributes: Box::default(),
+        param_reflect_types: Box::default(),
+        ret_reflect_type: None,
         ret_hint: None,
         variadic_slot: None,
         by_ref: false,
@@ -754,6 +767,8 @@ fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, decl_class: 
         param_hints: Box::default(),
         param_defaults: Box::default(),
         param_attributes: Box::default(),
+        param_reflect_types: Box::default(),
+        ret_reflect_type: None,
         ret_hint: None,
         variadic_slot: None,
         by_ref: false,
@@ -804,6 +819,8 @@ fn const_stub(name: &[u8], err: &CompileError) -> Func {
         param_hints: Box::default(),
         param_defaults: Box::default(),
         param_attributes: Box::default(),
+        param_reflect_types: Box::default(),
+        ret_reflect_type: None,
         ret_hint: None,
         variadic_slot: None,
         by_ref: false,

@@ -6447,7 +6447,8 @@ impl<'m> Vm<'m> {
             let is_variadic = func.variadic_slot == Some(i as u32);
             let required = func.param_required.get(i).copied().unwrap_or(true);
             let by_ref = func.param_by_ref.get(i).copied().unwrap_or(false);
-            let ty = func.param_hints.get(i).map(typehint_descriptor).unwrap_or(Zval::Bool(false));
+            let ty = func.param_reflect_types.get(i).and_then(reflect_type_descriptor)
+                .unwrap_or_else(|| func.param_hints.get(i).map(typehint_descriptor).unwrap_or(Zval::Bool(false)));
             let (has_default, default_val) = match func.param_defaults.get(i).and_then(|o| o.as_ref()) {
                 Some(thunk) => (true, self.run_value_thunk(thunk, cur_class)?),
                 None => (false, Zval::Null),
@@ -6470,7 +6471,8 @@ impl<'m> Vm<'m> {
         }
         let mut d = php_types::PhpArray::new();
         d.insert(Key::Str(PhpStr::new(b"name".to_vec())), Zval::Str(PhpStr::new(func.name.to_vec())));
-        d.insert(Key::Str(PhpStr::new(b"returnType".to_vec())), typehint_descriptor(&func.ret_hint));
+        let ret_ty = reflect_type_descriptor(&func.ret_reflect_type).unwrap_or_else(|| typehint_descriptor(&func.ret_hint));
+        d.insert(Key::Str(PhpStr::new(b"returnType".to_vec())), ret_ty);
         d.insert(Key::Str(PhpStr::new(b"params".to_vec())), Zval::Array(Rc::new(params)));
         Ok(d)
     }
@@ -6801,12 +6803,16 @@ impl<'m> Vm<'m> {
         let cls = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
         let prop = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
         let key = cls.strip_prefix(b"\\").unwrap_or(&cls).to_ascii_lowercase();
-        let hint = self
+        let pi = self
             .class_index
             .get(&key)
-            .and_then(|&cid| self.classes[cid].prop_info.get(prop.as_slice()))
-            .and_then(|pi| pi.type_hint.clone());
-        Ok(typehint_descriptor(&hint))
+            .and_then(|&cid| self.classes[cid].prop_info.get(prop.as_slice()));
+        // A composite (union/intersection) type reflects through the dedicated
+        // descriptor; a single type falls back to the enforced `type_hint`.
+        if let Some(z) = pi.and_then(|pi| reflect_type_descriptor(&pi.reflect_type)) {
+            return Ok(z);
+        }
+        Ok(typehint_descriptor(&pi.and_then(|pi| pi.type_hint.clone())))
     }
 
     /// `__reflect_prop_details($class, $prop)`: a descriptor array backing the
@@ -10656,6 +10662,70 @@ fn typehint_descriptor(hint: &Option<TypeHint>) -> Zval {
     a.insert(Key::Str(PhpStr::new(b"builtin".to_vec())), Zval::Bool(builtin));
     a.insert(Key::Str(PhpStr::new(b"nullable".to_vec())), Zval::Bool(h.nullable));
     Zval::Array(Rc::new(a))
+}
+
+
+/// Encode a composite (union/intersection) [`ReflectType`] as the descriptor the
+/// prelude builds a `ReflectionUnionType` / `ReflectionIntersectionType` from:
+/// `{kind: "union"|"intersection", types: [{name,builtin,nullable}, …],
+/// nullable}`. `T|null` normalises to a single nullable `ReflectionNamedType`
+/// descriptor (matching PHP). Returns `None` when there is no composite type (the
+/// caller then falls back to the single-type `typehint_descriptor`).
+fn reflect_type_descriptor(rt: &Option<crate::hir::ReflectType>) -> Option<Zval> {
+    use crate::hir::{ReflectNamed, ReflectType};
+    let named = |n: &ReflectNamed, nullable: bool| -> Zval {
+        let mut a = php_types::PhpArray::new();
+        a.insert(Key::Str(PhpStr::new(b"name".to_vec())), Zval::Str(PhpStr::new(n.name.to_vec())));
+        a.insert(Key::Str(PhpStr::new(b"builtin".to_vec())), Zval::Bool(n.builtin));
+        a.insert(Key::Str(PhpStr::new(b"nullable".to_vec())), Zval::Bool(nullable));
+        Zval::Array(Rc::new(a))
+    };
+    let composite = |kind: &[u8], members: &[ReflectNamed], nullable: bool| -> Zval {
+        let mut types = php_types::PhpArray::new();
+        for m in members {
+            let _ = types.append(named(m, false));
+        }
+        let mut a = php_types::PhpArray::new();
+        a.insert(Key::Str(PhpStr::new(b"kind".to_vec())), Zval::Str(PhpStr::new(kind.to_vec())));
+        a.insert(Key::Str(PhpStr::new(b"types".to_vec())), Zval::Array(Rc::new(types)));
+        a.insert(Key::Str(PhpStr::new(b"nullable".to_vec())), Zval::Bool(nullable));
+        Zval::Array(Rc::new(a))
+    };
+    match rt.as_ref()? {
+        ReflectType::Union(members) => {
+            let has_null = members.iter().any(|m| m.name.eq_ignore_ascii_case(b"null"));
+            let non_null: Vec<&ReflectNamed> = members.iter().filter(|m| !m.name.eq_ignore_ascii_case(b"null")).collect();
+            // `T|null` (one non-null member + null) is a nullable single type.
+            if has_null && non_null.len() == 1 {
+                return Some(named(non_null[0], true));
+            }
+            // PHP canonicalises union member order: class types first (in source
+            // order), then built-ins in a fixed order. A stable sort by rank keeps
+            // classes (rank 0) in source order.
+            let mut ordered = members.clone();
+            ordered.sort_by_key(|m| if m.builtin { union_builtin_rank(&m.name) } else { 0 });
+            Some(composite(b"union", &ordered, has_null))
+        }
+        // Intersection members keep their source order (PHP does not reorder them).
+        ReflectType::Intersection(members) => Some(composite(b"intersection", members, false)),
+    }
+}
+
+/// PHP's canonical ordering rank for a built-in type within a union (class types
+/// rank 0 and keep source order); lower sorts earlier.
+fn union_builtin_rank(name: &[u8]) -> i32 {
+    match name {
+        b"static" => 1,
+        b"callable" => 2,
+        b"object" => 3,
+        b"array" | b"iterable" => 4,
+        b"string" => 5,
+        b"int" => 6,
+        b"float" => 7,
+        b"bool" | b"false" | b"true" => 8,
+        b"null" => 9,
+        _ => 10,
+    }
 }
 
 /// One frame of the output-buffering stack (`ob_start`). `content` accumulates

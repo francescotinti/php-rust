@@ -1016,9 +1016,10 @@ impl<'f> Lowerer<'f> {
                 // its own `$this->name`; otherwise it is virtual (no storage).
                 let backed = default.is_some() || hooks_backing;
                 let hint = self.lower_prop_hint(h.hint.as_ref(), &default);
+                let reflect_type = h.hint.as_ref().and_then(|hh| lower_reflect_type(self, hh));
                 let attributes = self.lower_attributes(&h.attribute_lists, line)?;
                 out.push(PropDecl {
-                    name, visibility, default, get_hook, set_hook, backed, readonly, hint, abstract_hooks, attributes,
+                    name, visibility, default, get_hook, set_hook, backed, readonly, hint, abstract_hooks, attributes, reflect_type,
                 });
                 return Ok(());
             }
@@ -1040,6 +1041,7 @@ impl<'f> Lowerer<'f> {
                 });
             } else {
                 let hint = self.lower_prop_hint(plain.hint.as_ref(), &default);
+                let reflect_type = plain.hint.as_ref().and_then(|hh| lower_reflect_type(self, hh));
                 // The `#[Attr]` list precedes the whole declaration, so every item
                 // of a grouped `public $a, $b;` shares it.
                 let attributes = self.lower_attributes(&plain.attribute_lists, line)?;
@@ -1054,6 +1056,7 @@ impl<'f> Lowerer<'f> {
                     hint,
                     abstract_hooks: Vec::new(),
                     attributes,
+                    reflect_type,
                 });
             }
         }
@@ -1186,7 +1189,7 @@ impl<'f> Lowerer<'f> {
                     None => {
                         // Implicit `$value` parameter.
                         let slot = self.slot_for(b"value");
-                        vec![Param { slot, default: None, by_ref: false, variadic: false, hint: None, attributes: Vec::new() }]
+                        vec![Param { slot, default: None, by_ref: false, variadic: false, hint: None, attributes: Vec::new(), reflect_type: None }]
                     }
                 }
             } else {
@@ -1252,6 +1255,7 @@ impl<'f> Lowerer<'f> {
                 slots: local_scope.slots,
                 by_ref: false,
                 ret_hint: None,
+                ret_reflect_type: None,
                 defining_class: None,
                 closure_shift: 0,
                 attributes: Vec::new(),
@@ -1339,7 +1343,9 @@ impl<'f> Lowerer<'f> {
         for p in promoted {
             // A promoted property inherits its constructor parameter's declared
             // type (the param's hint already carries any implicit nullability).
-            let hint = params.iter().find(|pr| pr.slot == p.slot).and_then(|pr| pr.hint.clone());
+            let pr = params.iter().find(|pr| pr.slot == p.slot);
+            let hint = pr.and_then(|pr| pr.hint.clone());
+            let reflect_type = pr.and_then(|pr| pr.reflect_type.clone());
             props.push(PropDecl {
                 name: p.name,
                 visibility: p.visibility,
@@ -1351,6 +1357,7 @@ impl<'f> Lowerer<'f> {
                 hint,
                 abstract_hooks: Vec::new(),
                 attributes: p.attributes,
+                reflect_type,
             });
         }
         validate_goto(&body)?; // step 45: function-scoped goto/label check
@@ -1358,6 +1365,10 @@ impl<'f> Lowerer<'f> {
             .return_type_hint
             .as_ref()
             .and_then(|r| lower_hint(self, &r.hint));
+        let ret_reflect_type = method
+            .return_type_hint
+            .as_ref()
+            .and_then(|r| lower_reflect_type(self, &r.hint));
         let _ = class_line;
         let attributes = self.lower_attributes(&method.attribute_lists, line)?;
         Ok(MethodDecl {
@@ -1372,6 +1383,7 @@ impl<'f> Lowerer<'f> {
                 slots: local_scope.slots,
                 by_ref,
                 ret_hint,
+                ret_reflect_type,
                 defining_class: None,
                 closure_shift: 0,
                 attributes,
@@ -1418,6 +1430,10 @@ impl<'f> Lowerer<'f> {
             .return_type_hint
             .as_ref()
             .and_then(|r| lower_hint(self, &r.hint));
+        let ret_reflect_type = func
+            .return_type_hint
+            .as_ref()
+            .and_then(|r| lower_reflect_type(self, &r.hint));
         let attributes = self.lower_attributes(&func.attribute_lists, line)?;
         Ok(FnDecl {
             name,
@@ -1427,6 +1443,7 @@ impl<'f> Lowerer<'f> {
             slots: local_scope.slots,
             by_ref,
             ret_hint,
+            ret_reflect_type,
             defining_class: None,
                 closure_shift: 0,
             attributes,
@@ -1535,6 +1552,7 @@ impl<'f> Lowerer<'f> {
                     h.nullable = true;
                 }
             }
+            let reflect_type = p.hint.as_ref().and_then(|h| lower_reflect_type(self, h));
             params.push(Param {
                 slot,
                 default,
@@ -1542,6 +1560,7 @@ impl<'f> Lowerer<'f> {
                 variadic,
                 hint,
                 attributes,
+                reflect_type,
             });
         }
         Ok(params)
@@ -1605,9 +1624,13 @@ impl<'f> Lowerer<'f> {
             .return_type_hint
             .as_ref()
             .and_then(|r| lower_hint(self, &r.hint));
+        let ret_reflect_type = closure
+            .return_type_hint
+            .as_ref()
+            .and_then(|r| lower_reflect_type(self, &r.hint));
         let attributes = self.lower_attributes(&closure.attribute_lists, line)?;
         let fn_idx =
-            self.push_closure(params, body, local_scope.slots, by_ref, ret_hint, is_generator, attributes, line);
+            self.push_closure(params, body, local_scope.slots, by_ref, ret_hint, ret_reflect_type, is_generator, attributes, line);
         Ok(ExprKind::Closure {
             fn_idx,
             captures,
@@ -1625,6 +1648,7 @@ impl<'f> Lowerer<'f> {
         slots: Vec<Box<[u8]>>,
         by_ref: bool,
         ret_hint: Option<TypeHint>,
+        ret_reflect_type: Option<crate::hir::ReflectType>,
         is_generator: bool,
         attributes: Vec<crate::hir::HirAttribute>,
         line: Line,
@@ -1645,6 +1669,7 @@ impl<'f> Lowerer<'f> {
             slots,
             by_ref,
             ret_hint,
+            ret_reflect_type,
             // A closure/arrow inherits the lexically enclosing class so its body
             // can use `self::`/`parent::`/`new self` (resolved at compile time).
             defining_class: self.cur_class.clone(),
@@ -1735,8 +1760,12 @@ impl<'f> Lowerer<'f> {
             .return_type_hint
             .as_ref()
             .and_then(|r| lower_hint(self, &r.hint));
+        let ret_reflect_type = af
+            .return_type_hint
+            .as_ref()
+            .and_then(|r| lower_reflect_type(self, &r.hint));
         let fn_idx =
-            self.push_closure(params, body, local_scope.slots, false, ret_hint, is_generator, Vec::new(), line);
+            self.push_closure(params, body, local_scope.slots, false, ret_hint, ret_reflect_type, is_generator, Vec::new(), line);
         // An arrow function is never `static` here (rejected above), so it binds
         // `$this` like an ordinary closure (step 19-6).
         Ok(ExprKind::Closure {

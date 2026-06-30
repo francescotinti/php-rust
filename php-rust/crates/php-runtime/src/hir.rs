@@ -328,6 +328,9 @@ pub struct PropDecl {
     /// `#[Attr(args)]` attributes declared on the property, retained for
     /// `ReflectionProperty::getAttributes()` (empty for an unattributed property).
     pub attributes: Vec<HirAttribute>,
+    /// A composite (union/intersection) declared type, for `ReflectionProperty::
+    /// getType()`. `None` for a single type (reflected through `hint`).
+    pub reflect_type: Option<ReflectType>,
 }
 
 /// One method (step 19, D-19.5). Wraps an ordinary [`FnDecl`] (so method calls
@@ -388,6 +391,10 @@ pub struct FnDecl {
     /// for `ReflectionFunction`/`ReflectionMethod::getAttributes()` (empty for
     /// closures, hooks, and unattributed functions).
     pub attributes: Vec<HirAttribute>,
+    /// A composite (union/intersection) declared *return* type, for
+    /// `ReflectionFunctionAbstract::getReturnType()`. `None` for a single return
+    /// type (reflected through `ret_hint`). Reflection-only.
+    pub ret_reflect_type: Option<ReflectType>,
     pub line: Line,
 }
 
@@ -415,6 +422,10 @@ pub struct Param {
     /// retained for `ReflectionParameter::getAttributes()`. A promoted property
     /// shares the same list. Empty for the common case.
     pub attributes: Vec<HirAttribute>,
+    /// A composite (union/intersection) declared type, for `ReflectionParameter::
+    /// getType()` → `ReflectionUnionType`/`ReflectionIntersectionType`. `None` for
+    /// a single type (which reflects through `hint`). Reflection-only.
+    pub reflect_type: Option<ReflectType>,
 }
 
 /// One captured variable of a closure (step 18, D-18.3). At closure *creation*
@@ -464,6 +475,29 @@ pub enum HintKind {
     Object,
     /// A class/interface name — accepts an instance that is `instanceof` it.
     Class(Box<[u8]>),
+}
+
+/// One member of a union / intersection [`ReflectType`]: a named type with its
+/// `builtin` flag (a scalar/`array`/`null`/… is builtin; a class/interface name
+/// is not). Carried for reflection only — never enforced.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReflectNamed {
+    pub name: Box<[u8]>,
+    pub builtin: bool,
+}
+
+/// A reflection-only record of a *composite* declared type (union or
+/// intersection), captured verbatim so `ReflectionUnionType` /
+/// `ReflectionIntersectionType` can report their member types. Populated only for
+/// `A|B` / `A&B` hints (single types reflect through the enforced [`TypeHint`]);
+/// it never participates in the type-coercion binder, so it cannot change
+/// run-time behaviour.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReflectType {
+    /// `A|B|null` — the members in source order (a literal `null` is a member).
+    Union(Vec<ReflectNamed>),
+    /// `A&B` — the members in source order.
+    Intersection(Vec<ReflectNamed>),
 }
 
 impl TypeHint {

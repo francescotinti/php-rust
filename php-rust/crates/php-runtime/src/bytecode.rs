@@ -948,6 +948,14 @@ pub struct Func {
     /// to `param_names`) — `ReflectionParameter::getAttributes()`. Each inner vec
     /// is empty for an unattributed parameter (the common case).
     pub param_attributes: Box<[Vec<CompiledAttribute>]>,
+    /// Composite (union/intersection) declared type of each formal parameter
+    /// (parallel to `param_names`), for `ReflectionParameter::getType()` →
+    /// `ReflectionUnionType`/`ReflectionIntersectionType`. `None` for a single
+    /// type (reflected through `param_hints`). Reflection-only.
+    pub param_reflect_types: Box<[Option<crate::hir::ReflectType>]>,
+    /// Composite (union/intersection) declared *return* type, for
+    /// `getReturnType()`. `None` for a single type (via `ret_hint`).
+    pub ret_reflect_type: Option<crate::hir::ReflectType>,
     /// The body contains a `yield` — calling it produces a `Generator` rather
     /// than running the body. Drives generator setup once `Yield` is wired in.
     pub is_generator: bool,
@@ -1233,6 +1241,9 @@ pub struct PropInfo {
     /// Declared type of the most-derived declaration (`None` = untyped; an untyped
     /// redeclaration shadows an inherited type). Subsumes `prop_types`.
     pub type_hint: Option<TypeHint>,
+    /// Composite (union/intersection) declared type, for `ReflectionProperty::
+    /// getType()`. `None` for a single type (reflected through `type_hint`).
+    pub reflect_type: Option<crate::hir::ReflectType>,
     /// Property hooks (`None` = not hooked). Subsumes `prop_hooks`; a virtual
     /// (`backed == false`) hooked property has an entry here but no `prop_defaults`
     /// slot.

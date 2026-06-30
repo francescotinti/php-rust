@@ -1145,17 +1145,61 @@ class ReflectionClass {
     }
     public function hasMethod($name) { return method_exists($this->name, $name); }
 }
-class ReflectionNamedType {
+abstract class ReflectionType {
+    abstract public function allowsNull(): bool;
+    abstract public function __toString(): string;
+}
+class ReflectionUnionType extends ReflectionType {
+    public $__types; public $__nullable;
+    public function getTypes() { return $this->__types; }
+    public function allowsNull(): bool { return $this->__nullable; }
+    public function __toString(): string {
+        $parts = [];
+        foreach ($this->__types as $t) { $parts[] = $t->getName(); }
+        return implode('|', $parts);
+    }
+    public static function __fromInfo($t) {
+        $r = new ReflectionUnionType();
+        $types = [];
+        foreach ($t['types'] as $m) { $types[] = ReflectionNamedType::__fromInfo($m); }
+        $r->__types = $types;
+        $r->__nullable = $t['nullable'];
+        return $r;
+    }
+}
+class ReflectionIntersectionType extends ReflectionType {
+    public $__types;
+    public function getTypes() { return $this->__types; }
+    public function allowsNull(): bool { return false; }
+    public function __toString(): string {
+        $parts = [];
+        foreach ($this->__types as $t) { $parts[] = $t->getName(); }
+        return implode('&', $parts);
+    }
+    public static function __fromInfo($t) {
+        $r = new ReflectionIntersectionType();
+        $types = [];
+        foreach ($t['types'] as $m) { $types[] = ReflectionNamedType::__fromInfo($m); }
+        $r->__types = $types;
+        return $r;
+    }
+}
+class ReflectionNamedType extends ReflectionType {
     public $__name; public $__builtin; public $__nullable;
     public function getName() { return $this->__name; }
-    public function allowsNull() { return $this->__nullable; }
+    public function allowsNull(): bool { return $this->__nullable; }
     public function isBuiltin() { return $this->__builtin; }
-    public function __toString() {
+    public function __toString(): string {
         $q = ($this->__nullable && $this->__name !== 'mixed' && $this->__name !== 'null') ? '?' : '';
         return $q . $this->__name;
     }
     public static function __fromInfo($t) {
         if ($t === false) { return null; }
+        if (isset($t['kind'])) {
+            return $t['kind'] === 'intersection'
+                ? ReflectionIntersectionType::__fromInfo($t)
+                : ReflectionUnionType::__fromInfo($t);
+        }
         $r = new ReflectionNamedType();
         $r->__name = $t['name']; $r->__builtin = $t['builtin']; $r->__nullable = $t['nullable'];
         return $r;
@@ -2491,6 +2535,92 @@ fn lower_hint(lo: &Lowerer, hint: &Hint) -> Option<TypeHint> {
         _ => return None,
     };
     Some(TypeHint { kind, nullable: false })
+}
+
+
+/// Capture a *composite* (union/intersection) declared type for reflection only.
+/// Returns `None` for any single type (which reflects through the enforced
+/// [`TypeHint`]) — so this never participates in the coercion binder and cannot
+/// change run-time behaviour. `A|B|null` / `A&B` flatten to their members.
+fn lower_reflect_type(lo: &Lowerer, hint: &Hint) -> Option<crate::hir::ReflectType> {
+    use crate::hir::ReflectType;
+    match hint {
+        Hint::Union(_) => {
+            let mut out = Vec::new();
+            collect_union_members(lo, hint, &mut out);
+            Some(ReflectType::Union(out))
+        }
+        Hint::Intersection(_) => {
+            let mut out = Vec::new();
+            collect_intersection_members(lo, hint, &mut out);
+            Some(ReflectType::Intersection(out))
+        }
+        Hint::Parenthesized(p) => lower_reflect_type(lo, p.hint),
+        _ => None,
+    }
+}
+
+fn collect_union_members(lo: &Lowerer, hint: &Hint, out: &mut Vec<crate::hir::ReflectNamed>) {
+    match hint {
+        Hint::Union(u) => {
+            collect_union_members(lo, u.left, out);
+            collect_union_members(lo, u.right, out);
+        }
+        Hint::Parenthesized(p) => collect_union_members(lo, p.hint, out),
+        other => {
+            if let Some(n) = reflect_named(lo, other) {
+                out.push(n);
+            }
+        }
+    }
+}
+
+fn collect_intersection_members(lo: &Lowerer, hint: &Hint, out: &mut Vec<crate::hir::ReflectNamed>) {
+    match hint {
+        Hint::Intersection(i) => {
+            collect_intersection_members(lo, i.left, out);
+            collect_intersection_members(lo, i.right, out);
+        }
+        Hint::Parenthesized(p) => collect_intersection_members(lo, p.hint, out),
+        other => {
+            if let Some(n) = reflect_named(lo, other) {
+                out.push(n);
+            }
+        }
+    }
+}
+
+/// One leaf of a composite type → its reflection name + `builtin` flag.
+fn reflect_named(lo: &Lowerer, hint: &Hint) -> Option<crate::hir::ReflectNamed> {
+    use crate::hir::ReflectNamed;
+    let (name, builtin): (&[u8], bool) = match hint {
+        Hint::Integer(_) => (b"int", true),
+        Hint::Float(_) => (b"float", true),
+        Hint::String(_) => (b"string", true),
+        Hint::Bool(_) => (b"bool", true),
+        Hint::Array(_) => (b"array", true),
+        Hint::Callable(_) => (b"callable", true),
+        Hint::Iterable(_) => (b"iterable", true),
+        Hint::Object(_) => (b"object", true),
+        Hint::Null(_) => (b"null", true),
+        Hint::True(_) => (b"true", true),
+        Hint::False(_) => (b"false", true),
+        Hint::Void(_) => (b"void", true),
+        Hint::Never(_) => (b"never", true),
+        Hint::Mixed(_) => (b"mixed", true),
+        Hint::Static(_) => (b"static", false),
+        // `self` in a union reflects as the enclosing class name (PHP resolves it).
+        Hint::Self_(_) => {
+            return Some(ReflectNamed {
+                name: lo.cur_class.clone().unwrap_or_else(|| b"self".to_vec().into_boxed_slice()),
+                builtin: false,
+            })
+        }
+        Hint::Parent(_) => (b"parent", false),
+        Hint::Identifier(id) => return Some(ReflectNamed { name: lo.resolve_class(id), builtin: false }),
+        _ => return None,
+    };
+    Some(ReflectNamed { name: name.into(), builtin })
 }
 
 /// Whether `name` (case-insensitive) is a reserved type keyword rather than a
