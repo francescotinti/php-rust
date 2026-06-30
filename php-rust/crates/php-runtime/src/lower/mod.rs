@@ -2598,6 +2598,40 @@ fn lower_reflect_type(lo: &Lowerer, hint: &Hint) -> Option<crate::hir::ReflectTy
             Some(ReflectType::Intersection(out))
         }
         Hint::Parenthesized(p) => lower_reflect_type(lo, p.hint),
+        // `?T` where T is a special single type the enforced hint can't model.
+        Hint::Nullable(n) => single_special(lo, n.hint).map(|(named, _)| ReflectType::Single(named, true)),
+        // A bare special single type (`mixed`/`void`/`self`/…); scalars, `array`,
+        // class names, etc. return `None` here and reflect via the enforced hint.
+        other => single_special(lo, other).map(|(named, nullable)| ReflectType::Single(named, nullable)),
+    }
+}
+
+/// A *special* single type (one the enforced [`TypeHint`] lowers to `None`) →
+/// its reflection `(name, builtin)` plus implicit `allowsNull`. Returns `None`
+/// for an ordinary type (scalar / `array` / class / object / …) so the enforced
+/// hint keeps reflecting it.
+fn single_special(lo: &Lowerer, hint: &Hint) -> Option<(crate::hir::ReflectNamed, bool)> {
+    use crate::hir::ReflectNamed;
+    let mk = |name: &[u8], builtin: bool, nullable: bool| {
+        Some((ReflectNamed { name: name.to_vec().into_boxed_slice(), builtin }, nullable))
+    };
+    match hint {
+        Hint::Mixed(_) => mk(b"mixed", true, true),
+        Hint::Null(_) => mk(b"null", true, true),
+        Hint::Void(_) => mk(b"void", true, false),
+        Hint::Never(_) => mk(b"never", true, false),
+        Hint::True(_) => mk(b"true", true, false),
+        Hint::False(_) => mk(b"false", true, false),
+        Hint::Static(_) => mk(b"static", false, false),
+        Hint::Parent(_) => mk(b"parent", false, false),
+        // `self` reflects as the enclosing class name (PHP resolves it).
+        Hint::Self_(_) => Some((
+            ReflectNamed {
+                name: lo.cur_class.clone().unwrap_or_else(|| b"self".to_vec().into_boxed_slice()),
+                builtin: false,
+            },
+            false,
+        )),
         _ => None,
     }
 }

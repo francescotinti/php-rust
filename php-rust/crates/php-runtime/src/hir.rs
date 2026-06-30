@@ -494,6 +494,10 @@ pub struct ReflectNamed {
 /// run-time behaviour.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReflectType {
+    /// A *single* special type that the enforced [`TypeHint`] does not model
+    /// (`mixed`/`void`/`never`/`null`/`true`/`false`/`self`/`static`/`parent`),
+    /// with its `allowsNull` flag — so `getType()` reports it instead of `null`.
+    Single(ReflectNamed, bool),
     /// `A|B|null` — the members in source order (a literal `null` is a member).
     Union(Vec<ReflectNamed>),
     /// `A&B` — the members in source order.

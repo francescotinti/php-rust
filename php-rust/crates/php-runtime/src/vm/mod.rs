@@ -10759,6 +10759,7 @@ fn reflect_type_descriptor(rt: &Option<crate::hir::ReflectType>) -> Option<Zval>
         Zval::Array(Rc::new(a))
     };
     match rt.as_ref()? {
+        ReflectType::Single(n, nullable) => Some(named(n, *nullable)),
         ReflectType::Union(members) => {
             let has_null = members.iter().any(|m| m.name.eq_ignore_ascii_case(b"null"));
             let non_null: Vec<&ReflectNamed> = members.iter().filter(|m| !m.name.eq_ignore_ascii_case(b"null")).collect();
