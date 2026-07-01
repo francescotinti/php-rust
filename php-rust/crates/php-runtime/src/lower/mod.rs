@@ -18,7 +18,7 @@ use std::collections::{HashMap, HashSet};
 
 use bumpalo::Bump;
 use mago_database::file::File;
-use mago_span::Span;
+use mago_span::{HasSpan, Span};
 use mago_syntax::ast::{
     AssignmentOperator, BinaryOperator, ClassLikeMemberSelector,
     Expression, Extends, Hint,
@@ -118,6 +118,10 @@ fn lower_source_impl(
     }
 
     let mut low = Lowerer::new(&file, name);
+    // A misplaced `namespace` is a compile-time fatal in PHP; reject it here
+    // (before hoisting) so it renders the exact error rather than being silently
+    // accepted or tripping a later invariant.
+    low.check_namespace_first(program.statements.as_slice())?;
     match seed {
         // Seed the built-in exception hierarchy (Throwable/Exception/Error + the
         // SPL subclasses) at the front of the class table (ids 0..N), before any
@@ -2011,6 +2015,38 @@ impl<'f> Lowerer<'f> {
     /// 1-based source line for a span's start offset (`File::line_number` is 0-based).
     fn line_of(&self, span: Span) -> Line {
         self.file.line_number(span.start.offset) + 1
+    }
+
+    /// PHP requires a `namespace` declaration to be the very first statement in
+    /// the script — only `declare(...)` (and empty `;` statements) may precede it.
+    /// When the *first* namespace is preceded by anything else (output, code,
+    /// inline HTML, `use`, `const`, …) PHP raises a compile-time fatal; emit it
+    /// verbatim rather than silently accepting the misplaced namespace (or
+    /// panicking downstream). Subsequent `namespace` declarations are unrestricted
+    /// (`namespace A; $x=1; namespace B;` is legal), so the scan stops at the first.
+    fn check_namespace_first(&self, stmts: &[Statement]) -> Result<(), LowerError> {
+        let mut seen_other = false;
+        for s in stmts {
+            match s {
+                Statement::Namespace(_) => {
+                    if seen_other {
+                        return Err(LowerError::Fatal {
+                            message: "Namespace declaration statement has to be the \
+                                      very first statement or after any declare call \
+                                      in the script"
+                                .to_string(),
+                            line: self.line_of(s.span()),
+                        });
+                    }
+                    return Ok(());
+                }
+                // The open tag, `declare(...)`, and empty `;` statements may precede
+                // a namespace; anything else makes it no longer the first statement.
+                Statement::OpeningTag(_) | Statement::Declare(_) | Statement::Noop(_) => {}
+                _ => seen_other = true,
+            }
+        }
+        Ok(())
     }
 
 
