@@ -9437,7 +9437,10 @@ impl<'m> Vm<'m> {
             out.insert(k, new_v);
         }
         let top = self.frames.len() - 1;
-        self.frames[top].slots[slot as usize] = Zval::Array(Rc::new(out));
+        // Write through a reference slot (by-ref param, or a place ref from the
+        // compiler's non-variable first-arg path) so the caller/place sees the
+        // result; a plain slot is overwritten as before.
+        store_slot(&mut self.frames[top].slots[slot as usize], Zval::Array(Rc::new(out)));
         Ok(Zval::Bool(true))
     }
 
@@ -9467,7 +9470,7 @@ impl<'m> Vm<'m> {
         };
         let walked = self.walk_recursive(&arr, &callback, &extra, by_ref)?;
         let top = self.frames.len() - 1;
-        self.frames[top].slots[slot as usize] = Zval::Array(Rc::new(walked));
+        store_slot(&mut self.frames[top].slots[slot as usize], Zval::Array(Rc::new(walked)));
         Ok(Zval::Bool(true))
     }
 
@@ -9575,7 +9578,10 @@ impl<'m> Vm<'m> {
             let _ = out.append(v);
         }
         let top = self.frames.len() - 1;
-        self.frames[top].slots[slot as usize] = Zval::Array(Rc::new(out));
+        // Write through a reference slot (by-ref param, or a place ref from the
+        // compiler's non-variable first-arg path) so the caller/place sees the
+        // result; a plain slot is overwritten as before.
+        store_slot(&mut self.frames[top].slots[slot as usize], Zval::Array(Rc::new(out)));
         Ok(Zval::Bool(true))
     }
 
@@ -9640,7 +9646,10 @@ impl<'m> Vm<'m> {
             out.insert(k, v);
         }
         let top = self.frames.len() - 1;
-        self.frames[top].slots[slot as usize] = Zval::Array(Rc::new(out));
+        // Write through a reference slot (by-ref param, or a place ref from the
+        // compiler's non-variable first-arg path) so the caller/place sees the
+        // result; a plain slot is overwritten as before.
+        store_slot(&mut self.frames[top].slots[slot as usize], Zval::Array(Rc::new(out)));
         Ok(Zval::Bool(true))
     }
 
@@ -9675,7 +9684,10 @@ impl<'m> Vm<'m> {
             out.insert(k, v);
         }
         let top = self.frames.len() - 1;
-        self.frames[top].slots[slot as usize] = Zval::Array(Rc::new(out));
+        // Write through a reference slot (by-ref param, or a place ref from the
+        // compiler's non-variable first-arg path) so the caller/place sees the
+        // result; a plain slot is overwritten as before.
+        store_slot(&mut self.frames[top].slots[slot as usize], Zval::Array(Rc::new(out)));
         Ok(Zval::Bool(true))
     }
 

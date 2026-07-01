@@ -2467,11 +2467,32 @@ impl<'a> FnCompiler<'a> {
                         Ok(())
                     });
                 }
+                // An instance property or array element (`usort($this->q, $cb)`,
+                // `usort($packages[$type], $cb)`): take a reference cell to the
+                // place (single evaluation of the index keys) and *alias* it into a
+                // temp slot, then run the by-ref host builtin against that slot —
+                // the `ho_*` functions follow the ref and write the mutation
+                // through to the place. `BindRefTo` overwrites the temp slot's
+                // binding (unlike a plain `StoreSlot`, which would write *through*
+                // a stale ref left in the reused temp from a previous call/loop
+                // iteration, corrupting an unrelated place).
                 _ => {
-                    return Err(CompileError::Unsupported(
-                        "by-reference host builtin whose first argument is not a plain variable"
-                            .into(),
-                    ))
+                    let canon: Box<[u8]> = canon.into();
+                    let Some(place) = expr_field_place(first) else {
+                        return Err(CompileError::Unsupported(
+                            "by-reference host builtin whose first argument is not a plain variable"
+                                .into(),
+                        ));
+                    };
+                    let (base, steps) = self.field_path(&place)?;
+                    self.emit(Op::MakeRef { base, steps: steps.into() }); // [ref]
+                    let tmp = self.alloc_temp();
+                    self.emit(Op::BindRefTo { base: FieldBase::Local(tmp), steps: [].into() }); // slot:=ref; [value]
+                    self.emit(Op::Pop); // drop the aliased value
+                    self.push_value_args(rest)?;
+                    self.emit(Op::CallHostBuiltinRef { name: canon, slot: tmp, argc: rest.len() as u32 });
+                    self.free_temp();
+                    return Ok(());
                 }
             }
         }
