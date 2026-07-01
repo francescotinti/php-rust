@@ -6860,6 +6860,62 @@ impl<'m> Vm<'m> {
         Ok(Zval::Array(Rc::new(d)))
     }
 
+    /// `__reflect_invoke($object, $class, $method, $args)` — the engine behind
+    /// `ReflectionMethod::invoke`/`invokeArgs`. Resolves `$method` on the *reflected*
+    /// class `$class` (non-virtual, as PHP's reflection does — a subclass override is
+    /// not selected) and runs it **without** a visibility check: since PHP 8.1
+    /// `ReflectionMethod::invoke` calls private/protected methods without
+    /// `setAccessible(true)`. `$object` binds `$this` for an instance method (ignored
+    /// for a static one). Returns the method's value (or its `Generator` handle).
+    fn ho_reflect_invoke(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let obj = args
+            .first()
+            .map(|v| v.deref_clone())
+            .filter(|v| matches!(v, Zval::Object(_)));
+        let cname = match args.get(1).map(|v| v.deref_clone()) {
+            Some(Zval::Str(s)) => s.as_bytes().to_vec(),
+            _ => return Err(PhpError::Error("ReflectionMethod::invoke(): invalid class".into())),
+        };
+        let mname = match args.get(2).map(|v| v.deref_clone()) {
+            Some(Zval::Str(s)) => s.as_bytes().to_vec(),
+            _ => {
+                return Err(PhpError::Error(
+                    "ReflectionMethod::invoke(): invalid method".into(),
+                ))
+            }
+        };
+        let argv: Vec<Zval> = match args.get(3).map(|v| v.deref_clone()) {
+            Some(Zval::Array(a)) => a.iter().map(|(_, v)| v.deref_clone()).collect(),
+            _ => Vec::new(),
+        };
+        let key = cname.strip_prefix(b"\\").unwrap_or(&cname).to_ascii_lowercase();
+        let cid = *self.class_index.get(&key[..]).ok_or_else(|| {
+            PhpError::Error(format!(
+                "Class \"{}\" does not exist",
+                String::from_utf8_lossy(&cname)
+            ))
+        })?;
+        let (defc, midx) = resolve_method_runtime(&self.classes, cid, &mname)
+            .ok_or_else(|| undefined_method(&self.classes, cid, &mname))?;
+        // A static method ignores the supplied object; an instance method binds it.
+        let this = if self.classes[defc].methods[midx].is_static {
+            None
+        } else {
+            obj
+        };
+        let baseline = self.frames.len();
+        self.enter_authorized_method(cid, this, &mname, argv)?;
+        // A generator-body method pushes no frame — its `Generator` handle is left on
+        // the caller's stack (mirrors `call_callable`).
+        if self.frames.len() == baseline {
+            return Ok(self.frames[baseline - 1]
+                .stack
+                .pop()
+                .expect("reflect-invoke result on caller stack"));
+        }
+        self.drive_to_return(baseline)
+    }
+
     /// `__reflect_class_modifiers($class)`: `['final' => bool, 'abstract' => bool]`
     /// for `ReflectionClass::isFinal()`/`isAbstract()`. Empty (both false) if the
     /// class is unknown.
@@ -11247,6 +11303,7 @@ host_builtins! {
     b"__reflect_closure_attr_new" => vm.ho_reflect_closure_attr_new(args),
     b"__reflect_closure_attr_args" => vm.ho_reflect_closure_attr_args(args),
     b"__reflect_method_info" => vm.ho_reflect_method_info(args),
+    b"__reflect_invoke" => vm.ho_reflect_invoke(args),
     b"__reflect_class_modifiers" => vm.ho_reflect_class_modifiers(args),
     b"__reflect_new_no_ctor" => vm.ho_reflect_new_no_ctor(args),
     b"__reflect_new_lazy_ghost" => vm.ho_reflect_new_lazy_ghost(args),

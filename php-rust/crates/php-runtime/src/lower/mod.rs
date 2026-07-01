@@ -1482,10 +1482,10 @@ class ReflectionMethod {
     public function isPrivate() { return $this->__info['visibility'] === 'private'; }
     public function setAccessible($accessible) {}
     public function invoke($object, ...$args) {
-        return call_user_func_array([$object === null ? $this->class : $object, $this->name], $args);
+        return __reflect_invoke($object, $this->class, $this->name, $args);
     }
     public function invokeArgs($object, $args) {
-        return call_user_func_array([$object === null ? $this->class : $object, $this->name], $args);
+        return __reflect_invoke($object, $this->class, $this->name, $args);
     }
     public function getAttributes($name = null, $flags = 0) {
         $hostName = ($flags & ReflectionAttribute::IS_INSTANCEOF) ? null : $name;

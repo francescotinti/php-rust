@@ -607,8 +607,9 @@ impl<'m> Vm<'m> {
     /// Enter a method a `Closure::fromCallable` closure was pre-authorized to call,
     /// *without* re-checking visibility: accessibility was validated when the
     /// closure was created (see [`Self::make_method_closure`]), so a private /
-    /// protected target stays callable wherever the closure travels.
-    fn enter_authorized_method(
+    /// protected target stays callable wherever the closure travels. Also the
+    /// engine behind `ReflectionMethod::invoke` (privileged, PHP 8.1+).
+    pub(super) fn enter_authorized_method(
         &mut self,
         cid: usize,
         this: Option<Zval>,
