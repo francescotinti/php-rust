@@ -694,10 +694,24 @@ impl<'m> Vm<'m> {
                 "VM: dynamic call to by-reference builtin {}() is out of slice",
                 String::from_utf8_lossy(name)
             ))),
-            None => Err(PhpError::Error(format!(
-                "Call to undefined function {}()",
-                String::from_utf8_lossy(name)
-            ))),
+            None => {
+                // Host builtins (call-a-callable / introspection / preg / date / …)
+                // live outside the stateless `registry`; resolve the value-returning
+                // family here so a host builtin works as a dynamic string callable
+                // (`$fn='preg_quote'; $fn(...)`, `call_user_func`, `array_map`) and via
+                // the namespaced-fallback path. Arguments are by value, exactly as the
+                // compiled `Op::CallHostBuiltin` path passes them.
+                if let Some(canon) = host_builtin_canonical(name) {
+                    let result = self.dispatch_host_builtin(canon, args)?;
+                    let top = self.frames.len() - 1;
+                    self.frames[top].stack.push(result);
+                    return Ok(());
+                }
+                Err(PhpError::Error(format!(
+                    "Call to undefined function {}()",
+                    String::from_utf8_lossy(name)
+                )))
+            }
         }
     }
 
