@@ -1526,6 +1526,53 @@ impl<'a> FnCompiler<'a> {
         Ok(())
     }
 
+    /// Push the value of a `??` left-operand sub-expression using isset
+    /// semantics: an undefined variable, a missing array element, or an unset
+    /// dynamic property yields `null` *silently* (no "Undefined variable /
+    /// index / property" warning), recursing through nested `$a[b][c]` chains.
+    /// Mirrors PHP: `??` suppresses those notices along the whole access path.
+    /// Non-access operands fall through to a normal read.
+    fn coalesce_load(&mut self, a: &Expr) -> R<()> {
+        match &a.kind {
+            ExprKind::Var(slot) => {
+                self.emit(Op::LoadSlot(*slot));
+            }
+            ExprKind::Index { base, index } => {
+                self.coalesce_load(base)?;
+                self.expr(index)?;
+                self.emit(Op::CoalesceFetchDim);
+            }
+            ExprKind::PropGetDyn { object, name, nullsafe } if !nullsafe => {
+                self.expr(object)?;
+                self.expr(name)?;
+                self.emit(Op::PropGetDynamicSilent);
+            }
+            ExprKind::PropGet { object, name, nullsafe } if !nullsafe => {
+                // `$o->p[k] ?? d`: an unset `$o->p` must yield null silently (no
+                // "Undefined property" warning, and `__get` runs only when
+                // `__isset` says the property exists) — same gate the top-level
+                // `$o->p ?? d` uses.
+                self.expr(object)?; // [obj]
+                self.emit(Op::Dup); // [obj, obj]
+                self.emit(Op::PropIsset { name: name.clone() }); // [obj, isset]
+                let to_null = self.emit(Op::JumpIfFalse(Addr::MAX)); // unset → null; [obj]
+                self.emit(Op::PropGetSilent { name: name.clone() }); // [value]
+                let to_end = self.emit(Op::Jump(Addr::MAX));
+                let null_at = self.here();
+                self.patch(to_null, Op::JumpIfFalse(null_at));
+                self.emit(Op::Pop); // drop the kept object
+                let k = self.konst(Const::Null);
+                self.emit(Op::PushConst(k)); // [null]
+                let end = self.here();
+                self.patch(to_end, Op::Jump(end));
+            }
+            _ => {
+                self.expr(a)?;
+            }
+        }
+        Ok(())
+    }
+
     fn expr(&mut self, e: &Expr) -> R<()> {
         self.cur_line = e.line;
         match &e.kind {
@@ -1846,7 +1893,11 @@ impl<'a> FnCompiler<'a> {
                 // OR an out-of-range/non-integer string offset takes the default
                 // (a plain read of a string offset yields "", not null).
                 if let ExprKind::Index { base, index } = &a.kind {
-                    self.expr(base)?;
+                    // The base is loaded isset-aware too: `$a[k] ?? d` must not
+                    // warn when `$a` is an undefined variable / missing key /
+                    // unset dynamic property — `??` suppresses those notices all
+                    // the way down the access chain (bug: base used a plain read).
+                    self.coalesce_load(base)?;
                     self.expr(index)?;
                     self.emit(Op::CoalesceFetchDim);
                     let to_end = self.emit(Op::JumpIfNotNull(Addr::MAX));
