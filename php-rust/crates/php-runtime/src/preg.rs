@@ -71,11 +71,33 @@ fn caps_from_fancy(caps: &fancy_regex::Captures) -> Caps {
     Caps { groups }
 }
 
+fn caps_from_onig(caps: &onig::Captures) -> Caps {
+    // `caps.len()` counts all slots (0 = whole match). A non-participating group
+    // has no `pos`, so it collapses to `None` — the same convention as the other
+    // backends.
+    let groups = (0..caps.len())
+        .map(|i| {
+            caps.pos(i).map(|(start, end)| CapMatch {
+                start,
+                end,
+                text: caps.at(i).unwrap_or("").to_string(),
+            })
+        })
+        .collect();
+    Caps { groups }
+}
+
 /// A compiled PHP pattern. Tries the fast `regex` engine first, falling back to
-/// `fancy-regex` for patterns using PCRE features `regex` cannot build (step 36).
+/// `fancy-regex` for patterns using PCRE features `regex` cannot build (step 36),
+/// then to oniguruma (the `onig` crate) for the deepest PCRE features neither
+/// Rust engine supports — subroutine calls (`(?&name)`, `(?R)`), `(?(DEFINE))`
+/// blocks, recursion. Oniguruma is PHP's own mbregex backend and reads PCRE
+/// syntax under its `perl_ng` dialect. It is the LAST resort: only patterns both
+/// Rust engines reject reach it, so no existing behaviour changes.
 pub enum Engine {
     Regex(regex::Regex),
     Fancy(fancy_regex::Regex),
+    Onig(onig::Regex),
 }
 
 impl Engine {
@@ -84,6 +106,9 @@ impl Engine {
         match self {
             Engine::Regex(r) => r.captures_len(),
             Engine::Fancy(r) => r.captures_len(),
+            // oniguruma counts groups WITHOUT the implicit whole-match slot; the
+            // other backends include it, so add one for a common convention.
+            Engine::Onig(r) => r.captures_len() + 1,
         }
     }
 
@@ -99,6 +124,21 @@ impl Engine {
                 .capture_names()
                 .map(|n| n.map(|s| s.to_string()))
                 .collect(),
+            // oniguruma has no positional name iterator; build the index->name
+            // table from `foreach_name` (a name may bind several group numbers,
+            // e.g. duplicate `(?<x>..)(?<x>..)`).
+            Engine::Onig(r) => {
+                let mut names = vec![None; r.captures_len() + 1];
+                r.foreach_name(|name, nums| {
+                    for &g in nums {
+                        if let Some(slot) = names.get_mut(g as usize) {
+                            *slot = Some(name.to_string());
+                        }
+                    }
+                    true
+                });
+                names
+            }
         }
     }
 
@@ -108,6 +148,7 @@ impl Engine {
         match self {
             Engine::Regex(r) => r.captures(text).map(|c| caps_from_regex(&c)),
             Engine::Fancy(r) => r.captures(text).ok().flatten().map(|c| caps_from_fancy(&c)),
+            Engine::Onig(r) => r.captures(text).map(|c| caps_from_onig(&c)),
         }
     }
 
@@ -122,6 +163,21 @@ impl Engine {
         match self {
             Engine::Regex(r) => r.captures_at(text, start).map(|c| caps_from_regex(&c)),
             Engine::Fancy(r) => r.captures_from_pos(text, start).ok().flatten().map(|c| caps_from_fancy(&c)),
+            // oniguruma exposes no from-offset capture on its public API, and its
+            // `Captures` cannot be built outside the crate. For the common
+            // `start == 0` this is just `captures`; for a positive offset we scan
+            // matches over the whole text (so `^`/`\A`/lookbehind still anchor to
+            // the true start and offsets stay absolute) and take the first at or
+            // after `start`.
+            Engine::Onig(r) => {
+                if start == 0 {
+                    r.captures(text).map(|c| caps_from_onig(&c))
+                } else {
+                    r.captures_iter(text)
+                        .find(|c| c.pos(0).map_or(false, |(s, _)| s >= start))
+                        .map(|c| caps_from_onig(&c))
+                }
+            }
         }
     }
 
@@ -146,6 +202,7 @@ impl Engine {
                 }
                 out
             }
+            Engine::Onig(r) => r.captures_iter(text).map(|c| caps_from_onig(&c)).collect(),
         }
     }
 
@@ -163,8 +220,66 @@ impl Engine {
                 .try_replacen(text, 0, repl)
                 .map(|c| c.into_owned())
                 .unwrap_or_else(|_| text.to_string()),
+            // oniguruma's own replace uses a different backreference dialect, so
+            // expand `repl` (already normalised to `${n}` / `$$` by
+            // `translate_replacement`) by hand against every match.
+            Engine::Onig(r) => onig_replace_all(r, text, repl),
         }
     }
+}
+
+/// Replace every non-overlapping match of `re` in `text`, expanding the
+/// `translate_replacement`-normalised template `repl` (`${n}` backreferences,
+/// `$$` → literal `$`) for each match. Zero-width matches advance one byte so
+/// iteration terminates (mirrors the mbregex replacer).
+fn onig_replace_all(re: &onig::Regex, text: &str, repl: &str) -> String {
+    let bytes = text.as_bytes();
+    let rb = repl.as_bytes();
+    let mut out: Vec<u8> = Vec::new();
+    let mut last = 0usize;
+    for caps in re.captures_iter(text) {
+        let (start, end) = caps.pos(0).unwrap();
+        out.extend_from_slice(&bytes[last..start]);
+        let mut i = 0;
+        while i < rb.len() {
+            if rb[i] == b'$' && rb.get(i + 1) == Some(&b'$') {
+                out.push(b'$');
+                i += 2;
+            } else if rb[i] == b'$' && rb.get(i + 1) == Some(&b'{') {
+                let mut j = i + 2;
+                let ds = j;
+                while j < rb.len() && rb[j].is_ascii_digit() {
+                    j += 1;
+                }
+                if j > ds && rb.get(j) == Some(&b'}') {
+                    let n: usize = repl[ds..j].parse().unwrap_or(usize::MAX);
+                    if let Some(s) = caps.at(n) {
+                        out.extend_from_slice(s.as_bytes());
+                    }
+                    i = j + 1;
+                } else {
+                    out.push(rb[i]);
+                    i += 1;
+                }
+            } else {
+                out.push(rb[i]);
+                i += 1;
+            }
+        }
+        last = end;
+        // Guard zero-width matches: emit the next byte and step past it so the
+        // cursor always advances.
+        if end == start {
+            if end < bytes.len() {
+                out.push(bytes[end]);
+                last = end + 1;
+            } else {
+                break;
+            }
+        }
+    }
+    out.extend_from_slice(&bytes[last..]);
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// Parse and compile a PHP PCRE pattern. Returns `None` when the delimiters are
@@ -270,11 +385,38 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
     // pathological pattern errors (→ no-match, D-36.3) rather than running away.
     // This equals fancy-regex 0.14's own default, but pinning it documents the
     // guarantee and survives a future default change (step 36-3).
-    fancy_regex::RegexBuilder::new(&pat)
+    if let Ok(r) = fancy_regex::RegexBuilder::new(&pat)
         .backtrack_limit(1_000_000)
         .build()
+    {
+        return Some(Engine::Fancy(r));
+    }
+
+    // Last resort: oniguruma (PHP's own mbregex backend) under the `perl_ng`
+    // dialect, which reads PCRE syntax including subroutine calls
+    // (`(?&name)`, `(?R)`), `(?(DEFINE))` blocks and recursion — features
+    // neither Rust engine can build. Flags map to oniguruma compile options;
+    // `A` was already folded into `body` as `\A(?:…)`, and a bare `$` was
+    // rewritten upstream, so here we mainly translate i/x/s and pin `^`/`$` to
+    // whole-string anchors (PCRE default) unless `m` asked for per-line.
+    let mut oo = onig::RegexOptions::REGEX_OPTION_NONE;
+    for &f in flags {
+        match f {
+            b'i' => oo |= onig::RegexOptions::REGEX_OPTION_IGNORECASE,
+            b'x' => oo |= onig::RegexOptions::REGEX_OPTION_EXTEND,
+            // PCRE `s` (DOTALL): `.` matches newline — oniguruma's MULTILINE.
+            b's' => oo |= onig::RegexOptions::REGEX_OPTION_MULTILINE,
+            _ => {}
+        }
+    }
+    if !flags.contains(&b'm') {
+        // PCRE default: `^`/`$` anchor the whole subject (oniguruma treats them
+        // as per-line by default, so opt into SINGLELINE to match PCRE).
+        oo |= onig::RegexOptions::REGEX_OPTION_SINGLELINE;
+    }
+    onig::Regex::with_options(&body, oo, onig::Syntax::perl_ng())
         .ok()
-        .map(Engine::Fancy)
+        .map(Engine::Onig)
 }
 
 /// Translate a PHP replacement string into the `regex` crate's syntax: PHP

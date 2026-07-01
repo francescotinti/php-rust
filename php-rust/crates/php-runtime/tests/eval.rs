@@ -3741,20 +3741,23 @@ fn preg_match_all_g_anchor() {
     assert_eq!(out(r#"<?php echo preg_match_all('/\Ga/', 'aaab');"#), "3");
 }
 
-// Genuine scope-out (D-36.2): neither engine compiles these, so the `preg_*`
-// function returns false/null while PHP would match. Documented, no crash.
+// Deep PCRE features that neither Rust engine builds now route to the oniguruma
+// fallback (PHP's own mbregex backend), so they match oracle-identically.
 
 #[test]
-fn preg_scopeout_subroutine_returns_false() {
-    // `(?1)` subroutine call — oracle matches (1); we return false.
-    assert_eq!(out(r#"<?php echo (preg_match('/(a)(?1)/', 'aa') === false) ? 'F' : 'T';"#), "F");
+fn preg_subroutine_call_via_onig() {
+    // `(?1)` subroutine call — oracle matches (1). Handled by the onig fallback.
+    assert_eq!(out(r#"<?php preg_match('/(a)(?1)/', 'aa', $m); echo $m[0], $m[1];"#), "aaa");
 }
 
 #[test]
-fn preg_scopeout_control_verb_returns_false() {
-    // `(*SKIP)` backtracking control verb — oracle matches (1); we return false.
-    assert_eq!(out(r#"<?php echo (preg_match('/a(*SKIP)b/', 'ab') === false) ? 'F' : 'T';"#), "F");
+fn preg_control_verb_skip_via_onig() {
+    // `(*SKIP)` backtracking control verb — oracle matches (1). Onig handles it.
+    assert_eq!(out(r#"<?php echo preg_match('/a(*SKIP)b/', 'ab');"#), "1");
 }
+
+// Genuine remaining scope-out: oniguruma does not support PCRE callouts, so the
+// `preg_*` function still returns false/null while PHP would match. No crash.
 
 #[test]
 fn preg_scopeout_callout_returns_false() {
