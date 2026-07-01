@@ -78,6 +78,41 @@ pub fn ini_set(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Bool(false))
 }
 
+/// `php_ini_loaded_file()` — path of the primary loaded `php.ini`, or `false`
+/// when none was loaded. phpr reads no INI file, so `false` (as a PHP build
+/// started with `-n`). Composer's XdebugHandler tolerates this.
+pub fn php_ini_loaded_file(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    Ok(Zval::Bool(false))
+}
+
+/// `php_ini_scanned_files()` — comma-separated list of INI files parsed from the
+/// scan dir, or `false` when there is no scan dir / none were parsed. phpr scans
+/// none, so `false`.
+pub fn php_ini_scanned_files(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    Ok(Zval::Bool(false))
+}
+
+/// `phpinfo($flags = INFO_ALL)` — writes a report and returns `true`. phpr cannot
+/// reproduce the full multi-section report (which is HTML/text bound to the C
+/// SAPI internals), so it emits a minimal, honest *general* block. Notably it has
+/// no "Configure Command" line — phpr is not an autoconf build — which is exactly
+/// what a consumer parsing that field (Composer's DiagnoseCommand) should see.
+pub fn phpinfo(_args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    ctx.out.extend_from_slice(
+        b"phpinfo()\n\
+          PHP Version => 8.5.7\n\
+          \n\
+          System => Darwin\n\
+          Build Date => Jan  1 2026 00:00:00\n\
+          PHP Version => 8.5.7\n\
+          PHP SAPI => cli\n\
+          Zend Engine => 4.5.7\n\
+          Thread Safety => disabled\n\
+          Debug Build => no\n",
+    );
+    Ok(Zval::Bool(true))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

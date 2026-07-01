@@ -338,6 +338,9 @@ pub fn registry() -> Registry {
     add(b"php_sapi_name", env::php_sapi_name);
     add(b"ini_get", env::ini_get);
     add(b"ini_set", env::ini_set);
+    add(b"php_ini_loaded_file", env::php_ini_loaded_file);
+    add(b"php_ini_scanned_files", env::php_ini_scanned_files);
+    add(b"phpinfo", env::phpinfo);
     // By-reference builtins (step 11c): their first argument binds the caller's
     // variable cell (D-R7).
     let mut add_ref = |name: &[u8], f: php_runtime::BuiltinRefFn| {

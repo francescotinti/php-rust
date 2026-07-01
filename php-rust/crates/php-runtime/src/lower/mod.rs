@@ -683,12 +683,42 @@ class WeakMap implements ArrayAccess, Countable, IteratorAggregate {
     }
 }
 interface DateTimeInterface {}
+// phpr models instants as UTC unix timestamps, so a timezone is carried for
+// `getName()`/`getTimezone()` but does not shift the stored timestamp (faithful
+// for the UTC zone Composer uses; tz-aware display is deliberately out of scope).
+class DateTimeZone {
+    const AFRICA = 1;
+    const AMERICA = 2;
+    const ANTARCTICA = 4;
+    const ARCTIC = 8;
+    const ASIA = 16;
+    const ATLANTIC = 32;
+    const AUSTRALIA = 64;
+    const EUROPE = 128;
+    const INDIAN = 256;
+    const PACIFIC = 512;
+    const UTC = 1024;
+    const ALL = 2047;
+    const ALL_WITH_BC = 4095;
+    const PER_COUNTRY = 4096;
+    private $__name = "UTC";
+    public function __construct($timezone = "UTC") { $this->__name = (string)$timezone; }
+    public function getName() { return $this->__name; }
+    public function __toString() { return $this->__name; }
+}
 class DateTime implements DateTimeInterface {
     private $__ts = 0;
-    public function __construct($datetime = "now") {
+    private $__tz = "UTC";
+    public function __construct($datetime = "now", $timezone = null) {
+        if ($timezone !== null) { $this->__tz = $timezone->getName(); }
         if ($datetime === "now" || $datetime === "" || $datetime === null) {
             $this->__ts = time();
         } else {
+            // A leading '@' (unix timestamp) forces the UTC-offset zone "+00:00",
+            // ignoring any passed timezone (a PHP quirk).
+            if (is_string($datetime) && isset($datetime[0]) && $datetime[0] === "@") {
+                $this->__tz = "+00:00";
+            }
             $r = strtotime($datetime);
             if ($r === false) {
                 throw new Exception("DateTime::__construct(): Failed to parse time string ($datetime)");
@@ -696,6 +726,7 @@ class DateTime implements DateTimeInterface {
             $this->__ts = $r;
         }
     }
+    public function getTimezone() { return new DateTimeZone($this->__tz); }
     public function format($format) { return date($format, $this->__ts); }
     public function getTimestamp() { return $this->__ts; }
     public function setTimestamp($timestamp) { $this->__ts = $timestamp; return $this; }
@@ -756,10 +787,16 @@ class DateInterval {
 }
 class DateTimeImmutable implements DateTimeInterface {
     private $__ts = 0;
-    public function __construct($datetime = "now") {
+    private $__tz = "UTC";
+    public function __construct($datetime = "now", $timezone = null) {
+        if ($timezone !== null) { $this->__tz = $timezone->getName(); }
         if ($datetime === "now" || $datetime === "" || $datetime === null) {
             $this->__ts = time();
         } else {
+            // A leading '@' (unix timestamp) forces the UTC-offset zone "+00:00".
+            if (is_string($datetime) && isset($datetime[0]) && $datetime[0] === "@") {
+                $this->__tz = "+00:00";
+            }
             $r = strtotime($datetime);
             if ($r === false) {
                 throw new Exception("DateTimeImmutable::__construct(): Failed to parse time string ($datetime)");
@@ -767,6 +804,7 @@ class DateTimeImmutable implements DateTimeInterface {
             $this->__ts = $r;
         }
     }
+    public function getTimezone() { return new DateTimeZone($this->__tz); }
     public function format($format) { return date($format, $this->__ts); }
     public function getTimestamp() { return $this->__ts; }
     public function setTimestamp($timestamp) { return new DateTimeImmutable("@$timestamp"); }
@@ -2358,6 +2396,17 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"PHP_DEBUG" => ExprKind::Bool(false),
         b"PHP_ZTS" => ExprKind::Bool(false),
         b"PHP_MAXPATHLEN" => ExprKind::Int(1024),
+        // phpinfo() section selectors. phpr's `phpinfo` is a stub, but callers
+        // (Composer's DiagnoseCommand does `phpinfo(INFO_GENERAL)`) still name the
+        // flags, so they must resolve to their canonical bitmask values.
+        b"INFO_GENERAL" => ExprKind::Int(1),
+        b"INFO_CREDITS" => ExprKind::Int(2),
+        b"INFO_CONFIGURATION" => ExprKind::Int(4),
+        b"INFO_MODULES" => ExprKind::Int(8),
+        b"INFO_ENVIRONMENT" => ExprKind::Int(16),
+        b"INFO_VARIABLES" => ExprKind::Int(32),
+        b"INFO_LICENSE" => ExprKind::Int(64),
+        b"INFO_ALL" => ExprKind::Int(0x7FFF_FFFF),
         // Nominal platform-library versions. phpr does not link these C libraries
         // (it uses Rust crates for regex, mbstring, and TLS via rustls), so these
         // are representative constants for consumers that read them (e.g. Composer's
