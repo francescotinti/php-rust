@@ -911,6 +911,186 @@ function date_interval_create_from_date_string($datetime) {
 // Iterator + ArrayAccess protocols + the array builtins. Zero VM changes.
 // `__keys` is a key snapshot taken at rewind() so the integer `__pos` cursor is
 // order-preserving and survives mutation, matching SPL semantics.
+// ZipArchive (ext/zip subset backing Composer's dist downloads): the prelude
+// class delegates to the __zip_* host builtins (zip crate VM-side); the handle
+// is an int id in Vm.zips. Read-only surface: open/close/count/statIndex/
+// getNameIndex/locateName/getFromIndex/getFromName/extractTo. No writing.
+class ZipArchive implements Countable {
+    const CREATE = 1; const EXCL = 2; const CHECKCONS = 4; const OVERWRITE = 8; const RDONLY = 16;
+    const FL_NOCASE = 1; const FL_NODIR = 2;
+    const CM_DEFAULT = -1; const CM_STORE = 0; const CM_DEFLATE = 8;
+    const EM_NONE = 0;
+    const ER_OK = 0; const ER_MULTIDISK = 1; const ER_RENAME = 2; const ER_CLOSE = 3;
+    const ER_SEEK = 4; const ER_READ = 5; const ER_WRITE = 6; const ER_CRC = 7;
+    const ER_ZIPCLOSED = 8; const ER_NOENT = 9; const ER_EXISTS = 10; const ER_OPEN = 11;
+    const ER_TMPOPEN = 12; const ER_ZLIB = 13; const ER_MEMORY = 14; const ER_CHANGED = 15;
+    const ER_COMPNOTSUPP = 16; const ER_EOF = 17; const ER_INVAL = 18; const ER_NOZIP = 19;
+    const ER_INTERNAL = 20; const ER_INCONS = 21; const ER_REMOVE = 22; const ER_DELETED = 23;
+    public $numFiles = 0;
+    public $status = 0;
+    public $statusSys = 0;
+    public $filename = '';
+    public $comment = '';
+    private $__h = null;
+    public function open($filename, $flags = 0) {
+        $r = __zip_open($filename);
+        if (is_int($r)) { $this->status = $r; return $r; }
+        $this->__h = $r[0];
+        $this->numFiles = $r[1];
+        $this->filename = $filename;
+        $this->status = 0;
+        return true;
+    }
+    public function close() {
+        if ($this->__h === null) { return false; }
+        $r = __zip_close($this->__h);
+        $this->__h = null; $this->numFiles = 0; $this->filename = '';
+        return $r;
+    }
+    public function count(): int { return $this->numFiles; }
+    public function statIndex($index, $flags = 0) { return $this->__h === null ? false : __zip_stat_index($this->__h, $index); }
+    public function getNameIndex($index, $flags = 0) { return $this->__h === null ? false : __zip_get_name_index($this->__h, $index); }
+    public function locateName($name, $flags = 0) { return $this->__h === null ? false : __zip_locate_name($this->__h, $name); }
+    public function getFromIndex($index, $len = 0, $flags = 0) { return $this->__h === null ? false : __zip_get_from_index($this->__h, $index); }
+    public function getFromName($name, $len = 0, $flags = 0) {
+        if ($this->__h === null) { return false; }
+        $i = __zip_locate_name($this->__h, $name);
+        return $i === false ? false : __zip_get_from_index($this->__h, $i);
+    }
+    public function extractTo($pathto, $files = null) { return $this->__h === null ? false : __zip_extract_to($this->__h, $pathto); }
+    public function getStatusString() { return $this->status === 0 ? 'No error' : 'Unknown error ' . $this->status; }
+}
+// SplFileInfo + the directory-iterator family (Composer's Filesystem: rm -rf
+// via CHILD_FIRST, copy-tree via SELF_FIRST + getSubPathname). The recursive
+// iterator SNAPSHOTS the traversal at rewind() -- Composer's uses (delete after
+// yield, copy) are order-compatible; live-mutation semantics, CATCH_GET_CHILD
+// and the flag combinations beyond SKIP_DOTS/CURRENT_AS_PATHNAME are residues.
+class SplFileInfo {
+    protected $__path;
+    public function __construct($path) { $this->__path = $path; }
+    public function getPathname() { return $this->__path; }
+    public function isDir() { return is_dir($this->__path); }
+    public function isFile() { return is_file($this->__path); }
+    public function isLink() { return is_link($this->__path); }
+    public function getFilename() { return basename($this->__path); }
+    public function getPath() { return dirname($this->__path); }
+    public function getRealPath() { return realpath($this->__path); }
+    public function getSize() { return filesize($this->__path); }
+    public function getPerms() { return fileperms($this->__path); }
+    public function getMTime() { return filemtime($this->__path); }
+    public function isReadable() { return is_readable($this->__path); }
+    public function isWritable() { return is_writable($this->__path); }
+    public function getExtension() {
+        $f = basename($this->__path);
+        $p = strrpos($f, '.');
+        return $p === false || $p === 0 ? '' : substr($f, $p + 1);
+    }
+    public function __toString() { return $this->__path; }
+}
+class FilesystemIterator extends SplFileInfo {
+    const CURRENT_AS_FILEINFO = 0; const CURRENT_AS_PATHNAME = 32; const CURRENT_AS_SELF = 16;
+    const KEY_AS_PATHNAME = 0; const KEY_AS_FILENAME = 256;
+    const FOLLOW_SYMLINKS = 512; const NEW_CURRENT_AND_KEY = 256;
+    const SKIP_DOTS = 4096; const UNIX_PATHS = 8192;
+}
+class RecursiveDirectoryIterator extends FilesystemIterator implements RecursiveIterator {
+    private $__dir;
+    private $__flags;
+    private $__names = [];
+    private $__pos = 0;
+    private $__sub = ''; // path of this level relative to the traversal root
+    public function __construct($directory, $flags = 0) {
+        parent::__construct($directory);
+        if (!is_dir($directory)) {
+            throw new UnexpectedValueException("RecursiveDirectoryIterator::__construct($directory): Failed to open directory: No such file or directory");
+        }
+        $this->__dir = rtrim($directory, '/');
+        $this->__flags = $flags;
+        $names = scandir($directory);
+        if (($flags & self::SKIP_DOTS) === self::SKIP_DOTS) {
+            $keep = [];
+            foreach ($names as $n) { if ($n !== '.' && $n !== '..') { $keep[] = $n; } }
+            $names = $keep;
+        }
+        $this->__names = $names;
+        $this->__sync();
+    }
+    private function __cur() { return $this->__dir . '/' . $this->__names[$this->__pos]; }
+    // The native iterator *is* the current entry: every inherited SplFileInfo
+    // accessor (getFilename/getPathname/isDir/...) reflects the position; Symfony
+    // Finder's RecursiveDirectoryIterator::current() is built on exactly that.
+    private function __sync() {
+        if ($this->__pos < count($this->__names)) { $this->__path = $this->__cur(); }
+    }
+    public function rewind(): void { $this->__pos = 0; $this->__sync(); }
+    public function valid(): bool { return $this->__pos < count($this->__names); }
+    public function next(): void { $this->__pos++; $this->__sync(); }
+    public function key(): mixed { return $this->__cur(); }
+    public function current(): mixed {
+        if (($this->__flags & self::CURRENT_AS_PATHNAME) === self::CURRENT_AS_PATHNAME) { return $this->__cur(); }
+        return new SplFileInfo($this->__cur());
+    }
+    public function hasChildren($allowLinks = false) {
+        $p = $this->__cur();
+        return is_dir($p) && ($allowLinks || ($this->__flags & self::FOLLOW_SYMLINKS) === self::FOLLOW_SYMLINKS || !is_link($p));
+    }
+    public function getChildren() {
+        // `new static`: a subclass (Symfony Finder's iterator) gets subclass
+        // children, exactly like the native late-static getChildren.
+        $child = new static($this->__cur(), $this->__flags);
+        $name = $this->__names[$this->__pos];
+        $child->__sub = $this->__sub === '' ? $name : $this->__sub . '/' . $name;
+        return $child;
+    }
+    public function getSubPath() { return $this->__sub; }
+    public function getSubPathname() {
+        $name = $this->__names[$this->__pos];
+        return $this->__sub === '' ? $name : $this->__sub . '/' . $name;
+    }
+}
+class RecursiveIteratorIterator implements OuterIterator {
+    const LEAVES_ONLY = 0; const SELF_FIRST = 1; const CHILD_FIRST = 2; const CATCH_GET_CHILD = 16;
+    private $__it;
+    private $__mode;
+    private $__list = [];  // [[key, subpathname, current, depth], ...] in emit order
+    private $__pos = 0;
+    private $__maxDepth = -1; // -1 = unlimited (setMaxDepth(-1), the default)
+    public function __construct($iterator, $mode = 0, $flags = 0) {
+        $this->__it = $iterator;
+        $this->__mode = $mode;
+    }
+    public function setMaxDepth($maxDepth = -1) {
+        if ($maxDepth < -1) { throw new InvalidArgumentException('Parameter maxDepth must be >= -1'); }
+        $this->__maxDepth = $maxDepth;
+    }
+    public function getMaxDepth() { return $this->__maxDepth === -1 ? false : $this->__maxDepth; }
+    private function __collect($it, $depth) {
+        for ($it->rewind(); $it->valid(); $it->next()) {
+            $descend = method_exists($it, 'hasChildren') && $it->hasChildren()
+                && ($this->__maxDepth === -1 || $depth < $this->__maxDepth);
+            $entry = [$it->key(), method_exists($it, 'getSubPathname') ? $it->getSubPathname() : $it->key(), $it->current(), $depth];
+            if ($descend) {
+                if ($this->__mode === self::SELF_FIRST) { $this->__list[] = $entry; }
+                $this->__collect($it->getChildren(), $depth + 1);
+                if ($this->__mode === self::CHILD_FIRST) { $this->__list[] = $entry; }
+            } else {
+                $this->__list[] = $entry;
+            }
+        }
+    }
+    public function rewind(): void {
+        $this->__list = [];
+        $this->__pos = 0;
+        $this->__collect($this->__it, 0);
+    }
+    public function valid(): bool { return $this->__pos < count($this->__list); }
+    public function next(): void { $this->__pos++; }
+    public function key(): mixed { return $this->__list[$this->__pos][0]; }
+    public function current(): mixed { return $this->__list[$this->__pos][2]; }
+    public function getSubPathname() { return $this->__list[$this->__pos][1]; }
+    public function getDepth() { return $this->__list[$this->__pos][3]; }
+    public function getInnerIterator() { return $this->__it; }
+}
 // SplDoublyLinkedList family (Composer's dependency solver: SplQueue work
 // queues, RuleWatchChain extends the list and removes mid-iteration). Backed by
 // a plain array kept dense via array_splice; the iteration cursor is a plain
@@ -1057,6 +1237,70 @@ class IteratorIterator implements Iterator {
     public function current() { return $this->__it->current(); }
     public function key() { return $this->__it->key(); }
     public function next() { return $this->__it->next(); }
+    // SPL's dual-iterators forward unknown method calls to the inner iterator
+    // (spl_dual_it_call_method): `$filterIt->getFilename()` reaches the
+    // wrapped (Recursive)DirectoryIterator down the chain. Symfony Finder's
+    // whole Iterator/ stack leans on this.
+    public function __call($name, $args) { return $this->__it->$name(...$args); }
+}
+interface OuterIterator extends Iterator {
+    public function getInnerIterator();
+}
+interface RecursiveIterator extends Iterator {
+    public function hasChildren();
+    public function getChildren();
+}
+// `FilterIterator`: skip inner entries the subclass's accept() rejects --
+// rewind/next fast-forward to the next accepted position (Symfony Finder's
+// whole Iterator/ directory is built on it).
+abstract class FilterIterator extends IteratorIterator {
+    abstract public function accept(): bool;
+    public function rewind() {
+        parent::rewind();
+        while (parent::valid() && !$this->accept()) { parent::next(); }
+    }
+    public function next() {
+        parent::next();
+        while (parent::valid() && !$this->accept()) { parent::next(); }
+    }
+}
+class CallbackFilterIterator extends FilterIterator {
+    private $__cb;
+    public function __construct($iterator, $callback) {
+        parent::__construct($iterator);
+        $this->__cb = $callback;
+    }
+    public function accept(): bool {
+        $cb = $this->__cb;
+        return (bool) $cb($this->current(), $this->key(), $this->getInnerIterator());
+    }
+}
+// `AppendIterator`: iterate several iterators in sequence. Each appended
+// iterator is rewound when it becomes current (append-after-start supported).
+class AppendIterator implements OuterIterator {
+    private $__its = [];
+    private $__idx = 0;
+    public function __construct() {}
+    public function append($iterator) { $this->__its[] = $iterator; }
+    public function getInnerIterator() { return $this->__its[$this->__idx] ?? null; }
+    private function __settle() {
+        while ($this->__idx < count($this->__its) && !$this->__its[$this->__idx]->valid()) {
+            $this->__idx++;
+            if ($this->__idx < count($this->__its)) { $this->__its[$this->__idx]->rewind(); }
+        }
+    }
+    public function rewind() {
+        $this->__idx = 0;
+        if (count($this->__its) > 0) { $this->__its[0]->rewind(); }
+        $this->__settle();
+    }
+    public function valid() { return $this->__idx < count($this->__its) && $this->__its[$this->__idx]->valid(); }
+    public function current() { return $this->valid() ? $this->__its[$this->__idx]->current() : null; }
+    public function key() { return $this->valid() ? $this->__its[$this->__idx]->key() : null; }
+    public function next() {
+        if ($this->valid()) { $this->__its[$this->__idx]->next(); }
+        $this->__settle();
+    }
 }
 // `SplFixedArray`: a fixed-size, integer-indexed array. Backed by `$__storage`
 // filled with nulls to `$__size`; out-of-range offsets throw RuntimeException.
@@ -1625,8 +1869,22 @@ class ReflectionProperty {
         $this->__info = __reflect_prop_details($this->class, $this->name);
     }
     public function getName() { return $this->name; }
-    public function getValue($object = null) { return __reflect_prop_get($this->class, $this->name, $object); }
-    public function setValue($object, $value = null) { __reflect_prop_set($this->class, $this->name, $object, $value); }
+    public function getValue($object = null) {
+        if (__reflect_prop_is_static($this->class, $this->name)) {
+            return __reflect_static_prop_get($this->class, $this->name);
+        }
+        return __reflect_prop_get($this->class, $this->name, $object);
+    }
+    public function setValue($object, $value = null) {
+        if (__reflect_prop_is_static($this->class, $this->name)) {
+            // Static form: setValue($value) and setValue(null, $value) both write
+            // the class-level slot (Composer pokes InstalledVersions::$selfDir).
+            if (func_num_args() === 1) { $value = $object; }
+            __reflect_static_prop_set($this->class, $this->name, $value);
+            return;
+        }
+        __reflect_prop_set($this->class, $this->name, $object, $value);
+    }
     public function getAttributes($name = null, $flags = 0) {
         $hostName = ($flags & ReflectionAttribute::IS_INSTANCEOF) ? null : $name;
         return ReflectionAttribute::__filter(__reflect_prop_attributes($this->class, $this->name, $hostName), $name, $flags, 'ReflectionProperty');
@@ -2702,10 +2960,22 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"COUNT_NORMAL" => ExprKind::Int(0),
         b"COUNT_RECURSIVE" => ExprKind::Int(1),
         // json_encode / json_decode flags (step 26).
+        b"JSON_HEX_TAG" => ExprKind::Int(1),
+        b"JSON_HEX_AMP" => ExprKind::Int(2),
+        b"JSON_HEX_APOS" => ExprKind::Int(4),
+        b"JSON_HEX_QUOT" => ExprKind::Int(8),
+        b"JSON_FORCE_OBJECT" => ExprKind::Int(16),
+        b"JSON_NUMERIC_CHECK" => ExprKind::Int(32),
         b"JSON_UNESCAPED_SLASHES" => ExprKind::Int(64),
         b"JSON_PRETTY_PRINT" => ExprKind::Int(128),
         b"JSON_UNESCAPED_UNICODE" => ExprKind::Int(256),
+        b"JSON_PARTIAL_OUTPUT_ON_ERROR" => ExprKind::Int(512),
+        b"JSON_PRESERVE_ZERO_FRACTION" => ExprKind::Int(1024),
+        b"JSON_INVALID_UTF8_IGNORE" => ExprKind::Int(1_048_576),
+        b"JSON_INVALID_UTF8_SUBSTITUTE" => ExprKind::Int(2_097_152),
         b"JSON_THROW_ON_ERROR" => ExprKind::Int(4_194_304),
+        b"JSON_OBJECT_AS_ARRAY" => ExprKind::Int(1),
+        b"JSON_BIGINT_AS_STRING" => ExprKind::Int(2),
         b"JSON_ERROR_NONE" => ExprKind::Int(0),
         b"JSON_ERROR_DEPTH" => ExprKind::Int(1),
         b"JSON_ERROR_STATE_MISMATCH" => ExprKind::Int(2),

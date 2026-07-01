@@ -244,6 +244,7 @@ fn compile_body(
         // Named locals plus the high-water mark of compiler temporaries.
         n_slots: n_locals + c.n_temps_max,
         n_params,
+        slot_names: slot_names.to_vec().into_boxed_slice(),
         // Parameter names / required-ness for run-time named-argument binding (A):
         // a param's name is its slot's name (`params[i].slot == i`).
         param_names: params
@@ -303,6 +304,7 @@ fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
         ops: vec![Op::Fatal(0)],
         lines: vec![fd.line],
         consts: vec![Const::Str(msg.into_bytes().into())],
+        slot_names: fd.slots.to_vec().into_boxed_slice(),
         n_slots: fd.slots.len() as u32,
         n_params: fd.params.len() as u32,
         param_names: fd
@@ -722,6 +724,7 @@ fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassI
         consts: c.consts,
         n_slots: c.n_temps_max,
         n_params: 0,
+        slot_names: Box::default(),
         param_names: Box::default(),
         param_required: Box::default(),
         param_by_ref: Box::default(),
@@ -757,6 +760,7 @@ fn compile_default_thunk(value: &Expr, ctx: &ProgramCtx, cur_class: Option<Class
         consts: c.consts,
         n_slots: c.n_temps_max,
         n_params: 0,
+        slot_names: Box::default(),
         param_names: Box::default(),
         param_required: Box::default(),
         param_by_ref: Box::default(),
@@ -789,6 +793,7 @@ fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, decl_class: 
         consts: c.consts,
         n_slots: c.n_temps_max,
         n_params: 0,
+        slot_names: Box::default(),
         param_names: Box::default(),
         param_required: Box::default(),
         param_by_ref: Box::default(),
@@ -842,6 +847,7 @@ fn const_stub(name: &[u8], err: &CompileError) -> Func {
         consts: vec![Const::Str(msg.into_bytes().into())],
         n_slots: 0,
         n_params: 0,
+        slot_names: Box::default(),
         param_names: Box::default(),
         param_required: Box::default(),
         param_by_ref: Box::default(),
@@ -3890,15 +3896,18 @@ impl<'a> FnCompiler<'a> {
         leaves_value: bool,
         core: impl FnOnce(&mut Self, &Place) -> R<()>,
     ) -> R<()> {
-        if self.is_runtime_class(class) {
-            return Err(CompileError::Unsupported(
-                "indexed write to dynamic static property".into(),
-            ));
-        }
-        let (target, _) = self.resolve_target(class)?;
+        // A class only known at run time (an autoloaded name, `$cls`) reads and
+        // writes through the *Dynamic ops — the class value is pushed for each.
+        let runtime = self.is_runtime_class(class);
+        let target = if runtime { None } else { Some(self.resolve_target(class)?.0) };
         let nm: Box<[u8]> = name.into();
         let t = self.alloc_temp();
-        self.emit(Op::StaticPropGet { target, name: nm.clone() });
+        if runtime {
+            self.push_class_value(class)?;
+            self.emit(Op::StaticPropGetDynamic { name: nm.clone() });
+        } else {
+            self.emit(Op::StaticPropGet { target: target.unwrap(), name: nm.clone() });
+        }
         self.emit(Op::StoreSlot(t));
         let local = Place {
             base: PlaceBase::Local(t),
@@ -3909,14 +3918,24 @@ impl<'a> FnCompiler<'a> {
             let t2 = self.alloc_temp();
             self.emit(Op::StoreSlot(t2)); // []
             self.emit(Op::LoadSlot(t));
-            self.emit(Op::StaticPropSet { target, name: nm }); // [arr]
+            if runtime {
+                self.push_class_value(class)?;
+                self.emit(Op::StaticPropSetDynamic { name: nm }); // [arr]
+            } else {
+                self.emit(Op::StaticPropSet { target: target.unwrap(), name: nm }); // [arr]
+            }
             self.emit(Op::Pop);
             self.emit(Op::LoadSlot(t2)); // [result]
             self.free_temp(); // t2
         } else {
             core(self, &local)?; // []
             self.emit(Op::LoadSlot(t));
-            self.emit(Op::StaticPropSet { target, name: nm }); // [arr]
+            if runtime {
+                self.push_class_value(class)?;
+                self.emit(Op::StaticPropSetDynamic { name: nm }); // [arr]
+            } else {
+                self.emit(Op::StaticPropSet { target: target.unwrap(), name: nm }); // [arr]
+            }
             self.emit(Op::Pop);
         }
         self.free_temp(); // t
@@ -3935,14 +3954,15 @@ impl<'a> FnCompiler<'a> {
         steps: &[PlaceStep],
         core: impl FnOnce(&mut Self, &Place) -> R<()>,
     ) -> R<()> {
-        if self.is_runtime_class(class) {
-            return Err(CompileError::Unsupported(
-                "indexed read of dynamic static property".into(),
-            ));
-        }
-        let (target, _) = self.resolve_target(class)?;
         let t = self.alloc_temp();
-        self.emit(Op::StaticPropGet { target, name: name.into() });
+        if self.is_runtime_class(class) {
+            // A run-time class (autoloaded name, `$cls`): read via the dynamic op.
+            self.push_class_value(class)?;
+            self.emit(Op::StaticPropGetDynamic { name: name.into() });
+        } else {
+            let (target, _) = self.resolve_target(class)?;
+            self.emit(Op::StaticPropGet { target, name: name.into() });
+        }
         self.emit(Op::StoreSlot(t));
         let local = Place {
             base: PlaceBase::Local(t),

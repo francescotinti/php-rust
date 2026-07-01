@@ -1178,6 +1178,7 @@ fn filter_var(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// the much larger curl_multi surface.
 const LOADED_EXTENSIONS: &[&[u8]] = &[
     b"core", b"standard", b"spl", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
+    b"zip",
 ];
 
 /// extension_loaded($name): whether a PHP extension is available (case-insensitive).

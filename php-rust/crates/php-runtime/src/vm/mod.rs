@@ -377,6 +377,8 @@ pub(crate) fn run_module_with_hir<'m>(
         lazy_init: HashMap::new(),
         lazy_props: HashMap::new(),
         lazy_initializing: HashSet::new(),
+        zips: HashMap::new(),
+        next_zip: 1,
     };
     // Register the caller module's own functions in the global link table so a
     // call made from inside an `eval()` (where `self.module` is the eval unit,
@@ -963,6 +965,12 @@ struct Vm<'m> {
     /// object while it is being initialized"). Populated by `realize_lazy` around
     /// the initializer call and cleared when it returns (even on throw).
     lazy_initializing: HashSet<u32>,
+    /// Open zip archives (`ZipArchive`, ext/zip subset): handle id → parsed
+    /// archive, backing the `__zip_*` host builtins the prelude class delegates
+    /// to. An id is allocated by `__zip_open` and released by `__zip_close`.
+    zips: HashMap<u32, ::zip::ZipArchive<std::fs::File>>,
+    /// Next zip handle id (monotonic; ids are never reused within a run).
+    next_zip: u32,
 }
 
 impl<'m> Vm<'m> {
@@ -3972,6 +3980,17 @@ impl<'m> Vm<'m> {
                         PhpError::Error("Cannot use \"static\" outside class context".to_string())
                     })?;
                     let Some((decl, idx)) = find_const_runtime(&self.classes, start, &name) else {
+                        // An enum case is not a `consts` thunk: materialize its
+                        // interned singleton (the runtime mirror of Op::EnumCase).
+                        if let Some(ci) = self.classes[start]
+                            .enum_cases
+                            .iter()
+                            .position(|c| c.name.as_ref() == name.as_ref())
+                        {
+                            let obj = self.enum_case(start, ci as u32);
+                            self.frames[top].stack.push(Zval::Object(obj));
+                            continue;
+                        }
                         return Err(PhpError::Error(format!(
                             "Undefined constant {}::{}",
                             String::from_utf8_lossy(&self.classes[start].name),
@@ -4005,6 +4024,17 @@ impl<'m> Vm<'m> {
                     } else {
                         let cid = self.resolve_dynamic_class(&classval)?;
                         let Some((decl, idx)) = find_const_runtime(&self.classes, cid, &name) else {
+                            // An enum case is not a `consts` thunk: materialize its
+                            // interned singleton (the runtime mirror of Op::EnumCase).
+                            if let Some(ci) = self.classes[cid]
+                                .enum_cases
+                                .iter()
+                                .position(|c| c.name.as_ref() == name.as_ref())
+                            {
+                                let obj = self.enum_case(cid, ci as u32);
+                                self.frames[top].stack.push(Zval::Object(obj));
+                                continue;
+                            }
                             return Err(PhpError::Error(format!(
                                 "Undefined constant {}::{}",
                                 String::from_utf8_lossy(&self.classes[cid].name),
@@ -4426,7 +4456,7 @@ impl<'m> Vm<'m> {
             let caller = self.frames.len() - 1;
             (self.frames[caller].module.file.clone(), self.cur_line(caller))
         };
-        self.drive_unit(module, Some(origin))
+        self.drive_unit(module, Some(origin), None)
     }
 
     /// Link a freshly-compiled `eval`/`include` unit into the running VM and drive
@@ -4442,6 +4472,7 @@ impl<'m> Vm<'m> {
         &mut self,
         mut module: Module,
         eval_origin: Option<(Box<[u8]>, Line)>,
+        scope_bridge: Option<usize>,
     ) -> Result<Zval, PhpError> {
         // Build the eval-local -> global class-id remap: a name already in the
         // global table dedups to the existing id, a genuinely new user class is
@@ -4486,6 +4517,33 @@ impl<'m> Vm<'m> {
         let baseline = self.frames.len();
         let mut frame = Frame::new(&leaked.main, leaked);
         frame.eval_origin = eval_origin;
+        // PHP's include shares the *including* scope's variable table. Alias the
+        // unit frame's named slots to the includer's cells (promoting the
+        // includer slot to a shared `Zval::Ref` via `make_cell`): reads see the
+        // surrounding variables live, and assignments — including names the file
+        // introduces — land back in the includer, with no copy-back needed even
+        // when the unit throws. Global scope aligns by index (the unit was
+        // lowered seeded on `seed_globals`, so its leading slots mirror the
+        // global frame); a function scope matches by name.
+        if let Some(caller) = scope_bridge {
+            let names = &leaked.main.slot_names;
+            if caller == 0 {
+                let n = names.len().min(self.frames[0].slots.len());
+                for i in 0..n {
+                    frame.slots[i] = Zval::Ref(make_cell(&mut self.frames[0].slots[i]));
+                }
+            } else {
+                for (i, name) in names.iter().enumerate() {
+                    if let Some(cs) =
+                        self.frames[caller].func.slot_names.iter().position(|n| n == name)
+                    {
+                        if let Some(slot) = self.frames[caller].slots.get_mut(cs) {
+                            frame.slots[i] = Zval::Ref(make_cell(slot));
+                        }
+                    }
+                }
+            }
+        }
         self.frames.push(frame);
         let outcome = self.drive_to_return(baseline);
         self.module = saved;
@@ -4641,7 +4699,13 @@ impl<'m> Vm<'m> {
                 return self.include_compile_failed(&key, mode);
             }
         };
-        let ret = self.drive_unit(module, None)?;
+        // PHP scope rule: an included file shares the *including* scope's variable
+        // table — it reads the surrounding variables and the ones it assigns land
+        // back in the includer (global scope and function scope alike). Bridged in
+        // drive_unit by aliasing the unit frame's named slots to the includer's
+        // cells (see `scope_bridge` there).
+        let caller = self.frames.len() - 1;
+        let ret = self.drive_unit(module, None, Some(caller))?;
         // A file with no top-level `return` yields int(1); an explicit return passes
         // through (a literal `return null;` is the accepted edge that also yields 1).
         Ok(if matches!(ret, Zval::Null) { Zval::Long(1) } else { ret })
@@ -6226,6 +6290,161 @@ impl<'m> Vm<'m> {
         })
     }
 
+    /// `__zip_open($path)` (internal, the prelude `ZipArchive::open` backing):
+    /// parse the archive and allocate a handle. Returns `[id, numFiles]` on
+    /// success or the PHP ZipArchive error constant as an int (ER_NOENT = 9 /
+    /// ER_OPEN = 11 / ER_NOZIP = 19 / ER_READ = 5).
+    fn ho_zip_open(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let path = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags);
+        let path = String::from_utf8_lossy(path.as_bytes()).into_owned();
+        let file = match std::fs::File::open(&path) {
+            Ok(f) => f,
+            Err(e) => {
+                let code = if e.kind() == std::io::ErrorKind::NotFound { 9 } else { 11 };
+                return Ok(Zval::Long(code));
+            }
+        };
+        match ::zip::ZipArchive::new(file) {
+            Ok(z) => {
+                let id = self.next_zip;
+                self.next_zip += 1;
+                let n = z.len() as i64;
+                self.zips.insert(id, z);
+                let mut out = PhpArray::new();
+                let _ = out.append(Zval::Long(i64::from(id)));
+                let _ = out.append(Zval::Long(n));
+                Ok(Zval::Array(Rc::new(out)))
+            }
+            Err(::zip::result::ZipError::InvalidArchive(_)) => Ok(Zval::Long(19)),
+            Err(_) => Ok(Zval::Long(5)),
+        }
+    }
+
+    /// `__zip_close($id)`: release the handle. `false` on an unknown/closed one.
+    fn ho_zip_close(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let id = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags) as u32;
+        Ok(Zval::Bool(self.zips.remove(&id).is_some()))
+    }
+
+    /// `__zip_stat_index($id, $index)`: the entry's metadata as PHP's statIndex
+    /// array (`name`/`index`/`crc`/`size`/`mtime`/`comp_size`/`comp_method`/
+    /// `encryption_method`), or `false` out of range. `mtime` is reported as 0
+    /// (declared residue: the dosdate conversion is not modelled).
+    fn ho_zip_stat_index(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let id = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags) as u32;
+        let idx = convert::to_long_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags);
+        let Some(z) = self.zips.get_mut(&id) else { return Ok(Zval::Bool(false)) };
+        if idx < 0 {
+            return Ok(Zval::Bool(false));
+        }
+        let Ok(f) = z.by_index_raw(idx as usize) else { return Ok(Zval::Bool(false)) };
+        let mut out = PhpArray::new();
+        out.insert(Key::from_bytes(b"name"), Zval::Str(PhpStr::new(f.name_raw().to_vec())));
+        out.insert(Key::from_bytes(b"index"), Zval::Long(idx));
+        out.insert(Key::from_bytes(b"crc"), Zval::Long(i64::from(f.crc32())));
+        out.insert(Key::from_bytes(b"size"), Zval::Long(f.size() as i64));
+        out.insert(Key::from_bytes(b"mtime"), Zval::Long(0));
+        out.insert(Key::from_bytes(b"comp_size"), Zval::Long(f.compressed_size() as i64));
+        out.insert(
+            Key::from_bytes(b"comp_method"),
+            Zval::Long(match f.compression() {
+                ::zip::CompressionMethod::Stored => 0,
+                ::zip::CompressionMethod::Deflated => 8,
+                _ => -1,
+            }),
+        );
+        out.insert(Key::from_bytes(b"encryption_method"), Zval::Long(if f.encrypted() { 257 } else { 0 }));
+        Ok(Zval::Array(Rc::new(out)))
+    }
+
+    /// `__zip_get_name_index($id, $index)`: the entry's name, `false` out of range.
+    fn ho_zip_get_name_index(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let id = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags) as u32;
+        let idx = convert::to_long_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags);
+        let Some(z) = self.zips.get_mut(&id) else { return Ok(Zval::Bool(false)) };
+        if idx < 0 {
+            return Ok(Zval::Bool(false));
+        }
+        match z.by_index_raw(idx as usize) {
+            Ok(f) => Ok(Zval::Str(PhpStr::new(f.name_raw().to_vec()))),
+            Err(_) => Ok(Zval::Bool(false)),
+        }
+    }
+
+    /// `__zip_locate_name($id, $name)`: the index of the exact entry name,
+    /// `false` when absent (PHP's default flag-less locateName).
+    fn ho_zip_locate_name(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let id = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags) as u32;
+        let name = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags);
+        let Some(z) = self.zips.get_mut(&id) else { return Ok(Zval::Bool(false)) };
+        for i in 0..z.len() {
+            if let Ok(f) = z.by_index_raw(i) {
+                if f.name_raw() == name.as_bytes() {
+                    return Ok(Zval::Long(i as i64));
+                }
+            }
+        }
+        Ok(Zval::Bool(false))
+    }
+
+    /// `__zip_get_from_index($id, $index)`: the entry's decompressed contents,
+    /// `false` out of range / on a read error.
+    fn ho_zip_get_from_index(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let id = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags) as u32;
+        let idx = convert::to_long_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags);
+        let Some(z) = self.zips.get_mut(&id) else { return Ok(Zval::Bool(false)) };
+        if idx < 0 {
+            return Ok(Zval::Bool(false));
+        }
+        let Ok(mut f) = z.by_index(idx as usize) else { return Ok(Zval::Bool(false)) };
+        let mut buf = Vec::new();
+        match std::io::Read::read_to_end(&mut f, &mut buf) {
+            Ok(_) => Ok(Zval::Str(PhpStr::new(buf))),
+            Err(_) => Ok(Zval::Bool(false)),
+        }
+    }
+
+    /// `__zip_extract_to($id, $dest)`: extract every entry under `$dest`
+    /// (directories created as needed, unix permissions preserved when
+    /// recorded, entries escaping the destination skipped — the zip-slip guard
+    /// libzip applies). `false` on any I/O failure.
+    fn ho_zip_extract_to(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let id = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags) as u32;
+        let dest = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags);
+        let dest = std::path::PathBuf::from(String::from_utf8_lossy(dest.as_bytes()).into_owned());
+        let Some(z) = self.zips.get_mut(&id) else { return Ok(Zval::Bool(false)) };
+        if std::fs::create_dir_all(&dest).is_err() {
+            return Ok(Zval::Bool(false));
+        }
+        for i in 0..z.len() {
+            let Ok(mut f) = z.by_index(i) else { return Ok(Zval::Bool(false)) };
+            // Zip-slip guard: entries with `..`/absolute paths are skipped.
+            let Some(rel) = f.enclosed_name() else { continue };
+            let path = dest.join(rel);
+            if f.is_dir() {
+                if std::fs::create_dir_all(&path).is_err() {
+                    return Ok(Zval::Bool(false));
+                }
+                continue;
+            }
+            if let Some(parent) = path.parent() {
+                if std::fs::create_dir_all(parent).is_err() {
+                    return Ok(Zval::Bool(false));
+                }
+            }
+            let Ok(mut out) = std::fs::File::create(&path) else { return Ok(Zval::Bool(false)) };
+            if std::io::copy(&mut f, &mut out).is_err() {
+                return Ok(Zval::Bool(false));
+            }
+            #[cfg(unix)]
+            if let Some(mode) = f.unix_mode() {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode & 0o777));
+            }
+        }
+        Ok(Zval::Bool(true))
+    }
+
     /// `get_parent_class($object_or_class = null)` (Session B2): the parent class
     /// name, or `false` when there is none. An object or a *resolvable* class-name
     /// string selects the class; an unresolvable string (or other type) is a
@@ -7385,6 +7604,55 @@ impl<'m> Vm<'m> {
             self.gc_note(&old);
         }
         Ok(Zval::Null)
+    }
+
+    /// `__reflect_static_prop_get($class, $prop)`: read a static property
+    /// ignoring visibility — backs `ReflectionProperty::getValue()` on statics.
+    /// A constant default initializes lazily; a not-yet-run thunk default reads
+    /// NULL (declared residue).
+    fn ho_reflect_static_prop_get(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let class = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let prop = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let lc = class.strip_prefix(b"\\").unwrap_or(&class).to_ascii_lowercase();
+        let Some(&cid) = self.class_index.get(&lc) else { return Ok(Zval::Null) };
+        let Some((decl, idx)) = find_static_prop(&self.classes, cid, &prop) else {
+            return Ok(Zval::Null);
+        };
+        let key = (decl, prop);
+        if let Some(cell) = self.static_props.get(&key) {
+            return Ok(cell.borrow().deref_clone());
+        }
+        match &self.classes[decl].static_props[idx].init {
+            StaticInit::Const(c) => {
+                let v = c.to_zval();
+                self.static_props.insert(key, Rc::new(RefCell::new(v.clone())));
+                Ok(v)
+            }
+            StaticInit::Thunk(_) => Ok(Zval::Null),
+        }
+    }
+
+    /// `__reflect_static_prop_set($class, $prop, $value)`: write a static
+    /// property ignoring visibility — backs `ReflectionProperty::setValue` with
+    /// a NULL object (Composer pokes `InstalledVersions::$selfDir`). Returns
+    /// whether the property exists.
+    fn ho_reflect_static_prop_set(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let class = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let prop = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let value = args.get(2).cloned().unwrap_or(Zval::Null).deref_clone();
+        let lc = class.strip_prefix(b"\\").unwrap_or(&class).to_ascii_lowercase();
+        let Some(&cid) = self.class_index.get(&lc) else { return Ok(Zval::Bool(false)) };
+        let Some((decl, _)) = find_static_prop(&self.classes, cid, &prop) else {
+            return Ok(Zval::Bool(false));
+        };
+        let key = (decl, prop);
+        match self.static_props.get(&key) {
+            Some(cell) => *cell.borrow_mut() = value,
+            None => {
+                self.static_props.insert(key, Rc::new(RefCell::new(value)));
+            }
+        }
+        Ok(Zval::Bool(true))
     }
 
 
@@ -11612,6 +11880,15 @@ host_builtins! {
     b"spl_object_hash" => vm.ho_spl_object_hash(args),
     b"__weak_create" => vm.ho_weak_create(args),
     b"__weak_get" => vm.ho_weak_get(args),
+    b"__reflect_static_prop_get" => vm.ho_reflect_static_prop_get(args),
+    b"__reflect_static_prop_set" => vm.ho_reflect_static_prop_set(args),
+    b"__zip_open" => vm.ho_zip_open(args),
+    b"__zip_close" => vm.ho_zip_close(args),
+    b"__zip_stat_index" => vm.ho_zip_stat_index(args),
+    b"__zip_get_name_index" => vm.ho_zip_get_name_index(args),
+    b"__zip_locate_name" => vm.ho_zip_locate_name(args),
+    b"__zip_get_from_index" => vm.ho_zip_get_from_index(args),
+    b"__zip_extract_to" => vm.ho_zip_extract_to(args),
     b"get_parent_class" => vm.ho_get_parent_class(args),
     b"class_parents" => vm.ho_class_parents(args),
     b"class_implements" => vm.ho_class_implements(args),

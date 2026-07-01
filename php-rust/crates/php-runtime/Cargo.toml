@@ -16,3 +16,4 @@ regex = "1"
 fancy-regex = "0.14"
 onig = "6.5.3"
 getrandom = "0.2"
+zip = { version = "2", default-features = false, features = ["deflate"] }

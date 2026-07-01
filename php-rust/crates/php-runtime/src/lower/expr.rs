@@ -931,34 +931,92 @@ impl<'f> Lowerer<'f> {
         }
     }
 
-    /// Lower a first-class callable `name(...)` (step 18-6, D-18.10). Only the
-    /// plain function form with the `(...)` placeholder is supported; method /
-    /// static-method first-class callables and partial applications with real
-    /// placeholders stay unsupported (OOP / scope-out).
+    /// Lower a first-class callable `f(...)` (step 18-6, D-18.10) or its method
+    /// forms (PHP 8.1): `$obj->m(...)` desugars to
+    /// `Closure::fromCallable([$obj, 'm'])` and `C::m(...)` to
+    /// `Closure::fromCallable('C::m')` — the exact runtime path built for
+    /// method/static callables (bind-at-creation, visibility bypassed at
+    /// invoke). Dynamic selectors / dynamic classes and real partial
+    /// applications stay unsupported.
     fn lower_partial_application(
         &mut self,
         pa: &PartialApplication,
         line: Line,
     ) -> Result<ExprKind, LowerError> {
-        let func = match pa {
-            PartialApplication::Function(f) if f.argument_list.is_first_class_callable() => f,
-            _ => {
-                return Err(LowerError::Unsupported {
-                    what: "partial application",
+        match pa {
+            PartialApplication::Function(f) if f.argument_list.is_first_class_callable() => {
+                let name = match f.function {
+                    Expression::Identifier(id) => self.resolve_fn_name(id),
+                    _ => {
+                        return Err(LowerError::Unsupported {
+                            what: "dynamic first-class callable",
+                            line,
+                        })
+                    }
+                };
+                Ok(ExprKind::FirstClassCallable(name))
+            }
+            PartialApplication::Method(m) if m.argument_list.is_first_class_callable() => {
+                let object = self.lower_expr(m.object)?;
+                let name = match self.member_sel(&m.method, line)? {
+                    MemberSel::Static(n) => n,
+                    MemberSel::Dynamic(_) => {
+                        return Err(LowerError::Unsupported {
+                            what: "dynamic first-class callable",
+                            line,
+                        })
+                    }
+                };
+                let arr = Expr {
                     line,
+                    kind: ExprKind::Array(vec![
+                        ArrayElem { key: None, value: object, by_ref: false },
+                        ArrayElem {
+                            key: None,
+                            value: Expr { line, kind: ExprKind::Str(name.clone()) },
+                            by_ref: false,
+                        },
+                    ]),
+                };
+                Ok(ExprKind::StaticCall {
+                    class: ClassRef::Named(Box::from(&b"Closure"[..])),
+                    method: Box::from(&b"fromCallable"[..]),
+                    args: vec![arr],
+                    named: vec![],
                 })
             }
-        };
-        let name = match func.function {
-            Expression::Identifier(id) => self.resolve_fn_name(id),
-            _ => {
-                return Err(LowerError::Unsupported {
-                    what: "dynamic first-class callable",
-                    line,
+            PartialApplication::StaticMethod(s) if s.argument_list.is_first_class_callable() => {
+                let class = self.class_ref_of(s.class, line)?;
+                let name = match self.member_sel(&s.method, line)? {
+                    MemberSel::Static(n) => n,
+                    MemberSel::Dynamic(_) => {
+                        return Err(LowerError::Unsupported {
+                            what: "dynamic first-class callable",
+                            line,
+                        })
+                    }
+                };
+                let ClassRef::Named(cn) = class else {
+                    return Err(LowerError::Unsupported {
+                        what: "dynamic first-class callable",
+                        line,
+                    });
+                };
+                let mut qualified = cn.to_vec();
+                qualified.extend_from_slice(b"::");
+                qualified.extend_from_slice(&name);
+                Ok(ExprKind::StaticCall {
+                    class: ClassRef::Named(Box::from(&b"Closure"[..])),
+                    method: Box::from(&b"fromCallable"[..]),
+                    args: vec![Expr { line, kind: ExprKind::Str(qualified.into()) }],
+                    named: vec![],
                 })
             }
-        };
-        Ok(ExprKind::FirstClassCallable(name))
+            _ => Err(LowerError::Unsupported {
+                what: "partial application",
+                line,
+            }),
+        }
     }
 
     /// Lower a dynamic call's argument list: plain positional arguments plus

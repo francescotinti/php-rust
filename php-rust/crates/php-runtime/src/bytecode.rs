@@ -944,6 +944,11 @@ pub struct Func {
     /// compile time — `$obj->m(name: …)`, Session A — where the compile-time
     /// layout ([`crate::compile`]'s `emit_named_layout`) can't be built.
     pub param_names: Box<[Box<[u8]>]>,
+    /// Name of *every* named local (length `n_slots`, slot-indexed; temps are
+    /// past this range). Carried so an `include` executed inside this function
+    /// can bridge its variable scope by name (PHP: the included file shares the
+    /// caller's symbol table). Empty for synthetic thunks.
+    pub slot_names: Box<[Box<[u8]>]>,
     /// Whether each formal parameter is *required* (no default and non-variadic),
     /// parallel to `param_names`. The run-time named binder validates that every
     /// required parameter received an argument (raising `ArgumentCountError`).
