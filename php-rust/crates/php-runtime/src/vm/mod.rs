@@ -9184,6 +9184,8 @@ impl<'m> Vm<'m> {
     ) -> Result<Zval, PhpError> {
         match name {
             b"usort" => self.ho_usort(slot, rest),
+            b"uasort" => self.ho_uasort(slot, rest),
+            b"uksort" => self.ho_uksort(slot, rest),
             b"array_walk" => self.ho_array_walk(slot, rest),
             b"array_walk_recursive" => self.ho_array_walk_recursive(slot, rest),
             b"reset" => self.ho_array_pointer(slot, PtrOp::Reset),
@@ -9420,6 +9422,110 @@ impl<'m> Vm<'m> {
         let (mut i, mut j) = (0, 0);
         while i < left.len() && j < right.len() {
             if self.compare_with_callback(cmp, &left[i], &right[j])? <= 0 {
+                merged.push(left[i].clone());
+                i += 1;
+            } else {
+                merged.push(right[j].clone());
+                j += 1;
+            }
+        }
+        merged.extend_from_slice(&left[i..]);
+        merged.extend_from_slice(&right[j..]);
+        Ok(merged)
+    }
+
+    /// `uasort(&$array, $callback)`: sort by the value comparator like `usort`, but
+    /// **preserve** each element's key/value association (no re-indexing). Returns
+    /// `true`. Mirrors `usort`'s slot handling and stable merge sort.
+    fn ho_uasort(&mut self, slot: Slot, rest: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(cmp) = rest.into_iter().next() else {
+            return Err(PhpError::ArgumentCountError(
+                "uasort() expects exactly 2 arguments, 1 given".to_string(),
+            ));
+        };
+        let cmp = cmp.deref_clone();
+        let top = self.frames.len() - 1;
+        // Each item carries (compare-value, key, value); `uasort` compares the value.
+        let pairs: Vec<(Zval, Key, Zval)> =
+            match self.frames[top].slots[slot as usize].deref_clone() {
+                Zval::Array(a) => a
+                    .iter()
+                    .map(|(k, v)| {
+                        let val = v.deref_clone();
+                        (val.clone(), k.clone(), val)
+                    })
+                    .collect(),
+                other => {
+                    return Err(PhpError::TypeError(format!(
+                        "uasort(): Argument #1 ($array) must be of type array, {} given",
+                        other.type_name_for_error()
+                    )))
+                }
+            };
+        let sorted = self.vm_merge_sort_pairs(&cmp, pairs)?;
+        let mut out = PhpArray::new();
+        for (_, k, v) in sorted {
+            out.insert(k, v);
+        }
+        let top = self.frames.len() - 1;
+        self.frames[top].slots[slot as usize] = Zval::Array(Rc::new(out));
+        Ok(Zval::Bool(true))
+    }
+
+    /// `uksort(&$array, $callback)`: sort by the **key** comparator, preserving each
+    /// key/value association. The comparator receives the keys (int keys as int,
+    /// string keys as string). Returns `true`.
+    fn ho_uksort(&mut self, slot: Slot, rest: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(cmp) = rest.into_iter().next() else {
+            return Err(PhpError::ArgumentCountError(
+                "uksort() expects exactly 2 arguments, 1 given".to_string(),
+            ));
+        };
+        let cmp = cmp.deref_clone();
+        let top = self.frames.len() - 1;
+        // Compare the key (materialised as a Zval), keep key and value together.
+        let pairs: Vec<(Zval, Key, Zval)> =
+            match self.frames[top].slots[slot as usize].deref_clone() {
+                Zval::Array(a) => a
+                    .iter()
+                    .map(|(k, v)| (key_to_zval(k), k.clone(), v.deref_clone()))
+                    .collect(),
+                other => {
+                    return Err(PhpError::TypeError(format!(
+                        "uksort(): Argument #1 ($array) must be of type array, {} given",
+                        other.type_name_for_error()
+                    )))
+                }
+            };
+        let sorted = self.vm_merge_sort_pairs(&cmp, pairs)?;
+        let mut out = PhpArray::new();
+        for (_, k, v) in sorted {
+            out.insert(k, v);
+        }
+        let top = self.frames.len() - 1;
+        self.frames[top].slots[slot as usize] = Zval::Array(Rc::new(out));
+        Ok(Zval::Bool(true))
+    }
+
+    /// Stable merge sort of `(compare-value, key, value)` items by the PHP
+    /// comparator applied to the compare-value — the key-preserving engine behind
+    /// [`Self::ho_uasort`] / [`Self::ho_uksort`], mirroring [`Self::vm_merge_sort_with`].
+    fn vm_merge_sort_pairs(
+        &mut self,
+        cmp: &Zval,
+        mut items: Vec<(Zval, Key, Zval)>,
+    ) -> Result<Vec<(Zval, Key, Zval)>, PhpError> {
+        let n = items.len();
+        if n <= 1 {
+            return Ok(items);
+        }
+        let right = items.split_off(n / 2);
+        let left = self.vm_merge_sort_pairs(cmp, items)?;
+        let right = self.vm_merge_sort_pairs(cmp, right)?;
+        let mut merged = Vec::with_capacity(n);
+        let (mut i, mut j) = (0, 0);
+        while i < left.len() && j < right.len() {
+            if self.compare_with_callback(cmp, &left[i].0, &right[j].0)? <= 0 {
                 merged.push(left[i].clone());
                 i += 1;
             } else {
@@ -11375,6 +11481,8 @@ pub(crate) fn host_builtin_scanf(name: &[u8]) -> Option<&'static [u8]> {
 pub(crate) fn host_builtin_ref_first(name: &[u8]) -> Option<&'static [u8]> {
     const HOST_REF: &[&[u8]] = &[
         b"usort",
+        b"uasort",
+        b"uksort",
         b"array_walk",
         b"array_walk_recursive",
         // Array internal-pointer family (Session: array-pointer). Each takes the
