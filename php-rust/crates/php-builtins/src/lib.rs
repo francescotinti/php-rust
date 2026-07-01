@@ -512,7 +512,13 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
             // the upgraded object, or NULL once it has been collected. The backing
             // `__h` property is the internal weak handle.
             if obj.class_name.as_bytes() == b"WeakReference" {
-                let inner = obj.props.get(b"__h").cloned().unwrap_or(Zval::Null);
+                // `__h` is private → stored under its mangled key.
+                let inner = obj
+                    .props
+                    .get(php_types::mangle_prop_key(b"WeakReference", b"__h").as_slice())
+                    .or_else(|| obj.props.get(b"__h"))
+                    .cloned()
+                    .unwrap_or(Zval::Null);
                 out.extend_from_slice(
                     format!("object(WeakReference)#{} (1) {{\n", obj.id).as_bytes(),
                 );
@@ -549,7 +555,12 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
             // handler). The backing `__entries` maps spl_object_id => [weak, value].
             if obj.class_name.as_bytes() == b"WeakMap" {
                 let mut live: Vec<(Zval, Zval)> = Vec::new();
-                if let Some(Zval::Array(a)) = obj.props.get(b"__entries") {
+                // `__entries` is private → stored under its mangled key.
+                if let Some(Zval::Array(a)) = obj
+                    .props
+                    .get(php_types::mangle_prop_key(b"WeakMap", b"__entries").as_slice())
+                    .or_else(|| obj.props.get(b"__entries"))
+                {
                     for (_, entry) in a.iter() {
                         if let Zval::Array(pair) = entry {
                             let mut it = pair.iter().map(|(_, v)| v.clone());
@@ -645,7 +656,9 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
                 // An uninitialized typed property renders as `uninitialized(type)`.
                 if matches!(val, Zval::Undef) {
                     out.extend_from_slice(b"uninitialized(");
-                    out.extend_from_slice(obj.info.type_of(disp).unwrap_or(b"mixed"));
+                    // Type displays are keyed by the *storage* key (mangled for a
+                    // private); fall back to the display name for plain slots.
+                    out.extend_from_slice(obj.info.type_of(k).or_else(|| obj.info.type_of(disp)).unwrap_or(b"mixed"));
                     out.extend_from_slice(b")\n");
                 } else {
                     dump(out, val, indent + 2, seen);

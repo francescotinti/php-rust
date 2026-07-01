@@ -2393,7 +2393,11 @@ impl<'m> Vm<'m> {
                                 let v = o.borrow().props.get(&keyname).cloned();
                                 if let Some(v) = v {
                                     if !matches!(v, Zval::Undef) {
-                                        break Some((Zval::Str(PhpStr::new(keyname.to_vec())), v.deref_clone()));
+                                        // Expose the source-level name, not a mangled key.
+                                        break Some((
+                                            Zval::Str(PhpStr::new(php_types::prop_display_name(&keyname).to_vec())),
+                                            v.deref_clone(),
+                                        ));
                                     }
                                 }
                             }
@@ -3416,24 +3420,35 @@ impl<'m> Vm<'m> {
                         check_prop_access(&self.classes, cur, o.borrow().class_id as usize, &name)?;
                         let ocid = o.borrow().class_id as usize;
                         // Storage slot (mangled for an accessible private); per-instance
-                        // state (props, readonly tracking) is keyed by it.
-                        key = self.prop_storage_key(ocid, &name, cur);
+                        // state (props, readonly tracking) is keyed by it. `Denied`
+                        // already errored above, so the write is either a declared
+                        // slot or a dynamic creation — readonly / typed enforcement
+                        // applies only to the former (a parent's private reached from
+                        // a child scope is a *dynamic* write, untyped and unguarded).
+                        let access = resolve_prop_access(&self.classes, ocid, &name, cur);
+                        let declared_slot = matches!(access, PropAccess::Slot(_));
+                        key = match access {
+                            PropAccess::Slot(k) => k,
+                            _ => name.to_vec(),
+                        };
                         // Readonly write-once enforcement (after the visibility check,
                         // so a private/protected readonly reports the access error
                         // first, matching PHP). A permitted first initialisation is
                         // recorded so any later write fatals.
-                        if let Some(decl) = prop_readonly_decl(&self.classes, ocid, &name) {
-                            if o.borrow().readonly_clone_writable(&key) {
-                                // Permitted re-initialisation during `__clone` (8.3).
-                                let mut ob = o.borrow_mut();
-                                ob.consume_clone_writable(&key);
-                                ob.mark_readonly_init(&key);
-                            } else {
-                                let inited = o.borrow().is_readonly_init(&key);
-                                if let Some(err) = readonly_write_error(&self.classes, cur, decl, &name, inited) {
-                                    return Err(err);
+                        if declared_slot {
+                            if let Some(decl) = prop_readonly_decl(&self.classes, ocid, &name) {
+                                if o.borrow().readonly_clone_writable(&key) {
+                                    // Permitted re-initialisation during `__clone` (8.3).
+                                    let mut ob = o.borrow_mut();
+                                    ob.consume_clone_writable(&key);
+                                    ob.mark_readonly_init(&key);
+                                } else {
+                                    let inited = o.borrow().is_readonly_init(&key);
+                                    if let Some(err) = readonly_write_error(&self.classes, cur, decl, &name, inited) {
+                                        return Err(err);
+                                    }
+                                    o.borrow_mut().mark_readonly_init(&key);
                                 }
-                                o.borrow_mut().mark_readonly_init(&key);
                             }
                         }
                         // PHP 8.2: creating an *undeclared* property on a class that
@@ -3441,9 +3456,9 @@ impl<'m> Vm<'m> {
                         // property is still created). `__set`/hooks already
                         // short-circuited above. A *declared* property that was
                         // `unset` is absent from the store yet is not a dynamic
-                        // creation when re-assigned, so check the class layout too.
-                        if !o.borrow().props.contains(&key)
-                            && prop_vis_decl(&self.classes, ocid, &name).is_none()
+                        // creation when re-assigned — `declared_slot` covers it.
+                        if !declared_slot
+                            && !o.borrow().props.contains(&key)
                             && !self.allows_dynamic_props(ocid)
                         {
                             let cls = String::from_utf8_lossy(&self.classes[ocid].name).into_owned();
@@ -3455,7 +3470,9 @@ impl<'m> Vm<'m> {
                         // Typed-property write enforcement: coerce the value to the
                         // property's declared type (or TypeError). The assignment
                         // expression yields the coerced value.
-                        value = self.coerce_typed_prop_write(ocid, &name, value)?;
+                        if declared_slot {
+                            value = self.coerce_typed_prop_write(ocid, &name, value)?;
+                        }
                     }
                     if let Some(old) = write_property(&target, &key, value.clone())? {
                         self.gc_note(&old);
@@ -7116,7 +7133,9 @@ impl<'m> Vm<'m> {
             let key = raw.strip_prefix(b"\\").unwrap_or(&raw).to_ascii_lowercase();
             if let Some(&cid) = self.class_index.get(&key) {
                 for (n, _) in &self.classes[cid].prop_defaults {
-                    let _ = a.append(Zval::Str(PhpStr::new(n.to_vec())));
+                    // Slots are storage-keyed (mangled for privates); reflection
+                    // speaks source-level names.
+                    let _ = a.append(Zval::Str(PhpStr::new(php_types::prop_display_name(n).to_vec())));
                 }
             }
         }
@@ -7663,19 +7682,22 @@ impl<'m> Vm<'m> {
             Ok(c) => c,
             Err(msg) => return Ok(Zval::Str(PhpStr::new(msg.into_bytes()))),
         };
+        // Reflection speaks names; the slot (defaults, uninit set, lazy set) is
+        // storage-keyed — mangled for a private.
+        let key = self.prop_decl_storage_key(cid, &prop);
         // The property's declared default: its const, but a typed property with no
         // default stays uninitialized (`Undef`).
         let cc = self.classes[cid];
-        let default = if cc.uninit_props.iter().any(|n| n.as_ref() == prop.as_slice()) {
+        let default = if cc.uninit_props.iter().any(|n| n.as_ref() == key.as_slice()) {
             Zval::Undef
         } else {
             cc.prop_defaults
                 .iter()
-                .find(|(n, _)| n.as_ref() == prop.as_slice())
+                .find(|(n, _)| n.as_ref() == key.as_slice())
                 .map(|(_, c)| c.to_zval())
                 .unwrap_or(Zval::Null)
         };
-        self.lazy_materialize(&obj, &prop, default);
+        self.lazy_materialize(&obj, &key, default);
         Ok(Zval::Null)
     }
 
@@ -7690,11 +7712,13 @@ impl<'m> Vm<'m> {
         let class = args.get(1).cloned().unwrap_or(Zval::Null);
         let prop = convert::to_zstr_cast(args.get(2).unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
         let value = args.get(3).cloned().unwrap_or(Zval::Null);
-        match self.lazy_prop_target(&class, &prop, "setRawValueWithoutLazyInitialization") {
-            Ok(_) => {}
+        let cid = match self.lazy_prop_target(&class, &prop, "setRawValueWithoutLazyInitialization") {
+            Ok(c) => c,
             Err(msg) => return Ok(Zval::Str(PhpStr::new(msg.into_bytes()))),
-        }
-        self.lazy_materialize(&obj, &prop, value);
+        };
+        // Reflection speaks names; the slot is storage-keyed (mangled private).
+        let key = self.prop_decl_storage_key(cid, &prop);
+        self.lazy_materialize(&obj, &key, value);
         Ok(Zval::Null)
     }
 
@@ -7901,19 +7925,25 @@ impl<'m> Vm<'m> {
         let b = o.borrow();
         let mut keys: Vec<Box<[u8]>> = Vec::new();
         for name in &order {
-            let visible = match prop_vis_decl(&self.classes, cid, name) {
-                Some((vis, decl)) => visible_from(&self.classes, scope, vis, decl),
-                None => true,
+            // The scope's view of the declared name (see `resolve_prop_access`):
+            // the resolved storage key, a plain dynamic slot, or skipped. The list
+            // holds *storage* keys — `IterNext` reads live by key and exposes the
+            // unmangled display name.
+            let key: Box<[u8]> = match resolve_prop_access(&self.classes, cid, name, scope) {
+                PropAccess::Slot(k) => k.into(),
+                PropAccess::Dynamic => name.clone(),
+                PropAccess::Denied { .. } => continue,
             };
-            // Skip a property the scope can't see and one that is uninitialised
-            // (typed-no-default `Undef`); both are absent from a foreach view.
-            if visible && !matches!(b.props.get(name), None | Some(Zval::Undef)) {
-                keys.push(name.clone());
+            // Skip a slot that is absent or uninitialised (typed-no-default
+            // `Undef`); both are absent from a foreach view.
+            if !matches!(b.props.get(&key), None | Some(Zval::Undef)) {
+                keys.push(key);
             }
         }
         // Dynamic (undeclared) properties, always public, in insertion order.
+        // Mangled (private) slots are never dynamic.
         for (name, _) in b.props.iter() {
-            if !declared.contains(name) {
+            if !declared.contains(name) && !name.starts_with(b"\0") {
                 keys.push(name.to_vec().into_boxed_slice());
             }
         }
@@ -7963,35 +7993,37 @@ impl<'m> Vm<'m> {
         }
         let mut arr = PhpArray::new();
         for name in &order {
-            let visible = match prop_vis_decl(&self.classes, cid, name) {
-                Some((vis, decl)) => visible_from(&self.classes, cur, vis, decl),
-                None => true,
+            // The scope's view of the declared name: its resolved slot, a plain
+            // dynamic slot (a parent's private is invisible here), or denied.
+            let slot = match resolve_prop_access(&self.classes, cid, name, cur) {
+                PropAccess::Slot(k) => Some(k),
+                PropAccess::Dynamic => None,
+                PropAccess::Denied { .. } => continue,
             };
-            if !visible {
-                continue;
-            }
             // A hooked property (backed or virtual) surfaces through its `get`
             // hook; a plain property reads from the instance store. An
             // uninitialised typed property (neither hooked nor stored) is omitted.
-            if let Some(func) = self.prop_hook(cid, name, false) {
+            if let Some(func) = slot.is_some().then(|| self.prop_hook(cid, name, false)).flatten() {
                 let baseline = self.frames.len();
                 self.push_hook(func, Zval::Object(o.clone()), oid, name, None);
                 let val = self.drive_to_return(baseline)?;
                 arr.insert(Key::from_bytes(name), val);
-            } else if let Some(val) = o.borrow().props.get(name).cloned() {
-                // An uninitialized typed property (`Undef`) is omitted.
+            } else if let Some(val) = o.borrow().props.get(slot.as_deref().unwrap_or(name)).cloned() {
+                // An uninitialized typed property (`Undef`) is omitted; the entry
+                // surfaces under its source-level name, whatever the storage key.
                 if !matches!(val, Zval::Undef) {
                     arr.insert(Key::from_bytes(name), val);
                 }
             }
         }
         // Dynamic (undeclared) properties keep instance order, after the declared
-        // set; they are always public.
+        // set; they are always public. Mangled (private) slots are not dynamic —
+        // they were either surfaced above or are invisible to this scope.
         let dynamic: Vec<(Box<[u8]>, Zval)> = {
             let b = o.borrow();
             b.props
                 .iter()
-                .filter(|(name, _)| !declared.contains(*name))
+                .filter(|(name, _)| !declared.contains(*name) && !name.starts_with(b"\0"))
                 .map(|(name, val)| (name.to_vec().into_boxed_slice(), val.clone()))
                 .collect()
         };
@@ -8072,7 +8104,13 @@ impl<'m> Vm<'m> {
                 }
                 // A *virtual* hooked property has no backing storage (absent from the
                 // instance), so it is excluded — only backed properties are listed.
-                if let Some((_, val)) = defaults.iter().find(|(n, _)| n == pname) {
+                // The default lives under the declaration's *storage* key (mangled
+                // for a private); it surfaces under the source-level name.
+                let skey: Vec<u8> = match vis {
+                    Visibility::Private => php_types::mangle_prop_key(&self.classes[ci].name, pname),
+                    _ => pname.to_vec(),
+                };
+                if let Some((_, val)) = defaults.iter().find(|(n, _)| n.as_ref() == skey.as_slice()) {
                     arr.insert(Key::from_bytes(pname), val.clone());
                 }
             }
@@ -10496,7 +10534,8 @@ impl<'m> Vm<'m> {
         let cc = self.classes[cid];
         let mut props = Props::new();
         for (name, _c) in &cc.prop_defaults {
-            if prop_type_decl(&self.classes, cid, name).is_some() {
+            // `prop_defaults` is storage-keyed; the metadata table speaks names.
+            if prop_type_decl(&self.classes, cid, php_types::prop_display_name(name)).is_some() {
                 props.set(name, Zval::Undef);
             }
         }
@@ -10659,9 +10698,11 @@ impl<'m> Vm<'m> {
                 return Ok(());
             }
             // A declared eligible property that is no longer in the still-lazy set
-            // has been materialized: reading/writing it must not initialize.
+            // has been materialized: reading/writing it must not initialize. The
+            // set holds *storage* keys (mangled privates); `name` is source-level.
             if let Some(set) = self.lazy_props.get(&oid) {
-                let still_lazy = set.iter().any(|n| n.as_ref() == name);
+                let key = self.prop_decl_storage_key(cid, name);
+                let still_lazy = set.iter().any(|n| n.as_ref() == key.as_slice());
                 if !still_lazy && self.is_lazy_eligible_prop(cid, name) {
                     return Ok(());
                 }
@@ -10673,9 +10714,10 @@ impl<'m> Vm<'m> {
 
     /// Whether `name` is a property eligible for per-property lazy control on
     /// class `cid`: a declared, non-static, non-virtual instance property (those
-    /// are exactly the entries of `prop_defaults`).
+    /// are exactly the entries of `prop_defaults`, keyed by *storage* key).
     fn is_lazy_eligible_prop(&self, cid: ClassId, name: &[u8]) -> bool {
-        self.classes[cid].prop_defaults.iter().any(|(n, _)| n.as_ref() == name)
+        let key = self.prop_decl_storage_key(cid, name);
+        self.classes[cid].prop_defaults.iter().any(|(n, _)| n.as_ref() == key.as_slice())
     }
 
     /// Return the interned singleton object for enum `class`'s `case`-th case,
@@ -12250,11 +12292,23 @@ fn apply_cast(kind: CastKind, a: &Zval, d: &mut Diags) -> Zval {
         CastKind::Float => Zval::Double(convert::to_double(a)),
         CastKind::String => Zval::Str(convert::to_zstr_cast(a, d)),
         CastKind::Bool => Zval::Bool(convert::to_bool(a, d)),
-        // `(array)`: an array passes through, null/unset → empty, a scalar wraps
-        // into a single `[0 => v]` element (mirrors `eval::array_cast`).
+        // `(array)`: an array passes through, null/unset → empty, an object's
+        // stored properties copy over verbatim — *raw* storage keys, so a private
+        // surfaces as its mangled `\0Class\0name`, exactly PHP — and a scalar
+        // wraps into a single `[0 => v]` element (mirrors `eval::array_cast`).
         CastKind::Array => match a.deref_clone() {
             arr @ Zval::Array(_) => arr,
             Zval::Null | Zval::Undef => Zval::Array(Rc::new(PhpArray::new())),
+            Zval::Object(o) => {
+                let mut arr = PhpArray::new();
+                for (key, val) in o.borrow().props.iter() {
+                    // An uninitialized typed property is absent from the cast.
+                    if !matches!(val, Zval::Undef) {
+                        arr.insert(Key::from_bytes(key), val.deref_clone());
+                    }
+                }
+                Zval::Array(Rc::new(arr))
+            }
             scalar => {
                 let mut arr = PhpArray::new();
                 arr.insert(Key::Int(0), scalar);

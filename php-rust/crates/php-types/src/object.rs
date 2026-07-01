@@ -118,6 +118,31 @@ pub fn unmangle_prop_key<'a>(key: &'a [u8], info: &ObjectInfo) -> (&'a [u8], Pro
     (key, info.vis_of(key))
 }
 
+/// Build the *mangled* storage key of a private property: `\0Class\0prop`
+/// (Zend's zend_mangle_property_name), the key its slot lives under in
+/// [`Props`] so a parent's private and a subclass's same-name redeclaration
+/// coexist. The inverse of [`unmangle_prop_key`].
+pub fn mangle_prop_key(class: &[u8], prop: &[u8]) -> Vec<u8> {
+    let mut k = Vec::with_capacity(class.len() + prop.len() + 2);
+    k.push(0);
+    k.extend_from_slice(class);
+    k.push(0);
+    k.extend_from_slice(prop);
+    k
+}
+
+/// The display name of a stored property key: the `prop` part of a mangled
+/// `\0Class\0prop` / `\0*\0prop`, the key itself when plain. For diagnostics
+/// that must never leak NUL-mangled storage keys.
+pub fn prop_display_name(key: &[u8]) -> &[u8] {
+    if let Some(rest) = key.strip_prefix(b"\0") {
+        if let Some(sep) = rest.iter().position(|&b| b == 0) {
+            return &rest[sep + 1..];
+        }
+    }
+    key
+}
+
 /// Visibility of a declared property as rendered by `var_dump` / `print_r`
 /// (step 19-7). A dynamic (undeclared) property is treated as `Public`.
 #[derive(Debug, Clone, PartialEq)]

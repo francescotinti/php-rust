@@ -357,7 +357,11 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
     // inherited position but taking the most-derived default / visibility. Build
     // the visibility shape here; resolve defaults (const vs init-thunk) below.
     let mut ok = true;
-    let mut flat_defaults: Vec<(Box<[u8]>, Option<&Expr>, Option<&crate::hir::TypeHint>)> = Vec::new();
+    // Keyed by *storage key*: the plain name, or the mangled `\0Class\0name` for a
+    // private (Stage C) — so a parent's private and a subclass's same-name
+    // redeclaration occupy two distinct slots. The source-level name rides along
+    // for the prop-init thunk (whose `PropSet` ops carry names, not keys).
+    let mut flat_defaults: Vec<(Box<[u8]>, Box<[u8]>, Option<&Expr>, Option<&crate::hir::TypeHint>)> = Vec::new();
     let mut vis_entries: Vec<(Box<[u8]>, PropVis)> = Vec::new();
     // Property hooks (step 50), flattened parent-first like the layout: a
     // most-derived `get`/`set` overrides the inherited one. A *virtual* hooked
@@ -371,6 +375,12 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
     for &x in &chain {
         let cname = PhpStr::new(ctx.classes[x].name.to_vec());
         for p in &ctx.classes[x].props {
+            // The slot a private lives under is mangled with its declaring class.
+            let skey: Box<[u8]> = if p.visibility == Visibility::Private {
+                php_types::mangle_prop_key(&ctx.classes[x].name, &p.name).into()
+            } else {
+                p.name.clone()
+            };
             if p.get_hook.is_some() || p.set_hook.is_some() {
                 let inherited_backed = backed_seen.contains(p.name.as_ref());
                 let entry = prop_hooks.entry(p.name.clone()).or_insert(PropHooks {
@@ -399,27 +409,28 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
             // instance layout (not allocated, not dumped). Backed ones stay.
             let virtual_prop = (p.get_hook.is_some() || p.set_hook.is_some()) && !p.backed;
             if !virtual_prop {
-                match flat_defaults.iter_mut().find(|(k, _, _)| k.as_ref() == p.name.as_ref()) {
+                match flat_defaults.iter_mut().find(|(k, _, _, _)| k.as_ref() == skey.as_ref()) {
                     Some(e) => {
-                        e.1 = p.default.as_ref();
-                        e.2 = p.hint.as_ref();
+                        e.2 = p.default.as_ref();
+                        e.3 = p.hint.as_ref();
                     }
-                    None => flat_defaults.push((p.name.clone(), p.default.as_ref(), p.hint.as_ref())),
+                    None => flat_defaults.push((skey.clone(), p.name.clone(), p.default.as_ref(), p.hint.as_ref())),
                 }
                 let vis = match p.visibility {
                     Visibility::Public => PropVis::Public,
                     Visibility::Protected => PropVis::Protected,
                     Visibility::Private => PropVis::Private(Rc::clone(&cname)),
                 };
-                match vis_entries.iter_mut().find(|(k, _)| k.as_ref() == p.name.as_ref()) {
+                match vis_entries.iter_mut().find(|(k, _)| k.as_ref() == skey.as_ref()) {
                     Some(e) => e.1 = vis,
-                    None => vis_entries.push((p.name.clone(), vis)),
+                    None => vis_entries.push((skey.clone(), vis)),
                 }
             } else {
                 // A virtual property that shadowed an inherited backed one must
-                // also drop the inherited storage entry.
-                flat_defaults.retain(|(k, _, _)| k.as_ref() != p.name.as_ref());
-                vis_entries.retain(|(k, _)| k.as_ref() != p.name.as_ref());
+                // also drop the inherited storage entry (the plain slot; a parent's
+                // private slot is not shadowable and stays).
+                flat_defaults.retain(|(k, _, _, _)| k.as_ref() != skey.as_ref() && k.as_ref() != p.name.as_ref());
+                vis_entries.retain(|(k, _)| k.as_ref() != skey.as_ref() && k.as_ref() != p.name.as_ref());
             }
         }
     }
@@ -434,22 +445,26 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
     let mut uninit_props: Vec<Box<[u8]>> = Vec::new();
     // Type displays for the typed properties, for the uninitialized rendering.
     let mut prop_type_displays: Vec<(Box<[u8]>, Box<[u8]>)> = Vec::new();
-    for (name, default, hint) in &flat_defaults {
+    for (skey, name, default, hint) in &flat_defaults {
         if let Some(h) = hint {
-            prop_type_displays.push((name.clone(), h.display_name().into_bytes().into()));
+            prop_type_displays.push((skey.clone(), h.display_name().into_bytes().into()));
         }
         match default {
             None => {
-                prop_defaults.push((name.clone(), Const::Null));
+                prop_defaults.push((skey.clone(), Const::Null));
                 // Typed-without-default → uninitialized; untyped → NULL.
                 if hint.is_some() {
-                    uninit_props.push(name.clone());
+                    uninit_props.push(skey.clone());
                 }
             }
             Some(e) => match const_eval(e) {
-                Some(c) => prop_defaults.push((name.clone(), c)),
+                Some(c) => prop_defaults.push((skey.clone(), c)),
                 None => {
-                    prop_defaults.push((name.clone(), Const::Null));
+                    prop_defaults.push((skey.clone(), Const::Null));
+                    // The thunk writes by *name*; PropSet resolves the declared
+                    // slot at run time (prop_decl_storage_key). Known residue: of
+                    // two same-name private non-const defaults (dual slot), only
+                    // the most-derived one is materialised.
                     init_items.push((name.clone(), e));
                 }
             },
@@ -621,7 +636,11 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
                     type_hint: p.hint.clone(),
                     reflect_type: p.reflect_type.clone(),
                     hooks: None,
-                    storage_key: p.name.clone(),
+                    storage_key: if p.visibility == Visibility::Private {
+                        php_types::mangle_prop_key(&ctx.classes[x].name, &p.name).into()
+                    } else {
+                        p.name.clone()
+                    },
                 },
             );
         }

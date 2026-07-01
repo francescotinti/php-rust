@@ -1,10 +1,6 @@
 //! VM oop logic, extracted from vm/mod.rs (no semantic change).
 use super::*;
 
-/// Read object property `name` by value (deref-clone), following a reference
-/// receiver. A missing property — or a non-object receiver — warns and yields
-/// NULL, mirroring the tree-walker's `read_property` (OOP-1 has no `__get` /
-/// visibility enforcement).
 pub(super) fn read_property(recv: &Zval, name: &[u8], diags: &mut Diags) -> Zval {
     match recv {
         Zval::Object(o) => {
@@ -14,7 +10,8 @@ pub(super) fn read_property(recv: &Zval, name: &[u8], diags: &mut Diags) -> Zval
             }
             let cls = String::from_utf8_lossy(obj.class_name.as_bytes()).into_owned();
             drop(obj);
-            let prop = String::from_utf8_lossy(name).into_owned();
+            // `name` may be a mangled storage key; diagnostics show the source name.
+            let prop = String::from_utf8_lossy(php_types::prop_display_name(name)).into_owned();
             diags.push(Diag::Warning(format!("Undefined property: {cls}::${prop}")));
             Zval::Null
         }
@@ -224,16 +221,36 @@ pub(super) enum PropAccess {
 }
 
 /// Resolve a property access `obj_class->name` from `scope`. Single source of truth
-/// for both the storage key and the visibility decision (replacing the
-/// `check_prop_access` + name-as-key pair). Behaviour today mirrors
-/// `check_prop_access` exactly (storage key == name); the private-mangling stage
-/// changes only this function's internals.
+/// for both the storage key and the visibility decision, mirroring Zend's
+/// zend_get_property_info:
+///
+/// 1. If the running scope itself declares a *private* `name` and the object is an
+///    instance of that scope, the access targets the scope's mangled slot — even if
+///    a subclass redeclared a same-name private (the dual-slot case).
+/// 2. Otherwise the object's flattened table decides: an undeclared name is
+///    `Dynamic`; a visible declaration resolves to its slot; a *parent's* private
+///    on a child instance behaves as undeclared (Zend drops it from the child's
+///    table — reads warn "Undefined property", writes create a dynamic one); only
+///    an invisible private declared by the object's own class (or an invisible
+///    protected) is `Denied`.
 pub(super) fn resolve_prop_access(classes: &[&CompiledClass], obj_class: ClassId, name: &[u8], scope: Option<ClassId>) -> PropAccess {
+    if let Some(s) = scope {
+        if let Some(pi) = prop_info(classes, s, name) {
+            if pi.visibility == Visibility::Private
+                && pi.declaring_class == s
+                && class_is_a(classes, obj_class, s)
+            {
+                return PropAccess::Slot(pi.storage_key.to_vec());
+            }
+        }
+    }
     match prop_info(classes, obj_class, name) {
         None => PropAccess::Dynamic,
         Some(pi) => {
             if visible_from(classes, scope, pi.visibility, pi.declaring_class) {
                 PropAccess::Slot(pi.storage_key.to_vec())
+            } else if pi.visibility == Visibility::Private && pi.declaring_class != obj_class {
+                PropAccess::Dynamic
             } else {
                 PropAccess::Denied { decl: pi.declaring_class, vis: pi.visibility }
             }
@@ -256,12 +273,20 @@ pub(super) struct FieldScope<'a> {
 
 impl FieldScope<'_> {
     /// The storage key a `Prop` step addresses on an instance of `ocid`: the
-    /// resolved slot key for an accessible declared property, the plain name
-    /// otherwise (dynamic / denied) — `Vm::prop_storage_key`, borrow-friendly.
+    /// resolved slot key for an accessible declared property, the plain name for
+    /// a dynamic one. A `Denied` step keeps addressing the *declared* slot — the
+    /// mixed-path walkers have never enforced visibility (pre-existing gap: no
+    /// `__get`/`__set` protocol on intermediate steps either), so an inaccessible
+    /// private must keep hitting its real storage rather than autovivifying a
+    /// parallel dynamic property (Bug #34893's `$a->p->t = 'bar'` through `__get`).
     pub(super) fn prop_key<'n>(&self, ocid: ClassId, name: &'n [u8]) -> std::borrow::Cow<'n, [u8]> {
         match resolve_prop_access(self.classes, ocid, name, self.scope) {
             PropAccess::Slot(k) => std::borrow::Cow::Owned(k),
-            PropAccess::Dynamic | PropAccess::Denied { .. } => std::borrow::Cow::Borrowed(name),
+            PropAccess::Denied { .. } => match prop_info(self.classes, ocid, name) {
+                Some(pi) => std::borrow::Cow::Owned(pi.storage_key.to_vec()),
+                None => std::borrow::Cow::Borrowed(name),
+            },
+            PropAccess::Dynamic => std::borrow::Cow::Borrowed(name),
         }
     }
 }
@@ -301,19 +326,18 @@ pub(super) fn find_static_prop(classes: &[&CompiledClass], start: ClassId, name:
 }
 
 /// Enforce instance-property visibility for an access from frame class `cur` on an
-/// object of `obj_class`. A dynamic / undeclared property is always accessible.
+/// object of `obj_class`. A dynamic / undeclared property is always accessible;
+/// the error cases are exactly [`resolve_prop_access`]'s `Denied` outcomes.
 pub(super) fn check_prop_access(
     classes: &[&CompiledClass],
     cur: Option<ClassId>,
     obj_class: ClassId,
     name: &[u8],
 ) -> Result<(), PhpError> {
-    if let Some((vis, decl)) = prop_vis_decl(classes, obj_class, name) {
-        if !visible_from(classes, cur, vis, decl) {
-            return Err(prop_access_error(classes, decl, name, vis));
-        }
+    match resolve_prop_access(classes, obj_class, name, cur) {
+        PropAccess::Denied { decl, vis } => Err(prop_access_error(classes, decl, name, vis)),
+        _ => Ok(()),
     }
-    Ok(())
 }
 
 /// The "Cannot access {private,protected} property C::$p" fatal.
@@ -478,11 +502,6 @@ impl<'m> Vm<'m> {
         }
     }
 
-    /// Decide whether a magic property accessor of `kind` should run for `name` on
-    /// `o` instead of direct access (OOP-3b), mirroring the tree-walker's
-    /// `magic_prop_method`: it applies when the property is missing *or* not
-    /// visible from `cur_class`, the class defines the accessor, and no same-key
-    /// guard is active. Returns `(defining class, method index, object id)`.
     pub(super) fn magic_applies(
         &self,
         o: &Rc<RefCell<Object>>,
@@ -494,11 +513,16 @@ impl<'m> Vm<'m> {
         let (cid, oid, present, accessible) = {
             let obj = o.borrow();
             let cid = obj.class_id as usize;
-            let accessible = match prop_vis_decl(&self.classes, cid, name) {
-                Some((vis, dc)) => visible_from(&self.classes, cur_class, vis, dc),
-                None => true,
+            // Presence is judged at the *resolved* slot: a declared-but-unset
+            // private (mangled key) triggers magic from its own scope; a parent's
+            // private resolved `Dynamic` from a child scope is "present" only if a
+            // plain dynamic slot exists.
+            let (present, accessible) = match resolve_prop_access(&self.classes, cid, name, cur_class) {
+                PropAccess::Slot(k) => (obj.props.contains(k.as_slice()), true),
+                PropAccess::Dynamic => (obj.props.contains(name), true),
+                PropAccess::Denied { .. } => (obj.props.contains(name), false),
             };
-            (cid, obj.id, obj.props.contains(name), accessible)
+            (cid, obj.id, present, accessible)
         };
         if present && accessible {
             return None;
