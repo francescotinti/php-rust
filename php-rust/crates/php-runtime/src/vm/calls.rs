@@ -243,7 +243,22 @@ impl<'m> Vm<'m> {
             Zval::Closure(cl) => match &cl.named {
                 None => self.push_closure_frame(&cl, args),
                 Some(name) => {
-                    let name = name.as_bytes().to_vec();
+                    let nb = name.as_bytes();
+                    // A `Closure::fromCallable` method callable carries `Class::method`
+                    // in `named` (a function name never contains `::`). Dispatch it as
+                    // a pre-authorized method call — on the bound object for an instance
+                    // callable, else statically on the named class.
+                    if let Some(pos) = nb.windows(2).position(|w| w == b"::") {
+                        let m = nb[pos + 2..].to_vec();
+                        if let Some(this) = cl.bound_this.clone().filter(|t| matches!(t, Zval::Object(_))) {
+                            let cid = object_class_id(&this).expect("bound method object");
+                            return self.enter_authorized_method(cid, Some(this), &m, args);
+                        }
+                        let cls = Zval::Str(PhpStr::new(nb[..pos].to_vec()));
+                        let cid = self.resolve_dynamic_class(&cls)?;
+                        return self.enter_authorized_method(cid, None, &m, args);
+                    }
+                    let name = nb.to_vec();
                     self.invoke_named(&name, args)
                 }
             },
@@ -464,18 +479,34 @@ impl<'m> Vm<'m> {
                 )),
             }
         } else if method.eq_ignore_ascii_case(b"fromCallable") {
+            // The scope creating the closure, governing the accessibility of a
+            // private/protected method callable — checked once here; the resulting
+            // closure is then invocable from anywhere (D-18.10 / PHP semantics).
+            let caller_class = self.frames[self.frames.len() - 1].class;
+            let nc = || {
+                PhpError::Error(
+                    "Closure::fromCallable(): Argument #1 ($callback) is not callable".to_string(),
+                )
+            };
             match args.into_iter().next().map(|v| v.deref_clone()) {
                 // An existing closure passes through unchanged.
                 Some(Zval::Closure(cl)) => Ok(Zval::Closure(cl)),
-                // A function-name string becomes a named (first-class-callable)
-                // closure, like `Op::MakeFcc`.
                 Some(Zval::Str(s)) => {
+                    let b = s.as_bytes();
+                    // `"Class::method"` is a static-method callable.
+                    if let Some(pos) = b.windows(2).position(|w| w == b"::") {
+                        let cls = Zval::Str(PhpStr::new(b[..pos].to_vec()));
+                        let m = b[pos + 2..].to_vec();
+                        return self.make_method_closure(&cls, &m, caller_class).ok_or_else(nc);
+                    }
+                    // A function-name string becomes a named (first-class-callable)
+                    // closure, like `Op::MakeFcc`.
                     let id = self.next_id();
                     let params = self
                         .module
                         .functions
                         .iter()
-                        .find(|f| super::name_eq_ignore_case(&f.name, s.as_bytes()))
+                        .find(|f| super::name_eq_ignore_case(&f.name, b))
                         .map(super::closure_params)
                         .unwrap_or_default();
                     let info = Rc::new(ClosureInfo {
@@ -494,15 +525,107 @@ impl<'m> Vm<'m> {
                         is_static: false,
                     })))
                 }
-                _ => Err(PhpError::Error(
-                    "Closure::fromCallable(): Argument #1 ($callback) is not callable".to_string(),
-                )),
+                // `[$object, 'method']` (instance) or `['Class', 'method']` (static).
+                Some(Zval::Array(a)) => {
+                    let elems: Vec<Zval> = a.iter().map(|(_, v)| v.deref_clone()).collect();
+                    if elems.len() == 2 {
+                        if let Zval::Str(m) = &elems[1] {
+                            if let Some(c) =
+                                self.make_method_closure(&elems[0], m.as_bytes(), caller_class)
+                            {
+                                return Ok(c);
+                            }
+                        }
+                    }
+                    Err(nc())
+                }
+                _ => Err(nc()),
             }
         } else {
             Err(PhpError::Error(format!(
                 "Call to undefined method Closure::{}()",
                 String::from_utf8_lossy(method)
             )))
+        }
+    }
+
+    /// Build a `Closure` from a *method* callable — `[$obj, 'm']` (instance) or
+    /// `['Class', 'm']` / `"Class::m"` (static) — as `Closure::fromCallable`
+    /// accepts. Returns `None` (surfaced as the "not callable" error) when the
+    /// class or method is unknown or the method is not accessible from
+    /// `caller_class`; PHP checks accessibility once, at creation. The closure
+    /// carries `Class::method` in `named` — its `::` marks a method callable for
+    /// [`Self::invoke_value`], since a function name never contains `::` — and, for
+    /// an instance callable, the bound object in `bound_this`.
+    fn make_method_closure(
+        &mut self,
+        target: &Zval,
+        method: &[u8],
+        caller_class: Option<usize>,
+    ) -> Option<Zval> {
+        let (cid, bound): (usize, Option<Zval>) = match target {
+            Zval::Object(o) => (o.borrow().class_id as usize, Some(target.clone())),
+            Zval::Str(s) => {
+                let b = s.as_bytes();
+                let lc = b.strip_prefix(b"\\").unwrap_or(b).to_ascii_lowercase();
+                (self.class_index.get(&lc[..]).copied()?, None)
+            }
+            _ => return None,
+        };
+        let (defc, midx) = resolve_method_runtime(&self.classes, cid, method)?;
+        if !visible_from(
+            &self.classes,
+            caller_class,
+            self.classes[defc].methods[midx].visibility,
+            defc,
+        ) {
+            return None;
+        }
+        let mut disp = self.classes[cid].name.to_vec();
+        disp.extend_from_slice(b"::");
+        disp.extend_from_slice(method);
+        let ns = PhpStr::new(disp);
+        let params = super::closure_params(&self.classes[defc].methods[midx].func);
+        let info = Rc::new(ClosureInfo {
+            kind: ClosureRender::Function(ns.clone()),
+            params,
+        });
+        let id = self.next_id();
+        Some(Zval::Closure(Rc::new(Closure {
+            fn_idx: 0,
+            captures: Vec::new(),
+            named: Some(ns),
+            bound_this: bound,
+            id,
+            info,
+            module_id: 0,
+            scope: Some(defc),
+            is_static: false,
+        })))
+    }
+
+    /// Enter a method a `Closure::fromCallable` closure was pre-authorized to call,
+    /// *without* re-checking visibility: accessibility was validated when the
+    /// closure was created (see [`Self::make_method_closure`]), so a private /
+    /// protected target stays callable wherever the closure travels.
+    fn enter_authorized_method(
+        &mut self,
+        cid: usize,
+        this: Option<Zval>,
+        method: &[u8],
+        args: Vec<Zval>,
+    ) -> Result<(), PhpError> {
+        match resolve_method_runtime(&self.classes, cid, method) {
+            Some((defc, midx)) => {
+                let callee = &self.classes[defc].methods[midx].func;
+                let mut frame = Frame::new(callee, self.class_mod(defc));
+                bind_params(&mut frame, args);
+                frame.this = this;
+                frame.class = Some(defc);
+                frame.static_class = Some(cid); // LSB = the callable's class
+                self.enter_callee(frame)
+            }
+            None => Err(undefined_method(&self.classes, cid, method)),
         }
     }
 
