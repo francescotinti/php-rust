@@ -3557,6 +3557,18 @@ impl<'a> FnCompiler<'a> {
     /// expressions before the source's — the tree-walker's order. References into
     /// object properties or an appended slot fall back to the evaluator.
     fn assign_ref(&mut self, target: &Place, source: &Place) -> R<()> {
+        // `$x =& $this` (e.g. React's promise GC pattern) is legal PHP. `$this` is
+        // read-only, so bind the target to a fresh reference cell holding its
+        // object value rather than promoting the frame's `$this` to a reference:
+        // observationally equivalent to a true alias for all realistic code (only
+        // a write *through* the alias back into `$this` would differ), while
+        // leaving `$this`'s representation — read by every method body — untouched.
+        if matches!(source.base, PlaceBase::This) && source.steps.is_empty() {
+            let (tbase, tsteps) = self.field_path(target)?; // target index keys first…
+            self.emit(Op::This); // …then $this's value on top for the bind
+            self.emit(Op::BindRefTo { base: tbase, steps: tsteps.into() });
+            return Ok(());
+        }
         if target.steps.is_empty() && source.steps.is_empty() {
             let t = dim_base(target)?;
             let s = dim_base(source)?;
