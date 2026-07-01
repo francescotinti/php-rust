@@ -8,7 +8,7 @@
 //! entry), which is all the vast majority of callers observe.
 
 use php_runtime::Ctx;
-use php_types::{PhpError, PhpStr, Zval};
+use php_types::{convert, PhpError, PhpStr, Zval};
 
 /// `gc_collect_cycles()` — number of collected cycles. No GC is modelled, so 0.
 pub fn gc_collect_cycles(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
@@ -41,10 +41,35 @@ pub fn php_sapi_name(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Str(PhpStr::from_str("cli")))
 }
 
-/// `ini_get($name)` — no INI table is modelled, so every entry reads as absent
-/// (`false`), matching PHP for an unknown directive.
-pub fn ini_get(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    Ok(Zval::Bool(false))
+/// `ini_get($name)` — no full INI table is modelled, but the handful of core
+/// directives that real code branches on are reported with their PHP CLI-default
+/// string value (a registered directive returns a *string*, never a bool). An
+/// unregistered directive returns `false`, exactly like PHP. Notably
+/// `allow_url_fopen` is `"1"` — phpr's `file_get_contents`/`fopen` do open http(s)
+/// URLs — so Composer's diagnose does not report it as missing. `memory_limit` is
+/// `"-1"` (the compiled-in CLI default): phpr enforces no limit, which also keeps
+/// Composer from trying to re-exec itself to raise it (needs `proc_open`).
+pub fn ini_get(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let name = match args.first() {
+        Some(v) => convert::to_zstr(v, ctx.diags),
+        None => return Ok(Zval::Bool(false)),
+    };
+    let val: Option<&str> = match name.as_bytes() {
+        b"allow_url_fopen" => Some("1"),
+        b"allow_url_include" => Some(""),
+        b"disable_functions" => Some(""),
+        b"enable_dl" => Some(""),
+        b"memory_limit" => Some("-1"),
+        b"max_execution_time" => Some("0"),
+        b"default_socket_timeout" => Some("60"),
+        b"precision" => Some("14"),
+        b"serialize_precision" => Some("-1"),
+        _ => None,
+    };
+    Ok(match val {
+        Some(s) => Zval::Str(PhpStr::from_str(s)),
+        None => Zval::Bool(false),
+    })
 }
 
 /// `ini_set($name, $value)` — setting always "fails" (`false`); no INI table is
