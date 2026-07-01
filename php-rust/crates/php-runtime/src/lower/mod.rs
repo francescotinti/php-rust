@@ -2328,7 +2328,22 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"PHP_MINOR_VERSION" => ExprKind::Int(5),
         b"PHP_RELEASE_VERSION" => ExprKind::Int(7),
         b"PHP_VERSION_ID" => ExprKind::Int(80507),
+        b"PHP_EXTRA_VERSION" => str_lit(b""),
         b"PHP_SAPI" => str_lit(b"cli"),
+        // Build flavour — PHP 8.5 reports these as bool. phpr is a non-debug,
+        // non-thread-safe build, matching the oracle.
+        b"PHP_DEBUG" => ExprKind::Bool(false),
+        b"PHP_ZTS" => ExprKind::Bool(false),
+        b"PHP_MAXPATHLEN" => ExprKind::Int(1024),
+        // Nominal platform-library versions. phpr does not link these C libraries
+        // (it uses Rust crates for regex, mbstring, and TLS via rustls), so these
+        // are representative constants for consumers that read them (e.g. Composer's
+        // PlatformRepository builds `lib-*` packages from them); they are not tied
+        // to any host install and need not match a given machine's libraries.
+        b"PCRE_VERSION" => str_lit(b"10.44 2024-06-07"),
+        b"MB_ONIGURUMA_VERSION" => str_lit(b"6.9.9"),
+        b"OPENSSL_VERSION_TEXT" => str_lit(b"OpenSSL 3.0.0 7 sep 2023"),
+        b"OPENSSL_VERSION_NUMBER" => ExprKind::Int(0x3000_0000),
         // Platform identity (macOS oracle, matching `DIRECTORY_SEPARATOR`).
         b"PHP_OS" => str_lit(b"Darwin"),
         b"PHP_OS_FAMILY" => str_lit(b"Darwin"),

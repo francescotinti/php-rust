@@ -319,6 +319,9 @@ pub fn registry() -> Registry {
     add(b"strval", strval);
     add(b"setlocale", setlocale);
     add(b"extension_loaded", extension_loaded);
+    add(b"phpversion", phpversion);
+    add(b"inet_pton", inet_pton);
+    add(b"get_loaded_extensions", get_loaded_extensions);
     add(b"boolval", boolval);
     add(b"filter_var", filter_var);
     add(b"print_r", print_r);
@@ -1139,21 +1142,69 @@ fn filter_var(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     }
 }
 
-/// extension_loaded($name): whether a PHP extension is available. We report the
-/// set phpr substantially models (so polyfill/feature guards take the same branch):
-/// Core, standard, SPL, pcre, json, mbstring, hash, date, openssl. Case-insensitive.
+/// The extensions phpr substantially models, reported by `extension_loaded` and
+/// `phpversion` so polyfill/feature guards take the same branch as the oracle:
+/// Core, standard, SPL, pcre, json, mbstring, hash, date, openssl. Names lowercase.
+/// openssl: phpr models TLS via the rustls-backed http/https stream wrapper (the
+/// openssl/Composer-network filone). curl is deliberately *absent* so a dual-backend
+/// consumer (Composer's HttpDownloader) takes the stream-wrapper path rather than
+/// the much larger curl_multi surface.
+const LOADED_EXTENSIONS: &[&[u8]] = &[
+    b"core", b"standard", b"spl", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
+];
+
+/// extension_loaded($name): whether a PHP extension is available (case-insensitive).
 fn extension_loaded(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let name = convert::to_zstr(arg1(args, "extension_loaded")?, ctx.diags);
     let lc = name.as_bytes().to_ascii_lowercase();
-    const LOADED: &[&[u8]] = &[
-        b"core", b"standard", b"spl", b"pcre", b"json", b"mbstring", b"hash", b"date",
-        // openssl: phpr models TLS via the rustls-backed http/https stream wrapper
-        // (the openssl/Composer-network filone). curl is deliberately *absent* so a
-        // dual-backend consumer (Composer's HttpDownloader) takes the stream-wrapper
-        // path rather than the much larger curl_multi surface.
-        b"openssl",
+    Ok(Zval::Bool(LOADED_EXTENSIONS.contains(&lc.as_slice())))
+}
+
+/// phpversion($extension = null): with no argument, the PHP version ("8.5.7");
+/// with an extension name, that extension's version when loaded — phpr reports
+/// the PHP version for its bundled extensions, matching the oracle (e.g.
+/// `phpversion("openssl") === "8.5.7"`) — or `false` when the extension is absent.
+fn phpversion(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    match args.first() {
+        None | Some(Zval::Null) => Ok(Zval::Str(PhpStr::new(b"8.5.7".to_vec()))),
+        Some(v) => {
+            let lc = convert::to_zstr(v, ctx.diags).as_bytes().to_ascii_lowercase();
+            if LOADED_EXTENSIONS.contains(&lc.as_slice()) {
+                Ok(Zval::Str(PhpStr::new(b"8.5.7".to_vec())))
+            } else {
+                Ok(Zval::Bool(false))
+            }
+        }
+    }
+}
+
+/// get_loaded_extensions($zend_extensions = false): the extensions phpr models,
+/// in the oracle's proper casing ("Core"/"SPL" capitalised). phpr has no Zend
+/// extensions, so the flag yields the same list. Mirrors [`LOADED_EXTENSIONS`].
+fn get_loaded_extensions(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    const NAMES: &[&[u8]] = &[
+        b"Core", b"standard", b"SPL", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
     ];
-    Ok(Zval::Bool(LOADED.contains(&lc.as_slice())))
+    let mut arr = PhpArray::new();
+    for n in NAMES {
+        let _ = arr.append(Zval::Str(PhpStr::new(n.to_vec())));
+    }
+    Ok(Zval::Array(Rc::new(arr)))
+}
+
+/// inet_pton($ip): pack a human-readable IPv4/IPv6 address into its binary form
+/// (4 or 16 bytes), or `false` for an unparseable address. `std::net::IpAddr`
+/// parsing matches inet_pton's acceptance (dotted-quad IPv4, RFC 4291 IPv6).
+fn inet_pton(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let ip = convert::to_zstr(arg1(args, "inet_pton")?, ctx.diags);
+    let parsed = std::str::from_utf8(ip.as_bytes())
+        .ok()
+        .and_then(|s| s.parse::<std::net::IpAddr>().ok());
+    Ok(match parsed {
+        Some(std::net::IpAddr::V4(a)) => Zval::Str(PhpStr::new(a.octets().to_vec())),
+        Some(std::net::IpAddr::V6(a)) => Zval::Str(PhpStr::new(a.octets().to_vec())),
+        None => Zval::Bool(false),
+    })
 }
 
 /// setlocale($category, ...$locales): we do not model real C locales — accept the
