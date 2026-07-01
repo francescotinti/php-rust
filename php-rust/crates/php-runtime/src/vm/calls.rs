@@ -69,34 +69,71 @@ pub(super) fn pack_args(args: Vec<Zval>) -> Zval {
 /// params are bound and every remaining argument is collected into an array in
 /// the variadic slot (empty when there are none); otherwise surplus arguments
 /// are dropped (PHP silently ignores them for a non-variadic function).
+/// Decay a by-value argument (SEND_VAR_EX): a reference yields a clone of its
+/// referent (the no-ref-to-ref invariant D-R11), anything else is moved as-is.
+/// A dynamic call ([`crate::compile`]'s `push_dyn_args`) pushes a `Ref` for
+/// every plain-variable argument so an undefined variable materialises and a
+/// run-time by-reference parameter can bind; this un-aliases it wherever the
+/// destination is by-value.
+pub(super) fn decay_arg(a: Zval) -> Zval {
+    match a {
+        Zval::Ref(cell) => cell.borrow().clone(),
+        other => other,
+    }
+}
+
+/// [`decay_arg`] over a whole positional argument list, for a native/magic
+/// receiver dispatched without a [`bind_params`] step (a generator/fiber/closure
+/// method, `__call`, an enum `from`), which always wants values.
+pub(super) fn decay_args(args: Vec<Zval>) -> Vec<Zval> {
+    args.into_iter().map(decay_arg).collect()
+}
+
 pub(super) fn bind_params(frame: &mut Frame, args: Vec<Zval>) {
     frame.argc = args.len() as u32;
     match frame.func.variadic_slot {
         None => {
             let n = frame.func.n_params as usize;
             // Snapshot arguments beyond the declared parameters: they have no slot,
-            // so `func_get_args` (D1) could not otherwise recover them.
+            // so `func_get_args` (D1) could not otherwise recover them. Surplus
+            // arguments are always by-value, so a reference is decayed here.
             if args.len() > n {
-                frame.extra_args = args[n..].to_vec();
+                frame.extra_args = args[n..].iter().map(|a| a.deref_clone()).collect();
             }
             for (i, a) in args.into_iter().enumerate() {
                 if i < n {
-                    frame.slots[i] = a;
+                    // A by-reference parameter (`&$p`) keeps the caller's cell so
+                    // mutations alias back; every other parameter is by-value, so a
+                    // reference argument is decayed to a clone of its referent.
+                    frame.slots[i] = if frame.func.param_by_ref.get(i).copied().unwrap_or(false) {
+                        a
+                    } else {
+                        decay_arg(a)
+                    };
                 }
             }
         }
         Some(vslot) => {
             let v = vslot as usize;
-            let mut it = args.into_iter();
+            // Whether the variadic pack itself is declared `&...$rest` (its flag
+            // sits at the variadic slot's index, parallel to `param_by_ref`).
+            let variadic_by_ref = frame.func.param_by_ref.get(v).copied().unwrap_or(false);
+            let mut it = args.into_iter().enumerate();
             for slot in frame.slots.iter_mut().take(v) {
                 match it.next() {
-                    Some(a) => *slot = a,
+                    Some((i, a)) => {
+                        *slot = if frame.func.param_by_ref.get(i).copied().unwrap_or(false) {
+                            a
+                        } else {
+                            decay_arg(a)
+                        };
+                    }
                     None => break, // omitted fixed params stay Undef (default prologue)
                 }
             }
             let mut rest = PhpArray::new();
-            for a in it {
-                let _ = rest.append(a);
+            for (_, a) in it {
+                let _ = rest.append(if variadic_by_ref { a } else { decay_arg(a) });
             }
             frame.slots[v] = Zval::Array(Rc::new(rest));
         }

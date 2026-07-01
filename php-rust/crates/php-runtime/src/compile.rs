@@ -1966,7 +1966,11 @@ impl<'a> FnCompiler<'a> {
                         self.build_args_array(args)?;
                         self.emit(Op::StaticCallDynamicArgs { method: method.clone() });
                     } else {
-                        self.push_value_args(args)?;
+                        // The class (hence callee) is only known at run time
+                        // (`$cls::m()`, an autoloaded class): push by reference for a
+                        // plain-variable argument so a run-time by-ref parameter can
+                        // bind (SEND_VAR_EX); the binder decays it for by-value.
+                        self.push_dyn_args(args)?;
                         self.emit(Op::StaticCallDynamic { method: method.clone(), argc: args.len() as u32 });
                     }
                 } else if matches!(class, ClassRef::Named(n) if n.eq_ignore_ascii_case(b"Closure")) {
@@ -1993,31 +1997,37 @@ impl<'a> FnCompiler<'a> {
                             // For a statically-known class, honour the method's
                             // by-reference parameters (REF-2) exactly like a free
                             // function — pushing the caller's cell for a `&$p` slot.
-                            // `static::` / an unresolved method fall back to by-value
-                            // (their by-ref binding stays a separate gap).
+                            // `static::` / an unresolved (autoloaded) method aren't
+                            // known here, so a plain-variable argument is pushed by
+                            // reference and the run-time binder decides (SEND_VAR_EX).
                             let resolved = match target {
                                 ClassTarget::Class(cid) => {
                                     self.resolve_method_compile(cid, method).map(|r| (cid, r))
                                 }
                                 ClassTarget::Static => None,
                             };
-                            let mut pushed_by_ref = false;
-                            if let Some((cid, (defc, midx))) = resolved {
-                                let decl = &self.ctx.classes[defc].methods[midx].decl;
-                                if decl.params.iter().any(|p| p.by_ref) {
-                                    let by_ref: Vec<bool> =
-                                        decl.params.iter().map(|p| p.by_ref).collect();
-                                    let pnames: Vec<Box<[u8]>> =
-                                        decl.slots.iter().take(decl.params.len()).cloned().collect();
-                                    let mut fname = self.ctx.classes[cid].name.to_vec();
-                                    fname.extend_from_slice(b"::");
-                                    fname.extend_from_slice(method);
-                                    self.push_call_args(args, &by_ref, &fname, &pnames)?;
-                                    pushed_by_ref = true;
+                            match resolved {
+                                Some((cid, (defc, midx))) => {
+                                    let decl = &self.ctx.classes[defc].methods[midx].decl;
+                                    if decl.params.iter().any(|p| p.by_ref) {
+                                        let by_ref: Vec<bool> =
+                                            decl.params.iter().map(|p| p.by_ref).collect();
+                                        let pnames: Vec<Box<[u8]>> = decl
+                                            .slots
+                                            .iter()
+                                            .take(decl.params.len())
+                                            .cloned()
+                                            .collect();
+                                        let mut fname = self.ctx.classes[cid].name.to_vec();
+                                        fname.extend_from_slice(b"::");
+                                        fname.extend_from_slice(method);
+                                        self.push_call_args(args, &by_ref, &fname, &pnames)?;
+                                    } else {
+                                        // Known callee with no by-ref params: values.
+                                        self.push_value_args(args)?;
+                                    }
                                 }
-                            }
-                            if !pushed_by_ref {
-                                self.push_value_args(args)?;
+                                None => self.push_dyn_args(args)?,
                             }
                             self.emit(Op::StaticCall { target, method: method.clone(), forwarding, argc });
                         }
@@ -2716,9 +2726,10 @@ impl<'a> FnCompiler<'a> {
             // (REF-2) by pushing the caller's cell for a `&$p` slot — exactly like a
             // static `C::m()` call. A dynamic receiver (`$obj->m()`) stays by-value:
             // the callee, hence its by-ref params, is only known at run time.
-            let mut pushed_by_ref = false;
+            let mut resolved_here = false;
             if let Some(cid) = recv_class {
                 if let Some((defc, midx)) = self.resolve_method_compile(cid, method) {
+                    resolved_here = true;
                     let decl = &self.ctx.classes[defc].methods[midx].decl;
                     if decl.params.iter().any(|p| p.by_ref) {
                         let by_ref: Vec<bool> = decl.params.iter().map(|p| p.by_ref).collect();
@@ -2728,12 +2739,18 @@ impl<'a> FnCompiler<'a> {
                         fname.extend_from_slice(b"::");
                         fname.extend_from_slice(method);
                         self.push_call_args(args, &by_ref, &fname, &pnames)?;
-                        pushed_by_ref = true;
+                    } else {
+                        // Known callee with no by-ref params: plain values.
+                        self.push_value_args(args)?;
                     }
                 }
             }
-            if !pushed_by_ref {
-                self.push_value_args(args)?;
+            if !resolved_here {
+                // Dynamic receiver (`$obj->m()`) or an unresolved method: the callee
+                // — hence its by-ref params — is only known at run time, so push a
+                // plain-variable argument by reference (SEND_VAR_EX); `bind_params`
+                // decays it for a by-value parameter.
+                self.push_dyn_args(args)?;
             }
             self.emit(Op::MethodCall { method: method.into(), argc: args.len() as u32 });
         }
@@ -2762,7 +2779,10 @@ impl<'a> FnCompiler<'a> {
             self.expr(method)?; // [obj, argsArray, name]
             self.emit(Op::MethodCallDynamicArgs);
         } else {
-            self.push_value_args(args)?; // [obj, arg0…]
+            // `$obj->$m(args)`: the callee is only known at run time, so a
+            // plain-variable argument is pushed by reference (SEND_VAR_EX) and the
+            // binder decays it for a by-value parameter.
+            self.push_dyn_args(args)?; // [obj, arg0…]
             self.expr(method)?; // [obj, arg0…, name]
             self.emit(Op::MethodCallDynamic { argc: args.len() as u32 });
         }
@@ -2776,6 +2796,33 @@ impl<'a> FnCompiler<'a> {
                 return Err(CompileError::Unsupported("argument unpacking (spread)".into()));
             }
             self.expr(a)?;
+        }
+        Ok(())
+    }
+
+    /// Push each positional argument for a **dynamic** call whose callee — hence
+    /// which parameters are by-reference — isn't known at compile time (a
+    /// non-`$this` receiver `$obj->m(…)`, `$obj->$m(…)`, `$cls::m(…)`, an
+    /// autoloaded/`static::` static). Every plain-variable argument is passed by
+    /// [`Op::PushRef`] (PHP's SEND_VAR_EX): the callee's cell aliases the caller's
+    /// so a by-reference parameter can write through, and an undefined variable
+    /// materialises rather than warning. The run-time `bind_params` decays the
+    /// reference back to a value for a by-value parameter, so this is a no-op for
+    /// the common case. Non-variable arguments push their value; spreads are
+    /// rejected (the caller routes those through `build_args_array`).
+    fn push_dyn_args(&mut self, args: &[Expr]) -> R<()> {
+        for a in args {
+            match &a.kind {
+                ExprKind::Spread(_) => {
+                    return Err(CompileError::Unsupported("argument unpacking (spread)".into()));
+                }
+                ExprKind::Var(slot) => {
+                    self.emit(Op::PushRef(*slot));
+                }
+                _ => {
+                    self.expr(a)?;
+                }
+            }
         }
         Ok(())
     }

@@ -562,7 +562,9 @@ impl<'m> Vm<'m> {
         // (current/key/next/valid/rewind/…) directly (GEN).
         if let Zval::Generator(gs) = &this {
             let gs = Rc::clone(gs);
-            let result = self.generator_method(gs, method, args)?;
+            // Native dispatch — no `bind_params` step — so a reference pushed by a
+            // dynamic call (SEND_VAR_EX) is decayed to its value first.
+            let result = self.generator_method(gs, method, decay_args(args))?;
             self.frames[top].stack.push(result);
             return Ok(());
         }
@@ -571,7 +573,7 @@ impl<'m> Vm<'m> {
         if let (Zval::Object(o), Some(fcid)) = (&this, self.fiber_class_id) {
             let cid = o.borrow().class_id as usize;
             if is_instance_of(&self.classes, self.stringable_id, cid, fcid) {
-                let result = self.fiber_method(&this, method, args)?;
+                let result = self.fiber_method(&this, method, decay_args(args))?;
                 self.frames[top].stack.push(result);
                 return Ok(());
             }
@@ -580,7 +582,7 @@ impl<'m> Vm<'m> {
         // are dispatched natively — a closure is not a user object (step 19-6).
         if let Zval::Closure(cl) = &this {
             let cl = Rc::clone(cl);
-            let result = self.closure_instance_method(&cl, method, args)?;
+            let result = self.closure_instance_method(&cl, method, decay_args(args))?;
             self.frames[top].stack.push(result);
             return Ok(());
         }

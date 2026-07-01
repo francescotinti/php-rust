@@ -3763,7 +3763,8 @@ impl<'m> Vm<'m> {
                                     ))
                                 }
                             };
-                            let value = args.into_iter().next().unwrap_or(Zval::Null);
+                            // Decay a reference pushed by a dynamic call (SEND_VAR_EX).
+                            let value = args.into_iter().next().map(decay_arg).unwrap_or(Zval::Null);
                             // Park the whole fiber segment; it is restored by resume.
                             let parked = self.frames.split_off(baseline);
                             self.fibers.get_mut(&id).expect("running fiber state").parked = parked;
@@ -9697,7 +9698,9 @@ impl<'m> Vm<'m> {
             // original fatal (visibility / undefined method).
             None => match resolve_method_runtime(&self.classes, cid, b"__call") {
                 Some((cdefc, cmidx)) => {
-                    self.push_magic_call(cdefc, cmidx, Some(this), cid, method, args);
+                    // `__call($name, $args)` gets a value array — decay references
+                    // pushed by a dynamic call (SEND_VAR_EX).
+                    self.push_magic_call(cdefc, cmidx, Some(this), cid, method, decay_args(args));
                 }
                 None => {
                     return Err(match resolved {
@@ -9746,7 +9749,8 @@ impl<'m> Vm<'m> {
             if backed {
                 let try_from = method.eq_ignore_ascii_case(b"tryFrom");
                 if try_from || method.eq_ignore_ascii_case(b"from") {
-                    let arg = args.into_iter().next();
+                    // Decay a reference pushed by a dynamic call (SEND_VAR_EX).
+                    let arg = args.into_iter().next().map(decay_arg);
                     let v = self.vm_enum_from(start, arg, try_from)?;
                     self.frames[top].stack.push(v);
                     return Ok(());
@@ -9797,12 +9801,14 @@ impl<'m> Vm<'m> {
                     .and_then(|(tv, oc)| {
                         resolve_method_runtime(&self.classes, oc, b"__call").map(|(d, m)| (tv, oc, d, m))
                     });
+                // `__call`/`__callStatic($name, $args)` gets a value array — decay
+                // references pushed by a dynamic call (SEND_VAR_EX).
                 if let Some((tv, oc, cdefc, cmidx)) = via_call {
-                    self.push_magic_call(cdefc, cmidx, Some(tv), oc, method, args);
+                    self.push_magic_call(cdefc, cmidx, Some(tv), oc, method, decay_args(args));
                 } else if let Some((cdefc, cmidx)) =
                     resolve_method_runtime(&self.classes, start, b"__callStatic")
                 {
-                    self.push_magic_call(cdefc, cmidx, None, start, method, args);
+                    self.push_magic_call(cdefc, cmidx, None, start, method, decay_args(args));
                 } else {
                     return Err(match resolved {
                         Some((defc, midx)) => method_access_error(
