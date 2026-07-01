@@ -266,46 +266,154 @@ thread_local! {
     static LAST_RESPONSE_HEADERS: RefCell<Option<Vec<Vec<u8>>>> = const { RefCell::new(None) };
 }
 
-/// GET an http(s):// URL via the rustls-backed `ureq` transport, returning the
-/// 2xx response body. A non-2xx status or transport error yields `None` after a
-/// PHP "Failed to open stream" Warning — mirroring the http stream wrapper
-/// making `file_get_contents` return `false`. The response header lines are
-/// captured (for any status, so a 4xx status is still readable via
-/// `http_get_last_response_headers()`, as Composer relies on). TLS uses ureq's
-/// default secure verification against the bundled webpki roots, matching PHP's
-/// `verify_peer` default (Phase 2: GET + body + headers; context options later).
-fn http_get(url: &[u8], ctx: &mut Ctx) -> Option<Vec<u8>> {
+/// The `http` wrapper options phpr honours from a stream context (Phase 3).
+#[derive(Default)]
+struct HttpOptions {
+    method: Option<Vec<u8>>,
+    headers: Vec<Vec<u8>>,
+    content: Option<Vec<u8>>,
+    ignore_errors: bool,
+    max_redirects: Option<u32>,
+}
+
+/// A context value as bytes (string), transparently following a reference.
+fn ctx_bytes(v: &Zval) -> Option<Vec<u8>> {
+    match v {
+        Zval::Str(s) => Some(s.as_bytes().to_vec()),
+        Zval::Ref(r) => ctx_bytes(&r.borrow()),
+        _ => None,
+    }
+}
+
+fn ctx_bool(v: &Zval) -> bool {
+    match v {
+        Zval::Bool(b) => *b,
+        Zval::Long(n) => *n != 0,
+        Zval::Ref(r) => ctx_bool(&r.borrow()),
+        _ => false,
+    }
+}
+
+fn ctx_i64(v: &Zval) -> Option<i64> {
+    match v {
+        Zval::Long(n) => Some(*n),
+        Zval::Ref(r) => ctx_i64(&r.borrow()),
+        _ => None,
+    }
+}
+
+/// Push one or more header lines (a value may itself be `\r\n`-joined) skipping
+/// blanks.
+fn push_header_lines(out: &mut Vec<Vec<u8>>, raw: &[u8]) {
+    for part in raw.split(|&b| b == b'\n') {
+        let line: &[u8] = part.strip_suffix(b"\r").unwrap_or(part);
+        if !line.is_empty() {
+            out.push(line.to_vec());
+        }
+    }
+}
+
+/// Extract the `http` wrapper options from a stream-context resource (arg #3 of
+/// file_get_contents). Absent/foreign context → defaults. SSL options are not
+/// read here: ureq's default secure verification already matches PHP's
+/// verify_peer / system-CA defaults (explicit verify_peer=false / custom cafile
+/// is Phase 3b).
+fn parse_http_options(context: Option<&Zval>) -> HttpOptions {
+    let mut o = HttpOptions::default();
+    let Some(Zval::Resource(rc)) = context else {
+        return o;
+    };
+    let res = rc.borrow();
+    let Some(Zval::Array(opts)) = res.context_options() else {
+        return o;
+    };
+    let Some(Zval::Array(http)) = opts.get(&Key::from_bytes(b"http")) else {
+        return o;
+    };
+    o.method = http.get(&Key::from_bytes(b"method")).and_then(ctx_bytes);
+    o.content = http.get(&Key::from_bytes(b"content")).and_then(ctx_bytes);
+    if let Some(h) = http.get(&Key::from_bytes(b"header")) {
+        match h {
+            // `header` is an array of lines or a single (possibly multi-line) string.
+            Zval::Array(a) => {
+                for (_, v) in a.iter() {
+                    if let Some(b) = ctx_bytes(v) {
+                        push_header_lines(&mut o.headers, &b);
+                    }
+                }
+            }
+            other => {
+                if let Some(b) = ctx_bytes(other) {
+                    push_header_lines(&mut o.headers, &b);
+                }
+            }
+        }
+    }
+    if let Some(v) = http.get(&Key::from_bytes(b"ignore_errors")) {
+        o.ignore_errors = ctx_bool(v);
+    }
+    if let Some(n) = http.get(&Key::from_bytes(b"max_redirects")).and_then(ctx_i64) {
+        o.max_redirects = Some(n.max(0) as u32);
+    }
+    o
+}
+
+/// GET/POST an http(s):// URL via the rustls-backed `ureq` transport, honouring
+/// the `http` stream-context options, and returning the response body. A non-2xx
+/// status (without `ignore_errors`) or transport error yields `None` after a PHP
+/// "Failed to open stream" Warning — mirroring the http wrapper making
+/// `file_get_contents` return `false`. Response header lines are captured for any
+/// status (so a 4xx status stays readable via `http_get_last_response_headers()`,
+/// as Composer relies on). TLS uses ureq's default secure verification against the
+/// bundled webpki roots, matching PHP's `verify_peer` default.
+fn http_get(url: &[u8], context: Option<&Zval>, ctx: &mut Ctx) -> Option<Vec<u8>> {
     let Ok(url_str) = std::str::from_utf8(url) else {
         return None;
     };
+    let opts = parse_http_options(context);
     let mut warn = |why: String| {
         ctx.diags.push(Diag::Warning(format!(
             "file_get_contents({url_str}): Failed to open stream: {why}"
         )));
     };
-    // A non-2xx status is not a transport error here: we still capture the
-    // response headers so the status remains readable (Composer reads the code
-    // from the headers on 4xx). Redirects are followed; the final response's
-    // headers are the ones captured.
+    // A non-2xx status is not a transport error here (we still want the headers).
+    // max_redirects mirrors PHP's http wrapper default of 20.
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .http_status_as_error(false)
+        .max_redirects(opts.max_redirects.unwrap_or(20))
         .build()
         .into();
-    match agent.get(url_str).call() {
+    // Build an explicit request so any method (GET/POST/…) is handled uniformly.
+    let method = ureq::http::Method::from_bytes(opts.method.as_deref().unwrap_or(b"GET"))
+        .unwrap_or(ureq::http::Method::GET);
+    let mut builder = ureq::http::Request::builder().method(method).uri(url_str);
+    for line in &opts.headers {
+        if let Some(pos) = line.iter().position(|&b| b == b':') {
+            let name = String::from_utf8_lossy(&line[..pos]);
+            let raw = &line[pos + 1..];
+            let value = String::from_utf8_lossy(raw.strip_prefix(b" ").unwrap_or(raw));
+            builder = builder.header(name.trim(), value.trim_end());
+        }
+    }
+    let body: Vec<u8> = opts.content.clone().unwrap_or_default();
+    let Ok(request) = builder.body(body) else {
+        warn("invalid request".to_string());
+        return None;
+    };
+    match agent.run(request) {
         Ok(mut resp) => {
             let code = resp.status().as_u16();
-            // PHP's http wrapper is HTTP/1.1 and reports the canonical reason.
             let reason = resp.status().canonical_reason().unwrap_or("");
             let mut lines: Vec<Vec<u8>> = vec![format!("HTTP/1.1 {code} {reason}").into_bytes()];
             for (name, value) in resp.headers().iter() {
-                let mut line = Vec::with_capacity(name.as_str().len() + value.as_bytes().len() + 2);
-                line.extend_from_slice(name.as_str().as_bytes());
-                line.extend_from_slice(b": ");
-                line.extend_from_slice(value.as_bytes());
-                lines.push(line);
+                let mut l = Vec::with_capacity(name.as_str().len() + value.as_bytes().len() + 2);
+                l.extend_from_slice(name.as_str().as_bytes());
+                l.extend_from_slice(b": ");
+                l.extend_from_slice(value.as_bytes());
+                lines.push(l);
             }
             LAST_RESPONSE_HEADERS.with(|c| *c.borrow_mut() = Some(lines));
-            if (200..300).contains(&code) {
+            if (200..300).contains(&code) || opts.ignore_errors {
                 match resp.body_mut().read_to_vec() {
                     Ok(body) => Some(body),
                     Err(e) => {
@@ -362,7 +470,7 @@ pub fn file_get_contents(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
     // filesystem (the openssl/Composer-network filone); `$offset`/`$length` still
     // apply to the fetched body below, as for a file.
     let mut data = if is_http_url(name.as_bytes()) {
-        match http_get(name.as_bytes(), ctx) {
+        match http_get(name.as_bytes(), argv.get(2), ctx) {
             Some(body) => body,
             None => return Ok(Zval::Bool(false)),
         }

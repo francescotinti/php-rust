@@ -8784,6 +8784,33 @@ impl<'m> Vm<'m> {
         Zval::Resource(Rc::new(RefCell::new(Resource::new(id, stream))))
     }
 
+    /// Mint a `stream-context` resource carrying its options array (a host
+    /// builtin because it allocates a resource id, like `fopen`).
+    fn alloc_resource_context(&mut self, options: Zval) -> Zval {
+        let id = self.next_resource_id;
+        self.next_resource_id += 1;
+        Zval::Resource(Rc::new(RefCell::new(Resource::new_context(id, options))))
+    }
+
+    /// `stream_context_create($options = null, $params = null)`: build a context
+    /// resource holding `$options` (a `wrapper => [option => value]` map, e.g.
+    /// `['http' => ['method' => 'POST', 'header' => [...]], 'ssl' => [...]]`) for
+    /// the stream functions to read. `$params` (stream notifications) is not
+    /// modelled. Mirrors PHP's `?array` argument typing.
+    fn ho_stream_context_create(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let options = match args.first().map(|v| v.deref_clone()) {
+            None | Some(Zval::Null | Zval::Undef) => Zval::Array(Rc::new(PhpArray::new())),
+            Some(v @ Zval::Array(_)) => v,
+            Some(other) => {
+                return Err(PhpError::TypeError(format!(
+                    "stream_context_create(): Argument #1 ($options) must be of type ?array, {} given",
+                    other.type_name_for_error()
+                )))
+            }
+        };
+        Ok(self.alloc_resource_context(options))
+    }
+
     /// `fopen($filename, $mode, …)`: open a real file or a `php://` wrapper and mint
     /// a stream resource. A host builtin because it allocates a resource id. Args 3/4
     /// (use_include_path, context) are a scope-out. On failure: Warning + `false`.
@@ -11132,6 +11159,7 @@ host_builtins! {
     b"fopen" => vm.ho_fopen(args),
     b"tmpfile" => vm.ho_tmpfile(),
     b"opendir" => vm.ho_opendir(args),
+    b"stream_context_create" => vm.ho_stream_context_create(args),
     b"preg_replace" => vm.ho_preg_replace(args),
     b"preg_quote" => vm.ho_preg_quote(args),
     b"preg_split" => vm.ho_preg_split(args),
