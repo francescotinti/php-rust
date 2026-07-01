@@ -184,6 +184,8 @@ pub fn registry() -> Registry {
     add(b"strncmp", string::strncmp);
     add(b"strcasecmp", string::strcasecmp);
     add(b"strncasecmp", string::strncasecmp);
+    add(b"strnatcmp", string::strnatcmp);
+    add(b"strnatcasecmp", string::strnatcasecmp);
     add(b"ctype_alnum", ctype::ctype_alnum);
     add(b"ctype_alpha", ctype::ctype_alpha);
     add(b"ctype_cntrl", ctype::ctype_cntrl);

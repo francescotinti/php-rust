@@ -454,6 +454,157 @@ pub fn strncasecmp(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Long(zend_strcmp(a.as_bytes(), b.as_bytes(), Some(length as usize), true)))
 }
 
+/// C `isspace`: space, `\t`, `\n`, `\v`, `\f`, `\r` (`\v` = 0x0B is included,
+/// unlike Rust's `is_ascii_whitespace`).
+fn nat_isspace(c: u8) -> bool {
+    matches!(c, b' ' | b'\t' | b'\n' | 0x0B | 0x0C | b'\r')
+}
+
+/// A byte at `i`, or 0 (the C null terminator) when `i` is at/past the end —
+/// lets the port read "one past the end" as PHP's C code does on its NUL-
+/// terminated strings.
+fn nat_at(s: &[u8], i: usize) -> u8 {
+    s.get(i).copied().unwrap_or(0)
+}
+
+/// `compare_right`: two right-aligned integer runs — the longest run of digits
+/// wins; on equal length the greatest value wins (remembered as `bias`).
+fn nat_compare_right(a: &[u8], ai: &mut usize, b: &[u8], bi: &mut usize) -> i64 {
+    let mut bias = 0i64;
+    loop {
+        let ad = *ai < a.len() && a[*ai].is_ascii_digit();
+        let bd = *bi < b.len() && b[*bi].is_ascii_digit();
+        if !ad && !bd {
+            return bias;
+        } else if !ad {
+            return -1;
+        } else if !bd {
+            return 1;
+        } else if a[*ai] < b[*bi] {
+            if bias == 0 {
+                bias = -1;
+            }
+        } else if a[*ai] > b[*bi] {
+            if bias == 0 {
+                bias = 1;
+            }
+        }
+        *ai += 1;
+        *bi += 1;
+    }
+}
+
+/// `compare_left`: two left-aligned digit runs — the first differing digit wins.
+fn nat_compare_left(a: &[u8], ai: &mut usize, b: &[u8], bi: &mut usize) -> i64 {
+    loop {
+        let ad = *ai < a.len() && a[*ai].is_ascii_digit();
+        let bd = *bi < b.len() && b[*bi].is_ascii_digit();
+        if !ad && !bd {
+            return 0;
+        } else if !ad {
+            return -1;
+        } else if !bd {
+            return 1;
+        } else if a[*ai] < b[*bi] {
+            return -1;
+        } else if a[*ai] > b[*bi] {
+            return 1;
+        }
+        *ai += 1;
+        *bi += 1;
+    }
+}
+
+/// Natural-order comparison — a faithful port of PHP's `strnatcmp_ex`
+/// (`ext/standard/strnatcmp.c`, Martin Pool's algorithm): leading zeros and
+/// whitespace are skipped, digit runs compare by numeric magnitude, everything
+/// else byte-by-byte (upper-cased when `ci`). Returns -1/0/1.
+fn strnatcmp_ex(a: &[u8], b: &[u8], ci: bool) -> i64 {
+    if a.is_empty() || b.is_empty() {
+        return normalize_bool(a.len() as i64 - b.len() as i64);
+    }
+    let (mut ap, mut bp) = (0usize, 0usize);
+    let mut ca = a[ap];
+    let mut cb = b[bp];
+    // Skip leading zeros (only when a digit follows, so a bare "0" is kept).
+    while ca == b'0' && ap + 1 < a.len() && a[ap + 1].is_ascii_digit() {
+        ap += 1;
+        ca = a[ap];
+    }
+    while cb == b'0' && bp + 1 < b.len() && b[bp + 1].is_ascii_digit() {
+        bp += 1;
+        cb = b[bp];
+    }
+    loop {
+        while nat_isspace(ca) {
+            ap += 1;
+            ca = nat_at(a, ap);
+        }
+        while nat_isspace(cb) {
+            bp += 1;
+            cb = nat_at(b, bp);
+        }
+
+        if ca.is_ascii_digit() && cb.is_ascii_digit() {
+            let fractional = ca == b'0' || cb == b'0';
+            let result = if fractional {
+                nat_compare_left(a, &mut ap, b, &mut bp)
+            } else {
+                nat_compare_right(a, &mut ap, b, &mut bp)
+            };
+            if result != 0 {
+                return result;
+            } else if ap == a.len() && bp == b.len() {
+                return 0;
+            } else if ap == a.len() {
+                return -1;
+            } else if bp == b.len() {
+                return 1;
+            } else {
+                ca = a[ap];
+                cb = b[bp];
+            }
+        }
+
+        let (mut xa, mut xb) = (ca, cb);
+        if ci {
+            xa = xa.to_ascii_uppercase();
+            xb = xb.to_ascii_uppercase();
+        }
+        if xa < xb {
+            return -1;
+        } else if xa > xb {
+            return 1;
+        }
+
+        ap += 1;
+        bp += 1;
+        if ap >= a.len() && bp >= b.len() {
+            return 0;
+        } else if ap >= a.len() {
+            return -1;
+        } else if bp >= b.len() {
+            return 1;
+        }
+        ca = a[ap];
+        cb = b[bp];
+    }
+}
+
+/// `strnatcmp($s1, $s2)`: natural-order string comparison.
+pub fn strnatcmp(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let a = cmp_arg_str(args, 0, "strnatcmp", ctx)?;
+    let b = cmp_arg_str(args, 1, "strnatcmp", ctx)?;
+    Ok(Zval::Long(strnatcmp_ex(a.as_bytes(), b.as_bytes(), false)))
+}
+
+/// `strnatcasecmp($s1, $s2)`: case-insensitive natural-order comparison.
+pub fn strnatcasecmp(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let a = cmp_arg_str(args, 0, "strnatcasecmp", ctx)?;
+    let b = cmp_arg_str(args, 1, "strnatcasecmp", ctx)?;
+    Ok(Zval::Long(strnatcmp_ex(a.as_bytes(), b.as_bytes(), true)))
+}
+
 /// str_pad($string, $length, $pad_string = " ", $pad_type = STR_PAD_RIGHT).
 ///
 /// `$pad_type`: 0 = left, 1 = right (default), 2 = both (extra char on the
