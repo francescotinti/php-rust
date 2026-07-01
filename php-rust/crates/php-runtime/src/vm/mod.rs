@@ -372,6 +372,7 @@ pub(crate) fn run_module_with_hir<'m>(
         enum_cache: HashMap::new(),
         constants: HashMap::new(),
         mb_regex: crate::mbregex::MbRegexState::default(),
+        strtok: None,
         uncaught_throwable: None,
         lazy_init: HashMap::new(),
         lazy_props: HashMap::new(),
@@ -933,6 +934,10 @@ struct Vm<'m> {
     /// the global `mb_regex_encoding`/`mb_regex_set_options` and the `mb_ereg_search`
     /// cursor. Survives across `mb_*` calls for the whole run.
     mb_regex: crate::mbregex::MbRegexState,
+    /// `strtok` tokenizer state: the string handed to `strtok($str, $tok)` and the
+    /// current byte cursor. A one-argument `strtok($tok)` resumes from here.
+    /// `None` before any `strtok` call (or after exhaustion resets it).
+    strtok: Option<(Vec<u8>, usize)>,
     /// The throwable synthesized for an *uncaught* error, stashed by `unwind` while
     /// the faulting frames are still live so `render_fatal` can show the real stack
     /// trace (an engine error reaches the renderer after its frames are popped).
@@ -8455,6 +8460,49 @@ impl<'m> Vm<'m> {
         Ok(Zval::Str(PhpStr::new(buf)))
     }
 
+    /// `strtok([$string,] $token)`: split a string into tokens on any byte in
+    /// `$token`. The two-argument form sets the internal string and cursor; the
+    /// one-argument form resumes from the saved cursor. Leading delimiters are
+    /// skipped; `false` is returned when the string is exhausted (or a
+    /// one-argument call has no prior string). Mirrors PHP's stateful tokenizer.
+    fn ho_strtok(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let delims = match args.len() {
+            0 => {
+                return Err(PhpError::ArgumentCountError(
+                    "strtok() expects at least 1 argument, 0 given".to_string(),
+                ))
+            }
+            1 => convert::to_zstr_cast(&args[0].deref_clone(), &mut self.diags)
+                .as_bytes()
+                .to_vec(),
+            _ => {
+                let s = convert::to_zstr_cast(&args[0].deref_clone(), &mut self.diags)
+                    .as_bytes()
+                    .to_vec();
+                let tok = convert::to_zstr_cast(&args[1].deref_clone(), &mut self.diags)
+                    .as_bytes()
+                    .to_vec();
+                self.strtok = Some((s, 0));
+                tok
+            }
+        };
+        let Some((buf, pos)) = self.strtok.as_mut() else {
+            return Ok(Zval::Bool(false));
+        };
+        // Skip leading delimiters.
+        while *pos < buf.len() && delims.contains(&buf[*pos]) {
+            *pos += 1;
+        }
+        if *pos >= buf.len() {
+            return Ok(Zval::Bool(false));
+        }
+        let start = *pos;
+        while *pos < buf.len() && !delims.contains(&buf[*pos]) {
+            *pos += 1;
+        }
+        Ok(Zval::Str(PhpStr::new(buf[start..*pos].to_vec())))
+    }
+
     /// `preg_split($pattern, $subject, $limit = -1, $flags = 0)`: split `$subject`
     /// on matches of `$pattern`. Returns `false` on a bad pattern. Mirrors
     /// `eval::ho_preg_split` on the shared `crate::preg` engine (no-empty /
@@ -11492,6 +11540,7 @@ host_builtins! {
     b"preg_quote" => vm.ho_preg_quote(args),
     b"preg_split" => vm.ho_preg_split(args),
     b"preg_grep" => vm.ho_preg_grep(args),
+    b"strtok" => vm.ho_strtok(args),
     b"random_int" => vm.ho_random_int(args),
     b"random_bytes" => vm.ho_random_bytes(args),
     b"debug_backtrace" => vm.ho_debug_backtrace(args),
