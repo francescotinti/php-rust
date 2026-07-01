@@ -30,7 +30,7 @@ impl<'m> Vm<'m> {
                     Some(Zval::Long(n)) => *n,
                     _ => fault_line as i64,
                 };
-                let trace = match b.props.get(b"traceString") {
+                let trace = match b.props.get(self.host_prop_key(b.class_id as usize, b"traceString").as_slice()) {
                     Some(Zval::Str(s)) => String::from_utf8_lossy(s.as_bytes()).into_owned(),
                     _ => "#0 {main}".to_string(),
                 };
@@ -249,9 +249,9 @@ impl<'m> Vm<'m> {
             b.props.set(b"line", Zval::Long(line as i64));
             b.props
                 .set(b"file", Zval::Str(PhpStr::new(file)));
-            b.props.set(b"trace", trace);
+            b.props.set(self.host_prop_key(cid, b"trace").as_slice(), trace);
             b.props
-                .set(b"traceString", Zval::Str(PhpStr::new(trace_string)));
+                .set(self.host_prop_key(cid, b"traceString").as_slice(), Zval::Str(PhpStr::new(trace_string)));
         }
         Ok(value)
     }

@@ -10371,6 +10371,26 @@ impl<'m> Vm<'m> {
         prop_info(&self.classes, ocid, name).map(|pi| pi.storage_key.to_vec()).unwrap_or_else(|| name.to_vec())
     }
 
+    /// Storage key host (Rust) code uses for a *base-declared* internal property
+    /// (`Exception::$trace` / `$traceString`, `Fiber::$callable`): the slot of the
+    /// root-most ancestor of `ocid` that declares `name` — what Zend's
+    /// `zend_read_property(scope = base_ce)` addresses — unaffected by a same-name
+    /// private redeclaration in a user subclass. Plain name if nowhere declared.
+    fn host_prop_key(&self, ocid: ClassId, name: &[u8]) -> Vec<u8> {
+        let mut found: Option<&PropInfo> = None;
+        let mut cur = Some(ocid);
+        while let Some(c) = cur {
+            let Some(cc) = self.classes.get(c) else { break };
+            if let Some(pi) = cc.prop_info.get(name) {
+                if pi.declaring_class == c {
+                    found = Some(pi);
+                }
+            }
+            cur = cc.parent;
+        }
+        found.map(|pi| pi.storage_key.to_vec()).unwrap_or_else(|| name.to_vec())
+    }
+
     /// The fatal raised by a compound write (`+=`, `++`, …) to a `readonly`
     /// property: always an error — "Cannot modify readonly property" once
     /// initialised, or the before-initialization fatal if the implicit read of an
@@ -10815,9 +10835,9 @@ impl<'m> Vm<'m> {
         let mut b = o.borrow_mut();
         b.props.set(b"line", Zval::Long(line as i64));
         b.props.set(b"file", Zval::Str(PhpStr::new(file)));
-        b.props.set(b"trace", trace);
+        b.props.set(self.host_prop_key(cid, b"trace").as_slice(), trace);
         b.props
-            .set(b"traceString", Zval::Str(PhpStr::new(trace_string)));
+            .set(self.host_prop_key(cid, b"traceString").as_slice(), Zval::Str(PhpStr::new(trace_string)));
     }
 
     /// The source file attributed to frame `i`: its function's defining file

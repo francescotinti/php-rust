@@ -282,7 +282,10 @@ impl<'m> Vm<'m> {
             ));
         }
         let callable = match obj {
-            Zval::Object(o) => o.borrow().props.get(b"callable").cloned().unwrap_or(Zval::Null),
+            Zval::Object(o) => {
+                let key = self.host_prop_key(o.borrow().class_id as usize, b"callable");
+                o.borrow().props.get(key.as_slice()).cloned().unwrap_or(Zval::Null)
+            }
             _ => Zval::Null,
         };
         self.fibers.insert(
