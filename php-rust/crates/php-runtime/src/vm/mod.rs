@@ -8369,6 +8369,92 @@ impl<'m> Vm<'m> {
         Ok(Zval::Str(PhpStr::new(crate::preg::quote(&s, delim))))
     }
 
+    /// `preg_grep($pattern, $array, $flags = 0)`: return the entries of `$array`
+    /// whose (string-cast) value matches `$pattern`, preserving keys. With
+    /// `PREG_GREP_INVERT` (1) the *non-matching* entries are returned instead.
+    /// `false` on a bad pattern. Mirrors the shared `crate::preg` engine.
+    fn ho_preg_grep(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if args.len() < 2 {
+            return Err(PhpError::ArgumentCountError(
+                "preg_grep() expects at least 2 arguments".to_string(),
+            ));
+        }
+        let pat = convert::to_zstr_cast(&args[0].deref_clone(), &mut self.diags).as_bytes().to_vec();
+        let arr = match args[1].deref_clone() {
+            Zval::Array(a) => a,
+            other => {
+                return Err(PhpError::TypeError(format!(
+                    "preg_grep(): Argument #2 ($array) must be of type array, {} given",
+                    other.type_name_for_error()
+                )))
+            }
+        };
+        let flags = match args.get(2) {
+            Some(a) => convert::to_long_cast(&a.deref_clone(), &mut self.diags),
+            None => 0,
+        };
+        let invert = flags & 1 != 0; // PREG_GREP_INVERT
+        let Some(re) = self.preg_compile(&pat) else {
+            return Ok(Zval::Bool(false));
+        };
+        let entries: Vec<(Key, Zval)> =
+            arr.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect();
+        let mut out = PhpArray::new();
+        for (k, v) in entries {
+            let subj = convert::to_zstr_cast(&v, &mut self.diags).as_bytes().to_vec();
+            let subj = String::from_utf8_lossy(&subj);
+            let matched = re.captures_at(&subj, 0).is_some();
+            if matched != invert {
+                out.insert(k, v);
+            }
+        }
+        Ok(Zval::Array(Rc::new(out)))
+    }
+
+    /// `random_int(int $min, int $max): int` — a uniformly distributed random
+    /// integer in `[$min, $max]`, drawn from the OS CSPRNG. Mirrors PHP's
+    /// rejection-sampling algorithm (`php_random_range64`) to avoid modulo bias.
+    fn ho_random_int(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if args.len() < 2 {
+            return Err(PhpError::ArgumentCountError(format!(
+                "random_int() expects exactly 2 arguments, {} given",
+                args.len()
+            )));
+        }
+        let min = convert::to_long_cast(&args[0].deref_clone(), &mut self.diags);
+        let max = convert::to_long_cast(&args[1].deref_clone(), &mut self.diags);
+        if min > max {
+            return Err(PhpError::ValueError(
+                "random_int(): Argument #1 ($min) must be less than or equal to argument #2 ($max)"
+                    .to_string(),
+            ));
+        }
+        // Unsigned span between the bounds (two's-complement subtraction keeps
+        // it correct even when the range straddles zero or is the full i64).
+        let umax = (max as u64).wrapping_sub(min as u64);
+        let result = os_random_range64(umax)?;
+        Ok(Zval::Long(min.wrapping_add(result as i64)))
+    }
+
+    /// `random_bytes(int $length): string` — `$length` cryptographically secure
+    /// random bytes from the OS CSPRNG. `ValueError` when `$length < 1`.
+    fn ho_random_bytes(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(first) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "random_bytes() expects exactly 1 argument, 0 given".to_string(),
+            ));
+        };
+        let len = convert::to_long_cast(&first.deref_clone(), &mut self.diags);
+        if len < 1 {
+            return Err(PhpError::ValueError(
+                "random_bytes(): Argument #1 ($length) must be greater than 0".to_string(),
+            ));
+        }
+        let mut buf = vec![0u8; len as usize];
+        os_random_fill(&mut buf)?;
+        Ok(Zval::Str(PhpStr::new(buf)))
+    }
+
     /// `preg_split($pattern, $subject, $limit = -1, $flags = 0)`: split `$subject`
     /// on matches of `$pattern`. Returns `false` on a bad pattern. Mirrors
     /// `eval::ho_preg_split` on the shared `crate::preg` engine (no-empty /
@@ -11393,6 +11479,9 @@ host_builtins! {
     b"preg_replace" => vm.ho_preg_replace(args),
     b"preg_quote" => vm.ho_preg_quote(args),
     b"preg_split" => vm.ho_preg_split(args),
+    b"preg_grep" => vm.ho_preg_grep(args),
+    b"random_int" => vm.ho_random_int(args),
+    b"random_bytes" => vm.ho_random_bytes(args),
     b"debug_backtrace" => vm.ho_debug_backtrace(args),
     b"debug_print_backtrace" => vm.ho_debug_print_backtrace(),
     b"preg_replace_callback" => vm.ho_preg_replace_callback(args),
@@ -11599,6 +11688,45 @@ fn dyn_method_name(v: &Zval) -> Result<Vec<u8>, PhpError> {
         Zval::Str(s) => Ok(s.as_bytes().to_vec()),
         _ => Err(PhpError::Error("Method name must be a string".to_string())),
     }
+}
+
+
+/// Fill `buf` with cryptographically secure random bytes from the OS entropy
+/// source (`getrandom`). Backs `random_int`/`random_bytes`; a source failure
+/// (never expected on a normal host) surfaces as a plain `Error`.
+fn os_random_fill(buf: &mut [u8]) -> Result<(), PhpError> {
+    getrandom::getrandom(buf)
+        .map_err(|e| PhpError::Error(format!("Failed to generate random bytes: {e}")))
+}
+
+/// A fresh random `u64` from the OS CSPRNG (byte order is irrelevant for
+/// uniform randomness).
+fn os_random_u64() -> Result<u64, PhpError> {
+    let mut buf = [0u8; 8];
+    os_random_fill(&mut buf)?;
+    Ok(u64::from_le_bytes(buf))
+}
+
+/// Uniform unsigned integer in `[0, umax]` via OS randomness and rejection
+/// sampling — a direct port of PHP's `php_random_range64`, which discards the
+/// biased tail so every value in range is equally likely.
+fn os_random_range64(umax: u64) -> Result<u64, PhpError> {
+    let mut result = os_random_u64()?;
+    // Full 64-bit range: no reduction needed.
+    if umax == u64::MAX {
+        return Ok(result);
+    }
+    let umax = umax + 1; // make the range inclusive of `max`
+    // Powers of two are unbiased — just mask off the low bits.
+    if umax & (umax - 1) == 0 {
+        return Ok(result & (umax - 1));
+    }
+    // Ceiling below which `result % umax` is unbiased; reject anything above.
+    let limit = u64::MAX - (u64::MAX % umax) - 1;
+    while result > limit {
+        result = os_random_u64()?;
+    }
+    Ok(result % umax)
 }
 
 /// Best-effort equality of two callable [`Zval`]s for `spl_autoload_unregister`

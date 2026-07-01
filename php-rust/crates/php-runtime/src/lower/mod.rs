@@ -2619,6 +2619,7 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"PREG_SPLIT_NO_EMPTY" => ExprKind::Int(1),
         b"PREG_SPLIT_DELIM_CAPTURE" => ExprKind::Int(2),
         b"PREG_SPLIT_OFFSET_CAPTURE" => ExprKind::Int(4),
+        b"PREG_GREP_INVERT" => ExprKind::Int(1),
         // sort flags.
         b"SORT_REGULAR" => ExprKind::Int(0),
         b"SORT_NUMERIC" => ExprKind::Int(1),
