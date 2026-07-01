@@ -911,6 +911,98 @@ function date_interval_create_from_date_string($datetime) {
 // Iterator + ArrayAccess protocols + the array builtins. Zero VM changes.
 // `__keys` is a key snapshot taken at rewind() so the integer `__pos` cursor is
 // order-preserving and survives mutation, matching SPL semantics.
+// SplDoublyLinkedList family (Composer's dependency solver: SplQueue work
+// queues, RuleWatchChain extends the list and removes mid-iteration). Backed by
+// a plain array kept dense via array_splice; the iteration cursor is a plain
+// index that runs bottom-up (FIFO) or top-down (LIFO). Offsets index from the
+// iteration head: $stack[0] is the most recently pushed element (oracle).
+class SplDoublyLinkedList implements Iterator, Countable, ArrayAccess {
+    const IT_MODE_LIFO = 2;
+    const IT_MODE_FIFO = 0;
+    const IT_MODE_DELETE = 1;
+    const IT_MODE_KEEP = 0;
+    protected $__items = [];
+    protected $__pos = 0;
+    protected $__mode = 0; // FIFO|KEEP; SplStack flips to LIFO
+    private function __lifo() { return ($this->__mode & self::IT_MODE_LIFO) === self::IT_MODE_LIFO; }
+    private function __real($index, $method) {
+        $n = count($this->__items);
+        $i = (int)$index;
+        $r = $this->__lifo() ? $n - 1 - $i : $i;
+        if ($i < 0 || $r < 0 || $r >= $n) {
+            throw new OutOfRangeException("SplDoublyLinkedList::$method(): Argument #1 (\$index) is out of range");
+        }
+        return $r;
+    }
+    public function push($value) { $this->__items[] = $value; }
+    public function pop() {
+        if (count($this->__items) === 0) { throw new RuntimeException("Can't pop from an empty datastructure"); }
+        return array_pop($this->__items);
+    }
+    public function shift() {
+        if (count($this->__items) === 0) { throw new RuntimeException("Can't shift from an empty datastructure"); }
+        return array_shift($this->__items);
+    }
+    public function unshift($value) { array_unshift($this->__items, $value); }
+    public function top() {
+        if (count($this->__items) === 0) { throw new RuntimeException("Can't peek at an empty datastructure"); }
+        return $this->__items[count($this->__items) - 1];
+    }
+    public function bottom() {
+        if (count($this->__items) === 0) { throw new RuntimeException("Can't peek at an empty datastructure"); }
+        return $this->__items[0];
+    }
+    public function isEmpty() { return count($this->__items) === 0; }
+    public function count(): int { return count($this->__items); }
+    public function setIteratorMode($mode) { $this->__mode = (int)$mode; }
+    public function getIteratorMode() { return $this->__mode; }
+    public function toArray() { return $this->__items; }
+    public function rewind(): void { $this->__pos = $this->__lifo() ? count($this->__items) - 1 : 0; }
+    public function valid(): bool { return $this->__pos >= 0 && $this->__pos < count($this->__items); }
+    public function current(): mixed { return $this->valid() ? $this->__items[$this->__pos] : null; }
+    public function key(): mixed { return $this->__pos; }
+    public function next(): void {
+        if ($this->__lifo()) {
+            if (($this->__mode & self::IT_MODE_DELETE) === self::IT_MODE_DELETE && $this->valid()) { $this->pop(); }
+            $this->__pos--;
+        } else {
+            if (($this->__mode & self::IT_MODE_DELETE) === self::IT_MODE_DELETE && $this->valid()) {
+                $this->shift();
+            } else {
+                $this->__pos++;
+            }
+        }
+    }
+    public function prev(): void { if ($this->__lifo()) { $this->__pos++; } else { $this->__pos--; } }
+    public function offsetExists($index): bool {
+        $n = count($this->__items);
+        $i = (int)$index;
+        return $i >= 0 && $i < $n;
+    }
+    public function offsetGet($index): mixed { return $this->__items[$this->__real($index, "offsetGet")]; }
+    public function offsetSet($index, $value): void {
+        if ($index === null) { $this->__items[] = $value; return; }
+        $this->__items[$this->__real($index, "offsetSet")] = $value;
+    }
+    public function offsetUnset($index): void {
+        array_splice($this->__items, $this->__real($index, "offsetUnset"), 1);
+    }
+    public function add($index, $value) {
+        $n = count($this->__items);
+        $i = (int)$index;
+        if ($i < 0 || $i > $n) {
+            throw new OutOfRangeException("SplDoublyLinkedList::add(): Argument #1 (\$index) is out of range");
+        }
+        array_splice($this->__items, $i, 0, [$value]);
+    }
+}
+class SplQueue extends SplDoublyLinkedList {
+    public function enqueue($value) { $this->push($value); }
+    public function dequeue() { return $this->shift(); }
+}
+class SplStack extends SplDoublyLinkedList {
+    protected $__mode = 2; // IT_MODE_LIFO | IT_MODE_KEEP
+}
 class ArrayIterator implements Iterator, ArrayAccess, Countable {
     private $__storage = [];
     private $__keys = [];
