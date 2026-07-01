@@ -1859,7 +1859,7 @@ impl<'a> FnCompiler<'a> {
                 // warns or calls `__get`. Other operands (Var/Index) read silently.
                 if let ExprKind::PropGet { object, name, nullsafe } = &a.kind {
                     if !nullsafe {
-                        self.expr(object)?; // [obj]
+                        self.coalesce_load(object)?; // [obj] — silent: `$x->a->b ?? d`
                         self.emit(Op::Dup); // [obj, obj]
                         self.emit(Op::PropIsset { name: name.clone() }); // [obj, isset]
                         let to_default = self.emit(Op::JumpIfFalse(Addr::MAX)); // unset → default; [obj]
@@ -1879,7 +1879,7 @@ impl<'a> FnCompiler<'a> {
                 // no "Undefined property" warning leaks.
                 if let ExprKind::PropGetDyn { object, name, nullsafe } = &a.kind {
                     if !nullsafe {
-                        self.expr(object)?; // [obj]
+                        self.coalesce_load(object)?; // [obj] — silent object read
                         self.expr(name)?; // [obj, name]
                         self.emit(Op::PropGetDynamicSilent); // [value-or-null]
                         let to_end = self.emit(Op::JumpIfNotNull(Addr::MAX));

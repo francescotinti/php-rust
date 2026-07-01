@@ -353,13 +353,62 @@ impl<'f> Lowerer<'f> {
 
             Expression::Construct(c) => match c {
                 Construct::Isset(is) => {
-                    let mut places = Vec::new();
+                    // Fast path: every operand is a valid read-only test place —
+                    // the multi-place `IssetPath` form (unchanged). If any operand
+                    // is instead a value-access like `isset(f()['k'])` (valid PHP,
+                    // but not an lvalue), fall back to ANDing per-operand boolean
+                    // tests via the `(expr ?? null) !== null` equivalence.
+                    let mut places = Vec::with_capacity(is.values.len());
+                    let mut all_places = true;
                     for v in is.values.iter() {
-                        places.push(self.lower_test_place(v, line)?);
+                        match self.lower_test_place(v, line) {
+                            Ok(p) => places.push(p),
+                            Err(_) => {
+                                all_places = false;
+                                break;
+                            }
+                        }
                     }
-                    ExprKind::Isset(places)
+                    if all_places {
+                        ExprKind::Isset(places)
+                    } else {
+                        let mut it = is.values.iter();
+                        let mut acc =
+                            self.isset_operand_bool(it.next().expect("isset has >=1 operand"), line)?;
+                        for v in it {
+                            let next = self.isset_operand_bool(v, line)?;
+                            acc = Expr {
+                                line,
+                                kind: ExprKind::And(Box::new(acc), Box::new(next)),
+                            };
+                        }
+                        acc.kind
+                    }
                 }
-                Construct::Empty(em) => ExprKind::Empty(self.lower_test_place(em.value, line)?),
+                Construct::Empty(em) => match self.lower_test_place(em.value, line) {
+                    Ok(place) => ExprKind::Empty(place),
+                    Err(e) => {
+                        // `empty(f()['k'])` on a value-access ⟺ `!(f()['k'] ?? null)`
+                        // (missing / null / falsy → empty), evaluating the base once
+                        // via the coalesce path. Other non-lvalues stay a fatal.
+                        let is_value_access = matches!(
+                            em.value,
+                            Expression::ArrayAccess(_) | Expression::Access(Access::Property(_))
+                        );
+                        if !is_value_access {
+                            return Err(e);
+                        }
+                        let val = self.lower_expr(em.value)?;
+                        let coalesce = Expr {
+                            line,
+                            kind: ExprKind::Coalesce(
+                                Box::new(val),
+                                Box::new(Expr { line, kind: ExprKind::Null }),
+                            ),
+                        };
+                        ExprKind::Unary(UnOp::Not, Box::new(coalesce))
+                    }
+                },
                 // `print expr` — an expression that emits then yields int(1).
                 Construct::Print(p) => ExprKind::Print(Box::new(self.lower_expr(p.value)?)),
                 // `exit`/`die [arg]` — `die` is an exact alias of `exit`. Both
@@ -1048,6 +1097,35 @@ impl<'f> Lowerer<'f> {
     /// or an undefined dynamic class name, which a plain static read would not be,
     /// and a bare static property is not a general lvalue anyway (a write goes
     /// through `StaticPropAssign`). Every other operand defers to `lower_place`.
+    /// Lower one `isset()` operand that is *not* a plain test place into a
+    /// boolean-valued expression. `isset(X)` where `X` is an array- or
+    /// property-access is equivalent to `(X ?? null) !== null`; the coalesce
+    /// path evaluates the base (a call, `new`, …) exactly once and tests the
+    /// element/property isset-aware. Any other non-lvalue operand (`isset(f())`)
+    /// is a fatal in PHP, so its original `lower_test_place` error propagates.
+    fn isset_operand_bool(&mut self, v: &Expression, line: Line) -> Result<Expr, LowerError> {
+        match self.lower_test_place(v, line) {
+            Ok(place) => Ok(Expr { line, kind: ExprKind::Isset(vec![place]) }),
+            Err(e) => {
+                let is_value_access = matches!(
+                    v,
+                    Expression::ArrayAccess(_) | Expression::Access(Access::Property(_))
+                );
+                if !is_value_access {
+                    return Err(e);
+                }
+                let val = self.lower_expr(v)?;
+                let null = || Box::new(Expr { line, kind: ExprKind::Null });
+                let coalesce =
+                    Expr { line, kind: ExprKind::Coalesce(Box::new(val), null()) };
+                Ok(Expr {
+                    line,
+                    kind: ExprKind::Binary(BinOp::NotIdentical, Box::new(coalesce), null()),
+                })
+            }
+        }
+    }
+
     pub(super) fn lower_test_place(
         &mut self,
         e: &Expression,
