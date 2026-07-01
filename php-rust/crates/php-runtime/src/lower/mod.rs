@@ -1889,6 +1889,32 @@ impl<'f> Lowerer<'f> {
         }
     }
 
+    /// Resolve a *called* function's name to its primary name plus an optional
+    /// global fallback, mirroring [`Self::resolve_const_fetch`]. An **unqualified**
+    /// call inside a namespace primarily names `CURNS\foo` and falls back to the
+    /// global `foo` — PHP tries the namespaced function first at run time, then the
+    /// global one, so a namespaced function defined in *another* compilation unit
+    /// (autoloaded / included) still binds. Unlike [`Self::resolve_fn_name`] this
+    /// does *not* consult `fn_index`: whether `CURNS\foo` is a hoisted user
+    /// function, a builtin, or defined elsewhere is decided by the call lowering.
+    /// Qualified / fully-qualified / imported and global-scope names have no
+    /// fallback.
+    fn resolve_fn_call(&self, id: &Identifier) -> (Box<[u8]>, Option<Box<[u8]>>) {
+        match id {
+            Identifier::FullyQualified(f) => (strip_leading_backslash(f.value).into(), None),
+            Identifier::Qualified(q) => (self.resolve_qualified(q.value), None),
+            Identifier::Local(l) => {
+                if let Some(fqn) = self.use_functions.get(&l.value.to_ascii_lowercase()) {
+                    (fqn.clone().into(), None)
+                } else if self.cur_namespace.is_empty() {
+                    (l.value.into(), None)
+                } else {
+                    (join_ns(&self.cur_namespace, l.value), Some(l.value.into()))
+                }
+            }
+        }
+    }
+
     /// Resolve a constant fetch to its primary name plus an optional global
     /// fallback. An *unqualified* constant inside a namespace primarily names
     /// `CURNS\NAME` and falls back to the global `NAME` (PHP tries the namespaced

@@ -748,8 +748,8 @@ impl<'f> Lowerer<'f> {
         };
         // A non-identifier callee (`$f(...)`, `$a['k'](...)`, an IIFE) is a
         // dynamic call dispatched on the runtime callee value (step 18, D-18.5).
-        let name = match fc.function {
-            Expression::Identifier(id) => self.resolve_fn_name(id),
+        let (name, fallback) = match fc.function {
+            Expression::Identifier(id) => self.resolve_fn_call(id),
             other => {
                 let callee = Box::new(self.lower_expr(other)?);
                 let args = self.lower_positional_args(&fc.argument_list, line)?;
@@ -759,8 +759,13 @@ impl<'f> Lowerer<'f> {
         let (mut args, named) = self.lower_args(&fc.argument_list, line)?;
         // `assert($expr)`: PHP's compiler injects the assertion's source text as the
         // description, so an uncaught AssertionError reads "assert(<expr source>)".
-        // Mirror that when the caller passed no explicit description.
-        if named.is_empty() && args.len() == 1 && name.eq_ignore_ascii_case(b"assert") {
+        // Mirror that when the caller passed no explicit description. Inside a
+        // namespace `assert(...)` resolves to the global builtin, so match against
+        // the global-fallback name when present.
+        if named.is_empty()
+            && args.len() == 1
+            && fallback.as_deref().unwrap_or(&name).eq_ignore_ascii_case(b"assert")
+        {
             if let Some(Argument::Positional(p)) = fc.argument_list.arguments.first() {
                 if p.ellipsis.is_none() {
                     let sp = p.value.span();
@@ -778,6 +783,7 @@ impl<'f> Lowerer<'f> {
         }
         Ok(ExprKind::Call {
             name,
+            fallback,
             args,
             named,
         })

@@ -770,8 +770,16 @@ pub enum ExprKind {
     /// leading positional arguments; `named` are trailing `name: value` arguments
     /// (step 38), empty for an all-positional call. PHP forbids a positional
     /// argument after a named one, so this split is unambiguous.
+    ///
+    /// `fallback` is the global name an *unqualified* call inside a namespace falls
+    /// back to when the namespaced `CURNS\name` is not defined (`Foo\reject` →
+    /// `Some(reject)`, mirroring [`ExprKind::Const`]); `None` for already-global /
+    /// qualified / imported names. PHP resolves the fallback at run time (tries the
+    /// namespaced function first, then the global one), so a namespaced function
+    /// defined in another compilation unit (autoloaded / included) still binds.
     Call {
         name: Box<[u8]>,
+        fallback: Option<Box<[u8]>>,
         args: Vec<Expr>,
         named: Vec<(Box<[u8]>, Expr)>,
     },

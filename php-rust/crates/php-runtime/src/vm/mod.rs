@@ -2141,6 +2141,15 @@ impl<'m> Vm<'m> {
                     let callee = self.frames[top].stack.pop().expect("CallValue callee");
                     self.invoke_value(callee, args)?;
                 }
+                Op::CallNsFallback { name, fallback, argc } => {
+                    let n = argc as usize;
+                    let mut args = Vec::with_capacity(n);
+                    for _ in 0..n {
+                        args.push(self.frames[top].stack.pop().expect("CallNsFallback argument"));
+                    }
+                    args.reverse();
+                    self.invoke_named_fallback(&name, &fallback, args)?;
+                }
                 Op::CallValueArgs => {
                     // Spread `$f(...$a)`: the arguments are the values of a runtime
                     // array (the callee sits beneath it), expanded in order.

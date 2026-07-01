@@ -1714,7 +1714,9 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::Stringify); // honour __toString (OOP-3c)
                 self.emit(Op::Print);
             }
-            ExprKind::Call { name, args, named } => self.call(name, args, named)?,
+            ExprKind::Call { name, fallback, args, named } => {
+                self.call(name, fallback.as_deref(), args, named)?
+            }
             ExprKind::Array(elems) => {
                 self.emit(Op::ArrayInit);
                 for el in elems {
@@ -2215,18 +2217,33 @@ impl<'a> FnCompiler<'a> {
     /// `define`-family / undefined) is out of slice, so the script falls back to
     /// the tree-walker. Named/spread arguments and user by-ref/variadic params are
     /// likewise deferred.
-    fn call(&mut self, name: &[u8], args: &[Expr], named: &[(Box<[u8]>, Expr)]) -> R<()> {
+    fn call(
+        &mut self,
+        name: &[u8],
+        fallback: Option<&[u8]>,
+        args: &[Expr],
+        named: &[(Box<[u8]>, Expr)],
+    ) -> R<()> {
         // User functions shadow builtins — but only *hoisted* ones bind statically;
         // a conditional declaration is dispatched dynamically (callable only after
-        // its `DeclareFn` runs).
-        if let Some(idx) = self
-            .ctx
-            .funcs
-            .iter()
-            .enumerate()
-            .find(|(i, f)| !self.ctx.conditional_fns.contains(i) && ascii_eq_ignore_case(&f.name, name))
-            .map(|(i, _)| i)
-        {
+        // its `DeclareFn` runs). An unqualified call inside a namespace binds to the
+        // namespaced `name` if hoisted here, otherwise to the global `fallback`
+        // (PHP's two-step lookup), so the namespaced form always shadows the global.
+        let hoisted = |nm: &[u8]| {
+            self.ctx
+                .funcs
+                .iter()
+                .enumerate()
+                .find(|(i, f)| {
+                    !self.ctx.conditional_fns.contains(i) && ascii_eq_ignore_case(&f.name, nm)
+                })
+                .map(|(i, _)| i)
+        };
+        let user_idx = hoisted(name).or_else(|| fallback.and_then(hoisted));
+        // Builtins are always global, so resolve them — and the run-time dynamic
+        // dispatch below — against the global-fallback name when present.
+        let bname: &[u8] = fallback.unwrap_or(name);
+        if let Some(idx) = user_idx {
             // Named arguments are resolved to parameter slots at compile time
             // (the callee is known), PAR.
             // A spread anywhere (`f(...$src)`, with or without named args) needs
@@ -2268,7 +2285,7 @@ impl<'a> FnCompiler<'a> {
         // Evaluator-only *host* builtins (higher-order / class-introspection /
         // define-family, Sessions B–D) need the VM itself, so they are dispatched
         // VM-side via `Op::CallHostBuiltin` rather than the stateless registry.
-        if let Some(canon) = crate::vm::host_builtin_canonical(name) {
+        if let Some(canon) = crate::vm::host_builtin_canonical(bname) {
             self.push_value_args(args)?; // rejects spread (out of slice here)
             self.emit(Op::CallHostBuiltin { name: canon.into(), argc: args.len() as u32 });
             return Ok(());
@@ -2280,7 +2297,7 @@ impl<'a> FnCompiler<'a> {
         // undefined) variable and emit a spurious "Undefined variable" warning the
         // real PHP never raises. Push `null` in its place (the builtin ignores the
         // input value there).
-        if let Some((canon, out_idx)) = crate::vm::host_builtin_out_param(name) {
+        if let Some((canon, out_idx)) = crate::vm::host_builtin_out_param(bname) {
             let out_slot = match args.get(out_idx) {
                 None => None, // out-param omitted (e.g. `preg_match($p, $s)`)
                 Some(e) => match &e.kind {
@@ -2314,7 +2331,7 @@ impl<'a> FnCompiler<'a> {
         // `fscanf`'s `...&$vars` from index 2): push the two fixed arguments by
         // value and capture each trailing out argument's slot (a non-variable
         // target becomes `None`, silently skipped at run time, D-54.1).
-        if let Some(canon) = crate::vm::host_builtin_scanf(name) {
+        if let Some(canon) = crate::vm::host_builtin_scanf(bname) {
             let fixed = args.len().min(2);
             self.push_value_args(&args[..fixed])?;
             let out_slots = args[fixed..]
@@ -2333,7 +2350,7 @@ impl<'a> FnCompiler<'a> {
         }
         // By-reference-first host builtins (`usort`, …): first argument is an array
         // variable taken by reference, the rest by value (Session C).
-        if let Some(canon) = crate::vm::host_builtin_ref_first(name) {
+        if let Some(canon) = crate::vm::host_builtin_ref_first(bname) {
             let Some((first, rest)) = args.split_first() else {
                 return Err(CompileError::Unsupported(
                     "by-reference host builtin called with no arguments".into(),
@@ -2374,16 +2391,16 @@ impl<'a> FnCompiler<'a> {
             }
         }
         // Builtins: classify by-value vs by-reference-first via the registry.
-        match self.ctx.registry.get(name) {
+        match self.ctx.registry.get(bname) {
             Some(Builtin::Value(_)) => {
                 if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
-                    return self.emit_builtin_spread(name, args);
+                    return self.emit_builtin_spread(bname, args);
                 }
                 self.push_value_args(args)?;
-                self.emit(Op::CallBuiltin { name: name.into(), argc: args.len() as u32 });
+                self.emit(Op::CallBuiltin { name: bname.into(), argc: args.len() as u32 });
                 Ok(())
             }
-            Some(Builtin::RefFirst(_)) => self.call_ref_builtin(name, args),
+            Some(Builtin::RefFirst(_)) => self.call_ref_builtin(bname, args),
             None => {
                 // An unknown name is NOT a compile error: PHP defers "Call to
                 // undefined function" to run time (the function may be declared
@@ -2393,6 +2410,21 @@ impl<'a> FnCompiler<'a> {
                 // argument side effects, matching the tree-walker.
                 if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
                     return Err(CompileError::Unsupported("argument unpacking (spread)".into()));
+                }
+                // An unqualified call inside a namespace whose target resolved to
+                // neither a hoisted user function nor a builtin defers PHP's two-step
+                // lookup (namespaced `name`, then global `fallback`) to run time — so
+                // a function defined in another unit (autoloaded / included) binds.
+                if let Some(fb) = fallback {
+                    for a in args {
+                        self.expr(a)?;
+                    }
+                    self.emit(Op::CallNsFallback {
+                        name: name.into(),
+                        fallback: fb.into(),
+                        argc: args.len() as u32,
+                    });
+                    return Ok(());
                 }
                 let k = self.konst(Const::Str(name.into()));
                 self.emit(Op::PushConst(k));
@@ -3604,7 +3636,7 @@ impl<'a> FnCompiler<'a> {
             self.emit(Op::BindRefToChecked { base, steps: steps.into() });
             return Ok(());
         }
-        let ExprKind::Call { name, args, named } = &call.kind else {
+        let ExprKind::Call { name, args, named, .. } = &call.kind else {
             return Err(CompileError::Unsupported("reference assignment from a non-call".into()));
         };
         if !named.is_empty() {

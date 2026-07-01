@@ -577,6 +577,31 @@ impl<'m> Vm<'m> {
         }
     }
 
+    /// Dispatch an unqualified namespaced call by name, performing PHP's two-step
+    /// lookup: try the namespaced `name` first, then the global `fallback`. A
+    /// namespaced function defined in another compilation unit (autoloaded /
+    /// included) is registered in `linked_functions`, so it binds here even though
+    /// the compiler could not resolve it statically. When neither is callable the
+    /// catchable "Call to undefined function" reports the namespaced `name`, exactly
+    /// as PHP does (`N\foo()` rather than the bare `foo()`).
+    pub(super) fn invoke_named_fallback(
+        &mut self,
+        name: &[u8],
+        fallback: &[u8],
+        args: Vec<Zval>,
+    ) -> Result<(), PhpError> {
+        if self.is_name_callable(name) {
+            self.invoke_named(name, args)
+        } else if self.is_name_callable(fallback) {
+            self.invoke_named(fallback, args)
+        } else {
+            Err(PhpError::Error(format!(
+                "Call to undefined function {}()",
+                String::from_utf8_lossy(name)
+            )))
+        }
+    }
+
     /// Enter a freshly-built callee `frame`: if its body is a generator,
     /// materialise a `Generator` handle on the caller's operand stack instead of
     /// running it (GEN); otherwise push it to run. The caller is the current top

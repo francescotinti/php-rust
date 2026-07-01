@@ -306,6 +306,14 @@ pub enum Op {
     /// callee value: an anonymous closure runs `closures[fn_idx]` (binding captures
     /// then params); a named closure / string names a user function or builtin.
     CallValue { argc: u32 },
+    /// `[arg0, …, arg{argc-1}] -> [result]` — an unqualified named call inside a
+    /// namespace whose target the compiler could not resolve statically (neither a
+    /// hoisted user function nor a builtin). Pop `argc` arguments and dispatch by
+    /// name at run time trying the namespaced `name` first, then the global
+    /// `fallback` — exactly PHP's two-step lookup, so a function defined in another
+    /// unit (autoloaded / included) still binds. When neither is defined the
+    /// catchable "Call to undefined function `name`()" reports the namespaced name.
+    CallNsFallback { name: Box<[u8]>, fallback: Box<[u8]>, argc: u32 },
     /// `[callee, argsArray] -> [result]` — a dynamic call with argument unpacking
     /// `$f(...$a)` (CLO). Pop the runtime argument array (its values become the
     /// positional arguments, in order) and the callee beneath it, then dispatch
