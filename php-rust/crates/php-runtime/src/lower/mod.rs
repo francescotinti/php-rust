@@ -93,14 +93,15 @@ pub fn lower_source_seeded(
     seed_classes: &[crate::hir::ClassDecl],
     seed_static: usize,
     seed_traits: &[(Vec<u8>, LoweredTrait)],
+    seed_globals: &[Box<[u8]>],
 ) -> Result<Program, LowerError> {
-    lower_source_impl(name, source, Some((seed_classes, seed_static, seed_traits)))
+    lower_source_impl(name, source, Some((seed_classes, seed_static, seed_traits, seed_globals)))
 }
 
 fn lower_source_impl(
     name: &[u8],
     source: &[u8],
-    seed: Option<(&[crate::hir::ClassDecl], usize, &[(Vec<u8>, LoweredTrait)])>,
+    seed: Option<(&[crate::hir::ClassDecl], usize, &[(Vec<u8>, LoweredTrait)], &[Box<[u8]>])>,
 ) -> Result<Program, LowerError> {
     let arena = Bump::new();
     let file = File::ephemeral(Cow::Owned(name.to_vec()), Cow::Owned(source.to_vec()));
@@ -146,7 +147,19 @@ fn lower_source_impl(
         // `__FILE__`/backtrace to "eval()'d code". Calling a caller user function
         // from eval therefore remains unsupported here (a later phase resolves it
         // against the caller module instead of re-emitting).
-        Some((sclasses, sstatic, straits)) => {
+        Some((sclasses, sstatic, straits, sglobals)) => {
+            // Seed the shared global variable name→slot registry (step 57): a
+            // seeded (`include`/`eval`) unit numbers its `$GLOBALS['x']` / `global
+            // $x` slots to *agree* with `main`'s (and every earlier unit's), since
+            // at run time all `DimBase::Global` ops index the one bottom (`main`)
+            // frame. Pre-populating `globals` in order reproduces the shared slot
+            // numbering; a genuinely new global name this unit introduces appends
+            // past the seed (the VM grows the bottom frame to match). Without this,
+            // each unit renumbers globals from 0 and cross-unit access aliases the
+            // wrong cell or overflows `main`'s frame.
+            for g in sglobals {
+                low.globals.slot_for(g);
+            }
             low.classes = sclasses.to_vec();
             let mut ci: HashMap<Vec<u8>, usize> = HashMap::new();
             for (i, cd) in sclasses.iter().enumerate() {

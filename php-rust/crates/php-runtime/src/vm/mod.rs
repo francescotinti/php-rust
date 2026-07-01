@@ -324,6 +324,7 @@ pub(crate) fn run_module_with_hir<'m>(
         seed_classes: main_hir.map(|p| p.classes.clone()).unwrap_or_default(),
         seed_traits: main_hir.map(|p| p.traits.clone()).unwrap_or_default(),
         seed_static: main_hir.map_or(0, |p| p.static_count),
+        seed_globals: main_hir.map(|p| p.slots.clone()).unwrap_or_default(),
         linked_functions: HashMap::new(),
         included_files: HashSet::new(),
         autoloaders: Vec::new(),
@@ -738,6 +739,14 @@ struct Vm<'m> {
     /// The static-cell id high-water mark carried into a seeded unit's lowering, so
     /// its `static $x` cells get ids past every already-loaded unit's (Phase 3).
     seed_static: usize,
+    /// The accumulating global-variable name registry, canonical slot-numbering for
+    /// every `$GLOBALS['x']` / `global $x` access across units (step 57). Starts as
+    /// `main`'s top-level variable names (`Program.slots`) and grows by each loaded
+    /// unit's *new* global names, so a seeded unit numbers its global slots to agree
+    /// with `main`'s bottom (global) frame — which all `DimBase::Global` ops index.
+    /// `frames[0].slots` is grown in step with this so a new global slot addresses a
+    /// real cell. Empty (and unused) when no HIR is retained.
+    seed_globals: Vec<Box<[u8]>>,
     /// User functions declared by a linked `eval`/`include` unit (step 57, Phase
     /// 1c-2): lowercased name → (defining module, index into its `functions`), so
     /// they are callable by name after the unit returns. The defining module is
@@ -4457,6 +4466,7 @@ impl<'m> Vm<'m> {
                 &self.seed_classes,
                 self.seed_static,
                 &self.seed_traits,
+                &self.seed_globals,
             ) {
                 Err(crate::LowerError::UndefinedClass { name: pname, line }) => {
                     // An undefined name may be a class/interface *or* a trait used
@@ -4485,6 +4495,18 @@ impl<'m> Vm<'m> {
             self.seed_classes.extend_from_slice(&program.classes[l..]);
         }
         self.seed_static = program.static_count;
+        // Fold the unit's new global variable names into the shared registry and
+        // grow the bottom (`main`) frame to cover them, so a `$GLOBALS['new']` /
+        // `global $new` this unit introduced addresses a real cell rather than
+        // overflowing `main`'s original slot count (step 57). The unit was lowered
+        // seeded with `seed_globals`, so `program.slots` is `[seed…, new…]`.
+        let g = self.seed_globals.len();
+        if program.slots.len() > g {
+            self.seed_globals.extend_from_slice(&program.slots[g..]);
+            if let Some(main_frame) = self.frames.first_mut() {
+                main_frame.slots.resize_with(self.seed_globals.len(), || Zval::Undef);
+            }
+        }
         // Fold the unit's new traits into the cross-unit trait image (a trait file
         // loaded via autoload makes its trait available to the unit that needed it).
         for (k, t) in &program.traits {
