@@ -1905,15 +1905,22 @@ impl<'a> FnCompiler<'a> {
             }
             ExprKind::MethodCall { object, method, args, named, nullsafe } => {
                 self.expr(object)?;
+                // A `$this->m(...)` receiver has a statically-known class, so the
+                // method's by-reference parameters can be honoured (REF-2); any other
+                // receiver is dynamic and stays by-value.
+                let recv_class = match object.kind {
+                    ExprKind::This => self.cur_class,
+                    _ => None,
+                };
                 if *nullsafe {
                     // `$o?->m(...)`: a null receiver keeps null and skips the call
                     // (its arguments are not evaluated either).
                     let skip = self.emit(Op::JumpIfNull(Addr::MAX));
-                    self.emit_method_call(method, args, named)?;
+                    self.emit_method_call(method, args, named, recv_class)?;
                     let end = self.here();
                     self.patch(skip, Op::JumpIfNull(end));
                 } else {
-                    self.emit_method_call(method, args, named)?;
+                    self.emit_method_call(method, args, named, recv_class)?;
                 }
             }
             ExprKind::PropGetDyn { object, name, nullsafe } => {
@@ -2675,18 +2682,12 @@ impl<'a> FnCompiler<'a> {
         Ok(())
     }
 
-    /// Emit an instance method call `$obj->m(args)` (the receiver is already on the
-    /// stack). Named arguments (`name: v`) push the positional values then the named
-    /// values and dispatch via [`Op::MethodCallNamed`] (the method, hence its
-    /// parameters, is only known at run time); a spread (`...$a`) builds a runtime
-    /// argument array for [`Op::MethodCallArgs`]; otherwise the values are pushed
-    /// positionally for [`Op::MethodCall`]. Named + spread mixed falls back to the
-    /// evaluator.
     fn emit_method_call(
         &mut self,
         method: &[u8],
         args: &[Expr],
         named: &[(Box<[u8]>, Expr)],
+        recv_class: Option<ClassId>,
     ) -> R<()> {
         let has_spread = args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_)));
         if !named.is_empty() {
@@ -2710,7 +2711,30 @@ impl<'a> FnCompiler<'a> {
             self.build_args_array(args)?;
             self.emit(Op::MethodCallArgs { method: method.into() });
         } else {
-            self.push_value_args(args)?;
+            // When the receiver's class is statically known (a `$this->m(...)` call
+            // within a method body), honour the method's by-reference parameters
+            // (REF-2) by pushing the caller's cell for a `&$p` slot — exactly like a
+            // static `C::m()` call. A dynamic receiver (`$obj->m()`) stays by-value:
+            // the callee, hence its by-ref params, is only known at run time.
+            let mut pushed_by_ref = false;
+            if let Some(cid) = recv_class {
+                if let Some((defc, midx)) = self.resolve_method_compile(cid, method) {
+                    let decl = &self.ctx.classes[defc].methods[midx].decl;
+                    if decl.params.iter().any(|p| p.by_ref) {
+                        let by_ref: Vec<bool> = decl.params.iter().map(|p| p.by_ref).collect();
+                        let pnames: Vec<Box<[u8]>> =
+                            decl.slots.iter().take(decl.params.len()).cloned().collect();
+                        let mut fname = self.ctx.classes[cid].name.to_vec();
+                        fname.extend_from_slice(b"::");
+                        fname.extend_from_slice(method);
+                        self.push_call_args(args, &by_ref, &fname, &pnames)?;
+                        pushed_by_ref = true;
+                    }
+                }
+            }
+            if !pushed_by_ref {
+                self.push_value_args(args)?;
+            }
             self.emit(Op::MethodCall { method: method.into(), argc: args.len() as u32 });
         }
         Ok(())
@@ -3513,7 +3537,11 @@ impl<'a> FnCompiler<'a> {
             }
             let (base, steps) = self.field_path(target)?;
             self.expr(object)?;
-            self.emit_method_call(method, args, named)?;
+            let recv_class = match object.kind {
+                ExprKind::This => self.cur_class,
+                _ => None,
+            };
+            self.emit_method_call(method, args, named, recv_class)?;
             self.emit(Op::BindRefToChecked { base, steps: steps.into() });
             return Ok(());
         }
