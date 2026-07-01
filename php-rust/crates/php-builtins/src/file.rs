@@ -257,12 +257,23 @@ fn is_http_url(name: &[u8]) -> bool {
     head.starts_with(b"http://") || head.starts_with(b"https://")
 }
 
+thread_local! {
+    /// Response header lines of the most recent http(s):// stream read (status
+    /// line at index 0, then "Name: value" lines), backing
+    /// `http_get_last_response_headers()`. PHP repopulates this per stream op;
+    /// phpr keeps it here since `file_get_contents` is a pure builtin. `None`
+    /// when no http read has happened (or after a transport error).
+    static LAST_RESPONSE_HEADERS: RefCell<Option<Vec<Vec<u8>>>> = const { RefCell::new(None) };
+}
+
 /// GET an http(s):// URL via the rustls-backed `ureq` transport, returning the
-/// response body. A transport error or non-2xx status yields `None` after a PHP
-/// "Failed to open stream" Warning — mirroring the http stream wrapper making
-/// `file_get_contents` return `false`. TLS uses ureq's default secure
-/// verification against the bundled webpki roots, matching PHP's `verify_peer`
-/// default (Phase 2: GET + body; SSL/http context options come later).
+/// 2xx response body. A non-2xx status or transport error yields `None` after a
+/// PHP "Failed to open stream" Warning — mirroring the http stream wrapper
+/// making `file_get_contents` return `false`. The response header lines are
+/// captured (for any status, so a 4xx status is still readable via
+/// `http_get_last_response_headers()`, as Composer relies on). TLS uses ureq's
+/// default secure verification against the bundled webpki roots, matching PHP's
+/// `verify_peer` default (Phase 2: GET + body + headers; context options later).
 fn http_get(url: &[u8], ctx: &mut Ctx) -> Option<Vec<u8>> {
     let Ok(url_str) = std::str::from_utf8(url) else {
         return None;
@@ -272,30 +283,68 @@ fn http_get(url: &[u8], ctx: &mut Ctx) -> Option<Vec<u8>> {
             "file_get_contents({url_str}): Failed to open stream: {why}"
         )));
     };
-    match ureq::get(url_str).call() {
-        Ok(mut resp) => match resp.body_mut().read_to_vec() {
-            Ok(body) => Some(body),
-            Err(e) => {
-                warn(e.to_string());
+    // A non-2xx status is not a transport error here: we still capture the
+    // response headers so the status remains readable (Composer reads the code
+    // from the headers on 4xx). Redirects are followed; the final response's
+    // headers are the ones captured.
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        .build()
+        .into();
+    match agent.get(url_str).call() {
+        Ok(mut resp) => {
+            let code = resp.status().as_u16();
+            // PHP's http wrapper is HTTP/1.1 and reports the canonical reason.
+            let reason = resp.status().canonical_reason().unwrap_or("");
+            let mut lines: Vec<Vec<u8>> = vec![format!("HTTP/1.1 {code} {reason}").into_bytes()];
+            for (name, value) in resp.headers().iter() {
+                let mut line = Vec::with_capacity(name.as_str().len() + value.as_bytes().len() + 2);
+                line.extend_from_slice(name.as_str().as_bytes());
+                line.extend_from_slice(b": ");
+                line.extend_from_slice(value.as_bytes());
+                lines.push(line);
+            }
+            LAST_RESPONSE_HEADERS.with(|c| *c.borrow_mut() = Some(lines));
+            if (200..300).contains(&code) {
+                match resp.body_mut().read_to_vec() {
+                    Ok(body) => Some(body),
+                    Err(e) => {
+                        warn(e.to_string());
+                        None
+                    }
+                }
+            } else {
+                warn(format!("HTTP request failed! HTTP/1.1 {code} {reason}\r\n"));
                 None
             }
-        },
-        Err(ureq::Error::StatusCode(code)) => {
-            // Mirror PHP's http wrapper warning: "HTTP request failed! HTTP/1.1
-            // 404 Not Found". PHP's wrapper is HTTP/1.1 and uses the canonical
-            // reason phrase for the status.
-            let reason = ureq::http::StatusCode::from_u16(code)
-                .ok()
-                .and_then(|s| s.canonical_reason())
-                .unwrap_or("");
-            warn(format!("HTTP request failed! HTTP/1.1 {code} {reason}\r\n"));
-            None
         }
         Err(e) => {
             warn(e.to_string());
             None
         }
     }
+}
+
+/// `http_get_last_response_headers()` (PHP 8.4+): the response header lines of
+/// the last http(s):// stream read (status line then "Name: value" entries), or
+/// `null` when none has occurred.
+pub fn http_get_last_response_headers(_argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    Ok(LAST_RESPONSE_HEADERS.with(|c| match c.borrow().as_ref() {
+        Some(lines) => {
+            let mut arr = PhpArray::new();
+            for line in lines {
+                let _ = arr.append(Zval::Str(PhpStr::new(line.clone())));
+            }
+            Zval::Array(Rc::new(arr))
+        }
+        None => Zval::Null,
+    }))
+}
+
+/// `http_clear_last_response_headers()` (PHP 8.4+): forget the stored headers.
+pub fn http_clear_last_response_headers(_argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    LAST_RESPONSE_HEADERS.with(|c| *c.borrow_mut() = None);
+    Ok(Zval::Null)
 }
 
 /// `file_get_contents($filename, $use_include_path = false, $context = null,

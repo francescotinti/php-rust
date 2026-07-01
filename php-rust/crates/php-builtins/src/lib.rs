@@ -87,6 +87,8 @@ pub fn registry() -> Registry {
     add(b"rewind", file::rewind);
     add(b"fflush", file::fflush);
     add(b"file_get_contents", file::file_get_contents);
+    add(b"http_get_last_response_headers", file::http_get_last_response_headers);
+    add(b"http_clear_last_response_headers", file::http_clear_last_response_headers);
     add(b"file_put_contents", file::file_put_contents);
     add(b"file", file::file);
     add(b"readfile", file::readfile);
