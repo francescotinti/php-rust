@@ -162,6 +162,54 @@ pub fn array_merge(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Array(Rc::new(out)))
 }
 
+/// array_merge_recursive(...$arrays): like [`array_merge`], but a string key
+/// present on both sides *merges* instead of overwriting: each side is coerced
+/// to array form (a non-array value wraps as `[v]`) and the two are merged
+/// recursively — so scalars accumulate (`['k'=>'x'] + ['k'=>'y']` →
+/// `['k'=>['x','y']]`) and nested arrays deep-merge. Integer keys append with
+/// renumbering, exactly like `array_merge`.
+pub fn array_merge_recursive(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    fn to_arr(v: &Zval) -> PhpArray {
+        match v.deref_clone() {
+            Zval::Array(a) => (*a).clone(),
+            other => {
+                let mut w = PhpArray::new();
+                let _ = w.append(other);
+                w
+            }
+        }
+    }
+    fn merge_into(out: &mut PhpArray, src: &PhpArray) {
+        for (k, v) in src.iter() {
+            match k {
+                Key::Int(_) => {
+                    let _ = out.append(v.clone());
+                }
+                Key::Str(_) => match out.get(k) {
+                    Some(existing) => {
+                        let mut merged = to_arr(existing);
+                        merge_into(&mut merged, &to_arr(v));
+                        out.insert(k.clone(), Zval::Array(Rc::new(merged)));
+                    }
+                    None => out.insert(k.clone(), v.clone()),
+                },
+            }
+        }
+    }
+    let mut out = PhpArray::new();
+    for (i, arg) in args.iter().enumerate() {
+        let Zval::Array(a) = arg.deref_clone() else {
+            return Err(PhpError::TypeError(format!(
+                "array_merge_recursive(): Argument #{} must be of type array, {} given",
+                i + 1,
+                arg.type_name_for_error()
+            )));
+        };
+        merge_into(&mut out, &a);
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
 /// Build the "Argument #N must be of type array" TypeError shared by the
 /// array_replace family (mirrors array_merge's wording).
 fn replace_arg_err(func: &str, n: usize, arg: &Zval) -> PhpError {
@@ -806,6 +854,95 @@ pub fn array_fill(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let mut out = PhpArray::new();
     for i in 0..count {
         out.insert(Key::Int(start + i), value.clone());
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// array_fill_keys($keys, $value): one entry per element of `$keys`, all set to
+/// `$value`. Mirrors PHP's C loop exactly: an integer key passes through; every
+/// other key is converted *as a string* (zval_get_string — so `5.7` keys as
+/// "5.7", `false`/`null` as "", an array warns "Array to string conversion" and
+/// keys as "Array", a non-stringable object is the conversion Error), then
+/// canonicalized through the symtable rule ("5" → 5). Duplicate keys collapse,
+/// last position wins nothing — first insertion order is kept, value identical.
+pub fn array_fill_keys(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let keys = match args.first().map(|a| a.deref_clone()) {
+        Some(Zval::Array(a)) => a,
+        Some(other) => {
+            return Err(PhpError::TypeError(format!(
+                "array_fill_keys(): Argument #1 ($keys) must be of type array, {} given",
+                other.type_name_for_error()
+            )));
+        }
+        None => {
+            return Err(PhpError::ArgumentCountError(
+                "array_fill_keys() expects exactly 2 arguments, 0 given".to_string(),
+            ));
+        }
+    };
+    let Some(value) = args.get(1) else {
+        return Err(PhpError::ArgumentCountError(
+            "array_fill_keys() expects exactly 2 arguments, 1 given".to_string(),
+        ));
+    };
+    let mut out = PhpArray::new();
+    for (_, k) in keys.iter() {
+        let key = match k.deref_clone() {
+            Zval::Long(i) => Key::Int(i),
+            other => Key::from_bytes(convert::to_zstr_cast(&other, ctx.diags).as_bytes()),
+        };
+        out.insert(key, value.clone());
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// array_chunk($array, $length, $preserve_keys = false): split into chunks of
+/// `$length` (the last one possibly shorter). Without `$preserve_keys` every
+/// chunk reindexes from 0; with it the original keys carry over. `$length < 1`
+/// is the PHP 8 ValueError.
+pub fn array_chunk(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let arr = match args.first().map(|a| a.deref_clone()) {
+        Some(Zval::Array(a)) => a,
+        Some(other) => {
+            return Err(PhpError::TypeError(format!(
+                "array_chunk(): Argument #1 ($array) must be of type array, {} given",
+                other.type_name_for_error()
+            )));
+        }
+        None => {
+            return Err(PhpError::ArgumentCountError(
+                "array_chunk() expects at least 2 arguments, 0 given".to_string(),
+            ));
+        }
+    };
+    let length = convert::to_long_cast(
+        args.get(1).ok_or_else(|| {
+            PhpError::ArgumentCountError(
+                "array_chunk() expects at least 2 arguments, 1 given".to_string(),
+            )
+        })?,
+        ctx.diags,
+    );
+    if length < 1 {
+        return Err(PhpError::ValueError(
+            "array_chunk(): Argument #2 ($length) must be greater than 0".to_string(),
+        ));
+    }
+    let preserve = args.get(2).map(|v| convert::to_bool(v, ctx.diags)).unwrap_or(false);
+    let mut out = PhpArray::new();
+    let mut chunk = PhpArray::new();
+    for (k, v) in arr.iter() {
+        if preserve {
+            chunk.insert(k.clone(), v.clone());
+        } else {
+            let _ = chunk.append(v.clone());
+        }
+        if chunk.len() as i64 == length {
+            let _ = out.append(Zval::Array(Rc::new(std::mem::replace(&mut chunk, PhpArray::new()))));
+        }
+    }
+    if chunk.len() > 0 {
+        let _ = out.append(Zval::Array(Rc::new(chunk)));
     }
     Ok(Zval::Array(Rc::new(out)))
 }

@@ -5971,6 +5971,100 @@ impl<'m> Vm<'m> {
         Ok(Zval::Array(Rc::new(out)))
     }
 
+    /// Shared walker for the PHP 8.4 `array_all` / `array_any` / `array_find` /
+    /// `array_find_key` quartet: run `$callback(value, key)` over `$fname`'s
+    /// array argument until it returns truthy, yielding the first hit (or `None`).
+    fn array_search_callback(
+        &mut self,
+        fname: &str,
+        args: &[Zval],
+    ) -> Result<Option<(Key, Zval)>, PhpError> {
+        let arr = match args.first().map(|a| a.deref_clone()) {
+            Some(Zval::Array(a)) => a,
+            Some(other) => {
+                return Err(PhpError::TypeError(format!(
+                    "{fname}(): Argument #1 ($array) must be of type array, {} given",
+                    other.type_name_for_error()
+                )));
+            }
+            None => {
+                return Err(PhpError::ArgumentCountError(format!(
+                    "{fname}() expects exactly 2 arguments, 0 given"
+                )));
+            }
+        };
+        let Some(cb) = args.get(1).map(|c| c.deref_clone()) else {
+            return Err(PhpError::ArgumentCountError(format!(
+                "{fname}() expects exactly 2 arguments, 1 given"
+            )));
+        };
+        let entries: Vec<(Key, Zval)> =
+            arr.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect();
+        for (k, v) in entries {
+            let r = self.call_callable(cb.clone(), vec![v.clone(), key_to_zval(&k)])?;
+            if convert::to_bool(&r, &mut self.diags) {
+                return Ok(Some((k, v)));
+            }
+        }
+        Ok(None)
+    }
+
+    /// `array_all($array, $callback)` (PHP 8.4): whether the callback is truthy
+    /// for *every* element (vacuously true when empty) — the first falsy stops.
+    fn ho_array_all(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        // "all satisfy P" == "none satisfies !P": walk until the callback is
+        // falsy. The walker searches for truthy, so wrap per-element below.
+        let arr = match args.first().map(|a| a.deref_clone()) {
+            Some(Zval::Array(a)) => a,
+            Some(other) => {
+                return Err(PhpError::TypeError(format!(
+                    "array_all(): Argument #1 ($array) must be of type array, {} given",
+                    other.type_name_for_error()
+                )));
+            }
+            None => {
+                return Err(PhpError::ArgumentCountError(
+                    "array_all() expects exactly 2 arguments, 0 given".to_string(),
+                ));
+            }
+        };
+        let Some(cb) = args.get(1).map(|c| c.deref_clone()) else {
+            return Err(PhpError::ArgumentCountError(
+                "array_all() expects exactly 2 arguments, 1 given".to_string(),
+            ));
+        };
+        let entries: Vec<(Key, Zval)> =
+            arr.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect();
+        for (k, v) in entries {
+            let r = self.call_callable(cb.clone(), vec![v, key_to_zval(&k)])?;
+            if !convert::to_bool(&r, &mut self.diags) {
+                return Ok(Zval::Bool(false));
+            }
+        }
+        Ok(Zval::Bool(true))
+    }
+
+    /// `array_any($array, $callback)` (PHP 8.4): whether the callback is truthy
+    /// for *some* element (false when empty).
+    fn ho_array_any(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        Ok(Zval::Bool(self.array_search_callback("array_any", &args)?.is_some()))
+    }
+
+    /// `array_find($array, $callback)` (PHP 8.4): the first *value* the callback
+    /// accepts, `null` if none.
+    fn ho_array_find(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        Ok(self.array_search_callback("array_find", &args)?.map(|(_, v)| v).unwrap_or(Zval::Null))
+    }
+
+    /// `array_find_key($array, $callback)` (PHP 8.4): the first *key* the
+    /// callback accepts, `null` if none.
+    fn ho_array_find_key(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        Ok(self
+            .array_search_callback("array_find_key", &args)?
+            .map(|(k, _)| key_to_zval(&k))
+            .unwrap_or(Zval::Null))
+    }
+
     /// `array_reduce($array, $callback, $initial = null)` (Session C): fold the
     /// values left-to-right through `$callback($carry, $item)`, returning the final
     /// carry. (The evaluator has no `array_reduce`, so this is pure VM gain.)
@@ -11508,6 +11602,10 @@ host_builtins! {
     b"array_map" => vm.ho_array_map(args),
     b"array_filter" => vm.ho_array_filter(args),
     b"array_reduce" => vm.ho_array_reduce(args),
+    b"array_all" => vm.ho_array_all(args),
+    b"array_any" => vm.ho_array_any(args),
+    b"array_find" => vm.ho_array_find(args),
+    b"array_find_key" => vm.ho_array_find_key(args),
     b"get_class" => vm.ho_get_class(args),
     b"get_debug_type" => vm.ho_get_debug_type(args),
     b"spl_object_id" => vm.ho_spl_object_id(args),

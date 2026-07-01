@@ -51,6 +51,8 @@ pub fn registry() -> Registry {
     add(b"checkdate", date::checkdate);
     add(b"strtotime", date::strtotime);
     add(b"time", date::time);
+    add(b"microtime", date::microtime);
+    add(b"hrtime", date::hrtime);
     add(b"date_default_timezone_set", date::date_default_timezone_set);
     add(b"date_default_timezone_get", date::date_default_timezone_get);
     add(b"getdate", date::getdate);
@@ -164,6 +166,11 @@ pub fn registry() -> Registry {
     add(b"key_exists", array::array_key_exists);
     add(b"array_search", array::array_search);
     add(b"array_fill", array::array_fill);
+    add(b"array_fill_keys", array::array_fill_keys);
+    add(b"array_chunk", array::array_chunk);
+    add(b"array_merge_recursive", array::array_merge_recursive);
+    add(b"hash_algos", encoding::hash_algos);
+    add(b"stream_get_wrappers", encoding::stream_get_wrappers);
     add(b"array_flip", array::array_flip);
     add(b"array_combine", array::array_combine);
     add(b"array_pad", array::array_pad);

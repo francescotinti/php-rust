@@ -794,6 +794,42 @@ pub fn time(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Long(now_epoch()))
 }
 
+/// `microtime($as_float = false)`: the current epoch with microseconds — as the
+/// PHP-classic `"0.NNNNNNNN SSSSSSSSSS"` string by default, as a float with
+/// `true`. Non-deterministic (reads the real clock); not differential-tested.
+pub fn microtime(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let d = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    let as_float = args.first().map(|v| convert::to_bool(v, ctx.diags)).unwrap_or(false);
+    if as_float {
+        Ok(Zval::Double(d.as_secs() as f64 + f64::from(d.subsec_micros()) / 1e6))
+    } else {
+        Ok(Zval::Str(PhpStr::new(
+            format!("0.{:08} {}", d.subsec_micros() * 100, d.as_secs()).into_bytes(),
+        )))
+    }
+}
+
+/// `hrtime($as_number = false)`: a monotonic high-resolution timestamp —
+/// `[seconds, nanoseconds]` by default, total nanoseconds as an int with
+/// `true`. Anchored to an arbitrary epoch (process start), like PHP's.
+pub fn hrtime(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::sync::OnceLock;
+    static START: OnceLock<std::time::Instant> = OnceLock::new();
+    let start = *START.get_or_init(std::time::Instant::now);
+    let d = start.elapsed();
+    let as_number = args.first().map(|v| convert::to_bool(v, ctx.diags)).unwrap_or(false);
+    if as_number {
+        Ok(Zval::Long(d.as_nanos() as i64))
+    } else {
+        let mut out = PhpArray::new();
+        let _ = out.append(Zval::Long(d.as_secs() as i64));
+        let _ = out.append(Zval::Long(i64::from(d.subsec_nanos())));
+        Ok(Zval::Array(Rc::new(out)))
+    }
+}
+
 /// `date_default_timezone_set(string $timezoneId)`: always returns `true`. With
 /// the UTC-only scope (D-DT3) the timezone is not actually stored — setting a
 /// non-UTC zone is a no-op, a documented divergence (formatting stays UTC).

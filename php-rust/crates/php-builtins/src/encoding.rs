@@ -13,8 +13,10 @@ use sha2::{Sha224, Sha256, Sha384, Sha512, Sha512_224, Sha512_256};
 use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
 use sha1::Digest; // the `Digest` trait is re-exported by every RustCrypto crate
 
+use std::rc::Rc;
+
 use php_runtime::Ctx;
-use php_types::{convert, PhpError, PhpStr, Zval};
+use php_types::{convert, PhpArray, PhpError, PhpStr, Zval};
 
 // ---------------------------------------------------------------------------
 // hex helper
@@ -273,9 +275,42 @@ pub(crate) fn hash_raw(algo: &[u8], data: &[u8]) -> Option<Vec<u8>> {
         b"sha3-512" => Sha3_512::digest(data).to_vec(),
         // hash('crc32b') == the zlib/crc32() function output.
         b"crc32b" => crc_be(crc32fast::hash(data)).to_vec(),
+        // xxHash family (PHP 8.1): big-endian digests, default seed 0. `xxh3`
+        // is the 64-bit XXH3 (Composer keys its solver rules with it).
+        b"xxh32" => xxhash_rust::xxh32::xxh32(data, 0).to_be_bytes().to_vec(),
+        b"xxh64" => xxhash_rust::xxh64::xxh64(data, 0).to_be_bytes().to_vec(),
+        b"xxh3" => xxhash_rust::xxh3::xxh3_64(data).to_be_bytes().to_vec(),
+        b"xxh128" => xxhash_rust::xxh3::xxh3_128(data).to_be_bytes().to_vec(),
         _ => return None,
     };
     Some(raw)
+}
+
+/// `hash_algos(): array` — the hashing algorithms [`hash_raw`] actually
+/// supports, in PHP's canonical order for the subset (userland feature-detects
+/// via `in_array($algo, hash_algos())`).
+pub fn hash_algos(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let mut out = PhpArray::new();
+    for algo in [
+        "md5", "sha1", "sha224", "sha256", "sha384", "sha512/224", "sha512/256", "sha512",
+        "sha3-224", "sha3-256", "sha3-384", "sha3-512", "crc32b", "xxh32", "xxh64", "xxh3",
+        "xxh128",
+    ] {
+        let _ = out.append(Zval::Str(PhpStr::from_str(algo)));
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// `stream_get_wrappers(): array` — the stream wrappers this runtime actually
+/// opens (`open_file_stream` / `open_php_stream` / the ureq-backed http(s)
+/// layer). Userland feature-detects with `in_array($scheme, ...)`; notably
+/// `phar` is absent, matching phpr's unsupported-phar reality.
+pub fn stream_get_wrappers(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let mut out = PhpArray::new();
+    for w in ["php", "file", "data", "http", "https"] {
+        let _ = out.append(Zval::Str(PhpStr::from_str(w)));
+    }
+    Ok(Zval::Array(Rc::new(out)))
 }
 
 /// Raw HMAC of `data` under `algo` keyed by `key`, or `None` for an algorithm
