@@ -3904,6 +3904,36 @@ impl<'m> Vm<'m> {
                     let start = self.resolve_dynamic_class(&classval)?;
                     self.dispatch_static_call(top, start, &method, false, args)?;
                 }
+                Op::StaticCallDynamicMethod { argc } => {
+                    // `$cls::$m()`: method name on top, then args, then the class ref.
+                    let mval = self.frames[top].stack.pop().expect("StaticCallDynamicMethod name");
+                    let args = self.pop_keys(top, argc);
+                    let classval =
+                        self.frames[top].stack.pop().expect("StaticCallDynamicMethod class");
+                    // PHP validates the class before the method name: `$a::$b()` with
+                    // both invalid reports the class error first.
+                    let start = self.resolve_dynamic_class(&classval)?;
+                    let method = dyn_method_name(&mval)?;
+                    // A dynamic class is non-forwarding, like a named static call.
+                    self.dispatch_static_call(top, start, &method, false, args)?;
+                }
+                Op::StaticCallTargetDynamicMethod { target, forwarding, argc } => {
+                    // `self::$m()` / `Class::$m()`: method name on top, then args; the
+                    // class is a compile-time target, forwarding preserved.
+                    let mval = self.frames[top]
+                        .stack
+                        .pop()
+                        .expect("StaticCallTargetDynamicMethod name");
+                    let method = dyn_method_name(&mval)?;
+                    let args = self.pop_keys(top, argc);
+                    let start = match target {
+                        ClassTarget::Class(cid) => cid,
+                        ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
+                            PhpError::Error("Cannot use \"static\" outside class context".to_string())
+                        })?,
+                    };
+                    self.dispatch_static_call(top, start, &method, forwarding, args)?;
+                }
                 Op::ClassConst { class, idx } => {
                     // Run the constant's value thunk as a frame in its declaring
                     // class's context; its `Ret` leaves the value on the caller's
@@ -11558,6 +11588,17 @@ pub(crate) fn host_builtin_ref_first(name: &[u8]) -> Option<&'static [u8]> {
 /// case-insensitively in ASCII (mirrors the compiler's resolution).
 fn name_eq_ignore_case(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.eq_ignore_ascii_case(y))
+}
+
+
+/// The method name for a dynamic call (`$obj->$m()`, `$cls::$m()`): PHP requires a
+/// *string* — a non-string (object, array, int, …) raises the catchable
+/// "Method name must be a string" Error (it never coerces or calls `__toString`).
+fn dyn_method_name(v: &Zval) -> Result<Vec<u8>, PhpError> {
+    match v.deref_clone() {
+        Zval::Str(s) => Ok(s.as_bytes().to_vec()),
+        _ => Err(PhpError::Error("Method name must be a string".to_string())),
+    }
 }
 
 /// Best-effort equality of two callable [`Zval`]s for `spl_autoload_unregister`

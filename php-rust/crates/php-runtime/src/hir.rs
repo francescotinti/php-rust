@@ -960,6 +960,18 @@ pub enum ExprKind {
         named: Vec<(Box<[u8]>, Expr)>,
     },
 
+    /// `$cls::$method(args)` / `Class::$method(args)` — a static call whose method
+    /// name is only known at run time (step 51; the static analogue of
+    /// [`MethodCallDyn`]). `method` evaluates to a string; the class resolves like a
+    /// runtime-class [`StaticCall`] (`$cls` or a named class). `self`/`parent`/
+    /// `static` with a dynamic method stay unsupported (they need forwarding).
+    StaticCallDyn {
+        class: ClassRef,
+        method: Box<Expr>,
+        args: Vec<Expr>,
+        named: Vec<(Box<[u8]>, Expr)>,
+    },
+
     /// PHP 8.4 parent property-hook call: `parent::$prop::get()` /
     /// `parent::$prop::set($value)` (also `self::`/`static::`/`Named::`). Invokes
     /// the named class's `get`/`set` hook for `prop` on the current `$this`; when

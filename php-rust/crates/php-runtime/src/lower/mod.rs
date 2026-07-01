@@ -20,7 +20,7 @@ use bumpalo::Bump;
 use mago_database::file::File;
 use mago_span::{HasSpan, Span};
 use mago_syntax::ast::{
-    AssignmentOperator, BinaryOperator, ClassLikeMemberSelector,
+    AssignmentOperator, BinaryOperator,
     Expression, Extends, Hint,
     Identifier, Literal, LiteralInteger, Modifier, Node, Statement,
     Use, UseItems, UseType, Variable,
@@ -2328,19 +2328,6 @@ fn ns_name_of(name: Option<&Identifier>) -> Vec<u8> {
     match name {
         Some(id) => strip_leading_backslash(id.value()).to_vec(),
         None => Vec::new(),
-    }
-}
-
-/// The textual name of a member selector (`->name`, method/property). Tier-1
-/// supports only the static-identifier form; a dynamic selector (`$obj->$n`,
-/// `$obj->{expr}`) is out of 19-1 scope (step 19).
-fn member_name<'a>(sel: &ClassLikeMemberSelector<'a>, line: Line) -> Result<&'a [u8], LowerError> {
-    match sel {
-        ClassLikeMemberSelector::Identifier(id) => Ok(id.value),
-        _ => Err(LowerError::Unsupported {
-            what: "dynamic member name",
-            line,
-        }),
     }
 }
 

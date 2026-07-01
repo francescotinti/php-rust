@@ -2054,6 +2054,40 @@ impl<'a> FnCompiler<'a> {
                     }
                 }
             }
+            ExprKind::StaticCallDyn { class, method, args, named } => {
+                // `$cls::$m()` / `Class::$m()` / `self::$m()`: the method name is a
+                // runtime value (the static analogue of `$obj->$m()`).
+                if !named.is_empty() {
+                    return Err(CompileError::Unsupported(
+                        "named arguments on a dynamic static call".into(),
+                    ));
+                }
+                if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
+                    return Err(CompileError::Unsupported(
+                        "argument unpacking (spread) on a dynamic static call".into(),
+                    ));
+                }
+                if self.is_runtime_class(class) {
+                    // Runtime / unknown class: push it beneath the args, resolve at
+                    // run time, dispatch non-forwarding (LSB = the resolved class).
+                    self.push_class_value(class)?; // [classRef]
+                    self.push_dyn_args(args)?; // [classRef, arg0…]
+                    self.expr(method)?; // [classRef, arg0…, method]
+                    self.emit(Op::StaticCallDynamicMethod { argc: args.len() as u32 });
+                } else {
+                    // A compile-time class target (`Class`/`self`/`parent`/`static`):
+                    // keep forwarding semantics ($this / LSB) as a static `StaticCall`
+                    // would, only the method name is resolved at run time.
+                    let (target, forwarding) = self.resolve_target(class)?;
+                    self.push_dyn_args(args)?; // [arg0…]
+                    self.expr(method)?; // [arg0…, method]
+                    self.emit(Op::StaticCallTargetDynamicMethod {
+                        target,
+                        forwarding,
+                        argc: args.len() as u32,
+                    });
+                }
+            }
             ExprKind::ParentHookCall { class, prop, set, args } => {
                 // `parent::$prop::get()` / `parent::$prop::set($v)` (PHP 8.4). The
                 // class resolves like any `::`-qualified op; a dynamic class
@@ -4284,6 +4318,7 @@ fn expr_name(k: &ExprKind) -> String {
         ExprKind::PropGetDyn { .. } => "PropGetDyn",
         ExprKind::This => "This",
         ExprKind::StaticCall { .. } => "StaticCall",
+        ExprKind::StaticCallDyn { .. } => "StaticCallDyn",
         ExprKind::ParentHookCall { .. } => "ParentHookCall",
         ExprKind::ClassConst { .. } => "ClassConst",
         ExprKind::StaticProp { .. } => "StaticProp",

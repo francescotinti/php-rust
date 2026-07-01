@@ -747,6 +747,17 @@ pub enum Op {
     /// arguments are the values of a runtime array (spread call `$cls::m(...$a)`,
     /// Session A): the class reference sits beneath the array.
     StaticCallDynamicArgs { method: Box<[u8]> },
+    /// `[classRef, arg0, …, arg{argc-1}, method] -> [ret]` — `$cls::$m()` /
+    /// `Class::$m()` (step 51): both the class reference (beneath the arguments) and
+    /// the method name (on top) are runtime values. Pop the name, then the args, then
+    /// resolve the class and dispatch non-forwarding, like [`Op::StaticCallDynamic`]
+    /// with a runtime method. An unknown class/method is a catchable `Error`.
+    StaticCallDynamicMethod { argc: u32 },
+    /// `[arg0, …, arg{argc-1}, method] -> [ret]` — `self::$m()` / `parent::$m()` /
+    /// `static::$m()` / `Class::$m()` where the class is a compile-time `target` but
+    /// the method name is a runtime value on top of the stack. Keeps forwarding
+    /// semantics (`$this` / LSB) like [`Op::StaticCall`]; only the method is dynamic.
+    StaticCallTargetDynamicMethod { target: ClassTarget, forwarding: bool, argc: u32 },
     /// `[] -> [value]` — `Class::CONST` / `self::CONST` / `parent::CONST` resolved
     /// at compile time to its declaring class and constant index. Runs the
     /// constant's value *thunk* ([`CompiledConst::func`]) as a frame whose
