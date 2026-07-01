@@ -1503,6 +1503,29 @@ class ReflectionProperty {
         if ($msg !== null) { throw new ReflectionException($msg); }
     }
 }
+class ReflectionExtension {
+    public $name;
+    public function __construct($name) {
+        if (!extension_loaded($name)) {
+            throw new ReflectionException(sprintf('Extension "%s" does not exist', $name));
+        }
+        // Canonical casing as get_loaded_extensions reports it, mirroring
+        // ReflectionExtension::getName().
+        foreach (get_loaded_extensions() as $ext) {
+            if (strcasecmp($ext, $name) === 0) { $name = $ext; break; }
+        }
+        $this->name = $name;
+    }
+    public function getName() { return $this->name; }
+    public function getVersion() { return phpversion($this->name); }
+    // info() prints the phpinfo() block for the extension. phpr models these
+    // extensions with Rust crates, not the C internals whose text this reports,
+    // so it emits nothing (the OpenSSL-text-rendering class of rabbit hole);
+    // callers parse it defensively (e.g. Composer regexes for an optional
+    // sub-library version and simply skips it when absent).
+    public function info() {}
+    public function __toString() { return ''; }
+}
 function enum_exists($enum, $autoload = true) {
     // Reuse class_exists for the (autoload-aware) existence check, then confirm
     // the class is an enum via its implicit UnitEnum interface.
