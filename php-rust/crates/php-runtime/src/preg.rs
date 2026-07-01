@@ -436,9 +436,82 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
         // as per-line by default, so opt into SINGLELINE to match PCRE).
         oo |= onig::RegexOptions::REGEX_OPTION_SINGLELINE;
     }
+    let body = onigify_python_groups(&body);
     onig::Regex::with_options(&body, oo, onig::Syntax::perl_ng())
         .ok()
         .map(Engine::Onig)
+}
+
+/// Rewrite Python-style named-group syntax — `(?P<name>…)`, `(?P=name)`,
+/// `(?P>name)` — into the spellings oniguruma's `perl_ng` dialect accepts
+/// (`(?<name>…)`, `\k<name>`, `\g<name>`). PCRE reads both; the two Rust
+/// engines read `(?P<…>` natively, so only this last-resort path needs the
+/// translation (Composer's JsonManipulator mixes `(?P<start>` with
+/// `(?(DEFINE))`, which is exactly the combination that lands here). Escaped
+/// characters and character classes are left untouched.
+fn onigify_python_groups(body: &str) -> String {
+    let b = body.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(b.len());
+    let mut i = 0;
+    let mut in_class = false;
+    while i < b.len() {
+        let c = b[i];
+        if c == b'\\' && i + 1 < b.len() {
+            out.push(c);
+            out.push(b[i + 1]);
+            i += 2;
+            continue;
+        }
+        if in_class {
+            if c == b']' {
+                in_class = false;
+            }
+            out.push(c);
+            i += 1;
+            continue;
+        }
+        if c == b'[' {
+            in_class = true;
+            out.push(c);
+            i += 1;
+            continue;
+        }
+        if c == b'(' && b[i..].starts_with(b"(?P") {
+            match b.get(i + 3) {
+                // `(?P<name>` → `(?<name>`
+                Some(b'<') => {
+                    out.extend_from_slice(b"(?<");
+                    i += 4;
+                    continue;
+                }
+                // `(?P=name)` → `\k<name>` (backreference by name)
+                Some(b'=') => {
+                    if let Some(end) = b[i + 4..].iter().position(|&x| x == b')') {
+                        out.extend_from_slice(b"\\k<");
+                        out.extend_from_slice(&b[i + 4..i + 4 + end]);
+                        out.push(b'>');
+                        i += 4 + end + 1;
+                        continue;
+                    }
+                }
+                // `(?P>name)` → `\g<name>` (subroutine call by name)
+                Some(b'>') => {
+                    if let Some(end) = b[i + 4..].iter().position(|&x| x == b')') {
+                        out.extend_from_slice(b"\\g<");
+                        out.extend_from_slice(&b[i + 4..i + 4 + end]);
+                        out.push(b'>');
+                        i += 4 + end + 1;
+                        continue;
+                    }
+                }
+                _ => {}
+            }
+        }
+        out.push(c);
+        i += 1;
+    }
+    // Only ASCII was spliced, so the bytes stay valid UTF-8.
+    String::from_utf8(out).unwrap_or_else(|_| body.to_string())
 }
 
 /// Translate a PHP replacement string into the `regex` crate's syntax: PHP
