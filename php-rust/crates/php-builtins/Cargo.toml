@@ -18,3 +18,4 @@ hmac = "0.12"
 crc32fast = "1.4"
 pwhash = "1"
 x509-parser = "0.18"
+ureq = { version = "3", default-features = false, features = ["rustls"] }

@@ -250,6 +250,54 @@ fn strerror(e: &std::io::Error) -> String {
     m.split(" (os error").next().unwrap_or(&m).to_string()
 }
 
+/// Whether `name` is an http:// or https:// URL (routed through the HTTP
+/// transport rather than the filesystem). Scheme match is case-insensitive.
+fn is_http_url(name: &[u8]) -> bool {
+    let head = name.get(..8).unwrap_or(name).to_ascii_lowercase();
+    head.starts_with(b"http://") || head.starts_with(b"https://")
+}
+
+/// GET an http(s):// URL via the rustls-backed `ureq` transport, returning the
+/// response body. A transport error or non-2xx status yields `None` after a PHP
+/// "Failed to open stream" Warning — mirroring the http stream wrapper making
+/// `file_get_contents` return `false`. TLS uses ureq's default secure
+/// verification against the bundled webpki roots, matching PHP's `verify_peer`
+/// default (Phase 2: GET + body; SSL/http context options come later).
+fn http_get(url: &[u8], ctx: &mut Ctx) -> Option<Vec<u8>> {
+    let Ok(url_str) = std::str::from_utf8(url) else {
+        return None;
+    };
+    let mut warn = |why: String| {
+        ctx.diags.push(Diag::Warning(format!(
+            "file_get_contents({url_str}): Failed to open stream: {why}"
+        )));
+    };
+    match ureq::get(url_str).call() {
+        Ok(mut resp) => match resp.body_mut().read_to_vec() {
+            Ok(body) => Some(body),
+            Err(e) => {
+                warn(e.to_string());
+                None
+            }
+        },
+        Err(ureq::Error::StatusCode(code)) => {
+            // Mirror PHP's http wrapper warning: "HTTP request failed! HTTP/1.1
+            // 404 Not Found". PHP's wrapper is HTTP/1.1 and uses the canonical
+            // reason phrase for the status.
+            let reason = ureq::http::StatusCode::from_u16(code)
+                .ok()
+                .and_then(|s| s.canonical_reason())
+                .unwrap_or("");
+            warn(format!("HTTP request failed! HTTP/1.1 {code} {reason}\r\n"));
+            None
+        }
+        Err(e) => {
+            warn(e.to_string());
+            None
+        }
+    }
+}
+
 /// `file_get_contents($filename, $use_include_path = false, $context = null,
 /// $offset = 0, $length = null)` (step 51c, pure builtin — no resource). Reads
 /// the whole file, then applies `$offset`/`$length`. Missing → Warning + false.
@@ -261,16 +309,26 @@ pub fn file_get_contents(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
         ));
     };
     let name = convert::to_zstr(name_arg, ctx.diags);
-    let path = std::ffi::OsStr::from_bytes(strip_file_wrapper(name.as_bytes()));
-    let mut data = match std::fs::read(path) {
-        Ok(d) => d,
-        Err(e) => {
-            ctx.diags.push(Diag::Warning(format!(
-                "file_get_contents({}): Failed to open stream: {}",
-                String::from_utf8_lossy(name.as_bytes()),
-                strerror(&e)
-            )));
-            return Ok(Zval::Bool(false));
+    // http(s):// URLs go through the rustls-backed HTTP transport rather than the
+    // filesystem (the openssl/Composer-network filone); `$offset`/`$length` still
+    // apply to the fetched body below, as for a file.
+    let mut data = if is_http_url(name.as_bytes()) {
+        match http_get(name.as_bytes(), ctx) {
+            Some(body) => body,
+            None => return Ok(Zval::Bool(false)),
+        }
+    } else {
+        let path = std::ffi::OsStr::from_bytes(strip_file_wrapper(name.as_bytes()));
+        match std::fs::read(path) {
+            Ok(d) => d,
+            Err(e) => {
+                ctx.diags.push(Diag::Warning(format!(
+                    "file_get_contents({}): Failed to open stream: {}",
+                    String::from_utf8_lossy(name.as_bytes()),
+                    strerror(&e)
+                )));
+                return Ok(Zval::Bool(false));
+            }
         }
     };
     // $offset (arg #4): positive from the start, negative from the end.
