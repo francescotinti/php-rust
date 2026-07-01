@@ -87,6 +87,22 @@ fn caps_from_onig(caps: &onig::Captures) -> Caps {
     Caps { groups }
 }
 
+/// Build a `Caps` from an oniguruma `Region` (the offset-search path, where a
+/// borrowed `onig::Captures` is not available). Group text is sliced from the
+/// original subject by the region's absolute byte spans.
+fn caps_from_onig_region(text: &str, region: &onig::Region) -> Caps {
+    let groups = (0..region.len())
+        .map(|i| {
+            region.pos(i).map(|(start, end)| CapMatch {
+                start,
+                end,
+                text: text.get(start..end).unwrap_or("").to_string(),
+            })
+        })
+        .collect();
+    Caps { groups }
+}
+
 /// A compiled PHP pattern. Tries the fast `regex` engine first, falling back to
 /// `fancy-regex` for patterns using PCRE features `regex` cannot build (step 36),
 /// then to oniguruma (the `onig` crate) for the deepest PCRE features neither
@@ -163,19 +179,25 @@ impl Engine {
         match self {
             Engine::Regex(r) => r.captures_at(text, start).map(|c| caps_from_regex(&c)),
             Engine::Fancy(r) => r.captures_from_pos(text, start).ok().flatten().map(|c| caps_from_fancy(&c)),
-            // oniguruma exposes no from-offset capture on its public API, and its
-            // `Captures` cannot be built outside the crate. For the common
-            // `start == 0` this is just `captures`; for a positive offset we scan
-            // matches over the whole text (so `^`/`\A`/lookbehind still anchor to
-            // the true start and offsets stay absolute) and take the first at or
-            // after `start`.
+            // `start == 0` is a plain `captures`; a positive offset searches from
+            // `start` over the still-fully-visible text via `search_with_options`
+            // (its own `Captures` cannot be built outside the crate, so the match
+            // is read out of a `Region`). Starting the search AT `start` is what
+            // makes `\G` anchor there — PCRE's `preg_match($subject, …, $offset)`
+            // semantics — while `\A`/`^` keep anchoring to the true start.
             Engine::Onig(r) => {
                 if start == 0 {
                     r.captures(text).map(|c| caps_from_onig(&c))
                 } else {
-                    r.captures_iter(text)
-                        .find(|c| c.pos(0).map_or(false, |(s, _)| s >= start))
-                        .map(|c| caps_from_onig(&c))
+                    let mut region = onig::Region::new();
+                    r.search_with_options(
+                        text,
+                        start,
+                        text.len(),
+                        onig::SearchOptions::SEARCH_OPTION_NONE,
+                        Some(&mut region),
+                    )
+                    .map(|_| caps_from_onig_region(text, &region))
                 }
             }
         }
