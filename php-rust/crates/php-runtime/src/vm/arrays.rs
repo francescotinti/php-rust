@@ -85,13 +85,14 @@ pub(super) fn field_write(
     target: &mut Zval,
     steps: &[FieldStep],
     keys: &mut std::vec::IntoIter<Zval>,
+    fs: FieldScope,
     value: Zval,
     diags: &mut Diags,
     dropped: &mut Vec<Zval>,
 ) -> Result<(), PhpError> {
     if let Zval::Ref(cell) = target {
         let inner = &mut *cell.borrow_mut();
-        return field_write(inner, steps, keys, value, diags, dropped);
+        return field_write(inner, steps, keys, fs, value, diags, dropped);
     }
     let Some((first, rest)) = steps.split_first() else {
         // Leaf overwrite: hand the displaced value back for GC noting.
@@ -111,25 +112,27 @@ pub(super) fn field_write(
             match target {
                 Zval::Object(o) => {
                     let mut obj = o.borrow_mut();
+                    let key = fs.prop_key(obj.class_id as usize, name);
+                    let key = key.as_ref();
                     if obj.info.is_enum_case {
                         let cls = String::from_utf8_lossy(obj.class_name.as_bytes()).into_owned();
                         let prop = String::from_utf8_lossy(name).into_owned();
-                        return Err(PhpError::Error(if obj.props.contains(name) {
+                        return Err(PhpError::Error(if obj.props.contains(key) {
                             format!("Cannot modify readonly property {cls}::${prop}")
                         } else {
                             format!("Cannot create dynamic property {cls}::${prop}")
                         }));
                     }
                     if rest.is_empty() {
-                        if let Some(old) = obj.props.replace(name, value) {
+                        if let Some(old) = obj.props.replace(key, value) {
                             dropped.push(old);
                         }
                     } else {
-                        if !obj.props.contains(name) {
-                            obj.props.set(name, Zval::Array(Rc::new(PhpArray::new())));
+                        if !obj.props.contains(key) {
+                            obj.props.set(key, Zval::Array(Rc::new(PhpArray::new())));
                         }
-                        let child = obj.props.get_mut(name).expect("property just inserted");
-                        field_write(child, rest, keys, value, diags, dropped)?;
+                        let child = obj.props.get_mut(key).expect("property just inserted");
+                        field_write(child, rest, keys, fs, value, diags, dropped)?;
                     }
                 }
                 other => {
@@ -153,7 +156,7 @@ pub(super) fn field_write(
                 // Overwrite a plain element, but write *through* an existing
                 // reference element (the recursive call derefs at its top).
                 match arr.get_mut(&k) {
-                    Some(child) => field_write(child, rest, keys, value, diags, dropped)?,
+                    Some(child) => field_write(child, rest, keys, fs, value, diags, dropped)?,
                     None => arr.insert(k, value),
                 }
             } else {
@@ -161,7 +164,7 @@ pub(super) fn field_write(
                     arr.insert(k.clone(), Zval::Array(Rc::new(PhpArray::new())));
                 }
                 let child = arr.get_mut(&k).expect("key just inserted");
-                field_write(child, rest, keys, value, diags, dropped)?;
+                field_write(child, rest, keys, fs, value, diags, dropped)?;
             }
             Ok(())
         }
@@ -175,7 +178,7 @@ pub(super) fn field_write(
                 arr.append(value).map_err(|_| occupied())?;
             } else {
                 let mut child = Zval::Array(Rc::new(PhpArray::new()));
-                field_write(&mut child, rest, keys, value, diags, dropped)?;
+                field_write(&mut child, rest, keys, fs, value, diags, dropped)?;
                 arr.append(child).map_err(|_| occupied())?;
             }
             Ok(())
@@ -183,11 +186,9 @@ pub(super) fn field_write(
     }
 }
 
-/// Silently read a mixed field path's value (OOP-2c), `None` if any level is
-/// absent — backs compound/inc-dec (missing → NULL) and `isset`/field tests.
-pub(super) fn field_get(cell: &Zval, steps: &[FieldStep], keys: &mut std::vec::IntoIter<Zval>) -> Option<Zval> {
+pub(super) fn field_get(cell: &Zval, steps: &[FieldStep], keys: &mut std::vec::IntoIter<Zval>, fs: FieldScope) -> Option<Zval> {
     if let Zval::Ref(rc) = cell {
-        return field_get(&rc.borrow(), steps, keys);
+        return field_get(&rc.borrow(), steps, keys, fs);
     }
     match steps.split_first() {
         None => match cell {
@@ -207,8 +208,9 @@ pub(super) fn field_get(cell: &Zval, steps: &[FieldStep], keys: &mut std::vec::I
                 match cell {
                     Zval::Object(o) => {
                         let obj = o.borrow();
-                        match obj.props.get(name) {
-                            Some(v) => field_get(v, rest, keys),
+                        let key = fs.prop_key(obj.class_id as usize, name);
+                        match obj.props.get(key.as_ref()) {
+                            Some(v) => field_get(v, rest, keys, fs),
                             None => None,
                         }
                     }
@@ -220,7 +222,7 @@ pub(super) fn field_get(cell: &Zval, steps: &[FieldStep], keys: &mut std::vec::I
                 match cell {
                     Zval::Array(a) => {
                         let k = coerce_key_silent(&key)?;
-                        a.get(&k).and_then(|c| field_get(c, rest, keys))
+                        a.get(&k).and_then(|c| field_get(c, rest, keys, fs))
                     }
                     Zval::Str(s) if rest.is_empty() => {
                         string_offset(s, &key).map(|byte| Zval::Str(PhpStr::new(vec![byte])))
@@ -233,11 +235,9 @@ pub(super) fn field_get(cell: &Zval, steps: &[FieldStep], keys: &mut std::vec::I
     }
 }
 
-/// Remove a mixed field path's leaf (OOP-2c). A missing intermediate level is a
-/// silent no-op; arrays copy-on-write, objects mutate in place.
-pub(super) fn field_unset(target: &mut Zval, steps: &[FieldStep], keys: &mut std::vec::IntoIter<Zval>) {
+pub(super) fn field_unset(target: &mut Zval, steps: &[FieldStep], keys: &mut std::vec::IntoIter<Zval>, fs: FieldScope) {
     if let Zval::Ref(rc) = target {
-        field_unset(&mut rc.borrow_mut(), steps, keys);
+        field_unset(&mut rc.borrow_mut(), steps, keys, fs);
         return;
     }
     let Some((first, rest)) = steps.split_first() else {
@@ -254,10 +254,11 @@ pub(super) fn field_unset(target: &mut Zval, steps: &[FieldStep], keys: &mut std
                 }
             };
             if let Zval::Object(o) = target {
+                let key = fs.prop_key(o.borrow().class_id as usize, name);
                 if rest.is_empty() {
-                    o.borrow_mut().props.remove(name);
-                } else if let Some(child) = o.borrow_mut().props.get_mut(name) {
-                    field_unset(child, rest, keys);
+                    o.borrow_mut().props.remove(key.as_ref());
+                } else if let Some(child) = o.borrow_mut().props.get_mut(key.as_ref()) {
+                    field_unset(child, rest, keys, fs);
                 }
             }
         }
@@ -269,7 +270,7 @@ pub(super) fn field_unset(target: &mut Zval, steps: &[FieldStep], keys: &mut std
                     if rest.is_empty() {
                         arr.remove(&k);
                     } else if let Some(child) = arr.get_mut(&k) {
-                        field_unset(child, rest, keys);
+                        field_unset(child, rest, keys, fs);
                     }
                 }
             }
@@ -443,9 +444,6 @@ impl<'m> Vm<'m> {
         result
     }
 
-    /// Write `value` through a mixed field path. The base cell borrows
-    /// `self.frames` and `&mut self.diags` a disjoint field, so the two coexist
-    /// (the same split the array `path_op` relies on).
     pub(super) fn field_set(
         &mut self,
         base: FieldBase,
@@ -454,6 +452,7 @@ impl<'m> Vm<'m> {
         keys: Vec<Zval>,
         value: Zval,
     ) -> Result<(), PhpError> {
+        let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
         let cell = match base {
             FieldBase::Local(s) => &mut self.frames[top].slots[s as usize],
             FieldBase::Global(s) => &mut self.frames[0].slots[s as usize],
@@ -462,7 +461,7 @@ impl<'m> Vm<'m> {
             })?,
         };
         let mut dropped = Vec::new();
-        let r = field_write(cell, steps, &mut keys.into_iter(), value, &mut self.diags, &mut dropped);
+        let r = field_write(cell, steps, &mut keys.into_iter(), fs, value, &mut self.diags, &mut dropped);
         for d in &dropped {
             self.gc_note(d);
         }

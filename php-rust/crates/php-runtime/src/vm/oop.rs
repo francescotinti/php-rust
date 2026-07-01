@@ -241,6 +241,31 @@ pub(super) fn resolve_prop_access(classes: &[&CompiledClass], obj_class: ClassId
     }
 }
 
+/// The property-resolution context a mixed field path (the recursive
+/// `field_write` / `field_get` / `field_unset` / `field_cell` walkers) drills
+/// with: the loaded classes plus the scope every `Prop` step resolves from.
+/// `Copy`, so the walkers thread it for free; the storage key is re-resolved at
+/// each `Prop` step against the class of the object actually encountered there,
+/// under the *same* scope — exactly Zend, where every FETCH_OBJ resolves with
+/// the executing function's scope.
+#[derive(Clone, Copy)]
+pub(super) struct FieldScope<'a> {
+    pub(super) classes: &'a [&'a CompiledClass],
+    pub(super) scope: Option<ClassId>,
+}
+
+impl FieldScope<'_> {
+    /// The storage key a `Prop` step addresses on an instance of `ocid`: the
+    /// resolved slot key for an accessible declared property, the plain name
+    /// otherwise (dynamic / denied) — `Vm::prop_storage_key`, borrow-friendly.
+    pub(super) fn prop_key<'n>(&self, ocid: ClassId, name: &'n [u8]) -> std::borrow::Cow<'n, [u8]> {
+        match resolve_prop_access(self.classes, ocid, name, self.scope) {
+            PropAccess::Slot(k) => std::borrow::Cow::Owned(k),
+            PropAccess::Dynamic | PropAccess::Denied { .. } => std::borrow::Cow::Borrowed(name),
+        }
+    }
+}
+
 /// The declaring class of a `readonly` instance property, or `None` if
 /// non-readonly / dynamic. The shadowing (a more-derived non-readonly
 /// redeclaration cancels) is already baked into `PropInfo.readonly`.

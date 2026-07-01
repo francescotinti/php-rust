@@ -2239,11 +2239,12 @@ impl<'m> Vm<'m> {
                     self.reject_indirect_hook(base, top, &steps)?;
                     let keys = self.pop_field_keys(top, &steps);
                     let cell = {
+                        let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
                         let base_cell = field_base_mut(&mut self.frames, top, base)?;
                         if steps.is_empty() {
                             make_cell(base_cell)
                         } else {
-                            field_cell(base_cell, &steps, &mut keys.into_iter())
+                            field_cell(base_cell, &steps, &mut keys.into_iter(), fs)
                         }
                     };
                     self.frames[top].stack.push(Zval::Ref(cell));
@@ -10975,18 +10976,18 @@ impl<'m> Vm<'m> {
         keys
     }
 
-    /// Read a mixed field path's value (silent; `None` if any level is absent).
     fn field_value(&self, base: FieldBase, top: usize, steps: &[FieldStep], keys: Vec<Zval>) -> Option<Zval> {
+        let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
         let cell = match base {
             FieldBase::Local(s) => &self.frames[top].slots[s as usize],
             FieldBase::Global(s) => &self.frames[0].slots[s as usize],
             FieldBase::This => self.frames[top].this.as_ref()?,
         };
-        field_get(cell, steps, &mut keys.into_iter())
+        field_get(cell, steps, &mut keys.into_iter(), fs)
     }
 
-    /// Remove a mixed field path's leaf (silent no-op if absent).
     fn field_remove(&mut self, base: FieldBase, top: usize, steps: &[FieldStep], keys: Vec<Zval>) {
+        let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
         let cell = match base {
             FieldBase::Local(s) => &mut self.frames[top].slots[s as usize],
             FieldBase::Global(s) => &mut self.frames[0].slots[s as usize],
@@ -10995,7 +10996,7 @@ impl<'m> Vm<'m> {
                 None => return,
             },
         };
-        field_unset(cell, steps, &mut keys.into_iter());
+        field_unset(cell, steps, &mut keys.into_iter(), fs);
     }
 
     /// Push a `__call` / `__callStatic` magic-dispatch frame (OOP-3a): the magic
@@ -12083,24 +12084,18 @@ fn field_base_mut<'f>(
     })
 }
 
-/// Navigate `steps` from `target`, auto-vivifying missing levels as NULL, and
-/// promote the addressed leaf to a shared `Zval::Ref`, returning its cell
-/// (REF-4 + Session A `&$o->p` / `&$a[]`). A reference is followed into its cell;
-/// an `Index` step drills into an array element (consuming `keys` in source
-/// order), a `Prop` step into an object property, and a final `Append` creates a
-/// fresh array element. A scalar/non-object where a container was expected yields
-/// a detached cell so the caller does not crash.
 fn field_cell(
     target: &mut Zval,
     steps: &[FieldStep],
     keys: &mut std::vec::IntoIter<Zval>,
+    fs: FieldScope,
 ) -> Rc<RefCell<Zval>> {
     let Some((first, rest)) = steps.split_first() else {
         return make_cell(target);
     };
     if let Zval::Ref(rc) = target {
         let inner = &mut *rc.borrow_mut();
-        return field_cell(inner, steps, keys);
+        return field_cell(inner, steps, keys, fs);
     }
     match first {
         FieldStep::Prop(_) | FieldStep::PropDyn => {
@@ -12118,11 +12113,13 @@ fn field_cell(
                 return Rc::new(RefCell::new(Zval::Null));
             };
             let mut obj = o.borrow_mut();
-            if !obj.props.contains(name) {
-                obj.props.set(name, Zval::Null);
+            let key = fs.prop_key(obj.class_id as usize, name);
+            let key = key.as_ref();
+            if !obj.props.contains(key) {
+                obj.props.set(key, Zval::Null);
             }
-            let child = obj.props.get_mut(name).expect("property present after insert");
-            field_cell(child, rest, keys)
+            let child = obj.props.get_mut(key).expect("property present after insert");
+            field_cell(child, rest, keys, fs)
         }
         FieldStep::Append => {
             // `&$a[]` (Session A): append a fresh element and reference it. Append
@@ -12135,7 +12132,7 @@ fn field_cell(
             };
             let arr = Rc::make_mut(rc);
             match arr.append_default() {
-                Some(child) => field_cell(child, rest, keys),
+                Some(child) => field_cell(child, rest, keys, fs),
                 None => Rc::new(RefCell::new(Zval::Null)),
             }
         }
@@ -12155,7 +12152,7 @@ fn field_cell(
                 arr.insert(k.clone(), Zval::Null);
             }
             let child = arr.get_mut(&k).expect("key present after insert");
-            field_cell(child, rest, keys)
+            field_cell(child, rest, keys, fs)
         }
     }
 }
