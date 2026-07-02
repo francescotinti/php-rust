@@ -5001,7 +5001,24 @@ impl<'m> Vm<'m> {
             call_args.push(flags.clone());
         }
         let line = self.cur_line(self.frames.len() - 1);
-        self.run_value_builtin(f, &call_args, line)
+        let result = self.run_value_builtin(f, &call_args, line)?;
+        // The pure encoder reports failure as `false` without a cause; by far
+        // the most common one (the cycle/enum cases are pre-checked above) is
+        // malformed UTF-8 — JSON_ERROR_UTF8, or a JsonException under
+        // JSON_THROW_ON_ERROR.
+        if matches!(result, Zval::Bool(false)) && self.json_last_error == 0 {
+            self.json_last_error = 5;
+            if throw {
+                if let Some(cid) = self.class_index.get(&b"jsonexception"[..]).copied() {
+                    let obj = self.synthesize_throwable(
+                        cid,
+                        "Malformed UTF-8 characters, possibly incorrectly encoded",
+                    )?;
+                    return Err(PhpError::Thrown(obj));
+                }
+            }
+        }
+        Ok(result)
     }
 
     /// `json_last_error()`: the error code of the most recent JSON operation.
@@ -9638,15 +9655,23 @@ impl<'m> Vm<'m> {
     /// VM's machinery (`Self::alloc_object`'s construction, but with the serialized
     /// props instead of declared defaults). An unknown class falls back to
     /// `stdClass` (D-50).
-    fn vm_make_unserialized_object(&mut self, class: &[u8], fields: Vec<(Vec<u8>, Zval)>) -> Zval {
+    fn vm_make_unserialized_object(&mut self, class: &[u8], mut fields: Vec<(Vec<u8>, Zval)>) -> Zval {
         let lower = class.to_ascii_lowercase();
-        let cid = self
-            .class_index
-            .get(lower.as_slice())
-            .or_else(|| self.class_index.get(&b"stdclass"[..]))
-            .copied();
+        // An unknown class becomes `__PHP_Incomplete_Class`, keeping the data
+        // plus the original class name in `__PHP_Incomplete_Class_Name` (Zend).
+        let mut cid = self.class_index.get(lower.as_slice()).copied();
+        if cid.is_none() {
+            cid = self.class_index.get(&b"__php_incomplete_class"[..]).copied();
+            fields.insert(
+                0,
+                (
+                    b"__PHP_Incomplete_Class_Name".to_vec(),
+                    Zval::Str(PhpStr::new(class.to_vec())),
+                ),
+            );
+        }
         let Some(cid) = cid else {
-            // No stdClass in the prelude (should never happen) — degrade gracefully.
+            // No prelude fallback class (should never happen) — degrade gracefully.
             return Zval::Null;
         };
         let cc = self.classes[cid];

@@ -189,6 +189,58 @@ pub fn gethostname(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     }
 }
 
+/// `sys_getloadavg()`: the 1/5/15-minute load averages, or `false` on failure.
+pub fn sys_getloadavg(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let mut loads = [0f64; 3];
+    let n = unsafe { libc::getloadavg(loads.as_mut_ptr(), 3) };
+    if n < 3 {
+        return Ok(Zval::Bool(false));
+    }
+    let mut arr = php_types::PhpArray::new();
+    for l in loads {
+        let _ = arr.append(Zval::Double(l));
+    }
+    Ok(Zval::Array(std::rc::Rc::new(arr)))
+}
+
+/// `php_uname($mode = "a")`: system information via `uname(2)` — `s`ysname,
+/// `n`odename, `r`elease, `v`ersion, `m`achine, or `a`ll (space-joined).
+pub fn php_uname(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let mode = match args.first() {
+        Some(v) => convert::to_zstr(v, ctx.diags).as_bytes().to_vec(),
+        None => b"a".to_vec(),
+    };
+    let mut uts: libc::utsname = unsafe { std::mem::zeroed() };
+    if unsafe { libc::uname(&mut uts) } != 0 {
+        return Ok(Zval::Bool(false));
+    }
+    let field = |a: &[libc::c_char]| -> Vec<u8> {
+        a.iter().take_while(|&&c| c != 0).map(|&c| c as u8).collect()
+    };
+    let out = match mode.as_slice() {
+        b"s" => field(&uts.sysname),
+        b"n" => field(&uts.nodename),
+        b"r" => field(&uts.release),
+        b"v" => field(&uts.version),
+        b"m" => field(&uts.machine),
+        b"a" => {
+            let mut v = field(&uts.sysname);
+            for f in [&uts.nodename, &uts.release, &uts.version, &uts.machine] {
+                v.push(b' ');
+                v.extend_from_slice(&field(f));
+            }
+            v
+        }
+        _ => {
+            return Err(PhpError::ValueError(
+                "php_uname(): Argument #1 ($mode) must be one of \"a\", \"m\", \"n\", \"r\", \"s\", or \"v\""
+                    .to_string(),
+            ))
+        }
+    };
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
 /// `uniqid($prefix = "", $more_entropy = false)`: hex of the current epoch
 /// seconds + microseconds (13 chars), PHP's exact format; `$more_entropy`
 /// appends `.` + a 9-digit fractional, like PHP's combined LCG tail.

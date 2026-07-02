@@ -87,11 +87,13 @@ fn is_list(a: &PhpArray) -> bool {
 }
 
 fn encode_array(a: &PhpArray, flags: i64, depth: usize, out: &mut Vec<u8>) -> Result<(), ()> {
+    // JSON_FORCE_OBJECT (16): every array — list or empty — encodes as an object.
+    const FORCE_OBJECT: i64 = 16;
     if a.is_empty() {
-        out.extend_from_slice(b"[]");
+        out.extend_from_slice(if flags & FORCE_OBJECT != 0 { b"{}" } else { b"[]" });
         return Ok(());
     }
-    if is_list(a) {
+    if flags & FORCE_OBJECT == 0 && is_list(a) {
         let items: Vec<&Zval> = a.iter().map(|(_, v)| v).collect();
         encode_seq(b'[', b']', flags, depth, items.len(), out, |i, flags, depth, out| {
             encode(items[i], flags, depth, out)
@@ -175,8 +177,24 @@ fn key_bytes(k: &Key) -> Vec<u8> {
 }
 
 fn encode_string(s: &[u8], flags: i64, out: &mut Vec<u8>) -> Result<(), ()> {
-    // PHP requires valid UTF-8; otherwise json_encode fails (JSON_ERROR_UTF8).
-    let text = std::str::from_utf8(s).map_err(|_| ())?;
+    // PHP requires valid UTF-8; otherwise json_encode fails (JSON_ERROR_UTF8) —
+    // unless JSON_INVALID_UTF8_SUBSTITUTE (each invalid sequence becomes
+    // U+FFFD) or JSON_INVALID_UTF8_IGNORE (dropped) is set.
+    const INVALID_UTF8_IGNORE: i64 = 1048576;
+    const INVALID_UTF8_SUBSTITUTE: i64 = 2097152;
+    let owned: String;
+    let text = match std::str::from_utf8(s) {
+        Ok(t) => t,
+        Err(_) if flags & INVALID_UTF8_SUBSTITUTE != 0 => {
+            owned = String::from_utf8_lossy(s).into_owned();
+            &owned
+        }
+        Err(_) if flags & INVALID_UTF8_IGNORE != 0 => {
+            owned = s.utf8_chunks().map(|c| c.valid()).collect();
+            &owned
+        }
+        Err(_) => return Err(()),
+    };
     out.push(b'"');
     for ch in text.chars() {
         match ch {

@@ -525,6 +525,9 @@ fn stmt_variant_name(s: &Statement) -> &'static str {
 /// `file`/`line` are filled in by the evaluator at `new` time, not here.
 const PRELUDE_SRC: &[u8] = br##"<?php
 class stdClass {}
+// unserialize() of an unknown class: the instance keeps its data plus the
+// original class name in `__PHP_Incomplete_Class_Name` (set VM-side).
+class __PHP_Incomplete_Class {}
 #[Attribute(Attribute::TARGET_CLASS)]
 class Attribute {
     const TARGET_CLASS = 1;
@@ -760,18 +763,26 @@ class DateTimeZone {
 }
 class DateTime implements DateTimeInterface {
     private $__ts = 0;
+    private $__us = 0;
     private $__tz = "UTC";
     public function __construct($datetime = "now", $timezone = null) {
         if ($timezone !== null) { $this->__tz = $timezone->getName(); }
         if ($datetime === "now" || $datetime === "" || $datetime === null) {
-            $this->__ts = time();
+            $t = microtime(true);
+            $this->__ts = (int) $t;
+            $this->__us = (int) round(($t - (int) $t) * 1000000);
         } else {
             // A leading '@' (unix timestamp) forces the UTC-offset zone "+00:00",
             // ignoring any passed timezone (a PHP quirk).
             if (is_string($datetime) && isset($datetime[0]) && $datetime[0] === "@") {
                 $this->__tz = "+00:00";
             }
-            $r = strtotime($datetime);
+            $parse = $datetime;
+            if (is_string($datetime) && preg_match('/\.(\d{1,6})/', $datetime, $m) === 1) {
+                $this->__us = (int) str_pad($m[1], 6, '0');
+                $parse = preg_replace('/\.\d{1,6}/', '', $datetime, 1);
+            }
+            $r = strtotime($parse);
             if ($r === false) {
                 throw new Exception("DateTime::__construct(): Failed to parse time string ($datetime)");
             }
@@ -788,7 +799,23 @@ class DateTime implements DateTimeInterface {
         return $d->setTimezone($object->getTimezone());
     }
     public static function createFromImmutable($object) { return static::createFromInterface($object); }
-    public function format($format) { return date($format, $this->__ts); }
+    public function format($format) {
+        // 'u'/'v' (micro/milliseconds) come from this instance, not date():
+        // substitute the digits as backslash-escaped literals in the format.
+        $out = ''; $esc = false;
+        for ($i = 0, $len = strlen($format); $i < $len; $i++) {
+            $c = $format[$i];
+            if ($esc) { $out .= '\\' . $c; $esc = false; continue; }
+            if ($c === '\\') { $esc = true; continue; }
+            if ($c === 'u' || $c === 'v') {
+                $n = $c === 'u' ? sprintf('%06d', $this->__us) : sprintf('%03d', intdiv($this->__us, 1000));
+                foreach (str_split($n) as $d) { $out .= '\\' . $d; }
+                continue;
+            }
+            $out .= $c;
+        }
+        return date($out, $this->__ts);
+    }
     public function getTimestamp() { return $this->__ts; }
     public function setTimestamp($timestamp) { $this->__ts = $timestamp; return $this; }
     public function setDate($year, $month, $day) {
@@ -848,17 +875,25 @@ class DateInterval {
 }
 class DateTimeImmutable implements DateTimeInterface {
     private $__ts = 0;
+    private $__us = 0;
     private $__tz = "UTC";
     public function __construct($datetime = "now", $timezone = null) {
         if ($timezone !== null) { $this->__tz = $timezone->getName(); }
         if ($datetime === "now" || $datetime === "" || $datetime === null) {
-            $this->__ts = time();
+            $t = microtime(true);
+            $this->__ts = (int) $t;
+            $this->__us = (int) round(($t - (int) $t) * 1000000);
         } else {
             // A leading '@' (unix timestamp) forces the UTC-offset zone "+00:00".
             if (is_string($datetime) && isset($datetime[0]) && $datetime[0] === "@") {
                 $this->__tz = "+00:00";
             }
-            $r = strtotime($datetime);
+            $parse = $datetime;
+            if (is_string($datetime) && preg_match('/\.(\d{1,6})/', $datetime, $m) === 1) {
+                $this->__us = (int) str_pad($m[1], 6, '0');
+                $parse = preg_replace('/\.\d{1,6}/', '', $datetime, 1);
+            }
+            $r = strtotime($parse);
             if ($r === false) {
                 throw new Exception("DateTimeImmutable::__construct(): Failed to parse time string ($datetime)");
             }
@@ -878,7 +913,23 @@ class DateTimeImmutable implements DateTimeInterface {
         return $d->setTimezone($object->getTimezone());
     }
     public static function createFromMutable($object) { return static::createFromInterface($object); }
-    public function format($format) { return date($format, $this->__ts); }
+    public function format($format) {
+        // 'u'/'v' (micro/milliseconds) come from this instance, not date():
+        // substitute the digits as backslash-escaped literals in the format.
+        $out = ''; $esc = false;
+        for ($i = 0, $len = strlen($format); $i < $len; $i++) {
+            $c = $format[$i];
+            if ($esc) { $out .= '\\' . $c; $esc = false; continue; }
+            if ($c === '\\') { $esc = true; continue; }
+            if ($c === 'u' || $c === 'v') {
+                $n = $c === 'u' ? sprintf('%06d', $this->__us) : sprintf('%03d', intdiv($this->__us, 1000));
+                foreach (str_split($n) as $d) { $out .= '\\' . $d; }
+                continue;
+            }
+            $out .= $c;
+        }
+        return date($out, $this->__ts);
+    }
     public function getTimestamp() { return $this->__ts; }
     public function setTimestamp($timestamp) { return new DateTimeImmutable("@$timestamp"); }
     public function setDate($year, $month, $day) {

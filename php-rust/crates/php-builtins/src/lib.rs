@@ -336,6 +336,8 @@ pub fn registry() -> Registry {
     add(b"mt_getrandmax", math::mt_getrandmax);
     add(b"getrandmax", math::mt_getrandmax);
     add(b"gethostname", env::gethostname);
+    add(b"sys_getloadavg", env::sys_getloadavg);
+    add(b"php_uname", env::php_uname);
     add(b"uniqid", env::uniqid);
     add(b"max", math::max);
     add(b"min", math::min);

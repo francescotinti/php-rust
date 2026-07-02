@@ -352,19 +352,41 @@ fn parse_absolute(s: &str) -> Option<i64> {
         return None;
     }
     let (mut hour, mut min, mut sec) = (0i64, 0i64, 0i64);
+    let mut tz_offset = 0i64;
     if let Some(t) = time {
+        // Split off a trailing ISO-8601 timezone (`Z`, `+HH:MM`, `-HHMM`,
+        // `+HH`): the epoch is the civil time minus the offset.
+        let mut t = t;
+        if let Some(stripped) = t.strip_suffix('Z').or_else(|| t.strip_suffix('z')) {
+            t = stripped;
+        } else if let Some(pos) = t.rfind(['+', '-']) {
+            if pos > 0 {
+                let (body, tz) = t.split_at(pos);
+                let sign = if tz.starts_with('-') { -1 } else { 1 };
+                let digits: String = tz[1..].chars().filter(|c| *c != ':').collect();
+                let (h, m) = match digits.len() {
+                    2 => (digits.parse::<i64>().ok()?, 0),
+                    4 => (digits[..2].parse::<i64>().ok()?, digits[2..].parse::<i64>().ok()?),
+                    _ => return None,
+                };
+                tz_offset = sign * (h * 3600 + m * 60);
+                t = body;
+            }
+        }
         let mut tp = t.split(':');
         hour = tp.next()?.parse().ok()?;
         min = tp.next()?.parse().ok()?;
         sec = match tp.next() {
-            Some(x) => x.parse().ok()?,
+            // Fractional seconds are accepted and truncated (PHP returns an
+            // integer epoch).
+            Some(x) => x.split('.').next()?.parse().ok()?,
             None => 0,
         };
         if tp.next().is_some() {
             return None;
         }
     }
-    civil_to_epoch(year, month, day, hour, min, sec)
+    Some(civil_to_epoch(year, month, day, hour, min, sec)? - tz_offset)
 }
 
 /// Tokenize a relative expression (`[+-]N unit ...`, possibly repeated) into
