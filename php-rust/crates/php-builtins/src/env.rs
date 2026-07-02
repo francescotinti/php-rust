@@ -180,3 +180,34 @@ mod tests {
         ));
     }
 }
+
+/// `gethostname()`: the host's standard name, or `false` on failure.
+pub fn gethostname(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    match hostname::get() {
+        Ok(h) => Ok(Zval::Str(PhpStr::new(h.to_string_lossy().into_owned().into_bytes()))),
+        Err(_) => Ok(Zval::Bool(false)),
+    }
+}
+
+/// `uniqid($prefix = "", $more_entropy = false)`: hex of the current epoch
+/// seconds + microseconds (13 chars), PHP's exact format; `$more_entropy`
+/// appends `.` + a 9-digit fractional, like PHP's combined LCG tail.
+pub fn uniqid(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let prefix = args
+        .first()
+        .map(|v| convert::to_zstr(v, ctx.diags).as_bytes().to_vec())
+        .unwrap_or_default();
+    let more = args.get(1).map(|v| matches!(v, Zval::Bool(true))).unwrap_or(false);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    let mut out = prefix;
+    out.extend_from_slice(format!("{:08x}{:05x}", now.as_secs(), now.subsec_micros()).as_bytes());
+    if more {
+        let mut b = [0u8; 4];
+        let _ = getrandom::getrandom(&mut b);
+        let frac = (u32::from_le_bytes(b) as f64 / u32::MAX as f64) * 10.0;
+        out.extend_from_slice(format!("{:.8}", frac).as_bytes());
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
+}

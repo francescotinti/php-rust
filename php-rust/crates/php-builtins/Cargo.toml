@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+getrandom = "0.2"
+hostname = "0.4"
 php-types.workspace = true
 php-runtime.workspace = true
 time = "0.3.49"

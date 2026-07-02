@@ -2263,3 +2263,19 @@ pub fn tempnam(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     }
     Ok(Zval::Bool(false))
 }
+
+/// `flock($stream, $operation, &$would_block = null)`: phpr runs single-process
+/// with no advisory-lock consumers, so the lock always "succeeds" (true). The
+/// stream argument is still type-checked.
+pub fn flock(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    match argv.first().map(|v| v.deref_clone()) {
+        Some(Zval::Resource(_)) => Ok(Zval::Bool(true)),
+        Some(other) => Err(PhpError::TypeError(format!(
+            "flock(): Argument #1 ($stream) must be of type resource, {} given",
+            other.type_name_for_error()
+        ))),
+        None => Err(PhpError::ArgumentCountError(
+            "flock() expects at least 2 arguments, 0 given".to_string(),
+        )),
+    }
+}

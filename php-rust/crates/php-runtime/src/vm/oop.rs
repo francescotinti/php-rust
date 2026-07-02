@@ -194,6 +194,38 @@ pub(super) fn visible_from(classes: &[&CompiledClass], cur: Option<ClassId>, vis
     }
 }
 
+/// [`visible_from`] for a *method*, with Zend's prototype rule for `protected`:
+/// the check runs against the ROOT declaration up the parent chain, so a
+/// sibling subclass may call an override it inherited access to
+/// (zend_check_protected on `fbc->common.prototype` — PHPUnit's UnaryOperator
+/// calling IsIdentical::failureDescription, both under Constraint).
+pub(super) fn method_visible_from(
+    classes: &[&CompiledClass],
+    cur: Option<ClassId>,
+    vis: Visibility,
+    decl: ClassId,
+    method: &[u8],
+) -> bool {
+    if !matches!(vis, Visibility::Protected) {
+        return visible_from(classes, cur, vis, decl);
+    }
+    // Walk to the outermost ancestor that still declares (a non-private)
+    // `method`: that is the prototype's scope.
+    let mut root = decl;
+    let mut cur_cls = classes[decl].parent;
+    while let Some(p) = cur_cls {
+        let declares = classes[p]
+            .methods
+            .iter()
+            .any(|m| m.func.name.eq_ignore_ascii_case(method) && m.visibility != Visibility::Private);
+        if declares {
+            root = p;
+        }
+        cur_cls = classes[p].parent;
+    }
+    visible_from(classes, cur, vis, root)
+}
+
 /// Look up the unified, compile-time-resolved metadata for a declared instance
 /// property — a single hashmap lookup over the parent-flattened `prop_info` table
 /// (the flattening, with all shadowing rules applied, happened in `compile_class`).
@@ -684,7 +716,7 @@ impl<'m> Vm<'m> {
         let module = self.module;
         let resolved = resolve_method_runtime(&self.classes, cid, method);
         let usable = resolved.filter(|&(defc, midx)| {
-            visible_from(&self.classes, self.frames[top].class, self.classes[defc].methods[midx].visibility, defc)
+            method_visible_from(&self.classes, self.frames[top].class, self.classes[defc].methods[midx].visibility, defc, method)
         });
         match usable {
             Some((defc, midx)) => {

@@ -94,14 +94,27 @@ pub fn lower_source_seeded(
     seed_static: usize,
     seed_traits: &[(Vec<u8>, LoweredTrait)],
     seed_globals: &[Box<[u8]>],
+    seed_aliases: &[(Vec<u8>, Vec<u8>)],
 ) -> Result<Program, LowerError> {
-    lower_source_impl(name, source, Some((seed_classes, seed_static, seed_traits, seed_globals)))
+    lower_source_impl(
+        name,
+        source,
+        Some((seed_classes, seed_static, seed_traits, seed_globals, seed_aliases)),
+    )
 }
+
+type Seed<'a> = (
+    &'a [crate::hir::ClassDecl],
+    usize,
+    &'a [(Vec<u8>, LoweredTrait)],
+    &'a [Box<[u8]>],
+    &'a [(Vec<u8>, Vec<u8>)],
+);
 
 fn lower_source_impl(
     name: &[u8],
     source: &[u8],
-    seed: Option<(&[crate::hir::ClassDecl], usize, &[(Vec<u8>, LoweredTrait)], &[Box<[u8]>])>,
+    seed: Option<Seed<'_>>,
 ) -> Result<Program, LowerError> {
     let arena = Bump::new();
     let file = File::ephemeral(Cow::Owned(name.to_vec()), Cow::Owned(source.to_vec()));
@@ -151,7 +164,7 @@ fn lower_source_impl(
         // `__FILE__`/backtrace to "eval()'d code". Calling a caller user function
         // from eval therefore remains unsupported here (a later phase resolves it
         // against the caller module instead of re-emitting).
-        Some((sclasses, sstatic, straits, sglobals)) => {
+        Some((sclasses, sstatic, straits, sglobals, saliases)) => {
             // Seed the shared global variable name→slot registry (step 57): a
             // seeded (`include`/`eval`) unit numbers its `$GLOBALS['x']` / `global
             // $x` slots to *agree* with `main`'s (and every earlier unit's), since
@@ -168,6 +181,13 @@ fn lower_source_impl(
             let mut ci: HashMap<Vec<u8>, usize> = HashMap::new();
             for (i, cd) in sclasses.iter().enumerate() {
                 ci.entry(cd.name.to_ascii_lowercase()).or_insert(i);
+            }
+            // Runtime `class_alias` entries resolve to the ORIGINAL decl (index
+            // only — no clone), so `extends LegacyName` inherits the real class.
+            for (alias, orig) in saliases {
+                if let Some(&i) = ci.get(&orig.to_ascii_lowercase()) {
+                    ci.entry(alias.to_ascii_lowercase()).or_insert(i);
+                }
             }
             low.class_index = ci;
             // Seed already-loaded traits so a `use T` here resolves against a trait
@@ -1546,6 +1566,7 @@ class ReflectionClass {
     public function isInternal() { return $this->getFileName() === false; }
     public function isUserDefined() { return $this->getFileName() !== false; }
     public function getDocComment() { return false; }
+    public function isReadOnly() { return __reflect_class_modifiers($this->name)['readonly'] ?? false; }
     public function getStartLine() { $l = __reflect_class_loc($this->name); return $l[0] === false ? false : $l[1]; }
     public function getEndLine() { $l = __reflect_class_loc($this->name); return $l[0] === false ? false : $l[2]; }
     // phpr mangles anonymous classes exactly like PHP: `class@anonymous\0N`.
@@ -1955,6 +1976,13 @@ class ReflectionMethod {
             throw new ReflectionException(sprintf('Method %s::%s() does not exist', $this->class, $method));
         }
     }
+    public function isConstructor() { return strcasecmp($this->name, '__construct') === 0; }
+    public function returnsReference() { return $this->__info['byRef'] ?? false; }
+    public function hasTentativeReturnType() { return false; }
+    public function getTentativeReturnType() { return null; }
+    public function isUserDefined() { return ($this->__info['file'] ?? false) !== false; }
+    public function isInternal() { return ($this->__info['file'] ?? false) === false; }
+    public function isDestructor() { return strcasecmp($this->name, '__destruct') === 0; }
     public function getDeclaringClass() { return new ReflectionClass($this->__info['declaringClass']); }
     public function getFileName() { return $this->__info['file']; }
     public function getStartLine() { return $this->__info['startLine']; }
@@ -1979,6 +2007,15 @@ class ReflectionMethod {
 }
 class ReflectionProperty {
     public function getDocComment() { return false; }
+    public function isFinal() { return false; }
+    public function isAbstract() { return false; }
+    public function isVirtual() { return false; }
+    public function hasHooks() { return false; }
+    public function getHooks() { return []; }
+    public function hasHook($type) { return false; }
+    public function getHook($type) { return null; }
+    public function isDynamic() { return false; }
+    public function isLazy() { return false; }
     const IS_STATIC = 16;
     const IS_PUBLIC = 1;
     const IS_PROTECTED = 2;
@@ -3731,6 +3768,46 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         // PHP 8.0 removed E_STRICT from E_ALL; PHP 8.4 made E_STRICT a no-op. The
         // current value is 30719 (E_ALL without E_STRICT=2048), matching 8.5.
         b"E_ALL" => ExprKind::Int(30719),
+        // flock operations / debug_backtrace flags (oracle-pinned).
+        b"LOCK_SH" => ExprKind::Int(1),
+        b"LOCK_EX" => ExprKind::Int(2),
+        b"LOCK_UN" => ExprKind::Int(3),
+        b"LOCK_NB" => ExprKind::Int(4),
+        b"DEBUG_BACKTRACE_PROVIDE_OBJECT" => ExprKind::Int(1),
+        b"DEBUG_BACKTRACE_IGNORE_ARGS" => ExprKind::Int(2),
+        // syslog() priorities / facilities / options (macOS values, oracle-pinned).
+        b"LOG_EMERG" => ExprKind::Int(0),
+        b"LOG_ALERT" => ExprKind::Int(1),
+        b"LOG_CRIT" => ExprKind::Int(2),
+        b"LOG_ERR" => ExprKind::Int(3),
+        b"LOG_WARNING" => ExprKind::Int(4),
+        b"LOG_NOTICE" => ExprKind::Int(5),
+        b"LOG_INFO" => ExprKind::Int(6),
+        b"LOG_DEBUG" => ExprKind::Int(7),
+        b"LOG_AUTH" => ExprKind::Int(32),
+        b"LOG_AUTHPRIV" => ExprKind::Int(80),
+        b"LOG_CRON" => ExprKind::Int(72),
+        b"LOG_DAEMON" => ExprKind::Int(24),
+        b"LOG_KERN" => ExprKind::Int(0),
+        b"LOG_LPR" => ExprKind::Int(48),
+        b"LOG_MAIL" => ExprKind::Int(16),
+        b"LOG_NEWS" => ExprKind::Int(56),
+        b"LOG_SYSLOG" => ExprKind::Int(40),
+        b"LOG_UUCP" => ExprKind::Int(64),
+        b"LOG_USER" => ExprKind::Int(8),
+        b"LOG_LOCAL0" => ExprKind::Int(128),
+        b"LOG_LOCAL1" => ExprKind::Int(136),
+        b"LOG_LOCAL2" => ExprKind::Int(144),
+        b"LOG_LOCAL3" => ExprKind::Int(152),
+        b"LOG_LOCAL4" => ExprKind::Int(160),
+        b"LOG_LOCAL5" => ExprKind::Int(168),
+        b"LOG_LOCAL6" => ExprKind::Int(176),
+        b"LOG_LOCAL7" => ExprKind::Int(184),
+        b"LOG_NDELAY" => ExprKind::Int(8),
+        b"LOG_ODELAY" => ExprKind::Int(4),
+        b"LOG_PERROR" => ExprKind::Int(32),
+        b"LOG_PID" => ExprKind::Int(1),
+        b"LOG_CONS" => ExprKind::Int(2),
         // str_pad / array_filter / count flags.
         b"STR_PAD_RIGHT" => ExprKind::Int(1),
         b"STR_PAD_LEFT" => ExprKind::Int(0),

@@ -43,6 +43,13 @@ fn as_i64(v: &Zval) -> i64 {
 }
 
 fn encode(v: &Zval, flags: i64, depth: usize, out: &mut Vec<u8>) -> Result<(), ()> {
+    // PHP's json_encode depth limit (default $depth = 512): a deeper nesting —
+    // in particular a cyclic object graph, which json_normalize's cycle check
+    // cannot see through *plain* object properties — is `false`, not a stack
+    // overflow (JSON_ERROR_DEPTH/RECURSION territory).
+    if depth > 512 {
+        return Err(());
+    }
     match v {
         Zval::Null | Zval::Undef => out.extend_from_slice(b"null"),
         Zval::Bool(true) => out.extend_from_slice(b"true"),

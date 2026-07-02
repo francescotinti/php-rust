@@ -381,6 +381,7 @@ pub(crate) fn run_module_with_hir<'m>(
         zips: HashMap::new(),
         next_zip: 1,
         stream_chunk_sizes: HashMap::new(),
+        seed_aliases: Vec::new(),
         umask: 0o22,
         dom_docs: HashMap::new(),
         next_dom: 1,
@@ -998,6 +999,10 @@ struct Vm<'m> {
     /// phpr's I/O is unbuffered so the value has no read-path effect; it is kept
     /// only so the builtin can return the previous size (default 8192), as PHP does.
     stream_chunk_sizes: HashMap<u32, i64>,
+    /// `class_alias` entries as `(alias, original)` names, threaded into every
+    /// later unit's lowering so `extends AliasName` resolves to the original
+    /// class decl (index-only: no clone, mangling/identity preserved).
+    seed_aliases: Vec<(Vec<u8>, Vec<u8>)>,
     /// The process umask as `umask()` reports it. phpr never changes the real
     /// process umask (no unsafe/libc); the shadow value starts at the
     /// conventional 022 and get/set semantics match PHP (set returns previous).
@@ -4017,6 +4022,17 @@ impl<'m> Vm<'m> {
                     // Run the constant's value thunk as a frame in its declaring
                     // class's context; its `Ret` leaves the value on the caller's
                     // stack.
+                    if self.classes[class].consts.get(idx as usize).is_none() {
+                        return Err(PhpError::Error(format!(
+                            "VM: ClassConst out of range: {}::consts[{}] (len {}) in {} ({}) line {}",
+                            String::from_utf8_lossy(&self.classes[class].name),
+                            idx,
+                            self.classes[class].consts.len(),
+                            String::from_utf8_lossy(&self.frames[top].func.name),
+                            String::from_utf8_lossy(&self.frames[top].func.file),
+                            self.cur_line(top)
+                        )));
+                    }
                     let thunk = &self.classes[class].consts[idx as usize].func;
                     let mut frame = Frame::new(thunk, self.class_mod(class));
                     frame.class = Some(class);
@@ -4660,6 +4676,7 @@ impl<'m> Vm<'m> {
                 self.seed_static,
                 &self.seed_traits,
                 &self.seed_globals,
+                &self.seed_aliases,
             ) {
                 Err(crate::LowerError::UndefinedClass { name: pname, line }) => {
                     // An undefined name may be a class/interface *or* a trait used
@@ -4929,17 +4946,33 @@ impl<'m> Vm<'m> {
             .map(|v| convert::to_long_cast(v, &mut self.diags))
             .unwrap_or(0);
         let throw = flags & 4_194_304 != 0; // JSON_THROW_ON_ERROR
-        let normalized = match self.json_normalize(value) {
+        // A cyclic value graph is PHP's JSON_ERROR_RECURSION — detected up
+        // front over the whole graph (arrays *and* plain-object properties,
+        // which json_normalize deliberately does not descend into).
+        if json_has_cycle(&value, &mut Vec::new()) {
+            self.json_last_error = 6;
+            if throw {
+                if let Some(cid) = self.class_index.get(&b"jsonexception"[..]).copied() {
+                    let obj = self.synthesize_throwable(cid, "Recursion detected")?;
+                    return Err(PhpError::Thrown(obj));
+                }
+            }
+            return Ok(Zval::Bool(false));
+        }
+        let mut visiting = Vec::new();
+        let normalized = match self.json_normalize(value, &mut visiting) {
             Ok(n) => n,
             Err(e) => {
-                if self.json_last_error == 11 {
-                    // Non-backed enum: false, or a JsonException when requested.
+                if self.json_last_error == 11 || self.json_last_error == 6 {
+                    // Non-backed enum / recursion: false, or a JsonException.
                     if throw {
                         if let Some(cid) = self.class_index.get(&b"jsonexception"[..]).copied() {
-                            let obj = self.synthesize_throwable(
-                                cid,
-                                "Non-backed enums have no default serialization",
-                            )?;
+                            let msg = if self.json_last_error == 6 {
+                                "Recursion detected"
+                            } else {
+                                "Non-backed enums have no default serialization"
+                            };
+                            let obj = self.synthesize_throwable(cid, msg)?;
                             return Err(PhpError::Thrown(obj));
                         }
                     }
@@ -4974,6 +5007,7 @@ impl<'m> Vm<'m> {
             3 => b"Control character error, possibly incorrectly encoded",
             4 => b"Syntax error",
             5 => b"Malformed UTF-8 characters, possibly incorrectly encoded",
+            6 => b"Recursion detected",
             11 => b"Non-backed enums have no default serialization",
             _ => b"Unknown error",
         };
@@ -5018,11 +5052,14 @@ impl<'m> Vm<'m> {
     /// return (itself normalised, so a returned JsonSerializable resolves too) and
     /// normalise array elements. A plain object is left untouched for the pure
     /// encoder to serialise by properties (step 56c).
-    fn json_normalize(&mut self, v: Zval) -> Result<Zval, PhpError> {
+    /// `visiting` carries the Rc addresses of the arrays/objects on the current
+    /// descent path: revisiting one is a cycle — PHP's JSON_ERROR_RECURSION (6),
+    /// not a stack overflow.
+    fn json_normalize(&mut self, v: Zval, visiting: &mut Vec<usize>) -> Result<Zval, PhpError> {
         match v {
             Zval::Ref(r) => {
                 let inner = r.borrow().deref_clone();
-                self.json_normalize(inner)
+                self.json_normalize(inner, visiting)
             }
             Zval::Object(_) => {
                 // A lazy object initializes before being encoded (PHP 8.4); a
@@ -5030,19 +5067,27 @@ impl<'m> Vm<'m> {
                 // non-lazy, so the re-normalize does not recurse here again.
                 if deref_object(&v).is_some_and(|o| o.borrow().lazy.is_some()) {
                     let real = self.realize_full(&v)?;
-                    return self.json_normalize(real);
+                    return self.json_normalize(real, visiting);
+                }
+                let addr = deref_object(&v).map(|o| Rc::as_ptr(&o) as usize).unwrap_or(0);
+                if visiting.contains(&addr) {
+                    self.json_last_error = 6; // JSON_ERROR_RECURSION
+                    return Err(PhpError::Error("Recursion detected".to_string()));
                 }
                 let cid = object_class_id(&v).expect("object has a class id");
                 if self.jsonserializable_id.is_some_and(|j| is_instance_of(&self.classes, self.stringable_id, cid, j)) {
+                    visiting.push(addr);
                     let r = self.call_method_sync(v, b"jsonSerialize", Vec::new())?;
-                    self.json_normalize(r)
+                    let n = self.json_normalize(r, visiting);
+                    visiting.pop();
+                    n
                 } else if deref_object(&v).is_some_and(|o| o.borrow().info.is_enum_case) {
                     // An enum case serialises as its backing value; a non-backed
                     // enum has no JSON representation (JSON_ERROR_NON_BACKED_ENUM).
                     let backing = deref_object(&v)
                         .and_then(|o| o.borrow().props.get(b"value").cloned());
                     match backing {
-                        Some(val) => self.json_normalize(val),
+                        Some(val) => self.json_normalize(val, visiting),
                         None => {
                             self.json_last_error = 11; // JSON_ERROR_NON_BACKED_ENUM
                             // Unwinds to ho_json_encode, which detects the code 11
@@ -5058,13 +5103,20 @@ impl<'m> Vm<'m> {
                 }
             }
             Zval::Array(a) => {
+                let addr = Rc::as_ptr(&a) as usize;
+                if visiting.contains(&addr) {
+                    self.json_last_error = 6; // JSON_ERROR_RECURSION
+                    return Err(PhpError::Error("Recursion detected".to_string()));
+                }
+                visiting.push(addr);
                 let entries: Vec<(Key, Zval)> =
                     a.iter().map(|(k, val)| (k.clone(), val.deref_clone())).collect();
                 let mut out = PhpArray::new();
                 for (k, val) in entries {
-                    let nv = self.json_normalize(val)?;
+                    let nv = self.json_normalize(val, visiting)?;
                     out.insert(k, nv);
                 }
+                visiting.pop();
                 Ok(Zval::Array(Rc::new(out)))
             }
             other => Ok(other),
@@ -7300,6 +7352,7 @@ impl<'m> Vm<'m> {
         let decl_name = self.classes[decl].name.to_vec();
         let mut d = self.build_func_descriptor(&m.func, Some(decl))?;
         d.insert(Key::Str(PhpStr::new(b"static".to_vec())), Zval::Bool(is_static));
+        d.insert(Key::Str(PhpStr::new(b"byRef".to_vec())), Zval::Bool(m.func.by_ref));
         d.insert(Key::Str(PhpStr::new(b"final".to_vec())), Zval::Bool(is_final));
         d.insert(Key::Str(PhpStr::new(b"visibility".to_vec())), Zval::Str(PhpStr::new(vis.to_vec())));
         d.insert(Key::Str(PhpStr::new(b"abstract".to_vec())), Zval::Bool(false));
@@ -8728,6 +8781,12 @@ impl<'m> Vm<'m> {
             return Ok(Zval::Bool(false));
         }
         self.class_index.insert(alias_key, cid);
+        // Make the alias visible to the *lowering image* too, so a later unit
+        // can `extends`/`implements` it (monolog's tests alias the legacy
+        // PHPUnit_Framework_TestCase). An index-only entry: the alias resolves
+        // to the ORIGINAL decl, so inherited private-property mangling keeps
+        // the real declaring-class name and class identity is preserved.
+        self.seed_aliases.push((alias, orig));
         Ok(Zval::Bool(true))
     }
 
@@ -10860,7 +10919,7 @@ impl<'m> Vm<'m> {
         let resolved = resolve_method_runtime(&self.classes, cid, method);
         // Usable only if found *and* visible from the caller's scope.
         let usable = resolved.filter(|&(defc, midx)| {
-            visible_from(&self.classes, self.frames[top].class, self.classes[defc].methods[midx].visibility, defc)
+            method_visible_from(&self.classes, self.frames[top].class, self.classes[defc].methods[midx].visibility, defc, method)
         });
         match usable {
             Some((defc, midx)) => {
@@ -10948,7 +11007,7 @@ impl<'m> Vm<'m> {
         }
         let resolved = resolve_method_runtime(&self.classes, start, method);
         let usable = resolved.filter(|&(defc, midx)| {
-            visible_from(&self.classes, self.frames[top].class, self.classes[defc].methods[midx].visibility, defc)
+            method_visible_from(&self.classes, self.frames[top].class, self.classes[defc].methods[midx].visibility, defc, method)
         });
         // LSB: a forwarding call keeps the caller's; a named/dynamic call rebinds.
         let static_class = if forwarding {
@@ -12423,6 +12482,23 @@ host_builtins! {
         Ok(Zval::Null)
     },
     b"error_get_last" => vm.ho_error_get_last(),
+    // `get_defined_vars()`: the calling scope's named locals (in declaration
+    // order, undefined slots omitted), values by snapshot — host builtins run
+    // frameless, so the top frame IS the caller.
+    b"get_defined_vars" => {
+        let top = vm.frames.len() - 1;
+        let names: Vec<Box<[u8]>> = vm.frames[top].func.slot_names.to_vec();
+        let mut arr = PhpArray::new();
+        for (i, name) in names.iter().enumerate() {
+            if let Some(v) = vm.frames[top].slots.get(i) {
+                let v = v.deref_clone();
+                if !matches!(v, Zval::Undef) {
+                    arr.insert(Key::from_bytes(name), v);
+                }
+            }
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    },
     b"error_clear_last" => {
         // Realize pending diags first (same move as error_get_last), then forget.
         let line = vm.cur_line(vm.frames.len() - 1);
@@ -12735,6 +12811,41 @@ fn callable_eq(a: &Zval, b: &Zval) -> bool {
     }
 }
 
+/// Whether the value graph reachable from `v` contains a cycle (an array or
+/// object revisited on the current descent path) — `json_encode`'s
+/// JSON_ERROR_RECURSION test. Distinct from a *shared* (DAG) node, which PHP
+/// encodes fine: `visiting` is push/popped, not a global seen-set.
+fn json_has_cycle(v: &Zval, visiting: &mut Vec<usize>) -> bool {
+    match v {
+        Zval::Ref(r) => {
+            let inner = r.borrow();
+            json_has_cycle(&inner, visiting)
+        }
+        Zval::Array(a) => {
+            let addr = Rc::as_ptr(a) as usize;
+            if visiting.contains(&addr) {
+                return true;
+            }
+            visiting.push(addr);
+            let hit = a.iter().any(|(_, val)| json_has_cycle(val, visiting));
+            visiting.pop();
+            hit
+        }
+        Zval::Object(o) => {
+            let addr = Rc::as_ptr(o) as usize;
+            if visiting.contains(&addr) {
+                return true;
+            }
+            visiting.push(addr);
+            let vals: Vec<Zval> = o.borrow().props.iter().map(|(_, val)| val.clone()).collect();
+            let hit = vals.iter().any(|val| json_has_cycle(val, visiting));
+            visiting.pop();
+            hit
+        }
+        _ => false,
+    }
+}
+
 /// Rewrite every compile-time class id in a freshly-compiled `eval`/`include`
 /// module into the VM's GLOBAL id space (step 57, Phase 1c-2b), and offset its
 /// `static $x` cell ids past the live `self.statics` range. `remap[local]` is the
@@ -12845,6 +12956,12 @@ fn relocate_func(func: &mut Func, remap: &[ClassId], static_base: usize) {
     relocate_attrs(&mut func.attributes, remap, static_base);
     for pa in func.param_attributes.iter_mut() {
         relocate_attrs(pa, remap, static_base);
+    }
+    // Parameter-default thunks are Funcs too (`$level = Level::Debug` bakes an
+    // Op::EnumCase/ClassConst with a unit-local class id) — same relocation
+    // rule as attribute thunks.
+    for pd in func.param_defaults.iter_mut().flatten() {
+        relocate_func(pd, remap, static_base);
     }
 }
 
