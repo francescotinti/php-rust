@@ -489,6 +489,10 @@ pub enum HintKind {
     Object,
     /// A class/interface name — accepts an instance that is `instanceof` it.
     Class(Box<[u8]>),
+    /// A union (`array|ArrayAccess`): accepted when any member accepts the
+    /// value — an exact/check match first, then (weak mode) scalar coercion in
+    /// declared order. `null` membership is folded into `TypeHint.nullable`.
+    Union(Vec<HintKind>),
 }
 
 /// One member of a union / intersection [`ReflectType`]: a named type with its
@@ -522,6 +526,36 @@ impl TypeHint {
     /// The hint as written, for diagnostics (`int`, `array`, `Foo`), with a leading
     /// `?` when nullable.
     pub fn display_name(&self) -> String {
+        // A nullable union renders as `A|B|null` (PHP's TypeError spelling),
+        // not with a `?` prefix. Zend canonicalises the member order: class
+        // types first (declared order), then builtins in the fixed
+        // `zend_type_to_string` ranking, `null` last.
+        if let HintKind::Union(members) = &self.kind {
+            let rank = |k: &HintKind| -> u8 {
+                match k {
+                    HintKind::Class(_) => 0,
+                    HintKind::Callable => 1,
+                    HintKind::Object => 2,
+                    HintKind::Array => 3,
+                    HintKind::Iterable => 4,
+                    HintKind::Scalar(ScalarType::String) => 5,
+                    HintKind::Scalar(ScalarType::Int) => 6,
+                    HintKind::Scalar(ScalarType::Float) => 7,
+                    HintKind::Scalar(ScalarType::Bool) => 8,
+                    HintKind::Union(_) => 9,
+                }
+            };
+            let mut ordered: Vec<&HintKind> = members.iter().collect();
+            ordered.sort_by_key(|k| rank(k)); // stable: declared order within a rank
+            let mut parts: Vec<String> = ordered
+                .into_iter()
+                .map(|k| TypeHint { kind: k.clone(), nullable: false }.display_name())
+                .collect();
+            if self.nullable {
+                parts.push("null".to_string());
+            }
+            return parts.join("|");
+        }
         let base: std::borrow::Cow<'_, str> = match &self.kind {
             HintKind::Scalar(ScalarType::Int) => "int".into(),
             HintKind::Scalar(ScalarType::Float) => "float".into(),
@@ -532,6 +566,7 @@ impl TypeHint {
             HintKind::Iterable => "iterable".into(),
             HintKind::Object => "object".into(),
             HintKind::Class(name) => String::from_utf8_lossy(name).into_owned().into(),
+            HintKind::Union(_) => unreachable!("handled above"),
         };
         if self.nullable {
             format!("?{base}")

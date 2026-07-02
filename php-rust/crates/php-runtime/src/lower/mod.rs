@@ -931,23 +931,35 @@ class DateTimeImmutable implements DateTimeInterface {
         return date($out, $this->__ts);
     }
     public function getTimestamp() { return $this->__ts; }
-    public function setTimestamp($timestamp) { return new DateTimeImmutable("@$timestamp"); }
-    public function setDate($year, $month, $day) {
-        $ts = mktime((int)date('G', $this->__ts), (int)date('i', $this->__ts), (int)date('s', $this->__ts), $month, $day, $year);
-        return new DateTimeImmutable("@$ts");
+    // Every "wither" clones: the runtime class survives (PHP returns `static`,
+    // monolog's JsonSerializableDateTimeImmutable relies on it), and so do
+    // the timezone label and (where PHP keeps them) the microseconds.
+    public function setTimestamp($timestamp) {
+        $c = clone $this; $c->__ts = $timestamp; $c->__us = 0; return $c;
     }
-    public function setTime($hour, $minute, $second = 0) {
-        $ts = mktime($hour, $minute, $second, (int)date('n', $this->__ts), (int)date('j', $this->__ts), (int)date('Y', $this->__ts));
-        return new DateTimeImmutable("@$ts");
+    public function setDate($year, $month, $day) {
+        $c = clone $this;
+        $c->__ts = mktime((int)date('G', $this->__ts), (int)date('i', $this->__ts), (int)date('s', $this->__ts), $month, $day, $year);
+        return $c;
+    }
+    public function setTime($hour, $minute, $second = 0, $microsecond = 0) {
+        $c = clone $this;
+        $c->__ts = mktime($hour, $minute, $second, (int)date('n', $this->__ts), (int)date('j', $this->__ts), (int)date('Y', $this->__ts));
+        $c->__us = $microsecond;
+        return $c;
     }
     public static function createFromFormat($format, $datetime) {
         $ts = __date_from_format($format, $datetime);
         if ($ts === false) { return false; }
         return new DateTimeImmutable("@$ts");
     }
-    public function modify($modifier) { $ts = strtotime($modifier, $this->__ts); return new DateTimeImmutable("@$ts"); }
-    public function add($interval) { $ts = $this->__apply($interval, 1); return new DateTimeImmutable("@$ts"); }
-    public function sub($interval) { $ts = $this->__apply($interval, -1); return new DateTimeImmutable("@$ts"); }
+    public function modify($modifier) {
+        $r = strtotime($modifier, $this->__ts);
+        if ($r === false) { return false; }
+        $c = clone $this; $c->__ts = $r; return $c;
+    }
+    public function add($interval) { $c = clone $this; $c->__ts = $this->__apply($interval, 1); return $c; }
+    public function sub($interval) { $c = clone $this; $c->__ts = $this->__apply($interval, -1); return $c; }
     private function __apply($iv, $dir) {
         $sign = $dir * ($iv->invert ? -1 : 1);
         return mktime(
@@ -1943,7 +1955,8 @@ class ReflectionEnum extends ReflectionClass {
         return $out;
     }
 }
-class ReflectionFunction {
+abstract class ReflectionFunctionAbstract {}
+class ReflectionFunction extends ReflectionFunctionAbstract {
     public $name;
     public $__info;
     public $__closure;
@@ -1993,7 +2006,7 @@ class ReflectionFunction {
         return ReflectionAttribute::__filter($all, $name, $flags, 'ReflectionFunctionAbstract');
     }
 }
-class ReflectionMethod {
+class ReflectionMethod extends ReflectionFunctionAbstract {
     const IS_PUBLIC = 1;
     const IS_PROTECTED = 2;
     const IS_PRIVATE = 4;
@@ -4111,11 +4124,59 @@ fn lower_hint(lo: &Lowerer, hint: &Hint) -> Option<TypeHint> {
             let inner = lower_hint(lo, n.hint)?;
             return Some(TypeHint { nullable: true, ..inner });
         }
-        // Union / intersection / `self`/`parent`/`static` / `mixed` / `void` /
+        // `A|B[|null]`: enforced when EVERY member is itself enforceable —
+        // `null` folds into nullability, a single surviving member collapses
+        // to a plain hint. Any unenforceable member (mixed, `self`, literal
+        // `true`, a nested intersection, …) keeps the whole union unenforced.
+        Hint::Union(_) => {
+            let mut members: Vec<HintKind> = Vec::new();
+            let mut nullable = false;
+            if !collect_enforced_union(lo, hint, &mut members, &mut nullable) {
+                return None;
+            }
+            return match members.len() {
+                0 => None,
+                1 => Some(TypeHint { kind: members.pop().expect("len checked"), nullable }),
+                _ => Some(TypeHint { kind: HintKind::Union(members), nullable }),
+            };
+        }
+        // Intersection / `self`/`parent`/`static` / `mixed` / `void` /
         // literal types stay unenforced (lowered to `None`) for now.
         _ => return None,
     };
     Some(TypeHint { kind, nullable: false })
+}
+
+/// Collect the enforceable members of a union hint, flattening nested unions
+/// and folding `null` / `?T` into `nullable`. Returns `false` when any member
+/// is not enforceable — the caller then leaves the whole union unenforced.
+fn collect_enforced_union(
+    lo: &Lowerer,
+    hint: &Hint,
+    out: &mut Vec<HintKind>,
+    nullable: &mut bool,
+) -> bool {
+    match hint {
+        Hint::Union(u) => {
+            collect_enforced_union(lo, u.left, out, nullable)
+                && collect_enforced_union(lo, u.right, out, nullable)
+        }
+        Hint::Parenthesized(p) => collect_enforced_union(lo, p.hint, out, nullable),
+        Hint::Null(_) => {
+            *nullable = true;
+            true
+        }
+        other => match lower_hint(lo, other) {
+            Some(TypeHint { kind, nullable: n }) => {
+                if n {
+                    *nullable = true;
+                }
+                out.push(kind);
+                true
+            }
+            None => false,
+        },
+    }
 }
 
 

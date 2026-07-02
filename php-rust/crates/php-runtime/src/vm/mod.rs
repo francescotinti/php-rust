@@ -10912,6 +10912,49 @@ impl<'m> Vm<'m> {
                     Err(v.type_name_for_error())
                 }
             }
+            HintKind::Union(members) => {
+                // zend_verify_arg_type on a union: an exact (check-only or
+                // same-scalar) member accepts as-is; only then weak mode tries
+                // scalar coercion member by member in declared order.
+                let exact = |k: &HintKind| -> bool {
+                    match k {
+                        HintKind::Scalar(ScalarType::Int) => matches!(v, Zval::Long(_)),
+                        HintKind::Scalar(ScalarType::Float) => {
+                            matches!(v, Zval::Double(_) | Zval::Long(_))
+                        }
+                        HintKind::Scalar(ScalarType::String) => matches!(v, Zval::Str(_)),
+                        HintKind::Scalar(ScalarType::Bool) => matches!(v, Zval::Bool(_)),
+                        HintKind::Array => matches!(v, Zval::Array(_)),
+                        HintKind::Object => {
+                            matches!(v, Zval::Object(_) | Zval::Closure(_) | Zval::Generator(_))
+                        }
+                        HintKind::Callable => self.is_value_callable(&v),
+                        HintKind::Iterable => {
+                            matches!(v, Zval::Array(_))
+                                || self.value_satisfies_class(&v, b"Traversable")
+                        }
+                        HintKind::Class(name) => self.value_satisfies_class(&v, name),
+                        HintKind::Union(_) => false, // unions do not nest
+                    }
+                };
+                if members.iter().any(exact) {
+                    return Ok(value);
+                }
+                if !strict {
+                    for k in members {
+                        if matches!(k, HintKind::Scalar(_)) {
+                            let single =
+                                TypeHint { kind: k.clone(), nullable: hint.nullable };
+                            if let Ok(c) =
+                                coerce_to_hint(value.clone(), &single, &mut self.diags, strict)
+                            {
+                                return Ok(c);
+                            }
+                        }
+                    }
+                }
+                Err(v.type_name_for_error())
+            }
         }
     }
 
@@ -12389,6 +12432,9 @@ fn typehint_descriptor(hint: &Option<TypeHint>) -> Zval {
         HintKind::Iterable => (b"iterable", true),
         HintKind::Object => (b"object", true),
         HintKind::Class(c) => (c, false),
+        // Composite hints reflect through `reflect_type_descriptor` (the
+        // side-carried `ReflectType`), not this single-type descriptor.
+        HintKind::Union(_) => return Zval::Bool(false),
     };
     let mut a = php_types::PhpArray::new();
     a.insert(Key::Str(PhpStr::new(b"name".to_vec())), Zval::Str(PhpStr::new(name.to_vec())));
