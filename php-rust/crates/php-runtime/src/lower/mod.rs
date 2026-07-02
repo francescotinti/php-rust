@@ -35,6 +35,7 @@ use crate::hir::{
 
 mod stmt;
 mod class;
+mod curl_consts;
 mod expr;
 
 /// Why a script could not be lowered to HIR.
@@ -588,6 +589,68 @@ function hash_hmac_file($algo, $filename, $key, $binary = false) {
     $d = @file_get_contents($filename);
     if ($d === false) { return false; }
     return hash_hmac($algo, $d, $key, $binary);
+}
+// ext/curl easy API: CurlHandle (a PHP 8 object, not a resource) wraps an id
+// into the host-side handle table (__curl_* in php-builtins/curl.rs, over the
+// same rustls/ureq transport as the http:// stream wrapper). curl_multi_* is
+// deliberately NOT defined: consumers that probe for it (Composer) fall back
+// to streams; function_exists('curl_exec') consumers (monolog, Guzzle sync)
+// take this path.
+final class CurlHandle {
+    public $__id = 0;
+}
+function curl_init($url = null) {
+    $h = new CurlHandle;
+    $h->__id = __curl_init();
+    if ($url !== null) { curl_setopt($h, CURLOPT_URL, $url); }
+    return $h;
+}
+function curl_setopt($handle, $option, $value) { return __curl_setopt($handle->__id, $option, $value); }
+function curl_setopt_array($handle, $options) {
+    foreach ($options as $k => $v) {
+        if (!curl_setopt($handle, $k, $v)) { return false; }
+    }
+    return true;
+}
+function curl_exec($handle) { return __curl_exec($handle->__id); }
+function curl_errno($handle) { return __curl_errno($handle->__id); }
+function curl_error($handle) { return __curl_error($handle->__id); }
+function curl_getinfo($handle, $option = null) { return __curl_getinfo($handle->__id, $option); }
+// curl_close() is a host builtin (no-op + 8.5 deprecation with caller attribution).
+function curl_reset($handle) { __curl_reset($handle->__id); }
+function curl_escape($handle, $string) { return rawurlencode($string); }
+function curl_unescape($handle, $string) { return rawurldecode($string); }
+function curl_version() {
+    // Honest facade values: version mirrors a current libcurl line so version
+    // gates pass, but ssl_version/host say what the backend really is. The
+    // features bitmask claims only IPV6 (1) + SSL (4) - no HTTP2/libz/brotli.
+    return [
+        'version_number' => 526081,
+        'age' => 11,
+        'features' => 5,
+        'feature_list' => [
+            'AsynchDNS' => false,
+            'IPv6' => true,
+            'SSL' => true,
+            'libz' => false,
+            'HTTP2' => false,
+            'brotli' => false,
+            'zstd' => false,
+        ],
+        'ssl_version_number' => 0,
+        'version' => '8.7.1',
+        'host' => 'phpr-rustls',
+        'ssl_version' => 'rustls',
+        'libz_version' => '',
+        'protocols' => ['http', 'https'],
+        'ares' => '',
+        'ares_num' => 0,
+        'libidn' => '',
+        'iconv_ver_num' => 0,
+        'libssh_version' => '',
+        'brotli_ver_num' => 0,
+        'brotli_version' => '',
+    ];
 }
 #[Attribute(Attribute::TARGET_CLASS)]
 class Attribute {
@@ -4076,7 +4139,9 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"M_LOG2E" => ExprKind::Float(std::f64::consts::LOG2_E),
         b"M_LOG10E" => ExprKind::Float(std::f64::consts::LOG10_E),
         b"M_EULER" => ExprKind::Float(0.577_215_664_901_532_9),
-        _ => return None,
+        // The 689 ext/curl constants live in a generated sorted table
+        // (lower/curl_consts.rs) rather than as match arms here.
+        _ => return curl_consts::curl_constant(name).map(ExprKind::Int),
     })
 }
 

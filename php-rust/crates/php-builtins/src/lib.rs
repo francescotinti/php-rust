@@ -13,6 +13,7 @@ mod array;
 mod crypto;
 mod csv;
 mod ctype;
+mod curl;
 mod date;
 mod encoding;
 mod env;
@@ -64,6 +65,17 @@ pub fn registry() -> Registry {
     add(b"__interval_format", date::__interval_format);
     add(b"__date_from_format", date::__date_from_format);
     add(b"json_encode", json::json_encode);
+    // ext/curl easy-handle facade (curl.rs); the curl_* PHP surface is prelude
+    // functions wrapping these id-keyed hosts around the CurlHandle class.
+    add(b"__curl_init", curl::__curl_init);
+    add(b"__curl_setopt", curl::__curl_setopt);
+    add(b"__curl_exec", curl::__curl_exec);
+    add(b"__curl_errno", curl::__curl_errno);
+    add(b"__curl_error", curl::__curl_error);
+    add(b"__curl_reset", curl::__curl_reset);
+    add(b"__curl_getinfo", curl::__curl_getinfo);
+    add(b"curl_strerror", curl::curl_strerror);
+    add(b"curl_close", curl::curl_close);
     // Hashing / encoding builtins (step 62).
     add(b"base64_encode", encoding::base64_encode);
     add(b"base64_decode", encoding::base64_decode);
@@ -1223,12 +1235,14 @@ fn filter_var(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// `phpversion` so polyfill/feature guards take the same branch as the oracle:
 /// Core, standard, SPL, pcre, json, mbstring, hash, date, openssl. Names lowercase.
 /// openssl: phpr models TLS via the rustls-backed http/https stream wrapper (the
-/// openssl/Composer-network filone). curl is deliberately *absent* so a dual-backend
-/// consumer (Composer's HttpDownloader) takes the stream-wrapper path rather than
-/// the much larger curl_multi surface.
+/// openssl/Composer-network filone). curl: the *easy* API only (curl.rs facade
+/// over the same ureq transport); curl_multi_* stays undefined, so a dual-backend
+/// consumer that probes for it (Composer's HttpDownloader::isCurlEnabled) still
+/// takes the stream-wrapper path, while extension_loaded('curl') consumers
+/// (monolog's handlers, Guzzle's sync CurlHandler) get the easy surface.
 const LOADED_EXTENSIONS: &[&[u8]] = &[
     b"core", b"standard", b"spl", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
-    b"zip", b"dom", b"libxml", b"reflection", b"ctype",
+    b"zip", b"dom", b"libxml", b"reflection", b"ctype", b"curl",
     // Declared for PHPUnit's bootstrap gate; their heavy surfaces (token_get_all,
     // xml_parser_*, XMLWriter) are filled in test-driven — a use ahead of the
     // implementation surfaces as an honest "undefined function".
@@ -1239,7 +1253,7 @@ const LOADED_EXTENSIONS: &[&[u8]] = &[
 /// reports it (the check side is case-insensitive, the listing is not).
 const LOADED_EXTENSIONS_CASED: &[&[u8]] = &[
     b"Core", b"standard", b"SPL", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
-    b"zip", b"dom", b"libxml", b"Reflection", b"ctype",
+    b"zip", b"dom", b"libxml", b"Reflection", b"ctype", b"curl",
     b"xml", b"xmlwriter", b"tokenizer", b"Phar",
 ];
 
