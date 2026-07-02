@@ -379,6 +379,7 @@ pub(crate) fn run_module_with_hir<'m>(
         lazy_initializing: HashSet::new(),
         zips: HashMap::new(),
         next_zip: 1,
+        stream_chunk_sizes: HashMap::new(),
     };
     // Register the caller module's own functions in the global link table so a
     // call made from inside an `eval()` (where `self.module` is the eval unit,
@@ -971,6 +972,10 @@ struct Vm<'m> {
     zips: HashMap<u32, ::zip::ZipArchive<std::fs::File>>,
     /// Next zip handle id (monotonic; ids are never reused within a run).
     next_zip: u32,
+    /// Per-stream chunk size set by `stream_set_chunk_size` (resource id → size).
+    /// phpr's I/O is unbuffered so the value has no read-path effect; it is kept
+    /// only so the builtin can return the previous size (default 8192), as PHP does.
+    stream_chunk_sizes: HashMap<u32, i64>,
 }
 
 impl<'m> Vm<'m> {
@@ -2684,15 +2689,21 @@ impl<'m> Vm<'m> {
                     self.enter_callee(frame)?;
                 }
                 Op::CallArgs { func } => {
-                    // Spread call `f(...$arr)` (PAR): the arguments are the values
-                    // of a runtime array, bound positionally (variadic/defaults
-                    // compose via the binder).
+                    // Spread call `f(...$arr)` (PAR): integer keys bind positionally
+                    // (variadic/defaults compose via the binder), string keys as
+                    // named arguments (PHP 8.1).
                     let argsval = self.frames[top].stack.pop().expect("CallArgs array");
-                    let args = args_from_array_value(argsval);
+                    let (args, named) = split_args_from_array_value(argsval);
                     let m = self.frames[top].module;
                     let callee = &m.functions[func as usize];
-                    let mut frame = Frame::new(callee, m);
-                    bind_params(&mut frame, args);
+                    let frame = if named.is_empty() {
+                        let mut frame = Frame::new(callee, m);
+                        bind_params(&mut frame, args);
+                        frame
+                    } else {
+                        let qn = String::from_utf8_lossy(&callee.name).into_owned();
+                        build_named_frame(callee, m, &qn, args, named)?
+                    };
                     self.enter_callee(frame)?;
                 }
                 Op::CallNamed { func, positional, names } => {
@@ -2703,12 +2714,10 @@ impl<'m> Vm<'m> {
                     let named: Vec<(Box<[u8]>, Zval)> =
                         names.iter().cloned().zip(named_vals).collect();
                     let pos = self.pop_keys(top, positional);
-                    let line = self.cur_line(top);
                     let m = self.frames[top].module;
                     let callee = &m.functions[func as usize];
                     let qn = String::from_utf8_lossy(&callee.name).into_owned();
-                    let frame =
-                        build_named_frame(callee, m, &m.file, line, &qn, pos, named)?;
+                    let frame = build_named_frame(callee, m, &qn, pos, named)?;
                     self.enter_callee(frame)?;
                 }
                 Op::CallSpread { func, spreads, names } => {
@@ -2750,19 +2759,10 @@ impl<'m> Vm<'m> {
                     for (label, v) in names.iter().cloned().zip(named_vals) {
                         named.push((label, v));
                     }
-                    let line = self.cur_line(top);
                     let m = self.frames[top].module;
                     let callee = &m.functions[func as usize];
                     let qn = String::from_utf8_lossy(&callee.name).into_owned();
-                    let frame = build_named_frame(
-                        callee,
-                        m,
-                        &m.file,
-                        line,
-                        &qn,
-                        positional,
-                        named,
-                    )?;
+                    let frame = build_named_frame(callee, m, &qn, positional, named)?;
                     self.enter_callee(frame)?;
                 }
                 Op::CallBuiltin { name, argc } => {
@@ -3674,12 +3674,17 @@ impl<'m> Vm<'m> {
                 }
                 Op::MethodCallArgs { method } => {
                     // Spread `$obj->m(...$a)` (Session A): the arguments are the
-                    // values of a runtime array (the receiver sits beneath it).
+                    // values of a runtime array (the receiver sits beneath it);
+                    // string keys bind as named arguments (PHP 8.1).
                     let argsval = self.frames[top].stack.pop().expect("MethodCallArgs array");
-                    let args = args_from_array_value(argsval);
+                    let (args, named) = split_args_from_array_value(argsval);
                     let recv = self.frames[top].stack.pop().expect("MethodCallArgs receiver");
                     let this = recv.deref_clone();
-                    self.method_call(top, this, &method, args)?;
+                    if named.is_empty() {
+                        self.method_call(top, this, &method, args)?;
+                    } else {
+                        self.dispatch_instance_call_named(top, this, &method, args, named)?;
+                    }
                 }
                 Op::MethodCallDynamic { argc } => {
                     // `$obj->$m(args)`: the method name sits on top, the positional
@@ -3692,14 +3697,19 @@ impl<'m> Vm<'m> {
                     self.method_call(top, this, &method, args)?;
                 }
                 Op::MethodCallDynamicArgs => {
-                    // Spread `$obj->$m(...$a)`: name on top, args array beneath it.
+                    // Spread `$obj->$m(...$a)`: name on top, args array beneath it;
+                    // string keys bind as named arguments (PHP 8.1).
                     let nameval = self.frames[top].stack.pop().expect("MethodCallDynamicArgs name");
                     let method = convert::to_zstr(&nameval, &mut self.diags).as_bytes().to_vec();
                     let argsval = self.frames[top].stack.pop().expect("MethodCallDynamicArgs array");
-                    let args = args_from_array_value(argsval);
+                    let (args, named) = split_args_from_array_value(argsval);
                     let recv = self.frames[top].stack.pop().expect("MethodCallDynamicArgs receiver");
                     let this = recv.deref_clone();
-                    self.method_call(top, this, &method, args)?;
+                    if named.is_empty() {
+                        self.method_call(top, this, &method, args)?;
+                    } else {
+                        self.dispatch_instance_call_named(top, this, &method, args, named)?;
+                    }
                 }
                 Op::MethodCallNamed { method, positional, names } => {
                     // Named `$obj->m(p…, n: v, …)` (Session A): pop the named values
@@ -3829,7 +3839,7 @@ impl<'m> Vm<'m> {
                             continue;
                         }
                     }
-                    self.dispatch_static_call(top, start, &method, forwarding, args)?;
+                    self.dispatch_static_call(top, start, &method, forwarding, args, Vec::new())?;
                 }
                 Op::HookCall { target, prop, set, argc } => {
                     // PHP 8.4 `parent::$prop::get()` / `parent::$prop::set($v)`.
@@ -3905,16 +3915,17 @@ impl<'m> Vm<'m> {
                     self.frames[top].stack.push(result);
                 }
                 Op::StaticCallArgs { target, method, forwarding } => {
-                    // Spread `C::m(...$a)` (Session A): args from a runtime array.
+                    // Spread / named `C::m(...$a)` / `C::m(name: …)`: args from a
+                    // runtime array — integer keys positional, string keys named.
                     let argsval = self.frames[top].stack.pop().expect("StaticCallArgs array");
-                    let args = args_from_array_value(argsval);
+                    let (args, named) = split_args_from_array_value(argsval);
                     let start = match target {
                         ClassTarget::Class(cid) => cid,
                         ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
                             PhpError::Error("Cannot use \"static\" outside class context".to_string())
                         })?,
                     };
-                    self.dispatch_static_call(top, start, &method, forwarding, args)?;
+                    self.dispatch_static_call(top, start, &method, forwarding, args, named)?;
                 }
                 Op::StaticCallDynamic { method, argc } => {
                     // `$cls::m()` (PAR): args are on top, the class reference beneath.
@@ -3923,17 +3934,17 @@ impl<'m> Vm<'m> {
                         self.frames[top].stack.pop().expect("StaticCallDynamic class");
                     let start = self.resolve_dynamic_class(&classval)?;
                     // A dynamic class is non-forwarding, like a named class.
-                    self.dispatch_static_call(top, start, &method, false, args)?;
+                    self.dispatch_static_call(top, start, &method, false, args, Vec::new())?;
                 }
                 Op::StaticCallDynamicArgs { method } => {
                     // Spread `$cls::m(...$a)` (Session A): args array on top, the
-                    // class reference beneath.
+                    // class reference beneath; string keys bind as named (PHP 8.1).
                     let argsval = self.frames[top].stack.pop().expect("StaticCallDynamicArgs array");
-                    let args = args_from_array_value(argsval);
+                    let (args, named) = split_args_from_array_value(argsval);
                     let classval =
                         self.frames[top].stack.pop().expect("StaticCallDynamicArgs class");
                     let start = self.resolve_dynamic_class(&classval)?;
-                    self.dispatch_static_call(top, start, &method, false, args)?;
+                    self.dispatch_static_call(top, start, &method, false, args, named)?;
                 }
                 Op::StaticCallDynamicMethod { argc } => {
                     // `$cls::$m()`: method name on top, then args, then the class ref.
@@ -3946,7 +3957,7 @@ impl<'m> Vm<'m> {
                     let start = self.resolve_dynamic_class(&classval)?;
                     let method = dyn_method_name(&mval)?;
                     // A dynamic class is non-forwarding, like a named static call.
-                    self.dispatch_static_call(top, start, &method, false, args)?;
+                    self.dispatch_static_call(top, start, &method, false, args, Vec::new())?;
                 }
                 Op::StaticCallTargetDynamicMethod { target, forwarding, argc } => {
                     // `self::$m()` / `Class::$m()`: method name on top, then args; the
@@ -3963,7 +3974,7 @@ impl<'m> Vm<'m> {
                             PhpError::Error("Cannot use \"static\" outside class context".to_string())
                         })?,
                     };
-                    self.dispatch_static_call(top, start, &method, forwarding, args)?;
+                    self.dispatch_static_call(top, start, &method, forwarding, args, Vec::new())?;
                 }
                 Op::ClassConst { class, idx } => {
                     // Run the constant's value thunk as a frame in its declaring
@@ -4080,23 +4091,38 @@ impl<'m> Vm<'m> {
                     }
                 }
                 Op::InvokeCtorArgs => {
-                    // Spread `new C(...$a)` / `new $cls(...)` / `new static(...)`
-                    // (Session A): constructor arguments come from a runtime array.
+                    // Spread / named `new C(...$a)` / `new C(name: …)` of a class (or
+                    // constructor) resolved only at run time: arguments come from a
+                    // runtime array — integer keys positional, string keys **named**
+                    // (a spread of a string-keyed array binds by name too, PHP 8.1).
                     let argsval = self.frames[top].stack.pop().expect("InvokeCtorArgs array");
-                    let args = args_from_array_value(argsval);
+                    let (args, named) = split_args_from_array_value(argsval);
                     let recv = self.frames[top].stack.pop().expect("InvokeCtorArgs receiver");
                     let this = recv.deref_clone();
                     let cid = object_class_id(&this).expect("InvokeCtorArgs on a non-object");
                     match resolve_method_runtime(&self.classes, cid, b"__construct") {
                         Some((defc, midx)) => {
                             let callee = &self.classes[defc].methods[midx].func;
-                            let mut frame = Frame::new(callee, self.class_mod(defc));
-                            bind_params(&mut frame, args);
+                            let mut frame = if named.is_empty() {
+                                let mut frame = Frame::new(callee, self.class_mod(defc));
+                                bind_params(&mut frame, args);
+                                frame
+                            } else {
+                                let qn = format!(
+                                    "{}::__construct",
+                                    String::from_utf8_lossy(&self.classes[defc].name)
+                                );
+                                build_named_frame(callee, self.class_mod(defc), &qn, args, named)?
+                            };
                             frame.this = Some(this);
                             frame.class = Some(defc);
                             frame.static_class = Some(cid);
                             self.frames.push(frame);
                         }
+                        // A named argument has no constructor to bind against: the
+                        // catchable "Unknown named parameter" (positional arguments
+                        // to a ctor-less class are silently discarded, as in PHP).
+                        None if !named.is_empty() => return Err(unknown_named_param(&named)),
                         None => self.frames[top].stack.push(Zval::Null),
                     }
                 }
@@ -8733,11 +8759,13 @@ impl<'m> Vm<'m> {
         Ok(Zval::Str(PhpStr::new(out)))
     }
 
-    /// `preg_replace($pattern, $replacement, $subject)`: backreferences `$1`/`${1}`/
-    /// `\1` in the replacement are honoured. Returns `null` on a bad pattern. Single
-    /// scalar pattern/subject (array forms are a scope-out). Mirrors
-    /// `eval::ho_preg_replace` on the shared `crate::preg` engine.
-    fn ho_preg_replace(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+    /// `preg_replace($pattern, $replacement, $subject, $limit, &$count)`:
+    /// backreferences `$1`/`${1}`/`\1` in the replacement are honoured. Returns
+    /// `(result, count)` — `&$count` (the number of replacements, symfony
+    /// polyfill-intl-grapheme's `$len`) is written by the VM out-param path; the
+    /// plain dispatch drops it. Returns `null` on a bad pattern. Single scalar
+    /// pattern/subject and `$limit` stay a scope-out. Mirrors `eval::ho_preg_replace`.
+    fn ho_preg_replace(&mut self, args: Vec<Zval>) -> Result<(Zval, Zval), PhpError> {
         if args.len() < 3 {
             return Err(PhpError::ArgumentCountError(
                 "preg_replace() expects at least 3 arguments".to_string(),
@@ -8748,12 +8776,13 @@ impl<'m> Vm<'m> {
         let subject =
             convert::to_zstr_cast(&args[2].deref_clone(), &mut self.diags).as_bytes().to_vec();
         let Some(re) = self.preg_compile(&pat) else {
-            return Ok(Zval::Null);
+            return Ok((Zval::Null, Zval::Long(0)));
         };
         let repl = String::from_utf8_lossy(&crate::preg::translate_replacement(&repl)).into_owned();
         let subj = String::from_utf8_lossy(&subject);
+        let count = re.captures_iter(&subj).len() as i64;
         let result = re.replace_all(&subj, repl.as_str());
-        Ok(Zval::Str(PhpStr::new(result.as_bytes().to_vec())))
+        Ok((Zval::Str(PhpStr::new(result.as_bytes().to_vec())), Zval::Long(count)))
     }
 
     /// `preg_quote($str, $delimiter = null)`: escape regex metacharacters (and the
@@ -8981,6 +9010,7 @@ impl<'m> Vm<'m> {
             b"preg_match_all" => self.ho_preg_match_all(args),
             b"mb_ereg" => self.ho_mb_ereg(false, args),
             b"mb_eregi" => self.ho_mb_ereg(true, args),
+            b"preg_replace" => self.ho_preg_replace(args),
             _ => Err(undefined_builtin(name)),
         }
     }
@@ -9468,7 +9498,40 @@ impl<'m> Vm<'m> {
     /// a stream resource. A host builtin because it allocates a resource id. Args 3/4
     /// (use_include_path, context) are a scope-out. On failure: Warning + `false`.
     /// Mirrors `eval::ho_fopen`.
-    fn ho_fopen(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+    /// `stream_set_chunk_size($stream, $size)`: record the chunk size and return
+    /// the previous one (default 8192). phpr's stream I/O is unbuffered, so the
+    /// size has no read/write effect — the bookkeeping exists for the return
+    /// value and the argument validation (oracle-verified messages).
+    fn ho_stream_set_chunk_size(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let (Some(res_arg), Some(size_arg)) = (args.first(), args.get(1)) else {
+            return Err(PhpError::ArgumentCountError(format!(
+                "stream_set_chunk_size() expects exactly 2 arguments, {} given",
+                args.len()
+            )));
+        };
+        let Zval::Resource(res) = res_arg.deref_clone() else {
+            return Err(PhpError::TypeError(
+                "stream_set_chunk_size(): Argument #1 ($stream) must be of type resource"
+                    .to_string(),
+            ));
+        };
+        let size = convert::to_long_cast(&size_arg.deref_clone(), &mut self.diags);
+        if size <= 0 {
+            return Err(PhpError::ValueError(
+                "stream_set_chunk_size(): Argument #2 ($size) must be greater than 0".to_string(),
+            ));
+        }
+        if size > i32::MAX as i64 {
+            return Err(PhpError::ValueError(
+                "stream_set_chunk_size(): Argument #2 ($size) is too large".to_string(),
+            ));
+        }
+        let id = res.borrow().id;
+        let prev = self.stream_chunk_sizes.insert(id, size).unwrap_or(8192);
+        Ok(Zval::Long(prev))
+    }
+
+        fn ho_fopen(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let Some(path_arg) = args.first() else {
             return Err(PhpError::ArgumentCountError(
                 "fopen() expects at least 2 arguments, 0 given".to_string(),
@@ -10497,6 +10560,8 @@ impl<'m> Vm<'m> {
     /// routes to `__call` on `$this` (in object context) or `__callStatic`,
     /// otherwise raises the visibility / undefined-method error. Shared by
     /// `Op::StaticCall` (and, later, the dynamic `$cls::method()` path).
+    /// `named` arguments (from a runtime argument array's string keys) bind via
+    /// [`build_named_frame`], or ride string-keyed in a magic `$args` array.
     fn dispatch_static_call(
         &mut self,
         top: usize,
@@ -10504,6 +10569,7 @@ impl<'m> Vm<'m> {
         method: &[u8],
         forwarding: bool,
         args: Vec<Zval>,
+        named: Vec<(Box<[u8]>, Zval)>,
     ) -> Result<(), PhpError> {
         // Enum built-in statics (`cases` / `from` / `tryFrom`) are reserved names
         // that shadow user resolution and produce a value directly rather than
@@ -10520,7 +10586,15 @@ impl<'m> Vm<'m> {
                 let try_from = method.eq_ignore_ascii_case(b"tryFrom");
                 if try_from || method.eq_ignore_ascii_case(b"from") {
                     // Decay a reference pushed by a dynamic call (SEND_VAR_EX).
-                    let arg = args.into_iter().next().map(decay_arg);
+                    // The single parameter is `$value`, so a named argument (or a
+                    // spread's string key) binds by that name.
+                    let arg = args
+                        .into_iter()
+                        .next()
+                        .or_else(|| {
+                            named.into_iter().find(|(n, _)| &n[..] == b"value").map(|(_, v)| v)
+                        })
+                        .map(decay_arg);
                     let v = self.vm_enum_from(start, arg, try_from)?;
                     self.frames[top].stack.push(v);
                     return Ok(());
@@ -10554,8 +10628,18 @@ impl<'m> Vm<'m> {
         match usable {
             Some((defc, midx)) => {
                 let callee = &self.classes[defc].methods[midx].func;
-                let mut frame = Frame::new(callee, self.class_mod(defc));
-                bind_params(&mut frame, args);
+                let mut frame = if named.is_empty() {
+                    let mut frame = Frame::new(callee, self.class_mod(defc));
+                    bind_params(&mut frame, args);
+                    frame
+                } else {
+                    let qn = format!(
+                        "{}::{}",
+                        String::from_utf8_lossy(&self.classes[defc].name),
+                        String::from_utf8_lossy(method)
+                    );
+                    build_named_frame(callee, self.class_mod(defc), &qn, args, named)?
+                };
                 frame.this = this;
                 frame.class = Some(defc);
                 frame.static_class = Some(static_class);
@@ -10572,13 +10656,14 @@ impl<'m> Vm<'m> {
                         resolve_method_runtime(&self.classes, oc, b"__call").map(|(d, m)| (tv, oc, d, m))
                     });
                 // `__call`/`__callStatic($name, $args)` gets a value array — decay
-                // references pushed by a dynamic call (SEND_VAR_EX).
+                // references pushed by a dynamic call (SEND_VAR_EX); named values
+                // ride string-keyed alongside.
                 if let Some((tv, oc, cdefc, cmidx)) = via_call {
-                    self.push_magic_call(cdefc, cmidx, Some(tv), oc, method, decay_args(args));
+                    self.push_magic_call_named(cdefc, cmidx, Some(tv), oc, method, decay_args(args), named);
                 } else if let Some((cdefc, cmidx)) =
                     resolve_method_runtime(&self.classes, start, b"__callStatic")
                 {
-                    self.push_magic_call(cdefc, cmidx, None, start, method, decay_args(args));
+                    self.push_magic_call_named(cdefc, cmidx, None, start, method, decay_args(args), named);
                 } else {
                     return Err(match resolved {
                         Some((defc, midx)) => method_access_error(
@@ -11974,7 +12059,8 @@ host_builtins! {
     b"tmpfile" => vm.ho_tmpfile(),
     b"opendir" => vm.ho_opendir(args),
     b"stream_context_create" => vm.ho_stream_context_create(args),
-    b"preg_replace" => vm.ho_preg_replace(args),
+    b"stream_set_chunk_size" => vm.ho_stream_set_chunk_size(args),
+    b"preg_replace" => vm.ho_preg_replace(args).map(|(r, _)| r),
     b"preg_quote" => vm.ho_preg_quote(args),
     b"preg_split" => vm.ho_preg_split(args),
     b"preg_grep" => vm.ho_preg_grep(args),
@@ -12137,6 +12223,10 @@ pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usiz
         (b"preg_match_all", 2),
         (b"mb_ereg", 2),
         (b"mb_eregi", 2),
+        // `&$count` (number of replacements). Also in the plain host table for
+        // dynamic string-callable dispatch, so the compiler must consult this
+        // table FIRST (see `FnCompiler::call`).
+        (b"preg_replace", 4),
     ];
     HOST_OUT
         .iter()
@@ -16419,7 +16509,9 @@ mod tests {
     fn named_method_missing_required() {
         assert_eq!(
             vm_stdout(b"<?php class C { function m($a,$b){} } try { (new C)->m(a:1); } catch(ArgumentCountError $e){ echo $e->getMessage(); }"),
-            b"Too few arguments to function C::m(), 1 passed in test.php on line 1 and exactly 2 expected"
+            // zend_handle_undef_args: a named call reports the unbound parameter,
+            // not the positional-only "Too few arguments" form (oracle-verified).
+            b"C::m(): Argument #2 ($b) not passed"
         );
     }
 

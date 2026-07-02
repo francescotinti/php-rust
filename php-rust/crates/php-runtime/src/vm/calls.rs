@@ -53,6 +53,28 @@ pub(super) fn args_from_array_value(v: Zval) -> Vec<Zval> {
     }
 }
 
+/// Split a runtime argument array into positional (int-keyed, in order) and
+/// **named** (string-keyed) arguments, mirroring how PHP treats a spread of a
+/// string-keyed array (8.1) and how the compiler encodes `new C(named: …)` for
+/// a class resolved only at run time: positional values ride on integer keys,
+/// named values on their parameter-name string keys. A non-array yields nothing.
+pub(super) fn split_args_from_array_value(v: Zval) -> (Vec<Zval>, Vec<(Box<[u8]>, Zval)>) {
+    match v.deref_clone() {
+        Zval::Array(a) => {
+            let mut positional = Vec::new();
+            let mut named = Vec::new();
+            for (k, v) in a.iter() {
+                match k {
+                    Key::Int(_) => positional.push(v.deref_clone()),
+                    Key::Str(s) => named.push((s.as_bytes().to_vec().into_boxed_slice(), v.deref_clone())),
+                }
+            }
+            (positional, named)
+        }
+        _ => (Vec::new(), Vec::new()),
+    }
+}
+
 /// Pack call arguments into a 0-indexed list array — the second argument handed
 /// to `__call` / `__callStatic` (OOP-3a), mirroring the tree-walker's `pack_args`.
 pub(super) fn pack_args(args: Vec<Zval>) -> Zval {
@@ -161,14 +183,14 @@ pub(super) fn unknown_named_param(named: &[(Box<[u8]>, Zval)]) -> PhpError {
 /// keyed by its name (string key) — surplus positional args are collected too (int
 /// keys). Mirrors the evaluator's errors: a duplicate/positional collision is an
 /// overwrite `Error`, a name with no home (and no variadic) is unknown, and a
-/// required parameter left unbound is an `ArgumentCountError`. `display_name` is
-/// the `Class::method` used in that message; `frame.this`/`class`/`static_class`
-/// are set by the caller.
+/// required parameter left unbound is the named-call `ArgumentCountError`
+/// (`f(): Argument #N ($name) not passed`, zend_handle_undef_args — the
+/// positional-only "Too few arguments" form never applies here). `display_name`
+/// is the `Class::method` used in that message; `frame.this`/`class`/
+/// `static_class` are set by the caller.
 pub(super) fn build_named_frame<'m>(
     callee: &'m Func,
     module: &'m Module,
-    file: &[u8],
-    line: Line,
     display_name: &str,
     positional: Vec<Zval>,
     named: Vec<(Box<[u8]>, Zval)>,
@@ -217,12 +239,10 @@ pub(super) fn build_named_frame<'m>(
     // Every required (default-less, non-variadic) parameter must be bound.
     for (i, &required) in callee.param_required.iter().enumerate() {
         if required && matches!(frame.slots[i], Zval::Undef) {
-            let required_count = callee.param_required.iter().filter(|&&r| r).count();
-            let exactly = callee.param_required.iter().all(|&r| r);
-            let qualifier = if exactly { "exactly" } else { "at least" };
             return Err(PhpError::ArgumentCountError(format!(
-                "Too few arguments to function {display_name}(), {passed} passed in {} on line {line} and {qualifier} {required_count} expected",
-                String::from_utf8_lossy(file)
+                "{display_name}(): Argument #{} (${}) not passed",
+                i + 1,
+                String::from_utf8_lossy(&callee.param_names[i])
             )));
         }
     }
@@ -270,7 +290,7 @@ impl<'m> Vm<'m> {
                     let method = bytes[pos + 2..].to_vec();
                     let cid = self.resolve_dynamic_class(&cls)?;
                     let top = self.frames.len() - 1;
-                    self.dispatch_static_call(top, cid, &method, false, args)
+                    self.dispatch_static_call(top, cid, &method, false, args, Vec::new())
                 } else {
                     let name = bytes.to_vec();
                     self.invoke_named(&name, args)
@@ -323,7 +343,7 @@ impl<'m> Vm<'m> {
             }
             Zval::Str(_) => {
                 let cid = self.resolve_dynamic_class(&elems[0])?;
-                self.dispatch_static_call(top, cid, &method, false, args)
+                self.dispatch_static_call(top, cid, &method, false, args, Vec::new())
             }
             _ => Err(not_callable()),
         }

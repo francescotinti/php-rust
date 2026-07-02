@@ -2110,23 +2110,42 @@ impl<'a> FnCompiler<'a> {
                             self.emit(Op::StaticCall { target, method: method.clone(), forwarding, argc });
                         }
                     } else {
-                        // Named args: resolve the method at compile time against the
-                        // known class's parameters (PAR). `static::` is run-time only.
-                        let cid = match target {
-                            ClassTarget::Class(c) => c,
-                            ClassTarget::Static => {
-                                return Err(CompileError::Unsupported(
-                                    "named arguments on `static::m()`".into(),
-                                ))
+                        // Named args: lay them into the resolved method's parameter
+                        // slots at compile time when expressible; otherwise (an
+                        // unresolved method, `static::`, a variadic/by-ref/unknown/
+                        // colliding/missing name) build a runtime argument array
+                        // (string keys = names) for `Op::StaticCallArgs`, whose
+                        // binder resolves — or errors, catchably — at run time.
+                        let layout = match target {
+                            ClassTarget::Class(cid) => {
+                                self.resolve_method_compile(cid, method).filter(|&(defc, midx)| {
+                                    let fd = &self.ctx.classes[defc].methods[midx].decl;
+                                    self.can_emit_named_layout(fd, args, named)
+                                })
                             }
+                            ClassTarget::Static => None,
                         };
-                        let (defc, midx) = self.resolve_method_compile(cid, method).ok_or_else(|| {
-                            CompileError::Unsupported("named call to an unresolved static method".into())
-                        })?;
-                        let method_fd = &self.ctx.classes[defc].methods[midx].decl;
-                        let n = method_fd.params.len() as u32;
-                        self.emit_named_layout(method_fd, args, named)?;
-                        self.emit(Op::StaticCall { target, method: method.clone(), forwarding, argc: n });
+                        match layout {
+                            Some((defc, midx)) => {
+                                let method_fd = &self.ctx.classes[defc].methods[midx].decl;
+                                let n = method_fd.params.len() as u32;
+                                self.emit_named_layout(method_fd, args, named)?;
+                                self.emit(Op::StaticCall {
+                                    target,
+                                    method: method.clone(),
+                                    forwarding,
+                                    argc: n,
+                                });
+                            }
+                            None => {
+                                self.build_args_array_named(args, named)?;
+                                self.emit(Op::StaticCallArgs {
+                                    target,
+                                    method: method.clone(),
+                                    forwarding,
+                                });
+                            }
+                        }
                     }
                 }
             }
@@ -2392,16 +2411,10 @@ impl<'a> FnCompiler<'a> {
         if !named.is_empty() {
             return Err(CompileError::Unsupported("builtin call with named arguments".into()));
         }
-        // Evaluator-only *host* builtins (higher-order / class-introspection /
-        // define-family, Sessions B–D) need the VM itself, so they are dispatched
-        // VM-side via `Op::CallHostBuiltin` rather than the stateless registry.
-        if let Some(canon) = crate::vm::host_builtin_canonical(bname) {
-            self.push_value_args(args)?; // rejects spread (out of slice here)
-            self.emit(Op::CallHostBuiltin { name: canon.into(), argc: args.len() as u32 });
-            return Ok(());
-        }
         // Host builtins with a by-reference *output* parameter (`preg_match`'s
-        // `&$matches` at index 2): capture the out-param's slot and let the VM
+        // `&$matches` at index 2): checked BEFORE the plain host table because a
+        // name can live in both (`preg_replace` — the plain entry serves dynamic
+        // string-callable dispatch); capture the out-param's slot and let the VM
         // write the produced value back. The out-param is a *write* target, so its
         // argument is NOT evaluated by value — pushing it would read the (usually
         // undefined) variable and emit a spurious "Undefined variable" warning the
@@ -2435,6 +2448,14 @@ impl<'a> FnCompiler<'a> {
                 out_index: out_idx as u32,
                 argc: args.len() as u32,
             });
+            return Ok(());
+        }
+        // Evaluator-only *host* builtins (higher-order / class-introspection /
+        // define-family, Sessions B–D) need the VM itself, so they are dispatched
+        // VM-side via `Op::CallHostBuiltin` rather than the stateless registry.
+        if let Some(canon) = crate::vm::host_builtin_canonical(bname) {
+            self.push_value_args(args)?; // rejects spread (out of slice here)
+            self.emit(Op::CallHostBuiltin { name: canon.into(), argc: args.len() as u32 });
             return Ok(());
         }
         // Host builtins with variadic by-reference output parameters (`sscanf`/
@@ -3042,16 +3063,32 @@ impl<'a> FnCompiler<'a> {
     }
 
     /// Emit the run-time constructor invocation for `new static` / `new $cls` (the
-    /// receiver is already duplicated on the stack). A spread (`...$a`) builds a
-    /// runtime argument array and uses [`Op::InvokeCtorArgs`]; otherwise the values
-    /// are pushed positionally for [`Op::InvokeCtor`].
-    fn emit_invoke_ctor(&mut self, args: &[Expr]) -> R<()> {
-        if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
-            self.build_args_array(args)?;
+    /// receiver is already duplicated on the stack). A spread (`...$a`) or a
+    /// **named** argument builds a runtime argument array (string keys = names)
+    /// and uses [`Op::InvokeCtorArgs`], whose handler binds by name against the
+    /// run-time-resolved constructor; otherwise the values are pushed positionally
+    /// for [`Op::InvokeCtor`].
+    fn emit_invoke_ctor(&mut self, args: &[Expr], named: &[(Box<[u8]>, Expr)]) -> R<()> {
+        if !named.is_empty() || args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
+            self.build_args_array_named(args, named)?;
             self.emit(Op::InvokeCtorArgs);
         } else {
             self.push_value_args(args)?;
             self.emit(Op::InvokeCtor { argc: args.len() as u32 });
+        }
+        Ok(())
+    }
+
+    /// [`Self::build_args_array`] plus trailing **named** arguments, inserted with
+    /// their parameter name as string key (the encoding `Op::InvokeCtorArgs`
+    /// decodes back into a named binding — see `split_args_from_array_value`).
+    fn build_args_array_named(&mut self, args: &[Expr], named: &[(Box<[u8]>, Expr)]) -> R<()> {
+        self.build_args_array(args)?;
+        for (name, e) in named {
+            let k = self.konst(Const::Str(name.clone()));
+            self.emit(Op::PushConst(k));
+            self.expr(e)?;
+            self.emit(Op::ArrayInsert);
         }
         Ok(())
     }
@@ -3069,14 +3106,9 @@ impl<'a> FnCompiler<'a> {
                 // truly undefined (it may be declared conditionally or later). Push
                 // the name and allocate dynamically, exactly like `new $cls`.
                 None => {
-                    if !named.is_empty() {
-                        return Err(CompileError::Unsupported(
-                            "named arguments to `new` of an unknown class".into(),
-                        ));
-                    }
                     let k = self.konst(Const::Str(name.clone()));
                     self.emit(Op::PushConst(k));
-                    self.emit_dynamic_new(args)
+                    self.emit_dynamic_new(args, named)
                 }
             },
             ClassRef::SelfClass => {
@@ -3092,11 +3124,6 @@ impl<'a> FnCompiler<'a> {
                     .ok_or_else(|| CompileError::Unsupported("`new parent` without a parent class".into()))?;
                 self.new_obj_cid(cid, args, named)
             }
-            // `new static`/`new $cls` resolve the constructor at run time, where the
-            // compile-time named layout can't be built.
-            ClassRef::Static | ClassRef::Dynamic(_) if !named.is_empty() => {
-                Err(CompileError::Unsupported("named arguments to `new static`/`new $cls`".into()))
-            }
             ClassRef::Static => {
                 // The actual class (hence the constructor) is only known at run
                 // time, so allocate the LSB class and dispatch `__construct`
@@ -3108,7 +3135,7 @@ impl<'a> FnCompiler<'a> {
                 // Fix line/file/trace on a Throwable after its defaults are set.
                 self.emit(Op::StampThrowable);
                 self.emit(Op::Dup);
-                self.emit_invoke_ctor(args)?;
+                self.emit_invoke_ctor(args, named)?;
                 self.emit(Op::Pop);
                 Ok(())
             }
@@ -3116,7 +3143,7 @@ impl<'a> FnCompiler<'a> {
                 // `new $cls` (PAR): resolve the class at run time, then run the
                 // constructor dynamically (like `new static`).
                 self.expr(expr)?;
-                self.emit_dynamic_new(args)
+                self.emit_dynamic_new(args, named)
             }
         }
     }
@@ -3125,14 +3152,14 @@ impl<'a> FnCompiler<'a> {
     /// (a `new $cls` or a `new Name` whose class is unknown at compile time):
     /// resolve the class, init its properties, stamp a Throwable's location, and run
     /// the constructor dynamically, leaving the fresh object on the stack.
-    fn emit_dynamic_new(&mut self, args: &[Expr]) -> R<()> {
+    fn emit_dynamic_new(&mut self, args: &[Expr], named: &[(Box<[u8]>, Expr)]) -> R<()> {
         self.emit(Op::AllocDynamic);
         self.emit(Op::Dup);
         self.emit(Op::InitProps);
         self.emit(Op::Pop);
         self.emit(Op::StampThrowable);
         self.emit(Op::Dup);
-        self.emit_invoke_ctor(args)?;
+        self.emit_invoke_ctor(args, named)?;
         self.emit(Op::Pop);
         Ok(())
     }
@@ -3141,11 +3168,6 @@ impl<'a> FnCompiler<'a> {
     /// compile-time-resolved constructor (if any) with the fresh object as `$this`.
     fn new_obj_cid(&mut self, cid: ClassId, args: &[Expr], named: &[(Box<[u8]>, Expr)]) -> R<()> {
         let ctor = self.resolve_method_compile(cid, b"__construct");
-        if ctor.is_none() && !named.is_empty() {
-            return Err(CompileError::Unsupported(
-                "named arguments to a class with no constructor".into(),
-            ));
-        }
         self.emit(Op::Alloc { class: cid });
         // Materialise non-constant property defaults before the constructor runs.
         // `InitProps` is a no-op (pushes NULL) for classes with none.
@@ -3155,14 +3177,24 @@ impl<'a> FnCompiler<'a> {
         // After defaults are in place, fix a Throwable's line/file/trace at the
         // `new` site (a no-op for non-Throwables), before the constructor runs.
         self.emit(Op::StampThrowable);
-        // Spread `new C(...$a)` (Session A): the parameter count isn't known until
-        // the array is flattened, so resolve the constructor at run time from the
-        // fresh object's class (`InvokeCtorArgs`) — which also serves a ctor-less
-        // class (it pushes NULL). Mixed spread + named falls back to the evaluator
-        // (handled below by `emit_named_layout`, which rejects spreads).
-        if named.is_empty() && args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
+        // Spread `new C(...$a)` (with or without named arguments), and any named
+        // call the compile-time layout can't express (a variadic or by-ref
+        // parameter, an unknown/colliding name, a missing required argument, a
+        // ctor-less class): resolve the constructor at run time from the fresh
+        // object's class (`InvokeCtorArgs`), whose binder handles variadics and
+        // raises PHP's catchable errors ("Unknown named parameter", overwrite,
+        // too-few) only if the `new` actually executes.
+        let named_needs_runtime = !named.is_empty()
+            && match ctor {
+                Some((defc, midx)) => {
+                    let fd = &self.ctx.classes[defc].methods[midx].decl;
+                    !self.can_emit_named_layout(fd, args, named)
+                }
+                None => true,
+            };
+        if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) || named_needs_runtime {
             self.emit(Op::Dup);
-            self.build_args_array(args)?;
+            self.build_args_array_named(args, named)?;
             self.emit(Op::InvokeCtorArgs);
             self.emit(Op::Pop);
             return Ok(());

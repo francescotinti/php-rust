@@ -694,9 +694,7 @@ impl<'m> Vm<'m> {
                     String::from_utf8_lossy(&self.classes[defc].name),
                     String::from_utf8_lossy(method)
                 );
-                let line = self.cur_line(top);
-                let mut frame =
-                    build_named_frame(callee, module, &module.file, line, &qn, positional, named)?;
+                let mut frame = build_named_frame(callee, module, &qn, positional, named)?;
                 frame.this = Some(this);
                 frame.class = Some(defc);
                 frame.static_class = Some(cid); // LSB = receiver's actual class
