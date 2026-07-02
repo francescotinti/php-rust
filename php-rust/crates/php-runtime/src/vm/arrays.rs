@@ -147,6 +147,17 @@ pub(super) fn field_write(
         }
         FieldStep::Index => {
             let key = keys.next().expect("field index key");
+            // A *string* base takes the single-byte offset write (`$s[0] = 'X'`,
+            // zend_assign_to_string_offset), not the array path. An empty string
+            // is still a string here (oracle: `$e=''; $e[0]='a'` → "a").
+            if matches!(target, Zval::Str(_)) {
+                if !rest.is_empty() {
+                    return Err(PhpError::Error(
+                        "Cannot use string offset as an array".to_string(),
+                    ));
+                }
+                return string_offset_write(target, &key, &value, diags).map(|_| ());
+            }
             ensure_array(target)?;
             let Zval::Array(rc) = target else { unreachable!("ensured array") };
             let arr = Rc::make_mut(rc);
@@ -169,6 +180,11 @@ pub(super) fn field_write(
             Ok(())
         }
         FieldStep::Append => {
+            if matches!(target, Zval::Str(_)) {
+                return Err(PhpError::Error(
+                    "[] operator not supported for strings".to_string(),
+                ));
+            }
             ensure_array(target)?;
             let Zval::Array(rc) = target else { unreachable!("ensured array") };
             let arr = Rc::make_mut(rc);
@@ -400,6 +416,81 @@ pub(super) fn read_dim_nullable(base: &Zval, key: &Zval) -> Zval {
         Zval::Ref(rc) => read_dim_nullable(&rc.borrow(), key),
         _ => read_dim(base, key),
     }
+}
+
+/// `zend_assign_to_string_offset`: write `value`'s first byte at `key` into the
+/// string held by `target` (oracle-pinned matrix): the offset casts with PHP's
+/// warnings (float/bool/null → "String offset cast occurred", non-numeric
+/// string → TypeError), a negative offset counts from the end (out of range →
+/// "Illegal string offset" warning, no write), one past the end pads with
+/// spaces, an empty value is an Error and a multi-byte one keeps its first
+/// byte with a warning. Returns the single-byte string PHP yields as the
+/// assignment expression's value (the *unchanged* target on the no-write path).
+pub(super) fn string_offset_write(
+    target: &mut Zval,
+    key: &Zval,
+    value: &Zval,
+    diags: &mut Diags,
+) -> Result<Zval, PhpError> {
+    let Zval::Str(s) = target else {
+        return Err(PhpError::Error("string_offset_write on a non-string".to_string()));
+    };
+    let off = match key.deref_clone() {
+        Zval::Long(i) => i,
+        Zval::Double(d) => {
+            diags.push(Diag::Warning("String offset cast occurred".to_string()));
+            d as i64
+        }
+        Zval::Bool(b) => {
+            diags.push(Diag::Warning("String offset cast occurred".to_string()));
+            b as i64
+        }
+        Zval::Null | Zval::Undef => {
+            diags.push(Diag::Warning("String offset cast occurred".to_string()));
+            0
+        }
+        Zval::Str(k) => match std::str::from_utf8(k.as_bytes())
+            .ok()
+            .and_then(|t| t.trim().parse::<i64>().ok())
+        {
+            Some(i) => i,
+            None => {
+                return Err(PhpError::TypeError(
+                    "Cannot access offset of type string on string".to_string(),
+                ))
+            }
+        },
+        other => {
+            return Err(PhpError::TypeError(format!(
+                "Cannot access offset of type {} on string",
+                other.type_name_for_error()
+            )))
+        }
+    };
+    let vbytes = convert::to_zstr_cast(value, diags).as_bytes().to_vec();
+    if vbytes.is_empty() {
+        return Err(PhpError::Error(
+            "Cannot assign an empty string to a string offset".to_string(),
+        ));
+    }
+    if vbytes.len() > 1 {
+        diags.push(Diag::Warning(
+            "Only the first byte will be assigned to the string offset".to_string(),
+        ));
+    }
+    let mut bytes = s.as_bytes().to_vec();
+    let idx = if off < 0 { bytes.len() as i64 + off } else { off };
+    if idx < 0 {
+        diags.push(Diag::Warning(format!("Illegal string offset {off}")));
+        return Ok(target.clone());
+    }
+    let idx = idx as usize;
+    if idx >= bytes.len() {
+        bytes.resize(idx + 1, b' ');
+    }
+    bytes[idx] = vbytes[0];
+    *target = Zval::Str(PhpStr::new(bytes));
+    Ok(Zval::Str(PhpStr::new(vec![vbytes[0]])))
 }
 
 /// Ensure `cell` is an array, auto-vivifying from null/undefined/false; a

@@ -4062,6 +4062,16 @@ impl<'m> Vm<'m> {
                                 let cls = self.classes[o.borrow().class_id as usize].name.to_vec();
                                 self.frames[top].stack.push(Zval::Str(PhpStr::new(cls)));
                             }
+                            // Engine objects held as dedicated variants still
+                            // answer `$v::class` with their class name.
+                            Zval::Closure(_) => {
+                                self.frames[top].stack.push(Zval::Str(PhpStr::new(b"Closure".to_vec())));
+                            }
+                            Zval::Generator(_) => {
+                                self.frames[top]
+                                    .stack
+                                    .push(Zval::Str(PhpStr::new(b"Generator".to_vec())));
+                            }
                             other => {
                                 return Err(PhpError::TypeError(format!(
                                     "Cannot use \"::class\" on {}",
@@ -8906,7 +8916,7 @@ impl<'m> Vm<'m> {
             pairs.push((re, r));
         }
         let mut total = 0i64;
-        let mut run_one = |subject: &[u8], total: &mut i64| -> Zval {
+        let run_one = |subject: &[u8], total: &mut i64| -> Zval {
             let mut s = String::from_utf8_lossy(subject).into_owned();
             for (re, repl) in &pairs {
                 *total += re.captures_iter(&s).len() as i64;
@@ -9729,10 +9739,12 @@ impl<'m> Vm<'m> {
             return Ok(Zval::Array(Rc::new(out)));
         };
         let c = &self.classes[cid];
-        let file: Option<&[u8]> = c
-            .methods
-            .first()
-            .map(|m| &m.func.file[..])
+        // Prefer the declaring unit recorded on the class itself; older paths
+        // derived it from the first method, kept as fallback for classes whose
+        // `file` is empty (e.g. synthesized ones).
+        let file: Option<&[u8]> = Some(&c.file[..])
+            .filter(|f| !f.is_empty())
+            .or_else(|| c.methods.first().map(|m| &m.func.file[..]))
             .or_else(|| c.prop_init.as_ref().map(|f| &f.file[..]));
         match file {
             Some(f) if f != b"prelude" => {
@@ -9747,8 +9759,10 @@ impl<'m> Vm<'m> {
                     }
                 }
                 let _ = out.append(Zval::Str(PhpStr::new(f.to_vec())));
-                let _ = out.append(Zval::Long(if start == u32::MAX { 0 } else { start as i64 }));
-                let _ = out.append(Zval::Long(end as i64));
+                // A methodless class falls back to its `class` keyword's line.
+                let start = if start == u32::MAX { c.line as i64 } else { start as i64 };
+                let _ = out.append(Zval::Long(start));
+                let _ = out.append(Zval::Long(end.max(start as u32) as i64));
             }
             _ => {
                 let _ = out.append(Zval::Bool(false));
@@ -10753,6 +10767,9 @@ impl<'m> Vm<'m> {
     /// Whether a bare name is callable: a user function, any registry builtin, or a
     /// host builtin (mirrors `eval::is_name_callable`).
     fn is_name_callable(&self, name: &[u8]) -> bool {
+        // A fully-qualified callable (`'\trim'`, `\trim(...)` reaching the
+        // dynamic path) resolves like the bare name.
+        let name = name.strip_prefix(b"\\").unwrap_or(name);
         // Conditional declarations are callable only once registered in
         // `linked_functions` by their `Op::DeclareFn`.
         self.module
@@ -12860,6 +12877,10 @@ fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags, dro
     }
     match keys.split_first() {
         Some((k, rest)) => {
+            // Writing *through* a string offset (`$s[0][1] = …`) is the PHP error.
+            if matches!(cell, Zval::Str(_)) {
+                return Err(PhpError::Error("Cannot use string offset as an array".to_string()));
+            }
             ensure_array(cell)?;
             let Zval::Array(rc) = cell else { unreachable!("ensured array") };
             let arr = Rc::make_mut(rc);
@@ -12877,6 +12898,23 @@ fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags, dro
 
 /// Apply the leaf step to the parent cell (which must hold the target array).
 fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Vec<Zval>) -> Result<Zval, PhpError> {
+    // A string parent takes the byte-offset write path (`$s[0] = 'X'`), whose
+    // expression value is the written byte; the other leaf ops are the PHP
+    // errors for string offsets.
+    if matches!(parent, Zval::Str(_)) {
+        return match last {
+            Last::Set { key, value } => string_offset_write(parent, &key, &value, diags),
+            Last::Append { .. } => {
+                Err(PhpError::Error("[] operator not supported for strings".to_string()))
+            }
+            Last::OpSet { .. } => Err(PhpError::Error(
+                "Cannot use assign-op operators with string offsets".to_string(),
+            )),
+            Last::IncDec { .. } => Err(PhpError::Error(
+                "Cannot increment/decrement string offsets".to_string(),
+            )),
+        };
+    }
     ensure_array(parent)?;
     let Zval::Array(rc) = parent else { unreachable!("ensured array") };
     let arr = Rc::make_mut(rc);

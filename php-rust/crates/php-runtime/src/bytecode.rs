@@ -1174,6 +1174,11 @@ pub struct CompiledEnumCase {
 pub struct CompiledClass {
     /// Name as written (original case).
     pub name: Box<[u8]>,
+    /// The unit file that declared the class and the `class` keyword's line —
+    /// `ReflectionClass::getFileName/getStartLine` for a class with no methods
+    /// to derive them from (`b"prelude"` marks an engine class → false/internal).
+    pub file: Box<[u8]>,
+    pub line: u32,
     /// The name as a shared [`PhpStr`], stamped into each instance's
     /// [`php_types::Object::class_name`] without re-allocating.
     pub class_name: Rc<PhpStr>,

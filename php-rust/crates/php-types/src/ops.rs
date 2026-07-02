@@ -705,6 +705,10 @@ pub fn identical(a: &Zval, b: &Zval) -> bool {
         // Two resources are identical iff the same handle (`$f === $f`); each
         // `fopen` mints a unique handle so this also matches `==` by id (step 51).
         (Zval::Resource(l), Zval::Resource(r)) => Rc::ptr_eq(l, r),
+        // Closures and generators are objects: identity is handle identity
+        // (`$c === $c`, and `$c(...)`/fromCallable pass the same instance through).
+        (Zval::Closure(l), Zval::Closure(r)) => Rc::ptr_eq(l, r),
+        (Zval::Generator(l), Zval::Generator(r)) => Rc::ptr_eq(l, r),
         // Identity follows references on either side (also covers reference
         // elements inside arrays via the recursive call above).
         (Zval::Ref(c), _) => identical(&c.borrow(), b),

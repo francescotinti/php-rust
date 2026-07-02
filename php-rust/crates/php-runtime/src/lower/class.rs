@@ -423,6 +423,7 @@ impl<'f> Lowerer<'f> {
             }
         }
         Ok(ClassDecl {
+            file: self.unit_file(),
             name: join_ns(&self.cur_namespace, iface.name.value),
             parent: None,
             interfaces,
@@ -752,6 +753,7 @@ impl<'f> Lowerer<'f> {
             .map(|tn| self.resolve_class(tn))
             .collect();
         Ok(ClassDecl {
+            file: self.unit_file(),
             name,
             parent,
             interfaces,
@@ -915,6 +917,7 @@ impl<'f> Lowerer<'f> {
             .map(|tn| self.resolve_class(tn))
             .collect();
         Ok(ClassDecl {
+            file: self.unit_file(),
             name,
             parent: None,
             interfaces,

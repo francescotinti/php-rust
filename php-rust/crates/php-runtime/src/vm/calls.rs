@@ -679,6 +679,10 @@ impl<'m> Vm<'m> {
     /// callable / named closure): a user function (case-insensitive, shadows
     /// builtins) installs a frame; a value builtin runs and pushes its result.
     pub(super) fn invoke_named(&mut self, name: &[u8], args: Vec<Zval>) -> Result<(), PhpError> {
+        // A fully-qualified name (`'\trim'`) resolves like the bare one; the
+        // undefined-function message keeps the name as written, as PHP does.
+        let written = name;
+        let name = name.strip_prefix(b"\\").unwrap_or(name);
         // Only unconditionally-hoisted functions resolve by name eagerly;
         // conditional declarations become callable through `linked_functions`
         // once their `Op::DeclareFn` has run.
@@ -729,7 +733,7 @@ impl<'m> Vm<'m> {
                 }
                 Err(PhpError::Error(format!(
                     "Call to undefined function {}()",
-                    String::from_utf8_lossy(name)
+                    String::from_utf8_lossy(written)
                 )))
             }
         }

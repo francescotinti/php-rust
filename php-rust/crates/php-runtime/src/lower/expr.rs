@@ -387,26 +387,29 @@ impl<'f> Lowerer<'f> {
                 }
                 Construct::Empty(em) => match self.lower_test_place(em.value, line) {
                     Ok(place) => ExprKind::Empty(place),
-                    Err(e) => {
+                    Err(_) => {
                         // `empty(f()['k'])` on a value-access ⟺ `!(f()['k'] ?? null)`
                         // (missing / null / falsy → empty), evaluating the base once
-                        // via the coalesce path. Other non-lvalues stay a fatal.
+                        // via the coalesce path. Any other expression (PHP 5.5+:
+                        // `empty(trim($s))`) is simply `!expr` — it always "exists",
+                        // so only falsiness is tested.
                         let is_value_access = matches!(
                             em.value,
                             Expression::ArrayAccess(_) | Expression::Access(Access::Property(_))
                         );
-                        if !is_value_access {
-                            return Err(e);
-                        }
                         let val = self.lower_expr(em.value)?;
-                        let coalesce = Expr {
-                            line,
-                            kind: ExprKind::Coalesce(
-                                Box::new(val),
-                                Box::new(Expr { line, kind: ExprKind::Null }),
-                            ),
+                        let operand = if is_value_access {
+                            Expr {
+                                line,
+                                kind: ExprKind::Coalesce(
+                                    Box::new(val),
+                                    Box::new(Expr { line, kind: ExprKind::Null }),
+                                ),
+                            }
+                        } else {
+                            val
                         };
-                        ExprKind::Unary(UnOp::Not, Box::new(coalesce))
+                        ExprKind::Unary(UnOp::Not, Box::new(operand))
                     }
                 },
                 // `print expr` — an expression that emits then yields int(1).
@@ -947,11 +950,17 @@ impl<'f> Lowerer<'f> {
             PartialApplication::Function(f) if f.argument_list.is_first_class_callable() => {
                 let name = match f.function {
                     Expression::Identifier(id) => self.resolve_fn_name(id),
-                    _ => {
-                        return Err(LowerError::Unsupported {
-                            what: "dynamic first-class callable",
-                            line,
-                        })
+                    // `$prev(...)` / `($expr)(...)`: FCC on a dynamic callable
+                    // *value* is exactly `Closure::fromCallable($value)` (a value
+                    // that is already a Closure passes through unchanged).
+                    other => {
+                        let val = self.lower_expr(other)?;
+                        return Ok(ExprKind::StaticCall {
+                            class: ClassRef::Named(Box::from(&b"Closure"[..])),
+                            method: Box::from(&b"fromCallable"[..]),
+                            args: vec![val],
+                            named: vec![],
+                        });
                     }
                 };
                 Ok(ExprKind::FirstClassCallable(name))

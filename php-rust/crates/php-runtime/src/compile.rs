@@ -655,6 +655,8 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
 
     CompiledClass {
         name: cd.name.clone(),
+        file: cd.file.clone(),
+        line: cd.line,
         class_name: PhpStr::new(cd.name.to_vec()),
         parent: cd.parent,
         interfaces: cd.interfaces.clone(),
@@ -2848,6 +2850,15 @@ impl<'a> FnCompiler<'a> {
                         self.emit(Op::PushRef(*slot));
                     }
                     _ => {
+                        // A non-variable *place* (`$a[$k]`, `$this->p` — sebastian/
+                        // exporter's recursive by-ref descent) binds via `MakeRef`,
+                        // exactly like a by-ref builtin argument. A true non-place
+                        // (literal, call result) stays PHP's run-time Error.
+                        if let Some(place) = expr_field_place(a) {
+                            let (base, steps) = self.field_path(&place)?;
+                            self.emit(Op::MakeRef { base, steps: steps.into() });
+                            continue;
+                        }
                         let pname = pnames.get(i).map(|n| n.as_ref()).unwrap_or(b"");
                         let msg = format!(
                             "{}(): Argument #{} (${}) could not be passed by reference",

@@ -274,7 +274,8 @@ pub fn mode_caps(mode: &[u8]) -> Option<(bool, bool)> {
 pub fn open_php_stream(spec: &[u8], mode: &[u8]) -> Option<Stream> {
     let backend = if spec == b"memory" || spec == b"temp" || spec.starts_with(b"temp/") {
         StreamBackend::Memory(Cursor::new(Vec::new()))
-    } else if spec == b"stdin" {
+    } else if spec == b"stdin" || spec == b"input" {
+        // `php://input` is the raw request body; the CLI SAPI reads stdin.
         StreamBackend::Stdin
     } else if spec == b"stdout" {
         StreamBackend::Stdout

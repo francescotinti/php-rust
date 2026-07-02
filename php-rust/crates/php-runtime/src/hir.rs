@@ -155,6 +155,9 @@ pub enum Visibility {
 pub struct ClassDecl {
     /// Name as written (original case); resolved ASCII-case-insensitively.
     pub name: Box<[u8]>,
+    /// The unit file that declared the class (`b"prelude"` for engine classes) —
+    /// `ReflectionClass::getFileName`/`isInternal`.
+    pub file: Box<[u8]>,
     /// Superclass (`extends`), resolved to its [`ClassId`] at lowering (step
     /// 19-3, D-19.10). `None` for a root class. Properties and methods are
     /// resolved by walking this chain at runtime, not flattened at lowering.

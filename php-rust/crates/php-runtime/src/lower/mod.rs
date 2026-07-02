@@ -1536,11 +1536,16 @@ class ReflectionClass {
     public $name;
     public function __construct($objectOrClass) {
         $this->name = is_object($objectOrClass) ? get_class($objectOrClass) : $objectOrClass;
-        if (!class_exists($this->name) && !interface_exists($this->name)) {
+        // An *object* argument is always reflectable (engine values like a
+        // Closure included); only a class-name string is checked for existence.
+        if (!is_object($objectOrClass) && !class_exists($this->name) && !interface_exists($this->name)) {
             throw new ReflectionException(sprintf('Class "%s" does not exist', $this->name));
         }
     }
     public function getFileName() { $l = __reflect_class_loc($this->name); return $l[0]; }
+    public function isInternal() { return $this->getFileName() === false; }
+    public function isUserDefined() { return $this->getFileName() !== false; }
+    public function getDocComment() { return false; }
     public function getStartLine() { $l = __reflect_class_loc($this->name); return $l[0] === false ? false : $l[1]; }
     public function getEndLine() { $l = __reflect_class_loc($this->name); return $l[0] === false ? false : $l[2]; }
     // phpr mangles anonymous classes exactly like PHP: `class@anonymous\0N`.
@@ -1878,6 +1883,11 @@ class ReflectionFunction {
         foreach ($this->__info['params'] as $p) { if ($p['variadic']) { return true; } }
         return false;
     }
+    public function getDocComment() {
+        // Doc comments are not retained by the compiler (yet): "none", never a
+        // wrong one. PHPUnit's legacy annotation parser then simply finds none.
+        return false;
+    }
     public function getReturnType() { return ReflectionNamedType::__fromInfo($this->__info['returnType']); }
     public function hasReturnType() { return $this->__info['returnType'] !== false; }
     public function invoke(...$args) { return call_user_func_array($this->name, $args); }
@@ -1926,6 +1936,11 @@ class ReflectionMethod {
         foreach ($this->__info['params'] as $p) { if ($p['variadic']) { return true; } }
         return false;
     }
+    public function getDocComment() {
+        // Doc comments are not retained by the compiler (yet): "none", never a
+        // wrong one. PHPUnit's legacy annotation parser then simply finds none.
+        return false;
+    }
     public function getReturnType() { return ReflectionNamedType::__fromInfo($this->__info['returnType']); }
     public function hasReturnType() { return $this->__info['returnType'] !== false; }
     public function __construct($objectOrClass, $method = null) {
@@ -1963,6 +1978,7 @@ class ReflectionMethod {
     }
 }
 class ReflectionProperty {
+    public function getDocComment() { return false; }
     const IS_STATIC = 16;
     const IS_PUBLIC = 1;
     const IS_PROTECTED = 2;
@@ -2097,6 +2113,7 @@ class LibXMLError {
     public $file = '';
     public $line = 0;
 }
+function is_countable($value) { return is_array($value) || $value instanceof Countable; }
 function libxml_get_errors() {
     $out = array();
     foreach (__libxml_get_errors() as $e) {
