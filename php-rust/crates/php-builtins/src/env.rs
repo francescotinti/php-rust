@@ -73,6 +73,12 @@ pub fn getmypid(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Long(std::process::id() as i64))
 }
 
+/// `posix_getpid()` — ext/posix spelling of the same pid (`posix_kill` targets
+/// it in the pcntl signal tests). ext/pcntl's signal delivery lives VM-side.
+pub fn posix_getpid(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    Ok(Zval::Long(std::process::id() as i64))
+}
+
 /// `php_sapi_name()` — this engine runs as the command-line SAPI.
 pub fn php_sapi_name(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Str(PhpStr::from_str("cli")))

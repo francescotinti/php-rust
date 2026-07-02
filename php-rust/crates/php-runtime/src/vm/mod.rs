@@ -374,6 +374,8 @@ pub(crate) fn run_module_with_hir<'m>(
         constants: HashMap::new(),
         mb_regex: crate::mbregex::MbRegexState::default(),
         strtok: None,
+        signal_handlers: HashMap::new(),
+        async_signals: false,
         uncaught_throwable: None,
         lazy_init: HashMap::new(),
         lazy_props: HashMap::new(),
@@ -969,6 +971,15 @@ struct Vm<'m> {
     /// current byte cursor. A one-argument `strtok($tok)` resumes from here.
     /// `None` before any `strtok` call (or after exhaustion resets it).
     strtok: Option<(Vec<u8>, usize)>,
+    /// ext/pcntl handler table: signo → the PHP callable installed by
+    /// `pcntl_signal` (or `Zval::Long(0/1)` for SIG_DFL/SIG_IGN). Delivery is
+    /// two-phase like the engine's: the C-level catcher only marks the signal
+    /// pending ([`PENDING_SIGNALS`]); `pcntl_signal_dispatch` (or any host
+    /// builtin return, when `pcntl_async_signals(true)`) runs the PHP handler.
+    signal_handlers: HashMap<i32, Zval>,
+    /// `pcntl_async_signals` flag: dispatch pending signals at host-builtin
+    /// boundaries instead of waiting for an explicit `pcntl_signal_dispatch`.
+    async_signals: bool,
     /// The throwable synthesized for an *uncaught* error, stashed by `unwind` while
     /// the faulting frames are still live so `render_fatal` can show the real stack
     /// trace (an engine error reaches the renderer after its frames are popped).
@@ -2881,6 +2892,14 @@ impl<'m> Vm<'m> {
                     // user callable via `call_callable` (a nested `run_loop`).
                     let args = self.pop_keys(top, argc);
                     let result = self.dispatch_host_builtin(&name, args)?;
+                    // `pcntl_async_signals(true)`: host-builtin returns are the
+                    // async delivery points (a self-directed `posix_kill` is
+                    // observed here, before the next PHP statement).
+                    if self.async_signals
+                        && PENDING_SIGNALS.load(std::sync::atomic::Ordering::Relaxed) != 0
+                    {
+                        self.dispatch_pending_signals()?;
+                    }
                     let top = self.frames.len() - 1;
                     self.frames[top].stack.push(result);
                 }
@@ -9349,6 +9368,7 @@ impl<'m> Vm<'m> {
             b"mb_eregi" => self.ho_mb_ereg(true, args),
             b"preg_replace" => self.ho_preg_replace(args),
             b"proc_open" => self.ho_proc_open(args),
+            b"pcntl_sigprocmask" => self.ho_pcntl_sigprocmask(args),
             _ => Err(undefined_builtin(name)),
         }
     }
@@ -10507,6 +10527,157 @@ impl<'m> Vm<'m> {
             return Ok(Zval::Bool(false));
         };
         let ok = unsafe { libc::kill(p.child.id() as libc::pid_t, sig) } == 0;
+        Ok(Zval::Bool(ok))
+    }
+
+    /// `pcntl_signal($signo, $handler, $restart_syscalls = true)`: install a PHP
+    /// handler (stored VM-side; the C catcher only marks the signal pending) or
+    /// the SIG_DFL/SIG_IGN disposition (0/1, forwarded to the OS directly).
+    fn ho_pcntl_signal(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let signo = match args.first().map(|v| v.deref_clone()) {
+            Some(Zval::Long(n)) if n > 0 && n < 32 => n as i32,
+            _ => {
+                return Err(PhpError::ValueError(
+                    "pcntl_signal(): Argument #1 ($signal) must be greater than or equal to 1"
+                        .to_string(),
+                ))
+            }
+        };
+        let handler = args.get(1).map(|v| v.deref_clone()).unwrap_or(Zval::Null);
+        let restart = args
+            .get(2)
+            .map(|v| convert::is_true_silent(&v.deref_clone()))
+            .unwrap_or(true);
+        match &handler {
+            // SIG_DFL / SIG_IGN restore the OS disposition.
+            Zval::Long(n @ (0 | 1)) => {
+                let disp = if *n == 0 { libc::SIG_DFL } else { libc::SIG_IGN };
+                unsafe { libc::signal(signo, disp) };
+                self.signal_handlers.insert(signo, Zval::Long(*n));
+            }
+            _ => {
+                let mut sa: libc::sigaction = unsafe { std::mem::zeroed() };
+                sa.sa_sigaction = pcntl_mark_pending as *const () as usize;
+                sa.sa_flags = if restart { libc::SA_RESTART } else { 0 };
+                unsafe {
+                    libc::sigemptyset(&mut sa.sa_mask);
+                    libc::sigaction(signo, &sa, std::ptr::null_mut());
+                }
+                self.signal_handlers.insert(signo, handler);
+            }
+        }
+        Ok(Zval::Bool(true))
+    }
+
+    /// `pcntl_signal_get_handler($signo)`: the installed PHP handler, or the
+    /// SIG_DFL/SIG_IGN int; SIG_DFL for a never-touched signal.
+    fn ho_pcntl_signal_get_handler(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let signo = args
+            .first()
+            .map(|v| convert::to_long_cast(&v.deref_clone(), &mut self.diags))
+            .unwrap_or(0) as i32;
+        Ok(self
+            .signal_handlers
+            .get(&signo)
+            .cloned()
+            .unwrap_or(Zval::Long(0)))
+    }
+
+    /// Run the PHP handlers of every pending signal (two-phase delivery). The
+    /// pending set is drained *before* calling out, so a handler re-raising the
+    /// same signal is delivered on the next dispatch, not recursively.
+    fn dispatch_pending_signals(&mut self) -> Result<(), PhpError> {
+        loop {
+            let pending = PENDING_SIGNALS.swap(0, std::sync::atomic::Ordering::SeqCst);
+            if pending == 0 {
+                return Ok(());
+            }
+            for signo in 1..32 {
+                if pending & (1u64 << signo) == 0 {
+                    continue;
+                }
+                let Some(handler) = self.signal_handlers.get(&(signo as i32)).cloned() else {
+                    continue;
+                };
+                if matches!(handler, Zval::Long(_)) {
+                    continue;
+                }
+                // PHP passes ($signo, $siginfo); phpr models no siginfo → null.
+                self.call_callable(handler, vec![Zval::Long(signo), Zval::Null])?;
+            }
+        }
+    }
+
+    /// `pcntl_signal_dispatch()`: deliver pending signals now.
+    fn ho_pcntl_signal_dispatch(&mut self, _args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.dispatch_pending_signals()?;
+        Ok(Zval::Bool(true))
+    }
+
+    /// `pcntl_async_signals(?bool $enable = null)`: read or flip asynchronous
+    /// delivery. phpr's "async" is host-builtin-boundary granularity: pending
+    /// signals are dispatched when any host builtin returns (in particular the
+    /// `posix_kill` that raised them), which is where the engine-visible
+    /// difference lies for single-process code.
+    fn ho_pcntl_async_signals(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let old = self.async_signals;
+        match args.first().map(|v| v.deref_clone()) {
+            None | Some(Zval::Null) => {}
+            Some(v) => self.async_signals = convert::is_true_silent(&v),
+        }
+        Ok(Zval::Bool(old))
+    }
+
+    /// `pcntl_sigprocmask($how, $signals, &$old_signals = null)`: forward to the
+    /// OS mask; the previous mask reads back as the third out-param array.
+    fn ho_pcntl_sigprocmask(&mut self, args: Vec<Zval>) -> Result<(Zval, Zval), PhpError> {
+        let how = match args
+            .first()
+            .map(|v| convert::to_long_cast(&v.deref_clone(), &mut self.diags))
+        {
+            Some(1) => libc::SIG_BLOCK,
+            Some(2) => libc::SIG_UNBLOCK,
+            Some(3) => libc::SIG_SETMASK,
+            _ => {
+                return Err(PhpError::ValueError(
+                    "pcntl_sigprocmask(): Argument #1 ($mode) must be one of SIG_BLOCK, SIG_UNBLOCK, or SIG_SETMASK".to_string(),
+                ))
+            }
+        };
+        let mut set: libc::sigset_t = unsafe { std::mem::zeroed() };
+        unsafe { libc::sigemptyset(&mut set) };
+        if let Some(Zval::Array(a)) = args.get(1).map(|v| v.deref_clone()) {
+            for (_, v) in a.iter() {
+                let signo = convert::to_long_cast(&v.deref_clone(), &mut self.diags) as i32;
+                if signo > 0 {
+                    unsafe { libc::sigaddset(&mut set, signo) };
+                }
+            }
+        }
+        let mut old: libc::sigset_t = unsafe { std::mem::zeroed() };
+        let ok = unsafe { libc::sigprocmask(how, &set, &mut old) } == 0;
+        let mut old_arr = PhpArray::new();
+        for signo in 1..32 {
+            if unsafe { libc::sigismember(&old, signo) } == 1 {
+                let _ = old_arr.append(Zval::Long(signo as i64));
+            }
+        }
+        Ok((Zval::Bool(ok), Zval::Array(Rc::new(old_arr))))
+    }
+
+    /// `posix_kill($pid, $signo)`: raise a signal. Lives VM-side (not in
+    /// php-builtins) so a self-directed signal under `pcntl_async_signals(true)`
+    /// is delivered by the async check right after this builtin returns.
+    fn ho_posix_kill(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let pid = args
+            .first()
+            .map(|v| convert::to_long_cast(&v.deref_clone(), &mut self.diags))
+            .unwrap_or(0) as libc::pid_t;
+        let signo = args
+            .get(1)
+            .map(|v| convert::to_long_cast(&v.deref_clone(), &mut self.diags))
+            .unwrap_or(0) as i32;
+        let ok = unsafe { libc::kill(pid, signo) } == 0;
         Ok(Zval::Bool(ok))
     }
 
@@ -13076,6 +13247,11 @@ host_builtins! {
     b"__stream_select" => vm.ho_stream_select(args),
     b"proc_get_status" => vm.ho_proc_get_status(args),
     b"proc_terminate" => vm.ho_proc_terminate(args),
+    b"pcntl_signal" => vm.ho_pcntl_signal(args),
+    b"pcntl_signal_get_handler" => vm.ho_pcntl_signal_get_handler(args),
+    b"pcntl_signal_dispatch" => vm.ho_pcntl_signal_dispatch(args),
+    b"pcntl_async_signals" => vm.ho_pcntl_async_signals(args),
+    b"posix_kill" => vm.ho_posix_kill(args),
     b"umask" => vm.ho_umask(args),
     b"__dom_new_doc" => vm.ho_dom_new_doc(args),
     b"__dom_load" => vm.ho_dom_load(args),
@@ -13258,6 +13434,19 @@ fn array_pointer_apply(target: &mut Zval, op: PtrOp) -> Result<Zval, PhpError> {
 /// write their captures into `&$matches` at index 2. The compiler emits
 /// [`crate::bytecode::Op::CallHostBuiltinOut`] for these; [`Vm::dispatch_host_builtin_out`]
 /// produces `(result, out_value)` and the VM writes the out-value into the slot.
+/// ext/pcntl pending-signal bitmask (bit N = signal N), set by the async-safe
+/// C-level catcher and drained by `Vm::dispatch_pending_signals`. Process-wide:
+/// signals are delivered to the process, not to a VM instance.
+static PENDING_SIGNALS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// The C signal handler installed by `pcntl_signal`: async-signal-safe by
+/// construction (a single atomic OR), everything else happens at dispatch time.
+extern "C" fn pcntl_mark_pending(signo: libc::c_int) {
+    if (0..64).contains(&signo) {
+        PENDING_SIGNALS.fetch_or(1u64 << signo, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
 pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usize)> {
     const HOST_OUT: &[(&[u8], usize)] = &[
         (b"preg_match", 2),
@@ -13270,6 +13459,8 @@ pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usiz
         (b"preg_replace", 4),
         // `&$pipes` receives the pipe resources of the spawned child.
         (b"proc_open", 2),
+        // `&$old_signals` receives the previous signal mask (optional arg).
+        (b"pcntl_sigprocmask", 2),
     ];
     HOST_OUT
         .iter()

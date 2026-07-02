@@ -417,18 +417,266 @@ fn accumulate_relative(s: &str) -> Option<(i64, i64, i64, i64, i64, i64)> {
     applied.then_some((dy, dmo, dd, dh, dmi, ds))
 }
 
-/// Apply a relative expression (`+N unit` / `-N unit`, possibly repeated) to a
-/// base epoch, normalizing calendar overflow. `None` if it doesn't parse.
+/// How a weekday name snaps the date: bare "monday" lands on the target
+/// weekday going forward, today included; "next monday" strictly forward
+/// (+7 when already there); "last friday" strictly backward (-7 when there).
+#[derive(Clone, Copy)]
+enum WeekdayMode {
+    Bare,
+    /// Bare name inverted by "ago": backward, today included.
+    BareBack,
+    Next,
+    Last,
+}
+
+/// A parsed relative expression: the six component deltas plus timelib's
+/// side effects — time-of-day reset (keywords/date words), month/year
+/// overrides (month names), weekday snap, `first/last day of` modifiers.
+#[derive(Default)]
+struct RelExpr {
+    dy: i64,
+    dmo: i64,
+    dd: i64,
+    dh: i64,
+    dmi: i64,
+    ds: i64,
+    set_year: Option<i64>,
+    set_month: Option<i64>,
+    set_time: Option<(i64, i64, i64)>,
+    weekday: Option<(i64, WeekdayMode)>,
+    first_day: bool,
+    last_day: bool,
+}
+
+/// Fold `n × unit` into the deltas; `false` for an unknown unit.
+fn apply_unit(r: &mut RelExpr, unit: &str, n: i64) -> bool {
+    match unit {
+        "sec" | "secs" | "second" | "seconds" => r.ds += n,
+        "min" | "mins" | "minute" | "minutes" => r.dmi += n,
+        "hour" | "hours" => r.dh += n,
+        "day" | "days" => r.dd += n,
+        "week" | "weeks" => r.dd += n * 7,
+        "fortnight" | "fortnights" => r.dd += n * 14,
+        "month" | "months" => r.dmo += n,
+        "year" | "years" => r.dy += n,
+        _ => return false,
+    }
+    true
+}
+
+/// Weekday name (full or 3-letter) → 0=Sunday..6=Saturday.
+fn weekday_index(t: &str) -> Option<i64> {
+    Some(match t {
+        "sunday" | "sun" => 0,
+        "monday" | "mon" => 1,
+        "tuesday" | "tue" | "tues" => 2,
+        "wednesday" | "wed" => 3,
+        "thursday" | "thu" | "thur" | "thurs" => 4,
+        "friday" | "fri" => 5,
+        "saturday" | "sat" => 6,
+        _ => return None,
+    })
+}
+
+/// Month name (full or 3-letter) → 1..=12.
+fn month_name_index(t: &str) -> Option<i64> {
+    Some(match t {
+        "january" | "jan" => 1,
+        "february" | "feb" => 2,
+        "march" | "mar" => 3,
+        "april" | "apr" => 4,
+        "may" => 5,
+        "june" | "jun" => 6,
+        "july" | "jul" => 7,
+        "august" | "aug" => 8,
+        "september" | "sep" | "sept" => 9,
+        "october" | "oct" => 10,
+        "november" | "nov" => 11,
+        "december" | "dec" => 12,
+        _ => return None,
+    })
+}
+
+/// Split a token at digit/letter boundaries so timelib's fused forms
+/// (`-1day`, `62seconds`) tokenize like their spaced spellings; a leading
+/// sign stays glued to its number.
+fn split_fused(tok: &str, out: &mut Vec<String>) {
+    let mut cur = String::new();
+    let mut cur_alpha = false;
+    for c in tok.chars() {
+        let alpha = c.is_ascii_alphabetic();
+        if !cur.is_empty() && alpha != cur_alpha {
+            out.push(std::mem::take(&mut cur));
+        }
+        cur_alpha = alpha;
+        cur.push(c);
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+}
+
+/// Parse the relative-expression grammar subset (timelib): unit deltas
+/// (spaced or fused), `ago`, day keywords (today/midnight/noon/tomorrow/
+/// yesterday), `next|last|this|previous <unit|weekday>`, bare weekday and
+/// month names (with optional year), `first|last day of`. `None` when any
+/// token falls outside the modelled subset (→ strtotime false, like the
+/// oracle on a typo).
+fn parse_rel_expr(s: &str) -> Option<RelExpr> {
+    let mut toks: Vec<String> = Vec::new();
+    for t in s.split_whitespace() {
+        split_fused(t.trim_matches(','), &mut toks);
+    }
+    let mut r = RelExpr::default();
+    let mut applied = false;
+    let mut i = 0;
+    while i < toks.len() {
+        let t = toks[i].as_str();
+        let next_is = |off: usize, w: &str| toks.get(i + off).map(|x| x == w).unwrap_or(false);
+        match t {
+            "now" => {}
+            "today" | "midnight" => r.set_time = Some((0, 0, 0)),
+            "noon" => r.set_time = Some((12, 0, 0)),
+            "tomorrow" => {
+                r.dd += 1;
+                r.set_time = Some((0, 0, 0));
+            }
+            "yesterday" => {
+                r.dd -= 1;
+                r.set_time = Some((0, 0, 0));
+            }
+            // "ago" negates everything accumulated so far ("2 days ago"),
+            // weekday direction included ("saturday ago" = backward search).
+            "ago" => {
+                (r.dy, r.dmo, r.dd, r.dh, r.dmi, r.ds) =
+                    (-r.dy, -r.dmo, -r.dd, -r.dh, -r.dmi, -r.ds);
+                r.weekday = r.weekday.map(|(w, mode)| {
+                    let flipped = match mode {
+                        WeekdayMode::Bare => WeekdayMode::BareBack,
+                        WeekdayMode::BareBack => WeekdayMode::Bare,
+                        WeekdayMode::Next => WeekdayMode::Last,
+                        WeekdayMode::Last => WeekdayMode::Next,
+                    };
+                    (w, flipped)
+                });
+            }
+            "first" | "last" if next_is(1, "day") && next_is(2, "of") => {
+                if t == "first" {
+                    r.first_day = true;
+                } else {
+                    r.last_day = true;
+                }
+                i += 2;
+            }
+            "next" | "last" | "this" | "previous" => {
+                let unit = toks.get(i + 1)?.as_str();
+                if let Some(w) = weekday_index(unit) {
+                    let mode = match t {
+                        "next" => WeekdayMode::Next,
+                        "this" => WeekdayMode::Bare,
+                        _ => WeekdayMode::Last,
+                    };
+                    r.weekday = Some((w, mode));
+                    r.set_time = Some((0, 0, 0));
+                } else {
+                    let n = match t {
+                        "next" => 1,
+                        "this" => 0,
+                        _ => -1,
+                    };
+                    if !apply_unit(&mut r, unit, n) {
+                        return None;
+                    }
+                }
+                i += 1;
+            }
+            _ if weekday_index(t).is_some() => {
+                r.weekday = Some((weekday_index(t)?, WeekdayMode::Bare));
+                r.set_time = Some((0, 0, 0));
+            }
+            _ if month_name_index(t).is_some() => {
+                r.set_month = month_name_index(t);
+                // A month name is an absolute date element: time resets to
+                // midnight (timelib) unless a later token sets it again.
+                r.set_time.get_or_insert((0, 0, 0));
+                // Optional plain year right after ("January 2027").
+                if let Some(y) = toks
+                    .get(i + 1)
+                    .filter(|y| y.len() == 4 && y.bytes().all(|b| b.is_ascii_digit()))
+                    .and_then(|y| y.parse::<i64>().ok())
+                {
+                    r.set_year = Some(y);
+                    i += 1;
+                }
+            }
+            _ => {
+                let n: i64 = t.parse().ok()?;
+                let unit = toks.get(i + 1)?.as_str();
+                if !apply_unit(&mut r, unit, n) {
+                    return None;
+                }
+                i += 1;
+            }
+        }
+        applied = true;
+        i += 1;
+    }
+    applied.then_some(r)
+}
+
+/// Days in the (possibly overflowed) civil month, after the same
+/// month-into-year normalization `civil_to_epoch` does.
+fn days_in_civil_month(year: i64, month: i64) -> Option<i64> {
+    let total = year.checked_mul(12)?.checked_add(month - 1)?;
+    let y = i32::try_from(total.div_euclid(12)).ok()?;
+    let m = Month::try_from(u8::try_from(total.rem_euclid(12) + 1).ok()?).ok()?;
+    Some(m.length(y) as i64)
+}
+
+/// Apply a relative expression to a base epoch, normalizing calendar overflow
+/// the PHP way. Application order mirrors timelib: month/year overrides and
+/// deltas → `first/last day of` → day delta → weekday snap → time-of-day
+/// (reset or preserved) → hour/minute/second deltas.
 fn parse_relative(s: &str, base: i64) -> Option<i64> {
+    let r = parse_rel_expr(s)?;
     let dt = OffsetDateTime::from_unix_timestamp(base).ok()?;
-    let (dy, dmo, dd, dh, dmi, ds) = accumulate_relative(s)?;
+    let year = r.set_year.unwrap_or(dt.year() as i64) + r.dy;
+    let month = r.set_month.unwrap_or(u8::from(dt.month()) as i64) + r.dmo;
+    let mut day = if r.first_day {
+        1
+    } else if r.last_day {
+        days_in_civil_month(year, month)?
+    } else {
+        dt.day() as i64
+    };
+    day += r.dd;
+    if let Some((target, mode)) = r.weekday {
+        let midnight = civil_to_epoch(year, month, day, 0, 0, 0)?;
+        // 1970-01-01 was a Thursday; 0=Sunday.
+        let dow = (midnight.div_euclid(86_400) + 4).rem_euclid(7);
+        day += match mode {
+            WeekdayMode::Bare => (target - dow).rem_euclid(7),
+            // timelib's negated-weekday branch (`d -= 7 - (|weekday| - dow)`,
+            // do_adjust_for_weekday): "saturday ago" from Saturday is -7, not
+            // 0. Sunday negates to 0 and empirically walks back inclusively.
+            WeekdayMode::BareBack if target == 0 => -dow,
+            WeekdayMode::BareBack => -(7 - (target - dow)),
+            WeekdayMode::Next => (target - dow - 1).rem_euclid(7) + 1,
+            WeekdayMode::Last => -((dow - target - 1).rem_euclid(7) + 1),
+        };
+    }
+    let (hour, minute, second) = r.set_time.unwrap_or((
+        dt.hour() as i64,
+        dt.minute() as i64,
+        dt.second() as i64,
+    ));
     civil_to_epoch(
-        dt.year() as i64 + dy,
-        u8::from(dt.month()) as i64 + dmo,
-        dt.day() as i64 + dd,
-        dt.hour() as i64 + dh,
-        dt.minute() as i64 + dmi,
-        dt.second() as i64 + ds,
+        year,
+        month,
+        day,
+        hour + r.dh,
+        minute + r.dmi,
+        second + r.ds,
     )
 }
 

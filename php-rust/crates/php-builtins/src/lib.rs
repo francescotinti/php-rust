@@ -76,6 +76,7 @@ pub fn registry() -> Registry {
     add(b"__curl_getinfo", curl::__curl_getinfo);
     add(b"curl_strerror", curl::curl_strerror);
     add(b"curl_close", curl::curl_close);
+    add(b"posix_getpid", env::posix_getpid);
     // Hashing / encoding builtins (step 62).
     add(b"base64_encode", encoding::base64_encode);
     add(b"base64_decode", encoding::base64_decode);
@@ -1242,7 +1243,7 @@ fn filter_var(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// (monolog's handlers, Guzzle's sync CurlHandler) get the easy surface.
 const LOADED_EXTENSIONS: &[&[u8]] = &[
     b"core", b"standard", b"spl", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
-    b"zip", b"dom", b"libxml", b"reflection", b"ctype", b"curl",
+    b"zip", b"dom", b"libxml", b"reflection", b"ctype", b"curl", b"pcntl", b"posix",
     // Declared for PHPUnit's bootstrap gate; their heavy surfaces (token_get_all,
     // xml_parser_*, XMLWriter) are filled in test-driven — a use ahead of the
     // implementation surfaces as an honest "undefined function".
@@ -1253,7 +1254,7 @@ const LOADED_EXTENSIONS: &[&[u8]] = &[
 /// reports it (the check side is case-insensitive, the listing is not).
 const LOADED_EXTENSIONS_CASED: &[&[u8]] = &[
     b"Core", b"standard", b"SPL", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
-    b"zip", b"dom", b"libxml", b"Reflection", b"ctype", b"curl",
+    b"zip", b"dom", b"libxml", b"Reflection", b"ctype", b"curl", b"pcntl", b"posix",
     b"xml", b"xmlwriter", b"tokenizer", b"Phar",
 ];
 
