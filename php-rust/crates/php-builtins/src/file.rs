@@ -511,6 +511,185 @@ pub fn file_get_contents(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
     Ok(Zval::Str(PhpStr::new(data)))
 }
 
+/// `php_strip_whitespace($filename)`: the source with comments removed and
+/// whitespace runs collapsed, mirroring `zend_strip` (Zend/zend_highlight.c):
+/// a whitespace run emits a single `' '` unless one was just emitted
+/// (`prev_space`), a comment emits *nothing* (and leaves `prev_space` alone),
+/// strings/heredocs are copied verbatim, and a heredoc closer emits the marker,
+/// the directly-following `;`/`,` if any, then a forced `'\n'`. The PHP open
+/// tag keeps its one trailing newline (part of the token). Byte-level scanner,
+/// not the real lexer: interpolated `{$a["k"]}` inside a double-quoted string
+/// can desync the string tracking — harmless for the classmap-generation use
+/// (Composer needs comments gone, not token fidelity). Failure → `""`, no
+/// warning, as PHP.
+pub fn php_strip_whitespace(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::os::unix::ffi::OsStrExt;
+    let Some(name_arg) = argv.first() else {
+        return Err(PhpError::ArgumentCountError(
+            "php_strip_whitespace() expects exactly 1 argument, 0 given".to_string(),
+        ));
+    };
+    let name = convert::to_zstr(name_arg, ctx.diags);
+    let path = std::ffi::OsStr::from_bytes(strip_file_wrapper(name.as_bytes()));
+    let src = match std::fs::read(path) {
+        Ok(d) => d,
+        Err(_) => return Ok(Zval::Str(PhpStr::new(Vec::new()))),
+    };
+    let mut out: Vec<u8> = Vec::with_capacity(src.len());
+    let n = src.len();
+    let mut i = 0;
+    let mut in_php = false;
+    let mut prev_space = false;
+    // Copy a quoted string verbatim from the opening quote; returns the index
+    // just past the closing quote (or EOF). Backslash escapes the next byte.
+    fn copy_quoted(src: &[u8], mut i: usize, out: &mut Vec<u8>, quote: u8) -> usize {
+        out.push(src[i]);
+        i += 1;
+        while i < src.len() {
+            let b = src[i];
+            out.push(b);
+            i += 1;
+            if b == b'\\' && i < src.len() {
+                out.push(src[i]);
+                i += 1;
+            } else if b == quote {
+                break;
+            }
+        }
+        i
+    }
+    while i < n {
+        if !in_php {
+            // Inline HTML is copied verbatim up to the next open tag.
+            if src[i] == b'<' && src[i..].starts_with(b"<?php") {
+                out.extend_from_slice(b"<?php");
+                i += 5;
+                // The open-tag token swallows one following newline.
+                if src.get(i) == Some(&b'\n') {
+                    out.push(b'\n');
+                    i += 1;
+                }
+                in_php = true;
+                prev_space = false;
+            } else if src[i] == b'<' && src[i..].starts_with(b"<?=") {
+                out.extend_from_slice(b"<?=");
+                i += 3;
+                in_php = true;
+                prev_space = false;
+            } else {
+                out.push(src[i]);
+                i += 1;
+            }
+            continue;
+        }
+        let b = src[i];
+        match b {
+            b' ' | b'\t' | b'\r' | b'\n' => {
+                if !prev_space {
+                    out.push(b' ');
+                    prev_space = true;
+                }
+                i += 1;
+            }
+            b'/' if src.get(i + 1) == Some(&b'/') => {
+                // line comment: emits nothing (prev_space untouched, zend_strip)
+                while i < n && src[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            b'#' if src.get(i + 1) != Some(&b'[') => {
+                // hash comment (but `#[` is an attribute, not a comment)
+                while i < n && src[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            b'/' if src.get(i + 1) == Some(&b'*') => {
+                i += 2;
+                while i < n && !(src[i] == b'*' && src.get(i + 1) == Some(&b'/')) {
+                    i += 1;
+                }
+                i = (i + 2).min(n);
+            }
+            b'\'' | b'"' | b'`' => {
+                i = copy_quoted(&src, i, &mut out, b);
+                prev_space = false;
+            }
+            b'<' if src[i..].starts_with(b"<<<") => {
+                // heredoc/nowdoc: copy the opener, find the marker, copy the
+                // body verbatim through the closing-marker line.
+                let start = i;
+                i += 3;
+                while i < n && (src[i] == b' ' || src[i] == b'\t' || src[i] == b'~') {
+                    i += 1;
+                }
+                let quote = matches!(src.get(i), Some(b'\'' | b'"'));
+                if quote {
+                    i += 1;
+                }
+                let id_start = i;
+                while i < n && (src[i].is_ascii_alphanumeric() || src[i] == b'_') {
+                    i += 1;
+                }
+                let marker = src[id_start..i].to_vec();
+                if quote {
+                    i += 1;
+                }
+                if marker.is_empty() {
+                    // not actually a heredoc opener (`<<<` in odd context)
+                    out.extend_from_slice(&src[start..i]);
+                    prev_space = false;
+                    continue;
+                }
+                // find the closer: a line whose first non-blank bytes are the
+                // marker not followed by an identifier byte (PHP 7.3 flexible)
+                let mut close_end = n;
+                let mut j = i;
+                while j < n {
+                    if src[j] == b'\n' {
+                        let mut k = j + 1;
+                        while k < n && (src[k] == b' ' || src[k] == b'\t') {
+                            k += 1;
+                        }
+                        if src[k..].starts_with(&marker) {
+                            let after = k + marker.len();
+                            let is_ident = src
+                                .get(after)
+                                .is_some_and(|c| c.is_ascii_alphanumeric() || *c == b'_');
+                            if !is_ident {
+                                close_end = after;
+                                break;
+                            }
+                        }
+                    }
+                    j += 1;
+                }
+                out.extend_from_slice(&src[start..close_end]);
+                i = close_end;
+                // zend_strip: after T_END_HEREDOC write the directly-following
+                // non-whitespace token (`;`/`,`), then a forced newline.
+                if matches!(src.get(i), Some(b';' | b',')) {
+                    out.push(src[i]);
+                    i += 1;
+                }
+                out.push(b'\n');
+                prev_space = true;
+            }
+            b'?' if src.get(i + 1) == Some(&b'>') => {
+                out.extend_from_slice(b"?>");
+                i += 2;
+                in_php = false;
+                prev_space = false;
+            }
+            _ => {
+                out.push(b);
+                i += 1;
+                prev_space = false;
+            }
+        }
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
 /// `file_put_contents($filename, $data, $flags = 0, $context = null)` (step
 /// 51c). `$data` may be a string, an array (elements concatenated), or a
 /// readable stream resource (drained). `FILE_APPEND` (8) appends; `LOCK_EX` is

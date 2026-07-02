@@ -380,6 +380,7 @@ pub(crate) fn run_module_with_hir<'m>(
         zips: HashMap::new(),
         next_zip: 1,
         stream_chunk_sizes: HashMap::new(),
+        umask: 0o22,
     };
     // Register the caller module's own functions in the global link table so a
     // call made from inside an `eval()` (where `self.module` is the eval unit,
@@ -976,6 +977,12 @@ struct Vm<'m> {
     /// phpr's I/O is unbuffered so the value has no read-path effect; it is kept
     /// only so the builtin can return the previous size (default 8192), as PHP does.
     stream_chunk_sizes: HashMap<u32, i64>,
+    /// The process umask as `umask()` reports it. phpr never changes the real
+    /// process umask (no unsafe/libc); the shadow value starts at the
+    /// conventional 022 and get/set semantics match PHP (set returns previous).
+    /// Consumers (Composer's BinaryInstaller) only use it to compute chmod
+    /// masks like `0777 & ~umask()`, which the real `chmod` then applies.
+    umask: i64,
 }
 
 impl<'m> Vm<'m> {
@@ -9498,6 +9505,17 @@ impl<'m> Vm<'m> {
     /// a stream resource. A host builtin because it allocates a resource id. Args 3/4
     /// (use_include_path, context) are a scope-out. On failure: Warning + `false`.
     /// Mirrors `eval::ho_fopen`.
+    /// `umask(?int $mask = null)`: return the shadow umask; with an argument,
+    /// set it and return the previous one (PHP semantics). See the `Vm.umask`
+    /// field note — the real process umask is never touched.
+    fn ho_umask(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let prev = self.umask;
+        if let Some(a) = args.first() {
+            self.umask = convert::to_long_cast(&a.deref_clone(), &mut self.diags) & 0o777;
+        }
+        Ok(Zval::Long(prev))
+    }
+
     /// `stream_set_chunk_size($stream, $size)`: record the chunk size and return
     /// the previous one (default 8192). phpr's stream I/O is unbuffered, so the
     /// size has no read/write effect — the bookkeeping exists for the return
@@ -12060,6 +12078,7 @@ host_builtins! {
     b"opendir" => vm.ho_opendir(args),
     b"stream_context_create" => vm.ho_stream_context_create(args),
     b"stream_set_chunk_size" => vm.ho_stream_set_chunk_size(args),
+    b"umask" => vm.ho_umask(args),
     b"preg_replace" => vm.ho_preg_replace(args).map(|(r, _)| r),
     b"preg_quote" => vm.ho_preg_quote(args),
     b"preg_split" => vm.ho_preg_split(args),

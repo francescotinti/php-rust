@@ -33,13 +33,23 @@ fn main() -> ExitCode {
         return ExitCode::from(1);
     };
 
-    let source = match std::fs::read(&path) {
+    let mut source = match std::fs::read(&path) {
         Ok(s) => s,
         Err(_) => {
             eprintln!("Could not open input file: {}", path.to_string_lossy());
             return ExitCode::from(1);
         }
     };
+    // PHP's CLI SAPI skips a `#!` shebang line of the *entry* script only
+    // (cli_seek_file_begin) — it is neither output nor a statement, so
+    // `namespace` right after it stays "the very first statement"
+    // (Composer's vendor/bin proxies rely on this). Known skew: PHP starts
+    // the lexer at line 2, so diagnostics in shebang scripts report one line
+    // lower here.
+    if source.starts_with(b"#!") {
+        let end = source.iter().position(|&b| b == b'\n').map_or(source.len(), |p| p + 1);
+        source.drain(..end);
+    }
 
     // PHP resolves the script's `__FILE__` (and getFile()/trace paths) to its
     // realpath — an absolute, symlink-resolved path — so canonicalize the invoked
