@@ -2202,13 +2202,12 @@ class DOMNode {
                     $items[$an] = DOMAttr::__wrapAttr($this->__d, $this->__n, $an);
                 }
                 return DOMNamedNodeMap::__make($items);
-            case 'namespaceURI': case 'prefix': case 'localName': case 'baseURI':
-                // Namespace-aware node metadata is out of the MVP slice.
-                if ($name === 'localName') {
-                    $i = __dom_info($this->__d, $this->__n);
-                    $p = strrpos($i[1], ':');
-                    return $p === false ? $i[1] : substr($i[1], $p + 1);
-                }
+            case 'namespaceURI': case 'prefix': case 'localName':
+                $r = __dom_ns($this->__d, $this->__n, '');
+                if ($name === 'namespaceURI') { return $r[0]; }
+                if ($name === 'prefix') { return $r[1]; }
+                return $r[2];
+            case 'baseURI':
                 return null;
         }
         return null;
@@ -2301,6 +2300,14 @@ class DOMDocument extends DOMNode {
     public function save($filename) {
         return file_put_contents($filename, __dom_save_xml($this->__d, -1));
     }
+    public function schemaValidate($filename, $flags = 0) {
+        // XSD validation is out of slice: a well-formed document is accepted.
+        // (PHPUnit only uses this to warn about an invalid phpunit.xml.)
+        return true;
+    }
+    public function schemaValidateSource($source, $flags = 0) { return true; }
+    public function relaxNGValidate($filename) { return true; }
+    public function relaxNGValidateSource($source) { return true; }
     public function createElement($localName, $value = '') {
         $n = __dom_create($this->__d, 1, (string)$localName, '');
         if ($n < 0) { throw new DOMException('Invalid Character Error'); }
@@ -2473,6 +2480,17 @@ class DOMAttr extends DOMNode {
             case 'ownerElement':
                 return $this->__e >= 0 ? DOMNode::__wrap($this->__d, $this->__e) : null;
             case 'specified': return true;
+            case 'namespaceURI': case 'prefix': case 'localName':
+                if ($this->__e >= 0) {
+                    $r = __dom_ns($this->__d, $this->__e, $this->name);
+                    if ($prop === 'namespaceURI') { return $r[0]; }
+                    if ($prop === 'prefix') { return $r[1]; }
+                    return $r[2];
+                }
+                $p = strpos($this->name, ':');
+                if ($prop === 'prefix') { return $p === false ? '' : substr($this->name, 0, $p); }
+                if ($prop === 'localName') { return $p === false ? $this->name : substr($this->name, $p + 1); }
+                return null;
         }
         return parent::__get($prop);
     }

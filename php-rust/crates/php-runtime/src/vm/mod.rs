@@ -12432,6 +12432,7 @@ host_builtins! {
     b"__dom_nav" => vm.ho_dom_nav(args),
     b"__dom_children" => vm.ho_dom_children(args),
     b"__dom_text" => vm.ho_dom_text(args),
+    b"__dom_ns" => vm.ho_dom_ns(args),
     b"__dom_set_value" => vm.ho_dom_set_value(args),
     b"__dom_attr" => vm.ho_dom_attr(args),
     b"__dom_create" => vm.ho_dom_create(args),

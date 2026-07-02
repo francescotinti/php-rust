@@ -1185,11 +1185,19 @@ fn filter_var(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// the much larger curl_multi surface.
 const LOADED_EXTENSIONS: &[&[u8]] = &[
     b"core", b"standard", b"spl", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
-    b"zip", b"dom", b"libxml",
+    b"zip", b"dom", b"libxml", b"reflection", b"ctype",
     // Declared for PHPUnit's bootstrap gate; their heavy surfaces (token_get_all,
     // xml_parser_*, XMLWriter) are filled in test-driven — a use ahead of the
     // implementation surfaces as an honest "undefined function".
-    b"xml", b"xmlwriter", b"tokenizer",
+    b"xml", b"xmlwriter", b"tokenizer", b"phar",
+];
+
+/// The same list with PHP's canonical casing, as `get_loaded_extensions()`
+/// reports it (the check side is case-insensitive, the listing is not).
+const LOADED_EXTENSIONS_CASED: &[&[u8]] = &[
+    b"Core", b"standard", b"SPL", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
+    b"zip", b"dom", b"libxml", b"Reflection", b"ctype",
+    b"xml", b"xmlwriter", b"tokenizer", b"Phar",
 ];
 
 /// extension_loaded($name): whether a PHP extension is available (case-insensitive).
@@ -1221,11 +1229,8 @@ fn phpversion(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// in the oracle's proper casing ("Core"/"SPL" capitalised). phpr has no Zend
 /// extensions, so the flag yields the same list. Mirrors [`LOADED_EXTENSIONS`].
 fn get_loaded_extensions(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    const NAMES: &[&[u8]] = &[
-        b"Core", b"standard", b"SPL", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
-    ];
     let mut arr = PhpArray::new();
-    for n in NAMES {
+    for n in LOADED_EXTENSIONS_CASED {
         let _ = arr.append(Zval::Str(PhpStr::new(n.to_vec())));
     }
     Ok(Zval::Array(Rc::new(arr)))

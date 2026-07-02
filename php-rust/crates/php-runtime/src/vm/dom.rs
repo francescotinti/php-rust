@@ -217,7 +217,12 @@ impl DomDoc {
     pub(super) fn elements_by_tag(&self, ctx: usize, name: &[u8], out: &mut Vec<usize>) {
         for &c in &self.nodes[ctx].children {
             if let DomKind::Element { name: n, .. } = &self.nodes[c].kind {
-                if name == b"*" || n == name {
+                // ext/dom matches the *local* name too (oracle: `b` finds `m:b`).
+                let local = match n.iter().position(|&b| b == b':') {
+                    Some(p) => &n[p + 1..],
+                    None => &n[..],
+                };
+                if name == b"*" || n == name || local == name {
                     out.push(c);
                 }
             }
@@ -1469,6 +1474,67 @@ impl<'m> Vm<'m> {
         Ok(Zval::Array(Rc::new(arr)))
     }
 
+    /// `__dom_ns($doc, $node, $attrName)` → `[namespaceURI|null, prefix, localName|null]`
+    /// (oracle-pinned): an element resolves its prefix (or the in-scope default
+    /// `xmlns`) up the ancestor chain; an *attribute* (`$attrName !== ''`, resolved
+    /// against owner element `$node`) is only in a namespace when prefixed —
+    /// `xml`/`xmlns` map to their fixed W3C URIs. `prefix` is always a string
+    /// (`""` when none); `localName` is null for non-element/attr nodes.
+    pub(super) fn ho_dom_ns(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let n = self.dom_arg(&args, 1);
+        let attr_name = self.dom_str(&args, 2);
+        let (_, id) = self.dom_doc(&args)?;
+        let n = self.dom_node(id, n)?;
+        let doc = &self.dom_docs[&id];
+        let split = |qn: &[u8]| -> (Vec<u8>, Vec<u8>) {
+            match qn.iter().position(|&b| b == b':') {
+                Some(p) => (qn[..p].to_vec(), qn[p + 1..].to_vec()),
+                None => (Vec::new(), qn.to_vec()),
+            }
+        };
+        let (uri, prefix, local): (Option<Vec<u8>>, Vec<u8>, Option<Vec<u8>>) =
+            if !attr_name.is_empty() {
+                let (prefix, local) = split(&attr_name);
+                let uri = if prefix.is_empty() {
+                    // An unprefixed attribute is never in the default namespace.
+                    None
+                } else if prefix == b"xml" {
+                    Some(b"http://www.w3.org/XML/1998/namespace".to_vec())
+                } else if prefix == b"xmlns" {
+                    Some(b"http://www.w3.org/2000/xmlns/".to_vec())
+                } else {
+                    doc.resolve_ns(n, &prefix)
+                };
+                (uri, prefix, Some(local))
+            } else {
+                match &doc.nodes[n].kind {
+                    DomKind::Element { name, .. } => {
+                        let (prefix, local) = split(name);
+                        let uri = if prefix == b"xml" {
+                            Some(b"http://www.w3.org/XML/1998/namespace".to_vec())
+                        } else {
+                            // Empty prefix resolves the in-scope default `xmlns`;
+                            // an explicit `xmlns=""` un-declares it (null).
+                            doc.resolve_ns(n, &prefix).filter(|u| !u.is_empty())
+                        };
+                        (uri, prefix, Some(local))
+                    }
+                    _ => (None, Vec::new(), None),
+                }
+            };
+        let mut arr = PhpArray::new();
+        let _ = arr.append(match uri {
+            Some(u) => Zval::Str(PhpStr::new(u)),
+            None => Zval::Null,
+        });
+        let _ = arr.append(Zval::Str(PhpStr::new(prefix)));
+        let _ = arr.append(match local {
+            Some(l) => Zval::Str(PhpStr::new(l)),
+            None => Zval::Null,
+        });
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
     /// `__dom_text(docId, nodeId) -> string` (W3C textContent).
     pub(super) fn ho_dom_text(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let n = self.dom_arg(&args, 1);
@@ -1680,7 +1746,10 @@ impl<'m> Vm<'m> {
             }
         }
         let (doc, _) = self.dom_doc(&args)?;
-        let ctx = if ctx < 0 { 0 } else { ctx as usize };
+        // PHP's DOMXPath::query default context is the document *element*
+        // (php.net: "defaults to the root element"), not the document node —
+        // PHPUnit's Loader relies on it (`query('testsuites/testsuite')`).
+        let ctx = if ctx < 0 { doc.document_element().unwrap_or(0) } else { ctx as usize };
         match xpath_eval(doc, ctx, &expr, &ns) {
             Ok(XVal::Nodes(items)) => {
                 let mut arr = PhpArray::new();
