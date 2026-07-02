@@ -17813,10 +17813,11 @@ mod tests {
 
     #[test]
     fn unserialize_unknown_class_falls_back_to_stdclass() {
-        // D-50 scope-out: unknown class → stdClass (PHP makes __PHP_Incomplete_Class).
+        // Unknown class → __PHP_Incomplete_Class carrying the original class
+        // name in __PHP_Incomplete_Class_Name plus the serialized fields (Zend).
         assert_eq!(
-            vm_stdout(b"<?php $o=unserialize('O:3:\"Zzz\":1:{s:1:\"a\";i:9;}'); echo get_class($o),':',$o->a;"),
-            b"stdClass:9"
+            vm_stdout(b"<?php $o=unserialize('O:3:\"Zzz\":1:{s:1:\"a\";i:9;}'); echo get_class($o),':',$o->a,':',$o->__PHP_Incomplete_Class_Name;"),
+            b"__PHP_Incomplete_Class:9:Zzz"
         );
     }
 
