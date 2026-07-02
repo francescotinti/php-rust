@@ -3769,8 +3769,8 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         // current value is 30719 (E_ALL without E_STRICT=2048), matching 8.5.
         b"E_ALL" => ExprKind::Int(30719),
         // flock operations / debug_backtrace flags (oracle-pinned).
+        // (`LOCK_EX` lives with the file_put_contents flags above.)
         b"LOCK_SH" => ExprKind::Int(1),
-        b"LOCK_EX" => ExprKind::Int(2),
         b"LOCK_UN" => ExprKind::Int(3),
         b"LOCK_NB" => ExprKind::Int(4),
         b"DEBUG_BACKTRACE_PROVIDE_OBJECT" => ExprKind::Int(1),

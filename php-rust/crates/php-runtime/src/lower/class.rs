@@ -399,14 +399,19 @@ impl<'f> Lowerer<'f> {
         };
         let mut consts = Vec::new();
         let mut abstract_methods = Vec::new();
+        let mut abstract_sigs = Vec::new();
         let mut props = Vec::new();
         let mut static_props = Vec::new();
         for member in iface.members.iter() {
             match member {
                 ClassLikeMember::Constant(c) => self.lower_class_const(c, &mut consts, line)?,
                 // Interface methods are signatures only (abstract) — no body to
-                // run, but their names are reported by `get_class_methods`.
-                ClassLikeMember::Method(m) => abstract_methods.push(m.name.value.into()),
+                // run, but their names are reported by `get_class_methods` and
+                // their full signatures back the Reflection surface.
+                ClassLikeMember::Method(m) => {
+                    abstract_methods.push(m.name.value.into());
+                    abstract_sigs.push(self.lower_method(m, line, &mut props)?);
+                }
                 // PHP 8.4 interface properties (`public $p { get; set; }`): a hook
                 // contract every implementer must satisfy. Lowered like an
                 // abstract-class property — its `get;`/`set;` become abstract hooks
@@ -435,6 +440,7 @@ impl<'f> Lowerer<'f> {
             consts,
             methods: Vec::new(),
             abstract_methods,
+            abstract_sigs,
             is_enum: false,
             enum_backing: None,
             enum_cases: Vec::new(),
@@ -622,6 +628,8 @@ impl<'f> Lowerer<'f> {
         // Names of abstract methods this class must implement (its own, plus any
         // pulled in from traits during flattening), step 21-4 / D-21.11.
         let mut abstract_req: Vec<Box<[u8]>> = Vec::new();
+        // Full signatures of the abstract methods declared *here* (Reflection).
+        let mut abstract_sigs: Vec<crate::hir::MethodDecl> = Vec::new();
         // `__CLASS__`/`__METHOD__` in any method body resolve to this class name
         // (step 49). Restored after the member loop; an early error here aborts
         // the whole lowering, so the leak-on-error path is harmless.
@@ -632,9 +640,11 @@ impl<'f> Lowerer<'f> {
                     self.lower_property(p, &mut props, &mut static_props, line)?
                 }
                 // An abstract method is a signature only — no body to run. A
-                // concrete subclass / consumer must supply the implementation.
+                // concrete subclass / consumer must supply the implementation;
+                // the signature itself backs the Reflection surface.
                 ClassLikeMember::Method(m) if matches!(m.body, MethodBody::Abstract(_)) => {
-                    abstract_req.push(m.name.value.into())
+                    abstract_req.push(m.name.value.into());
+                    abstract_sigs.push(self.lower_method(m, line, &mut props)?);
                 }
                 ClassLikeMember::Method(m) => {
                     methods.push(self.lower_method(m, line, &mut props)?)
@@ -765,6 +775,7 @@ impl<'f> Lowerer<'f> {
             consts,
             methods,
             abstract_methods,
+            abstract_sigs,
             is_enum: false,
             enum_backing: None,
             enum_cases: Vec::new(),
@@ -932,6 +943,7 @@ impl<'f> Lowerer<'f> {
             // Enums implement any interface methods concretely, so none are left
             // abstract (step 47).
             abstract_methods: Vec::new(),
+            abstract_sigs: Vec::new(),
             is_enum: true,
             enum_backing,
             enum_cases,
@@ -1284,14 +1296,12 @@ impl<'f> Lowerer<'f> {
         let line = self.line_of(method.span());
         let is_static = method.modifiers.iter().any(|m| m.is_static());
         let is_final = method.modifiers.iter().any(|m| m.is_final());
-        let body = match &method.body {
-            MethodBody::Concrete(block) => block,
-            MethodBody::Abstract(_) => {
-                return Err(LowerError::Unsupported {
-                    what: "abstract method",
-                    line,
-                })
-            }
+        // An abstract/interface method is a signature with no body: lowered
+        // with an empty statement list so its `MethodDecl` (params, defaults,
+        // visibility) can back the Reflection surface via `abstract_sigs`.
+        let body: &[Statement] = match &method.body {
+            MethodBody::Concrete(block) => block.statements.as_slice(),
+            MethodBody::Abstract(_) => &[],
         };
         let visibility = visibility_of(method.modifiers.iter());
         let by_ref = method.ampersand.is_some();
@@ -1312,7 +1322,7 @@ impl<'f> Lowerer<'f> {
             // (before the body, whose nested param lists would overwrite them),
             // declare each as an instance property, and prepend `$this->p = $p`.
             let promoted = std::mem::take(&mut self.promoted);
-            let mut body = self.lower_stmts(body.statements.as_slice())?;
+            let mut body = self.lower_stmts(body)?;
             if !promoted.is_empty() {
                 let mut prologue: Vec<Stmt> = Vec::with_capacity(promoted.len());
                 for p in &promoted {

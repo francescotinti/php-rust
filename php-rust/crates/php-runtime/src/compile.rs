@@ -564,6 +564,45 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         })
         .collect();
 
+    // Abstract/interface method signatures (empty bodies): compiled with the
+    // full method machinery so param defaults / attributes / types reflect
+    // correctly. Never dispatched — the Reflection surface reads them.
+    let abstract_sigs: Vec<CompiledMethod> = cd
+        .abstract_sigs
+        .iter()
+        .map(|m| {
+            let func = match compile_body(
+                &m.decl.name,
+                &m.decl.file,
+                &m.decl.body,
+                m.decl.slots.len() as u32,
+                &m.decl.params,
+                &m.decl.slots,
+                m.decl.by_ref,
+                m.decl.is_generator,
+                m.decl.ret_hint.clone(),
+                m.decl.line,
+                ctx,
+                Some(cid),
+                false,
+                m.decl.closure_shift,
+            ) {
+                Ok(f) => f,
+                Err(e) => stub_func(&m.decl, &e),
+            };
+            let mut func = func;
+            func.attributes = compile_attrs(&m.decl.attributes, ctx, Some(cid));
+            func.ret_reflect_type = m.decl.ret_reflect_type.clone();
+            CompiledMethod {
+                name: m.decl.name.clone(),
+                visibility: m.visibility,
+                is_static: m.is_static,
+                is_final: m.is_final,
+                func,
+            }
+        })
+        .collect();
+
     // Own declared properties, in declaration order — used only for the *ordered*
     // per-class enumeration in `get_object_vars` / `get_class_vars`. The readonly /
     // typed / visibility *lookups* now go through the flattened `prop_info` table.
@@ -666,6 +705,8 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         prop_defaults,
         info: Rc::new(ObjectInfo::from_entries_typed(vis_entries, prop_type_displays)),
         methods,
+        abstract_methods: cd.abstract_methods.clone(),
+        abstract_sigs,
         own_prop_vis,
         static_props,
         prop_init,
@@ -2422,6 +2463,16 @@ impl<'a> FnCompiler<'a> {
             return Ok(());
         }
         if !named.is_empty() {
+            // Builtins with a known signature accept named arguments by
+            // compile-time reordering into positionals (PHP resolves them by
+            // the declared parameter names — `debug_backtrace(..., limit: 3)`).
+            // Only a *contiguous* combined list is expressible (a hole would
+            // need the builtin's default value); anything else keeps the error.
+            if let Some(pnames) = builtin_param_names(bname) {
+                if let Some(combined) = reorder_named_args(args, named, pnames) {
+                    return self.call(name, fallback, &combined, &[]);
+                }
+            }
             return Err(CompileError::Unsupported("builtin call with named arguments".into()));
         }
         // Host builtins with a by-reference *output* parameter (`preg_match`'s
@@ -3507,7 +3558,10 @@ impl<'a> FnCompiler<'a> {
             PlaceBase::Global(_)
             | PlaceBase::Superglobal(_)
             | PlaceBase::StaticProp { .. }
-            | PlaceBase::ClassConst { .. } => return Ok(None),
+            | PlaceBase::ClassConst { .. }
+            // Value bases are rewritten through a temp (`value_base_rmw`)
+            // before any place operation, so they never reach here.
+            | PlaceBase::Value(_) => return Ok(None),
         }
         Ok(Some(name.clone()))
     }
@@ -3645,11 +3699,23 @@ impl<'a> FnCompiler<'a> {
             PlaceBase::ClassConst { .. } => {
                 return Err(CompileError::Unsupported("class constant field path".into()))
             }
-            // A superglobal is an array; a `->prop` field path rooted at one is not
-            // valid PHP and never arises from a real program.
-            PlaceBase::Superglobal(_) => {
-                return Err(CompileError::Unsupported("superglobal field path".into()))
+            // A reference through a call result (`$x = &f()->p`): the place
+            // operations rewrite `Value` through `value_base_rmw` before any
+            // field walk, so only `assign_ref`'s direct `field_path` reaches
+            // here. Materialise the temporary into a temp slot (deliberately
+            // not freed — the `MakeRef`/`BindRefTo` runs after this walk) and
+            // root the walk there: the reference reaches the real object
+            // through its handle.
+            PlaceBase::Value(ref e) => {
+                let e = (**e).clone();
+                let t = self.alloc_temp();
+                self.expr(&e)?;
+                self.emit(Op::StoreSlot(t));
+                FieldBase::Local(t)
             }
+            // `$o->p = &$_SERVER`, `&$_SERVER['k']`: reference paths rooted at
+            // the VM-level superglobal store (monolog's WebProcessor).
+            PlaceBase::Superglobal(i) => FieldBase::Superglobal(i),
         };
         let mut steps = Vec::with_capacity(place.steps.len());
         for step in &place.steps {
@@ -3864,6 +3930,10 @@ impl<'a> FnCompiler<'a> {
     /// object-property write `$o->p = rhs` / `$this->p = rhs` (OOP-1). Mixed
     /// property+index chains (`$o->a[$k] = …`) remain out of slice.
     fn assign_place(&mut self, place: &Place, rhs: &Expr) -> R<()> {
+        if let PlaceBase::Value(e) = &place.base {
+            let e = (**e).clone();
+            return self.value_base_rmw(&e, &place.steps, |s, p| s.assign_place(p, rhs));
+        }
         if let PlaceBase::StaticProp { class, name } = &place.base {
             let (class, name) = (class.clone(), name.clone());
             return self.static_prop_rmw(&class, &name, &place.steps, true, |s, p| {
@@ -3916,6 +3986,10 @@ impl<'a> FnCompiler<'a> {
     /// object/array path to `FieldUnset`, a plain array element to `UnsetPath`, and
     /// an indexed static property is read-modify-written through a temp.
     fn unset_place(&mut self, place: &Place) -> R<()> {
+        if let PlaceBase::Value(e) = &place.base {
+            let e = (**e).clone();
+            return self.value_base_rmw(&e, &place.steps, |s, p| s.unset_place(p));
+        }
         if let PlaceBase::StaticProp { class, name } = &place.base {
             let (class, name) = (class.clone(), name.clone());
             return self.static_prop_rmw(&class, &name, &place.steps, false, |s, p| {
@@ -4051,12 +4125,40 @@ impl<'a> FnCompiler<'a> {
         Ok(())
     }
 
+    /// Materialise a call/`new`/`clone` result into a temp and run `core` over a
+    /// `Local`-rooted place on it (`f()->prop = v`, `f()['k'] ??= v`, …). No
+    /// write-back: PHP treats the result as a temporary — a property write
+    /// reaches the real object through its handle, while a pure index write
+    /// lands in the discarded temp (`f()['k'] = 2` is legal and leaves `f()`'s
+    /// value untouched), which is exactly what the temp gives us.
+    fn value_base_rmw(
+        &mut self,
+        value: &Expr,
+        steps: &[PlaceStep],
+        core: impl FnOnce(&mut Self, &Place) -> R<()>,
+    ) -> R<()> {
+        let t = self.alloc_temp();
+        self.expr(value)?;
+        self.emit(Op::StoreSlot(t));
+        let local = Place {
+            base: PlaceBase::Local(t),
+            steps: steps.to_vec(),
+        };
+        core(self, &local)?;
+        self.free_temp();
+        Ok(())
+    }
+
     /// Compile `$o->p ??= rhs` on a single property (magic-aware). Read via
     /// `__isset`; if already set, the existing value (`__get`) is the result and
     /// no write happens; if unset, assign `rhs` (`__set`) and yield it. Each magic
     /// op leaves its result for the next, so the composition works for both magic
     /// and declared properties.
     fn assign_coalesce_place(&mut self, place: &Place, rhs: &Expr) -> R<()> {
+        if let PlaceBase::Value(e) = &place.base {
+            let e = (**e).clone();
+            return self.value_base_rmw(&e, &place.steps, |s, p| s.assign_coalesce_place(p, rhs));
+        }
         if let PlaceBase::StaticProp { class, name } = &place.base {
             let (class, name) = (class.clone(), name.clone());
             return self.static_prop_rmw(&class, &name, &place.steps, true, |s, p| {
@@ -4115,6 +4217,10 @@ impl<'a> FnCompiler<'a> {
 
     /// Compile a compound element write `$a[…][k] op= rhs`.
     fn assign_op_place(&mut self, op: crate::hir::BinOp, place: &Place, rhs: &Expr) -> R<()> {
+        if let PlaceBase::Value(e) = &place.base {
+            let e = (**e).clone();
+            return self.value_base_rmw(&e, &place.steps, |s, p| s.assign_op_place(op, p, rhs));
+        }
         if let PlaceBase::StaticProp { class, name } = &place.base {
             let (class, name) = (class.clone(), name.clone());
             return self.static_prop_rmw(&class, &name, &place.steps, true, |s, p| {
@@ -4172,6 +4278,10 @@ impl<'a> FnCompiler<'a> {
 
     /// Compile `++`/`--` on an array element `$a[…][k]`.
     fn incdec_place(&mut self, place: &Place, inc: bool, pre: bool) -> R<()> {
+        if let PlaceBase::Value(e) = &place.base {
+            let e = (**e).clone();
+            return self.value_base_rmw(&e, &place.steps, |s, p| s.incdec_place(p, inc, pre));
+        }
         if let PlaceBase::StaticProp { class, name } = &place.base {
             let (class, name) = (class.clone(), name.clone());
             return self.static_prop_rmw(&class, &name, &place.steps, true, |s, p| {
@@ -4242,6 +4352,10 @@ impl<'a> FnCompiler<'a> {
     /// object/array path via `FieldIsset`, a plain array element via `IssetPath`,
     /// and an indexed static property via a read-only temp.
     fn isset_one(&mut self, place: &Place) -> R<()> {
+        if let PlaceBase::Value(e) = &place.base {
+            let e = (**e).clone();
+            return self.value_base_rmw(&e, &place.steps, |s, p| s.isset_one(p));
+        }
         if let PlaceBase::StaticProp { class, name } = &place.base {
             let (class, name) = (class.clone(), name.clone());
             return self.static_prop_read(&class, &name, &place.steps, |s, p| s.isset_one(p));
@@ -4267,6 +4381,10 @@ impl<'a> FnCompiler<'a> {
     /// (`empty` is `!isset || !truthy(value)`), so an unset magic property never
     /// warns or calls `__get`; other places use the array `EmptyPath`.
     fn empty(&mut self, place: &Place) -> R<()> {
+        if let PlaceBase::Value(e) = &place.base {
+            let e = (**e).clone();
+            return self.value_base_rmw(&e, &place.steps, |s, p| s.empty(p));
+        }
         if let PlaceBase::ClassConst { class, name } = &place.base {
             let (class, name) = (class.clone(), name.clone());
             return self.class_const_read(&class, &name, &place.steps, |s, p| s.empty(p));
@@ -4377,6 +4495,105 @@ fn local_slot(place: &Place) -> crate::hir::Slot {
 /// anything not rooted at an addressable location (a call result, a literal, a
 /// static property — handled separately, &c.). Nullsafe property reads are
 /// excluded: `?->` is not an assignable place.
+/// Declared parameter names for host builtins commonly called with named
+/// arguments (php.net signatures), for the compile-time named→positional
+/// rewrite in [`FnCompiler::call`]. By-reference and variadic builtins stay
+/// out — their argument handling is positional-only.
+fn builtin_param_names(name: &[u8]) -> Option<&'static [&'static [u8]]> {
+    Some(match name.to_ascii_lowercase().as_slice() {
+        b"debug_backtrace" => &[b"options", b"limit"],
+        b"json_encode" => &[b"value", b"flags", b"depth"],
+        b"json_decode" => &[b"json", b"associative", b"depth", b"flags"],
+        b"array_slice" => &[b"array", b"offset", b"length", b"preserve_keys"],
+        b"array_chunk" => &[b"array", b"length", b"preserve_keys"],
+        b"array_keys" => &[b"array", b"filter_value", b"strict"],
+        b"array_column" => &[b"array", b"column_key", b"index_key"],
+        b"array_fill" => &[b"start_index", b"count", b"value"],
+        b"array_unique" => &[b"array", b"flags"],
+        b"in_array" => &[b"needle", b"haystack", b"strict"],
+        b"array_search" => &[b"needle", b"haystack", b"strict"],
+        b"count" => &[b"value", b"mode"],
+        b"implode" => &[b"separator", b"array"],
+        b"explode" => &[b"separator", b"string", b"limit"],
+        b"substr" => &[b"string", b"offset", b"length"],
+        b"substr_count" => &[b"haystack", b"needle", b"offset", b"length"],
+        b"str_pad" => &[b"string", b"length", b"pad_string", b"pad_type"],
+        b"str_repeat" => &[b"string", b"times"],
+        b"str_split" => &[b"string", b"length"],
+        b"strpos" | b"stripos" | b"strrpos" | b"strripos" => {
+            &[b"haystack", b"needle", b"offset"]
+        }
+        b"str_contains" | b"str_starts_with" | b"str_ends_with" => &[b"haystack", b"needle"],
+        b"trim" | b"ltrim" | b"rtrim" => &[b"string", b"characters"],
+        b"number_format" => {
+            &[b"num", b"decimals", b"decimal_separator", b"thousands_separator"]
+        }
+        b"round" => &[b"num", b"precision", b"mode"],
+        b"intdiv" => &[b"num1", b"num2"],
+        b"intval" => &[b"value", b"base"],
+        b"range" => &[b"start", b"end", b"step"],
+        b"date" | b"gmdate" => &[b"format", b"timestamp"],
+        b"strtotime" => &[b"datetime", b"baseTimestamp"],
+        b"microtime" => &[b"as_float"],
+        b"hrtime" => &[b"as_number"],
+        b"htmlspecialchars" | b"htmlentities" => {
+            &[b"string", b"flags", b"encoding", b"double_encode"]
+        }
+        b"iterator_to_array" => &[b"iterator", b"preserve_keys"],
+        b"mb_substr" => &[b"string", b"start", b"length", b"encoding"],
+        b"mb_strtolower" | b"mb_strtoupper" => &[b"string", b"encoding"],
+        b"preg_split" => &[b"pattern", b"subject", b"limit", b"flags"],
+        b"preg_quote" => &[b"str", b"delimiter"],
+        b"file_get_contents" => {
+            &[b"filename", b"use_include_path", b"context", b"offset", b"length"]
+        }
+        b"file_put_contents" => &[b"filename", b"data", b"flags", b"context"],
+        b"str_replace" | b"str_ireplace" => &[b"search", b"replace", b"subject"],
+        b"strtr" => &[b"string", b"from", b"to"],
+        b"dirname" => &[b"path", b"levels"],
+        b"basename" => &[b"path", b"suffix"],
+        b"pathinfo" => &[b"path", b"flags"],
+        b"http_build_query" => &[b"data", b"numeric_prefix", b"arg_separator", b"encoding_type"],
+        b"get_object_vars" => &[b"object"],
+        b"get_class_methods" => &[b"object_or_class"],
+        b"class_exists" | b"interface_exists" | b"enum_exists" | b"trait_exists" => {
+            &[b"class", b"autoload"]
+        }
+        _ => return None,
+    })
+}
+
+/// Combine positional and named arguments against a builtin's declared
+/// parameter names into a purely positional list. `None` when a named argument
+/// is unknown, collides with a positional, repeats, or would leave a hole (the
+/// builtin's default is not expressible at compile time).
+fn reorder_named_args(
+    args: &[Expr],
+    named: &[(Box<[u8]>, Expr)],
+    pnames: &[&[u8]],
+) -> Option<Vec<Expr>> {
+    if args.len() > pnames.len() || args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
+        return None;
+    }
+    let mut slots: Vec<Option<Expr>> = vec![None; pnames.len()];
+    for (i, a) in args.iter().enumerate() {
+        slots[i] = Some(a.clone());
+    }
+    for (nm, ex) in named {
+        let p = pnames.iter().position(|pn| *pn == &nm[..])?;
+        if slots[p].is_some() {
+            return None; // collides with a positional / repeated name
+        }
+        slots[p] = Some(ex.clone());
+    }
+    let filled = slots.iter().take_while(|s| s.is_some()).count();
+    if slots[filled..].iter().any(|s| s.is_some()) {
+        return None; // a hole would need the builtin's default value
+    }
+    slots.truncate(filled);
+    Some(slots.into_iter().map(|s| s.expect("prefix is Some")).collect())
+}
+
 fn expr_field_place(e: &Expr) -> Option<Place> {
     match &e.kind {
         ExprKind::Var(s) => Some(Place { base: PlaceBase::Local(*s), steps: Vec::new() }),
@@ -4413,6 +4630,9 @@ fn dim_base(place: &Place) -> R<DimBase> {
         }
         PlaceBase::ClassConst { .. } => {
             Err(CompileError::Unsupported("class constant dim base".into()))
+        }
+        PlaceBase::Value(_) => {
+            Err(CompileError::Unsupported("call-result dim base".into()))
         }
     }
 }

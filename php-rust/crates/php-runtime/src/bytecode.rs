@@ -1032,6 +1032,10 @@ pub struct ExcRegion {
 pub enum FieldBase {
     Local(Slot),
     Global(Slot),
+    /// A data superglobal (`$_SERVER` &c.) rooting a reference path
+    /// (`$o->p = &$_SERVER`, `&$_SERVER['k']`): resolves into the VM-level
+    /// superglobal store by index, like [`DimBase::Superglobal`].
+    Superglobal(u8),
     This,
 }
 
@@ -1200,6 +1204,14 @@ pub struct CompiledClass {
     pub info: Rc<ObjectInfo>,
     /// Methods declared *on this class* (resolution walks `parent` at run time).
     pub methods: Vec<CompiledMethod>,
+    /// Names of abstract methods this class carries unimplemented (own,
+    /// interface- or trait-required) — `get_class_methods` reports them.
+    pub abstract_methods: Vec<Box<[u8]>>,
+    /// Full signatures (empty bodies) of the abstract/interface methods
+    /// *declared here*: the Reflection surface (`hasMethod` / `getMethod` /
+    /// `method_exists` — PHPUnit's mock-generator view of abstract classes)
+    /// resolves against these; method dispatch never consults them.
+    pub abstract_sigs: Vec<CompiledMethod>,
     /// Instance properties *declared directly on this class* with their
     /// visibility, in declaration order (OOP-2b). Used only for the *ordered*
     /// per-class enumeration in `get_object_vars` / `get_class_vars`; the

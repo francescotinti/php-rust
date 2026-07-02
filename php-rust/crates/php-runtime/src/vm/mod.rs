@@ -569,6 +569,10 @@ struct Frame<'m> {
     /// When true, this frame's `Ret` value is converted to a string before being
     /// pushed — for a `__toString` call scheduled by [`Op::Stringify`].
     ret_stringify: bool,
+    /// When true, this frame's `Ret` value is dereferenced before being pushed
+    /// — a by-reference protocol getter (`&offsetGet`, monolog's LogRecord)
+    /// consumed in value context (`count($o['k'])`).
+    ret_deref: bool,
     /// A magic-accessor recursion-guard key to remove from [`Vm::magic_guard`]
     /// when this frame returns (OOP-3b).
     guard_release: Option<(u32, MagicKind, Vec<u8>)>,
@@ -633,6 +637,7 @@ impl<'m> Frame<'m> {
             ret_cell: None,
             ret_bool: false,
             ret_isset: false,
+            ret_deref: false,
             ret_stringify: false,
             guard_release: None,
             iters: Vec::new(),
@@ -2295,7 +2300,7 @@ impl<'m> Vm<'m> {
                     let keys = self.pop_field_keys(top, &steps);
                     let cell = {
                         let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
-                        let base_cell = field_base_mut(&mut self.frames, top, base)?;
+                        let base_cell = field_base_mut(&mut self.frames, &mut self.superglobals, top, base)?;
                         if steps.is_empty() {
                             make_cell(base_cell)
                         } else {
@@ -2323,7 +2328,7 @@ impl<'m> Vm<'m> {
                     if steps.is_empty() {
                         // A step-less base is rebound directly (not written
                         // through), matching `eval::bind_ref_target`.
-                        let base_cell = field_base_mut(&mut self.frames, top, base)?;
+                        let base_cell = field_base_mut(&mut self.frames, &mut self.superglobals, top, base)?;
                         *base_cell = Zval::Ref(cell);
                     } else {
                         self.field_set(base, top, &steps, keys, Zval::Ref(cell))?;
@@ -2352,7 +2357,7 @@ impl<'m> Vm<'m> {
                     let value = cell.borrow().clone();
                     let keys = self.pop_field_keys(top, &steps);
                     if steps.is_empty() {
-                        let base_cell = field_base_mut(&mut self.frames, top, base)?;
+                        let base_cell = field_base_mut(&mut self.frames, &mut self.superglobals, top, base)?;
                         *base_cell = Zval::Ref(cell);
                     } else {
                         self.field_set(base, top, &steps, keys, Zval::Ref(cell))?;
@@ -3015,6 +3020,7 @@ impl<'m> Vm<'m> {
                     let ret_bool = self.frames[top].ret_bool;
                     let ret_isset = self.frames[top].ret_isset;
                     let ret_stringify = self.frames[top].ret_stringify;
+                    let ret_deref = self.frames[top].ret_deref;
                     let guard = self.frames[top].guard_release.take();
                     // A `clone`-driven `__clone` is finishing: revoke any remaining
                     // readonly re-init permission on the copy (PHP 8.3), so writes
@@ -3045,6 +3051,8 @@ impl<'m> Vm<'m> {
                             Zval::Bool(convert::to_bool(&ret, &mut self.diags))
                         } else if ret_stringify {
                             Zval::Str(convert::to_zstr(&ret, &mut self.diags))
+                        } else if ret_deref {
+                            ret.deref_clone()
                         } else {
                             ret
                         };
@@ -4482,6 +4490,9 @@ impl<'m> Vm<'m> {
         })?;
         let callee = &self.classes[defc].methods[midx].func;
         let mut frame = Frame::new(callee, self.class_mod(defc));
+        // A by-reference getter (`&offsetGet`) returns its raw `Ref`; a value
+        // consumer (`count($o['k'])`) needs the dereferenced value.
+        frame.ret_deref = callee.by_ref && matches!(ret, RetMode::Stack);
         bind_params(&mut frame, args);
         frame.this = Some(recv);
         frame.class = Some(defc);
@@ -6995,7 +7006,7 @@ impl<'m> Vm<'m> {
         } else {
             let key = class.strip_prefix(b"\\").unwrap_or(class).to_ascii_lowercase();
             let &cid = self.class_index.get(&key)?;
-            let (m, decl) = self.find_method_reflect(cid, func)?;
+            let (m, decl, _) = self.find_method_reflect(cid, func)?;
             Some((&m.func, Some(decl)))
         }
     }
@@ -7154,16 +7165,43 @@ impl<'m> Vm<'m> {
         self.linked_functions.get(&lc).map(|&(m, idx)| &m.functions[idx])
     }
 
-    /// Resolve a method by walking `cid`'s ancestry; returns the compiled method and
-    /// the class that declares it (for `ReflectionMethod::getDeclaringClass`).
-    fn find_method_reflect(&self, cid: ClassId, method: &[u8]) -> Option<(&'m CompiledMethod, ClassId)> {
+    /// Resolve a method by walking `cid`'s ancestry; returns the compiled method,
+    /// the class that declares it (for `ReflectionMethod::getDeclaringClass`) and
+    /// whether it is abstract. Zend copies interface methods into the implementing
+    /// class's function table as abstract entries, so after the parent chain
+    /// (concrete methods, then own abstract signatures) the interface graph is
+    /// searched — an abstract class satisfies `hasMethod`/`getMethod` for a method
+    /// it merely inherits from an interface, declared by that interface.
+    fn find_method_reflect(&self, cid: ClassId, method: &[u8]) -> Option<(&'m CompiledMethod, ClassId, bool)> {
         let lc = method.to_ascii_lowercase();
+        let mut ifaces: Vec<ClassId> = Vec::new();
         let mut cur = Some(cid);
         while let Some(c) = cur {
             if let Some(m) = self.classes[c].methods.iter().find(|m| m.name.to_ascii_lowercase() == lc) {
-                return Some((m, c));
+                return Some((m, c, false));
             }
+            if let Some(m) =
+                self.classes[c].abstract_sigs.iter().find(|m| m.name.to_ascii_lowercase() == lc)
+            {
+                return Some((m, c, true));
+            }
+            ifaces.extend(self.classes[c].interfaces.iter().copied());
             cur = self.classes[c].parent;
+        }
+        let mut i = 0;
+        while i < ifaces.len() {
+            let c = ifaces[i];
+            i += 1;
+            if let Some(m) =
+                self.classes[c].abstract_sigs.iter().find(|m| m.name.to_ascii_lowercase() == lc)
+            {
+                return Some((m, c, true));
+            }
+            for &n in &self.classes[c].interfaces {
+                if !ifaces.contains(&n) {
+                    ifaces.push(n);
+                }
+            }
         }
         None
     }
@@ -7339,7 +7377,7 @@ impl<'m> Vm<'m> {
         };
         let key = cname.strip_prefix(b"\\").unwrap_or(&cname).to_ascii_lowercase();
         let Some(&cid) = self.class_index.get(&key) else { return Ok(Zval::Bool(false)) };
-        let Some((m, decl)) = self.find_method_reflect(cid, &mname) else {
+        let Some((m, decl, is_abstract)) = self.find_method_reflect(cid, &mname) else {
             return Ok(Zval::Bool(false));
         };
         let is_static = m.is_static;
@@ -7355,7 +7393,7 @@ impl<'m> Vm<'m> {
         d.insert(Key::Str(PhpStr::new(b"byRef".to_vec())), Zval::Bool(m.func.by_ref));
         d.insert(Key::Str(PhpStr::new(b"final".to_vec())), Zval::Bool(is_final));
         d.insert(Key::Str(PhpStr::new(b"visibility".to_vec())), Zval::Str(PhpStr::new(vis.to_vec())));
-        d.insert(Key::Str(PhpStr::new(b"abstract".to_vec())), Zval::Bool(false));
+        d.insert(Key::Str(PhpStr::new(b"abstract".to_vec())), Zval::Bool(is_abstract));
         d.insert(Key::Str(PhpStr::new(b"declaringClass".to_vec())), Zval::Str(PhpStr::new(decl_name)));
         // Source location (ReflectionMethod::getFileName/getStartLine/getEndLine):
         // the compiled unit's file and the op line table's span; a prelude
@@ -7469,7 +7507,13 @@ impl<'m> Vm<'m> {
         let cid = *self.class_index.get(&key).ok_or_else(|| {
             PhpError::Error(format!("Class \"{}\" does not exist", String::from_utf8_lossy(&raw)))
         })?;
-        self.alloc_object(cid)
+        let v = self.alloc_object(cid)?;
+        // Non-constant declared defaults (`= []`, …) live in the `prop_init`
+        // thunk, run by `Op::InitProps` at a `new` site — mirror it here.
+        if let Zval::Object(rc) = &v {
+            self.run_prop_init_thunk(cid, rc);
+        }
+        Ok(v)
     }
 
     /// `__reflect_new_lazy_ghost($class, $init)`: allocate an uninitialized lazy
@@ -8706,9 +8750,12 @@ impl<'m> Vm<'m> {
         let cur = self.frames[self.frames.len() - 1].class;
         let mut arr = PhpArray::new();
         let mut seen: Vec<Vec<u8>> = Vec::new();
+        let mut ifaces: Vec<ClassId> = Vec::new();
         let mut c = Some(start);
         while let Some(cc) = c {
-            for m in &self.classes[cc].methods {
+            // Concrete methods first, then the class's own abstract signatures
+            // (both live in Zend's per-class function table).
+            for m in self.classes[cc].methods.iter().chain(&self.classes[cc].abstract_sigs) {
                 let lname = m.name.to_ascii_lowercase();
                 if seen.contains(&lname) {
                     continue; // a more-derived class already defined this name
@@ -8718,7 +8765,27 @@ impl<'m> Vm<'m> {
                     let _ = arr.append(Zval::Str(PhpStr::new(m.name.to_vec())));
                 }
             }
+            ifaces.extend(self.classes[cc].interfaces.iter().copied());
             c = self.classes[cc].parent;
+        }
+        // Interface-declared methods the chain never (re)declared: Zend copies
+        // them into the implementing class's function table (always public).
+        let mut i = 0;
+        while i < ifaces.len() {
+            let cc = ifaces[i];
+            i += 1;
+            for m in &self.classes[cc].abstract_sigs {
+                let lname = m.name.to_ascii_lowercase();
+                if !seen.contains(&lname) {
+                    seen.push(lname);
+                    let _ = arr.append(Zval::Str(PhpStr::new(m.name.to_vec())));
+                }
+            }
+            for &n in &self.classes[cc].interfaces {
+                if !ifaces.contains(&n) {
+                    ifaces.push(n);
+                }
+            }
         }
         Ok(Zval::Array(Rc::new(arr)))
     }
@@ -8829,7 +8896,12 @@ impl<'m> Vm<'m> {
             return Ok(Zval::Bool(false));
         };
         let m = convert::to_zstr_cast(&a1.deref_clone(), &mut self.diags);
-        Ok(Zval::Bool(resolve_method_runtime(&self.classes, cid, m.as_bytes()).is_some()))
+        // Abstract/interface-declared methods exist in Zend's function table
+        // even without a body — the reflect walk covers them.
+        Ok(Zval::Bool(
+            resolve_method_runtime(&self.classes, cid, m.as_bytes()).is_some()
+                || self.find_method_reflect(cid, m.as_bytes()).is_some(),
+        ))
     }
 
     /// `property_exists($object_or_class, $property)` (Session B4): whether the class
@@ -9560,23 +9632,63 @@ impl<'m> Vm<'m> {
         let cc = self.classes[cid];
         let class_name = Rc::clone(&cc.class_name);
         let info = Rc::clone(&cc.info);
+        // Start from the declared defaults, exactly like `alloc_object`: Zend's
+        // unserialize builds the object from the class's default-properties
+        // table and only then applies the serialized fields (doctrine's
+        // Instantiator relies on `O:N:"C":0:{}` yielding a defaulted instance).
         let mut props = Props::new();
-        // A restored readonly property counts as already initialised (so a later
-        // write fatals, and a read does not raise the before-initialization error).
-        let mut readonly_init: Vec<Box<[u8]>> = Vec::new();
-        for (k, v) in fields {
-            if prop_readonly_decl(&self.classes, cid, &k).is_some() {
-                readonly_init.push(k.as_slice().into());
-            }
-            props.set(&k, v);
+        for (name, c) in &cc.prop_defaults {
+            props.set(name, c.to_zval());
+        }
+        for name in &cc.uninit_props {
+            props.set(name, Zval::Undef);
         }
         let id = self.next_id();
-        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init, readonly_clone_writable: Vec::new(), lazy: None, proxy_instance: None };
+        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init: Vec::new(), readonly_clone_writable: Vec::new(), lazy: None, proxy_instance: None };
         let rc = Rc::new(RefCell::new(obj));
         // Track for `__destruct` (OOP-3d), like every other freshly minted object.
         self.created.push(Rc::clone(&rc));
         self.gc_track(&rc);
+        // Non-constant declared defaults (`= []`, `= SOME_CONST`, …) live in the
+        // class's `prop_init` thunk — run it on the fresh instance, like
+        // `Op::InitProps` after `Op::Alloc`. A failing thunk degrades to the
+        // constant-only defaults (no fatal from inside unserialize).
+        self.run_prop_init_thunk(cid, &rc);
+        // The serialized fields overwrite the defaults. A restored readonly
+        // property counts as already initialised (so a later write fatals, and a
+        // read does not raise the before-initialization error).
+        for (k, v) in fields {
+            // PHP's wire format mangles protected fields as `\0*\0name`; the
+            // VM stores protected properties under the plain name. (A private
+            // `\0Class\0name` matches the VM storage key as-is.)
+            let k: Vec<u8> = match k.strip_prefix(b"\0*\0") {
+                Some(rest) => rest.to_vec(),
+                None => k,
+            };
+            if prop_readonly_decl(&self.classes, cid, &k).is_some() {
+                rc.borrow_mut().readonly_init.push(k.as_slice().into());
+            }
+            rc.borrow_mut().props.set(&k, v);
+        }
         Zval::Object(rc)
+    }
+
+    /// Run a class's non-constant property-default thunk (`prop_init`) on a
+    /// fresh instance, synchronously, from host-builtin context — the same work
+    /// `Op::InitProps` does after `Op::Alloc` at a `new` site. Shared by
+    /// `unserialize` and `ReflectionClass::newInstanceWithoutConstructor`. A
+    /// failing thunk degrades to the constant-only defaults.
+    fn run_prop_init_thunk(&mut self, cid: ClassId, rc: &Rc<RefCell<Object>>) {
+        if let Some(func) = &self.classes[cid].prop_init {
+            let baseline = self.frames.len();
+            let mut frame = Frame::new(func, self.class_mod(cid));
+            frame.this = Some(Zval::Object(Rc::clone(rc)));
+            frame.class = Some(cid);
+            frame.static_class = Some(cid);
+            frame.init_props = true; // privileged default writes
+            self.frames.push(frame);
+            let _ = self.drive_to_return(baseline);
+        }
     }
 
     fn collect_backtrace(&self) -> Vec<BtFrame> {
@@ -11906,6 +12018,7 @@ impl<'m> Vm<'m> {
         let cell = match base {
             FieldBase::Local(s) => &self.frames[top].slots[s as usize],
             FieldBase::Global(s) => &self.frames[0].slots[s as usize],
+            FieldBase::Superglobal(i) => &self.superglobals[i as usize],
             FieldBase::This => self.frames[top].this.as_ref()?,
         };
         field_get(cell, steps, &mut keys.into_iter(), fs)
@@ -11916,6 +12029,7 @@ impl<'m> Vm<'m> {
         let cell = match base {
             FieldBase::Local(s) => &mut self.frames[top].slots[s as usize],
             FieldBase::Global(s) => &mut self.frames[0].slots[s as usize],
+            FieldBase::Superglobal(i) => &mut self.superglobals[i as usize],
             FieldBase::This => match self.frames[top].this.as_mut() {
                 Some(c) => c,
                 None => return,
@@ -12125,6 +12239,7 @@ impl<'m> Vm<'m> {
         let base_val = match base {
             FieldBase::Local(s) => self.frames[top].slots.get(s as usize)?,
             FieldBase::Global(s) => self.frames[0].slots.get(s as usize)?,
+            FieldBase::Superglobal(i) => self.superglobals.get(i as usize)?,
             FieldBase::This => self.frames[top].this.as_ref()?,
         };
         let o = deref_object(base_val)?;
@@ -12172,6 +12287,7 @@ impl<'m> Vm<'m> {
         let base_val = match base {
             FieldBase::Local(s) => self.frames[top].slots.get(s as usize),
             FieldBase::Global(s) => self.frames[0].slots.get(s as usize),
+            FieldBase::Superglobal(i) => self.superglobals.get(i as usize),
             FieldBase::This => self.frames[top].this.as_ref(),
         };
         let Some(o) = base_val.and_then(deref_object) else { return false };
@@ -12878,6 +12994,12 @@ fn relocate_module_class_ids(module: &mut Module, remap: &[ClassId], static_base
         for m in &mut cc.methods {
             relocate_func(&mut m.func, remap, static_base);
         }
+        // Abstract signatures have empty bodies but their param-default /
+        // attribute thunks carry bytecode — the relocation rule applies to
+        // every nested `Func`.
+        for m in &mut cc.abstract_sigs {
+            relocate_func(&mut m.func, remap, static_base);
+        }
         if let Some(pi) = cc.prop_init.as_mut() {
             relocate_func(pi, remap, static_base);
         }
@@ -13172,12 +13294,14 @@ fn elem_cell(cell: &mut Zval, key: &Key) -> Rc<RefCell<Zval>> {
 /// `$this`-not-in-object error.
 fn field_base_mut<'f>(
     frames: &'f mut [Frame<'_>],
+    superglobals: &'f mut [Zval],
     top: usize,
     base: FieldBase,
 ) -> Result<&'f mut Zval, PhpError> {
     Ok(match base {
         FieldBase::Local(s) => &mut frames[top].slots[s as usize],
         FieldBase::Global(s) => &mut frames[0].slots[s as usize],
+        FieldBase::Superglobal(i) => &mut superglobals[i as usize],
         FieldBase::This => frames[top].this.as_mut().ok_or_else(|| {
             PhpError::Error("Using $this when not in object context".to_string())
         })?,

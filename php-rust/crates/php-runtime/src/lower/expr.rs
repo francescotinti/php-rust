@@ -1350,6 +1350,20 @@ impl<'f> Lowerer<'f> {
                 }
                 Ok(place)
             }
+            // A call/`new`/`clone` result as the root of a write target
+            // (`f()->prop = v`, `f()['k'] = v`): PHP treats the result as a
+            // temporary and allows the write (property writes reach the real
+            // object via its handle; pure index writes land in the discarded
+            // temp). Only expressions PHP itself treats as temporaries may root
+            // a `Value` place — real places that are merely unsupported here
+            // (`$$x`, `?->`, bare `Class::$p`) keep the honest error, since a
+            // temp copy would silently drop their writes.
+            Expression::Call(_) | Expression::Instantiation(_) | Expression::Clone(_) => {
+                Ok(Place {
+                    base: PlaceBase::Value(Box::new(self.lower_expr(lhs)?)),
+                    steps: Vec::new(),
+                })
+            }
             _ => Err(LowerError::Unsupported {
                 what: "assignment target",
                 line,

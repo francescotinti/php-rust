@@ -547,6 +547,7 @@ impl<'m> Vm<'m> {
         let cell = match base {
             FieldBase::Local(s) => &mut self.frames[top].slots[s as usize],
             FieldBase::Global(s) => &mut self.frames[0].slots[s as usize],
+            FieldBase::Superglobal(i) => &mut self.superglobals[i as usize],
             FieldBase::This => self.frames[top].this.as_mut().ok_or_else(|| {
                 PhpError::Error("Using $this when not in object context".to_string())
             })?,

@@ -192,6 +192,12 @@ pub struct ClassDecl {
     /// and `abstract` methods, which carry no body so are not in `methods`
     /// (step 47). Kept (always public) so `get_class_methods` can report them.
     pub abstract_methods: Vec<Box<[u8]>>,
+    /// Full signatures for those abstract/interface methods (empty bodies):
+    /// the Reflection surface (`hasMethod`/`getMethod`/`method_exists` — the
+    /// PHPUnit mock generator's view of abstract classes) resolves against
+    /// these; method *dispatch* never consults them. Trait-supplied abstract
+    /// requirements are name-only (not carried here).
+    pub abstract_sigs: Vec<MethodDecl>,
     /// `enum` declaration (vs `class`/`interface`), step 23. When set, `parent`
     /// is `None`, `props`/`static_props` are empty, and the cases live in
     /// `enum_cases`. The whole OOP machinery (methods, consts, instanceof,
@@ -1104,6 +1110,15 @@ pub enum PlaceBase {
     /// and the index path tested on it — read-only, so this base never reaches a
     /// write/unset path (only `lower_test_place` produces it).
     ClassConst { class: ClassRef, name: Box<[u8]> },
+    /// A call/`new`/`clone` result as the root of a write target
+    /// (`f()->prop = v`, `$c->get()->arr[$k] = v`). PHP treats such a result as
+    /// a *temporary*: the write is legal — a property write reaches the real
+    /// object through its handle, while a pure index write lands in the
+    /// discarded temp (`f()['k'] = 2` leaves `f()`'s value untouched). The
+    /// expression is materialised into a compiler temp and the steps applied to
+    /// it, with no write-back. Real places (variables, `$$x`, `Class::$p`) never
+    /// use this base.
+    Value(Box<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
