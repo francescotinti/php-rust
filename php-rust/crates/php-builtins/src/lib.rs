@@ -80,6 +80,8 @@ pub fn registry() -> Registry {
     add(b"fread", file::fread);
     add(b"fwrite", file::fwrite);
     add(b"stream_isatty", file::stream_isatty);
+    add(b"stream_set_blocking", file::stream_set_blocking);
+    add(b"set_socket_blocking", file::stream_set_blocking); // legacy alias
     add(b"fputs", file::fwrite);
     add(b"fclose", file::fclose);
     add(b"fgets", file::fgets);
@@ -338,6 +340,8 @@ pub fn registry() -> Registry {
     add(b"gethostname", env::gethostname);
     add(b"sys_getloadavg", env::sys_getloadavg);
     add(b"php_uname", env::php_uname);
+    add(b"usleep", env::usleep);
+    add(b"sleep", env::sleep);
     add(b"uniqid", env::uniqid);
     add(b"max", math::max);
     add(b"min", math::min);

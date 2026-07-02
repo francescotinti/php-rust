@@ -18,6 +18,8 @@ pub struct Resource {
 #[derive(Debug)]
 pub enum ResKind {
     Stream(Stream),
+    /// A `proc_open` process handle. gettype "resource"; var_dump "process".
+    Process(ProcHandle),
     /// A directory handle from `opendir` (step 53c). PHP models these as php_stream
     /// too, so they report the same "resource"/"stream" labels as a byte stream.
     Dir(DirHandle),
@@ -79,6 +81,21 @@ pub enum StreamBackend {
     Stdin,
     Stdout,
     Stderr,
+    /// Pipes to a `proc_open` child: `$pipes[0]` writes to the child's stdin,
+    /// `$pipes[1]`/`$pipes[2]` read its stdout/stderr. Unseekable.
+    ChildStdin(std::process::ChildStdin),
+    ChildStdout(std::process::ChildStdout),
+    ChildStderr(std::process::ChildStderr),
+}
+
+/// A `proc_open` child process: the handle, the command line it was launched
+/// with (`proc_get_status`'s `command`), and the exit code once collected —
+/// PHP reports `exitcode` from cache after the first wait.
+#[derive(Debug)]
+pub struct ProcHandle {
+    pub child: std::process::Child,
+    pub command: Vec<u8>,
+    pub exit_code: Option<i32>,
 }
 
 impl Resource {
@@ -97,6 +114,22 @@ impl Resource {
         }
     }
 
+    /// A `proc_open` process resource.
+    pub fn new_process(id: u32, proc: ProcHandle) -> Resource {
+        Resource {
+            id,
+            kind: ResKind::Process(proc),
+        }
+    }
+
+    /// The process handle, if this is a `proc_open` resource.
+    pub fn as_process_mut(&mut self) -> Option<&mut ProcHandle> {
+        match &mut self.kind {
+            ResKind::Process(p) => Some(p),
+            _ => None,
+        }
+    }
+
     /// The context options array, if this is a stream-context resource.
     pub fn context_options(&self) -> Option<&crate::Zval> {
         match &self.kind {
@@ -109,7 +142,9 @@ impl Resource {
     /// "resource (closed)" (oracle-verified, D-51.1/D-51.5).
     pub fn type_name(&self) -> &'static str {
         match self.kind {
-            ResKind::Stream(_) | ResKind::Dir(_) | ResKind::Context(_) => "resource",
+            ResKind::Stream(_) | ResKind::Dir(_) | ResKind::Context(_) | ResKind::Process(_) => {
+                "resource"
+            }
             ResKind::Closed => "resource (closed)",
         }
     }
@@ -126,6 +161,7 @@ impl Resource {
         match self.kind {
             ResKind::Stream(_) | ResKind::Dir(_) => "stream",
             ResKind::Context(_) => "stream-context",
+            ResKind::Process(_) => "process",
             ResKind::Closed => "Unknown",
         }
     }
@@ -133,7 +169,7 @@ impl Resource {
     pub fn as_stream_mut(&mut self) -> Option<&mut Stream> {
         match &mut self.kind {
             ResKind::Stream(s) => Some(s),
-            ResKind::Dir(_) | ResKind::Context(_) | ResKind::Closed => None,
+            ResKind::Dir(_) | ResKind::Context(_) | ResKind::Process(_) | ResKind::Closed => None,
         }
     }
 
@@ -141,7 +177,9 @@ impl Resource {
     pub fn as_dir_mut(&mut self) -> Option<&mut DirHandle> {
         match &mut self.kind {
             ResKind::Dir(d) => Some(d),
-            ResKind::Stream(_) | ResKind::Context(_) | ResKind::Closed => None,
+            ResKind::Stream(_) | ResKind::Context(_) | ResKind::Process(_) | ResKind::Closed => {
+                None
+            }
         }
     }
 }
@@ -153,11 +191,22 @@ impl Stream {
         let mut buf = vec![0u8; n];
         let mut filled = 0;
         while filled < n {
-            let got = match &mut self.backend {
-                StreamBackend::File(f) => f.read(&mut buf[filled..])?,
-                StreamBackend::Memory(c) => c.read(&mut buf[filled..])?,
-                StreamBackend::Stdin => std::io::stdin().read(&mut buf[filled..])?,
-                StreamBackend::Stdout | StreamBackend::Stderr => 0,
+            let r = match &mut self.backend {
+                StreamBackend::File(f) => f.read(&mut buf[filled..]),
+                StreamBackend::Memory(c) => c.read(&mut buf[filled..]),
+                StreamBackend::Stdin => std::io::stdin().read(&mut buf[filled..]),
+                StreamBackend::ChildStdout(p) => p.read(&mut buf[filled..]),
+                StreamBackend::ChildStderr(p) => p.read(&mut buf[filled..]),
+                StreamBackend::Stdout | StreamBackend::Stderr | StreamBackend::ChildStdin(_) => {
+                    Ok(0)
+                }
+            };
+            let got = match r {
+                Ok(g) => g,
+                // A non-blocking descriptor with nothing buffered: return the
+                // bytes so far (PHP's fread returns "" here) without EOF.
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                Err(e) => return Err(e),
             };
             if got == 0 {
                 self.eof = true;
@@ -179,11 +228,20 @@ impl Stream {
             if matches!(max, Some(m) if out.len() >= m) {
                 break;
             }
-            let got = match &mut self.backend {
-                StreamBackend::File(f) => f.read(&mut one)?,
-                StreamBackend::Memory(c) => c.read(&mut one)?,
-                StreamBackend::Stdin => std::io::stdin().read(&mut one)?,
-                StreamBackend::Stdout | StreamBackend::Stderr => 0,
+            let r = match &mut self.backend {
+                StreamBackend::File(f) => f.read(&mut one),
+                StreamBackend::Memory(c) => c.read(&mut one),
+                StreamBackend::Stdin => std::io::stdin().read(&mut one),
+                StreamBackend::ChildStdout(p) => p.read(&mut one),
+                StreamBackend::ChildStderr(p) => p.read(&mut one),
+                StreamBackend::Stdout | StreamBackend::Stderr | StreamBackend::ChildStdin(_) => {
+                    Ok(0)
+                }
+            };
+            let got = match r {
+                Ok(g) => g,
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                Err(e) => return Err(e),
             };
             if got == 0 {
                 self.eof = true;
@@ -217,6 +275,12 @@ impl Stream {
                 e.write_all(data)?;
                 Ok(data.len())
             }
+            StreamBackend::ChildStdin(p) => {
+                p.write_all(data)?;
+                Ok(data.len())
+            }
+            // The child's output ends are read-only; report zero bytes written.
+            StreamBackend::ChildStdout(_) | StreamBackend::ChildStderr(_) => Ok(0),
         }
     }
 
@@ -227,6 +291,8 @@ impl Stream {
             StreamBackend::Stdin => Ok(()),
             StreamBackend::Stdout => std::io::stdout().flush(),
             StreamBackend::Stderr => std::io::stderr().flush(),
+            StreamBackend::ChildStdin(p) => p.flush(),
+            StreamBackend::ChildStdout(_) | StreamBackend::ChildStderr(_) => Ok(()),
         }
     }
 
@@ -235,7 +301,8 @@ impl Stream {
         let r = match &mut self.backend {
             StreamBackend::File(f) => f.seek(pos).is_ok(),
             StreamBackend::Memory(c) => c.seek(pos).is_ok(),
-            StreamBackend::Stdin | StreamBackend::Stdout | StreamBackend::Stderr => false,
+            // std streams and child pipes are not seekable.
+            _ => false,
         };
         if r {
             self.eof = false;
@@ -245,12 +312,45 @@ impl Stream {
         }
     }
 
+    /// The OS file descriptor behind this stream, when there is one — used by
+    /// `stream_select` (poll) and `stream_set_blocking` (fcntl). In-process
+    /// memory buffers have none.
+    pub fn raw_fd(&self) -> Option<i32> {
+        use std::os::unix::io::AsRawFd;
+        Some(match &self.backend {
+            StreamBackend::File(f) => f.as_raw_fd(),
+            StreamBackend::Memory(_) => return None,
+            StreamBackend::Stdin => 0,
+            StreamBackend::Stdout => 1,
+            StreamBackend::Stderr => 2,
+            StreamBackend::ChildStdin(p) => p.as_raw_fd(),
+            StreamBackend::ChildStdout(p) => p.as_raw_fd(),
+            StreamBackend::ChildStderr(p) => p.as_raw_fd(),
+        })
+    }
+
+    /// `stream_set_blocking`: toggle `O_NONBLOCK` on the underlying descriptor.
+    /// A memory buffer is always "blocking-complete"; report success.
+    pub fn set_blocking(&mut self, enable: bool) -> bool {
+        let Some(fd) = self.raw_fd() else { return true };
+        unsafe {
+            let flags = libc::fcntl(fd, libc::F_GETFL);
+            if flags < 0 {
+                return false;
+            }
+            let flags =
+                if enable { flags & !libc::O_NONBLOCK } else { flags | libc::O_NONBLOCK };
+            libc::fcntl(fd, libc::F_SETFL, flags) == 0
+        }
+    }
+
     /// `ftell`: current byte offset, or `None` if not tellable.
     pub fn tell(&mut self) -> Option<u64> {
         match &mut self.backend {
             StreamBackend::File(f) => f.stream_position().ok(),
             StreamBackend::Memory(c) => c.stream_position().ok(),
-            StreamBackend::Stdin | StreamBackend::Stdout | StreamBackend::Stderr => None,
+            // std streams and child pipes have no byte offset.
+            _ => None,
         }
     }
 }
@@ -287,9 +387,15 @@ pub fn open_php_stream(spec: &[u8], mode: &[u8]) -> Option<Stream> {
     let (readable, writable) = match backend {
         StreamBackend::Stdin => (true, false),
         StreamBackend::Stdout | StreamBackend::Stderr => (false, true),
-        // `php://memory` / `php://temp` are always read+write: Zend's memory
-        // stream ignores the fopen mode (oracle: mode "a" still reads back).
-        StreamBackend::Memory(_) => (true, true),
+        // `php://memory` / `php://temp`: always readable (oracle: mode "a"
+        // reads back; "r" reads the empty buffer); writable unless the mode is
+        // read-only-ish — Zend's memory stream only knows a READONLY flag, set
+        // for "r"/"x"/"c" (oracle-pinned matrix: r+ w w+ a a+ all write).
+        StreamBackend::Memory(_) => {
+            let writable =
+                matches!(mode.first(), Some(b'w') | Some(b'a')) || mode.contains(&b'+');
+            (true, writable)
+        }
         _ => mode_caps(mode).unwrap_or((true, true)),
     };
     let mut uri = b"php://".to_vec();

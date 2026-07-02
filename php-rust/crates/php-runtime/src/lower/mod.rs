@@ -528,6 +528,67 @@ class stdClass {}
 // unserialize() of an unknown class: the instance keeps its data plus the
 // original class name in `__PHP_Incomplete_Class_Name` (set VM-side).
 class __PHP_Incomplete_Class {}
+// Incremental hashing (hash_init/update/final): the context buffers the fed
+// data and the digest is computed at final by the one-shot hash()/hash_hmac()
+// builtins (which are oracle-faithful), so every algorithm they support works
+// incrementally too. Output-identical to streaming; memory-proportional to
+// the fed data (fine for the workloads phpr targets).
+final class HashContext {
+    public $__algo = '';
+    public $__buf = '';
+    public $__key = null;
+}
+function hash_init($algo, $flags = 0, $key = '') {
+    try { hash($algo, ''); } catch (ValueError $e) {
+        // hash_init()'s message has no trailing `, "x" given` (unlike hash()).
+        throw new ValueError('hash_init(): Argument #1 ($algo) must be a valid hashing algorithm');
+    }
+    $c = new HashContext;
+    $c->__algo = $algo;
+    if (($flags & HASH_HMAC) !== 0) {
+        if ($key === '' || $key === null) {
+            throw new ValueError('hash_init(): Argument #3 ($key) cannot be empty when HASH_HMAC is specified');
+        }
+        $c->__key = $key;
+    }
+    return $c;
+}
+function hash_update($context, $data) { $context->__buf .= $data; return true; }
+function hash_update_stream($context, $stream, $length = -1) {
+    $data = $length >= 0 ? stream_get_contents($stream, $length) : stream_get_contents($stream);
+    if ($data === false) { return 0; }
+    $context->__buf .= $data;
+    return strlen($data);
+}
+function hash_update_file($context, $filename) {
+    $d = @file_get_contents($filename);
+    if ($d === false) { return false; }
+    $context->__buf .= $d;
+    return true;
+}
+function hash_final($context, $binary = false) {
+    if ($context->__key !== null) {
+        return hash_hmac($context->__algo, $context->__buf, $context->__key, $binary);
+    }
+    return hash($context->__algo, $context->__buf, $binary);
+}
+function hash_copy($context) { return clone $context; }
+function hash_file($algo, $filename, $binary = false) {
+    $d = @file_get_contents($filename);
+    if ($d === false) { return false; }
+    return hash($algo, $d, $binary);
+}
+function stream_select(&$read, &$write, &$except, $seconds, $microseconds = null) {
+    $r = __stream_select($read ?? [], $write ?? [], $except ?? [], $seconds, $microseconds);
+    if ($r === false) { return false; }
+    $read = $r[1]; $write = $r[2]; $except = $r[3];
+    return $r[0];
+}
+function hash_hmac_file($algo, $filename, $key, $binary = false) {
+    $d = @file_get_contents($filename);
+    if ($d === false) { return false; }
+    return hash_hmac($algo, $d, $key, $binary);
+}
 #[Attribute(Attribute::TARGET_CLASS)]
 class Attribute {
     const TARGET_CLASS = 1;
@@ -3853,6 +3914,8 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         // PHP 8.0 removed E_STRICT from E_ALL; PHP 8.4 made E_STRICT a no-op. The
         // current value is 30719 (E_ALL without E_STRICT=2048), matching 8.5.
         b"E_ALL" => ExprKind::Int(30719),
+        // hash_init() flag.
+        b"HASH_HMAC" => ExprKind::Int(1),
         // http_build_query() encoding selectors.
         b"PHP_QUERY_RFC1738" => ExprKind::Int(1),
         b"PHP_QUERY_RFC3986" => ExprKind::Int(2),

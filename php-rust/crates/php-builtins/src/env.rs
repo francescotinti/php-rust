@@ -203,6 +203,24 @@ pub fn sys_getloadavg(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> 
     Ok(Zval::Array(std::rc::Rc::new(arr)))
 }
 
+/// `usleep($microseconds)`: pause execution.
+pub fn usleep(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let us = args.first().map(|v| convert::to_long_cast(v, ctx.diags)).unwrap_or(0);
+    if us > 0 {
+        std::thread::sleep(std::time::Duration::from_micros(us as u64));
+    }
+    Ok(Zval::Null)
+}
+
+/// `sleep($seconds)`: pause execution; returns 0 (the POSIX remainder).
+pub fn sleep(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = args.first().map(|v| convert::to_long_cast(v, ctx.diags)).unwrap_or(0);
+    if s > 0 {
+        std::thread::sleep(std::time::Duration::from_secs(s as u64));
+    }
+    Ok(Zval::Long(0))
+}
+
 /// `php_uname($mode = "a")`: system information via `uname(2)` — `s`ysname,
 /// `n`odename, `r`elease, `v`ersion, `m`achine, or `a`ll (space-joined).
 pub fn php_uname(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {

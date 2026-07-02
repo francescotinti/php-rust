@@ -2485,15 +2485,24 @@ impl<'a> FnCompiler<'a> {
         // real PHP never raises. Push `null` in its place (the builtin ignores the
         // input value there).
         if let Some((canon, out_idx)) = crate::vm::host_builtin_out_param(bname) {
+            // A property/index out-param (`proc_open(..., $this->pipes)`) is
+            // written back through a temp slot after the call.
+            let mut out_place: Option<Place> = None;
             let out_slot = match args.get(out_idx) {
                 None => None, // out-param omitted (e.g. `preg_match($p, $s)`)
                 Some(e) => match &e.kind {
                     ExprKind::Var(slot) => Some(*slot),
-                    _ => {
-                        return Err(CompileError::Unsupported(
-                            "host builtin out-param is not a plain variable".into(),
-                        ))
-                    }
+                    _ => match expr_field_place(e) {
+                        Some(place) => {
+                            out_place = Some(place);
+                            Some(self.alloc_temp())
+                        }
+                        None => {
+                            return Err(CompileError::Unsupported(
+                                "host builtin out-param is not a plain variable".into(),
+                            ))
+                        }
+                    },
                 },
             };
             for (i, a) in args.iter().enumerate() {
@@ -2512,6 +2521,17 @@ impl<'a> FnCompiler<'a> {
                 out_index: out_idx as u32,
                 argc: args.len() as u32,
             });
+            if let Some(place) = out_place {
+                // [result] → assign the temp into the real place, drop the
+                // assignment's value, keep the call result on top.
+                let rhs = Expr {
+                    line: args[out_idx].line,
+                    kind: ExprKind::Var(out_slot.expect("temp allocated with out_place")),
+                };
+                self.assign_place(&place, &rhs)?; // [result, value]
+                self.emit(Op::Pop); // [result]
+                self.free_temp();
+            }
             return Ok(());
         }
         // Evaluator-only *host* builtins (higher-order / class-introspection /

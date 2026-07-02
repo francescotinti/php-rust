@@ -959,6 +959,18 @@ pub fn stream_copy_to_stream(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpEr
 
 /// `ftruncate($stream, $size)`: truncate (or zero-extend) the underlying file /
 /// in-memory buffer to `$size` bytes. Returns `true` on success.
+/// `stream_set_blocking($stream, $enable)`: toggle blocking mode on the
+/// descriptor (fcntl `O_NONBLOCK`); in-process buffers report success.
+pub fn stream_set_blocking(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let r = stream_arg(argv, "stream_set_blocking")?;
+    let enable = argv.get(1).map(|v| convert::to_bool(v, ctx.diags)).unwrap_or(true);
+    let mut res = r.borrow_mut();
+    let Some(s) = res.as_stream_mut() else {
+        return Ok(Zval::Bool(false));
+    };
+    Ok(Zval::Bool(s.set_blocking(enable)))
+}
+
 pub fn ftruncate(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let r = stream_arg(argv, "ftruncate")?;
     let size = argv
@@ -974,7 +986,8 @@ pub fn ftruncate(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
             c.get_mut().resize(size as usize, 0);
             true
         }
-        StreamBackend::Stdin | StreamBackend::Stdout | StreamBackend::Stderr => false,
+        // std streams and child pipes cannot be truncated.
+        _ => false,
     };
     Ok(Zval::Bool(ok))
 }
@@ -1628,7 +1641,8 @@ pub fn fstat(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
             v[7] = c.get_ref().len() as i64; // size
             v
         }
-        StreamBackend::Stdin | StreamBackend::Stdout | StreamBackend::Stderr => {
+        // std streams and child pipes: a synthetic rw stat with no size.
+        _ => {
             let mut v = [0i64; 13];
             v[2] = 0o100_666;
             v[3] = 1;

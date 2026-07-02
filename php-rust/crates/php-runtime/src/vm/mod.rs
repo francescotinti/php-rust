@@ -9348,6 +9348,7 @@ impl<'m> Vm<'m> {
             b"mb_ereg" => self.ho_mb_ereg(false, args),
             b"mb_eregi" => self.ho_mb_ereg(true, args),
             b"preg_replace" => self.ho_preg_replace(args),
+            b"proc_open" => self.ho_proc_open(args),
             _ => Err(undefined_builtin(name)),
         }
     }
@@ -10031,6 +10032,9 @@ impl<'m> Vm<'m> {
             StreamBackend::Stdin | StreamBackend::Stdout | StreamBackend::Stderr => {
                 ("STDIO", false)
             }
+            StreamBackend::ChildStdin(_)
+            | StreamBackend::ChildStdout(_)
+            | StreamBackend::ChildStderr(_) => ("STDIO", false),
         };
         let wrapper = if s.uri.starts_with(b"php://") { "PHP" } else { "plainfile" };
         let mut arr = PhpArray::new();
@@ -10165,6 +10169,345 @@ impl<'m> Vm<'m> {
             }
         }
         Ok(Zval::Bool(false))
+    }
+
+    /// `proc_open($command, $descriptor_spec, &$pipes, $cwd?, $env?)`: spawn a
+    /// child process. A string command runs through `/bin/sh -c` (PHP's POSIX
+    /// behaviour); an array is a direct argv (PHP 7.4+). Descriptors 0/1/2
+    /// support `['pipe', ...]` (a pipe resource in `$pipes`) and
+    /// `['file', path, mode]`; anything else inherits. Returns
+    /// `(process resource | false, pipes array)` — the VM writes the pipes
+    /// array into the by-ref `$pipes` argument.
+    fn ho_proc_open(&mut self, args: Vec<Zval>) -> Result<(Zval, Zval), PhpError> {
+        use php_types::stream::{ProcHandle, StreamBackend};
+        use std::process::Stdio;
+        let empty_pipes = Zval::Array(Rc::new(PhpArray::new()));
+        let cmd_arg = args.first().map(|v| v.deref_clone()).unwrap_or(Zval::Null);
+        let mut command = std::process::Command::new("/bin/sh");
+        let cmd_repr: Vec<u8>;
+        match &cmd_arg {
+            Zval::Array(a) => {
+                let argv: Vec<Vec<u8>> = a
+                    .iter()
+                    .map(|(_, v)| {
+                        convert::to_zstr_cast(&v.deref_clone(), &mut self.diags)
+                            .as_bytes()
+                            .to_vec()
+                    })
+                    .collect();
+                let Some(first) = argv.first() else {
+                    self.diags.push(Diag::Warning(
+                        "proc_open(): Command array must have at least one element".to_string(),
+                    ));
+                    return Ok((Zval::Bool(false), empty_pipes));
+                };
+                use std::os::unix::ffi::OsStrExt;
+                command = std::process::Command::new(std::ffi::OsStr::from_bytes(first));
+                for a in &argv[1..] {
+                    command.arg(std::ffi::OsStr::from_bytes(a));
+                }
+                cmd_repr = argv.join(&b' ');
+            }
+            other => {
+                let s = convert::to_zstr_cast(other, &mut self.diags).as_bytes().to_vec();
+                use std::os::unix::ffi::OsStrExt;
+                command.arg("-c").arg(std::ffi::OsStr::from_bytes(&s));
+                cmd_repr = s;
+            }
+        }
+        // Descriptor spec: which of fd 0/1/2 become pipes / files / inherited.
+        let spec = match args.get(1).map(|v| v.deref_clone()) {
+            Some(Zval::Array(a)) => a,
+            _ => Rc::new(PhpArray::new()),
+        };
+        let mut want_pipe = [false; 3];
+        for fd in 0..3i64 {
+            let d = spec.get(&Key::Int(fd)).map(|v| v.deref_clone());
+            let stdio = match d {
+                Some(Zval::Array(desc)) => {
+                    let kind = desc
+                        .get(&Key::Int(0))
+                        .map(|v| convert::to_zstr_cast(&v.deref_clone(), &mut self.diags))
+                        .map(|s| s.as_bytes().to_vec())
+                        .unwrap_or_default();
+                    match kind.as_slice() {
+                        b"pipe" => {
+                            want_pipe[fd as usize] = true;
+                            Stdio::piped()
+                        }
+                        b"file" => {
+                            let path = desc
+                                .get(&Key::Int(1))
+                                .map(|v| convert::to_zstr_cast(&v.deref_clone(), &mut self.diags))
+                                .map(|s| s.as_bytes().to_vec())
+                                .unwrap_or_default();
+                            let mode = desc
+                                .get(&Key::Int(2))
+                                .map(|v| convert::to_zstr_cast(&v.deref_clone(), &mut self.diags))
+                                .map(|s| s.as_bytes().to_vec())
+                                .unwrap_or_else(|| b"r".to_vec());
+                            use std::os::unix::ffi::OsStrExt;
+                            let p = std::path::Path::new(std::ffi::OsStr::from_bytes(&path));
+                            let file = match mode.first() {
+                                Some(b'r') => std::fs::File::open(p),
+                                Some(b'a') => {
+                                    std::fs::OpenOptions::new().create(true).append(true).open(p)
+                                }
+                                _ => std::fs::File::create(p),
+                            };
+                            match file {
+                                Ok(f) => Stdio::from(f),
+                                Err(_) => {
+                                    self.diags.push(Diag::Warning(format!(
+                                        "proc_open(): Unable to open descriptor {fd} file"
+                                    )));
+                                    return Ok((Zval::Bool(false), empty_pipes));
+                                }
+                            }
+                        }
+                        _ => Stdio::inherit(),
+                    }
+                }
+                _ => Stdio::inherit(),
+            };
+            match fd {
+                0 => command.stdin(stdio),
+                1 => command.stdout(stdio),
+                _ => command.stderr(stdio),
+            };
+        }
+        if let Some(Zval::Str(cwd)) = args.get(3).map(|v| v.deref_clone()) {
+            use std::os::unix::ffi::OsStrExt;
+            command.current_dir(std::ffi::OsStr::from_bytes(cwd.as_bytes()));
+        }
+        if let Some(Zval::Array(env)) = args.get(4).map(|v| v.deref_clone()) {
+            // PHP: a non-null $env_vars REPLACES the environment.
+            command.env_clear();
+            for (k, v) in env.iter() {
+                let key = match k {
+                    Key::Str(s) => s.as_bytes().to_vec(),
+                    Key::Int(i) => i.to_string().into_bytes(),
+                };
+                let val = convert::to_zstr_cast(&v.deref_clone(), &mut self.diags);
+                use std::os::unix::ffi::OsStrExt;
+                command.env(
+                    std::ffi::OsStr::from_bytes(&key),
+                    std::ffi::OsStr::from_bytes(val.as_bytes()),
+                );
+            }
+        }
+        let mut child = match command.spawn() {
+            Ok(c) => c,
+            Err(e) => {
+                self.diags.push(Diag::Warning(format!("proc_open(): {e}")));
+                return Ok((Zval::Bool(false), empty_pipes));
+            }
+        };
+        let mut pipes = PhpArray::new();
+        let mk_pipe = |vm: &mut Self, backend: StreamBackend, readable: bool| -> Zval {
+            let stream = Stream {
+                backend,
+                readable,
+                writable: !readable,
+                eof: false,
+                uri: b"pipe".to_vec(),
+                mode: if readable { b"r".to_vec() } else { b"w".to_vec() },
+            };
+            vm.alloc_resource(stream)
+        };
+        if want_pipe[0] {
+            if let Some(sin) = child.stdin.take() {
+                pipes.insert(Key::Int(0), mk_pipe(self, StreamBackend::ChildStdin(sin), false));
+            }
+        }
+        if want_pipe[1] {
+            if let Some(sout) = child.stdout.take() {
+                pipes.insert(Key::Int(1), mk_pipe(self, StreamBackend::ChildStdout(sout), true));
+            }
+        }
+        if want_pipe[2] {
+            if let Some(serr) = child.stderr.take() {
+                pipes.insert(Key::Int(2), mk_pipe(self, StreamBackend::ChildStderr(serr), true));
+            }
+        }
+        let id = self.next_resource_id;
+        self.next_resource_id += 1;
+        let proc = ProcHandle { child, command: cmd_repr, exit_code: None };
+        let res = Zval::Resource(Rc::new(RefCell::new(Resource::new_process(id, proc))));
+        Ok((res, Zval::Array(Rc::new(pipes))))
+    }
+
+    /// Resolve a `proc_*` argument to its process resource, or a `TypeError`.
+    fn proc_arg(
+        args: &[Zval],
+        fname: &str,
+    ) -> Result<Rc<RefCell<Resource>>, PhpError> {
+        match args.first().map(|v| v.deref_clone()) {
+            Some(Zval::Resource(r)) => Ok(r),
+            other => Err(PhpError::TypeError(format!(
+                "{fname}(): Argument #1 ($process) must be of type resource, {} given",
+                other.map(|v| v.type_name_for_error()).unwrap_or_else(|| "null".to_string())
+            ))),
+        }
+    }
+
+    /// `__stream_select($read, $write, $except, $seconds, $microseconds)`: the
+    /// poll(2) core of `stream_select` (the prelude wrapper owns the by-ref
+    /// array rewrite). Returns `[count, read, write, except]` with each array
+    /// filtered to the ready streams (keys preserved), or `false` on error.
+    /// A memory-backed stream is always ready; a `null` $seconds blocks.
+    fn ho_stream_select(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let arr_of = |v: Option<&Zval>| -> Rc<PhpArray> {
+            match v.map(|x| x.deref_clone()) {
+                Some(Zval::Array(a)) => a,
+                _ => Rc::new(PhpArray::new()),
+            }
+        };
+        let read = arr_of(args.first());
+        let write = arr_of(args.get(1));
+        let except = arr_of(args.get(2));
+        let timeout_ms: i32 = match args.get(3).map(|v| v.deref_clone()) {
+            None | Some(Zval::Null) => -1,
+            Some(sec) => {
+                let s = convert::to_long_cast(&sec, &mut self.diags);
+                let us = args
+                    .get(4)
+                    .map(|v| convert::to_long_cast(v, &mut self.diags))
+                    .unwrap_or(0);
+                (s * 1000 + us / 1000).min(i32::MAX as i64) as i32
+            }
+        };
+        // Collect (set, key, fd) triples; memory streams count as ready now.
+        let mut fds: Vec<libc::pollfd> = Vec::new();
+        let mut plan: Vec<(usize, Key, Option<usize>)> = Vec::new(); // (set, key, pollfd idx)
+        let mut ready_now = 0usize;
+        for (set, arr, events) in
+            [(0usize, &read, libc::POLLIN), (1, &write, libc::POLLOUT), (2, &except, libc::POLLPRI)]
+        {
+            for (k, v) in arr.iter() {
+                let fd = match v.deref_clone() {
+                    Zval::Resource(r) => r.borrow_mut().as_stream_mut().and_then(|s| s.raw_fd()),
+                    _ => None,
+                };
+                match fd {
+                    Some(fd) => {
+                        plan.push((set, k.clone(), Some(fds.len())));
+                        fds.push(libc::pollfd { fd, events, revents: 0 });
+                    }
+                    None => {
+                        // No descriptor (php://memory &c.): always ready.
+                        plan.push((set, k.clone(), None));
+                        ready_now += 1;
+                    }
+                }
+            }
+        }
+        let n = if fds.is_empty() {
+            0
+        } else {
+            // With in-process streams already ready, don't block.
+            let t = if ready_now > 0 { 0 } else { timeout_ms };
+            let r = unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, t) };
+            if r < 0 {
+                return Ok(Zval::Bool(false));
+            }
+            r as usize
+        };
+        let mut outs = [PhpArray::new(), PhpArray::new(), PhpArray::new()];
+        let mut count = 0i64;
+        let sources = [&read, &write, &except];
+        for (set, key, idx) in plan {
+            let ready = match idx {
+                None => true,
+                Some(i) => fds[i].revents != 0,
+            };
+            if ready {
+                if let Some(v) = sources[set].get(&key) {
+                    outs[set].insert(key, v.clone());
+                    count += 1;
+                }
+            }
+        }
+        let _ = n;
+        let [r_out, w_out, e_out] = outs;
+        let mut result = PhpArray::new();
+        let _ = result.append(Zval::Long(count));
+        let _ = result.append(Zval::Array(Rc::new(r_out)));
+        let _ = result.append(Zval::Array(Rc::new(w_out)));
+        let _ = result.append(Zval::Array(Rc::new(e_out)));
+        Ok(Zval::Array(Rc::new(result)))
+    }
+
+    /// `proc_close($process)`: wait for the child and return its exit code
+    /// (cached if `proc_get_status` already collected it); the resource closes.
+    fn ho_proc_close(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let r = Self::proc_arg(&args, "proc_close")?;
+        let mut res = r.borrow_mut();
+        let code = match res.as_process_mut() {
+            Some(p) => match p.exit_code {
+                Some(c) => c,
+                None => match p.child.wait() {
+                    Ok(status) => status.code().unwrap_or(-1),
+                    Err(_) => -1,
+                },
+            },
+            None => -1,
+        };
+        res.kind = php_types::stream::ResKind::Closed;
+        Ok(Zval::Long(code as i64))
+    }
+
+    /// `proc_get_status($process)`: command/pid/running/signaled/stopped/
+    /// exitcode/termsig/stopsig, PHP's key order. The exit code stays readable
+    /// on later calls (PHP 8 caches it).
+    fn ho_proc_get_status(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let r = Self::proc_arg(&args, "proc_get_status")?;
+        let mut res = r.borrow_mut();
+        let Some(p) = res.as_process_mut() else {
+            return Err(PhpError::TypeError(
+                "proc_get_status(): supplied resource is not a valid process resource".to_string(),
+            ));
+        };
+        let pid = p.child.id() as i64;
+        let mut running = false;
+        let mut termsig = 0i64;
+        if p.exit_code.is_none() {
+            match p.child.try_wait() {
+                Ok(Some(status)) => {
+                    use std::os::unix::process::ExitStatusExt;
+                    termsig = status.signal().unwrap_or(0) as i64;
+                    p.exit_code = Some(status.code().unwrap_or(-1));
+                }
+                Ok(None) => running = true,
+                Err(_) => {}
+            }
+        }
+        let exitcode = if running { -1 } else { p.exit_code.unwrap_or(-1) as i64 };
+        let mut a = PhpArray::new();
+        a.insert(Key::from_bytes(b"command"), Zval::Str(PhpStr::new(p.command.clone())));
+        a.insert(Key::from_bytes(b"pid"), Zval::Long(pid));
+        a.insert(Key::from_bytes(b"running"), Zval::Bool(running));
+        a.insert(Key::from_bytes(b"signaled"), Zval::Bool(termsig != 0));
+        a.insert(Key::from_bytes(b"stopped"), Zval::Bool(false));
+        a.insert(Key::from_bytes(b"exitcode"), Zval::Long(exitcode));
+        a.insert(Key::from_bytes(b"termsig"), Zval::Long(termsig));
+        a.insert(Key::from_bytes(b"stopsig"), Zval::Long(0));
+        Ok(Zval::Array(Rc::new(a)))
+    }
+
+    /// `proc_terminate($process, $signal = 15)`: deliver a signal to the child.
+    fn ho_proc_terminate(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let r = Self::proc_arg(&args, "proc_terminate")?;
+        let sig = match args.get(1) {
+            Some(v) => convert::to_long_cast(v, &mut self.diags) as i32,
+            None => 15, // SIGTERM
+        };
+        let mut res = r.borrow_mut();
+        let Some(p) = res.as_process_mut() else {
+            return Ok(Zval::Bool(false));
+        };
+        let ok = unsafe { libc::kill(p.child.id() as libc::pid_t, sig) } == 0;
+        Ok(Zval::Bool(ok))
     }
 
     /// `opendir($directory)`: snapshot the directory entries (`.`/`..` first, then
@@ -11040,6 +11383,11 @@ impl<'m> Vm<'m> {
             || self.registry.get(name).is_some()
             || host_builtin_canonical(name).is_some()
             || host_builtin_ref_first(name).is_some()
+            // Builtins with by-ref *output* parameters (preg_match's &$matches,
+            // sscanf's trailing vars) live in their own dispatch tables — they
+            // are real functions to `function_exists`/`is_callable`.
+            || host_builtin_out_param(name).is_some()
+            || host_builtin_scanf(name).is_some()
     }
 
     /// Install a frame for an anonymous closure: bind its captured variables into
@@ -12724,6 +13072,10 @@ host_builtins! {
     b"stream_context_create" => vm.ho_stream_context_create(args),
     b"stream_set_chunk_size" => vm.ho_stream_set_chunk_size(args),
     b"stream_get_meta_data" => vm.ho_stream_get_meta_data(args),
+    b"proc_close" => vm.ho_proc_close(args),
+    b"__stream_select" => vm.ho_stream_select(args),
+    b"proc_get_status" => vm.ho_proc_get_status(args),
+    b"proc_terminate" => vm.ho_proc_terminate(args),
     b"umask" => vm.ho_umask(args),
     b"__dom_new_doc" => vm.ho_dom_new_doc(args),
     b"__dom_load" => vm.ho_dom_load(args),
@@ -12916,6 +13268,8 @@ pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usiz
         // dynamic string-callable dispatch, so the compiler must consult this
         // table FIRST (see `FnCompiler::call`).
         (b"preg_replace", 4),
+        // `&$pipes` receives the pipe resources of the spawned child.
+        (b"proc_open", 2),
     ];
     HOST_OUT
         .iter()
