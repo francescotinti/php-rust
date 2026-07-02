@@ -355,6 +355,26 @@ pub fn sort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpE
     Ok(Zval::Bool(true))
 }
 
+/// `shuffle(array &$array): true` — `php_array_data_shuffle` verbatim:
+/// Fisher–Yates from the top with the global MT19937 engine (`mt_range`, so a
+/// seeded sequence is byte-identical to PHP), then reindex from 0.
+pub fn shuffle(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let rc = as_array_mut(arr, "shuffle")?;
+    let mut vals: Vec<Zval> = rc.iter().map(|(_, v)| v.clone()).collect();
+    for i in (1..vals.len()).rev() {
+        let j = crate::math::mt_range(i as u32) as usize;
+        if j != i {
+            vals.swap(i, j);
+        }
+    }
+    let mut out = PhpArray::new();
+    for v in vals {
+        let _ = out.append(v);
+    }
+    *arr = Zval::Array(Rc::new(out));
+    Ok(Zval::Bool(true))
+}
+
 /// `rsort(array &$array, int $flags = SORT_REGULAR): true` — like [`sort`] but
 /// descending. Reindexes from 0, dropping the original keys.
 pub fn rsort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {

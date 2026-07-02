@@ -454,7 +454,7 @@ fn mt_next() -> u32 {
 
 /// `php_random_range32` verbatim: raw word for the full range, `& (n-1)` for a
 /// power-of-two span, otherwise modulo with redraws above the unbiased limit.
-fn mt_range(umax: u32) -> u32 {
+pub(crate) fn mt_range(umax: u32) -> u32 {
     let mut result = mt_next();
     if umax == u32::MAX {
         return result;

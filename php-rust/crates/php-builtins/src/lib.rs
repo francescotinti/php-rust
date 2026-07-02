@@ -401,6 +401,7 @@ pub fn registry() -> Registry {
     add_ref(b"array_push", array::array_push);
     add_ref(b"settype", array::settype);
     add_ref(b"sort", array::sort);
+    add_ref(b"shuffle", array::shuffle);
     add_ref(b"rsort", array::rsort);
     add_ref(b"asort", array::asort);
     add_ref(b"arsort", array::arsort);

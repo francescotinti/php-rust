@@ -5806,6 +5806,7 @@ impl<'m> Vm<'m> {
             return Ok(Zval::Bool(false));
         };
         let cname = convert::to_zstr_cast(name_arg, &mut self.diags).as_bytes().to_vec();
+        self.class_const_class_autoload(&cname);
         Ok(Zval::Bool(self.constant_known(&cname)))
     }
 
@@ -5827,6 +5828,7 @@ impl<'m> Vm<'m> {
         // `constant("Class::CONST")`: resolve the class constant through the
         // parent/interface chain and evaluate its value thunk in the declaring
         // class's context (the thunk ref is `'m`, so it survives `&mut self`).
+        self.class_const_class_autoload(&cname);
         if let Some((decl, idx)) = self.class_const_ref(&cname) {
             let thunk: &'m Func = &self.classes[decl].consts[idx].func;
             return self.run_value_thunk(thunk, Some(decl));
@@ -5861,6 +5863,19 @@ impl<'m> Vm<'m> {
         let cls = cls.strip_prefix(b"\\").unwrap_or(cls);
         let cid = *self.class_index.get(&cls.to_ascii_lowercase())?;
         find_const_runtime(&self.classes, cid, rest)
+    }
+
+    /// Like [`Self::class_const_ref`] but running the autoloaders on a class
+    /// miss first — `defined()`/`constant()` autoload their `Class::CONST`
+    /// class, like Zend (http-discovery probes Guzzle via
+    /// `defined('GuzzleHttp\ClientInterface::MAJOR_VERSION')` before anything
+    /// has loaded the class). A throwing autoloader degrades to not-found.
+    fn class_const_class_autoload(&mut self, name: &[u8]) {
+        if let Some(pos) = name.windows(2).position(|w| w == b"::") {
+            let cls = &name[..pos];
+            let cls = cls.strip_prefix(b"\\").unwrap_or(cls);
+            let _ = self.resolve_class_autoload(&cls.to_vec());
+        }
     }
 
     /// The index of enum case `name` declared on class `cid`, if any.
@@ -6617,7 +6632,9 @@ impl<'m> Vm<'m> {
             Zval::Str(s) => {
                 let raw = s.as_bytes();
                 let name = raw.strip_prefix(b"\\").unwrap_or(raw);
-                match self.class_index.get(&name.to_ascii_lowercase()).copied() {
+                // These builtins autoload (their `$autoload` param defaults to
+                // true) — a swallowed autoloader throw degrades to not-found.
+                match self.resolve_class_autoload(name).ok().flatten() {
                     Some(c) => Some(c),
                     None => {
                         self.diags.push(Diag::Warning(format!(
@@ -6698,7 +6715,10 @@ impl<'m> Vm<'m> {
             Zval::Str(s) if allow_string => {
                 let raw = s.as_bytes();
                 let name = raw.strip_prefix(b"\\").unwrap_or(raw);
-                self.class_index.get(&name.to_ascii_lowercase()).copied()
+                // A string subject is looked up WITH autoload (zend_lookup_class),
+                // like Zend's is_a_impl — http-discovery probes candidates via
+                // `is_subclass_of('GuzzleHttp\Client', ClientInterface::class)`.
+                self.resolve_class_autoload(name).ok().flatten()
             }
             _ => None,
         };
