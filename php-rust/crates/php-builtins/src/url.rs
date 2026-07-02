@@ -431,3 +431,117 @@ pub fn rawurldecode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let s = convert::to_zstr(&args[0], ctx.diags);
     Ok(Zval::Str(PhpStr::new(decode(s.as_bytes(), true))))
 }
+
+/// `http_build_query($data, $numeric_prefix = "", $arg_separator = "&",
+/// $encoding_type = PHP_QUERY_RFC1738)` — port of `php_url_encode_hash_ex`
+/// (ext/standard/http.c): null values are skipped, bools become `1`/`0`,
+/// nested arrays/objects recurse as `parent%5Bkey%5D`, integer keys at the top
+/// level take the numeric prefix, and RFC3986 (`encoding_type` 2) uses `%20`
+/// for spaces instead of `+`.
+pub fn http_build_query(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let data = match args.first().map(|v| v.deref_clone()) {
+        Some(v @ (Zval::Array(_) | Zval::Object(_))) => v,
+        Some(other) => {
+            return Err(PhpError::TypeError(format!(
+                "http_build_query(): Argument #1 ($data) must be of type array, {} given",
+                other.type_name_for_error()
+            )))
+        }
+        None => {
+            return Err(PhpError::Error(
+                "http_build_query() expects at least 1 argument, 0 given".to_string(),
+            ))
+        }
+    };
+    let numeric_prefix = match args.get(1).map(|v| v.deref_clone()) {
+        Some(Zval::Null) | None => Vec::new(),
+        Some(v) => convert::to_zstr(&v, ctx.diags).as_bytes().to_vec(),
+    };
+    let sep = match args.get(2).map(|v| v.deref_clone()) {
+        Some(Zval::Null) | None => b"&".to_vec(),
+        Some(v) => convert::to_zstr(&v, ctx.diags).as_bytes().to_vec(),
+    };
+    let raw = matches!(args.get(3).map(|v| v.deref_clone()), Some(Zval::Long(2)));
+    let mut parts: Vec<Vec<u8>> = Vec::new();
+    hbq_walk(&data, None, &numeric_prefix, raw, &mut parts, ctx);
+    Ok(Zval::Str(PhpStr::new(parts.join(&sep[..]))))
+}
+
+/// One level of `php_url_encode_hash_ex`: emit `key=value` pairs into `parts`.
+/// `prefix` is the raw (unencoded) composite key of the enclosing level —
+/// per-byte encoding at the leaf produces the same bytes as PHP's per-level
+/// encoding, since `encode(a) + "%5B" + encode(b) + "%5D" == encode(a[b])`.
+fn hbq_walk(
+    data: &Zval,
+    prefix: Option<&[u8]>,
+    numeric_prefix: &[u8],
+    raw: bool,
+    parts: &mut Vec<Vec<u8>>,
+    ctx: &mut Ctx,
+) {
+    // (key bytes or None for an integer key, integer key value, member value)
+    let entries: Vec<(Option<Vec<u8>>, i64, Zval)> = match data {
+        Zval::Array(a) => a
+            .iter()
+            .map(|(k, v)| match k {
+                Key::Int(i) => (None, *i, v.deref_clone()),
+                Key::Str(s) => (Some(s.as_bytes().to_vec()), 0, v.deref_clone()),
+            })
+            .collect(),
+        Zval::Object(o) => o
+            .borrow()
+            .props
+            .iter()
+            // Private properties are stored NUL-mangled (`\0Class\0p`) and are
+            // not included, matching PHP's public-only hash of an object.
+            .filter(|(k, _)| !k.starts_with(b"\0"))
+            .map(|(k, v)| (Some(k.to_vec()), 0, v.deref_clone()))
+            .collect(),
+        _ => return,
+    };
+    for (skey, ikey, value) in entries {
+        if matches!(value, Zval::Null | Zval::Undef) {
+            continue;
+        }
+        let composite: Vec<u8> = match (&skey, prefix) {
+            (Some(s), None) => s.clone(),
+            (None, None) => {
+                let mut k = numeric_prefix.to_vec();
+                k.extend_from_slice(ikey.to_string().as_bytes());
+                k
+            }
+            (Some(s), Some(p)) => {
+                let mut k = p.to_vec();
+                k.push(b'[');
+                k.extend_from_slice(s);
+                k.push(b']');
+                k
+            }
+            (None, Some(p)) => {
+                let mut k = p.to_vec();
+                k.push(b'[');
+                k.extend_from_slice(ikey.to_string().as_bytes());
+                k.push(b']');
+                k
+            }
+        };
+        match value {
+            Zval::Array(_) | Zval::Object(_) => {
+                hbq_walk(&value, Some(&composite), numeric_prefix, raw, parts, ctx)
+            }
+            Zval::Bool(b) => {
+                let mut pair = encode(&composite, raw);
+                pair.push(b'=');
+                pair.push(if b { b'1' } else { b'0' });
+                parts.push(pair);
+            }
+            other => {
+                let sv = convert::to_zstr(&other, ctx.diags);
+                let mut pair = encode(&composite, raw);
+                pair.push(b'=');
+                pair.extend_from_slice(&encode(sv.as_bytes(), raw));
+                parts.push(pair);
+            }
+        }
+    }
+}

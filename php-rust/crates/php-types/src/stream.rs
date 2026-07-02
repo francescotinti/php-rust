@@ -287,6 +287,9 @@ pub fn open_php_stream(spec: &[u8], mode: &[u8]) -> Option<Stream> {
     let (readable, writable) = match backend {
         StreamBackend::Stdin => (true, false),
         StreamBackend::Stdout | StreamBackend::Stderr => (false, true),
+        // `php://memory` / `php://temp` are always read+write: Zend's memory
+        // stream ignores the fopen mode (oracle: mode "a" still reads back).
+        StreamBackend::Memory(_) => (true, true),
         _ => mode_caps(mode).unwrap_or((true, true)),
     };
     let mut uri = b"php://".to_vec();

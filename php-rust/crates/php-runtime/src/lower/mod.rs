@@ -779,6 +779,15 @@ class DateTime implements DateTimeInterface {
         }
     }
     public function getTimezone() { return new DateTimeZone($this->__tz); }
+    public function setTimezone($timezone) {
+        $this->__tz = is_string($timezone) ? $timezone : $timezone->getName();
+        return $this;
+    }
+    public static function createFromInterface($object) {
+        $d = new DateTime("@" . $object->getTimestamp());
+        return $d->setTimezone($object->getTimezone());
+    }
+    public static function createFromImmutable($object) { return static::createFromInterface($object); }
     public function format($format) { return date($format, $this->__ts); }
     public function getTimestamp() { return $this->__ts; }
     public function setTimestamp($timestamp) { $this->__ts = $timestamp; return $this; }
@@ -857,6 +866,18 @@ class DateTimeImmutable implements DateTimeInterface {
         }
     }
     public function getTimezone() { return new DateTimeZone($this->__tz); }
+    public function setTimezone($timezone) {
+        // `clone` keeps the runtime class, so a userland subclass (monolog's
+        // JsonSerializableDateTimeImmutable) survives, like PHP's `static`.
+        $c = clone $this;
+        $c->__tz = is_string($timezone) ? $timezone : $timezone->getName();
+        return $c;
+    }
+    public static function createFromInterface($object) {
+        $d = new DateTimeImmutable("@" . $object->getTimestamp());
+        return $d->setTimezone($object->getTimezone());
+    }
+    public static function createFromMutable($object) { return static::createFromInterface($object); }
     public function format($format) { return date($format, $this->__ts); }
     public function getTimestamp() { return $this->__ts; }
     public function setTimestamp($timestamp) { return new DateTimeImmutable("@$timestamp"); }
@@ -3768,6 +3789,48 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         // PHP 8.0 removed E_STRICT from E_ALL; PHP 8.4 made E_STRICT a no-op. The
         // current value is 30719 (E_ALL without E_STRICT=2048), matching 8.5.
         b"E_ALL" => ExprKind::Int(30719),
+        // http_build_query() encoding selectors.
+        b"PHP_QUERY_RFC1738" => ExprKind::Int(1),
+        b"PHP_QUERY_RFC3986" => ExprKind::Int(2),
+        // POSIX signal numbers (macOS values, brew-php-pinned; ext/pcntl defines
+        // these — monolog's SignalHandler references them even when the pcntl
+        // *functions* are unavailable). SIGEMT is undefined on macOS PHP too.
+        b"SIGHUP" => ExprKind::Int(1),
+        b"SIGINT" => ExprKind::Int(2),
+        b"SIGQUIT" => ExprKind::Int(3),
+        b"SIGILL" => ExprKind::Int(4),
+        b"SIGTRAP" => ExprKind::Int(5),
+        b"SIGABRT" => ExprKind::Int(6),
+        b"SIGFPE" => ExprKind::Int(8),
+        b"SIGKILL" => ExprKind::Int(9),
+        b"SIGBUS" => ExprKind::Int(10),
+        b"SIGSEGV" => ExprKind::Int(11),
+        b"SIGSYS" => ExprKind::Int(12),
+        b"SIGPIPE" => ExprKind::Int(13),
+        b"SIGALRM" => ExprKind::Int(14),
+        b"SIGTERM" => ExprKind::Int(15),
+        b"SIGURG" => ExprKind::Int(16),
+        b"SIGSTOP" => ExprKind::Int(17),
+        b"SIGTSTP" => ExprKind::Int(18),
+        b"SIGCONT" => ExprKind::Int(19),
+        b"SIGCHLD" => ExprKind::Int(20),
+        b"SIGTTIN" => ExprKind::Int(21),
+        b"SIGTTOU" => ExprKind::Int(22),
+        b"SIGIO" => ExprKind::Int(23),
+        b"SIGXCPU" => ExprKind::Int(24),
+        b"SIGXFSZ" => ExprKind::Int(25),
+        b"SIGVTALRM" => ExprKind::Int(26),
+        b"SIGPROF" => ExprKind::Int(27),
+        b"SIGWINCH" => ExprKind::Int(28),
+        b"SIGINFO" => ExprKind::Int(29),
+        b"SIGUSR1" => ExprKind::Int(30),
+        b"SIGUSR2" => ExprKind::Int(31),
+        b"SIG_DFL" => ExprKind::Int(0),
+        b"SIG_IGN" => ExprKind::Int(1),
+        b"SIG_ERR" => ExprKind::Int(-1),
+        b"SIG_BLOCK" => ExprKind::Int(1),
+        b"SIG_UNBLOCK" => ExprKind::Int(2),
+        b"SIG_SETMASK" => ExprKind::Int(3),
         // flock operations / debug_backtrace flags (oracle-pinned).
         // (`LOCK_EX` lives with the file_put_contents flags above.)
         b"LOCK_SH" => ExprKind::Int(1),

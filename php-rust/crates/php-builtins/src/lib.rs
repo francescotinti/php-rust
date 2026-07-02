@@ -297,6 +297,7 @@ pub fn registry() -> Registry {
     add(b"urldecode", url::urldecode);
     add(b"rawurlencode", url::rawurlencode);
     add(b"rawurldecode", url::rawurldecode);
+    add(b"http_build_query", url::http_build_query);
     add(b"sprintf", format::sprintf);
     add(b"printf", format::printf);
     add(b"vsprintf", format::vsprintf);
