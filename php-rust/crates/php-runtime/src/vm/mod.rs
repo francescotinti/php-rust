@@ -40,6 +40,7 @@ use crate::hir::{
 mod arrays;
 mod calls;
 mod coroutines;
+mod dom;
 mod exceptions;
 mod oop;
 use arrays::*;
@@ -381,6 +382,10 @@ pub(crate) fn run_module_with_hir<'m>(
         next_zip: 1,
         stream_chunk_sizes: HashMap::new(),
         umask: 0o22,
+        dom_docs: HashMap::new(),
+        next_dom: 1,
+        libxml_internal: false,
+        libxml_errors: Vec::new(),
     };
     // Register the caller module's own functions in the global link table so a
     // call made from inside an `eval()` (where `self.module` is the eval unit,
@@ -397,15 +402,31 @@ pub(crate) fn run_module_with_hir<'m>(
     }
     // Predefined CLI stream constants `STDIN`/`STDOUT`/`STDERR` (resource ids
     // #1/#2/#3, as the PHP CLI SAPI), so a script can `fwrite(STDERR, …)` (step 57).
-    let std_stream = |id: u32, backend: StreamBackend, readable: bool, writable: bool| {
+    let std_stream = |id: u32, backend: StreamBackend, readable: bool, writable: bool, uri: &[u8], mode: &[u8]| {
         Zval::Resource(Rc::new(RefCell::new(Resource::new(
             id,
-            Stream { backend, readable, writable, eof: false },
+            Stream {
+                backend,
+                readable,
+                writable,
+                eof: false,
+                uri: uri.to_vec(),
+                mode: mode.to_vec(),
+            },
         ))))
     };
-    vm.constants.insert(b"STDIN".to_vec(), std_stream(1, StreamBackend::Stdin, true, false));
-    vm.constants.insert(b"STDOUT".to_vec(), std_stream(2, StreamBackend::Stdout, false, true));
-    vm.constants.insert(b"STDERR".to_vec(), std_stream(3, StreamBackend::Stderr, false, true));
+    vm.constants.insert(
+        b"STDIN".to_vec(),
+        std_stream(1, StreamBackend::Stdin, true, false, b"php://stdin", b"rb"),
+    );
+    vm.constants.insert(
+        b"STDOUT".to_vec(),
+        std_stream(2, StreamBackend::Stdout, false, true, b"php://stdout", b"wb"),
+    );
+    vm.constants.insert(
+        b"STDERR".to_vec(),
+        std_stream(3, StreamBackend::Stderr, false, true, b"php://stderr", b"wb"),
+    );
     // `PHP_BINARY`: absolute path to the running interpreter (PHP predefines it).
     // Composer and symfony reference it (e.g. xdebug-handler restart); a missing
     // constant otherwise fatals during `bin/composer`.
@@ -983,6 +1004,15 @@ struct Vm<'m> {
     /// Consumers (Composer's BinaryInstaller) only use it to compute chmod
     /// masks like `0777 & ~umask()`, which the real `chmod` then applies.
     umask: i64,
+    /// ext/dom documents (`DOMDocument` handles): doc id → arena tree, backing
+    /// the `__dom_*` host builtins the prelude DOM classes delegate to.
+    dom_docs: HashMap<u32, dom::DomDoc>,
+    /// Next DOM document id (monotonic).
+    next_dom: u32,
+    /// ext/libxml error surface: `libxml_use_internal_errors` flag and the
+    /// recorded parse errors `libxml_get_errors` reports.
+    libxml_internal: bool,
+    libxml_errors: Vec<String>,
 }
 
 impl<'m> Vm<'m> {
@@ -4709,10 +4739,18 @@ impl<'m> Vm<'m> {
         if mode.is_once() && self.included_files.contains(&key) {
             return Ok(Zval::Bool(true));
         }
-        let content = match std::fs::read(&real) {
+        let mut content = match std::fs::read(&real) {
             Ok(c) => c,
             Err(_) => return self.include_open_failed(&path, mode),
         };
+        // The Zend lexer skips a leading `#!` line in *included* files too
+        // (oracle-verified on 8.5: `include` of a shebang script outputs no
+        // shebang) — Composer's vendor/bin proxies include the real tool
+        // binary, shebang and all.
+        if content.starts_with(b"#!") {
+            let end = content.iter().position(|&b| b == b'\n').map_or(content.len(), |p| p + 1);
+            content.drain(..end);
+        }
         // Mark loaded before running, so a `_once` re-entry during the file's own
         // execution (mutual includes) sees it and short-circuits.
         self.included_files.insert(key.clone());
@@ -7256,6 +7294,23 @@ impl<'m> Vm<'m> {
         d.insert(Key::Str(PhpStr::new(b"visibility".to_vec())), Zval::Str(PhpStr::new(vis.to_vec())));
         d.insert(Key::Str(PhpStr::new(b"abstract".to_vec())), Zval::Bool(false));
         d.insert(Key::Str(PhpStr::new(b"declaringClass".to_vec())), Zval::Str(PhpStr::new(decl_name)));
+        // Source location (ReflectionMethod::getFileName/getStartLine/getEndLine):
+        // the compiled unit's file and the op line table's span; a prelude
+        // ("internal") method reports false, like PHP.
+        if m.func.file.as_ref() != b"prelude" {
+            d.insert(
+                Key::Str(PhpStr::new(b"file".to_vec())),
+                Zval::Str(PhpStr::new(m.func.file.to_vec())),
+            );
+            let start = m.func.lines.iter().copied().filter(|&l| l > 0).min().unwrap_or(0);
+            let end = m.func.lines.iter().copied().max().unwrap_or(0);
+            d.insert(Key::Str(PhpStr::new(b"startLine".to_vec())), Zval::Long(start as i64));
+            d.insert(Key::Str(PhpStr::new(b"endLine".to_vec())), Zval::Long(end as i64));
+        } else {
+            d.insert(Key::Str(PhpStr::new(b"file".to_vec())), Zval::Bool(false));
+            d.insert(Key::Str(PhpStr::new(b"startLine".to_vec())), Zval::Bool(false));
+            d.insert(Key::Str(PhpStr::new(b"endLine".to_vec())), Zval::Bool(false));
+        }
         Ok(Zval::Array(Rc::new(d)))
     }
 
@@ -7899,6 +7954,19 @@ impl<'m> Vm<'m> {
         let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, &method) else { return Ok(Zval::Null) };
         let Some(attr) = self.classes[defc].methods[midx].func.attributes.get(idx) else { return Ok(Zval::Null) };
         let thunk = if get_args { &attr.args_thunk } else { &attr.new_thunk };
+        log::debug!(
+            target: "phpr::attr",
+            "run_method_attr {}::{} idx {} -> defc {} midx {} attr {} (of {}) ops={:?} consts={:?}",
+            String::from_utf8_lossy(&cname),
+            String::from_utf8_lossy(&method),
+            idx,
+            defc,
+            midx,
+            String::from_utf8_lossy(&attr.name),
+            self.classes[defc].methods[midx].func.attributes.len(),
+            thunk.ops,
+            thunk.consts
+        );
         if !get_args {
             let attr_name = attr.name.to_vec();
             let siblings: Vec<Vec<u8>> = self.classes[defc].methods[midx].func.attributes.iter().map(|a| a.name.to_vec()).collect();
@@ -7909,7 +7977,18 @@ impl<'m> Vm<'m> {
         frame.class = Some(defc);
         frame.static_class = Some(defc);
         self.frames.push(frame);
-        self.drive_to_return(baseline)
+        let r = self.drive_to_return(baseline);
+        if let Ok(v) = &r {
+            log::debug!(
+                target: "phpr::attr",
+                "run_method_attr result: {}",
+                match object_class_id(v) {
+                    Some(c) => String::from_utf8_lossy(&self.classes[c].name).into_owned(),
+                    None => "non-object".to_string(),
+                }
+            );
+        }
+        r
     }
 
     /// `__reflect_method_attr_new($class, $method, $index)`.
@@ -8017,7 +8096,10 @@ impl<'m> Vm<'m> {
     fn validate_attr(&mut self, attr_class: &[u8], siblings: &[Vec<u8>], target_bit: i64, target_label: &str) -> Result<(), PhpError> {
         let bare = attr_class.strip_prefix(b"\\").unwrap_or(attr_class);
         let name = String::from_utf8_lossy(bare).into_owned();
-        if !self.class_index.contains_key(&bare.to_ascii_lowercase()) {
+        // A miss runs the autoloaders first: PHP's newInstance() resolves the
+        // attribute class through zend_lookup_class (PHPUnit's DataProvider &
+        // co. are only ever loaded this way).
+        if self.resolve_class_autoload(&bare.to_vec())?.is_none() {
             return Err(PhpError::Error(format!("Attribute class \"{}\" not found", name)));
         }
         let Some(flags) = self.attr_flags(attr_class) else {
@@ -8778,18 +8860,88 @@ impl<'m> Vm<'m> {
                 "preg_replace() expects at least 3 arguments".to_string(),
             ));
         }
-        let pat = convert::to_zstr_cast(&args[0].deref_clone(), &mut self.diags).as_bytes().to_vec();
-        let repl = convert::to_zstr_cast(&args[1].deref_clone(), &mut self.diags).as_bytes().to_vec();
-        let subject =
-            convert::to_zstr_cast(&args[2].deref_clone(), &mut self.diags).as_bytes().to_vec();
-        let Some(re) = self.preg_compile(&pat) else {
-            return Ok((Zval::Null, Zval::Long(0)));
+        // `$pattern` may be an array; `$replacement` pairs with it in iteration
+        // order (a shorter replacement array pads with "", Zend's rule), while a
+        // string replacement broadcasts over every pattern. A replacement array
+        // against a string pattern is the PHP 8 TypeError.
+        let pattern_val = args[0].deref_clone();
+        let repl_val = args[1].deref_clone();
+        let pats: Vec<Vec<u8>> = match &pattern_val {
+            Zval::Array(a) => a
+                .iter()
+                .map(|(_, v)| {
+                    convert::to_zstr_cast(&v.deref_clone(), &mut self.diags).as_bytes().to_vec()
+                })
+                .collect(),
+            other => {
+                vec![convert::to_zstr_cast(other, &mut self.diags).as_bytes().to_vec()]
+            }
         };
-        let repl = String::from_utf8_lossy(&crate::preg::translate_replacement(&repl)).into_owned();
-        let subj = String::from_utf8_lossy(&subject);
-        let count = re.captures_iter(&subj).len() as i64;
-        let result = re.replace_all(&subj, repl.as_str());
-        Ok((Zval::Str(PhpStr::new(result.as_bytes().to_vec())), Zval::Long(count)))
+        let repls: Vec<Vec<u8>> = match &repl_val {
+            Zval::Array(a) => {
+                if !matches!(pattern_val, Zval::Array(_)) {
+                    return Err(PhpError::TypeError(
+                        "preg_replace(): Argument #2 ($replacement) must be of type string when argument #1 ($pattern) is a string".to_string(),
+                    ));
+                }
+                a.iter()
+                    .map(|(_, v)| {
+                        convert::to_zstr_cast(&v.deref_clone(), &mut self.diags).as_bytes().to_vec()
+                    })
+                    .collect()
+            }
+            other => {
+                let one = convert::to_zstr_cast(other, &mut self.diags).as_bytes().to_vec();
+                vec![one; pats.len()]
+            }
+        };
+        // Compile every pattern up front: any bad pattern nulls the whole call.
+        let mut pairs = Vec::with_capacity(pats.len());
+        for (i, p) in pats.iter().enumerate() {
+            let Some(re) = self.preg_compile(p) else {
+                return Ok((Zval::Null, Zval::Long(0)));
+            };
+            let r = repls.get(i).map(|r| r.as_slice()).unwrap_or(b"");
+            let r = String::from_utf8_lossy(&crate::preg::translate_replacement(r)).into_owned();
+            pairs.push((re, r));
+        }
+        let mut total = 0i64;
+        let mut run_one = |subject: &[u8], total: &mut i64| -> Zval {
+            let mut s = String::from_utf8_lossy(subject).into_owned();
+            for (re, repl) in &pairs {
+                *total += re.captures_iter(&s).len() as i64;
+                s = re.replace_all(&s, repl.as_str()).to_string();
+            }
+            Zval::Str(PhpStr::new(s.into_bytes()))
+        };
+        // An array `$subject` maps per entry (keys preserved); a scalar maps to
+        // a string result.
+        match args[2].deref_clone() {
+            Zval::Array(subjects) => {
+                let entries: Vec<(Key, Vec<u8>)> = subjects
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            k.clone(),
+                            convert::to_zstr_cast(&v.deref_clone(), &mut self.diags)
+                                .as_bytes()
+                                .to_vec(),
+                        )
+                    })
+                    .collect();
+                let mut out = PhpArray::new();
+                for (k, s) in entries {
+                    let r = run_one(&s, &mut total);
+                    out.insert(k, r);
+                }
+                Ok((Zval::Array(Rc::new(out)), Zval::Long(total)))
+            }
+            other => {
+                let s = convert::to_zstr_cast(&other, &mut self.diags).as_bytes().to_vec();
+                let r = run_one(&s, &mut total);
+                Ok((r, Zval::Long(total)))
+            }
+        }
     }
 
     /// `preg_quote($str, $delimiter = null)`: escape regex metacharacters (and the
@@ -9505,6 +9657,108 @@ impl<'m> Vm<'m> {
     /// a stream resource. A host builtin because it allocates a resource id. Args 3/4
     /// (use_include_path, context) are a scope-out. On failure: Warning + `false`.
     /// Mirrors `eval::ho_fopen`.
+    /// `get_declared_classes()` / `get_declared_interfaces()` (`which` 0 / 1):
+    /// names of every linked class table entry of that kind, in declaration
+    /// order — prelude first, then user/included units, matching PHP's
+    /// internal-then-user ordering. Residue: a compiled-but-not-executed
+    /// conditional class is already listed. Consumers (PHPUnit's
+    /// TestSuiteLoader) diff the list around a `require`, which this serves.
+    fn ho_get_declared(&mut self, which: i64) -> Result<Zval, PhpError> {
+        let mut arr = PhpArray::new();
+        for c in self.classes.iter() {
+            let is_iface = matches!(c.instantiable, crate::bytecode::Instantiable::Interface);
+            if (which == 1) == is_iface {
+                let _ = arr.append(Zval::Str(PhpStr::new(c.name.to_vec())));
+            }
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// `array_diff($array, ...$arrays)` as a HOST builtin: PHP compares by the
+    /// values' *string* representation, which for objects runs `__toString` —
+    /// something the stateless registry version cannot do (PHPUnit's
+    /// TestSuiteSorter diffs ExecutionOrderDependency objects). Keys preserved,
+    /// first-array order, N comparison arrays.
+    fn ho_array_diff(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if args.len() < 2 {
+            return Err(PhpError::ArgumentCountError(format!(
+                "array_diff() expects at least 2 arguments, {} given",
+                args.len()
+            )));
+        }
+        let Zval::Array(first) = args[0].deref_clone() else {
+            return Err(PhpError::TypeError(
+                "array_diff(): Argument #1 ($array) must be of type array".to_string(),
+            ));
+        };
+        let mut seen: Vec<Vec<u8>> = Vec::new();
+        for (i, a) in args.iter().enumerate().skip(1) {
+            let Zval::Array(arr) = a.deref_clone() else {
+                return Err(PhpError::TypeError(format!(
+                    "array_diff(): Argument #{} must be of type array",
+                    i + 1
+                )));
+            };
+            for (_, v) in arr.iter() {
+                seen.push(self.vm_stringify(&v.deref_clone())?.as_bytes().to_vec());
+            }
+        }
+        let mut out = PhpArray::new();
+        for (k, v) in first.iter() {
+            let s = self.vm_stringify(&v.deref_clone())?.as_bytes().to_vec();
+            if !seen.contains(&s) {
+                out.insert(k.clone(), v.deref_clone());
+            }
+        }
+        Ok(Zval::Array(Rc::new(out)))
+    }
+
+    /// `__reflect_class_loc(name) -> [file|false, startLine, endLine]`: the file
+    /// that declared the class (from its first method's compiled unit; the
+    /// property-init thunk as fallback) and the line span covered by its method
+    /// bodies — `false`/0 for a prelude ("internal") class or one with no
+    /// compiled body. Serves ReflectionClass::getFileName/getStartLine/getEndLine
+    /// (the span is an approximation from the op line tables, not the `class`
+    /// keyword's line).
+    fn ho_reflect_class_loc(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let mut out = PhpArray::new();
+        let Some(cid) = self.resolve_named_class_with_autoload(&args)? else {
+            let _ = out.append(Zval::Bool(false));
+            let _ = out.append(Zval::Long(0));
+            let _ = out.append(Zval::Long(0));
+            return Ok(Zval::Array(Rc::new(out)));
+        };
+        let c = &self.classes[cid];
+        let file: Option<&[u8]> = c
+            .methods
+            .first()
+            .map(|m| &m.func.file[..])
+            .or_else(|| c.prop_init.as_ref().map(|f| &f.file[..]));
+        match file {
+            Some(f) if f != b"prelude" => {
+                let mut start = u32::MAX;
+                let mut end = 0u32;
+                for m in c.methods.iter().filter(|m| m.func.file[..] == f[..]) {
+                    for &l in m.func.lines.iter() {
+                        if l > 0 {
+                            start = start.min(l);
+                            end = end.max(l);
+                        }
+                    }
+                }
+                let _ = out.append(Zval::Str(PhpStr::new(f.to_vec())));
+                let _ = out.append(Zval::Long(if start == u32::MAX { 0 } else { start as i64 }));
+                let _ = out.append(Zval::Long(end as i64));
+            }
+            _ => {
+                let _ = out.append(Zval::Bool(false));
+                let _ = out.append(Zval::Long(0));
+                let _ = out.append(Zval::Long(0));
+            }
+        }
+        Ok(Zval::Array(Rc::new(out)))
+    }
+
     /// `umask(?int $mask = null)`: return the shadow umask; with an argument,
     /// set it and return the previous one (PHP semantics). See the `Vm.umask`
     /// field note — the real process umask is never touched.
@@ -9514,6 +9768,58 @@ impl<'m> Vm<'m> {
             self.umask = convert::to_long_cast(&a.deref_clone(), &mut self.diags) & 0o777;
         }
         Ok(Zval::Long(prev))
+    }
+
+    /// `stream_get_meta_data($stream)`: the stream's metadata array, mirroring
+    /// `php_stream_populate_meta_data` (key order included). `timed_out`/`blocked`/
+    /// `unread_bytes` are fixed (no socket timeouts or read buffering here);
+    /// `stream_type`/`wrapper_type`/`seekable` derive from the backend; `uri`/
+    /// `mode` were recorded at open time.
+    fn ho_stream_get_meta_data(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(arg) = args.first().map(|a| a.deref_clone()) else {
+            return Err(PhpError::ArgumentCountError(
+                "stream_get_meta_data() expects exactly 1 argument, 0 given".to_string(),
+            ));
+        };
+        let Zval::Resource(r) = &arg else {
+            return Err(PhpError::TypeError(format!(
+                "stream_get_meta_data(): Argument #1 ($stream) must be of type resource, {} given",
+                arg.type_name_for_error()
+            )));
+        };
+        let mut res = r.borrow_mut();
+        let Some(s) = res.as_stream_mut() else {
+            return Err(PhpError::TypeError(
+                "stream_get_meta_data(): supplied resource is not a valid stream resource"
+                    .to_string(),
+            ));
+        };
+        use php_types::stream::StreamBackend;
+        let (stream_type, seekable) = match &s.backend {
+            StreamBackend::File(_) => ("STDIO", true),
+            StreamBackend::Memory(_) => ("MEMORY", true),
+            StreamBackend::Stdin | StreamBackend::Stdout | StreamBackend::Stderr => {
+                ("STDIO", false)
+            }
+        };
+        let wrapper = if s.uri.starts_with(b"php://") { "PHP" } else { "plainfile" };
+        let mut arr = PhpArray::new();
+        arr.insert(Key::from_bytes(b"timed_out"), Zval::Bool(false));
+        arr.insert(Key::from_bytes(b"blocked"), Zval::Bool(true));
+        arr.insert(Key::from_bytes(b"eof"), Zval::Bool(s.eof));
+        arr.insert(
+            Key::from_bytes(b"wrapper_type"),
+            Zval::Str(PhpStr::new(wrapper.as_bytes().to_vec())),
+        );
+        arr.insert(
+            Key::from_bytes(b"stream_type"),
+            Zval::Str(PhpStr::new(stream_type.as_bytes().to_vec())),
+        );
+        arr.insert(Key::from_bytes(b"mode"), Zval::Str(PhpStr::new(s.mode.clone())));
+        arr.insert(Key::from_bytes(b"unread_bytes"), Zval::Long(0));
+        arr.insert(Key::from_bytes(b"seekable"), Zval::Bool(seekable));
+        arr.insert(Key::from_bytes(b"uri"), Zval::Str(PhpStr::new(s.uri.clone())));
+        Ok(Zval::Array(Rc::new(arr)))
     }
 
     /// `stream_set_chunk_size($stream, $size)`: record the chunk size and return
@@ -9611,12 +9917,16 @@ impl<'m> Vm<'m> {
                 .open(&path)
             {
                 Ok(f) => {
+                    use std::os::unix::ffi::OsStrExt;
+                    let uri = path.as_os_str().as_bytes().to_vec();
                     let _ = std::fs::remove_file(&path);
                     let stream = Stream {
                         backend: StreamBackend::File(f),
                         readable: true,
                         writable: true,
                         eof: false,
+                        uri,
+                        mode: b"r+b".to_vec(),
                     };
                     return Ok(self.alloc_resource(stream));
                 }
@@ -10708,7 +11018,19 @@ impl<'m> Vm<'m> {
                 // Try the live table, then autoload (Phase 3) and retry, before the
                 // catchable "Class not found".
                 match self.resolve_class_autoload(name)? {
-                    Some(id) => Ok(id),
+                    Some(id) => {
+                        let got = &self.classes[id].name;
+                        if !got.eq_ignore_ascii_case(name) {
+                            log::debug!(
+                                target: "phpr::attr",
+                                "resolve_dynamic_class MISMATCH: asked {:?} got cid {} = {:?}",
+                                String::from_utf8_lossy(name),
+                                id,
+                                String::from_utf8_lossy(got)
+                            );
+                        }
+                        Ok(id)
+                    }
                     None => Err(PhpError::Error(format!(
                         "Class \"{}\" not found",
                         String::from_utf8_lossy(name)
@@ -12067,7 +12389,30 @@ host_builtins! {
     b"get_called_class" => vm.ho_get_called_class(),
     b"error_reporting" => vm.ho_error_reporting(args),
     b"trigger_error" | b"user_error" => vm.ho_trigger_error(args),
+    // Prelude-internal: raise an E_DEPRECATED attributed to the *caller* of the
+    // prelude method (PHP reports an internal method's deprecation at the call
+    // site, not inside the implementation — SplObjectStorage::attach & co.).
+    b"__deprecated_from_caller" => {
+        let msg = convert::to_zstr_cast(
+            &args.first().map(|a| a.deref_clone()).unwrap_or(Zval::Null),
+            &mut vm.diags,
+        )
+        .as_bytes()
+        .to_vec();
+        let caller = vm.frames.len().saturating_sub(2);
+        let line = vm.cur_line(caller);
+        vm.flush_diags(line)?;
+        vm.raise_diagnostic(8192, &String::from_utf8_lossy(&msg), line)?;
+        Ok(Zval::Null)
+    },
     b"error_get_last" => vm.ho_error_get_last(),
+    b"error_clear_last" => {
+        // Realize pending diags first (same move as error_get_last), then forget.
+        let line = vm.cur_line(vm.frames.len() - 1);
+        vm.flush_diags(line)?;
+        vm.last_error = None;
+        Ok(Zval::Null)
+    },
     b"set_exception_handler" => vm.ho_set_exception_handler(args),
     b"restore_exception_handler" => vm.ho_restore_exception_handler(),
     b"set_error_handler" => vm.ho_set_error_handler(args),
@@ -12078,7 +12423,31 @@ host_builtins! {
     b"opendir" => vm.ho_opendir(args),
     b"stream_context_create" => vm.ho_stream_context_create(args),
     b"stream_set_chunk_size" => vm.ho_stream_set_chunk_size(args),
+    b"stream_get_meta_data" => vm.ho_stream_get_meta_data(args),
     b"umask" => vm.ho_umask(args),
+    b"__dom_new_doc" => vm.ho_dom_new_doc(args),
+    b"__dom_load" => vm.ho_dom_load(args),
+    b"__dom_save_xml" => vm.ho_dom_save_xml(args),
+    b"__dom_info" => vm.ho_dom_info(args),
+    b"__dom_nav" => vm.ho_dom_nav(args),
+    b"__dom_children" => vm.ho_dom_children(args),
+    b"__dom_text" => vm.ho_dom_text(args),
+    b"__dom_set_value" => vm.ho_dom_set_value(args),
+    b"__dom_attr" => vm.ho_dom_attr(args),
+    b"__dom_create" => vm.ho_dom_create(args),
+    b"__dom_mutate" => vm.ho_dom_mutate(args),
+    b"__dom_copy" => vm.ho_dom_copy(args),
+    b"__dom_doc_element" => vm.ho_dom_doc_element(args),
+    b"__dom_by_tag" => vm.ho_dom_by_tag(args),
+    b"__dom_xpath" => vm.ho_dom_xpath(args),
+    b"__dom_doc_meta" => vm.ho_dom_doc_meta(args),
+    b"__reflect_class_loc" => vm.ho_reflect_class_loc(args),
+    b"array_diff" => vm.ho_array_diff(args),
+    b"get_declared_classes" => vm.ho_get_declared(0),
+    b"get_declared_interfaces" => vm.ho_get_declared(1),
+    b"libxml_use_internal_errors" => vm.ho_libxml_use_internal_errors(args),
+    b"__libxml_get_errors" => vm.ho_libxml_get_errors(),
+    b"libxml_clear_errors" => vm.ho_libxml_clear_errors(),
     b"preg_replace" => vm.ho_preg_replace(args).map(|(r, _)| r),
     b"preg_quote" => vm.ho_preg_quote(args),
     b"preg_split" => vm.ho_preg_split(args),
@@ -12365,6 +12734,10 @@ fn relocate_module_class_ids(module: &mut Module, remap: &[ClassId], static_base
     for f in &mut module.closures {
         relocate_func(f, remap, static_base);
     }
+    // Attributes on the unit's top-level constants (`#[Foo] const X = …`).
+    for attrs in module.const_attributes.values_mut() {
+        relocate_attrs(attrs, remap, static_base);
+    }
     for cc in &mut module.classes {
         // 2. Class metadata: superclass and implemented interfaces.
         if let Some(p) = cc.parent.as_mut() {
@@ -12381,6 +12754,13 @@ fn relocate_module_class_ids(module: &mut Module, remap: &[ClassId], static_base
         }
         for c in &mut cc.consts {
             relocate_func(&mut c.func, remap, static_base);
+            relocate_attrs(&mut c.attributes, remap, static_base);
+        }
+        // Attribute thunks on the class itself and on its properties (method and
+        // parameter attributes ride inside `relocate_func` above).
+        relocate_attrs(&mut cc.attributes, remap, static_base);
+        for attrs in cc.prop_attributes.values_mut() {
+            relocate_attrs(attrs, remap, static_base);
         }
         for sp in &mut cc.static_props {
             if let StaticInit::Thunk(f) = &mut sp.init {
@@ -12437,6 +12817,24 @@ fn relocate_func(func: &mut Func, remap: &[ClassId], static_base: usize) {
             }
             _ => {}
         }
+    }
+    // The function's `#[Attr]` thunks (declaration + per-parameter) are Funcs of
+    // their own: a `new Attr(...)` resolved at compile time bakes a unit-local
+    // `Op::Alloc { class }` that must relocate exactly like a method body —
+    // missed, `newInstance()` builds whatever class sits at the stale global id
+    // (the PHPUnit DataProvider→CoversTrait bug). Attribute thunks carry no
+    // attributes themselves, so the recursion is one level deep.
+    relocate_attrs(&mut func.attributes, remap, static_base);
+    for pa in func.param_attributes.iter_mut() {
+        relocate_attrs(pa, remap, static_base);
+    }
+}
+
+/// [`relocate_func`] over both thunks of each attribute in a list.
+fn relocate_attrs(attrs: &mut [crate::bytecode::CompiledAttribute], remap: &[ClassId], static_base: usize) {
+    for a in attrs.iter_mut() {
+        relocate_func(&mut a.new_thunk, remap, static_base);
+        relocate_func(&mut a.args_thunk, remap, static_base);
     }
 }
 

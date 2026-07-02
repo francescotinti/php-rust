@@ -1803,13 +1803,24 @@ impl<'a> FnCompiler<'a> {
                         self.expr(k)?;
                     }
                     // A by-reference element (`['k' => &$v]`) pushes a *reference*
-                    // to the source slot in place of the value, so the array
-                    // element aliases the variable's cell; `Op::ArrayInsert` /
-                    // `Op::ArrayPush` then store that `Ref` verbatim. Lowering
-                    // guarantees `value` is a bare `Var` when `by_ref`.
+                    // to the source place instead of the value, so the array
+                    // element aliases its cell; `Op::ArrayInsert` / `Op::ArrayPush`
+                    // then store that `Ref` verbatim. A bare variable uses its
+                    // slot; any other place (`&$o->p[$k]`) takes the `MakeRef`
+                    // field-path route, exactly like a by-ref builtin argument.
                     match (el.by_ref, &el.value.kind) {
                         (true, ExprKind::Var(slot)) => {
                             self.emit(Op::PushRef(*slot));
+                        }
+                        (true, _) => {
+                            let Some(place) = expr_field_place(&el.value) else {
+                                return Err(CompileError::Unsupported(
+                                    "by-reference array element of a non-place expression"
+                                        .into(),
+                                ));
+                            };
+                            let (base, steps) = self.field_path(&place)?;
+                            self.emit(Op::MakeRef { base, steps: steps.into() });
                         }
                         _ => self.expr(&el.value)?,
                     }

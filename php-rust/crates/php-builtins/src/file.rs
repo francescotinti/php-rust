@@ -731,6 +731,20 @@ pub fn file_put_contents(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
         }
         other => convert::to_zstr(other, ctx.diags).as_bytes().to_vec(),
     };
+    // `php://` write targets: stdout/output feed the program's output stream,
+    // stderr the host's (never compared byte-for-byte). PHPUnit's --debug
+    // printer writes events with file_put_contents('php://stdout', …).
+    match name.as_bytes() {
+        b"php://stdout" | b"php://output" => {
+            ctx.out.extend_from_slice(&bytes);
+            return Ok(Zval::Long(bytes.len() as i64));
+        }
+        b"php://stderr" => {
+            let _ = std::io::stderr().write_all(&bytes);
+            return Ok(Zval::Long(bytes.len() as i64));
+        }
+        _ => {}
+    }
     let flags = argv
         .get(2)
         .map(|v| convert::to_long_cast(v, ctx.diags))

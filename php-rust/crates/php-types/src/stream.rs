@@ -62,6 +62,11 @@ pub struct Stream {
     /// not merely when the position reaches the end. `feof` reads this; a seek
     /// clears it (D-51.5).
     pub eof: bool,
+    /// The spec the stream was opened with (`/path/to/file`, `php://stdout`) —
+    /// `stream_get_meta_data()['uri']`.
+    pub uri: Vec<u8>,
+    /// The `fopen` mode as given (`"r"`, `"w+b"`) — `stream_get_meta_data()['mode']`.
+    pub mode: Vec<u8>,
 }
 
 #[derive(Debug)]
@@ -283,11 +288,15 @@ pub fn open_php_stream(spec: &[u8], mode: &[u8]) -> Option<Stream> {
         StreamBackend::Stdout | StreamBackend::Stderr => (false, true),
         _ => mode_caps(mode).unwrap_or((true, true)),
     };
+    let mut uri = b"php://".to_vec();
+    uri.extend_from_slice(spec);
     Some(Stream {
         backend,
         readable,
         writable,
         eof: false,
+        uri,
+        mode: mode.to_vec(),
     })
 }
 
@@ -327,6 +336,8 @@ pub fn open_file_stream(path: &[u8], mode: &[u8]) -> Result<Stream, String> {
             readable,
             writable,
             eof: false,
+            uri: path.to_vec(),
+            mode: mode.to_vec(),
         }),
         Err(e) => {
             let m = e.to_string();

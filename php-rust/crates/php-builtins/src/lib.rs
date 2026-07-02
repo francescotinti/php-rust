@@ -53,6 +53,7 @@ pub fn registry() -> Registry {
     add(b"time", date::time);
     add(b"microtime", date::microtime);
     add(b"hrtime", date::hrtime);
+    add(b"getrusage", date::getrusage);
     add(b"date_default_timezone_set", date::date_default_timezone_set);
     add(b"date_default_timezone_get", date::date_default_timezone_get);
     add(b"getdate", date::getdate);
@@ -176,6 +177,7 @@ pub fn registry() -> Registry {
     add(b"array_combine", array::array_combine);
     add(b"array_pad", array::array_pad);
     add(b"array_product", array::array_product);
+    add(b"array_is_list", array::array_is_list);
     add(b"array_key_first", array::array_key_first);
     add(b"array_key_last", array::array_key_last);
     add(b"array_diff", array::array_diff);
@@ -224,6 +226,7 @@ pub fn registry() -> Registry {
     add(b"bin2hex", string::bin2hex);
     add(b"hex2bin", string::hex2bin);
     add(b"random_bytes", string::random_bytes);
+    add(b"addcslashes", string::addcslashes);
     add(b"addslashes", string::addslashes);
     add(b"stripslashes", string::stripslashes);
     add(b"substr_replace", string::substr_replace);
@@ -343,8 +346,11 @@ pub fn registry() -> Registry {
     add(b"gc_disable", env::gc_enable);
     add(b"gc_enabled", env::gc_enabled);
     add(b"gc_mem_caches", env::gc_mem_caches);
+    add(b"gc_status", env::gc_status);
+    add(b"getmypid", env::getmypid);
     add(b"memory_get_usage", env::memory_get_usage);
     add(b"memory_get_peak_usage", env::memory_get_usage);
+    add(b"memory_reset_peak_usage", env::memory_reset_peak_usage);
     add(b"php_sapi_name", env::php_sapi_name);
     add(b"ini_get", env::ini_get);
     add(b"ini_set", env::ini_set);
@@ -1179,7 +1185,11 @@ fn filter_var(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// the much larger curl_multi surface.
 const LOADED_EXTENSIONS: &[&[u8]] = &[
     b"core", b"standard", b"spl", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
-    b"zip",
+    b"zip", b"dom", b"libxml",
+    // Declared for PHPUnit's bootstrap gate; their heavy surfaces (token_get_all,
+    // xml_parser_*, XMLWriter) are filled in test-driven — a use ahead of the
+    // implementation surfaces as an honest "undefined function".
+    b"xml", b"xmlwriter", b"tokenizer",
 ];
 
 /// extension_loaded($name): whether a PHP extension is available (case-insensitive).

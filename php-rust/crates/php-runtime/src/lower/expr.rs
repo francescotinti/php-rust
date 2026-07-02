@@ -1415,23 +1415,18 @@ impl<'f> Lowerer<'f> {
     }
 
     /// Lower an array-element value, recognising a by-reference element
-    /// (`['k' => &$v]`): the element aliases the source variable's cell. Only a
-    /// bare variable source is in scope (it lowers to `Op::PushRef`, mirroring
-    /// by-ref call args); `&$a[0]` / `&$o->p` stay deferred.
+    /// (`['k' => &$v]`): the element aliases the source place's cell. A bare
+    /// variable lowers to `Op::PushRef`; any other place (`&$a[0]`, `&$o->p`,
+    /// nested paths) compiles to `Op::MakeRef` over its field path — the
+    /// compiler rejects a non-place source there.
     fn lower_array_value(
         &mut self,
         value: &Expression,
-        line: Line,
+        _line: Line,
     ) -> Result<(Expr, bool), LowerError> {
         if let Expression::UnaryPrefix(u) = value {
             if let UnaryPrefixOperator::Reference(_) = u.operator {
                 let inner = self.lower_expr(u.operand)?;
-                if !matches!(inner.kind, ExprKind::Var(_)) {
-                    return Err(LowerError::Unsupported {
-                        what: "by-reference array element of non-variable",
-                        line,
-                    });
-                }
                 return Ok((inner, true));
             }
         }

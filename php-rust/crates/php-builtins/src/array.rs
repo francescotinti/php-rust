@@ -1037,6 +1037,20 @@ pub fn array_product(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(acc)
 }
 
+/// array_is_list($array) (PHP 8.1): true iff the keys are exactly 0..n-1 in
+/// order (an empty array is a list).
+pub fn array_is_list(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let arr = arr_arg(args, "array_is_list")?;
+    let mut expect: i64 = 0;
+    for (k, _) in arr.iter() {
+        match k {
+            Key::Int(i) if *i == expect => expect += 1,
+            _ => return Ok(Zval::Bool(false)),
+        }
+    }
+    Ok(Zval::Bool(true))
+}
+
 /// array_key_first($array) / array_key_last($array): the first/last key, or
 /// null for an empty array.
 pub fn array_key_first(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {

@@ -30,10 +30,47 @@ pub fn gc_mem_caches(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Long(0))
 }
 
+/// `gc_status()` (PHP 8.3 shape): the full 12-key stats array with an idle
+/// collector's values (threshold/buffer_size are PHP's compiled-in defaults).
+/// Consumers (PHPUnit's telemetry) diff the counters, so constant zeros read
+/// as "no collector activity", which is honest — phpr's cycle collector runs
+/// its own accounting that these counters do not model.
+pub fn gc_status(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::rc::Rc;
+    let mut out = php_types::PhpArray::new();
+    let mut put = |k: &str, v: Zval| {
+        out.insert(php_types::Key::Str(PhpStr::from_str(k)), v);
+    };
+    put("running", Zval::Bool(false));
+    put("protected", Zval::Bool(false));
+    put("full", Zval::Bool(false));
+    put("runs", Zval::Long(0));
+    put("collected", Zval::Long(0));
+    put("threshold", Zval::Long(10001));
+    put("buffer_size", Zval::Long(16384));
+    put("roots", Zval::Long(0));
+    put("application_time", Zval::Double(0.0));
+    put("collector_time", Zval::Double(0.0));
+    put("destructor_time", Zval::Double(0.0));
+    put("free_time", Zval::Double(0.0));
+    Ok(Zval::Array(Rc::new(out)))
+}
+
 /// `memory_get_usage()` / `memory_get_peak_usage()` — a plausible constant byte
 /// count (no allocator is tracked).
 pub fn memory_get_usage(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Long(2_000_000))
+}
+
+/// `memory_reset_peak_usage()` (PHP 8.2) — no-op: no allocator peak is tracked
+/// (see `memory_get_usage`). Returns null (void), as PHP.
+pub fn memory_reset_peak_usage(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    Ok(Zval::Null)
+}
+
+/// `getmypid()` — the real process id (PHPUnit's ShutdownHandler keys on it).
+pub fn getmypid(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    Ok(Zval::Long(std::process::id() as i64))
 }
 
 /// `php_sapi_name()` — this engine runs as the command-line SAPI.

@@ -90,8 +90,9 @@ impl<'m> Vm<'m> {
     pub(super) fn unwind(&mut self, e: PhpError, floor: usize) -> Option<PhpError> {
         log::debug!(
             target: "phpr::exc",
-            "unwind: {} (floor {}, depth {})",
+            "unwind: {} \"{}\" (floor {}, depth {})",
             e.class_name(),
+            e.message(),
             floor,
             self.frames.len()
         );

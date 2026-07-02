@@ -1699,12 +1699,11 @@ impl<'f> Lowerer<'f> {
         af: &ArrowFunction,
         line: Line,
     ) -> Result<ExprKind, LowerError> {
-        if af.r#static.is_some() {
-            return Err(LowerError::Unsupported {
-                what: "static arrow function",
-                line,
-            });
-        }
+        // `static fn`: the only semantic is "do not bind $this" — a well-formed
+        // static closure never touches $this, so lowering it like a plain arrow
+        // is observationally identical for them. Residue: PHP raises "Using
+        // $this when not in object context" if a static closure DOES use $this,
+        // and Closure::bind() on one fails; phpr does not enforce either yet.
         if af.ampersand.is_some() {
             return Err(LowerError::Unsupported {
                 what: "by-reference arrow function",

@@ -1133,6 +1133,69 @@ pub fn hex2bin(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Str(PhpStr::new(out)))
 }
 
+/// `addcslashes($string, $characters)`: backslash-escape every byte of
+/// `$string` that falls in the `$characters` set, C-style. The set is expanded
+/// by `php_charmask` rules (ext/standard/string.c): `a..z` is an incrementing
+/// range; a malformed range (decrementing, or `..` at either end) is taken
+/// literally with the same warnings PHP raises. An escaped byte outside
+/// 32..=126 becomes the C mnemonic (`\n`, `\t`, `\r`, `\a`, `\v`, `\b`, `\f`)
+/// or a 3-digit octal `\ooo`; a printable one is just backslash-prefixed.
+pub fn addcslashes(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = str_at(args, ctx, 0, "addcslashes", 2)?;
+    let charlist = str_at(args, ctx, 1, "addcslashes", 2)?;
+    // php_charmask: expand the charlist (with `a..z` ranges) into a byte set.
+    let mut mask = [false; 256];
+    let cl = &charlist[..];
+    let mut i = 0;
+    while i < cl.len() {
+        let c = cl[i];
+        // A valid range needs `x..y` with y >= x and both ends present.
+        if i + 3 < cl.len() && cl[i + 1] == b'.' && cl[i + 2] == b'.' {
+            let end = cl[i + 3];
+            if end >= c {
+                for b in c..=end {
+                    mask[b as usize] = true;
+                }
+                i += 4;
+                continue;
+            }
+            ctx.diags.push(Diag::Warning(
+                "addcslashes(): Invalid '..'-range, '..'-range needs to be incrementing".into(),
+            ));
+            // fall through: the bytes are taken literally
+        } else if i + 1 < cl.len() && cl[i + 1] == b'.' && cl[i + 2..].first() == Some(&b'.') {
+            // `x..` at the very end: literal, with PHP's warning
+            ctx.diags.push(Diag::Warning("addcslashes(): Invalid '..'-range".into()));
+        }
+        mask[c as usize] = true;
+        i += 1;
+    }
+    let mut out = Vec::with_capacity(s.len());
+    for &b in &s {
+        if mask[b as usize] {
+            if !(32..=126).contains(&b) {
+                out.push(b'\\');
+                match b {
+                    b'\n' => out.push(b'n'),
+                    b'\t' => out.push(b't'),
+                    b'\r' => out.push(b'r'),
+                    7 => out.push(b'a'),
+                    11 => out.push(b'v'),
+                    8 => out.push(b'b'),
+                    12 => out.push(b'f'),
+                    _ => out.extend_from_slice(format!("{:03o}", b).as_bytes()),
+                }
+            } else {
+                out.push(b'\\');
+                out.push(b);
+            }
+        } else {
+            out.push(b);
+        }
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
 /// `addslashes($string)`: backslash-escape `'`, `"`, `\` and NUL.
 pub fn addslashes(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let s = str_at(args, ctx, 0, "addslashes", 1)?;

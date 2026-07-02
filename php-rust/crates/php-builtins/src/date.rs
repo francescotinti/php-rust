@@ -811,6 +811,33 @@ pub fn microtime(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     }
 }
 
+/// `getrusage($mode = 0)`: process resource usage. phpr reads no OS rusage
+/// (no libc); consumers (PHPUnit's telemetry) only *delta* the CPU-time fields,
+/// so `ru_utime` advances with the process's monotonic elapsed time and every
+/// other field is 0, under the full standard key set.
+pub fn getrusage(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::sync::OnceLock;
+    static START: OnceLock<std::time::Instant> = OnceLock::new();
+    let start = *START.get_or_init(std::time::Instant::now);
+    let d = start.elapsed();
+    let mut out = PhpArray::new();
+    let mut put = |k: &[u8], v: i64| {
+        out.insert(php_types::Key::Str(PhpStr::new(k.to_vec())), Zval::Long(v));
+    };
+    for k in [
+        &b"ru_oublock"[..], b"ru_inblock", b"ru_msgsnd", b"ru_msgrcv", b"ru_maxrss",
+        b"ru_ixrss", b"ru_idrss", b"ru_isrss", b"ru_minflt", b"ru_majflt", b"ru_nsignals",
+        b"ru_nvcsw", b"ru_nivcsw", b"ru_nswap",
+    ] {
+        put(k, 0);
+    }
+    put(b"ru_utime.tv_usec", i64::from(d.subsec_micros()));
+    put(b"ru_utime.tv_sec", d.as_secs() as i64);
+    put(b"ru_stime.tv_usec", 0);
+    put(b"ru_stime.tv_sec", 0);
+    Ok(Zval::Array(Rc::new(out)))
+}
+
 /// `hrtime($as_number = false)`: a monotonic high-resolution timestamp —
 /// `[seconds, nanoseconds]` by default, total nanoseconds as an int with
 /// `true`. Anchored to an arbitrary epoch (process start), like PHP's.
