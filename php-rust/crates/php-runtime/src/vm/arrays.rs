@@ -103,10 +103,25 @@ pub(super) struct AaDescend {
     pub value: Zval,
 }
 
-/// The pending ArrayAccess dispatch a field-write walk produced (at most one).
+/// A leaf *property* write (`$this->e->foo = v`) that landed on an OBJECT whose
+/// `foo` is not a declared, accessible slot: the caller must run the full
+/// `Op::PropSet` object-write semantics — dispatch `__set` (guarded against
+/// re-entrant recursion) or, absent a magic setter, materialise a dynamic
+/// property / enforce visibility. A free function cannot make the method call
+/// nor consult the runtime recursion guard, so it defers here (bug40833:
+/// `$this->e->foo = v` must invoke `e->__set('foo', v)`, not materialise `foo`).
+pub(super) struct AaMagicSet {
+    pub obj: Zval,
+    pub name: Vec<u8>,
+    pub value: Zval,
+}
+
+/// The pending ArrayAccess / magic dispatch a field-write walk produced (at
+/// most one — a walk defers exactly one leaf that needs a method call).
 pub(super) enum AaOp {
     Write(AaWrite),
     Descend(AaDescend),
+    MagicSet(AaMagicSet),
 }
 
 pub(super) fn field_write(
@@ -140,8 +155,30 @@ pub(super) fn field_write(
             };
             match target {
                 Zval::Object(o) => {
+                    // Own a handle so the leaf-defer branch can move the object into
+                    // the pending op without holding a borrow of `target`.
+                    let o = o.clone();
+                    let (cid, is_enum) = {
+                        let b = o.borrow();
+                        (b.class_id as usize, b.info.is_enum_case)
+                    };
+                    // A leaf write on a property that is not a declared, accessible
+                    // slot defers to the VM caller (`prop_set_magic_or_dynamic`),
+                    // which dispatches `__set` (guarded against re-entrant recursion)
+                    // or, absent a magic setter, materialises a dynamic property /
+                    // enforces visibility. A declared accessible slot is written
+                    // directly below — PHP never invokes `__set` for an accessible
+                    // property. Enum cases keep their dedicated immutability error.
+                    if rest.is_empty() && !is_enum && !fs.prop_is_declared_slot(cid, name) {
+                        *aa = Some(AaOp::MagicSet(AaMagicSet {
+                            obj: Zval::Object(o),
+                            name: name.to_vec(),
+                            value,
+                        }));
+                        return Ok(());
+                    }
                     let mut obj = o.borrow_mut();
-                    let key = fs.prop_key(obj.class_id as usize, name);
+                    let key = fs.prop_key(cid, name);
                     let key = key.as_ref();
                     if obj.info.is_enum_case {
                         let cls = String::from_utf8_lossy(obj.class_name.as_bytes()).into_owned();
@@ -638,17 +675,25 @@ impl<'m> Vm<'m> {
         // `$this->coll[0]->foo = 1`, `$a->x[0][1]->y = v`, ...).
         let mut pending = aa;
         while let Some(op) = pending.take() {
-            let (obj, msg_obj) = match &op {
-                AaOp::Write(w) => (&w.obj, &w.obj),
-                AaOp::Descend(d) => (&d.obj, &d.obj),
+            // A magic / dynamic property write (`$this->e->foo = v`) needs no
+            // ArrayAccess; the array dispatches below do.
+            if let AaOp::MagicSet(AaMagicSet { obj, name, value }) = op {
+                self.prop_set_magic_or_dynamic(obj, &name, value, top)?;
+                continue;
+            }
+            let msg_obj = match &op {
+                AaOp::Write(w) => &w.obj,
+                AaOp::Descend(d) => &d.obj,
+                AaOp::MagicSet(_) => unreachable!("handled above"),
             };
-            if !self.object_implements(obj, b"arrayaccess") {
+            if !self.object_implements(msg_obj, b"arrayaccess") {
                 let name = deref_object(msg_obj)
                     .map(|o| String::from_utf8_lossy(o.borrow().class_name.as_bytes()).into_owned())
                     .unwrap_or_default();
                 return Err(PhpError::Error(format!("Cannot use object of type {name} as array")));
             }
             match op {
+                AaOp::MagicSet(_) => unreachable!("handled above"),
                 AaOp::Write(AaWrite { obj, key, value }) => {
                     self.call_method_sync(obj, b"offsetSet", vec![key.unwrap_or(Zval::Null), value])?;
                 }

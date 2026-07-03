@@ -5013,6 +5013,70 @@ impl<'m> Vm<'m> {
         self.drive_to_return(baseline)
     }
 
+    /// Perform the full `Op::PropSet` object-write semantics for a leaf property
+    /// write deferred by the field-path walker (`$this->e->foo = v` where `foo`
+    /// is not a declared, accessible slot on the target object). Dispatches
+    /// `__set` when a magic setter applies, registering the recursion guard
+    /// around the synchronous call so a re-entrant write to the *same* property
+    /// inside `__set` materialises instead of re-entering (exactly as
+    /// `push_magic_prop` arranges for `Op::PropSet`; without it, `$this->e->foo`
+    /// assignments inside `e::__set` recurse to a stack overflow). Absent a magic
+    /// setter, enforces visibility (`Denied` → private-access error) and
+    /// materialises a dynamic property.
+    fn prop_set_magic_or_dynamic(
+        &mut self,
+        target: Zval,
+        name: &[u8],
+        value: Zval,
+        top: usize,
+    ) -> Result<(), PhpError> {
+        let cur = self.frames[top].class;
+        // A write to a lazy object initializes it first, then forwards to the
+        // real instance (mirrors Op::PropSet). Magic dispatch and the recursion
+        // guard must be evaluated against the *real* object, not the proxy, so an
+        // `__set` already in progress on the real instance is not double-invoked
+        // (gh21478: `$proxy->x` inside the real instance's `__set`). The walker
+        // never runs during `init_props`, so no `init_props` guard is needed.
+        self.trigger_lazy(&target, name)?;
+        let target = self.proxy_redirect(target);
+        let Some(o) = deref_object(&target) else {
+            // The walker only defers object leaves, so a non-object here is
+            // unreachable in practice; drop the write rather than panic.
+            return Ok(());
+        };
+        if let Some((_defc, _midx, oid)) =
+            self.magic_applies(&o, name, cur, MagicKind::Set, b"__set")
+        {
+            let gkey = (oid, MagicKind::Set, name.to_vec());
+            let inserted = self.magic_guard.insert(gkey.clone());
+            let recv = Zval::Object(o);
+            let r = self.call_method_sync(
+                recv,
+                b"__set",
+                vec![Zval::Str(PhpStr::new(name.to_vec())), value],
+            );
+            if inserted {
+                self.magic_guard.remove(&gkey);
+            }
+            r?;
+            return Ok(());
+        }
+        // No magic setter: enforce visibility, then materialise. A `Denied`
+        // (private reached from the wrong scope) errors here; otherwise this is a
+        // dynamic-property creation (the walker defers only non-declared-slot
+        // leaves, so no readonly / typed slot enforcement applies).
+        let ocid = o.borrow().class_id as usize;
+        check_prop_access(&self.classes, cur, ocid, name)?;
+        let key = match resolve_prop_access(&self.classes, ocid, name, cur) {
+            PropAccess::Slot(k) => k,
+            _ => name.to_vec(),
+        };
+        if let Some(old) = write_property(&target, &key, value)? {
+            self.gc_note(&old);
+        }
+        Ok(())
+    }
+
     /// Synchronously collect the `(key, value)` pairs of a `Traversable` object
     /// (step 56), used by both spread paths. An `IteratorAggregate` is resolved
     /// via `getIterator()` first (its result may be an array, a Generator, or an
