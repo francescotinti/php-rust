@@ -323,6 +323,15 @@ impl FieldScope<'_> {
         }
     }
 
+    /// Whether `name` resolves to a *declared, accessible* property slot on an
+    /// instance of `ocid` from this scope — the guard the fused field ops use
+    /// before dispatching the ArrayAccess protocol on a leaf, so a *dynamic*
+    /// (magic/undeclared) property is left to the plain walker (bug40833:
+    /// `unset($o->magicProp[0])` must not skip `__get`).
+    pub(super) fn prop_is_declared_slot(&self, ocid: ClassId, name: &[u8]) -> bool {
+        matches!(resolve_prop_access(self.classes, ocid, name, self.scope), PropAccess::Slot(_))
+    }
+
     pub(super) fn prop_key<'n>(&self, ocid: ClassId, name: &'n [u8]) -> std::borrow::Cow<'n, [u8]> {
         match resolve_prop_access(self.classes, ocid, name, self.scope) {
             PropAccess::Slot(k) => std::borrow::Cow::Owned(k),

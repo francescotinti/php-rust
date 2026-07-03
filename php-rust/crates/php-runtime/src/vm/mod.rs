@@ -2057,6 +2057,14 @@ impl<'m> Vm<'m> {
                             continue;
                         }
                     }
+                    // Nested form landing on an ArrayAccess (`isset($m['k'][2])`
+                    // where the element holds one): protocol on the leaf.
+                    if let Some((recv, key)) = self.dim_aa_leaf(base, top, &keys) {
+                        let r = self.call_method_sync(recv, b"offsetExists", vec![key])?;
+                        let set = convert::is_true_silent(&r.deref_clone());
+                        self.frames[top].stack.push(Zval::Bool(set));
+                        continue;
+                    }
                     let set = matches!(
                         silent_get_path(self.base_cell(base, top), &keys),
                         Some(v) if !matches!(v, Zval::Null | Zval::Undef)
@@ -2084,6 +2092,18 @@ impl<'m> Vm<'m> {
                             continue;
                         }
                     }
+                    if let Some((recv, key)) = self.dim_aa_leaf(base, top, &keys) {
+                        let exists =
+                            self.call_method_sync(recv.clone(), b"offsetExists", vec![key.clone()])?;
+                        let empty = if convert::is_true_silent(&exists.deref_clone()) {
+                            let v = self.call_method_sync(recv, b"offsetGet", vec![key])?;
+                            !convert::is_true_silent(&v.deref_clone())
+                        } else {
+                            true
+                        };
+                        self.frames[top].stack.push(Zval::Bool(empty));
+                        continue;
+                    }
                     let empty = match silent_get_path(self.base_cell(base, top), &keys) {
                         Some(v) => !convert::is_true_silent(&v),
                         None => true,
@@ -2100,6 +2120,10 @@ impl<'m> Vm<'m> {
                             self.enter_object_method(recv, b"offsetUnset", vec![key], RetMode::Discard)?;
                             continue;
                         }
+                    }
+                    if let Some((recv, key)) = self.dim_aa_leaf(base, top, &keys) {
+                        self.call_method_sync(recv, b"offsetUnset", vec![key])?;
+                        continue;
                     }
                     // `unset($x)` drops the variable's value: capture and note it
                     // (it may hold the last reference to an object with a
@@ -4411,6 +4435,15 @@ impl<'m> Vm<'m> {
                 }
                 Op::FieldIsset { base, steps } => {
                     let keys = self.pop_field_keys(top, &steps);
+                    // A final Index on an ArrayAccess object is the protocol:
+                    // `isset($this->coll[0])` = offsetExists (no offsetGet),
+                    // mirroring Op::IssetPath's single-step arm.
+                    if let Some((recv, key)) = self.field_aa_leaf(base, top, &steps, &keys) {
+                        let r = self.call_method_sync(recv, b"offsetExists", vec![key])?;
+                        let set = convert::is_true_silent(&r.deref_clone());
+                        self.frames[top].stack.push(Zval::Bool(set));
+                        continue;
+                    }
                     let set = matches!(
                         self.field_value(base, top, &steps, keys),
                         Some(v) if !matches!(v, Zval::Null | Zval::Undef)
@@ -4419,6 +4452,20 @@ impl<'m> Vm<'m> {
                 }
                 Op::FieldEmpty { base, steps } => {
                     let keys = self.pop_field_keys(top, &steps);
+                    // ArrayAccess leaf: !offsetExists short-circuits to empty,
+                    // else !truthy(offsetGet) — mirrors Op::EmptyPath.
+                    if let Some((recv, key)) = self.field_aa_leaf(base, top, &steps, &keys) {
+                        let exists =
+                            self.call_method_sync(recv.clone(), b"offsetExists", vec![key.clone()])?;
+                        let empty = if convert::is_true_silent(&exists.deref_clone()) {
+                            let v = self.call_method_sync(recv, b"offsetGet", vec![key])?;
+                            !convert::is_true_silent(&v.deref_clone())
+                        } else {
+                            true
+                        };
+                        self.frames[top].stack.push(Zval::Bool(empty));
+                        continue;
+                    }
                     // empty == !isset || !truthy(value): an unreachable/null leaf is
                     // empty; otherwise test the value's boolean.
                     let empty = match self.field_value(base, top, &steps, keys) {
@@ -4431,6 +4478,11 @@ impl<'m> Vm<'m> {
                 }
                 Op::FieldUnset { base, steps } => {
                     let keys = self.pop_field_keys(top, &steps);
+                    // ArrayAccess leaf: `unset($this->coll[0])` = offsetUnset.
+                    if let Some((recv, key)) = self.field_aa_leaf(base, top, &steps, &keys) {
+                        self.call_method_sync(recv, b"offsetUnset", vec![key])?;
+                        continue;
+                    }
                     self.field_remove(base, top, &steps, keys);
                 }
                 Op::Fatal(i) => {
@@ -13261,6 +13313,89 @@ impl<'m> Vm<'m> {
             FieldBase::This => self.frames[top].this.as_ref()?,
         };
         field_get(cell, steps, &mut keys.into_iter(), fs)
+    }
+
+    /// For the fused field ops (isset/empty/unset): when the path's LAST step
+    /// is an Index whose prefix resolves to an ArrayAccess OBJECT, the op must
+    /// dispatch the protocol instead of array-walking. Returns the receiver
+    /// (shared Rc — protocol mutations hit the real instance) and the final
+    /// key; `None` keeps the plain walker path.
+    fn field_aa_leaf(
+        &self,
+        base: FieldBase,
+        top: usize,
+        steps: &[FieldStep],
+        keys: &[Zval],
+    ) -> Option<(Zval, Zval)> {
+        let (last, prefix) = steps.split_last()?;
+        if !matches!(last, FieldStep::Index) {
+            return None;
+        }
+        // Conservative: only a leaf `Index` whose immediately-enclosing step is
+        // a *declared, accessible* property (or `$this`/local base) dispatches
+        // the protocol. A magic/undeclared property in the prefix keeps the
+        // plain walker so `__get`/`__set` semantics are not skipped (bug40833:
+        // `unset($obj->magicProp[0])`). `$this->collection[k]` — doctrine's
+        // AbstractLazyCollection — has a declared `collection`, so it qualifies.
+        let (last_prop, prefix_head) = match prefix.split_last() {
+            Some((FieldStep::Prop(n), head)) => (n.as_ref(), head),
+            // No property in the prefix (`$local[k]`): the base is a plain
+            // variable, safe to dispatch.
+            None => {
+                let recv = self.base_field_cell(base, top)?.deref_clone();
+                let key = keys.first()?.clone();
+                return (matches!(recv, Zval::Object(_))
+                    && self.object_implements(&recv, b"arrayaccess"))
+                .then_some((recv, key));
+            }
+            _ => return None,
+        };
+        // The container the last property lives on (the prefix minus that prop).
+        let head_consumed = prefix_head
+            .iter()
+            .filter(|s| matches!(s, FieldStep::Index | FieldStep::PropDyn))
+            .count();
+        let container = self.field_value(base, top, prefix_head, keys[..head_consumed].to_vec())?;
+        let ccid = object_class_id(&container)?;
+        let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
+        if !fs.prop_is_declared_slot(ccid, last_prop) {
+            return None;
+        }
+        let consumed = prefix
+            .iter()
+            .filter(|s| matches!(s, FieldStep::Index | FieldStep::PropDyn))
+            .count();
+        let key = keys.get(consumed)?.clone();
+        let recv = self.field_value(base, top, prefix, keys[..consumed].to_vec())?;
+        (matches!(recv, Zval::Object(_)) && self.object_implements(&recv, b"arrayaccess"))
+            .then_some((recv, key))
+    }
+
+    /// The base cell of a field path as a value (no navigation), for the
+    /// prefix-less `field_aa_leaf` case.
+    fn base_field_cell(&self, base: FieldBase, top: usize) -> Option<&Zval> {
+        Some(match base {
+            FieldBase::Local(s) => &self.frames[top].slots[s as usize],
+            FieldBase::Global(s) => &self.frames[0].slots[s as usize],
+            FieldBase::Superglobal(i) => &self.superglobals[i as usize],
+            FieldBase::This => self.frames[top].this.as_ref()?,
+        })
+    }
+
+    /// The dim-path analogue of [`Self::field_aa_leaf`]: for a MULTI-key
+    /// isset/empty/unset whose prefix resolves to an ArrayAccess object,
+    /// return (receiver, final key) for protocol dispatch.
+    fn dim_aa_leaf(&self, base: DimBase, top: usize, keys: &[Zval]) -> Option<(Zval, Zval)> {
+        if keys.len() < 2 {
+            return None;
+        }
+        let (last, prefix) = keys.split_last()?;
+        let recv = silent_get_path(self.base_cell(base, top), prefix)?;
+        if matches!(recv, Zval::Object(_)) && self.object_implements(&recv, b"arrayaccess") {
+            Some((recv, last.clone()))
+        } else {
+            None
+        }
     }
 
     fn field_remove(&mut self, base: FieldBase, top: usize, steps: &[FieldStep], keys: Vec<Zval>) {

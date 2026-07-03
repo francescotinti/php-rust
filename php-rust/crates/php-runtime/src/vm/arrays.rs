@@ -91,6 +91,24 @@ pub(super) struct AaWrite {
     pub value: Zval,
 }
 
+/// A dim-write step that landed on an OBJECT *mid-path*
+/// (`$this->coll[0]->foo = 1`): the caller must `offsetGet(key)` and resume the
+/// drill on the result (an object resumes through its handle; anything else is
+/// PHP's "indirect modification has no effect" notice).
+pub(super) struct AaDescend {
+    pub obj: Zval,
+    pub key: Zval,
+    pub rest: Vec<FieldStep>,
+    pub keys: Vec<Zval>,
+    pub value: Zval,
+}
+
+/// The pending ArrayAccess dispatch a field-write walk produced (at most one).
+pub(super) enum AaOp {
+    Write(AaWrite),
+    Descend(AaDescend),
+}
+
 pub(super) fn field_write(
     target: &mut Zval,
     steps: &[FieldStep],
@@ -99,7 +117,7 @@ pub(super) fn field_write(
     value: Zval,
     diags: &mut Diags,
     dropped: &mut Vec<Zval>,
-    aa: &mut Option<AaWrite>,
+    aa: &mut Option<AaOp>,
 ) -> Result<(), PhpError> {
     if let Zval::Ref(cell) = target {
         let inner = &mut *cell.borrow_mut();
@@ -169,18 +187,22 @@ pub(super) fn field_write(
                 }
                 return string_offset_write(target, &key, &value, diags).map(|_| ());
             }
-            if let Zval::Object(o) = target {
-                // A leaf dim-write on an object defers to ArrayAccess dispatch
-                // in the VM caller; a non-leaf one is PHP's object-as-array
-                // error (nested overloaded writes need by-ref offsetGet).
+            if matches!(target, Zval::Object(_)) {
+                // A dim-write on an object defers to ArrayAccess dispatch in
+                // the VM caller: offsetSet at the leaf, offsetGet + resumed
+                // drill mid-path (`$this->coll[0]->foo = 1`).
                 if rest.is_empty() {
-                    *aa = Some(AaWrite { obj: target.clone(), key: Some(key), value });
-                    return Ok(());
+                    *aa = Some(AaOp::Write(AaWrite { obj: target.clone(), key: Some(key), value }));
+                } else {
+                    *aa = Some(AaOp::Descend(AaDescend {
+                        obj: target.clone(),
+                        key,
+                        rest: rest.to_vec(),
+                        keys: keys.collect(),
+                        value,
+                    }));
                 }
-                return Err(PhpError::Error(format!(
-                    "Cannot use object of type {} as array",
-                    String::from_utf8_lossy(o.borrow().class_name.as_bytes())
-                )));
+                return Ok(());
             }
             ensure_array(target)?;
             let Zval::Array(rc) = target else { unreachable!("ensured array") };
@@ -209,11 +231,14 @@ pub(super) fn field_write(
                     "[] operator not supported for strings".to_string(),
                 ));
             }
-            if let Zval::Object(o) = target {
+            if matches!(target, Zval::Object(_)) {
                 if rest.is_empty() {
-                    *aa = Some(AaWrite { obj: target.clone(), key: None, value });
+                    *aa = Some(AaOp::Write(AaWrite { obj: target.clone(), key: None, value }));
                     return Ok(());
                 }
+                // `$o->c[]->x = v` — appending then drilling has no PHP
+                // equivalent through ArrayAccess; keep the object-as-array error.
+                let Zval::Object(o) = target else { unreachable!() };
                 return Err(PhpError::Error(format!(
                     "Cannot use object of type {} as array",
                     String::from_utf8_lossy(o.borrow().class_name.as_bytes())
@@ -609,17 +634,46 @@ impl<'m> Vm<'m> {
             self.gc_note(d);
         }
         r?;
-        // A leaf dim-write that landed on an object: ArrayAccess dispatches
-        // offsetSet ($o->collection[] = v — doctrine's AbstractLazyCollection);
-        // anything else is PHP's object-as-array error.
-        if let Some(AaWrite { obj, key, value }) = aa {
-            if self.object_implements(&obj, b"arrayaccess") {
-                self.call_method_sync(obj, b"offsetSet", vec![key.unwrap_or(Zval::Null), value])?;
-            } else {
-                let name = deref_object(&obj)
+        // Pending ArrayAccess dispatches (possibly chained through Descend:
+        // `$this->coll[0]->foo = 1`, `$a->x[0][1]->y = v`, ...).
+        let mut pending = aa;
+        while let Some(op) = pending.take() {
+            let (obj, msg_obj) = match &op {
+                AaOp::Write(w) => (&w.obj, &w.obj),
+                AaOp::Descend(d) => (&d.obj, &d.obj),
+            };
+            if !self.object_implements(obj, b"arrayaccess") {
+                let name = deref_object(msg_obj)
                     .map(|o| String::from_utf8_lossy(o.borrow().class_name.as_bytes()).into_owned())
                     .unwrap_or_default();
                 return Err(PhpError::Error(format!("Cannot use object of type {name} as array")));
+            }
+            match op {
+                AaOp::Write(AaWrite { obj, key, value }) => {
+                    self.call_method_sync(obj, b"offsetSet", vec![key.unwrap_or(Zval::Null), value])?;
+                }
+                AaOp::Descend(AaDescend { obj, key, rest, keys, value }) => {
+                    let cname = deref_object(&obj)
+                        .map(|o| String::from_utf8_lossy(o.borrow().class_name.as_bytes()).into_owned())
+                        .unwrap_or_default();
+                    let mut val = self.call_method_sync(obj, b"offsetGet", vec![key])?.deref_clone();
+                    if !matches!(val, Zval::Object(_)) {
+                        // Writing through a by-value offsetGet result mutates a
+                        // temporary — PHP's notice, and no write happens.
+                        self.diags.push(Diag::Notice(format!(
+                            "Indirect modification of overloaded element of {cname} has no effect"
+                        )));
+                        break;
+                    }
+                    let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
+                    let mut dropped = Vec::new();
+                    let mut aa2 = None;
+                    field_write(&mut val, &rest, &mut keys.into_iter(), fs, value, &mut self.diags, &mut dropped, &mut aa2)?;
+                    for d in &dropped {
+                        self.gc_note(d);
+                    }
+                    pending = aa2;
+                }
             }
         }
         Ok(())

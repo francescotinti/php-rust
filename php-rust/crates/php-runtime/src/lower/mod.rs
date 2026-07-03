@@ -688,14 +688,35 @@ class Attribute {
 }
 interface UnitEnum {}
 interface BackedEnum extends UnitEnum {}
-interface Stringable {}
+// Engine interfaces carry their real method signatures (compiled as
+// abstract_sigs): hasMethod/getMethods and PHPUnit interface mocks read them.
+interface Stringable {
+    public function __toString(): string;
+}
 interface Throwable {}
 interface Traversable {}
-interface Iterator extends Traversable {}
-interface IteratorAggregate extends Traversable {}
-interface ArrayAccess {}
-interface Countable {}
-interface JsonSerializable {}
+interface Iterator extends Traversable {
+    public function current(): mixed;
+    public function key(): mixed;
+    public function next(): void;
+    public function rewind(): void;
+    public function valid(): bool;
+}
+interface IteratorAggregate extends Traversable {
+    public function getIterator(): Traversable;
+}
+interface ArrayAccess {
+    public function offsetExists(mixed $offset): bool;
+    public function offsetGet(mixed $offset): mixed;
+    public function offsetSet(mixed $offset, mixed $value): void;
+    public function offsetUnset(mixed $offset): void;
+}
+interface Countable {
+    public function count(): int;
+}
+interface JsonSerializable {
+    public function jsonSerialize(): mixed;
+}
 class Exception implements Throwable {
     protected $message = "";
     protected $code = 0;
