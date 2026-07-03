@@ -1313,7 +1313,12 @@ pub fn filetype(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// `false` if any component is missing.
 pub fn realpath(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     use std::os::unix::ffi::OsStrExt;
-    let p = arg_os_path(argv, ctx);
+    let mut p = arg_os_path(argv, ctx);
+    // PHP quirk: realpath("") resolves the current directory (Symfony Process
+    // builds its cwd through this, and "" must NOT read as failure).
+    if p.is_empty() {
+        p = std::ffi::OsString::from(".");
+    }
     match std::fs::canonicalize(&p) {
         Ok(abs) => Ok(Zval::Str(PhpStr::new(abs.as_os_str().as_bytes().to_vec()))),
         Err(_) => Ok(Zval::Bool(false)),

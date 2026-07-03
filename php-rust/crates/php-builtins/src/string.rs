@@ -1555,6 +1555,69 @@ pub fn strcspn(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Long(n as i64))
 }
 
+/// escapeshellarg($arg): wrap in single quotes with embedded `'` escaped as
+/// `'\''` (php_escape_shell_arg, unix branch). A NUL byte is a ValueError.
+pub fn escapeshellarg(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = convert::to_zstr_cast(
+        args.first().ok_or_else(|| {
+            PhpError::Error("escapeshellarg() expects exactly 1 argument, 0 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let bytes = s.as_bytes();
+    if bytes.contains(&0) {
+        return Err(PhpError::ValueError(
+            "escapeshellarg(): Argument #1 ($arg) must not contain any null bytes".to_string(),
+        ));
+    }
+    let mut out = Vec::with_capacity(bytes.len() + 2);
+    out.push(b'\'');
+    for &b in bytes {
+        if b == b'\'' {
+            out.extend_from_slice(b"'\\''");
+        } else {
+            out.push(b);
+        }
+    }
+    out.push(b'\'');
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
+/// escapeshellcmd($command): backslash-escape the shell metacharacters
+/// (php_escape_shell_cmd, unix branch); unmatched quotes are escaped too,
+/// paired `'`/`"` pass through. A NUL byte is a ValueError.
+pub fn escapeshellcmd(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = convert::to_zstr_cast(
+        args.first().ok_or_else(|| {
+            PhpError::Error("escapeshellcmd() expects exactly 1 argument, 0 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let bytes = s.as_bytes();
+    if bytes.contains(&0) {
+        return Err(PhpError::ValueError(
+            "escapeshellcmd(): Argument #1 ($command) must not contain any null bytes".to_string(),
+        ));
+    }
+    let squotes = bytes.iter().filter(|&&b| b == b'\'').count();
+    let dquotes = bytes.iter().filter(|&&b| b == b'"').count();
+    let mut out = Vec::with_capacity(bytes.len());
+    for &b in bytes {
+        match b {
+            b'\'' if squotes % 2 == 0 => out.push(b),
+            b'"' if dquotes % 2 == 0 => out.push(b),
+            b'#' | b'&' | b';' | b'`' | b'|' | b'*' | b'?' | b'~' | b'<' | b'>' | b'^'
+            | b'(' | b')' | b'[' | b']' | b'{' | b'}' | b'$' | b'\\' | b'\x0A' | b'\xFF'
+            | b'\'' | b'"' => {
+                out.push(b'\\');
+                out.push(b);
+            }
+            _ => out.push(b),
+        }
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
 /// strpbrk($string, $characters): the substring starting at the first byte of
 /// `$string` present in `$characters`, or `false` when none is. An empty
 /// `$characters` is a ValueError (PHP 8).

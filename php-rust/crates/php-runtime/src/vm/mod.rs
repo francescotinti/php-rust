@@ -719,8 +719,18 @@ enum YieldFromState {
     /// Delegating to an array's elements (re-yielded verbatim).
     Array { entries: Vec<(Zval, Zval)>, pos: usize },
     /// Delegating to a sub-generator (its `send()`s forwarded, its return value
-    /// becoming the `yield from` expression's value).
-    Gen { rc: Rc<RefCell<GenState>> },
+    /// becoming the `yield from` expression's value). `opaque` marks a
+    /// generator reached through an IteratorAggregate: PHP still streams it,
+    /// but the `yield from` expression reads NULL, not its return value.
+    Gen { rc: Rc<RefCell<GenState>>, opaque: bool },
+}
+
+/// What a Traversable `yield from` delegate resolves to (see `Op::YieldFrom`):
+/// an inner Generator (delegated live) or the drained (key, value) entries of
+/// an Iterator protocol run.
+enum TraversableSource {
+    Gen(Rc<RefCell<GenState>>),
+    Entries(Vec<(Zval, Zval)>),
 }
 
 /// The virtual machine: the module under execution plus the explicit call stack.
@@ -3132,8 +3142,30 @@ impl<'m> Vm<'m> {
                             }
                             Zval::Generator(rc) => {
                                 self.frames[top].yield_from =
-                                    Some(YieldFromState::Gen { rc: Rc::clone(&rc) });
+                                    Some(YieldFromState::Gen { rc: Rc::clone(&rc), opaque: false });
                                 self.ensure_started(&rc)?; // prime to its first yield
+                            }
+                            Zval::Object(_) if self.object_is_traversable(&delegate) => {
+                                // A Traversable delegate (Symfony Finder pipes
+                                // FilterIterators through `yield from`): resolve
+                                // IteratorAggregate to its Iterator, then drain
+                                // the protocol synchronously into entries.
+                                // Divergence: PHP interleaves the delegate's
+                                // steps with the consumer; phpr snapshots — the
+                                // outcome matches for finite side-effect-free
+                                // iterators (an infinite Iterator would hang
+                                // here instead of streaming).
+                                match self.traversable_entries(delegate.clone())? {
+                                    TraversableSource::Gen(rc) => {
+                                        self.frames[top].yield_from =
+                                            Some(YieldFromState::Gen { rc: Rc::clone(&rc), opaque: true });
+                                        self.ensure_started(&rc)?;
+                                    }
+                                    TraversableSource::Entries(entries) => {
+                                        self.frames[top].yield_from =
+                                            Some(YieldFromState::Array { entries, pos: 0 });
+                                    }
+                                }
                             }
                             other => {
                                 return Err(PhpError::Error(format!(
@@ -3146,7 +3178,7 @@ impl<'m> Vm<'m> {
                         // Re-entry from a resume: the sent value is on the stack.
                         let sent = self.frames[top].stack.pop().expect("YieldFrom sent");
                         let sub = match &self.frames[top].yield_from {
-                            Some(YieldFromState::Gen { rc }) => Some(Rc::clone(rc)),
+                            Some(YieldFromState::Gen { rc, .. }) => Some(Rc::clone(rc)),
                             _ => None,
                         };
                         if let Some(rc) = sub {
@@ -3164,7 +3196,7 @@ impl<'m> Vm<'m> {
                                 None
                             }
                         }
-                        YieldFromState::Gen { rc } => {
+                        YieldFromState::Gen { rc, .. } => {
                             let g = rc.borrow();
                             if matches!(g.status, GenStatus::Done) {
                                 None
@@ -3190,7 +3222,11 @@ impl<'m> Vm<'m> {
                             // stack as the `yield from` expression's value.
                             let value = match self.frames[top].yield_from.take().unwrap() {
                                 YieldFromState::Array { .. } => Zval::Null,
-                                YieldFromState::Gen { rc } => rc.borrow().ret.clone(),
+                                // An aggregate-wrapped generator's return stays
+                                // opaque (PHP: only a DIRECT generator delegate
+                                // propagates getReturn()).
+                                YieldFromState::Gen { opaque: true, .. } => Zval::Null,
+                                YieldFromState::Gen { rc, .. } => rc.borrow().ret.clone(),
                             };
                             self.frames[top].stack.push(value);
                         }
@@ -9771,6 +9807,68 @@ impl<'m> Vm<'m> {
         Ok(Zval::Bool(true))
     }
 
+    /// Whether an object implements the named (lowercased) interface, via its
+    /// full class/interface chain.
+    pub(super) fn object_implements(&self, v: &Zval, iface_lc: &[u8]) -> bool {
+        let Some(cid) = object_class_id(v) else { return false };
+        self.class_index
+            .get(iface_lc)
+            .is_some_and(|&t| is_instance_of(&self.classes, self.stringable_id, cid, t))
+    }
+
+    /// Whether an object implements Traversable (directly or via its
+    /// class/interface chain) — the `yield from` delegate check.
+    fn object_is_traversable(&self, v: &Zval) -> bool {
+        self.object_implements(v, b"traversable")
+    }
+
+    /// Resolve a Traversable object for `yield from`: IteratorAggregate chains
+    /// unwrap through `getIterator()` (a Generator result is delegated live);
+    /// a plain Iterator is drained through the protocol into (key, value)
+    /// entries.
+    fn traversable_entries(&mut self, mut it: Zval) -> Result<TraversableSource, PhpError> {
+        // Unwrap IteratorAggregate (bounded: a cycle of getIterator()s errors).
+        for _ in 0..16 {
+            let Some(cid) = object_class_id(&it) else { break };
+            let is_agg = self
+                .class_index
+                .get(&b"iteratoraggregate"[..])
+                .is_some_and(|&a| is_instance_of(&self.classes, self.stringable_id, cid, a));
+            if !is_agg {
+                break;
+            }
+            let inner = self.call_method_sync(it.clone(), b"getIterator", Vec::new())?;
+            match inner.deref_clone() {
+                Zval::Generator(rc) => return Ok(TraversableSource::Gen(rc)),
+                other @ Zval::Object(_) => it = other,
+                Zval::Array(a) => {
+                    let entries = a.iter().map(|(k, v)| (key_to_zval(k), v.deref_clone())).collect();
+                    return Ok(TraversableSource::Entries(entries));
+                }
+                other => {
+                    return Err(PhpError::Error(format!(
+                        "getIterator() must return an object implementing Traversable, {} returned",
+                        other.type_name_for_error()
+                    )))
+                }
+            }
+        }
+        // Drive the Iterator protocol to exhaustion.
+        let mut entries = Vec::new();
+        self.call_method_sync(it.clone(), b"rewind", Vec::new())?;
+        loop {
+            let valid = self.call_method_sync(it.clone(), b"valid", Vec::new())?;
+            if !convert::is_true_silent(&valid.deref_clone()) {
+                break;
+            }
+            let key = self.call_method_sync(it.clone(), b"key", Vec::new())?.deref_clone();
+            let val = self.call_method_sync(it.clone(), b"current", Vec::new())?.deref_clone();
+            entries.push((key, val));
+            self.call_method_sync(it.clone(), b"next", Vec::new())?;
+        }
+        Ok(TraversableSource::Entries(entries))
+    }
+
     /// Whether the value graph contains an object with a `__serialize`/`__sleep`
     /// hook — the fast-path gate for [`Self::ho_serialize`]: a hook-free graph
     /// (the overwhelmingly common case) passes to the pure serializer untouched,
@@ -14282,16 +14380,22 @@ pub(super) fn closure_params(func: &Func) -> Vec<ClosureParam> {
 /// Drill through `keys` from `cell` (following references, auto-vivifying and
 /// copy-on-writing each level), then apply `last` at the leaf. Recursion (not a
 /// reassigned `&mut` in a loop) keeps the nested borrows well-formed.
-fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags, dropped: &mut Vec<Zval>) -> Result<Zval, PhpError> {
+fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags, dropped: &mut Vec<Zval>, aa: &mut Option<crate::vm::arrays::AaWrite>) -> Result<Zval, PhpError> {
     if let Zval::Ref(rc) = cell {
         let mut inner = rc.borrow_mut();
-        return path_apply(&mut inner, keys, last, diags, dropped);
+        return path_apply(&mut inner, keys, last, diags, dropped, aa);
     }
     match keys.split_first() {
         Some((k, rest)) => {
             // Writing *through* a string offset (`$s[0][1] = …`) is the PHP error.
             if matches!(cell, Zval::Str(_)) {
                 return Err(PhpError::Error("Cannot use string offset as an array".to_string()));
+            }
+            if let Zval::Object(o) = cell {
+                return Err(PhpError::Error(format!(
+                    "Cannot use object of type {} as array",
+                    String::from_utf8_lossy(o.borrow().class_name.as_bytes())
+                )));
             }
             ensure_array(cell)?;
             let Zval::Array(rc) = cell else { unreachable!("ensured array") };
@@ -14302,14 +14406,14 @@ fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags, dro
                 arr.insert(key.clone(), Zval::Null);
             }
             let child = arr.get_mut(&key).expect("just inserted");
-            path_apply(child, rest, last, diags, dropped)
+            path_apply(child, rest, last, diags, dropped, aa)
         }
-        None => apply_last(cell, last, diags, dropped),
+        None => apply_last(cell, last, diags, dropped, aa),
     }
 }
 
 /// Apply the leaf step to the parent cell (which must hold the target array).
-fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Vec<Zval>) -> Result<Zval, PhpError> {
+fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Vec<Zval>, aa: &mut Option<crate::vm::arrays::AaWrite>) -> Result<Zval, PhpError> {
     // A string parent takes the byte-offset write path (`$s[0] = 'X'`), whose
     // expression value is the written byte; the other leaf ops are the PHP
     // errors for string offsets.
@@ -14326,6 +14430,27 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Ve
                 "Cannot increment/decrement string offsets".to_string(),
             )),
         };
+    }
+    // A leaf Set/Append on an OBJECT defers to the caller's ArrayAccess
+    // dispatch (offsetSet); the compound leaves stay errors here (PHP needs a
+    // by-ref offsetGet for those).
+    if let Zval::Object(o) = parent {
+        match last {
+            Last::Set { key, value } => {
+                *aa = Some(crate::vm::arrays::AaWrite { obj: parent.clone(), key: Some(key), value: value.clone() });
+                return Ok(value);
+            }
+            Last::Append { value } => {
+                *aa = Some(crate::vm::arrays::AaWrite { obj: parent.clone(), key: None, value: value.clone() });
+                return Ok(value);
+            }
+            _ => {
+                return Err(PhpError::Error(format!(
+                    "Cannot use object of type {} as array",
+                    String::from_utf8_lossy(o.borrow().class_name.as_bytes())
+                )))
+            }
+        }
     }
     ensure_array(parent)?;
     let Zval::Array(rc) = parent else { unreachable!("ensured array") };

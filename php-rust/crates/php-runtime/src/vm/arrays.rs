@@ -81,6 +81,16 @@ pub(super) fn prop_dyn_name(keys: &mut std::vec::IntoIter<Zval>, diags: &mut Dia
     convert::to_zstr(&key, diags).as_bytes().into()
 }
 
+/// A leaf dim-write that landed on an OBJECT: the caller (`Vm::field_set`) must
+/// dispatch it through the ArrayAccess protocol (`offsetSet`) — a free function
+/// cannot make the method call. `key: None` is the append form (`$o->c[] = v`
+/// → `offsetSet(null, v)`).
+pub(super) struct AaWrite {
+    pub obj: Zval,
+    pub key: Option<Zval>,
+    pub value: Zval,
+}
+
 pub(super) fn field_write(
     target: &mut Zval,
     steps: &[FieldStep],
@@ -89,10 +99,11 @@ pub(super) fn field_write(
     value: Zval,
     diags: &mut Diags,
     dropped: &mut Vec<Zval>,
+    aa: &mut Option<AaWrite>,
 ) -> Result<(), PhpError> {
     if let Zval::Ref(cell) = target {
         let inner = &mut *cell.borrow_mut();
-        return field_write(inner, steps, keys, fs, value, diags, dropped);
+        return field_write(inner, steps, keys, fs, value, diags, dropped, aa);
     }
     let Some((first, rest)) = steps.split_first() else {
         // Leaf overwrite: hand the displaced value back for GC noting.
@@ -132,7 +143,7 @@ pub(super) fn field_write(
                             obj.props.set(key, Zval::Array(Rc::new(PhpArray::new())));
                         }
                         let child = obj.props.get_mut(key).expect("property just inserted");
-                        field_write(child, rest, keys, fs, value, diags, dropped)?;
+                        field_write(child, rest, keys, fs, value, diags, dropped, aa)?;
                     }
                 }
                 other => {
@@ -158,6 +169,19 @@ pub(super) fn field_write(
                 }
                 return string_offset_write(target, &key, &value, diags).map(|_| ());
             }
+            if let Zval::Object(o) = target {
+                // A leaf dim-write on an object defers to ArrayAccess dispatch
+                // in the VM caller; a non-leaf one is PHP's object-as-array
+                // error (nested overloaded writes need by-ref offsetGet).
+                if rest.is_empty() {
+                    *aa = Some(AaWrite { obj: target.clone(), key: Some(key), value });
+                    return Ok(());
+                }
+                return Err(PhpError::Error(format!(
+                    "Cannot use object of type {} as array",
+                    String::from_utf8_lossy(o.borrow().class_name.as_bytes())
+                )));
+            }
             ensure_array(target)?;
             let Zval::Array(rc) = target else { unreachable!("ensured array") };
             let arr = Rc::make_mut(rc);
@@ -167,7 +191,7 @@ pub(super) fn field_write(
                 // Overwrite a plain element, but write *through* an existing
                 // reference element (the recursive call derefs at its top).
                 match arr.get_mut(&k) {
-                    Some(child) => field_write(child, rest, keys, fs, value, diags, dropped)?,
+                    Some(child) => field_write(child, rest, keys, fs, value, diags, dropped, aa)?,
                     None => arr.insert(k, value),
                 }
             } else {
@@ -175,7 +199,7 @@ pub(super) fn field_write(
                     arr.insert(k.clone(), Zval::Array(Rc::new(PhpArray::new())));
                 }
                 let child = arr.get_mut(&k).expect("key just inserted");
-                field_write(child, rest, keys, fs, value, diags, dropped)?;
+                field_write(child, rest, keys, fs, value, diags, dropped, aa)?;
             }
             Ok(())
         }
@@ -184,6 +208,16 @@ pub(super) fn field_write(
                 return Err(PhpError::Error(
                     "[] operator not supported for strings".to_string(),
                 ));
+            }
+            if let Zval::Object(o) = target {
+                if rest.is_empty() {
+                    *aa = Some(AaWrite { obj: target.clone(), key: None, value });
+                    return Ok(());
+                }
+                return Err(PhpError::Error(format!(
+                    "Cannot use object of type {} as array",
+                    String::from_utf8_lossy(o.borrow().class_name.as_bytes())
+                )));
             }
             ensure_array(target)?;
             let Zval::Array(rc) = target else { unreachable!("ensured array") };
@@ -194,7 +228,7 @@ pub(super) fn field_write(
                 arr.append(value).map_err(|_| occupied())?;
             } else {
                 let mut child = Zval::Array(Rc::new(PhpArray::new()));
-                field_write(&mut child, rest, keys, fs, value, diags, dropped)?;
+                field_write(&mut child, rest, keys, fs, value, diags, dropped, aa)?;
                 arr.append(child).map_err(|_| occupied())?;
             }
             Ok(())
@@ -224,7 +258,9 @@ pub(super) fn field_get(cell: &Zval, steps: &[FieldStep], keys: &mut std::vec::I
                 match cell {
                     Zval::Object(o) => {
                         let obj = o.borrow();
-                        let key = fs.prop_key(obj.class_id as usize, name);
+                        // Denied (inaccessible declared) reads as absent here:
+                        // this walker backs isset/empty/`??` only.
+                        let key = fs.prop_key_read(obj.class_id as usize, name)?;
                         match obj.props.get(key.as_ref()) {
                             Some(v) => field_get(v, rest, keys, fs),
                             None => None,
@@ -528,11 +564,25 @@ impl<'m> Vm<'m> {
         // old `$a[0]`) are collected here, then noted as possible GC roots once
         // the borrow of the base cell ends.
         let mut dropped = Vec::new();
-        let result = path_apply(cell, &keys, last, &mut self.diags, &mut dropped);
+        let mut aa = None;
+        let result = path_apply(cell, &keys, last, &mut self.diags, &mut dropped, &mut aa);
         for d in &dropped {
             self.gc_note(d);
         }
-        result
+        let result = result?;
+        // Leaf Set/Append that landed on an object (`$arr['x'][] = v` where the
+        // element holds an ArrayAccess): dispatch offsetSet.
+        if let Some(AaWrite { obj, key, value }) = aa {
+            if self.object_implements(&obj, b"arrayaccess") {
+                self.call_method_sync(obj, b"offsetSet", vec![key.unwrap_or(Zval::Null), value])?;
+            } else {
+                let name = deref_object(&obj)
+                    .map(|o| String::from_utf8_lossy(o.borrow().class_name.as_bytes()).into_owned())
+                    .unwrap_or_default();
+                return Err(PhpError::Error(format!("Cannot use object of type {name} as array")));
+            }
+        }
+        Ok(result)
     }
 
     pub(super) fn field_set(
@@ -553,10 +603,25 @@ impl<'m> Vm<'m> {
             })?,
         };
         let mut dropped = Vec::new();
-        let r = field_write(cell, steps, &mut keys.into_iter(), fs, value, &mut self.diags, &mut dropped);
+        let mut aa = None;
+        let r = field_write(cell, steps, &mut keys.into_iter(), fs, value, &mut self.diags, &mut dropped, &mut aa);
         for d in &dropped {
             self.gc_note(d);
         }
-        r
+        r?;
+        // A leaf dim-write that landed on an object: ArrayAccess dispatches
+        // offsetSet ($o->collection[] = v — doctrine's AbstractLazyCollection);
+        // anything else is PHP's object-as-array error.
+        if let Some(AaWrite { obj, key, value }) = aa {
+            if self.object_implements(&obj, b"arrayaccess") {
+                self.call_method_sync(obj, b"offsetSet", vec![key.unwrap_or(Zval::Null), value])?;
+            } else {
+                let name = deref_object(&obj)
+                    .map(|o| String::from_utf8_lossy(o.borrow().class_name.as_bytes()).into_owned())
+                    .unwrap_or_default();
+                return Err(PhpError::Error(format!("Cannot use object of type {name} as array")));
+            }
+        }
+        Ok(())
     }
 }

@@ -78,6 +78,8 @@ pub fn registry() -> Registry {
     add(b"curl_close", curl::curl_close);
     add(b"posix_getpid", env::posix_getpid);
     add(b"strpbrk", string::strpbrk);
+    add(b"escapeshellarg", string::escapeshellarg);
+    add(b"escapeshellcmd", string::escapeshellcmd);
     // Hashing / encoding builtins (step 62).
     add(b"base64_encode", encoding::base64_encode);
     add(b"base64_decode", encoding::base64_decode);

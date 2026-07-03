@@ -2288,6 +2288,10 @@ class ReflectionProperty {
         }
         __reflect_prop_set($this->class, $this->name, $object, $value);
     }
+    // PHP 8.4 raw accessors bypass property hooks; phpr's reflection reads the
+    // backing slots directly already, so they alias get/setValue.
+    public function getRawValue($object) { return $this->getValue($object); }
+    public function setRawValue($object, $value) { $this->setValue($object, $value); }
     public function getAttributes($name = null, $flags = 0) {
         $hostName = ($flags & ReflectionAttribute::IS_INSTANCEOF) ? null : $name;
         return ReflectionAttribute::__filter(__reflect_prop_attributes($this->class, $this->name, $hostName), $name, $flags, 'ReflectionProperty');
@@ -3918,6 +3922,11 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         // non-thread-safe build, matching the oracle.
         b"PHP_DEBUG" => ExprKind::Bool(false),
         b"PHP_ZTS" => ExprKind::Bool(false),
+        // The ZEND_* spellings exist on every build (Symfony Process gates its
+        // cwd fallback on defined('ZEND_THREAD_SAFE') — the constant must BE
+        // defined, whatever its value).
+        b"ZEND_THREAD_SAFE" => ExprKind::Bool(false),
+        b"ZEND_DEBUG_BUILD" => ExprKind::Bool(false),
         b"PHP_MAXPATHLEN" => ExprKind::Int(1024),
         // phpinfo() section selectors. phpr's `phpinfo` is a stub, but callers
         // (Composer's DiagnoseCommand does `phpinfo(INFO_GENERAL)`) still name the
@@ -3944,6 +3953,22 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"PHP_OS_FAMILY" => str_lit(b"Darwin"),
         b"DIRECTORY_SEPARATOR" => str_lit(b"/"),
         b"PATH_SEPARATOR" => str_lit(b":"),
+        // Global DATE_* format constants (ext/date mirrors of the
+        // DateTimeInterface class constants; values from the oracle).
+        b"DATE_ATOM" => str_lit(b"Y-m-d\\TH:i:sP"),
+        b"DATE_COOKIE" => str_lit(b"l, d-M-Y H:i:s T"),
+        b"DATE_ISO8601" => str_lit(b"Y-m-d\\TH:i:sO"),
+        b"DATE_ISO8601_EXPANDED" => str_lit(b"X-m-d\\TH:i:sP"),
+        b"DATE_RFC822" => str_lit(b"D, d M y H:i:s O"),
+        b"DATE_RFC850" => str_lit(b"l, d-M-y H:i:s T"),
+        b"DATE_RFC1036" => str_lit(b"D, d M y H:i:s O"),
+        b"DATE_RFC1123" => str_lit(b"D, d M Y H:i:s O"),
+        b"DATE_RFC7231" => str_lit(b"D, d M Y H:i:s \\G\\M\\T"),
+        b"DATE_RFC2822" => str_lit(b"D, d M Y H:i:s O"),
+        b"DATE_RFC3339" => str_lit(b"Y-m-d\\TH:i:sP"),
+        b"DATE_RFC3339_EXTENDED" => str_lit(b"Y-m-d\\TH:i:s.vP"),
+        b"DATE_RSS" => str_lit(b"D, d M Y H:i:s O"),
+        b"DATE_W3C" => str_lit(b"Y-m-d\\TH:i:sP"),
         // setlocale() category selectors (macOS values, matching the oracle).
         b"LC_ALL" => ExprKind::Int(0),
         b"LC_COLLATE" => ExprKind::Int(1),

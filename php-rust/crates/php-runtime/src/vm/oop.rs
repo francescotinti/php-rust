@@ -311,6 +311,18 @@ impl FieldScope<'_> {
     /// `__get`/`__set` protocol on intermediate steps either), so an inaccessible
     /// private must keep hitting its real storage rather than autovivifying a
     /// parallel dynamic property (Bug #34893's `$a->p->t = 'bar'` through `__get`).
+    /// Like [`Self::prop_key`], but for the SILENT read walker (`field_get`,
+    /// backing isset/empty/`??`): an inaccessible declared property reads as
+    /// absent (`None`) — PHP's `isset($o->private)` from outside is false and
+    /// `$o->private ?? $d` yields `$d`, with no error (mirrors Op::PropIsset).
+    pub(super) fn prop_key_read<'n>(&self, ocid: ClassId, name: &'n [u8]) -> Option<std::borrow::Cow<'n, [u8]>> {
+        match resolve_prop_access(self.classes, ocid, name, self.scope) {
+            PropAccess::Slot(k) => Some(std::borrow::Cow::Owned(k)),
+            PropAccess::Dynamic => Some(std::borrow::Cow::Borrowed(name)),
+            PropAccess::Denied { .. } => None,
+        }
+    }
+
     pub(super) fn prop_key<'n>(&self, ocid: ClassId, name: &'n [u8]) -> std::borrow::Cow<'n, [u8]> {
         match resolve_prop_access(self.classes, ocid, name, self.scope) {
             PropAccess::Slot(k) => std::borrow::Cow::Owned(k),
