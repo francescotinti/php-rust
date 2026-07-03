@@ -809,7 +809,55 @@ impl<'m> Vm<'m> {
                     // The frame stays pushed on the error path so the unwind's trace
                     // capture includes this call; unwind then pops it.
                     Ok(c) => self.frames[top].slots[i] = c,
-                    Err(given) => return Err(self.arg_type_error(func, i, &hint, &given, call_line)),
+                    Err(given) => {
+                        return Err(self.arg_type_error(
+                            func,
+                            i + 1,
+                            func.param_names.get(i).map(|n| &n[..]),
+                            &hint,
+                            &given,
+                            call_line,
+                        ))
+                    }
+                }
+            }
+        }
+        // The variadic pack (`T ...$rest`): each collected element is checked /
+        // coerced against the element hint at its true call-argument position — the
+        // fixed slots consumed args `0..v`, so pack element #k is argument `v+k+1`
+        // (PHP omits the parameter name for a variadic element). A by-reference
+        // variadic (`&...$rest`) is left untouched, like a by-ref fixed parameter.
+        if let Some(vslot) = func.variadic_slot {
+            let v = vslot as usize;
+            let by_ref = func.param_by_ref.get(v).copied().unwrap_or(false);
+            if !by_ref {
+                if let Some(hint) = func.param_hints.get(v).cloned().flatten() {
+                    let strict = self.module.strict;
+                    let items: Vec<(Key, Zval)> = match &self.frames[top].slots[v] {
+                        Zval::Array(a) => {
+                            a.iter().map(|(k, val)| (k.clone(), val.clone())).collect()
+                        }
+                        _ => Vec::new(),
+                    };
+                    if !items.is_empty() {
+                        let mut coerced = PhpArray::new();
+                        for (idx, (k, val)) in items.into_iter().enumerate() {
+                            match self.coerce_or_check_hint(val, &hint, strict) {
+                                Ok(c) => coerced.insert(k, c),
+                                Err(given) => {
+                                    return Err(self.arg_type_error(
+                                        func,
+                                        v + idx + 1,
+                                        None,
+                                        &hint,
+                                        &given,
+                                        call_line,
+                                    ))
+                                }
+                            }
+                        }
+                        self.frames[top].slots[v] = Zval::Array(Rc::new(coerced));
+                    }
                 }
             }
         }
@@ -865,27 +913,30 @@ impl<'m> Vm<'m> {
     /// coercion, matching PHP's exact wording (step 14). `getMessage()` names the
     /// *call* site ("… called in <file> on line <N>"); the throwable's file/line
     /// report the *definition* site, which `__toString` renders as the special
-    /// "… and defined in <file>:<line>" suffix.
+    /// "… and defined in <file>:<line>" suffix. `arg_num` is 1-based; `pname` is
+    /// the parameter name (`Some` for a fixed parameter → "Argument #N ($name)…",
+    /// `None` for a variadic-pack element → "Argument #N …", matching PHP which
+    /// omits the name for a variadic element).
     fn arg_type_error(
         &self,
         f: &Func,
-        i: usize,
+        arg_num: usize,
+        pname: Option<&[u8]>,
         hint: &TypeHint,
         given: &str,
         call_line: Line,
     ) -> PhpError {
         let file = String::from_utf8_lossy(&self.module.file).into_owned();
-        let pname = f
-            .param_names
-            .get(i)
-            .map(|n| String::from_utf8_lossy(n).into_owned())
-            .unwrap_or_default();
+        let named = match pname {
+            Some(n) => format!(" (${})", String::from_utf8_lossy(n)),
+            None => String::new(),
+        };
         PhpError::TypeErrorAt {
             msg: format!(
-                "{}(): Argument #{} (${}) must be of type {}, {} given, called in {} on line {}",
+                "{}(): Argument #{}{} must be of type {}, {} given, called in {} on line {}",
                 self.qualified_callee_name(f),
-                i + 1,
-                pname,
+                arg_num,
+                named,
                 hint.display_name(),
                 given,
                 file,
