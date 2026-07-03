@@ -4427,7 +4427,20 @@ impl<'m> Vm<'m> {
                     self.suppress_depth = self.suppress_depth.saturating_sub(1);
                     if let Some(saved) = self.suppress_marks.pop() {
                         // Drop the diagnostics raised under `@` (never rendered, as
-                        // `flush_diags` was a no-op while suppressed).
+                        // `flush_diags` was a no-op while suppressed) — but `@` does
+                        // NOT hide them from error_get_last (monolog's StreamHandler
+                        // appends error_get_last()['message'] after an @fopen): the
+                        // last suppressed one is recorded like the default handler
+                        // would have.
+                        if let Some(d) = self.diags.get(saved..).and_then(|s| s.last()) {
+                            let (errno, message) = match d {
+                                Diag::Warning(m) => (2, m),
+                                Diag::Notice(m) => (8, m),
+                                Diag::Deprecated(m) => (8192, m),
+                            };
+                            let line = self.cur_line(top);
+                            self.last_error = Some((errno, message.as_bytes().to_vec(), line));
+                        }
                         self.diags.truncate(saved);
                     }
                 }
@@ -9758,6 +9771,208 @@ impl<'m> Vm<'m> {
         Ok(Zval::Bool(true))
     }
 
+    /// Whether the value graph contains an object with a `__serialize`/`__sleep`
+    /// hook — the fast-path gate for [`Self::ho_serialize`]: a hook-free graph
+    /// (the overwhelmingly common case) passes to the pure serializer untouched,
+    /// keeping shared-object identity intact. `seen` breaks cycles.
+    fn has_serialize_hooks(&self, v: &Zval, seen: &mut Vec<usize>) -> bool {
+        match v {
+            Zval::Ref(r) => {
+                let addr = Rc::as_ptr(r) as usize;
+                if seen.contains(&addr) {
+                    return false;
+                }
+                seen.push(addr);
+                self.has_serialize_hooks(&r.borrow(), seen)
+            }
+            Zval::Array(a) => a.iter().any(|(_, val)| self.has_serialize_hooks(val, seen)),
+            Zval::Object(orc) => {
+                let addr = Rc::as_ptr(orc) as usize;
+                if seen.contains(&addr) {
+                    return false;
+                }
+                seen.push(addr);
+                if let Some(cid) = object_class_id(v) {
+                    if resolve_method_runtime(&self.classes, cid, b"__serialize").is_some()
+                        || resolve_method_runtime(&self.classes, cid, b"__sleep").is_some()
+                    {
+                        return true;
+                    }
+                }
+                let vals: Vec<Zval> =
+                    orc.borrow().props.iter().map(|(_, val)| val.clone()).collect();
+                vals.iter().any(|val| self.has_serialize_hooks(val, seen))
+            }
+            _ => false,
+        }
+    }
+
+    /// Rewrite an object graph for serialization, running `__serialize` (data
+    /// array becomes the payload) / `__sleep` (side effects + prop filter) and
+    /// substituting synthetic same-class objects the pure serializer then
+    /// formats. `memo` keeps one synthetic per source object (shared subtrees /
+    /// cycles map to the same rewrite).
+    fn prepare_serialize(
+        &mut self,
+        v: Zval,
+        memo: &mut HashMap<usize, Zval>,
+    ) -> Result<Zval, PhpError> {
+        match v {
+            Zval::Ref(r) => {
+                let inner = r.borrow().clone();
+                self.prepare_serialize(inner, memo)
+            }
+            Zval::Array(a) => {
+                let mut out = PhpArray::new();
+                for (k, val) in a.iter() {
+                    out.insert(k.clone(), self.prepare_serialize(val.clone(), memo)?);
+                }
+                Ok(Zval::Array(Rc::new(out)))
+            }
+            Zval::Object(ref orc) => {
+                // A lazy object initializes before serialization (PHP 8.4's
+                // "serialize may initialize"; a proxy forwards to its real
+                // instance) — mirrors json_normalize.
+                if orc.borrow().lazy.is_some() {
+                    let real = self.realize_full(&v)?;
+                    return self.prepare_serialize(real, memo);
+                }
+                let addr = Rc::as_ptr(orc) as usize;
+                if let Some(done) = memo.get(&addr) {
+                    return Ok(done.clone());
+                }
+                let cid = object_class_id(&v);
+                let mut opaque_keys = false;
+                let entries: Vec<(Vec<u8>, Zval)> = if let Some(cid) = cid.filter(|&c| {
+                    resolve_method_runtime(&self.classes, c, b"__serialize").is_some()
+                }) {
+                    let _ = cid;
+                    // __serialize's array keys are OPAQUE payload names, not
+                    // properties: they serialize verbatim (no visibility
+                    // re-mangling from the class's declarations).
+                    opaque_keys = true;
+                    let data = self
+                        .call_method_sync(v.clone(), b"__serialize", Vec::new())?
+                        .deref_clone();
+                    let Zval::Array(a) = data else {
+                        return Err(PhpError::TypeError(format!(
+                            "{}::__serialize() must return an array",
+                            String::from_utf8_lossy(orc.borrow().class_name.as_bytes())
+                        )));
+                    };
+                    a.iter()
+                        .map(|(k, val)| {
+                            let kb = match k {
+                                Key::Int(i) => i.to_string().into_bytes(),
+                                Key::Str(s) => s.as_bytes().to_vec(),
+                            };
+                            (kb, val.clone())
+                        })
+                        .collect()
+                } else if cid.is_some_and(|c| {
+                    resolve_method_runtime(&self.classes, c, b"__sleep").is_some()
+                }) {
+                    let names = self
+                        .call_method_sync(v.clone(), b"__sleep", Vec::new())?
+                        .deref_clone();
+                    let Zval::Array(names) = names else {
+                        self.diags.push(Diag::Notice(
+                            "serialize(): __sleep() should return an array only containing the names of instance-variables to serialize"
+                                .to_string(),
+                        ));
+                        return Ok(Zval::Null);
+                    };
+                    let ob = orc.borrow();
+                    let mut picked = Vec::new();
+                    for (_, n) in names.iter() {
+                        let want = convert::to_zstr_cast(&n.deref_clone(), &mut self.diags)
+                            .as_bytes()
+                            .to_vec();
+                        // Match by *declared* name: the stored key may carry a
+                        // private/protected mangle prefix.
+                        let hit = ob.props.iter().find(|(k, _)| {
+                            let (disp, _) = php_types::unmangle_prop_key(k, &ob.info);
+                            disp == &want[..]
+                        });
+                        match hit {
+                            Some((k, val)) => picked.push((k.to_vec(), val.clone())),
+                            None => {
+                                // PHP 8 skips the member: silently when it is a
+                                // DECLARED (typed, uninitialized) property, with
+                                // the "does not exist" Warning when undeclared.
+                                let declared = cid.is_some_and(|mut c| loop {
+                                    if self.classes[c].prop_info.contains_key(&want[..]) {
+                                        break true;
+                                    }
+                                    match self.classes[c].parent {
+                                        Some(p) => c = p,
+                                        None => break false,
+                                    }
+                                });
+                                if !declared {
+                                    self.diags.push(Diag::Warning(format!(
+                                        "serialize(): \"{}\" returned as member variable from __sleep() but does not exist",
+                                        String::from_utf8_lossy(&want)
+                                    )));
+                                }
+                            }
+                        }
+                    }
+                    drop(ob);
+                    picked
+                } else {
+                    // No hook here: keep the props, but rewrite the values (a
+                    // hooked object may sit deeper).
+                    orc.borrow().props.iter().map(|(k, val)| (k.to_vec(), val.clone())).collect()
+                };
+                // Synthetic same-class carrier, registered in `memo` BEFORE the
+                // recursion so a cyclic graph terminates.
+                let synth = Rc::new(RefCell::new((*orc.borrow()).clone()));
+                {
+                    let mut sb = synth.borrow_mut();
+                    let keys: Vec<Vec<u8>> = sb.props.iter().map(|(k, _)| k.to_vec()).collect();
+                    for k in keys {
+                        sb.props.remove(&k);
+                    }
+                    if opaque_keys {
+                        sb.info = Rc::new(php_types::ObjectInfo::default());
+                    }
+                }
+                let out = Zval::Object(synth.clone());
+                memo.insert(addr, out.clone());
+                for (k, val) in entries {
+                    let pv = self.prepare_serialize(val, memo)?;
+                    synth.borrow_mut().props.set(&k, pv);
+                }
+                Ok(out)
+            }
+            other => Ok(other),
+        }
+    }
+
+    /// `serialize($value)`: the pure formatter (php-builtins) does the encoding;
+    /// this host wrapper first runs the object hooks (`__serialize`/`__sleep`)
+    /// the pure side cannot call. Hook-free graphs pass through untouched.
+    fn ho_serialize(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(first) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "serialize() expects exactly 1 argument, 0 given".to_string(),
+            ));
+        };
+        let v = first.deref_clone();
+        let prepared = if self.has_serialize_hooks(&v, &mut Vec::new()) {
+            self.prepare_serialize(v, &mut HashMap::new())?
+        } else {
+            v
+        };
+        let f = match self.registry.get(&b"serialize"[..]) {
+            Some(Builtin::Value(f)) => *f,
+            _ => return Err(PhpError::Error("serialize builtin unavailable".to_string())),
+        };
+        let line = self.cur_line(self.frames.len() - 1);
+        self.run_value_builtin(f, &[prepared], line)
+    }
+
     /// `unserialize($str)`: rebuild a value from PHP's serialization format. A
     /// host builtin because reconstructing an object needs the class table and id
     /// allocator. Mirrors `eval::ho_unserialize`: the shared
@@ -9775,7 +9990,7 @@ impl<'m> Vm<'m> {
         let bytes = convert::to_zstr_cast(&arg0, &mut self.diags);
         let nbytes = bytes.as_bytes().len();
         match crate::unserialize::parse(bytes.as_bytes()) {
-            Some(s) => Ok(self.vm_ser_to_zval(s)),
+            Some(s) => self.vm_ser_to_zval(s),
             None => {
                 // PHP reports the failing offset; we do not track it, so report 0
                 // (matches `eval`, D-50).
@@ -9790,9 +10005,9 @@ impl<'m> Vm<'m> {
     /// Turn a decoded [`Ser`](crate::unserialize::Ser) tree into a `Zval`, recursing
     /// into arrays/objects. Mirrors `eval::ser_to_zval`; objects go through
     /// [`Self::vm_make_unserialized_object`] (the VM's class table / id allocator).
-    fn vm_ser_to_zval(&mut self, s: crate::unserialize::Ser) -> Zval {
+    fn vm_ser_to_zval(&mut self, s: crate::unserialize::Ser) -> Result<Zval, PhpError> {
         use crate::unserialize::Ser;
-        match s {
+        Ok(match s {
             Ser::Null => Zval::Null,
             Ser::Bool(b) => Zval::Bool(b),
             Ser::Long(n) => Zval::Long(n),
@@ -9807,19 +10022,46 @@ impl<'m> Vm<'m> {
                         Ser::Str(b) => Key::from_bytes(&b),
                         _ => continue,
                     };
-                    let val = self.vm_ser_to_zval(v);
+                    let val = self.vm_ser_to_zval(v)?;
                     arr.insert(key, val);
                 }
                 Zval::Array(Rc::new(arr))
             }
             Ser::Object(class, props) => {
+                let lower = class.to_ascii_lowercase();
+                let cid = self.class_index.get(lower.as_slice()).copied();
+                // `__unserialize` receives the raw data array INSTEAD of prop
+                // materialisation (PHP 7.4 protocol; wins over __wakeup).
+                if let Some(cid) = cid {
+                    if resolve_method_runtime(&self.classes, cid, b"__unserialize").is_some() {
+                        let mut data = PhpArray::new();
+                        for (name, v) in props {
+                            let val = self.vm_ser_to_zval(v)?;
+                            data.insert(Key::from_bytes(&name), val);
+                        }
+                        let obj = self.vm_make_unserialized_object(&class, Vec::new());
+                        self.call_method_sync(
+                            obj.clone(),
+                            b"__unserialize",
+                            vec![Zval::Array(Rc::new(data))],
+                        )?;
+                        return Ok(obj);
+                    }
+                }
                 let fields: Vec<(Vec<u8>, Zval)> = props
                     .into_iter()
-                    .map(|(name, v)| (name, self.vm_ser_to_zval(v)))
-                    .collect();
-                self.vm_make_unserialized_object(&class, fields)
+                    .map(|(name, v)| Ok((name, self.vm_ser_to_zval(v)?)))
+                    .collect::<Result<_, PhpError>>()?;
+                let obj = self.vm_make_unserialized_object(&class, fields);
+                // The legacy `__wakeup` runs after the props are materialised.
+                if let Some(cid) = cid {
+                    if resolve_method_runtime(&self.classes, cid, b"__wakeup").is_some() {
+                        self.call_method_sync(obj.clone(), b"__wakeup", Vec::new())?;
+                    }
+                }
+                obj
             }
-        }
+        })
     }
 
     /// Build an object of named `class` with the given properties, the constructor
@@ -10220,6 +10462,7 @@ impl<'m> Vm<'m> {
             StreamBackend::ChildStdin(_)
             | StreamBackend::ChildStdout(_)
             | StreamBackend::ChildStderr(_) => ("STDIO", false),
+            StreamBackend::Tcp(_) | StreamBackend::Udp(_) => ("tcp_socket/unknown", false),
         };
         let wrapper = if s.uri.starts_with(b"php://") { "PHP" } else { "plainfile" };
         let mut arr = PhpArray::new();
@@ -10299,6 +10542,12 @@ impl<'m> Vm<'m> {
                         "fopen({}): Failed to open stream: no suitable wrapper could be found",
                         String::from_utf8_lossy(&path)
                     )));
+                    // Synchronous flush: PHP raises the fopen warning AT the
+                    // call, so a set_error_handler installed just around it
+                    // (monolog's StreamHandler) sees it even when the deferred
+                    // per-statement flush would land after restore_error_handler.
+                    let line = self.cur_line(self.frames.len() - 1);
+                    self.flush_diags(line)?;
                     Ok(Zval::Bool(false))
                 }
             };
@@ -10310,6 +10559,8 @@ impl<'m> Vm<'m> {
                     "fopen({}): Failed to open stream: {msg}",
                     String::from_utf8_lossy(&path)
                 )));
+                let line = self.cur_line(self.frames.len() - 1);
+                self.flush_diags(line)?;
                 Ok(Zval::Bool(false))
             }
         }
@@ -10844,6 +11095,124 @@ impl<'m> Vm<'m> {
             .unwrap_or(0) as i32;
         let ok = unsafe { libc::kill(pid, signo) } == 0;
         Ok(Zval::Bool(ok))
+    }
+
+    /// `__fsockopen(target, port, timeout_secs) -> [stream|false, errno, errstr]`:
+    /// the host behind the prelude `fsockopen`/`pfsockopen` wrappers (whose two
+    /// by-ref outputs live in the prelude). Transports: `tcp://` (or schemeless)
+    /// over `TcpStream::connect_timeout`, `udp://` over a connected `UdpSocket`;
+    /// anything else is PHP's "unable to find the socket transport". A failure
+    /// also raises fsockopen's Warning (monolog `@`-suppresses it and reads the
+    /// errno/errstr pair instead).
+    fn ho_fsockopen(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let target = args
+            .first()
+            .map(|v| convert::to_zstr_cast(&v.deref_clone(), &mut self.diags).as_bytes().to_vec())
+            .unwrap_or_default();
+        let port_arg = args
+            .get(1)
+            .map(|v| convert::to_long_cast(&v.deref_clone(), &mut self.diags))
+            .unwrap_or(-1);
+        let timeout = match args.get(2).map(|v| convert::to_double(&v.deref_clone())) {
+            Some(t) if t > 0.0 => t,
+            _ => 60.0, // ini default_socket_timeout
+        };
+        let text = String::from_utf8_lossy(&target).into_owned();
+        let fail = |vm: &mut Self, errno: i64, errstr: String| -> Result<Zval, PhpError> {
+            vm.diags.push(Diag::Warning(format!(
+                "fsockopen(): Unable to connect to {text}:{port_arg} ({errstr})"
+            )));
+            let mut out = PhpArray::new();
+            let _ = out.append(Zval::Bool(false));
+            let _ = out.append(Zval::Long(errno));
+            let _ = out.append(Zval::Str(PhpStr::new(errstr.into_bytes())));
+            Ok(Zval::Array(Rc::new(out)))
+        };
+        let (scheme, rest) = match text.split_once("://") {
+            Some((s, r)) => (s.to_ascii_lowercase(), r.to_string()),
+            None => ("tcp".to_string(), text.clone()),
+        };
+        if scheme != "tcp" && scheme != "udp" {
+            return fail(
+                self,
+                0,
+                format!(
+                    "Unable to find the socket transport \"{scheme}\" - did you forget to enable it when you configured PHP?"
+                ),
+            );
+        }
+        // host[:port] — an explicit :port in the target wins over the argument.
+        let (host, port) = match rest.rsplit_once(':') {
+            Some((h, p)) if p.chars().all(|c| c.is_ascii_digit()) && !p.is_empty() => {
+                (h.to_string(), p.parse::<i64>().unwrap_or(-1))
+            }
+            _ => (rest.clone(), port_arg),
+        };
+        if !(0..=65535).contains(&port) {
+            return fail(self, 0, format!("Failed to parse address \"{rest}\""));
+        }
+        use std::net::ToSocketAddrs;
+        let addr = match (host.as_str(), port as u16).to_socket_addrs() {
+            Ok(mut it) => match it.next() {
+                Some(a) => a,
+                None => {
+                    return fail(
+                        self,
+                        0,
+                        format!("php_network_getaddresses: getaddrinfo for {host} failed: nodename nor servname provided, or not known"),
+                    )
+                }
+            },
+            Err(_) => {
+                return fail(
+                    self,
+                    0,
+                    format!("php_network_getaddresses: getaddrinfo for {host} failed: nodename nor servname provided, or not known"),
+                )
+            }
+        };
+        let backend = if scheme == "tcp" {
+            match std::net::TcpStream::connect_timeout(
+                &addr,
+                std::time::Duration::from_secs_f64(timeout),
+            ) {
+                Ok(t) => php_types::stream::StreamBackend::Tcp(t),
+                Err(e) => {
+                    let errno = e.raw_os_error().unwrap_or(0) as i64;
+                    let msg = e.to_string();
+                    let msg = msg.split(" (os error").next().unwrap_or(&msg).to_string();
+                    return fail(self, errno, msg);
+                }
+            }
+        } else {
+            let sock = std::net::UdpSocket::bind("0.0.0.0:0")
+                .and_then(|s| s.connect(addr).map(|()| s));
+            match sock {
+                Ok(s) => php_types::stream::StreamBackend::Udp(s),
+                Err(e) => {
+                    let errno = e.raw_os_error().unwrap_or(0) as i64;
+                    let msg = e.to_string();
+                    let msg = msg.split(" (os error").next().unwrap_or(&msg).to_string();
+                    return fail(self, errno, msg);
+                }
+            }
+        };
+        let id = self.next_resource_id;
+        self.next_resource_id += 1;
+        let stream = php_types::Stream {
+            backend,
+            readable: true,
+            writable: true,
+            eof: false,
+            uri: target,
+            mode: b"r+".to_vec(),
+        };
+        let res = Zval::Resource(Rc::new(RefCell::new(Resource::new(id, stream))));
+        let mut out = PhpArray::new();
+        let _ = out.append(res);
+        let _ = out.append(Zval::Long(0));
+        let _ = out.append(Zval::Str(PhpStr::new(Vec::new())));
+        Ok(Zval::Array(Rc::new(out)))
     }
 
     /// `opendir($directory)`: snapshot the directory entries (`.`/`..` first, then
@@ -13418,6 +13787,8 @@ host_builtins! {
     b"pcntl_signal_dispatch" => vm.ho_pcntl_signal_dispatch(args),
     b"pcntl_async_signals" => vm.ho_pcntl_async_signals(args),
     b"posix_kill" => vm.ho_posix_kill(args),
+    b"__fsockopen" => vm.ho_fsockopen(args),
+    b"serialize" => vm.ho_serialize(args),
     b"umask" => vm.ho_umask(args),
     b"__dom_new_doc" => vm.ho_dom_new_doc(args),
     b"__dom_load" => vm.ho_dom_load(args),

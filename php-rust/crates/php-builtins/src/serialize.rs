@@ -83,10 +83,25 @@ fn ser_into(out: &mut Vec<u8>, v: &Zval) -> Result<(), PhpError> {
             out.extend_from_slice(b"\":");
             out.extend_from_slice(n.to_string().as_bytes());
             out.extend_from_slice(b":{");
-            // Public property names serialize verbatim; private/protected name
-            // mangling (`\0Class\0p` / `\0*\0p`) is a step-50 scope-out (D-50).
+            // Wire-format name mangling: a private slot is stored mangled
+            // (`\0Class\0p`) and serializes verbatim; a protected one is stored
+            // PLAIN and gains Zend's `\0*\0` prefix on the wire (unserialize
+            // strips it back off). Public/dynamic names pass through.
             for (pname, val) in obj.props.iter() {
-                ser_str(out, pname);
+                let is_plain = !pname.starts_with(b"\0");
+                if is_plain
+                    && matches!(
+                        php_types::unmangle_prop_key(pname, &obj.info).1,
+                        php_types::PropVis::Protected
+                    )
+                {
+                    let mut mangled = Vec::with_capacity(pname.len() + 3);
+                    mangled.extend_from_slice(b"\0*\0");
+                    mangled.extend_from_slice(pname);
+                    ser_str(out, &mangled);
+                } else {
+                    ser_str(out, pname);
+                }
                 ser_into(out, val)?;
             }
             out.push(b'}');

@@ -586,6 +586,19 @@ function hash_file($algo, $filename, $binary = false) {
     if ($d === false) { return false; }
     return hash($algo, $d, $binary);
 }
+function fsockopen($hostname, $port = -1, &$error_code = null, &$error_string = null, $timeout = null) {
+    $r = __fsockopen((string)$hostname, (int)$port, $timeout === null ? -1.0 : (float)$timeout);
+    $error_code = $r[1];
+    $error_string = $r[2];
+    return $r[0];
+}
+// phpr has no persistent-connection pool: pfsockopen connects fresh.
+function pfsockopen($hostname, $port = -1, &$error_code = null, &$error_string = null, $timeout = null) {
+    $r = __fsockopen((string)$hostname, (int)$port, $timeout === null ? -1.0 : (float)$timeout);
+    $error_code = $r[1];
+    $error_string = $r[2];
+    return $r[0];
+}
 function stream_select(&$read, &$write, &$except, $seconds, $microseconds = null) {
     $r = __stream_select($read ?? [], $write ?? [], $except ?? [], $seconds, $microseconds);
     if ($r === false) { return false; }

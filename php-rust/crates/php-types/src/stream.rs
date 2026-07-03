@@ -86,6 +86,11 @@ pub enum StreamBackend {
     ChildStdin(std::process::ChildStdin),
     ChildStdout(std::process::ChildStdout),
     ChildStderr(std::process::ChildStderr),
+    /// A connected TCP client socket (`fsockopen("tcp://...")`). Unseekable.
+    Tcp(std::net::TcpStream),
+    /// A connected UDP socket (`fsockopen("udp://...")`): writes send one
+    /// datagram each, reads receive one. Unseekable, never EOF-terminated.
+    Udp(std::net::UdpSocket),
 }
 
 /// A `proc_open` child process: the handle, the command line it was launched
@@ -197,6 +202,8 @@ impl Stream {
                 StreamBackend::Stdin => std::io::stdin().read(&mut buf[filled..]),
                 StreamBackend::ChildStdout(p) => p.read(&mut buf[filled..]),
                 StreamBackend::ChildStderr(p) => p.read(&mut buf[filled..]),
+                StreamBackend::Tcp(t) => t.read(&mut buf[filled..]),
+                StreamBackend::Udp(u) => u.recv(&mut buf[filled..]),
                 StreamBackend::Stdout | StreamBackend::Stderr | StreamBackend::ChildStdin(_) => {
                     Ok(0)
                 }
@@ -234,6 +241,8 @@ impl Stream {
                 StreamBackend::Stdin => std::io::stdin().read(&mut one),
                 StreamBackend::ChildStdout(p) => p.read(&mut one),
                 StreamBackend::ChildStderr(p) => p.read(&mut one),
+                StreamBackend::Tcp(t) => t.read(&mut one),
+                StreamBackend::Udp(u) => u.recv(&mut one),
                 StreamBackend::Stdout | StreamBackend::Stderr | StreamBackend::ChildStdin(_) => {
                     Ok(0)
                 }
@@ -279,6 +288,8 @@ impl Stream {
                 p.write_all(data)?;
                 Ok(data.len())
             }
+            StreamBackend::Tcp(t) => t.write(data),
+            StreamBackend::Udp(u) => u.send(data),
             // The child's output ends are read-only; report zero bytes written.
             StreamBackend::ChildStdout(_) | StreamBackend::ChildStderr(_) => Ok(0),
         }
@@ -292,6 +303,8 @@ impl Stream {
             StreamBackend::Stdout => std::io::stdout().flush(),
             StreamBackend::Stderr => std::io::stderr().flush(),
             StreamBackend::ChildStdin(p) => p.flush(),
+            StreamBackend::Tcp(t) => t.flush(),
+            StreamBackend::Udp(_) => Ok(()),
             StreamBackend::ChildStdout(_) | StreamBackend::ChildStderr(_) => Ok(()),
         }
     }
@@ -326,6 +339,8 @@ impl Stream {
             StreamBackend::ChildStdin(p) => p.as_raw_fd(),
             StreamBackend::ChildStdout(p) => p.as_raw_fd(),
             StreamBackend::ChildStderr(p) => p.as_raw_fd(),
+            StreamBackend::Tcp(t) => t.as_raw_fd(),
+            StreamBackend::Udp(u) => u.as_raw_fd(),
         })
     }
 
