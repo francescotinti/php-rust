@@ -5,6 +5,8 @@
 //! class table, so it is intercepted by the evaluator instead (see
 //! `eval.rs::ho_json_decode`).
 
+use std::rc::Rc;
+
 use php_runtime::Ctx;
 use php_types::dtoa::double_to_shortest;
 use php_types::{Key, Object, PhpArray, PhpError, PhpStr, PropVis, Zval};
@@ -27,7 +29,7 @@ pub fn json_encode(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     };
     let flags = args.get(1).map(as_i64).unwrap_or(0);
     let mut out = Vec::new();
-    match encode(value, flags, 1, &mut out) {
+    match encode(value, flags, 1, &mut seen_stack(), &mut out) {
         Ok(()) => Ok(Zval::Str(PhpStr::new(out))),
         Err(()) => Ok(Zval::Bool(false)),
     }
@@ -42,12 +44,36 @@ fn as_i64(v: &Zval) -> i64 {
     }
 }
 
-fn encode(v: &Zval, flags: i64, depth: usize, out: &mut Vec<u8>) -> Result<(), ()> {
+/// JSON_PARTIAL_OUTPUT_ON_ERROR.
+const PARTIAL: i64 = 512;
+
+fn seen_stack() -> Vec<usize> {
+    Vec::new()
+}
+
+/// Emit PHP's partial-output substitute for an unencodable node (`null`; a
+/// non-finite double becomes `0`).
+fn partial_null(out: &mut Vec<u8>) {
+    out.extend_from_slice(b"null");
+}
+
+fn encode(
+    v: &Zval,
+    flags: i64,
+    depth: usize,
+    seen: &mut Vec<usize>,
+    out: &mut Vec<u8>,
+) -> Result<(), ()> {
+    let partial = flags & PARTIAL != 0;
     // PHP's json_encode depth limit (default $depth = 512): a deeper nesting —
     // in particular a cyclic object graph, which json_normalize's cycle check
     // cannot see through *plain* object properties — is `false`, not a stack
     // overflow (JSON_ERROR_DEPTH/RECURSION territory).
     if depth > 512 {
+        if partial {
+            partial_null(out);
+            return Ok(());
+        }
         return Err(());
     }
     match v {
@@ -57,6 +83,11 @@ fn encode(v: &Zval, flags: i64, depth: usize, out: &mut Vec<u8>) -> Result<(), (
         Zval::Long(n) => out.extend_from_slice(n.to_string().as_bytes()),
         Zval::Double(d) => {
             if !d.is_finite() {
+                // Partial output substitutes 0 for INF/NAN (Zend's rule).
+                if partial {
+                    out.push(b'0');
+                    return Ok(());
+                }
                 return Err(());
             }
             // Same shortest-roundtrip digits as var_dump (serialize_precision=-1),
@@ -68,12 +99,62 @@ fn encode(v: &Zval, flags: i64, depth: usize, out: &mut Vec<u8>) -> Result<(), (
                 }
             }
             out.extend_from_slice(&s);
+            // JSON_PRESERVE_ZERO_FRACTION (1024): a whole-number float keeps a
+            // ".0" so it decodes back as a float (Elastica's stringify sets it).
+            if flags & 1024 != 0 && !s.contains(&b'.') && !s.contains(&b'e') {
+                out.extend_from_slice(b".0");
+            }
         }
-        Zval::Str(s) => encode_string(s.as_bytes(), flags, out)?,
-        Zval::Array(a) => encode_array(a, flags, depth, out)?,
-        Zval::Object(o) => encode_object(&o.borrow(), flags, depth, out)?,
-        Zval::Ref(r) => encode(&r.borrow(), flags, depth, out)?,
-        _ => return Err(()),
+        Zval::Str(s) => {
+            let before = out.len();
+            if encode_string(s.as_bytes(), flags, out).is_err() {
+                if partial {
+                    out.truncate(before);
+                    partial_null(out);
+                    return Ok(());
+                }
+                return Err(());
+            }
+        }
+        Zval::Array(a) => {
+            // Recursion check by identity: a revisited container is PHP's
+            // JSON_ERROR_RECURSION (→ null under partial output).
+            let addr = Rc::as_ptr(a) as usize;
+            if seen.contains(&addr) {
+                if partial {
+                    partial_null(out);
+                    return Ok(());
+                }
+                return Err(());
+            }
+            seen.push(addr);
+            let r = encode_array(a, flags, depth, seen, out);
+            seen.pop();
+            r?
+        }
+        Zval::Object(o) => {
+            let addr = Rc::as_ptr(o) as usize;
+            if seen.contains(&addr) {
+                if partial {
+                    partial_null(out);
+                    return Ok(());
+                }
+                return Err(());
+            }
+            seen.push(addr);
+            let r = encode_object(&o.borrow(), flags, depth, seen, out);
+            seen.pop();
+            r?
+        }
+        Zval::Ref(r) => encode(&r.borrow(), flags, depth, seen, out)?,
+        _ => {
+            // Resources and other unencodable values.
+            if partial {
+                partial_null(out);
+                return Ok(());
+            }
+            return Err(());
+        }
     }
     Ok(())
 }
@@ -86,7 +167,13 @@ fn is_list(a: &PhpArray) -> bool {
         .all(|(i, (k, _))| matches!(k, Key::Int(n) if *n == i as i64))
 }
 
-fn encode_array(a: &PhpArray, flags: i64, depth: usize, out: &mut Vec<u8>) -> Result<(), ()> {
+fn encode_array(
+    a: &PhpArray,
+    flags: i64,
+    depth: usize,
+    seen: &mut Vec<usize>,
+    out: &mut Vec<u8>,
+) -> Result<(), ()> {
     // JSON_FORCE_OBJECT (16): every array — list or empty — encodes as an object.
     const FORCE_OBJECT: i64 = 16;
     if a.is_empty() {
@@ -96,7 +183,7 @@ fn encode_array(a: &PhpArray, flags: i64, depth: usize, out: &mut Vec<u8>) -> Re
     if flags & FORCE_OBJECT == 0 && is_list(a) {
         let items: Vec<&Zval> = a.iter().map(|(_, v)| v).collect();
         encode_seq(b'[', b']', flags, depth, items.len(), out, |i, flags, depth, out| {
-            encode(items[i], flags, depth, out)
+            encode(items[i], flags, depth, seen, out)
         })
     } else {
         let entries: Vec<(Vec<u8>, &Zval)> = a
@@ -106,12 +193,18 @@ fn encode_array(a: &PhpArray, flags: i64, depth: usize, out: &mut Vec<u8>) -> Re
         encode_seq(b'{', b'}', flags, depth, entries.len(), out, |i, flags, depth, out| {
             encode_string(&entries[i].0, flags, out)?;
             out.extend_from_slice(if flags & PRETTY_PRINT != 0 { b": " } else { b":" });
-            encode(entries[i].1, flags, depth, out)
+            encode(entries[i].1, flags, depth, seen, out)
         })
     }
 }
 
-fn encode_object(o: &Object, flags: i64, depth: usize, out: &mut Vec<u8>) -> Result<(), ()> {
+fn encode_object(
+    o: &Object,
+    flags: i64,
+    depth: usize,
+    seen: &mut Vec<usize>,
+    out: &mut Vec<u8>,
+) -> Result<(), ()> {
     // Only public properties are serialised, in declaration / insertion order
     // (a mangled private key unmangles to Private and is filtered out).
     let entries: Vec<(Vec<u8>, &Zval)> = o
@@ -129,7 +222,7 @@ fn encode_object(o: &Object, flags: i64, depth: usize, out: &mut Vec<u8>) -> Res
     encode_seq(b'{', b'}', flags, depth, entries.len(), out, |i, flags, depth, out| {
         encode_string(&entries[i].0, flags, out)?;
         out.extend_from_slice(if flags & PRETTY_PRINT != 0 { b": " } else { b":" });
-        encode(entries[i].1, flags, depth, out)
+        encode(entries[i].1, flags, depth, seen, out)
     })
 }
 

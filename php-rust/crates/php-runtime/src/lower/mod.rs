@@ -2179,6 +2179,10 @@ class ReflectionMethod extends ReflectionFunctionAbstract {
     public function getReturnType() { return ReflectionNamedType::__fromInfo($this->__info['returnType']); }
     public function hasReturnType() { return $this->__info['returnType'] !== false; }
     public function __construct($objectOrClass, $method = null) {
+        // A class-name string autoloads (Zend does; the info lookup below is
+        // autoload-blind and would report "does not exist" for a not-yet-loaded
+        // class).
+        if (is_string($objectOrClass)) { class_exists(strpos($objectOrClass, '::') !== false ? explode('::', $objectOrClass, 2)[0] : $objectOrClass); }
         if ($method === null && is_string($objectOrClass) && strpos($objectOrClass, '::') !== false) {
             $parts = explode('::', $objectOrClass, 2);
             $objectOrClass = $parts[0]; $method = $parts[1];

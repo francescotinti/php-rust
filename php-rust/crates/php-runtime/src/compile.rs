@@ -2549,6 +2549,11 @@ impl<'a> FnCompiler<'a> {
         // define-family, Sessions B–D) need the VM itself, so they are dispatched
         // VM-side via `Op::CallHostBuiltin` rather than the stateless registry.
         if let Some(canon) = crate::vm::host_builtin_canonical(bname) {
+            // A spread (`json_encode(...$args)`) takes the same runtime-flatten
+            // op as registry builtins; its VM handler routes host names too.
+            if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
+                return self.emit_builtin_spread(canon, args);
+            }
             self.push_value_args(args)?; // rejects spread (out of slice here)
             self.emit(Op::CallHostBuiltin { name: canon.into(), argc: args.len() as u32 });
             return Ok(());

@@ -2848,8 +2848,12 @@ impl<'m> Vm<'m> {
                     self.frames[top].stack.push(result);
                 }
                 Op::CallBuiltinSpread { name, spreads } => {
+                    // A registry builtin runs via its Value fn; a VM host
+                    // builtin (`json_encode(...$args)`, Elastica's stringify)
+                    // takes the flattened args through dispatch_host_builtin.
                     let f = match self.registry.get(&name[..]) {
-                        Some(Builtin::Value(f)) => *f,
+                        Some(Builtin::Value(f)) => Some(*f),
+                        _ if host_builtin_canonical(&name).is_some() => None,
                         _ => return Err(undefined_builtin(&name)),
                     };
                     let comp_vals = self.pop_keys(top, spreads.len() as u32);
@@ -2883,8 +2887,14 @@ impl<'m> Vm<'m> {
                             String::from_utf8_lossy(&name)
                         )));
                     }
-                    let line = self.cur_line(top);
-                    let result = self.run_value_builtin(f, &args, line)?;
+                    let result = match f {
+                        Some(f) => {
+                            let line = self.cur_line(top);
+                            self.run_value_builtin(f, &args, line)?
+                        }
+                        None => self.dispatch_host_builtin(&name, args)?,
+                    };
+                    let top = self.frames.len() - 1;
                     self.frames[top].stack.push(result);
                 }
                 Op::CallHostBuiltin { name, argc } => {
@@ -4976,10 +4986,16 @@ impl<'m> Vm<'m> {
             .map(|v| convert::to_long_cast(v, &mut self.diags))
             .unwrap_or(0);
         let throw = flags & 4_194_304 != 0; // JSON_THROW_ON_ERROR
+        // JSON_PARTIAL_OUTPUT_ON_ERROR: unencodable nodes become null (0 for
+        // INF/NAN) instead of failing the whole encode — the cycle handling
+        // moves from the up-front check to per-node substitution (normalize
+        // for JsonSerializable/array revisits, the pure encoder for plain
+        // object graphs).
+        let partial = flags & 512 != 0;
         // A cyclic value graph is PHP's JSON_ERROR_RECURSION — detected up
         // front over the whole graph (arrays *and* plain-object properties,
         // which json_normalize deliberately does not descend into).
-        if json_has_cycle(&value, &mut Vec::new()) {
+        if !partial && json_has_cycle(&value, &mut Vec::new()) {
             self.json_last_error = 6;
             if throw {
                 if let Some(cid) = self.class_index.get(&b"jsonexception"[..]).copied() {
@@ -4990,7 +5006,7 @@ impl<'m> Vm<'m> {
             return Ok(Zval::Bool(false));
         }
         let mut visiting = Vec::new();
-        let normalized = match self.json_normalize(value, &mut visiting) {
+        let normalized = match self.json_normalize(value, partial, &mut visiting) {
             Ok(n) => n,
             Err(e) => {
                 if self.json_last_error == 11 || self.json_last_error == 6 {
@@ -5102,11 +5118,11 @@ impl<'m> Vm<'m> {
     /// `visiting` carries the Rc addresses of the arrays/objects on the current
     /// descent path: revisiting one is a cycle — PHP's JSON_ERROR_RECURSION (6),
     /// not a stack overflow.
-    fn json_normalize(&mut self, v: Zval, visiting: &mut Vec<usize>) -> Result<Zval, PhpError> {
+    fn json_normalize(&mut self, v: Zval, partial: bool, visiting: &mut Vec<usize>) -> Result<Zval, PhpError> {
         match v {
             Zval::Ref(r) => {
                 let inner = r.borrow().deref_clone();
-                self.json_normalize(inner, visiting)
+                self.json_normalize(inner, partial, visiting)
             }
             Zval::Object(_) => {
                 // A lazy object initializes before being encoded (PHP 8.4); a
@@ -5114,27 +5130,82 @@ impl<'m> Vm<'m> {
                 // non-lazy, so the re-normalize does not recurse here again.
                 if deref_object(&v).is_some_and(|o| o.borrow().lazy.is_some()) {
                     let real = self.realize_full(&v)?;
-                    return self.json_normalize(real, visiting);
+                    return self.json_normalize(real, partial, visiting);
                 }
                 let addr = deref_object(&v).map(|o| Rc::as_ptr(&o) as usize).unwrap_or(0);
                 if visiting.contains(&addr) {
                     self.json_last_error = 6; // JSON_ERROR_RECURSION
+                    if partial {
+                        // JSON_PARTIAL_OUTPUT_ON_ERROR: the revisited node
+                        // reads as null, encoding continues.
+                        return Ok(Zval::Null);
+                    }
                     return Err(PhpError::Error("Recursion detected".to_string()));
                 }
                 let cid = object_class_id(&v).expect("object has a class id");
                 if self.jsonserializable_id.is_some_and(|j| is_instance_of(&self.classes, self.stringable_id, cid, j)) {
                     visiting.push(addr);
                     let r = self.call_method_sync(v, b"jsonSerialize", Vec::new())?;
-                    let n = self.json_normalize(r, visiting);
+                    let n = self.json_normalize(r, partial, visiting);
                     visiting.pop();
                     n
+                } else if self
+                    .class_index
+                    .get(&b"arrayobject"[..])
+                    .is_some_and(|&ao| is_instance_of(&self.classes, self.stringable_id, cid, ao))
+                {
+                    // json_encode(ArrayObject) reads the get_properties handler,
+                    // i.e. the backing storage — always as a JSON *object* (a
+                    // synthesized stdClass here). Mangled (NUL-prefixed) keys —
+                    // private slots the ctor's `(array)` cast copied from an
+                    // object backing — are dropped, like PHP's handler never
+                    // exposing them (monolog wraps __PHP_Incomplete_Class this
+                    // way and expects only the public marker to survive).
+                    let storage = deref_object(&v)
+                        .and_then(|o| o.borrow().props.get(b"\0ArrayObject\0__storage").cloned())
+                        .map(|s| s.deref_clone());
+                    visiting.push(addr);
+                    let mut entries: Vec<(Vec<u8>, Zval)> = Vec::new();
+                    if let Some(Zval::Array(sa)) = storage {
+                        for (k, val) in sa.iter() {
+                            let kb = match k {
+                                Key::Int(i) => i.to_string().into_bytes(),
+                                Key::Str(s) => {
+                                    if s.as_bytes().first() == Some(&0) {
+                                        continue;
+                                    }
+                                    s.as_bytes().to_vec()
+                                }
+                            };
+                            let nv = self.json_normalize(val.deref_clone(), partial, visiting);
+                            match nv {
+                                Ok(nv) => entries.push((kb, nv)),
+                                Err(e) => {
+                                    visiting.pop();
+                                    return Err(e);
+                                }
+                            }
+                        }
+                    }
+                    visiting.pop();
+                    let Some(&std_cid) = self.class_index.get(&b"stdclass"[..]) else {
+                        return Ok(v);
+                    };
+                    let obj = self.alloc_object(std_cid)?;
+                    if let Zval::Object(o) = &obj {
+                        let mut b = o.borrow_mut();
+                        for (k, nv) in entries {
+                            b.props.set(&k, nv);
+                        }
+                    }
+                    Ok(obj)
                 } else if deref_object(&v).is_some_and(|o| o.borrow().info.is_enum_case) {
                     // An enum case serialises as its backing value; a non-backed
                     // enum has no JSON representation (JSON_ERROR_NON_BACKED_ENUM).
                     let backing = deref_object(&v)
                         .and_then(|o| o.borrow().props.get(b"value").cloned());
                     match backing {
-                        Some(val) => self.json_normalize(val, visiting),
+                        Some(val) => self.json_normalize(val, partial, visiting),
                         None => {
                             self.json_last_error = 11; // JSON_ERROR_NON_BACKED_ENUM
                             // Unwinds to ho_json_encode, which detects the code 11
@@ -5153,6 +5224,9 @@ impl<'m> Vm<'m> {
                 let addr = Rc::as_ptr(&a) as usize;
                 if visiting.contains(&addr) {
                     self.json_last_error = 6; // JSON_ERROR_RECURSION
+                    if partial {
+                        return Ok(Zval::Null);
+                    }
                     return Err(PhpError::Error("Recursion detected".to_string()));
                 }
                 visiting.push(addr);
@@ -5160,7 +5234,7 @@ impl<'m> Vm<'m> {
                     a.iter().map(|(k, val)| (k.clone(), val.deref_clone())).collect();
                 let mut out = PhpArray::new();
                 for (k, val) in entries {
-                    let nv = self.json_normalize(val, visiting)?;
+                    let nv = self.json_normalize(val, partial, visiting)?;
                     out.insert(k, nv);
                 }
                 visiting.pop();
@@ -7501,8 +7575,12 @@ impl<'m> Vm<'m> {
                 ))
             }
         };
+        // Array elements pass AS-IS (no deref): a `[&$x]` element keeps its Ref
+        // so a by-ref parameter aliases it (UtilsTest drives the private
+        // detectAndCleanUtf8(&$data) through invokeArgs); the binder derefs
+        // for by-value parameters as in any call.
         let argv: Vec<Zval> = match args.get(3).map(|v| v.deref_clone()) {
-            Some(Zval::Array(a)) => a.iter().map(|(_, v)| v.deref_clone()).collect(),
+            Some(Zval::Array(a)) => a.iter().map(|(_, v)| v.clone()).collect(),
             _ => Vec::new(),
         };
         let key = cname.strip_prefix(b"\\").unwrap_or(&cname).to_ascii_lowercase();
@@ -9026,14 +9104,25 @@ impl<'m> Vm<'m> {
         let Some(re) = self.preg_compile(&pat) else {
             return Ok(Zval::Null);
         };
-        let subj = String::from_utf8_lossy(&subject).into_owned();
-        let bytes = subj.as_bytes().to_vec();
+        // Byte-true subject handling: an invalid-UTF-8 subject fails a /u
+        // pattern (PHP: null) or round-trips through latin1 for a byte-mode
+        // one; a latin1-fixed capture set carries original-byte offsets, so
+        // the splice below always slices the ORIGINAL subject bytes.
+        let unicode = crate::preg::pattern_is_unicode(&pat);
+        let Some(txt) = crate::preg::subject_text(&subject, unicode) else {
+            return Ok(Zval::Null);
+        };
+        let latin1 = txt.is_latin1();
+        let subj = txt.as_str().to_owned();
         // Collect (range, match-array) up front so the regex borrow of `subj` ends
         // before we re-enter the VM via the callback.
         let hits: Vec<(usize, usize, Zval)> = re
             .captures_iter(&subj)
             .into_iter()
-            .map(|caps| {
+            .map(|mut caps| {
+                if latin1 {
+                    caps.latin1_fix(&subj);
+                }
                 let m0 = caps.get(0).expect("match has group 0");
                 (m0.start, m0.end, crate::preg::captures_array(&re, &caps, 0))
             })
@@ -9041,13 +9130,13 @@ impl<'m> Vm<'m> {
         let mut out: Vec<u8> = Vec::new();
         let mut last = 0usize;
         for (start, end, match_arr) in hits {
-            out.extend_from_slice(&bytes[last..start]);
+            out.extend_from_slice(&subject[last..start]);
             let ret = self.call_callable(callback.clone(), vec![match_arr])?;
             let rs = self.vm_stringify(&ret.deref_clone())?;
             out.extend_from_slice(rs.as_bytes());
             last = end;
         }
-        out.extend_from_slice(&bytes[last..]);
+        out.extend_from_slice(&subject[last..]);
         Ok(Zval::Str(PhpStr::new(out)))
     }
 
@@ -9099,23 +9188,37 @@ impl<'m> Vm<'m> {
             }
         };
         // Compile every pattern up front: any bad pattern nulls the whole call.
+        // The translated replacement stays as bytes so it can enter whichever
+        // text domain the subject picks (UTF-8, or latin1 for a binary one).
         let mut pairs = Vec::with_capacity(pats.len());
+        let mut any_unicode = false;
         for (i, p) in pats.iter().enumerate() {
             let Some(re) = self.preg_compile(p) else {
                 return Ok((Zval::Null, Zval::Long(0)));
             };
+            any_unicode |= crate::preg::pattern_is_unicode(p);
             let r = repls.get(i).map(|r| r.as_slice()).unwrap_or(b"");
-            let r = String::from_utf8_lossy(&crate::preg::translate_replacement(r)).into_owned();
-            pairs.push((re, r));
+            pairs.push((re, crate::preg::translate_replacement(r)));
         }
         let mut total = 0i64;
         let run_one = |subject: &[u8], total: &mut i64| -> Zval {
-            let mut s = String::from_utf8_lossy(subject).into_owned();
+            let Some(txt) = crate::preg::subject_text(subject, any_unicode) else {
+                // Invalid UTF-8 under a /u pattern: PHP nulls this subject.
+                return Zval::Null;
+            };
+            let latin1 = txt.is_latin1();
+            let mut s = txt.as_str().to_owned();
             for (re, repl) in &pairs {
+                let repl = if latin1 {
+                    crate::preg::latin1_decode(repl)
+                } else {
+                    String::from_utf8_lossy(repl).into_owned()
+                };
                 *total += re.captures_iter(&s).len() as i64;
                 s = re.replace_all(&s, repl.as_str()).to_string();
             }
-            Zval::Str(PhpStr::new(s.into_bytes()))
+            let out = if latin1 { crate::preg::latin1_encode(&s) } else { s.into_bytes() };
+            Zval::Str(PhpStr::new(out))
         };
         // An array `$subject` maps per entry (keys preserved); a scalar maps to
         // a string result.
@@ -9197,10 +9300,18 @@ impl<'m> Vm<'m> {
         let entries: Vec<(Key, Zval)> =
             arr.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect();
         let mut out = PhpArray::new();
+        let unicode = crate::preg::pattern_is_unicode(&pat);
         for (k, v) in entries {
             let subj = convert::to_zstr_cast(&v, &mut self.diags).as_bytes().to_vec();
-            let subj = String::from_utf8_lossy(&subj);
-            let matched = re.captures_at(&subj, 0).is_some();
+            // An invalid-UTF-8 entry under /u simply doesn't match (PHP flags
+            // PREG_BAD_UTF8_ERROR but keeps filtering).
+            let Some(txt) = crate::preg::subject_text(&subj, unicode) else {
+                if invert {
+                    out.insert(k, v);
+                }
+                continue;
+            };
+            let matched = re.captures_at(txt.as_str(), 0).is_some();
             if matched != invert {
                 out.insert(k, v);
             }
@@ -9322,38 +9433,50 @@ impl<'m> Vm<'m> {
         let no_empty = flags & 1 != 0;
         let delim_capture = flags & 2 != 0;
         let offset_capture = flags & 4 != 0;
-        let subj = String::from_utf8_lossy(&subject).into_owned();
+        // Byte-true subject handling (see preg::subject_text): pieces always
+        // slice the ORIGINAL bytes — a latin1-fixed capture set carries
+        // original-byte offsets, and for a valid-UTF-8 subject the two byte
+        // domains coincide.
+        let unicode = crate::preg::pattern_is_unicode(&pat);
+        let Some(txt) = crate::preg::subject_text(&subject, unicode) else {
+            return Ok(Zval::Bool(false));
+        };
+        let latin1 = txt.is_latin1();
+        let subj = txt.as_str().to_owned();
         let mut arr = PhpArray::new();
         let mut last = 0usize;
-        let push = |arr: &mut PhpArray, text: &str, off: usize| {
+        let push = |arr: &mut PhpArray, text: &[u8], off: usize| {
             if no_empty && text.is_empty() {
                 return;
             }
             if offset_capture {
                 let _ = arr.append(crate::preg::offset_pair(
-                    Zval::Str(PhpStr::new(text.as_bytes().to_vec())),
+                    Zval::Str(PhpStr::new(text.to_vec())),
                     off as i64,
                 ));
             } else {
-                let _ = arr.append(Zval::Str(PhpStr::new(text.as_bytes().to_vec())));
+                let _ = arr.append(Zval::Str(PhpStr::new(text.to_vec())));
             }
         };
-        for (idx, caps) in re.captures_iter(&subj).into_iter().enumerate() {
+        for (idx, mut caps) in re.captures_iter(&subj).into_iter().enumerate() {
+            if latin1 {
+                caps.latin1_fix(&subj);
+            }
             let m0 = caps.get(0).unwrap();
             if limit > 0 && idx as i64 + 1 >= limit {
                 break;
             }
-            push(&mut arr, &subj[last..m0.start], last);
+            push(&mut arr, &subject[last..m0.start], last);
             if delim_capture {
                 for g in 1..caps.len() {
                     if let Some(mm) = caps.get(g) {
-                        push(&mut arr, mm.text.as_str(), mm.start);
+                        push(&mut arr, &mm.text, mm.start);
                     }
                 }
             }
             last = m0.end;
         }
-        push(&mut arr, &subj[last..], last);
+        push(&mut arr, &subject[last..], last);
         Ok(Zval::Array(Rc::new(arr)))
     }
 
@@ -9415,9 +9538,20 @@ impl<'m> Vm<'m> {
             }
             off as usize
         };
-        let subj = String::from_utf8_lossy(&subject);
-        let (ret, matches) = match re.captures_at(&subj, start) {
-            Some(caps) => (1, crate::preg::captures_array(&re, &caps, flags)),
+        let unicode = crate::preg::pattern_is_unicode(&pat);
+        let Some(txt) = crate::preg::subject_text(&subject, unicode) else {
+            // Invalid UTF-8 under /u: PREG_BAD_UTF8_ERROR → false, like PHP.
+            return Ok((Zval::Bool(false), Zval::Null));
+        };
+        let latin1 = txt.is_latin1();
+        let subj = txt.as_str();
+        let (ret, matches) = match re.captures_at(subj, start) {
+            Some(mut caps) => {
+                if latin1 {
+                    caps.latin1_fix(subj);
+                }
+                (1, crate::preg::captures_array(&re, &caps, flags))
+            }
             None => (0, Zval::Array(Rc::new(PhpArray::new()))),
         };
         Ok((Zval::Long(ret), matches))
@@ -9444,13 +9578,21 @@ impl<'m> Vm<'m> {
             Some(a) => convert::to_long_cast(&a.deref_clone(), &mut self.diags),
             None => 0,
         };
-        let subj = String::from_utf8_lossy(&subject).into_owned();
+        let unicode = crate::preg::pattern_is_unicode(&pat);
+        let Some(txt) = crate::preg::subject_text(&subject, unicode) else {
+            return Ok((Zval::Bool(false), Zval::Null));
+        };
+        let latin1 = txt.is_latin1();
+        let subj = txt.as_str().to_owned();
         let offset = flags & PREG_OFFSET_CAPTURE != 0;
         let as_null = flags & PREG_UNMATCHED_AS_NULL != 0;
         let mut count: i64 = 0;
         let outer = if flags & PREG_SET_ORDER != 0 {
             let mut outer = PhpArray::new();
-            for caps in re.captures_iter(&subj) {
+            for mut caps in re.captures_iter(&subj) {
+                if latin1 {
+                    caps.latin1_fix(&subj);
+                }
                 count += 1;
                 let _ = outer.append(crate::preg::captures_array(&re, &caps, flags));
             }
@@ -9459,7 +9601,10 @@ impl<'m> Vm<'m> {
             let ngroups = re.captures_len();
             let names = re.capture_names();
             let mut cols: Vec<PhpArray> = (0..ngroups).map(|_| PhpArray::new()).collect();
-            for caps in re.captures_iter(&subj) {
+            for mut caps in re.captures_iter(&subj) {
+                if latin1 {
+                    caps.latin1_fix(&subj);
+                }
                 count += 1;
                 for (g, col) in cols.iter_mut().enumerate() {
                     let _ = col.append(capture_value(caps.get(g), offset, as_null));

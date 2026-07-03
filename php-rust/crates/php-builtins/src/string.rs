@@ -1555,6 +1555,23 @@ pub fn strcspn(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Long(n as i64))
 }
 
+/// strpbrk($string, $characters): the substring starting at the first byte of
+/// `$string` present in `$characters`, or `false` when none is. An empty
+/// `$characters` is a ValueError (PHP 8).
+pub fn strpbrk(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let (s, chars) = haystack_needle(args, ctx, "strpbrk")?;
+    if chars.is_empty() {
+        return Err(PhpError::ValueError(
+            "strpbrk(): Argument #2 ($characters) must be a non-empty string".to_string(),
+        ));
+    }
+    let set = byte_set(&chars);
+    match s.iter().position(|&b| set[b as usize]) {
+        Some(i) => Ok(Zval::Str(PhpStr::new(s[i..].to_vec()))),
+        None => Ok(Zval::Bool(false)),
+    }
+}
+
 // ---- step 57b: strtr + chunk_split ----------------------------------------
 
 /// strtr($string, $from, $to): per-byte translation table, mapping `from[i]` to

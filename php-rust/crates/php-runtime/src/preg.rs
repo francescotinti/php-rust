@@ -16,11 +16,13 @@ use php_types::{Key, PhpArray, PhpStr, Zval};
 
 /// A single capture group's byte span and text, engine-neutral so the two
 /// backends never leak their distinct `Match`/`Captures` lifetimes into the
-/// evaluator.
+/// evaluator. `text` is bytes (PHP strings are): for a latin1-round-tripped
+/// subject (see [`subject_text`]) it holds the *original* subject bytes after
+/// [`Caps::latin1_fix`].
 pub struct CapMatch {
     pub start: usize,
     pub end: usize,
-    pub text: String,
+    pub text: Vec<u8>,
 }
 
 /// Engine-neutral capture set: index 0 is the whole match, 1.. the groups.
@@ -43,6 +45,92 @@ impl Caps {
     pub fn is_empty(&self) -> bool {
         self.groups.is_empty()
     }
+
+    /// Map a capture set produced in the latin1-decoded domain (see
+    /// [`subject_text`]) back to the subject's original byte domain: every
+    /// text latin1-encodes, and the UTF-8 offsets become original byte
+    /// offsets (each original byte decoded to exactly one char, so the
+    /// offset is the char count before the span).
+    pub fn latin1_fix(&mut self, decoded: &str) {
+        for g in self.groups.iter_mut().flatten() {
+            g.text = latin1_encode(&String::from_utf8_lossy(&g.text));
+            g.start = decoded[..g.start.min(decoded.len())].chars().count();
+            g.end = g.start + g.text.len();
+        }
+    }
+}
+
+/// Whether a PHP pattern carries the `/u` (PCRE_UTF8) modifier — flags sit
+/// after the last closing delimiter, mirroring [`compile`]'s extraction.
+pub fn pattern_is_unicode(pattern: &[u8]) -> bool {
+    let Some(&open) = pattern.first() else { return false };
+    let close = match open {
+        b'(' => b')',
+        b'{' => b'}',
+        b'[' => b']',
+        b'<' => b'>',
+        d => d,
+    };
+    match pattern.iter().rposition(|&c| c == close) {
+        Some(end) => pattern[end + 1..].contains(&b'u'),
+        None => false,
+    }
+}
+
+/// Decode bytes as latin1: byte N → char U+00N (bijective).
+pub fn latin1_decode(b: &[u8]) -> String {
+    b.iter().map(|&c| c as char).collect()
+}
+
+/// Encode the latin1 round-trip back: chars ≤ U+00FF become their single
+/// byte; anything above (text injected from a genuine-UTF-8 replacement)
+/// keeps its UTF-8 bytes.
+pub fn latin1_encode(s: &str) -> Vec<u8> {
+    let mut out = Vec::with_capacity(s.len());
+    for c in s.chars() {
+        if (c as u32) <= 0xFF {
+            out.push(c as u32 as u8);
+        } else {
+            let mut buf = [0u8; 4];
+            out.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
+        }
+    }
+    out
+}
+
+/// A regex subject as text for the str-based engines. PHP subjects are byte
+/// strings: a valid-UTF-8 one runs directly; an invalid one under `/u` is a
+/// `PREG_BAD_UTF8_ERROR` (`None` → the caller returns `false` like PHP), and
+/// under a byte-mode pattern round-trips through latin1 (the caller must
+/// [`Caps::latin1_fix`] every capture set and latin1-encode assembled
+/// output). A valid-UTF-8 subject under a byte-mode pattern keeps the
+/// existing char-domain behaviour (documented divergence: PHP matches bytes
+/// there too, but real byte-mode patterns on valid UTF-8 are ASCII-safe).
+pub enum SubjectText<'a> {
+    Utf8(&'a str),
+    Latin1(String),
+}
+
+impl SubjectText<'_> {
+    pub fn as_str(&self) -> &str {
+        match self {
+            SubjectText::Utf8(s) => s,
+            SubjectText::Latin1(s) => s,
+        }
+    }
+
+    pub fn is_latin1(&self) -> bool {
+        matches!(self, SubjectText::Latin1(_))
+    }
+}
+
+/// See [`SubjectText`]. `None` = invalid UTF-8 under `/u` (PHP: `false`).
+pub fn subject_text(subject: &[u8], unicode: bool) -> Option<SubjectText<'_>> {
+    match std::str::from_utf8(subject) {
+        Ok(s) => Some(SubjectText::Utf8(s)),
+        Err(_) if unicode => None,
+        Err(_) => Some(SubjectText::Latin1(latin1_decode(subject))),
+    }
 }
 
 fn caps_from_regex(caps: &regex::Captures) -> Caps {
@@ -51,7 +139,7 @@ fn caps_from_regex(caps: &regex::Captures) -> Caps {
             caps.get(i).map(|m| CapMatch {
                 start: m.start(),
                 end: m.end(),
-                text: m.as_str().to_string(),
+                text: m.as_str().as_bytes().to_vec(),
             })
         })
         .collect();
@@ -64,7 +152,7 @@ fn caps_from_fancy(caps: &fancy_regex::Captures) -> Caps {
             caps.get(i).map(|m| CapMatch {
                 start: m.start(),
                 end: m.end(),
-                text: m.as_str().to_string(),
+                text: m.as_str().as_bytes().to_vec(),
             })
         })
         .collect();
@@ -80,7 +168,7 @@ fn caps_from_onig(caps: &onig::Captures) -> Caps {
             caps.pos(i).map(|(start, end)| CapMatch {
                 start,
                 end,
-                text: caps.at(i).unwrap_or("").to_string(),
+                text: caps.at(i).unwrap_or("").as_bytes().to_vec(),
             })
         })
         .collect();
@@ -96,7 +184,7 @@ fn caps_from_onig_region(text: &str, region: &onig::Region) -> Caps {
             region.pos(i).map(|(start, end)| CapMatch {
                 start,
                 end,
-                text: text.get(start..end).unwrap_or("").to_string(),
+                text: text.get(start..end).unwrap_or("").as_bytes().to_vec(),
             })
         })
         .collect();
@@ -684,7 +772,7 @@ pub fn captures_array(re: &Engine, caps: &Caps, flags: i64) -> Zval {
 pub fn capture_value(m: Option<&CapMatch>, offset: bool, as_null: bool) -> Zval {
     match m {
         Some(mm) => {
-            let s = Zval::Str(PhpStr::new(mm.text.as_bytes().to_vec()));
+            let s = Zval::Str(PhpStr::new(mm.text.clone()));
             if offset {
                 offset_pair(s, mm.start as i64)
             } else {

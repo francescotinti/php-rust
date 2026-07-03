@@ -77,6 +77,7 @@ pub fn registry() -> Registry {
     add(b"curl_strerror", curl::curl_strerror);
     add(b"curl_close", curl::curl_close);
     add(b"posix_getpid", env::posix_getpid);
+    add(b"strpbrk", string::strpbrk);
     // Hashing / encoding builtins (step 62).
     add(b"base64_encode", encoding::base64_encode);
     add(b"base64_decode", encoding::base64_decode);
@@ -1226,6 +1227,44 @@ fn filter_var(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
             Ok(f) => Ok(Zval::Double(f)),
             Err(_) => Ok(miss()),
         },
+        // FILTER_VALIDATE_URL: port of php_filter_url (logical_filters.c) over
+        // the same php_url_parse the parse_url builtin uses. A URL must parse,
+        // carry a scheme, and (unless mailto/news/file) a host; an http(s)
+        // host is further restricted to alnum/-/./_ (monolog's SlackRecord
+        // relies on 'ghost' NOT validating so it emits icon_emoji).
+        273 => {
+            let bytes = s.as_bytes();
+            let ok = match crate::url::php_url_parse(bytes) {
+                None => false,
+                Some(u) => {
+                    let scheme_ok = u.scheme.is_some();
+                    let sch = u.scheme.as_deref().unwrap_or(b"");
+                    let hostless_ok = sch.eq_ignore_ascii_case(b"mailto")
+                        || sch.eq_ignore_ascii_case(b"news")
+                        || sch.eq_ignore_ascii_case(b"file");
+                    let host_ok = match &u.host {
+                        Some(h) if !h.is_empty() => {
+                            if sch.eq_ignore_ascii_case(b"http") || sch.eq_ignore_ascii_case(b"https") {
+                                h.iter().all(|&c| {
+                                    c.is_ascii_alphanumeric()
+                                        || c == b'-'
+                                        || c == b'.'
+                                        || c == b'_'
+                                        || c == b'['
+                                        || c == b']'
+                                        || c == b':'
+                                })
+                            } else {
+                                true
+                            }
+                        }
+                        _ => hostless_ok,
+                    };
+                    scheme_ok && host_ok
+                }
+            };
+            if ok { Ok(Zval::Str(s)) } else { Ok(miss()) }
+        }
         // FILTER_DEFAULT / FILTER_UNSAFE_RAW and the unimplemented validators return
         // the value as a string (no sanitisation), the documented default behaviour.
         _ => Ok(Zval::Str(s)),

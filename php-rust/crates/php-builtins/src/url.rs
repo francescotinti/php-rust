@@ -7,15 +7,15 @@ use php_runtime::Ctx;
 use php_types::{convert, Key, PhpArray, PhpError, PhpStr, Zval};
 
 #[derive(Default)]
-struct ParsedUrl {
-    scheme: Option<Vec<u8>>,
-    host: Option<Vec<u8>>,
+pub(crate) struct ParsedUrl {
+    pub(crate) scheme: Option<Vec<u8>>,
+    pub(crate) host: Option<Vec<u8>>,
     port: u16,
     has_port: bool,
     user: Option<Vec<u8>>,
     pass: Option<Vec<u8>>,
-    path: Option<Vec<u8>>,
-    query: Option<Vec<u8>>,
+    pub(crate) path: Option<Vec<u8>>,
+    pub(crate) query: Option<Vec<u8>>,
     fragment: Option<Vec<u8>>,
 }
 
@@ -86,7 +86,7 @@ enum Stage {
     JustPath,
 }
 
-fn php_url_parse(s: &[u8]) -> Option<ParsedUrl> {
+pub(crate) fn php_url_parse(s: &[u8]) -> Option<ParsedUrl> {
     let ue = s.len();
     let mut r = ParsedUrl::default();
     let mut pos = 0usize; // `s` in the C source
