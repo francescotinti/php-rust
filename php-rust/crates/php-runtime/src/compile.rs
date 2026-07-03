@@ -197,6 +197,7 @@ fn compile_fndecl(fd: &FnDecl, ctx: &ProgramCtx) -> R<Func> {
     .map(|mut f| {
         f.attributes = compile_attrs(&fd.attributes, ctx, cur_class);
         f.ret_reflect_type = fd.ret_reflect_type.clone();
+        f.doc = fd.doc.clone();
         f
     })
 }
@@ -238,6 +239,8 @@ fn compile_body(
     Ok(Func {
         name: name.into(),
         file: file.into(),
+        // Set by `compile_fndecl` (compile_body only sees the pieces).
+        doc: None,
         ops: c.ops,
         lines: c.lines,
         consts: c.consts,
@@ -301,6 +304,7 @@ fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
     Func {
         name: fd.name.clone(),
         file: fd.file.clone(),
+        doc: fd.doc.clone(),
         ops: vec![Op::Fatal(0)],
         lines: vec![fd.line],
         consts: vec![Const::Str(msg.into_bytes().into())],
@@ -514,6 +518,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
             let mut func = func;
             func.attributes = compile_attrs(&m.decl.attributes, ctx, Some(cid));
             func.ret_reflect_type = m.decl.ret_reflect_type.clone();
+            func.doc = m.decl.doc.clone();
             CompiledMethod {
                 name: m.decl.name.clone(),
                 visibility: m.visibility,
@@ -593,6 +598,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
             let mut func = func;
             func.attributes = compile_attrs(&m.decl.attributes, ctx, Some(cid));
             func.ret_reflect_type = m.decl.ret_reflect_type.clone();
+            func.doc = m.decl.doc.clone();
             CompiledMethod {
                 name: m.decl.name.clone(),
                 visibility: m.visibility,
@@ -696,6 +702,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
         name: cd.name.clone(),
         file: cd.file.clone(),
         line: cd.line,
+        doc: cd.doc.clone(),
         class_name: PhpStr::new(cd.name.to_vec()),
         parent: cd.parent,
         interfaces: cd.interfaces.clone(),
@@ -762,6 +769,7 @@ fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassI
     Ok(Func {
         name: Box::from(&b"{prop-init}"[..]),
         file: Box::default(),
+        doc: None,
         ops: c.ops,
         lines: c.lines,
         consts: c.consts,
@@ -798,6 +806,7 @@ fn compile_default_thunk(value: &Expr, ctx: &ProgramCtx, cur_class: Option<Class
     Some(Func {
         name: Box::default(),
         file: Box::default(),
+        doc: None,
         ops: c.ops,
         lines: c.lines,
         consts: c.consts,
@@ -831,6 +840,7 @@ fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, decl_class: 
     Ok(Func {
         name: name.into(),
         file: Box::default(),
+        doc: None,
         ops: c.ops,
         lines: c.lines,
         consts: c.consts,
@@ -885,6 +895,7 @@ fn const_stub(name: &[u8], err: &CompileError) -> Func {
     Func {
         name: name.into(),
         file: Box::default(),
+        doc: None,
         ops: vec![Op::Fatal(0)],
         lines: vec![0],
         consts: vec![Const::Str(msg.into_bytes().into())],

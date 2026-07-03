@@ -132,6 +132,13 @@ fn lower_source_impl(
     }
 
     let mut low = Lowerer::new(&file, name);
+    // Docblock trivia, for `getDocComment` retention (the AST drops comments).
+    low.docs = program
+        .trivia
+        .iter()
+        .filter(|t| t.kind.is_docblock())
+        .map(|t| (t.span.start.offset, t.span.end.offset))
+        .collect();
     // A misplaced `namespace` is a compile-time fatal in PHP; reject it here
     // (before hoisting) so it renders the exact error rather than being silently
     // accepted or tripping a later invariant.
@@ -1779,7 +1786,7 @@ class ReflectionClass {
     public function getFileName() { $l = __reflect_class_loc($this->name); return $l[0]; }
     public function isInternal() { return $this->getFileName() === false; }
     public function isUserDefined() { return $this->getFileName() !== false; }
-    public function getDocComment() { return false; }
+    public function getDocComment() { return __reflect_class_doc($this->name); }
     public function isReadOnly() { return __reflect_class_modifiers($this->name)['readonly'] ?? false; }
     public function getStartLine() { $l = __reflect_class_loc($this->name); return $l[0] === false ? false : $l[1]; }
     public function getEndLine() { $l = __reflect_class_loc($this->name); return $l[0] === false ? false : $l[2]; }
@@ -2119,11 +2126,7 @@ class ReflectionFunction extends ReflectionFunctionAbstract {
         foreach ($this->__info['params'] as $p) { if ($p['variadic']) { return true; } }
         return false;
     }
-    public function getDocComment() {
-        // Doc comments are not retained by the compiler (yet): "none", never a
-        // wrong one. PHPUnit's legacy annotation parser then simply finds none.
-        return false;
-    }
+    public function getDocComment() { return $this->__info['doc'] ?? false; }
     public function getReturnType() { return ReflectionNamedType::__fromInfo($this->__info['returnType']); }
     public function hasReturnType() { return $this->__info['returnType'] !== false; }
     public function invoke(...$args) { return call_user_func_array($this->name, $args); }
@@ -2172,11 +2175,7 @@ class ReflectionMethod extends ReflectionFunctionAbstract {
         foreach ($this->__info['params'] as $p) { if ($p['variadic']) { return true; } }
         return false;
     }
-    public function getDocComment() {
-        // Doc comments are not retained by the compiler (yet): "none", never a
-        // wrong one. PHPUnit's legacy annotation parser then simply finds none.
-        return false;
-    }
+    public function getDocComment() { return $this->__info['doc'] ?? false; }
     public function getReturnType() { return ReflectionNamedType::__fromInfo($this->__info['returnType']); }
     public function hasReturnType() { return $this->__info['returnType'] !== false; }
     public function __construct($objectOrClass, $method = null) {
@@ -3046,6 +3045,10 @@ type LoweredClosure = (Vec<Param>, Vec<Capture>, Vec<Stmt>);
 
 struct Lowerer<'f> {
     file: &'f File,
+    /// `/** ... */` docblock trivia spans of the unit, `(start, end)` byte
+    /// offsets in lexical order — the parser drops comments from the AST, so
+    /// [`Self::doc_for`] re-attaches them to declarations Zend-style.
+    docs: Vec<(u32, u32)>,
     /// The global scope (always present) and the active function-local overlay
     /// (`Some` while a function body is lowered). `slot_for` resolves against the
     /// active scope; the globals stay reachable so a global slot can be
@@ -3166,6 +3169,7 @@ impl<'f> Lowerer<'f> {
     fn new(file: &'f File, prog_name: &[u8]) -> Self {
         Lowerer {
             file,
+            docs: Vec::new(),
             globals: Scope::default(),
             locals: None,
             after_closing_tag: false,
@@ -3425,6 +3429,62 @@ impl<'f> Lowerer<'f> {
     /// 1-based source line for a span's start offset (`File::line_number` is 0-based).
     fn line_of(&self, span: Span) -> Line {
         self.file.line_number(span.start.offset) + 1
+    }
+
+    /// The `/** ... */` doc comment lexically attached to a declaration starting
+    /// at byte `decl_start` (Zend semantics): the closest preceding docblock
+    /// separated from the declaration only by whitespace, attribute lists
+    /// (`#[...]`) and member-modifier keywords. `None` otherwise — "none", never
+    /// a wrong one.
+    fn doc_for(&self, decl_start: u32) -> Option<Box<[u8]>> {
+        let idx = self.docs.partition_point(|&(_, end)| end <= decl_start);
+        let &(ds, de) = self.docs.get(idx.checked_sub(1)?)?;
+        let src = self.file.contents.as_ref();
+        let target = decl_start as usize;
+        let mut i = de as usize;
+        while i < target {
+            let b = src[i];
+            if b.is_ascii_whitespace() {
+                i += 1;
+            } else if b == b'#' && src.get(i + 1) == Some(&b'[') {
+                // Skip an attribute list, tracking bracket depth and quoted
+                // strings (a `']'` inside an argument must not end it).
+                i += 2;
+                let mut depth = 1usize;
+                while i < target && depth > 0 {
+                    match src[i] {
+                        b'[' => depth += 1,
+                        b']' => depth -= 1,
+                        q @ (b'\'' | b'"') => {
+                            i += 1;
+                            while i < target && src[i] != q {
+                                if src[i] == b'\\' {
+                                    i += 1;
+                                }
+                                i += 1;
+                            }
+                        }
+                        _ => {}
+                    }
+                    i += 1;
+                }
+            } else if b.is_ascii_alphabetic() {
+                let start = i;
+                while i < target && (src[i].is_ascii_alphanumeric() || src[i] == b'_') {
+                    i += 1;
+                }
+                const MODIFIERS: &[&[u8]] = &[
+                    b"public", b"protected", b"private", b"static", b"final", b"abstract",
+                    b"readonly", b"var",
+                ];
+                if !MODIFIERS.iter().any(|m| src[start..i].eq_ignore_ascii_case(m)) {
+                    return None;
+                }
+            } else {
+                return None;
+            }
+        }
+        Some(src.get(ds as usize..de as usize)?.to_vec().into())
     }
 
     /// PHP requires a `namespace` declaration to be the very first statement in

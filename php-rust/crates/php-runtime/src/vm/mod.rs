@@ -7317,6 +7317,12 @@ impl<'m> Vm<'m> {
         let ret_ty = reflect_type_descriptor(&func.ret_reflect_type).unwrap_or_else(|| typehint_descriptor(&func.ret_hint));
         d.insert(Key::Str(PhpStr::new(b"returnType".to_vec())), ret_ty);
         d.insert(Key::Str(PhpStr::new(b"params".to_vec())), Zval::Array(Rc::new(params)));
+        // getDocComment: the retained `/** ... */`, or false like PHP's.
+        let doc = match &func.doc {
+            Some(d) => Zval::Str(PhpStr::new(d.to_vec())),
+            None => Zval::Bool(false),
+        };
+        d.insert(Key::Str(PhpStr::new(b"doc".to_vec())), doc);
         Ok(d)
     }
 
@@ -10008,6 +10014,20 @@ impl<'m> Vm<'m> {
             }
         }
         Ok(Zval::Array(Rc::new(out)))
+    }
+
+    /// `__reflect_class_doc(name) -> string|false`: the class declaration's
+    /// retained `/** ... */` doc comment (ReflectionClass::getDocComment), false
+    /// for none / an unknown class / a prelude ("internal") class.
+    fn ho_reflect_class_doc(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(cid) = self.resolve_named_class_with_autoload(&args)? else {
+            return Ok(Zval::Bool(false));
+        };
+        let c = &self.classes[cid];
+        Ok(match (&c.doc, &c.file[..]) {
+            (Some(d), f) if f != b"prelude" => Zval::Str(PhpStr::new(d.to_vec())),
+            _ => Zval::Bool(false),
+        })
     }
 
     /// `umask(?int $mask = null)`: return the shadow umask; with an argument,
@@ -13247,6 +13267,7 @@ host_builtins! {
     b"__stream_select" => vm.ho_stream_select(args),
     b"proc_get_status" => vm.ho_proc_get_status(args),
     b"proc_terminate" => vm.ho_proc_terminate(args),
+    b"__reflect_class_doc" => vm.ho_reflect_class_doc(args),
     b"pcntl_signal" => vm.ho_pcntl_signal(args),
     b"pcntl_signal_get_handler" => vm.ho_pcntl_signal_get_handler(args),
     b"pcntl_signal_dispatch" => vm.ho_pcntl_signal_dispatch(args),

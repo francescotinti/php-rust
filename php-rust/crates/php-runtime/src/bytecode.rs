@@ -922,6 +922,9 @@ pub struct Func {
     /// `include`/autoload boundary. Empty for synthetic stubs / the `{main}` body
     /// (which fall back to the module file).
     pub file: Box<[u8]>,
+    /// The `/** ... */` doc comment (carried from `FnDecl::doc`) —
+    /// `ReflectionFunctionAbstract::getDocComment`.
+    pub doc: Option<Box<[u8]>>,
     /// The instruction stream. Jump targets are indices into this vector.
     pub ops: Vec<Op>,
     /// Source line of each op, parallel to `ops` (same length). The VM reads
@@ -1183,6 +1186,9 @@ pub struct CompiledClass {
     /// to derive them from (`b"prelude"` marks an engine class → false/internal).
     pub file: Box<[u8]>,
     pub line: u32,
+    /// The `/** ... */` doc comment (carried from `ClassDecl::doc`) —
+    /// `ReflectionClass::getDocComment`.
+    pub doc: Option<Box<[u8]>>,
     /// The name as a shared [`PhpStr`], stamped into each instance's
     /// [`php_types::Object::class_name`] without re-allocating.
     pub class_name: Rc<PhpStr>,

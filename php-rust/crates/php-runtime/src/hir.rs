@@ -155,6 +155,9 @@ pub enum Visibility {
 pub struct ClassDecl {
     /// Name as written (original case); resolved ASCII-case-insensitively.
     pub name: Box<[u8]>,
+    /// The `/** ... */` doc comment lexically attached to the declaration
+    /// (`ReflectionClass::getDocComment`). `None` when absent.
+    pub doc: Option<Box<[u8]>>,
     /// The unit file that declared the class (`b"prelude"` for engine classes) —
     /// `ReflectionClass::getFileName`/`isInternal`.
     pub file: Box<[u8]>,
@@ -366,6 +369,10 @@ pub struct MethodDecl {
 pub struct FnDecl {
     /// Name as written (original case); calls match it ASCII-case-insensitively.
     pub name: Box<[u8]>,
+    /// The `/** ... */` doc comment lexically attached to the declaration
+    /// (`ReflectionFunctionAbstract::getDocComment`, PHPUnit annotations).
+    /// `None` when absent or for synthetic functions.
+    pub doc: Option<Box<[u8]>>,
     /// Source file this function was lowered from (the unit's path), so a stack
     /// trace / `getFile()` reports the *defining* file even when the function is
     /// called across an `include`/autoload boundary (the executing frame carries

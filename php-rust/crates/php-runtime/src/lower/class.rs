@@ -430,6 +430,7 @@ impl<'f> Lowerer<'f> {
         Ok(ClassDecl {
             file: self.unit_file(),
             name: join_ns(&self.cur_namespace, iface.name.value),
+            doc: self.doc_for(iface.span().start.offset),
             parent: None,
             interfaces,
             is_abstract: true,
@@ -498,6 +499,7 @@ impl<'f> Lowerer<'f> {
             class.members.iter(),
             line,
         )?;
+        decl.doc = self.doc_for(class.span().start.offset);
         // A `readonly class` (PHP 8.2): every (non-static) instance property is
         // readonly, including promoted and trait-supplied ones.
         if class.modifiers.iter().any(|m| m.is_readonly()) {
@@ -765,6 +767,9 @@ impl<'f> Lowerer<'f> {
         Ok(ClassDecl {
             file: self.unit_file(),
             name,
+            // Attached by the named-declaration lowerers (`lower_class`);
+            // anonymous classes keep none.
+            doc: None,
             parent,
             interfaces,
             is_abstract,
@@ -930,6 +935,7 @@ impl<'f> Lowerer<'f> {
         Ok(ClassDecl {
             file: self.unit_file(),
             name,
+            doc: self.doc_for(en.span().start.offset),
             parent: None,
             interfaces,
             is_abstract: false,
@@ -1266,6 +1272,8 @@ impl<'f> Lowerer<'f> {
         Ok((
             FnDecl {
                 name: hook_name,
+                // Synthetic (a property hook body) — no docblock of its own.
+                doc: None,
                 file,
                 params,
                 body,
@@ -1394,6 +1402,7 @@ impl<'f> Lowerer<'f> {
             is_final,
             decl: FnDecl {
                 name,
+                doc: self.doc_for(method.span().start.offset),
                 file,
                 params,
                 body,
@@ -1456,6 +1465,7 @@ impl<'f> Lowerer<'f> {
         let file = self.unit_file();
         Ok(FnDecl {
             name,
+            doc: self.doc_for(func.span().start.offset),
             file,
             params,
             body,
@@ -1684,6 +1694,8 @@ impl<'f> Lowerer<'f> {
         let file = self.unit_file();
         self.closures.push(FnDecl {
             name,
+            // Closures keep no docblock (rarely reflected; "none" is honest).
+            doc: None,
             file,
             params,
             body,
