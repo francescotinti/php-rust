@@ -352,6 +352,7 @@ pub(crate) fn run_module_with_hir<'m>(
         next_resource_id: 5,
         static_props: HashMap::new(),
         statics: vec![None; module.static_count],
+        closure_statics: HashMap::new(),
         magic_guard: HashSet::new(),
         created: Vec::new(),
         destructed: HashSet::new(),
@@ -623,6 +624,12 @@ struct Frame<'m> {
     /// permission (`Object::readonly_clone_writable`) is revoked, so a *manual*
     /// `$o->__clone()` call (no permission) still fatals on a readonly write.
     clone_init: bool,
+    /// The instance id of the closure this frame is running, if any. `static $x`
+    /// inside a closure persists **per closure instance** (PHP binds the static to
+    /// the Closure object, not the op-array): a fresh closure from the same literal
+    /// gets fresh statics. Non-closure frames (`None`) use the program-global
+    /// `Vm::statics`; closure frames key `Vm::closure_statics` by `(id, static_id)`.
+    closure_id: Option<u32>,
 }
 
 impl<'m> Frame<'m> {
@@ -652,6 +659,7 @@ impl<'m> Frame<'m> {
             init_props: false,
             eval_origin: None,
             clone_init: false,
+            closure_id: None,
         }
     }
 }
@@ -898,6 +906,12 @@ struct Vm<'m> {
     /// later calls — and across recursion — so the variable accumulates. Mirrors
     /// the tree-walker's `Evaluator::statics`.
     statics: Vec<Option<Rc<RefCell<Zval>>>>,
+    /// Per-closure-instance storage for `static $x` declared inside a closure body,
+    /// keyed by `(closure instance id, program-global static id)`. PHP binds a
+    /// closure's static to the Closure *object*, so each fresh closure from the same
+    /// literal starts its statics over (a shared `Vm::statics` slot would wrongly
+    /// persist across instances). Grows only for closures that declare statics.
+    closure_statics: HashMap<(u32, u32), Rc<RefCell<Zval>>>,
     /// Active magic-accessor guards (object id, kind, property) — a magic method
     /// is not re-entered for the same access while it is running (OOP-3b).
     magic_guard: HashSet<(u32, MagicKind, Vec<u8>)>,
@@ -1691,14 +1705,24 @@ impl<'m> Vm<'m> {
                 }
                 Op::StaticGuard { id, skip } => {
                     // First execution of this `static` declaration falls through to
-                    // run the initialiser; every later one skips to the alias.
-                    if self.statics[id as usize].is_some() {
+                    // run the initialiser; every later one skips to the alias. A
+                    // closure keys its own per-instance storage (fresh statics per
+                    // closure object); everything else the program-global `statics`.
+                    let exists = match self.frames[top].closure_id {
+                        Some(cid) => self.closure_statics.contains_key(&(cid, id)),
+                        None => self.statics[id as usize].is_some(),
+                    };
+                    if exists {
                         self.frames[top].ip = skip as usize;
                     }
                 }
                 Op::StaticStore { id } => {
                     let v = self.frames[top].stack.pop().expect("StaticStore on empty stack");
-                    let old = self.statics[id as usize].replace(Rc::new(RefCell::new(v)));
+                    let cell = Rc::new(RefCell::new(v));
+                    let old = match self.frames[top].closure_id {
+                        Some(cid) => self.closure_statics.insert((cid, id), cell),
+                        None => self.statics[id as usize].replace(cell),
+                    };
                     if let Some(cell) = old {
                         if Rc::strong_count(&cell) == 1 {
                             let inner = cell.borrow();
@@ -1710,11 +1734,18 @@ impl<'m> Vm<'m> {
                     // Alias the local slot to the persistent cell: reads/writes of
                     // the variable now go through it (the slot holds a `Zval::Ref`,
                     // followed by `read_slot`/`store_slot` like any reference).
-                    let cell = Rc::clone(
-                        self.statics[id as usize]
-                            .as_ref()
-                            .expect("StaticAlias reached before its StaticStore"),
-                    );
+                    let cell = match self.frames[top].closure_id {
+                        Some(cid) => Rc::clone(
+                            self.closure_statics
+                                .get(&(cid, id))
+                                .expect("StaticAlias reached before its StaticStore"),
+                        ),
+                        None => Rc::clone(
+                            self.statics[id as usize]
+                                .as_ref()
+                                .expect("StaticAlias reached before its StaticStore"),
+                        ),
+                    };
                     // Rebinding the slot to the static cell drops whatever it held
                     // (`$x = new T; static $x;` discards the temporary T here).
                     let old = std::mem::replace(&mut self.frames[top].slots[slot as usize], Zval::Ref(cell));
@@ -12325,6 +12356,8 @@ impl<'m> Vm<'m> {
             ));
         };
         let mut frame = Frame::new(callee, m);
+        // `static $x` in the body persists per this closure *instance* (id).
+        frame.closure_id = Some(cl.id);
         for (slot, val) in &cl.captures {
             frame.slots[*slot as usize] = val.clone();
         }
