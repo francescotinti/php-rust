@@ -533,6 +533,11 @@ pub enum Op {
     /// handed to the builtin as `&mut Zval` (write-through), and `argc` is the
     /// count of the remaining by-value arguments on the stack.
     CallBuiltinRef { name: Box<[u8]>, slot: Slot, argc: u32 },
+    /// `[comp0, …, compN] -> [result]` — [`Op::CallBuiltinRef`] whose by-value
+    /// *rest* arguments include a spread (`array_push($a, ...$b)`): one stack value
+    /// per component, `spreads[i]` marking spread *sources* to flatten at run time
+    /// (mirrors [`Op::CallBuiltinSpread`]). The by-ref first argument stays `slot`.
+    CallBuiltinRefSpread { name: Box<[u8]>, slot: Slot, spreads: Box<[bool]> },
     /// `[ref, rest0, …, rest{argc-1}] -> [result]` — call a by-reference-first
     /// builtin whose first argument is a non-variable place (`array_pop($this->q)`,
     /// `sort($data['list'])`). The by-ref target is a [`Zval::Ref`] cell produced by

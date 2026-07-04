@@ -212,7 +212,7 @@ fn lower_source_impl(
                     (k.clone(), t)
                 })
                 .collect();
-            let (_pclasses, _pindex, pfunctions, pfn_index) = lower_prelude();
+            let (pfunctions, pfn_index) = prelude_functions();
             low.functions = pfunctions;
             low.fn_index = pfn_index;
             low.static_count = sstatic;
@@ -3024,12 +3024,34 @@ type LoweredPrelude = (
     HashMap<Vec<u8>, usize>,
 );
 
-/// Lower [`PRELUDE_SRC`] with a throwaway [`Lowerer`] and return its owned class
-/// table + name→id index (step 20) plus the global functions it declares (step
-/// 35: the procedural date API). Function/`new` call sites resolve by *name*
-/// (the evaluator rebuilds its `fn_index`/class table from `Program`), so the
-/// prelude bodies need no index fix-up after being merged in.
+thread_local! {
+    /// One lowering of the prelude per thread. Parsing + hoisting the whole
+    /// embedded PHP prelude is a large constant, and every `include`/`eval`
+    /// unit needs (a clone of) its products — re-lowering it per included file
+    /// dominates an autoload storm (PHPUnit's `preload()` requires ~1200 files).
+    static PRELUDE_CACHE: std::cell::OnceCell<LoweredPrelude> = const { std::cell::OnceCell::new() };
+}
+
+/// Lower [`PRELUDE_SRC`] once per thread (cached) and return a clone of its
+/// owned class table + name→id index (step 20) plus the global functions it
+/// declares (step 35: the procedural date API). Function/`new` call sites
+/// resolve by *name* (the evaluator rebuilds its `fn_index`/class table from
+/// `Program`), so the prelude bodies need no index fix-up after being merged in.
 fn lower_prelude() -> LoweredPrelude {
+    PRELUDE_CACHE.with(|c| c.get_or_init(lower_prelude_uncached).clone())
+}
+
+/// The prelude's *functions* only (table + name→index), for the seeded
+/// (`include`/`eval`) lowering path — it takes its classes from the seed image,
+/// so cloning the cached prelude classes there would be pure waste.
+fn prelude_functions() -> (Vec<FnDecl>, HashMap<Vec<u8>, usize>) {
+    PRELUDE_CACHE.with(|c| {
+        let p = c.get_or_init(lower_prelude_uncached);
+        (p.2.clone(), p.3.clone())
+    })
+}
+
+fn lower_prelude_uncached() -> LoweredPrelude {
     let arena = Bump::new();
     let file = File::ephemeral(Cow::Borrowed(b"prelude".as_slice()), Cow::Borrowed(PRELUDE_SRC));
     let program = parse_file(&arena, &file);

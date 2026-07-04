@@ -74,6 +74,58 @@ struct ProgramCtx<'a> {
 /// source [`Program`], so a call/`new`/method resolved to index `i` in the HIR
 /// maps to index `i` here. Closures are still out of slice.
 pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
+    compile_program_stubbed(program, registry, &[])
+}
+
+/// An inert [`CompiledClass`] for a *seed* class the running VM already links by
+/// name: `drive_unit`'s remap dedups it to the existing global id, so this
+/// stub's only consumer is that name lookup. `ok: false` makes an accidental
+/// `Op::Alloc` on it fatal (fail-loud) rather than silently misbehaving.
+fn stub_class(cd: &crate::hir::ClassDecl) -> CompiledClass {
+    CompiledClass {
+        name: cd.name.clone(),
+        file: b"seed-stub".to_vec().into_boxed_slice(),
+        line: 0,
+        doc: None,
+        class_name: PhpStr::new(cd.name.to_vec()),
+        parent: None,
+        interfaces: Vec::new(),
+        instantiable: Instantiable::Yes,
+        is_final: false,
+        is_abstract: false,
+        prop_defaults: Vec::new(),
+        info: Rc::new(ObjectInfo::from_entries(Vec::new())),
+        methods: Vec::new(),
+        abstract_methods: Vec::new(),
+        abstract_sigs: Vec::new(),
+        own_prop_vis: Vec::new(),
+        static_props: Vec::new(),
+        prop_init: None,
+        consts: Vec::new(),
+        enum_cases: Vec::new(),
+        attributes: Vec::new(),
+        prop_attributes: Default::default(),
+        uses_traits: Vec::new(),
+        uninit_props: Vec::new(),
+        ok: false,
+        prop_info: Default::default(),
+    }
+}
+
+/// Like [`compile_program`], but a class whose index is marked in `stub_mask`
+/// compiles to an inert stub. An `include`/`eval` unit is lowered against the
+/// whole accumulated seed image (`program.classes = [seed…, new…]`), yet
+/// `drive_unit` dedups every already-linked class by name — so fully compiling
+/// the seed portion again is pure waste: O(seed) bytecode per included file,
+/// *quadratic* memory/time across a Composer autoload storm (PHPUnit's
+/// `preload()` requires ~1200 files → gigabytes of duplicated, leaked class
+/// bytecode). The VM passes a mask of the classes its `class_index` already
+/// links; new / conditional classes always compile in full.
+pub fn compile_program_stubbed(
+    program: &Program,
+    registry: &Registry,
+    stub_mask: &[bool],
+) -> R<Module> {
     // Case-insensitive name→id index for resolving `ClassRef::Named`; the first
     // declaration of a name wins (PHP forbids redeclaration).
     let mut class_index: HashMap<Vec<u8>, ClassId> = HashMap::new();
@@ -115,12 +167,19 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
         .map(|fd| compile_fndecl(fd, &ctx).unwrap_or_else(|e| stub_func(fd, &e)))
         .collect();
     let main = compile_body(b"", &program.file, &program.body, program.slots.len() as u32, &[], &program.slots, false, false, None, 0, &ctx, None, true, 0)?;
-    // Classes are compiled tolerantly too (see `compile_class`).
+    // Classes are compiled tolerantly too (see `compile_class`); a seed class
+    // the VM already links compiles to an inert stub (see the doc above).
     let classes = program
         .classes
         .iter()
         .enumerate()
-        .map(|(cid, cd)| compile_class(cid, cd, &ctx))
+        .map(|(cid, cd)| {
+            if stub_mask.get(cid).copied().unwrap_or(false) {
+                stub_class(cd)
+            } else {
+                compile_class(cid, cd, &ctx)
+            }
+        })
         .collect();
 
     // Top-level `const` attributes, compiled name→thunks (free-function context,
@@ -3132,6 +3191,27 @@ impl<'a> FnCompiler<'a> {
         match &first.kind {
             ExprKind::Var(slot) => {
                 let slot = *slot;
+                // A spread among the by-value rest (`array_push($a, ...$b)`): push
+                // one value per component (spread *sources* marked) and flatten at
+                // run time, mirroring the by-value `emit_builtin_spread` path.
+                if rest.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
+                    let mut spreads = Vec::with_capacity(rest.len());
+                    for a in rest {
+                        if let ExprKind::Spread(src) = &a.kind {
+                            self.expr(src)?;
+                            spreads.push(true);
+                        } else {
+                            self.expr(a)?;
+                            spreads.push(false);
+                        }
+                    }
+                    self.emit(Op::CallBuiltinRefSpread {
+                        name: name.into(),
+                        slot,
+                        spreads: spreads.into(),
+                    });
+                    return Ok(());
+                }
                 self.push_value_args(rest)?;
                 self.emit(Op::CallBuiltinRef { name: name.into(), slot, argc: rest.len() as u32 });
                 Ok(())

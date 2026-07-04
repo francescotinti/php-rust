@@ -3062,6 +3062,43 @@ impl<'m> Vm<'m> {
                     let result = result?;
                     self.frames[top].stack.push(result);
                 }
+                Op::CallBuiltinRefSpread { name, slot, spreads } => {
+                    // By-ref-first builtin whose by-value rest includes a spread
+                    // (`array_push($a, ...$b)`): flatten the components (int-keyed
+                    // pairs are positional; a string key is PHP's unknown-named
+                    // error, as builtins accept none), then run like CallBuiltinRef.
+                    let f = match self.registry.get(&name[..]) {
+                        Some(Builtin::RefFirst(f)) => *f,
+                        _ => return Err(undefined_builtin(&name)),
+                    };
+                    let comp_vals = self.pop_keys(top, spreads.len() as u32);
+                    let mut rest: Vec<Zval> = Vec::new();
+                    for (&is_spread, val) in spreads.iter().zip(comp_vals) {
+                        if is_spread {
+                            for (k, v) in self.spread_pairs(val)? {
+                                match k {
+                                    Key::Int(_) => rest.push(v),
+                                    Key::Str(_) => {
+                                        return Err(PhpError::Error(format!(
+                                            "{}() does not accept unknown named parameters",
+                                            String::from_utf8_lossy(&name)
+                                        )))
+                                    }
+                                }
+                            }
+                        } else {
+                            rest.push(val);
+                        }
+                    }
+                    let line = self.cur_line(top);
+                    self.flush_diags(line)?;
+                    let mut produced = Vec::new();
+                    let result = builtin_ref_call(f, &mut self.frames[top].slots[slot as usize], &rest, &mut produced, &mut self.diags);
+                    self.write_output(&produced)?;
+                    self.flush_diags(line)?;
+                    let result = result?;
+                    self.frames[top].stack.push(result);
+                }
                 Op::CallBuiltinRefCell { name, argc } => {
                     // By-ref-first builtin on a non-variable place (`array_pop($o->q)`):
                     // the target is a `Zval::Ref` cell (from `MakeRef`) beneath the
@@ -4706,7 +4743,8 @@ impl<'m> Vm<'m> {
             Err(_) => return Ok(Zval::Bool(false)),
         };
         self.accumulate_seed(&program);
-        let module = match crate::compile::compile_program(&program, self.registry) {
+        let stubs = self.seed_stub_mask(&program);
+        let module = match crate::compile::compile_program_stubbed(&program, self.registry, &stubs) {
             Ok(m) => m,
             Err(_) => return Ok(Zval::Bool(false)),
         };
@@ -4898,6 +4936,25 @@ impl<'m> Vm<'m> {
         }
     }
 
+    /// Mask of `program.classes` indices the running VM already links by name:
+    /// `drive_unit` dedups those to their existing global ids, so their (seed)
+    /// compilation is pure waste and can be stubbed (`compile_program_stubbed`).
+    /// A class declared *conditionally by this unit* always compiles in full
+    /// (its `Op::DeclareClass` may need the real thing); a seed conditional
+    /// never registered (name absent from `class_index`) also compiles in full,
+    /// preserving today's behaviour.
+    fn seed_stub_mask(&self, program: &Program) -> Vec<bool> {
+        program
+            .classes
+            .iter()
+            .enumerate()
+            .map(|(i, cd)| {
+                !program.conditional_classes.contains(&i)
+                    && self.class_index.contains_key(&cd.name.to_ascii_lowercase())
+            })
+            .collect()
+    }
+
     /// Resolve an `include`/`require` path to a real file (step 57, Phase 2): an
     /// absolute path is used directly; a relative one is tried against the
     /// including file's directory first, then the process CWD (a minimal
@@ -4962,7 +5019,11 @@ impl<'m> Vm<'m> {
             }
         };
         self.accumulate_seed(&program);
-        let module = match crate::compile::compile_program(&program, self.registry) {
+        // Classes the VM already links compile as inert stubs — drive_unit dedups
+        // them by name anyway; fully recompiling the whole accumulated seed image
+        // per included file is quadratic (PHPUnit's preload() = ~1200 requires).
+        let stubs = self.seed_stub_mask(&program);
+        let module = match crate::compile::compile_program_stubbed(&program, self.registry, &stubs) {
             Ok(m) => m,
             Err(e) => {
                 log::warn!(target: "phpr::include", "compile failed for {}: {:?}", String::from_utf8_lossy(&key), e);
