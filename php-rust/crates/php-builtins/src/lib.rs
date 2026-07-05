@@ -1285,6 +1285,7 @@ fn filter_var(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 const LOADED_EXTENSIONS: &[&[u8]] = &[
     b"core", b"standard", b"spl", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
     b"zip", b"dom", b"libxml", b"reflection", b"ctype", b"curl", b"pcntl", b"posix",
+    b"pdo", b"pdo_sqlite",
     // Declared for PHPUnit's bootstrap gate; their heavy surfaces (token_get_all,
     // xml_parser_*, XMLWriter) are filled in test-driven — a use ahead of the
     // implementation surfaces as an honest "undefined function".
@@ -1296,6 +1297,7 @@ const LOADED_EXTENSIONS: &[&[u8]] = &[
 const LOADED_EXTENSIONS_CASED: &[&[u8]] = &[
     b"Core", b"standard", b"SPL", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
     b"zip", b"dom", b"libxml", b"Reflection", b"ctype", b"curl", b"pcntl", b"posix",
+    b"PDO", b"pdo_sqlite",
     b"xml", b"xmlwriter", b"tokenizer", b"Phar",
 ];
 

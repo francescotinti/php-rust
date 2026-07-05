@@ -43,6 +43,7 @@ mod coroutines;
 mod dom;
 mod exceptions;
 mod oop;
+mod pdo;
 use arrays::*;
 use calls::*;
 use oop::*;
@@ -384,6 +385,8 @@ pub(crate) fn run_module_with_hir<'m>(
         lazy_initializing: HashSet::new(),
         zips: HashMap::new(),
         next_zip: 1,
+        pdo_conns: HashMap::new(),
+        next_pdo: 1,
         stream_chunk_sizes: HashMap::new(),
         seed_aliases: Vec::new(),
         umask: 0o22,
@@ -1085,6 +1088,13 @@ struct Vm<'m> {
     zips: HashMap<u32, ::zip::ZipArchive<std::fs::File>>,
     /// Next zip handle id (monotonic; ids are never reused within a run).
     next_zip: u32,
+    /// Open PDO connections (ext/pdo_sqlite subset): handle id → rusqlite
+    /// connection, backing the `__pdo_*` host builtins the prelude `PDO` class
+    /// delegates to. An id is allocated by `__pdo_open` and released by
+    /// `__pdo_close` (the prelude `PDO::__destruct`).
+    pdo_conns: HashMap<u32, rusqlite::Connection>,
+    /// Next PDO handle id (monotonic; ids are never reused within a run).
+    next_pdo: u32,
     /// Per-stream chunk size set by `stream_set_chunk_size` (resource id → size).
     /// phpr's I/O is unbuffered so the value has no read-path effect; it is kept
     /// only so the builtin can return the previous size (default 8192), as PHP does.
@@ -14502,6 +14512,9 @@ host_builtins! {
     b"__zip_locate_name" => vm.ho_zip_locate_name(args),
     b"__zip_get_from_index" => vm.ho_zip_get_from_index(args),
     b"__zip_extract_to" => vm.ho_zip_extract_to(args),
+    b"__pdo_open" => vm.ho_pdo_open(args),
+    b"__pdo_close" => vm.ho_pdo_close(args),
+    b"__pdo_sqlite_version" => vm.ho_pdo_sqlite_version(),
     b"get_parent_class" => vm.ho_get_parent_class(args),
     b"class_parents" => vm.ho_class_parents(args),
     b"class_implements" => vm.ho_class_implements(args),

@@ -109,7 +109,7 @@ const UNSUPPORTED_SECTIONS: &[&str] = &[
 /// corresponding steps (pcre: 31/36/37, json: 26, date: 34/35, mbstring: 41–43).
 /// A test requiring anything else still skips. Names are compared lowercase.
 const SUPPORTED_EXTENSIONS: &[&str] =
-    &["core", "standard", "mbstring", "pcre", "json", "date", "ctype", "hash", "zip"];
+    &["core", "standard", "mbstring", "pcre", "json", "date", "ctype", "hash", "zip", "pdo", "pdo_sqlite"];
 
 /// Classify and (when in scope) run a single `.phpt` source on the bytecode VM.
 pub fn run_phpt(src: &[u8], name: &[u8], reg: &Registry) -> TestResult {
