@@ -16,7 +16,7 @@
 //! data and steers control flow.
 
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BinaryHeap, HashMap, HashSet};
 use std::rc::Rc;
 
 use php_types::{
@@ -357,6 +357,7 @@ pub(crate) fn run_module_with_hir<'m>(
         created: BTreeMap::new(),
         destructed: HashSet::new(),
         gc_roots: HashMap::new(),
+        gc_queue: BinaryHeap::new(),
         shutdown_fns: Vec::new(),
         generators: HashMap::new(),
         fibers: HashMap::new(),
@@ -935,6 +936,12 @@ struct Vm<'m> {
     /// Drained at each sweep (objects still referenced get re-noted the next
     /// time they lose a reference), keeping the buffer small.
     gc_roots: HashMap<u32, Rc<RefCell<Object>>>,
+    /// Max-heap over the ids in `gc_roots`, pushed as each id enters the map.
+    /// The sweep pops it to visit candidates newest-first instead of
+    /// re-filtering the whole buffer after every freed object (which went
+    /// quadratic once thousands of never-collectable cyclic candidates piled
+    /// up). Entries whose id is no longer in the map are stale and skipped.
+    gc_queue: BinaryHeap<u32>,
     /// Callbacks registered with `register_shutdown_function`, each with its bound
     /// arguments, run in registration order at script end — after the main run (and
     /// any uncaught-fatal banner), before object destructors.
@@ -1087,7 +1094,10 @@ impl<'m> Vm<'m> {
                 if self.destructed.contains(&id) {
                     return;
                 }
-                self.gc_roots.entry(id).or_insert_with(|| Rc::clone(rc));
+                if let std::collections::hash_map::Entry::Vacant(e) = self.gc_roots.entry(id) {
+                    e.insert(Rc::clone(rc));
+                    self.gc_queue.push(id);
+                }
             }
             Zval::Ref(r) => {
                 if Rc::strong_count(r) == 1 {
@@ -1128,17 +1138,25 @@ impl<'m> Vm<'m> {
         );
         let verify = gc_verify_enabled();
         loop {
-            // Candidate selection (the O(candidates) win): a possible root is
-            // collectable when its only strong references are `created` (1) and
-            // its own buffer clone (1). Pick the newest (highest id) to match the
-            // legacy newest-first order — object ids, and `created`, are monotonic
-            // in creation order.
-            let cand_id = self
-                .gc_roots
-                .iter()
-                .filter(|(_, o)| Rc::strong_count(o) == 2)
-                .map(|(id, _)| *id)
-                .max();
+            // Candidate selection: a possible root is collectable when its only
+            // strong references are `created` (1) and its own buffer clone (1).
+            // Pop the max-heap so candidates are visited newest-first (highest
+            // id), matching the legacy full-filter max-id order. A popped id no
+            // longer in the buffer is stale — skip it. A popped candidate whose
+            // strong_count is still > 2 is not collectable *now*: discard it
+            // from the buffer instead of rescanning it after every freed object
+            // — whatever reference it loses later re-notes (and re-queues) it,
+            // the same invariant the possible-roots buffer itself relies on.
+            let cand_id = loop {
+                let Some(id) = self.gc_queue.pop() else { break None };
+                match self.gc_roots.get(&id) {
+                    None => continue,
+                    Some(o) if Rc::strong_count(o) == 2 => break Some(id),
+                    Some(_) => {
+                        self.gc_roots.remove(&id);
+                    }
+                }
+            };
 
             let chosen_id = if verify {
                 // Authoritative full scan, cross-checking buffer completeness.
@@ -1181,6 +1199,7 @@ impl<'m> Vm<'m> {
             let Some(id) = chosen_id else {
                 // Nothing more to collect this round: drop the candidate buffer.
                 self.gc_roots.clear();
+                self.gc_queue.clear();
                 break;
             };
 
@@ -1269,7 +1288,10 @@ impl<'m> Vm<'m> {
     /// drained and re-noted when they later lose a reference.
     fn gc_track(&mut self, rc: &Rc<RefCell<Object>>) {
         let id = rc.borrow().id;
-        self.gc_roots.entry(id).or_insert_with(|| Rc::clone(rc));
+        if let std::collections::hash_map::Entry::Vacant(e) = self.gc_roots.entry(id) {
+            e.insert(Rc::clone(rc));
+            self.gc_queue.push(id);
+        }
     }
 
     /// Note every object held by a frame that is being dropped (a returning or
