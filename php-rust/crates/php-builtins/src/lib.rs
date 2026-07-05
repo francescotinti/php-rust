@@ -457,6 +457,15 @@ fn var_dump(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Null)
 }
 
+/// ext/pdo's classes are C structs with no visible instance props: the prelude
+/// keeps their state in private `__…` slots, which debug dumps must hide (the
+/// oracle shows `object(PDO)#1 (0) {}`, and only `queryString` on a statement).
+fn pdo_hidden_prop(key: &[u8]) -> bool {
+    key.starts_with(b"\0PDO\0__")
+        || key.starts_with(b"\0PDOStatement\0__")
+        || key.starts_with(b"\0PDORow\0__")
+}
+
 /// Recursive var_dump formatter. `indent` is the leading-space count for this
 /// value's own block; nested entries indent by a further 2. `seen` holds the
 /// addresses of containers currently being dumped, so a value that refers back
@@ -709,9 +718,16 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
             // ordinary class names.
             out.extend_from_slice(class_display_name(obj.class_name.as_bytes()));
             // The header count excludes uninitialized typed properties (PHP).
-            let count = obj.props.iter().filter(|(_, v)| !matches!(v, Zval::Undef)).count();
+            let count = obj
+                .props
+                .iter()
+                .filter(|(k, v)| !matches!(v, Zval::Undef) && !pdo_hidden_prop(k))
+                .count();
             out.extend_from_slice(format!(")#{} ({}) {{\n", obj.id, count).as_bytes());
             for (k, val) in obj.props.iter() {
+                if pdo_hidden_prop(k) {
+                    continue;
+                }
                 let (disp, vis) = php_types::unmangle_prop_key(k, &obj.info);
                 spaces(out, indent + 2);
                 out.extend_from_slice(b"[\"");
@@ -1053,6 +1069,9 @@ fn print_r_into(out: &mut Vec<u8>, v: &Zval, indent: usize, ctx: &mut Ctx, seen:
             }
             seen.push(ptr);
             for (k, val) in obj.props.iter() {
+                if pdo_hidden_prop(k) {
+                    continue;
+                }
                 let (disp, vis) = php_types::unmangle_prop_key(k, &obj.info);
                 spaces(out, indent + 4);
                 out.push(b'[');

@@ -1390,19 +1390,39 @@ class PDO {
     public function __destruct() {
         if ($this->__h !== null) { __pdo_close($this->__h); $this->__h = null; }
     }
+    // get/setAttribute follow pdo_dbh.c: the error state clears at method
+    // ENTRY (a later errorCode() reads 00000 even after a failed call here);
+    // an attribute outside the supported set raises SQLSTATE[IM001] on get
+    // and plainly returns false on set.
     public function setAttribute($attribute, $value) {
-        $this->__attrs[$attribute] = $value;
-        return true;
+        $this->__err = array('00000', null, null);
+        if ($attribute === PDO::ATTR_ERRMODE || $attribute === PDO::ATTR_CASE || $attribute === PDO::ATTR_ORACLE_NULLS
+            || $attribute === PDO::ATTR_STRINGIFY_FETCHES || $attribute === PDO::ATTR_DEFAULT_FETCH_MODE
+            || $attribute === PDO::ATTR_DEFAULT_STR_PARAM || $attribute === PDO::ATTR_STATEMENT_CLASS
+            || $attribute === PDO::ATTR_TIMEOUT || $attribute === PDO::SQLITE_ATTR_EXTENDED_RESULT_CODES) {
+            $this->__attrs[$attribute] = $value;
+            return true;
+        }
+        return false;
     }
     public function getAttribute($attribute) {
+        $this->__err = array('00000', null, null);
         if ($attribute === PDO::ATTR_DRIVER_NAME) { return 'sqlite'; }
         if ($attribute === PDO::ATTR_SERVER_VERSION || $attribute === PDO::ATTR_CLIENT_VERSION) { return __pdo_sqlite_version(); }
-        if (array_key_exists($attribute, $this->__attrs)) { return $this->__attrs[$attribute]; }
-        if ($attribute === PDO::ATTR_CASE || $attribute === PDO::ATTR_ORACLE_NULLS) { return 0; }
-        if ($attribute === PDO::ATTR_PERSISTENT || $attribute === PDO::ATTR_STRINGIFY_FETCHES) { return false; }
-        if ($attribute === PDO::ATTR_DEFAULT_FETCH_MODE) { return PDO::FETCH_BOTH; }
-        return null;
+        if ($attribute === PDO::ATTR_ERRMODE || $attribute === PDO::ATTR_CASE || $attribute === PDO::ATTR_ORACLE_NULLS
+            || $attribute === PDO::ATTR_PERSISTENT || $attribute === PDO::ATTR_STRINGIFY_FETCHES
+            || $attribute === PDO::ATTR_DEFAULT_FETCH_MODE || $attribute === PDO::ATTR_DEFAULT_STR_PARAM
+            || $attribute === PDO::ATTR_STATEMENT_CLASS || $attribute === PDO::SQLITE_ATTR_EXTENDED_RESULT_CODES) {
+            if (array_key_exists($attribute, $this->__attrs)) { return $this->__attrs[$attribute]; }
+            if ($attribute === PDO::ATTR_CASE || $attribute === PDO::ATTR_ORACLE_NULLS || $attribute === PDO::SQLITE_ATTR_EXTENDED_RESULT_CODES) { return 0; }
+            if ($attribute === PDO::ATTR_PERSISTENT || $attribute === PDO::ATTR_STRINGIFY_FETCHES) { return false; }
+            if ($attribute === PDO::ATTR_DEFAULT_FETCH_MODE) { return PDO::FETCH_BOTH; }
+            if ($attribute === PDO::ATTR_ERRMODE) { return PDO::ERRMODE_EXCEPTION; }
+            return null;
+        }
+        return $this->__raise(array('SQLSTATE[IM001]: Driver does not support this function: driver does not support that attribute', 'IM001', null, null), 'PDO::getAttribute');
     }
+    public static function getAvailableDrivers() { return array('sqlite'); }
     public function exec($statement) {
         $r = __pdo_exec($this->__h, (string)$statement);
         if (isset($r['err'])) { return $this->__raise($r['err'], 'PDO::exec'); }
@@ -1413,6 +1433,7 @@ class PDO {
     // manual exec('BEGIN') IS visible here); the state errors below throw
     // *unconditionally*, whatever ATTR_ERRMODE says (pdo_dbh.c).
     public function beginTransaction() {
+        $this->__err = array('00000', null, null);
         if ($this->inTransaction()) { throw new PDOException('There is already an active transaction'); }
         $r = __pdo_exec($this->__h, 'BEGIN');
         if (isset($r['err'])) { return $this->__raise($r['err'], 'PDO::beginTransaction'); }
@@ -1420,6 +1441,7 @@ class PDO {
         return true;
     }
     public function commit() {
+        $this->__err = array('00000', null, null);
         if (!$this->inTransaction()) { throw new PDOException('There is no active transaction'); }
         $r = __pdo_exec($this->__h, 'COMMIT');
         if (isset($r['err'])) { return $this->__raise($r['err'], 'PDO::commit'); }
@@ -1427,6 +1449,7 @@ class PDO {
         return true;
     }
     public function rollBack() {
+        $this->__err = array('00000', null, null);
         if (!$this->inTransaction()) { throw new PDOException('There is no active transaction'); }
         $r = __pdo_exec($this->__h, 'ROLLBACK');
         if (isset($r['err'])) { return $this->__raise($r['err'], 'PDO::rollBack'); }
@@ -1495,7 +1518,8 @@ class PDOStatement implements IteratorAggregate {
     // einfo (oracle-verified pdo_stmt.c behaviour).
     private $__err = null;
     private $__mode = null;
-    private $__modeArg = null;
+    private $__modeArgs = array();
+    private $__meta = array();
     public function __pdoInit($pdo, $h, $sql) {
         $this->__pdo = $pdo;
         $this->__c = $h;
@@ -1542,16 +1566,31 @@ class PDOStatement implements IteratorAggregate {
         $this->__err = array('00000', null, null);
         $this->__cols = isset($r['cols']) ? $r['cols'] : array();
         $this->__rows = isset($r['rows']) ? $r['rows'] : array();
+        $this->__meta = isset($r['meta']) ? $r['meta'] : array();
         $this->__pos = 0;
         $this->__changes = isset($r['changes']) ? $r['changes'] : 0;
         return true;
     }
-    private function __buildRow($row, $mode) {
+    // FETCH_CLASS instantiation: props are written BEFORE the constructor
+    // runs, unless FETCH_PROPS_LATE flips the order (bug46139 semantics).
+    private function __fetchClass($assoc, $class, $ctorArgs, $propsLate) {
+        $rc = new ReflectionClass($class);
+        $o = $rc->newInstanceWithoutConstructor();
+        $ctor = $rc->getConstructor();
+        if ($propsLate && $ctor !== null) { $o->__construct(...$ctorArgs); }
+        foreach ($assoc as $k => $v) { $o->$k = $v; }
+        if (!$propsLate && $ctor !== null) { $o->__construct(...$ctorArgs); }
+        return $o;
+    }
+    private function __buildRow($row, $mode, $margs = null) {
         $pdo = $this->__pdo;
         if ($mode === null || $mode === PDO::FETCH_DEFAULT) { $mode = $this->__mode; }
         if ($mode === null || $mode === PDO::FETCH_DEFAULT) {
             $mode = $pdo !== null ? $pdo->getAttribute(PDO::ATTR_DEFAULT_FETCH_MODE) : PDO::FETCH_BOTH;
         }
+        if ($margs === null) { $margs = $this->__modeArgs; }
+        $flags = $mode & ~15;
+        $mode = $mode & 15;
         $stringify = $pdo !== null && $pdo->getAttribute(PDO::ATTR_STRINGIFY_FETCHES);
         $case = $pdo !== null ? $pdo->getAttribute(PDO::ATTR_CASE) : PDO::CASE_NATURAL;
         $vals = array();
@@ -1561,7 +1600,7 @@ class PDOStatement implements IteratorAggregate {
         }
         if ($mode === PDO::FETCH_NUM) { return $vals; }
         if ($mode === PDO::FETCH_COLUMN) {
-            $col = $this->__modeArg !== null ? $this->__modeArg : 0;
+            $col = isset($margs[0]) ? $margs[0] : 0;
             return array_key_exists($col, $vals) ? $vals[$col] : null;
         }
         $names = array();
@@ -1569,6 +1608,18 @@ class PDOStatement implements IteratorAggregate {
             if ($case === PDO::CASE_LOWER) { $n = strtolower($n); }
             elseif ($case === PDO::CASE_UPPER) { $n = strtoupper($n); }
             $names[$i] = $n;
+        }
+        if ($mode === PDO::FETCH_CLASS) {
+            $assoc = array();
+            foreach ($vals as $i => $v) { $assoc[$names[$i]] = $v; }
+            $class = isset($margs[0]) ? $margs[0] : 'stdClass';
+            $ctorArgs = isset($margs[1]) && is_array($margs[1]) ? $margs[1] : array();
+            return $this->__fetchClass($assoc, $class, $ctorArgs, ($flags & PDO::FETCH_PROPS_LATE) !== 0);
+        }
+        if ($mode === PDO::FETCH_INTO) {
+            $obj = isset($margs[0]) ? $margs[0] : new stdClass();
+            foreach ($vals as $i => $v) { $n = $names[$i]; $obj->$n = $v; }
+            return $obj;
         }
         if ($mode === PDO::FETCH_KEY_PAIR) { return array($vals[0] => $vals[1]); }
         if ($mode === PDO::FETCH_NAMED) {
@@ -1598,9 +1649,10 @@ class PDOStatement implements IteratorAggregate {
         return $this->__buildRow($row, $mode);
     }
     public function fetchAll($mode = null, ...$args) {
+        if ($this->__rows === null) { return array(); }
         $out = array();
         if ($mode === PDO::FETCH_COLUMN) {
-            $col = isset($args[0]) ? $args[0] : 0;
+            $col = isset($args[0]) ? $args[0] : (isset($this->__modeArgs[0]) ? $this->__modeArgs[0] : 0);
             while (($row = $this->fetch(PDO::FETCH_NUM)) !== false) { $out[] = array_key_exists($col, $row) ? $row[$col] : null; }
             return $out;
         }
@@ -1608,7 +1660,10 @@ class PDOStatement implements IteratorAggregate {
             while (($row = $this->fetch(PDO::FETCH_NUM)) !== false) { $out[$row[0]] = $row[1]; }
             return $out;
         }
-        while (($row = $this->fetch($mode)) !== false) { $out[] = $row; }
+        while ($this->__pos < count($this->__rows)) {
+            $out[] = $this->__buildRow($this->__rows[$this->__pos], $mode, count($args) ? $args : null);
+            $this->__pos = $this->__pos + 1;
+        }
         return $out;
     }
     public function fetchColumn($column = 0) {
@@ -1631,11 +1686,40 @@ class PDOStatement implements IteratorAggregate {
     }
     public function setFetchMode($mode, ...$args) {
         $this->__mode = $mode;
-        $this->__modeArg = isset($args[0]) ? $args[0] : null;
+        $this->__modeArgs = $args;
         return true;
     }
     public function rowCount() { return $this->__changes; }
     public function columnCount() { return count($this->__cols); }
+    // getColumnMeta statics come from the host ('meta': decl type + table,
+    // absent on expression columns); native_type/pdo_type reflect the *value*
+    // in the materialized first row, like sqlite3_column_type at execute.
+    public function getColumnMeta($column) {
+        if ($this->__rows === null) { return false; }
+        if ($column < 0 || $column >= count($this->__cols)) {
+            return $this->__raise(array('SQLSTATE[HY000]: General error: 100 another row available', 'HY000', 100, 'another row available'), 'PDOStatement::getColumnMeta');
+        }
+        $v = count($this->__rows) > 0 ? $this->__rows[0][$column] : null;
+        if (is_int($v)) { $nt = 'integer'; $pt = PDO::PARAM_INT; }
+        elseif (is_float($v)) { $nt = 'double'; $pt = PDO::PARAM_STR; }
+        elseif ($v === null) { $nt = 'null'; $pt = PDO::PARAM_NULL; }
+        else { $nt = 'string'; $pt = PDO::PARAM_STR; }
+        $out = array('native_type' => $nt, 'pdo_type' => $pt);
+        $m = isset($this->__meta[$column]) ? $this->__meta[$column] : array(null, null);
+        if ($m[0] !== null) { $out['sqlite:decl_type'] = $m[0]; }
+        if ($m[1] !== null) { $out['table'] = $m[1]; }
+        $out['flags'] = array();
+        $out['name'] = $this->__cols[$column];
+        $out['len'] = -1;
+        $out['precision'] = 0;
+        return $out;
+    }
+    public function getAttribute($attribute) {
+        if ($attribute === PDO::ATTR_EMULATE_PREPARES) { return false; }
+        if ($attribute === PDO::SQLITE_ATTR_READONLY_STATEMENT) { return __pdo_stmt_readonly($this->__c, $this->queryString); }
+        return $this->__raise(array('SQLSTATE[IM001]: Driver does not support this function: driver does not support that attribute', 'IM001', null, null), 'PDOStatement::getAttribute');
+    }
+    public function setAttribute($attribute, $value) { return false; }
     public function errorCode() { return $this->__err === null ? null : $this->__err[0]; }
     public function errorInfo() {
         if ($this->__err === null) {
@@ -1671,6 +1755,7 @@ class PDORow {
     public $queryString = '';
     public function __construct() { throw new PDOException('You may not create a PDORow manually'); }
 }
+function pdo_drivers() { return PDO::getAvailableDrivers(); }
 // SplFileInfo + the directory-iterator family (Composer's Filesystem: rm -rf
 // via CHILD_FIRST, copy-tree via SELF_FIRST + getSubPathname). The recursive
 // iterator SNAPSHOTS the traversal at rewind() -- Composer's uses (delete after

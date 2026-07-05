@@ -275,6 +275,27 @@ impl<'m> Vm<'m> {
             for name in stmt.column_names() {
                 let _ = cols.append(Zval::Str(PhpStr::new(name.as_bytes().to_vec())));
             }
+            // Per-column getColumnMeta statics: [decl type | null, table | null]
+            // (both absent on an expression column); the value-derived
+            // native_type/pdo_type come from the materialized first row,
+            // prelude-side.
+            let mut meta = PhpArray::new();
+            {
+                let decls = stmt.columns();
+                let origins = stmt.columns_with_metadata();
+                for i in 0..cc {
+                    let mut m = PhpArray::new();
+                    let _ = m.append(match decls.get(i).and_then(|c| c.decl_type()) {
+                        Some(d) => Zval::Str(PhpStr::new(d.as_bytes().to_vec())),
+                        None => Zval::Null,
+                    });
+                    let _ = m.append(match origins.get(i).and_then(|c| c.table_name()) {
+                        Some(t) => Zval::Str(PhpStr::new(t.as_bytes().to_vec())),
+                        None => Zval::Null,
+                    });
+                    let _ = meta.append(Zval::Array(Rc::new(m)));
+                }
+            }
             let mut rows_out = PhpArray::new();
             let mut rows = stmt.raw_query();
             loop {
@@ -294,6 +315,7 @@ impl<'m> Vm<'m> {
             let mut out = PhpArray::new();
             out.insert(Key::from_bytes(b"cols"), Zval::Array(Rc::new(cols)));
             out.insert(Key::from_bytes(b"rows"), Zval::Array(Rc::new(rows_out)));
+            out.insert(Key::from_bytes(b"meta"), Zval::Array(Rc::new(meta)));
             Ok(Zval::Array(Rc::new(out)))
         } else {
             match stmt.raw_execute() {
@@ -323,6 +345,17 @@ impl<'m> Vm<'m> {
             Ok(_) => Ok(Zval::Bool(true)),
             Err(e) => Ok(stmt_err_of(&e)),
         }
+    }
+
+    /// `__pdo_stmt_readonly($id, $sql)`: sqlite3_stmt_readonly on a fresh
+    /// prepare, what `PDOStatement::getAttribute(SQLITE_ATTR_READONLY_STATEMENT)`
+    /// reports. `false` on any error (the attribute read does not raise).
+    pub(super) fn ho_pdo_stmt_readonly(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let id = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags) as u32;
+        let sql = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags);
+        let sql = String::from_utf8_lossy(sql.as_bytes()).into_owned();
+        let Some(conn) = self.pdo_conns.get(&id) else { return Ok(Zval::Bool(false)) };
+        Ok(Zval::Bool(conn.prepare(&sql).map(|s| s.readonly()).unwrap_or(false)))
     }
 
     /// `__pdo_in_txn($id)`: whether a transaction is open, as pdo_sqlite's
