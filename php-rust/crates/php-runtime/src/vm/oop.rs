@@ -614,7 +614,7 @@ impl<'m> Vm<'m> {
     pub(super) fn run_shutdown_destructors(&mut self) {
         self.frames.clear();
         let survivors = std::mem::take(&mut self.created);
-        for o in survivors.into_iter().rev() {
+        for (_, o) in survivors.into_iter().rev() {
             let (cid, id) = {
                 let b = o.borrow();
                 (b.class_id as usize, b.id)

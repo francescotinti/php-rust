@@ -16,7 +16,7 @@
 //! data and steers control flow.
 
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
 
 use php_types::{
@@ -354,10 +354,9 @@ pub(crate) fn run_module_with_hir<'m>(
         statics: vec![None; module.static_count],
         closure_statics: HashMap::new(),
         magic_guard: HashSet::new(),
-        created: Vec::new(),
+        created: BTreeMap::new(),
         destructed: HashSet::new(),
-        gc_roots: Vec::new(),
-        gc_root_ids: HashSet::new(),
+        gc_roots: HashMap::new(),
         shutdown_fns: Vec::new(),
         generators: HashMap::new(),
         fibers: HashMap::new(),
@@ -915,11 +914,15 @@ struct Vm<'m> {
     /// Active magic-accessor guards (object id, kind, property) — a magic method
     /// is not re-entered for the same access while it is running (OOP-3b).
     magic_guard: HashSet<(u32, MagicKind, Vec<u8>)>,
-    /// A strong handle to every object created via `new`, in creation order
-    /// (OOP-3d). The extra ref lets the destruction sweep detect unreachability
+    /// A strong handle to every object created via `new`, keyed by object id
+    /// (OOP-3d). Ids are monotonic, so key order IS creation order — iteration
+    /// replaces the old Vec's positional order, and the sweep's per-object
+    /// lookup/removal is O(log n) instead of a linear scan of every tracked
+    /// object (which went quadratic once cyclic garbage accumulated). The extra
+    /// ref lets the destruction sweep detect unreachability
     /// (`Rc::strong_count == 1` ⇒ only this tracking ref remains); entries are
     /// removed as they are destructed or at shutdown.
-    created: Vec<Rc<RefCell<Object>>>,
+    created: BTreeMap<u32, Rc<RefCell<Object>>>,
     /// Object handles whose `__destruct` has already run, guarding double calls.
     destructed: HashSet<u32>,
     /// Possible-roots buffer for the destruction sweep: objects that have just
@@ -927,12 +930,11 @@ struct Vm<'m> {
     /// `gc_possible_root` buffer). [`Op::Sweep`] re-examines only these instead
     /// of all of `created`, turning the per-statement O(created) scan into
     /// O(candidates) — the fix for the O(n²) blow-up on large cyclic graphs.
-    /// Holds one strong clone per object id, so a buffered candidate's
-    /// `Rc::strong_count` is inflated by exactly 1; `gc_root_ids` dedupes by id.
-    /// Both are drained at each sweep (objects still referenced get re-noted the
-    /// next time they lose a reference), keeping the buffer small.
-    gc_roots: Vec<Rc<RefCell<Object>>>,
-    gc_root_ids: HashSet<u32>,
+    /// Holds one strong clone per object id (the map key dedupes), so a
+    /// buffered candidate's `Rc::strong_count` is inflated by exactly 1.
+    /// Drained at each sweep (objects still referenced get re-noted the next
+    /// time they lose a reference), keeping the buffer small.
+    gc_roots: HashMap<u32, Rc<RefCell<Object>>>,
     /// Callbacks registered with `register_shutdown_function`, each with its bound
     /// arguments, run in registration order at script end — after the main run (and
     /// any uncaught-fatal banner), before object destructors.
@@ -1085,9 +1087,7 @@ impl<'m> Vm<'m> {
                 if self.destructed.contains(&id) {
                     return;
                 }
-                if self.gc_root_ids.insert(id) {
-                    self.gc_roots.push(Rc::clone(rc));
-                }
+                self.gc_roots.entry(id).or_insert_with(|| Rc::clone(rc));
             }
             Zval::Ref(r) => {
                 if Rc::strong_count(r) == 1 {
@@ -1136,21 +1136,21 @@ impl<'m> Vm<'m> {
             let cand_id = self
                 .gc_roots
                 .iter()
-                .filter(|o| Rc::strong_count(o) == 2)
-                .map(|o| o.borrow().id)
+                .filter(|(_, o)| Rc::strong_count(o) == 2)
+                .map(|(id, _)| *id)
                 .max();
 
             let chosen_id = if verify {
                 // Authoritative full scan, cross-checking buffer completeness.
                 let full_id = {
-                    let roots = &self.gc_root_ids;
+                    let roots = &self.gc_roots;
                     self.created
                         .iter()
-                        .filter(|o| {
-                            let extra = roots.contains(&o.borrow().id) as usize;
+                        .filter(|(id, o)| {
+                            let extra = roots.contains_key(id) as usize;
                             Rc::strong_count(o) - extra == 1
                         })
-                        .map(|o| o.borrow().id)
+                        .map(|(id, _)| *id)
                         .max()
                 };
                 if full_id != cand_id {
@@ -1159,8 +1159,7 @@ impl<'m> Vm<'m> {
                     if let Some(fid) = full_id {
                         let name = self
                             .created
-                            .iter()
-                            .find(|o| o.borrow().id == fid)
+                            .get(&fid)
                             .map(|o| self.classes[o.borrow().class_id as usize].name.clone())
                             .unwrap_or_default();
                         log::error!(
@@ -1182,7 +1181,6 @@ impl<'m> Vm<'m> {
             let Some(id) = chosen_id else {
                 // Nothing more to collect this round: drop the candidate buffer.
                 self.gc_roots.clear();
-                self.gc_root_ids.clear();
                 break;
             };
 
@@ -1191,11 +1189,10 @@ impl<'m> Vm<'m> {
             // an interned enum-case singleton that was noted on a value drop): its
             // `strong_count == 2` is a false positive, so just drop it from the
             // buffer and move on.
-            let Some(ci) = self.created.iter().position(|o| o.borrow().id == id) else {
+            let Some(o) = self.created.remove(&id) else {
                 self.gc_unnote(id);
                 continue;
             };
-            let o = self.created.remove(ci);
             self.gc_unnote(id);
             let cid = o.borrow().class_id as usize;
 
@@ -1260,11 +1257,7 @@ impl<'m> Vm<'m> {
     /// present), so the buffer no longer keeps it alive. Called when the sweep
     /// takes ownership of an object it is about to free.
     fn gc_unnote(&mut self, id: u32) {
-        if self.gc_root_ids.remove(&id) {
-            if let Some(gi) = self.gc_roots.iter().position(|o| o.borrow().id == id) {
-                self.gc_roots.swap_remove(gi);
-            }
-        }
+        self.gc_roots.remove(&id);
     }
 
     /// Track a freshly created object as a possible root. A temporary that is
@@ -1276,9 +1269,7 @@ impl<'m> Vm<'m> {
     /// drained and re-noted when they later lose a reference.
     fn gc_track(&mut self, rc: &Rc<RefCell<Object>>) {
         let id = rc.borrow().id;
-        if self.gc_root_ids.insert(id) {
-            self.gc_roots.push(Rc::clone(rc));
-        }
+        self.gc_roots.entry(id).or_insert_with(|| Rc::clone(rc));
     }
 
     /// Note every object held by a frame that is being dropped (a returning or
@@ -3404,7 +3395,8 @@ impl<'m> Vm<'m> {
                         };
                         Rc::new(RefCell::new(obj))
                     };
-                    self.created.push(Rc::clone(&clone_rc));
+                    self.created
+                        .insert(clone_rc.borrow().id, Rc::clone(&clone_rc));
                     self.gc_track(&clone_rc);
                     let cid = clone_rc.borrow().class_id as usize;
                     let clone_val = Zval::Object(clone_rc.clone());
@@ -9039,7 +9031,8 @@ impl<'m> Vm<'m> {
         // Materialise the *evaluated* instance defaults via a throwaway instance:
         // constants come from `alloc_object`, non-constant defaults (arrays, `1+2`,
         // …) from the prop-init thunk. The instance is untracked for `__destruct`.
-        let created_mark = self.created.len();
+        // Ids after this mark belong to the throwaway allocation below.
+        let created_mark = self.created.last_key_value().map(|(id, _)| *id);
         let temp = self.alloc_object(cid)?;
         let cc = self.classes[cid];
         if let Some(func) = cc.prop_init.as_ref() {
@@ -9063,7 +9056,11 @@ impl<'m> Vm<'m> {
                 .collect(),
             _ => Vec::new(),
         };
-        self.created.truncate(created_mark); // discard the throwaway, no __destruct
+        // Discard the throwaway (and anything its prop-init minted), no __destruct.
+        match created_mark {
+            Some(m) => drop(self.created.split_off(&(m + 1))),
+            None => self.created.clear(),
+        }
         // Inheritance chain, most-derived first.
         let mut chain: Vec<usize> = Vec::new();
         let mut c = Some(cid);
@@ -10412,7 +10409,7 @@ impl<'m> Vm<'m> {
         let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init: Vec::new(), readonly_clone_writable: Vec::new(), lazy: None, proxy_instance: None };
         let rc = Rc::new(RefCell::new(obj));
         // Track for `__destruct` (OOP-3d), like every other freshly minted object.
-        self.created.push(Rc::clone(&rc));
+        self.created.insert(id, Rc::clone(&rc));
         self.gc_track(&rc);
         // Non-constant declared defaults (`= []`, `= SOME_CONST`, …) live in the
         // class's `prop_init` thunk — run it on the fresh instance, like
@@ -12928,7 +12925,7 @@ impl<'m> Vm<'m> {
         let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init: Vec::new(), readonly_clone_writable: Vec::new(), lazy: None, proxy_instance: None };
         let rc = Rc::new(RefCell::new(obj));
         // Track for `__destruct` (OOP-3d): the extra strong ref drives the sweep.
-        self.created.push(Rc::clone(&rc));
+        self.created.insert(id, Rc::clone(&rc));
         self.gc_track(&rc);
         Ok(Zval::Object(rc))
     }
