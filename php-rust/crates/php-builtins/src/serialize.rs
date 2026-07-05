@@ -75,6 +75,27 @@ fn ser_into(out: &mut Vec<u8>, v: &Zval) -> Result<(), PhpError> {
         Zval::Object(o) => {
             let obj = o.borrow();
             let cname = obj.class_name.as_bytes();
+            // A record staged by the VM for a legacy `Serializable` object
+            // (its `serialize()` already produced the raw payload): emit
+            // `C:<len>:"<class>":<len>:{<payload>}`; a missing payload (PHP:
+            // `serialize()` returned NULL) serializes the object as plain `N;`.
+            if cname == b"\0__phpr_cformat" {
+                match (obj.props.get(b"class"), obj.props.get(b"payload")) {
+                    (Some(Zval::Str(c)), Some(Zval::Str(p))) => {
+                        out.extend_from_slice(b"C:");
+                        out.extend_from_slice(c.as_bytes().len().to_string().as_bytes());
+                        out.extend_from_slice(b":\"");
+                        out.extend_from_slice(c.as_bytes());
+                        out.extend_from_slice(b"\":");
+                        out.extend_from_slice(p.as_bytes().len().to_string().as_bytes());
+                        out.extend_from_slice(b":{");
+                        out.extend_from_slice(p.as_bytes());
+                        out.push(b'}');
+                    }
+                    _ => out.extend_from_slice(b"N;"),
+                }
+                return Ok(());
+            }
             let n = obj.props.iter().count();
             out.extend_from_slice(b"O:");
             out.extend_from_slice(cname.len().to_string().as_bytes());

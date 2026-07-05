@@ -21,6 +21,9 @@ pub enum Ser {
     Array(Vec<(Ser, Ser)>),
     /// Class name and ordered (property-name, value) pairs.
     Object(Vec<u8>, Vec<(Vec<u8>, Ser)>),
+    /// `C:<len>:"<class>":<len>:{<payload>}` — a legacy `Serializable` record:
+    /// class name and the raw opaque payload its `unserialize()` receives.
+    CObject(Vec<u8>, Vec<u8>),
 }
 
 /// Parse a complete serialized value. Returns `None` on any malformed input or
@@ -144,6 +147,20 @@ impl Parser<'_> {
                 }
                 self.eat(b'}')?;
                 Some(Ser::Object(class, props))
+            }
+            b'C' => {
+                // Legacy Serializable record: the braces wrap `<len>` raw
+                // payload bytes, NOT nested serialized values.
+                self.i += 1;
+                self.eat(b':')?;
+                let class = self.quoted_bytes()?;
+                self.eat(b':')?;
+                let len = self.usize_until(b':')?;
+                self.eat(b'{')?;
+                let payload = self.b.get(self.i..self.i.checked_add(len)?)?.to_vec();
+                self.i += len;
+                self.eat(b'}')?;
+                Some(Ser::CObject(class, payload))
             }
             _ => None,
         }

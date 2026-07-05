@@ -442,6 +442,22 @@ pub(crate) fn run_module_with_hir<'m>(
             .unwrap_or_else(|_| b"php".to_vec());
         vm.constants.insert(b"PHP_BINARY".to_vec(), Zval::Str(PhpStr::new(path)));
     }
+    // Link-time `Serializable` policy for the hoisted (unconditional) classes:
+    // the deprecation is staged in `diags` (flushed with the first statement,
+    // so it prints before any script output, like Zend's compile-time emission)
+    // and an enum implementing it aborts before `main` runs. Conditional
+    // classes are checked by their `Op::DeclareClass` instead. (Classes linked
+    // later by an include unit are not checked — deliberate slice.)
+    let mut link_fatal = None;
+    for cid in 0..vm.classes.len() {
+        if module.conditional_classes.contains(&cid) {
+            continue;
+        }
+        if let Err(e) = vm.serializable_link_check(cid) {
+            link_fatal = Some(e);
+            break;
+        }
+    }
     vm.frames.push(Frame::new(&module.main, module));
     // Seed the CLI superglobals (`$_SERVER`/`$argv`/`$argc`/`$_ENV`) into the
     // script frame's global slots for a real CLI run; the test harness passes
@@ -456,7 +472,11 @@ pub(crate) fn run_module_with_hir<'m>(
     // Disable error-handler routing for everything past the main run: the final
     // flush, the uncaught-fatal render, and shutdown destructors must render raw
     // and never call user code (Session 2 `final_flush` guard).
-    let run_result = vm.run();
+    let is_link_fatal = link_fatal.is_some();
+    let run_result = match link_fatal {
+        Some(e) => Err(e),
+        None => vm.run(),
+    };
     vm.final_flush = true;
     let (fatal, return_value) = match run_result {
         Ok(v) => (None, v),
@@ -466,7 +486,9 @@ pub(crate) fn run_module_with_hir<'m>(
         }
         // An uncaught throwable routed to a `set_exception_handler` is handled
         // there (no fatal banner; PHP exits cleanly); otherwise it is the fatal.
-        Err(e) if vm.handle_uncaught_exception(&e) => (None, Zval::Null),
+        // A link-time fatal is Zend's compile-time kind: never a throwable, so
+        // it bypasses the exception handler and renders a plain banner below.
+        Err(e) if !is_link_fatal && vm.handle_uncaught_exception(&e) => (None, Zval::Null),
         Err(e) => (Some(e), Zval::Null),
     };
     // Flush any diagnostics still staged, then render the uncaught fatal at the
@@ -478,7 +500,16 @@ pub(crate) fn run_module_with_hir<'m>(
         // PHP flushes any active output buffers *before* printing the fatal banner,
         // so the script's buffered output precedes the "Fatal error:" block.
         vm.flush_all_output_buffers();
-        vm.render_fatal(err, line);
+        if is_link_fatal {
+            // Compile/link-time fatal (e.g. an enum implementing Serializable):
+            // a plain banner with the declaration site — no throwable wrapping,
+            // no stack trace.
+            let file = String::from_utf8_lossy(&module.file);
+            let block = format!("\nFatal error: {} in {} on line {}\n", err.message(), file, line);
+            vm.rendered.extend_from_slice(block.as_bytes());
+        } else {
+            vm.render_fatal(err, line);
+        }
     }
     // `register_shutdown_function` callbacks run after the main script (and any
     // uncaught-fatal banner), before object destructors (PHP shutdown sequence).
@@ -1640,6 +1671,45 @@ impl<'m> Vm<'m> {
     fn ho_gc_collect_cycles(&mut self, _args: Vec<Zval>) -> Result<Zval, PhpError> {
         let n = self.collect_cycles()?;
         Ok(Zval::Long(n))
+    }
+
+    /// PHP 8.1 link-time policy for the legacy `Serializable` interface
+    /// (zend_inheritance.c): a class implementing it — directly or through an
+    /// interface — gets an E_DEPRECATED at declaration unless it also provides
+    /// both `__serialize()` and `__unserialize()`; interfaces and abstract
+    /// classes are exempt (the concrete implementor reports). An enum may not
+    /// implement it at all: the deprecation still fires first (Zend checks the
+    /// interface before the enum rule), then the declaration is a fatal.
+    fn serializable_link_check(&mut self, cid: usize) -> Result<(), PhpError> {
+        let Some(&ser) = self.class_index.get(&b"serializable"[..]) else {
+            return Ok(());
+        };
+        if cid == ser {
+            return Ok(());
+        }
+        let cc = self.classes[cid];
+        if matches!(cc.instantiable, Instantiable::Interface | Instantiable::Abstract) {
+            return Ok(());
+        }
+        if !is_instance_of(&self.classes, self.stringable_id, cid, ser) {
+            return Ok(());
+        }
+        if resolve_method_runtime(&self.classes, cid, b"__serialize").is_none()
+            || resolve_method_runtime(&self.classes, cid, b"__unserialize").is_none()
+        {
+            self.diags.push(Diag::Deprecated(format!(
+                "{} implements the Serializable interface, which is deprecated. Implement __serialize() and __unserialize() instead (or in addition, if support for old PHP versions is necessary)",
+                String::from_utf8_lossy(cc.class_name.as_bytes())
+            )));
+        }
+        if matches!(cc.instantiable, Instantiable::Enum) {
+            self.fatal_line = cc.line;
+            return Err(PhpError::Error(format!(
+                "Enum {} cannot implement the Serializable interface",
+                String::from_utf8_lossy(cc.class_name.as_bytes())
+            )));
+        }
+        Ok(())
     }
 
     /// Render every diagnostic raised since the last flush into `rendered`,
@@ -3099,6 +3169,7 @@ impl<'m> Vm<'m> {
                         )));
                     }
                     self.class_index.insert(key, cid);
+                    self.serializable_link_check(cid)?;
                 }
                 Op::Call { func, argc } => {
                     let m = self.frames[top].module;
@@ -10417,6 +10488,9 @@ impl<'m> Vm<'m> {
                 if let Some(cid) = object_class_id(v) {
                     if resolve_method_runtime(&self.classes, cid, b"__serialize").is_some()
                         || resolve_method_runtime(&self.classes, cid, b"__sleep").is_some()
+                        || self.class_index.get(&b"serializable"[..]).is_some_and(|&ser| {
+                            is_instance_of(&self.classes, self.stringable_id, cid, ser)
+                        })
                     {
                         return true;
                     }
@@ -10464,6 +10538,52 @@ impl<'m> Vm<'m> {
                     return Ok(done.clone());
                 }
                 let cid = object_class_id(&v);
+                // Legacy `Serializable` (priority: below `__serialize`, above
+                // `__sleep`): `->serialize()` yields the raw payload, staged in
+                // a marker record the pure formatter emits as
+                // `C:<len>:"<Class>":<len>:{<payload>}` (or `N;` on null).
+                if let Some(c) = cid.filter(|&c| {
+                    resolve_method_runtime(&self.classes, c, b"__serialize").is_none()
+                        && self.class_index.get(&b"serializable"[..]).is_some_and(|&ser| {
+                            is_instance_of(&self.classes, self.stringable_id, c, ser)
+                        })
+                }) {
+                    let ret = self
+                        .call_method_sync(v.clone(), b"serialize", Vec::new())?
+                        .deref_clone();
+                    let payload = match ret {
+                        Zval::Str(s) => Some(Zval::Str(s)),
+                        Zval::Null | Zval::Undef => None,
+                        _ => {
+                            return Err(PhpError::TypeError(format!(
+                                "{}::serialize() must return a string or NULL",
+                                String::from_utf8_lossy(self.classes[c].name.as_ref())
+                            )))
+                        }
+                    };
+                    let mut props = Props::new();
+                    props.set(
+                        b"class",
+                        Zval::Str(PhpStr::new(orc.borrow().class_name.as_bytes().to_vec())),
+                    );
+                    if let Some(p) = payload {
+                        props.set(b"payload", p);
+                    }
+                    let synth = Object {
+                        class_id: orc.borrow().class_id,
+                        class_name: PhpStr::new(b"\0__phpr_cformat".to_vec()),
+                        props,
+                        id: self.next_id(),
+                        info: Rc::new(php_types::ObjectInfo::default()),
+                        readonly_init: Vec::new(),
+                        readonly_clone_writable: Vec::new(),
+                        lazy: None,
+                        proxy_instance: None,
+                    };
+                    let out = Zval::Object(Rc::new(RefCell::new(synth)));
+                    memo.insert(addr, out.clone());
+                    return Ok(out);
+                }
                 let mut opaque_keys = false;
                 let entries: Vec<(Vec<u8>, Zval)> = if let Some(cid) = cid.filter(|&c| {
                     resolve_method_runtime(&self.classes, c, b"__serialize").is_some()
@@ -10681,6 +10801,30 @@ impl<'m> Vm<'m> {
                         self.call_method_sync(obj.clone(), b"__wakeup", Vec::new())?;
                     }
                 }
+                obj
+            }
+            Ser::CObject(class, payload) => {
+                // Legacy `Serializable` record: instantiate without the
+                // constructor and hand the raw payload to `->unserialize()`.
+                // A class without an unserializer degrades to `false` with a
+                // Warning (mirrors Zend's "class has no unserializer" path).
+                let lower = class.to_ascii_lowercase();
+                let cid = self.class_index.get(lower.as_slice()).copied().filter(|&c| {
+                    resolve_method_runtime(&self.classes, c, b"unserialize").is_some()
+                });
+                let Some(cid) = cid else {
+                    self.diags.push(Diag::Warning(format!(
+                        "unserialize(): Class {} has no unserializer",
+                        String::from_utf8_lossy(&class)
+                    )));
+                    return Ok(Zval::Bool(false));
+                };
+                let obj = self.alloc_object(cid)?;
+                self.call_method_sync(
+                    obj.clone(),
+                    b"unserialize",
+                    vec![Zval::Str(PhpStr::new(payload))],
+                )?;
                 obj
             }
         })
