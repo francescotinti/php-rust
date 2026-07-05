@@ -3237,16 +3237,42 @@ impl<'a> FnCompiler<'a> {
             // argument; the plain-variable and static-property fast paths above
             // avoid the extra cell.
             _ => {
-                let Some(place) = expr_field_place(first) else {
-                    return Err(CompileError::Unsupported(
-                        "by-reference builtin whose first argument is not a plain variable".into(),
-                    ));
-                };
-                let (base, steps) = self.field_path(&place)?;
-                self.emit(Op::MakeRef { base, steps: steps.into() });
-                self.push_value_args(rest)?;
-                self.emit(Op::CallBuiltinRefCell { name: name.into(), argc: rest.len() as u32 });
-                Ok(())
+                if let Some(place) = expr_field_place(first) {
+                    let (base, steps) = self.field_path(&place)?;
+                    self.emit(Op::MakeRef { base, steps: steps.into() });
+                    self.push_value_args(rest)?;
+                    self.emit(Op::CallBuiltinRefCell {
+                        name: name.into(),
+                        argc: rest.len() as u32,
+                    });
+                    return Ok(());
+                }
+                // An *indexed* static property
+                // (`array_unshift(self::$hooks[$class]['before'], $m)`): peel the
+                // index chain down to the static-prop root and go through the same
+                // read-modify-write temp as the bare static property above, with
+                // the indexes as path steps — the builtin mutates a reference cell
+                // into the temp's path, then the temp is written back.
+                let mut steps_rev: Vec<PlaceStep> = Vec::new();
+                let mut cur = first;
+                while let ExprKind::Index { base, index } = &cur.kind {
+                    steps_rev.push(PlaceStep::Index((**index).clone()));
+                    cur = base;
+                }
+                if let ExprKind::StaticProp { class, name: prop } = &cur.kind {
+                    steps_rev.reverse();
+                    let nm: Box<[u8]> = name.into();
+                    return self.static_prop_rmw(class, prop, &steps_rev, true, |c, place| {
+                        let (base, psteps) = c.field_path(place)?;
+                        c.emit(Op::MakeRef { base, steps: psteps.into() });
+                        c.push_value_args(rest)?;
+                        c.emit(Op::CallBuiltinRefCell { name: nm, argc: rest.len() as u32 });
+                        Ok(())
+                    });
+                }
+                Err(CompileError::Unsupported(
+                    "by-reference builtin whose first argument is not a plain variable".into(),
+                ))
             }
         }
     }

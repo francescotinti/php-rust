@@ -717,6 +717,10 @@ interface Countable {
 interface JsonSerializable {
     public function jsonSerialize(): mixed;
 }
+interface Serializable {
+    public function serialize();
+    public function unserialize($data);
+}
 class Exception implements Throwable {
     protected $message = "";
     protected $code = 0;
@@ -794,6 +798,7 @@ class RangeException extends RuntimeException {}
 class UnderflowException extends RuntimeException {}
 class UnexpectedValueException extends RuntimeException {}
 class JsonException extends Exception {}
+class PharException extends Exception {}
 class TypeError extends Error {}
 class ArgumentCountError extends TypeError {}
 class ValueError extends Error {}
@@ -1517,7 +1522,7 @@ class SplObjectStorage implements Countable, Iterator, ArrayAccess {
         if ($this->valid()) { $this->__data[$this->__ids[$this->__pos]] = $info; }
     }
     public function offsetExists($object) { return isset($this->__objs[spl_object_id($object)]); }
-    public function offsetSet($object, $info) { $this->__attach($object, $info); }
+    public function offsetSet($object, $info = null) { $this->__attach($object, $info); }
     public function offsetUnset($object) {
         $id = spl_object_id($object);
         unset($this->__objs[$id], $this->__data[$id]);
@@ -1855,6 +1860,13 @@ class ReflectionClass {
     public function isUninitializedLazyObject($object) { return __lazy_is_uninitialized($object); }
     public function initializeLazyObject($object) { return __lazy_initialize($object); }
     public function isInstantiable() { return class_exists($this->name); }
+    public function isCloneable() {
+        if ($this->isInterface() || $this->isAbstract() || $this->isEnum()) { return false; }
+        if ($this->hasMethod('__clone')) {
+            return $this->getMethod('__clone')->isPublic();
+        }
+        return true;
+    }
     public function isInterface() { return interface_exists($this->name); }
     public function isEnum() { return in_array('UnitEnum', class_implements($this->name)); }
     public function isFinal() { return __reflect_class_modifiers($this->name)['final']; }
@@ -2614,6 +2626,34 @@ class DOMNode {
     }
 }
 
+// Class-shape stub of ext/xmlreader's pull parser: enough for code that
+// subclasses or type-checks XMLReader (doctrine/instantiator's test assets).
+// Actual pull-parsing is out of slice: there are deliberately no methods, so
+// any real use fails loudly with "undefined method" instead of misparsing.
+class XMLReader {
+    const NONE = 0;
+    const ELEMENT = 1;
+    const ATTRIBUTE = 2;
+    const TEXT = 3;
+    const CDATA = 4;
+    const ENTITY_REF = 5;
+    const ENTITY = 6;
+    const PI = 7;
+    const COMMENT = 8;
+    const DOC = 9;
+    const DOC_TYPE = 10;
+    const DOC_FRAGMENT = 11;
+    const NOTATION = 12;
+    const WHITESPACE = 13;
+    const SIGNIFICANT_WHITESPACE = 14;
+    const END_ELEMENT = 15;
+    const END_ENTITY = 16;
+    const XML_DECLARATION = 17;
+    const LOADDTD = 1;
+    const DEFAULTATTRS = 2;
+    const VALIDATE = 3;
+    const SUBST_ENTITIES = 4;
+}
 class DOMDocument extends DOMNode {
     public $preserveWhiteSpace = true;
     public $formatOutput = false;
@@ -2648,6 +2688,15 @@ class DOMDocument extends DOMNode {
     public function schemaValidateSource($source, $flags = 0) { return true; }
     public function relaxNGValidate($filename) { return true; }
     public function relaxNGValidateSource($source) { return true; }
+    public function xinclude($options = 0) {
+        // XInclude substitution (PHPUnit's config loader calls this on every
+        // phpunit.xml). A document with no XInclude elements is untouched and
+        // the count is 0; actual substitution is out of slice, so report -1
+        // (libxml's processing-error result) instead of pretending it worked.
+        foreach (__dom_by_tag($this->__d, -1, 'xi:include') as $n) { return -1; }
+        foreach (__dom_by_tag($this->__d, -1, 'xinclude') as $n) { return -1; }
+        return 0;
+    }
     public function createElement($localName, $value = '') {
         $n = __dom_create($this->__d, 1, (string)$localName, '');
         if ($n < 0) { throw new DOMException('Invalid Character Error'); }
