@@ -14519,6 +14519,7 @@ host_builtins! {
     b"__pdo_run" => vm.ho_pdo_run(args),
     b"__pdo_prepare" => vm.ho_pdo_prepare(args),
     b"__pdo_last_id" => vm.ho_pdo_last_id(args),
+    b"__pdo_in_txn" => vm.ho_pdo_in_txn(args),
     b"get_parent_class" => vm.ho_get_parent_class(args),
     b"class_parents" => vm.ho_class_parents(args),
     b"class_implements" => vm.ho_class_implements(args),

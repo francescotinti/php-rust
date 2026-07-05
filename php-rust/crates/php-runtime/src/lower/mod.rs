@@ -1370,6 +1370,10 @@ class PDO {
     private $__h = null;
     private $__attrs = array();
     private $__err = array('00000', null, null);
+    // The driver-level einfo (native code, native msg): unlike __err it is NOT
+    // reset by a later success -- a fresh statement's errorInfo leaks it
+    // (oracle: ['', 1, 'near "BROKEN": syntax error'] after a past failure).
+    private $__driverErr = array(null, null);
     public function __construct($dsn, $username = null, $password = null, $options = null) {
         $r = __pdo_open((string)$dsn);
         if (is_array($r)) {
@@ -1402,12 +1406,47 @@ class PDO {
     public function exec($statement) {
         $r = __pdo_exec($this->__h, (string)$statement);
         if (isset($r['err'])) { return $this->__raise($r['err'], 'PDO::exec'); }
+        $this->__err = array('00000', null, null);
         return $r['changes'];
+    }
+    // pdo_sqlite implements in_transaction via sqlite3_get_autocommit (so a
+    // manual exec('BEGIN') IS visible here); the state errors below throw
+    // *unconditionally*, whatever ATTR_ERRMODE says (pdo_dbh.c).
+    public function beginTransaction() {
+        if ($this->inTransaction()) { throw new PDOException('There is already an active transaction'); }
+        $r = __pdo_exec($this->__h, 'BEGIN');
+        if (isset($r['err'])) { return $this->__raise($r['err'], 'PDO::beginTransaction'); }
+        $this->__err = array('00000', null, null);
+        return true;
+    }
+    public function commit() {
+        if (!$this->inTransaction()) { throw new PDOException('There is no active transaction'); }
+        $r = __pdo_exec($this->__h, 'COMMIT');
+        if (isset($r['err'])) { return $this->__raise($r['err'], 'PDO::commit'); }
+        $this->__err = array('00000', null, null);
+        return true;
+    }
+    public function rollBack() {
+        if (!$this->inTransaction()) { throw new PDOException('There is no active transaction'); }
+        $r = __pdo_exec($this->__h, 'ROLLBACK');
+        if (isset($r['err'])) { return $this->__raise($r['err'], 'PDO::rollBack'); }
+        $this->__err = array('00000', null, null);
+        return true;
+    }
+    public function inTransaction() { return __pdo_in_txn($this->__h); }
+    public function errorCode() { return $this->__err[0]; }
+    public function errorInfo() { return array($this->__err[0], $this->__err[1], $this->__err[2]); }
+    public function __driverError() { return $this->__driverErr; }
+    public function quote($string, $type = PDO::PARAM_STR) {
+        $s = (string)$string;
+        if (strpos($s, "\0") !== false) { return false; }
+        return "'" . str_replace("'", "''", $s) . "'";
     }
     public function prepare($query, $options = null) {
         // pdo_sqlite prepares eagerly: broken SQL fails here, not at execute.
         $r = __pdo_prepare($this->__h, (string)$query);
         if (is_array($r) && isset($r['err'])) { return $this->__raise($r['err'], 'PDO::prepare'); }
+        $this->__err = array('00000', null, null);
         $st = new PDOStatement();
         $st->__pdoInit($this, $this->__h, (string)$query);
         return $st;
@@ -1428,6 +1467,7 @@ class PDO {
     // ctor failures use the native int instead, see __construct).
     public function __raise($e, $fn) {
         $this->__err = array($e[1], $e[2], $e[3]);
+        if ($e[2] !== null) { $this->__driverErr = array($e[2], $e[3]); }
         $mode = isset($this->__attrs[PDO::ATTR_ERRMODE]) ? $this->__attrs[PDO::ATTR_ERRMODE] : PDO::ERRMODE_EXCEPTION;
         if ($mode === PDO::ERRMODE_EXCEPTION) {
             $ex = new PDOException($e[0], $e[1]);
@@ -1450,7 +1490,10 @@ class PDOStatement implements IteratorAggregate {
     private $__pos = 0;
     private $__changes = 0;
     private $__bound = array();
-    private $__err = array('00000', null, null);
+    // null until the first execute-ish op: a fresh statement's errorCode() is
+    // NULL while its errorInfo() shows '' plus the *connection's* last driver
+    // einfo (oracle-verified pdo_stmt.c behaviour).
+    private $__err = null;
     private $__mode = null;
     private $__modeArg = null;
     public function __pdoInit($pdo, $h, $sql) {
@@ -1496,6 +1539,7 @@ class PDOStatement implements IteratorAggregate {
         }
         $r = __pdo_run($this->__c, $this->queryString, $send, $strict);
         if (isset($r['err'])) { return $this->__raise($r['err'], 'PDOStatement::execute'); }
+        $this->__err = array('00000', null, null);
         $this->__cols = isset($r['cols']) ? $r['cols'] : array();
         $this->__rows = isset($r['rows']) ? $r['rows'] : array();
         $this->__pos = 0;
@@ -1592,6 +1636,14 @@ class PDOStatement implements IteratorAggregate {
     }
     public function rowCount() { return $this->__changes; }
     public function columnCount() { return count($this->__cols); }
+    public function errorCode() { return $this->__err === null ? null : $this->__err[0]; }
+    public function errorInfo() {
+        if ($this->__err === null) {
+            $d = $this->__pdo !== null ? $this->__pdo->__driverError() : array(null, null);
+            return array('', $d[0], $d[1]);
+        }
+        return array($this->__err[0], $this->__err[1], $this->__err[2]);
+    }
     public function closeCursor() {
         $this->__rows = array();
         $this->__pos = 0;

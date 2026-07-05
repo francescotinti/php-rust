@@ -49,6 +49,11 @@ fn native_err(e: &rusqlite::Error) -> (i64, String) {
             i64::from(f.extended_code & 0xff),
             msg.clone().unwrap_or_else(|| f.to_string()),
         ),
+        // Prepare-time syntax errors: rusqlite's Display decorates them with
+        // ` in <sql> at offset N`; PHP reports the bare sqlite message.
+        rusqlite::Error::SqlInputError { error, msg, .. } => {
+            (i64::from(error.extended_code & 0xff), msg.clone())
+        }
         other => (1, other.to_string()),
     }
 }
@@ -318,6 +323,14 @@ impl<'m> Vm<'m> {
             Ok(_) => Ok(Zval::Bool(true)),
             Err(e) => Ok(stmt_err_of(&e)),
         }
+    }
+
+    /// `__pdo_in_txn($id)`: whether a transaction is open, as pdo_sqlite's
+    /// in_transaction handler reports it (`!sqlite3_get_autocommit`, so a
+    /// manual `exec('BEGIN')` counts too).
+    pub(super) fn ho_pdo_in_txn(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let id = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags) as u32;
+        Ok(Zval::Bool(self.pdo_conns.get(&id).is_some_and(|c| !c.is_autocommit())))
     }
 
     /// `__pdo_last_id($id)`: sqlite's last-inserted rowid (0 before any
