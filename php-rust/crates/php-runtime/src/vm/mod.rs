@@ -2339,7 +2339,12 @@ impl<'m> Vm<'m> {
                     if caught {
                         self.frames[top].stack.pop();
                         if let Some(slot) = var {
-                            store_slot(&mut self.frames[top].slots[slot as usize], exc);
+                            let displaced =
+                                store_slot(&mut self.frames[top].slots[slot as usize], exc);
+                            self.gc_note(&displaced);
+                        } else {
+                            // A capture-less catch drops the throwable right here.
+                            self.gc_note(&exc);
                         }
                         self.frames[top].ip = body as usize;
                     }
@@ -7993,15 +7998,20 @@ impl<'m> Vm<'m> {
         // Resetting destroys the object's current incarnation: a fully
         // constructed (non-lazy) object runs its `__destruct` before being reborn
         // lazy (PHP 8.4). An uninitialized lazy wrapper was never constructed, so
-        // it does not. It is *not* added to `destructed`: the reborn object will
-        // run its destructor again when it is later realized and dropped.
+        // it does not. Mirrors zend_lazy_objects.c (zend_object_make_lazy): the
+        // DESTRUCTOR_CALLED flag is set *before* the call and stays set if the
+        // destructor throws (the reset aborts, and the destructor must not run a
+        // second time); a completed reset clears it unconditionally — the reborn
+        // incarnation destructs again when later realized and dropped.
         let (oid, is_real) = { let b = rc.borrow(); (b.id, b.lazy.is_none()) };
         if is_real
             && !self.destructed.contains(&oid)
             && resolve_method_runtime(&self.classes, ocid, b"__destruct").is_some()
         {
+            self.destructed.insert(oid);
             self.call_method_sync(obj.clone(), b"__destruct", Vec::new())?;
         }
+        self.destructed.remove(&oid);
         let kind = if is_proxy { LazyKind::Proxy } else { LazyKind::Ghost };
         let init = args.get(3).cloned().unwrap_or(Zval::Null);
         // Reset on the object's *own* class layout (it may be a subclass).

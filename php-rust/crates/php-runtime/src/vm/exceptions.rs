@@ -140,22 +140,38 @@ impl<'m> Vm<'m> {
             if let Some(r) = region {
                 // Caught: any earlier "uncaught" trace stashed by a deeper unwind is
                 // void (the exception is handled after all).
-                self.uncaught_throwable = None;
+                if let Some(stale) = self.uncaught_throwable.take() {
+                    self.gc_note(&stale);
+                }
                 // Statement boundaries leave the operand stack at its baseline, so
                 // clearing any partial-expression values restores it for the
-                // handler. A catch region parks the exception on the stack for
-                // `CatchMatch`; a finally region parks it in `pending_throw`, to be
-                // re-raised at `EndFinally` (EXC-2).
-                self.frames[top].stack.clear();
+                // handler. Those values lose their references here — note them as
+                // possible roots, like any other dropped holder. A catch region
+                // parks the exception on the stack for `CatchMatch`; a finally
+                // region parks it in `pending_throw`, to be re-raised at
+                // `EndFinally` (EXC-2).
+                let partial = std::mem::take(&mut self.frames[top].stack);
+                for v in &partial {
+                    self.gc_note(v);
+                }
                 if r.is_finally {
-                    self.frames[top].pending_throw = Some(obj);
+                    if let Some(old) = self.frames[top].pending_throw.replace(obj) {
+                        self.gc_note(&old);
+                    }
                 } else {
                     // A new in-flight exception supersedes any exception parked by
                     // an earlier finally in this frame (e.g. a finally that threw).
-                    self.frames[top].pending_throw = None;
+                    if let Some(old) = self.frames[top].pending_throw.take() {
+                        self.gc_note(&old);
+                    }
                     self.frames[top].stack.push(obj);
                 }
                 self.frames[top].ip = r.target as usize;
+                // The routed handler holds the throwable now; the incoming error's
+                // own clone of it drops here — a refcount decrement like any other.
+                if let PhpError::Thrown(v) = &e {
+                    self.gc_note(v);
+                }
                 return None;
             }
             if top == floor {
@@ -170,7 +186,10 @@ impl<'m> Vm<'m> {
                 }
                 return Some(e);
             }
-            self.frames.pop();
+            // An unwound frame drops its locals/stack/iterators without running
+            // `Ret` — note everything it held, exactly like the `Ret` hook does.
+            let dead = self.frames.pop().expect("unwound frame above floor");
+            self.gc_note_frame(&dead);
         }
     }
 

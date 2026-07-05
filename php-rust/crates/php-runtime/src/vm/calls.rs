@@ -669,7 +669,12 @@ impl<'m> Vm<'m> {
             Ok(RunExit::Returned(v)) => Ok(v),
             Ok(_) => unreachable!("a synchronously driven callee does not yield/suspend at its own baseline"),
             Err(e) => {
-                self.frames.truncate(baseline);
+                // Frames above the baseline die without a `Ret`: note their
+                // contents like the unwind path does.
+                while self.frames.len() > baseline {
+                    let dead = self.frames.pop().expect("frames above baseline");
+                    self.gc_note_frame(&dead);
+                }
                 Err(e)
             }
         }

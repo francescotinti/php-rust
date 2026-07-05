@@ -119,12 +119,20 @@ impl<'m> Vm<'m> {
             }
             Err(e) => {
                 // Uncaught inside the generator: `unwind` left the dead frame at
-                // the baseline; drop it and surface the exception at the resumer.
-                self.frames.pop();
-                let mut gs = gs_rc.borrow_mut();
-                gs.cur_key = Zval::Null;
-                gs.cur_val = Zval::Null;
-                gs.status = GenStatus::Done;
+                // the baseline; drop it (noting what it held) and surface the
+                // exception at the resumer.
+                let dead = self.frames.pop().expect("dead generator frame");
+                self.gc_note_frame(&dead);
+                let (k, v) = {
+                    let mut gs = gs_rc.borrow_mut();
+                    gs.status = GenStatus::Done;
+                    (
+                        std::mem::replace(&mut gs.cur_key, Zval::Null),
+                        std::mem::replace(&mut gs.cur_val, Zval::Null),
+                    )
+                };
+                self.gc_note(&k);
+                self.gc_note(&v);
                 Err(e)
             }
         }
@@ -259,8 +267,11 @@ impl<'m> Vm<'m> {
             Err(e) => {
                 // The exception escaped the fiber: it terminates and the error
                 // propagates out of start()/resume(). `unwind` left the dead
-                // baseline frame; drop the whole segment.
-                self.frames.truncate(baseline);
+                // baseline frame; drop the whole segment, noting what it held.
+                while self.frames.len() > baseline {
+                    let dead = self.frames.pop().expect("fiber frames above baseline");
+                    self.gc_note_frame(&dead);
+                }
                 if let Some(st) = self.fibers.get_mut(&id) {
                     st.status = FiberStatus::Terminated;
                 }
@@ -297,7 +308,10 @@ impl<'m> Vm<'m> {
         if self.frames.len() != baseline + 1 {
             // A non-closure callable (builtin / generator function) did not push a
             // plain fiber frame; out of scope.
-            self.frames.truncate(baseline);
+            while self.frames.len() > baseline {
+                let dead = self.frames.pop().expect("frames above baseline");
+                self.gc_note_frame(&dead);
+            }
             self.fibers.remove(&id);
             return Err(PhpError::Error(
                 "VM: fiber callable must be a closure or function (other callables unsupported)"
