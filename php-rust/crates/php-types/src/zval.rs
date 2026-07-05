@@ -195,6 +195,18 @@ impl Zval {
             other => other.error_type_name().to_string(),
         }
     }
+
+    /// Names a value like PHP's `zend_zval_value_name`: bools read as their
+    /// *value* ("true"/"false"), everything else as [`Self::type_name_for_error`].
+    /// PHP 8.3+ uses this flavour in the "Call to a member function … on …"
+    /// fatal (while property-access warnings keep the plain type name).
+    pub fn value_name_for_error(&self) -> String {
+        match self {
+            Zval::Bool(b) => if *b { "true" } else { "false" }.to_string(),
+            Zval::Ref(cell) => cell.borrow().value_name_for_error(),
+            other => other.type_name_for_error(),
+        }
+    }
 }
 
 #[cfg(test)]

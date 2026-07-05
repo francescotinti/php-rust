@@ -694,7 +694,7 @@ impl<'m> Vm<'m> {
                 return Err(PhpError::Error(format!(
                     "Call to a member function {}() on {}",
                     String::from_utf8_lossy(method),
-                    other.type_name_for_error()
+                    other.value_name_for_error()
                 )))
             }
         };
@@ -725,7 +725,7 @@ impl<'m> Vm<'m> {
                 return Err(PhpError::Error(format!(
                     "Call to a member function {}() on {}",
                     String::from_utf8_lossy(method),
-                    other.type_name_for_error()
+                    other.value_name_for_error()
                 )))
             }
         };

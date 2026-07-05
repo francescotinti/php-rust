@@ -1369,6 +1369,7 @@ class PDO {
     const SQLITE_ATTR_EXTENDED_RESULT_CODES = 1002;
     private $__h = null;
     private $__attrs = array();
+    private $__err = array('00000', null, null);
     public function __construct($dsn, $username = null, $password = null, $options = null) {
         $r = __pdo_open((string)$dsn);
         if (is_array($r)) {
@@ -1398,16 +1399,221 @@ class PDO {
         if ($attribute === PDO::ATTR_DEFAULT_FETCH_MODE) { return PDO::FETCH_BOTH; }
         return null;
     }
+    public function exec($statement) {
+        $r = __pdo_exec($this->__h, (string)$statement);
+        if (isset($r['err'])) { return $this->__raise($r['err'], 'PDO::exec'); }
+        return $r['changes'];
+    }
+    public function prepare($query, $options = null) {
+        // pdo_sqlite prepares eagerly: broken SQL fails here, not at execute.
+        $r = __pdo_prepare($this->__h, (string)$query);
+        if (is_array($r) && isset($r['err'])) { return $this->__raise($r['err'], 'PDO::prepare'); }
+        $st = new PDOStatement();
+        $st->__pdoInit($this, $this->__h, (string)$query);
+        return $st;
+    }
+    public function query($query, $mode = null, ...$args) {
+        $st = $this->prepare($query);
+        if ($st === false) { return false; }
+        if ($mode !== null) { $st->setFetchMode($mode, ...$args); }
+        if ($st->execute() === false) { return false; }
+        return $st;
+    }
+    public function lastInsertId($name = null) {
+        return (string)__pdo_last_id($this->__h);
+    }
+    // The shared error sink: record errorInfo and act per ATTR_ERRMODE.
+    // Payload = [full message, sqlstate, native code|null, native msg|null];
+    // runtime PDOException codes are the SQLSTATE *string* (connection-time
+    // ctor failures use the native int instead, see __construct).
+    public function __raise($e, $fn) {
+        $this->__err = array($e[1], $e[2], $e[3]);
+        $mode = isset($this->__attrs[PDO::ATTR_ERRMODE]) ? $this->__attrs[PDO::ATTR_ERRMODE] : PDO::ERRMODE_EXCEPTION;
+        if ($mode === PDO::ERRMODE_EXCEPTION) {
+            $ex = new PDOException($e[0], $e[1]);
+            $ex->errorInfo = array($e[1], $e[2], $e[3]);
+            throw $ex;
+        }
+        if ($mode === PDO::ERRMODE_WARNING) { trigger_error($fn . '(): ' . $e[0], E_USER_WARNING); }
+        return false;
+    }
 }
-// Step-1 skeleton: the query path (PDO::exec/query/prepare and the statement
-// surface) lands with the next step; the class exists so type checks and
-// instanceof resolve already.
-class PDOStatement {
+// The statement: prepared-SQL + bound-params holder; execute() ships both to
+// __pdo_run (the host re-prepares each time: sqlite has no server state to
+// lose) and materializes the whole rowset VM-side, fetch* then walk it.
+class PDOStatement implements IteratorAggregate {
     public $queryString = '';
+    private $__pdo = null;
     private $__c = null;
+    private $__cols = array();
     private $__rows = null;
     private $__pos = 0;
-    private $__params = array();
+    private $__changes = 0;
+    private $__bound = array();
+    private $__err = array('00000', null, null);
+    private $__mode = null;
+    private $__modeArg = null;
+    public function __pdoInit($pdo, $h, $sql) {
+        $this->__pdo = $pdo;
+        $this->__c = $h;
+        $this->queryString = $sql;
+    }
+    // bindValue/execute(array) coercions: execute(array) values are all
+    // PARAM_STR (oracle: execute([1]) fetches back "1"); bindValue applies the
+    // declared PARAM_* type. null always stays null; bools bind as sqlite ints.
+    private function __coerce($v, $t) {
+        if ($v === null) { return null; }
+        $t = $t & ~PDO::PARAM_INPUT_OUTPUT;
+        if ($t === PDO::PARAM_INT) { return (int)$v; }
+        if ($t === PDO::PARAM_BOOL) { return (bool)$v; }
+        if ($t === PDO::PARAM_NULL) { return null; }
+        if ($t === PDO::PARAM_STR || $t === PDO::PARAM_LOB) { return (string)$v; }
+        return $v;
+    }
+    public function bindValue($param, $value, $type = PDO::PARAM_STR) {
+        $this->__bound[$param] = array($this->__coerce($value, $type), $type, false, null);
+        return true;
+    }
+    public function bindParam($param, &$var, $type = PDO::PARAM_STR, $maxLength = 0, $driverOptions = null) {
+        $this->__bound[$param] = array(null, $type, true, null);
+        $this->__bound[$param][3] =& $var;
+        return true;
+    }
+    public function execute($params = null) {
+        $send = array();
+        $strict = false;
+        if (is_array($params)) {
+            $strict = true;
+            foreach ($params as $k => $v) {
+                // A 0-based execute(array) list feeds the 1-based placeholders.
+                $key = is_int($k) ? $k + 1 : $k;
+                $send[$key] = $v === null ? null : (string)$v;
+            }
+        } else {
+            foreach ($this->__bound as $k => $b) {
+                $send[$k] = $b[2] ? $this->__coerce($b[3], $b[1]) : $b[0];
+            }
+        }
+        $r = __pdo_run($this->__c, $this->queryString, $send, $strict);
+        if (isset($r['err'])) { return $this->__raise($r['err'], 'PDOStatement::execute'); }
+        $this->__cols = isset($r['cols']) ? $r['cols'] : array();
+        $this->__rows = isset($r['rows']) ? $r['rows'] : array();
+        $this->__pos = 0;
+        $this->__changes = isset($r['changes']) ? $r['changes'] : 0;
+        return true;
+    }
+    private function __buildRow($row, $mode) {
+        $pdo = $this->__pdo;
+        if ($mode === null || $mode === PDO::FETCH_DEFAULT) { $mode = $this->__mode; }
+        if ($mode === null || $mode === PDO::FETCH_DEFAULT) {
+            $mode = $pdo !== null ? $pdo->getAttribute(PDO::ATTR_DEFAULT_FETCH_MODE) : PDO::FETCH_BOTH;
+        }
+        $stringify = $pdo !== null && $pdo->getAttribute(PDO::ATTR_STRINGIFY_FETCHES);
+        $case = $pdo !== null ? $pdo->getAttribute(PDO::ATTR_CASE) : PDO::CASE_NATURAL;
+        $vals = array();
+        foreach ($row as $i => $v) {
+            if ($stringify && (is_int($v) || is_float($v))) { $v = (string)$v; }
+            $vals[$i] = $v;
+        }
+        if ($mode === PDO::FETCH_NUM) { return $vals; }
+        if ($mode === PDO::FETCH_COLUMN) {
+            $col = $this->__modeArg !== null ? $this->__modeArg : 0;
+            return array_key_exists($col, $vals) ? $vals[$col] : null;
+        }
+        $names = array();
+        foreach ($this->__cols as $i => $n) {
+            if ($case === PDO::CASE_LOWER) { $n = strtolower($n); }
+            elseif ($case === PDO::CASE_UPPER) { $n = strtoupper($n); }
+            $names[$i] = $n;
+        }
+        if ($mode === PDO::FETCH_KEY_PAIR) { return array($vals[0] => $vals[1]); }
+        if ($mode === PDO::FETCH_NAMED) {
+            $out = array();
+            $dup = array();
+            foreach ($vals as $i => $v) {
+                $n = $names[$i];
+                if (array_key_exists($n, $out)) {
+                    if (!isset($dup[$n])) { $out[$n] = array($out[$n]); $dup[$n] = true; }
+                    $out[$n][] = $v;
+                } else { $out[$n] = $v; }
+            }
+            return $out;
+        }
+        $out = array();
+        foreach ($vals as $i => $v) {
+            if ($mode === PDO::FETCH_ASSOC || $mode === PDO::FETCH_OBJ || $mode === PDO::FETCH_BOTH) { $out[$names[$i]] = $v; }
+            if ($mode === PDO::FETCH_BOTH || $mode === PDO::FETCH_NUM) { $out[$i] = $v; }
+        }
+        if ($mode === PDO::FETCH_OBJ) { return (object)$out; }
+        return $out;
+    }
+    public function fetch($mode = null, $cursorOrientation = 0, $cursorOffset = 0) {
+        if ($this->__rows === null || $this->__pos >= count($this->__rows)) { return false; }
+        $row = $this->__rows[$this->__pos];
+        $this->__pos = $this->__pos + 1;
+        return $this->__buildRow($row, $mode);
+    }
+    public function fetchAll($mode = null, ...$args) {
+        $out = array();
+        if ($mode === PDO::FETCH_COLUMN) {
+            $col = isset($args[0]) ? $args[0] : 0;
+            while (($row = $this->fetch(PDO::FETCH_NUM)) !== false) { $out[] = array_key_exists($col, $row) ? $row[$col] : null; }
+            return $out;
+        }
+        if ($mode === PDO::FETCH_KEY_PAIR) {
+            while (($row = $this->fetch(PDO::FETCH_NUM)) !== false) { $out[$row[0]] = $row[1]; }
+            return $out;
+        }
+        while (($row = $this->fetch($mode)) !== false) { $out[] = $row; }
+        return $out;
+    }
+    public function fetchColumn($column = 0) {
+        $row = $this->fetch(PDO::FETCH_NUM);
+        if ($row === false) { return false; }
+        return array_key_exists($column, $row) ? $row[$column] : null;
+    }
+    public function fetchObject($class = 'stdClass', $constructorArgs = array()) {
+        if (!is_string($class) || !class_exists($class)) {
+            throw new TypeError('PDOStatement::fetchObject(): Argument #1 ($class) must be a valid class name, ' . $class . ' given');
+        }
+        $row = $this->fetch(PDO::FETCH_ASSOC);
+        if ($row === false) { return false; }
+        if ($class === 'stdClass') { return (object)$row; }
+        $rc = new ReflectionClass($class);
+        $o = $rc->newInstanceWithoutConstructor();
+        foreach ($row as $k => $v) { $o->$k = $v; }
+        if ($rc->getConstructor() !== null) { $o->__construct(...$constructorArgs); }
+        return $o;
+    }
+    public function setFetchMode($mode, ...$args) {
+        $this->__mode = $mode;
+        $this->__modeArg = isset($args[0]) ? $args[0] : null;
+        return true;
+    }
+    public function rowCount() { return $this->__changes; }
+    public function columnCount() { return count($this->__cols); }
+    public function closeCursor() {
+        $this->__rows = array();
+        $this->__pos = 0;
+        return true;
+    }
+    public function getIterator(): Iterator {
+        $rows = array();
+        while (($row = $this->fetch()) !== false) { $rows[] = $row; }
+        return new ArrayIterator($rows);
+    }
+    // Mirrors PDO::__raise, reading the owner's ERRMODE.
+    public function __raise($e, $fn) {
+        $this->__err = array($e[1], $e[2], $e[3]);
+        $mode = $this->__pdo !== null ? $this->__pdo->getAttribute(PDO::ATTR_ERRMODE) : PDO::ERRMODE_EXCEPTION;
+        if ($mode === PDO::ERRMODE_EXCEPTION) {
+            $ex = new PDOException($e[0], $e[1]);
+            $ex->errorInfo = array($e[1], $e[2], $e[3]);
+            throw $ex;
+        }
+        if ($mode === PDO::ERRMODE_WARNING) { trigger_error($fn . '(): ' . $e[0], E_USER_WARNING); }
+        return false;
+    }
 }
 class PDORow {
     public $queryString = '';

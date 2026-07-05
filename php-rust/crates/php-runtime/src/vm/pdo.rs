@@ -18,7 +18,7 @@
 
 use std::rc::Rc;
 
-use php_types::{convert, PhpArray, PhpError, PhpStr, Zval};
+use php_types::{convert, Key, PhpArray, PhpError, PhpStr, Zval};
 
 use super::Vm;
 
@@ -63,6 +63,83 @@ fn pdo_conn_err(e: &rusqlite::Error, path: &str) -> Zval {
         msg = bare.to_string();
     }
     pdo_err(&format!("SQLSTATE[HY000] [{code}] {msg}"), code, Some(("HY000", &msg)))
+}
+
+/// A runtime (statement-level) error as the dict `['err' => payload]` the
+/// prelude query path expects. The SQLSTATE is derived from the sqlite primary
+/// code exactly like pdo_sqlite's `_pdo_sqlite_error` mapper, and the message
+/// is PDO's `SQLSTATE[state]: Description: code msg` runtime format (unlike
+/// the connection-time `SQLSTATE[HY000] [code] msg` one). PDOException codes
+/// for these are the SQLSTATE *string* (payload[1]).
+fn stmt_err(code: i64, msg: &str) -> Zval {
+    let state = match code {
+        19 => "23000", // SQLITE_CONSTRAINT
+        18 => "22001", // SQLITE_TOOBIG
+        9 => "01002",  // SQLITE_INTERRUPT
+        22 => "HYC00", // SQLITE_NOLFS
+        _ => "HY000",
+    };
+    let desc = match state {
+        "23000" => "Integrity constraint violation",
+        "22001" => "String data, right truncated",
+        "01002" => "Disconnect error",
+        "HYC00" => "Optional feature not implemented",
+        _ => "General error",
+    };
+    let mut payload = PhpArray::new();
+    let full = format!("SQLSTATE[{state}]: {desc}: {code} {msg}");
+    let _ = payload.append(Zval::Str(PhpStr::new(full.into_bytes())));
+    let _ = payload.append(Zval::Str(PhpStr::new(state.as_bytes().to_vec())));
+    let _ = payload.append(Zval::Long(code));
+    let _ = payload.append(Zval::Str(PhpStr::new(msg.as_bytes().to_vec())));
+    let mut out = PhpArray::new();
+    out.insert(Key::from_bytes(b"err"), Zval::Array(Rc::new(payload)));
+    Zval::Array(Rc::new(out))
+}
+
+fn stmt_err_of(e: &rusqlite::Error) -> Zval {
+    let (code, msg) = native_err(e);
+    stmt_err(code, &msg)
+}
+
+/// Every parameter-binding defect (count mismatch on an execute(array), a
+/// named placeholder that does not exist, a position out of range) surfaces in
+/// PHP as sqlite's SQLITE_RANGE — oracle: `SQLSTATE[HY000]: General error: 25
+/// column index out of range` — so one payload covers them all.
+fn range_err() -> Zval {
+    stmt_err(25, "column index out of range")
+}
+
+/// A PHP value as the sqlite value pdo_sqlite would bind: the type coercions
+/// (PARAM_INT & co.) already happened prelude-side, so binding follows the
+/// zval type. Non-UTF-8 strings bind as blobs (rusqlite's Text is a String;
+/// sqlite itself does not re-validate on read-back).
+fn zval_to_sql(v: &Zval) -> rusqlite::types::Value {
+    use rusqlite::types::Value;
+    match v.deref_clone() {
+        Zval::Null => Value::Null,
+        Zval::Bool(b) => Value::Integer(i64::from(b)),
+        Zval::Long(i) => Value::Integer(i),
+        Zval::Double(f) => Value::Real(f),
+        Zval::Str(s) => match std::str::from_utf8(s.as_bytes()) {
+            Ok(t) => Value::Text(t.to_string()),
+            Err(_) => Value::Blob(s.as_bytes().to_vec()),
+        },
+        _ => Value::Null,
+    }
+}
+
+/// A result cell as PHP 8.1+ pdo_sqlite reports it natively (STRINGIFY off):
+/// INTEGER→int, REAL→float, TEXT/BLOB→string, NULL→null.
+fn sql_to_zval(v: rusqlite::types::ValueRef<'_>) -> Zval {
+    use rusqlite::types::ValueRef;
+    match v {
+        ValueRef::Null => Zval::Null,
+        ValueRef::Integer(i) => Zval::Long(i),
+        ValueRef::Real(f) => Zval::Double(f),
+        ValueRef::Text(t) => Zval::Str(PhpStr::new(t.to_vec())),
+        ValueRef::Blob(b) => Zval::Str(PhpStr::new(b.to_vec())),
+    }
 }
 
 impl<'m> Vm<'m> {
@@ -110,5 +187,146 @@ impl<'m> Vm<'m> {
     /// `PDO::getAttribute(ATTR_SERVER_VERSION)` reports for the sqlite driver.
     pub(super) fn ho_pdo_sqlite_version(&mut self) -> Result<Zval, PhpError> {
         Ok(Zval::Str(PhpStr::new(rusqlite::version().as_bytes().to_vec())))
+    }
+
+    /// `__pdo_exec($id, $sql)` (the `PDO::exec` backing): run the whole string
+    /// (sqlite3_exec semantics: multiple `;`-separated statements) and report
+    /// `['changes' => N]` — N from the last modifying statement, 0 for a pure
+    /// SELECT — or `['err' => payload]`.
+    pub(super) fn ho_pdo_exec(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let id = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags) as u32;
+        let sql = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags);
+        let sql = String::from_utf8_lossy(sql.as_bytes()).into_owned();
+        let Some(conn) = self.pdo_conns.get(&id) else {
+            return Ok(stmt_err(21, "library routine called out of sequence"));
+        };
+        match conn.execute_batch(&sql) {
+            Ok(()) => {
+                let mut out = PhpArray::new();
+                out.insert(Key::from_bytes(b"changes"), Zval::Long(conn.changes() as i64));
+                Ok(Zval::Array(Rc::new(out)))
+            }
+            Err(e) => Ok(stmt_err_of(&e)),
+        }
+    }
+
+    /// `__pdo_run($id, $sql, $params, $strict)` (the `PDOStatement::execute`
+    /// backing): prepare, bind, and run one statement. `$params` carries
+    /// 1-based int keys for positional placeholders and (with or without the
+    /// `:`) names for named ones; values are already PARAM_*-coerced prelude
+    /// side. `$strict` is the execute(array) path, where PDO additionally
+    /// requires the array to cover the placeholders exactly (oracle: the
+    /// SQLITE_RANGE error); the bindValue path leaves gaps as sqlite NULLs.
+    /// Success: `['cols' =>…, 'rows' =>…]` for a row-returning statement
+    /// (rows fully materialized: sqlite has no server cursor to preserve) or
+    /// `['changes' => N]`; failure: `['err' => payload]`.
+    pub(super) fn ho_pdo_run(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let id = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags) as u32;
+        let sql = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags);
+        let sql = String::from_utf8_lossy(sql.as_bytes()).into_owned();
+        let strict = matches!(args.get(3), Some(Zval::Bool(true)));
+        let Some(conn) = self.pdo_conns.get(&id) else {
+            return Ok(stmt_err(21, "library routine called out of sequence"));
+        };
+        let mut stmt = match conn.prepare(&sql) {
+            Ok(s) => s,
+            Err(e) => return Ok(stmt_err_of(&e)),
+        };
+        let pc = stmt.parameter_count();
+        if let Some(Zval::Array(params)) = args.get(2).map(|a| a.deref_clone()) {
+            // Oracle-checked shape: an execute(array) whose *size* differs from
+            // the placeholder count fails with SQLITE_RANGE, while a named key
+            // that matches no placeholder is silently skipped (both paths); a
+            // positional bind out of range is sqlite's own RANGE error.
+            if strict && params.len() != pc {
+                return Ok(range_err());
+            }
+            for (k, v) in params.iter() {
+                let pos = match k {
+                    Key::Int(i) => *i,
+                    Key::Str(name) => {
+                        let mut n = Vec::with_capacity(name.as_bytes().len() + 1);
+                        if !name.as_bytes().starts_with(b":") {
+                            n.push(b':');
+                        }
+                        n.extend_from_slice(name.as_bytes());
+                        match std::str::from_utf8(&n).ok().and_then(|n| stmt.parameter_index(n).ok().flatten()) {
+                            Some(i) => i as i64,
+                            None => continue,
+                        }
+                    }
+                };
+                if pos < 1 || pos as usize > pc {
+                    return Ok(range_err());
+                }
+                if stmt.raw_bind_parameter(pos as usize, zval_to_sql(v)).is_err() {
+                    return Ok(range_err());
+                }
+            }
+        }
+        let cc = stmt.column_count();
+        if cc > 0 {
+            let mut cols = PhpArray::new();
+            for name in stmt.column_names() {
+                let _ = cols.append(Zval::Str(PhpStr::new(name.as_bytes().to_vec())));
+            }
+            let mut rows_out = PhpArray::new();
+            let mut rows = stmt.raw_query();
+            loop {
+                match rows.next() {
+                    Ok(Some(row)) => {
+                        let mut vals = PhpArray::new();
+                        for i in 0..cc {
+                            let cell = row.get_ref(i).map(sql_to_zval).unwrap_or(Zval::Null);
+                            let _ = vals.append(cell);
+                        }
+                        let _ = rows_out.append(Zval::Array(Rc::new(vals)));
+                    }
+                    Ok(None) => break,
+                    Err(e) => return Ok(stmt_err_of(&e)),
+                }
+            }
+            let mut out = PhpArray::new();
+            out.insert(Key::from_bytes(b"cols"), Zval::Array(Rc::new(cols)));
+            out.insert(Key::from_bytes(b"rows"), Zval::Array(Rc::new(rows_out)));
+            Ok(Zval::Array(Rc::new(out)))
+        } else {
+            match stmt.raw_execute() {
+                Ok(n) => {
+                    let mut out = PhpArray::new();
+                    out.insert(Key::from_bytes(b"changes"), Zval::Long(n as i64));
+                    Ok(Zval::Array(Rc::new(out)))
+                }
+                Err(e) => Ok(stmt_err_of(&e)),
+            }
+        }
+    }
+
+    /// `__pdo_prepare($id, $sql)`: compile-check only. pdo_sqlite prepares
+    /// eagerly (no EMULATE_PREPARES), so `PDO::prepare` on broken SQL fails
+    /// *immediately* (false/throw per ERRMODE); the checked statement is
+    /// discarded here and re-prepared at execute (see module doc). `true` or
+    /// `['err' => payload]`.
+    pub(super) fn ho_pdo_prepare(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let id = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags) as u32;
+        let sql = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags);
+        let sql = String::from_utf8_lossy(sql.as_bytes()).into_owned();
+        let Some(conn) = self.pdo_conns.get(&id) else {
+            return Ok(stmt_err(21, "library routine called out of sequence"));
+        };
+        match conn.prepare(&sql) {
+            Ok(_) => Ok(Zval::Bool(true)),
+            Err(e) => Ok(stmt_err_of(&e)),
+        }
+    }
+
+    /// `__pdo_last_id($id)`: sqlite's last-inserted rowid (0 before any
+    /// insert); `PDO::lastInsertId` stringifies it prelude-side.
+    pub(super) fn ho_pdo_last_id(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let id = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags) as u32;
+        let Some(conn) = self.pdo_conns.get(&id) else {
+            return Ok(Zval::Long(0));
+        };
+        Ok(Zval::Long(conn.last_insert_rowid()))
     }
 }
