@@ -358,6 +358,7 @@ pub(crate) fn run_module_with_hir<'m>(
         destructed: HashSet::new(),
         gc_roots: HashMap::new(),
         gc_queue: BinaryHeap::new(),
+        gc_cycle_roots: HashSet::new(),
         shutdown_fns: Vec::new(),
         generators: HashMap::new(),
         fibers: HashMap::new(),
@@ -942,6 +943,15 @@ struct Vm<'m> {
     /// quadratic once thousands of never-collectable cyclic candidates piled
     /// up). Entries whose id is no longer in the map are stale and skipped.
     gc_queue: BinaryHeap<u32>,
+    /// Possible roots of *cyclic* garbage (mirrors Zend's root buffer feeding
+    /// `gc_collect_cycles`): a candidate the sweep popped that was not
+    /// collectable lost a reference but still has holders — if those holders
+    /// form a dead cycle its refcount never falls to the collectable point, so
+    /// it is demoted here instead of forgotten. When the set reaches
+    /// [`GC_CYCLE_THRESHOLD`] (or `gc_collect_cycles()` forces it) the cycle
+    /// collector runs a trial-deletion pass over these ids. Ids only —
+    /// `created` keeps the objects alive; stale ids are filtered at collection.
+    gc_cycle_roots: HashSet<u32>,
     /// Callbacks registered with `register_shutdown_function`, each with its bound
     /// arguments, run in registration order at script end — after the main run (and
     /// any uncaught-fatal banner), before object destructors.
@@ -1129,7 +1139,7 @@ impl<'m> Vm<'m> {
         }
     }
 
-    fn gc_sweep(&mut self, top: usize, ip: usize) {
+    fn gc_sweep(&mut self, top: usize, ip: usize) -> Result<(), PhpError> {
         log::trace!(
             target: "phpr::gc",
             "sweep: {} tracked / {} candidate objects",
@@ -1143,10 +1153,11 @@ impl<'m> Vm<'m> {
             // Pop the max-heap so candidates are visited newest-first (highest
             // id), matching the legacy full-filter max-id order. A popped id no
             // longer in the buffer is stale — skip it. A popped candidate whose
-            // strong_count is still > 2 is not collectable *now*: discard it
-            // from the buffer instead of rescanning it after every freed object
-            // — whatever reference it loses later re-notes (and re-queues) it,
-            // the same invariant the possible-roots buffer itself relies on.
+            // strong_count is still > 2 is not collectable *now*: demote it to
+            // the cycle-roots buffer instead of rescanning it after every freed
+            // object — if it later loses another reference it is re-noted (and
+            // re-queued) like any candidate, and if its remaining holders are a
+            // dead cycle the cycle collector picks it up from there.
             let cand_id = loop {
                 let Some(id) = self.gc_queue.pop() else { break None };
                 match self.gc_roots.get(&id) {
@@ -1154,6 +1165,7 @@ impl<'m> Vm<'m> {
                     Some(o) if Rc::strong_count(o) == 2 => break Some(id),
                     Some(_) => {
                         self.gc_roots.remove(&id);
+                        self.gc_cycle_roots.insert(id);
                     }
                 }
             };
@@ -1197,7 +1209,16 @@ impl<'m> Vm<'m> {
             };
 
             let Some(id) = chosen_id else {
-                // Nothing more to collect this round: drop the candidate buffer.
+                // Nothing more collectable by refcount. If enough possible
+                // cycle roots piled up, run the cycle collector (mirrors Zend's
+                // automatic gc_collect_cycles at root-buffer pressure): freed
+                // cycle members re-enter the buffers, so take another pass.
+                if self.gc_cycle_roots.len() >= Self::GC_CYCLE_THRESHOLD
+                    && self.collect_cycles()? > 0
+                {
+                    continue;
+                }
+                // Drop the candidate buffer.
                 self.gc_roots.clear();
                 self.gc_queue.clear();
                 break;
@@ -1228,7 +1249,11 @@ impl<'m> Vm<'m> {
             // own destructor. Treat the wrapper as destructor-less; the cascade
             // releases the real instance so its `__destruct` fires next pass.
             if o.borrow().lazy.is_some() {
-                self.lazy_init.remove(&id);
+                // The initializer/factory closure dies with the wrapper — note
+                // what it captured (it may hold the last ref to an object).
+                if let Some(init) = self.lazy_init.remove(&id) {
+                    self.gc_note(&init);
+                }
                 self.lazy_props.remove(&id);
                 self.gc_cascade(&o);
                 continue;
@@ -1253,6 +1278,7 @@ impl<'m> Vm<'m> {
             // Destructor-less object: note what it held, then drop it.
             self.gc_cascade(&o);
         }
+        Ok(())
     }
 
     /// Note every object held one level down in `o`'s properties as a possible
@@ -1353,6 +1379,267 @@ impl<'m> Vm<'m> {
             // tracked separately — neither owns a value to release here.
             IterState::ByRef { .. } | IterState::Gen { .. } => {}
         }
+    }
+
+    /// Cycle-roots pressure at which a sweep triggers an automatic cycle
+    /// collection. Zend's default is 10001 buffered roots, but its buffer
+    /// fills at *intra-statement* refcount decrements while phpr demotes at
+    /// statement-boundary sweeps: corpus tests tuned to overflow Zend's buffer
+    /// at an exact micro-instant (gh20657-002 crafts 10000 roots so the
+    /// overflow lands inside a lazy-object realize) would fire here at a
+    /// visibly different statement. A higher threshold keeps automatic
+    /// collection for real workloads (doctrine/inflector piles up >100k dead
+    /// cycle members) without crossing inside synthetic 10k-tuned tests.
+    const GC_CYCLE_THRESHOLD: usize = 50_000;
+
+    /// Trial-deletion cycle detection (the mark phase of Zend's
+    /// `gc_collect_cycles`, adapted to `Rc`): starting from `roots`, walk the
+    /// object graph through props, arrays, references, closure captures and
+    /// lazy-proxy instances, counting for every reachable node how many of its
+    /// strong references come from *inside* the walked graph. A node whose
+    /// `Rc::strong_count` exceeds its in-graph edges (plus the handles we know
+    /// about: `created` for objects, plus the clone this walk itself holds) has
+    /// an external holder — a VM slot, a global, a static, a live container —
+    /// and is alive; anything reachable from a live node is alive too. What
+    /// remains is garbage kept only by its own cycles. Returns those object
+    /// ids (ascending) plus the count of dead *containers* (arrays and
+    /// closures — what Zend reports alongside objects in the
+    /// `gc_collect_cycles` total; references are traversed transparently and
+    /// never counted). Containers the walk cannot see through (generator /
+    /// fiber state, host-side handles) simply leave their referents with
+    /// unexplained strong counts ⇒ alive: unknown edges err on keeping.
+    fn gc_classify(&self, roots: &[u32]) -> (Vec<u32>, usize) {
+        use std::collections::VecDeque;
+        #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+        enum Node {
+            Obj(u32),
+            Arr(usize),
+            Ref(usize),
+            Clo(usize),
+        }
+        enum Handle {
+            Obj(Rc<RefCell<Object>>),
+            Arr(Rc<PhpArray>),
+            Ref(Rc<RefCell<Zval>>),
+            Clo(Rc<Closure>),
+        }
+        fn node_of(v: &Zval) -> Option<(Node, Handle)> {
+            match v {
+                Zval::Object(o) => Some((Node::Obj(o.borrow().id), Handle::Obj(Rc::clone(o)))),
+                Zval::Array(a) => {
+                    Some((Node::Arr(Rc::as_ptr(a) as usize), Handle::Arr(Rc::clone(a))))
+                }
+                Zval::Ref(r) => Some((Node::Ref(Rc::as_ptr(r) as usize), Handle::Ref(Rc::clone(r)))),
+                Zval::Closure(c) => {
+                    Some((Node::Clo(Rc::as_ptr(c) as usize), Handle::Clo(Rc::clone(c))))
+                }
+                _ => None,
+            }
+        }
+
+        let mut handles: HashMap<Node, Handle> = HashMap::new();
+        let mut in_edges: HashMap<Node, usize> = HashMap::new();
+        let mut children: HashMap<Node, Vec<Node>> = HashMap::new();
+        let mut work: VecDeque<Node> = VecDeque::new();
+        for &id in roots {
+            let Some(rc) = self.created.get(&id) else { continue };
+            let node = Node::Obj(id);
+            if handles.insert(node, Handle::Obj(Rc::clone(rc))).is_none() {
+                work.push_back(node);
+            }
+        }
+        while let Some(node) = work.pop_front() {
+            let child_vals: Vec<Zval> = match handles.get(&node).expect("worklist node has handle") {
+                Handle::Obj(o) => {
+                    let b = o.borrow();
+                    let mut vs: Vec<Zval> = b.props.iter().map(|(_, v)| v.clone()).collect();
+                    if let Some(pi) = &b.proxy_instance {
+                        vs.push((**pi).clone());
+                    }
+                    vs
+                }
+                Handle::Arr(a) => a.iter().map(|(_, v)| v.clone()).collect(),
+                Handle::Ref(r) => vec![r.borrow().clone()],
+                Handle::Clo(c) => {
+                    let mut vs: Vec<Zval> = c.captures.iter().map(|(_, v)| v.clone()).collect();
+                    if let Some(bt) = &c.bound_this {
+                        vs.push(bt.clone());
+                    }
+                    vs
+                }
+            };
+            let mut kids = Vec::new();
+            for v in &child_vals {
+                if let Some((cn, ch)) = node_of(v) {
+                    *in_edges.entry(cn).or_insert(0) += 1;
+                    kids.push(cn);
+                    if let std::collections::hash_map::Entry::Vacant(e) = handles.entry(cn) {
+                        e.insert(ch);
+                        work.push_back(cn);
+                    }
+                }
+            }
+            children.insert(node, kids);
+        }
+        // External check. `known` = references this walk can account for
+        // without an outside holder: our own handle clone, and `created` for a
+        // tracked object. An untracked object (interned enum case) is immortal.
+        let mut live: VecDeque<Node> = VecDeque::new();
+        let mut is_live: HashSet<Node> = HashSet::new();
+        for (node, h) in &handles {
+            let external = match (node, h) {
+                (Node::Obj(id), Handle::Obj(o)) => {
+                    !self.created.contains_key(id)
+                        || Rc::strong_count(o) - 2 > in_edges.get(node).copied().unwrap_or(0)
+                }
+                (_, Handle::Arr(a)) => {
+                    Rc::strong_count(a) - 1 > in_edges.get(node).copied().unwrap_or(0)
+                }
+                (_, Handle::Ref(r)) => {
+                    Rc::strong_count(r) - 1 > in_edges.get(node).copied().unwrap_or(0)
+                }
+                (_, Handle::Clo(c)) => {
+                    Rc::strong_count(c) - 1 > in_edges.get(node).copied().unwrap_or(0)
+                }
+                _ => unreachable!("node/handle kinds always match"),
+            };
+            if external && is_live.insert(*node) {
+                live.push_back(*node);
+            }
+        }
+        while let Some(node) = live.pop_front() {
+            if let Some(kids) = children.get(&node) {
+                for k in kids {
+                    if is_live.insert(*k) {
+                        live.push_back(*k);
+                    }
+                }
+            }
+        }
+        let mut whites: Vec<u32> = Vec::new();
+        let mut dead_containers = 0usize;
+        for n in handles.keys() {
+            if is_live.contains(n) {
+                continue;
+            }
+            match n {
+                Node::Obj(id) if self.created.contains_key(id) => whites.push(*id),
+                Node::Arr(_) | Node::Clo(_) => dead_containers += 1,
+                _ => {}
+            }
+        }
+        whites.sort_unstable();
+        (whites, dead_containers)
+    }
+
+    /// Collect reference cycles (Zend `gc_collect_cycles`): classify the
+    /// buffered possible roots via [`Self::gc_classify`], run `__destruct` on
+    /// the doomed objects (oldest-first, synchronously — an exception
+    /// propagates to the triggering statement, as in PHP), re-classify (a
+    /// destructor may resurrect part of the graph), then break the surviving
+    /// cycles by dropping every white object's properties and freeing it.
+    /// Freeing may liberate further garbage (its contents are re-noted), so
+    /// the whole pass repeats until nothing more dies — in PHP that follow-up
+    /// garbage would have died by refcount the instant the cycle broke, so it
+    /// must not outlive this call. Returns the number of destroyed objects,
+    /// arrays and closures (what Zend's counter reports).
+    fn collect_cycles(&mut self) -> Result<i64, PhpError> {
+        let mut total = 0i64;
+        loop {
+            // Leftover acyclic candidates join the root set; their buffer
+            // clones are dropped so the classifier sees only real holders.
+            let leftover: Vec<u32> = self.gc_roots.keys().copied().collect();
+            self.gc_roots.clear();
+            self.gc_queue.clear();
+            self.gc_cycle_roots.extend(leftover);
+            let roots: Vec<u32> = self
+                .gc_cycle_roots
+                .drain()
+                .collect::<Vec<_>>()
+                .into_iter()
+                .filter(|id| self.created.contains_key(id))
+                .collect();
+            if roots.is_empty() {
+                break;
+            }
+            let (whites, _) = self.gc_classify(&roots);
+            log::debug!(
+                target: "phpr::gc",
+                "cycle collect: {} roots, {} garbage objects",
+                roots.len(),
+                whites.len()
+            );
+            if whites.is_empty() {
+                break;
+            }
+            // Destructor phase, oldest-first (creation order — matches Zend's
+            // buffer order). The destructor runs at most once per object
+            // (`destructed`), and never for an uninitialized lazy wrapper.
+            for &id in whites.iter() {
+                let Some(rc) = self.created.get(&id) else { continue };
+                let rc = Rc::clone(rc);
+                let (cid, lazy_wrapper) = {
+                    let b = rc.borrow();
+                    (b.class_id as usize, b.lazy.is_some())
+                };
+                if lazy_wrapper || self.destructed.contains(&id) {
+                    continue;
+                }
+                if resolve_method_runtime(&self.classes, cid, b"__destruct").is_some() {
+                    log::debug!(target: "phpr::gc", "destruct (cycle): {}#{}", String::from_utf8_lossy(&self.classes[cid].name), id);
+                    self.destructed.insert(id);
+                    self.call_method_sync(Zval::Object(rc), b"__destruct", Vec::new())?;
+                }
+            }
+            // A destructor may have stored parts of the graph somewhere
+            // reachable: only what is *still* unreferenced dies. Dead
+            // arrays/closures inside the garbage count toward the total.
+            let (whites, dead_containers) = self.gc_classify(&roots);
+            // Detach every white's contents first, then free: a white's
+            // properties may hold the last references to other whites.
+            let mut taken: Vec<(u32, Props, Option<Box<Zval>>)> = Vec::new();
+            for &id in whites.iter().rev() {
+                let Some(rc) = self.created.get(&id) else { continue };
+                let mut b = rc.borrow_mut();
+                let props = std::mem::replace(&mut b.props, Props::new());
+                let proxy = b.proxy_instance.take();
+                drop(b);
+                taken.push((id, props, proxy));
+            }
+            if taken.is_empty() && dead_containers == 0 {
+                break;
+            }
+            total += (taken.len() + dead_containers) as i64;
+            for (id, props, proxy) in taken {
+                self.created.remove(&id);
+                self.gc_unnote(id);
+                // The dropped contents — properties, a proxy's real instance,
+                // a lazy wrapper's initializer closure — may hold the last
+                // reference to garbage outside the white set: note everything
+                // so the next fixpoint round (or the normal sweep) reaps it.
+                if let Some(init) = self.lazy_init.remove(&id) {
+                    self.gc_note(&init);
+                }
+                self.lazy_props.remove(&id);
+                for (_, v) in props.iter() {
+                    self.gc_note(v);
+                }
+                if let Some(p) = &proxy {
+                    self.gc_note(p);
+                }
+            }
+        }
+        if total > 0 {
+            log::debug!(target: "phpr::gc", "cycle collect: {} values freed", total);
+        }
+        Ok(total)
+    }
+
+    /// `gc_collect_cycles()` — force a cycle collection now, regardless of the
+    /// root-buffer threshold. Returns the number of destroyed objects.
+    fn ho_gc_collect_cycles(&mut self, _args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let n = self.collect_cycles()?;
+        Ok(Zval::Long(n))
     }
 
     /// Render every diagnostic raised since the last flush into `rendered`,
@@ -4627,7 +4914,7 @@ impl<'m> Vm<'m> {
                     )));
                 }
                 Op::Sweep => {
-                    self.gc_sweep(top, ip);
+                    self.gc_sweep(top, ip)?;
                 }
                 Op::Nop => {}
             }
@@ -14034,6 +14321,7 @@ macro_rules! host_builtins {
 
 host_builtins! {
     vm: vm, name: name, args: args;
+    b"gc_collect_cycles" => vm.ho_gc_collect_cycles(args),
     b"spl_autoload_register" => vm.ho_spl_autoload_register(args),
     b"spl_autoload_unregister" => vm.ho_spl_autoload_unregister(args),
     b"spl_autoload_functions" => vm.ho_spl_autoload_functions(),
