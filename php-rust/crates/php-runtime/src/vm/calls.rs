@@ -780,6 +780,11 @@ impl<'m> Vm<'m> {
         // The call site is the caller's current line, reported in an arg TypeError
         // (captured before the callee frame is pushed).
         let call_line = self.cur_line(self.frames.len() - 1);
+        // strict_types governs the CALL SITE's unit (Zend: the caller's file
+        // decides argument coercion) — captured before the callee is pushed. A
+        // strict main script must not leak strictness into weak vendor units.
+        let caller_strict =
+            self.frames.last().map(|f| f.module.strict).unwrap_or(self.module.strict);
         // Push the callee frame, then coerce/check each by-value argument against
         // its declared hint *within* that frame (step 14 / 16): PHP throws an
         // argument TypeError inside the function, so its stack trace shows this call
@@ -798,7 +803,7 @@ impl<'m> Vm<'m> {
             );
         }
         if func.param_hints.iter().any(Option::is_some) {
-            let strict = self.module.strict;
+            let strict = caller_strict;
             for i in 0..func.n_params as usize {
                 if Some(i as Slot) == func.variadic_slot {
                     continue;
@@ -840,7 +845,7 @@ impl<'m> Vm<'m> {
             let by_ref = func.param_by_ref.get(v).copied().unwrap_or(false);
             if !by_ref {
                 if let Some(hint) = func.param_hints.get(v).cloned().flatten() {
-                    let strict = self.module.strict;
+                    let strict = caller_strict;
                     let items: Vec<(Key, Zval)> = match &self.frames[top].slots[v] {
                         Zval::Array(a) => {
                             a.iter().map(|(k, val)| (k.clone(), val.clone())).collect()

@@ -555,6 +555,31 @@ impl<'m> Vm<'m> {
         }
     }
 
+    /// [`Self::class_id_from_value`] with a class-*name* miss running the
+    /// autoloaders first — `method_exists`/`property_exists` on a not-yet-loaded
+    /// class name load it, like PHP (dbal's Symfony-version probes rely on it).
+    /// `instanceof` keeps the non-loading variant (Zend does not autoload there).
+    pub(super) fn class_id_from_value_autoload(
+        &mut self,
+        v: &Zval,
+    ) -> Result<Option<ClassId>, PhpError> {
+        if let Some(c) = self.class_id_from_value(v) {
+            return Ok(Some(c));
+        }
+        match v {
+            Zval::Str(s) => {
+                let raw = s.as_bytes();
+                let name = raw.strip_prefix(b"\\").unwrap_or(raw).to_vec();
+                self.resolve_class_autoload(&name)
+            }
+            Zval::Ref(r) => {
+                let inner = r.borrow().clone();
+                self.class_id_from_value_autoload(&inner)
+            }
+            _ => Ok(None),
+        }
+    }
+
     pub(super) fn magic_applies(
         &self,
         o: &Rc<RefCell<Object>>,

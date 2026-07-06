@@ -330,10 +330,39 @@ pub fn checkdate(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// Parse an absolute date string in the supported subset: `Y-m-d` or `Y/m/d`,
 /// optionally followed by ` `/`T` and `H:i[:s]`. Returns the UTC epoch.
 fn parse_absolute(s: &str) -> Option<i64> {
-    let s = s.replace('T', " ");
+    // The ISO-8601 `T` separator only counts between digits — a blanket
+    // replace would shred a trailing timezone NAME ("UTC" → "U C").
+    let mut s = s.to_string();
+    let b = s.clone().into_bytes();
+    if let Some(p) = b
+        .windows(3)
+        .position(|w| w[0].is_ascii_digit() && w[1] == b'T' && w[2].is_ascii_digit())
+    {
+        s.replace_range(p + 1..p + 2, " ");
+    }
     let mut parts = s.split_whitespace();
     let date = parts.next()?;
     let time = parts.next();
+    // Optional third token: a timezone name (`… 15:58:59.123456 UTC`) or an
+    // explicit offset. Only the zero-offset names are modelled (phpr renders
+    // everything in UTC); an unknown name stays a parse failure.
+    let mut name_offset: Option<i64> = None;
+    if let Some(tzn) = parts.next() {
+        match tzn.to_ascii_uppercase().as_str() {
+            "UTC" | "GMT" | "Z" => name_offset = Some(0),
+            t if t.starts_with('+') || t.starts_with('-') => {
+                let sign = if t.starts_with('-') { -1 } else { 1 };
+                let digits: String = t[1..].chars().filter(|c| *c != ':').collect();
+                let (h, m) = match digits.len() {
+                    2 => (digits.parse::<i64>().ok()?, 0),
+                    4 => (digits[..2].parse::<i64>().ok()?, digits[2..].parse::<i64>().ok()?),
+                    _ => return None,
+                };
+                name_offset = Some(sign * (h * 3600 + m * 60));
+            }
+            _ => return None,
+        }
+    }
     if parts.next().is_some() {
         return None;
     }
@@ -385,6 +414,9 @@ fn parse_absolute(s: &str) -> Option<i64> {
         if tp.next().is_some() {
             return None;
         }
+    }
+    if let Some(off) = name_offset {
+        tz_offset = off;
     }
     Some(civil_to_epoch(year, month, day, hour, min, sec)? - tz_offset)
 }
@@ -1064,6 +1096,24 @@ pub fn __date_from_format(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError
                             mm
                         );
                         tz_off = Some((sign * (hh * 3600 + mm * 60), disp.into_bytes()));
+                    }
+                }
+                b'T' | b'e' => {
+                    // Timezone name/abbreviation. Only the zero-offset names
+                    // are modelled (phpr keeps wall time in UTC); the display
+                    // form feeds the object's tz so `format('T')` round-trips.
+                    let start = vi;
+                    while vi < v.len()
+                        && (v[vi].is_ascii_alphabetic() || v[vi] == b'/' || v[vi] == b'_')
+                    {
+                        vi += 1;
+                    }
+                    if vi == start {
+                        return None;
+                    }
+                    match v[start..vi].to_ascii_uppercase().as_slice() {
+                        b"UTC" | b"GMT" | b"Z" => tz_off = Some((0, b"UTC".to_vec())),
+                        _ => return None,
                     }
                 }
                 b'u' | b'v' => {

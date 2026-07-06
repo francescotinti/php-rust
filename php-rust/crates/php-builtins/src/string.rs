@@ -849,11 +849,52 @@ pub fn substr_count(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
             "substr_count(): Argument #2 ($needle) must not be empty".to_string(),
         ));
     }
+    // `$offset` / `$length` window the haystack (negatives count from the end;
+    // an out-of-range offset is a ValueError; SQLServerPlatform's paren
+    // balancing counts from the ORDER BY offset).
+    let hlen = haystack.len() as i64;
+    let mut start = match args.get(2) {
+        Some(v) => convert::to_long_cast(v, ctx.diags),
+        None => 0,
+    };
+    if start < 0 {
+        start += hlen;
+    }
+    if start < 0 || start > hlen {
+        return Err(PhpError::ValueError(
+            "substr_count(): Argument #3 ($offset) must be contained in argument #1 ($haystack)"
+                .to_string(),
+        ));
+    }
+    let mut end = match args.get(3) {
+        Some(Zval::Null) | None => hlen,
+        Some(v) => {
+            let mut l = convert::to_long_cast(v, ctx.diags);
+            if l < 0 {
+                l += hlen - start;
+            }
+            if l < 0 || start + l > hlen {
+                return Err(PhpError::ValueError(
+                    "substr_count(): Argument #4 ($length) must be contained in argument #1 ($haystack)".to_string(),
+                ));
+            }
+            start + l
+        }
+    };
+    if end < start {
+        end = start;
+    }
+    let window = &haystack[start as usize..end as usize];
     let mut count = 0i64;
     let mut from = 0usize;
-    while let Some(pos) = find_sub(&haystack[from..], &needle) {
-        count += 1;
-        from += pos + needle.len();
+    while from < window.len() {
+        match find_sub(&window[from..], &needle) {
+            Some(pos) => {
+                count += 1;
+                from += pos + needle.len();
+            }
+            None => break,
+        }
     }
     Ok(Zval::Long(count))
 }

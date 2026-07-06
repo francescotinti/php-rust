@@ -2228,7 +2228,7 @@ impl<'m> Vm<'m> {
                     // Coerce a just-filled scalar-hinted default (step 14). A valid
                     // constant default always coerces; keep the value otherwise.
                     let v = self.frames[top].slots[slot as usize].clone();
-                    if let Ok(c) = coerce_to_hint(v, &hint, &mut self.diags, self.module.strict) {
+                    if let Ok(c) = coerce_to_hint(v, &hint, &mut self.diags, self.frames[top].module.strict) {
                         self.frames[top].slots[slot as usize] = c;
                     }
                 }
@@ -3557,7 +3557,8 @@ impl<'m> Vm<'m> {
                     // `getReturn`).
                     if let Some(hint) = func.ret_hint.clone().filter(|_| !func.is_generator) {
                         if !func.by_ref && self.frames[top].ret_cell.is_none() {
-                            let strict = self.module.strict;
+                            // The function's own unit governs its return check.
+                            let strict = self.frames[top].module.strict;
                             match self.coerce_or_check_hint(ret, &hint, strict) {
                                 Ok(c) => ret = c,
                                 Err(given) => {
@@ -5719,13 +5720,27 @@ impl<'m> Vm<'m> {
         // malformed UTF-8 — JSON_ERROR_UTF8, or a JsonException under
         // JSON_THROW_ON_ERROR.
         if matches!(result, Zval::Bool(false)) && self.json_last_error == 0 {
-            self.json_last_error = 5;
+            // Distinguish the two silent-encoder failures: a non-finite float
+            // is JSON_ERROR_INF_OR_NAN (7), anything else is UTF-8 (5).
+            fn has_nonfinite(v: &Zval) -> bool {
+                match v {
+                    Zval::Double(d) => !d.is_finite(),
+                    Zval::Array(a) => a.iter().any(|(_, e)| has_nonfinite(e)),
+                    Zval::Object(o) => o.borrow().props.iter().any(|(_, e)| has_nonfinite(e)),
+                    Zval::Ref(r) => has_nonfinite(&r.borrow()),
+                    _ => false,
+                }
+            }
+            let inf = call_args.first().is_some_and(has_nonfinite);
+            self.json_last_error = if inf { 7 } else { 5 };
+            let msg = if inf {
+                "Inf and NaN cannot be JSON encoded"
+            } else {
+                "Malformed UTF-8 characters, possibly incorrectly encoded"
+            };
             if throw {
                 if let Some(cid) = self.class_index.get(&b"jsonexception"[..]).copied() {
-                    let obj = self.synthesize_throwable(
-                        cid,
-                        "Malformed UTF-8 characters, possibly incorrectly encoded",
-                    )?;
+                    let obj = self.synthesize_throwable(cid, msg)?;
                     return Err(PhpError::Thrown(obj));
                 }
             }
@@ -5748,6 +5763,10 @@ impl<'m> Vm<'m> {
             4 => b"Syntax error",
             5 => b"Malformed UTF-8 characters, possibly incorrectly encoded",
             6 => b"Recursion detected",
+            7 => b"Inf and NaN cannot be JSON encoded",
+            8 => b"Type is not supported",
+            9 => b"The decoded property name is invalid",
+            10 => b"Single unpaired UTF-16 surrogate in unicode escape",
             11 => b"Non-backed enums have no default serialization",
             _ => b"Unknown error",
         };
@@ -9332,13 +9351,14 @@ impl<'m> Vm<'m> {
     /// Resolve an "object or class-name string" argument to a [`ClassId`], matching
     /// PHP 8.5's `TypeError` for an unresolvable string or a non-object/non-string
     /// value (shared by `get_parent_class` / `get_class_methods`, Session B2).
-    fn class_arg_to_id(&self, v: Zval, fname: &str) -> Result<ClassId, PhpError> {
+    fn class_arg_to_id(&mut self, v: Zval, fname: &str) -> Result<ClassId, PhpError> {
         match v {
             Zval::Object(o) => Ok(o.borrow().class_id as usize),
             Zval::Str(s) => {
                 let raw = s.as_bytes();
-                let name = raw.strip_prefix(b"\\").unwrap_or(raw);
-                self.class_index.get(&name.to_ascii_lowercase()).copied().ok_or_else(|| {
+                let name = raw.strip_prefix(b"\\").unwrap_or(raw).to_vec();
+                // A class-name string triggers autoload, like PHP's zend_lookup_class.
+                self.resolve_class_autoload(&name)?.ok_or_else(|| {
                     PhpError::TypeError(format!(
                         "{fname}(): Argument #1 ($object_or_class) must be an object or a valid class name, string given"
                     ))
@@ -9773,7 +9793,7 @@ impl<'m> Vm<'m> {
                 "method_exists() expects exactly 2 arguments".to_string(),
             ));
         };
-        let Some(cid) = self.class_id_from_value(&a0.deref_clone()) else {
+        let Some(cid) = self.class_id_from_value_autoload(&a0.deref_clone())? else {
             return Ok(Zval::Bool(false));
         };
         let m = convert::to_zstr_cast(&a1.deref_clone(), &mut self.diags);
@@ -9796,7 +9816,7 @@ impl<'m> Vm<'m> {
             ));
         };
         let v = a0.deref_clone();
-        let Some(cid) = self.class_id_from_value(&v) else {
+        let Some(cid) = self.class_id_from_value_autoload(&v)? else {
             return Ok(Zval::Bool(false));
         };
         let pname_z = convert::to_zstr_cast(&a1.deref_clone(), &mut self.diags);
@@ -13078,7 +13098,7 @@ impl<'m> Vm<'m> {
         let Some((decl, hint)) = prop_type_decl(&self.classes, ocid, name) else {
             return Ok(value);
         };
-        let strict = self.module.strict;
+        let strict = self.frames.last().map(|f| f.module.strict).unwrap_or(self.module.strict);
         match self.coerce_or_check_hint(value, &hint, strict) {
             Ok(v) => Ok(v),
             Err(given) => Err(PhpError::TypeError(format!(
