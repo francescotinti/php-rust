@@ -48,6 +48,10 @@ pub struct Program {
     /// / static reference before the declaration resolves dynamically (autoload or
     /// "Class not found"), exactly as PHP defers a conditional class to run time.
     pub conditional_classes: std::collections::HashSet<usize>,
+    /// Traits declared inside a branch (`(key, trait)`, key = bare lowercase
+    /// name), registered at run time by [`StmtKind::DeclareTrait`] into the
+    /// VM's seed-trait image for later units to `use`.
+    pub conditional_traits: Vec<(Vec<u8>, LoweredTrait)>,
     /// Anonymous functions and arrow functions, lowered into one flat table
     /// (step 18, D-18.2). A [`ExprKind::Closure`] selects its body by index;
     /// closures nest by appending to this same vector.
@@ -695,6 +699,12 @@ pub enum StmtKind {
     /// inside a branch/block — not hoisted). `idx` is in [`Program::classes`] and is
     /// listed in [`Program::conditional_classes`].
     DeclareClass(usize),
+    /// Conditional TRAIT declaration (a `trait` inside a branch — the
+    /// if/else-per-dependency-version pattern, e.g. doctrine/orm's
+    /// GetReflectionClassImplementation): register
+    /// [`Program::conditional_traits`]`[idx]` into the VM's seed-trait image
+    /// when reached, so a LATER unit's lowering can `use` it.
+    DeclareTrait(usize),
 }
 
 /// One `catch (T1 | T2 $e) { body }` clause (step 20). `types` are the caught
@@ -776,6 +786,10 @@ pub enum ExprKind {
     /// `$GLOBALS` is a read-only copy; element writes keep going through the
     /// dedicated `GlobalVar` path).
     GlobalsArray,
+    /// `$GLOBALS[$name] = rhs` with a *runtime* key (PHPUnit injects its XML
+    /// `<php><var>` config exactly this way): resolve-or-create the global
+    /// slot by name at run time and assign. Value = rhs, like any assignment.
+    GlobalsDynAssign { key: Box<Expr>, rhs: Box<Expr> },
 
     /// Binary op with eager left-then-right operand evaluation, dispatched to
     /// `php_types::ops` by the evaluator. Excludes short-circuit and coalesce.

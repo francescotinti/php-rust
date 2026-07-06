@@ -221,6 +221,9 @@ pub enum Op {
     /// named locals (by `slot_names`) plus the seeded data superglobals into a
     /// fresh array (PHP 8.1 read-only-copy semantics).
     LoadGlobals,
+    /// `[key, v] -> [v]` — `$GLOBALS[$name] = v` with a runtime key: resolve
+    /// (or create) the named global slot in the bottom frame and assign.
+    GlobalsDynAssign,
     /// Default-parameter prologue (PAR): if `slot` already holds an argument
     /// (it is not `Undef`), jump to `skip` (past the default); otherwise fall
     /// through to evaluate the default expression and `StoreSlot` it. Emitted at
@@ -481,6 +484,10 @@ pub enum Op {
     /// the runtime class index so it resolves by name from here on. Re-declaring an
     /// already-defined name is the PHP "Cannot declare class … already in use" fatal.
     DeclareClass { class: ClassId },
+    /// `[] -> []` — register [`Module::conditional_traits`]`[idx]` into the VM
+    /// seed-trait image (a `trait` declared inside an executed branch), so a
+    /// later unit's lowering can `use` it.
+    DeclareTrait { idx: u32 },
     /// `[arg0, …, arg{argc-1}] -> [result]` — call the by-value builtin named
     /// `name` (resolved in the [`crate::builtin::Registry`] at run time, as the
     /// tree-walker does). Arguments are popped into a `&[Zval]`; the builtin runs
@@ -1351,6 +1358,9 @@ pub struct Module {
     /// the name in the VM's runtime class index), so the eager `class_index` and its
     /// runtime clone skip these indices.
     pub conditional_classes: std::collections::HashSet<usize>,
+    /// Traits declared inside a branch (`(key, trait)`), registered into the
+    /// VM's seed-trait image when their [`Op::DeclareTrait`] runs.
+    pub conditional_traits: Vec<(Vec<u8>, crate::hir::LoweredTrait)>,
     /// Anonymous / arrow-function bodies — same index space as
     /// [`crate::hir::Program::closures`].
     pub closures: Vec<Func>,

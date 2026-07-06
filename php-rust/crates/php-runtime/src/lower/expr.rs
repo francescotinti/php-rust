@@ -136,6 +136,22 @@ impl<'f> Lowerer<'f> {
                         }
                     }
                 }
+                // `$GLOBALS[$name] = rhs` with a runtime key (PHPUnit's XML
+                // config injection): resolved by name at run time (constant
+                // keys keep the compile-time GlobalVar slot path below).
+                if let AssignmentOperator::Assign(_) = a.operator {
+                    if let Expression::ArrayAccess(aa) = a.lhs {
+                        let base_is_globals = matches!(
+                            aa.array,
+                            Expression::Variable(Variable::Direct(d)) if strip_dollar(d.name) == b"GLOBALS"
+                        );
+                        if base_is_globals && globals_key(aa.array, aa.index).is_none() {
+                            let key = Box::new(self.lower_expr(aa.index)?);
+                            let rhs = Box::new(self.lower_expr(a.rhs)?);
+                            return Ok(Expr { line, kind: ExprKind::GlobalsDynAssign { key, rhs } });
+                        }
+                    }
+                }
                 // `Class::$p = …` / `+= ` / `??=` — static-property assignment is
                 // not a `Place` (it roots at a per-class cell, not a slot), so it
                 // gets dedicated nodes (step 19-4, D-19.14).
@@ -1623,6 +1639,26 @@ impl<'f> Lowerer<'f> {
             target,
             Expression::Array(_) | Expression::List(_) | Expression::LegacyArray(_)
         ) {
+            // Any non-variable WRITABLE place as the value target
+            // (`foreach (... as $this->reference)`, `as $a['k']`): bind the
+            // element into a temp and prepend `place = $temp;` to the body —
+            // the same shape as the list-destructure path below (ORM's
+            // DDC117Test iterates into `$this->reference`).
+            if !matches!(target, Expression::Variable(Variable::Direct(_)))
+                && !matches!(target, Expression::UnaryPrefix(u) if matches!(u.operator, UnaryPrefixOperator::Reference(_)))
+            {
+                let temp = self.fresh_list_temp();
+                let src = Expr { line, kind: ExprKind::Var(temp) };
+                let place = self.lower_place(target, line)?;
+                let stmt = crate::hir::Stmt {
+                    line,
+                    kind: crate::hir::StmtKind::Expr(Expr {
+                        line,
+                        kind: ExprKind::AssignPlace(place, Box::new(src)),
+                    }),
+                };
+                return Ok(Some((temp, stmt)));
+            }
             return Ok(None);
         }
         // A by-reference target inside a `foreach` value pattern (`foreach ($a as

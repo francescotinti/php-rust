@@ -967,6 +967,31 @@ pub fn array_chunk(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Array(Rc::new(out)))
 }
 
+/// array_count_values($array): value => occurrence count (int/string values
+/// only; others raise a Warning and are skipped, like PHP).
+pub fn array_count_values(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let arr = arr_arg(args, "array_count_values")?;
+    let mut out = PhpArray::new();
+    for (_, v) in arr.iter() {
+        let key = match &v.deref_clone() {
+            Zval::Long(i) => Key::Int(*i),
+            Zval::Str(s) => Key::from_zstr(s),
+            _ => {
+                ctx.diags.push(php_types::Diag::Warning(
+                    "array_count_values(): Can only count scalar values, entry skipped".to_string(),
+                ));
+                continue;
+            }
+        };
+        let n = match out.get(&key) {
+            Some(Zval::Long(n)) => n + 1,
+            _ => 1,
+        };
+        out.insert(key, Zval::Long(n));
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
 /// array_change_key_case($array, $case = CASE_LOWER): string keys re-cased
 /// (ASCII, like PHP's non-mb variant); later duplicates overwrite earlier ones.
 pub fn array_change_key_case(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {

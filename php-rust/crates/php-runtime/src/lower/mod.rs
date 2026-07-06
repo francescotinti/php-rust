@@ -260,6 +260,7 @@ fn lower_source_impl(
         functions: low.functions,
         conditional_fns: low.conditional_fns,
         conditional_classes: low.conditional_classes,
+        conditional_traits: low.conditional_traits,
         closures: low.closures,
         static_count: low.static_count,
         strict: low.strict,
@@ -1785,6 +1786,69 @@ final class PDORow {
     public function __construct() { throw new PDOException('You may not create a PDORow manually'); }
 }
 function pdo_drivers() { return PDO::getAvailableDrivers(); }
+// SPL: iteratore vuoto e filtro-regex (doctrine/persistence FileClassLocator
+// filtra i file di mapping con RegexIterator::MATCH; GET_MATCH sostituisce
+// current() con l'array dei match; le chiavi dell'inner sono preservate).
+class EmptyIterator implements Iterator {
+    public function current(): mixed { throw new BadMethodCallException('Accessing the value of an EmptyIterator'); }
+    public function key(): mixed { throw new BadMethodCallException('Accessing the key of an EmptyIterator'); }
+    public function next(): void {}
+    public function rewind(): void {}
+    public function valid(): bool { return false; }
+}
+class RegexIterator implements Iterator {
+    const USE_KEY = 1;
+    const INVERT_MATCH = 2;
+    const MATCH = 0;
+    const GET_MATCH = 1;
+    const ALL_MATCHES = 2;
+    const SPLIT = 3;
+    const REPLACE = 4;
+    public $replacement = null;
+    private $__it;
+    private $__regex;
+    private $__mode;
+    private $__flags;
+    private $__pregFlags;
+    private $__cur;
+    public function __construct($iterator, $pattern, $mode = self::MATCH, $flags = 0, $pregFlags = 0) {
+        $this->__it = $iterator;
+        $this->__regex = $pattern;
+        $this->__mode = $mode;
+        $this->__flags = $flags;
+        $this->__pregFlags = $pregFlags;
+    }
+    public function getInnerIterator() { return $this->__it; }
+    public function getRegex() { return $this->__regex; }
+    public function getMode() { return $this->__mode; }
+    public function getFlags() { return $this->__flags; }
+    private function __advance() {
+        while ($this->__it->valid()) {
+            $v = $this->__it->current();
+            $subject = ($this->__flags & self::USE_KEY) === self::USE_KEY ? $this->__it->key() : $v;
+            $m = array();
+            if ($this->__mode === self::ALL_MATCHES) {
+                $ok = preg_match_all($this->__regex, (string)$subject, $m, $this->__pregFlags) > 0;
+            } else {
+                $ok = preg_match($this->__regex, (string)$subject, $m) === 1;
+            }
+            if (($this->__flags & self::INVERT_MATCH) === self::INVERT_MATCH) { $ok = !$ok; }
+            if ($ok) {
+                if ($this->__mode === self::GET_MATCH || $this->__mode === self::ALL_MATCHES) { $this->__cur = $m; }
+                elseif ($this->__mode === self::SPLIT) { $this->__cur = preg_split($this->__regex, (string)$subject, -1, $this->__pregFlags); }
+                elseif ($this->__mode === self::REPLACE) { $this->__cur = preg_replace($this->__regex, (string)$this->replacement, (string)$subject); }
+                else { $this->__cur = $v; }
+                return;
+            }
+            $this->__it->next();
+        }
+    }
+    public function rewind(): void { $this->__it->rewind(); $this->__advance(); }
+    public function valid(): bool { return $this->__it->valid(); }
+    public function current(): mixed { return $this->__cur; }
+    public function key(): mixed { return $this->__it->key(); }
+    public function next(): void { $this->__it->next(); $this->__advance(); }
+}
 // ext/sqlite3 sul medesimo backing rusqlite dei __pdo_* (stessa registry di
 // connessioni): SQLite3Stmt tiene SQL+parametri e ri-prepara a ogni execute,
 // SQLite3Result e' il rowset materializzato. Quirk oracle-verificati: exec
@@ -2066,6 +2130,11 @@ class RecursiveDirectoryIterator extends FilesystemIterator implements Recursive
         return new SplFileInfo($this->__cur());
     }
     public function hasChildren($allowLinks = false) {
+        // The native RDI never descends into the dot entries -- without this
+        // guard a traversal WITHOUT SKIP_DOTS recurses into `.` forever
+        // (doctrine/persistence's SymfonyFileLocator iterates dots included).
+        $n = $this->__names[$this->__pos] ?? '';
+        if ($n === '.' || $n === '..') { return false; }
         $p = $this->__cur();
         return is_dir($p) && ($allowLinks || ($this->__flags & self::FOLLOW_SYMLINKS) === self::FOLLOW_SYMLINKS || !is_link($p));
     }
@@ -2568,6 +2637,8 @@ class ReflectionAttribute {
     }
 }
 class ReflectionClass {
+    const SKIP_INITIALIZATION_ON_SERIALIZE = 8;
+    const SKIP_DESTRUCTOR = 16;
     public $name;
     public function __construct($objectOrClass) {
         $this->name = is_object($objectOrClass) ? get_class($objectOrClass) : $objectOrClass;
@@ -2684,6 +2755,12 @@ class ReflectionClass {
         return $out;
     }
     public function getTraitAliases() { return []; }
+    public function getDefaultProperties() { return __reflect_prop_defaults($this->name); }
+    public function getNamespaceName() {
+        $p = strrpos($this->name, '\\');
+        return $p === false ? '' : substr($this->name, 0, $p);
+    }
+    public function inNamespace() { return strpos($this->name, '\\') !== false; }
     public function getMethod($name) { return new ReflectionMethod($this->name, $name); }
     public function getConstructor() {
         return method_exists($this->name, '__construct')
@@ -3072,6 +3149,11 @@ class ReflectionProperty {
     public function getDocComment() { return false; }
     public function isFinal() { return false; }
     public function isAbstract() { return false; }
+    // Asymmetric visibility (8.4): phpr does not model aviz declarations, so
+    // every property reports symmetric get/set (ORM's RuntimeReflectionService
+    // probes these on each mapped field).
+    public function isProtectedSet() { return false; }
+    public function isPrivateSet() { return false; }
     public function isVirtual() { return false; }
     public function hasHooks() { return false; }
     public function getHooks() { return []; }
@@ -3978,6 +4060,8 @@ struct Lowerer<'f> {
     /// Indices into `functions` that are *conditional* declarations (registered at
     /// run time by `DeclareFn`, not resolvable by name eagerly).
     conditional_fns: HashSet<usize>,
+    /// Traits declared inside a branch, registered at run time (DeclareTrait).
+    conditional_traits: Vec<(Vec<u8>, LoweredTrait)>,
     /// Indices into `classes` that are *conditional* declarations (registered at
     /// run time by `DeclareClass`, not resolvable by name eagerly).
     conditional_classes: HashSet<usize>,
@@ -4089,6 +4173,7 @@ impl<'f> Lowerer<'f> {
             fn_index: HashMap::new(),
             conditional_fns: HashSet::new(),
             conditional_classes: HashSet::new(),
+            conditional_traits: Vec::new(),
             closures: Vec::new(),
             prog_name: prog_name.into(),
             fn_by_ref: false,

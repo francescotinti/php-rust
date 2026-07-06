@@ -2207,13 +2207,30 @@ impl<'m> Vm<'m> {
                     let old = store_slot(&mut self.superglobals[idx as usize], v);
                     self.gc_note(&old);
                 }
+                Op::GlobalsDynAssign => {
+                    // `$GLOBALS[$name] = v`: resolve-or-create the global slot.
+                    let v = self.frames[top].stack.pop().expect("GlobalsDynAssign value");
+                    let key = self.frames[top].stack.pop().expect("GlobalsDynAssign key");
+                    let name = convert::to_zstr_cast(&key, &mut self.diags).as_bytes().to_vec();
+                    let slot = self.global_slot_by_name(&name);
+                    match &mut self.frames[0].slots[slot] {
+                        Zval::Ref(rc) => *rc.borrow_mut() = v.clone(),
+                        cell => *cell = v.clone(),
+                    }
+                    self.frames[top].stack.push(v);
+                }
                 Op::LoadGlobals => {
                     // Bare `$GLOBALS`: snapshot the script frame's named locals
                     // plus the seeded data superglobals (PHP 8.1 read-only-copy
-                    // semantics; `$GLOBALS` itself excluded).
+                    // semantics; `$GLOBALS` itself excluded). The cross-unit
+                    // registry (seed_globals) supersedes the main func's own
+                    // slot names once includes/dynamic writes extended it.
                     let mut out = PhpArray::new();
-                    let names: Vec<Vec<u8>> =
-                        self.frames[0].func.slot_names.iter().map(|n| n.to_vec()).collect();
+                    let names: Vec<Vec<u8>> = if self.seed_globals.is_empty() {
+                        self.frames[0].func.slot_names.iter().map(|n| n.to_vec()).collect()
+                    } else {
+                        self.seed_globals.iter().map(|n| n.to_vec()).collect()
+                    };
                     for (i, name) in names.iter().enumerate() {
                         if name.is_empty() {
                             continue;
@@ -3237,6 +3254,17 @@ impl<'m> Vm<'m> {
                     }
                     self.linked_functions.insert(name.to_ascii_lowercase(), (m, idx));
                 }
+                Op::DeclareTrait { idx } => {
+                    // A conditional trait declaration executed: register the
+                    // lowered trait into the seed image so later units can
+                    // `use` it (only the branch that RAN registers its variant).
+                    let module = self.frames[top].module;
+                    if let Some((key, lt)) = module.conditional_traits.get(idx as usize) {
+                        if !self.seed_traits.iter().any(|(k, _)| k == key) {
+                            self.seed_traits.push((key.clone(), lt.clone()));
+                        }
+                    }
+                }
                 Op::DeclareClass { class } => {
                     // A conditional class/interface/enum statement was reached:
                     // register its name in the runtime class index so it resolves by
@@ -3793,7 +3821,7 @@ impl<'m> Vm<'m> {
                 }
                 Op::AllocStatic => {
                     let cid = self.frames[top].static_class.ok_or_else(|| {
-                        PhpError::Error("Cannot use \"static\" outside class context".to_string())
+                        PhpError::Error("Cannot use \"static\" in the global scope".to_string())
                     })?;
                     let obj = self.alloc_object(cid)?;
                     self.frames[top].stack.push(obj);
@@ -4334,6 +4362,20 @@ impl<'m> Vm<'m> {
                                 )));
                             }
                         }
+                        // A declared TYPED property returns to the
+                        // *uninitialized* state on unset (isInitialized false,
+                        // read = "must not be accessed before initialization")
+                        // rather than becoming an undefined dynamic prop —
+                        // doctrine/persistence's TypedNoDefaultReflectionProperty
+                        // models `setValue(null)` exactly this way.
+                        let ob = o.borrow();
+                        let typed = ob.info.type_of(&key).is_some()
+                            || ob.info.type_of(&name).is_some();
+                        drop(ob);
+                        if typed {
+                            o.borrow_mut().props.set(&key, Zval::Undef);
+                            continue;
+                        }
                     }
                     prop_unset(&target, &key);
                 }
@@ -4427,7 +4469,7 @@ impl<'m> Vm<'m> {
                 Op::InstanceOfStatic => {
                     let v = self.frames[top].stack.pop().expect("InstanceOfStatic operand");
                     let target = self.frames[top].static_class.ok_or_else(|| {
-                        PhpError::Error("Cannot use \"static\" outside class context".to_string())
+                        PhpError::Error("Cannot use \"static\" in the global scope".to_string())
                     })?;
                     let result = match v.deref_clone() {
                         Zval::Object(o) => {
@@ -4478,7 +4520,7 @@ impl<'m> Vm<'m> {
                     let start = match target {
                         ClassTarget::Class(cid) => cid,
                         ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
-                            PhpError::Error("Cannot use \"static\" outside class context".to_string())
+                            PhpError::Error("Cannot use \"static\" in the global scope".to_string())
                         })?,
                     };
                     // `Fiber::suspend` / `Fiber::getCurrent` are native static
@@ -4526,7 +4568,7 @@ impl<'m> Vm<'m> {
                     let start = match target {
                         ClassTarget::Class(cid) => cid,
                         ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
-                            PhpError::Error("Cannot use \"static\" outside class context".to_string())
+                            PhpError::Error("Cannot use \"static\" in the global scope".to_string())
                         })?,
                     };
                     // A user `get`/`set` hook on the named class runs as a frame.
@@ -4593,7 +4635,7 @@ impl<'m> Vm<'m> {
                     let start = match target {
                         ClassTarget::Class(cid) => cid,
                         ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
-                            PhpError::Error("Cannot use \"static\" outside class context".to_string())
+                            PhpError::Error("Cannot use \"static\" in the global scope".to_string())
                         })?,
                     };
                     self.dispatch_static_call(top, start, &method, forwarding, args, named)?;
@@ -4642,7 +4684,7 @@ impl<'m> Vm<'m> {
                     let start = match target {
                         ClassTarget::Class(cid) => cid,
                         ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
-                            PhpError::Error("Cannot use \"static\" outside class context".to_string())
+                            PhpError::Error("Cannot use \"static\" in the global scope".to_string())
                         })?,
                     };
                     self.dispatch_static_call(top, start, &method, forwarding, args, Vec::new())?;
@@ -4670,7 +4712,7 @@ impl<'m> Vm<'m> {
                 }
                 Op::ClassConstDyn { name } => {
                     let start = self.frames[top].static_class.ok_or_else(|| {
-                        PhpError::Error("Cannot use \"static\" outside class context".to_string())
+                        PhpError::Error("Cannot use \"static\" in the global scope".to_string())
                     })?;
                     let Some((decl, idx)) = find_const_runtime(&self.classes, start, &name) else {
                         // An enum case is not a `consts` thunk: materialize its
@@ -4753,7 +4795,7 @@ impl<'m> Vm<'m> {
                 }
                 Op::ClassNameStatic => {
                     let start = self.frames[top].static_class.ok_or_else(|| {
-                        PhpError::Error("Cannot use \"static\" outside class context".to_string())
+                        PhpError::Error("Cannot use \"static\" in the global scope".to_string())
                     })?;
                     let name = self.classes[start].name.to_vec();
                     self.frames[top].stack.push(Zval::Str(PhpStr::new(name)));
@@ -7205,6 +7247,8 @@ impl<'m> Vm<'m> {
                 Ok(Zval::Str(PhpStr::new(o.borrow().class_name.as_bytes().to_vec())))
             }
             Zval::Closure(_) => Ok(Zval::Str(PhpStr::new(b"Closure".to_vec()))),
+            // A generator is an object in PHP (PHPUnit's exporter reflects it).
+            Zval::Generator(_) => Ok(Zval::Str(PhpStr::new(b"Generator".to_vec()))),
             other => Err(PhpError::TypeError(format!(
                 "get_class(): Argument #1 ($object) must be of type object, {} given",
                 other.type_name_for_error()
@@ -8586,6 +8630,76 @@ impl<'m> Vm<'m> {
             }
         }
         Ok(Zval::Array(Rc::new(a)))
+    }
+
+    /// Resolve (or create) the bottom-frame slot for global `$name` at run
+    /// time — the `$GLOBALS[$name] = v` dynamic write path. A created slot
+    /// joins the cross-unit registry, so later units' `$GLOBALS['name']` and
+    /// `global $name` lower onto the same cell.
+    fn global_slot_by_name(&mut self, name: &[u8]) -> usize {
+        if let Some(i) = self.seed_globals.iter().position(|n| n.as_ref() == name) {
+            return i;
+        }
+        // A main-only run has an empty registry: seed it from the main func's
+        // own slot names first so indices line up.
+        if self.seed_globals.is_empty() {
+            self.seed_globals =
+                self.frames[0].func.slot_names.iter().map(|n| n.clone()).collect();
+            if let Some(i) = self.seed_globals.iter().position(|n| n.as_ref() == name) {
+                return i;
+            }
+        }
+        let i = self.seed_globals.len();
+        self.seed_globals.push(name.to_vec().into_boxed_slice());
+        if let Some(f) = self.frames.first_mut() {
+            f.slots.resize_with(self.seed_globals.len(), || Zval::Undef);
+        }
+        i
+    }
+
+    /// `__reflect_prop_defaults($class)`: `ReflectionClass::getDefaultProperties`
+    /// — statics first (their *current* value, like Zend), then the instance
+    /// defaults in declaration order; a typed property without a default
+    /// (`Undef`) is omitted. Names are source-level (unmangled).
+    fn ho_reflect_prop_defaults(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let mut out = php_types::PhpArray::new();
+        let Some(first) = args.first() else { return Ok(Zval::Array(Rc::new(out))) };
+        let raw = convert::to_zstr_cast(first, &mut self.diags).as_bytes().to_vec();
+        let key = raw.strip_prefix(b"\\").unwrap_or(&raw).to_ascii_lowercase();
+        let Some(&cid) = self.class_index.get(&key) else { return Ok(Zval::Array(Rc::new(out))) };
+        // Statics along the parent chain (child-most first, like the function
+        // table walks elsewhere).
+        let mut cur = Some(cid);
+        while let Some(c) = cur {
+            for (i, sp) in self.classes[c].static_props.iter().enumerate() {
+                let name = sp.name.to_vec();
+                if out.get(&Key::from_bytes(&name)).is_some() {
+                    continue;
+                }
+                let cell_key = (c, name.clone());
+                let v = if let Some(cell) = self.static_props.get(&cell_key) {
+                    cell.borrow().deref_clone()
+                } else {
+                    match &self.classes[c].static_props[i].init {
+                        StaticInit::Const(k) => k.to_zval(),
+                        StaticInit::Thunk(_) => Zval::Null,
+                    }
+                };
+                out.insert(Key::from_bytes(&name), v);
+            }
+            cur = self.classes[c].parent;
+        }
+        let cc = self.classes[cid];
+        for (n, d) in &cc.prop_defaults {
+            if cc.uninit_props.iter().any(|u| u == n) {
+                continue; // typed, no default: absent from the map
+            }
+            let disp = php_types::prop_display_name(n).to_vec();
+            if out.get(&Key::from_bytes(&disp)).is_none() {
+                out.insert(Key::from_bytes(&disp), d.to_zval());
+            }
+        }
+        Ok(Zval::Array(Rc::new(out)))
     }
 
     /// `__reflect_prop_is_static($class, $prop)`: whether `$prop` is a static
@@ -14218,7 +14332,7 @@ impl<'m> Vm<'m> {
         let start = match target {
             ClassTarget::Class(cid) => cid,
             ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
-                PhpError::Error("Cannot use \"static\" outside class context".to_string())
+                PhpError::Error("Cannot use \"static\" in the global scope".to_string())
             })?,
         };
         let Some((decl, idx)) = find_static_prop(&self.classes, start, name) else {
@@ -14888,6 +15002,7 @@ host_builtins! {
     b"__reflect_attr_arguments" => vm.ho_reflect_attr_arguments(args),
     b"__reflect_prop_declaring_class" => vm.ho_reflect_prop_declaring_class(args),
     b"__reflect_method_names" => vm.ho_reflect_method_names(args),
+    b"__reflect_prop_defaults" => vm.ho_reflect_prop_defaults(args),
     b"implode" | b"join" => vm.ho_implode(args),
     b"__reflect_func_info" => vm.ho_reflect_func_info(args),
     b"__reflect_closure_info" => vm.ho_reflect_closure_info(args),

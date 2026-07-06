@@ -3,7 +3,7 @@
 use mago_span::HasSpan;
 use mago_syntax::ast::{
     DeclareBody,
-    Expression, ForeachTarget, Function, Literal, Statement, StaticItem, Variable,
+    Expression, ForeachTarget, Function, Literal, Statement, StaticItem, Trait, Variable,
 };
 
 use crate::hir::{
@@ -287,10 +287,30 @@ impl<'f> Lowerer<'f> {
                 let decl = self.lower_enum(en)?;
                 StmtKind::DeclareClass(self.push_conditional_class(decl))
             }
-            // A trait declaration carries no runtime behaviour: the top-level
-            // ones were lowered into `self.traits` and flattened into their
-            // consumers at lowering time (step 21).
-            Statement::Trait(_) => return Ok(None),
+            // A trait declaration: the top-level ones were lowered into
+            // `self.traits` and flattened into their consumers at lowering time
+            // (step 21) — a no-op here. A trait inside a branch (the
+            // if/else-per-dependency-version pattern) is lowered NOW and
+            // registered at run time via `DeclareTrait`, so later units can
+            // `use` whichever variant the executed branch declared.
+            Statement::Trait(t) => {
+                let key = t.name.value.to_ascii_lowercase();
+                if self.traits.contains_key(&key) {
+                    return Ok(None); // top-level, already hoisted
+                }
+                let mut asts: std::collections::HashMap<Vec<u8>, &Trait> =
+                    std::collections::HashMap::new();
+                asts.insert(key.clone(), t);
+                let mut in_progress: std::collections::HashSet<Vec<u8>> =
+                    std::collections::HashSet::new();
+                self.resolve_trait(&key, &asts, &mut in_progress)?;
+                // Detach from the compile-time table (only the executed branch
+                // may register it; a sibling same-name branch re-lowers).
+                let lowered = self.traits.remove(&key).expect("resolve_trait registered it");
+                let idx = self.conditional_traits.len();
+                self.conditional_traits.push((key, lowered));
+                StmtKind::DeclareTrait(idx)
+            }
 
             // `try { } catch (T $e) { } finally { }` (step 20). Each catch's type
             // hint is a single class or a `A | B` union (collected to names); its

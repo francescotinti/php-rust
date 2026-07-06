@@ -194,6 +194,7 @@ pub fn registry() -> Registry {
     add(b"stream_get_wrappers", encoding::stream_get_wrappers);
     add(b"array_flip", array::array_flip);
     add(b"array_change_key_case", array::array_change_key_case);
+    add(b"array_count_values", array::array_count_values);
     add(b"array_combine", array::array_combine);
     add(b"array_pad", array::array_pad);
     add(b"array_product", array::array_product);

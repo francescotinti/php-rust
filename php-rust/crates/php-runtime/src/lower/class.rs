@@ -49,7 +49,7 @@ impl<'f> Lowerer<'f> {
     /// Lower one trait into [`Lowerer::traits`], memoised. Resolves the trait's
     /// own `use` clauses first (so nested members are present), then flattens
     /// them in with the trait's own members taking precedence (step 21).
-    fn resolve_trait(
+    pub(super) fn resolve_trait(
         &mut self,
         key: &[u8],
         asts: &HashMap<Vec<u8>, &Trait>,

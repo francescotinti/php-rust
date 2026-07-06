@@ -195,6 +195,7 @@ pub fn compile_program_stubbed(
         functions,
         conditional_fns: program.conditional_fns.clone(),
         conditional_classes: program.conditional_classes.clone(),
+        conditional_traits: program.conditional_traits.clone(),
         closures,
         classes,
         file: program.file.clone(),
@@ -1304,6 +1305,9 @@ impl<'a> FnCompiler<'a> {
             StmtKind::DeclareClass(idx) => {
                 self.emit(Op::DeclareClass { class: *idx });
             }
+            StmtKind::DeclareTrait(idx) => {
+                self.emit(Op::DeclareTrait { idx: *idx as u32 });
+            }
             StmtKind::Echo(values) => {
                 for e in values {
                     self.expr(e)?;
@@ -1817,6 +1821,11 @@ impl<'a> FnCompiler<'a> {
             ExprKind::GlobalsArray => {
                 // Bare `$GLOBALS`: snapshot of the global symbol table.
                 self.emit(Op::LoadGlobals);
+            }
+            ExprKind::GlobalsDynAssign { key, rhs } => {
+                self.expr(key)?;
+                self.expr(rhs)?;
+                self.emit(Op::GlobalsDynAssign); // [key, v] -> [v]
             }
             ExprKind::Assign(slot, rhs) => {
                 self.expr(rhs)?;
@@ -2739,6 +2748,24 @@ impl<'a> FnCompiler<'a> {
                 _ => {
                     let canon: Box<[u8]> = canon.into();
                     let Some(place) = expr_field_place(first) else {
+                        // `current(f(...))` / `key(<temp>)`: PHP 8 takes these
+                        // BY VALUE (they only read the pointer, which for a
+                        // temporary sits at the first element) — evaluate into
+                        // a temp slot and call. The pointer-WRITING family
+                        // (reset/end/next/prev) keeps the honest error.
+                        if canon.as_ref() == b"current" || canon.as_ref() == b"key" {
+                            let tmp = self.alloc_temp();
+                            self.expr(first)?;
+                            self.emit(Op::StoreSlot(tmp));
+                            self.push_value_args(rest)?;
+                            self.emit(Op::CallHostBuiltinRef {
+                                name: canon,
+                                slot: tmp,
+                                argc: rest.len() as u32,
+                            });
+                            self.free_temp();
+                            return Ok(());
+                        }
                         return Err(CompileError::Unsupported(
                             "by-reference host builtin whose first argument is not a plain variable"
                                 .into(),
@@ -4377,6 +4404,95 @@ impl<'a> FnCompiler<'a> {
             self.patch(to_end, Op::Jump(end));
             return Ok(());
         }
+        // `$this->cache[$k] ??= rhs` — a prop-bearing path: evaluate every
+        // dynamic key ONCE into temps, probe with FieldIsset, then read the
+        // existing leaf or FieldAssign the rhs (ORM's lazy identity-map
+        // caches: `$this->repositories[$name] ??= …`).
+        if place_has_prop(place)
+            && !matches!(
+                place.base,
+                PlaceBase::Value(_) | PlaceBase::StaticProp { .. } | PlaceBase::ClassConst { .. }
+            )
+            && place.steps.iter().all(|s| !matches!(s, PlaceStep::Append))
+        {
+            let base = match place.base {
+                PlaceBase::Local(s) => FieldBase::Local(s),
+                PlaceBase::Global(s) => FieldBase::Global(s),
+                PlaceBase::This => FieldBase::This,
+                PlaceBase::Superglobal(i) => FieldBase::Superglobal(i),
+                _ => unreachable!("filtered above"),
+            };
+            let mut steps: Vec<FieldStep> = Vec::with_capacity(place.steps.len());
+            let mut temps: Vec<Option<u32>> = Vec::with_capacity(place.steps.len());
+            for step in &place.steps {
+                match step {
+                    PlaceStep::Index(k) => {
+                        let t = self.alloc_temp();
+                        self.expr(k)?;
+                        self.emit(Op::StoreSlot(t));
+                        steps.push(FieldStep::Index);
+                        temps.push(Some(t));
+                    }
+                    PlaceStep::PropDyn(name) => {
+                        let t = self.alloc_temp();
+                        self.expr(name)?;
+                        self.emit(Op::StoreSlot(t));
+                        steps.push(FieldStep::PropDyn);
+                        temps.push(Some(t));
+                    }
+                    PlaceStep::Prop(name) => {
+                        steps.push(FieldStep::Prop(name.clone()));
+                        temps.push(None);
+                    }
+                    PlaceStep::Append => unreachable!("filtered above"),
+                }
+            }
+            let steps: Box<[FieldStep]> = steps.into();
+            for t in temps.iter().flatten() {
+                self.emit(Op::LoadSlot(*t));
+            }
+            self.emit(Op::FieldIsset { base, steps: steps.clone() });
+            let to_assign = self.emit(Op::JumpIfFalse(Addr::MAX));
+            // Set: read the existing leaf (base value, then walk the steps).
+            match base {
+                FieldBase::Local(s) => self.emit(Op::LoadSlot(s)),
+                FieldBase::Global(s) => self.emit(Op::LoadGlobal(s)),
+                FieldBase::This => self.emit(Op::This),
+                FieldBase::Superglobal(i) => self.emit(Op::LoadSuperglobal(i)),
+            };
+            let mut ti = temps.iter();
+            for step in steps.iter() {
+                let t = ti.next().expect("temps parallel to steps");
+                match step {
+                    FieldStep::Prop(n) => {
+                        self.emit(Op::PropGet { name: n.clone() });
+                    }
+                    FieldStep::PropDyn => {
+                        self.emit(Op::LoadSlot(t.expect("dyn step has temp")));
+                        self.emit(Op::PropGetDynamic);
+                    }
+                    FieldStep::Index => {
+                        self.emit(Op::LoadSlot(t.expect("index step has temp")));
+                        self.emit(Op::FetchDim);
+                    }
+                    FieldStep::Append => unreachable!("filtered above"),
+                }
+            }
+            let to_end = self.emit(Op::Jump(Addr::MAX));
+            let assign_at = self.here();
+            self.patch(to_assign, Op::JumpIfFalse(assign_at));
+            for t in temps.iter().flatten() {
+                self.emit(Op::LoadSlot(*t));
+            }
+            self.expr(rhs)?;
+            self.emit(Op::FieldAssign { base, steps });
+            let end = self.here();
+            self.patch(to_end, Op::Jump(end));
+            for _ in temps.iter().flatten() {
+                self.free_temp();
+            }
+            return Ok(());
+        }
         // `$a[k1][k2]… ??= rhs` on an all-index path rooted at a local /
         // `$GLOBALS` slot: evaluate each key once (into temps), then assign
         // only if the element is unset, yielding the existing or newly-stored
@@ -4873,6 +4989,7 @@ fn expr_name(k: &ExprKind) -> String {
         ExprKind::GlobalVar(_) => "GlobalVar",
         ExprKind::Superglobal(_) => "Superglobal",
         ExprKind::GlobalsArray => "GlobalsArray",
+        ExprKind::GlobalsDynAssign { .. } => "GlobalsDynAssign",
         ExprKind::Binary(..) => "Binary",
         ExprKind::And(..) => "And",
         ExprKind::Or(..) => "Or",

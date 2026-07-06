@@ -370,7 +370,18 @@ pub(super) fn field_unset(target: &mut Zval, steps: &[FieldStep], keys: &mut std
             if let Zval::Object(o) = target {
                 let key = fs.prop_key(o.borrow().class_id as usize, name);
                 if rest.is_empty() {
-                    o.borrow_mut().props.remove(key.as_ref());
+                    // A declared TYPED property returns to *uninitialized* on
+                    // unset (mirrors Op::PropUnset; doctrine unsets via a
+                    // bound closure with a dynamic name).
+                    let typed = {
+                        let ob = o.borrow();
+                        ob.info.type_of(key.as_ref()).is_some() || ob.info.type_of(name).is_some()
+                    };
+                    if typed {
+                        o.borrow_mut().props.set(key.as_ref(), Zval::Undef);
+                    } else {
+                        o.borrow_mut().props.remove(key.as_ref());
+                    }
                 } else if let Some(child) = o.borrow_mut().props.get_mut(key.as_ref()) {
                     field_unset(child, rest, keys, fs);
                 }
