@@ -2234,13 +2234,15 @@ impl<'a> FnCompiler<'a> {
                 let closure_static =
                     matches!(class, ClassRef::Named(n) if n.eq_ignore_ascii_case(b"Closure"));
                 if !closure_static && self.is_runtime_class(class) {
-                    if !named.is_empty() {
-                        return Err(CompileError::Unsupported("named arguments on `$cls::m()`".into()));
-                    }
                     // `$cls::m()` / an unknown named class (PAR): the class reference
                     // is pushed beneath the arguments and resolved at run time.
                     self.push_class_value(class)?;
-                    if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
+                    if !named.is_empty() {
+                        // Named args ride the runtime args array (string keys =
+                        // names); the dispatch binder resolves them (PHP 8.1).
+                        self.build_args_array_named(args, named)?;
+                        self.emit(Op::StaticCallDynamicArgs { method: method.clone() });
+                    } else if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
                         // Spread `$cls::m(...$a)` (Session A): args from a runtime array.
                         self.build_args_array(args)?;
                         self.emit(Op::StaticCallDynamicArgs { method: method.clone() });
@@ -2352,36 +2354,42 @@ impl<'a> FnCompiler<'a> {
             }
             ExprKind::StaticCallDyn { class, method, args, named } => {
                 // `$cls::$m()` / `Class::$m()` / `self::$m()`: the method name is a
-                // runtime value (the static analogue of `$obj->$m()`).
-                if !named.is_empty() {
-                    return Err(CompileError::Unsupported(
-                        "named arguments on a dynamic static call".into(),
-                    ));
-                }
-                if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
-                    return Err(CompileError::Unsupported(
-                        "argument unpacking (spread) on a dynamic static call".into(),
-                    ));
-                }
+                // runtime value (the static analogue of `$obj->$m()`). Named or
+                // spread arguments ride a runtime args array (string keys = names,
+                // spreads flattened), like the instance-side `$obj->$m(...)`.
+                let has_named = !named.is_empty();
+                let has_spread = args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_)));
                 if self.is_runtime_class(class) {
                     // Runtime / unknown class: push it beneath the args, resolve at
                     // run time, dispatch non-forwarding (LSB = the resolved class).
                     self.push_class_value(class)?; // [classRef]
-                    self.push_dyn_args(args)?; // [classRef, arg0…]
-                    self.expr(method)?; // [classRef, arg0…, method]
-                    self.emit(Op::StaticCallDynamicMethod { argc: args.len() as u32 });
+                    if has_named || has_spread {
+                        self.build_args_array_named(args, named)?; // [classRef, argsArray]
+                        self.expr(method)?; // [classRef, argsArray, method]
+                        self.emit(Op::StaticCallDynamicMethodArgs);
+                    } else {
+                        self.push_dyn_args(args)?; // [classRef, arg0…]
+                        self.expr(method)?; // [classRef, arg0…, method]
+                        self.emit(Op::StaticCallDynamicMethod { argc: args.len() as u32 });
+                    }
                 } else {
                     // A compile-time class target (`Class`/`self`/`parent`/`static`):
                     // keep forwarding semantics ($this / LSB) as a static `StaticCall`
                     // would, only the method name is resolved at run time.
                     let (target, forwarding) = self.resolve_target(class)?;
-                    self.push_dyn_args(args)?; // [arg0…]
-                    self.expr(method)?; // [arg0…, method]
-                    self.emit(Op::StaticCallTargetDynamicMethod {
-                        target,
-                        forwarding,
-                        argc: args.len() as u32,
-                    });
+                    if has_named || has_spread {
+                        self.build_args_array_named(args, named)?; // [argsArray]
+                        self.expr(method)?; // [argsArray, method]
+                        self.emit(Op::StaticCallTargetDynamicMethodArgs { target, forwarding });
+                    } else {
+                        self.push_dyn_args(args)?; // [arg0…]
+                        self.expr(method)?; // [arg0…, method]
+                        self.emit(Op::StaticCallTargetDynamicMethod {
+                            target,
+                            forwarding,
+                            argc: args.len() as u32,
+                        });
+                    }
                 }
             }
             ExprKind::ParentHookCall { class, prop, set, args } => {
@@ -3264,13 +3272,14 @@ impl<'a> FnCompiler<'a> {
         args: &[Expr],
         named: &[(Box<[u8]>, Expr)],
     ) -> R<()> {
-        if !named.is_empty() {
-            return Err(CompileError::Unsupported(
-                "named arguments on a dynamic method call".into(),
-            ));
-        }
         let has_spread = args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_)));
-        if has_spread {
+        if !named.is_empty() {
+            // Named args ride the runtime args array (string keys = names); the
+            // handler splits and binds them like the spread path (PHP 8.1).
+            self.build_args_array_named(args, named)?; // [obj, argsArray]
+            self.expr(method)?; // [obj, argsArray, name]
+            self.emit(Op::MethodCallDynamicArgs);
+        } else if has_spread {
             self.build_args_array(args)?; // [obj, argsArray]
             self.expr(method)?; // [obj, argsArray, name]
             self.emit(Op::MethodCallDynamicArgs);

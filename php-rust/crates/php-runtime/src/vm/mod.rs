@@ -4709,6 +4709,41 @@ impl<'m> Vm<'m> {
                     // A dynamic class is non-forwarding, like a named static call.
                     self.dispatch_static_call(top, start, &method, false, args, Vec::new())?;
                 }
+                Op::StaticCallDynamicMethodArgs => {
+                    // `$cls::$m(...)` with named/spread args: method name on top,
+                    // args array beneath (string keys = named), class ref below.
+                    let mval =
+                        self.frames[top].stack.pop().expect("StaticCallDynamicMethodArgs name");
+                    let argsval =
+                        self.frames[top].stack.pop().expect("StaticCallDynamicMethodArgs array");
+                    let (args, named) = split_args_from_array_value(argsval);
+                    let classval =
+                        self.frames[top].stack.pop().expect("StaticCallDynamicMethodArgs class");
+                    // PHP validates the class before the method name.
+                    let start = self.resolve_dynamic_class(&classval)?;
+                    let method = dyn_method_name(&mval)?;
+                    self.dispatch_static_call(top, start, &method, false, args, named)?;
+                }
+                Op::StaticCallTargetDynamicMethodArgs { target, forwarding } => {
+                    // `self::$m(...)` / `Class::$m(...)` with named/spread args.
+                    let mval = self.frames[top]
+                        .stack
+                        .pop()
+                        .expect("StaticCallTargetDynamicMethodArgs name");
+                    let method = dyn_method_name(&mval)?;
+                    let argsval = self.frames[top]
+                        .stack
+                        .pop()
+                        .expect("StaticCallTargetDynamicMethodArgs array");
+                    let (args, named) = split_args_from_array_value(argsval);
+                    let start = match target {
+                        ClassTarget::Class(cid) => cid,
+                        ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
+                            PhpError::Error("Cannot use \"static\" in the global scope".to_string())
+                        })?,
+                    };
+                    self.dispatch_static_call(top, start, &method, forwarding, args, named)?;
+                }
                 Op::StaticCallTargetDynamicMethod { target, forwarding, argc } => {
                     // `self::$m()` / `Class::$m()`: method name on top, then args; the
                     // class is a compile-time target, forwarding preserved.

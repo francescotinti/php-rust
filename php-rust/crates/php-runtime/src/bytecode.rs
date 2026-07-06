@@ -782,6 +782,14 @@ pub enum Op {
     /// the method name is a runtime value on top of the stack. Keeps forwarding
     /// semantics (`$this` / LSB) like [`Op::StaticCall`]; only the method is dynamic.
     StaticCallTargetDynamicMethod { target: ClassTarget, forwarding: bool, argc: u32 },
+    /// `[classRef, argsArray, method] -> [ret]` — `$cls::$m(...)` with named or
+    /// spread arguments: the args ride a runtime array (string keys = named,
+    /// spreads flattened), the class ref and method name are runtime values.
+    StaticCallDynamicMethodArgs,
+    /// `[argsArray, method] -> [ret]` — `self::$m(...)` / `Class::$m(...)` with
+    /// named or spread arguments: compile-time class `target`, runtime method
+    /// name, args from a runtime array (string keys = named).
+    StaticCallTargetDynamicMethodArgs { target: ClassTarget, forwarding: bool },
     /// `[] -> [value]` — `Class::CONST` / `self::CONST` / `parent::CONST` resolved
     /// at compile time to its declaring class and constant index. Runs the
     /// constant's value *thunk* ([`CompiledConst::func`]) as a frame whose
