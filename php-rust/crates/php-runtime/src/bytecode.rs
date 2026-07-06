@@ -655,6 +655,11 @@ pub enum Op {
     /// `[name, rhs] -> [rhs]` — `$$x = rhs`: resolve/create the variable by its
     /// runtime NAME and store (writing through a reference like `StoreSlot`).
     StoreVarDyn,
+    /// `[classRef, name] -> [value]` — `C::{$expr}` (PHP 8.3): resolve the
+    /// class (string/object, autoloading), then the constant by its runtime
+    /// name through the parent/interface chain; `"class"` yields the class
+    /// name, an enum case its singleton. Unknown -> catchable Error.
+    ClassConstDynamic,
     /// `[obj] -> [v]` — read property `name` like [`Op::PropGet`] but *silently*:
     /// a missing property yields NULL with no "Undefined property" warning and no
     /// visibility error (the read context of `empty()` / `??`). A `__get` accessor

@@ -4782,6 +4782,30 @@ impl<'m> Vm<'m> {
                     };
                     self.dispatch_static_call(top, start, &method, forwarding, args, Vec::new())?;
                 }
+                Op::ClassConstDynamic => {
+                    // `C::{$expr}`: class beneath, runtime constant name on top.
+                    let nv = self.frames[top].stack.pop().expect("ClassConstDynamic name");
+                    let name = convert::to_zstr_cast(&nv, &mut self.diags).as_bytes().to_vec();
+                    let classval =
+                        self.frames[top].stack.pop().expect("ClassConstDynamic class");
+                    let cid = self.resolve_dynamic_class(&classval)?;
+                    // NB: the magic `::class` is compile-time only — a dynamic
+                    // `C::{'class'}` is an Undefined constant in PHP.
+                    if let Some((decl, idx)) = find_const_runtime(&self.classes, cid, &name) {
+                        let thunk: &'m Func = &self.classes[decl].consts[idx].func;
+                        let v = self.run_value_thunk(thunk, Some(decl))?;
+                        self.frames[top].stack.push(v);
+                    } else if let Some(ci) = self.enum_case_idx(cid, &name) {
+                        let case = self.enum_case(cid, ci as u32);
+                        self.frames[top].stack.push(Zval::Object(case));
+                    } else {
+                        return Err(PhpError::Error(format!(
+                            "Undefined constant {}::{}",
+                            String::from_utf8_lossy(&self.classes[cid].name),
+                            String::from_utf8_lossy(&name)
+                        )));
+                    }
+                }
                 Op::ClassConst { class, idx } => {
                     // Run the constant's value thunk as a frame in its declaring
                     // class's context; its `Ret` leaves the value on the caller's

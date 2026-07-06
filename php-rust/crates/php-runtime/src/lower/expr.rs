@@ -374,10 +374,11 @@ impl<'f> Lowerer<'f> {
                     }
                 }
             }
-            // `$a[]` only has meaning as an assignment target; reading it is an error.
+            // `$a[]` only has meaning as an assignment target; reading it is
+            // PHP's own compile-time fatal, reproduced faithfully.
             Expression::ArrayAppend(_) => {
-                return Err(LowerError::Unsupported {
-                    what: "[] in read context",
+                return Err(LowerError::Fatal {
+                    message: "Cannot use [] for reading".to_string(),
                     line,
                 })
             }
@@ -695,9 +696,18 @@ impl<'f> Lowerer<'f> {
             P::BoolCast(..) | P::BooleanCast(..) => cast(CastKind::Bool, self)?,
             P::ArrayCast(..) => cast(CastKind::Array, self)?,
             P::ObjectCast(..) => cast(CastKind::Object, self)?,
-            P::UnsetCast(..) | P::VoidCast(..) => {
+            // `(unset)$x` was removed in PHP 8.0: the exact compile-time fatal.
+            // `(void)` (8.5) casts to nothing and is valid only as a statement;
+            // as a read it keeps the honest Unsupported.
+            P::UnsetCast(..) => {
+                return Err(LowerError::Fatal {
+                    message: "The (unset) cast is no longer supported".to_string(),
+                    line,
+                })
+            }
+            P::VoidCast(..) => {
                 return Err(LowerError::Unsupported {
-                    what: "unset/void cast",
+                    what: "void cast",
                     line,
                 })
             }
@@ -965,14 +975,19 @@ impl<'f> Lowerer<'f> {
                     }),
                 }
             }
-            // `Class::CONST` / `self::CONST` / `Class::class` (step 19-4).
+            // `Class::CONST` / `self::CONST` / `Class::class` (step 19-4);
+            // `Class::{$expr}` (PHP 8.3) resolves the NAME at run time.
             Access::ClassConstant(cc) => {
                 let class = self.class_ref_of(cc.class, line)?;
                 let name = match &cc.constant {
                     ClassLikeConstantSelector::Identifier(id) => id.value,
-                    _ => {
+                    ClassLikeConstantSelector::Expression(sel) => {
+                        let name = Box::new(self.lower_expr(sel.expression)?);
+                        return Ok(ExprKind::ClassConstDyn { class, name });
+                    }
+                    ClassLikeConstantSelector::Missing(_) => {
                         return Err(LowerError::Unsupported {
-                            what: "dynamic class constant name",
+                            what: "missing class constant selector",
                             line,
                         })
                     }
@@ -1498,11 +1513,11 @@ impl<'f> Lowerer<'f> {
                     },
                     by_ref: false,
                 }),
-                // A missing element `[, ]` is only valid in a destructuring pattern,
-                // not an array literal.
+                // A missing element `[, ]` is only valid in a destructuring
+                // pattern; in an array literal it is PHP's compile-time fatal.
                 ArrayElement::Missing(_) => {
-                    return Err(LowerError::Unsupported {
-                        what: "missing element in array literal",
+                    return Err(LowerError::Fatal {
+                        message: "Cannot use empty array elements in arrays".to_string(),
                         line,
                     })
                 }

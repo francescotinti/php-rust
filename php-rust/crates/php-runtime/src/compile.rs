@@ -2420,6 +2420,11 @@ impl<'a> FnCompiler<'a> {
                 });
             }
             ExprKind::ClassConst { class, name } => self.class_const(class, name)?,
+            ExprKind::ClassConstDyn { class, name } => {
+                self.push_class_value(class)?;
+                self.expr(name)?;
+                self.emit(Op::ClassConstDynamic);
+            }
             ExprKind::StaticProp { class, name } => {
                 if self.is_runtime_class(class) {
                     self.push_class_value(class)?;
@@ -5129,6 +5134,7 @@ fn expr_name(k: &ExprKind) -> String {
         ExprKind::Var(_) => "Var",
         ExprKind::VarDyn(_) => "VarDyn",
         ExprKind::VarDynAssign { .. } => "VarDynAssign",
+        ExprKind::ClassConstDyn { .. } => "ClassConstDyn",
         ExprKind::GlobalVar(_) => "GlobalVar",
         ExprKind::Superglobal(_) => "Superglobal",
         ExprKind::GlobalsArray => "GlobalsArray",
