@@ -721,15 +721,18 @@ impl<'m> Frame<'m> {
 enum IterState {
     ByVal { entries: Vec<(Zval, Zval)>, pos: usize },
     ByRef { source: Slot, keys: Vec<Key>, pos: usize },
-    /// `foreach` over a plain (non-Traversable) object: the visible property key set
-    /// is fixed at loop start, but each value is read *live* from the object at the
-    /// step (object handle semantics — a property mutated in the body is observed; a
-    /// key removed mid-loop is skipped).
-    ObjVals { obj: Zval, keys: Vec<Box<[u8]>>, pos: usize },
-    /// `foreach ($obj as &$v)` over a plain object: like [`IterState::ObjVals`] but
-    /// each step binds `$v` *by reference* to the property's storage cell, so writes
-    /// through `$v` mutate the property.
-    ObjRefs { obj: Zval, keys: Vec<Box<[u8]>>, pos: usize },
+    /// `foreach` over a plain (non-Traversable) object: fully *live* hash-cursor
+    /// semantics (PHP iterates the property table by position) — each step
+    /// recomputes the visible entries and yields the first not yet visited, so a
+    /// property added in the body is reached, a removed one is skipped, and a
+    /// hooked property's `get` runs at its step. `yielded` holds the display
+    /// names already produced.
+    ObjVals { obj: Zval, scope: Option<ClassId>, yielded: Vec<Box<[u8]>> },
+    /// `foreach ($obj as &$v)` over a plain object: like [`IterState::ObjVals`]
+    /// but each step binds `$v` *by reference* — to the property's storage cell,
+    /// or to the cell a `&get` hook returns (a by-value hook is a fatal
+    /// "Cannot create reference to property C::$p").
+    ObjRefs { obj: Zval, scope: Option<ClassId>, yielded: Vec<Box<[u8]>> },
     /// `foreach` over a generator (GEN): no snapshot — each step reads the
     /// generator's current `(key, value)` and resumes it for the next. `primed`
     /// is false until the first `IterNext` (which starts the generator rather than
@@ -740,6 +743,18 @@ enum IterState {
     /// `IterNext` (see [`ObjStage`]). `pending` is the cell the last protocol call
     /// wrote into; `cur_val` holds `current()` while `key()` is fetched.
     Object { it: Zval, stage: ObjStage, pending: Option<Rc<RefCell<Zval>>>, cur_val: Option<Zval> },
+}
+
+/// How one step of a live plain-object `foreach` ([`IterState::ObjVals`] /
+/// [`IterState::ObjRefs`]) reads or binds the next visible property (built by
+/// [`Vm::object_iter_entries`]).
+enum PropIterEntry {
+    /// Read/bind the storage slot under this (possibly mangled) key.
+    Slot { key: Box<[u8]> },
+    /// Dispatch the property's get hook as resolved from class `view`'s
+    /// flattened table (`view` differs from the object's class only when the
+    /// running scope's own private declaration shadows a subclass one).
+    Hook { name: Box<[u8]>, view: ClassId },
 }
 
 /// The step the object-iterator state machine is about to perform (step 51). A
@@ -3045,8 +3060,8 @@ impl<'m> Vm<'m> {
                         // A plain (non-Traversable) object iterates its visible
                         // properties (declared first, then dynamic): the key set is
                         // fixed here, values are read live at each step.
-                        Zval::Object(o) => {
-                            IterState::ObjVals { obj: deref.clone(), keys: self.object_iter_keys(o, scope), pos: 0 }
+                        Zval::Object(_) => {
+                            IterState::ObjVals { obj: deref.clone(), scope, yielded: Vec::new() }
                         }
                         _ => IterState::ByVal { entries: snapshot_entries(&iterable), pos: 0 },
                     };
@@ -3085,33 +3100,50 @@ impl<'m> Vm<'m> {
                         }
                         continue;
                     }
-                    // Plain-object foreach: read the next visible property's value
-                    // live from the object, skipping any key removed since loop start.
+                    // Plain-object foreach: yield the next not-yet-visited visible
+                    // property, recomputed live (a property added in the body is
+                    // reached, a removed one skipped); a hooked property reads
+                    // through its `get` hook at this step.
                     if matches!(self.frames[top].iters.last(), Some(IterState::ObjVals { .. })) {
                         let pair = loop {
-                            let (obj, keyname) = {
-                                let Some(IterState::ObjVals { obj, keys, pos }) =
-                                    self.frames[top].iters.last_mut()
+                            let (obj, entry) = {
+                                let Some(IterState::ObjVals { obj, scope, yielded }) =
+                                    self.frames[top].iters.last()
                                 else {
                                     unreachable!("ObjVals iterator")
                                 };
-                                if *pos >= keys.len() {
-                                    break None;
-                                }
-                                let k = keys[*pos].clone();
-                                *pos += 1;
-                                (obj.clone(), k)
+                                let Zval::Object(o) = obj else { break None };
+                                let next = self
+                                    .object_iter_entries(o, *scope)
+                                    .into_iter()
+                                    .find(|(d, _)| !yielded.iter().any(|y| y == d));
+                                let Some(next) = next else { break None };
+                                (obj.clone(), next)
                             };
-                            if let Zval::Object(o) = &obj {
-                                let v = o.borrow().props.get(&keyname).cloned();
-                                if let Some(v) = v {
-                                    if !matches!(v, Zval::Undef) {
-                                        // Expose the source-level name, not a mangled key.
-                                        break Some((
-                                            Zval::Str(PhpStr::new(php_types::prop_display_name(&keyname).to_vec())),
-                                            v.deref_clone(),
-                                        ));
+                            let (display, entry) = entry;
+                            if let Some(IterState::ObjVals { yielded, .. }) =
+                                self.frames[top].iters.last_mut()
+                            {
+                                yielded.push(display.clone());
+                            }
+                            match entry {
+                                PropIterEntry::Slot { key } => {
+                                    let v = deref_object(&obj).and_then(|o| o.borrow().props.get(&key).cloned());
+                                    if let Some(v) = v {
+                                        if !matches!(v, Zval::Undef) {
+                                            break Some((
+                                                Zval::Str(PhpStr::new(display.to_vec())),
+                                                v.deref_clone(),
+                                            ));
+                                        }
                                     }
+                                    // Vanished since the entry list was built: skip.
+                                }
+                                PropIterEntry::Hook { name, view } => {
+                                    // `push_hook` already derefs a `&get` return in
+                                    // this value context (`ret_deref`).
+                                    let v = self.run_iter_get_hook(&obj, &name, view, true)?;
+                                    break Some((Zval::Str(PhpStr::new(display.to_vec())), v.deref_clone()));
                                 }
                             }
                         };
@@ -3256,11 +3288,17 @@ impl<'m> Vm<'m> {
                     // live element/property by reference. A plain object binds each
                     // visible property by reference (ObjRefs); an array uses ByRef.
                     let src = self.frames[top].slots[source as usize].deref_clone();
+                    // A by-ref foreach over a lazy object initializes it first
+                    // (PHP 8.4); a proxy then iterates its real instance.
+                    let src = if deref_object(&src).is_some_and(|o| o.borrow().lazy.is_some()) {
+                        self.realize_full(&src)?
+                    } else {
+                        src
+                    };
                     if let Zval::Object(o) = &src {
                         if !self.is_traversable(o.borrow().class_id as usize) {
                             let scope = self.frames[top].class;
-                            let keys = self.object_iter_keys(o, scope);
-                            self.frames[top].iters.push(IterState::ObjRefs { obj: src.clone(), keys, pos: 0 });
+                            self.frames[top].iters.push(IterState::ObjRefs { obj: src.clone(), scope, yielded: Vec::new() });
                             continue;
                         }
                     }
@@ -3269,26 +3307,63 @@ impl<'m> Vm<'m> {
                 }
                 Op::IterNextRef { value, key, end } => {
                     // A plain-object by-ref foreach: bind `$v` to the property's
-                    // storage cell (skipping keys removed since loop start).
+                    // storage cell — or, for a hooked property, to the cell its
+                    // `&get` hook returns (a by-value get hook is a fatal). The
+                    // entry list is recomputed live, like `IterState::ObjVals`.
                     if matches!(self.frames[top].iters.last(), Some(IterState::ObjRefs { .. })) {
                         let bound = loop {
-                            let (obj, keyname) = {
-                                let Some(IterState::ObjRefs { obj, keys, pos }) =
-                                    self.frames[top].iters.last_mut()
+                            let (obj, entry) = {
+                                let Some(IterState::ObjRefs { obj, scope, yielded }) =
+                                    self.frames[top].iters.last()
                                 else {
                                     unreachable!("ObjRefs iterator")
                                 };
-                                if *pos >= keys.len() {
-                                    break None;
-                                }
-                                let k = keys[*pos].clone();
-                                *pos += 1;
-                                (obj.clone(), k)
+                                let Zval::Object(o) = obj else { break None };
+                                let next = self
+                                    .object_iter_entries(o, *scope)
+                                    .into_iter()
+                                    .find(|(d, _)| !yielded.iter().any(|y| y == d));
+                                let Some(next) = next else { break None };
+                                (obj.clone(), next)
                             };
-                            if let Zval::Object(o) = &obj {
-                                if o.borrow().props.get(&keyname).is_some() {
-                                    let cell = prop_ref_cell(o, &keyname);
-                                    break Some((cell, keyname));
+                            let (display, entry) = entry;
+                            if let Some(IterState::ObjRefs { yielded, .. }) =
+                                self.frames[top].iters.last_mut()
+                            {
+                                yielded.push(display.clone());
+                            }
+                            match entry {
+                                PropIterEntry::Slot { key: k } => {
+                                    if let Some(o) = deref_object(&obj) {
+                                        if o.borrow().props.get(&k).is_some() {
+                                            let cell = prop_ref_cell(&o, &k);
+                                            break Some((cell, display));
+                                        }
+                                    }
+                                }
+                                PropIterEntry::Hook { name, view } => {
+                                    let by_ref = self
+                                        .prop_hook_in(view, &name)
+                                        .is_some_and(|f| f.by_ref);
+                                    if !by_ref {
+                                        // A by-value get hook has no addressable
+                                        // storage to alias (PHP 8.4 wording).
+                                        let decl = deref_object(&obj)
+                                            .and_then(|o| prop_info(&self.classes, o.borrow().class_id as usize, &name))
+                                            .map(|pi| pi.declaring_class)
+                                            .unwrap_or(view);
+                                        return Err(PhpError::Error(format!(
+                                            "Cannot create reference to property {}::${}",
+                                            String::from_utf8_lossy(&self.classes[decl].name),
+                                            String::from_utf8_lossy(&name),
+                                        )));
+                                    }
+                                    let v = self.run_iter_get_hook(&obj, &name, view, false)?;
+                                    let cell = match v {
+                                        Zval::Ref(rc) => rc,
+                                        other => Rc::new(RefCell::new(other)),
+                                    };
+                                    break Some((cell, display));
                                 }
                             }
                         };
@@ -5911,6 +5986,36 @@ impl<'m> Vm<'m> {
             // unreachable in practice; drop the write rather than panic.
             return Ok(());
         };
+        // A `set` hook takes precedence over `__set` and direct write (step 50,
+        // mirrors `Op::PropSet`); skipped while the property's own hook is
+        // active (a backing write inside the hook). The hook runs to completion
+        // synchronously — its return is discarded (surfaced to the drive, not
+        // parked in a `ret_cell`, so the bounded run terminates).
+        {
+            let (oid, ocid) = {
+                let b = o.borrow();
+                (b.id, b.class_id as usize)
+            };
+            if !self.hook_guarded(oid, name) {
+                if let Some(func) = self.prop_hook(ocid, name, true) {
+                    let baseline = self.frames.len();
+                    self.push_hook(func, target.clone(), oid, name, Some(value));
+                    self.frames.last_mut().expect("hook frame just pushed").ret_cell = None;
+                    let _ = self.drive_to_return(baseline)?;
+                    return Ok(());
+                }
+                // A virtual hooked property with no set hook is read-only; a
+                // *backed* one without a set hook writes its backing directly
+                // (falls through to the plain write below).
+                if self.is_virtual_hooked(ocid, name) {
+                    return Err(PhpError::Error(format!(
+                        "Property {}::${} is read-only",
+                        String::from_utf8_lossy(&self.classes[ocid].name),
+                        String::from_utf8_lossy(name),
+                    )));
+                }
+            }
+        }
         if let Some((_defc, _midx, oid)) =
             self.magic_applies(&o, name, cur, MagicKind::Set, b"__set")
         {
@@ -9836,15 +9941,21 @@ impl<'m> Vm<'m> {
     /// from outside only `public`, from within the class the `protected`/`private`
     /// ones too. Dynamic properties are public. Insertion order is preserved.
     /// Mirrors `eval::ci_get_object_vars`.
-    /// The property *keys* a `foreach` over a plain (non-Traversable) object yields,
-    /// in iteration order: properties visible from `scope` (public always;
-    /// protected/private per the class hierarchy), declared first in declaration
-    /// order (parent-first, a redeclaration keeping its position), then dynamic ones
-    /// in insertion order. The key set is fixed at loop start; values are read live
-    /// at each step (PHP object foreach has handle semantics, not a value snapshot),
-    /// so a property mutated in the loop body is observed. Mirrors
-    /// `get_object_vars`'s visibility view.
-    fn object_iter_keys(&self, o: &Rc<RefCell<Object>>, scope: Option<ClassId>) -> Vec<Box<[u8]>> {
+    /// The entries a `foreach` over a plain (non-Traversable) object can yield,
+    /// in iteration order, as `(display name, how-to-read)` pairs: declared
+    /// properties first (parent-first declaration order, a redeclaration keeping
+    /// its position), then dynamic ones in insertion order. Visibility follows
+    /// [`resolve_prop_access`] from `scope`. A hooked property with a get hook
+    /// yields a [`PropIterEntry::Hook`] (backed or virtual — the hook runs at
+    /// the step, PHP 8.4); a set-only *virtual* property is unreadable and
+    /// skipped; everything else is a [`PropIterEntry::Slot`] read, skipped when
+    /// absent or uninitialized. Recomputed at each `IterNext`, so the loop
+    /// observes live additions/removals (PHP's property-hash cursor).
+    fn object_iter_entries(
+        &self,
+        o: &Rc<RefCell<Object>>,
+        scope: Option<ClassId>,
+    ) -> Vec<(Box<[u8]>, PropIterEntry)> {
         let cid = o.borrow().class_id as usize;
         let mut chain: Vec<usize> = Vec::new();
         let mut c = Some(cid);
@@ -9862,31 +9973,86 @@ impl<'m> Vm<'m> {
             }
         }
         let b = o.borrow();
-        let mut keys: Vec<Box<[u8]>> = Vec::new();
+        let mut out: Vec<(Box<[u8]>, PropIterEntry)> = Vec::new();
         for name in &order {
             // The scope's view of the declared name (see `resolve_prop_access`):
-            // the resolved storage key, a plain dynamic slot, or skipped. The list
-            // holds *storage* keys — `IterNext` reads live by key and exposes the
-            // unmangled display name.
+            // the resolved storage key, a plain dynamic slot, or skipped.
             let key: Box<[u8]> = match resolve_prop_access(&self.classes, cid, name, scope) {
                 PropAccess::Slot(k) => k.into(),
                 PropAccess::Dynamic => name.clone(),
                 PropAccess::Denied { .. } => continue,
             };
+            // The hook view: the scope's own *private* declaration shadows a
+            // subclass redeclaration (mirrors `resolve_prop_access` case 1);
+            // otherwise the object's flattened (most-derived) table decides.
+            let view = match scope {
+                Some(s)
+                    if prop_info(&self.classes, s, name).is_some_and(|pi| {
+                        pi.visibility == Visibility::Private
+                            && pi.declaring_class == s
+                            && class_is_a(&self.classes, cid, s)
+                    }) =>
+                {
+                    s
+                }
+                _ => cid,
+            };
+            if let Some(h) =
+                self.classes[view].prop_info.get(name.as_ref()).and_then(|pi| pi.hooks.as_ref())
+            {
+                if h.get.is_some() {
+                    out.push((name.clone(), PropIterEntry::Hook { name: name.clone(), view }));
+                    continue;
+                }
+                if !h.backed {
+                    // A set-only virtual property is not readable: skipped.
+                    continue;
+                }
+                // A set-only backed property reads its backing store directly.
+            }
             // Skip a slot that is absent or uninitialised (typed-no-default
             // `Undef`); both are absent from a foreach view.
             if !matches!(b.props.get(&key), None | Some(Zval::Undef)) {
-                keys.push(key);
+                out.push((name.clone(), PropIterEntry::Slot { key }));
             }
         }
         // Dynamic (undeclared) properties, always public, in insertion order.
         // Mangled (private) slots are never dynamic.
         for (name, _) in b.props.iter() {
             if !declared.contains(name) && !name.starts_with(b"\0") {
-                keys.push(name.to_vec().into_boxed_slice());
+                let n: Box<[u8]> = name.to_vec().into_boxed_slice();
+                out.push((n.clone(), PropIterEntry::Slot { key: n }));
             }
         }
-        keys
+        out
+    }
+
+    /// The compiled get hook of property `name` as resolved from class `view`'s
+    /// flattened `prop_info` — like [`Self::prop_hook`], with an explicit start
+    /// class (the scope-private shadow case of `object_iter_entries`).
+    fn prop_hook_in(&self, view: ClassId, name: &[u8]) -> Option<&'m Func> {
+        self.classes[view].prop_info.get(name)?.hooks.as_ref()?.get.as_ref()
+    }
+
+    /// Run property `name`'s get hook (resolved from `view`) on `obj`, driving
+    /// the hook frame to its return synchronously. `deref = true` keeps the
+    /// by-value contract of a foreach value step; by-ref binding passes `false`
+    /// to receive the cell a `&get` hook returns.
+    fn run_iter_get_hook(
+        &mut self,
+        obj: &Zval,
+        name: &[u8],
+        view: ClassId,
+        deref: bool,
+    ) -> Result<Zval, PhpError> {
+        let Some(func) = self.prop_hook_in(view, name) else { return Ok(Zval::Null) };
+        let oid = deref_object(obj).map(|o| o.borrow().id).unwrap_or(0);
+        let baseline = self.frames.len();
+        self.push_hook(func, obj.clone(), oid, name, None);
+        if !deref {
+            self.frames.last_mut().expect("hook frame just pushed").ret_deref = false;
+        }
+        self.drive_to_return(baseline)
     }
 
     fn ho_get_object_vars(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {

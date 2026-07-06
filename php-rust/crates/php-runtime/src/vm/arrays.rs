@@ -178,7 +178,12 @@ pub(super) fn field_write(
                     // enforces visibility. A declared accessible slot is written
                     // directly below — PHP never invokes `__set` for an accessible
                     // property. Enum cases keep their dedicated immutability error.
-                    if rest.is_empty() && !is_enum && !fs.prop_is_declared_slot(cid, name) {
+                    // A *hooked* property (PHP 8.4) also defers: its set hook (or
+                    // the hooked write rules) must run, not a raw storage write.
+                    if rest.is_empty()
+                        && !is_enum
+                        && (!fs.prop_is_declared_slot(cid, name) || fs.prop_hooked(cid, name))
+                    {
                         *aa = Some(AaOp::MagicSet(AaMagicSet {
                             obj: Zval::Object(o),
                             name: name.to_vec(),

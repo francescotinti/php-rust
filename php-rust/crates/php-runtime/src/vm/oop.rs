@@ -332,6 +332,14 @@ impl FieldScope<'_> {
         matches!(resolve_prop_access(self.classes, ocid, name, self.scope), PropAccess::Slot(_))
     }
 
+    /// Whether `name` is a *hooked* property on an instance of `ocid` (PHP 8.4).
+    /// A leaf write on one must defer to the VM caller so the set hook (or the
+    /// hooked-property write rules) dispatches — the walker itself only writes
+    /// raw storage.
+    pub(super) fn prop_hooked(&self, ocid: ClassId, name: &[u8]) -> bool {
+        prop_info(self.classes, ocid, name).is_some_and(|pi| pi.hooks.is_some())
+    }
+
     pub(super) fn prop_key<'n>(&self, ocid: ClassId, name: &'n [u8]) -> std::borrow::Cow<'n, [u8]> {
         match resolve_prop_access(self.classes, ocid, name, self.scope) {
             PropAccess::Slot(k) => std::borrow::Cow::Owned(k),
