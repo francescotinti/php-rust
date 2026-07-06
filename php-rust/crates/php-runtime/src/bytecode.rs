@@ -1344,6 +1344,10 @@ pub struct PropHooks {
 pub struct PropInfo {
     /// Declared visibility (subsumes `own_prop_vis`).
     pub visibility: Visibility,
+    /// Asymmetric *write* visibility (`public private(set)`, PHP 8.4); `None`
+    /// when the set side matches `visibility`. Read where reference semantics
+    /// change (`$r = &$o->prop` from a non-writing scope binds a copy).
+    pub set_visibility: Option<Visibility>,
     /// The most-derived class that (re)declares this property — the class named in
     /// access / readonly / type error messages and by `ReflectionProperty::$class`.
     pub declaring_class: ClassId,

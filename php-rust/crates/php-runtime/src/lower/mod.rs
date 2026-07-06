@@ -5192,6 +5192,20 @@ fn visibility_of<'a>(modifiers: impl Iterator<Item = &'a Modifier<'a>>) -> Visib
     Visibility::Public
 }
 
+/// The asymmetric *write* visibility declared by a modifier list
+/// (`public private(set) $p`, PHP 8.4), or `None` when the set side is not
+/// narrowed. `public(set)` is the explicit default and also maps to `None`.
+fn set_visibility_of<'a>(modifiers: impl Iterator<Item = &'a Modifier<'a>>) -> Option<Visibility> {
+    for m in modifiers {
+        match m {
+            Modifier::ProtectedSet(_) => return Some(Visibility::Protected),
+            Modifier::PrivateSet(_) => return Some(Visibility::Private),
+            _ => {}
+        }
+    }
+    None
+}
+
 /// Build the PHP link-time fatal for a concrete class that leaves abstract
 /// methods unimplemented (step 21-4, D-21.11). Singular/plural and the
 /// `Class::method` list match PHP's wording byte-for-byte.

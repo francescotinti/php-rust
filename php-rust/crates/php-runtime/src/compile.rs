@@ -738,6 +738,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
                 p.name.clone(),
                 PropInfo {
                     visibility: p.visibility,
+                    set_visibility: p.set_visibility,
                     declaring_class: x,
                     readonly: p.readonly,
                     type_hint: p.hint.clone(),

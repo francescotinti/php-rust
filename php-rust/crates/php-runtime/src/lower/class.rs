@@ -758,6 +758,60 @@ impl<'f> Lowerer<'f> {
             static_props.extend(t_static);
             consts.extend(t_consts);
         }
+        // By-ref property-hook validations (PHP 8.4, `zend_inheritance.c` wording
+        // verbatim). 1: a *backed* property (own backing, or backing inherited
+        // from an ancestor's plain/backed declaration) whose get hook returns by
+        // reference must not also declare a set hook — every write is expected
+        // to flow through the reference the get hook hands out.
+        for p in &props {
+            if p.get_hook.as_ref().is_some_and(|g| g.by_ref)
+                && p.set_hook.is_some()
+                && (p.backed || self.ancestor_prop_backed(parent, &p.name))
+            {
+                return Err(LowerError::Fatal {
+                    message: format!(
+                        "Get hook of backed property {}::{} with set hook may not return by reference",
+                        String::from_utf8_lossy(&name),
+                        String::from_utf8_lossy(&p.name),
+                    ),
+                    line,
+                });
+            }
+        }
+        // 2: an interface's `&get` contract must be implemented by a by-ref get
+        // hook. A plain property satisfies it too (its storage is addressable),
+        // and the reverse (a by-value `get;` implemented by `&get`) is fine.
+        let mut ifq: Vec<usize> = interfaces.clone();
+        let mut if_seen: std::collections::HashSet<usize> = ifq.iter().copied().collect();
+        while let Some(i) = ifq.pop() {
+            let Some(icd) = self.classes.get(i) else { continue };
+            for &ii in &icd.interfaces {
+                if if_seen.insert(ii) {
+                    ifq.push(ii);
+                }
+            }
+            for ip in &icd.props {
+                if !ip.abstract_hooks.iter().any(|h| h.as_ref() == b"&get") {
+                    continue;
+                }
+                let val_get = props
+                    .iter()
+                    .find(|p| p.name == ip.name)
+                    .and_then(|p| p.get_hook.as_ref())
+                    .is_some_and(|g| !g.by_ref);
+                if val_get {
+                    return Err(LowerError::Fatal {
+                        message: format!(
+                            "Declaration of {c}::${p}::get() must be compatible with & {i}::${p}::get()",
+                            c = String::from_utf8_lossy(&name),
+                            p = String::from_utf8_lossy(&ip.name),
+                            i = String::from_utf8_lossy(&icd.name),
+                        ),
+                        line,
+                    });
+                }
+            }
+        }
         // A `final` method in an ancestor cannot be overridden (PHP fatal). Check
         // each method this class defines against the most-derived ancestor that
         // declares the same name.
@@ -785,7 +839,9 @@ impl<'f> Lowerer<'f> {
                     let mut v = b"$".to_vec();
                     v.extend_from_slice(&p.name);
                     v.extend_from_slice(b"::");
-                    v.extend_from_slice(h);
+                    // A by-ref abstract get is stored as `&get`; the contract
+                    // name stays `$prop::get`.
+                    v.extend_from_slice(h.strip_prefix(b"&").unwrap_or(h));
                     v.into_boxed_slice()
                 })
             })
@@ -1117,7 +1173,8 @@ impl<'f> Lowerer<'f> {
                 let reflect_type = h.hint.as_ref().and_then(|hh| lower_reflect_type(self, hh));
                 let attributes = self.lower_attributes(&h.attribute_lists, line)?;
                 out.push(PropDecl {
-                    name, visibility, default, get_hook, set_hook, backed, readonly, hint, abstract_hooks, attributes, reflect_type,
+                    name, visibility, set_visibility: set_visibility_of(h.modifiers.iter()),
+                    default, get_hook, set_hook, backed, readonly, hint, abstract_hooks, attributes, reflect_type,
                 });
                 return Ok(());
             }
@@ -1146,6 +1203,7 @@ impl<'f> Lowerer<'f> {
                 out.push(PropDecl {
                     name,
                     visibility,
+                    set_visibility: set_visibility_of(plain.modifiers.iter()),
                     default,
                     get_hook: None,
                     set_hook: None,
@@ -1176,6 +1234,24 @@ impl<'f> Lowerer<'f> {
         Some(h)
     }
 
+    /// Whether an ancestor's declaration of property `name` supplies backing
+    /// storage: a plain declaration, or a backed hooked one (its own hooks touch
+    /// `$this->name`). A hooked redeclaration of such a property stays *backed*
+    /// (PHP 8.4 inheritance) — the by-ref get-hook validation needs this before
+    /// `compile_class` flattens the chain. The nearest ancestor declaration
+    /// decides; a forward-declared (not yet lowered) parent reports `false`.
+    fn ancestor_prop_backed(&self, parent: Option<usize>, name: &[u8]) -> bool {
+        let mut c = parent;
+        while let Some(ci) = c {
+            let Some(cd) = self.classes.get(ci) else { return false };
+            if let Some(p) = cd.props.iter().find(|p| p.name.as_ref() == name) {
+                return p.backed;
+            }
+            c = cd.parent;
+        }
+        false
+    }
+
     /// Lower a property's `{ get … set … }` hook list (PHP 8.4, step 50) into an
     /// optional `get` and `set` hook (each an [`FnDecl`]), plus whether any hook
     /// accesses the property's own backing (`$this-><name>`), which makes the
@@ -1204,18 +1280,24 @@ impl<'f> Lowerer<'f> {
                     line,
                 });
             }
-            // `&get`/`&set` (by-reference) hooks are out of this step's scope.
-            if hook.ampersand.is_some() {
-                return Err(LowerError::Unsupported { what: "by-reference property hook", line });
-            }
+            // `&get` returns by reference (PHP 8.4): the hook body compiles like
+            // a `function &f()`. A by-ref marker on `set` is tolerated (Zend only
+            // deprecates the useless by-ref return of a void hook).
+            let by_ref = hook.ampersand.is_some();
             let is_set = hook.name.value.eq_ignore_ascii_case(b"set");
             // An abstract hook (`get;` / `set;`) is a contract with no body: record
-            // its name for abstract-method enforcement and emit no `FnDecl`.
+            // its name for abstract-method enforcement and emit no `FnDecl`. A
+            // by-ref abstract get is recorded as `&get` (the variance check reads
+            // the marker; consumers building `$prop::get` names strip it).
             if matches!(hook.body, PropertyHookBody::Abstract(_)) {
-                abstract_hooks.push((if is_set { &b"set"[..] } else { &b"get"[..] }).into());
+                abstract_hooks.push(match (is_set, by_ref) {
+                    (true, _) => (&b"set"[..]).into(),
+                    (false, true) => (&b"&get"[..]).into(),
+                    (false, false) => (&b"get"[..]).into(),
+                });
                 continue;
             }
-            let (fd, hook_backed) = self.lower_one_hook(hook, prop_name, is_set, line)?;
+            let (fd, hook_backed) = self.lower_one_hook(hook, prop_name, is_set, by_ref, line)?;
             backed |= hook_backed;
             if is_set {
                 set_hook = Some(fd);
@@ -1237,8 +1319,13 @@ impl<'f> Lowerer<'f> {
         hook: &PropertyHook,
         prop_name: &[u8],
         is_set: bool,
+        by_ref: bool,
         line: Line,
     ) -> Result<(FnDecl, bool), LowerError> {
+        // Only a get hook meaningfully returns by reference (`&get`); the body
+        // then compiles like a `function &f()` (a `return <lvalue>` yields the
+        // place's shared cell). `&set` keeps by-value lowering.
+        let by_ref = by_ref && !is_set;
         let body_ast = match &hook.body {
             // `abstract`/interface hooks (`{ get; }`) declare a contract only.
             PropertyHookBody::Abstract(_) => {
@@ -1259,7 +1346,7 @@ impl<'f> Lowerer<'f> {
         // Fresh local overlay + backing-access tracking for this hook body.
         let saved_locals = self.locals.replace(Scope::default());
         let saved_tag = std::mem::replace(&mut self.after_closing_tag, false);
-        let saved_by_ref = std::mem::replace(&mut self.fn_by_ref, false);
+        let saved_by_ref = std::mem::replace(&mut self.fn_by_ref, by_ref);
         let saved_saw_yield = std::mem::replace(&mut self.fn_saw_yield, false);
         let saved_fn = self.cur_function.replace(hook_name.clone());
         let saved_hook_prop = self.hook_prop.replace(prop_name.into());
@@ -1307,6 +1394,14 @@ impl<'f> Lowerer<'f> {
             };
             let body = match body_ast {
                 PropertyHookConcreteBody::Block(b) => self.lower_stmts(b.statements.as_slice())?,
+                // `&get => <lvalue>` desugars like `return <lvalue>;` in a
+                // `function &f()`: a reference to the place (mirrors the
+                // `Statement::Return` arm in `lower_stmt`).
+                PropertyHookConcreteBody::Expression(e)
+                    if !is_set && self.fn_by_ref && is_returnable_lvalue(e.expression) =>
+                {
+                    vec![Stmt { line, kind: StmtKind::ReturnRef(self.lower_place(e.expression, line)?) }]
+                }
                 PropertyHookConcreteBody::Expression(e) => {
                     let expr = self.lower_expr(e.expression)?;
                     if is_set {
@@ -1355,7 +1450,7 @@ impl<'f> Lowerer<'f> {
                 body,
                 is_generator,
                 slots: local_scope.slots,
-                by_ref: false,
+                by_ref,
                 ret_hint: None,
                 ret_reflect_type: None,
                 defining_class: None,
@@ -1449,6 +1544,9 @@ impl<'f> Lowerer<'f> {
             props.push(PropDecl {
                 name: p.name,
                 visibility: p.visibility,
+                // Promoted params do not carry asymmetric set visibility here
+                // (a `private(set)` promotion is not modelled yet).
+                set_visibility: None,
                 default: None,
                 get_hook: p.get_hook,
                 set_hook: p.set_hook,

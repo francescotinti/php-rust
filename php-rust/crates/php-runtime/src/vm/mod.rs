@@ -2886,6 +2886,26 @@ impl<'m> Vm<'m> {
                     // REF-4: navigate to the place's leaf, promote it to a shared
                     // cell, and push a reference to it. Keys (for `Index` steps)
                     // were pushed in source order and sit on top of the stack.
+                    // A `&get` hook makes the property addressable: the reference
+                    // the hook returns is the path's root (PHP 8.4).
+                    if let Some(root) = self.byref_hook_root(base, top, &steps)? {
+                        let keys = self.pop_field_keys(top, &steps);
+                        let cell = if steps.len() == 1 {
+                            root
+                        } else {
+                            let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
+                            let mut root_val = Zval::Ref(root);
+                            field_cell(&mut root_val, &steps[1..], &mut keys.into_iter(), fs)
+                        };
+                        self.frames[top].stack.push(Zval::Ref(cell));
+                        continue;
+                    }
+                    // A property whose set visibility excludes this scope hands
+                    // out a reference to a *copy* (PHP 8.4 asymmetric visibility).
+                    if let Some(cell) = self.asym_set_ref_copy(base, top, &steps) {
+                        self.frames[top].stack.push(Zval::Ref(cell));
+                        continue;
+                    }
                     // Taking a reference *to* a hooked property is indirect modification.
                     self.reject_indirect_hook(base, top, &steps)?;
                     let keys = self.pop_field_keys(top, &steps);
@@ -2905,6 +2925,27 @@ impl<'m> Vm<'m> {
                     // and push the aliased value (the assignment's result).
                     // Binding a reference *into* a hooked property is forbidden.
                     if self.field_starts_at_hook(base, top, &steps) {
+                        if steps.len() > 1 {
+                            // Navigating *into* the property: a `&get` hook's cell
+                            // is an addressable root — bind the leaf inside it.
+                            if let Some(root) = self.byref_hook_root(base, top, &steps)? {
+                                let top_val = self.frames[top].stack.pop().expect("BindRefTo value");
+                                let cell = match top_val {
+                                    Zval::Ref(rc) => rc,
+                                    other => Rc::new(RefCell::new(other)),
+                                };
+                                let value = cell.borrow().clone();
+                                let keys = self.pop_field_keys(top, &steps);
+                                self.field_set_in_root(root, top, &steps[1..], keys, Zval::Ref(cell), true)?;
+                                self.frames[top].stack.push(value);
+                                continue;
+                            }
+                        } else {
+                            // The write fetch of the rebind target runs a `&get`
+                            // hook first (observable side effects, bug007) — then
+                            // PHP still rejects rebinding the property slot.
+                            let _ = self.byref_hook_root(base, top, &steps)?;
+                        }
                         return Err(PhpError::Error(
                             "Cannot assign by reference to overloaded object".to_string(),
                         ));
@@ -2931,6 +2972,27 @@ impl<'m> Vm<'m> {
                     // is only known now. A non-`Ref` source means the callee did not
                     // return by reference — raise the notice, then bind a copy.
                     if self.field_starts_at_hook(base, top, &steps) {
+                        if steps.len() == 1 {
+                            // Run a `&get` hook's observable side effects before
+                            // rejecting the rebind (mirrors `Op::BindRefTo`).
+                            let _ = self.byref_hook_root(base, top, &steps)?;
+                        } else if let Some(root) = self.byref_hook_root(base, top, &steps)? {
+                            let top_val = self.frames[top].stack.pop().expect("BindRefToChecked value");
+                            let cell = match top_val {
+                                Zval::Ref(rc) => rc,
+                                other => {
+                                    self.diags.push(Diag::Notice(
+                                        "Only variables should be assigned by reference".to_string(),
+                                    ));
+                                    Rc::new(RefCell::new(other))
+                                }
+                            };
+                            let value = cell.borrow().clone();
+                            let keys = self.pop_field_keys(top, &steps);
+                            self.field_set_in_root(root, top, &steps[1..], keys, Zval::Ref(cell), true)?;
+                            self.frames[top].stack.push(value);
+                            continue;
+                        }
                         return Err(PhpError::Error(
                             "Cannot assign by reference to overloaded object".to_string(),
                         ));
@@ -5147,6 +5209,15 @@ impl<'m> Vm<'m> {
                     self.frames[top].stack.push(if pre { newv } else { old });
                 }
                 Op::FieldAssign { base, steps } => {
+                    // A path starting at a `&get` hooked property writes through
+                    // the reference the hook returns (one hook run, no set hook).
+                    if let Some(root) = self.byref_hook_root(base, top, &steps)? {
+                        let value = self.frames[top].stack.pop().expect("FieldAssign value");
+                        let keys = self.pop_field_keys(top, &steps);
+                        self.field_set_in_root(root, top, &steps[1..], keys, value.clone(), false)?;
+                        self.frames[top].stack.push(value);
+                        continue;
+                    }
                     self.reject_indirect_hook(base, top, &steps)?;
                     let value = self.frames[top].stack.pop().expect("FieldAssign value");
                     let keys = self.pop_field_keys(top, &steps);
@@ -5154,6 +5225,19 @@ impl<'m> Vm<'m> {
                     self.frames[top].stack.push(value);
                 }
                 Op::FieldAssignOp { base, steps, op } => {
+                    if let Some(root) = self.byref_hook_root(base, top, &steps)? {
+                        let rhs = self.frames[top].stack.pop().expect("FieldAssignOp rhs");
+                        let keys = self.pop_field_keys(top, &steps);
+                        let old = {
+                            let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
+                            field_get(&Zval::Ref(Rc::clone(&root)), &steps[1..], &mut keys.clone().into_iter(), fs)
+                                .unwrap_or(Zval::Null)
+                        };
+                        let result = apply_binop(op, &old, &rhs, &mut self.diags)?;
+                        self.field_set_in_root(root, top, &steps[1..], keys, result.clone(), false)?;
+                        self.frames[top].stack.push(result);
+                        continue;
+                    }
                     self.reject_indirect_hook(base, top, &steps)?;
                     let rhs = self.frames[top].stack.pop().expect("FieldAssignOp rhs");
                     let keys = self.pop_field_keys(top, &steps);
@@ -5163,6 +5247,23 @@ impl<'m> Vm<'m> {
                     self.frames[top].stack.push(result);
                 }
                 Op::FieldIncDec { base, steps, inc, pre } => {
+                    if let Some(root) = self.byref_hook_root(base, top, &steps)? {
+                        let keys = self.pop_field_keys(top, &steps);
+                        let old = {
+                            let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
+                            field_get(&Zval::Ref(Rc::clone(&root)), &steps[1..], &mut keys.clone().into_iter(), fs)
+                                .unwrap_or(Zval::Null)
+                        };
+                        let mut newv = old.clone();
+                        if inc {
+                            ops::increment(&mut newv, &mut self.diags)?;
+                        } else {
+                            ops::decrement(&mut newv, &mut self.diags)?;
+                        }
+                        self.field_set_in_root(root, top, &steps[1..], keys, newv.clone(), false)?;
+                        self.frames[top].stack.push(if pre { newv } else { old });
+                        continue;
+                    }
                     self.reject_indirect_hook(base, top, &steps)?;
                     let keys = self.pop_field_keys(top, &steps);
                     let old = self.field_value(base, top, &steps, keys.clone()).unwrap_or(Zval::Null);
@@ -14886,6 +14987,12 @@ impl<'m> Vm<'m> {
             // A `set` hook's own return value is discarded (like `__set`).
             frame.ret_cell = Some(Rc::new(RefCell::new(Zval::Null)));
         }
+        // A `&get` hook returns a `Zval::Ref`; this implicit dispatch serves a
+        // *value* context (a plain property read), so the caller needs the
+        // dereferenced value, not the cell. Place contexts (`&$o->prop`,
+        // `$o->prop[] = v`) run the hook via `byref_hook_root`, which clears
+        // the flag to keep the cell.
+        frame.ret_deref = func.by_ref && !is_set;
         let key = (oid, MagicKind::Hook, name.to_vec());
         // Only the frame that first guards `(oid, name)` releases it on `Ret`. A
         // nested explicit hook call re-entering the same property (a parent hook
@@ -14930,6 +15037,9 @@ impl<'m> Vm<'m> {
         if is_set {
             frame.ret_cell = Some(Rc::new(RefCell::new(Zval::Null)));
         }
+        // Explicit `parent::$name::get()` is a value context: deref a `&get`
+        // hook's returned cell (mirrors `push_hook`).
+        frame.ret_deref = func.by_ref && !is_set;
         let key = (oid, MagicKind::Hook, name.to_vec());
         if self.magic_guard.insert(key.clone()) {
             frame.guard_release = Some(key);
@@ -14943,7 +15053,8 @@ impl<'m> Vm<'m> {
     /// with a write fetch). Returns the `(class name, prop name)` to name in the
     /// error, or `None` when the path is allowed: the property is not hooked, or
     /// its current value is an object (object handles stay mutable). A `&get`
-    /// by-reference hook would also allow it, but those are not yet supported.
+    /// by-reference hook also allows it — those paths are intercepted upstream
+    /// by [`Self::byref_hook_root`] before this check runs.
     fn indirect_hook_target(
         &self,
         base: FieldBase,
@@ -15012,6 +15123,92 @@ impl<'m> Vm<'m> {
         }
         let cid = o.borrow().class_id as usize;
         self.prop_hook(cid, name, false).is_some() || self.prop_hook(cid, name, true).is_some()
+    }
+
+    /// `$r = &$o->prop` on a property whose asymmetric *set* visibility
+    /// (`public private(set)`, PHP 8.4) excludes the current scope binds a
+    /// reference to a **copy** — the storage must not become writable through
+    /// the alias (`Zend/tests/asymmetric_visibility/object_reference.phpt`).
+    /// Returns the detached cell, or `None` when the path is not a single
+    /// property step or the scope may write the property.
+    fn asym_set_ref_copy(
+        &self,
+        base: FieldBase,
+        top: usize,
+        steps: &[FieldStep],
+    ) -> Option<Rc<RefCell<Zval>>> {
+        let [FieldStep::Prop(name)] = steps else { return None };
+        let base_val = match base {
+            FieldBase::Local(s) => self.frames[top].slots.get(s as usize),
+            FieldBase::Global(s) => self.frames[0].slots.get(s as usize),
+            FieldBase::Superglobal(i) => self.superglobals.get(i as usize),
+            FieldBase::This => self.frames[top].this.as_ref(),
+        };
+        let o = base_val.and_then(deref_object)?;
+        let cid = o.borrow().class_id as usize;
+        let pi = prop_info(&self.classes, cid, name)?;
+        let sv = pi.set_visibility?;
+        if visible_from(&self.classes, self.frames[top].class, sv, pi.declaring_class) {
+            return None;
+        }
+        let key = self.prop_storage_key(cid, name, self.frames[top].class);
+        let val = o.borrow().props.get(&key).map(|v| v.deref_clone()).unwrap_or(Zval::Null);
+        Some(Rc::new(RefCell::new(val)))
+    }
+
+    /// If a write/ref path starts at a property whose get hook returns **by
+    /// reference** (`&get`, PHP 8.4), run the hook and hand back the cell it
+    /// returned: the property becomes addressable and the cell is the root the
+    /// rest of the path drills into (`$r = &$o->prop`, `$o->prop[] = v`,
+    /// `sort($o->prop)`). `None` when the path does not start at such a
+    /// property (or the hook guard is active — the hook's own backing access).
+    /// The hook frame is driven to its return synchronously; its `ret_deref`
+    /// is cleared because this dispatch serves a *place* context. A hook that
+    /// returns a non-reference yields a detached cell (writes are lost, like
+    /// PHP's temporary).
+    fn byref_hook_root(
+        &mut self,
+        base: FieldBase,
+        top: usize,
+        steps: &[FieldStep],
+    ) -> Result<Option<Rc<RefCell<Zval>>>, PhpError> {
+        let name: Box<[u8]> = match steps.first() {
+            Some(FieldStep::Prop(n)) => n.clone(),
+            _ => return Ok(None),
+        };
+        let base_val = match base {
+            FieldBase::Local(s) => self.frames[top].slots.get(s as usize),
+            FieldBase::Global(s) => self.frames[0].slots.get(s as usize),
+            FieldBase::Superglobal(i) => self.superglobals.get(i as usize),
+            FieldBase::This => self.frames[top].this.as_ref(),
+        };
+        let Some(target) = base_val.map(|v| v.deref_clone()) else { return Ok(None) };
+        if !matches!(target, Zval::Object(_)) {
+            return Ok(None);
+        }
+        // A write fetch of a lazy object's property initializes it first (PHP
+        // 8.4); an initialized proxy forwards to its real instance.
+        self.trigger_lazy(&target, &name)?;
+        let target = self.proxy_redirect(target);
+        let Some(o) = deref_object(&target) else { return Ok(None) };
+        let (oid, cid) = {
+            let b = o.borrow();
+            (b.id, b.class_id as usize)
+        };
+        if self.hook_guarded(oid, &name) {
+            return Ok(None);
+        }
+        let Some(func) = self.prop_hook(cid, &name, false).filter(|f| f.by_ref) else {
+            return Ok(None);
+        };
+        let baseline = self.frames.len();
+        self.push_hook(func, target, oid, &name, None);
+        self.frames.last_mut().expect("hook frame just pushed").ret_deref = false;
+        let v = self.drive_to_return(baseline)?;
+        Ok(Some(match v {
+            Zval::Ref(rc) => rc,
+            other => Rc::new(RefCell::new(other)),
+        }))
     }
 
 }

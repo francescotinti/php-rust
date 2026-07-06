@@ -761,7 +761,16 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
                     out.extend_from_slice(obj.info.type_of(k).or_else(|| obj.info.type_of(disp)).unwrap_or(b"mixed"));
                     out.extend_from_slice(b")\n");
                 } else {
-                    dump(out, val, indent + 2, seen);
+                    // A property slot holding a reference with a live alias is
+                    // marked `&` (`$r = &$obj->p`), like the array-element arm;
+                    // a sole-holder reference prints as a plain value.
+                    match val {
+                        Zval::Ref(cell) if std::rc::Rc::strong_count(cell) >= 2 => {
+                            out.push(b'&');
+                            dump(out, &cell.borrow(), indent + 2, seen);
+                        }
+                        _ => dump(out, val, indent + 2, seen),
+                    }
                 }
             }
             drop(obj);

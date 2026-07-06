@@ -316,6 +316,11 @@ pub struct PropDecl {
     /// Property name, without the leading `$`.
     pub name: Box<[u8]>,
     pub visibility: Visibility,
+    /// Asymmetric *write* visibility (`public private(set) $p`, PHP 8.4).
+    /// `None` when the set side matches `visibility`. Enforced today only where
+    /// it changes reference semantics (`$r = &$o->prop` binds a copy when the
+    /// scope cannot write the property).
+    pub set_visibility: Option<Visibility>,
     pub default: Option<Expr>,
     /// Declared type (`public int $x`), enforced on write (coerced under weak
     /// typing, `TypeError` otherwise). `None` for an untyped property. A literal

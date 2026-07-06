@@ -725,8 +725,45 @@ impl<'m> Vm<'m> {
             self.gc_note(d);
         }
         r?;
-        // Pending ArrayAccess dispatches (possibly chained through Descend:
-        // `$this->coll[0]->foo = 1`, `$a->x[0][1]->y = v`, ...).
+        self.drain_aa_pending(aa, top, rebind)
+    }
+
+    /// Write `value` at `steps` inside `root` — an already-resolved path root,
+    /// the cell a by-ref (`&get`) property hook returned — with the same
+    /// deferred ArrayAccess dispatch as [`Self::field_set_mode`]. The property
+    /// hook (and any set hook) is NOT consulted again: PHP writes through the
+    /// reference (a `$o->hooked[] = v` runs `&get` once and no `set`).
+    pub(super) fn field_set_in_root(
+        &mut self,
+        root: Rc<RefCell<Zval>>,
+        top: usize,
+        steps: &[FieldStep],
+        keys: Vec<Zval>,
+        value: Zval,
+        rebind: bool,
+    ) -> Result<(), PhpError> {
+        let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
+        let mut root_val = Zval::Ref(root);
+        let mut dropped = Vec::new();
+        let mut aa = None;
+        let r = field_write(&mut root_val, steps, &mut keys.into_iter(), fs, value, &mut self.diags, &mut dropped, &mut aa, rebind);
+        for d in &dropped {
+            self.gc_note(d);
+        }
+        r?;
+        self.drain_aa_pending(aa, top, rebind)
+    }
+
+    /// Run the pending ArrayAccess / magic-set dispatches a [`field_write`]
+    /// parked (possibly chained through `Descend`: `$this->coll[0]->foo = 1`,
+    /// `$a->x[0][1]->y = v`, …). Extracted from [`Self::field_set_mode`] so
+    /// hook-rooted writes ([`Self::field_set_in_root`]) share it.
+    fn drain_aa_pending(
+        &mut self,
+        aa: Option<AaOp>,
+        top: usize,
+        rebind: bool,
+    ) -> Result<(), PhpError> {
         let mut pending = aa;
         while let Some(op) = pending.take() {
             // A magic / dynamic property write (`$this->e->foo = v`) needs no
