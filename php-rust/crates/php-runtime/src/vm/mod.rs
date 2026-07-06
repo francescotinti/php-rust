@@ -5036,6 +5036,41 @@ impl<'m> Vm<'m> {
                     *cell.borrow_mut() = newv.clone();
                     self.frames[top].stack.push(if pre { newv } else { old });
                 }
+                Op::StaticPropGetDynName => {
+                    // [classRef, name]: peek both so a scheduled init thunk can
+                    // re-run this op with its operands intact (PAR).
+                    let n = self.frames[top].stack.len();
+                    let nameval = self.frames[top].stack[n - 1].clone();
+                    let name: Box<[u8]> =
+                        convert::to_zstr_cast(&nameval, &mut self.diags).as_bytes().to_vec().into();
+                    let classval = self.frames[top].stack[n - 2].clone();
+                    let cid = self.resolve_dynamic_class(&classval)?;
+                    let cell = match self.ensure_static(ClassTarget::Class(cid), &name, top, ip)? {
+                        Some(c) => c,
+                        None => continue,
+                    };
+                    self.frames[top].stack.pop(); // name
+                    self.frames[top].stack.pop(); // class
+                    let v = cell.borrow().deref_clone();
+                    self.frames[top].stack.push(v);
+                }
+                Op::StaticPropSetDynName => {
+                    let n = self.frames[top].stack.len();
+                    let nameval = self.frames[top].stack[n - 1].clone();
+                    let name: Box<[u8]> =
+                        convert::to_zstr_cast(&nameval, &mut self.diags).as_bytes().to_vec().into();
+                    let classval = self.frames[top].stack[n - 2].clone();
+                    let cid = self.resolve_dynamic_class(&classval)?;
+                    let cell = match self.ensure_static(ClassTarget::Class(cid), &name, top, ip)? {
+                        Some(c) => c,
+                        None => continue,
+                    };
+                    self.frames[top].stack.pop(); // name
+                    self.frames[top].stack.pop(); // class
+                    let value = self.frames[top].stack.pop().expect("StaticPropSetDynName value");
+                    *cell.borrow_mut() = value.clone();
+                    self.frames[top].stack.push(value);
+                }
                 Op::StaticPropGetDynamic { name } => {
                     // The class reference is on top; peek it so a scheduled init
                     // thunk can re-run this op without losing it (PAR).

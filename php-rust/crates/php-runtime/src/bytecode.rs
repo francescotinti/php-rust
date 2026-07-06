@@ -794,6 +794,13 @@ pub enum Op {
     /// the method name is a runtime value on top of the stack. Keeps forwarding
     /// semantics (`$this` / LSB) like [`Op::StaticCall`]; only the method is dynamic.
     StaticCallTargetDynamicMethod { target: ClassTarget, forwarding: bool, argc: u32 },
+    /// `[classRef, name] -> [value]` — `C::$$x` / `C::${expr}` read: both the
+    /// class reference and the property NAME are runtime values. Operands are
+    /// peeked (popped only on success) so a scheduled static-init thunk can
+    /// re-run the op, like [`Op::StaticPropGetDynamic`].
+    StaticPropGetDynName,
+    /// `[rhs, classRef, name] -> [rhs]` — `C::$$x = rhs` with a runtime name.
+    StaticPropSetDynName,
     /// `[classRef, argsArray, method] -> [ret]` — `$cls::$m(...)` with named or
     /// spread arguments: the args ride a runtime array (string keys = named,
     /// spreads flattened), the class ref and method name are runtime values.

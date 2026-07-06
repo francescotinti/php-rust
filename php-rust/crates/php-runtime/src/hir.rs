@@ -798,6 +798,10 @@ pub enum ExprKind {
     VarDynAssign { name: Box<Expr>, rhs: Box<Expr> },
     /// `C::{$expr}` (PHP 8.3): the class-constant NAME is a runtime value.
     ClassConstDyn { class: ClassRef, name: Box<Expr> },
+    /// `C::$$x` / `C::${expr}` read: the static-property NAME is a runtime value.
+    StaticPropDyn { class: ClassRef, name: Box<Expr> },
+    /// `C::$$x = rhs`: the write side of the dynamic static-property name.
+    StaticPropDynAssign { class: ClassRef, name: Box<Expr>, rhs: Box<Expr> },
 
     /// Binary op with eager left-then-right operand evaluation, dispatched to
     /// `php_types::ops` by the evaluator. Excludes short-circuit and coalesce.

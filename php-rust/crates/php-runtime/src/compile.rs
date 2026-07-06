@@ -2425,6 +2425,19 @@ impl<'a> FnCompiler<'a> {
                 self.expr(name)?;
                 self.emit(Op::ClassConstDynamic);
             }
+            ExprKind::StaticPropDyn { class, name } => {
+                self.push_class_value(class)?;
+                self.expr(name)?;
+                self.emit(Op::StaticPropGetDynName);
+            }
+            ExprKind::StaticPropDynAssign { class, name, rhs } => {
+                // rhs first, so the class+name pair sits on top for the
+                // init-thunk re-run (mirrors StaticPropSetDynamic).
+                self.expr(rhs)?;
+                self.push_class_value(class)?;
+                self.expr(name)?;
+                self.emit(Op::StaticPropSetDynName);
+            }
             ExprKind::StaticProp { class, name } => {
                 if self.is_runtime_class(class) {
                     self.push_class_value(class)?;
@@ -5140,6 +5153,8 @@ fn expr_name(k: &ExprKind) -> String {
         ExprKind::VarDyn(_) => "VarDyn",
         ExprKind::VarDynAssign { .. } => "VarDynAssign",
         ExprKind::ClassConstDyn { .. } => "ClassConstDyn",
+        ExprKind::StaticPropDyn { .. } => "StaticPropDyn",
+        ExprKind::StaticPropDynAssign { .. } => "StaticPropDynAssign",
         ExprKind::GlobalVar(_) => "GlobalVar",
         ExprKind::Superglobal(_) => "Superglobal",
         ExprKind::GlobalsArray => "GlobalsArray",

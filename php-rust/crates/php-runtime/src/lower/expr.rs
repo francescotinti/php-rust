@@ -162,6 +162,21 @@ impl<'f> Lowerer<'f> {
                         }
                     }
                 }
+                // `C::$$x = rhs` / `C::${expr} = rhs`: the static-property NAME
+                // is a runtime value (plain assignment only).
+                if let AssignmentOperator::Assign(_) = a.operator {
+                    if let Expression::Access(Access::StaticProperty(sp)) = a.lhs {
+                        if !matches!(&sp.property, Variable::Direct(_)) {
+                            let class = self.class_ref_of(sp.class, line)?;
+                            let name = Box::new(self.lower_variable_name(&sp.property, line)?);
+                            let rhs = Box::new(self.lower_expr(a.rhs)?);
+                            return Ok(Expr {
+                                line,
+                                kind: ExprKind::StaticPropDynAssign { class, name, rhs },
+                            });
+                        }
+                    }
+                }
                 // `Class::$p = …` / `+= ` / `??=` — static-property assignment is
                 // not a `Place` (it roots at a per-class cell, not a slot), so it
                 // gets dedicated nodes (step 19-4, D-19.14).
@@ -997,9 +1012,14 @@ impl<'f> Lowerer<'f> {
                     name: name.into(),
                 })
             }
-            // `Class::$prop` static-property read (step 19-4).
+            // `Class::$prop` static-property read (step 19-4); `C::$$x` /
+            // `C::${expr}` resolves the NAME at run time.
             Access::StaticProperty(sp) => {
                 let class = self.class_ref_of(sp.class, line)?;
+                if !matches!(&sp.property, Variable::Direct(_)) {
+                    let name = Box::new(self.lower_variable_name(&sp.property, line)?);
+                    return Ok(ExprKind::StaticPropDyn { class, name });
+                }
                 let name = static_prop_name(&sp.property, line)?;
                 Ok(ExprKind::StaticProp {
                     class,
