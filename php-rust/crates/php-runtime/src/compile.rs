@@ -1216,6 +1216,19 @@ impl<'a> FnCompiler<'a> {
         self.n_temps_cur -= 1;
     }
 
+    /// Rebind a temp slot to `null`, dropping a `Zval::Ref` left in it by an
+    /// alias trick (`reset($this->prop)` binds the temp to the property's
+    /// cell). A freed temp is REUSED, and the common `StoreSlot` writes
+    /// *through* a ref it finds in the slot — a stale alias residue would
+    /// silently corrupt the aliased place (ORM's ArrayHydrator saw its
+    /// `resultPointers` overwritten by an unrelated temp value this way).
+    fn clear_temp_binding(&mut self, tmp: crate::hir::Slot) {
+        let k = self.konst(Const::Null);
+        self.emit(Op::PushConst(k));
+        self.emit(Op::BindRefTo { base: FieldBase::Local(tmp), steps: [].into() });
+        self.emit(Op::Pop);
+    }
+
     /// Append `op`, returning its address. Records the current source line in the
     /// parallel `lines` table (EXC-3b).
     fn emit(&mut self, op: Op) -> Addr {
@@ -2747,6 +2760,47 @@ impl<'a> FnCompiler<'a> {
                 // iteration, corrupting an unrelated place).
                 _ => {
                     let canon: Box<[u8]> = canon.into();
+                    // A prop/dim chain whose ROOT is itself a non-place
+                    // expression (`reset($this->resultSetMapping()->aliasMap)`,
+                    // ORM hydrators): evaluate the root once into a temp and
+                    // treat `<tmp>->prop…` as the field place. Mutations
+                    // through the ref reach the real object because objects
+                    // are by-handle (an array-valued root would be a copy —
+                    // PHP itself refuses those as by-ref arguments).
+                    if expr_field_place(first).is_none() {
+                        if let Some((root, steps)) = expr_rooted_field_chain(first) {
+                            let root_tmp = self.alloc_temp();
+                            self.expr(root)?;
+                            // BindRefTo REPLACES the temp's binding (a plain
+                            // StoreSlot would write through a stale ref left
+                            // from a previous call/loop iteration).
+                            self.emit(Op::BindRefTo {
+                                base: FieldBase::Local(root_tmp),
+                                steps: [].into(),
+                            });
+                            self.emit(Op::Pop);
+                            let place = Place { base: PlaceBase::Local(root_tmp), steps };
+                            let (base, fsteps) = self.field_path(&place)?;
+                            self.emit(Op::MakeRef { base, steps: fsteps.into() });
+                            let tmp = self.alloc_temp();
+                            self.emit(Op::BindRefTo {
+                                base: FieldBase::Local(tmp),
+                                steps: [].into(),
+                            });
+                            self.emit(Op::Pop);
+                            self.push_value_args(rest)?;
+                            self.emit(Op::CallHostBuiltinRef {
+                                name: canon,
+                                slot: tmp,
+                                argc: rest.len() as u32,
+                            });
+                            self.clear_temp_binding(tmp);
+                            self.clear_temp_binding(root_tmp);
+                            self.free_temp();
+                            self.free_temp();
+                            return Ok(());
+                        }
+                    }
                     let Some(place) = expr_field_place(first) else {
                         // `current(f(...))` / `key(<temp>)`: PHP 8 takes these
                         // BY VALUE (they only read the pointer, which for a
@@ -2756,7 +2810,14 @@ impl<'a> FnCompiler<'a> {
                         if canon.as_ref() == b"current" || canon.as_ref() == b"key" {
                             let tmp = self.alloc_temp();
                             self.expr(first)?;
-                            self.emit(Op::StoreSlot(tmp));
+                            // BindRefTo REPLACES the temp's binding — a plain
+                            // StoreSlot would write *through* a stale ref left
+                            // in the reused temp by an earlier alias call.
+                            self.emit(Op::BindRefTo {
+                                base: FieldBase::Local(tmp),
+                                steps: [].into(),
+                            });
+                            self.emit(Op::Pop);
                             self.push_value_args(rest)?;
                             self.emit(Op::CallHostBuiltinRef {
                                 name: canon,
@@ -2778,6 +2839,7 @@ impl<'a> FnCompiler<'a> {
                     self.emit(Op::Pop); // drop the aliased value
                     self.push_value_args(rest)?;
                     self.emit(Op::CallHostBuiltinRef { name: canon, slot: tmp, argc: rest.len() as u32 });
+                    self.clear_temp_binding(tmp);
                     self.free_temp();
                     return Ok(());
                 }
@@ -4920,6 +4982,37 @@ fn reorder_named_args(
     }
     slots.truncate(filled);
     Some(slots.into_iter().map(|s| s.expect("prefix is Some")).collect())
+}
+
+/// Peel trailing `->prop` / `[idx]` steps off a chain whose ROOT is not itself
+/// a writable place (a method call, `new`, …): `reset($this->rsm()->aliasMap)`.
+/// Returns the root expression and the peeled steps (outermost last); `None`
+/// when there is no step to peel (the argument really is a plain expression).
+fn expr_rooted_field_chain(e: &Expr) -> Option<(&Expr, Vec<PlaceStep>)> {
+    let mut steps_rev: Vec<PlaceStep> = Vec::new();
+    let mut cur = e;
+    loop {
+        match &cur.kind {
+            ExprKind::Index { base, index } => {
+                steps_rev.push(PlaceStep::Index((**index).clone()));
+                cur = base;
+            }
+            ExprKind::PropGet { object, name, nullsafe: false } => {
+                steps_rev.push(PlaceStep::Prop(name.clone()));
+                cur = object;
+            }
+            ExprKind::PropGetDyn { object, name, nullsafe: false } => {
+                steps_rev.push(PlaceStep::PropDyn((**name).clone()));
+                cur = object;
+            }
+            _ => break,
+        }
+    }
+    if steps_rev.is_empty() {
+        return None;
+    }
+    steps_rev.reverse();
+    Some((cur, steps_rev))
 }
 
 fn expr_field_place(e: &Expr) -> Option<Place> {

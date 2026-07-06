@@ -739,6 +739,26 @@ impl<'m> Vm<'m> {
                     self.frames[top].stack.push(result);
                     return Ok(());
                 }
+                // `current`/`key` read the cursor without moving it — their
+                // parameter lost the `&` in PHP 8.1, so a dynamic string
+                // callable (`array_map('current', $rows)`) passes the array
+                // by value. The pointer-MOVING family keeps the error below,
+                // exactly as PHP refuses a by-ref arg it cannot bind.
+                if let Some(canon) = host_builtin_ref_first(name) {
+                    if canon == b"current" || canon == b"key" {
+                        let mut a0 = args
+                            .into_iter()
+                            .next()
+                            .unwrap_or(Zval::Null)
+                            .deref_clone();
+                        let op =
+                            if canon == b"current" { PtrOp::Current } else { PtrOp::Key };
+                        let result = array_pointer_apply(&mut a0, op)?;
+                        let top = self.frames.len() - 1;
+                        self.frames[top].stack.push(result);
+                        return Ok(());
+                    }
+                }
                 Err(PhpError::Error(format!(
                     "Call to undefined function {}()",
                     String::from_utf8_lossy(written)

@@ -785,6 +785,19 @@ pub fn strrev(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Str(PhpStr::new(b)))
 }
 
+/// str_rot13($string): ROT13 each ASCII letter, other bytes untouched.
+pub fn str_rot13(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let mut b = str_arg(args, ctx, "str_rot13")?;
+    for c in b.iter_mut() {
+        match *c {
+            b'a'..=b'z' => *c = b'a' + (*c - b'a' + 13) % 26,
+            b'A'..=b'Z' => *c = b'A' + (*c - b'A' + 13) % 26,
+            _ => {}
+        }
+    }
+    Ok(Zval::Str(PhpStr::new(b)))
+}
+
 /// Coerce positional arg `idx` (named `pname`) to bytes for a 2-string builtin.
 pub(crate) fn str_at(args: &[Zval], ctx: &mut Ctx, idx: usize, fname: &str, expected: usize) -> Result<Vec<u8>, PhpError> {
     let v = args.get(idx).ok_or_else(|| {

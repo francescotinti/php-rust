@@ -2692,6 +2692,7 @@ class ReflectionClass {
     }
     public function isUninitializedLazyObject($object) { return __lazy_is_uninitialized($object); }
     public function initializeLazyObject($object) { return __lazy_initialize($object); }
+    public function markLazyObjectAsInitialized($object) { return __lazy_mark_initialized($object); }
     public function isInstantiable() { return class_exists($this->name); }
     public function isCloneable() {
         if ($this->isInterface() || $this->isAbstract() || $this->isEnum()) { return false; }

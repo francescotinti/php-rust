@@ -2885,7 +2885,7 @@ impl<'m> Vm<'m> {
                         let base_cell = field_base_mut(&mut self.frames, &mut self.superglobals, top, base)?;
                         *base_cell = Zval::Ref(cell);
                     } else {
-                        self.field_set(base, top, &steps, keys, Zval::Ref(cell))?;
+                        self.field_set_mode(base, top, &steps, keys, Zval::Ref(cell), true)?;
                     }
                     self.frames[top].stack.push(value);
                 }
@@ -2914,7 +2914,7 @@ impl<'m> Vm<'m> {
                         let base_cell = field_base_mut(&mut self.frames, &mut self.superglobals, top, base)?;
                         *base_cell = Zval::Ref(cell);
                     } else {
-                        self.field_set(base, top, &steps, keys, Zval::Ref(cell))?;
+                        self.field_set_mode(base, top, &steps, keys, Zval::Ref(cell), true)?;
                     }
                     self.frames[top].stack.push(value);
                 }
@@ -8566,6 +8566,39 @@ impl<'m> Vm<'m> {
     fn ho_lazy_initialize(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let v = args.first().cloned().unwrap_or(Zval::Null);
         self.realize_lazy(&v)?;
+        Ok(v)
+    }
+
+    /// `__lazy_mark_initialized($obj)`: PHP 8.4
+    /// `ReflectionClass::markLazyObjectAsInitialized` — flip the object to its
+    /// initialized shape (property defaults applied, lazy marker cleared)
+    /// WITHOUT running the pending initializer/factory, which is discarded.
+    /// A no-op on a non-lazy or already-initialized object.
+    fn ho_lazy_mark_initialized(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let v = args.first().cloned().unwrap_or(Zval::Null);
+        if let Some(rc) = deref_object(&v) {
+            let (oid, cid, uninit) = {
+                let b = rc.borrow();
+                (b.id, b.class_id as usize, b.lazy.is_some() && b.proxy_instance.is_none())
+            };
+            if uninit {
+                let cc = self.classes[cid];
+                let mut props = Props::new();
+                for (name, c) in &cc.prop_defaults {
+                    props.set(name, c.to_zval());
+                }
+                for name in &cc.uninit_props {
+                    props.set(name, Zval::Undef);
+                }
+                {
+                    let mut b = rc.borrow_mut();
+                    b.lazy = None;
+                    b.props = props;
+                }
+                self.lazy_props.remove(&oid);
+                self.lazy_init.remove(&oid);
+            }
+        }
         Ok(v)
     }
 
@@ -15019,6 +15052,7 @@ host_builtins! {
     b"__lazy_is_uninitialized" => vm.ho_lazy_is_uninitialized(args),
     b"__lazy_is_initializing" => vm.ho_lazy_is_initializing(args),
     b"__lazy_initialize" => vm.ho_lazy_initialize(args),
+    b"__lazy_mark_initialized" => vm.ho_lazy_mark_initialized(args),
     b"__lazy_skip_init" => vm.ho_lazy_skip_init(args),
     b"__lazy_set_raw" => vm.ho_lazy_set_raw(args),
     b"__reflect_prop_names" => vm.ho_reflect_prop_names(args),
@@ -15288,13 +15322,18 @@ fn array_pointer_apply(target: &mut Zval, op: PtrOp) -> Result<Zval, PhpError> {
             target.type_name_for_error()
         )));
     };
+    // The returned element is DEREF'd: PHP hands back the value, never the
+    // reference wrapper (a `=&`-bound element returned raw would alias the
+    // receiving variable — `$first = reset($this->resultPointers)` in ORM's
+    // ArrayHydrator turned `$first` into an alias, and the next iteration's
+    // plain assignment wrote *through* it, building a self-referential cell).
     Ok(match op {
-        PtrOp::Current => rc.ptr_current().unwrap_or(Zval::Bool(false)),
+        PtrOp::Current => rc.ptr_current().map(|v| v.deref_clone()).unwrap_or(Zval::Bool(false)),
         PtrOp::Key => rc.ptr_key().map(|k| key_to_zval(&k)).unwrap_or(Zval::Null),
-        PtrOp::Reset => Rc::make_mut(rc).ptr_reset().unwrap_or(Zval::Bool(false)),
-        PtrOp::End => Rc::make_mut(rc).ptr_end().unwrap_or(Zval::Bool(false)),
-        PtrOp::Next => Rc::make_mut(rc).ptr_next().unwrap_or(Zval::Bool(false)),
-        PtrOp::Prev => Rc::make_mut(rc).ptr_prev().unwrap_or(Zval::Bool(false)),
+        PtrOp::Reset => Rc::make_mut(rc).ptr_reset().map(|v| v.deref_clone()).unwrap_or(Zval::Bool(false)),
+        PtrOp::End => Rc::make_mut(rc).ptr_end().map(|v| v.deref_clone()).unwrap_or(Zval::Bool(false)),
+        PtrOp::Next => Rc::make_mut(rc).ptr_next().map(|v| v.deref_clone()).unwrap_or(Zval::Bool(false)),
+        PtrOp::Prev => Rc::make_mut(rc).ptr_prev().map(|v| v.deref_clone()).unwrap_or(Zval::Bool(false)),
     })
 }
 

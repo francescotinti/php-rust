@@ -274,6 +274,7 @@ pub fn registry() -> Registry {
     add(b"ltrim", string::ltrim);
     add(b"rtrim", string::rtrim);
     add(b"strrev", string::strrev);
+    add(b"str_rot13", string::str_rot13);
     add(b"str_contains", string::str_contains);
     add(b"str_starts_with", string::str_starts_with);
     add(b"str_ends_with", string::str_ends_with);

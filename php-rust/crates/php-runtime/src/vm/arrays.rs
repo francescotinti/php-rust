@@ -133,10 +133,19 @@ pub(super) fn field_write(
     diags: &mut Diags,
     dropped: &mut Vec<Zval>,
     aa: &mut Option<AaOp>,
+    rebind: bool,
 ) -> Result<(), PhpError> {
     if let Zval::Ref(cell) = target {
+        // A reference-BIND (`$arr['k'] =& $x`) REPLACES a leaf slot that
+        // already holds a reference — writing through it instead would nest
+        // the new ref inside the old cell (ORM's ArrayHydrator resultPointers
+        // built a self-referential cell that way: infinite deref).
+        if rebind && steps.is_empty() {
+            dropped.push(std::mem::replace(target, value));
+            return Ok(());
+        }
         let inner = &mut *cell.borrow_mut();
-        return field_write(inner, steps, keys, fs, value, diags, dropped, aa);
+        return field_write(inner, steps, keys, fs, value, diags, dropped, aa, rebind);
     }
     let Some((first, rest)) = steps.split_first() else {
         // Leaf overwrite: hand the displaced value back for GC noting.
@@ -198,7 +207,7 @@ pub(super) fn field_write(
                             obj.props.set(key, Zval::Array(Rc::new(PhpArray::new())));
                         }
                         let child = obj.props.get_mut(key).expect("property just inserted");
-                        field_write(child, rest, keys, fs, value, diags, dropped, aa)?;
+                        field_write(child, rest, keys, fs, value, diags, dropped, aa, rebind)?;
                     }
                 }
                 other => {
@@ -250,7 +259,7 @@ pub(super) fn field_write(
                 // Overwrite a plain element, but write *through* an existing
                 // reference element (the recursive call derefs at its top).
                 match arr.get_mut(&k) {
-                    Some(child) => field_write(child, rest, keys, fs, value, diags, dropped, aa)?,
+                    Some(child) => field_write(child, rest, keys, fs, value, diags, dropped, aa, rebind)?,
                     None => arr.insert(k, value),
                 }
             } else {
@@ -258,7 +267,7 @@ pub(super) fn field_write(
                     arr.insert(k.clone(), Zval::Array(Rc::new(PhpArray::new())));
                 }
                 let child = arr.get_mut(&k).expect("key just inserted");
-                field_write(child, rest, keys, fs, value, diags, dropped, aa)?;
+                field_write(child, rest, keys, fs, value, diags, dropped, aa, rebind)?;
             }
             Ok(())
         }
@@ -290,7 +299,7 @@ pub(super) fn field_write(
                 arr.append(value).map_err(|_| occupied())?;
             } else {
                 let mut child = Zval::Array(Rc::new(PhpArray::new()));
-                field_write(&mut child, rest, keys, fs, value, diags, dropped, aa)?;
+                field_write(&mut child, rest, keys, fs, value, diags, dropped, aa, rebind)?;
                 arr.append(child).map_err(|_| occupied())?;
             }
             Ok(())
@@ -686,6 +695,20 @@ impl<'m> Vm<'m> {
         keys: Vec<Zval>,
         value: Zval,
     ) -> Result<(), PhpError> {
+        self.field_set_mode(base, top, steps, keys, value, false)
+    }
+
+    /// [`Self::field_set`] with `rebind` (reference-bind leaf semantics: a
+    /// leaf slot holding a reference is REPLACED, not written through).
+    pub(super) fn field_set_mode(
+        &mut self,
+        base: FieldBase,
+        top: usize,
+        steps: &[FieldStep],
+        keys: Vec<Zval>,
+        value: Zval,
+        rebind: bool,
+    ) -> Result<(), PhpError> {
         let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
         let cell = match base {
             FieldBase::Local(s) => &mut self.frames[top].slots[s as usize],
@@ -697,7 +720,7 @@ impl<'m> Vm<'m> {
         };
         let mut dropped = Vec::new();
         let mut aa = None;
-        let r = field_write(cell, steps, &mut keys.into_iter(), fs, value, &mut self.diags, &mut dropped, &mut aa);
+        let r = field_write(cell, steps, &mut keys.into_iter(), fs, value, &mut self.diags, &mut dropped, &mut aa, rebind);
         for d in &dropped {
             self.gc_note(d);
         }
@@ -744,7 +767,7 @@ impl<'m> Vm<'m> {
                     let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
                     let mut dropped = Vec::new();
                     let mut aa2 = None;
-                    field_write(&mut val, &rest, &mut keys.into_iter(), fs, value, &mut self.diags, &mut dropped, &mut aa2)?;
+                    field_write(&mut val, &rest, &mut keys.into_iter(), fs, value, &mut self.diags, &mut dropped, &mut aa2, rebind)?;
                     for d in &dropped {
                         self.gc_note(d);
                     }
