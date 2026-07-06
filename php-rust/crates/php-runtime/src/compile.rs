@@ -3852,6 +3852,34 @@ impl<'a> FnCompiler<'a> {
         Ok(Some(name.clone()))
     }
 
+    /// The dynamic-name twin of [`Self::prop_place`]: a single `->{expr}` /
+    /// `->$k` step on `$this` or a local. Pushes `[obj, name]` and reports
+    /// `true`; the caller emits the `…Dyn` opcode.
+    fn prop_place_dyn(&mut self, place: &Place) -> R<bool> {
+        if place.steps.len() != 1 {
+            return Ok(false);
+        }
+        let PlaceStep::PropDyn(name) = &place.steps[0] else {
+            return Ok(false);
+        };
+        let name = name.clone();
+        match place.base {
+            PlaceBase::This => {
+                self.emit(Op::This);
+            }
+            PlaceBase::Local(s) => {
+                self.emit(Op::LoadSlot(s));
+            }
+            PlaceBase::Global(_)
+            | PlaceBase::Superglobal(_)
+            | PlaceBase::StaticProp { .. }
+            | PlaceBase::ClassConst { .. }
+            | PlaceBase::Value(_) => return Ok(false),
+        }
+        self.expr(&name)?;
+        Ok(true)
+    }
+
     /// Lower a mixed property/index place (`$o->a[$k]`, `$this->x->y`, …) into a
     /// [`FieldBase`] plus a [`FieldStep`] list, emitting each `Index` step's key
     /// expression in source order (consumed at run time beneath the value). The
@@ -4756,6 +4784,8 @@ impl<'a> FnCompiler<'a> {
         }
         if let Some(name) = self.prop_place(place)? {
             self.emit(Op::PropIsset { name });
+        } else if self.prop_place_dyn(place)? {
+            self.emit(Op::PropIssetDyn);
         } else if place_has_prop(place) {
             let (base, steps) = self.field_path(place)?;
             self.emit(Op::FieldIsset { base, steps: steps.into() });

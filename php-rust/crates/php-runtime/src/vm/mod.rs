@@ -4273,6 +4273,43 @@ impl<'m> Vm<'m> {
                     }
                     self.frames[top].stack.push(if pre { newv } else { old });
                 }
+                Op::PropIssetDyn => {
+                    // Dynamic-name twin of `PropIsset`: pop the name, then fall
+                    // into the same hook/`__isset`/visibility dispatch.
+                    let name_v = self.frames[top].stack.pop().expect("PropIssetDyn name");
+                    let name: Box<[u8]> =
+                        convert::to_zstr_cast(&name_v, &mut self.diags).as_bytes().to_vec().into();
+                    let obj = self.frames[top].stack.pop().expect("PropIssetDyn object");
+                    let cur = self.frames[top].class;
+                    let target = obj.deref_clone();
+                    let set = if let Zval::Object(o) = &target {
+                        let (oid, cid) = { let b = o.borrow(); (b.id, b.class_id as usize) };
+                        if !self.hook_guarded(oid, &name) {
+                            if let Some(func) = self.prop_hook(cid, &name, false) {
+                                self.push_hook(func, target.clone(), oid, &name, None);
+                                self.frames.last_mut().unwrap().ret_isset = true;
+                                continue;
+                            }
+                        }
+                        if let Some((defc, midx, oid)) =
+                            self.magic_applies(o, &name, cur, MagicKind::Isset, b"__isset")
+                        {
+                            self.push_magic_prop(defc, midx, oid, MagicKind::Isset, target.clone(), &name, None, None, true);
+                            continue;
+                        }
+                        let ocid = o.borrow().class_id as usize;
+                        match prop_vis_decl(&self.classes, ocid, &name) {
+                            Some((vis, decl)) if !visible_from(&self.classes, cur, vis, decl) => false,
+                            _ => {
+                                let key = self.prop_storage_key(ocid, &name, cur);
+                                prop_isset(&target, &key)
+                            }
+                        }
+                    } else {
+                        prop_isset(&target, &name)
+                    };
+                    self.frames[top].stack.push(Zval::Bool(set));
+                }
                 Op::PropIsset { name } => {
                     let obj = self.frames[top].stack.pop().expect("PropIsset object");
                     let cur = self.frames[top].class;

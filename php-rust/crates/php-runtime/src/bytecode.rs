@@ -645,6 +645,9 @@ pub enum Op {
     /// `[obj] -> [bool]` — `isset($o->p)`: true iff the property exists and is not
     /// null (silent, no warning).
     PropIsset { name: Box<[u8]> },
+    /// `[obj, name] -> [bool]` — `isset($o->{expr})` / `isset($o->$k)`: the
+    /// dynamic-name twin of [`Op::PropIsset`] (same hook/`__isset` dispatch).
+    PropIssetDyn,
     /// `[obj] -> [v]` — read property `name` like [`Op::PropGet`] but *silently*:
     /// a missing property yields NULL with no "Undefined property" warning and no
     /// visibility error (the read context of `empty()` / `??`). A `__get` accessor

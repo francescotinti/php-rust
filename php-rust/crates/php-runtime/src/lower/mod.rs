@@ -3942,6 +3942,197 @@ class DOMXPath {
         return 'concat(' . implode(',', $enc) . ')';
     }
 }
+// --- SimpleXML on the __dom_* host hooks -----------------------------------
+// One class models PHP's four faces of SimpleXMLElement via $__k:
+//   'e' = a concrete element node;
+//   's' = a named set ($el->field: children of $__par named $__nm; '' = all,
+//         the children() result) -- reads apply to the FIRST match, foreach
+//         walks all matches, count() counts them;
+//   'a' = a single attribute ($el['name'] / $attrs->name);
+//   'A' = the attributes() bag.
+class SimpleXMLElement implements ArrayAccess, Countable, Iterator, Stringable {
+    public $__d; public $__k = 'e'; public $__n = -1; public $__par = -1; public $__nm = '';
+    private $__it = array(); private $__i = 0;
+    public function __construct($data = null, $options = 0, $dataIsURL = false, $ns = '', $isPrefix = false) {
+        if ($data === null) { return; }
+        $doc = new DOMDocument();
+        $ok = $dataIsURL ? @$doc->load((string)$data) : @$doc->loadXML((string)$data);
+        if (!$ok) { throw new Exception('String could not be parsed as XML'); }
+        $this->__d = $doc->__d;
+        $this->__n = __dom_doc_element($doc->__d);
+    }
+    public static function __mk($d, $k, $n, $par = -1, $nm = '') {
+        $e = new SimpleXMLElement();
+        $e->__d = $d; $e->__k = $k; $e->__n = $n; $e->__par = $par; $e->__nm = (string)$nm;
+        return $e;
+    }
+    public static function __local($n) { $p = strrpos($n, ':'); return $p === false ? $n : substr($n, $p + 1); }
+    // The concrete element this face reads from: itself for an element, the
+    // FIRST match for a named set, and the PARENT for the children() face
+    // ('' set) -- in PHP children() is the same element seen through its
+    // child list, so ->x / ['attr'] / getName() on it address the parent.
+    public function __node() {
+        if ($this->__k === 'e' || $this->__k === 'A') { return $this->__n; }
+        if ($this->__k === 's') {
+            if ($this->__nm === '') { return $this->__par; }
+            $l = $this->__elems();
+            return count($l) ? $l[0] : -1;
+        }
+        return -1;
+    }
+    // Matching element node ids (set kind; an element is its own singleton).
+    public function __elems() {
+        $out = array();
+        if ($this->__k === 'e') { $out[] = $this->__n; return $out; }
+        if ($this->__k !== 's' || $this->__par < 0) { return $out; }
+        foreach (__dom_children($this->__d, $this->__par) as $c) {
+            $i = __dom_info($this->__d, $c);
+            if ($i[0] !== 1) { continue; }
+            if ($this->__nm === '' || $i[1] === $this->__nm || SimpleXMLElement::__local($i[1]) === $this->__nm) { $out[] = $c; }
+        }
+        return $out;
+    }
+    public function __get($name) {
+        $name = (string)$name;
+        if ($this->__k === 'A') {
+            if (__dom_attr($this->__d, $this->__n, 0, $name, '') === false) { return null; }
+            return SimpleXMLElement::__mk($this->__d, 'a', $this->__n, -1, $name);
+        }
+        $n = $this->__node();
+        if ($n < 0) { return null; }
+        $s = SimpleXMLElement::__mk($this->__d, 's', -1, $n, $name);
+        // No matching child -> null: PHP's empty named set casts to FALSE
+        // (`if ($el->{'join-table'})`), and phpr objects are always truthy,
+        // so absence must surface as null. Present elements (even empty
+        // ones) cast to TRUE, which the always-truthy set object matches.
+        if (count($s->__elems()) === 0) { return null; }
+        return $s;
+    }
+    public function __isset($name) {
+        $name = (string)$name;
+        if ($this->__k === 'A') { return __dom_attr($this->__d, $this->__n, 0, $name, '') !== false; }
+        $n = $this->__node();
+        if ($n < 0) { return false; }
+        $s = SimpleXMLElement::__mk($this->__d, 's', -1, $n, $name);
+        return count($s->__elems()) > 0;
+    }
+    public function offsetExists($k) {
+        if (is_int($k)) {
+            if ($this->__k === 's') { return $k >= 0 && $k < count($this->__elems()); }
+            return $k === 0 && $this->__node() >= 0;
+        }
+        $n = $this->__node(); if ($n < 0) { return false; }
+        return __dom_attr($this->__d, $n, 0, (string)$k, '') !== false;
+    }
+    public function offsetGet($k) {
+        if (is_int($k)) {
+            $l = $this->__elems();
+            if ($k < 0 || $k >= count($l)) { return null; }
+            return SimpleXMLElement::__mk($this->__d, 'e', $l[$k]);
+        }
+        $n = $this->__node(); if ($n < 0) { return null; }
+        // The attribute VALUE as a plain string (PHP hands back an attribute
+        // SimpleXMLElement; the string keeps `empty($el['columns'])` faithful
+        // for an empty attribute, which phpr's always-truthy objects cannot).
+        $v = __dom_attr($this->__d, $n, 0, (string)$k, '');
+        return $v === false ? null : (string)$v;
+    }
+    public function offsetSet($k, $v) {
+        $n = $this->__node(); if ($n < 0) { return; }
+        __dom_attr($this->__d, $n, 1, (string)$k, (string)$v);
+    }
+    public function offsetUnset($k) {
+        $n = $this->__node(); if ($n < 0) { return; }
+        __dom_attr($this->__d, $n, 3, (string)$k, '');
+    }
+    public function count() {
+        if ($this->__k === 'a') { return 0; }
+        if ($this->__k === 'A') { return count(__dom_attr($this->__d, $this->__n, 4, '', '')); }
+        if ($this->__k === 's') { return count($this->__elems()); }
+        $n = $this->__node(); if ($n < 0) { return 0; }
+        $c = 0;
+        foreach (__dom_children($this->__d, $n) as $ch) {
+            $i = __dom_info($this->__d, $ch);
+            if ($i[0] === 1) { $c++; }
+        }
+        return $c;
+    }
+    public function __toString() {
+        if ($this->__k === 'a') {
+            $v = __dom_attr($this->__d, $this->__n, 0, $this->__nm, '');
+            return $v === false ? '' : (string)$v;
+        }
+        $n = $this->__node(); if ($n < 0) { return ''; }
+        // PHP concatenates the DIRECT text/cdata children only (not descendants).
+        $out = '';
+        foreach (__dom_children($this->__d, $n) as $c) {
+            $i = __dom_info($this->__d, $c);
+            if ($i[0] === 3 || $i[0] === 4) { $out .= $i[2]; }
+        }
+        return $out;
+    }
+    public function getName() {
+        if ($this->__k === 'a') { return SimpleXMLElement::__local($this->__nm); }
+        $n = $this->__node(); if ($n < 0) { return ''; }
+        $i = __dom_info($this->__d, $n);
+        return SimpleXMLElement::__local($i[1]);
+    }
+    public function children($ns = null, $isPrefix = false) {
+        $n = $this->__node();
+        return SimpleXMLElement::__mk($this->__d, 's', -1, $n, '');
+    }
+    public function attributes($ns = null, $isPrefix = false) {
+        $n = $this->__node(); if ($n < 0) { return null; }
+        return SimpleXMLElement::__mk($this->__d, 'A', $n);
+    }
+    public function asXML($filename = null) {
+        $n = $this->__node(); if ($n < 0) { return false; }
+        $xml = __dom_save_xml($this->__d, $n);
+        if ($filename !== null) { return file_put_contents((string)$filename, $xml) !== false; }
+        return $xml;
+    }
+    public function saveXML($filename = null) { return $this->asXML($filename); }
+    public function rewind() {
+        $this->__it = array();
+        if ($this->__k === 'A') {
+            foreach (__dom_attr($this->__d, $this->__n, 4, '', '') as $an) {
+                $this->__it[] = array(SimpleXMLElement::__local($an), SimpleXMLElement::__mk($this->__d, 'a', $this->__n, -1, $an));
+            }
+        } elseif ($this->__k === 's') {
+            foreach ($this->__elems() as $e) {
+                $i = __dom_info($this->__d, $e);
+                $this->__it[] = array(SimpleXMLElement::__local($i[1]), SimpleXMLElement::__mk($this->__d, 'e', $e));
+            }
+        } elseif ($this->__k === 'e') {
+            foreach (__dom_children($this->__d, $this->__n) as $c) {
+                $i = __dom_info($this->__d, $c);
+                if ($i[0] !== 1) { continue; }
+                $this->__it[] = array(SimpleXMLElement::__local($i[1]), SimpleXMLElement::__mk($this->__d, 'e', $c));
+            }
+        }
+        $this->__i = 0;
+    }
+    public function valid() { return $this->__i < count($this->__it); }
+    public function current() { return $this->__it[$this->__i][1]; }
+    public function key() { return $this->__it[$this->__i][0]; }
+    public function next() { $this->__i++; }
+}
+function simplexml_load_string($data, $class_name = 'SimpleXMLElement', $options = 0, $namespace_or_prefix = '', $is_prefix = false) {
+    $doc = new DOMDocument();
+    if (!@$doc->loadXML((string)$data)) { return false; }
+    $r = __dom_doc_element($doc->__d);
+    if (!is_int($r) || $r < 0) { return false; }
+    return SimpleXMLElement::__mk($doc->__d, 'e', $r);
+}
+function simplexml_load_file($filename, $class_name = 'SimpleXMLElement', $options = 0, $namespace_or_prefix = '', $is_prefix = false) {
+    $c = @file_get_contents((string)$filename);
+    if ($c === false) { return false; }
+    return simplexml_load_string($c, $class_name, $options, $namespace_or_prefix, $is_prefix);
+}
+function simplexml_import_dom($node, $class_name = 'SimpleXMLElement') {
+    if ($node instanceof DOMDocument) { return SimpleXMLElement::__mk($node->__d, 'e', __dom_doc_element($node->__d)); }
+    return SimpleXMLElement::__mk($node->__d, 'e', $node->__n);
+}
 "##;
 
 /// The four owned products of lowering [`PRELUDE_SRC`]: the class table + its
