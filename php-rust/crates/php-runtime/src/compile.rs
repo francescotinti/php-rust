@@ -4945,6 +4945,11 @@ fn local_slot(place: &Place) -> crate::hir::Slot {
 fn builtin_param_names(name: &[u8]) -> Option<&'static [&'static [u8]]> {
     Some(match name.to_ascii_lowercase().as_slice() {
         b"debug_backtrace" => &[b"options", b"limit"],
+        b"strlen" => &[b"string"],
+        b"assert" => &[b"assertion", b"description"],
+        b"htmlentities" | b"htmlspecialchars" => {
+            &[b"string", b"flags", b"encoding", b"double_encode"]
+        }
         b"json_encode" => &[b"value", b"flags", b"depth"],
         b"json_decode" => &[b"json", b"associative", b"depth", b"flags"],
         b"array_slice" => &[b"array", b"offset", b"length", b"preserve_keys"],

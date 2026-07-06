@@ -108,24 +108,34 @@ impl<'f> Lowerer<'f> {
 
             Statement::Foreach(node) => {
                 let iter = self.lower_expr(node.expression)?;
-                let (key, value_target) = match &node.target {
+                let (key_target, value_target) = match &node.target {
                     ForeachTarget::Value(v) => (None, v.value),
-                    ForeachTarget::KeyValue(kv) => {
-                        (Some(self.foreach_slot(kv.key, line)?), kv.value)
-                    }
+                    ForeachTarget::KeyValue(kv) => (Some(kv.key), kv.value),
                 };
-                // `as [$a,$b]` / `as list(...)`: bind the element to a temp and
-                // destructure it at the top of the body (step 51).
-                let (value, by_ref, prelude) =
+                // `as [$a,$b]` / `as list(...)` / a writable place: bind the
+                // element to a temp and assign at the top of the body (step 51).
+                let (value, by_ref, value_prelude) =
                     match self.foreach_destructure(value_target, line)? {
-                        Some((temp, stmt)) => (temp, false, Some(stmt)),
+                        Some((temp, stmt, r)) => (temp, r, Some(stmt)),
                         None => {
                             let (v, r) = self.foreach_value_slot(value_target, line)?;
                             (v, r, None)
                         }
                     };
+                let (key, key_prelude) = match key_target {
+                    None => (None, None),
+                    Some(k) => {
+                        let (slot, pre) = self.foreach_key_slot(k, line)?;
+                        (Some(slot), pre)
+                    }
+                };
                 let mut body = self.lower_stmts(node.body.statements())?;
-                if let Some(stmt) = prelude {
+                // PHP assigns the VALUE before the KEY (observable when both
+                // land in the same container), so the value prelude runs first.
+                if let Some(stmt) = key_prelude {
+                    body.insert(0, stmt);
+                }
+                if let Some(stmt) = value_prelude {
                     body.insert(0, stmt);
                 }
                 StmtKind::Foreach {

@@ -198,6 +198,9 @@ impl<'f> Lowerer<'f> {
             method_lc: Vec<u8>,
             alias: Option<Box<[u8]>>,
             vis: Option<Visibility>,
+            /// Source-case names, for PHP's fatal messages.
+            trait_orig: Option<Vec<u8>>,
+            method_orig: Vec<u8>,
         }
         let mut aliases: Vec<Alias> = Vec::new();
         for u in uses {
@@ -212,20 +215,25 @@ impl<'f> Lowerer<'f> {
                             }
                         }
                         TraitUseAdaptation::Alias(a) => {
-                            let (trait_lc, method_lc) = match &a.method_reference {
-                                TraitUseMethodReference::Absolute(abs) => (
-                                    Some(bare_last_segment(&abs.trait_name).to_ascii_lowercase()),
-                                    abs.method_name.value.to_ascii_lowercase(),
-                                ),
-                                TraitUseMethodReference::Identifier(id) => {
-                                    (None, id.value.to_ascii_lowercase())
-                                }
-                            };
+                            let (trait_lc, method_lc, trait_orig, method_orig) =
+                                match &a.method_reference {
+                                    TraitUseMethodReference::Absolute(abs) => (
+                                        Some(bare_last_segment(&abs.trait_name).to_ascii_lowercase()),
+                                        abs.method_name.value.to_ascii_lowercase(),
+                                        Some(bare_last_segment(&abs.trait_name).to_vec()),
+                                        abs.method_name.value.to_vec(),
+                                    ),
+                                    TraitUseMethodReference::Identifier(id) => {
+                                        (None, id.value.to_ascii_lowercase(), None, id.value.to_vec())
+                                    }
+                                };
                             aliases.push(Alias {
                                 trait_lc,
                                 method_lc,
                                 alias: a.alias.as_ref().map(|id| id.value.into()),
                                 vis: a.visibility.as_ref().map(visibility_of_modifier),
+                                trait_orig,
+                                method_orig,
                             });
                         }
                     }
@@ -314,10 +322,74 @@ impl<'f> Lowerer<'f> {
         // --- apply `as` aliases (sourced straight from the trait table) ---
         for a in &aliases {
             let src = self.find_trait_method(uses, a.trait_lc.as_deref(), &a.method_lc);
-            let mut src = src.ok_or(LowerError::Unsupported {
-                what: "trait alias of unknown method",
-                line,
-            })?;
+            let mut src = match src {
+                Some(s) => s,
+                None => {
+                    if let Some(tl) = &a.trait_lc {
+                        if !self.traits.contains_key(tl.as_slice()) {
+                            let t = a.trait_orig.as_deref().unwrap_or(tl);
+                            let t = String::from_utf8_lossy(t);
+                            // A known CLASS in `as`/`insteadof` has its own fatal.
+                            let message = if self.class_index.contains_key(tl.as_slice()) {
+                                format!("Class {t} is not a trait, Only traits may be used in 'as' and 'insteadof' statements")
+                            } else {
+                                format!("Could not find trait {t}")
+                            };
+                            return Err(LowerError::Fatal { message, line });
+                        }
+                    }
+                    // An ABSTRACT trait method is aliasable: the alias adds a
+                    // new abstract requirement under the alias name (bug69084);
+                    // the original requirement stays.
+                    let is_abstract = if let Some(tl) = &a.trait_lc {
+                        self.traits.get(tl.as_slice()).is_some_and(|lt| {
+                            lt.abstract_methods
+                                .iter()
+                                .any(|n| n.to_ascii_lowercase() == a.method_lc)
+                        })
+                    } else {
+                        uses.iter().any(|u| {
+                            u.trait_names.iter().any(|tn| {
+                                self.traits
+                                    .get(&bare_last_segment(tn).to_ascii_lowercase())
+                                    .is_some_and(|lt| {
+                                        lt.abstract_methods
+                                            .iter()
+                                            .any(|n| n.to_ascii_lowercase() == a.method_lc)
+                                    })
+                            })
+                        })
+                    };
+                    if is_abstract {
+                        if let Some(new_name) = &a.alias {
+                            abstract_methods.push(new_name.clone());
+                        }
+                        continue;
+                    }
+                    // PHP's link-time fatals, verbatim (zend_inheritance.c):
+                    // the explicit `T::m` form has its own wording.
+                    let morig = String::from_utf8_lossy(&a.method_orig).into_owned();
+                    let message = if let Some(t) = &a.trait_orig {
+                        format!(
+                            "An alias was defined for {}::{} but this method does not exist",
+                            String::from_utf8_lossy(t),
+                            morig
+                        )
+                    } else {
+                        match &a.alias {
+                            Some(new_name) => format!(
+                                "An alias ({}) was defined for method {}(), but this method does not exist",
+                                String::from_utf8_lossy(new_name),
+                                morig
+                            ),
+                            None => format!(
+                                "The modifiers of the trait method {morig}() are changed, but this method does not exist. Error"
+                            ),
+                        }
+                    };
+                    return Err(LowerError::Fatal { message, line });
+                }
+            };
             match &a.alias {
                 Some(new_name) => {
                     src.decl.name = new_name.clone();

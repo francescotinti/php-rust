@@ -1472,6 +1472,47 @@ impl<'f> Lowerer<'f> {
         }
     }
 
+    /// A `foreach` KEY target: a plain variable binds its slot; a writable
+    /// place (`$obj->k['x']`, `$ks[]`) binds a temp plus a `place = $temp;`
+    /// body-prelude statement (PHP runs it AFTER the value's — the caller
+    /// orders the preludes). `&$k` and `list(...)` keys are PHP compile fatals.
+    pub(super) fn foreach_key_slot(
+        &mut self,
+        target: &Expression,
+        line: Line,
+    ) -> Result<(Slot, Option<crate::hir::Stmt>), LowerError> {
+        if matches!(target, Expression::UnaryPrefix(u) if matches!(u.operator, UnaryPrefixOperator::Reference(_)))
+        {
+            return Err(LowerError::Fatal {
+                message: "Key element cannot be a reference".to_string(),
+                line,
+            });
+        }
+        if matches!(
+            target,
+            Expression::Array(_) | Expression::List(_) | Expression::LegacyArray(_)
+        ) {
+            return Err(LowerError::Fatal {
+                message: "Cannot use list as key element".to_string(),
+                line,
+            });
+        }
+        if let Expression::Variable(Variable::Direct(d)) = target {
+            return Ok((self.slot_for(strip_dollar(d.name)), None));
+        }
+        let temp = self.fresh_list_temp();
+        let src = Expr { line, kind: ExprKind::Var(temp) };
+        let place = self.lower_place(target, line)?;
+        let stmt = crate::hir::Stmt {
+            line,
+            kind: crate::hir::StmtKind::Expr(Expr {
+                line,
+                kind: ExprKind::AssignPlace(place, Box::new(src)),
+            }),
+        };
+        Ok((temp, Some(stmt)))
+    }
+
     /// A `foreach` *value* target, which may be by reference (`&$v`, step 11d-3).
     /// Returns the bound slot plus whether the binding is by reference.
     pub(super) fn foreach_value_slot(
@@ -1688,11 +1729,36 @@ impl<'f> Lowerer<'f> {
         &mut self,
         target: &Expression,
         line: Line,
-    ) -> Result<Option<(Slot, crate::hir::Stmt)>, LowerError> {
+    ) -> Result<Option<(Slot, crate::hir::Stmt, bool)>, LowerError> {
         if !matches!(
             target,
             Expression::Array(_) | Expression::List(_) | Expression::LegacyArray(_)
         ) {
+            // `foreach (... as &$obj->prop)`: iterate by reference into a temp
+            // and alias the place to it at the top of the body (`place =& $t`)
+            // — writes through either side then reach the element.
+            if let Expression::UnaryPrefix(u) = target {
+                if matches!(u.operator, UnaryPrefixOperator::Reference(_))
+                    && !matches!(u.operand, Expression::Variable(Variable::Direct(_)))
+                {
+                    let temp = self.fresh_list_temp();
+                    let place = self.lower_place(u.operand, line)?;
+                    let stmt = crate::hir::Stmt {
+                        line,
+                        kind: crate::hir::StmtKind::Expr(Expr {
+                            line,
+                            kind: ExprKind::AssignRef {
+                                target: place,
+                                source: Place {
+                                    base: PlaceBase::Local(temp),
+                                    steps: Vec::new(),
+                                },
+                            },
+                        }),
+                    };
+                    return Ok(Some((temp, stmt, true)));
+                }
+            }
             // Any non-variable WRITABLE place as the value target
             // (`foreach (... as $this->reference)`, `as $a['k']`): bind the
             // element into a temp and prepend `place = $temp;` to the body —
@@ -1711,7 +1777,7 @@ impl<'f> Lowerer<'f> {
                         kind: ExprKind::AssignPlace(place, Box::new(src)),
                     }),
                 };
-                return Ok(Some((temp, stmt)));
+                return Ok(Some((temp, stmt, false)));
             }
             return Ok(None);
         }
@@ -1741,7 +1807,7 @@ impl<'f> Lowerer<'f> {
             line,
             kind: crate::hir::StmtKind::Expr(Expr { line, kind }),
         };
-        Ok(Some((temp, stmt)))
+        Ok(Some((temp, stmt, false)))
     }
 }
 
