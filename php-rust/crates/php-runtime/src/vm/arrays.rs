@@ -483,6 +483,26 @@ pub(super) fn read_dim_warn(base: &Zval, key: &Zval, diags: &mut Diags) -> Zval 
             None => Zval::Null,
         },
         Zval::Ref(rc) => read_dim_warn(&rc.borrow(), key, diags),
+        // `$false[0]` & co.: PHP 7.4+ warns naming the value (false/null/…)
+        // and yields null. Strings keep the silent byte-offset path below.
+        Zval::Null | Zval::Undef | Zval::Bool(_) | Zval::Long(_) | Zval::Double(_) => {
+            diags.push(Diag::Warning(format!(
+                "Trying to access array offset on {}",
+                base.value_name_for_error()
+            )));
+            Zval::Null
+        }
+        _ => read_dim(base, key),
+    }
+}
+
+/// [`read_dim_warn`] for a `list()` element read ([`crate::bytecode::Op::FetchDimList`]):
+/// the undefined-key Warning stays, but a scalar base is SILENT — Zend's list
+/// path raises no offset-on-scalar warning (`list($a) = null` is quiet).
+pub(super) fn read_dim_warn_list(base: &Zval, key: &Zval, diags: &mut Diags) -> Zval {
+    match base {
+        Zval::Array(_) => read_dim_warn(base, key, diags),
+        Zval::Ref(rc) => read_dim_warn_list(&rc.borrow(), key, diags),
         _ => read_dim(base, key),
     }
 }

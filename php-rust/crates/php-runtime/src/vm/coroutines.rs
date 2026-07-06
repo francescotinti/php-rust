@@ -236,6 +236,16 @@ impl<'m> Vm<'m> {
     /// termination); an exception that escapes the fiber propagates to the caller.
     pub(super) fn drive_fiber(&mut self, id: u32, obj: &Zval, baseline: usize) -> Result<Zval, PhpError> {
         self.fiber_stack.push(FiberContext { id, baseline, obj: obj.clone() });
+        // `@` is per-execution-context: park the caller's suppression state and
+        // run the fiber body under its OWN (restored from its last suspend), so
+        // `@$fiber->start()` does not silence diagnostics inside the fiber.
+        let caller_depth = std::mem::take(&mut self.suppress_depth);
+        let caller_marks = std::mem::take(&mut self.suppress_marks);
+        if let Some(st) = self.fibers.get_mut(&id) {
+            let (d, m) = std::mem::take(&mut st.suppress);
+            self.suppress_depth = d;
+            self.suppress_marks = m;
+        }
         let outcome = loop {
             match self.run_loop(baseline) {
                 Ok(exit) => break Ok(exit),
@@ -246,6 +256,13 @@ impl<'m> Vm<'m> {
             }
         };
         self.fiber_stack.pop();
+        // Park the fiber's suppression state (survives a suspend inside `@`)
+        // and restore the caller's.
+        let fiber_depth = std::mem::replace(&mut self.suppress_depth, caller_depth);
+        let fiber_marks = std::mem::replace(&mut self.suppress_marks, caller_marks);
+        if let Some(st) = self.fibers.get_mut(&id) {
+            st.suppress = (fiber_depth, fiber_marks);
+        }
         match outcome {
             Ok(RunExit::Suspended { value }) => {
                 // `Fiber::suspend` already parked frames[baseline..] into the entry.
@@ -301,7 +318,12 @@ impl<'m> Vm<'m> {
         };
         self.fibers.insert(
             id,
-            FiberState { status: FiberStatus::Running, parked: Vec::new(), ret: Zval::Null },
+            FiberState {
+                status: FiberStatus::Running,
+                parked: Vec::new(),
+                ret: Zval::Null,
+                suppress: (0, Vec::new()),
+            },
         );
         let baseline = self.frames.len();
         self.invoke_value(callable, args)?;

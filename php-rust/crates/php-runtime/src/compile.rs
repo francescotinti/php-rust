@@ -1061,6 +1061,10 @@ fn find_const_decl<'a>(cid: ClassId, name: &[u8], ctx: &'a ProgramCtx<'a>) -> Op
 /// the stack of enclosing loops (for `break N` / `continue N`), and the
 /// program-wide [`ProgramCtx`] for resolving call / class targets.
 struct FnCompiler<'a> {
+    /// Inside a `list()` destructuring's element assignments: element reads
+    /// compile to [`Op::FetchDimList`] (silent on a scalar base, unlike a plain
+    /// `$x[k]` read — Zend's list path raises no offset-on-scalar warning).
+    in_list_assign: bool,
     /// Pending `?->` short-circuit jump sites of the access chain being
     /// compiled: PHP's nullsafe skips to the end of the WHOLE chain
     /// (`$a?->b()->c()['d']` with null `$a` evaluates none of it), so every
@@ -1172,6 +1176,7 @@ impl<'a> FnCompiler<'a> {
         slot_names: &'a [Box<[u8]>],
     ) -> Self {
         FnCompiler {
+            in_list_assign: false,
             nullsafe_chain: None,
             ops: Vec::new(),
             lines: Vec::new(),
@@ -1821,13 +1826,16 @@ impl<'a> FnCompiler<'a> {
             ExprKind::ListAssign { temp, rhs, assigns } => {
                 // `[$a,$b] = rhs`: stash rhs once, run each sub-assignment (which
                 // reads `temp[key]`, or for a `&$x` target aliases the real source
-                // element), then leave the stored rhs as the value.
+                // element), then leave the stored rhs as the value. Element reads
+                // are scalar-silent (see `in_list_assign`).
                 self.expr(rhs)?;
                 self.emit(Op::StoreSlot(*temp));
+                let saved = std::mem::replace(&mut self.in_list_assign, true);
                 for a in assigns {
                     self.expr(a)?;
                     self.emit(Op::Pop); // each sub-assignment's value is discarded
                 }
+                self.in_list_assign = saved;
                 self.emit(Op::LoadSlot(*temp));
             }
             ExprKind::AssignOp(op, slot, rhs) => {
@@ -1995,7 +2003,7 @@ impl<'a> FnCompiler<'a> {
                 let root = self.chain_enter();
                 self.expr(base)?;
                 self.chain_pause(|s| s.expr(index))?;
-                self.emit(Op::FetchDim);
+                self.emit(if self.in_list_assign { Op::FetchDimList } else { Op::FetchDim });
                 self.chain_exit(root);
             }
             ExprKind::AssignPlace(place, rhs) => self.assign_place(place, rhs)?,

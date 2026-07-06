@@ -124,6 +124,11 @@ struct FiberState<'m> {
     status: FiberStatus,
     parked: Vec<Frame<'m>>,
     ret: Zval,
+    /// The fiber's own `@` suppression state (depth, diag marks), parked at
+    /// suspend: error suppression is per-execution-context in PHP, so the
+    /// caller's `@$fiber->start()` must not silence diagnostics raised inside
+    /// the fiber body (and vice versa).
+    suppress: (u32, Vec<usize>),
 }
 
 /// The currently-running fiber context (GEN-4), pushed while a fiber executes.
@@ -1809,12 +1814,38 @@ impl<'m> Vm<'m> {
         //    recording is independent of `error_reporting` (which gates only the
         //    visible render below).
         self.last_error = Some((errno, message.as_bytes().to_vec(), line));
+        // An enclosing `@` swallows the default render — the `last_error`
+        // record above still happened, like PHP's error_get_last under
+        // suppression (a nested call's trigger_error is inside the region).
+        if self.suppress_depth > 0 {
+            return Ok(());
+        }
         // Default render (Session 1 behaviour), gated on `error_reporting`.
+        // Attributed to the nearest NON-prelude frame: a prelude-authored
+        // class raising a user-level warning (PDO/SQLite3 ERRMODE_WARNING)
+        // reports the USER call site, like the C implementations do.
         if self.error_level & errno != 0 {
+            let (file, rline) = if self.frames.is_empty() {
+                (self.module.file.to_vec(), line)
+            } else {
+                // A prelude frame is detected via its *defining class* (the
+                // prelude lowers into the main unit, so module.file can't tell).
+                let is_prelude = |f: &Frame| {
+                    f.class
+                        .map(|c| self.classes[c].file.as_ref() == b"prelude")
+                        .unwrap_or(false)
+                };
+                let mut fi = self.frames.len() - 1;
+                while fi > 0 && is_prelude(&self.frames[fi]) {
+                    fi -= 1;
+                }
+                let rline = if fi + 1 == self.frames.len() { line } else { self.cur_line(fi) };
+                (self.frames[fi].module.file.to_vec(), rline)
+            };
             let header = format!("\n{}: {} in ", errno_label(errno), message);
             self.rendered.extend_from_slice(header.as_bytes());
-            self.rendered.extend_from_slice(&self.module.file);
-            let tail = format!(" on line {line}\n");
+            self.rendered.extend_from_slice(&file);
+            let tail = format!(" on line {rline}\n");
             self.rendered.extend_from_slice(tail.as_bytes());
         }
         Ok(())
@@ -2449,6 +2480,18 @@ impl<'m> Vm<'m> {
                         continue;
                     }
                     let v = read_dim_warn(&base, &key, &mut self.diags);
+                    self.frames[top].stack.push(v);
+                }
+                Op::FetchDimList => {
+                    // A `list()` element read: undefined-key warns, a scalar
+                    // base stays silent (Zend's list path).
+                    let key = self.frames[top].stack.pop().expect("FetchDimList key");
+                    let base = self.frames[top].stack.pop().expect("FetchDimList base");
+                    if let Some(recv) = self.as_arrayaccess(&base) {
+                        self.enter_object_method(recv, b"offsetGet", vec![key], RetMode::Stack)?;
+                        continue;
+                    }
+                    let v = read_dim_warn_list(&base, &key, &mut self.diags);
                     self.frames[top].stack.push(v);
                 }
                 Op::CoalesceFetchDim => {
@@ -14820,6 +14863,8 @@ host_builtins! {
     b"__pdo_last_id" => vm.ho_pdo_last_id(args),
     b"__pdo_in_txn" => vm.ho_pdo_in_txn(args),
     b"__pdo_stmt_readonly" => vm.ho_pdo_stmt_readonly(args),
+    b"__pdo_changes" => vm.ho_pdo_changes(args),
+    b"__pdo_param_count" => vm.ho_pdo_param_count(args),
     b"get_parent_class" => vm.ho_get_parent_class(args),
     b"class_parents" => vm.ho_class_parents(args),
     b"class_implements" => vm.ho_class_implements(args),

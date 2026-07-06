@@ -361,6 +361,25 @@ impl<'m> Vm<'m> {
         Ok(Zval::Bool(conn.prepare(&sql).map(|s| s.readonly()).unwrap_or(false)))
     }
 
+    /// `__pdo_changes($id)`: sqlite3_changes — rows affected by the most
+    /// recent statement on the connection (`SQLite3::changes`,
+    /// `SQLite3Result::rowCount` via the DBAL driver).
+    pub(super) fn ho_pdo_changes(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let id = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags) as u32;
+        Ok(Zval::Long(self.pdo_conns.get(&id).map(|c| c.changes() as i64).unwrap_or(0)))
+    }
+
+    /// `__pdo_param_count($id, $sql)`: sqlite3_bind_parameter_count on a fresh
+    /// prepare (`SQLite3Stmt::paramCount`). 0 on any error (the count read
+    /// does not raise; prepare already validated the SQL).
+    pub(super) fn ho_pdo_param_count(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let id = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags) as u32;
+        let sql = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags);
+        let sql = String::from_utf8_lossy(sql.as_bytes()).into_owned();
+        let Some(conn) = self.pdo_conns.get(&id) else { return Ok(Zval::Long(0)) };
+        Ok(Zval::Long(conn.prepare(&sql).map(|s| s.parameter_count() as i64).unwrap_or(0)))
+    }
+
     /// `__pdo_in_txn($id)`: whether a transaction is open, as pdo_sqlite's
     /// in_transaction handler reports it (`!sqlite3_get_autocommit`, so a
     /// manual `exec('BEGIN')` counts too).

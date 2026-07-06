@@ -212,6 +212,11 @@ pub enum Op {
     StoreSuperglobal(u8),
     /// `[] -> [v]` — `++`/`--` on data superglobal `idx`, pushing the pre/post-value.
     IncDecSuperglobal { idx: u8, inc: bool, pre: bool },
+    /// `[base, key] -> [v]` — a `list()`-destructuring element read: like
+    /// [`Op::FetchDim`] (undefined-key Warning included) but SILENT on a
+    /// non-array scalar base — `list($a) = null` does not raise the
+    /// "Trying to access array offset on null" warning `$null[0]` would.
+    FetchDimList,
     /// `[] -> [arr]` — a *bare* `$GLOBALS` read: snapshot the script frame's
     /// named locals (by `slot_names`) plus the seeded data superglobals into a
     /// fresh array (PHP 8.1 read-only-copy semantics).
