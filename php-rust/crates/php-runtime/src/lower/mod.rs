@@ -1780,7 +1780,7 @@ class PDOStatement implements IteratorAggregate {
         return false;
     }
 }
-class PDORow {
+final class PDORow {
     public $queryString = '';
     public function __construct() { throw new PDOException('You may not create a PDORow manually'); }
 }
@@ -2421,7 +2421,14 @@ class ReflectionClass {
     }
     public function newInstance(...$args) { return new $this->name(...$args); }
     public function newInstanceArgs($args = []) { return new $this->name(...$args); }
-    public function newInstanceWithoutConstructor() { return __reflect_new_no_ctor($this->name); }
+    public function newInstanceWithoutConstructor() {
+        // Internal final classes cannot skip their constructor (Zend rejects
+        // it; doctrine/instantiator's PDORow probe relies on the refusal).
+        if ($this->isInternal() && $this->isFinal()) {
+            throw new ReflectionException('Class ' . $this->name . ' is an internal class marked as final that cannot be instantiated without invoking its constructor');
+        }
+        return __reflect_new_no_ctor($this->name);
+    }
     public function newLazyGhost(callable $initializer, int $options = 0) { return __reflect_new_lazy_ghost($this->name, $initializer); }
     public function newLazyProxy(callable $factory, int $options = 0) { return __reflect_new_lazy_proxy($this->name, $factory); }
     public function resetAsLazyGhost($object, callable $initializer, int $options = 0) {

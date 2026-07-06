@@ -11001,6 +11001,19 @@ impl<'m> Vm<'m> {
             }
             Ser::Object(class, props) => {
                 let lower = class.to_ascii_lowercase();
+                // The PDO classes are marked not-serializable in ext/pdo:
+                // unserializing one throws (doctrine/instantiator's fallback
+                // path converts this into its UnexpectedValueException).
+                if matches!(lower.as_slice(), b"pdo" | b"pdostatement" | b"pdorow") {
+                    let msg = format!(
+                        "Unserialization of '{}' is not allowed",
+                        String::from_utf8_lossy(&class)
+                    );
+                    if let Some(cid) = self.class_index.get(&b"exception"[..]).copied() {
+                        let obj = self.synthesize_throwable(cid, &msg)?;
+                        return Err(PhpError::Thrown(obj));
+                    }
+                }
                 let cid = self.class_index.get(lower.as_slice()).copied();
                 // `__unserialize` receives the raw data array INSTEAD of prop
                 // materialisation (PHP 7.4 protocol; wins over __wakeup).
