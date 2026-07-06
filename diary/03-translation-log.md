@@ -755,7 +755,7 @@ gap di feature non implementate, non difetti di rendering).
 
 ## Tooling hardening — depth-guard + phpt-runner isolation
 
-Step non-funzionale (DevEx/stabilità), nato dalla review esterna `analysis_results.md`
+Step non-funzionale (DevEx/stabilità), nato dalla review esterna `analysis_results.md` (oggi `external-review-2026-06-16.md`)
 (punti 1A + 3B). Nessun cambio di semantica osservabile; +2 test.
 - **Oracle**: ricompilato `/tmp/php-src` con `--enable-mbstring` (richiede oniguruma,
   installato via `brew install oniguruma`; `pkg-config` assente → passati

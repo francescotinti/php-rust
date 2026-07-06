@@ -1,4 +1,12 @@
-# Analisi del Progetto: PHP-Rust
+# Analisi del Progetto: PHP-Rust — review esterna (2026-06-16, STORICA)
+
+> ⚠️ **Documento storico** (era tree-walker, ~step 36). Molte raccomandazioni sono state
+> **poi realizzate**: il passaggio alla bytecode VM è completato e la VM è l'**unico motore**
+> dalla Sessione F (`eval/` eliminato, `corosensei` rimosso); il **cycle collector reale**
+> (trial deletion sui possible-roots) è arrivato in Sessione J. Va letto come fotografia
+> dei limiti percepiti a metà giugno 2026, non dello stato corrente — per quello vedere
+> `metrics.md` («Stato corrente») e `03-translation-log.md` (Sessioni F–N).
+> *(File rinominato da `analysis_results.md` il 2026-07-07.)*
 
 Dopo aver analizzato la documentazione del progetto (inclusi `EXPERIMENT_PLAN.md`, il diario degli step, la tabella di mapping e le divergenze note), emerge che l'architettura attuale è un'eccellente e pragmatica reimplementazione di PHP. Sfrutta `mago` come front-end per aggirare il parsing complesso, e traduce l'AST in un HIR (High-Level Intermediate Representation) su cui opera un valutatore *tree-walking*.
 

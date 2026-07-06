@@ -5,6 +5,33 @@
 Catalogo delle divergenze semantiche tra la reimplementazione Rust e l'oracle
 PHP 8.5.7. Ogni voce: severità, categoria, causa, stato.
 
+## ⚠️ Mappa di stato (2026-07-07, HEAD `e0b5080`) — leggere prima
+
+Questo file è un **registro cronologico**: ogni voce fotografa lo stato *all'epoca in cui fu
+scritta*, e molte divergenze sono state **chiuse da step successivi senza che la voce originale
+venisse ritoccata** (è un audit trail, non una matrice di compatibilità). Esempio concreto:
+**D-45.1** (`goto` dentro un blocco) è dichiarata residua allo Step 45 ma è stata **chiusa in
+Sessione F** (`f34d8d5`, routing scope-aware attraverso i `finally`). Regola generale: se il
+test che motivò una D oggi è nei **2.138 pass** del corpus, la D è de facto chiusa — il gate
+«zero pass→fail» impedisce che riapra silenziosamente.
+
+Classificazione **a livello di famiglia** (un re-audit voce-per-voce contro HEAD corrente non è
+ancora stato fatto — le ~69 D qui sotto vanno lette col filtro del corpus):
+
+- **Chiuse da step successivi** (voci storiche superate): gran parte delle D dell'era
+  tree-walker e delle prime fasi VM — generatori D-GEN (throw/finally/eccezioni-attraverso-yield
+  implementati nell'era VM), D-45.1 goto, gran parte delle D-NEW di step 6–29, le D su named
+  args/spread (binder runtime completo, Sessioni G–H), le numerazioni handle `#N` (free-list
+  LIFO, Sessione N).
+- **Attive** (divergenza reale, root-cause nota, fix non ancora fatto): D-64.1/2/3 (crypt
+  bcrypt `$2x$`/8-bit/md5-salt), D-68.1 (specifier numerico su oggetto), D-ECO-4 (GC:
+  generatori/Fiber opachi al collector), D-ECO-7 (residui suite ORM/Monolog).
+- **Scope-out deliberati** (documentati, non pianificati): le D-MB-* (edge mbstring), i
+  micro-edge DateTime D-DT, D-ECO-1 (curl_multi), D-ECO-2 (UDF sqlite — deferita per
+  re-entrancy VM, filone possibile), D-ECO-5 (quirk `::class` dinamico — fedeltà nostra
+  corretta, registrato perché contro-intuitivo).
+- **Pianificate come filone**: D-ECO-6 (by-ref property hooks `&get`, 15 test, recon fatta).
+
 ## Stato a fine step 2
 
 **Nessuna divergenza residua.** Il differential su 37.835 casi (operatori +

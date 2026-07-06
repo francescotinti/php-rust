@@ -1,6 +1,14 @@
 # Metriche dell'esperimento
 
-> Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Aggiornato: 2026-06-15 (fine step 36).
+> Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Aggiornato: **2026-07-07** (HEAD `e0b5080`).
+>
+> **Come leggere questo file**: le tabelle che seguono sono l'**archivio storico per epoca**
+> (step 1–39, era tree-walker e prime fasi VM) e NON vanno sommate né confrontate tra loro —
+> ogni numero è relativo alla suite, al motore e al commit della propria epoca. La fotografia
+> corrente, con data e HEAD, è nella sezione **«Stato corrente»** in fondo. Nota di scoping
+> permanente: il claim «37.835 casi a 0 mismatch» è il **differential degli operatori/conversioni
+> di php-types** (47×47×17 binop + unari), non il corpus `.phpt` — le due metriche misurano
+> cose diverse e viaggiano separate.
 
 ## LOC (target Rust, escluso codice di test)
 
@@ -1032,6 +1040,18 @@ tree-walking `&mut self`. Motore = `corosensei` coroutine stackful.
 
 Regola del gate: confronto delle fail-list **per nome**, zero pass→fail ammessi
 (skip→fail non è regressione); run pesanti sequenziali.
+
+Riproducibilità (motore: bytecode VM, l'unico dalla Sessione F):
+
+```bash
+phpt-runner --isolate --list-fails <php-src>/Zend/tests   # gate primario
+cargo test                                                # 20 suite di crate
+PHP_ORACLE=$(which php) cargo test -p php-types --test differential  # 37.835 operatori
+```
+
+Le suite ecosistema girano lanciando il runner PHPUnit della libreria sotto `phpr`
+(vendor installato dal *nostro* composer) e confrontando l'output con l'oracle
+`/opt/homebrew/opt/php/bin/php` (8.5.x).
 
 ## Suite ecosistema (girate sotto phpr, output confrontato con l'oracle)
 

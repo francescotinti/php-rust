@@ -145,10 +145,11 @@ Il terzo drago — l'**ecosistema di estensioni C (PECL)** — è aggredito per 
 mirata (PDO/sqlite, dom/simplexml e curl sono già caduti così); il layer FFI di compatibilità
 resta l'opzione di lungo termine per la coda.
 
-**Fedeltà**, oggi: differential type-juggling vs PHP reale a **0 mismatch**; ~1.500 unit/integration
-test Rust verdi; sul corpus `Zend/tests` ufficiale **2.071 phpt passano** (56% dei runnable, in
-crescita a ogni sessione, con gate «zero pass→fail» su ogni commit); ~640 commit di storia
-tracciata sessione per sessione.
+**Fedeltà** (a HEAD `e0b5080`, 2026-07-07): differential type-juggling vs PHP reale a
+**0 mismatch** (37.835 casi — è il differential degli *operatori*, metrica distinta dal corpus
+`.phpt`); 20 suite di crate Rust verdi; sul corpus `Zend/tests` ufficiale **2.138 phpt passano**
+(58% dei runnable, in crescita a ogni sessione, con gate «zero pass→fail» su ogni commit);
+~650 commit di storia tracciata sessione per sessione.
 
 > Lo storico dettagliato dei ~70 step di costruzione è in **[HISTORY.md](HISTORY.md)**; il diario
 > metodologico replicabile è in **[diary/](diary/)**.
@@ -157,10 +158,10 @@ tracciata sessione per sessione.
 
 ## 🚀 Prossimi passi
 
-1. **Allargare il corpus eseguibile** — `--run-skipif` nel runner (sblocca ~200+ phpt di
-   ext/pdo, ext/sqlite3 e altri) e chiusura data-driven dei costrutti che oggi fermano la
-   compilazione di un'intera unit (named arguments su call dinamiche, ecc.): ogni costrutto
-   chiuso sblocca in cascata corpus e suite dei framework.
+1. **Chiudere gli ultimi costrutti di linguaggio** — il grosso del bucket
+   «compile-unsupported» è già rientrato (`--run-skipif`, named/spread args dinamici,
+   variable variables, `C::{$expr}`, fatal compile-time fedeli: corpus 2.071→2.138); il
+   prossimo blocco è **by-ref property hooks** (`&get`, PHP 8.4) e la coda residua.
 2. **Doctrine ORM a zero** — gli ultimi 12 errori sono triagiati (XSD `schemaValidate`,
    typed-prop sui proxy lazy, singleton); il grosso del lavoro è fatto.
 3. **Framework bootstrap** — *Hello World* su Laravel/Symfony: lo stress-test definitivo per
