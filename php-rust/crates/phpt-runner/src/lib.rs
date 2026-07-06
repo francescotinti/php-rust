@@ -111,8 +111,82 @@ const UNSUPPORTED_SECTIONS: &[&str] = &[
 const SUPPORTED_EXTENSIONS: &[&str] =
     &["core", "standard", "mbstring", "pcre", "json", "date", "ctype", "hash", "zip", "pdo", "pdo_sqlite", "sqlite3"];
 
+/// Options steering a run — today only `--run-skipif`.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct RunOpts {
+    /// Execute a test's `--SKIPIF--` section through the VM instead of skipping
+    /// the whole test unseen: an output starting with `skip` (case-insensitive,
+    /// run-tests.php's rule) skips with the given reason; anything else lets the
+    /// test run. A skipif we cannot execute (missing builtin, lower error) skips
+    /// honestly as `skipif-error` rather than guessing.
+    pub run_skipif: bool,
+}
+
 /// Classify and (when in scope) run a single `.phpt` source on the bytecode VM.
 pub fn run_phpt(src: &[u8], name: &[u8], reg: &Registry) -> TestResult {
+    run_phpt_opts(src, name, reg, RunOpts::default())
+}
+
+/// Run the `--SKIPIF--` body as its own script (`<test>.skip.php`, so `__DIR__`
+/// and relative `require` resolve next to the test, exactly as run-tests.php's
+/// temp file does). Returns `Some(skip)` when the test must not run.
+fn eval_skipif(body: &str, name: &[u8], reg: &Registry) -> Option<TestResult> {
+    let test_path = Path::new(OsStr::from_bytes(name));
+    let skip_path = test_path.with_extension("skip.php");
+    let skip_name = skip_path.to_string_lossy().into_owned().into_bytes();
+    let source = body.as_bytes();
+    let materialized = !skip_path.exists() && fs::write(&skip_path, source).is_ok();
+    let run = php_runtime::vm::run_source_with(&skip_name, source, reg);
+    if materialized {
+        let _ = fs::remove_file(&skip_path);
+    }
+    match run {
+        Ok(o) => {
+            // A skipif that itself died is a scope gap of ours, not a decision.
+            if o.fatal.is_some() {
+                let msg = o.fatal.as_ref().map(|e| e.message().to_string()).unwrap_or_default();
+                return Some(TestResult::skip("skipif-error", msg));
+            }
+            let out = String::from_utf8_lossy(&o.rendered);
+            let head = out.trim_start();
+            // run-tests.php: !strncasecmp('skip', ltrim($output), 4). `xfail`
+            // from a skipif is treated as a skip too (we don't model XFAIL).
+            if head.len() >= 4 && head[..4].eq_ignore_ascii_case("skip") {
+                let reason = head.lines().next().unwrap_or("skip").trim().to_string();
+                return Some(TestResult::skip("skipif", reason));
+            }
+            if head.len() >= 5 && head[..5].eq_ignore_ascii_case("xfail") {
+                let reason = head.lines().next().unwrap_or("xfail").trim().to_string();
+                return Some(TestResult::skip("skipif-xfail", reason));
+            }
+            None
+        }
+        Err(php_runtime::vm::VmRunError::Unsupported(what)) => {
+            Some(TestResult::skip("skipif-error", what))
+        }
+        Err(php_runtime::vm::VmRunError::Lower(e)) => {
+            Some(TestResult::skip("skipif-error", format!("lower error: {e}")))
+        }
+    }
+}
+
+/// Execute a `--CLEAN--` section (best-effort, output and errors discarded):
+/// tests use it to delete scratch files (PDO's `.db` files), and not running it
+/// leaves litter that breaks *other* tests on the next batch.
+fn eval_clean(body: &str, name: &[u8], reg: &Registry) {
+    let test_path = Path::new(OsStr::from_bytes(name));
+    let clean_path = test_path.with_extension("clean.php");
+    let clean_name = clean_path.to_string_lossy().into_owned().into_bytes();
+    let source = body.as_bytes();
+    let materialized = !clean_path.exists() && fs::write(&clean_path, source).is_ok();
+    let _ = php_runtime::vm::run_source_with(&clean_name, source, reg);
+    if materialized {
+        let _ = fs::remove_file(&clean_path);
+    }
+}
+
+/// [`run_phpt`] with explicit [`RunOpts`].
+pub fn run_phpt_opts(src: &[u8], name: &[u8], reg: &Registry, opts: RunOpts) -> TestResult {
     let sections = parse_sections(src);
 
     let Some(file) = find(&sections, "FILE") else {
@@ -130,10 +204,20 @@ pub fn run_phpt(src: &[u8], name: &[u8], reg: &Registry) -> TestResult {
         return TestResult::skip("malformed", "no --EXPECT(F)-- section".to_string());
     };
 
-    // Out-of-scope sections.
-    for (name, _) in &sections {
-        if UNSUPPORTED_SECTIONS.contains(&name.as_str()) {
-            return TestResult::skip("section", format!("--{name}-- section not modelled"));
+    // Out-of-scope sections. With `--run-skipif` the SKIPIF section is executed
+    // (below) instead of forcing a blind skip.
+    for (sname, _) in &sections {
+        if UNSUPPORTED_SECTIONS.contains(&sname.as_str())
+            && !(opts.run_skipif && sname == "SKIPIF")
+        {
+            return TestResult::skip("section", format!("--{sname}-- section not modelled"));
+        }
+    }
+    if opts.run_skipif {
+        if let Some(skipif) = find(&sections, "SKIPIF") {
+            if let Some(skip) = eval_skipif(skipif, name, reg) {
+                return skip;
+            }
         }
     }
     // An extension-gated test runs only when every required extension is one we
@@ -207,6 +291,11 @@ pub fn run_phpt(src: &[u8], name: &[u8], reg: &Registry) -> TestResult {
         };
     if materialized {
         let _ = fs::remove_file(&script_path);
+    }
+    // The test ran: honour its --CLEAN-- section (scratch-file deletion), or
+    // later tests inherit its litter (PDO's on-disk `.db` files).
+    if let Some(clean) = find(&sections, "CLEAN") {
+        eval_clean(clean, name, reg);
     }
     let (rendered, fatal_msg) = match run {
         Ok(v) => v,
@@ -497,10 +586,15 @@ impl Summary {
 /// Run every `.phpt` under `root` (a file or a directory, searched
 /// recursively), returning the aggregate [`Summary`].
 pub fn run_path(root: &Path, reg: &Registry) -> std::io::Result<Summary> {
+    run_path_opts(root, reg, RunOpts::default())
+}
+
+/// [`run_path`] with explicit [`RunOpts`].
+pub fn run_path_opts(root: &Path, reg: &Registry, opts: RunOpts) -> std::io::Result<Summary> {
     let mut summary = Summary::default();
     for path in collect_phpt(root)? {
         let src = fs::read(&path)?;
-        let result = run_phpt(&src, &php_script_name(&path), reg);
+        let result = run_phpt_opts(&src, &php_script_name(&path), reg, opts);
         summary.record(&path, &result);
     }
     Ok(summary)

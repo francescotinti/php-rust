@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 
 use php_builtins::registry;
 use phpt_runner::{
-    collect_phpt, php_script_name, run_path, run_phpt, Status, Summary,
+    collect_phpt, php_script_name, run_path_opts, run_phpt_opts, RunOpts, Status, Summary,
 };
 
 /// The recursive-descent front-end (mago) and our tree-walking evaluator both
@@ -43,11 +43,14 @@ fn main() -> ExitCode {
     php_runtime::logging::init();
     let mut args: Vec<String> = std::env::args().skip(1).collect();
 
+    // Flags shared by the parent and the `--run-one` child, parsed up front.
+    let mut opts = RunOpts::default();
     // Hidden child mode: run exactly one test and serialise its result, so the
     // parent (`--isolate`) can survive a crash here as a non-zero exit status.
     if let Some(pos) = args.iter().position(|a| a == "--run-one") {
+        opts.run_skipif = args.iter().any(|a| a == "--run-skipif");
         let path = args.get(pos + 1).cloned();
-        return run_one_child(path);
+        return run_one_child(path, opts);
     }
 
     let mut list_fails = false;
@@ -66,34 +69,38 @@ fn main() -> ExitCode {
             isolate = true;
             false
         }
+        "--run-skipif" => {
+            opts.run_skipif = true;
+            false
+        }
         _ => true,
     });
 
     if args.is_empty() {
-        eprintln!("usage: phpt-runner [--list-fails] [--list-skips] [--isolate] <path>...");
+        eprintln!("usage: phpt-runner [--list-fails] [--list-skips] [--isolate] [--run-skipif] <path>...");
         return ExitCode::from(2);
     }
 
     if isolate {
         // The parent only spawns children, so it needs no large stack itself.
-        return run_isolated(&args, list_fails, list_skips);
+        return run_isolated(&args, list_fails, list_skips, opts);
     }
 
     // In-process (fast) path: run the whole job on a generous-stack worker.
     std::thread::Builder::new()
         .stack_size(WORKER_STACK)
-        .spawn(move || run_in_process(&args, list_fails, list_skips))
+        .spawn(move || run_in_process(&args, list_fails, list_skips, opts))
         .expect("spawn worker")
         .join()
         .expect("worker panicked")
 }
 
 /// Run every test in-process under one big-stack worker thread (the default).
-fn run_in_process(args: &[String], list_fails: bool, list_skips: bool) -> ExitCode {
+fn run_in_process(args: &[String], list_fails: bool, list_skips: bool, opts: RunOpts) -> ExitCode {
     let reg = registry();
     let mut total = Summary::default();
     for arg in args {
-        match run_path(Path::new(arg), &reg) {
+        match run_path_opts(Path::new(arg), &reg, opts) {
             Ok(s) => merge(&mut total, s),
             Err(e) => {
                 eprintln!("error reading {arg}: {e}");
@@ -108,7 +115,7 @@ fn run_in_process(args: &[String], list_fails: bool, list_skips: bool) -> ExitCo
 /// Run each test in its own child process (`--run-one`). A child that exits
 /// abnormally (signal from a stack overflow, or a panic) is recorded as one
 /// FAIL with the cause, instead of aborting the whole batch (DevEx hardening).
-fn run_isolated(args: &[String], list_fails: bool, list_skips: bool) -> ExitCode {
+fn run_isolated(args: &[String], list_fails: bool, list_skips: bool, opts: RunOpts) -> ExitCode {
     let exe = match std::env::current_exe() {
         Ok(p) => p,
         Err(e) => {
@@ -127,7 +134,7 @@ fn run_isolated(args: &[String], list_fails: bool, list_skips: bool) -> ExitCode
         };
         let timeout = isolate_timeout();
         for path in paths {
-            let out = run_one_isolated(&exe, &path, timeout);
+            let out = run_one_isolated(&exe, &path, timeout, opts);
             match out {
                 // Clean run: the child serialised a result on stdout.
                 Ok(IsolatedRun::Done(o)) if o.status.success() => {
@@ -222,9 +229,13 @@ fn run_one_isolated(
     exe: &Path,
     path: &Path,
     timeout: Option<Duration>,
+    opts: RunOpts,
 ) -> std::io::Result<IsolatedRun> {
     let mut cmd = Command::new(exe);
     cmd.arg("--run-one").arg(path);
+    if opts.run_skipif {
+        cmd.arg("--run-skipif");
+    }
     let mut child = cmd
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -269,7 +280,7 @@ fn run_one_isolated(
 /// Child mode: run a single test on a big-stack worker and serialise its result
 /// as `STATUS\tCATEGORY\n` followed by the (possibly multi-line) detail. A crash
 /// or panic here exits the process abnormally, which the parent detects.
-fn run_one_child(path: Option<String>) -> ExitCode {
+fn run_one_child(path: Option<String>, opts: RunOpts) -> ExitCode {
     let Some(path) = path else {
         eprintln!("--run-one needs a path");
         return ExitCode::from(2);
@@ -286,7 +297,7 @@ fn run_one_child(path: Option<String>) -> ExitCode {
         .stack_size(WORKER_STACK)
         .spawn(move || {
             let reg = registry();
-            run_phpt(&src, &name, &reg)
+            run_phpt_opts(&src, &name, &reg, opts)
         })
         .expect("spawn worker")
         .join()
