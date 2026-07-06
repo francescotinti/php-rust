@@ -321,6 +321,10 @@ pub(crate) fn run_module_with_hir<'m>(
     main_hir: Option<&'m Program>,
     argv: Option<&[&[u8]]>,
 ) -> VmOutcome {
+    // A fresh program starts a fresh handle space: ids freed by a PREVIOUS
+    // run's teardown (same thread — in-process phpt batches, unit tests)
+    // must not leak into this run's `#N` numbering.
+    php_types::reset_freed_object_ids();
     let mut vm = Vm {
         module,
         classes: module.classes.iter().collect(),
@@ -1131,8 +1135,20 @@ struct Vm<'m> {
 }
 
 impl<'m> Vm<'m> {
-    /// Allocate a fresh object handle id.
+    /// Allocate an object handle id: REUSE the most recently freed handle
+    /// first (Zend's objects-store free list, LIFO), else mint a fresh one.
+    /// Per-id VM bookkeeping from the id's previous life is cleared here —
+    /// a reused id must not inherit a "destructor already ran" mark or a
+    /// dead lazy-object state.
     fn next_id(&mut self) -> u32 {
+        if let Some(id) = php_types::take_freed_object_id() {
+            self.destructed.remove(&id);
+            self.lazy_init.remove(&id);
+            self.lazy_props.remove(&id);
+            self.lazy_initializing.remove(&id);
+            self.gc_roots.remove(&id);
+            return id;
+        }
         let id = self.next_object_id;
         self.next_object_id += 1;
         id
@@ -11241,7 +11257,8 @@ impl<'m> Vm<'m> {
                 };
                 // Synthetic same-class carrier, registered in `memo` BEFORE the
                 // recursion so a cyclic graph terminates.
-                let synth = Rc::new(RefCell::new((*orc.borrow()).clone()));
+                // id 0 = synthetic carrier: never printed, never releases a handle.
+                let synth = Rc::new(RefCell::new(orc.borrow().copy_with_id(0)));
                 {
                     let mut sb = synth.borrow_mut();
                     let keys: Vec<Vec<u8>> = sb.props.iter().map(|(k, _)| k.to_vec()).collect();

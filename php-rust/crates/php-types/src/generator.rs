@@ -28,7 +28,13 @@ pub enum GenStatus {
 
 /// The key a `yield` reports, before the driver resolves it against the
 /// auto-key counter (step 39).
-#[derive(Debug, Clone)]
+impl Drop for GenState {
+    fn drop(&mut self) {
+        crate::object::free_object_id(self.id);
+    }
+}
+
+#[derive(Debug)]
 pub enum GenKey {
     /// `yield $v` — take the next auto-key and bump the counter.
     Auto,

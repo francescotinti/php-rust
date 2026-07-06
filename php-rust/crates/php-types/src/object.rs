@@ -15,7 +15,7 @@ use crate::{PhpStr, Zval};
 /// resolution / `instanceof` (evaluator side); `class_name` is carried in the
 /// value itself so `var_dump` and error messages can render it without the class
 /// table (mirrors how `Closure` carries its `ClosureInfo`, D-19.2).
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Object {
     pub class_id: u32,
     pub class_name: Rc<PhpStr>,
@@ -66,7 +66,58 @@ pub enum LazyKind {
     Proxy,
 }
 
+thread_local! {
+    /// Freed object-handle ids, LIFO — Zend's `EG(objects_store).free_list_head`.
+    /// [`Drop`] pushes here when an `Object`/`Closure`/`GenState` is released;
+    /// the VM pops on allocation so `#N` handles are REUSED newest-first,
+    /// exactly like `zend_objects_store_put`. Reset per program run.
+    static FREED_OBJECT_IDS: std::cell::RefCell<Vec<u32>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Push a released handle id (0 = synthetic carrier, never pushed).
+pub fn free_object_id(id: u32) {
+    if id != 0 {
+        FREED_OBJECT_IDS.with(|f| f.borrow_mut().push(id));
+    }
+}
+
+/// Pop the most recently freed handle id (Zend reuses newest-first).
+pub fn take_freed_object_id() -> Option<u32> {
+    FREED_OBJECT_IDS.with(|f| f.borrow_mut().pop())
+}
+
+/// Clear the freed-id list (a new program run starts a fresh handle space).
+pub fn reset_freed_object_ids() {
+    FREED_OBJECT_IDS.with(|f| f.borrow_mut().clear());
+}
+
+impl Drop for Object {
+    fn drop(&mut self) {
+        free_object_id(self.id);
+    }
+}
+
 impl Object {
+    /// A field-by-field copy carrying the given handle id. `Object` is
+    /// deliberately NOT `Clone`: an implicit copy would carry the source's id,
+    /// and its eventual drop would push a LIVE id onto the freed-id list
+    /// (handle reuse, see [`crate::free_object_id`]). Pass `0` for a synthetic
+    /// carrier that must never release a handle.
+    pub fn copy_with_id(&self, id: u32) -> Object {
+        Object {
+            class_id: self.class_id,
+            class_name: Rc::clone(&self.class_name),
+            props: self.props.clone(),
+            id,
+            info: Rc::clone(&self.info),
+            readonly_init: self.readonly_init.clone(),
+            readonly_clone_writable: self.readonly_clone_writable.clone(),
+            lazy: self.lazy,
+            proxy_instance: self.proxy_instance.clone(),
+        }
+    }
+
     /// Whether readonly property `name` has been initialised on this instance.
     pub fn is_readonly_init(&self, name: &[u8]) -> bool {
         self.readonly_init.iter().any(|n| n.as_ref() == name)

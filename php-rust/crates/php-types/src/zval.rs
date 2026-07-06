@@ -66,7 +66,13 @@ pub enum Zval {
 /// the `(dst-slot, value)` bindings snapshotted at *creation* time — a `use($x)`
 /// by-value capture holds a plain clone, a `use(&$x)` by-reference capture holds
 /// a `Zval::Ref` to the shared cell (D-18.3).
-#[derive(Clone, Debug)]
+impl Drop for Closure {
+    fn drop(&mut self) {
+        crate::object::free_object_id(self.id);
+    }
+}
+
+#[derive(Debug)]
 pub struct Closure {
     pub fn_idx: usize,
     pub captures: Vec<(u32, Zval)>,

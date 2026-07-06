@@ -1441,9 +1441,11 @@ class PDO {
             if (strcasecmp($cls, 'PDOStatement') !== 0 && !is_subclass_of($cls, 'PDOStatement')) {
                 throw new TypeError('PDO::setAttribute(): Argument #2 ($value) PDO::ATTR_STATEMENT_CLASS class must be derived from PDOStatement');
             }
-            if (strcasecmp($cls, 'PDOStatement') !== 0) {
-                $ctor = (new ReflectionClass($cls))->getConstructor();
-                if ($ctor !== null && $ctor->isPublic()) {
+            if (strcasecmp($cls, 'PDOStatement') !== 0 && method_exists($cls, '__construct')) {
+                // Host hook directly -- intermediate Reflection objects would
+                // burn handle ids the real pdo_dbh.c never allocates (#N).
+                $mi = __reflect_method_info($cls, '__construct');
+                if ($mi['visibility'] === 'public') {
                     throw new TypeError('PDO::setAttribute(): Argument #2 ($value) User-supplied statement class cannot have a public constructor');
                 }
             }
@@ -1549,13 +1551,14 @@ class PDO {
             $st->__pdoInit($this, $this->__h, $sql);
             return $st;
         }
-        $rc = new ReflectionClass($cls);
-        if ($rc->isAbstract()) { throw new Error('Cannot instantiate abstract class ' . $cls); }
-        $st = $rc->newInstanceWithoutConstructor();
+        // Host hooks directly (no intermediate Reflection objects: they would
+        // burn handle ids the real pdo_stmt.c never allocates, shifting #N).
+        if (__reflect_class_modifiers($cls)['abstract']) { throw new Error('Cannot instantiate abstract class ' . $cls); }
+        $st = __reflect_new_no_ctor($cls);
         $st->__pdoInit($this, $this->__h, $sql);
-        if ($rc->getConstructor() !== null) {
+        if (method_exists($cls, '__construct')) {
             $args = isset($sc[1]) && is_array($sc[1]) ? $sc[1] : array();
-            (new ReflectionMethod($cls, '__construct'))->invoke($st, ...$args);
+            __reflect_invoke($st, $cls, '__construct', $args);
         }
         return $st;
     }
