@@ -1402,21 +1402,67 @@ class PDO {
     public function __destruct() {
         if ($this->__h !== null) { __pdo_close($this->__h); $this->__h = null; }
     }
-    // PHP 8.4 static factory (doctrine/dbal's PDOConnect prefers it). The real
-    // one returns the driver subclass (Pdo\Sqlite); phpr returns PDO itself,
-    // an accepted slice until the subclass exists.
+    // PHP 8.4 static factory (doctrine/dbal's PDOConnect prefers it): returns
+    // the driver subclass (Pdo\Sqlite) for a sqlite DSN, like the real one.
     public static function connect($dsn, $username = null, $password = null, $options = null) {
+        if (strncmp((string)$dsn, 'sqlite:', 7) === 0 && !is_a(static::class, 'Pdo\Sqlite', true)) {
+            return new \Pdo\Sqlite($dsn, $username, $password, $options);
+        }
         return new static($dsn, $username, $password, $options);
     }
     // get/setAttribute follow pdo_dbh.c: the error state clears at method
     // ENTRY (a later errorCode() reads 00000 even after a failed call here);
     // an attribute outside the supported set raises SQLSTATE[IM001] on get
     // and plainly returns false on set.
+    // TypeError text helper (PHP's zend_zval_value_name flavour).
+    public static function __tname($v) {
+        if ($v === null) { return 'null'; }
+        if (is_bool($v)) { return 'bool'; }
+        if (is_int($v)) { return 'int'; }
+        if (is_float($v)) { return 'float'; }
+        if (is_string($v)) { return 'string'; }
+        if (is_array($v)) { return 'array'; }
+        if (is_object($v)) { return get_class($v); }
+        return gettype($v);
+    }
     public function setAttribute($attribute, $value) {
         $this->__err = array('00000', null, null);
+        // ATTR_STATEMENT_CLASS validates eagerly (pdo_dbh.c): array shape,
+        // real class, derived from PDOStatement, non-public constructor.
+        // Abstractness is NOT checked here -- it errors at instantiation.
+        if ($attribute === PDO::ATTR_STATEMENT_CLASS) {
+            if (!is_array($value)) {
+                throw new TypeError('PDO::setAttribute(): Argument #2 ($value) PDO::ATTR_STATEMENT_CLASS value must be of type array, ' . PDO::__tname($value) . ' given');
+            }
+            if (!isset($value[0]) || !is_string($value[0]) || !class_exists($value[0])) {
+                throw new TypeError('PDO::setAttribute(): Argument #2 ($value) PDO::ATTR_STATEMENT_CLASS class must be a valid class');
+            }
+            $cls = $value[0];
+            if (strcasecmp($cls, 'PDOStatement') !== 0 && !is_subclass_of($cls, 'PDOStatement')) {
+                throw new TypeError('PDO::setAttribute(): Argument #2 ($value) PDO::ATTR_STATEMENT_CLASS class must be derived from PDOStatement');
+            }
+            if (strcasecmp($cls, 'PDOStatement') !== 0) {
+                $ctor = (new ReflectionClass($cls))->getConstructor();
+                if ($ctor !== null && $ctor->isPublic()) {
+                    throw new TypeError('PDO::setAttribute(): Argument #2 ($value) User-supplied statement class cannot have a public constructor');
+                }
+            }
+            if (array_key_exists(1, $value) && $value[1] !== null && !is_array($value[1])) {
+                throw new TypeError('PDO::setAttribute(): Argument #2 ($value) PDO::ATTR_STATEMENT_CLASS ctor_args must be of type ?array, ' . PDO::__tname($value[1]) . ' given');
+            }
+            $this->__attrs[$attribute] = $value;
+            return true;
+        }
+        if ($attribute === PDO::ATTR_STRINGIFY_FETCHES) {
+            if (!is_bool($value) && !is_int($value) && !is_float($value)) {
+                throw new TypeError('Attribute value must be of type bool for selected attribute, ' . PDO::__tname($value) . ' given');
+            }
+            $this->__attrs[$attribute] = (bool)$value;
+            return true;
+        }
         if ($attribute === PDO::ATTR_ERRMODE || $attribute === PDO::ATTR_CASE || $attribute === PDO::ATTR_ORACLE_NULLS
-            || $attribute === PDO::ATTR_STRINGIFY_FETCHES || $attribute === PDO::ATTR_DEFAULT_FETCH_MODE
-            || $attribute === PDO::ATTR_DEFAULT_STR_PARAM || $attribute === PDO::ATTR_STATEMENT_CLASS
+            || $attribute === PDO::ATTR_DEFAULT_FETCH_MODE
+            || $attribute === PDO::ATTR_DEFAULT_STR_PARAM
             || $attribute === PDO::ATTR_TIMEOUT || $attribute === PDO::SQLITE_ATTR_EXTENDED_RESULT_CODES) {
             $this->__attrs[$attribute] = $value;
             return true;
@@ -1436,6 +1482,7 @@ class PDO {
             if ($attribute === PDO::ATTR_PERSISTENT || $attribute === PDO::ATTR_STRINGIFY_FETCHES) { return false; }
             if ($attribute === PDO::ATTR_DEFAULT_FETCH_MODE) { return PDO::FETCH_BOTH; }
             if ($attribute === PDO::ATTR_ERRMODE) { return PDO::ERRMODE_EXCEPTION; }
+            if ($attribute === PDO::ATTR_STATEMENT_CLASS) { return array('PDOStatement'); }
             return null;
         }
         return $this->__raise(array('SQLSTATE[IM001]: Driver does not support this function: driver does not support that attribute', 'IM001', null, null), 'PDO::getAttribute');
@@ -1488,8 +1535,28 @@ class PDO {
         $r = __pdo_prepare($this->__h, (string)$query);
         if (is_array($r) && isset($r['err'])) { return $this->__raise($r['err'], 'PDO::prepare'); }
         $this->__err = array('00000', null, null);
-        $st = new PDOStatement();
-        $st->__pdoInit($this, $this->__h, (string)$query);
+        return $this->__newStatement((string)$query);
+    }
+    // ATTR_STATEMENT_CLASS instantiation: the class was validated at set time;
+    // abstractness surfaces HERE (an Error, like `new` would raise), and the
+    // (usually non-public) constructor runs AFTER the statement is wired,
+    // with the declared ctor_args -- visibility bypassed like pdo_stmt.c.
+    public function __newStatement($sql) {
+        $sc = isset($this->__attrs[PDO::ATTR_STATEMENT_CLASS]) ? $this->__attrs[PDO::ATTR_STATEMENT_CLASS] : null;
+        $cls = $sc !== null ? $sc[0] : 'PDOStatement';
+        if (strcasecmp($cls, 'PDOStatement') === 0) {
+            $st = new PDOStatement();
+            $st->__pdoInit($this, $this->__h, $sql);
+            return $st;
+        }
+        $rc = new ReflectionClass($cls);
+        if ($rc->isAbstract()) { throw new Error('Cannot instantiate abstract class ' . $cls); }
+        $st = $rc->newInstanceWithoutConstructor();
+        $st->__pdoInit($this, $this->__h, $sql);
+        if ($rc->getConstructor() !== null) {
+            $args = isset($sc[1]) && is_array($sc[1]) ? $sc[1] : array();
+            (new ReflectionMethod($cls, '__construct'))->invoke($st, ...$args);
+        }
         return $st;
     }
     public function query($query, $mode = null, ...$args) {
@@ -1539,6 +1606,7 @@ class PDOStatement implements IteratorAggregate {
     private $__modeArgs = array();
     private $__meta = array();
     private $__freed = false;
+    private $__boundCols = array();
     public function __pdoInit($pdo, $h, $sql) {
         $this->__pdo = $pdo;
         $this->__c = $h;
@@ -1604,7 +1672,7 @@ class PDOStatement implements IteratorAggregate {
         if (!$propsLate && $ctor !== null) { $o->__construct(...$ctorArgs); }
         return $o;
     }
-    private function __buildRow($row, $mode, $margs = null) {
+    private function __buildRow($row, $mode, $margs = null, $colOff = 0) {
         $pdo = $this->__pdo;
         if ($mode === null || $mode === PDO::FETCH_DEFAULT) { $mode = $this->__mode; }
         if ($mode === null || $mode === PDO::FETCH_DEFAULT) {
@@ -1615,10 +1683,13 @@ class PDOStatement implements IteratorAggregate {
         $mode = $mode & 15;
         $stringify = $pdo !== null && $pdo->getAttribute(PDO::ATTR_STRINGIFY_FETCHES);
         $case = $pdo !== null ? $pdo->getAttribute(PDO::ATTR_CASE) : PDO::CASE_NATURAL;
+        // $colOff > 0 = FETCH_GROUP/UNIQUE: the first column became the group
+        // key, the row is built from the REMAINING columns (0-rebased).
         $vals = array();
         foreach ($row as $i => $v) {
+            if ($i < $colOff) { continue; }
             if ($stringify && (is_int($v) || is_float($v))) { $v = (string)$v; }
-            $vals[$i] = $v;
+            $vals[$i - $colOff] = $v;
         }
         if ($mode === PDO::FETCH_NUM) { return $vals; }
         if ($mode === PDO::FETCH_COLUMN) {
@@ -1627,9 +1698,10 @@ class PDOStatement implements IteratorAggregate {
         }
         $names = array();
         foreach ($this->__cols as $i => $n) {
+            if ($i < $colOff) { continue; }
             if ($case === PDO::CASE_LOWER) { $n = strtolower($n); }
             elseif ($case === PDO::CASE_UPPER) { $n = strtoupper($n); }
-            $names[$i] = $n;
+            $names[$i - $colOff] = $n;
         }
         if ($mode === PDO::FETCH_CLASS) {
             $assoc = array();
@@ -1668,11 +1740,61 @@ class PDOStatement implements IteratorAggregate {
         if ($this->__rows === null || $this->__pos >= count($this->__rows)) { return false; }
         $row = $this->__rows[$this->__pos];
         $this->__pos = $this->__pos + 1;
+        // Bound columns (bindColumn) refresh on EVERY fetch, whatever the mode;
+        // FETCH_BOUND then just reports success without building a row.
+        if (count($this->__boundCols)) {
+            foreach ($this->__boundCols as $col => $b) {
+                $i = is_int($col) ? $col - 1 : array_search($col, $this->__cols, true);
+                $v = ($i !== false && $i !== null && array_key_exists($i, $row)) ? $row[$i] : null;
+                $this->__boundCols[$col][0] = $this->__coerce($v, $b[1]);
+            }
+        }
+        if ($mode === PDO::FETCH_BOUND) { return true; }
         return $this->__buildRow($row, $mode);
+    }
+    public function bindColumn($column, &$var, $type = PDO::PARAM_STR, $maxLength = 0, $driverOptions = null) {
+        $this->__boundCols[$column] = array(null, $type === null ? PDO::PARAM_STR : $type);
+        $this->__boundCols[$column][0] =& $var;
+        return true;
     }
     public function fetchAll($mode = null, ...$args) {
         if ($this->__rows === null) { return array(); }
         $out = array();
+        $flags = is_int($mode) ? $mode : 0;
+        // FETCH_GROUP/FETCH_UNIQUE: key on the first column, build the rest.
+        if (($flags & (PDO::FETCH_GROUP | PDO::FETCH_UNIQUE)) !== 0) {
+            $unique = ($flags & PDO::FETCH_UNIQUE) !== 0;
+            $inner = $mode & ~(PDO::FETCH_GROUP | PDO::FETCH_UNIQUE);
+            if (($inner & 15) === 0) { $inner = $inner | PDO::FETCH_BOTH; }
+            while ($this->__pos < count($this->__rows)) {
+                $row = $this->__rows[$this->__pos];
+                $this->__pos = $this->__pos + 1;
+                $key = $row[0];
+                $built = $this->__buildRow($row, $inner, count($args) ? $args : null, 1);
+                if ($unique) { $out[$key] = $built; }
+                else { $out[$key][] = $built; }
+            }
+            return $out;
+        }
+        // FETCH_FUNC: one callable invocation per row, columns as arguments.
+        if (($flags & 15) === PDO::FETCH_FUNC) {
+            $fn = isset($args[0]) ? $args[0] : (isset($this->__modeArgs[0]) ? $this->__modeArgs[0] : null);
+            while (($row = $this->fetch(PDO::FETCH_NUM)) !== false) { $out[] = $fn(...$row); }
+            return $out;
+        }
+        // FETCH_CLASSTYPE: the class name comes from the FIRST column, the
+        // remaining columns are the properties (stdClass when unknown).
+        if (($flags & PDO::FETCH_CLASSTYPE) !== 0) {
+            $inner = $mode & ~PDO::FETCH_CLASSTYPE;
+            while ($this->__pos < count($this->__rows)) {
+                $row = $this->__rows[$this->__pos];
+                $this->__pos = $this->__pos + 1;
+                $cls = (string)$row[0];
+                if (!class_exists($cls)) { $cls = 'stdClass'; }
+                $out[] = $this->__buildRow($row, PDO::FETCH_CLASS | ($inner & ~15), array($cls, array()), 1);
+            }
+            return $out;
+        }
         if ($mode === PDO::FETCH_COLUMN) {
             $col = isset($args[0]) ? $args[0] : (isset($this->__modeArgs[0]) ? $this->__modeArgs[0] : 0);
             while (($row = $this->fetch(PDO::FETCH_NUM)) !== false) { $out[] = array_key_exists($col, $row) ? $row[$col] : null; }
@@ -4135,6 +4257,37 @@ function simplexml_import_dom($node, $class_name = 'SimpleXMLElement') {
 }
 "##;
 
+/// The namespaced prelude tail: PHP forbids `namespace` after global code, so
+/// `Pdo\Sqlite` (PHP 8.4's driver subclass) is its own unit, hoisted into the
+/// same class table by [`lower_prelude_uncached`]. The sqlite-specific UDF
+/// family (createFunction/createAggregate/createCollation/setAuthorizer) is
+/// NOT declared: it needs PHP callbacks running inside sqlite's step loop
+/// (VM re-entrancy), so those calls keep the honest undefined-method error.
+const PRELUDE_NS_SRC: &[u8] = br##"<?php
+namespace Pdo;
+class Sqlite extends \PDO {
+    public const DETERMINISTIC = 2048;
+    public const OPEN_READONLY = 1;
+    public const OPEN_READWRITE = 2;
+    public const OPEN_CREATE = 4;
+    public const ATTR_OPEN_FLAGS = 1000;
+    public const ATTR_READONLY_STATEMENT = 1001;
+    public const ATTR_EXTENDED_RESULT_CODES = 1002;
+    public const ATTR_BUSY_STATEMENT = 1003;
+    public const ATTR_EXPLAIN_STATEMENT = 1004;
+    public const ATTR_TRANSACTION_MODE = 1005;
+    public const TRANSACTION_MODE_DEFERRED = 0;
+    public const TRANSACTION_MODE_IMMEDIATE = 1;
+    public const TRANSACTION_MODE_EXCLUSIVE = 2;
+    public const EXPLAIN_MODE_PREPARED = 0;
+    public const EXPLAIN_MODE_EXPLAIN = 1;
+    public const EXPLAIN_MODE_EXPLAIN_QUERY_PLAN = 2;
+    public const OK = 0;
+    public const DENY = 1;
+    public const IGNORE = 2;
+}
+"##;
+
 /// The four owned products of lowering [`PRELUDE_SRC`]: the class table + its
 /// name→id index (step 20), and the global-function table + its name→index
 /// (step 35). Both are seeded into every real program before user declarations
@@ -4192,6 +4345,19 @@ fn lower_prelude_uncached() -> LoweredPrelude {
             low.hoist_function(func).expect("prelude function must lower");
         }
     }
+    // The namespaced tail (`Pdo\Sqlite`): PHP forbids a `namespace` statement
+    // after global code, so it lives in its own compilation unit, hoisted into
+    // the same tables (for_blocks scopes the namespace for the second file).
+    let file_ns =
+        File::ephemeral(Cow::Borrowed(b"prelude".as_slice()), Cow::Borrowed(PRELUDE_NS_SRC));
+    let program_ns = parse_file(&arena, &file_ns);
+    debug_assert!(
+        !program_ns.has_errors(),
+        "namespaced prelude failed to parse: {:?}",
+        program_ns.errors
+    );
+    low.hoist_classes(program_ns.statements.as_slice())
+        .expect("namespaced prelude must lower");
     (low.classes, low.class_index, low.functions, low.fn_index)
 }
 
