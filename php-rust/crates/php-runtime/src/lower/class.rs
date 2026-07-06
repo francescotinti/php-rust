@@ -805,8 +805,12 @@ impl<'f> Lowerer<'f> {
         // before the NUL is what `var_dump`/`print_r` show (`class@anonymous`),
         // while `get_class()`/`::class` return the whole string (EXPECTF `%s`
         // matches the `\0…` tail). `@`/NUL keep it unreachable from user names.
+        // The tail embeds the *unit* (like PHP's `file:line$handle`): a bare
+        // per-unit counter collides across `include`d units in the link table
+        // (two units' `class@anonymous\x00` resolved to whichever linked first).
         let mut nm = b"class@anonymous\0".to_vec();
-        nm.extend_from_slice(format!("{n}").as_bytes());
+        nm.extend_from_slice(&self.prog_name);
+        nm.extend_from_slice(format!(":{line}${n}").as_bytes());
         let name: Box<[u8]> = nm.into();
         let is_abstract = anon.modifiers.iter().any(|m| m.is_abstract());
         let mut decl = self.lower_class_body(

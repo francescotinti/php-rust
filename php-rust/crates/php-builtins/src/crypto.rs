@@ -99,10 +99,8 @@ mod tests {
     fn call(args: &[Zval]) -> Result<Zval, PhpError> {
         let mut out = Vec::new();
         let mut diags: Diags = Vec::new();
-        let mut ctx = Ctx {
-            out: &mut out,
-            diags: &mut diags,
-        };
+        let mut direct = Vec::new();
+        let mut ctx = Ctx { out: &mut out, diags: &mut diags, direct_out: &mut direct };
         crypt(args, &mut ctx)
     }
 

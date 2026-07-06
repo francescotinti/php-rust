@@ -1061,6 +1061,13 @@ fn find_const_decl<'a>(cid: ClassId, name: &[u8], ctx: &'a ProgramCtx<'a>) -> Op
 /// the stack of enclosing loops (for `break N` / `continue N`), and the
 /// program-wide [`ProgramCtx`] for resolving call / class targets.
 struct FnCompiler<'a> {
+    /// Pending `?->` short-circuit jump sites of the access chain being
+    /// compiled: PHP's nullsafe skips to the end of the WHOLE chain
+    /// (`$a?->b()->c()['d']` with null `$a` evaluates none of it), so every
+    /// deref link routes its null-jump here and the chain's outermost link
+    /// patches them all past itself. `None` outside a chain; detached
+    /// (chain_pause) around non-chain subexpressions like call arguments.
+    nullsafe_chain: Option<Vec<u32>>,
     ops: Vec<Op>,
     /// Source line of each emitted op, parallel to `ops` (EXC-3b). `emit` pushes
     /// the current line; `patch` overwrites an op in place and leaves this alone.
@@ -1165,6 +1172,7 @@ impl<'a> FnCompiler<'a> {
         slot_names: &'a [Box<[u8]>],
     ) -> Self {
         FnCompiler {
+            nullsafe_chain: None,
             ops: Vec::new(),
             lines: Vec::new(),
             cur_line: 0,
@@ -1711,6 +1719,40 @@ impl<'a> FnCompiler<'a> {
         Ok(())
     }
 
+    /// Open a nullsafe chain context if none is active; returns whether this
+    /// link is the chain's outermost one (the root, which patches the skips).
+    fn chain_enter(&mut self) -> bool {
+        if self.nullsafe_chain.is_none() {
+            self.nullsafe_chain = Some(Vec::new());
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Root of an access chain: patch every collected `?->` skip to *here*
+    /// (past the whole chain) and close the context.
+    fn chain_exit(&mut self, root: bool) {
+        if root {
+            if let Some(sites) = self.nullsafe_chain.take() {
+                let end = self.here();
+                for s in sites {
+                    self.patch(s, Op::JumpIfNull(end));
+                }
+            }
+        }
+    }
+
+    /// Compile a non-chain subexpression (call arguments, a dynamic name, an
+    /// index) with the chain context detached, so a `?->` inside it forms its
+    /// own chain instead of short-circuiting the enclosing one.
+    fn chain_pause<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+        let saved = self.nullsafe_chain.take();
+        let r = f(self);
+        self.nullsafe_chain = saved;
+        r
+    }
+
     fn expr(&mut self, e: &Expr) -> R<()> {
         self.cur_line = e.line;
         match &e.kind {
@@ -1766,6 +1808,10 @@ impl<'a> FnCompiler<'a> {
                 // `$_SERVER` (&c.) read — resolved by name in the VM superglobal
                 // store, so it reads correctly from any unit/frame.
                 self.emit(Op::LoadSuperglobal(*idx));
+            }
+            ExprKind::GlobalsArray => {
+                // Bare `$GLOBALS`: snapshot of the global symbol table.
+                self.emit(Op::LoadGlobals);
             }
             ExprKind::Assign(slot, rhs) => {
                 self.expr(rhs)?;
@@ -1945,9 +1991,12 @@ impl<'a> FnCompiler<'a> {
                 }
             }
             ExprKind::Index { base, index } => {
+                // Part of an access chain: `$o?->m()['x']` skips the fetch too.
+                let root = self.chain_enter();
                 self.expr(base)?;
-                self.expr(index)?;
+                self.chain_pause(|s| s.expr(index))?;
                 self.emit(Op::FetchDim);
+                self.chain_exit(root);
             }
             ExprKind::AssignPlace(place, rhs) => self.assign_place(place, rhs)?,
             ExprKind::AssignCoalescePlace(place, rhs) => self.assign_coalesce_place(place, rhs)?,
@@ -2094,18 +2143,20 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::Include { mode: *mode });
             }
             ExprKind::PropGet { object, name, nullsafe } => {
+                let root = self.chain_enter();
                 self.expr(object)?;
                 if *nullsafe {
-                    // `$o?->p`: a null receiver keeps null and skips the read.
+                    // `$o?->p`: a null receiver keeps null and skips the read —
+                    // and every further link of the enclosing chain (patched by
+                    // the chain root).
                     let skip = self.emit(Op::JumpIfNull(Addr::MAX));
-                    self.emit(Op::PropGet { name: name.clone() });
-                    let end = self.here();
-                    self.patch(skip, Op::JumpIfNull(end));
-                } else {
-                    self.emit(Op::PropGet { name: name.clone() });
+                    self.nullsafe_chain.as_mut().expect("chain open").push(skip);
                 }
+                self.emit(Op::PropGet { name: name.clone() });
+                self.chain_exit(root);
             }
             ExprKind::MethodCall { object, method, args, named, nullsafe } => {
+                let root = self.chain_enter();
                 self.expr(object)?;
                 // A `$this->m(...)` receiver has a statically-known class, so the
                 // method's by-reference parameters can be honoured (REF-2); any other
@@ -2116,38 +2167,34 @@ impl<'a> FnCompiler<'a> {
                 };
                 if *nullsafe {
                     // `$o?->m(...)`: a null receiver keeps null and skips the call
-                    // (its arguments are not evaluated either).
+                    // (its arguments are not evaluated either) plus the rest of
+                    // the chain.
                     let skip = self.emit(Op::JumpIfNull(Addr::MAX));
-                    self.emit_method_call(method, args, named, recv_class)?;
-                    let end = self.here();
-                    self.patch(skip, Op::JumpIfNull(end));
-                } else {
-                    self.emit_method_call(method, args, named, recv_class)?;
+                    self.nullsafe_chain.as_mut().expect("chain open").push(skip);
                 }
+                self.chain_pause(|s| s.emit_method_call(method, args, named, recv_class))?;
+                self.chain_exit(root);
             }
             ExprKind::PropGetDyn { object, name, nullsafe } => {
+                let root = self.chain_enter();
                 self.expr(object)?;
                 if *nullsafe {
                     let skip = self.emit(Op::JumpIfNull(Addr::MAX));
-                    self.expr(name)?; // [obj, name]
-                    self.emit(Op::PropGetDynamic);
-                    let end = self.here();
-                    self.patch(skip, Op::JumpIfNull(end));
-                } else {
-                    self.expr(name)?; // [obj, name]
-                    self.emit(Op::PropGetDynamic);
+                    self.nullsafe_chain.as_mut().expect("chain open").push(skip);
                 }
+                self.chain_pause(|s| s.expr(name))?; // [obj, name]
+                self.emit(Op::PropGetDynamic);
+                self.chain_exit(root);
             }
             ExprKind::MethodCallDyn { object, method, args, named, nullsafe } => {
+                let root = self.chain_enter();
                 self.expr(object)?;
                 if *nullsafe {
                     let skip = self.emit(Op::JumpIfNull(Addr::MAX));
-                    self.emit_method_call_dyn(method, args, named)?;
-                    let end = self.here();
-                    self.patch(skip, Op::JumpIfNull(end));
-                } else {
-                    self.emit_method_call_dyn(method, args, named)?;
+                    self.nullsafe_chain.as_mut().expect("chain open").push(skip);
                 }
+                self.chain_pause(|s| s.emit_method_call_dyn(method, args, named))?;
+                self.chain_exit(root);
             }
             ExprKind::InstanceOf { expr, class } => self.instance_of(expr, class)?,
             ExprKind::StaticCall { class, method, args, named } => {
@@ -4322,37 +4369,52 @@ impl<'a> FnCompiler<'a> {
             self.patch(to_end, Op::Jump(end));
             return Ok(());
         }
-        // `$a[k] ??= rhs` on a single-step array element rooted at a local /
-        // `$GLOBALS` slot: evaluate the key once (into a temp), then assign only if
-        // the element is unset, yielding the existing or newly-stored value.
-        if place.steps.len() == 1 {
-            if let PlaceStep::Index(k) = &place.steps[0] {
-                let base = dim_base(place)?;
+        // `$a[k1][k2]… ??= rhs` on an all-index path rooted at a local /
+        // `$GLOBALS` slot: evaluate each key once (into temps), then assign
+        // only if the element is unset, yielding the existing or newly-stored
+        // value (symfony's DeepClone leans on the 2-step static-prop form,
+        // which static_prop_rmw funnels here).
+        if !place.steps.is_empty()
+            && place.steps.iter().all(|s| matches!(s, PlaceStep::Index(_)))
+        {
+            let n = place.steps.len() as u32;
+            let base = dim_base(place)?;
+            let mut temps = Vec::with_capacity(place.steps.len());
+            for st in &place.steps {
+                let PlaceStep::Index(k) = st else { unreachable!("all-index checked") };
                 let t_key = self.alloc_temp();
-                self.expr(k)?; // [key]
-                self.emit(Op::Dup); // [key, key]
-                self.emit(Op::StoreSlot(t_key)); // [key]
-                self.emit(Op::IssetPath { base, nkeys: 1 }); // [bool]
-                let to_assign = self.emit(Op::JumpIfFalse(Addr::MAX));
-                // Set: yield the existing element value.
-                match base {
-                    DimBase::Local(s) => self.emit(Op::LoadSlot(s)),
-                    DimBase::Global(s) => self.emit(Op::LoadGlobal(s)),
-                    DimBase::Superglobal(i) => self.emit(Op::LoadSuperglobal(i)),
-                };
-                self.emit(Op::LoadSlot(t_key)); // [baseval, key]
-                self.emit(Op::FetchDim); // [value]
-                let to_end = self.emit(Op::Jump(Addr::MAX));
-                let assign_at = self.here();
-                self.patch(to_assign, Op::JumpIfFalse(assign_at));
-                self.emit(Op::LoadSlot(t_key)); // [key]
-                self.expr(rhs)?; // [key, rhs]
-                self.emit(Op::AssignPath { base, nkeys: 1, append: false }); // [value]
-                let end = self.here();
-                self.patch(to_end, Op::Jump(end));
-                self.free_temp();
-                return Ok(());
+                self.expr(k)?; // […, key]
+                self.emit(Op::Dup);
+                self.emit(Op::StoreSlot(t_key));
+                temps.push(t_key);
             }
+            // stack: [k1 … kn]
+            self.emit(Op::IssetPath { base, nkeys: n }); // [bool]
+            let to_assign = self.emit(Op::JumpIfFalse(Addr::MAX));
+            // Set: yield the existing element value.
+            match base {
+                DimBase::Local(s) => self.emit(Op::LoadSlot(s)),
+                DimBase::Global(s) => self.emit(Op::LoadGlobal(s)),
+                DimBase::Superglobal(i) => self.emit(Op::LoadSuperglobal(i)),
+            };
+            for t in &temps {
+                self.emit(Op::LoadSlot(*t)); // [baseval, key]
+                self.emit(Op::FetchDim); // [value]
+            }
+            let to_end = self.emit(Op::Jump(Addr::MAX));
+            let assign_at = self.here();
+            self.patch(to_assign, Op::JumpIfFalse(assign_at));
+            for t in &temps {
+                self.emit(Op::LoadSlot(*t)); // [k1 … kn]
+            }
+            self.expr(rhs)?; // [k1 … kn, rhs]
+            self.emit(Op::AssignPath { base, nkeys: n, append: false }); // [value]
+            let end = self.here();
+            self.patch(to_end, Op::Jump(end));
+            for _ in &temps {
+                self.free_temp();
+            }
+            return Ok(());
         }
         Err(CompileError::Unsupported("`??=` on this place".into()))
     }
@@ -4802,6 +4864,7 @@ fn expr_name(k: &ExprKind) -> String {
         ExprKind::Var(_) => "Var",
         ExprKind::GlobalVar(_) => "GlobalVar",
         ExprKind::Superglobal(_) => "Superglobal",
+        ExprKind::GlobalsArray => "GlobalsArray",
         ExprKind::Binary(..) => "Binary",
         ExprKind::And(..) => "And",
         ExprKind::Or(..) => "Or",

@@ -770,6 +770,12 @@ pub enum ExprKind {
     /// superglobal store, so it resolves identically in every unit/frame
     /// (including included files), unlike a unit-local `GlobalVar` slot.
     Superglobal(u8),
+    /// A *bare* `$GLOBALS` read (passed/copied as a whole array): materialize
+    /// the global symbol table — the script frame's named locals plus the
+    /// seeded data superglobals — as an array snapshot (PHP 8.1 semantics:
+    /// `$GLOBALS` is a read-only copy; element writes keep going through the
+    /// dedicated `GlobalVar` path).
+    GlobalsArray,
 
     /// Binary op with eager left-then-right operand evaluation, dispatched to
     /// `php_types::ops` by the evaluator. Excludes short-circuit and coalesce.

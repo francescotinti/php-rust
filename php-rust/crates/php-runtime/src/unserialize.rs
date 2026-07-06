@@ -137,9 +137,12 @@ impl Parser<'_> {
                 self.eat(b'{')?;
                 let mut props = Vec::with_capacity(n);
                 for _ in 0..n {
-                    // Property names are themselves serialized strings.
+                    // Property names are serialized strings; an `__serialize()`
+                    // record may carry *int* keys (`i:0;`) — kept as their
+                    // decimal form (the array builder re-canonicalizes them).
                     let name = match self.value()? {
                         Ser::Str(s) => s,
+                        Ser::Long(i) => i.to_string().into_bytes(),
                         _ => return None,
                     };
                     let v = self.value()?;

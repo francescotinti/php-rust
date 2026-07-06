@@ -386,6 +386,86 @@ pub fn mode_caps(mode: &[u8]) -> Option<(bool, bool)> {
 /// Open a `php://` wrapper stream (`memory`/`temp`/`stdout`/`stderr`), or `None`
 /// for an unrecognised wrapper (step 51b). stdout/stderr are write-only; memory/
 /// temp honour the mode (defaulting to read+write for a lenient/odd mode string).
+/// `data:` / `data://` (RFC 2397) read-only streams: `data://MIME[;base64],payload`.
+/// Non-base64 payloads are urldecoded (`+` → space, like PHP's wrapper); an
+/// invalid base64 payload fails the open (PHP: "rfc2397: unable to decode").
+/// `path` is the full URI including the `data:` prefix (kept as the stream uri).
+pub fn open_data_stream(path: &[u8]) -> Option<Stream> {
+    let spec = path.strip_prefix(b"data:")?;
+    let spec = spec.strip_prefix(b"//").unwrap_or(spec);
+    let comma = spec.iter().position(|&b| b == b',')?;
+    let (meta, payload) = (&spec[..comma], &spec[comma + 1..]);
+    let data = if meta.ends_with(b";base64") {
+        base64_decode_strict(payload)?
+    } else {
+        // urldecode: %XX plus `+` → space.
+        let mut out = Vec::with_capacity(payload.len());
+        let mut i = 0;
+        while i < payload.len() {
+            match payload[i] {
+                b'+' => out.push(b' '),
+                b'%' if i + 2 < payload.len() => {
+                    match (
+                        (payload[i + 1] as char).to_digit(16),
+                        (payload[i + 2] as char).to_digit(16),
+                    ) {
+                        (Some(h), Some(l)) => {
+                            out.push((h * 16 + l) as u8);
+                            i += 2;
+                        }
+                        _ => out.push(b'%'),
+                    }
+                }
+                c => out.push(c),
+            }
+            i += 1;
+        }
+        out
+    };
+    Some(Stream {
+        backend: StreamBackend::Memory(Cursor::new(data)),
+        readable: true,
+        writable: false,
+        eof: false,
+        uri: path.to_vec(),
+        mode: b"rb".to_vec(),
+    })
+}
+
+/// Strict base64 (PHP's `base64_decode($s, true)`): whitespace tolerated,
+/// any other out-of-alphabet byte (or data after `=` padding) fails.
+fn base64_decode_strict(s: &[u8]) -> Option<Vec<u8>> {
+    let mut acc: u32 = 0;
+    let mut bits = 0u32;
+    let mut out = Vec::new();
+    let mut padded = false;
+    for &c in s {
+        let v = match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            b' ' | b'\n' | b'\r' | b'\t' => continue,
+            b'=' => {
+                padded = true;
+                continue;
+            }
+            _ => return None,
+        };
+        if padded {
+            return None;
+        }
+        acc = (acc << 6) | u32::from(v);
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+        }
+    }
+    Some(out)
+}
+
 pub fn open_php_stream(spec: &[u8], mode: &[u8]) -> Option<Stream> {
     let backend = if spec == b"memory" || spec == b"temp" || spec.starts_with(b"temp/") {
         StreamBackend::Memory(Cursor::new(Vec::new()))

@@ -100,10 +100,11 @@ pub fn fwrite(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         )));
         return Ok(Zval::Bool(false));
     }
-    // `php://stdout` must land in the evaluator's output buffer (so it
-    // interleaves with `echo` and is captured), not the real process stdout.
+    // `php://stdout` lands in the evaluator's stdout stream but BYPASSES the
+    // ob_* stack, like PHP's stream layer (PHPUnit's printer relies on this
+    // while tests hold an output buffer): route it through the direct sink.
     if matches!(stream.backend, StreamBackend::Stdout) {
-        ctx.out.extend_from_slice(bytes);
+        ctx.direct_out.extend_from_slice(bytes);
         return Ok(Zval::Long(bytes.len() as i64));
     }
     match stream.write(bytes) {

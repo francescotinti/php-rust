@@ -257,7 +257,10 @@ impl<'m> Vm<'m> {
                         n.extend_from_slice(name.as_bytes());
                         match std::str::from_utf8(&n).ok().and_then(|n| stmt.parameter_index(n).ok().flatten()) {
                             Some(i) => i as i64,
-                            None => continue,
+                            // execute(array) skips an unmatched name silently;
+                            // a bindValue'd one errors at execute (oracle 25).
+                            None if strict => continue,
+                            None => return Ok(range_err()),
                         }
                     }
                 };

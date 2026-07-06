@@ -121,6 +121,19 @@ pub fn ini_set(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Bool(false))
 }
 
+/// `ini_restore($name)` — void. phpr's INI table is immutable (ini_set never
+/// applies), so restoring is a no-op; existing so guard code like DBAL's
+/// StatementTest teardown runs.
+pub fn ini_restore(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    Ok(Zval::Null)
+}
+
+/// `posix_geteuid()` — the process's effective uid (libc, real value: DBAL's
+/// ExceptionTest skips its chmod-based test when running as root).
+pub fn posix_geteuid(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    Ok(Zval::Long(i64::from(unsafe { libc::geteuid() })))
+}
+
 /// `php_ini_loaded_file()` — path of the primary loaded `php.ini`, or `false`
 /// when none was loaded. phpr reads no INI file, so `false` (as a PHP build
 /// started with `-n`). Composer's XdebugHandler tolerates this.
@@ -164,7 +177,8 @@ mod tests {
     fn call(f: fn(&[Zval], &mut Ctx) -> Result<Zval, PhpError>, args: &[Zval]) -> Zval {
         let mut out = Vec::new();
         let mut diags: Diags = Vec::new();
-        let mut ctx = Ctx { out: &mut out, diags: &mut diags };
+        let mut direct = Vec::new();
+        let mut ctx = Ctx { out: &mut out, diags: &mut diags, direct_out: &mut direct };
         f(args, &mut ctx).unwrap()
     }
 

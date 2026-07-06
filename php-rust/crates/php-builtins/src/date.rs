@@ -972,6 +972,10 @@ pub fn __date_from_format(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError
     // Track which fields were explicitly parsed (for `|`).
     let mut seen = [false; 6]; // y, mo, d, h, i, s
     let mut vi = 0;
+    // `O`/`P` timezone offset (seconds east) + its `+HH:MM` display form, and
+    // `u`/`v` fractional seconds (as microseconds).
+    let mut tz_off: Option<(i64, Vec<u8>)> = None;
+    let mut micros: i64 = 0;
 
     let result = (|| {
         while fi < f.len() {
@@ -1036,6 +1040,73 @@ pub fn __date_from_format(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError
                     s = read_digits(v, &mut vi, 2)?;
                     seen[5] = true;
                 }
+                b'O' | b'P' | b'p' => {
+                    // `+0300` / `+03:00` (or a literal `Z` for UTC).
+                    if v.get(vi) == Some(&b'Z') {
+                        vi += 1;
+                        tz_off = Some((0, b"+00:00".to_vec()));
+                    } else {
+                        let sign = match v.get(vi)? {
+                            b'+' => 1i64,
+                            b'-' => -1i64,
+                            _ => return None,
+                        };
+                        vi += 1;
+                        let hh = read_digits(v, &mut vi, 2)?;
+                        if v.get(vi) == Some(&b':') {
+                            vi += 1;
+                        }
+                        let mm = read_digits(v, &mut vi, 2)?;
+                        let disp = format!(
+                            "{}{:02}:{:02}",
+                            if sign < 0 { '-' } else { '+' },
+                            hh,
+                            mm
+                        );
+                        tz_off = Some((sign * (hh * 3600 + mm * 60), disp.into_bytes()));
+                    }
+                }
+                b'u' | b'v' => {
+                    // Up to 6 (u) / 3 (v) fraction digits, scaled to micros.
+                    let max = if fc == b'u' { 6 } else { 3 };
+                    let start = vi;
+                    let mut n: i64 = 0;
+                    while vi < v.len() && vi - start < max && v[vi].is_ascii_digit() {
+                        n = n * 10 + i64::from(v[vi] - b'0');
+                        vi += 1;
+                    }
+                    if vi == start {
+                        return None;
+                    }
+                    let mut digits = vi - start;
+                    while digits < 6 {
+                        n *= 10;
+                        digits += 1;
+                    }
+                    micros = if fc == b'v' { n } else { n };
+                }
+                b'U' => {
+                    // Epoch seconds, straight through.
+                    let start = vi;
+                    let mut n: i64 = 0;
+                    let neg = if v.get(vi) == Some(&b'-') {
+                        vi += 1;
+                        true
+                    } else {
+                        false
+                    };
+                    while vi < v.len() && v[vi].is_ascii_digit() {
+                        n = n * 10 + i64::from(v[vi] - b'0');
+                        vi += 1;
+                    }
+                    if vi == start {
+                        return None;
+                    }
+                    let ts = if neg { -n } else { n };
+                    let (y2, mo2, d2, h2, mi2, s2) = decompose(ts)?;
+                    (yr, mo, d, h, mi, s) = (y2, mo2, d2, h2, mi2, s2);
+                    seen = [true; 6];
+                }
                 other => {
                     if v.get(vi) == Some(&other) {
                         vi += 1;
@@ -1049,11 +1120,23 @@ pub fn __date_from_format(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError
         if vi != v.len() {
             return None;
         }
-        civil_to_epoch(yr, mo, d, h, mi, s)
+        let base = civil_to_epoch(yr, mo, d, h, mi, s)?;
+        // A parsed offset means the wall time above was *in* that offset.
+        Some(base - tz_off.as_ref().map(|(o, _)| *o).unwrap_or(0))
     })();
 
     Ok(match result {
-        Some(ts) => Zval::Long(ts),
+        Some(ts) => {
+            // `[ts, tz-display|null, microseconds]` for the prelude wrapper.
+            let mut out = php_types::PhpArray::new();
+            let _ = out.append(Zval::Long(ts));
+            let _ = out.append(match tz_off {
+                Some((_, disp)) => Zval::Str(php_types::PhpStr::new(disp)),
+                None => Zval::Null,
+            });
+            let _ = out.append(Zval::Long(micros));
+            Zval::Array(std::rc::Rc::new(out))
+        }
         None => Zval::Bool(false),
     })
 }

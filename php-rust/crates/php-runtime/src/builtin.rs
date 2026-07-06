@@ -17,6 +17,11 @@ use php_types::{Diags, PhpError, Zval};
 pub struct Ctx<'a> {
     pub out: &'a mut Vec<u8>,
     pub diags: &'a mut Diags,
+    /// Output that must reach the real stdout *bypassing output buffering*:
+    /// PHP routes stream writes (`fwrite(STDOUT)`, `php://stdout`) past the
+    /// `ob_*` stack, unlike `echo`/`print`. The VM appends this straight to
+    /// its stdout/rendered sinks after the builtin returns.
+    pub direct_out: &'a mut Vec<u8>,
 }
 
 /// A by-value builtin: positional arguments in, a value (or fatal error) out.

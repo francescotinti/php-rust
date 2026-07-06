@@ -1944,12 +1944,19 @@ impl<'m> Vm<'m> {
     ) -> Result<Zval, PhpError> {
         self.flush_diags(line)?;
         let mut produced = Vec::new();
+        let mut direct = Vec::new();
         let res = {
-            let mut ctx = Ctx { out: &mut produced, diags: &mut self.diags };
+            let mut ctx =
+                Ctx { out: &mut produced, diags: &mut self.diags, direct_out: &mut direct };
             f(args, &mut ctx)
         };
         self.flush_diags(line)?;
         self.write_output(&produced)?;
+        // Stream writes to stdout bypass the ob stack (see Ctx::direct_out).
+        if !direct.is_empty() {
+            self.stdout.extend_from_slice(&direct);
+            self.rendered.extend_from_slice(&direct);
+        }
         res
     }
 
@@ -2168,6 +2175,32 @@ impl<'m> Vm<'m> {
                     let v = self.frames[top].stack.pop().expect("StoreSuperglobal on empty stack");
                     let old = store_slot(&mut self.superglobals[idx as usize], v);
                     self.gc_note(&old);
+                }
+                Op::LoadGlobals => {
+                    // Bare `$GLOBALS`: snapshot the script frame's named locals
+                    // plus the seeded data superglobals (PHP 8.1 read-only-copy
+                    // semantics; `$GLOBALS` itself excluded).
+                    let mut out = PhpArray::new();
+                    let names: Vec<Vec<u8>> =
+                        self.frames[0].func.slot_names.iter().map(|n| n.to_vec()).collect();
+                    for (i, name) in names.iter().enumerate() {
+                        if name.is_empty() {
+                            continue;
+                        }
+                        let v = read_slot(&self.frames[0].slots[i]);
+                        if matches!(v, Zval::Undef) {
+                            continue;
+                        }
+                        out.insert(Key::from_bytes(name), v);
+                    }
+                    for (i, name) in crate::bytecode::SUPERGLOBAL_NAMES.iter().enumerate() {
+                        let v = read_slot(&self.superglobals[i]);
+                        if matches!(v, Zval::Undef) {
+                            continue;
+                        }
+                        out.insert(Key::from_bytes(name), v);
+                    }
+                    self.frames[top].stack.push(Zval::Array(Rc::new(out)));
                 }
                 Op::IncDecSuperglobal { idx, inc, pre } => {
                     let i = idx as usize;
@@ -6110,6 +6143,10 @@ impl<'m> Vm<'m> {
             Some(v) => convert::to_bool(v, &mut self.diags),
             None => false,
         };
+        let flags = args
+            .get(3)
+            .map(|v| convert::to_long_cast(v, &mut self.diags))
+            .unwrap_or(0);
         match crate::json::parse(&json) {
             Some(j) => {
                 self.json_last_error = 0; // JSON_ERROR_NONE
@@ -6117,6 +6154,13 @@ impl<'m> Vm<'m> {
             }
             None => {
                 self.json_last_error = 4; // JSON_ERROR_SYNTAX
+                if flags & 4_194_304 != 0 {
+                    // JSON_THROW_ON_ERROR
+                    if let Some(cid) = self.class_index.get(&b"jsonexception"[..]).copied() {
+                        let obj = self.synthesize_throwable(cid, "Syntax error")?;
+                        return Err(PhpError::Thrown(obj));
+                    }
+                }
                 Ok(Zval::Null)
             }
         }
@@ -8439,6 +8483,49 @@ impl<'m> Vm<'m> {
         Ok(Zval::Array(Rc::new(a)))
     }
 
+    /// `__reflect_method_names($class)`: every method name visible on `$class`
+    /// regardless of visibility — declaration order, child-most override first,
+    /// walking the parent chain (a parent's `private` methods excluded, like
+    /// `ReflectionClass::getMethods`). `get_class_methods` can't back this: it
+    /// filters to public when called from outside the class (PHPUnit's hook
+    /// discovery needs the protected `#[Before]` methods).
+    fn ho_reflect_method_names(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let mut a = php_types::PhpArray::new();
+        if let Some(first) = args.first() {
+            let raw = convert::to_zstr_cast(first, &mut self.diags).as_bytes().to_vec();
+            let key = raw.strip_prefix(b"\\").unwrap_or(&raw).to_ascii_lowercase();
+            if let Some(&cid) = self.class_index.get(&key) {
+                let mut seen: std::collections::HashSet<Vec<u8>> = std::collections::HashSet::new();
+                let mut out: Vec<Vec<u8>> = Vec::new();
+                // Parent chain first (child-most override wins), then the
+                // interface closure: an interface's signatures live in
+                // `abstract_sigs`, which mock generation must see too.
+                let mut queue: Vec<(usize, usize)> = vec![(cid, 0)];
+                while let Some((c, depth)) = queue.pop() {
+                    let cls = &self.classes[c];
+                    for m in cls.methods.iter().chain(cls.abstract_sigs.iter()) {
+                        if depth > 0 && matches!(m.visibility, crate::hir::Visibility::Private) {
+                            continue;
+                        }
+                        if seen.insert(m.name.to_ascii_lowercase()) {
+                            out.push(m.name.to_vec());
+                        }
+                    }
+                    if let Some(p) = cls.parent {
+                        queue.push((p as usize, depth + 1));
+                    }
+                    for &i in &cls.interfaces {
+                        queue.push((i as usize, depth + 1));
+                    }
+                }
+                for n in out {
+                    let _ = a.append(Zval::Str(PhpStr::new(n)));
+                }
+            }
+        }
+        Ok(Zval::Array(Rc::new(a)))
+    }
+
     /// `__reflect_prop_is_static($class, $prop)`: whether `$prop` is a static
     /// property of `$class` — backs `ReflectionProperty::isStatic`.
     fn ho_reflect_prop_is_static(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
@@ -10152,8 +10239,121 @@ impl<'m> Vm<'m> {
             b"preg_replace" => self.ho_preg_replace(args),
             b"proc_open" => self.ho_proc_open(args),
             b"pcntl_sigprocmask" => self.ho_pcntl_sigprocmask(args),
+            b"parse_str" => self.ho_parse_str(args),
             _ => Err(undefined_builtin(name)),
         }
+    }
+
+    /// `parse_str($string, &$result)`: parse a URL query string into an array
+    /// (urldecoded keys/values, `k[]`/`k[sub]` nesting; PHP mangles `.`/` ` to
+    /// `_` in *top-level* names). Returns `(null, result_array)` for the VM
+    /// out-param path.
+    fn ho_parse_str(&mut self, args: Vec<Zval>) -> Result<(Zval, Zval), PhpError> {
+        fn urldecode(s: &[u8]) -> Vec<u8> {
+            let mut out = Vec::with_capacity(s.len());
+            let mut i = 0;
+            while i < s.len() {
+                match s[i] {
+                    b'+' => out.push(b' '),
+                    b'%' if i + 2 < s.len() => {
+                        let hi = (s[i + 1] as char).to_digit(16);
+                        let lo = (s[i + 2] as char).to_digit(16);
+                        if let (Some(h), Some(l)) = (hi, lo) {
+                            out.push((h * 16 + l) as u8);
+                            i += 2;
+                        } else {
+                            out.push(b'%');
+                        }
+                    }
+                    c => out.push(c),
+                }
+                i += 1;
+            }
+            out
+        }
+        let src = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags);
+        let mut result = PhpArray::new();
+        for pair in src.as_bytes().split(|&b| b == b'&') {
+            if pair.is_empty() {
+                continue;
+            }
+            let (raw_key, raw_val) = match pair.iter().position(|&b| b == b'=') {
+                Some(eq) => (&pair[..eq], &pair[eq + 1..]),
+                None => (pair, &pair[pair.len()..]),
+            };
+            let key = urldecode(raw_key);
+            let val = Zval::Str(PhpStr::new(urldecode(raw_val)));
+            // Split `name[a][b]…` into the base name and bracket path.
+            let (base_end, mut path): (usize, Vec<Option<Vec<u8>>>) =
+                match key.iter().position(|&b| b == b'[') {
+                    None => (key.len(), Vec::new()),
+                    Some(p) => {
+                        let mut segs = Vec::new();
+                        let mut i = p;
+                        while i < key.len() && key[i] == b'[' {
+                            match key[i + 1..].iter().position(|&b| b == b']') {
+                                Some(off) => {
+                                    let seg = &key[i + 1..i + 1 + off];
+                                    segs.push(if seg.is_empty() { None } else { Some(seg.to_vec()) });
+                                    i += off + 2;
+                                }
+                                None => break,
+                            }
+                        }
+                        (p, segs)
+                    }
+                };
+            // PHP mangles `.` and ` ` to `_` in the top-level variable name.
+            let mut base: Vec<u8> = key[..base_end]
+                .iter()
+                .map(|&b| if b == b'.' || b == b' ' { b'_' } else { b })
+                .collect();
+            if base.is_empty() {
+                continue;
+            }
+            if path.is_empty() {
+                result.insert(Key::from_bytes(&base), val);
+                continue;
+            }
+            // Walk/create the nested arrays for the bracket path.
+            path.insert(0, Some(std::mem::take(&mut base)));
+            fn descend(arr: &mut PhpArray, path: &[Option<Vec<u8>>], val: Zval) {
+                let (head, rest) = path.split_first().expect("non-empty path");
+                if rest.is_empty() {
+                    match head {
+                        Some(k) => arr.insert(Key::from_bytes(k), val),
+                        None => {
+                            let _ = arr.append(val);
+                        }
+                    }
+                    return;
+                }
+                let key = match head {
+                    Some(k) => Key::from_bytes(k),
+                    None => {
+                        // `k[]` mid-path: the next free int index (append form).
+                        let mut next = 0i64;
+                        for (k, _) in arr.iter() {
+                            if let Key::Int(i) = k {
+                                if *i >= next {
+                                    next = i + 1;
+                                }
+                            }
+                        }
+                        Key::Int(next)
+                    }
+                };
+                let entry = match arr.get(&key) {
+                    Some(Zval::Array(a)) => (**a).clone(),
+                    _ => PhpArray::new(),
+                };
+                let mut entry = entry;
+                descend(&mut entry, rest, val);
+                arr.insert(key, Zval::Array(Rc::new(entry)));
+            }
+            descend(&mut result, &path, val);
+        }
+        Ok((Zval::Null, Zval::Array(Rc::new(result))))
     }
 
     /// `preg_match($pattern, $subject, &$matches = null, $flags = 0)`: returns 1 on
@@ -11310,6 +11510,20 @@ impl<'m> Vm<'m> {
         let mode = convert::to_zstr_cast(&mode_arg.deref_clone(), &mut self.diags)
             .as_bytes()
             .to_vec();
+        if path.starts_with(b"data:") {
+            return match php_types::open_data_stream(&path) {
+                Some(stream) => Ok(self.alloc_resource(stream)),
+                None => {
+                    self.diags.push(Diag::Warning(format!(
+                        "fopen({}): Failed to open stream: rfc2397: unable to decode",
+                        String::from_utf8_lossy(&path)
+                    )));
+                    let line = self.cur_line(self.frames.len() - 1);
+                    self.flush_diags(line)?;
+                    Ok(Zval::Bool(false))
+                }
+            };
+        }
         if let Some(spec) = path.strip_prefix(b"php://".as_slice()) {
             return match open_php_stream(spec, &mode) {
                 Some(stream) => Ok(self.alloc_resource(stream)),
@@ -12236,6 +12450,58 @@ impl<'m> Vm<'m> {
             }
             other => Ok(convert::to_zstr(other, &mut self.diags)),
         }
+    }
+
+    /// `implode($separator, $array)` / `implode($array)` as a *host* builtin:
+    /// elements convert via [`Self::vm_stringify`], so a `Stringable` object
+    /// element runs its `__toString` (doctrine's nested CompositeExpression) —
+    /// the registry implementation can only fatal on objects. Signature errors
+    /// mirror `php-builtins`' implode exactly.
+    fn ho_implode(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let args: Vec<Zval> = args.iter().map(|a| a.deref_clone()).collect();
+        let (glue, arr) = match args.as_slice() {
+            [Zval::Array(a)] => (Vec::new(), Rc::clone(a)),
+            [only] => {
+                return Err(PhpError::TypeError(format!(
+                    "implode(): Argument #1 ($array) must be of type array, {} given",
+                    only.type_name_for_error()
+                )))
+            }
+            [sep, rest @ ..] => {
+                if let Zval::Array(_) = sep {
+                    return Err(PhpError::TypeError(
+                        "implode(): Argument #1 ($separator) must be of type string, array given"
+                            .to_string(),
+                    ));
+                }
+                match rest.first() {
+                    Some(Zval::Array(a)) => {
+                        (convert::to_zstr(sep, &mut self.diags).as_bytes().to_vec(), Rc::clone(a))
+                    }
+                    Some(other) => {
+                        return Err(PhpError::TypeError(format!(
+                            "implode(): Argument #2 ($array) must be of type array, {} given",
+                            other.type_name_for_error()
+                        )))
+                    }
+                    None => unreachable!("rest has at least one element"),
+                }
+            }
+            [] => {
+                return Err(PhpError::Error(
+                    "implode() expects at least 1 argument, 0 given".to_string(),
+                ))
+            }
+        };
+        let mut out = Vec::new();
+        for (i, (_, v)) in arr.iter().enumerate() {
+            if i > 0 {
+                out.extend_from_slice(&glue);
+            }
+            let s = self.vm_stringify(&v.deref_clone())?;
+            out.extend_from_slice(s.as_bytes());
+        }
+        Ok(Zval::Str(PhpStr::new(out)))
     }
 
     /// Dispatch a by-reference-first host builtin (`usort`, Session C): `slot` is
@@ -14543,6 +14809,8 @@ host_builtins! {
     b"__reflect_attr_newinstance" => vm.ho_reflect_attr_newinstance(args),
     b"__reflect_attr_arguments" => vm.ho_reflect_attr_arguments(args),
     b"__reflect_prop_declaring_class" => vm.ho_reflect_prop_declaring_class(args),
+    b"__reflect_method_names" => vm.ho_reflect_method_names(args),
+    b"implode" | b"join" => vm.ho_implode(args),
     b"__reflect_func_info" => vm.ho_reflect_func_info(args),
     b"__reflect_closure_info" => vm.ho_reflect_closure_info(args),
     b"__reflect_closure_attributes" => vm.ho_reflect_closure_attributes(args),
@@ -14859,6 +15127,8 @@ pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usiz
     const HOST_OUT: &[(&[u8], usize)] = &[
         (b"preg_match", 2),
         (b"preg_match_all", 2),
+        // `&$result` receives the parsed query-string array.
+        (b"parse_str", 1),
         (b"mb_ereg", 2),
         (b"mb_eregi", 2),
         // `&$count` (number of replacements). Also in the plain host table for
@@ -15533,13 +15803,26 @@ fn apply_cast(kind: CastKind, a: &Zval, d: &mut Diags) -> Zval {
             arr @ Zval::Array(_) => arr,
             Zval::Null | Zval::Undef => Zval::Array(Rc::new(PhpArray::new())),
             Zval::Object(o) => {
+                let ob = o.borrow();
                 let mut arr = PhpArray::new();
-                for (key, val) in o.borrow().props.iter() {
+                for (key, val) in ob.props.iter() {
                     // An uninitialized typed property is absent from the cast.
-                    if !matches!(val, Zval::Undef) {
+                    if matches!(val, Zval::Undef) {
+                        continue;
+                    }
+                    // Zend keys: public plain, private `\0Class\0name` (the raw
+                    // storage key already), protected `\0*\0name` — phpr stores
+                    // protected props unmangled, so the marker is added here.
+                    let (disp, vis) = php_types::unmangle_prop_key(key, &ob.info);
+                    if matches!(vis, php_types::PropVis::Protected) {
+                        let mut k = b"\0*\0".to_vec();
+                        k.extend_from_slice(disp);
+                        arr.insert(Key::from_bytes(&k), val.deref_clone());
+                    } else {
                         arr.insert(Key::from_bytes(key), val.deref_clone());
                     }
                 }
+                drop(ob);
                 Zval::Array(Rc::new(arr))
             }
             scalar => {

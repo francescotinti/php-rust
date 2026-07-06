@@ -60,8 +60,13 @@ impl<'f> Lowerer<'f> {
                     // Superglobals (`$_SERVER`, …) are auto-global: in any scope
                     // they read the VM-level superglobal store by name, so they
                     // resolve identically across units/frames (incl. included
-                    // files). `$GLOBALS` keeps its own dedicated slot handling.
+                    // files). `$GLOBALS[k]` keeps its dedicated slot handling.
                     ExprKind::Superglobal(idx)
+                } else if name == b"GLOBALS" {
+                    // A bare `$GLOBALS` (no dim): the global symbol table as an
+                    // array snapshot (`TestUtil::mapConnectionParameters($GLOBALS,…)`).
+                    // Keyed reads take the `GlobalVar` route in lower_index.
+                    ExprKind::GlobalsArray
                 } else {
                     ExprKind::Var(self.slot_for(name))
                 }
@@ -967,24 +972,18 @@ impl<'f> Lowerer<'f> {
             }
             PartialApplication::Method(m) if m.argument_list.is_first_class_callable() => {
                 let object = self.lower_expr(m.object)?;
-                let name = match self.member_sel(&m.method, line)? {
-                    MemberSel::Static(n) => n,
-                    MemberSel::Dynamic(_) => {
-                        return Err(LowerError::Unsupported {
-                            what: "dynamic first-class callable",
-                            line,
-                        })
-                    }
+                // `$obj->m(...)` and the dynamic `$obj->$name(...)`: both are
+                // `Closure::fromCallable([$obj, <name>])`, the name a literal
+                // or the runtime expression.
+                let name_expr = match self.member_sel(&m.method, line)? {
+                    MemberSel::Static(n) => Expr { line, kind: ExprKind::Str(n) },
+                    MemberSel::Dynamic(e) => e,
                 };
                 let arr = Expr {
                     line,
                     kind: ExprKind::Array(vec![
                         ArrayElem { key: None, value: object, by_ref: false },
-                        ArrayElem {
-                            key: None,
-                            value: Expr { line, kind: ExprKind::Str(name.clone()) },
-                            by_ref: false,
-                        },
+                        ArrayElem { key: None, value: name_expr, by_ref: false },
                     ]),
                 };
                 Ok(ExprKind::StaticCall {
@@ -996,28 +995,48 @@ impl<'f> Lowerer<'f> {
             }
             PartialApplication::StaticMethod(s) if s.argument_list.is_first_class_callable() => {
                 let class = self.class_ref_of(s.class, line)?;
-                let name = match self.member_sel(&s.method, line)? {
-                    MemberSel::Static(n) => n,
-                    MemberSel::Dynamic(_) => {
+                // `self::m(...)` / `static::m(...)`: the lexically enclosing
+                // class is known here (`static::` differs only under LSB
+                // inheritance of the *creation site*, which fromCallable's
+                // forms do not model — accepted slice). A dynamic class
+                // (`$obj::$name(...)`) rides as the array's first element
+                // (fromCallable accepts an object or a class-name string).
+                let class_elem: Expr = match class {
+                    ClassRef::Named(cn) => {
+                        Expr { line, kind: ExprKind::Str(cn.to_vec().into()) }
+                    }
+                    ClassRef::SelfClass | ClassRef::Static => match self.cur_class.clone() {
+                        Some(c) => Expr { line, kind: ExprKind::Str(c.to_vec().into()) },
+                        None => {
+                            return Err(LowerError::Unsupported {
+                                what: "dynamic first-class callable",
+                                line,
+                            })
+                        }
+                    },
+                    ClassRef::Dynamic(e) => *e,
+                    _ => {
                         return Err(LowerError::Unsupported {
                             what: "dynamic first-class callable",
                             line,
                         })
                     }
                 };
-                let ClassRef::Named(cn) = class else {
-                    return Err(LowerError::Unsupported {
-                        what: "dynamic first-class callable",
-                        line,
-                    });
+                let name_expr = match self.member_sel(&s.method, line)? {
+                    MemberSel::Static(n) => Expr { line, kind: ExprKind::Str(n) },
+                    MemberSel::Dynamic(e) => e,
                 };
-                let mut qualified = cn.to_vec();
-                qualified.extend_from_slice(b"::");
-                qualified.extend_from_slice(&name);
+                let arr = Expr {
+                    line,
+                    kind: ExprKind::Array(vec![
+                        ArrayElem { key: None, value: class_elem, by_ref: false },
+                        ArrayElem { key: None, value: name_expr, by_ref: false },
+                    ]),
+                };
                 Ok(ExprKind::StaticCall {
                     class: ClassRef::Named(Box::from(&b"Closure"[..])),
                     method: Box::from(&b"fromCallable"[..]),
-                    args: vec![Expr { line, kind: ExprKind::Str(qualified.into()) }],
+                    args: vec![arr],
                     named: vec![],
                 })
             }

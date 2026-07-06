@@ -10,7 +10,10 @@ pub(super) fn builtin_ref_call(
     out: &mut Vec<u8>,
     diags: &mut Diags,
 ) -> Result<Zval, PhpError> {
-    let mut ctx = Ctx { out, diags };
+    // The ref-first family (sort/array_push/…) never writes to a stdout
+    // stream, so its ob-bypass sink is a discarded local.
+    let mut direct = Vec::new();
+    let mut ctx = Ctx { out, diags, direct_out: &mut direct };
     if let Zval::Ref(rc) = cell {
         let mut guard = rc.borrow_mut();
         f(&mut guard, rest, &mut ctx)

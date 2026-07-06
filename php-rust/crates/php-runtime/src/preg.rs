@@ -395,6 +395,11 @@ fn onig_replace_all(re: &onig::Regex, text: &str, repl: &str) -> String {
 /// Parse and compile a PHP PCRE pattern. Returns `None` when the delimiters are
 /// malformed or neither engine can build the body (step 36 auto-fallback).
 pub fn compile(pattern: &[u8]) -> Option<Engine> {
+    // php_pcre.c skips leading whitespace (incl. newlines) before reading the
+    // delimiter — an indented-heredoc pattern (doctrine/dbal's name parser)
+    // starts with spaces and is valid PCRE.
+    let ws = pattern.iter().take_while(|b| b.is_ascii_whitespace()).count();
+    let pattern = &pattern[ws..];
     let open = *pattern.first()?;
     let close = match open {
         b'(' => b')',
@@ -611,6 +616,13 @@ pub fn translate_replacement(repl: &[u8]) -> Vec<u8> {
     let mut i = 0;
     while i < repl.len() {
         let c = repl[i];
+        // PCRE replacement: `\\` is ONE literal backslash (doctrine's
+        // escapeStringForLike relies on `'\\\\$1'` producing `\` + group).
+        if c == b'\\' && repl.get(i + 1) == Some(&b'\\') {
+            out.push(b'\\');
+            i += 2;
+            continue;
+        }
         if c == b'\\' || c == b'$' {
             // Optional brace form: \{1} / ${1}.
             let (mut j, braced) = if repl.get(i + 1) == Some(&b'{') {

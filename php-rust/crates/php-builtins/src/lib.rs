@@ -193,6 +193,7 @@ pub fn registry() -> Registry {
     add(b"hash_algos", encoding::hash_algos);
     add(b"stream_get_wrappers", encoding::stream_get_wrappers);
     add(b"array_flip", array::array_flip);
+    add(b"array_change_key_case", array::array_change_key_case);
     add(b"array_combine", array::array_combine);
     add(b"array_pad", array::array_pad);
     add(b"array_product", array::array_product);
@@ -362,6 +363,12 @@ pub fn registry() -> Registry {
     add(b"max", math::max);
     add(b"min", math::min);
     add(b"intdiv", math::intdiv);
+    add(b"dechex", math::dechex);
+    add(b"decoct", math::decoct);
+    add(b"decbin", math::decbin);
+    add(b"hexdec", math::hexdec);
+    add(b"octdec", math::octdec);
+    add(b"bindec", math::bindec);
     add(b"fdiv", math::fdiv);
     add(b"pow", math::pow);
     add(b"sqrt", math::sqrt);
@@ -412,6 +419,8 @@ pub fn registry() -> Registry {
     add(b"php_sapi_name", env::php_sapi_name);
     add(b"ini_get", env::ini_get);
     add(b"ini_set", env::ini_set);
+    add(b"ini_restore", env::ini_restore);
+    add(b"posix_geteuid", env::posix_geteuid);
     add(b"php_ini_loaded_file", env::php_ini_loaded_file);
     add(b"php_ini_scanned_files", env::php_ini_scanned_files);
     add(b"phpinfo", env::phpinfo);

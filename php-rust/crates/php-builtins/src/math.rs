@@ -46,6 +46,71 @@ fn num_arg(args: &[Zval], idx: usize, fname: &str, n: usize, pname: &str) -> Res
     })
 }
 
+/// dechex($num): lowercase hex digits of the int, treated as *unsigned* 64-bit
+/// (PHP: dechex(-1) = "ffffffffffffffff").
+pub fn dechex(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let n = to_int_arg(args, 0, "dechex", 1, "num")?;
+    Ok(Zval::str_from(&format!("{:x}", n as u64)))
+}
+
+/// decoct($num): octal digits, unsigned like dechex.
+pub fn decoct(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let n = to_int_arg(args, 0, "decoct", 1, "num")?;
+    Ok(Zval::str_from(&format!("{:o}", n as u64)))
+}
+
+/// decbin($num): binary digits, unsigned like dechex.
+pub fn decbin(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let n = to_int_arg(args, 0, "decbin", 1, "num")?;
+    Ok(Zval::str_from(&format!("{:b}", n as u64)))
+}
+
+/// The `hexdec`/`octdec`/`bindec` core: fold the digits of `base`, ignoring
+/// characters outside the alphabet (PHP semantics), overflowing into float.
+fn basedec(args: &[Zval], base: u32, fname: &'static str, ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let v = args.first().ok_or_else(|| {
+        PhpError::ArgumentCountError(format!("{fname}() expects exactly 1 argument, 0 given"))
+    })?;
+    let s = php_types::convert::to_zstr_cast(v, ctx.diags);
+    let mut int_acc: i64 = 0;
+    let mut float_acc: f64 = 0.0;
+    let mut overflow = false;
+    for &b in s.as_bytes() {
+        let d = match (b as char).to_digit(base) {
+            Some(d) => d,
+            None => continue,
+        };
+        if !overflow {
+            match int_acc.checked_mul(base as i64).and_then(|x| x.checked_add(d as i64)) {
+                Some(x) => int_acc = x,
+                None => {
+                    overflow = true;
+                    float_acc = int_acc as f64;
+                }
+            }
+        }
+        if overflow {
+            float_acc = float_acc * base as f64 + d as f64;
+        }
+    }
+    Ok(if overflow { Zval::Double(float_acc) } else { Zval::Long(int_acc) })
+}
+
+/// hexdec($hex_string): int (or float on overflow) value of the hex digits.
+pub fn hexdec(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    basedec(args, 16, "hexdec", ctx)
+}
+
+/// octdec($octal_string).
+pub fn octdec(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    basedec(args, 8, "octdec", ctx)
+}
+
+/// bindec($binary_string).
+pub fn bindec(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    basedec(args, 2, "bindec", ctx)
+}
+
 /// intdiv($num1, $num2): integer division truncated toward zero.
 pub fn intdiv(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let a = to_int_arg(args, 0, "intdiv", 1, "num1")?;

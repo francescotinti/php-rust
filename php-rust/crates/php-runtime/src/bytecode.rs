@@ -212,6 +212,10 @@ pub enum Op {
     StoreSuperglobal(u8),
     /// `[] -> [v]` — `++`/`--` on data superglobal `idx`, pushing the pre/post-value.
     IncDecSuperglobal { idx: u8, inc: bool, pre: bool },
+    /// `[] -> [arr]` — a *bare* `$GLOBALS` read: snapshot the script frame's
+    /// named locals (by `slot_names`) plus the seeded data superglobals into a
+    /// fresh array (PHP 8.1 read-only-copy semantics).
+    LoadGlobals,
     /// Default-parameter prologue (PAR): if `slot` already holds an argument
     /// (it is not `Undef`), jump to `skip` (past the default); otherwise fall
     /// through to evaluate the default expression and `StoreSlot` it. Emitted at

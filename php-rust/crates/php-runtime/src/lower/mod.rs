@@ -721,6 +721,9 @@ interface Serializable {
     public function serialize();
     public function unserialize($data);
 }
+interface SeekableIterator extends Iterator {
+    public function seek(int $offset);
+}
 class Exception implements Throwable {
     protected $message = "";
     protected $code = 0;
@@ -1002,10 +1005,15 @@ class DateTime implements DateTimeInterface {
         $this->__ts = mktime($hour, $minute, $second, (int)date('n', $this->__ts), (int)date('j', $this->__ts), (int)date('Y', $this->__ts));
         return $this;
     }
-    public static function createFromFormat($format, $datetime) {
-        $ts = __date_from_format($format, $datetime);
-        if ($ts === false) { return false; }
-        return new DateTime("@$ts");
+    public static function createFromFormat($format, $datetime, $timezone = null) {
+        $r = __date_from_format($format, $datetime);
+        if ($r === false) { return false; }
+        $d = new DateTime("@" . $r[0]);
+        // "@ts" leaves the "+00:00" offset tz; the real createFromFormat keeps
+        // the parsed offset, the $timezone argument, or the default (UTC).
+        $d->__tz = $r[1] !== null ? $r[1] : ($timezone !== null ? $timezone->getName() : 'UTC');
+        $d->__us = $r[2];
+        return $d;
     }
     public function modify($modifier) { $this->__ts = strtotime($modifier, $this->__ts); return $this; }
     public function add($interval) { $this->__ts = $this->__apply($interval, 1); return $this; }
@@ -1124,10 +1132,13 @@ class DateTimeImmutable implements DateTimeInterface {
         $c->__us = $microsecond;
         return $c;
     }
-    public static function createFromFormat($format, $datetime) {
-        $ts = __date_from_format($format, $datetime);
-        if ($ts === false) { return false; }
-        return new DateTimeImmutable("@$ts");
+    public static function createFromFormat($format, $datetime, $timezone = null) {
+        $r = __date_from_format($format, $datetime);
+        if ($r === false) { return false; }
+        $d = new DateTimeImmutable("@" . $r[0]);
+        $d->__tz = $r[1] !== null ? $r[1] : ($timezone !== null ? $timezone->getName() : 'UTC');
+        $d->__us = $r[2];
+        return $d;
     }
     public function modify($modifier) {
         $r = strtotime($modifier, $this->__ts);
@@ -1390,6 +1401,12 @@ class PDO {
     public function __destruct() {
         if ($this->__h !== null) { __pdo_close($this->__h); $this->__h = null; }
     }
+    // PHP 8.4 static factory (doctrine/dbal's PDOConnect prefers it). The real
+    // one returns the driver subclass (Pdo\Sqlite); phpr returns PDO itself,
+    // an accepted slice until the subclass exists.
+    public static function connect($dsn, $username = null, $password = null, $options = null) {
+        return new static($dsn, $username, $password, $options);
+    }
     // get/setAttribute follow pdo_dbh.c: the error state clears at method
     // ENTRY (a later errorCode() reads 00000 even after a failed call here);
     // an attribute outside the supported set raises SQLSTATE[IM001] on get
@@ -1520,6 +1537,7 @@ class PDOStatement implements IteratorAggregate {
     private $__mode = null;
     private $__modeArgs = array();
     private $__meta = array();
+    private $__freed = false;
     public function __pdoInit($pdo, $h, $sql) {
         $this->__pdo = $pdo;
         $this->__c = $h;
@@ -1531,6 +1549,8 @@ class PDOStatement implements IteratorAggregate {
     private function __coerce($v, $t) {
         if ($v === null) { return null; }
         $t = $t & ~PDO::PARAM_INPUT_OUTPUT;
+        // A stream bound as PARAM_LOB sends its remaining contents.
+        if ($t === PDO::PARAM_LOB && is_resource($v)) { return stream_get_contents($v); }
         if ($t === PDO::PARAM_INT) { return (int)$v; }
         if ($t === PDO::PARAM_BOOL) { return (bool)$v; }
         if ($t === PDO::PARAM_NULL) { return null; }
@@ -1568,6 +1588,7 @@ class PDOStatement implements IteratorAggregate {
         $this->__rows = isset($r['rows']) ? $r['rows'] : array();
         $this->__meta = isset($r['meta']) ? $r['meta'] : array();
         $this->__pos = 0;
+        $this->__freed = false;
         $this->__changes = isset($r['changes']) ? $r['changes'] : 0;
         return true;
     }
@@ -1695,9 +1716,16 @@ class PDOStatement implements IteratorAggregate {
     // absent on expression columns); native_type/pdo_type reflect the *value*
     // in the materialized first row, like sqlite3_column_type at execute.
     public function getColumnMeta($column) {
-        if ($this->__rows === null) { return false; }
-        if ($column < 0 || $column >= count($this->__cols)) {
-            return $this->__raise(array('SQLSTATE[HY000]: General error: 100 another row available', 'HY000', 100, 'another row available'), 'PDOStatement::getColumnMeta');
+        if ($column < 0) { throw new ValueError('PDOStatement::getColumnMeta(): Argument #1 ($column) must be greater than or equal to 0'); }
+        if ($this->__rows === null || $this->__freed) { return false; }
+        if ($column >= count($this->__cols)) {
+            // With rows still pending, pdo_sqlite surfaces the driver state
+            // (SQLITE_ROW = 100); with the set exhausted it reports false
+            // (PHP >= 8.3.18 behaviour, what DBAL's InvalidColumnIndex needs).
+            if ($this->__pos < count($this->__rows)) {
+                return $this->__raise(array('SQLSTATE[HY000]: General error: 100 another row available', 'HY000', 100, 'another row available'), 'PDOStatement::getColumnMeta');
+            }
+            return false;
         }
         $v = count($this->__rows) > 0 ? $this->__rows[0][$column] : null;
         if (is_int($v)) { $nt = 'integer'; $pt = PDO::PARAM_INT; }
@@ -1731,6 +1759,7 @@ class PDOStatement implements IteratorAggregate {
     public function closeCursor() {
         $this->__rows = array();
         $this->__pos = 0;
+        $this->__freed = true;
         return true;
     }
     public function getIterator(): Iterator {
@@ -1769,6 +1798,7 @@ class SplFileInfo {
     public function isFile() { return is_file($this->__path); }
     public function isLink() { return is_link($this->__path); }
     public function getFilename() { return basename($this->__path); }
+    public function getBasename($suffix = '') { return basename($this->__path, $suffix); }
     public function getPath() { return dirname($this->__path); }
     public function getRealPath() { return realpath($this->__path); }
     public function getSize() { return filesize($this->__path); }
@@ -1788,6 +1818,37 @@ class FilesystemIterator extends SplFileInfo {
     const KEY_AS_PATHNAME = 0; const KEY_AS_FILENAME = 256;
     const FOLLOW_SYMLINKS = 512; const NEW_CURRENT_AND_KEY = 256;
     const SKIP_DOTS = 4096; const UNIX_PATHS = 8192;
+}
+// DirectoryIterator (flat, dots included): the native iterator is the current
+// entry, like RecursiveDirectoryIterator below (Symfony Console's completion
+// command scans /etc/bash_completion.d with it).
+class DirectoryIterator extends SplFileInfo implements SeekableIterator {
+    private $__dir;
+    private $__names = [];
+    private $__pos = 0;
+    public function __construct($directory) {
+        parent::__construct($directory);
+        if (!is_dir($directory)) {
+            throw new UnexpectedValueException("DirectoryIterator::__construct($directory): Failed to open directory: No such file or directory");
+        }
+        $this->__dir = rtrim($directory, '/');
+        $this->__names = scandir($directory);
+        $this->__sync();
+    }
+    private function __cur() { return $this->__dir . '/' . $this->__names[$this->__pos]; }
+    private function __sync() {
+        if ($this->__pos < count($this->__names)) { $this->__path = $this->__cur(); }
+    }
+    public function rewind(): void { $this->__pos = 0; $this->__sync(); }
+    public function valid(): bool { return $this->__pos < count($this->__names); }
+    public function next(): void { $this->__pos++; $this->__sync(); }
+    public function seek($offset): void { $this->__pos = $offset; $this->__sync(); }
+    public function key(): mixed { return $this->__pos; }
+    public function current(): mixed { return $this; }
+    public function isDot(): bool {
+        $n = $this->__names[$this->__pos] ?? '';
+        return $n === '.' || $n === '..';
+    }
 }
 class RecursiveDirectoryIterator extends FilesystemIterator implements RecursiveIterator {
     private $__dir;
@@ -2334,7 +2395,7 @@ class ReflectionClass {
         $this->name = is_object($objectOrClass) ? get_class($objectOrClass) : $objectOrClass;
         // An *object* argument is always reflectable (engine values like a
         // Closure included); only a class-name string is checked for existence.
-        if (!is_object($objectOrClass) && !class_exists($this->name) && !interface_exists($this->name)) {
+        if (!is_object($objectOrClass) && !class_exists($this->name) && !interface_exists($this->name) && !trait_exists($this->name)) {
             throw new ReflectionException(sprintf('Class "%s" does not exist', $this->name));
         }
     }
@@ -2445,7 +2506,9 @@ class ReflectionClass {
     }
     public function getMethods($filter = null) {
         $out = [];
-        foreach (get_class_methods($this->name) as $m) {
+        // All visibilities, parent chain included (get_class_methods filters
+        // to public outside the class -- PHPUnit's #[Before] hooks are protected).
+        foreach (__reflect_method_names($this->name) as $m) {
             $rm = new ReflectionMethod($this->name, $m);
             if ($filter !== null && ($rm->getModifiers() & $filter) === 0) { continue; }
             $out[] = $rm;
@@ -2555,6 +2618,41 @@ class ReflectionParameter {
             throw new ReflectionException('Internal error: Failed to retrieve the default value');
         }
         return $this->__default;
+    }
+    // `Parameter #N [ <optional> Type $name = DEFAULT ]` (oracle format).
+    // PHPUnit's mock generator parses the piece after ' = ' as *source code*
+    // for an object default, so enum cases render `\FQCN::CASE`.
+    public function __toString() {
+        $opt = $this->isDefaultValueAvailable();
+        $s = 'Parameter #' . $this->getPosition() . ' [ <' . ($opt ? 'optional' : 'required') . '> ';
+        $t = $this->getType();
+        $ts = '';
+        if ($t !== null) {
+            if ($t instanceof ReflectionUnionType) {
+                $parts = array();
+                foreach ($t->getTypes() as $tt) { $parts[] = $tt->getName(); }
+                $ts = implode('|', $parts);
+            } elseif ($t instanceof ReflectionIntersectionType) {
+                $parts = array();
+                foreach ($t->getTypes() as $tt) { $parts[] = $tt->getName(); }
+                $ts = implode('&', $parts);
+            } else {
+                $ts = $t->getName();
+                if ($t->allowsNull() && $ts !== 'null' && $ts !== 'mixed') { $ts = '?' . $ts; }
+            }
+        }
+        $s .= ($ts !== '' ? $ts . ' ' : '') . ($this->isPassedByReference() ? '&' : '') . ($this->isVariadic() ? '...' : '') . '$' . $this->getName();
+        if ($opt && !$this->isVariadic()) {
+            $v = $this->__default;
+            if ($v === null) { $d = 'NULL'; }
+            elseif (is_object($v)) {
+                $d = ($v instanceof UnitEnum) ? '\\' . get_class($v) . '::' . $v->name : 'new \\' . get_class($v) . '(...)';
+            }
+            elseif (is_array($v)) { $d = str_replace("\n", '', var_export($v, true)); }
+            else { $d = var_export($v, true); }
+            $s .= ' = ' . $d;
+        }
+        return $s . ' ]';
     }
     public function getAttributes($name = null, $flags = 0) {
         $hostName = ($flags & ReflectionAttribute::IS_INSTANCEOF) ? null : $name;
@@ -4824,6 +4922,9 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"ARRAY_FILTER_USE_BOTH" => ExprKind::Int(1),
         b"COUNT_NORMAL" => ExprKind::Int(0),
         b"COUNT_RECURSIVE" => ExprKind::Int(1),
+        // array_change_key_case flags.
+        b"CASE_LOWER" => ExprKind::Int(0),
+        b"CASE_UPPER" => ExprKind::Int(1),
         // json_encode / json_decode flags (step 26).
         b"JSON_HEX_TAG" => ExprKind::Int(1),
         b"JSON_HEX_AMP" => ExprKind::Int(2),

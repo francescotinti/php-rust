@@ -967,6 +967,32 @@ pub fn array_chunk(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Array(Rc::new(out)))
 }
 
+/// array_change_key_case($array, $case = CASE_LOWER): string keys re-cased
+/// (ASCII, like PHP's non-mb variant); later duplicates overwrite earlier ones.
+pub fn array_change_key_case(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let arr = arr_arg(args, "array_change_key_case")?;
+    let upper = args
+        .get(1)
+        .map(|v| convert::to_long_cast(v, ctx.diags) == 1)
+        .unwrap_or(false);
+    let mut out = PhpArray::new();
+    for (k, v) in arr.iter() {
+        let key = match k {
+            Key::Str(s) => {
+                let cased = if upper {
+                    s.as_bytes().to_ascii_uppercase()
+                } else {
+                    s.as_bytes().to_ascii_lowercase()
+                };
+                Key::from_bytes(&cased)
+            }
+            other => other.clone(),
+        };
+        out.insert(key, v.clone());
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
 /// array_flip($array): swap keys and values. Only int|string values become
 /// keys; others are skipped.
 pub fn array_flip(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
