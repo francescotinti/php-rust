@@ -2226,6 +2226,15 @@ impl<'a> FnCompiler<'a> {
                 self.chain_pause(|s| s.emit_method_call_dyn(method, args, named))?;
                 self.chain_exit(root);
             }
+            ExprKind::VarDyn(name) => {
+                self.expr(name)?;
+                self.emit(Op::LoadVarDyn);
+            }
+            ExprKind::VarDynAssign { name, rhs } => {
+                self.expr(name)?;
+                self.expr(rhs)?;
+                self.emit(Op::StoreVarDyn);
+            }
             ExprKind::InstanceOf { expr, class } => self.instance_of(expr, class)?,
             ExprKind::StaticCall { class, method, args, named } => {
                 // `Closure::bind`/`fromCallable` are built-in statics with no compiled
@@ -5118,6 +5127,8 @@ fn expr_name(k: &ExprKind) -> String {
         ExprKind::Str(_) => "Str",
         ExprKind::Const { .. } => "Const",
         ExprKind::Var(_) => "Var",
+        ExprKind::VarDyn(_) => "VarDyn",
+        ExprKind::VarDynAssign { .. } => "VarDynAssign",
         ExprKind::GlobalVar(_) => "GlobalVar",
         ExprKind::Superglobal(_) => "Superglobal",
         ExprKind::GlobalsArray => "GlobalsArray",

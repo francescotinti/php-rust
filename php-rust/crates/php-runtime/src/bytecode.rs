@@ -648,6 +648,13 @@ pub enum Op {
     /// `[obj, name] -> [bool]` — `isset($o->{expr})` / `isset($o->$k)`: the
     /// dynamic-name twin of [`Op::PropIsset`] (same hook/`__isset` dispatch).
     PropIssetDyn,
+    /// `[name] -> [value]` — `$$x` / `${expr}` read: resolve the runtime NAME
+    /// against the current frame (named slots, then the dynamic side-table;
+    /// superglobals by name). Undefined -> warning + NULL, like `LoadVar`.
+    LoadVarDyn,
+    /// `[name, rhs] -> [rhs]` — `$$x = rhs`: resolve/create the variable by its
+    /// runtime NAME and store (writing through a reference like `StoreSlot`).
+    StoreVarDyn,
     /// `[obj] -> [v]` — read property `name` like [`Op::PropGet`] but *silently*:
     /// a missing property yields NULL with no "Undefined property" warning and no
     /// visibility error (the read context of `empty()` / `??`). A `__get` accessor

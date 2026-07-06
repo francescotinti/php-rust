@@ -584,6 +584,10 @@ struct Frame<'m> {
     ip: usize,
     slots: Vec<Zval>,
     stack: Vec<Zval>,
+    /// Variables created by NAME at run time (`$$x = v` with a name outside
+    /// the function's static slot set). Read/written only by the variable
+    /// variable ops; empty (no allocation) for ordinary frames.
+    dyn_vars: std::collections::HashMap<Vec<u8>, Zval>,
     /// The object bound to `$this` while running a method, or `None` for the
     /// script body and free functions. Read by [`Op::This`]; set when a
     /// [`Op::MethodCall`] / [`Op::InvokeMethod`] pushes a method frame.
@@ -680,6 +684,7 @@ impl<'m> Frame<'m> {
             ip: 0,
             slots: vec![Zval::Undef; func.n_slots as usize],
             stack: Vec::new(),
+            dyn_vars: std::collections::HashMap::new(),
             this: None,
             class: None,
             static_class: None,
@@ -2120,6 +2125,22 @@ impl<'m> Vm<'m> {
                     let v = self.frames[top].stack.pop().expect("StoreSlot on empty stack");
                     let old = store_slot(&mut self.frames[top].slots[s as usize], v);
                     self.gc_note(&old);
+                }
+                Op::LoadVarDyn => {
+                    // `$$x` read: resolve the runtime name in the current frame.
+                    let nv = self.frames[top].stack.pop().expect("LoadVarDyn name");
+                    let name = convert::to_zstr_cast(&nv, &mut self.diags).as_bytes().to_vec();
+                    let v = self.var_dyn_read(top, &name);
+                    self.frames[top].stack.push(v);
+                }
+                Op::StoreVarDyn => {
+                    // `$$x = rhs`: resolve/create by runtime name; the rhs stays
+                    // on the stack as the assignment's value.
+                    let rhs = self.frames[top].stack.pop().expect("StoreVarDyn value");
+                    let nv = self.frames[top].stack.pop().expect("StoreVarDyn name");
+                    let name = convert::to_zstr_cast(&nv, &mut self.diags).as_bytes().to_vec();
+                    self.var_dyn_write(top, &name, rhs.clone())?;
+                    self.frames[top].stack.push(rhs);
                 }
                 Op::StaticGuard { id, skip } => {
                     // First execution of this `static` declaration falls through to
@@ -12797,6 +12818,61 @@ impl<'m> Vm<'m> {
             out.extend_from_slice(s.as_bytes());
         }
         Ok(Zval::Str(PhpStr::new(out)))
+    }
+
+    /// `$$x` read (Op::LoadVarDyn): superglobals by name, then the frame's
+    /// named slots, then the dynamic side-table. An undefined name raises the
+    /// PHP 8 "Undefined variable" warning and reads NULL, like `LoadVar`.
+    fn var_dyn_read(&mut self, top: usize, name: &[u8]) -> Zval {
+        if let Some(idx) = crate::bytecode::superglobal_index(name) {
+            return read_slot(&self.superglobals[idx as usize]);
+        }
+        let named = self.frames[top].func.slot_names.iter().position(|n| n.as_ref() == name);
+        if let Some(s) = named {
+            if matches!(self.frames[top].slots[s], Zval::Undef) {
+                self.diags.push(Diag::Warning(format!(
+                    "Undefined variable ${}",
+                    String::from_utf8_lossy(name)
+                )));
+                return Zval::Null;
+            }
+            return read_slot(&self.frames[top].slots[s]);
+        }
+        if let Some(v) = self.frames[top].dyn_vars.get(name) {
+            return read_slot(v);
+        }
+        self.diags.push(Diag::Warning(format!(
+            "Undefined variable ${}",
+            String::from_utf8_lossy(name)
+        )));
+        Zval::Null
+    }
+
+    /// `$$x = v` (Op::StoreVarDyn): write through a reference like
+    /// `store_slot`; a name outside the frame's static slots lives in the
+    /// dynamic side-table (`Frame::dyn_vars`).
+    fn var_dyn_write(&mut self, top: usize, name: &[u8], v: Zval) -> Result<(), PhpError> {
+        if name == b"this" {
+            return Err(PhpError::Error("Cannot re-assign $this".to_string()));
+        }
+        if let Some(idx) = crate::bytecode::superglobal_index(name) {
+            let old = store_slot(&mut self.superglobals[idx as usize], v);
+            self.gc_note(&old);
+            return Ok(());
+        }
+        let named = self.frames[top].func.slot_names.iter().position(|n| n.as_ref() == name);
+        if let Some(s) = named {
+            let old = store_slot(&mut self.frames[top].slots[s], v);
+            self.gc_note(&old);
+            return Ok(());
+        }
+        if let Some(cell) = self.frames[top].dyn_vars.get_mut(name) {
+            let old = store_slot(cell, v);
+            self.gc_note(&old);
+            return Ok(());
+        }
+        self.frames[top].dyn_vars.insert(name.to_vec(), v);
+        Ok(())
     }
 
     /// Dispatch a by-reference-first host builtin (`usort`, Session C): `slot` is

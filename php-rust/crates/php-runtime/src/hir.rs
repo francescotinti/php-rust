@@ -790,6 +790,12 @@ pub enum ExprKind {
     /// `<php><var>` config exactly this way): resolve-or-create the global
     /// slot by name at run time and assign. Value = rhs, like any assignment.
     GlobalsDynAssign { key: Box<Expr>, rhs: Box<Expr> },
+    /// `$$name` / `${expr}` read: the variable NAME is a runtime value,
+    /// resolved against the current frame (named slots, then the dynamic
+    /// side-table; superglobals by name).
+    VarDyn(Box<Expr>),
+    /// `$$name = rhs`: the write side of the variable variable.
+    VarDynAssign { name: Box<Expr>, rhs: Box<Expr> },
 
     /// Binary op with eager left-then-right operand evaluation, dispatched to
     /// `php_types::ops` by the evaluator. Excludes short-circuit and coalesce.

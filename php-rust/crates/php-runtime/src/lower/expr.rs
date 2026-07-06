@@ -71,12 +71,11 @@ impl<'f> Lowerer<'f> {
                     ExprKind::Var(self.slot_for(name))
                 }
             }
-            Expression::Variable(_) => {
-                return Err(LowerError::Unsupported {
-                    what: "variable variable",
-                    line,
-                })
+            Expression::Variable(v) => {
+                // `$$x` / `${expr}`: the variable NAME is a runtime value.
+                ExprKind::VarDyn(Box::new(self.lower_variable_name(v, line)?))
             }
+            // (helper below: lower_variable_name)
 
             Expression::Binary(b) => {
                 // `instanceof`'s RHS is a *class* reference, not a value, so it is
@@ -149,6 +148,17 @@ impl<'f> Lowerer<'f> {
                             let key = Box::new(self.lower_expr(aa.index)?);
                             let rhs = Box::new(self.lower_expr(a.rhs)?);
                             return Ok(Expr { line, kind: ExprKind::GlobalsDynAssign { key, rhs } });
+                        }
+                    }
+                }
+                // `$$name = rhs` / `${expr} = rhs`: the target variable's NAME
+                // is a runtime value — not a `Place` (no compile-time slot).
+                if let AssignmentOperator::Assign(_) = a.operator {
+                    if let Expression::Variable(v) = a.lhs {
+                        if !matches!(v, Variable::Direct(_)) {
+                            let name = Box::new(self.lower_variable_name(v, line)?);
+                            let rhs = Box::new(self.lower_expr(a.rhs)?);
+                            return Ok(Expr { line, kind: ExprKind::VarDynAssign { name, rhs } });
                         }
                     }
                 }
@@ -609,6 +619,38 @@ impl<'f> Lowerer<'f> {
         Ok(acc.kind)
     }
 
+    /// The NAME expression of a variable variable: for `$$x` (nested) the name
+    /// is `$x`'s value; for `${expr}` the braced expression itself; a direct
+    /// inner variable reads like any `$x` (this / superglobal / slot).
+    fn lower_variable_name(&mut self, v: &Variable, line: u32) -> Result<Expr, LowerError> {
+        Ok(match v {
+            Variable::Direct(d) => {
+                let name = strip_dollar(d.name);
+                let kind = if name == b"this" {
+                    ExprKind::This
+                } else if let Some(idx) = crate::bytecode::superglobal_index(name) {
+                    ExprKind::Superglobal(idx)
+                } else {
+                    ExprKind::Var(self.slot_for(name))
+                };
+                Expr { line, kind }
+            }
+            Variable::Indirect(i) => self.lower_expr(i.expression)?,
+            Variable::Nested(n) => {
+                // `$$x`: the name is the INNER variable's VALUE. A direct inner
+                // reads plainly ($x); a deeper level wraps once more (`$$$x`).
+                let iv = &n.variable;
+                match iv {
+                    Variable::Direct(_) => self.lower_variable_name(iv, line)?,
+                    _ => {
+                        let inner = self.lower_variable_name(iv, line)?;
+                        Expr { line, kind: ExprKind::VarDyn(Box::new(inner)) }
+                    }
+                }
+            }
+        })
+    }
+
     fn lower_literal(&self, lit: &Literal, line: Line) -> Result<ExprKind, LowerError> {
         Ok(match lit {
             Literal::Null(_) => ExprKind::Null,
@@ -728,12 +770,9 @@ impl<'f> Lowerer<'f> {
                             ExprKind::Var(self.slot_for(nm))
                         }
                     }
-                    _ => {
-                        return Err(LowerError::Unsupported {
-                            what: "variable variable member name",
-                            line,
-                        })
-                    }
+                    // `$obj->$$x` / `$obj->${expr}`: the member name comes from
+                    // a variable variable — read it like any `$$x` value.
+                    other => ExprKind::VarDyn(Box::new(self.lower_variable_name(other, line)?)),
                 };
                 Ok(MemberSel::Dynamic(Expr { line, kind }))
             }
