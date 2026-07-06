@@ -1006,3 +1006,52 @@ tree-walking `&mut self`. Motore = `corosensei` coroutine stackful.
   numerazione handle oggetto (i generatori consumano `next_object_id`), fedeltà
   della stack trace (frame `Generator->next()` interni), e feature non-generator
   (`get_class()` senza argomenti). **Nessun D-NEW** in scope supportato.
+
+
+---
+
+# Stato corrente — 2026-07-07, HEAD `e0b5080`
+
+> Fotografia a fine sessioni G–N (vedi `03-translation-log.md`). Le tabelle storiche sopra
+> restano come archivio degli step 1–39; da qui in poi la metrica primaria è il corpus
+> Zend/tests + le suite dell'ecosistema.
+
+## Gate primario: corpus Zend/tests (phpt-runner --isolate)
+
+| Data | HEAD | Pass | Delta filone |
+|---|---|---|---|
+| 2026-07-01 | `05d741c` | 1927 | Stage C private-mangling (+12) |
+| 2026-07-02 | `a497e0b` | 2005 | PHPUnit/Monolog |
+| 2026-07-03 | `33a4457` | 2019 | collections |
+| 2026-07-05 | `6915059` | 2035 | GC cycle collector |
+| 2026-07-05 | `36ee420` | 2040 | Serializable + event-manager |
+| 2026-07-06 | `c7b56f5` | 2060 | PDO/DBAL/sqlite3 |
+| 2026-07-06 | `8282724` | 2071 | doctrine/orm |
+| 2026-07-06 | `863053e` | 2120 | bucket compile-unsupported (5 commit) |
+| 2026-07-07 | `e0b5080` | **2138** | object-handle free-list LIFO (+18) |
+
+Regola del gate: confronto delle fail-list **per nome**, zero pass→fail ammessi
+(skip→fail non è regressione); run pesanti sequenziali.
+
+## Suite ecosistema (girate sotto phpr, output confrontato con l'oracle)
+
+| Suite | Test | Stato |
+|---|---|---|
+| doctrine/dbal | 3769 | **0 err / 0 fail** |
+| doctrine/orm | 3484 | 12 err / 22 fail (da 2353 err + crash) |
+| doctrine/collections | 257 | verde |
+| doctrine/inflector | 1213 | verde (21 s) |
+| doctrine/lexer | — | verde |
+| doctrine/event-manager | 8 | verde |
+| doctrine/instantiator | 49 | verde |
+| monolog/monolog | 1150 | 22 err / 3 fail |
+| PHPUnit 13.2 (self) | — | verde, output byte-identico |
+
+## Altri numeri
+
+- **phpt ext/pdo + pdo_sqlite**: 84 pass (con `--run-skipif`; 121+85 runnable).
+- **cargo test**: 20 suite di crate, tutte verdi.
+- **LOC Rust** (runtime+types+builtins, escl. test): ~68.000.
+- **Motori regex**: 3 (oniguruma è il terzo, fallback per subroutine/ricorsione PCRE). **Zero `unsafe`**
+  fuori dall'FFI libc di php-builtins. **Zero dipendenze C** per DB (rusqlite bundled)
+  e TLS (rustls).

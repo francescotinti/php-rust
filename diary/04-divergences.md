@@ -684,3 +684,35 @@ ricevono i `v*`. Questo allinea all'oracle `%s` su oggetti (prima: warning + nom
   osservata nello sweep `strings` (fail 163→161). La risoluzione per-specifier richiederebbe di
   passare le stringhe pre-calcolate al motore via un campo del `Ctx` (ABI condivisa da ~243
   builtin): sproporzionato per l'edge. Documentato, non forzato.
+
+
+## Sessioni G–N (25 giu → 7 lug) — divergenze note e scope-out a HEAD `e0b5080`
+
+Le sessioni ecosistema (vedi `03-translation-log.md`) hanno riconciliato quasi tutto verso
+l'oracle; restano catalogate le seguenti, tutte **triagiate con root-cause nota** e deferite
+per scelta (non per ignoranza):
+
+- **D-ECO-1 — curl_multi assente**: ext/curl è una facade easy-API su ureq/rustls; la famiglia
+  `curl_multi_*` non esiste → Composer ripiega sul backend a stream (comportamento corretto,
+  ma un codice che *richieda* curl_multi fallisce). Deferita: richiederebbe un event-loop.
+- **D-ECO-2 — UDF SQLite** (`createFunction`/`createAggregate`/`createCollation`, ~20 phpt):
+  richiedono la **re-entrancy della VM** dentro una callback rusqlite (il C chiama PHP durante
+  una query). Design non banale (borrow del Vm dentro il closure rusqlite) → filone dedicato.
+- **D-ECO-3 — transient del prelude e free-list degli handle**: dove il prelude PHP alloca
+  oggetti intermedi che il C di Zend non alloca (es. Reflection dentro un path PDO), il **top
+  della free-list LIFO** si sposta e gli `#N` divergono dai phpt. I path caldi PDO sono stati
+  de-Reflectionizzati (hook host diretti); ogni nuovo codice prelude in un path confrontato
+  con `#N` deve evitare allocazioni transient.
+- **D-ECO-4 — GC: generatori e Fiber opachi al collector**: il cycle collector (trial
+  deletion) traversa oggetti, array e closure; i frame parcheggiati di generatori/Fiber non
+  sono ancora traversati → un ciclo che passa *solo* per un generatore sospeso non è raccolto.
+  `gc_enable()/gc_disable()` sono stub (il trigger a soglia vive solo nello sweep main).
+- **D-ECO-5 — `::class` dinamico** (quirk verificato, fedeltà nostra ma sorprendente):
+  `C::{$expr}` con `$expr = 'class'` in PHP è "Undefined constant C::class" — il magic
+  `::class` non esiste nel path dinamico. Registrato perché contro-intuitivo.
+- **D-ECO-6 — by-ref property hooks** (`&get`, PHP 8.4, 15 test Zend): unico blocco di
+  linguaggio 8.4/8.5 rimasto nel bucket compile-unsupported. Recon e design write-through
+  completi; sessione dedicata pianificata.
+- **D-ECO-7 — residui suite**: ORM 12 err/22 fail (XSD schemaValidate ~5, typed-prop lazy
+  proxy 3, edge triagiati); Monolog 22 err/3 fail (curl_multi, xdebug, piattaforma); 6 test
+  lazy-objects `reset_*` non-dtor (reflected-scope, chained proxy — root-cause nota).

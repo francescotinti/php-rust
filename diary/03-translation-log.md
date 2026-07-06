@@ -2145,3 +2145,157 @@ presente in-tree, quindi il pass-count E4 non è rimisurabile, ma la parità dua
 > a cercare `eval/mod.rs`), proprio dove servivano i `find_referencing_symbols` di F3. Guadagno
 > non degno di nota a fronte dell'attrito → ritorno alla modalità ibrida `grep`+`Read`, come
 > concordato.
+
+
+---
+
+# Sessioni G–N (25 giu → 7 lug 2026) — dal linguaggio all'ecosistema
+
+> Cento commit in due settimane, riassunti per macro-filone. Il progetto cambia natura: chiusa
+> la migrazione a motore unico (Sessione F), l'obiettivo diventa far girare **software PHP
+> reale** — Composer, PHPUnit, Monolog, Doctrine — con output byte-identico all'oracle, usando
+> ogni suite come corpus di test gratuito. Il gate permanente resta il corpus `Zend/tests`
+> (runner `--isolate`, confronto fail-list per nome, zero pass→fail ammessi): in queste sessioni
+> passa da ~1900 a **2138 pass**.
+
+## Sessione G — Composer bring-up: Reflection, references runtime, TLS, private-mangling
+
+Il primo traguardo ecosistema: **`composer about` gira oracle-identico**. Per arrivarci servono
+quattro filoni intrecciati (~40 commit):
+
+- **Reflection framework-grade**: ReflectionProperty::getType, getAttributes con
+  IS_INSTANCEOF/$flags, ReflectionClassConstant, ReflectionUnionType/IntersectionType,
+  ReflectionEnum, ReflectionExtension minimale, constant()/defined() su Class::CONST. Corpus +34.
+- **References a runtime**: il pezzo mancante più profondo. By-ref argument binding per le
+  call **dinamiche** (l'equivalente di SEND_VAR_EX: a compile-time non sai se il parametro è
+  by-ref), return-by-ref da metodi e proprietà (`$x = &$obj->method()`), elementi by-ref nei
+  literal array, `$x =& $this`, by-ref attraverso static calls, host builtins che scrivono
+  attraverso le ref.
+- **TLS / rete**: `file_get_contents('https://…')` via **ureq+rustls**, stream contexts
+  (`stream_context_create` con opzioni http onorate), header di risposta side-channel,
+  `openssl_x509_parse` via x509-parser (CaBundle), costanti PHP_* di piattaforma. phpr parla
+  HTTPS senza toccare OpenSSL C.
+- **Terzo motore regex**: **oniguruma** come fallback per i pattern PCRE che il motore
+  principale non copre (subroutine, `(?(DEFINE))`, ricorsione, `(?P<name>)`), con anchoring
+  `\G` corretto per gli offset-search.
+- **Stage C — private-property mangling**: le proprietà private sono storate come
+  `\0Class\0prop` (dual-slot come Zend), con un resolver scope-aware (`FieldScope`) threaded
+  attraverso tutti i field-path. Prerequisito del futuro property layout flat. Corpus 1915→1927.
+
+Completano il quadro: slot delle variabili globali condivisi tra compilation unit (gli include
+vedono le stesse `$GLOBALS`), fallback di namespace a runtime per le funzioni non qualificate,
+`version_compare`/`parse_url`/`assert()` funzionale con AssertionError, `strnatcmp`, `strtok`
+stateful, `random_int`/`random_bytes` su getrandom, uasort/uksort.
+
+## Sessione H — `composer require` end-to-end: Monolog installa e gira
+
+**`composer require monolog/monolog` scarica, risolve, unzippa e autoloada** dentro phpr, e
+il codice Monolog gira **byte-identico** all'oracle. I pezzi: estrazione **zip nativa** (crate
+Rust, niente ext/zip C), include-scope corretto, Finder/SPL (SplDoublyLinkedList/Queue/Stack),
+first-class callable, e soprattutto il **binder runtime dei named arguments** esteso a *tutte*
+le forme di chiamata — Monolog usa named args sui costruttori dei handler e ogni call-site
+dinamico deve riordinare/completare i default a runtime.
+
+## Sessione I — PHPUnit 13.2 verde + suite Monolog
+
+Il moltiplicatore di tutto il resto: **PHPUnit 13.2 installa via il nostro composer e gira
+verde con output byte-identico**. Da qui in poi ogni libreria porta in dote la propria suite
+come differential-test gratuito. Ha richiesto:
+
+- **ext/dom in puro Rust** (PHPUnit legge la config XML via DOM): un albero DOM con builtin
+  `__dom_*` host-side e le classi PHP nel prelude.
+- **proc_open + stream_select/set_blocking** end-to-end (Symfony Process), **ext/curl
+  easy-API** come facade su ureq/rustls (curl_multi assente → Composer ripiega su stream),
+  fsockopen Tcp/Udp, subset **pcntl** two-phase, date relative (subset timelib).
+- **Docblock retention** attraverso HIR/lower/compile (getDocComment reale), serialize-hooks
+  (`__sleep`/`__serialize`/`__wakeup`), **union type-hints enforced** con TypeError fedeli,
+  preg byte-true, `__PHP_Incomplete_Class`.
+
+Con PHPUnit verde, la **suite Monolog** (1150 test) passa da 291 errori a **22 err / 3 fail**
+— i residui sono triagiati (curl_multi, xdebug, edge di piattaforma).
+
+## Sessione J — Doctrine (collections, event-manager) + fix O(n²) include + GC cycle collector
+
+Aperto il filone Doctrine: **collections 2.6.0** installa end-to-end e la suite chiude a
+**257 test verdi** (da 70 err/28 fail a 0/2, poi 0). Lezioni engine: ArrayAccess con
+**deferred-dispatch** su dim-write e fused-op (isset/empty/unset attraverso offsetExists/Get),
+static vars di closure **per-istanza** (non per op-array), enforcement dei type-hint sui
+variadici, `__set` su field-path leaf con guardia di ricorsione.
+
+Due filoni infrastrutturali resi urgenti dalle suite grosse:
+
+- **Costo quadratico degli include eliminato** (seed-stub): il preload di PHPUnit passava da
+  5.4 GB/45 s a **1.35 GB/12 s**. Sbloccata la suite doctrine/lexer (verde) e inflector
+  (**1213 test verdi in 21 s**).
+- **GC cycle collector reale**: strutture O(log n) (BTreeMap per id, max-heap con
+  discard-on-pop), note dei ref-drop nel plumbing eccezioni (2625→27 under-note), e infine la
+  **trial deletion** sui possible-roots — `gc_collect_cycles()` è quello di Zend, non uno stub.
+  Corpus 2019→2035.
+
+Chiusura con doctrine/event-manager **8/8 verde** e la semantica engine dell'interfaccia
+`Serializable` (corpus 2040).
+
+## Sessione K — PDO/pdo_sqlite + ext/sqlite3 su rusqlite: DBAL tutto verde
+
+Il database layer, in 8 commit pianificati (Step 1–6 + sqlite3): **PDO / PDOStatement / PDORow
+e SQLite3 / SQLite3Stmt / SQLite3Result su rusqlite (bundled)**, nuovo modulo `vm/pdo.rs`.
+Scelte chiave: si **ri-prepara lo statement a ogni execute** (semantica PHP), errori
+SQLSTATE/errmode/attributi/metadata verificati uno a uno sull'oracle. Risultato:
+**doctrine/dbal 3769 test, 0 err, 0 fail** e instantiator 49/49.
+
+La suite DBAL ha stanato fix engine profondi che nessun corpus aveva esposto: `strict_types`
+è **per-unit e si decide al call-site**, bypass dell'output-buffering per `fwrite(STDOUT)`,
+nomi delle **classi anonime** unici cross-unit (il nome per-unit collideva), nullsafe
+`?->` short-circuit sull'intera catena, `$GLOBALS` bare, `??=` multi-chiave, `*_exists` che
+autoloadano, wrapper `data://`, `@` su trigger_error annidato e per-Fiber. Corpus 2040→2060.
+
+## Sessione L — doctrine/orm: dal crash a 12 errori su 3484 test
+
+La suite ORM partiva a **2353 errori + stack overflow**; chiude a **12 err / 22 fail su 3484
+test**. Il grosso è stato il **modello delle reference**: rebind `=&` sul leaf (flag dedicato
+in field_write), `reset()`/`current()` che **dereferenziano** il ritorno (un ritorno Ref grezzo
+diventava alias involontario → celle auto-referenziali → panic RefCell), pulizia dei **residui
+Ref nei temp** dopo le alias-call (`clear_temp_binding`), by-ref builtin con radice non-place.
+In più: **SimpleXML completo nel prelude** sopra i builtin `__dom_*` (quirk oracle-verificati:
+children() tiene il parent come contesto, __get null-on-no-match per il bool-cast) e
+`Op::PropIssetDyn` (isset su proprietà dinamica via `__isset`). Corpus 2060→2071.
+
+## Sessione M — infra runner + il bucket compile-unsupported
+
+Due mosse di infrastruttura e poi giù di lima sul bucket dei costrutti rifiutati a compile:
+
+- **`--run-skipif` nel phpt-runner** (+ esecuzione `--CLEAN--` sempre): lo SKIPIF gira nella
+  VM come `<test>.skip.php`. Sbloccati ext/pdo 7→121 test runnable e pdo_sqlite 69→85.
+- **PDO batch 1**: ATTR_STATEMENT_CLASS completo (validazione eager, ctor privato via
+  invocazione host), fetchAll FETCH_GROUP/UNIQUE/FUNC/CLASSTYPE (con i **valori moderni** delle
+  costanti: GROUP=32, UNIQUE=64, FUNC=10, CLASSTYPE=128), bindColumn/FETCH_BOUND, classe
+  `Pdo\Sqlite` in una seconda unit namespaced del prelude. PDO phpt 57→81.
+- **Il bucket** (5 commit): named/spread args su *tutte* le call dinamiche; **variable
+  variables** (`$$x`, `${expr}`, `$$$x` — attenzione: Nested = un livello di indirezione, non
+  due); **fatal compile-time fedeli** resi come output (`Cannot use [] for reading`, cast
+  `(unset)`, elemento array vuoto) via `LowerError::Fatal` che il runner esegue e confronta;
+  `C::{$expr}` dynamic class constant (quirk oracle: `::class` dinamico è "Undefined
+  constant"); i **5 fatal verbatim di zend_inheritance per i trait-alias** (l'alias di un
+  metodo astratto è una feature, non un errore); **foreach in place arbitrari** (key/value su
+  `$c->var['k']`, `$ks[]`, by-ref su proprietà — con l'ordine osservabile VALUE-prima-di-KEY);
+  **dynamic static property name** (`C::$$x`, con operandi peekati per il re-run degli
+  init-thunk). Corpus 2071→**2120**.
+
+## Sessione N — object-handle free-list LIFO (il riuso degli #N di Zend)
+
+Zend riusa gli handle degli oggetti liberati con una free-list LIFO in `objects_store`; phpr
+coniava id monotoni, e ogni test che confronta gli `#N` esatti nel var_dump falliva. Il fix:
+**`impl Drop` su Object, Closure e GenState** (condividono lo spazio handle) che spinge l'id in
+una free-list thread-local nel momento esatto in cui muore l'ultimo `Rc` — timing identico a
+Zend, verificato oracle-identico al primo probe (LIFO, unset-order, clone, generatori,
+spl_object_id). Tre insidie: le tre struct **non sono più `Clone`** (una copia implicita
+porterebbe l'id del sorgente e libererebbe un handle vivo — l'unico utente, il carrier di
+serialize, ora usa `copy_with_id(0)`); l'id riusato va **ripulito dal bookkeeping della vita
+precedente** (destructed, lazy_*, gc_roots); i transient del prelude (oggetti Reflection
+intermedi) **spostano il top della free-list** rispetto al C — de-Reflectionizzati i path caldi
+PDO chiamando gli hook host direttamente. Corpus 2120→**2138** (+18 fail→pass), PDO phpt 81→84.
+
+**Stato a HEAD `e0b5080`**: corpus Zend/tests 2138 pass; cargo test 20 crate verdi; suite
+ecosistema — DBAL 3769/0/0, ORM 3484 con 12 err/22 fail, collections/event-manager/instantiator/
+lexer/inflector verdi, Monolog 22 err/3 fail su 1150, PHPUnit byte-identico. Prossimo filone
+pianificato: **by-ref property hooks** (`&get`, PHP 8.4, 15 test) — recon e design già scritti.
