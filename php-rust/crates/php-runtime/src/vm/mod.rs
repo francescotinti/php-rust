@@ -7177,6 +7177,60 @@ impl<'m> Vm<'m> {
                             ))
                         }
                     }
+                } else if self.classes[cid].prop_info.values().any(|pi| pi.hooks.is_some()) {
+                    // A class with property hooks encodes its PUBLIC properties
+                    // through their `get` hooks — including a virtual (get-only,
+                    // unbacked) property the raw slot store never holds
+                    // (init_trigger_json_encode_hooks). Enumerate as an external
+                    // scope, normalize each value, and hand back a stdClass so the
+                    // pure formatter emits a JSON object.
+                    let (orc, oid) = match deref_object(&v) {
+                        Some(o) => {
+                            let id = o.borrow().id;
+                            (o, id)
+                        }
+                        None => return Ok(v),
+                    };
+                    visiting.push(addr);
+                    let vars = match self.object_vars_array(&orc, cid, oid, None) {
+                        Ok(a) => a,
+                        Err(e) => {
+                            visiting.pop();
+                            return Err(e);
+                        }
+                    };
+                    let entries: Vec<(Vec<u8>, Zval)> = vars
+                        .iter()
+                        .map(|(k, val)| {
+                            let kb = match k {
+                                Key::Int(i) => i.to_string().into_bytes(),
+                                Key::Str(s) => s.as_bytes().to_vec(),
+                            };
+                            (kb, val.deref_clone())
+                        })
+                        .collect();
+                    let mut norm: Vec<(Vec<u8>, Zval)> = Vec::new();
+                    for (k, val) in entries {
+                        match self.json_normalize(val, partial, visiting) {
+                            Ok(nv) => norm.push((k, nv)),
+                            Err(e) => {
+                                visiting.pop();
+                                return Err(e);
+                            }
+                        }
+                    }
+                    visiting.pop();
+                    let Some(&std_cid) = self.class_index.get(&b"stdclass"[..]) else {
+                        return Ok(v);
+                    };
+                    let obj = self.alloc_object(std_cid)?;
+                    if let Zval::Object(so) = &obj {
+                        let mut b = so.borrow_mut();
+                        for (k, nv) in norm {
+                            b.props.set(&k, nv);
+                        }
+                    }
+                    Ok(obj)
                 } else {
                     Ok(v)
                 }
@@ -11012,6 +11066,22 @@ impl<'m> Vm<'m> {
             let b = o.borrow();
             (b.class_id as usize, b.id)
         };
+        let arr = self.object_vars_array(&o, cid, oid, cur)?;
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
+    /// Enumerate an object's properties as `name => value`, in PHP's declared-then-
+    /// dynamic order, filtered by the visibility visible from `cur` (`None` = an
+    /// external scope, i.e. public only). Hooked/virtual properties surface through
+    /// their `get` hook (an uninitialized typed property is omitted). Shared by
+    /// `get_object_vars` and json-encoding a hooked object (json passes `None`).
+    fn object_vars_array(
+        &mut self,
+        o: &Rc<RefCell<Object>>,
+        cid: usize,
+        oid: u32,
+        cur: Option<ClassId>,
+    ) -> Result<PhpArray, PhpError> {
         // Declared-property order, parent-first (root → derived), de-duplicated so
         // a redeclared property keeps its inherited position. `own_prop_vis`
         // includes *virtual* hooked properties (which have no instance storage),
@@ -11071,7 +11141,7 @@ impl<'m> Vm<'m> {
         for (name, val) in dynamic {
             arr.insert(Key::from_bytes(&name), val);
         }
-        Ok(Zval::Array(Rc::new(arr)))
+        Ok(arr)
     }
 
     /// `get_class_vars(string $class)`: the class's default property values as an
