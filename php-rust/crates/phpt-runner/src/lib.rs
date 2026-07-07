@@ -490,6 +490,9 @@ fn expectf_to_regex(wanted: &str) -> String {
         ("%x", r"[0-9a-fA-F]+"),
         ("%f", r"[+-]?\.?\d+\.?\d*(?:[Ee][+-]?\d+)?"),
         ("%c", r"."),
+        // run-tests.php writes NUL bytes in expected output as `%0`
+        // (private-property wire names in serialize tests).
+        ("%0", r"\x00"),
     ] {
         re = re.replace(from, to);
     }

@@ -2453,18 +2453,44 @@ impl<'m> Vm<'m> {
                     // a lazy operand initializes then (init_trigger_compare) —
                     // never for object-vs-scalar (the object simply compares
                     // greater), `===`, or a same-handle compare.
+                    let cmp_op = matches!(
+                        b,
+                        BinOp::Eq | BinOp::NotEq | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Spaceship
+                    );
                     let both_objects = match (deref_object(&lhs), deref_object(&rhs)) {
                         (Some(a), Some(b)) => Some(Rc::ptr_eq(&a, &b)),
                         _ => None,
                     };
                     let (lhs, rhs) = if matches!(both_objects, Some(false))
-                        && matches!(
-                            b,
-                            BinOp::Eq | BinOp::NotEq | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Spaceship
-                        )
+                        && cmp_op
                         && (self.is_lazy_value(&lhs) || self.is_lazy_value(&rhs))
                     {
                         (self.realize_full(&lhs)?, self.realize_full(&rhs)?)
+                    } else {
+                        (lhs, rhs)
+                    };
+                    // A string-vs-object comparison converts the object through
+                    // its `__toString` when it has one (PHP semantics; a lazy
+                    // wrapper is NOT initialized by this — the hook is a method
+                    // call on the wrapper).
+                    let (lhs, rhs) = if cmp_op && both_objects.is_none() {
+                        let l_str = matches!(lhs.deref_clone(), Zval::Str(_));
+                        let r_str = matches!(rhs.deref_clone(), Zval::Str(_));
+                        let mut to_str = |vm: &mut Self, v: Zval, other_is_str: bool| -> Result<Zval, PhpError> {
+                            if !other_is_str {
+                                return Ok(v);
+                            }
+                            if let Some(o) = deref_object(&v) {
+                                let cid = o.borrow().class_id as usize;
+                                if resolve_method_runtime(&vm.classes, cid, b"__toString").is_some() {
+                                    return vm.call_method_sync(v, b"__toString", Vec::new());
+                                }
+                            }
+                            Ok(v)
+                        };
+                        let lhs = to_str(self, lhs, r_str)?;
+                        let rhs = to_str(self, rhs, l_str)?;
+                        (lhs, rhs)
                     } else {
                         (lhs, rhs)
                     };

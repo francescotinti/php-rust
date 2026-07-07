@@ -397,6 +397,28 @@ fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
     }
 }
 
+/// The `uninitialized(T)` display for a declared type only the reflection-side
+/// record models (`mixed`, unions, intersections — the enforced [`TypeHint`]
+/// covers the rest).
+fn reflect_type_display(rt: &crate::hir::ReflectType) -> Vec<u8> {
+    use crate::hir::ReflectType;
+    let join = |ms: &[crate::hir::ReflectNamed], sep: u8| -> Vec<u8> {
+        let mut out = Vec::new();
+        for (i, m) in ms.iter().enumerate() {
+            if i > 0 {
+                out.push(sep);
+            }
+            out.extend_from_slice(&m.name);
+        }
+        out
+    };
+    match rt {
+        ReflectType::Single(n, _) => n.name.to_vec(),
+        ReflectType::Union(ms) => join(ms, b'|'),
+        ReflectType::Intersection(ms) => join(ms, b'&'),
+    }
+}
+
 /// Compile one HIR [`ClassDecl`] into a [`CompiledClass`] (OOP-1). Tolerant, like
 /// functions: a method that doesn't compile becomes a [`stub_func`]; a
 /// non-constant property default marks the class `ok = false` so [`Op::Alloc`]
@@ -427,7 +449,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
     // private (Stage C) — so a parent's private and a subclass's same-name
     // redeclaration occupy two distinct slots. The source-level name rides along
     // for the prop-init thunk (whose `PropSet` ops carry names, not keys).
-    let mut flat_defaults: Vec<(Box<[u8]>, Box<[u8]>, Option<&Expr>, Option<&crate::hir::TypeHint>)> = Vec::new();
+    let mut flat_defaults: Vec<(Box<[u8]>, Box<[u8]>, Option<&Expr>, Option<&crate::hir::TypeHint>, Option<&crate::hir::ReflectType>)> = Vec::new();
     let mut vis_entries: Vec<(Box<[u8]>, PropVis)> = Vec::new();
     // Property hooks (step 50), flattened parent-first like the layout: a
     // most-derived `get`/`set` overrides the inherited one. A *virtual* hooked
@@ -475,12 +497,13 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
             // instance layout (not allocated, not dumped). Backed ones stay.
             let virtual_prop = (p.get_hook.is_some() || p.set_hook.is_some()) && !p.backed;
             if !virtual_prop {
-                match flat_defaults.iter_mut().find(|(k, _, _, _)| k.as_ref() == skey.as_ref()) {
+                match flat_defaults.iter_mut().find(|(k, _, _, _, _)| k.as_ref() == skey.as_ref()) {
                     Some(e) => {
                         e.2 = p.default.as_ref();
                         e.3 = p.hint.as_ref();
+                        e.4 = p.reflect_type.as_ref();
                     }
-                    None => flat_defaults.push((skey.clone(), p.name.clone(), p.default.as_ref(), p.hint.as_ref())),
+                    None => flat_defaults.push((skey.clone(), p.name.clone(), p.default.as_ref(), p.hint.as_ref(), p.reflect_type.as_ref())),
                 }
                 let vis = match p.visibility {
                     Visibility::Public => PropVis::Public,
@@ -495,7 +518,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
                 // A virtual property that shadowed an inherited backed one must
                 // also drop the inherited storage entry (the plain slot; a parent's
                 // private slot is not shadowable and stays).
-                flat_defaults.retain(|(k, _, _, _)| k.as_ref() != skey.as_ref() && k.as_ref() != p.name.as_ref());
+                flat_defaults.retain(|(k, _, _, _, _)| k.as_ref() != skey.as_ref() && k.as_ref() != p.name.as_ref());
                 vis_entries.retain(|(k, _)| k.as_ref() != skey.as_ref() && k.as_ref() != p.name.as_ref());
             }
         }
@@ -511,15 +534,24 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
     let mut uninit_props: Vec<Box<[u8]>> = Vec::new();
     // Type displays for the typed properties, for the uninitialized rendering.
     let mut prop_type_displays: Vec<(Box<[u8]>, Box<[u8]>)> = Vec::new();
-    for (skey, name, default, hint) in &flat_defaults {
-        if let Some(h) = hint {
-            prop_type_displays.push((skey.clone(), h.display_name().into_bytes().into()));
+    for (skey, name, default, hint, rt) in &flat_defaults {
+        // The `uninitialized(T)` display: the enforced hint's name, or — for a
+        // type only the reflection record models (mixed / unions /
+        // intersections) — a render of that record.
+        let display: Option<Box<[u8]>> = match (hint, rt) {
+            (Some(h), _) => Some(h.display_name().into_bytes().into()),
+            (None, Some(r)) => Some(reflect_type_display(r).into()),
+            (None, None) => None,
+        };
+        if let Some(d) = display {
+            prop_type_displays.push((skey.clone(), d));
         }
         match default {
             None => {
                 prop_defaults.push((skey.clone(), Const::Null));
-                // Typed-without-default → uninitialized; untyped → NULL.
-                if hint.is_some() {
+                // ANY declared type without default → uninitialized (Zend:
+                // `mixed`/union properties included); untyped → NULL.
+                if hint.is_some() || rt.is_some() {
                     uninit_props.push(skey.clone());
                 }
             }
