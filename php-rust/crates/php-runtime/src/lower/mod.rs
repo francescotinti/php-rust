@@ -2843,7 +2843,12 @@ class ReflectionClass implements Reflector {
             $head = 'Class';
             $kind = ($this->isAbstract() ? 'abstract ' : '') . ($this->isFinal() ? 'final ' : '') . 'class';
         }
-        $s = "$head [ $src $kind {$this->name} ] {\n";
+        $hdr = "$head [ $src $kind {$this->name}";
+        $parent = $this->getParentClass();
+        if ($parent !== false) { $hdr .= " extends " . $parent->getName(); }
+        $ifaces = $this->getInterfaceNames();
+        if (!empty($ifaces)) { $hdr .= " implements " . implode(', ', $ifaces); }
+        $s = $hdr . " ] {\n";
         $file = $this->getFileName();
         if ($file !== false) {
             $s .= "  @@ $file " . $this->getStartLine() . "-" . $this->getEndLine() . "\n";
@@ -3405,12 +3410,16 @@ class ReflectionFunction extends ReflectionFunctionAbstract {
     public function __toString() {
         $src = ($this->__info['file'] ?? false) !== false ? '<user>' : '<internal>';
         $s = "Function [ $src function {$this->name} ] {\n";
-        $s .= "  @@ " . ($this->__info['file'] ?? '') . " " . ($this->__info['startLine'] ?? 0) . " - " . ($this->__info['endLine'] ?? 0) . "\n";
+        if (($this->__info['file'] ?? false) !== false) {
+            $s .= "  @@ " . $this->__info['file'] . " " . ($this->__info['startLine'] ?? 0) . " - " . ($this->__info['endLine'] ?? 0) . "\n";
+        }
         $params = $this->getParameters();
-        $s .= "\n  - Parameters [" . count($params) . "] {\n";
-        foreach ($params as $p) { $s .= "    " . $p . "\n"; }
-        $s .= "  }\n";
-        if ($this->hasReturnType()) { $s .= "  - Return [ " . $this->getReturnType() . " ]\n"; }
+        if (count($params) > 0 || $this->hasReturnType()) {
+            $s .= "\n  - Parameters [" . count($params) . "] {\n";
+            foreach ($params as $p) { $s .= "    " . $p . "\n"; }
+            $s .= "  }\n";
+            if ($this->hasReturnType()) { $s .= "  - Return [ " . $this->getReturnType() . " ]\n"; }
+        }
         return $s . "}\n";
     }
 }
@@ -3462,13 +3471,19 @@ class ReflectionMethod extends ReflectionFunctionAbstract {
         if ($this->isStatic()) { $mods .= 'static '; }
         $vis = $this->isPublic() ? 'public' : ($this->isProtected() ? 'protected' : 'private');
         $s = "Method [ $src {$mods}{$vis} method {$this->name} ] {\n";
-        $s .= "  @@ " . $this->getFileName() . " " . $this->getStartLine() . " - " . $this->getEndLine() . "\n";
+        // An internal (prelude) method has no source location, so PHP omits the `@@`.
+        if ($this->isUserDefined()) {
+            $s .= "  @@ " . $this->getFileName() . " " . $this->getStartLine() . " - " . $this->getEndLine() . "\n";
+        }
         if (!$this->isAbstract()) {
             $params = $this->getParameters();
-            $s .= "\n  - Parameters [" . count($params) . "] {\n";
-            foreach ($params as $p) { $s .= "    " . $p . "\n"; }
-            $s .= "  }\n";
-            if ($this->hasReturnType()) { $s .= "  - Return [ " . $this->getReturnType() . " ]\n"; }
+            // The parameters/return block appears only when there is something in it.
+            if (count($params) > 0 || $this->hasReturnType()) {
+                $s .= "\n  - Parameters [" . count($params) . "] {\n";
+                foreach ($params as $p) { $s .= "    " . $p . "\n"; }
+                $s .= "  }\n";
+                if ($this->hasReturnType()) { $s .= "  - Return [ " . $this->getReturnType() . " ]\n"; }
+            }
         }
         return $s . "}\n";
     }
