@@ -392,6 +392,7 @@ pub(crate) fn run_module_with_hir<'m>(
         uncaught_throwable: None,
         lazy_init: HashMap::new(),
         lazy_props: HashMap::new(),
+        var_dump_debug: HashMap::new(),
         lazy_options: HashMap::new(),
         lazy_initializing: HashSet::new(),
         zips: HashMap::new(),
@@ -1131,6 +1132,11 @@ struct Vm<'m> {
     /// initializer (every property is already materialized). Absent for a
     /// non-lazy object.
     lazy_props: HashMap<u32, Vec<Box<[u8]>>>,
+    /// Scratch handoff from the `var_dump` arg-walk to `run_value_builtin`: each
+    /// debuggable object's `__debugInfo()` result, keyed by object id. Populated
+    /// only while dispatching a `var_dump` (and `mem::take`n right after), empty
+    /// otherwise — never observed across ops.
+    var_dump_debug: HashMap<u32, Zval>,
     /// Per-lazy-object option flags (PHP 8.4 `ReflectionClass::newLazy*` /
     /// `resetAsLazy*` `$options`): SKIP_INITIALIZATION_ON_SERIALIZE (8) and
     /// SKIP_DESTRUCTOR (16, consumed at reset time). Keyed by object id.
@@ -2068,9 +2074,16 @@ impl<'m> Vm<'m> {
         self.flush_diags(line)?;
         let mut produced = Vec::new();
         let mut direct = Vec::new();
+        // A `var_dump` arg-walk left the objects' `__debugInfo()` results here;
+        // take them so the pure builtin can render them (empty for every other).
+        let debug_info = std::mem::take(&mut self.var_dump_debug);
         let res = {
-            let mut ctx =
-                Ctx { out: &mut produced, diags: &mut self.diags, direct_out: &mut direct };
+            let mut ctx = Ctx {
+                out: &mut produced,
+                diags: &mut self.diags,
+                direct_out: &mut direct,
+                debug_info: &debug_info,
+            };
             f(args, &mut ctx)
         };
         self.flush_diags(line)?;
@@ -3935,6 +3948,14 @@ impl<'m> Vm<'m> {
                                 *a = self.realize_full(a)?;
                             }
                         }
+                    }
+                    // `var_dump` calls each debuggable object's `__debugInfo()`
+                    // (PHP 8.4) *before* rendering — a lazy object initializes only
+                    // if that method touches its state — and dumps the returned
+                    // array under the object header. Results handed to the builtin
+                    // via `var_dump_debug` (taken in `run_value_builtin`).
+                    if name[..] == *b"var_dump" {
+                        self.var_dump_debug = self.compute_debug_info(&args)?;
                     }
                     // `count($obj)`/`sizeof($obj)` on a Countable dispatches its
                     // user `count()` method (step 56); the builtin only handles
@@ -6675,6 +6696,53 @@ impl<'m> Vm<'m> {
                 .expect("sync method result on caller stack"));
         }
         self.drive_to_return(baseline)
+    }
+
+    /// Walk `var_dump`'s argument tree and invoke `__debugInfo()` on every object
+    /// that declares it (PHP 8.4), returning object-id → the returned array. The
+    /// call runs on the raw receiver — a lazy object is *not* pre-initialized, so
+    /// it stays lazy unless the method body touches its own state
+    /// (init_trigger_var_dump_debug_info_001/002). Recurses through arrays,
+    /// references, the (non-debuggable) object's own slots, and each debug
+    /// result, so nested debuggable objects are rendered too. Cycle-guarded by id.
+    fn compute_debug_info(&mut self, args: &[Zval]) -> Result<HashMap<u32, Zval>, PhpError> {
+        let mut map: HashMap<u32, Zval> = HashMap::new();
+        let mut stack: Vec<Zval> = args.to_vec();
+        let mut visited: std::collections::HashSet<u32> = std::collections::HashSet::new();
+        while let Some(v) = stack.pop() {
+            match &v {
+                Zval::Ref(cell) => stack.push(cell.borrow().clone()),
+                Zval::Array(a) => {
+                    for (_, val) in a.iter() {
+                        stack.push(val.clone());
+                    }
+                }
+                Zval::Object(o) => {
+                    let (id, cid) = {
+                        let b = o.borrow();
+                        (b.id, b.class_id as usize)
+                    };
+                    if !visited.insert(id) {
+                        continue;
+                    }
+                    if resolve_method_runtime(&self.classes, cid, b"__debugInfo").is_some() {
+                        let res = self.call_method_sync(v.clone(), b"__debugInfo", Vec::new())?;
+                        if let Zval::Array(a) = &res {
+                            for (_, val) in a.iter() {
+                                stack.push(val.clone());
+                            }
+                        }
+                        map.insert(id, res);
+                    } else {
+                        for (_, val) in o.borrow().props.iter() {
+                            stack.push(val.clone());
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(map)
     }
 
     /// Perform the full `Op::PropSet` object-write semantics for a leaf property

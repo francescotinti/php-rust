@@ -428,7 +428,8 @@ mod tests {
         let mut out = Vec::new();
         let mut diags: Diags = Vec::new();
         let mut direct = Vec::new();
-        let mut ctx = Ctx { out: &mut out, diags: &mut diags, direct_out: &mut direct };
+        let dbg = std::collections::HashMap::new();
+        let mut ctx = Ctx { out: &mut out, diags: &mut diags, direct_out: &mut direct, debug_info: &dbg };
         f(args, &mut ctx).unwrap()
     }
 

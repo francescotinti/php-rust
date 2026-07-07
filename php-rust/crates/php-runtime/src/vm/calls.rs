@@ -13,7 +13,8 @@ pub(super) fn builtin_ref_call(
     // The ref-first family (sort/array_push/…) never writes to a stdout
     // stream, so its ob-bypass sink is a discarded local.
     let mut direct = Vec::new();
-    let mut ctx = Ctx { out, diags, direct_out: &mut direct };
+    let empty_debug = std::collections::HashMap::new();
+    let mut ctx = Ctx { out, diags, direct_out: &mut direct, debug_info: &empty_debug };
     if let Zval::Ref(rc) = cell {
         let mut guard = rc.borrow_mut();
         f(&mut guard, rest, &mut ctx)

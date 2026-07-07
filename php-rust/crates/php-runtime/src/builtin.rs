@@ -22,6 +22,12 @@ pub struct Ctx<'a> {
     /// `ob_*` stack, unlike `echo`/`print`. The VM appends this straight to
     /// its stdout/rendered sinks after the builtin returns.
     pub direct_out: &'a mut Vec<u8>,
+    /// Precomputed `__debugInfo()` results for `var_dump`, keyed by object id.
+    /// The VM invokes each debuggable object's `__debugInfo` method *before* the
+    /// dump (so a lazy object initializes only if that method touches its state,
+    /// PHP 8.4) and `var_dump` renders the returned array under the object header
+    /// instead of the raw property slots. Empty for every other builtin.
+    pub debug_info: &'a std::collections::HashMap<u32, Zval>,
 }
 
 /// A by-value builtin: positional arguments in, a value (or fatal error) out.

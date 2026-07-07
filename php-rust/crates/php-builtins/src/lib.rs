@@ -463,7 +463,7 @@ fn var_dump(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     }
     for v in args {
         let mut seen = Vec::new();
-        dump(ctx.out, v, 0, &mut seen);
+        dump(ctx.out, v, 0, &mut seen, ctx.debug_info);
     }
     Ok(Zval::Null)
 }
@@ -481,7 +481,13 @@ fn pdo_hidden_prop(key: &[u8]) -> bool {
 /// value's own block; nested entries indent by a further 2. `seen` holds the
 /// addresses of containers currently being dumped, so a value that refers back
 /// into its own subtree prints `*RECURSION*` instead of looping (step 19-7).
-fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
+fn dump(
+    out: &mut Vec<u8>,
+    v: &Zval,
+    indent: usize,
+    seen: &mut Vec<usize>,
+    debug: &std::collections::HashMap<u32, Zval>,
+) {
     match v {
         Zval::Undef | Zval::Null => out.extend_from_slice(b"NULL\n"),
         Zval::Bool(true) => out.extend_from_slice(b"bool(true)\n"),
@@ -523,9 +529,9 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
                 match val {
                     Zval::Ref(cell) if std::rc::Rc::strong_count(cell) >= 2 => {
                         out.push(b'&');
-                        dump(out, &cell.borrow(), indent + 2, seen);
+                        dump(out, &cell.borrow(), indent + 2, seen, debug);
                     }
-                    _ => dump(out, val, indent + 2, seen),
+                    _ => dump(out, val, indent + 2, seen, debug),
                 }
             }
             seen.pop();
@@ -534,7 +540,7 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
         }
         // A top-level reference is dereferenced transparently (the `&` marker
         // only applies to reference *elements* inside a container).
-        Zval::Ref(cell) => dump(out, &cell.borrow(), indent, seen),
+        Zval::Ref(cell) => dump(out, &cell.borrow(), indent, seen, debug),
         // A closure dumps as a `Closure` object with its name/file/line (or the
         // wrapped `function`) plus a `parameter` pseudo-property (step 18-7).
         Zval::Closure(c) => {
@@ -548,7 +554,7 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
                 out.extend_from_slice(k);
                 out.extend_from_slice(b"\"]=>\n");
                 spaces(out, indent + 2);
-                dump(out, val, indent + 2, seen);
+                dump(out, val, indent + 2, seen, debug);
             }
             spaces(out, indent);
             out.extend_from_slice(b"}\n");
@@ -587,6 +593,40 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
             }
             seen.push(ptr);
             let obj = o.borrow();
+            // An object with a `__debugInfo()` method (PHP 8.4): the VM already
+            // invoked it (keyed by object id) and var_dump renders the returned
+            // array under the object header, not the raw slots. A still-lazy
+            // object keeps its `lazy ghost `/`lazy proxy ` prefix — the call
+            // initializes it only if the method body touched its state.
+            if let Some(Zval::Array(dbg)) = debug.get(&obj.id) {
+                if let Some(kind) = obj.lazy {
+                    out.extend_from_slice(match kind {
+                        php_types::LazyKind::Ghost => b"lazy ghost ".as_slice(),
+                        php_types::LazyKind::Proxy => b"lazy proxy ".as_slice(),
+                    });
+                }
+                out.extend_from_slice(b"object(");
+                out.extend_from_slice(class_display_name(obj.class_name.as_bytes()));
+                out.extend_from_slice(format!(")#{} ({}) {{\n", obj.id, dbg.len()).as_bytes());
+                for (key, val) in dbg.iter() {
+                    spaces(out, indent + 2);
+                    match key {
+                        Key::Int(i) => out.extend_from_slice(format!("[{i}]=>\n").as_bytes()),
+                        Key::Str(s) => {
+                            out.extend_from_slice(b"[\"");
+                            out.extend_from_slice(s.as_bytes());
+                            out.extend_from_slice(b"\"]=>\n");
+                        }
+                    }
+                    spaces(out, indent + 2);
+                    dump(out, val, indent + 2, seen, debug);
+                }
+                drop(obj);
+                seen.pop();
+                spaces(out, indent);
+                out.extend_from_slice(b"}\n");
+                return;
+            }
             // An enum case renders as `enum(Name::Case)` (step 23, D-23.5); the
             // backing value is intentionally not shown.
             if obj.info.is_enum_case {
@@ -618,7 +658,7 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
                 spaces(out, indent + 2);
                 out.extend_from_slice(b"[\"object\"]=>\n");
                 spaces(out, indent + 2);
-                dump(out, &inner, indent + 2, seen); // WeakHandle arm: object or NULL
+                dump(out, &inner, indent + 2, seen, debug); // WeakHandle arm: object or NULL
                 drop(obj);
                 seen.pop();
                 spaces(out, indent);
@@ -636,7 +676,7 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
                 out.extend_from_slice(b"[\"name\"]=>\n");
                 spaces(out, indent + 2);
                 drop(obj);
-                dump(out, &name, indent + 2, seen);
+                dump(out, &name, indent + 2, seen, debug);
                 seen.pop();
                 spaces(out, indent);
                 out.extend_from_slice(b"}\n");
@@ -681,11 +721,11 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
                     spaces(out, indent + 4);
                     out.extend_from_slice(b"[\"key\"]=>\n");
                     spaces(out, indent + 4);
-                    dump(out, key, indent + 4, seen);
+                    dump(out, key, indent + 4, seen, debug);
                     spaces(out, indent + 4);
                     out.extend_from_slice(b"[\"value\"]=>\n");
                     spaces(out, indent + 4);
-                    dump(out, value, indent + 4, seen);
+                    dump(out, value, indent + 4, seen, debug);
                     spaces(out, indent + 2);
                     out.extend_from_slice(b"}\n");
                 }
@@ -708,7 +748,7 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
                     spaces(out, indent + 2);
                     let inst = (**inst).clone();
                     drop(obj);
-                    dump(out, &inst, indent + 2, seen);
+                    dump(out, &inst, indent + 2, seen, debug);
                     seen.pop();
                     spaces(out, indent);
                     out.extend_from_slice(b"}\n");
@@ -767,9 +807,9 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
                     match val {
                         Zval::Ref(cell) if std::rc::Rc::strong_count(cell) >= 2 => {
                             out.push(b'&');
-                            dump(out, &cell.borrow(), indent + 2, seen);
+                            dump(out, &cell.borrow(), indent + 2, seen, debug);
                         }
-                        _ => dump(out, val, indent + 2, seen),
+                        _ => dump(out, val, indent + 2, seen, debug),
                     }
                 }
             }
@@ -781,7 +821,7 @@ fn dump(out: &mut Vec<u8>, v: &Zval, indent: usize, seen: &mut Vec<usize>) {
         // A bare weak handle (only reached if one ever escapes the WeakReference/
         // WeakMap special-casing): the live object, or NULL once collected.
         Zval::WeakHandle(w) => match w.upgrade() {
-            Some(o) => dump(out, &Zval::Object(o), indent, seen),
+            Some(o) => dump(out, &Zval::Object(o), indent, seen, debug),
             None => out.extend_from_slice(b"NULL\n"),
         },
     }
