@@ -9183,6 +9183,7 @@ impl<'m> Vm<'m> {
         self.destructed.remove(&oid);
         let kind = if is_proxy { LazyKind::Proxy } else { LazyKind::Ghost };
         let init = args.get(3).cloned().unwrap_or(Zval::Null);
+        self.reject_internal_lazy(ocid)?;
         // Reset through the *reflected* class's layout: a subclass's additional
         // properties are preserved (install_lazy's reflected-scope rules).
         self.install_lazy(&rc, cid, kind, init)?;
@@ -14675,11 +14676,42 @@ impl<'m> Vm<'m> {
     /// initializer/factory is stashed in `lazy_init` and runs on first access
     /// (see [`Self::realize_lazy`]). `kind` selects ghost vs proxy semantics.
     fn alloc_lazy(&mut self, cid: ClassId, init: Zval, kind: LazyKind) -> Result<Zval, PhpError> {
+        self.reject_internal_lazy(cid)?;
         let v = self.alloc_object(cid)?;
         if let Zval::Object(rc) = &v {
             self.install_lazy(rc, cid, kind, init)?;
         }
         Ok(v)
+    }
+
+    /// PHP 8.4 refuses to make instances of *internal* classes lazy (their
+    /// native state cannot be left uninitialized) — `stdClass` is the one
+    /// documented exception, and a userland subclass of an internal class is
+    /// rejected naming the internal ancestor. phpr's "internal" classes are
+    /// the prelude-defined ones.
+    fn reject_internal_lazy(&self, cid: ClassId) -> Result<(), PhpError> {
+        let mut c = Some(cid);
+        while let Some(ci) = c {
+            let cc = self.classes[ci];
+            if cc.file.as_ref() == b"prelude" && cc.name.as_ref() != b"stdClass" {
+                // The wording distinguishes the internal class itself from a
+                // userland subclass inheriting it.
+                return Err(PhpError::Error(if ci == cid {
+                    format!(
+                        "Cannot make instance of internal class lazy: {} is internal",
+                        String::from_utf8_lossy(&cc.name),
+                    )
+                } else {
+                    format!(
+                        "Cannot make instance of internal class lazy: {} inherits internal class {}",
+                        String::from_utf8_lossy(&self.classes[cid].name),
+                        String::from_utf8_lossy(&cc.name),
+                    )
+                }));
+            }
+            c = cc.parent;
+        }
+        Ok(())
     }
 
     /// Turn an existing object handle `rc` (of class `cid`) into an
@@ -14784,6 +14816,12 @@ impl<'m> Vm<'m> {
         drop(dropped);
         if had_content {
             self.gc_sweep_impl(None)?;
+        }
+        // A class with no eligible (reset) properties is never uninitialized
+        // (PHP 8.4, support_stdClass): the object stays a plain instance and
+        // the initializer is dropped without running.
+        if still_lazy.is_empty() {
+            return Ok(());
         }
         rc.borrow_mut().lazy = Some(kind);
         self.lazy_init.insert(oid, init);
