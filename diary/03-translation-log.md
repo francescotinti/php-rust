@@ -2299,3 +2299,53 @@ PDO chiamando gli hook host direttamente. Corpus 2120→**2138** (+18 fail→pas
 ecosistema — DBAL 3769/0/0, ORM 3484 con 12 err/22 fail, collections/event-manager/instantiator/
 lexer/inflector verdi, Monolog 22 err/3 fail su 1150, PHPUnit byte-identico. Prossimo filone
 pianificato: **by-ref property hooks** (`&get`, PHP 8.4, 15 test) — recon e design già scritti.
+
+## Sessione O — by-ref property hooks (`&get`, PHP 8.4): il filone chiude 15/15
+
+Il piano scritto la sessione scorsa ha retto quasi alla lettera. Quattro step committati
+(`7bdd1ed` → `c66f2fb` → `6e5a0fc`):
+
+- **Lowering**: `&get` accettato; il body del hook compila come `function &f()` riusando il
+  plumbing `fn_by_ref`/`ReturnRef` esistente (la forma arrow `&get => $this->_p` va specchiata
+  a mano sul ramo Return del lower — costruiva `StmtKind::Return` direttamente, bypassando la
+  logica by-ref). `&set` si tollera (Zend deprecation, non fatal). Le due validazioni fatal
+  verbatim: *"Get hook of backed property C::p with set hook may not return by reference"*
+  (backed anche per **ereditarietà** — serve `ancestor_prop_backed` al lowering, prima del
+  flattening di compile_class) e la variance d'interfaccia *"Declaration of A::$p::get() must
+  be compatible with & I::$p::get()"* (l'abstract hook by-ref si registra come `"&get"` nella
+  lista abstract_hooks; i consumer che costruiscono `$p::get` strippano il marcatore).
+- **Runtime, contesti valore**: `push_hook` marca `ret_deref = func.by_ref && !is_set` — il
+  `Ret` esistente dereferenzia (lezione ORM: mai residui Ref nei temp). Nei contesti place il
+  nuovo `byref_hook_root` esegue il hook **sincrono** (push_hook + drive_to_return, pattern già
+  usato da call_method_sync/ho_get_object_vars) con `ret_deref` azzerato, e la cell ritornata
+  diventa la **radice del path**: MakeRef, FieldAssign/AssignOp/IncDec (via `field_set_in_root`,
+  col drain ArrayAccess estratto da field_set_mode), BindRefTo(Checked) — che per il rebind del
+  prop stesso esegue il hook per i side effect e POI fatala "Cannot assign by reference to
+  overloaded object" (bug007 stampa il get prima del fatal!).
+- **foreach sugli oggetti hooked**: ObjVals/ObjRefs riscritti da snapshot-chiavi a **cursore
+  live** (ogni IterNext ricalcola le entry visibili e produce la prima non ancora visitata —
+  le prop aggiunte nel body si visitano, foreach_002). Le entry sono Slot (storage) o Hook
+  (get dispatched allo step); set-only virtual si salta, set-only backed legge il backing; la
+  vista hook è scope-aware (la private del scope shadowa la ridichiarazione del figlio — la
+  sezione A/B di foreach.phpt). By-ref foreach lega la cell del `&get`; get by-value = fatal
+  "Cannot create reference to property C::$p". Bonus: la scrittura dynamic-name
+  `$o->{$n} = v` ora dispatcha i set hook (field_write deferisce le prop hooked a
+  prop_set_magic_or_dynamic, che esegue il set hook sincrono **azzerando ret_cell** — con
+  ret_cell impostato il drive bounded non termina mai).
+- **Lazy + typed refs**: `realize_full` segue le CATENE di proxy (proxy il cui instance è
+  stato resettato lazy). E le **typed references** minime: `Vm.typed_refs` registra le cell
+  che aliasano storage di prop tipate (MakeRef su singolo step Prop — copre `&$o->typed`,
+  gli arg by-ref e il ReturnRef del hook su backing tipato — più il binding foreach by-ref);
+  StoreSlot attraverso una cell registrata coerce/checka con l'errore Zend *"Cannot assign
+  string to reference held by property C::$p of type int"*. Due sottigliezze oracle: la
+  sorgente **muore con l'oggetto** (weak sull'owner; l'handle della created-table non conta —
+  typed_properties_094) e **clone la eredita** come nuovo owner (typed_properties_081).
+
+Due regressioni intercettate dal gate per-nome e fixate al volo: il marcatore `&` di var_dump
+sulle prop (mancava del tutto — aggiunto specchiando la regola degli elementi array) ha
+scoperto che `public private(set)` non era modellato: `$r = &$foo->bar` da fuori deve legare
+una **copia** (object_reference.phpt) — aggiunto `set_visibility` a PropDecl/PropInfo con il
+copy-on-ref in MakeRef.
+
+Corpus Zend 2138→**2163** (+25: i 15 del filone + 10 bonus, tra cui 5 typed_properties, due
+gh di property_hooks, foreach_010); zero pass→fail; cargo test 20 crate verdi.
