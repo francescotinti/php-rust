@@ -167,9 +167,9 @@ pub(super) fn field_write(
                     // Own a handle so the leaf-defer branch can move the object into
                     // the pending op without holding a borrow of `target`.
                     let o = o.clone();
-                    let (cid, is_enum) = {
+                    let (cid, is_enum, is_lazy) = {
                         let b = o.borrow();
-                        (b.class_id as usize, b.info.is_enum_case)
+                        (b.class_id as usize, b.info.is_enum_case, b.lazy.is_some())
                     };
                     // A leaf write on a property that is not a declared, accessible
                     // slot defers to the VM caller (`prop_set_magic_or_dynamic`),
@@ -180,9 +180,12 @@ pub(super) fn field_write(
                     // property. Enum cases keep their dedicated immutability error.
                     // A *hooked* property (PHP 8.4) also defers: its set hook (or
                     // the hooked write rules) must run, not a raw storage write.
+                    // So does a *lazy* object (uninitialized, or a forwarding
+                    // proxy): the write must trigger initialization / follow the
+                    // proxy, not land on the wrapper's raw storage.
                     if rest.is_empty()
                         && !is_enum
-                        && (!fs.prop_is_declared_slot(cid, name) || fs.prop_hooked(cid, name))
+                        && (!fs.prop_is_declared_slot(cid, name) || fs.prop_hooked(cid, name) || is_lazy)
                     {
                         *aa = Some(AaOp::MagicSet(AaMagicSet {
                             obj: Zval::Object(o),

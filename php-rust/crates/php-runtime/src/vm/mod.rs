@@ -1244,6 +1244,15 @@ impl<'m> Vm<'m> {
     }
 
     fn gc_sweep(&mut self, top: usize, ip: usize) -> Result<(), PhpError> {
+        self.gc_sweep_impl(Some((top, ip)))
+    }
+
+    /// The sweep body. `resume = Some((top, ip))` is the statement-level mode:
+    /// a found destructor is *scheduled* (frame pushed, `ip` rewound so the
+    /// `Sweep` op re-runs after it returns). `None` drives each destructor to
+    /// completion synchronously — the reset-as-lazy path, where PHP runs the
+    /// displaced contents' destructors inside the reset itself.
+    fn gc_sweep_impl(&mut self, resume: Option<(usize, usize)>) -> Result<(), PhpError> {
         log::trace!(
             target: "phpr::gc",
             "sweep: {} tracked / {} candidate objects",
@@ -1373,11 +1382,28 @@ impl<'m> Vm<'m> {
                 // Discard the destructor's return (don't disturb the caller's
                 // operand stack).
                 frame.ret_cell = Some(Rc::new(RefCell::new(Zval::Null)));
-                self.frames[top].ip = ip; // re-run Sweep after it returns
-                self.frames.push(frame);
-                // `o` stays alive via `frame.this`; it is freed (and its contents
-                // cascaded by the `Ret` hook) when that frame returns.
-                break;
+                match resume {
+                    Some((top, ip)) => {
+                        self.frames[top].ip = ip; // re-run Sweep after it returns
+                        self.frames.push(frame);
+                        // `o` stays alive via `frame.this`; it is freed (and its
+                        // contents cascaded by the `Ret` hook) when that frame
+                        // returns.
+                        break;
+                    }
+                    None => {
+                        // Synchronous mode: run the destructor to completion and
+                        // keep sweeping (the `Ret` hook cascades as usual). The
+                        // return must surface to the bounded drive — a `ret_cell`
+                        // would swallow the baseline return and the drive would
+                        // run the caller's ops (the drive_to_return lesson).
+                        frame.ret_cell = None;
+                        let baseline = self.frames.len();
+                        self.frames.push(frame);
+                        let _ = self.drive_to_return(baseline)?;
+                        continue;
+                    }
+                }
             }
             // Destructor-less object: note what it held, then drop it.
             self.gc_cascade(&o);
@@ -4175,9 +4201,9 @@ impl<'m> Vm<'m> {
                     let cur = self.frames[top].class;
                     let target = obj.deref_clone();
                     // A read of a lazy object initializes it first (PHP 8.4); an
-                    // initialized proxy then forwards the read to its real instance.
-                    self.trigger_lazy(&target, &name)?;
-                    let target = self.proxy_redirect(target);
+                    // initialized proxy then forwards the read to its real instance
+                    // (transitively — the instance may have been reset lazy).
+                    let target = self.lazy_prop_forward(target, &name)?;
                     // Storage slot to read (the plain name for a dynamic/non-object
                     // target; a mangled key for an accessible private — set below).
                     let mut key = name.to_vec();
@@ -4297,10 +4323,9 @@ impl<'m> Vm<'m> {
                     let target = obj.deref_clone();
                     // A write to a lazy object initializes it first (PHP 8.4); a no-op
                     // during the object's own construction (it is no longer lazy then).
+                    // Proxy forwarding is transitive (a reset instance re-triggers).
                     let target = if !self.frames[top].init_props {
-                        self.trigger_lazy(&target, &name)?;
-                        // An initialized proxy forwards the write to its real instance.
-                        self.proxy_redirect(target)
+                        self.lazy_prop_forward(target, &name)?
                     } else {
                         target
                     };
@@ -6043,13 +6068,13 @@ impl<'m> Vm<'m> {
     ) -> Result<(), PhpError> {
         let cur = self.frames[top].class;
         // A write to a lazy object initializes it first, then forwards to the
-        // real instance (mirrors Op::PropSet). Magic dispatch and the recursion
-        // guard must be evaluated against the *real* object, not the proxy, so an
-        // `__set` already in progress on the real instance is not double-invoked
+        // real instance (mirrors Op::PropSet; transitive — a reset instance
+        // re-triggers). Magic dispatch and the recursion guard must be
+        // evaluated against the *real* object, not the proxy, so an `__set`
+        // already in progress on the real instance is not double-invoked
         // (gh21478: `$proxy->x` inside the real instance's `__set`). The walker
         // never runs during `init_props`, so no `init_props` guard is needed.
-        self.trigger_lazy(&target, name)?;
-        let target = self.proxy_redirect(target);
+        let target = self.lazy_prop_forward(target, name)?;
         let Some(o) = deref_object(&target) else {
             // The walker only defers object leaves, so a non-object here is
             // unreachable in practice; drop the write rather than panic.
@@ -8975,8 +9000,9 @@ impl<'m> Vm<'m> {
         self.destructed.remove(&oid);
         let kind = if is_proxy { LazyKind::Proxy } else { LazyKind::Ghost };
         let init = args.get(3).cloned().unwrap_or(Zval::Null);
-        // Reset on the object's *own* class layout (it may be a subclass).
-        self.install_lazy(&rc, ocid, kind, init);
+        // Reset through the *reflected* class's layout: a subclass's additional
+        // properties are preserved (install_lazy's reflected-scope rules).
+        self.install_lazy(&rc, cid, kind, init)?;
         Ok(obj)
     }
 
@@ -9809,7 +9835,7 @@ impl<'m> Vm<'m> {
                 .map(|(_, c)| c.to_zval())
                 .unwrap_or(Zval::Null)
         };
-        self.lazy_materialize(&obj, &key, default);
+        self.lazy_materialize(&obj, &key, default)?;
         Ok(Zval::Null)
     }
 
@@ -9830,7 +9856,7 @@ impl<'m> Vm<'m> {
         };
         // Reflection speaks names; the slot is storage-keyed (mangled private).
         let key = self.prop_decl_storage_key(cid, &prop);
-        self.lazy_materialize(&obj, &key, value);
+        self.lazy_materialize(&obj, &key, value)?;
         Ok(Zval::Null)
     }
 
@@ -14462,7 +14488,7 @@ impl<'m> Vm<'m> {
     fn alloc_lazy(&mut self, cid: ClassId, init: Zval, kind: LazyKind) -> Result<Zval, PhpError> {
         let v = self.alloc_object(cid)?;
         if let Zval::Object(rc) = &v {
-            self.install_lazy(rc, cid, kind, init);
+            self.install_lazy(rc, cid, kind, init)?;
         }
         Ok(v)
     }
@@ -14473,44 +14499,109 @@ impl<'m> Vm<'m> {
     /// set the lazy marker, and stash the initializer/factory + per-property
     /// still-lazy set. Shared by [`Self::alloc_lazy`] (fresh alloc) and the
     /// `resetAsLazy*` reflection path (an already-live instance).
-    fn install_lazy(&mut self, rc: &Rc<RefCell<Object>>, cid: ClassId, kind: LazyKind, init: Zval) {
-        let cc = self.classes[cid];
-        let mut props = Props::new();
-        for (name, _c) in &cc.prop_defaults {
-            // `prop_defaults` is storage-keyed; the metadata table speaks names.
-            if prop_type_decl(&self.classes, cid, php_types::prop_display_name(name)).is_some() {
-                props.set(name, Zval::Undef);
-            }
-        }
-        for name in &cc.uninit_props {
-            props.set(name, Zval::Undef);
-        }
-        // Every eligible (non-static, non-virtual) declared instance property
-        // starts lazy; `prop_defaults` already lists them flattened in
-        // declaration order. A skip / raw-set later removes one.
-        let still_lazy: Vec<Box<[u8]>> =
-            cc.prop_defaults.iter().map(|(n, _)| n.clone()).collect();
+    fn install_lazy(&mut self, rc: &Rc<RefCell<Object>>, cid: ClassId, kind: LazyKind, init: Zval) -> Result<(), PhpError> {
+        let ocid = rc.borrow().class_id as usize;
+        // The properties that become lazy are those of the *reflected* class's
+        // layout (`cid`): a `resetAsLazy*` through a parent reflector preserves
+        // the subclass's additional properties and the dynamic ones
+        // (`reset_as_lazy_ignores_additional_props`). A fresh `newLazy*`
+        // allocation passes the object's own class, so everything resets.
+        let reflected: HashSet<&[u8]> =
+            self.classes[cid].prop_defaults.iter().map(|(n, _)| n.as_ref()).collect();
+        // An *initialized* readonly property declared by a class other than
+        // the reflected one also keeps its value and its initialized mark —
+        // only the reflected class's own readonly slots are unlocked for the
+        // initializer (`reset_as_lazy_readonly`, zend_object_make_lazy).
+        let preserved_ro: HashSet<Box<[u8]>> = {
+            let b = rc.borrow();
+            b.readonly_init
+                .iter()
+                .filter(|k| {
+                    reflected.contains(k.as_ref())
+                        && prop_readonly_decl(&self.classes, ocid, php_types::prop_display_name(k))
+                            .is_some_and(|decl| decl != cid)
+                })
+                .cloned()
+                .collect()
+        };
+        // Every reset slot starts lazy; a skip / raw-set later removes one.
+        let still_lazy: Vec<Box<[u8]>> = self.classes[cid]
+            .prop_defaults
+            .iter()
+            .map(|(n, _)| n.clone())
+            .filter(|n| !preserved_ro.contains(n))
+            .collect();
         let (oid, dropped) = {
             let mut b = rc.borrow_mut();
-            // The object's current contents are about to be discarded: capture its
-            // old property values (and any proxy instance) so their references can
-            // be released as possible GC roots. Resetting a *live* object thus runs
-            // the destructors of objects it held (nested destructors), matching PHP.
-            let mut dropped: Vec<Zval> = b.props.iter().map(|(_, v)| v.clone()).collect();
+            // Rebuild the layout in the object's full declaration order: a
+            // reset slot goes typed-`Undef` / untyped-absent (its displaced
+            // value is captured so its references can be released as possible
+            // GC roots — resetting a live object runs the destructors of what
+            // it held, matching PHP); a preserved slot keeps its value.
+            let mut props = Props::new();
+            let mut dropped: Vec<Zval> = Vec::new();
+            let mut declared: HashSet<&[u8]> = HashSet::new();
+            for (key, _) in &self.classes[ocid].prop_defaults {
+                declared.insert(key.as_ref());
+                if reflected.contains(key.as_ref()) && !preserved_ro.contains(key) {
+                    // `prop_defaults` is storage-keyed; metadata speaks names.
+                    if prop_type_decl(&self.classes, ocid, php_types::prop_display_name(key)).is_some() {
+                        props.set(key, Zval::Undef);
+                    }
+                    if let Some(old) = b.props.get(key) {
+                        dropped.push(old.clone());
+                    }
+                } else if let Some(cur) = b.props.get(key) {
+                    props.set(key, cur.clone());
+                }
+            }
+            // Dynamic properties are always reset — only *declared* properties
+            // outside the reflected layout are preserved
+            // (`reset_as_lazy_resets_dynamic_props`).
+            for (key, val) in b.props.iter() {
+                if !declared.contains(key) {
+                    dropped.push(val.clone());
+                }
+            }
             if let Some(inst) = &b.proxy_instance {
                 dropped.push((**inst).clone());
             }
             b.props = props;
             b.proxy_instance = None;
-            b.lazy = Some(kind);
-            b.readonly_init.clear();
+            // The lazy marker is set only *after* the displaced contents'
+            // destructors below: they observe the target already emptied but
+            // not yet lazy — `zend_object_make_lazy` sets the flag last
+            // (`reset_as_lazy_can_reset_initialized_proxies`' dump).
+            b.lazy = None;
+            b.readonly_init.retain(|k| preserved_ro.contains(k));
             (b.id, dropped)
         };
+        // The reset discards the property table, detaching any reference that
+        // aliased a typed slot: Zend deletes the reference's source type, so a
+        // later write through the alias is unchecked
+        // (`reset_as_lazy_deletes_reference_source_type`).
+        if !self.typed_refs.is_empty() {
+            let owner = Rc::as_ptr(rc);
+            self.typed_refs.retain(|t| !std::ptr::eq(t.obj.as_ptr(), owner));
+        }
+        // Release the displaced contents and run any destructor they held the
+        // last reference to *synchronously* — PHP frees them inside the reset
+        // itself, not at the next statement boundary. A fresh alloc has
+        // nothing to release and skips the sweep.
+        let had_content = !dropped.is_empty();
         for v in &dropped {
             self.gc_note(v);
         }
+        drop(dropped);
+        if had_content {
+            self.gc_sweep_impl(None)?;
+        }
+        rc.borrow_mut().lazy = Some(kind);
         self.lazy_init.insert(oid, init);
+        // Realization applies class defaults to these (still-lazy) slots only;
+        // everything else keeps its preserved value.
         self.lazy_props.insert(oid, still_lazy);
+        Ok(())
     }
 
     /// Initialize a lazy object (PHP 8.4). A **ghost** gets the class's real
@@ -14537,15 +14628,37 @@ impl<'m> Vm<'m> {
                     let cc = self.classes[cid];
                     // Rebuild the property layout in declaration order (the ghost held
                     // only the typed placeholders, so an incremental `set` would
-                    // mis-order the untyped ones appended on top).
+                    // mis-order the untyped ones appended on top). Defaults apply to
+                    // the *still-lazy* slots only: a skipped/raw-set property, a
+                    // subclass property outside a parent-reflector reset, an
+                    // initialized foreign readonly, and dynamics all keep their
+                    // current values.
+                    let still: HashSet<Box<[u8]>> = self
+                        .lazy_props
+                        .get(&oid)
+                        .map(|v| v.iter().cloned().collect())
+                        .unwrap_or_default();
+                    let mut b = rc.borrow_mut();
                     let mut props = Props::new();
+                    let mut declared: HashSet<&[u8]> = HashSet::new();
                     for (name, c) in &cc.prop_defaults {
-                        props.set(name, c.to_zval());
+                        declared.insert(name.as_ref());
+                        if still.contains(name.as_ref()) {
+                            props.set(name, c.to_zval());
+                        } else if let Some(cur) = b.props.get(name) {
+                            props.set(name, cur.clone());
+                        }
                     }
                     for name in &cc.uninit_props {
-                        props.set(name, Zval::Undef);
+                        if still.contains(name.as_ref()) {
+                            props.set(name, Zval::Undef);
+                        }
                     }
-                    let mut b = rc.borrow_mut();
+                    for (name, val) in b.props.iter() {
+                        if !declared.contains(name) {
+                            props.set(name, val.clone());
+                        }
+                    }
                     b.lazy = None;
                     b.props = props;
                 }
@@ -14583,10 +14696,10 @@ impl<'m> Vm<'m> {
     /// from the still-lazy set, and — once that set empties — clear the lazy
     /// marker so the object becomes ordinary (no initializer/factory runs; every
     /// property is already set). The caller has validated `prop` is eligible.
-    fn lazy_materialize(&mut self, v: &Zval, prop: &[u8], value: Zval) {
-        let Some(rc) = deref_object(v) else { return };
+    fn lazy_materialize(&mut self, v: &Zval, prop: &[u8], value: Zval) -> Result<(), PhpError> {
+        let Some(rc) = deref_object(v) else { return Ok(()) };
         let oid = rc.borrow().id;
-        rc.borrow_mut().props.set(prop, value);
+        let old = rc.borrow_mut().props.replace(prop, value);
         if let Some(set) = self.lazy_props.get_mut(&oid) {
             set.retain(|n| n.as_ref() != prop);
             if set.is_empty() {
@@ -14595,6 +14708,15 @@ impl<'m> Vm<'m> {
                 rc.borrow_mut().lazy = None;
             }
         }
+        // A displaced previous raw value is released *now* (PHP refcount): its
+        // destructor may observe — and thereby initialize — the lazy object
+        // (`setRawValueWithoutLazyInitialization_side_effect_destruct`).
+        if let Some(old) = old {
+            self.gc_note(&old);
+            drop(old);
+            self.gc_sweep_impl(None)?;
+        }
+        Ok(())
     }
 
     /// If `v` is an *initialized* lazy proxy, the real instance it forwards to;
@@ -14611,6 +14733,29 @@ impl<'m> Vm<'m> {
             }
         }
         v
+    }
+
+    /// The object a property access on `target` actually lands on: trigger
+    /// lazy initialization and follow proxy forwarding **transitively** — a
+    /// proxy's real instance may itself have been reset lazy
+    /// (`resetAsLazyProxy` on an already-linked instance,
+    /// `reset_as_lazy_real_instance`), and the access must re-trigger it.
+    /// The bound is a cycle guard only.
+    fn lazy_prop_forward(&mut self, target: Zval, name: &[u8]) -> Result<Zval, PhpError> {
+        let mut cur = target;
+        for _ in 0..64 {
+            self.trigger_lazy(&cur, name)?;
+            let next = self.proxy_redirect(cur.clone());
+            let same = match (deref_object(&cur), deref_object(&next)) {
+                (Some(a), Some(b)) => Rc::ptr_eq(&a, &b),
+                _ => true,
+            };
+            cur = next;
+            if same {
+                break;
+            }
+        }
+        Ok(cur)
     }
 
 
@@ -15510,9 +15655,9 @@ impl<'m> Vm<'m> {
             return Ok(None);
         }
         // A write fetch of a lazy object's property initializes it first (PHP
-        // 8.4); an initialized proxy forwards to its real instance.
-        self.trigger_lazy(&target, &name)?;
-        let target = self.proxy_redirect(target);
+        // 8.4); an initialized proxy forwards to its real instance
+        // (transitively — the instance may have been reset lazy).
+        let target = self.lazy_prop_forward(target, &name)?;
         let Some(o) = deref_object(&target) else { return Ok(None) };
         let (oid, cid) = {
             let b = o.borrow();
