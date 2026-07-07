@@ -392,6 +392,7 @@ pub(crate) fn run_module_with_hir<'m>(
         uncaught_throwable: None,
         lazy_init: HashMap::new(),
         lazy_props: HashMap::new(),
+        lazy_options: HashMap::new(),
         lazy_initializing: HashSet::new(),
         zips: HashMap::new(),
         next_zip: 1,
@@ -1129,6 +1130,10 @@ struct Vm<'m> {
     /// initializer (every property is already materialized). Absent for a
     /// non-lazy object.
     lazy_props: HashMap<u32, Vec<Box<[u8]>>>,
+    /// Per-lazy-object option flags (PHP 8.4 `ReflectionClass::newLazy*` /
+    /// `resetAsLazy*` `$options`): SKIP_INITIALIZATION_ON_SERIALIZE (8) and
+    /// SKIP_DESTRUCTOR (16, consumed at reset time). Keyed by object id.
+    lazy_options: HashMap<u32, u32>,
     /// Object ids whose initializer/factory is *currently running* (PHP 8.4):
     /// re-entering `resetAsLazy*` on such an object is an error ("Can not reset an
     /// object while it is being initialized"). Populated by `realize_lazy` around
@@ -1183,6 +1188,7 @@ impl<'m> Vm<'m> {
             self.destructed.remove(&id);
             self.lazy_init.remove(&id);
             self.lazy_props.remove(&id);
+            self.lazy_options.remove(&id);
             self.lazy_initializing.remove(&id);
             self.gc_roots.remove(&id);
             return id;
@@ -5760,9 +5766,67 @@ impl<'m> Vm<'m> {
                 }
                 Op::FieldUnset { base, steps } => {
                     let keys = self.pop_field_keys(top, &steps);
+                    // `unset($o->magic)` reached through the path walker (a
+                    // dynamic name): `__unset` dispatches like Op::PropUnset —
+                    // on the initialized-proxy instance, or the uninitialized
+                    // wrapper without initializing (gh18038-010).
+                    let magic_done: bool = 'magic_unset: {
+                        let name: Vec<u8> = match steps.split_first() {
+                            Some((FieldStep::Prop(n), [])) => n.to_vec(),
+                            Some((FieldStep::PropDyn, [])) => {
+                                let Some(k) = keys.first() else { break 'magic_unset false };
+                                convert::to_zstr_cast(k, &mut self.diags).as_bytes().to_vec()
+                            }
+                            _ => break 'magic_unset false,
+                        };
+                        let base_val = match base {
+                            FieldBase::Local(s) => self.frames[top].slots.get(s as usize),
+                            FieldBase::Global(s) => self.frames[0].slots.get(s as usize),
+                            FieldBase::Superglobal(i) => self.superglobals.get(i as usize),
+                            FieldBase::This => self.frames[top].this.as_ref(),
+                        };
+                        let Some(mut v) = base_val.map(|v| v.deref_clone()) else {
+                            break 'magic_unset false;
+                        };
+                        for _ in 0..64 {
+                            let next = self.proxy_redirect(v.clone());
+                            let same = match (deref_object(&v), deref_object(&next)) {
+                                (Some(a), Some(b)) => Rc::ptr_eq(&a, &b),
+                                _ => true,
+                            };
+                            v = next;
+                            if same {
+                                break;
+                            }
+                        }
+                        let Some(o) = deref_object(&v) else { break 'magic_unset false };
+                        let cur = self.frames[top].class;
+                        if self.magic_applies(&o, &name, cur, MagicKind::Unset, b"__unset").is_none() {
+                            break 'magic_unset false;
+                        }
+                        let oid = o.borrow().id;
+                        let gkey = (oid, MagicKind::Unset, name.clone());
+                        let ins = self.magic_guard.insert(gkey.clone());
+                        let r = self.call_method_sync(v.clone(), b"__unset", vec![Zval::Str(PhpStr::new(name))]);
+                        if ins {
+                            self.magic_guard.remove(&gkey);
+                        }
+                        r?;
+                        true
+                    };
+                    if magic_done {
+                        continue;
+                    }
                     // ArrayAccess leaf: `unset($this->coll[0])` = offsetUnset.
                     if let Some((recv, key)) = self.field_aa_leaf(base, top, &steps, &keys) {
                         self.call_method_sync(recv, b"offsetUnset", vec![key])?;
+                        continue;
+                    }
+                    // A lazy base initializes; the removal runs on the realized
+                    // object (a guarded `unset($this->$name)` inside `__unset`).
+                    if let Some(mut root) = self.field_lazy_root(base, top, &steps, &keys, false)? {
+                        let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
+                        field_unset(&mut root, &steps, &mut keys.into_iter(), fs);
                         continue;
                     }
                     self.field_remove(base, top, &steps, keys);
@@ -9201,7 +9265,11 @@ impl<'m> Vm<'m> {
             PhpError::Error(format!("Class \"{}\" does not exist", String::from_utf8_lossy(&raw)))
         })?;
         let init = args.get(1).cloned().unwrap_or(Zval::Null);
-        self.alloc_lazy(cid, init, LazyKind::Ghost)
+        let options = match args.get(2).map(|v| v.deref_clone()) {
+            Some(Zval::Long(n)) => n as u32,
+            _ => 0,
+        };
+        self.alloc_lazy(cid, init, LazyKind::Ghost, options)
     }
 
     /// `__reflect_new_lazy_proxy($class, $factory)`: allocate an uninitialized
@@ -9218,7 +9286,11 @@ impl<'m> Vm<'m> {
             PhpError::Error(format!("Class \"{}\" does not exist", String::from_utf8_lossy(&raw)))
         })?;
         let factory = args.get(1).cloned().unwrap_or(Zval::Null);
-        self.alloc_lazy(cid, factory, LazyKind::Proxy)
+        let options = match args.get(2).map(|v| v.deref_clone()) {
+            Some(Zval::Long(n)) => n as u32,
+            _ => 0,
+        };
+        self.alloc_lazy(cid, factory, LazyKind::Proxy, options)
     }
 
 
@@ -9259,8 +9331,15 @@ impl<'m> Vm<'m> {
         // destructor throws (the reset aborts, and the destructor must not run a
         // second time); a completed reset clears it unconditionally — the reborn
         // incarnation destructs again when later realized and dropped.
+        let options = match args.get(4).map(|v| v.deref_clone()) {
+            Some(Zval::Long(n)) => n as u32,
+            _ => 0,
+        };
         let (oid, is_real) = { let b = rc.borrow(); (b.id, b.lazy.is_none()) };
+        // SKIP_DESTRUCTOR (16): the displaced incarnation's own destructor is
+        // suppressed (reset_as_lazy_may_skip_destructor).
         if is_real
+            && options & 16 == 0
             && !self.destructed.contains(&oid)
             && resolve_method_runtime(&self.classes, ocid, b"__destruct").is_some()
         {
@@ -9273,7 +9352,7 @@ impl<'m> Vm<'m> {
         self.reject_internal_lazy(ocid)?;
         // Reset through the *reflected* class's layout: a subclass's additional
         // properties are preserved (install_lazy's reflected-scope rules).
-        self.install_lazy(&rc, cid, kind, init)?;
+        self.install_lazy(&rc, cid, kind, init, options)?;
         Ok(obj)
     }
 
@@ -9301,12 +9380,62 @@ impl<'m> Vm<'m> {
         Ok(Zval::Bool(is))
     }
 
-    /// `__lazy_initialize($obj)`: force initialization and return `$obj` — PHP 8.4
+    /// `__lazy_initialize($obj)`: force initialization and return the object the
+    /// caller should observe — the *real instance* for a proxy (transitively),
+    /// the object itself for a ghost — PHP 8.4
     /// `ReflectionClass::initializeLazyObject`.
     fn ho_lazy_initialize(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let v = args.first().cloned().unwrap_or(Zval::Null);
-        self.realize_lazy(&v)?;
-        Ok(v)
+        self.realize_full(&v)
+    }
+
+    /// `__lazy_get_initializer($obj)`: the pending initializer/factory of an
+    /// *uninitialized* lazy object, or NULL — PHP 8.4
+    /// `ReflectionClass::getLazyInitializer`.
+    fn ho_lazy_get_initializer(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let init = args
+            .first()
+            .and_then(deref_object)
+            .filter(|o| {
+                let b = o.borrow();
+                b.lazy.is_some() && b.proxy_instance.is_none()
+            })
+            .and_then(|o| self.lazy_init.get(&o.borrow().id).cloned());
+        Ok(init.unwrap_or(Zval::Null))
+    }
+
+    /// `__lazy_prop_is_lazy($obj, $class, $prop)`: whether the property is still
+    /// lazy on `$obj` (an access would initialize) — PHP 8.4
+    /// `ReflectionProperty::isLazy`.
+    fn ho_lazy_prop_is_lazy(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let mut obj = args.first().cloned().unwrap_or(Zval::Null);
+        let prop = convert::to_zstr_cast(args.get(2).unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        // An initialized proxy reports its (possibly re-reset) instance's state.
+        for _ in 0..64 {
+            let next = self.proxy_redirect(obj.clone());
+            let same = match (deref_object(&obj), deref_object(&next)) {
+                (Some(a), Some(b)) => Rc::ptr_eq(&a, &b),
+                _ => true,
+            };
+            obj = next;
+            if same {
+                break;
+            }
+        }
+        let is = deref_object(&obj).is_some_and(|o| {
+            let (oid, cid, uninit) = {
+                let b = o.borrow();
+                (b.id, b.class_id as usize, b.lazy.is_some() && b.proxy_instance.is_none())
+            };
+            if !uninit {
+                return false;
+            }
+            let key = self.prop_decl_storage_key(cid, &prop);
+            self.lazy_props
+                .get(&oid)
+                .is_some_and(|set| set.iter().any(|n| n.as_ref() == key.as_slice()))
+        });
+        Ok(Zval::Bool(is))
     }
 
     /// `__lazy_mark_initialized($obj)`: PHP 8.4
@@ -11784,10 +11913,27 @@ impl<'m> Vm<'m> {
             Zval::Object(ref orc) => {
                 // A lazy object initializes before serialization (PHP 8.4's
                 // "serialize may initialize"; a proxy forwards to its real
-                // instance) — mirrors json_normalize.
+                // instance) — mirrors json_normalize. With
+                // SKIP_INITIALIZATION_ON_SERIALIZE (8) an *uninitialized*
+                // wrapper serializes its raw view instead.
                 if orc.borrow().lazy.is_some() {
-                    let real = self.realize_full(&v)?;
-                    return self.prepare_serialize(real, memo);
+                    let (oid, ocid, uninit) = {
+                        let b = orc.borrow();
+                        (b.id, b.class_id as usize, b.proxy_instance.is_none())
+                    };
+                    // A serialize hook (`__sleep`/`__serialize`) still
+                    // initializes even under the skip flag — the hook needs the
+                    // real state (serialize___sleep_skip_flag_may_initialize).
+                    let has_hooks =
+                        resolve_method_runtime(&self.classes, ocid, b"__serialize").is_some()
+                            || resolve_method_runtime(&self.classes, ocid, b"__sleep").is_some();
+                    let skip = uninit
+                        && !has_hooks
+                        && self.lazy_options.get(&oid).is_some_and(|f| f & 8 != 0);
+                    if !skip {
+                        let real = self.realize_full(&v)?;
+                        return self.prepare_serialize(real, memo);
+                    }
                 }
                 let addr = Rc::as_ptr(orc) as usize;
                 if let Some(done) = memo.get(&addr) {
@@ -14791,11 +14937,11 @@ impl<'m> Vm<'m> {
     /// instantiability check and `#id` assignment are a normal alloc; the
     /// initializer/factory is stashed in `lazy_init` and runs on first access
     /// (see [`Self::realize_lazy`]). `kind` selects ghost vs proxy semantics.
-    fn alloc_lazy(&mut self, cid: ClassId, init: Zval, kind: LazyKind) -> Result<Zval, PhpError> {
+    fn alloc_lazy(&mut self, cid: ClassId, init: Zval, kind: LazyKind, options: u32) -> Result<Zval, PhpError> {
         self.reject_internal_lazy(cid)?;
         let v = self.alloc_object(cid)?;
         if let Zval::Object(rc) = &v {
-            self.install_lazy(rc, cid, kind, init)?;
+            self.install_lazy(rc, cid, kind, init, options)?;
         }
         Ok(v)
     }
@@ -14836,7 +14982,7 @@ impl<'m> Vm<'m> {
     /// set the lazy marker, and stash the initializer/factory + per-property
     /// still-lazy set. Shared by [`Self::alloc_lazy`] (fresh alloc) and the
     /// `resetAsLazy*` reflection path (an already-live instance).
-    fn install_lazy(&mut self, rc: &Rc<RefCell<Object>>, cid: ClassId, kind: LazyKind, init: Zval) -> Result<(), PhpError> {
+    fn install_lazy(&mut self, rc: &Rc<RefCell<Object>>, cid: ClassId, kind: LazyKind, init: Zval, options: u32) -> Result<(), PhpError> {
         let ocid = rc.borrow().class_id as usize;
         // The properties that become lazy are those of the *reflected* class's
         // layout (`cid`): a `resetAsLazy*` through a parent reflector preserves
@@ -14944,6 +15090,7 @@ impl<'m> Vm<'m> {
         // Realization applies class defaults to these (still-lazy) slots only;
         // everything else keeps its preserved value.
         self.lazy_props.insert(oid, still_lazy);
+        self.lazy_options.insert(oid, options);
         Ok(())
     }
 
@@ -16502,6 +16649,8 @@ host_builtins! {
     b"__lazy_mark_initialized" => vm.ho_lazy_mark_initialized(args),
     b"__lazy_skip_init" => vm.ho_lazy_skip_init(args),
     b"__lazy_set_raw" => vm.ho_lazy_set_raw(args),
+    b"__lazy_get_initializer" => vm.ho_lazy_get_initializer(args),
+    b"__lazy_prop_is_lazy" => vm.ho_lazy_prop_is_lazy(args),
     b"__reflect_prop_names" => vm.ho_reflect_prop_names(args),
     b"__reflect_prop_is_static" => vm.ho_reflect_prop_is_static(args),
     b"__reflect_prop_type" => vm.ho_reflect_prop_type(args),

@@ -96,7 +96,10 @@ fn ser_into(out: &mut Vec<u8>, v: &Zval) -> Result<(), PhpError> {
                 }
                 return Ok(());
             }
-            let n = obj.props.iter().count();
+            // An *uninitialized* typed property (`Undef`) is absent from the
+            // wire format (Zend skips it; a lazy wrapper serialized with
+            // SKIP_INITIALIZATION_ON_SERIALIZE keeps only materialized slots).
+            let n = obj.props.iter().filter(|(_, v)| !matches!(v, Zval::Undef)).count();
             out.extend_from_slice(b"O:");
             out.extend_from_slice(cname.len().to_string().as_bytes());
             out.extend_from_slice(b":\"");
@@ -109,6 +112,9 @@ fn ser_into(out: &mut Vec<u8>, v: &Zval) -> Result<(), PhpError> {
             // PLAIN and gains Zend's `\0*\0` prefix on the wire (unserialize
             // strips it back off). Public/dynamic names pass through.
             for (pname, val) in obj.props.iter() {
+                if matches!(val, Zval::Undef) {
+                    continue;
+                }
                 let is_plain = !pname.starts_with(b"\0");
                 if is_plain
                     && matches!(

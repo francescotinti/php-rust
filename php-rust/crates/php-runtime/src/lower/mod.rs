@@ -2803,19 +2803,40 @@ class ReflectionClass {
         }
         return __reflect_new_no_ctor($this->name);
     }
-    public function newLazyGhost(callable $initializer, int $options = 0) { return __reflect_new_lazy_ghost($this->name, $initializer); }
-    public function newLazyProxy(callable $factory, int $options = 0) { return __reflect_new_lazy_proxy($this->name, $factory); }
+    const SKIP_INITIALIZATION_ON_SERIALIZE = 8;
+    const SKIP_DESTRUCTOR = 16;
+    private function __lazyOptionsCheck($method, $argno, $options, $valid) {
+        if (($options & ~$valid) !== 0) {
+            // SKIP_DESTRUCTOR alone gets the dedicated wording; any other
+            // stray bit is "invalid flags" (Zend's order).
+            if (($options & ~($valid | self::SKIP_DESTRUCTOR)) === 0 && ($options & self::SKIP_DESTRUCTOR)) {
+                throw new ReflectionException(sprintf('ReflectionClass::%s(): Argument #%d ($options) does not accept ReflectionClass::SKIP_DESTRUCTOR', $method, $argno));
+            }
+            throw new ReflectionException(sprintf('ReflectionClass::%s(): Argument #%d ($options) contains invalid flags', $method, $argno));
+        }
+    }
+    public function newLazyGhost(callable $initializer, int $options = 0) {
+        $this->__lazyOptionsCheck('newLazyGhost', 2, $options, self::SKIP_INITIALIZATION_ON_SERIALIZE);
+        return __reflect_new_lazy_ghost($this->name, $initializer, $options);
+    }
+    public function newLazyProxy(callable $factory, int $options = 0) {
+        $this->__lazyOptionsCheck('newLazyProxy', 2, $options, self::SKIP_INITIALIZATION_ON_SERIALIZE);
+        return __reflect_new_lazy_proxy($this->name, $factory, $options);
+    }
     public function resetAsLazyGhost($object, callable $initializer, int $options = 0) {
+        $this->__lazyOptionsCheck('resetAsLazyGhost', 3, $options, self::SKIP_INITIALIZATION_ON_SERIALIZE | self::SKIP_DESTRUCTOR);
         if (__lazy_is_initializing($object)) { throw new Error('Can not reset an object while it is being initialized'); }
         if (__lazy_is_uninitialized($object)) { throw new ReflectionException('Object is already lazy'); }
-        return __reflect_reset_lazy($this->name, $object, false, $initializer);
+        return __reflect_reset_lazy($this->name, $object, false, $initializer, $options);
     }
     public function resetAsLazyProxy($object, callable $factory, int $options = 0) {
+        $this->__lazyOptionsCheck('resetAsLazyProxy', 3, $options, self::SKIP_INITIALIZATION_ON_SERIALIZE | self::SKIP_DESTRUCTOR);
         if (__lazy_is_initializing($object)) { throw new Error('Can not reset an object while it is being initialized'); }
         if (__lazy_is_uninitialized($object)) { throw new ReflectionException('Object is already lazy'); }
-        return __reflect_reset_lazy($this->name, $object, true, $factory);
+        return __reflect_reset_lazy($this->name, $object, true, $factory, $options);
     }
     public function isUninitializedLazyObject($object) { return __lazy_is_uninitialized($object); }
+    public function getLazyInitializer($object) { return __lazy_get_initializer($object); }
     public function initializeLazyObject($object) { return __lazy_initialize($object); }
     public function markLazyObjectAsInitialized($object) { return __lazy_mark_initialized($object); }
     public function isInstantiable() { return class_exists($this->name); }
@@ -3286,7 +3307,9 @@ class ReflectionProperty {
     public function hasHook($type) { return false; }
     public function getHook($type) { return null; }
     public function isDynamic() { return false; }
-    public function isLazy() { return false; }
+    public function isLazy($object = null) {
+        return $object !== null && __lazy_prop_is_lazy($object, $this->class, $this->name);
+    }
     const IS_STATIC = 16;
     const IS_PUBLIC = 1;
     const IS_PROTECTED = 2;
