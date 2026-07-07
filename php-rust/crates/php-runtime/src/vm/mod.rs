@@ -7560,6 +7560,25 @@ impl<'m> Vm<'m> {
             .get(3)
             .map(|v| convert::to_long_cast(v, &mut self.diags))
             .unwrap_or(0);
+        // JSON must be valid UTF-8; malformed input is JSON_ERROR_UTF8 (not a
+        // syntax error) and decodes to null — UNLESS JSON_INVALID_UTF8_IGNORE
+        // (0x100000) / JSON_INVALID_UTF8_SUBSTITUTE (0x200000) ask to scrub it
+        // first (that PHP-exact per-byte substitution is not modelled yet, so
+        // those flagged inputs fall through to the parser).
+        let utf8_scrub = flags & (0x10_0000 | 0x20_0000) != 0;
+        if !utf8_scrub && std::str::from_utf8(&json).is_err() {
+            self.json_last_error = 5; // JSON_ERROR_UTF8
+            if flags & 4_194_304 != 0 {
+                if let Some(cid) = self.class_index.get(&b"jsonexception"[..]).copied() {
+                    let obj = self.synthesize_throwable(
+                        cid,
+                        "Malformed UTF-8 characters, possibly incorrectly encoded",
+                    )?;
+                    return Err(PhpError::Thrown(obj));
+                }
+            }
+            return Ok(Zval::Null);
+        }
         match crate::json::parse(&json) {
             Some(j) => {
                 self.json_last_error = 0; // JSON_ERROR_NONE
