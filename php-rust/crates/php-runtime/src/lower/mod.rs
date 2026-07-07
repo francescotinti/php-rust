@@ -3069,6 +3069,12 @@ class ReflectionParameter {
     }
 }
 class ReflectionObject extends ReflectionClass {
+    // Minimal, class-derived rendering (does NOT read the live instance, so it
+    // never triggers lazy initialization: init_trigger_reflection_object_toString).
+    // The full PHP Reflection export format is not reproduced.
+    public function __toString() {
+        return sprintf("Object of class [ class %s ] {\n}\n", $this->name);
+    }
 }
 class ReflectionConstant {
     public $name;
