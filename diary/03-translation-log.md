@@ -2435,3 +2435,27 @@ Un commit (`9fc9764`), lazy_objects 152→**166**/223, corpus 2225→**2239**:
 
 Residui 49 nella dir (serialize __sleep, __debugInfo, isLazy/getInitializer, gc, rfc,
 FieldUnset dynamic-name = gh18038-010).
+
+## Sessione S — lazy objects, quarto giro: options, superficie Reflection, unset magic
+
+Un commit (`aa5ad1d`), lazy_objects 166→**178**/223, corpus 2239→**2252**:
+
+- **Le `$options` dei lazy** cablate end-to-end (`Vm.lazy_options`, per-oid):
+  SKIP_INITIALIZATION_ON_SERIALIZE (8) fa serializzare la vista raw del wrapper — MA un
+  hook `__sleep`/`__serialize` inizializza comunque (il gate ha morso subito il
+  `_may_initialize`); SKIP_DESTRUCTOR (16) sopprime il dtor dell'incarnazione spiazzata
+  al reset. Validazione dei flag nel prelude coi due wording Zend distinti.
+- **Superficie Reflection**: `getLazyInitializer` (l'initializer pendente o null, identico
+  `===` — la lazy_init map lo conserva già per il retry), `ReflectionProperty::isLazy`
+  (host nuovo, segue le catene proxy per il Nested Proxy), e `initializeLazyObject` che
+  ritorna l'INSTANCE reale (realize_full), non il wrapper.
+- **FieldUnset** completa il protocollo magic dei path walker: `__unset` dispatcha
+  (guarded, su instance per proxy inizializzati / wrapper per uninit) sui path
+  single-step a nome dinamico; base lazy senza magic → init + unset sul root realizzato
+  (chiude gh18038-010, e con lui TUTTA la famiglia gh18038).
+- **Il serializer puro salta le prop `Undef`** — il wire format Zend omette le typed
+  uninitialized: sistemava il raw-wrapper e in cascata pure i typed generali.
+
+La dir è a 178/223; i 37 residui sono ormai code lunghe (gc_002-4, rfc examples,
+__debugInfo, json_encode_hooks, realize_proxy_overridden, typed_properties_001-3,
+oss_fuzz, jit_*).
