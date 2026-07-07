@@ -14881,9 +14881,20 @@ impl<'m> Vm<'m> {
         let obj_name = deref_object(&value)
             .map(|o| String::from_utf8_lossy(&self.classes[o.borrow().class_id as usize].name).into_owned());
         let strict = self.frames.last().map(|f| f.module.strict).unwrap_or(self.module.strict);
-        match self.coerce_or_check_hint(value, &hint, strict) {
+        match self.coerce_or_check_hint(value.clone(), &hint, strict) {
             Ok(v) => Ok(v),
             Err(given) => {
+                // Weak typing: a Stringable object assigned to a string-typed slot
+                // coerces via __toString — which may run arbitrary code and even
+                // initialize a lazy object
+                // (setRawValueWithoutLazyInitialization_side_effect_toString).
+                if !strict {
+                    if let Some(s) = self.stringify_for_string_hint(&value, &hint)? {
+                        if let Ok(v) = self.coerce_or_check_hint(s, &hint, strict) {
+                            return Ok(v);
+                        }
+                    }
+                }
                 let given = match (given.as_str(), obj_name) {
                     ("object", Some(n)) => n,
                     _ => given,
@@ -14896,6 +14907,34 @@ impl<'m> Vm<'m> {
                 )))
             }
         }
+    }
+
+    /// If `hint` admits a string and `value` is a `Stringable` object, return its
+    /// `__toString()` result (which may run arbitrary code / throw) for weak-typing
+    /// object→string coercion; `None` when the coercion does not apply.
+    fn stringify_for_string_hint(
+        &mut self,
+        value: &Zval,
+        hint: &TypeHint,
+    ) -> Result<Option<Zval>, PhpError> {
+        let accepts_string = match &hint.kind {
+            HintKind::Scalar(ScalarType::String) => true,
+            HintKind::Union(ms) => {
+                ms.iter().any(|k| matches!(k, HintKind::Scalar(ScalarType::String)))
+            }
+            _ => false,
+        };
+        if !accepts_string {
+            return Ok(None);
+        }
+        let Some(cid) = deref_object(value).map(|o| o.borrow().class_id as usize) else {
+            return Ok(None);
+        };
+        if resolve_method_runtime(&self.classes, cid, b"__toString").is_none() {
+            return Ok(None);
+        }
+        let s = self.call_method_sync(value.clone(), b"__toString", Vec::new())?.deref_clone();
+        Ok(Some(s))
     }
 
     /// Whether `v` is an instance of the class/interface `name` (the `instanceof`
