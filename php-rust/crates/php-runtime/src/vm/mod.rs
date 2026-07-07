@@ -9566,6 +9566,21 @@ impl<'m> Vm<'m> {
             None => Zval::Bool(false),
         };
         d.insert(Key::Str(PhpStr::new(b"doc".to_vec())), doc);
+        // Source location (getFileName/getStartLine/getEndLine, and the `@@` line of
+        // the __toString export). The op line table spans the body; a body-less
+        // method (abstract / empty `{}`) has no op lines, so fall back to the
+        // declaration line. A prelude ("internal") callable reports false.
+        if func.file.as_ref() == b"prelude" || func.file.is_empty() {
+            d.insert(Key::Str(PhpStr::new(b"file".to_vec())), Zval::Bool(false));
+            d.insert(Key::Str(PhpStr::new(b"startLine".to_vec())), Zval::Bool(false));
+            d.insert(Key::Str(PhpStr::new(b"endLine".to_vec())), Zval::Bool(false));
+        } else {
+            let start = func.lines.iter().copied().filter(|&l| l > 0).min().unwrap_or(func.line);
+            let end = func.lines.iter().copied().filter(|&l| l > 0).max().unwrap_or(func.line);
+            d.insert(Key::Str(PhpStr::new(b"file".to_vec())), Zval::Str(PhpStr::new(func.file.to_vec())));
+            d.insert(Key::Str(PhpStr::new(b"startLine".to_vec())), Zval::Long(i64::from(start)));
+            d.insert(Key::Str(PhpStr::new(b"endLine".to_vec())), Zval::Long(i64::from(end)));
+        }
         Ok(d)
     }
 
@@ -9700,23 +9715,8 @@ impl<'m> Vm<'m> {
         d.insert(Key::Str(PhpStr::new(b"visibility".to_vec())), Zval::Str(PhpStr::new(vis.to_vec())));
         d.insert(Key::Str(PhpStr::new(b"abstract".to_vec())), Zval::Bool(is_abstract));
         d.insert(Key::Str(PhpStr::new(b"declaringClass".to_vec())), Zval::Str(PhpStr::new(decl_name)));
-        // Source location (ReflectionMethod::getFileName/getStartLine/getEndLine):
-        // the compiled unit's file and the op line table's span; a prelude
-        // ("internal") method reports false, like PHP.
-        if m.func.file.as_ref() != b"prelude" {
-            d.insert(
-                Key::Str(PhpStr::new(b"file".to_vec())),
-                Zval::Str(PhpStr::new(m.func.file.to_vec())),
-            );
-            let start = m.func.lines.iter().copied().filter(|&l| l > 0).min().unwrap_or(0);
-            let end = m.func.lines.iter().copied().max().unwrap_or(0);
-            d.insert(Key::Str(PhpStr::new(b"startLine".to_vec())), Zval::Long(start as i64));
-            d.insert(Key::Str(PhpStr::new(b"endLine".to_vec())), Zval::Long(end as i64));
-        } else {
-            d.insert(Key::Str(PhpStr::new(b"file".to_vec())), Zval::Bool(false));
-            d.insert(Key::Str(PhpStr::new(b"startLine".to_vec())), Zval::Bool(false));
-            d.insert(Key::Str(PhpStr::new(b"endLine".to_vec())), Zval::Bool(false));
-        }
+        // file / startLine / endLine are added by build_func_descriptor (shared with
+        // ReflectionFunction), with a declaration-line fallback for body-less methods.
         Ok(Zval::Array(Rc::new(d)))
     }
 

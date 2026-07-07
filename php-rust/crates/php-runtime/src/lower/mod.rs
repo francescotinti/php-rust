@@ -2824,6 +2824,54 @@ class ReflectionClass implements Reflector {
     // phpr mangles anonymous classes exactly like PHP: `class@anonymous\0N`.
     public function isAnonymous() { return strpos($this->name, 'class@anonymous') === 0; }
     public function getName() { return $this->name; }
+    // Indent every non-empty line of a stringable child (a nested Method block) by
+    // $n spaces for the export format.
+    private function __indent($obj, $n) {
+        $pad = str_repeat(' ', $n);
+        $out = '';
+        foreach (explode("\n", rtrim((string) $obj, "\n")) as $l) {
+            $out .= ($l === '' ? '' : $pad . $l) . "\n";
+        }
+        return $out;
+    }
+    // The PHP `Reflection::export` string for a class (ext/reflection golden output).
+    public function __toString() {
+        $src = $this->isUserDefined() ? '<user>' : '<internal>';
+        if ($this->isInterface()) { $head = 'Interface'; $kind = 'interface'; }
+        elseif ($this->isTrait()) { $head = 'Class'; $kind = 'trait'; }
+        else {
+            $head = 'Class';
+            $kind = ($this->isAbstract() ? 'abstract ' : '') . ($this->isFinal() ? 'final ' : '') . 'class';
+        }
+        $s = "$head [ $src $kind {$this->name} ] {\n";
+        $file = $this->getFileName();
+        if ($file !== false) {
+            $s .= "  @@ $file " . $this->getStartLine() . "-" . $this->getEndLine() . "\n";
+        }
+        $consts = $this->getReflectionConstants();
+        $props = $this->getProperties();
+        $sprops = []; $iprops = [];
+        foreach ($props as $p) { if ($p->isStatic()) { $sprops[] = $p; } else { $iprops[] = $p; } }
+        $methods = $this->getMethods();
+        $smeth = []; $imeth = [];
+        foreach ($methods as $m) { if ($m->isStatic()) { $smeth[] = $m; } else { $imeth[] = $m; } }
+        $s .= "\n  - Constants [" . count($consts) . "] {\n";
+        foreach ($consts as $c) { $s .= "    " . rtrim((string) $c, "\n") . "\n"; }
+        $s .= "  }\n";
+        $s .= "\n  - Static properties [" . count($sprops) . "] {\n";
+        foreach ($sprops as $p) { $s .= "    " . rtrim((string) $p, "\n") . "\n"; }
+        $s .= "  }\n";
+        $s .= "\n  - Static methods [" . count($smeth) . "] {\n";
+        foreach ($smeth as $m) { $s .= $this->__indent($m, 4); }
+        $s .= "  }\n";
+        $s .= "\n  - Properties [" . count($iprops) . "] {\n";
+        foreach ($iprops as $p) { $s .= "    " . rtrim((string) $p, "\n") . "\n"; }
+        $s .= "  }\n";
+        $s .= "\n  - Methods [" . count($imeth) . "] {\n";
+        foreach ($imeth as $m) { $s .= $this->__indent($m, 4); }
+        $s .= "  }\n";
+        return $s . "}\n";
+    }
     public function getShortName() {
         $p = strrpos($this->name, '\\');
         return $p === false ? $this->name : substr($this->name, $p + 1);
@@ -2889,6 +2937,7 @@ class ReflectionClass implements Reflector {
         return true;
     }
     public function isInterface() { return interface_exists($this->name); }
+    public function isTrait() { return trait_exists($this->name); }
     public function isEnum() { return in_array('UnitEnum', class_implements($this->name)); }
     public function isFinal() { return __reflect_class_modifiers($this->name)['final']; }
     public function isAbstract() { return __reflect_class_modifiers($this->name)['abstract']; }
@@ -3096,7 +3145,10 @@ class ReflectionParameter implements Reflector {
     // PHPUnit's mock generator parses the piece after ' = ' as *source code*
     // for an object default, so enum cases render `\FQCN::CASE`.
     public function __toString() {
-        $opt = $this->isDefaultValueAvailable();
+        // A variadic is <optional> without a default; the ` = DEFAULT` suffix is
+        // driven separately by whether a default value is available.
+        $opt = $this->isOptional();
+        $hasDefault = $this->isDefaultValueAvailable();
         $s = 'Parameter #' . $this->getPosition() . ' [ <' . ($opt ? 'optional' : 'required') . '> ';
         $t = $this->getType();
         $ts = '';
@@ -3115,7 +3167,7 @@ class ReflectionParameter implements Reflector {
             }
         }
         $s .= ($ts !== '' ? $ts . ' ' : '') . ($this->isPassedByReference() ? '&' : '') . ($this->isVariadic() ? '...' : '') . '$' . $this->getName();
-        if ($opt && !$this->isVariadic()) {
+        if ($hasDefault && !$this->isVariadic()) {
             $v = $this->__default;
             if ($v === null) { $d = 'NULL'; }
             elseif (is_object($v)) {
@@ -3246,6 +3298,21 @@ class ReflectionClassConstant implements Reflector {
         $hostName = ($flags & ReflectionAttribute::IS_INSTANCEOF) ? null : $name;
         return ReflectionAttribute::__filter(__reflect_classconst_attributes($this->class, $this->name, $hostName), $name, $flags, 'ReflectionClassConstant');
     }
+    // `Constant [ VIS TYPE NAME ] { VALUE }` (ext/reflection golden output). The
+    // type shown matches the declared type for a typed constant and the value's
+    // type for an untyped one; for scalars they coincide, so derive from the value.
+    public function __toString() {
+        $vis = $this->__info['visibility'];
+        $v = $this->getValue();
+        $tmap = ['integer' => 'int', 'double' => 'float', 'boolean' => 'bool', 'NULL' => 'null'];
+        $t = gettype($v);
+        $type = $tmap[$t] ?? $t;
+        if (is_bool($v)) { $val = $v ? 'true' : 'false'; }
+        elseif ($v === null) { $val = ''; }
+        elseif (is_string($v)) { $val = $v; }
+        else { $val = (string) $v; }
+        return "Constant [ $vis $type {$this->name} ] { $val }\n";
+    }
 }
 class ReflectionEnumUnitCase extends ReflectionClassConstant {
     // getValue() is inherited: __reflect_class_const_info returns the case
@@ -3320,6 +3387,11 @@ class ReflectionFunction extends ReflectionFunctionAbstract {
     public function getDocComment() { return $this->__info['doc'] ?? false; }
     public function getReturnType() { return ReflectionNamedType::__fromInfo($this->__info['returnType']); }
     public function hasReturnType() { return $this->__info['returnType'] !== false; }
+    public function getFileName() { return $this->__info['file'] ?? false; }
+    public function getStartLine() { return $this->__info['startLine'] ?? false; }
+    public function getEndLine() { return $this->__info['endLine'] ?? false; }
+    public function isUserDefined() { return ($this->__info['file'] ?? false) !== false; }
+    public function isInternal() { return ($this->__info['file'] ?? false) === false; }
     public function invoke(...$args) { return call_user_func_array($this->name, $args); }
     public function invokeArgs($args) { return call_user_func_array($this->name, $args); }
     public function getAttributes($name = null, $flags = 0) {
@@ -3328,6 +3400,18 @@ class ReflectionFunction extends ReflectionFunctionAbstract {
             ? __reflect_closure_attributes($this->__closure, $hostName)
             : __reflect_func_attributes($this->name, $hostName);
         return ReflectionAttribute::__filter($all, $name, $flags, 'ReflectionFunctionAbstract');
+    }
+    // The PHP `Reflection::export` string for a function (ext/reflection golden output).
+    public function __toString() {
+        $src = ($this->__info['file'] ?? false) !== false ? '<user>' : '<internal>';
+        $s = "Function [ $src function {$this->name} ] {\n";
+        $s .= "  @@ " . ($this->__info['file'] ?? '') . " " . ($this->__info['startLine'] ?? 0) . " - " . ($this->__info['endLine'] ?? 0) . "\n";
+        $params = $this->getParameters();
+        $s .= "\n  - Parameters [" . count($params) . "] {\n";
+        foreach ($params as $p) { $s .= "    " . $p . "\n"; }
+        $s .= "  }\n";
+        if ($this->hasReturnType()) { $s .= "  - Return [ " . $this->getReturnType() . " ]\n"; }
+        return $s . "}\n";
     }
 }
 class ReflectionMethod extends ReflectionFunctionAbstract {
@@ -3369,6 +3453,25 @@ class ReflectionMethod extends ReflectionFunctionAbstract {
     public function getDocComment() { return $this->__info['doc'] ?? false; }
     public function getReturnType() { return ReflectionNamedType::__fromInfo($this->__info['returnType']); }
     public function hasReturnType() { return $this->__info['returnType'] !== false; }
+    // The PHP `Reflection::export` string for a method (ext/reflection golden output).
+    public function __toString() {
+        $src = $this->isUserDefined() ? '<user>' : '<internal>';
+        $mods = '';
+        if ($this->isAbstract()) { $mods .= 'abstract '; }
+        if ($this->isFinal()) { $mods .= 'final '; }
+        if ($this->isStatic()) { $mods .= 'static '; }
+        $vis = $this->isPublic() ? 'public' : ($this->isProtected() ? 'protected' : 'private');
+        $s = "Method [ $src {$mods}{$vis} method {$this->name} ] {\n";
+        $s .= "  @@ " . $this->getFileName() . " " . $this->getStartLine() . " - " . $this->getEndLine() . "\n";
+        if (!$this->isAbstract()) {
+            $params = $this->getParameters();
+            $s .= "\n  - Parameters [" . count($params) . "] {\n";
+            foreach ($params as $p) { $s .= "    " . $p . "\n"; }
+            $s .= "  }\n";
+            if ($this->hasReturnType()) { $s .= "  - Return [ " . $this->getReturnType() . " ]\n"; }
+        }
+        return $s . "}\n";
+    }
     public function __construct($objectOrClass, $method = null) {
         // A class-name string autoloads (Zend does; the info lookup below is
         // autoload-blind and would report "does not exist" for a not-yet-loaded
@@ -3519,6 +3622,34 @@ class ReflectionProperty implements Reflector {
     public function getDeclaringClass() { return new ReflectionClass($this->__info['declaringClass']); }
     public function hasDefaultValue() { return $this->__info['hasDefault']; }
     public function getDefaultValue() { return $this->__info['default']; }
+    // `Property [ VIS [static ][readonly ]TYPE $name[ = DEFAULT] ]` (export format).
+    // Asymmetric set-visibility (`protected(set)`) is not modelled, so a readonly
+    // property renders without it.
+    public function __toString() {
+        $mods = $this->isPublic() ? 'public' : ($this->isProtected() ? 'protected' : 'private');
+        if ($this->isStatic()) { $mods .= ' static'; }
+        if ($this->isReadOnly()) { $mods .= ' readonly'; }
+        $type = '';
+        if ($this->hasType()) {
+            $t = $this->getType();
+            if ($t instanceof ReflectionNamedType) {
+                $tn = $t->getName();
+                if ($t->allowsNull() && $tn !== 'null' && $tn !== 'mixed') { $tn = '?' . $tn; }
+            } else {
+                $tn = (string) $t;
+            }
+            $type = $tn . ' ';
+        }
+        $s = "Property [ $mods {$type}\$" . $this->name;
+        if ($this->hasDefaultValue()) {
+            $v = $this->getDefaultValue();
+            if ($v === null) { $d = 'NULL'; }
+            elseif (is_array($v)) { $d = str_replace("\n", '', var_export($v, true)); }
+            else { $d = var_export($v, true); }
+            $s .= ' = ' . $d;
+        }
+        return $s . " ]\n";
+    }
     public function isInitialized($object = null) { return __reflect_prop_initialized($this->class, $this->name, $object); }
     public function skipLazyInitialization($object) {
         $msg = __lazy_skip_init($object, $this->class, $this->name);
