@@ -10047,11 +10047,14 @@ impl<'m> Vm<'m> {
     /// `__reflect_prop_set($class, $prop, $obj, $value)`: write `$value` into
     /// property `$prop` (declared in `$class`) of `$obj` ignoring visibility —
     /// backs `ReflectionProperty::setValue`. A lazy object initializes first; a
-    /// proxy forwards to its real instance.
+    /// proxy forwards to its real instance. EXCEPT: a property already made
+    /// non-lazy by `skipLazyInitialization`/`setRawValueWithoutLazyInitialization`
+    /// is written straight into the still-lazy wrapper without running the
+    /// initializer (rfc_example_004/005).
     fn ho_reflect_prop_set(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let class = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
         let prop = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
-        let obj = self.realize_full(&args.get(2).cloned().unwrap_or(Zval::Null))?;
+        let obj_arg = args.get(2).cloned().unwrap_or(Zval::Null);
         let value = args.get(3).cloned().unwrap_or(Zval::Null);
         let lc = class.strip_prefix(b"\\").unwrap_or(&class).to_ascii_lowercase();
         let cid = self.class_index.get(&lc).copied();
@@ -10059,6 +10062,37 @@ impl<'m> Vm<'m> {
             Some(c) => self.prop_decl_storage_key(c, &prop),
             None => prop.clone(),
         };
+        // A setValue on a still-uninitialized lazy wrapper whose target property
+        // has already been dropped from the lazy set (skipLazyInitialization) must
+        // NOT trigger the initializer — materialize the single slot in place.
+        let skip_materialized = {
+            let mut target = obj_arg.clone();
+            for _ in 0..64 {
+                let next = self.proxy_redirect(target.clone());
+                let same = match (deref_object(&target), deref_object(&next)) {
+                    (Some(a), Some(b)) => Rc::ptr_eq(&a, &b),
+                    _ => true,
+                };
+                target = next;
+                if same {
+                    break;
+                }
+            }
+            deref_object(&target).is_some_and(|o| {
+                let b = o.borrow();
+                b.lazy.is_some()
+                    && b.proxy_instance.is_none()
+                    && !self
+                        .lazy_props
+                        .get(&b.id)
+                        .is_some_and(|set| set.iter().any(|n| n.as_ref() == key.as_slice()))
+            })
+        };
+        if skip_materialized {
+            self.lazy_materialize(&obj_arg, &key, value)?;
+            return Ok(Zval::Null);
+        }
+        let obj = self.realize_full(&obj_arg)?;
         if let Some(old) = write_property(&obj, &key, value)? {
             self.gc_note(&old);
         }
