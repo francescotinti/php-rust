@@ -9,7 +9,7 @@ test bakes in the reference interpreter's expected output (its `--EXPECT--` /
 that case — not merely "it ran". An area is considered **done only when every one of
 its tests passes** (zero failures).
 
-> **Snapshot:** 2026-07-07. Numbers are produced by running each area in isolation
+> **Snapshot:** 2026-07-08. Numbers are produced by running each area in isolation
 > with the project test runner (`phpt-runner --isolate <area>`). `pass` / `fail` count
 > executed tests; `skip` counts tests the runner declined — almost always because the
 > underlying extension is not compiled into phpr, so those tests never execute.
@@ -65,7 +65,7 @@ deliberately, area by area.
 | `ext/ctype` | 46 | 0 | ✅ DONE |
 | `ext/opcache` | 26 | 14 | 🟡 PARTIAL |
 | `ext/pcre` | 68 | 42 | 🟡 PARTIAL |
-| `ext/json` | 33 | 38 | 🟠 WEAK |
+| `ext/json` | 41 | 30 | 🟡 PARTIAL |
 | `ext/sqlite3` | 34 | 40 | 🟠 WEAK |
 | `ext/pdo_sqlite` | 22 | 44 | 🟠 WEAK |
 | `ext/mbstring` | 40 | 70 | 🟠 WEAK |
