@@ -2412,3 +2412,26 @@ Quattro commit (`…→b8d4be4`), corpus 2170→**2225**:
 
 Residui 63, triagiati nel topic file di memoria (validazioni setRaw/skipLazy, famiglia
 gh18038, serialize __sleep, __debugInfo, superficie Reflection isLazy/getInitializer).
+
+## Sessione R — lazy objects, terzo giro: validazioni, guard-transfer, protocollo magic dei path
+
+Un commit (`9fc9764`), lazy_objects 152→**166**/223, corpus 2225→**2239**:
+
+- **Validazioni raw-set/skip**: ReflectionProperty accetta le prop dinamiche di ISTANZA
+  (__info sintetico public); skip/setRaw le rifiutano col wording Zend; il raw-set rispetta
+  il write-once readonly (il primo scrive e marca, il secondo fatala — ma uno skip che
+  materializza Undef NON è un'inizializzazione, gate ha morso subito); skip è no-op su
+  oggetti inizializzati e prop già materializzate.
+- **Guard-transfer attraverso i proxy** (famiglia gh18038): `Frame.guard_release` diventa
+  Vec e la magic guard tenuta sul wrapper si TRASFERISCE all'oggetto a cui l'accesso
+  forwarda, rilasciata dallo stesso frame — `$this->$name = v` dentro la __set del wrapper
+  scrive raw l'instance appena inizializzata invece di ri-dispatchare (il *2 doppio).
+- **Protocollo magic di FieldIsset** (`isset($o->magic['k'])`, bug40833-family): __isset
+  decide (dispatched sync con guard manuale, sull'instance per i proxy inizializzati, sul
+  wrapper senza init per quelli no), poi __get fornisce il valore su cui il resto del path
+  testa l'offset; base lazy senza magic → init + walk radicato sull'oggetto realizzato.
+  `field_lazy_root` ora gestisce anche PropDyn (le keys si poppano PRIMA dei check nei
+  Field*/MakeRef).
+
+Residui 49 nella dir (serialize __sleep, __debugInfo, isLazy/getInitializer, gc, rfc,
+FieldUnset dynamic-name = gh18038-010).
