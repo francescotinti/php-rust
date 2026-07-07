@@ -3159,6 +3159,39 @@ final class ReflectionReference {
     }
     public function getId(): string { return $this->id; }
 }
+// Reflects a suspended Generator: its current execution point, bound $this and
+// the underlying function. Backed by the host, which reads the parked frame.
+final class ReflectionGenerator {
+    private $__gen;
+    public function __construct(Generator $generator) { $this->__gen = $generator; }
+    public function getExecutingLine(): int { return __reflect_gen_info($this->__gen)[0]; }
+    public function getExecutingFile() { return __reflect_gen_info($this->__gen)[1]; }
+    public function getThis() { return __reflect_gen_info($this->__gen)[2]; }
+    public function getFunction(): ReflectionFunctionAbstract {
+        $name = __reflect_gen_info($this->__gen)[3];
+        if (strpos($name, '::') !== false) {
+            [$c, $m] = explode('::', $name, 2);
+            return new ReflectionMethod($c, $m);
+        }
+        return new ReflectionFunction($name);
+    }
+    public function getExecutingGenerator(): Generator { return $this->__gen; }
+    // The suspended call stack is not modelled; return an empty trace rather than
+    // erroring (best-effort; the other accessors are exact).
+    public function getTrace($options = 1): array { return []; }
+}
+// Reflects a suspended Fiber: its current execution point and the callable it
+// runs. Backed by the host, which reads the fiber's parked frame.
+final class ReflectionFiber {
+    private $__fiber;
+    public function __construct(Fiber $fiber) { $this->__fiber = $fiber; }
+    public function getFiber(): Fiber { return $this->__fiber; }
+    public function getExecutingLine(): int { return __reflect_fiber_info($this->__fiber)[0]; }
+    public function getExecutingFile() { return __reflect_fiber_info($this->__fiber)[1]; }
+    public function getCallable(): callable { return __reflect_fiber_info($this->__fiber)[2]; }
+    // The suspended call stack is not modelled (see ReflectionGenerator::getTrace).
+    public function getTrace($options = 1): array { return []; }
+}
 class ReflectionConstant {
     public $name;
     public function __construct($name) {

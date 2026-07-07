@@ -13273,6 +13273,68 @@ impl<'m> Vm<'m> {
         }
     }
 
+
+    /// `__reflect_gen_info(gen) -> [line, file|false, this, funcName]`: the state of
+    /// a `Generator`'s suspended frame, backing `ReflectionGenerator`. A running or
+    /// finished generator (no parked frame) reports line 0 / file false / this null.
+    fn ho_reflect_gen_info(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let g = match args.first().map(|v| v.deref_clone()) {
+            Some(Zval::Generator(g)) => g,
+            _ => return Ok(Zval::Bool(false)),
+        };
+        let (id, func_name) = {
+            let b = g.borrow();
+            (b.id, b.func_name.clone())
+        };
+        let mut out = PhpArray::new();
+        match self.generators.get(&id) {
+            Some(frame) => {
+                let line = frame.func.lines.get(frame.ip).copied().unwrap_or(0);
+                out.insert(Key::Int(0), Zval::Long(i64::from(line)));
+                out.insert(Key::Int(1), Zval::Str(PhpStr::new(frame.func.file.to_vec())));
+                out.insert(Key::Int(2), frame.this.clone().unwrap_or(Zval::Null));
+            }
+            None => {
+                out.insert(Key::Int(0), Zval::Long(0));
+                out.insert(Key::Int(1), Zval::Bool(false));
+                out.insert(Key::Int(2), Zval::Null);
+            }
+        }
+        out.insert(Key::Int(3), Zval::Str(PhpStr::new(func_name.to_vec())));
+        Ok(Zval::Array(Rc::new(out)))
+    }
+
+
+    /// `__reflect_fiber_info(fiber) -> [line, file|false, callable]`: the suspended
+    /// frame of a `Fiber` and the callable it was constructed with, backing
+    /// `ReflectionFiber`. A not-started / finished fiber reports line 0 / file false.
+    fn ho_reflect_fiber_info(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let obj = match args.first().map(|v| v.deref_clone()) {
+            Some(Zval::Object(o)) => o,
+            _ => return Ok(Zval::Bool(false)),
+        };
+        let (id, cid) = {
+            let b = obj.borrow();
+            (b.id, b.class_id as usize)
+        };
+        let key = self.host_prop_key(cid, b"callable");
+        let callable = obj.borrow().props.get(key.as_slice()).cloned().unwrap_or(Zval::Null);
+        let mut out = PhpArray::new();
+        match self.fibers.get(&id).and_then(|s| s.parked.last()) {
+            Some(frame) => {
+                let line = frame.func.lines.get(frame.ip).copied().unwrap_or(0);
+                out.insert(Key::Int(0), Zval::Long(i64::from(line)));
+                out.insert(Key::Int(1), Zval::Str(PhpStr::new(frame.func.file.to_vec())));
+            }
+            None => {
+                out.insert(Key::Int(0), Zval::Long(0));
+                out.insert(Key::Int(1), Zval::Bool(false));
+            }
+        }
+        out.insert(Key::Int(2), callable);
+        Ok(Zval::Array(Rc::new(out)))
+    }
+
     /// `__reflect_class_doc(name) -> string|false`: the class declaration's
     /// retained `/** ... */` doc comment (ReflectionClass::getDocComment), false
     /// for none / an unknown class / a prelude ("internal") class.
@@ -17780,6 +17842,8 @@ host_builtins! {
     b"__reflect_class_loc" => vm.ho_reflect_class_loc(args),
     b"__reflect_class_real_name" => vm.ho_reflect_class_real_name(args),
     b"__reflect_ref_id" => vm.ho_reflect_ref_id(args),
+    b"__reflect_gen_info" => vm.ho_reflect_gen_info(args),
+    b"__reflect_fiber_info" => vm.ho_reflect_fiber_info(args),
     b"array_diff" => vm.ho_array_diff(args),
     b"get_declared_classes" => vm.ho_get_declared(0),
     b"get_declared_interfaces" => vm.ho_get_declared(1),
