@@ -364,6 +364,7 @@ pub(crate) fn run_module_with_hir<'m>(
         statics: vec![None; module.static_count],
         closure_statics: HashMap::new(),
         magic_guard: HashSet::new(),
+        typed_refs: Vec::new(),
         created: BTreeMap::new(),
         destructed: HashSet::new(),
         gc_roots: HashMap::new(),
@@ -757,6 +758,20 @@ enum PropIterEntry {
     Hook { name: Box<[u8]>, view: ClassId },
 }
 
+/// One live typed-reference source (see `Vm::typed_refs`): the weak handle
+/// keys the entry, the rest formats the TypeError and drives the check.
+struct TypedRefSource {
+    cell: std::rc::Weak<RefCell<Zval>>,
+    /// The owning object: Zend deletes a property's type source when the
+    /// object is freed (`typed_properties_094`), so enforcement stops once
+    /// only the VM's `created` tracking handle (strong count ≤ 1) remains.
+    obj: std::rc::Weak<RefCell<Object>>,
+    /// Declaring class name, for the error wording (`C::$p`).
+    class_name: Box<[u8]>,
+    prop: Box<[u8]>,
+    hint: TypeHint,
+}
+
 /// The step the object-iterator state machine is about to perform (step 51). A
 /// `NeedX` stage *issues* the protocol call; the paired `AfterX` *consumes* its
 /// captured result when `IterNext` re-runs.
@@ -979,6 +994,13 @@ struct Vm<'m> {
     /// Active magic-accessor guards (object id, kind, property) — a magic method
     /// is not re-entered for the same access while it is running (OOP-3b).
     magic_guard: HashSet<(u32, MagicKind, Vec<u8>)>,
+    /// Live reference cells that alias a *typed* property's storage (PHP's
+    /// typed-reference sources, narrowed to the cells phpr hands out via
+    /// `&$o->typedProp` / by-ref foreach / a `&get` hook returning a typed
+    /// backing): a write through such a cell keeps enforcing the property's
+    /// declared type. Dead cells are pruned on registration; empty in the
+    /// common program, so the write-path check is a cheap `is_empty`.
+    typed_refs: Vec<TypedRefSource>,
     /// A strong handle to every object created via `new`, keyed by object id
     /// (OOP-3d). Ids are monotonic, so key order IS creation order — iteration
     /// replaces the old Vec's positional order, and the sweep's per-object
@@ -2153,6 +2175,19 @@ impl<'m> Vm<'m> {
                     self.frames[top].stack.push(v);
                 }
                 Op::StoreSlot(s) => {
+                    // A slot aliasing a *typed property* (a registered typed
+                    // reference) coerces/checks the value first (PHP's typed-ref
+                    // assignment: "Cannot assign string to reference held by
+                    // property C::$p of type int").
+                    if !self.typed_refs.is_empty() {
+                        if let Zval::Ref(cell) = &self.frames[top].slots[s as usize] {
+                            let cell = Rc::clone(cell);
+                            let strict = self.frames[top].module.strict;
+                            let v = self.frames[top].stack.pop().expect("StoreSlot value");
+                            let v = self.typed_ref_assign(&cell, v, strict)?;
+                            self.frames[top].stack.push(v);
+                        }
+                    }
                     let v = self.frames[top].stack.pop().expect("StoreSlot on empty stack");
                     let old = store_slot(&mut self.frames[top].slots[s as usize], v);
                     self.gc_note(&old);
@@ -2933,6 +2968,12 @@ impl<'m> Vm<'m> {
                             field_cell(base_cell, &steps, &mut keys.into_iter(), fs)
                         }
                     };
+                    // A reference to a *typed* property keeps enforcing its type
+                    // on writes through the alias (PHP's typed references).
+                    if let [FieldStep::Prop(name)] = &steps[..] {
+                        let name = name.clone();
+                        self.register_prop_typed_ref(base, top, &name, &cell);
+                    }
                     self.frames[top].stack.push(Zval::Ref(cell));
                 }
                 Op::BindRefTo { base, steps } => {
@@ -3337,6 +3378,12 @@ impl<'m> Vm<'m> {
                                     if let Some(o) = deref_object(&obj) {
                                         if o.borrow().props.get(&k).is_some() {
                                             let cell = prop_ref_cell(&o, &k);
+                                            // A typed property's cell keeps
+                                            // enforcing its type through `$v`.
+                                            let cid = o.borrow().class_id as usize;
+                                            if let Some((decl, hint)) = prop_type_decl(&self.classes, cid, &display) {
+                                                self.register_typed_ref(&cell, &o, decl, &display, hint);
+                                            }
                                             break Some((cell, display));
                                         }
                                     }
@@ -4072,6 +4119,28 @@ impl<'m> Vm<'m> {
                     self.created
                         .insert(clone_rc.borrow().id, Rc::clone(&clone_rc));
                     self.gc_track(&clone_rc);
+                    // A clone inherits typed references (typed_properties_081):
+                    // its property slots share the source's reference cells, so
+                    // the copy becomes an additional owner of each registered
+                    // typed source (the type outlives the original object).
+                    if !self.typed_refs.is_empty() {
+                        let src_ptr = Rc::as_ptr(o);
+                        let inherited: Vec<TypedRefSource> = self
+                            .typed_refs
+                            .iter()
+                            .filter(|t| {
+                                t.cell.strong_count() > 0 && std::ptr::eq(t.obj.as_ptr(), src_ptr)
+                            })
+                            .map(|t| TypedRefSource {
+                                cell: t.cell.clone(),
+                                obj: Rc::downgrade(&clone_rc),
+                                class_name: t.class_name.clone(),
+                                prop: t.prop.clone(),
+                                hint: t.hint.clone(),
+                            })
+                            .collect();
+                        self.typed_refs.extend(inherited);
+                    }
                     let cid = clone_rc.borrow().class_id as usize;
                     let clone_val = Zval::Object(clone_rc.clone());
                     self.frames[top].stack.push(clone_val.clone());
@@ -14552,8 +14621,24 @@ impl<'m> Vm<'m> {
     /// `get_object_vars`, `json_encode`, `serialize`, `var_export`, `foreach`,
     /// comparison), all of which trigger initialization in PHP 8.4.
     fn realize_full(&mut self, v: &Zval) -> Result<Zval, PhpError> {
-        self.realize_lazy(v)?;
-        Ok(self.proxy_redirect(v.clone()))
+        // A proxy's instance may itself have been reset lazy (a proxy chain,
+        // `resetAsLazyProxy` on an already-linked instance): keep realizing
+        // until the object a whole-object operation reads is a real one. The
+        // bound is a cycle guard only.
+        let mut cur = v.clone();
+        for _ in 0..64 {
+            self.realize_lazy(&cur)?;
+            let next = self.proxy_redirect(cur.clone());
+            let same = match (deref_object(&cur), deref_object(&next)) {
+                (Some(a), Some(b)) => Rc::ptr_eq(&a, &b),
+                _ => true,
+            };
+            cur = next;
+            if same {
+                break;
+            }
+        }
+        Ok(cur)
     }
 
     /// Trigger lazy initialization before an access to property `name` when `v`
@@ -15289,6 +15374,78 @@ impl<'m> Vm<'m> {
         }
         let cid = o.borrow().class_id as usize;
         self.prop_hook(cid, name, false).is_some() || self.prop_hook(cid, name, true).is_some()
+    }
+
+    /// Record `cell` as aliasing typed property `decl::$prop`, so writes
+    /// through the reference keep enforcing `hint` (Zend's typed-reference
+    /// sources, narrowed to the cells phpr hands out). Dead entries are pruned
+    /// here, keeping the table proportional to the *live* typed aliases.
+    fn register_typed_ref(
+        &mut self,
+        cell: &Rc<RefCell<Zval>>,
+        owner: &Rc<RefCell<Object>>,
+        decl: ClassId,
+        prop: &[u8],
+        hint: TypeHint,
+    ) {
+        self.typed_refs.retain(|t| t.cell.strong_count() > 0);
+        let ptr = Rc::as_ptr(cell);
+        if self.typed_refs.iter().any(|t| std::ptr::eq(t.cell.as_ptr(), ptr)) {
+            return;
+        }
+        self.typed_refs.push(TypedRefSource {
+            cell: Rc::downgrade(cell),
+            obj: Rc::downgrade(owner),
+            class_name: self.classes[decl].name.clone(),
+            prop: prop.into(),
+            hint,
+        });
+    }
+
+    /// If `base->name` is a *typed* declared property, register `cell` (just
+    /// handed out as a reference to it) as a typed-reference source.
+    fn register_prop_typed_ref(&mut self, base: FieldBase, top: usize, name: &[u8], cell: &Rc<RefCell<Zval>>) {
+        let base_val = match base {
+            FieldBase::Local(s) => self.frames[top].slots.get(s as usize),
+            FieldBase::Global(s) => self.frames[0].slots.get(s as usize),
+            FieldBase::Superglobal(i) => self.superglobals.get(i as usize),
+            FieldBase::This => self.frames[top].this.as_ref(),
+        };
+        let Some(o) = base_val.and_then(deref_object) else { return };
+        let cid = o.borrow().class_id as usize;
+        if let Some((decl, hint)) = prop_type_decl(&self.classes, cid, name) {
+            self.register_typed_ref(cell, &o, decl, name, hint);
+        }
+    }
+
+    /// Coerce (weak mode) / check (strict) `v` for a write through `cell` when
+    /// the cell is a registered typed-property reference; pass-through
+    /// otherwise. A mismatch is Zend's typed-ref TypeError ("Cannot assign
+    /// string to reference held by property C::$p of type int").
+    fn typed_ref_assign(&mut self, cell: &Rc<RefCell<Zval>>, v: Zval, strict: bool) -> Result<Zval, PhpError> {
+        let ptr = Rc::as_ptr(cell);
+        // The owning object must still be alive beyond the VM's own `created`
+        // tracking handle: Zend deletes the type source at object free, and
+        // an object whose only remaining handle is the tracking one is
+        // dead-pending-sweep (`typed_properties_094`).
+        let found = self
+            .typed_refs
+            .iter()
+            .find(|t| {
+                t.cell.strong_count() > 0
+                    && std::ptr::eq(t.cell.as_ptr(), ptr)
+                    && t.obj.strong_count() > 1
+            })
+            .map(|t| (t.hint.clone(), t.class_name.clone(), t.prop.clone()));
+        let Some((hint, cls, prop)) = found else { return Ok(v) };
+        self.coerce_or_check_hint(v, &hint, strict).map_err(|given| {
+            PhpError::TypeError(format!(
+                "Cannot assign {given} to reference held by property {}::${} of type {}",
+                String::from_utf8_lossy(&cls),
+                String::from_utf8_lossy(&prop),
+                hint.display_name(),
+            ))
+        })
     }
 
     /// `$r = &$o->prop` on a property whose asymmetric *set* visibility
