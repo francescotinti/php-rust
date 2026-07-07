@@ -2485,3 +2485,63 @@ Due commit (`…4153e8b`), lazy_objects 178→**190**/223, corpus 2252→**2277*
 Restano 25 code bespoke (famiglia gh* proxy-__get, __debugInfo, json hooks,
 ref-source-types, il monster skipLazyInitialization, fuzz/jit): rendimento calante — si
 passa ai residui ORM con la strada spianata.
+
+---
+
+## Sessione U — ref-source-types + bug latente by-ref method return (HEAD dopo `bd57360`)
+
+Chiuso il gruppo **ref-source-types / typed_properties_002** (lazy) e la
+semantica delle scritture attraverso reference tipate. Corpus Zend
+2287→**2296** (0 pass→fail), dir lazy_objects 198/223, tutte le 20 suite
+cargo verdi. Commit unico + push.
+
+**Cosa è stato sistemato**
+- `write_property` (oop.rs) scrive ATTRAVERSO uno slot `Ref` (Zend
+  zend_assign_to_variable su IS_REF); solo un rebind esplicito `=&` lo
+  rimpiazza. `typed_ref_assign` ora coerce/valida OGNI sorgente tipata che
+  aliasa una cella (`$o->b =& $o->a`).
+- `field_write` leaf-defer NON dirotta più un reference-BIND (`=&`) su una
+  prop typed/hooked: il bind deve rimpiazzare lo slot e registrare la
+  sorgente, non passare per __set/coerce-as-value (typed_properties_071/_096,
+  oss-fuzz-471486164-002 backing store di un hook).
+- `Op::Clone` separa i reference interni all'oggetto che un clone NON deve
+  condividere: una prop-reference senza alias esterno vivo (strong_count 1
+  nella sorgente) viene COPIATA, non condivisa (bug27268, bug68262). I
+  reference realmente condivisi (typed_properties_081) restano condivisi.
+  Nuovo `Props::separate_cloned_internal_refs` (soglia strong_count==2
+  post-clone).
+- **BUG LATENTE (core) fixato**: un `$obj->m()` dinamico il cui metodo
+  ritorna by-ref (`&m()`) lasciava un `Ref` grezzo sullo stack; in contesto
+  VALORE PHP restituisce una COPIA. `dispatch_instance_call` non impostava
+  `ret_deref` (a differenza di `enter_object_method`) e la copia non
+  avveniva. Fix: emesso `Op::DerefTop` dopo OGNI method-call in contesto
+  valore (compile.rs, arm `ExprKind::MethodCall`/`MethodCallDyn`); il path
+  `=&` passa da `assign_ref_call`→`BindRefToChecked` e resta intatto.
+  `DerefTop` è no-op su un risultato non-reference. Ha sbloccato +9 nel
+  corpus (oltre i 6 test target).
+
+**Lezioni**
+- Il write-through di `write_property` ha ESPOSTO il bug by-ref-method-return
+  (prima il replace-slot lo mascherava). Il gate per-nome ha pescato 5
+  regressioni (2 clone-ref, 3 =&-su-typed): tutte ricondotte a due cause
+  (defer che dirottava `=&`, e la copia mancante del ritorno by-ref).
+- Distinguere clone-che-condivide (081, alias esterno vivo) da
+  clone-che-separa (27268/68262, solo l'oggetto tiene il ref) NON è possibile
+  col solo refcount: la causa vera era la copia mancante del ritorno by-ref
+  che rendeva `$x` un falso holder. Fixata quella, la separazione a
+  strong_count==2 basta.
+
+**Residui lazy (17, coda calante — triage)**: __debugInfo in var_dump
+(001/002, feature nuova: dispatch senza pre-init), json_encode+hook virtuali
+(prop `c` get), skipLazyInitialization+setValue (rfc_004/005 + monster:
+`__reflect_prop_set` deve non inizializzare una prop skip-marked = fuori da
+lazy_props), serialize skip-flag (__sleep/__serialize non inizializzano col
+flag), stack-trace initializer (gh20085/oss_fuzz_71407 frame del closure),
+init_fatal (parse-error in initializer eval), jit_assign_obj_op_dynamic
+(compound su dyn-prop), gh20875 (catena multi-diagnostica).
+
+**NOTA TOOLING**: dopo le molte edit di sessione l'indice LSP di Serena su
+`vm/mod.rs` (~1MB) è DISALLINEATO (offset simbolo sballati di 1000+ righe) →
+navigazione simbolica inaffidabile; il guard blocca grep/rg su .rs. La coda
+dei 17 (ognuno una micro-feature in mod.rs) va ripresa a sessione riavviata
+(reindex Serena) per evitare scan costosi / edit alla cieca.
