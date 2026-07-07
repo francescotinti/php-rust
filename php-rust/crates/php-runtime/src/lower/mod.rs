@@ -3299,7 +3299,9 @@ class ReflectionProperty {
     public $__info;
     public function __construct($class, $property) {
         $cls = is_object($class) ? get_class($class) : $class;
-        if (!property_exists($cls, $property)) {
+        // A dynamic property is reflectable when the INSTANCE is given.
+        if (!property_exists($cls, $property)
+            && !(is_object($class) && property_exists($class, $property))) {
             throw new ReflectionException(sprintf('Property %s::$%s does not exist', $cls, $property));
         }
         // The declaring class is the most-derived class that declares the property
@@ -3312,9 +3314,15 @@ class ReflectionProperty {
         $this->__info = __reflect_prop_details($this->class, $this->name);
         // An ancestor's PRIVATE property is invisible to the subclass's
         // reflection surface (Zend: getProperty throws; realize_skipped).
-        if (isset($this->__info['visibility']) && $this->__info['visibility'] === 'private'
+        if (is_array($this->__info) && isset($this->__info['visibility'])
+            && $this->__info['visibility'] === 'private'
             && strcasecmp($this->class, $cls) !== 0) {
             throw new ReflectionException(sprintf('Property %s::$%s does not exist', $cls, $property));
+        }
+        if (!is_array($this->__info)) {
+            // A dynamic property: public, untyped, no default.
+            $this->__info = ['visibility' => 'public', 'static' => false, 'readonly' => false,
+                'hasDefault' => false, 'default' => null, 'declaringClass' => $this->class];
         }
     }
     public function getName() { return $this->name; }

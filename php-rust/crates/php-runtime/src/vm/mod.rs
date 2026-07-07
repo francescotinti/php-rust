@@ -625,9 +625,10 @@ struct Frame<'m> {
     /// — a by-reference protocol getter (`&offsetGet`, monolog's LogRecord)
     /// consumed in value context (`count($o['k'])`).
     ret_deref: bool,
-    /// A magic-accessor recursion-guard key to remove from [`Vm::magic_guard`]
-    /// when this frame returns (OOP-3b).
-    guard_release: Option<(u32, MagicKind, Vec<u8>)>,
+    /// Magic-accessor recursion-guard keys to remove from [`Vm::magic_guard`]
+    /// when this frame returns (OOP-3b). Usually zero or one; a guard
+    /// transferred across proxy forwarding (gh18038) appends here too.
+    guard_release: Vec<(u32, MagicKind, Vec<u8>)>,
     /// Active `foreach` iterators, innermost last. Lives in the frame (not the
     /// operand stack) so it survives across the loop body; freed by `IterPop`,
     /// and discarded wholesale when the frame unwinds (a `return` out of a loop).
@@ -698,7 +699,7 @@ impl<'m> Frame<'m> {
             ret_isset: false,
             ret_deref: false,
             ret_stringify: false,
-            guard_release: None,
+            guard_release: Vec::new(),
             iters: Vec::new(),
             pending_throw: None,
             pending_transfer: None,
@@ -3003,10 +3004,10 @@ impl<'m> Vm<'m> {
                     // REF-4: navigate to the place's leaf, promote it to a shared
                     // cell, and push a reference to it. Keys (for `Index` steps)
                     // were pushed in source order and sit on top of the stack.
+                    let keys = self.pop_field_keys(top, &steps);
                     // A `&get` hook makes the property addressable: the reference
                     // the hook returns is the path's root (PHP 8.4).
                     if let Some(root) = self.byref_hook_root(base, top, &steps)? {
-                        let keys = self.pop_field_keys(top, &steps);
                         let cell = if steps.len() == 1 {
                             root
                         } else {
@@ -3029,7 +3030,7 @@ impl<'m> Vm<'m> {
                     // first (PHP 8.4, fetch_ref_initializes) — a skipped/raw-set
                     // property does not — and a forwarding proxy binds the
                     // *instance*'s cell, so the walk roots there.
-                    let lazy_root = self.field_lazy_root(base, top, &steps, false)?;
+                    let lazy_root = self.field_lazy_root(base, top, &steps, &keys, false)?;
                     // Taking a reference to an *uninitialized* non-nullable typed
                     // property is an error (zend_fetch_property_address,
                     // fetch_ref_skipped_prop_does_not_initialize).
@@ -3059,7 +3060,6 @@ impl<'m> Vm<'m> {
                             }
                         }
                     }
-                    let keys = self.pop_field_keys(top, &steps);
                     let cell = {
                         let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
                         if let Some(mut root) = lazy_root {
@@ -3979,7 +3979,7 @@ impl<'m> Vm<'m> {
                     let ret_isset = self.frames[top].ret_isset;
                     let ret_stringify = self.frames[top].ret_stringify;
                     let ret_deref = self.frames[top].ret_deref;
-                    let guard = self.frames[top].guard_release.take();
+                    let guard = std::mem::take(&mut self.frames[top].guard_release);
                     // A `clone`-driven `__clone` is finishing: revoke any remaining
                     // readonly re-init permission on the copy (PHP 8.3), so writes
                     // after the clone — or via a manual `__clone()` — fatal again.
@@ -3995,7 +3995,7 @@ impl<'m> Vm<'m> {
                     // object whose last reference was a returning function's local).
                     self.gc_note_frame(&dead);
                     drop(dead);
-                    if let Some(key) = guard {
+                    for key in guard {
                         self.magic_guard.remove(&key);
                     }
                     if let Some(cell) = ret_cell {
@@ -5524,11 +5524,11 @@ impl<'m> Vm<'m> {
                     self.frames[top].stack.push(if pre { newv } else { old });
                 }
                 Op::FieldAssign { base, steps } => {
+                    let value = self.frames[top].stack.pop().expect("FieldAssign value");
+                    let keys = self.pop_field_keys(top, &steps);
                     // A path starting at a `&get` hooked property writes through
                     // the reference the hook returns (one hook run, no set hook).
                     if let Some(root) = self.byref_hook_root(base, top, &steps)? {
-                        let value = self.frames[top].stack.pop().expect("FieldAssign value");
-                        let keys = self.pop_field_keys(top, &steps);
                         self.field_set_in_root(root, top, &steps[1..], keys, value.clone(), false)?;
                         self.frames[top].stack.push(value);
                         continue;
@@ -5536,22 +5536,18 @@ impl<'m> Vm<'m> {
                     self.reject_indirect_hook(base, top, &steps)?;
                     // A lazy base initializes/forwards first; the walk then roots
                     // at the realized object (PHP 8.4).
-                    if let Some(root) = self.field_lazy_root(base, top, &steps, true)? {
-                        let value = self.frames[top].stack.pop().expect("FieldAssign value");
-                        let keys = self.pop_field_keys(top, &steps);
+                    if let Some(root) = self.field_lazy_root(base, top, &steps, &keys, true)? {
                         self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, value.clone(), false)?;
                         self.frames[top].stack.push(value);
                         continue;
                     }
-                    let value = self.frames[top].stack.pop().expect("FieldAssign value");
-                    let keys = self.pop_field_keys(top, &steps);
                     self.field_set(base, top, &steps, keys, value.clone())?;
                     self.frames[top].stack.push(value);
                 }
                 Op::FieldAssignOp { base, steps, op } => {
+                    let rhs = self.frames[top].stack.pop().expect("FieldAssignOp rhs");
+                    let keys = self.pop_field_keys(top, &steps);
                     if let Some(root) = self.byref_hook_root(base, top, &steps)? {
-                        let rhs = self.frames[top].stack.pop().expect("FieldAssignOp rhs");
-                        let keys = self.pop_field_keys(top, &steps);
                         let old = {
                             let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
                             field_get(&Zval::Ref(Rc::clone(&root)), &steps[1..], &mut keys.clone().into_iter(), fs)
@@ -5563,9 +5559,7 @@ impl<'m> Vm<'m> {
                         continue;
                     }
                     self.reject_indirect_hook(base, top, &steps)?;
-                    if let Some(root) = self.field_lazy_root(base, top, &steps, true)? {
-                        let rhs = self.frames[top].stack.pop().expect("FieldAssignOp rhs");
-                        let keys = self.pop_field_keys(top, &steps);
+                    if let Some(root) = self.field_lazy_root(base, top, &steps, &keys, true)? {
                         let old = {
                             let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
                             field_get(&root, &steps, &mut keys.clone().into_iter(), fs).unwrap_or(Zval::Null)
@@ -5575,16 +5569,14 @@ impl<'m> Vm<'m> {
                         self.frames[top].stack.push(result);
                         continue;
                     }
-                    let rhs = self.frames[top].stack.pop().expect("FieldAssignOp rhs");
-                    let keys = self.pop_field_keys(top, &steps);
                     let old = self.field_value(base, top, &steps, keys.clone()).unwrap_or(Zval::Null);
                     let result = apply_binop(op, &old, &rhs, &mut self.diags)?;
                     self.field_set(base, top, &steps, keys, result.clone())?;
                     self.frames[top].stack.push(result);
                 }
                 Op::FieldIncDec { base, steps, inc, pre } => {
+                    let keys = self.pop_field_keys(top, &steps);
                     if let Some(root) = self.byref_hook_root(base, top, &steps)? {
-                        let keys = self.pop_field_keys(top, &steps);
                         let old = {
                             let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
                             field_get(&Zval::Ref(Rc::clone(&root)), &steps[1..], &mut keys.clone().into_iter(), fs)
@@ -5601,8 +5593,7 @@ impl<'m> Vm<'m> {
                         continue;
                     }
                     self.reject_indirect_hook(base, top, &steps)?;
-                    if let Some(root) = self.field_lazy_root(base, top, &steps, true)? {
-                        let keys = self.pop_field_keys(top, &steps);
+                    if let Some(root) = self.field_lazy_root(base, top, &steps, &keys, true)? {
                         let old = {
                             let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
                             field_get(&root, &steps, &mut keys.clone().into_iter(), fs).unwrap_or(Zval::Null)
@@ -5617,7 +5608,6 @@ impl<'m> Vm<'m> {
                         self.frames[top].stack.push(if pre { newv } else { old });
                         continue;
                     }
-                    let keys = self.pop_field_keys(top, &steps);
                     let old = self.field_value(base, top, &steps, keys.clone()).unwrap_or(Zval::Null);
                     let mut newv = old.clone();
                     if inc {
@@ -5629,13 +5619,110 @@ impl<'m> Vm<'m> {
                     self.frames[top].stack.push(if pre { newv } else { old });
                 }
                 Op::FieldIsset { base, steps } => {
-                    let keys = self.pop_field_keys(top, &steps);
+                    let mut keys = self.pop_field_keys(top, &steps);
+                    // Magic protocol at the path start (`isset($o->magic['k'])`,
+                    // gh18038 / the bug40833 family): `__isset` decides, then
+                    // `__get` supplies the value the rest of the path tests. An
+                    // initialized proxy dispatches on its instance; an
+                    // uninitialized wrapper dispatches on itself (no init).
+                    let magic_set: Option<bool> = 'magic_isset: {
+                        let (name, rest, key_used): (Vec<u8>, &[FieldStep], usize) = match steps.split_first() {
+                            Some((FieldStep::Prop(n), rest)) => (n.to_vec(), rest, 0),
+                            Some((FieldStep::PropDyn, rest)) => {
+                                let Some(k) = keys.first() else { break 'magic_isset None };
+                                (convert::to_zstr_cast(k, &mut self.diags).as_bytes().to_vec(), rest, 1)
+                            }
+                            _ => break 'magic_isset None,
+                        };
+                        let base_val = match base {
+                            FieldBase::Local(s) => self.frames[top].slots.get(s as usize),
+                            FieldBase::Global(s) => self.frames[0].slots.get(s as usize),
+                            FieldBase::Superglobal(i) => self.superglobals.get(i as usize),
+                            FieldBase::This => self.frames[top].this.as_ref(),
+                        };
+                        let Some(mut v) = base_val.map(|v| v.deref_clone()) else { break 'magic_isset None };
+                        // Follow *initialized* proxy forwarding (no initialization).
+                        for _ in 0..64 {
+                            let next = self.proxy_redirect(v.clone());
+                            let same = match (deref_object(&v), deref_object(&next)) {
+                                (Some(a), Some(b)) => Rc::ptr_eq(&a, &b),
+                                _ => true,
+                            };
+                            v = next;
+                            if same {
+                                break;
+                            }
+                        }
+                        let Some(o) = deref_object(&v) else { break 'magic_isset None };
+                        let cur = self.frames[top].class;
+                        let has_isset =
+                            self.magic_applies(&o, &name, cur, MagicKind::Isset, b"__isset").is_some();
+                        let has_get =
+                            self.magic_applies(&o, &name, cur, MagicKind::Get, b"__get").is_some();
+                        if !has_isset && !has_get {
+                            break 'magic_isset None;
+                        }
+                        let oid = o.borrow().id;
+                        let name_z = Zval::Str(PhpStr::new(name.clone()));
+                        let read_through_get = |vm: &mut Self, keys: Vec<Zval>| -> Result<bool, PhpError> {
+                            let gkey = (oid, MagicKind::Get, name.clone());
+                            let ins = vm.magic_guard.insert(gkey.clone());
+                            let r = vm.call_method_sync(v.clone(), b"__get", vec![name_z.clone()]);
+                            if ins {
+                                vm.magic_guard.remove(&gkey);
+                            }
+                            let gv = r?.deref_clone();
+                            let fs = FieldScope { classes: &vm.classes, scope: cur };
+                            let mut it = keys.into_iter();
+                            Ok(matches!(
+                                field_get(&gv, rest, &mut it, fs),
+                                Some(x) if !matches!(x, Zval::Null | Zval::Undef)
+                            ))
+                        };
+                        let set = if has_isset {
+                            let gkey = (oid, MagicKind::Isset, name.clone());
+                            let ins = self.magic_guard.insert(gkey.clone());
+                            let r = self.call_method_sync(v.clone(), b"__isset", vec![name_z.clone()]);
+                            if ins {
+                                self.magic_guard.remove(&gkey);
+                            }
+                            let mut set = convert::to_bool(&r?.deref_clone(), &mut self.diags);
+                            if set && !rest.is_empty() {
+                                set = if has_get {
+                                    read_through_get(self, keys.split_off(key_used))?
+                                } else {
+                                    false
+                                };
+                            }
+                            set
+                        } else {
+                            // `__isset` guarded (a re-entrant check inside it) or
+                            // absent: read through `__get` for the offset test.
+                            read_through_get(self, keys.split_off(key_used))?
+                        };
+                        Some(set)
+                    };
+                    if let Some(set) = magic_set {
+                        self.frames[top].stack.push(Zval::Bool(set));
+                        continue;
+                    }
                     // A final Index on an ArrayAccess object is the protocol:
                     // `isset($this->coll[0])` = offsetExists (no offsetGet),
                     // mirroring Op::IssetPath's single-step arm.
                     if let Some((recv, key)) = self.field_aa_leaf(base, top, &steps, &keys) {
                         let r = self.call_method_sync(recv, b"offsetExists", vec![key])?;
                         let set = convert::is_true_silent(&r.deref_clone());
+                        self.frames[top].stack.push(Zval::Bool(set));
+                        continue;
+                    }
+                    // A lazy base initializes and the walk roots at the realized
+                    // object (isset through a wrapper reads the instance).
+                    if let Some(root) = self.field_lazy_root(base, top, &steps, &keys, false)? {
+                        let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
+                        let set = matches!(
+                            field_get(&root, &steps, &mut keys.into_iter(), fs),
+                            Some(v) if !matches!(v, Zval::Null | Zval::Undef)
+                        );
                         self.frames[top].stack.push(Zval::Bool(set));
                         continue;
                     }
@@ -10007,6 +10094,35 @@ impl<'m> Vm<'m> {
         // Reflection speaks names; the slot (defaults, uninit set, lazy set) is
         // storage-keyed — mangled for a private.
         let key = self.prop_decl_storage_key(cid, &prop);
+        // A skip is a NO-OP on an initialized object and on a property that is
+        // no longer lazy (skipLazyInitialization_initialized_object /
+        // _skips_non_lazy_prop) — unlike a raw-set, it writes nothing then.
+        {
+            let mut target = obj.clone();
+            for _ in 0..64 {
+                let next = self.proxy_redirect(target.clone());
+                let same = match (deref_object(&target), deref_object(&next)) {
+                    (Some(a), Some(b)) => Rc::ptr_eq(&a, &b),
+                    _ => true,
+                };
+                target = next;
+                if same {
+                    break;
+                }
+            }
+            let uninit_still_lazy = deref_object(&target).is_some_and(|o| {
+                let b = o.borrow();
+                b.lazy.is_some()
+                    && b.proxy_instance.is_none()
+                    && self
+                        .lazy_props
+                        .get(&b.id)
+                        .is_some_and(|set| set.iter().any(|n| n.as_ref() == key.as_slice()))
+            });
+            if !uninit_still_lazy {
+                return Ok(Zval::Null);
+            }
+        }
         // The property's declared default: its const, but a typed property with no
         // default stays uninitialized (`Undef`).
         let cc = self.classes[cid];
@@ -14977,6 +15093,25 @@ impl<'m> Vm<'m> {
             let b = rc.borrow();
             (b.id, b.class_id as usize)
         };
+        // A raw write still honours readonly write-once: the first raw-set of a
+        // readonly slot marks it initialized, a second one errors
+        // (setRawValueWithoutLazyInitialization_readonly). A skip materializing
+        // `Undef` leaves the slot uninitialized — not an initialization
+        // (skipLazyInitialization_readonly).
+        if !matches!(value, Zval::Undef) {
+        if let Some(decl) =
+            prop_readonly_decl(&self.classes, cid, php_types::prop_display_name(prop))
+        {
+            if rc.borrow().is_readonly_init(prop) {
+                return Err(PhpError::Error(format!(
+                    "Cannot modify readonly property {}::${}",
+                    String::from_utf8_lossy(&self.classes[decl].name),
+                    String::from_utf8_lossy(php_types::prop_display_name(prop)),
+                )));
+            }
+            rc.borrow_mut().mark_readonly_init(prop);
+        }
+        }
         // Materialize IN DECLARATION ORDER: the lazy wrapper's table holds only
         // the typed placeholders, so a plain `set` of an untyped property would
         // append it after them (skipLazyInitialization on `$a` must not move it
@@ -15105,9 +15240,19 @@ impl<'m> Vm<'m> {
         base: FieldBase,
         top: usize,
         steps: &[FieldStep],
+        keys: &[Zval],
         write: bool,
     ) -> Result<Option<Zval>, PhpError> {
-        let Some(FieldStep::Prop(n)) = steps.first() else { return Ok(None) };
+        let n: Box<[u8]> = match steps.first() {
+            Some(FieldStep::Prop(n)) => n.clone(),
+            // A dynamic first step's name is the first popped key.
+            Some(FieldStep::PropDyn) => match keys.first() {
+                Some(k) => convert::to_zstr_cast(k, &mut self.diags).as_bytes().to_vec().into(),
+                None => return Ok(None),
+            },
+            _ => return Ok(None),
+        };
+        let n = &n;
         let base_val = match base {
             FieldBase::Local(s) => self.frames[top].slots.get(s as usize),
             FieldBase::Global(s) => self.frames[0].slots.get(s as usize),
@@ -15143,26 +15288,54 @@ impl<'m> Vm<'m> {
         hook_write: Option<bool>,
         magic: (MagicKind, &'static [u8]),
     ) -> Result<Zval, PhpError> {
-        if let Some(o) = deref_object(&target) {
-            let (uninit, oid, cid) = {
-                let b = o.borrow();
-                (b.lazy.is_some() && b.proxy_instance.is_none(), b.id, b.class_id as usize)
-            };
-            if uninit {
-                let hooked = !self.hook_guarded(oid, name)
-                    && match hook_write {
-                        Some(w) => self.prop_hook(cid, name, w).is_some(),
-                        None => {
-                            self.prop_hook(cid, name, false).is_some()
-                                || self.prop_hook(cid, name, true).is_some()
+        let Some(o) = deref_object(&target) else { return Ok(target) };
+        let (uninit, oid, cid) = {
+            let b = o.borrow();
+            (b.lazy.is_some() && b.proxy_instance.is_none(), b.id, b.class_id as usize)
+        };
+        if uninit {
+            let hooked = !self.hook_guarded(oid, name)
+                && match hook_write {
+                    Some(w) => self.prop_hook(cid, name, w).is_some(),
+                    None => {
+                        self.prop_hook(cid, name, false).is_some()
+                            || self.prop_hook(cid, name, true).is_some()
+                    }
+                };
+            if hooked || self.magic_applies(&o, name, scope, magic.0, magic.1).is_some() {
+                return Ok(target);
+            }
+        }
+        let fwd = self.lazy_prop_forward(target, name)?;
+        // A magic guard held on the wrapper carries over to the object the
+        // access forwards to: `$this->$name = v` inside the wrapper's `__set`
+        // writes the (possibly freshly initialized) instance raw instead of
+        // re-dispatching (gh18038). The transferred key is released by the
+        // same frame that releases the wrapper's.
+        if let Some(fo) = deref_object(&fwd) {
+            if !Rc::ptr_eq(&o, &fo) {
+                let old_key = (oid, magic.0, name.to_vec());
+                if self.magic_guard.contains(&old_key) {
+                    let new_key = (fo.borrow().id, magic.0, name.to_vec());
+                    if self.magic_guard.insert(new_key.clone()) {
+                        match self
+                            .frames
+                            .iter_mut()
+                            .rev()
+                            .find(|f| f.guard_release.iter().any(|k| *k == old_key))
+                        {
+                            Some(f) => f.guard_release.push(new_key),
+                            None => {
+                                if let Some(f) = self.frames.last_mut() {
+                                    f.guard_release.push(new_key);
+                                }
+                            }
                         }
-                    };
-                if hooked || self.magic_applies(&o, name, scope, magic.0, magic.1).is_some() {
-                    return Ok(target);
+                    }
                 }
             }
         }
-        self.lazy_prop_forward(target, name)
+        Ok(fwd)
     }
 
     /// Trigger lazy initialization before an access to property `name` when `v`
@@ -15697,7 +15870,7 @@ impl<'m> Vm<'m> {
         frame.ret_bool = ret_bool;
         let key = (oid, kind, name.to_vec());
         self.magic_guard.insert(key.clone());
-        frame.guard_release = Some(key);
+        frame.guard_release.push(key);
         self.frames.push(frame);
     }
 
@@ -15773,7 +15946,7 @@ impl<'m> Vm<'m> {
         // nested explicit hook call re-entering the same property (a parent hook
         // calling its own parent) must not release the outer hook's guard early.
         if self.magic_guard.insert(key.clone()) {
-            frame.guard_release = Some(key);
+            frame.guard_release.push(key);
         }
         self.frames.push(frame);
     }
@@ -15817,7 +15990,7 @@ impl<'m> Vm<'m> {
         frame.ret_deref = func.by_ref && !is_set;
         let key = (oid, MagicKind::Hook, name.to_vec());
         if self.magic_guard.insert(key.clone()) {
-            frame.guard_release = Some(key);
+            frame.guard_release.push(key);
         }
         self.frames.push(frame);
     }
