@@ -3310,6 +3310,12 @@ class ReflectionProperty {
         $decl = __reflect_prop_declaring_class($cls, $property);
         $this->class = $decl === false ? $cls : $decl;
         $this->__info = __reflect_prop_details($this->class, $this->name);
+        // An ancestor's PRIVATE property is invisible to the subclass's
+        // reflection surface (Zend: getProperty throws; realize_skipped).
+        if (isset($this->__info['visibility']) && $this->__info['visibility'] === 'private'
+            && strcasecmp($this->class, $cls) !== 0) {
+            throw new ReflectionException(sprintf('Property %s::$%s does not exist', $cls, $property));
+        }
     }
     public function getName() { return $this->name; }
     public function getValue($object = null) {

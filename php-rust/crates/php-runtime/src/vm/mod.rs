@@ -3029,25 +3029,36 @@ impl<'m> Vm<'m> {
                     // first (PHP 8.4, fetch_ref_initializes) — a skipped/raw-set
                     // property does not — and a forwarding proxy binds the
                     // *instance*'s cell, so the walk roots there.
-                    let lazy_root: Option<Zval> = match steps.first() {
-                        Some(FieldStep::Prop(n)) => {
-                            let base_val = match base {
-                                FieldBase::Local(s) => self.frames[top].slots.get(s as usize),
-                                FieldBase::Global(s) => self.frames[0].slots.get(s as usize),
-                                FieldBase::Superglobal(i) => self.superglobals.get(i as usize),
-                                FieldBase::This => self.frames[top].this.as_ref(),
-                            };
-                            match base_val.map(|v| v.deref_clone()) {
-                                Some(v) if deref_object(&v).is_some_and(|o| o.borrow().lazy.is_some()) => {
-                                    let n = n.clone();
-                                    let cur = self.frames[top].class;
-                                    Some(self.lazy_prop_access(v, &n, cur, Some(false), (MagicKind::Get, b"__get"))?)
+                    let lazy_root = self.field_lazy_root(base, top, &steps, false)?;
+                    // Taking a reference to an *uninitialized* non-nullable typed
+                    // property is an error (zend_fetch_property_address,
+                    // fetch_ref_skipped_prop_does_not_initialize).
+                    if let [FieldStep::Prop(n)] = &steps[..] {
+                        let target = match &lazy_root {
+                            Some(r) => Some(r.clone()),
+                            None => match base {
+                                FieldBase::Local(s) => self.frames[top].slots.get(s as usize).map(|v| v.deref_clone()),
+                                FieldBase::Global(s) => self.frames[0].slots.get(s as usize).map(|v| v.deref_clone()),
+                                FieldBase::Superglobal(i) => self.superglobals.get(i as usize).map(|v| v.deref_clone()),
+                                FieldBase::This => self.frames[top].this.as_ref().map(|v| v.deref_clone()),
+                            },
+                        };
+                        if let Some(o) = target.as_ref().and_then(deref_object) {
+                            let cid = o.borrow().class_id as usize;
+                            let key = self.prop_storage_key(cid, n, self.frames[top].class);
+                            if matches!(o.borrow().props.get(&key), Some(Zval::Undef)) {
+                                if let Some((decl, hint)) = prop_type_decl(&self.classes, cid, n) {
+                                    if !hint.nullable {
+                                        return Err(PhpError::Error(format!(
+                                            "Cannot access uninitialized non-nullable property {}::${} by reference",
+                                            String::from_utf8_lossy(&self.classes[decl].name),
+                                            String::from_utf8_lossy(n),
+                                        )));
+                                    }
                                 }
-                                _ => None,
                             }
                         }
-                        _ => None,
-                    };
+                    }
                     let keys = self.pop_field_keys(top, &steps);
                     let cell = {
                         let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
@@ -4200,6 +4211,29 @@ impl<'m> Vm<'m> {
                             src.type_name_for_error()
                         )));
                     };
+                    // Cloning a lazy object initializes it first (PHP 8.4,
+                    // clone_initializes). An initialized proxy then clones as a
+                    // NEW initialized proxy wrapping a clone of its real
+                    // instance: the copy below runs on the instance and the
+                    // wrapper is rebuilt around it afterwards.
+                    if o.borrow().lazy.is_some() && o.borrow().proxy_instance.is_none() {
+                        self.realize_lazy(&src)?;
+                    }
+                    let proxy_wrapper: Option<(u32, Rc<PhpStr>, Rc<ObjectInfo>)> = {
+                        let b = o.borrow();
+                        if matches!(b.lazy, Some(LazyKind::Proxy)) && b.proxy_instance.is_some() {
+                            Some((b.class_id, Rc::clone(&b.class_name), Rc::clone(&b.info)))
+                        } else {
+                            None
+                        }
+                    };
+                    let src = if proxy_wrapper.is_some() {
+                        let inst = o.borrow().proxy_instance.clone().expect("initialized proxy");
+                        (*inst).clone()
+                    } else {
+                        src
+                    };
+                    let Zval::Object(o) = &src else { unreachable!("proxy instance is an object") };
                     // Shallow copy: a fresh handle, properties cloned by value
                     // (nested objects share their handle, arrays copy on write).
                     let clone_rc = {
@@ -4247,7 +4281,28 @@ impl<'m> Vm<'m> {
                     }
                     let cid = clone_rc.borrow().class_id as usize;
                     let clone_val = Zval::Object(clone_rc.clone());
-                    self.frames[top].stack.push(clone_val.clone());
+                    // A proxy clones to a fresh initialized-proxy wrapper around
+                    // the instance copy; `__clone` below still runs on the copy.
+                    let pushed = if let Some((wcid, wname, winfo)) = proxy_wrapper {
+                        let wrapper = Object {
+                            class_id: wcid,
+                            class_name: wname,
+                            props: Props::new(),
+                            id: self.next_id(),
+                            info: winfo,
+                            readonly_init: Vec::new(),
+                            readonly_clone_writable: Vec::new(),
+                            lazy: Some(LazyKind::Proxy),
+                            proxy_instance: Some(Box::new(clone_val.clone())),
+                        };
+                        let wrc = Rc::new(RefCell::new(wrapper));
+                        self.created.insert(wrc.borrow().id, Rc::clone(&wrc));
+                        self.gc_track(&wrc);
+                        Zval::Object(wrc)
+                    } else {
+                        clone_val.clone()
+                    };
+                    self.frames[top].stack.push(pushed);
                     // Run `__clone` on the copy if defined (return discarded), so it
                     // can deep-copy what it needs (PHP OOP).
                     if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, b"__clone") {
@@ -5479,6 +5534,15 @@ impl<'m> Vm<'m> {
                         continue;
                     }
                     self.reject_indirect_hook(base, top, &steps)?;
+                    // A lazy base initializes/forwards first; the walk then roots
+                    // at the realized object (PHP 8.4).
+                    if let Some(root) = self.field_lazy_root(base, top, &steps, true)? {
+                        let value = self.frames[top].stack.pop().expect("FieldAssign value");
+                        let keys = self.pop_field_keys(top, &steps);
+                        self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, value.clone(), false)?;
+                        self.frames[top].stack.push(value);
+                        continue;
+                    }
                     let value = self.frames[top].stack.pop().expect("FieldAssign value");
                     let keys = self.pop_field_keys(top, &steps);
                     self.field_set(base, top, &steps, keys, value.clone())?;
@@ -5499,6 +5563,18 @@ impl<'m> Vm<'m> {
                         continue;
                     }
                     self.reject_indirect_hook(base, top, &steps)?;
+                    if let Some(root) = self.field_lazy_root(base, top, &steps, true)? {
+                        let rhs = self.frames[top].stack.pop().expect("FieldAssignOp rhs");
+                        let keys = self.pop_field_keys(top, &steps);
+                        let old = {
+                            let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
+                            field_get(&root, &steps, &mut keys.clone().into_iter(), fs).unwrap_or(Zval::Null)
+                        };
+                        let result = apply_binop(op, &old, &rhs, &mut self.diags)?;
+                        self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, result.clone(), false)?;
+                        self.frames[top].stack.push(result);
+                        continue;
+                    }
                     let rhs = self.frames[top].stack.pop().expect("FieldAssignOp rhs");
                     let keys = self.pop_field_keys(top, &steps);
                     let old = self.field_value(base, top, &steps, keys.clone()).unwrap_or(Zval::Null);
@@ -5525,6 +5601,22 @@ impl<'m> Vm<'m> {
                         continue;
                     }
                     self.reject_indirect_hook(base, top, &steps)?;
+                    if let Some(root) = self.field_lazy_root(base, top, &steps, true)? {
+                        let keys = self.pop_field_keys(top, &steps);
+                        let old = {
+                            let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
+                            field_get(&root, &steps, &mut keys.clone().into_iter(), fs).unwrap_or(Zval::Null)
+                        };
+                        let mut newv = old.clone();
+                        if inc {
+                            ops::increment(&mut newv, &mut self.diags)?;
+                        } else {
+                            ops::decrement(&mut newv, &mut self.diags)?;
+                        }
+                        self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, newv.clone(), false)?;
+                        self.frames[top].stack.push(if pre { newv } else { old });
+                        continue;
+                    }
                     let keys = self.pop_field_keys(top, &steps);
                     let old = self.field_value(base, top, &steps, keys.clone()).unwrap_or(Zval::Null);
                     let mut newv = old.clone();
@@ -14721,6 +14813,12 @@ impl<'m> Vm<'m> {
         };
         match kind {
             LazyKind::Ghost => {
+                // Snapshot the wrapper for rollback: an initializer exception
+                // leaves the object LAZY, reverting any change the initializer
+                // made to it (PHP 8.4, init_exception_reverts_initializer_changes).
+                let saved_props = rc.borrow().props.clone();
+                let saved_ro = rc.borrow().readonly_init.clone();
+                let saved_lazy_props = self.lazy_props.get(&oid).cloned();
                 {
                     let cc = self.classes[cid];
                     // Rebuild the property layout in declaration order (the ghost held
@@ -14765,22 +14863,48 @@ impl<'m> Vm<'m> {
                     // ignored. The object is marked "initializing" so a re-entrant
                     // `resetAsLazy*` on it errors (cleared even if it throws).
                     self.lazy_initializing.insert(oid);
-                    let r = self.call_callable(init, vec![v.clone()]);
+                    let r = self.call_callable(init.clone(), vec![v.clone()]);
                     self.lazy_initializing.remove(&oid);
-                    r?;
+                    if let Err(e) = r {
+                        // Roll the wrapper back to its uninitialized-lazy state;
+                        // the initializer stays installed (a later access retries).
+                        {
+                            let mut b = rc.borrow_mut();
+                            b.props = saved_props;
+                            b.readonly_init = saved_ro;
+                            b.lazy = Some(LazyKind::Ghost);
+                        }
+                        if let Some(sp) = saved_lazy_props {
+                            self.lazy_props.insert(oid, sp);
+                        }
+                        self.lazy_init.insert(oid, init);
+                        return Err(e);
+                    }
                 }
             }
             LazyKind::Proxy => {
-                self.lazy_props.remove(&oid);
+                let saved_lazy_props = self.lazy_props.remove(&oid);
                 // Remove the factory *before* invoking it so a re-entrant access on
                 // the proxy during the factory does not recurse (it sees no factory
                 // and bails). The factory's return is the real instance to forward to.
                 if let Some(factory) = self.lazy_init.remove(&oid) {
                     self.lazy_initializing.insert(oid);
-                    let r = self.call_callable(factory, vec![v.clone()]);
+                    let r = self.call_callable(factory.clone(), vec![v.clone()]);
                     self.lazy_initializing.remove(&oid);
-                    let real = r?;
-                    rc.borrow_mut().proxy_instance = Some(Box::new(real));
+                    match r {
+                        Ok(real) => {
+                            rc.borrow_mut().proxy_instance = Some(Box::new(real));
+                        }
+                        Err(e) => {
+                            // A factory exception leaves the proxy uninitialized
+                            // and retryable (PHP 8.4).
+                            if let Some(sp) = saved_lazy_props {
+                                self.lazy_props.insert(oid, sp);
+                            }
+                            self.lazy_init.insert(oid, factory);
+                            return Err(e);
+                        }
+                    }
                 }
             }
         }
@@ -14794,9 +14918,52 @@ impl<'m> Vm<'m> {
     /// marker so the object becomes ordinary (no initializer/factory runs; every
     /// property is already set). The caller has validated `prop` is eligible.
     fn lazy_materialize(&mut self, v: &Zval, prop: &[u8], value: Zval) -> Result<(), PhpError> {
+        // On an *initialized* proxy the raw write lands on the real instance
+        // (clone_creates_object_with_independent_state_003); only an
+        // uninitialized wrapper takes the materialize path proper.
+        let mut v = v.clone();
+        for _ in 0..64 {
+            let next = self.proxy_redirect(v.clone());
+            let same = match (deref_object(&v), deref_object(&next)) {
+                (Some(a), Some(b)) => Rc::ptr_eq(&a, &b),
+                _ => true,
+            };
+            v = next;
+            if same {
+                break;
+            }
+        }
+        let v = &v;
         let Some(rc) = deref_object(v) else { return Ok(()) };
-        let oid = rc.borrow().id;
-        let old = rc.borrow_mut().props.replace(prop, value);
+        let (oid, cid) = {
+            let b = rc.borrow();
+            (b.id, b.class_id as usize)
+        };
+        // Materialize IN DECLARATION ORDER: the lazy wrapper's table holds only
+        // the typed placeholders, so a plain `set` of an untyped property would
+        // append it after them (skipLazyInitialization on `$a` must not move it
+        // behind `$b`/`$c` in the dump). Rebuild against the class layout.
+        let old = {
+            let mut b = rc.borrow_mut();
+            let mut props = Props::new();
+            let mut old = None;
+            let mut value = Some(value);
+            for (key, _) in &self.classes[cid].prop_defaults {
+                if key.as_ref() == prop {
+                    old = b.props.get(key).cloned();
+                    props.set(key, value.take().expect("materialized value used once"));
+                } else if let Some(cur) = b.props.get(key) {
+                    props.set(key, cur.clone());
+                }
+            }
+            if let Some(v) = value.take() {
+                // Not a declared slot (defensive): plain set, old semantics.
+                old = b.props.get(prop).cloned();
+                props.set(prop, v);
+            }
+            b.props = props;
+            old
+        };
         if let Some(set) = self.lazy_props.get_mut(&oid) {
             set.retain(|n| n.as_ref() != prop);
             if set.is_empty() {
@@ -14888,6 +15055,39 @@ impl<'m> Vm<'m> {
     /// [`Self::realize_full`] before reading its property table.
     fn is_lazy_value(&self, v: &Zval) -> bool {
         deref_object(v).is_some_and(|o| o.borrow().lazy.is_some())
+    }
+
+    /// If a field path's base holds a *lazy* object and the walk starts with a
+    /// property step, initialize/forward it (PHP 8.4) and return the object
+    /// the walk should root at instead of the raw base slot — the walkers
+    /// themselves only see storage (`$proxy->obj->p = v` must reach the real
+    /// instance, not scribble on the wrapper's placeholder).
+    fn field_lazy_root(
+        &mut self,
+        base: FieldBase,
+        top: usize,
+        steps: &[FieldStep],
+        write: bool,
+    ) -> Result<Option<Zval>, PhpError> {
+        let Some(FieldStep::Prop(n)) = steps.first() else { return Ok(None) };
+        let base_val = match base {
+            FieldBase::Local(s) => self.frames[top].slots.get(s as usize),
+            FieldBase::Global(s) => self.frames[0].slots.get(s as usize),
+            FieldBase::Superglobal(i) => self.superglobals.get(i as usize),
+            FieldBase::This => self.frames[top].this.as_ref(),
+        };
+        let Some(v) = base_val.map(|v| v.deref_clone()) else { return Ok(None) };
+        if !self.is_lazy_value(&v) {
+            return Ok(None);
+        }
+        let n = n.clone();
+        let cur = self.frames[top].class;
+        let fwd = if write {
+            self.lazy_prop_access(v, &n, cur, Some(true), (MagicKind::Set, b"__set"))?
+        } else {
+            self.lazy_prop_access(v, &n, cur, Some(false), (MagicKind::Get, b"__get"))?
+        };
+        Ok(Some(fwd))
     }
 
     /// [`Self::lazy_prop_forward`] gated on *how* the access will be served:
