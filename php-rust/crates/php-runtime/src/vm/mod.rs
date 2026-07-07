@@ -383,6 +383,7 @@ pub(crate) fn run_module_with_hir<'m>(
         stringable_id: module.class_index.get(&b"stringable"[..]).copied(),
         jsonserializable_id: module.class_index.get(&b"jsonserializable"[..]).copied(),
         json_last_error: 0,
+        json_active: Vec::new(),
         enum_cache: HashMap::new(),
         constants: HashMap::new(),
         mb_regex: crate::mbregex::MbRegexState::default(),
@@ -1088,6 +1089,12 @@ struct Vm<'m> {
     /// reported by `json_last_error()`/`json_last_error_msg()` (0 = JSON_ERROR_NONE,
     /// 4 = SYNTAX, 11 = NON_BACKED_ENUM).
     json_last_error: i64,
+    /// Object addresses whose `jsonSerialize()` is currently on the encode stack —
+    /// tracked ACROSS nested `json_encode()` calls (unlike the per-call `visiting`
+    /// path). A nested `json_encode()` of such an object is JSON_ERROR_RECURSION;
+    /// the return value of a `jsonSerialize()` that is the same object encodes by
+    /// plain properties (json_encode_recursion_01/02).
+    json_active: Vec<usize>,
     /// Interned enum case singletons, keyed by (enum class id, case index), so
     /// `E::Case === E::Case` (Session A). Materialised lazily on first `E::Case`.
     enum_cache: HashMap<(ClassId, u32), Rc<RefCell<Object>>>,
@@ -6942,6 +6949,21 @@ impl<'m> Vm<'m> {
         // for JsonSerializable/array revisits, the pure encoder for plain
         // object graphs).
         let partial = flags & 512 != 0;
+        // A json_encode() re-entered from within a jsonSerialize() still running
+        // for the SAME object is JSON_ERROR_RECURSION (json_encode_recursion_01),
+        // not an infinite descent — the nested call fails fast with `false`.
+        if let Some(addr) = deref_object(&value).map(|o| Rc::as_ptr(&o) as usize) {
+            if self.json_active.contains(&addr) {
+                self.json_last_error = 6;
+                if throw {
+                    if let Some(cid) = self.class_index.get(&b"jsonexception"[..]).copied() {
+                        let obj = self.synthesize_throwable(cid, "Recursion detected")?;
+                        return Err(PhpError::Thrown(obj));
+                    }
+                }
+                return Ok(Zval::Bool(false));
+            }
+        }
         // A cyclic value graph is PHP's JSON_ERROR_RECURSION — detected up
         // front over the whole graph (arrays *and* plain-object properties,
         // which json_normalize deliberately does not descend into).
@@ -6991,18 +7013,18 @@ impl<'m> Vm<'m> {
         // the most common one (the cycle/enum cases are pre-checked above) is
         // malformed UTF-8 — JSON_ERROR_UTF8, or a JsonException under
         // JSON_THROW_ON_ERROR.
+        fn has_nonfinite(v: &Zval) -> bool {
+            match v {
+                Zval::Double(d) => !d.is_finite(),
+                Zval::Array(a) => a.iter().any(|(_, e)| has_nonfinite(e)),
+                Zval::Object(o) => o.borrow().props.iter().any(|(_, e)| has_nonfinite(e)),
+                Zval::Ref(r) => has_nonfinite(&r.borrow()),
+                _ => false,
+            }
+        }
         if matches!(result, Zval::Bool(false)) && self.json_last_error == 0 {
             // Distinguish the two silent-encoder failures: a non-finite float
             // is JSON_ERROR_INF_OR_NAN (7), anything else is UTF-8 (5).
-            fn has_nonfinite(v: &Zval) -> bool {
-                match v {
-                    Zval::Double(d) => !d.is_finite(),
-                    Zval::Array(a) => a.iter().any(|(_, e)| has_nonfinite(e)),
-                    Zval::Object(o) => o.borrow().props.iter().any(|(_, e)| has_nonfinite(e)),
-                    Zval::Ref(r) => has_nonfinite(&r.borrow()),
-                    _ => false,
-                }
-            }
             let inf = call_args.first().is_some_and(has_nonfinite);
             self.json_last_error = if inf { 7 } else { 5 };
             let msg = if inf {
@@ -7017,16 +7039,34 @@ impl<'m> Vm<'m> {
                 }
             }
         }
+        // JSON_PARTIAL_OUTPUT_ON_ERROR substitutes the offending node (INF/NAN → 0)
+        // and still returns a string, but json_last_error() must report that the
+        // error occurred (inf_nan_error).
+        if partial && self.json_last_error == 0 && call_args.first().is_some_and(has_nonfinite) {
+            self.json_last_error = 7;
+        }
         Ok(result)
     }
 
     /// `json_last_error()`: the error code of the most recent JSON operation.
-    fn ho_json_last_error(&mut self) -> Result<Zval, PhpError> {
+    fn ho_json_last_error(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if !args.is_empty() {
+            return Err(PhpError::TypeError(format!(
+                "json_last_error() expects exactly 0 arguments, {} given",
+                args.len()
+            )));
+        }
         Ok(Zval::Long(self.json_last_error))
     }
 
     /// `json_last_error_msg()`: the human-readable message for that error code.
-    fn ho_json_last_error_msg(&mut self) -> Result<Zval, PhpError> {
+    fn ho_json_last_error_msg(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if !args.is_empty() {
+            return Err(PhpError::TypeError(format!(
+                "json_last_error_msg() expects exactly 0 arguments, {} given",
+                args.len()
+            )));
+        }
         let msg: &[u8] = match self.json_last_error {
             0 => b"No error",
             1 => b"Maximum stack depth exceeded",
@@ -7112,10 +7152,27 @@ impl<'m> Vm<'m> {
                 }
                 let cid = object_class_id(&v).expect("object has a class id");
                 if self.jsonserializable_id.is_some_and(|j| is_instance_of(&self.classes, self.stringable_id, cid, j)) {
+                    // A jsonSerialize() that returns the SAME object (directly or
+                    // deeper) is encoded by its plain public properties — NOT by
+                    // calling jsonSerialize() again, which would never terminate
+                    // (json_encode_recursion_02). `json_active` marks the objects
+                    // whose jsonSerialize() is currently running.
+                    if self.json_active.contains(&addr) {
+                        return Ok(v);
+                    }
+                    self.json_active.push(addr);
                     visiting.push(addr);
-                    let r = self.call_method_sync(v, b"jsonSerialize", Vec::new())?;
-                    let n = self.json_normalize(r, partial, visiting);
+                    let r = self.call_method_sync(v, b"jsonSerialize", Vec::new());
                     visiting.pop();
+                    let r = match r {
+                        Ok(r) => r,
+                        Err(e) => {
+                            self.json_active.pop();
+                            return Err(e);
+                        }
+                    };
+                    let n = self.json_normalize(r, partial, visiting);
+                    self.json_active.pop();
                     n
                 } else if self
                     .class_index
@@ -7488,6 +7545,17 @@ impl<'m> Vm<'m> {
             Some(v) => convert::to_bool(v, &mut self.diags),
             None => false,
         };
+        // `$depth` must be a positive nesting limit; a non-positive one is a
+        // ValueError before any parsing (json_decode_error). phpr does not enforce
+        // the limit itself, but it must reject an invalid argument.
+        if let Some(v) = args.get(2) {
+            let depth = convert::to_long_cast(v, &mut self.diags);
+            if depth <= 0 {
+                return Err(PhpError::ValueError(
+                    "json_decode(): Argument #3 ($depth) must be greater than 0".to_string(),
+                ));
+            }
+        }
         let flags = args
             .get(3)
             .map(|v| convert::to_long_cast(v, &mut self.diags))
@@ -17710,8 +17778,8 @@ host_builtins! {
     b"debug_print_backtrace" => vm.ho_debug_print_backtrace(),
     b"preg_replace_callback" => vm.ho_preg_replace_callback(args),
     b"json_decode" => vm.ho_json_decode(args),
-    b"json_last_error" => vm.ho_json_last_error(),
-    b"json_last_error_msg" => vm.ho_json_last_error_msg(),
+    b"json_last_error" => vm.ho_json_last_error(args),
+    b"json_last_error_msg" => vm.ho_json_last_error_msg(args),
     b"assert" => vm.ho_assert(args),
     b"mb_split" => vm.ho_mb_split(args),
     b"mb_regex_encoding" => vm.ho_mb_regex_encoding(args),
