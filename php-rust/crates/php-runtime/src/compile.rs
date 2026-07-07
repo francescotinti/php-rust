@@ -1441,11 +1441,11 @@ impl<'a> FnCompiler<'a> {
             StmtKind::Foreach { iter, key, value, by_ref, body } => {
                 if *by_ref {
                     // REF-3: by-ref iteration needs an lvalue source to write back
-                    // to. Over a plain variable we rebind each element live. Over
-                    // any other (non-lvalue) source PHP does NOT error: it degrades
-                    // to by-value iteration, where writes to `$value` land nowhere
-                    // observable. So only the `Var` source takes the by-ref path;
-                    // everything else falls through to the by-value loop below.
+                    // to. Over a plain variable we rebind each element live. Over a
+                    // non-lvalue source (a temporary array, a function return) PHP
+                    // degrades to by-value iteration, where writes to `$value` land
+                    // nowhere observable — so that case falls through to the
+                    // by-value loop below.
                     if let ExprKind::Var(slot) = iter.kind {
                         self.emit(Op::IterInitRef(slot));
                         let cont = self.here();
@@ -1457,6 +1457,33 @@ impl<'a> FnCompiler<'a> {
                         self.patch(fetch, Op::IterNextRef { value: *value, key: *key, end: exhaust });
                         self.emit(Op::IterPop);
                         let after = self.here();
+                        self.close_loop(cont, after);
+                        return Ok(());
+                    }
+                    // Any OTHER lvalue source — a property (`$o->p`), array element,
+                    // static/`$this` property — is written back to too: bind a
+                    // reference to the place into a temp local, then iterate that by
+                    // reference so an element REPLACEMENT (`$v = …`) writes through to
+                    // the source array (Doctrine QueryBuilder::indexBy rewrites
+                    // `$this->dqlParts['from']` elements via `foreach (… as &$f)`).
+                    if let Some(place) = expr_field_place(iter) {
+                        let (base, steps) = self.field_path(&place)?;
+                        self.emit(Op::MakeRef { base, steps: steps.into() });
+                        let tmp = self.alloc_temp();
+                        self.emit(Op::BindRefTo { base: FieldBase::Local(tmp), steps: [].into() });
+                        self.emit(Op::Pop);
+                        self.emit(Op::IterInitRef(tmp));
+                        let cont = self.here();
+                        let fetch = self.emit(Op::IterNextRef { value: *value, key: *key, end: Addr::MAX });
+                        self.loops.push(LoopCtx { has_iter: true, ..LoopCtx::default() });
+                        self.block(body)?;
+                        self.emit(Op::Jump(cont));
+                        let exhaust = self.here();
+                        self.patch(fetch, Op::IterNextRef { value: *value, key: *key, end: exhaust });
+                        self.emit(Op::IterPop);
+                        let after = self.here();
+                        self.clear_temp_binding(tmp);
+                        self.free_temp();
                         self.close_loop(cont, after);
                         return Ok(());
                     }
