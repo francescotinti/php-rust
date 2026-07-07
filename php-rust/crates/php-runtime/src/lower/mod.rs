@@ -2852,7 +2852,22 @@ class ReflectionClass {
     public function isFinal() { return __reflect_class_modifiers($this->name)['final']; }
     public function isAbstract() { return __reflect_class_modifiers($this->name)['abstract']; }
     public function hasMethod($name) { return method_exists($this->name, $name); }
-    public function hasProperty($name) { return property_exists($this->name, $name); }
+    public function hasProperty($name) {
+        if (!property_exists($this->name, $name)) { return false; }
+        // An ancestor's PRIVATE property is invisible to a subclass' reflection
+        // surface: hasProperty() must agree with getProperty()/new
+        // ReflectionProperty() (which throw for it), else a caller that guards a
+        // getProperty() with hasProperty() still hits the exception
+        // (Doctrine ORM ClassMetadata::isTypedProperty, GH11199).
+        $decl = __reflect_prop_declaring_class($this->name, $name);
+        if ($decl !== false && strcasecmp($decl, $this->name) !== 0) {
+            $info = __reflect_prop_details($decl, $name);
+            if (is_array($info) && ($info['visibility'] ?? null) === 'private') {
+                return false;
+            }
+        }
+        return true;
+    }
     public function getProperty($name) { return new ReflectionProperty($this->name, $name); }
     public function getProperties($filter = null) {
         $out = [];
