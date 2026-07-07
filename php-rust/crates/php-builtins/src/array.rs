@@ -1138,6 +1138,20 @@ pub fn array_key_first(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> 
     Ok(arr.iter().next().map(|(k, _)| key_to_zval(k)).unwrap_or(Zval::Null))
 }
 
+
+/// array_first($array) / array_last($array) (PHP 8.5): the first/last *value*
+/// (dereferenced), or null for an empty array — without moving the internal
+/// pointer.
+pub fn array_first(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let arr = arr_arg(args, "array_first")?;
+    Ok(arr.iter().next().map(|(_, v)| v.deref_clone()).unwrap_or(Zval::Null))
+}
+
+pub fn array_last(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let arr = arr_arg(args, "array_last")?;
+    Ok(arr.iter().last().map(|(_, v)| v.deref_clone()).unwrap_or(Zval::Null))
+}
+
 pub fn array_key_last(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let arr = arr_arg(args, "array_key_last")?;
     Ok(arr.iter().last().map(|(k, _)| key_to_zval(k)).unwrap_or(Zval::Null))

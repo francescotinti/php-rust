@@ -201,6 +201,8 @@ pub fn registry() -> Registry {
     add(b"array_is_list", array::array_is_list);
     add(b"array_key_first", array::array_key_first);
     add(b"array_key_last", array::array_key_last);
+    add(b"array_first", array::array_first);
+    add(b"array_last", array::array_last);
     add(b"array_diff", array::array_diff);
     add(b"array_intersect", array::array_intersect);
     add(b"array_diff_key", array::array_diff_key);
@@ -261,6 +263,7 @@ pub fn registry() -> Registry {
     add(b"fgetcsv", file::fgetcsv);
     add(b"fputcsv", file::fputcsv);
     add(b"str_replace", string::str_replace);
+    add(b"str_ireplace", string::str_ireplace);
     add(b"strtoupper", string::strtoupper);
     add(b"strtolower", string::strtolower);
     add(b"ucfirst", string::ucfirst);

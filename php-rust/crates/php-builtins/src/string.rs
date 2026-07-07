@@ -288,6 +288,60 @@ fn replace_all(s: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
     out
 }
 
+
+/// Case-insensitive (ASCII) counterpart of `replace_all`, backing `str_ireplace`.
+fn replace_all_ci(s: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(s.len());
+    let mut i = 0;
+    while i < s.len() {
+        if i + from.len() <= s.len() && s[i..i + from.len()].eq_ignore_ascii_case(from) {
+            out.extend_from_slice(to);
+            i += from.len();
+        } else {
+            out.push(s[i]);
+            i += 1;
+        }
+    }
+    out
+}
+
+/// str_ireplace($search, $replace, $subject): like `str_replace` but matching is
+/// ASCII-case-insensitive. The optional by-reference `$count` is unsupported.
+pub fn str_ireplace(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let search = args.first().ok_or_else(|| {
+        PhpError::Error("str_ireplace() expects at least 3 arguments, 0 given".to_string())
+    })?;
+    let replace = args.get(1).ok_or_else(|| {
+        PhpError::Error("str_ireplace() expects at least 3 arguments, 1 given".to_string())
+    })?;
+    let subject = args.get(2).ok_or_else(|| {
+        PhpError::Error("str_ireplace() expects at least 3 arguments, 2 given".to_string())
+    })?;
+
+    let pairs = replacement_pairs(search, replace, ctx);
+
+    let apply = |subj: &Zval, ctx: &mut Ctx| -> Vec<u8> {
+        let mut cur = convert::to_zstr(subj, ctx.diags).as_bytes().to_vec();
+        for (s, r) in &pairs {
+            if !s.is_empty() {
+                cur = replace_all_ci(&cur, s, r);
+            }
+        }
+        cur
+    };
+
+    if let Zval::Array(a) = subject {
+        let mut out = PhpArray::new();
+        let entries: Vec<_> = a.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        for (k, v) in entries {
+            out.insert(k, Zval::Str(PhpStr::new(apply(&v, ctx))));
+        }
+        Ok(Zval::Array(Rc::new(out)))
+    } else {
+        Ok(Zval::Str(PhpStr::new(apply(subject, ctx))))
+    }
+}
+
 /// Sole `&str` argument coerced to bytes, or an `ArgumentCountError`-style fatal.
 fn str_arg(args: &[Zval], ctx: &mut Ctx, fname: &str) -> Result<Vec<u8>, PhpError> {
     let v = args
