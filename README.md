@@ -2,6 +2,8 @@
 
 *Read this in [Italiano](italiano.md).*
 
+*📊 Live [test coverage & PHP compatibility](COVERAGE.md) — parity with the official PHP test suite, area by area.*
+
 > **PHP, reimplemented from scratch in Rust.** A modern, memory-safe, async-ready
 > PHP 8.5 runtime — driven by observable behavior, not by the internal architecture
 > of the Zend Engine.
