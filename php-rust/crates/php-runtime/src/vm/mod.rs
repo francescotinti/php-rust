@@ -2484,7 +2484,7 @@ impl<'m> Vm<'m> {
                     let (lhs, rhs) = if cmp_op && both_objects.is_none() {
                         let l_str = matches!(lhs.deref_clone(), Zval::Str(_));
                         let r_str = matches!(rhs.deref_clone(), Zval::Str(_));
-                        let mut to_str = |vm: &mut Self, v: Zval, other_is_str: bool| -> Result<Zval, PhpError> {
+                        let to_str = |vm: &mut Self, v: Zval, other_is_str: bool| -> Result<Zval, PhpError> {
                             if !other_is_str {
                                 return Ok(v);
                             }
@@ -3037,18 +3037,49 @@ impl<'m> Vm<'m> {
                     // cell, and push a reference to it. Keys (for `Index` steps)
                     // were pushed in source order and sit on top of the stack.
                     let keys = self.pop_field_keys(top, &steps);
+                    // EXCEPTION checked FIRST (it must pre-empt hook/lazy
+                    // machinery): a ref fetch under the wrapper's own
+                    // suppressed `__get` guard stays on the wrapper's raw
+                    // storage without initializing (gh20854's
+                    // `return $this->x;` in the wrapper's `&__get`).
+                    let guarded_ref_fetch = 'grf: {
+                        let n: Box<[u8]> = match &steps[..] {
+                            [FieldStep::Prop(n)] => n.clone(),
+                            [FieldStep::PropDyn] => match keys.first().cloned() {
+                                Some(k) => self.dyn_prop_name_value(&k)?,
+                                None => break 'grf false,
+                            },
+                            _ => break 'grf false,
+                        };
+                        let target = match base {
+                            FieldBase::Local(s) => self.frames[top].slots.get(s as usize).map(|v| v.deref_clone()),
+                            FieldBase::Global(s) => self.frames[0].slots.get(s as usize).map(|v| v.deref_clone()),
+                            FieldBase::Superglobal(i) => self.superglobals.get(i as usize).map(|v| v.deref_clone()),
+                            FieldBase::This => self.frames[top].this.as_ref().map(|v| v.deref_clone()),
+                        };
+                        let Some(o) = target.and_then(|v| deref_object(&v)) else { break 'grf false };
+                        let (uninit, oid, cid) = {
+                            let b = o.borrow();
+                            (b.lazy.is_some() && b.proxy_instance.is_none(), b.id, b.class_id as usize)
+                        };
+                        uninit
+                            && self.magic_guard.contains(&(oid, MagicKind::Get, n.to_vec()))
+                            && resolve_method_runtime(&self.classes, cid, b"__get").is_some()
+                    };
                     // A `&get` hook makes the property addressable: the reference
                     // the hook returns is the path's root (PHP 8.4).
-                    if let Some(root) = self.byref_hook_root(base, top, &steps)? {
-                        let cell = if steps.len() == 1 {
-                            root
-                        } else {
-                            let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
-                            let mut root_val = Zval::Ref(root);
-                            field_cell(&mut root_val, &steps[1..], &mut keys.into_iter(), fs)
-                        };
-                        self.frames[top].stack.push(Zval::Ref(cell));
-                        continue;
+                    if !guarded_ref_fetch {
+                        if let Some(root) = self.byref_hook_root(base, top, &steps)? {
+                            let cell = if steps.len() == 1 {
+                                root
+                            } else {
+                                let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
+                                let mut root_val = Zval::Ref(root);
+                                field_cell(&mut root_val, &steps[1..], &mut keys.into_iter(), fs)
+                            };
+                            self.frames[top].stack.push(Zval::Ref(cell));
+                            continue;
+                        }
                     }
                     // A property whose set visibility excludes this scope hands
                     // out a reference to a *copy* (PHP 8.4 asymmetric visibility).
@@ -3061,8 +3092,98 @@ impl<'m> Vm<'m> {
                     // A reference fetch of a lazy object's property initializes it
                     // first (PHP 8.4, fetch_ref_initializes) — a skipped/raw-set
                     // property does not — and a forwarding proxy binds the
-                    // *instance*'s cell, so the walk roots there.
-                    let lazy_root = self.field_lazy_root(base, top, &steps, &keys, false)?;
+                    // *instance*'s cell, so the walk roots there (unless the
+                    // guarded-ref-fetch exception above applies).
+                    let lazy_root = if guarded_ref_fetch {
+                        None
+                    } else {
+                        self.field_lazy_root(base, top, &steps, &keys, false)?
+                    };
+                    // `&$o->magic` consults `__get` (gh21478-proxy-get-ref-
+                    // forward, gh20875_proxy_get_no_init): the magic result
+                    // binds as a fresh cell — an uninitialized proxy dispatches
+                    // on the wrapper WITHOUT initializing. Under an ACTIVE
+                    // guard the fetch degrades to an undefined READ (warning,
+                    // detached NULL cell — nothing materializes).
+                    let makeref_magic: Option<Rc<RefCell<Zval>>> = 'makeref_magic: {
+                        let n: Box<[u8]> = match &steps[..] {
+                            [FieldStep::Prop(n)] => n.clone(),
+                            [FieldStep::PropDyn] => {
+                                let Some(k) = keys.first().cloned() else { break 'makeref_magic None };
+                                self.dyn_prop_name_value(&k)?
+                            }
+                            _ => break 'makeref_magic None,
+                        };
+                        let target = match base {
+                            FieldBase::Local(s) => self.frames[top].slots.get(s as usize).map(|v| v.deref_clone()),
+                            FieldBase::Global(s) => self.frames[0].slots.get(s as usize).map(|v| v.deref_clone()),
+                            FieldBase::Superglobal(i) => self.superglobals.get(i as usize).map(|v| v.deref_clone()),
+                            FieldBase::This => self.frames[top].this.as_ref().map(|v| v.deref_clone()),
+                        };
+                        let Some(o) = target.and_then(|v| deref_object(&v)) else { break 'makeref_magic None };
+                        let cur = self.frames[top].class;
+                        let oid = o.borrow().id;
+                        // For a forwarding wrapper the guard may be held on the
+                        // instance's handle — honor both before dispatching.
+                        let inst = deref_object(&self.proxy_view(Zval::Object(Rc::clone(&o))));
+                        let inst_guard = inst
+                            .as_ref()
+                            .is_some_and(|io| self.magic_guard.contains(&(io.borrow().id, MagicKind::Get, n.to_vec())));
+                        if !inst_guard && self.magic_applies(&o, &n, cur, MagicKind::Get, b"__get").is_some() {
+                            let gkey = (oid, MagicKind::Get, n.to_vec());
+                            let ins = self.magic_guard.insert(gkey.clone());
+                            let r = self.call_method_sync(
+                                Zval::Object(Rc::clone(&o)),
+                                b"__get",
+                                vec![Zval::Str(PhpStr::new(n.to_vec()))],
+                            );
+                            if ins {
+                                self.magic_guard.remove(&gkey);
+                            }
+                            let v = r?;
+                            break 'makeref_magic Some(Rc::new(RefCell::new(v.deref_clone())));
+                        }
+                        // `__get` guard-suppressed on a forwarding PROXY WRAPPER
+                        // with an absent slot: Zend's ptr-fetch falls back to a
+                        // READ — undefined-property warning naming the INSTANCE
+                        // class, detached NULL cell, nothing materializes. (A
+                        // plain object instead materializes with the creation
+                        // deprecation — gh20854.)
+                        let is_wrapper = {
+                            let b = o.borrow();
+                            b.lazy.is_some() && b.proxy_instance.is_some()
+                        };
+                        if is_wrapper {
+                            let cid_o = o.borrow().class_id as usize;
+                            let has_get = resolve_method_runtime(&self.classes, cid_o, b"__get").is_some();
+                            let undeclared = matches!(
+                                resolve_prop_access(&self.classes, cid_o, &n, cur),
+                                PropAccess::Dynamic
+                            );
+                            let absent_on_inst = inst
+                                .as_ref()
+                                .is_some_and(|io| !io.borrow().props.contains(n.as_ref()));
+                            let guarded = inst_guard
+                                || self.magic_guard.contains(&(oid, MagicKind::Get, n.to_vec()));
+                            if has_get && undeclared && absent_on_inst && guarded {
+                                let icid = inst
+                                    .as_ref()
+                                    .map(|io| io.borrow().class_id as usize)
+                                    .unwrap_or(cid_o);
+                                self.diags.push(Diag::Warning(format!(
+                                    "Undefined property: {}::${}",
+                                    String::from_utf8_lossy(&self.classes[icid].name),
+                                    String::from_utf8_lossy(&n),
+                                )));
+                                break 'makeref_magic Some(Rc::new(RefCell::new(Zval::Null)));
+                            }
+                        }
+                        None
+                    };
+                    if let Some(cell) = makeref_magic {
+                        self.frames[top].stack.push(Zval::Ref(cell));
+                        continue;
+                    }
                     // `&$o->undeclared` MATERIALIZES the property: on a class not
                     // allowing dynamic props that is the creation deprecation
                     // (gh20854's `&__get` returning an absent `$this->x`).
@@ -15749,9 +15870,14 @@ impl<'m> Vm<'m> {
         magic: (MagicKind, &'static [u8]),
     ) -> Result<Zval, PhpError> {
         let Some(o) = deref_object(&target) else { return Ok(target) };
-        let (uninit, oid, cid) = {
+        let (uninit, init_proxy, oid, cid) = {
             let b = o.borrow();
-            (b.lazy.is_some() && b.proxy_instance.is_none(), b.id, b.class_id as usize)
+            (
+                b.lazy.is_some() && b.proxy_instance.is_none(),
+                b.lazy.is_some() && b.proxy_instance.is_some(),
+                b.id,
+                b.class_id as usize,
+            )
         };
         if uninit {
             let hooked = !self.hook_guarded(oid, name)
@@ -15766,7 +15892,34 @@ impl<'m> Vm<'m> {
                 return Ok(target);
             }
         }
-        let fwd = self.lazy_prop_forward(target, name)?;
+        let fwd = self.lazy_prop_forward(target.clone(), name)?;
+        // An *initialized* proxy keeps its OWN magic accessors: the handler
+        // resolves on the wrapper's class (a subclass override wins,
+        // gh21478-proxy-get-override), while property PRESENCE is judged on
+        // the real instance the access forwards to. When magic applies, the
+        // dispatch happens on the wrapper — return it unforwarded.
+        if init_proxy {
+            if let Some(io) = deref_object(&fwd) {
+                let (present, accessible, inst_oid) = {
+                    let b = io.borrow();
+                    let inst_cid = b.class_id as usize;
+                    let (p, a) = match resolve_prop_access(&self.classes, inst_cid, name, scope) {
+                        PropAccess::Slot(k) => (b.props.contains(k.as_slice()), true),
+                        PropAccess::Dynamic => (b.props.contains(name), true),
+                        PropAccess::Denied { .. } => (b.props.contains(name), false),
+                    };
+                    (p, a, b.id)
+                };
+                let guarded = self.magic_guard.contains(&(oid, magic.0, name.to_vec()))
+                    || self.magic_guard.contains(&(inst_oid, magic.0, name.to_vec()));
+                if !(present && accessible)
+                    && !guarded
+                    && resolve_method_runtime(&self.classes, cid, magic.1).is_some()
+                {
+                    return Ok(target);
+                }
+            }
+        }
         // A magic guard held on the wrapper carries over to the object the
         // access forwards to: `$this->$name = v` inside the wrapper's `__set`
         // writes the (possibly freshly initialized) instance raw instead of
