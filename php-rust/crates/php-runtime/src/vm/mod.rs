@@ -2437,6 +2437,26 @@ impl<'m> Vm<'m> {
                 Op::Binary(b) => {
                     let rhs = self.frames[top].stack.pop().expect("Binary rhs");
                     let lhs = self.frames[top].stack.pop().expect("Binary lhs");
+                    // A *loose* comparison reads the whole property table, so it
+                    // initializes a lazy operand (PHP 8.4, init_trigger_compare)
+                    // and compares a proxy's real instance; `===`/`!==` compare
+                    // handles and never initialize — and neither does comparing
+                    // an object with itself (same handle short-circuits).
+                    let same_handle = match (deref_object(&lhs), deref_object(&rhs)) {
+                        (Some(a), Some(b)) => Rc::ptr_eq(&a, &b),
+                        _ => false,
+                    };
+                    let (lhs, rhs) = if !same_handle
+                        && matches!(
+                            b,
+                            BinOp::Eq | BinOp::NotEq | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Spaceship
+                        )
+                        && (self.is_lazy_value(&lhs) || self.is_lazy_value(&rhs))
+                    {
+                        (self.realize_full(&lhs)?, self.realize_full(&rhs)?)
+                    } else {
+                        (lhs, rhs)
+                    };
                     let r = apply_binop(b, &lhs, &rhs, &mut self.diags)?;
                     self.frames[top].stack.push(r);
                 }
@@ -2447,6 +2467,27 @@ impl<'m> Vm<'m> {
                 }
                 Op::Cast(k) => {
                     let a = self.frames[top].stack.pop().expect("Cast operand");
+                    // `(array)` does NOT initialize a lazy object (an
+                    // uninitialized wrapper casts to its raw — mostly empty —
+                    // view, init_trigger_array_cast), but an initialized proxy
+                    // casts its real instance: follow the forwarding chain.
+                    let a = if matches!(k, CastKind::Array) && self.is_lazy_value(&a) {
+                        let mut cur = a;
+                        for _ in 0..64 {
+                            let next = self.proxy_redirect(cur.clone());
+                            let same = match (deref_object(&cur), deref_object(&next)) {
+                                (Some(x), Some(y)) => Rc::ptr_eq(&x, &y),
+                                _ => true,
+                            };
+                            cur = next;
+                            if same {
+                                break;
+                            }
+                        }
+                        cur
+                    } else {
+                        a
+                    };
                     // `(object)` needs the object table (stdClass alloc); the rest
                     // are pure value conversions.
                     let r = if matches!(k, CastKind::Object) {
@@ -2984,14 +3025,41 @@ impl<'m> Vm<'m> {
                     }
                     // Taking a reference *to* a hooked property is indirect modification.
                     self.reject_indirect_hook(base, top, &steps)?;
+                    // A reference fetch of a lazy object's property initializes it
+                    // first (PHP 8.4, fetch_ref_initializes) — a skipped/raw-set
+                    // property does not — and a forwarding proxy binds the
+                    // *instance*'s cell, so the walk roots there.
+                    let lazy_root: Option<Zval> = match steps.first() {
+                        Some(FieldStep::Prop(n)) => {
+                            let base_val = match base {
+                                FieldBase::Local(s) => self.frames[top].slots.get(s as usize),
+                                FieldBase::Global(s) => self.frames[0].slots.get(s as usize),
+                                FieldBase::Superglobal(i) => self.superglobals.get(i as usize),
+                                FieldBase::This => self.frames[top].this.as_ref(),
+                            };
+                            match base_val.map(|v| v.deref_clone()) {
+                                Some(v) if deref_object(&v).is_some_and(|o| o.borrow().lazy.is_some()) => {
+                                    let n = n.clone();
+                                    let cur = self.frames[top].class;
+                                    Some(self.lazy_prop_access(v, &n, cur, Some(false), (MagicKind::Get, b"__get"))?)
+                                }
+                                _ => None,
+                            }
+                        }
+                        _ => None,
+                    };
                     let keys = self.pop_field_keys(top, &steps);
                     let cell = {
                         let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
-                        let base_cell = field_base_mut(&mut self.frames, &mut self.superglobals, top, base)?;
-                        if steps.is_empty() {
-                            make_cell(base_cell)
+                        if let Some(mut root) = lazy_root {
+                            field_cell(&mut root, &steps, &mut keys.into_iter(), fs)
                         } else {
-                            field_cell(base_cell, &steps, &mut keys.into_iter(), fs)
+                            let base_cell = field_base_mut(&mut self.frames, &mut self.superglobals, top, base)?;
+                            if steps.is_empty() {
+                                make_cell(base_cell)
+                            } else {
+                                field_cell(base_cell, &steps, &mut keys.into_iter(), fs)
+                            }
                         }
                     };
                     // A reference to a *typed* property keeps enforcing its type
@@ -3631,7 +3699,17 @@ impl<'m> Vm<'m> {
                         // The compiler only emits CallBuiltin for value builtins.
                         _ => return Err(undefined_builtin(&name)),
                     };
-                    let args = self.pop_keys(top, argc); // pops argc, source order
+                    let mut args = self.pop_keys(top, argc); // pops argc, source order
+                    // A whole-object exporter initializes a lazy argument first
+                    // (PHP 8.4, init_trigger_var_export); the pure builtin then
+                    // formats the realized instance.
+                    if matches!(&name[..], b"var_export" | b"print_r") {
+                        for a in &mut args {
+                            if self.is_lazy_value(a) {
+                                *a = self.realize_full(a)?;
+                            }
+                        }
+                    }
                     // `count($obj)`/`sizeof($obj)` on a Countable dispatches its
                     // user `count()` method (step 56); the builtin only handles
                     // arrays. A non-Countable object still TypeErrors in the
@@ -4200,10 +4278,10 @@ impl<'m> Vm<'m> {
                     let obj = self.frames[top].stack.pop().expect("PropGet object");
                     let cur = self.frames[top].class;
                     let target = obj.deref_clone();
-                    // A read of a lazy object initializes it first (PHP 8.4); an
-                    // initialized proxy then forwards the read to its real instance
-                    // (transitively — the instance may have been reset lazy).
-                    let target = self.lazy_prop_forward(target, &name)?;
+                    // A read of a lazy object initializes it first (PHP 8.4) —
+                    // unless a hook/`__get` serves it; an initialized proxy then
+                    // forwards the read to its real instance (transitively).
+                    let target = self.lazy_prop_access(target, &name, cur, Some(false), (MagicKind::Get, b"__get"))?;
                     // Storage slot to read (the plain name for a dynamic/non-object
                     // target; a mangled key for an accessible private — set below).
                     let mut key = name.to_vec();
@@ -4247,8 +4325,10 @@ impl<'m> Vm<'m> {
                     // visibility error (the read context of `empty()` / `??`).
                     let obj = self.frames[top].stack.pop().expect("PropGetSilent object");
                     let cur = self.frames[top].class;
-                    // An initialized proxy forwards the (silent) read to its instance.
-                    let target = self.proxy_redirect(obj.deref_clone());
+                    // A silent read (`??`/`empty`) still initializes a lazy object
+                    // (PHP 8.4, fetch_coalesce_initializes) — unless a hook/`__get`
+                    // serves it; an initialized proxy forwards to its instance.
+                    let target = self.lazy_prop_access(obj.deref_clone(), &name, cur, Some(false), (MagicKind::Get, b"__get"))?;
                     let mut key = name.to_vec();
                     if let Zval::Object(o) = &target {
                         if let Some((defc, midx, oid)) =
@@ -4270,7 +4350,7 @@ impl<'m> Vm<'m> {
                     let name = convert::to_zstr(&nameval, &mut self.diags).as_bytes().to_vec();
                     let obj = self.frames[top].stack.pop().expect("PropGetDynamic object");
                     let cur = self.frames[top].class;
-                    let target = obj.deref_clone();
+                    let target = self.lazy_prop_access(obj.deref_clone(), &name, cur, Some(false), (MagicKind::Get, b"__get"))?;
                     let mut key = name.to_vec();
                     if let Zval::Object(o) = &target {
                         let (oid, cid) = { let b = o.borrow(); (b.id, b.class_id as usize) };
@@ -4301,7 +4381,7 @@ impl<'m> Vm<'m> {
                     let name = convert::to_zstr(&nameval, &mut self.diags).as_bytes().to_vec();
                     let obj = self.frames[top].stack.pop().expect("PropGetDynamicSilent object");
                     let cur = self.frames[top].class;
-                    let target = obj.deref_clone();
+                    let target = self.lazy_prop_access(obj.deref_clone(), &name, cur, Some(false), (MagicKind::Get, b"__get"))?;
                     let mut key = name.to_vec();
                     if let Zval::Object(o) = &target {
                         if let Some((defc, midx, oid)) =
@@ -4321,11 +4401,12 @@ impl<'m> Vm<'m> {
                     let obj = self.frames[top].stack.pop().expect("PropSet object");
                     let cur = self.frames[top].class;
                     let target = obj.deref_clone();
-                    // A write to a lazy object initializes it first (PHP 8.4); a no-op
-                    // during the object's own construction (it is no longer lazy then).
+                    // A write to a lazy object initializes it first (PHP 8.4) —
+                    // unless a set hook/`__set` serves it; a no-op during the
+                    // object's own construction (it is no longer lazy then).
                     // Proxy forwarding is transitive (a reset instance re-triggers).
                     let target = if !self.frames[top].init_props {
-                        self.lazy_prop_forward(target, &name)?
+                        self.lazy_prop_access(target, &name, cur, Some(true), (MagicKind::Set, b"__set"))?
                     } else {
                         target
                     };
@@ -4458,6 +4539,9 @@ impl<'m> Vm<'m> {
                     let rhs = self.frames[top].stack.pop().expect("PropOpSet rhs");
                     let obj = self.frames[top].stack.pop().expect("PropOpSet object");
                     let cur = self.frames[top].class;
+                    // A compound read-modify-write initializes a lazy object (PHP
+                    // 8.4, fetch_op_initializes) — unless a hook serves it.
+                    let obj = self.lazy_prop_access(obj.deref_clone(), &name, cur, None, (MagicKind::Get, b"__get"))?;
                     let key = match object_class_id(&obj) {
                         Some(ocid) => {
                             check_prop_access(&self.classes, cur, ocid, &name)?;
@@ -4499,6 +4583,8 @@ impl<'m> Vm<'m> {
                 Op::PropIncDec { name, inc, pre } => {
                     let obj = self.frames[top].stack.pop().expect("PropIncDec object");
                     let cur = self.frames[top].class;
+                    // `++`/`--` initializes a lazy object like a compound assign.
+                    let obj = self.lazy_prop_access(obj.deref_clone(), &name, cur, None, (MagicKind::Get, b"__get"))?;
                     let key = match object_class_id(&obj) {
                         Some(ocid) => {
                             check_prop_access(&self.classes, cur, ocid, &name)?;
@@ -4549,7 +4635,7 @@ impl<'m> Vm<'m> {
                         convert::to_zstr_cast(&name_v, &mut self.diags).as_bytes().to_vec().into();
                     let obj = self.frames[top].stack.pop().expect("PropIssetDyn object");
                     let cur = self.frames[top].class;
-                    let target = obj.deref_clone();
+                    let target = self.lazy_prop_access(obj.deref_clone(), &name, cur, Some(false), (MagicKind::Isset, b"__isset"))?;
                     let set = if let Zval::Object(o) = &target {
                         let (oid, cid) = { let b = o.borrow(); (b.id, b.class_id as usize) };
                         if !self.hook_guarded(oid, &name) {
@@ -4581,7 +4667,9 @@ impl<'m> Vm<'m> {
                 Op::PropIsset { name } => {
                     let obj = self.frames[top].stack.pop().expect("PropIsset object");
                     let cur = self.frames[top].class;
-                    let target = obj.deref_clone();
+                    // `isset()` initializes a lazy object (PHP 8.4,
+                    // isset_initializes) — unless a get hook/`__isset` serves it.
+                    let target = self.lazy_prop_access(obj.deref_clone(), &name, cur, Some(false), (MagicKind::Isset, b"__isset"))?;
                     let set = if let Zval::Object(o) = &target {
                         // `isset($o->hooked)` runs the `get` hook and tests its result
                         // for being non-null (step 50). Hooks precede `__isset`.
@@ -4618,7 +4706,10 @@ impl<'m> Vm<'m> {
                 Op::PropUnset { name } => {
                     let obj = self.frames[top].stack.pop().expect("PropUnset object");
                     let cur = self.frames[top].class;
-                    let target = obj.deref_clone();
+                    // `unset()` initializes a lazy object (PHP 8.4,
+                    // unset_undefined_initializes) — unless `__unset`/a hook error
+                    // serves it (hooked props fatal below without initializing).
+                    let target = self.lazy_prop_access(obj.deref_clone(), &name, cur, None, (MagicKind::Unset, b"__unset"))?;
                     let mut key = name.to_vec();
                     if let Zval::Object(o) = &target {
                         // An enum case property is readonly — it cannot be unset.
@@ -6074,7 +6165,7 @@ impl<'m> Vm<'m> {
         // already in progress on the real instance is not double-invoked
         // (gh21478: `$proxy->x` inside the real instance's `__set`). The walker
         // never runs during `init_props`, so no `init_props` guard is needed.
-        let target = self.lazy_prop_forward(target, name)?;
+        let target = self.lazy_prop_access(target, name, cur, Some(true), (MagicKind::Set, b"__set"))?;
         let Some(o) = deref_object(&target) else {
             // The walker only defers object leaves, so a non-object here is
             // unreachable in practice; drop the write rather than panic.
@@ -11435,6 +11526,12 @@ impl<'m> Vm<'m> {
                     return false;
                 }
                 seen.push(addr);
+                // A lazy object must go through the VM-side prepare pass — it
+                // initializes before serialization (PHP 8.4) — even when no
+                // serialize hook exists anywhere in the graph.
+                if orc.borrow().lazy.is_some() {
+                    return true;
+                }
                 if let Some(cid) = object_class_id(v) {
                     if resolve_method_runtime(&self.classes, cid, b"__serialize").is_some()
                         || resolve_method_runtime(&self.classes, cid, b"__sleep").is_some()
@@ -14786,6 +14883,50 @@ impl<'m> Vm<'m> {
         Ok(cur)
     }
 
+    /// Whether `v` is (a reference to) a lazy object — uninitialized, or a
+    /// forwarding proxy — i.e. a value whole-object consumers must
+    /// [`Self::realize_full`] before reading its property table.
+    fn is_lazy_value(&self, v: &Zval) -> bool {
+        deref_object(v).is_some_and(|o| o.borrow().lazy.is_some())
+    }
+
+    /// [`Self::lazy_prop_forward`] gated on *how* the access will be served:
+    /// when the property dispatches a hook or a magic accessor, the wrapper is
+    /// NOT initialized (PHP's `fetch_*_may_not_initialize` family — the hook /
+    /// magic body's own accesses trigger instead). `hook_write` selects the
+    /// hook side that intercepts this access kind (`None` checks both sides —
+    /// compound ops and unset). `magic` is the access kind's magic interceptor
+    /// (`__get`/`__set`/`__isset`/`__unset`).
+    fn lazy_prop_access(
+        &mut self,
+        target: Zval,
+        name: &[u8],
+        scope: Option<ClassId>,
+        hook_write: Option<bool>,
+        magic: (MagicKind, &'static [u8]),
+    ) -> Result<Zval, PhpError> {
+        if let Some(o) = deref_object(&target) {
+            let (uninit, oid, cid) = {
+                let b = o.borrow();
+                (b.lazy.is_some() && b.proxy_instance.is_none(), b.id, b.class_id as usize)
+            };
+            if uninit {
+                let hooked = !self.hook_guarded(oid, name)
+                    && match hook_write {
+                        Some(w) => self.prop_hook(cid, name, w).is_some(),
+                        None => {
+                            self.prop_hook(cid, name, false).is_some()
+                                || self.prop_hook(cid, name, true).is_some()
+                        }
+                    };
+                if hooked || self.magic_applies(&o, name, scope, magic.0, magic.1).is_some() {
+                    return Ok(target);
+                }
+            }
+        }
+        self.lazy_prop_forward(target, name)
+    }
+
     /// Trigger lazy initialization before an access to property `name` when `v`
     /// is an uninitialized lazy object. Cheap for the common case: a plain
     /// `Option` check, no work for non-lazy objects. A property that has been
@@ -15655,9 +15796,15 @@ impl<'m> Vm<'m> {
             return Ok(None);
         }
         // A write fetch of a lazy object's property initializes it first (PHP
-        // 8.4); an initialized proxy forwards to its real instance
-        // (transitively — the instance may have been reset lazy).
-        let target = self.lazy_prop_forward(target, &name)?;
+        // 8.4) — unless a hook serves it; an initialized proxy forwards to its
+        // real instance (transitively — the instance may have been reset lazy).
+        let target = self.lazy_prop_access(
+            target,
+            &name,
+            self.frames[top].class,
+            Some(false),
+            (MagicKind::Get, b"__get"),
+        )?;
         let Some(o) = deref_object(&target) else { return Ok(None) };
         let (oid, cid) = {
             let b = o.borrow();
