@@ -1,175 +1,175 @@
 # php-rust
 
-> **PHP, reimplementato da zero in Rust.** Un runtime PHP 8.5 moderno, memory-safe e
-> predisposto all'asincronia — guidato dal comportamento osservabile, non dall'architettura
-> interna dello Zend Engine.
+*Read this in [Italiano](italiano.md).*
+
+> **PHP, reimplemented from scratch in Rust.** A modern, memory-safe, async-ready
+> PHP 8.5 runtime — driven by observable behavior, not by the internal architecture
+> of the Zend Engine.
 
 ```bash
-phpr script.php        # un drop-in di `php`, ma è Rust fino in fondo
+phpr script.php        # a drop-in for `php`, but it's Rust all the way down
 ```
 
 ---
 
-## 💡 Idea
+## 💡 The idea
 
-Lo Zend Engine — il cuore di PHP — è ~280.000 righe di C accumulate dal 1999. Porta con sé
-gestione manuale della memoria, un garbage collector custom, un layer di thread-safety (TSRM),
-una VM generata da macro e un JIT contorto. È solido ma fragile: intere classi di vulnerabilità
-(*use-after-free*, *buffer overflow*) vivono lì per costruzione.
+The Zend Engine — the heart of PHP — is ~280,000 lines of C that have piled up since 1999. It
+carries manual memory management, a custom garbage collector, a thread-safety layer (TSRM), a
+macro-generated VM, and a convoluted JIT. It's battle-tested but brittle: entire classes of
+vulnerabilities (*use-after-free*, *buffer overflow*) live there by construction.
 
-L'intuizione del progetto è ribaltare il problema:
+The insight behind the project is to flip the problem on its head:
 
-> **Il contratto da preservare non è il *design* di Zend, ma l'*output osservabile* di PHP.**
+> **The contract worth preserving isn't Zend's *design*, but PHP's *observable output*.**
 
-E quell'output ha già un oracolo perfetto: i **~21.500 test ufficiali `.phpt`** del sorgente PHP.
-Qualunque runtime che produce lo stesso identico output *è* PHP. Questo trasforma il lavoro da
-*«traduzione del C»* a *«reimplementazione guidata dalla specifica»*, dove il C si legge solo
-per inchiodare la semantica nei casi ambigui.
+And that output already has a perfect oracle: the **~21,500 official `.phpt` tests** shipped with
+the PHP source. Any runtime that produces the exact same output *is* PHP. This turns the job from
+*"translating C"* into *"spec-driven reimplementation"*, where you only read the C to pin down the
+semantics in the ambiguous cases.
 
-Il risultato è un engine in cui Rust fa il lavoro pesante a costo zero: l'**ownership** sostituisce
-`zend_alloc`, `Rc`+copy-on-write sostituiscono il refcounting manuale, `Send`/`Sync` rendono
-il multi-threading una proprietà del tipo invece di un sottosistema (TSRM), e un processo
-residente rende l'engine async-ready per costruzione.
+The result is an engine where Rust does the heavy lifting at zero cost: **ownership** replaces
+`zend_alloc`, `Rc`+copy-on-write replaces manual refcounting, `Send`/`Sync` make multi-threading a
+property of the type instead of a subsystem (TSRM), and a resident process makes the engine
+async-ready by construction.
 
 ---
 
-## 🎯 Obiettivo
+## 🎯 The goal
 
-Un runtime PHP che sia, nell'ordine:
+A PHP runtime that is, in order:
 
-1. **Fedele** — bug-for-bug compatibile con PHP 8.5 sul corpus ufficiale `.phpt` (incluse le
-   idiosincrasie del type juggling, i warning legacy, lo stack trace byte-identico).
-2. **Sicuro** — niente segfault a livello di core; le classi di bug della memoria del C eliminate
-   dal type system di Rust.
-3. **Moderno** — distribuibile come **singolo binario** (l'effetto Go/Deno), con web server
-   nativo integrato e una base **nativamente asincrona e multi-thread** — superando il limite
-   storico *shared-nothing / single-threaded* di PHP.
+1. **Faithful** — bug-for-bug compatible with PHP 8.5 on the official `.phpt` corpus (including the
+   quirks of type juggling, legacy warnings, and byte-identical stack traces).
+2. **Safe** — no segfaults at the core level; the C memory-bug classes eliminated by Rust's type
+   system.
+3. **Modern** — shippable as a **single binary** (the Go/Deno effect), with a built-in native web
+   server and a **natively async, multi-threaded** foundation — moving past PHP's historical
+   *shared-nothing / single-threaded* limitation.
 
-Il banco di prova non è un microbenchmark: è **far girare Composer** e poi far rispondere una
-rotta *Hello World* di **Laravel/Symfony**. Quei traguardi stressano OOP, autoloading e
-Reflection più di qualsiasi test sintetico.
+The real test bench isn't a microbenchmark: it's **running Composer** and then serving a *Hello
+World* route on **Laravel/Symfony**. Those milestones stress OOP, autoloading, and Reflection far
+more than any synthetic test.
 
 ---
 
 ## 🗺️ Roadmap
 
-| Fase | Traguardo | Stato |
+| Phase | Milestone | Status |
 |---|---|---|
-| **1. Nucleo semantico** | Type juggling fedele all'oracle (`zend_operators.c`), `==`/`===`, coercizioni | ✅ Fatto |
-| **2. Linguaggio completo** | Espressioni, control-flow, funzioni, array, reference, closure | ✅ Fatto |
-| **3. OOP** | Classi, ereditarietà, visibility, `static`/LSB, magic methods, enum, trait, interfacce | ✅ Fatto |
-| **4. Eccezioni & errori** | `try/catch/finally`, engine error catchabili, stack trace, line tracking | ✅ Fatto |
-| **5. VM a bytecode** | Generatori, `yield from`, Fiber su frame espliciti — **niente `unsafe`, niente coroutine stackful** | ✅ Fatto |
-| **6. Memoria** | Cycle collector per i riferimenti circolari (l'altro grande «drago») | ✅ Fatto |
-| **7. Libreria standard** | ~500 builtin: array/string/math/json/preg/mbstring/hash/file/stream/date… | ✅ Sostanziale (coda lunga in corso) |
-| **8. Composer reale** | `composer require monolog/monolog` **end-to-end**: risoluzione, download HTTPS (rustls), unzip, autoload — e il pacchetto **gira** | ✅ Fatto |
-| **8b. Ecosistema reale** | **PHPUnit 13.2 verde byte-identico**; Doctrine **DBAL 3769 test / 0 err / 0 fail** su PDO+sqlite nativi; **ORM 3484 test / 12 err**; Monolog, collections, inflector, instantiator… | ✅/🔄 In corso |
-| **9. Framework bootstrap** | *Hello World* su Laravel / Symfony | ⏳ Prossimo |
-| **10. Async & single-binary** | Event loop Tokio + web server Axum residente, distribuzione standalone | ⏳ Futuro |
-| **11. JIT (Tier 3)** | Bytecode pulito → Cranelift/LLVM per il codice macchina al volo | 🔭 Visione |
+| **1. Semantic core** | Type juggling faithful to the oracle (`zend_operators.c`), `==`/`===`, coercions | ✅ Done |
+| **2. Full language** | Expressions, control flow, functions, arrays, references, closures | ✅ Done |
+| **3. OOP** | Classes, inheritance, visibility, `static`/LSB, magic methods, enums, traits, interfaces | ✅ Done |
+| **4. Exceptions & errors** | `try/catch/finally`, catchable engine errors, stack traces, line tracking | ✅ Done |
+| **5. Bytecode VM** | Generators, `yield from`, Fibers on explicit frames — **no `unsafe`, no stackful coroutines** | ✅ Done |
+| **6. Memory** | Cycle collector for circular references (the other big "dragon") | ✅ Done |
+| **7. Standard library** | ~500 builtins: array/string/math/json/preg/mbstring/hash/file/stream/date… | ✅ Substantial (long tail in progress) |
+| **8. Real Composer** | `composer require monolog/monolog` **end-to-end**: resolution, HTTPS download (rustls), unzip, autoload — and the package **runs** | ✅ Done |
+| **8b. Real ecosystem** | **PHPUnit 13.2 green, byte-identical**; Doctrine **DBAL 3769 tests / 0 err / 0 fail** on native PDO+sqlite; **ORM 3484 tests / 12 err**; Monolog, collections, inflector, instantiator… | ✅/🔄 In progress |
+| **9. Framework bootstrap** | *Hello World* on Laravel / Symfony | ⏳ Next |
+| **10. Async & single-binary** | Tokio event loop + resident Axum web server, standalone distribution | ⏳ Future |
+| **11. JIT (Tier 3)** | Clean bytecode → Cranelift/LLVM for on-the-fly machine code | 🔭 Vision |
 
 ---
 
-## 🏗️ Architettura
+## 🏗️ Architecture
 
-Un solo motore di produzione: una **VM a bytecode**. Il sorgente passa per
-`parser (mago) → AST → HIR → bytecode → VM dispatch loop`. (Il progetto è nato con un
-tree-walker, poi rimosso una volta che la VM ha raggiunto la piena parità: vedi
+A single production engine: a **bytecode VM**. Source flows through
+`parser (mago) → AST → HIR → bytecode → VM dispatch loop`. (The project started with a
+tree-walker, later removed once the VM reached full parity: see
 [HISTORY.md](HISTORY.md).)
 
 ```
 php-rust/crates/
-  php-types      Zval / PhpStr / PhpArray / Object + operatori (l'anima di PHP:
-                 type juggling full-port da zend_operators.c). Zero dipendenze interne.
-  php-runtime    HIR + lowering da `mago`, e la VM a bytecode:
+  php-types      Zval / PhpStr / PhpArray / Object + operators (the soul of PHP:
+                 type juggling, full-port from zend_operators.c). Zero internal dependencies.
+  php-runtime    HIR + lowering from `mago`, and the bytecode VM:
                  compile.rs (HIR→bytecode) + vm/{mod,exceptions,coroutines,arrays,oop,calls}.rs
-  php-builtins   registry di ~380 builtin puri (var_dump, array_*, sprintf, json_*, preg_*,
-                 mb_*, hash/encoding, file/stream, …) + ~120 host builtin VM-side
+  php-builtins   registry of ~380 pure builtins (var_dump, array_*, sprintf, json_*, preg_*,
+                 mb_*, hash/encoding, file/stream, …) + ~120 host builtins VM-side
                  (reflection, callable, PDO/sqlite, dom/xml, curl, proc_open, …)
-  php-cli        binario `phpr` — drop-in di `php`, stream CLI-faithful + exit code fedele
-  php-server     web server nativo (Axum + Tokio) — la testa di ponte verso l'async
-  phpt-runner    esegue i `.phpt` ufficiali con capability-scan e diff unificato vs oracle
-diary/           diario metodologico: 00-reconnaissance … 99-conclusions + metriche
+  php-cli        the `phpr` binary — drop-in for `php`, CLI-faithful streams + faithful exit code
+  php-server     native web server (Axum + Tokio) — the bridgehead toward async
+  phpt-runner    runs the official `.phpt` tests with capability scan and unified diff vs oracle
+diary/           methodological journal: 00-reconnaissance … 99-conclusions + metrics
 ```
 
-**Perché Rust collassa Zend** — il payoff strutturale, in cifre:
+**Why Rust collapses Zend** — the structural payoff, in numbers:
 
-| Sottosistema Zend | LOC C | Sostituto Rust | LOC Rust |
+| Zend subsystem | C LOC | Rust replacement | Rust LOC |
 |---|---:|---|---:|
-| VM generata + `zend_execute.c` | ~146.000 | VM a bytecode (motore unico) | dentro `php-runtime` |
-| `zend_compile.c` (AST→opcodes) | ~12.400 | lowering AST→HIR + compile.rs | dentro `php-runtime` |
-| lexer re2c + parser Bison + AST | ~25.000 | dipendenza `mago` + bridge | ~500 |
-| `zend_alloc` / `zend_gc` / TSRM / opcache / win32 | ~88.000 | ownership, `Rc`+COW, `Send`/`Sync` + cycle collector | ~1.000 |
-| `zend_operators.c` (type juggling) | ~3.900 | full-port fedele | ~1.500 |
+| Generated VM + `zend_execute.c` | ~146,000 | bytecode VM (single engine) | inside `php-runtime` |
+| `zend_compile.c` (AST→opcodes) | ~12,400 | AST→HIR lowering + compile.rs | inside `php-runtime` |
+| re2c lexer + Bison parser + AST | ~25,000 | `mago` dependency + bridge | ~500 |
+| `zend_alloc` / `zend_gc` / TSRM / opcache / win32 | ~88,000 | ownership, `Rc`+COW, `Send`/`Sync` + cycle collector | ~1,000 |
+| `zend_operators.c` (type juggling) | ~3,900 | faithful full-port | ~1,500 |
 
-**~280K LOC di C core (senza contare le estensioni) → ~68K LOC di Rust totali oggi** — engine,
-stdlib, PDO/sqlite, dom/xml, TLS e tooling inclusi. Il rapporto ~4:1 regge anche a
-funzionalità cresciute di un ordine di grandezza rispetto alle prime stime.
-
----
-
-## 📍 Dove siamo
-
-Il linguaggio **core è completo e fedele**: tutto il control-flow, le funzioni, gli array, il
-sistema di reference, le closure, l'**OOP completo** (classi, ereditarietà, visibility, `static`
-+ late-static-binding, magic methods, enum, trait, Reflection framework-grade), le **eccezioni**
-(incluso stack trace byte-identico e gli engine error catchabili), i **generatori** e i **Fiber**
-— questi ultimi implementati parcheggiando i frame su uno stack esplicito della VM, **senza
-`unsafe` e senza coroutine stackful**. Del PHP moderno ci sono anche i pezzi difficili:
-**property hooks** e **lazy objects** (ghost/proxy) di PHP 8.4, le first-class callable,
-`strict_types` risolto per-unit dal call-site.
-
-Ma il salto vero è che **l'ecosistema reale gira**:
-
-- **Composer** installa pacchetti end-to-end: risoluzione, download **HTTPS nativo**
-  (ureq + rustls), unzip nativa, dump dell'autoloader — e il pacchetto installato **esegue**.
-- **PHPUnit 13.2** boota e produce output **byte-identico** all'oracle.
-- **Doctrine DBAL: 3769 test, 0 errori, 0 failure** — su un'implementazione di
-  **PDO / pdo_sqlite / ext-sqlite3 nativa in Rust** (rusqlite bundled, semantiche
-  SQLSTATE/errmode/metadata verificate una a una contro l'oracle).
-- **Doctrine ORM: 3484 test, 12 errori / 22 failure** (e in discesa) — hydration,
-  UnitOfWork, mapping XML compresi. Collections, inflector, lexer, event-manager,
-  instantiator: **verdi**.
-- Estensioni modellate senza C: `pdo`, `pdo_sqlite`, `sqlite3`, `dom`, `libxml`,
-  **`simplexml`** (sul DOM Rust), `curl` (easy-API su ureq), `openssl`/TLS (rustls),
-  `zip`, `mbstring`, `pcre` (3 engine), `hash`, `json`, `pcntl`, `posix`, `ctype`.
-
-Due dei tre «draghi» storici di un porting PHP sono già stati domati:
-
-- 🐉 **Riferimenti circolari** → un **cycle collector** stile Zend (algoritmo *possible-roots*),
-  con sweep O(candidati): un test patologico da 87.380 oggetti ciclici è passato da ~11s a ~0,25s.
-- 🐉 **Bug-for-bug compatibility** → l'intera strategia è ancorata al corpus `.phpt` e alle
-  suite dei framework reali, l'unico vero scudo contro le regressioni.
-
-Il terzo drago — l'**ecosistema di estensioni C (PECL)** — è aggredito per riscrittura nativa
-mirata (PDO/sqlite, dom/simplexml e curl sono già caduti così); il layer FFI di compatibilità
-resta l'opzione di lungo termine per la coda.
-
-**Fedeltà** (a HEAD `e0b5080`, 2026-07-07): differential type-juggling vs PHP reale a
-**0 mismatch** (37.835 casi — è il differential degli *operatori*, metrica distinta dal corpus
-`.phpt`); 20 suite di crate Rust verdi; sul corpus `Zend/tests` ufficiale **2.138 phpt passano**
-(58% dei runnable, in crescita a ogni sessione, con gate «zero pass→fail» su ogni commit);
-~650 commit di storia tracciata sessione per sessione.
-
-> Lo storico dettagliato dei ~70 step di costruzione è in **[HISTORY.md](HISTORY.md)**; il diario
-> metodologico replicabile è in **[diary/](diary/)**.
+**~280K LOC of core C (extensions not counted) → ~68K LOC of total Rust today** — engine, stdlib,
+PDO/sqlite, dom/xml, TLS, and tooling included. The ~4:1 ratio holds even as functionality has
+grown by an order of magnitude over the first estimates.
 
 ---
 
-## 🚀 Prossimi passi
+## 📍 Where we are
 
-1. **Chiudere gli ultimi costrutti di linguaggio** — il grosso del bucket
-   «compile-unsupported» è già rientrato (`--run-skipif`, named/spread args dinamici,
-   variable variables, `C::{$expr}`, fatal compile-time fedeli: corpus 2.071→2.138); il
-   prossimo blocco è **by-ref property hooks** (`&get`, PHP 8.4) e la coda residua.
-2. **Doctrine ORM a zero** — gli ultimi 12 errori sono triagiati (XSD `schemaValidate`,
-   typed-prop sui proxy lazy, singleton); il grosso del lavoro è fatto.
-3. **Framework bootstrap** — *Hello World* su Laravel/Symfony: lo stress-test definitivo per
-   autoloading e Reflection, ora a portata visto che PHPUnit e Doctrine già girano.
-4. **Robustezza** — convertire gli `unwrap`/`expect` raggiungibili da input utente in errori VM
-   tipizzati + fuzzing della pipeline `lower/compile`, per una garanzia *no-panic*.
-5. **Salto async** — integrare un event loop **Tokio** e consolidare `php-server` (Axum) in un
-   runtime residente, verso un PHP nativamente concorrente e un **singolo binario** distribuibile.
+The **core language is complete and faithful**: all of control flow, functions, arrays, the
+reference system, closures, **full OOP** (classes, inheritance, visibility, `static` + late static
+binding, magic methods, enums, traits, framework-grade Reflection), **exceptions** (including
+byte-identical stack traces and catchable engine errors), **generators** and **Fibers** — the
+latter implemented by parking frames on an explicit VM stack, **with no `unsafe` and no stackful
+coroutines**. The hard parts of modern PHP are here too: PHP 8.4 **property hooks** and **lazy
+objects** (ghost/proxy), first-class callables, `strict_types` resolved per-unit from the call site.
+
+But the real leap is that **the real ecosystem runs**:
+
+- **Composer** installs packages end-to-end: resolution, **native HTTPS** download
+  (ureq + rustls), native unzip, autoloader dump — and the installed package **executes**.
+- **PHPUnit 13.2** boots and produces output **byte-identical** to the oracle.
+- **Doctrine DBAL: 3769 tests, 0 errors, 0 failures** — on a **native Rust implementation of
+  PDO / pdo_sqlite / ext-sqlite3** (bundled rusqlite, with SQLSTATE/errmode/metadata semantics
+  verified one by one against the oracle).
+- **Doctrine ORM: 3484 tests, 12 errors / 22 failures** (and falling) — hydration, UnitOfWork,
+  XML mapping included. Collections, inflector, lexer, event-manager, instantiator: **green**.
+- Extensions modeled without C: `pdo`, `pdo_sqlite`, `sqlite3`, `dom`, `libxml`,
+  **`simplexml`** (on the Rust DOM), `curl` (easy-API on ureq), `openssl`/TLS (rustls),
+  `zip`, `mbstring`, `pcre` (3 engines), `hash`, `json`, `pcntl`, `posix`, `ctype`.
+
+Two of the three historical "dragons" of a PHP port have already been tamed:
+
+- 🐉 **Circular references** → a Zend-style **cycle collector** (*possible-roots* algorithm),
+  with O(candidates) sweep: a pathological test of 87,380 cyclic objects went from ~11s to ~0.25s.
+- 🐉 **Bug-for-bug compatibility** → the entire strategy is anchored to the `.phpt` corpus and the
+  real framework suites, the only real shield against regressions.
+
+The third dragon — the **C extension ecosystem (PECL)** — is being tackled by targeted native
+rewrites (PDO/sqlite, dom/simplexml, and curl have already fallen that way); a compatibility FFI
+layer remains the long-term option for the tail.
+
+**Fidelity** (at HEAD `e0b5080`, 2026-07-07): differential type-juggling vs real PHP at
+**0 mismatches** (37,835 cases — this is the *operator* differential, a metric distinct from the
+`.phpt` corpus); 20 green Rust crate suites; on the official `Zend/tests` corpus **2,138 phpt pass**
+(58% of the runnable ones, growing every session, with a "zero pass→fail" gate on every commit);
+~650 commits of history tracked session by session.
+
+> The detailed history of the ~70 build steps lives in **[HISTORY.md](HISTORY.md)**; the
+> replicable methodological journal is in **[diary/](diary/)**.
+
+---
+
+## 🚀 Next steps
+
+1. **Close the last language constructs** — the bulk of the "compile-unsupported" bucket is already
+   back in (`--run-skipif`, dynamic named/spread args, variable variables, `C::{$expr}`, faithful
+   compile-time fatals: corpus 2,071→2,138); the next block is **by-ref property hooks**
+   (`&get`, PHP 8.4) and the remaining tail.
+2. **Doctrine ORM to zero** — the last 12 errors are triaged (XSD `schemaValidate`, typed props on
+   lazy proxies, singletons); the bulk of the work is done.
+3. **Framework bootstrap** — *Hello World* on Laravel/Symfony: the ultimate stress test for
+   autoloading and Reflection, now within reach given that PHPUnit and Doctrine already run.
+4. **Robustness** — convert user-input-reachable `unwrap`/`expect` into typed VM errors + fuzz the
+   `lower/compile` pipeline, for a *no-panic* guarantee.
+5. **The async leap** — integrate a **Tokio** event loop and consolidate `php-server` (Axum) into a
+   resident runtime, toward a natively concurrent PHP and a shippable **single binary**.
 
 ---
 
@@ -177,29 +177,29 @@ resta l'opzione di lungo termine per la coda.
 
 ```bash
 cd php-rust
-cargo run -p php-cli -- script.php       # esegui uno script con `phpr`
-cargo test                               # unit + integration test
+cargo run -p php-cli -- script.php       # run a script with `phpr`
+cargo test                               # unit + integration tests
 
-# Differential vs oracle (richiede un binario php; si auto-salta se assente):
+# Differential vs oracle (requires a php binary; auto-skips if absent):
 PHP_ORACLE=/path/to/php cargo test -p php-types --test differential
 
-# Esegui il corpus ufficiale .phpt attraverso la VM:
+# Run the official .phpt corpus through the VM:
 cargo run -p phpt-runner -- /path/to/php-src/tests /path/to/php-src/Zend/tests
-cargo run -p phpt-runner -- --isolate --list-fails <path>   # un test = un sotto-processo, con diff
+cargo run -p phpt-runner -- --isolate --list-fails <path>   # one test = one sub-process, with diff
 ```
 
-Diagnostica: `PHP_RUST_TRACE=hir|body|exec|all phpr script.php` mostra su **stderr** l'HIR
-abbassato e/o la traccia d'esecuzione, senza inquinare lo stdout confrontato con l'oracolo.
+Diagnostics: `PHP_RUST_TRACE=hir|body|exec|all phpr script.php` prints the lowered HIR and/or the
+execution trace to **stderr**, without polluting the stdout compared against the oracle.
 
 ---
 
-## 🤝 Contribuire
+## 🤝 Contributing
 
-L'idea *«riscrivere PHP in Rust per renderlo asincrono e safe»* è un magnete per la community Rust.
-Il modo migliore di contribuire una volta presa confidenza: prendere un builtin mancante o un
-gruppo di `.phpt` che falliscono (`phpt-runner --list-fails`), riprodurli contro l'oracolo, e
-chiudere il gap restando byte-identici. La regola d'oro del progetto: **l'oracolo ha sempre ragione.**
+The idea of *"rewriting PHP in Rust to make it async and safe"* is a magnet for the Rust community.
+The best way to contribute once you've found your footing: pick a missing builtin or a group of
+failing `.phpt` tests (`phpt-runner --list-fails`), reproduce them against the oracle, and close
+the gap while staying byte-identical. The project's golden rule: **the oracle is always right.**
 
-## 📄 Licenza
+## 📄 License
 
 MIT.
