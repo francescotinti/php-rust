@@ -8755,6 +8755,11 @@ impl<'m> Vm<'m> {
     /// `TypeError`, matching PHP 8.5 (eval returns `false` here, so VM ≥ eval). No
     /// argument uses the current class context.
     fn ho_get_parent_class(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        // Generator / Closure are valid engine classes with no parent (→ false),
+        // not the "invalid class name" TypeError class_arg_to_id would raise.
+        if args.first().and_then(Self::engine_special_class_name).is_some() {
+            return Ok(Zval::Bool(false));
+        }
         let top = self.frames.len() - 1;
         let cid: Option<ClassId> = match args.into_iter().next() {
             Some(a) => Some(self.class_arg_to_id(a.deref_clone(), "get_parent_class")?),
@@ -8794,11 +8799,39 @@ impl<'m> Vm<'m> {
         }
     }
 
+    /// The name of the special engine class an argument denotes, if any:
+    /// `Generator` / `Closure` are modelled as bare zvals with no `ClassId`, so
+    /// the class-registry lookups (`class_parents` / `class_implements`) miss them
+    /// — yet `class_exists` reports them, so these must answer consistently. The
+    /// argument is either the class-name string or a live value of that kind.
+    fn engine_special_class_name(v: &Zval) -> Option<&'static str> {
+        match v {
+            Zval::Generator(_) => Some("Generator"),
+            Zval::Closure(_) => Some("Closure"),
+            Zval::Str(s) => {
+                let n = s.as_bytes();
+                let n = n.strip_prefix(b"\\").unwrap_or(n);
+                if n.eq_ignore_ascii_case(b"Generator") {
+                    Some("Generator")
+                } else if n.eq_ignore_ascii_case(b"Closure") {
+                    Some("Closure")
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
     /// `class_parents($object_or_class)` — the ancestor classes from the immediate
     /// parent upward, as a `name => name` array (insertion order = nearest first);
     /// `false` for a bad argument. Interfaces/traits are excluded (see
     /// `class_implements`).
     fn ho_class_parents(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        // Generator / Closure have no parent class (class_parents → []).
+        if args.first().and_then(Self::engine_special_class_name).is_some() {
+            return Ok(Zval::Array(Rc::new(php_types::PhpArray::new())));
+        }
         let Some(cid) = args.into_iter().next().and_then(|v| self.class_arg_or_warn(v, "class_parents")) else {
             return Ok(Zval::Bool(false));
         };
@@ -8816,6 +8849,20 @@ impl<'m> Vm<'m> {
     /// transitively (its own and its ancestors', plus interfaces those interfaces
     /// extend), as a `name => name` array; `false` for a bad argument.
     fn ho_class_implements(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        // Generator implements Iterator (⊇ Traversable); Closure implements
+        // nothing. Ordered as PHP returns them (Iterator, then Traversable).
+        if let Some(kind) = args.first().and_then(Self::engine_special_class_name) {
+            let mut arr = php_types::PhpArray::new();
+            if kind == "Generator" {
+                for name in [&b"Iterator"[..], &b"Traversable"[..]] {
+                    arr.insert(
+                        Key::Str(PhpStr::new(name.to_vec())),
+                        Zval::Str(PhpStr::new(name.to_vec())),
+                    );
+                }
+            }
+            return Ok(Zval::Array(Rc::new(arr)));
+        }
         let Some(cid) = args.into_iter().next().and_then(|v| self.class_arg_or_warn(v, "class_implements")) else {
             return Ok(Zval::Bool(false));
         };
