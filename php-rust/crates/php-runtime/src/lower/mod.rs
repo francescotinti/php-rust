@@ -3106,6 +3106,25 @@ class ReflectionObject extends ReflectionClass {
         return sprintf("Object of class [ class %s ] {\n}\n", $this->name);
     }
 }
+// A reference an array element holds (7.4). `fromArrayElement` returns null when
+// the element is not a `&`-reference; `getId` yields the same string for two
+// elements aliasing the same reference (Symfony var-exporter / deepclone rely on
+// this to preserve shared references across a clone).
+final class ReflectionReference {
+    private $id;
+    private function __construct() {}
+    public static function fromArrayElement(array $array, int|string $key): ?ReflectionReference {
+        if (!array_key_exists($key, $array)) {
+            throw new ReflectionException(sprintf('Key "%s" does not exist', $key));
+        }
+        $id = __reflect_ref_id($array, $key);
+        if ($id === false) { return null; }
+        $ref = new ReflectionReference();
+        $ref->id = $id;
+        return $ref;
+    }
+    public function getId(): string { return $this->id; }
+}
 class ReflectionConstant {
     public $name;
     public function __construct($name) {

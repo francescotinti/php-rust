@@ -13163,6 +13163,29 @@ impl<'m> Vm<'m> {
         }
     }
 
+
+    /// `__reflect_ref_id(array, key) -> string|false`: the identity of the
+    /// reference an array element holds, or `false` when the element is not a
+    /// reference (or the key/argument is invalid). Two elements that alias the same
+    /// reference report the same id — the contract `ReflectionReference::getId()`
+    /// relies on (Symfony var-exporter / deepclone reference tracking). The id is
+    /// the reference cell's address rendered as text; only equality is meaningful.
+    fn ho_reflect_ref_id(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(Zval::Array(a)) = args.first() else {
+            return Ok(Zval::Bool(false));
+        };
+        let Some(key) = args.get(1).and_then(arrays::coerce_key_silent) else {
+            return Ok(Zval::Bool(false));
+        };
+        match a.get(&key) {
+            Some(Zval::Ref(cell)) => {
+                let id = format!("{:p}", Rc::as_ptr(cell));
+                Ok(Zval::Str(PhpStr::new(id.into_bytes())))
+            }
+            _ => Ok(Zval::Bool(false)),
+        }
+    }
+
     /// `__reflect_class_doc(name) -> string|false`: the class declaration's
     /// retained `/** ... */` doc comment (ReflectionClass::getDocComment), false
     /// for none / an unknown class / a prelude ("internal") class.
@@ -17669,6 +17692,7 @@ host_builtins! {
     b"__dom_doc_meta" => vm.ho_dom_doc_meta(args),
     b"__reflect_class_loc" => vm.ho_reflect_class_loc(args),
     b"__reflect_class_real_name" => vm.ho_reflect_class_real_name(args),
+    b"__reflect_ref_id" => vm.ho_reflect_ref_id(args),
     b"array_diff" => vm.ho_array_diff(args),
     b"get_declared_classes" => vm.ho_get_declared(0),
     b"get_declared_interfaces" => vm.ho_get_declared(1),
