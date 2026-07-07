@@ -12323,26 +12323,27 @@ impl<'m> Vm<'m> {
                 Ok(Zval::Array(Rc::new(out)))
             }
             Zval::Object(ref orc) => {
-                // A lazy object initializes before serialization (PHP 8.4's
-                // "serialize may initialize"; a proxy forwards to its real
-                // instance) — mirrors json_normalize. With
-                // SKIP_INITIALIZATION_ON_SERIALIZE (8) an *uninitialized*
-                // wrapper serializes its raw view instead.
+                // A lazy object's serialization (PHP 8.4). `__serialize` (the
+                // modern hook) always runs on the *raw* wrapper — no pre-init —
+                // and initializes only if its body observes object state
+                // (serialize___serialize_may_not_initialize). `__sleep` (legacy)
+                // pre-initializes by DEFAULT (serialize___sleep_initializes) —
+                // UNLESS SKIP_INITIALIZATION_ON_SERIALIZE (8) is set, which runs
+                // it raw so it initializes only on state access
+                // (serialize___sleep_skip_flag vs …_may_initialize). A hook-free
+                // lazy object needs its real props, so it initializes now (a
+                // proxy forwards to its instance) unless the skip flag serializes
+                // the raw (empty) view.
                 if orc.borrow().lazy.is_some() {
                     let (oid, ocid, uninit) = {
                         let b = orc.borrow();
                         (b.id, b.class_id as usize, b.proxy_instance.is_none())
                     };
-                    // A serialize hook (`__sleep`/`__serialize`) still
-                    // initializes even under the skip flag — the hook needs the
-                    // real state (serialize___sleep_skip_flag_may_initialize).
-                    let has_hooks =
-                        resolve_method_runtime(&self.classes, ocid, b"__serialize").is_some()
-                            || resolve_method_runtime(&self.classes, ocid, b"__sleep").is_some();
-                    let skip = uninit
-                        && !has_hooks
-                        && self.lazy_options.get(&oid).is_some_and(|f| f & 8 != 0);
-                    if !skip {
+                    let has_serialize =
+                        resolve_method_runtime(&self.classes, ocid, b"__serialize").is_some();
+                    let skip_flag =
+                        uninit && self.lazy_options.get(&oid).is_some_and(|f| f & 8 != 0);
+                    if !has_serialize && !skip_flag {
                         let real = self.realize_full(&v)?;
                         return self.prepare_serialize(real, memo);
                     }
@@ -12438,7 +12439,16 @@ impl<'m> Vm<'m> {
                         ));
                         return Ok(Zval::Null);
                     };
-                    let ob = orc.borrow();
+                    // `__sleep` may have initialized a lazy *proxy* (it observed
+                    // state); read the named props from the real instance it now
+                    // forwards to, not the placeholder wrapper.
+                    let read_rc = orc
+                        .borrow()
+                        .proxy_instance
+                        .as_ref()
+                        .and_then(|inst| deref_object(inst))
+                        .unwrap_or_else(|| orc.clone());
+                    let ob = read_rc.borrow();
                     let mut picked = Vec::new();
                     for (_, n) in names.iter() {
                         let want = convert::to_zstr_cast(&n.deref_clone(), &mut self.diags)
@@ -12487,6 +12497,11 @@ impl<'m> Vm<'m> {
                 let synth = Rc::new(RefCell::new(orc.borrow().copy_with_id(0)));
                 {
                     let mut sb = synth.borrow_mut();
+                    // The carrier is a concrete snapshot: drop any lazy marker so
+                    // the pure formatter treats it as an ordinary object (a
+                    // hook-serialized lazy wrapper must not carry proxy state).
+                    sb.lazy = None;
+                    sb.proxy_instance = None;
                     let keys: Vec<Vec<u8>> = sb.props.iter().map(|(k, _)| k.to_vec()).collect();
                     for k in keys {
                         sb.props.remove(&k);
