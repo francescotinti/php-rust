@@ -2459,3 +2459,29 @@ Un commit (`aa5ad1d`), lazy_objects 166→**178**/223, corpus 2239→**2252**:
 La dir è a 178/223; i 37 residui sono ormai code lunghe (gc_002-4, rfc examples,
 __debugInfo, json_encode_hooks, realize_proxy_overridden, typed_properties_001-3,
 oss_fuzz, jit_*).
+
+## Sessione T — le code lazy: validazioni initializer, semantica typed-uninit generale
+
+Due commit (`…4153e8b`), lazy_objects 178→**190**/223, corpus 2252→**2277**. I pezzi grossi:
+
+- **Validazioni del ritorno dell'initializer**: ghost che ritorna non-null = TypeError col
+  rollback lazy; la factory del proxy deve ritornare un oggetto della classe del proxy o di
+  un antenato compatibile (niente prop aggiuntive, niente override __destruct/__clone —
+  wording Zend verbatim), non-lazy. Confronti: realize solo oggetto-vs-oggetto; il
+  string-vs-object passa da __toString senza inizializzare.
+- **Semantica typed-uninitialized GENERALE**: qualunque tipo dichiarato senza default parte
+  uninitialized — mixed, union, intersection compresi (prima erano trattati come untyped →
+  NULL). Il record ReflectType affianca il hint enforced come marcatore uninit e fornisce il
+  display di `uninitialized(T)`. Fix fondamentale ben oltre i lazy.
+- **array_walk sugli oggetti** (realize + binding by-ref con typed-ref), array_splice
+  converte l'oggetto replacement (Undef omesse), i ref-builtin leggono attraverso i proxy
+  inizializzati (proxy_view). BindRefTo inizializza/forwarda la base lazy, stringifica i nomi
+  dinamici oggetto via __toString, valida il bind su prop tipata e registra la typed source.
+- **`%0` nell'EXPECTF del runner** = byte NUL (convenzione run-tests per i nomi wire delle
+  private) — serialize___sleep passava di colpo.
+- Scritture di slot dichiarati su wrapper lazy in ordine di dichiarazione
+  (lazy_ordered_insert); wording "Cannot assign {Classe}" per i valori oggetto.
+
+Restano 25 code bespoke (famiglia gh* proxy-__get, __debugInfo, json hooks,
+ref-source-types, il monster skipLazyInitialization, fuzz/jit): rendimento calante — si
+passa ai residui ORM con la strada spianata.
