@@ -11345,8 +11345,21 @@ impl<'m> Vm<'m> {
 
     fn ho_class_exists(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let cid = self.resolve_named_class_with_autoload(&args)?;
-        let exists = matches!(cid, Some(c) if self.classes[c].instantiable != Instantiable::Interface);
-        Ok(Zval::Bool(exists))
+        if matches!(cid, Some(c) if self.classes[c].instantiable != Instantiable::Interface) {
+            return Ok(Zval::Bool(true));
+        }
+        // `Generator` and `Closure` are always-present engine classes phpr models
+        // as special zvals (no ClassId), so the ClassId lookup misses them —
+        // class_exists() must still report them present (PHPUnit's
+        // assertInstanceOf(Generator::class, …): QueryTest::testIterateWithDistinct).
+        if let Some(v) = args.first() {
+            let n = convert::to_zstr_cast(v, &mut self.diags);
+            let n = n.as_bytes().strip_prefix(b"\\").unwrap_or(n.as_bytes());
+            if n.eq_ignore_ascii_case(b"Generator") || n.eq_ignore_ascii_case(b"Closure") {
+                return Ok(Zval::Bool(true));
+            }
+        }
+        Ok(Zval::Bool(false))
     }
 
     /// `class_alias(string $class, string $alias, bool $autoload = true): bool` —
