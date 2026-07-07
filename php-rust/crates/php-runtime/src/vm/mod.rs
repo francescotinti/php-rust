@@ -5611,7 +5611,12 @@ impl<'m> Vm<'m> {
                             frame.this = Some(this);
                             frame.class = Some(defc);
                             frame.static_class = Some(cid);
-                            self.frames.push(frame);
+                            // Coerce the arguments against the constructor's declared
+                            // parameter types using the CALL SITE's strict mode, like
+                            // `InvokeMethod` — a `new $cls(...)` (dynamic class) must
+                            // weak-coerce just as `new C(...)` does (ORM hydrators
+                            // instantiate DTOs dynamically: NewOperatorTest).
+                            self.enter_callee(frame)?;
                         }
                         // No constructor: leave NULL so the surrounding `Pop` keeps
                         // the operand stack balanced (the instance is kept by `Dup`).
@@ -5645,7 +5650,9 @@ impl<'m> Vm<'m> {
                             frame.this = Some(this);
                             frame.class = Some(defc);
                             frame.static_class = Some(cid);
-                            self.frames.push(frame);
+                            // Coerce arguments with the call site's strict mode (see
+                            // Op::InvokeCtor); the dynamic ctor path bypassed this.
+                            self.enter_callee(frame)?;
                         }
                         // A named argument has no constructor to bind against: the
                         // catchable "Unknown named parameter" (positional arguments
