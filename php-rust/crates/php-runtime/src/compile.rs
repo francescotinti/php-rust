@@ -3422,18 +3422,7 @@ impl<'a> FnCompiler<'a> {
                     self.emit(Op::PushRef(*slot));
                 }
                 _ => {
-                    // A non-variable *place* (`$this->p`, `$a[$k]`) is also passed by
-                    // reference (SEND_VAR_EX): a by-ref parameter of the run-time
-                    // callee must write back to the property/element (Doctrine
-                    // ClassMetadata::setVersionMapping(array &$m) auto-vivifies
-                    // `$this->mapping['options']`). `bind_params` decays the ref for
-                    // a by-value parameter, matching the plain-variable case above.
-                    if let Some(place) = expr_field_place(a) {
-                        let (base, steps) = self.field_path(&place)?;
-                        self.emit(Op::MakeRef { base, steps: steps.into() });
-                    } else {
-                        self.expr(a)?;
-                    }
+                    self.expr(a)?;
                 }
             }
         }
