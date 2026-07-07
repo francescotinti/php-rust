@@ -762,6 +762,7 @@ enum PropIterEntry {
 
 /// One live typed-reference source (see `Vm::typed_refs`): the weak handle
 /// keys the entry, the rest formats the TypeError and drives the check.
+#[derive(Clone)]
 struct TypedRefSource {
     cell: std::rc::Weak<RefCell<Zval>>,
     /// The owning object: Zend deletes a property's type source when the
@@ -3037,6 +3038,9 @@ impl<'m> Vm<'m> {
                     // cell, and push a reference to it. Keys (for `Index` steps)
                     // were pushed in source order and sit on top of the stack.
                     let keys = self.pop_field_keys(top, &steps);
+                    // First key retained past the cell walk (a dynamic-name
+                    // typed-ref registration needs it after keys are consumed).
+                    let keys_first_backup = keys.first().cloned();
                     // EXCEPTION checked FIRST (it must pre-empt hook/lazy
                     // machinery): a ref fetch under the wrapper's own
                     // suppressed `__get` guard stays on the wrapper's raw
@@ -3259,9 +3263,18 @@ impl<'m> Vm<'m> {
                     };
                     // A reference to a *typed* property keeps enforcing its type
                     // on writes through the alias (PHP's typed references).
-                    if let [FieldStep::Prop(name)] = &steps[..] {
-                        let name = name.clone();
-                        self.register_prop_typed_ref(base, top, &name, &cell);
+                    match &steps[..] {
+                        [FieldStep::Prop(name)] => {
+                            let name = name.clone();
+                            self.register_prop_typed_ref(base, top, &name, &cell);
+                        }
+                        [FieldStep::PropDyn] => {
+                            if let Some(k) = keys_first_backup.as_ref() {
+                                let name = self.dyn_prop_name_value(k)?;
+                                self.register_prop_typed_ref(base, top, &name, &cell);
+                            }
+                        }
+                        _ => {}
                     }
                     self.frames[top].stack.push(Zval::Ref(cell));
                 }
@@ -4454,10 +4467,14 @@ impl<'m> Vm<'m> {
                     // (nested objects share their handle, arrays copy on write).
                     let clone_rc = {
                         let b = o.borrow();
+                        let mut props = b.props.clone();
+                        // Detach object-internal (unshared) property references so
+                        // the copy does not write back through them (bug27268/68262).
+                        props.separate_cloned_internal_refs();
                         let obj = Object {
                             class_id: b.class_id,
                             class_name: Rc::clone(&b.class_name),
-                            props: b.props.clone(),
+                            props,
                             id: self.next_id(),
                             info: Rc::clone(&b.info),
                             // A clone keeps the source's readonly props initialised.
@@ -4806,6 +4823,21 @@ impl<'m> Vm<'m> {
                     if let Zval::Object(o) = &target {
                         self.lazy_ordered_insert(o, &key);
                     }
+                    // A write through a reference slot honours ALL of the
+                    // cell's typed sources (an aliased pair enforces both,
+                    // typed_properties_002).
+                    if !self.typed_refs.is_empty() {
+                        if let Zval::Object(o) = &target {
+                            let cell = match o.borrow().props.get(&key) {
+                                Some(Zval::Ref(c)) => Some(Rc::clone(c)),
+                                _ => None,
+                            };
+                            if let Some(cell) = cell {
+                                let strict = self.frames[top].module.strict;
+                                value = self.typed_ref_assign(&cell, value, strict)?;
+                            }
+                        }
+                    }
                     if let Some(old) = write_property(&target, &key, value.clone())? {
                         self.gc_note(&old);
                     }
@@ -5033,6 +5065,16 @@ impl<'m> Vm<'m> {
                                     "Cannot unset readonly property {cls}::${prop}"
                                 )));
                             }
+                        }
+                        // `unset` deletes the property's typed-reference source:
+                        // a still-live alias becomes an ordinary reference
+                        // (init_handles_ref_source_types).
+                        if !self.typed_refs.is_empty() {
+                            let op_ptr = Rc::as_ptr(o);
+                            let disp = php_types::prop_display_name(&key).to_vec();
+                            self.typed_refs.retain(|t| {
+                                !(std::ptr::eq(t.obj.as_ptr(), op_ptr) && t.prop.as_ref() == &disp[..])
+                            });
                         }
                         // A declared TYPED property returns to the
                         // *uninitialized* state on unset (isInitialized false,
@@ -6037,6 +6079,43 @@ impl<'m> Vm<'m> {
                         self.call_method_sync(recv, b"offsetUnset", vec![key])?;
                         continue;
                     }
+                    // Single-property paths mirror Op::PropUnset's declared-slot
+                    // rules: the typed-reference source dies, a TYPED slot
+                    // returns to uninitialized (typed_properties_002's
+                    // `unset($obj->$a)`), a plain one is removed.
+                    let single_name: Option<Box<[u8]>> = match &steps[..] {
+                        [FieldStep::Prop(n)] => Some(n.clone()),
+                        [FieldStep::PropDyn] => match keys.first().cloned() {
+                            Some(k) => Some(self.dyn_prop_name_value(&k)?),
+                            None => None,
+                        },
+                        _ => None,
+                    };
+                    if let Some(n) = single_name {
+                        let target = match base {
+                            FieldBase::Local(s) => self.frames[top].slots.get(s as usize).map(|v| v.deref_clone()),
+                            FieldBase::Global(s) => self.frames[0].slots.get(s as usize).map(|v| v.deref_clone()),
+                            FieldBase::Superglobal(i) => self.superglobals.get(i as usize).map(|v| v.deref_clone()),
+                            FieldBase::This => self.frames[top].this.as_ref().map(|v| v.deref_clone()),
+                        };
+                        let target = target.map(|v| self.proxy_view(v));
+                        if let Some(o) = target.as_ref().and_then(deref_object) {
+                            let cur = self.frames[top].class;
+                            let ocid = o.borrow().class_id as usize;
+                            let key = self.prop_storage_key(ocid, &n, cur);
+                            if !self.typed_refs.is_empty() {
+                                let op_ptr = Rc::as_ptr(&o);
+                                let disp = php_types::prop_display_name(&key).to_vec();
+                                self.typed_refs.retain(|t| {
+                                    !(std::ptr::eq(t.obj.as_ptr(), op_ptr) && t.prop.as_ref() == &disp[..])
+                                });
+                            }
+                            if prop_type_decl(&self.classes, ocid, &n).is_some() {
+                                o.borrow_mut().props.set(&key, Zval::Undef);
+                                continue;
+                            }
+                        }
+                    }
                     // A lazy base initializes; the removal runs on the realized
                     // object (a guarded `unset($this->$name)` inside `__unset`).
                     if let Some(mut root) = self.field_lazy_root(base, top, &steps, &keys, false)? {
@@ -6688,6 +6767,19 @@ impl<'m> Vm<'m> {
         };
         if let Zval::Object(o2) = &target {
             self.lazy_ordered_insert(o2, &key);
+        }
+        // Typed enforcement + through-ref sources, mirroring Op::PropSet (the
+        // dynamic-name write path lands here; typed_properties_002).
+        let mut value = self.coerce_typed_prop_write(ocid, name, value)?;
+        if !self.typed_refs.is_empty() {
+            let cell = match o.borrow().props.get(&key) {
+                Some(Zval::Ref(c)) => Some(Rc::clone(c)),
+                _ => None,
+            };
+            if let Some(cell) = cell {
+                let strict = self.frames.last().map(|f| f.module.strict).unwrap_or(self.module.strict);
+                value = self.typed_ref_assign(&cell, value, strict)?;
+            }
         }
         if let Some(old) = write_property(&target, &key, value)? {
             self.gc_note(&old);
@@ -15388,6 +15480,17 @@ impl<'m> Vm<'m> {
                 let saved_props = rc.borrow().props.clone();
                 let saved_ro = rc.borrow().readonly_init.clone();
                 let saved_lazy_props = self.lazy_props.get(&oid).cloned();
+                // The initializer may `unset()` properties, deleting their
+                // typed-reference sources — a rollback resurrects them
+                // (init_handles_ref_source_types_exception).
+                let saved_typed: Vec<TypedRefSource> = {
+                    let op_ptr = Rc::as_ptr(&rc);
+                    self.typed_refs
+                        .iter()
+                        .filter(|t| std::ptr::eq(t.obj.as_ptr(), op_ptr))
+                        .cloned()
+                        .collect()
+                };
                 {
                     let cc = self.classes[cid];
                     // Rebuild the property layout in declaration order (the ghost held
@@ -15455,6 +15558,11 @@ impl<'m> Vm<'m> {
                         if let Some(sp) = saved_lazy_props {
                             self.lazy_props.insert(oid, sp);
                         }
+                        {
+                            let op_ptr = Rc::as_ptr(&rc);
+                            self.typed_refs.retain(|t| !std::ptr::eq(t.obj.as_ptr(), op_ptr));
+                            self.typed_refs.extend(saved_typed);
+                        }
                         self.lazy_init.insert(oid, init);
                         return Err(e);
                     }
@@ -15511,6 +15619,15 @@ impl<'m> Vm<'m> {
                     });
                     match r {
                         Ok(real) => {
+                            // The wrapper's own property table is superseded by
+                            // the instance: its typed-reference sources die with
+                            // it (init_handles_ref_source_types' proxy half —
+                            // propagating pre-initialized props is the
+                            // factory's job).
+                            if !self.typed_refs.is_empty() {
+                                let wp = Rc::as_ptr(&rc);
+                                self.typed_refs.retain(|t| !std::ptr::eq(t.obj.as_ptr(), wp));
+                            }
                             rc.borrow_mut().proxy_instance = Some(Box::new(real));
                         }
                         Err(e) => {
@@ -16716,12 +16833,14 @@ impl<'m> Vm<'m> {
     /// handed out as a reference to it) as a typed-reference source.
     fn register_prop_typed_ref(&mut self, base: FieldBase, top: usize, name: &[u8], cell: &Rc<RefCell<Zval>>) {
         let base_val = match base {
-            FieldBase::Local(s) => self.frames[top].slots.get(s as usize),
-            FieldBase::Global(s) => self.frames[0].slots.get(s as usize),
-            FieldBase::Superglobal(i) => self.superglobals.get(i as usize),
-            FieldBase::This => self.frames[top].this.as_ref(),
+            FieldBase::Local(s) => self.frames[top].slots.get(s as usize).map(|v| v.deref_clone()),
+            FieldBase::Global(s) => self.frames[0].slots.get(s as usize).map(|v| v.deref_clone()),
+            FieldBase::Superglobal(i) => self.superglobals.get(i as usize).map(|v| v.deref_clone()),
+            FieldBase::This => self.frames[top].this.as_ref().map(|v| v.deref_clone()),
         };
-        let Some(o) = base_val.and_then(deref_object) else { return };
+        // The owner is the object the access actually lands on: an
+        // initialized proxy's INSTANCE (unset purges by that identity).
+        let Some(o) = base_val.map(|v| self.proxy_view(v)).as_ref().and_then(deref_object) else { return };
         let cid = o.borrow().class_id as usize;
         if let Some((decl, hint)) = prop_type_decl(&self.classes, cid, name) {
             self.register_typed_ref(cell, &o, decl, name, hint);
@@ -16737,25 +16856,31 @@ impl<'m> Vm<'m> {
         // The owning object must still be alive beyond the VM's own `created`
         // tracking handle: Zend deletes the type source at object free, and
         // an object whose only remaining handle is the tracking one is
-        // dead-pending-sweep (`typed_properties_094`).
-        let found = self
+        // dead-pending-sweep (`typed_properties_094`). A cell aliased by
+        // SEVERAL typed properties (`$o->b =& $o->a`) must satisfy every
+        // source (typed_properties_002).
+        let sources: Vec<(TypeHint, Box<[u8]>, Box<[u8]>)> = self
             .typed_refs
             .iter()
-            .find(|t| {
+            .filter(|t| {
                 t.cell.strong_count() > 0
                     && std::ptr::eq(t.cell.as_ptr(), ptr)
                     && t.obj.strong_count() > 1
             })
-            .map(|t| (t.hint.clone(), t.class_name.clone(), t.prop.clone()));
-        let Some((hint, cls, prop)) = found else { return Ok(v) };
-        self.coerce_or_check_hint(v, &hint, strict).map_err(|given| {
-            PhpError::TypeError(format!(
-                "Cannot assign {given} to reference held by property {}::${} of type {}",
-                String::from_utf8_lossy(&cls),
-                String::from_utf8_lossy(&prop),
-                hint.display_name(),
-            ))
-        })
+            .map(|t| (t.hint.clone(), t.class_name.clone(), t.prop.clone()))
+            .collect();
+        let mut v = v;
+        for (hint, cls, prop) in sources {
+            v = self.coerce_or_check_hint(v, &hint, strict).map_err(|given| {
+                PhpError::TypeError(format!(
+                    "Cannot assign {given} to reference held by property {}::${} of type {}",
+                    String::from_utf8_lossy(&cls),
+                    String::from_utf8_lossy(&prop),
+                    hint.display_name(),
+                ))
+            })?;
+        }
+        Ok(v)
     }
 
     /// `$r = &$o->prop` on a property whose asymmetric *set* visibility

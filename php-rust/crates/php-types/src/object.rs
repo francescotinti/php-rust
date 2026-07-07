@@ -325,6 +325,33 @@ impl Props {
         }
     }
 
+    /// After this table has been `clone`d for an object `clone`, break the
+    /// sharing of any property reference that no *live external* variable
+    /// aliases (Zend `zend_objects_clone_members`: bug27268, bug68262).
+    ///
+    /// A property that became `IS_REFERENCE` only because of the object itself
+    /// (e.g. a by-reference return of `$this->p`, then a rebind that leaves the
+    /// object as the sole holder) must NOT be shared with the clone — otherwise
+    /// a write through the clone's slot would leak back into the source. A
+    /// reference genuinely shared with an outside variable stays shared.
+    ///
+    /// Detection: right after the shallow `clone`, the source and this clone
+    /// both hold each shared cell, so a cell whose only two owners are those
+    /// two tables has `strong_count == 2`. Give the clone its own independent
+    /// reference containing a copy of the value; higher counts (a live `=&`
+    /// alias, or an intra-object alias shared by several properties) are left
+    /// untouched.
+    pub fn separate_cloned_internal_refs(&mut self) {
+        for (_, v) in self.entries.iter_mut() {
+            if let Zval::Ref(cell) = v {
+                if Rc::strong_count(cell) == 2 {
+                    let inner = cell.borrow().clone();
+                    *v = Zval::Ref(Rc::new(std::cell::RefCell::new(inner)));
+                }
+            }
+        }
+    }
+
     /// Iterate properties in insertion order.
     pub fn iter(&self) -> impl Iterator<Item = (&[u8], &Zval)> {
         self.entries.iter().map(|(k, v)| (k.as_ref(), v))

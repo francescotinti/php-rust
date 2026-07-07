@@ -183,9 +183,17 @@ pub(super) fn field_write(
                     // So does a *lazy* object (uninitialized, or a forwarding
                     // proxy): the write must trigger initialization / follow the
                     // proxy, not land on the wrapper's raw storage.
+                    // A reference-BIND (`=&`) at the leaf must REPLACE the slot
+                    // with the incoming reference (and let the VM register the
+                    // typed-ref source afterwards); it must NOT be diverted to
+                    // `__set`/hook/coerce-as-value dispatch, which would drop the
+                    // aliasing (`typed_properties_071`, oss-fuzz hooked backing).
                     if rest.is_empty()
                         && !is_enum
-                        && (!fs.prop_is_declared_slot(cid, name) || fs.prop_hooked(cid, name) || is_lazy)
+                        && (!fs.prop_is_declared_slot(cid, name)
+                            || (!rebind
+                                && (fs.prop_hooked(cid, name) || fs.prop_typed(cid, name)))
+                            || is_lazy)
                     {
                         *aa = Some(AaOp::MagicSet(AaMagicSet {
                             obj: Zval::Object(o),

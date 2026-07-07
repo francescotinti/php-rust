@@ -2236,6 +2236,13 @@ impl<'a> FnCompiler<'a> {
                     self.nullsafe_chain.as_mut().expect("chain open").push(skip);
                 }
                 self.chain_pause(|s| s.emit_method_call(method, args, named, recv_class))?;
+                // A method that returns by reference (`&m()`) yields a raw `Ref`;
+                // in value context (everything except a `$x =& $o->m()` bind, which
+                // compiles through `assign_ref_call` → `BindRefToChecked`) PHP hands
+                // back a COPY, not an alias (REF-4b, mirrors the known-function
+                // `DerefTop` above). `DerefTop` is a no-op for a non-reference
+                // result, so it is safe to emit after every value-context call.
+                self.emit(Op::DerefTop);
                 self.chain_exit(root);
             }
             ExprKind::PropGetDyn { object, name, nullsafe } => {
@@ -2257,6 +2264,9 @@ impl<'a> FnCompiler<'a> {
                     self.nullsafe_chain.as_mut().expect("chain open").push(skip);
                 }
                 self.chain_pause(|s| s.emit_method_call_dyn(method, args, named))?;
+                // Value context: copy a by-reference return (see the static-call
+                // arm above); `DerefTop` is a no-op for a plain result.
+                self.emit(Op::DerefTop);
                 self.chain_exit(root);
             }
             ExprKind::VarDyn(name) => {

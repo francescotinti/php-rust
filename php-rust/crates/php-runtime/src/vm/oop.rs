@@ -38,7 +38,21 @@ pub(super) fn read_property(recv: &Zval, name: &[u8], diags: &mut Diags) -> Zval
 /// [`Vm::gc_note`]; the others drop it (unchanged behaviour).
 pub(super) fn write_property(recv: &Zval, name: &[u8], value: Zval) -> Result<Option<Zval>, PhpError> {
     match recv {
-        Zval::Object(o) => Ok(o.borrow_mut().props.replace(name, value)),
+        Zval::Object(o) => {
+            // A slot holding a reference is written THROUGH — aliases keep
+            // seeing the update (Zend zend_assign_to_variable on an IS_REF
+            // slot); only a rebind (`=&`, the field_set_mode rebind path)
+            // replaces it.
+            let cell = match o.borrow().props.get(name) {
+                Some(Zval::Ref(cell)) => Some(Rc::clone(cell)),
+                _ => None,
+            };
+            if let Some(cell) = cell {
+                let old = std::mem::replace(&mut *cell.borrow_mut(), value);
+                return Ok(Some(old));
+            }
+            Ok(o.borrow_mut().props.replace(name, value))
+        }
         Zval::Ref(rc) => write_property(&rc.borrow(), name, value),
         other => Err(PhpError::Error(format!(
             "Attempt to assign property \"{}\" on {}",
@@ -338,6 +352,13 @@ impl FieldScope<'_> {
     /// raw storage.
     pub(super) fn prop_hooked(&self, ocid: ClassId, name: &[u8]) -> bool {
         prop_info(self.classes, ocid, name).is_some_and(|pi| pi.hooks.is_some())
+    }
+
+    /// Whether `name` is a declared TYPED property on `ocid`: a leaf write
+    /// must defer to the VM caller for type enforcement (and through-ref
+    /// typed sources) — the walker itself writes raw storage.
+    pub(super) fn prop_typed(&self, ocid: ClassId, name: &[u8]) -> bool {
+        prop_info(self.classes, ocid, name).is_some_and(|pi| pi.type_hint.is_some())
     }
 
     pub(super) fn prop_key<'n>(&self, ocid: ClassId, name: &'n [u8]) -> std::borrow::Cow<'n, [u8]> {
