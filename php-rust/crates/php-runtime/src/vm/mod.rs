@@ -2305,14 +2305,16 @@ impl<'m> Vm<'m> {
                     if matches!(self.frames[0].slots[i], Zval::Undef) {
                         self.frames[0].slots[i] = Zval::Null;
                     }
-                    let old = self.frames[0].slots[i].clone();
+                    // Value snapshot + write-through (see IncDecSlot: a reference
+                    // slot must yield the pre-increment VALUE and keep aliases).
+                    let old = self.frames[0].slots[i].deref_clone();
                     let (newv, diags) = self.compute_incdec(old.clone(), inc)?;
                     // PHP raises the diagnostic *before* writing the result back, so a
                     // `set_error_handler` runs here (it may throw, unwinding this op, or
                     // mutate the variable — which the write-back below then overwrites).
                     self.raise_diags(diags, self.cur_line(top))?;
-                    self.frames[0].slots[i] = newv;
-                    let pushed = if pre { self.frames[0].slots[i].clone() } else { old };
+                    let _ = store_slot(&mut self.frames[0].slots[i], newv.clone());
+                    let pushed = if pre { newv } else { old };
                     self.frames[top].stack.push(pushed);
                 }
                 Op::LoadSuperglobal(idx) => {
@@ -2375,11 +2377,12 @@ impl<'m> Vm<'m> {
                     if matches!(self.superglobals[i], Zval::Undef) {
                         self.superglobals[i] = Zval::Null;
                     }
-                    let old = self.superglobals[i].clone();
+                    // Value snapshot + write-through (see IncDecSlot).
+                    let old = self.superglobals[i].deref_clone();
                     let (newv, diags) = self.compute_incdec(old.clone(), inc)?;
                     self.raise_diags(diags, self.cur_line(top))?;
-                    self.superglobals[i] = newv;
-                    let pushed = if pre { self.superglobals[i].clone() } else { old };
+                    let _ = store_slot(&mut self.superglobals[i], newv.clone());
+                    let pushed = if pre { newv } else { old };
                     self.frames[top].stack.push(pushed);
                 }
                 Op::PushUndef => {
@@ -2433,12 +2436,17 @@ impl<'m> Vm<'m> {
                     if matches!(self.frames[top].slots[i], Zval::Undef) {
                         self.frames[top].slots[i] = Zval::Null;
                     }
-                    let old = self.frames[top].slots[i].clone();
+                    // Snapshot the VALUE (deref a reference slot): the postfix
+                    // result is the pre-increment value, not the live cell —
+                    // `$c++ === 0` on a by-ref captured `$c` compared the
+                    // already-incremented cell. The write-back goes *through*
+                    // the reference so aliases keep seeing the update.
+                    let old = self.frames[top].slots[i].deref_clone();
                     let (newv, diags) = self.compute_incdec(old.clone(), inc)?;
                     // Raise before write-back (see IncDecGlobal).
                     self.raise_diags(diags, self.cur_line(top))?;
-                    self.frames[top].slots[i] = newv;
-                    let pushed = if pre { self.frames[top].slots[i].clone() } else { old };
+                    let _ = store_slot(&mut self.frames[top].slots[i], newv.clone());
+                    let pushed = if pre { newv } else { old };
                     self.frames[top].stack.push(pushed);
                 }
                 Op::Binary(b) => {
@@ -3055,6 +3063,37 @@ impl<'m> Vm<'m> {
                     // property does not — and a forwarding proxy binds the
                     // *instance*'s cell, so the walk roots there.
                     let lazy_root = self.field_lazy_root(base, top, &steps, &keys, false)?;
+                    // `&$o->undeclared` MATERIALIZES the property: on a class not
+                    // allowing dynamic props that is the creation deprecation
+                    // (gh20854's `&__get` returning an absent `$this->x`).
+                    if let [FieldStep::Prop(n)] = &steps[..] {
+                        let target = match &lazy_root {
+                            Some(r) => Some(r.clone()),
+                            None => match base {
+                                FieldBase::Local(s) => self.frames[top].slots.get(s as usize).map(|v| v.deref_clone()),
+                                FieldBase::Global(s) => self.frames[0].slots.get(s as usize).map(|v| v.deref_clone()),
+                                FieldBase::Superglobal(i) => self.superglobals.get(i as usize).map(|v| v.deref_clone()),
+                                FieldBase::This => self.frames[top].this.as_ref().map(|v| v.deref_clone()),
+                            },
+                        };
+                        if let Some(o) = target.as_ref().and_then(deref_object) {
+                            let ocid = o.borrow().class_id as usize;
+                            let dynamic = matches!(
+                                resolve_prop_access(&self.classes, ocid, n, self.frames[top].class),
+                                PropAccess::Dynamic
+                            );
+                            if dynamic
+                                && !o.borrow().props.contains(n.as_ref())
+                                && !self.allows_dynamic_props(ocid)
+                            {
+                                let cls = String::from_utf8_lossy(&self.classes[ocid].name).into_owned();
+                                let prop = String::from_utf8_lossy(n).into_owned();
+                                self.diags.push(Diag::Deprecated(format!(
+                                    "Creation of dynamic property {cls}::${prop} is deprecated"
+                                )));
+                            }
+                        }
+                    }
                     // Taking a reference to an *uninitialized* non-nullable typed
                     // property is an error (zend_fetch_property_address,
                     // fetch_ref_skipped_prop_does_not_initialize).
