@@ -2349,3 +2349,37 @@ copy-on-ref in MakeRef.
 
 Corpus Zend 2138→**2163** (+25: i 15 del filone + 10 bonus, tra cui 5 typed_properties, due
 gh di property_hooks, foreach_010); zero pass→fail; cargo test 20 crate verdi.
+
+## Sessione P — i sei residui lazy-reset chiudono (stessa giornata del filone by-ref)
+
+I 6 test `reset_*` deferiti dal filone lazy objects erano tutti root-caused da una settimana;
+due dei pezzi costruiti stamattina (realize_full a catena, la tabella typed_refs) li hanno
+resi improvvisamente a portata. Un commit (`9215f54`), corpus 2163→**2170**, lazy_objects
+90→97:
+
+- **Forwarding transitivo** (`lazy_prop_forward`): trigger_lazy + proxy_redirect in loop fino
+  a stabilità nei quattro siti prop-access — un proxy la cui instance è stata ri-resettata
+  lazy si ri-triggera (reset_as_lazy_real_instance).
+- **Reflected-scope** in `install_lazy`: si lazificano solo gli slot del layout della classe
+  RIFLESSA; le prop dichiarate dalla subclass si preservano (ordine mantenuto iterando il
+  layout completo dell'oggetto), le **dinamiche si droppano sempre** (la triage vecchia
+  diceva il contrario — reset_as_lazy_resets_dynamic_props l'ha smentita al gate), e le
+  readonly GIÀ inizializzate dichiarate da una classe diversa dalla riflessa restano valore+
+  marca (l'unlock readonly è per classe dichiarante). `lazy_reset_scope` per-oggetto si è
+  rivelato inutile: `lazy_props` filtrata all'install codifica già tutto per la realize.
+- **Ordine zend_object_make_lazy**: i contenuti spiazzati si rilasciano DENTRO la reset con
+  uno **sweep sincrono** (`gc_sweep_impl(None)` — variante di gc_sweep che drive_to_return-a
+  ogni dtor invece di schedulare col rewind dell'ip) e il marker lazy si imposta DOPO: il
+  destructor osserva il target svuotato ma non-lazy. Il primo tentativo è panicato
+  "a non-baseline Ret has a caller": il frame dtor aveva `ret_cell` — la stessa lezione
+  drive_to_return che morde per la terza volta.
+- **Il vero bug di side_effect_destruct** non era il timing del dtor ma un buco dei path
+  misti: `$this->obj->b = v` (FieldAssign) scriveva lo storage del ghost SENZA trigger
+  dell'init. Ora field_write deferisce i leaf-write su oggetti lazy a
+  prop_set_magic_or_dynamic (stessa condizione dei hooked). Restano i gap su read-path e
+  mid-path, oggi non osservati da nessun test.
+- **Realize ghost**: i default di classe si riapplicano SOLO agli slot ancora still-lazy —
+  fix generale che smette di clobberare i valori raw-set.
+
+Il gate per-nome ha di nuovo pagato: la prima versione "dinamiche preservate" passava i 6
+target ma rompeva resets_dynamic_props, invisibile al conteggio (+7 netto comunque).
