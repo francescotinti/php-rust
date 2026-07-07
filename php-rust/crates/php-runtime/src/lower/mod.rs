@@ -2856,7 +2856,15 @@ class ReflectionClass {
     public function getProperty($name) { return new ReflectionProperty($this->name, $name); }
     public function getProperties($filter = null) {
         $out = [];
-        foreach (__reflect_prop_names($this->name) as $n) { $out[] = new ReflectionProperty($this->name, $n); }
+        foreach (__reflect_prop_names($this->name) as $n) {
+            // getProperties() INCLUDES an ancestor's private property (unlike a
+            // direct `new ReflectionProperty($child, $name)`, which throws for it):
+            // construct each with the DECLARING class as scope so the ancestor-
+            // private guard in the ctor does not fire (an ArrayObject subclass'
+            // inherited private $__storage would otherwise abort enumeration).
+            $decl = __reflect_prop_declaring_class($this->name, $n);
+            $out[] = new ReflectionProperty($decl === false ? $this->name : $decl, $n);
+        }
         return $out;
     }
     public function hasConstant($name) { return defined($this->name . '::' . $name); }

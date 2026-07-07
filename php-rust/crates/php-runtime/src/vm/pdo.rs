@@ -40,6 +40,29 @@ fn pdo_err(message: &str, code: i64, state: Option<(&str, &str)>) -> Zval {
     Zval::Array(Rc::new(out))
 }
 
+/// Register the math functions the bundled sqlite lacks (it ships without
+/// `SQLITE_ENABLE_MATH_FUNCTIONS`). Doctrine's DQL maps `SQRT(x)` straight to a
+/// `SQRT(...)` SQL call (QueryDqlFunctionTest::testFunctionSqrt); real PHP links
+/// a sqlite built with the math extension, so these names must exist. Names are
+/// matched case-insensitively by sqlite. Best-effort: a registration error is
+/// ignored (the query then fails exactly as before).
+fn register_sqlite_math(c: &rusqlite::Connection) {
+    use rusqlite::functions::FunctionFlags;
+    let flags = FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC;
+    let _ = c.create_scalar_function("sqrt", 1, flags, |ctx| {
+        let x: Option<f64> = ctx.get(0)?;
+        Ok(x.map(f64::sqrt))
+    });
+    let _ = c.create_scalar_function("power", 2, flags, |ctx| {
+        let base: Option<f64> = ctx.get(0)?;
+        let exp: Option<f64> = ctx.get(1)?;
+        Ok(match (base, exp) {
+            (Some(b), Some(e)) => Some(b.powf(e)),
+            _ => None,
+        })
+    });
+}
+
 /// A rusqlite error as PDO reports it: the sqlite *primary* result code (PHP
 /// calls `sqlite3_errcode`; the extended code's low byte) and the bare native
 /// message.
@@ -173,6 +196,7 @@ impl<'m> Vm<'m> {
         };
         match conn {
             Ok(c) => {
+                register_sqlite_math(&c);
                 let id = self.next_pdo;
                 self.next_pdo += 1;
                 self.pdo_conns.insert(id, c);

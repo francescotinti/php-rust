@@ -19,4 +19,4 @@ getrandom = "0.2"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 quick-xml = "0.41"
 libc = "0.2"
-rusqlite = { version = "0.40.1", features = ["bundled", "column_decltype", "column_metadata"] }
+rusqlite = { version = "0.40.1", features = ["bundled", "column_decltype", "column_metadata", "functions"] }
