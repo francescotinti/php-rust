@@ -2383,3 +2383,32 @@ resi improvvisamente a portata. Un commit (`9215f54`), corpus 2163→**2170**, l
 
 Il gate per-nome ha di nuovo pagato: la prima versione "dinamiche preservate" passava i 6
 target ma rompeva resets_dynamic_props, invisibile al conteggio (+7 netto comunque).
+
+## Sessione Q — lazy objects, lo sweep grande: 97→152/223
+
+Dopo i sei reset_* la dir lazy_objects restava a 97/223 con ~117 fail in famiglie nette.
+Quattro commit (`…→b8d4be4`), corpus 2170→**2225**:
+
+- **La superficie di trigger completa**: `lazy_prop_access` gate-a il forwarding sul TIPO di
+  accesso — se la proprietà dispatcha un hook o un magic accessor, l'init NON scatta (la
+  famiglia `fetch_*_may_not_initialize`: sono gli accessi interni del body a triggerare).
+  Cablata su tutte le op prop (get/set/silent/dynamic/isset/unset/compound/incdec) e, via
+  `field_lazy_root`, sulle op path-based (FieldAssign*/MakeRef) che ora radicano il walk
+  sull'oggetto realizzato invece di scarabocchiare i placeholder del wrapper.
+- **La mappa Zend di cosa inizializza**: sì per read/write/isset/unset/`??`/compound/&-fetch/
+  foreach/`==`/var_export/serialize/clone/json; NO per dispatch hook-magic, `(array)` cast
+  (solo redirect della catena proxy), `===`, confronto same-handle, var_dump senza
+  __debugInfo, prop skipped. Tre trappole scoperte coi gate: il same-handle compare non
+  inizializza; serialize bypassava il realize sul pure-path (gate: has_serialize_hooks →
+  true per i lazy); il raw-set su proxy INIZIALIZZATO scrive l'instance.
+- **Clone**: realize della sorgente prima; il clone di un proxy inizializzato è un NUOVO
+  wrapper proxy attorno al clone dell'instance, __clone una volta sola sulla copia.
+- **Rollback**: eccezione nell'initializer → il ghost torna lazy byte-per-byte (snapshot di
+  props/readonly/still-lazy) con initializer reinstallato; idem la factory del proxy.
+- **Regole di contorno**: materialize ricostruisce la prop-table in ordine di dichiarazione;
+  &-fetch su typed Undef non-nullable = errore verbatim; ReflectionProperty rigetta le
+  private degli antenati; classe senza prop eleggibili = mai lazy (stdClass); classi interne
+  (= prelude) rifiutate con i due wording Zend.
+
+Residui 63, triagiati nel topic file di memoria (validazioni setRaw/skipLazy, famiglia
+gh18038, serialize __sleep, __debugInfo, superficie Reflection isLazy/getInitializer).
