@@ -740,6 +740,15 @@ pub fn array_splice(arr: &mut Zval, args: &[Zval], ctx: &mut Ctx) -> Result<Zval
 
     let replacement: Vec<Zval> = match args.get(2) {
         Some(Zval::Array(r)) => r.iter().map(|(_, v)| v.clone()).collect(),
+        // An object replacement converts to its property values (Zend's
+        // internal to-array), uninitialized (`Undef`) slots omitted.
+        Some(Zval::Object(o)) => o
+            .borrow()
+            .props
+            .iter()
+            .filter(|(_, v)| !matches!(v, Zval::Undef))
+            .map(|(_, v)| v.deref_clone())
+            .collect(),
         Some(other) => vec![other.clone()],
         None => Vec::new(),
     };

@@ -2449,11 +2449,15 @@ impl<'m> Vm<'m> {
                     // and compares a proxy's real instance; `===`/`!==` compare
                     // handles and never initialize — and neither does comparing
                     // an object with itself (same handle short-circuits).
-                    let same_handle = match (deref_object(&lhs), deref_object(&rhs)) {
-                        (Some(a), Some(b)) => Rc::ptr_eq(&a, &b),
-                        _ => false,
+                    // Only an object-vs-object comparison reads property tables:
+                    // a lazy operand initializes then (init_trigger_compare) —
+                    // never for object-vs-scalar (the object simply compares
+                    // greater), `===`, or a same-handle compare.
+                    let both_objects = match (deref_object(&lhs), deref_object(&rhs)) {
+                        (Some(a), Some(b)) => Some(Rc::ptr_eq(&a, &b)),
+                        _ => None,
                     };
-                    let (lhs, rhs) = if !same_handle
+                    let (lhs, rhs) = if matches!(both_objects, Some(false))
                         && matches!(
                             b,
                             BinOp::Eq | BinOp::NotEq | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Spaceship
@@ -2479,19 +2483,7 @@ impl<'m> Vm<'m> {
                     // view, init_trigger_array_cast), but an initialized proxy
                     // casts its real instance: follow the forwarding chain.
                     let a = if matches!(k, CastKind::Array) && self.is_lazy_value(&a) {
-                        let mut cur = a;
-                        for _ in 0..64 {
-                            let next = self.proxy_redirect(cur.clone());
-                            let same = match (deref_object(&cur), deref_object(&next)) {
-                                (Some(x), Some(y)) => Rc::ptr_eq(&x, &y),
-                                _ => true,
-                            };
-                            cur = next;
-                            if same {
-                                break;
-                            }
-                        }
-                        cur
+                        self.proxy_view(a)
                     } else {
                         a
                     };
@@ -3122,9 +3114,27 @@ impl<'m> Vm<'m> {
                         Zval::Ref(rc) => rc,
                         other => Rc::new(RefCell::new(other)),
                     };
+                    let mut keys = self.pop_field_keys(top, &steps);
+                    // A lazy base initializes/forwards; binding into a typed
+                    // property validates the reference's value at bind time and
+                    // registers the typed source (typed_properties_001).
+                    let lazy_root = self.field_lazy_root(base, top, &steps, &keys, true)?;
+                    {
+                        let target = match &lazy_root {
+                            Some(r) => Some(r.clone()),
+                            None => match base {
+                                FieldBase::Local(s) => self.frames[top].slots.get(s as usize).map(|v| v.deref_clone()),
+                                FieldBase::Global(s) => self.frames[0].slots.get(s as usize).map(|v| v.deref_clone()),
+                                FieldBase::Superglobal(i) => self.superglobals.get(i as usize).map(|v| v.deref_clone()),
+                                FieldBase::This => self.frames[top].this.as_ref().map(|v| v.deref_clone()),
+                            },
+                        };
+                        self.bind_ref_typed_check(target.as_ref(), &steps, &mut keys, &cell)?;
+                    }
                     let value = cell.borrow().clone();
-                    let keys = self.pop_field_keys(top, &steps);
-                    if steps.is_empty() {
+                    if let Some(root) = lazy_root {
+                        self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, Zval::Ref(cell), true)?;
+                    } else if steps.is_empty() {
                         // A step-less base is rebound directly (not written
                         // through), matching `eval::bind_ref_target`.
                         let base_cell = field_base_mut(&mut self.frames, &mut self.superglobals, top, base)?;
@@ -3885,6 +3895,13 @@ impl<'m> Vm<'m> {
                     let rest = self.pop_keys(top, argc);
                     // Mirror `eval`'s ref-builtin rendering (E1): flush, run, append
                     // the builtin's output, then flush its own warnings.
+                    // A by-value object argument reads through an initialized
+                    // proxy (an uninitialized wrapper keeps its raw view —
+                    // array_splice's internal to-array, convert_to_array).
+                    let rest: Vec<Zval> = rest
+                        .into_iter()
+                        .map(|a| if self.is_lazy_value(&a) { self.proxy_view(a) } else { a })
+                        .collect();
                     let line = self.cur_line(top);
                     self.flush_diags(line)?;
                     let mut produced = Vec::new();
@@ -3922,6 +3939,13 @@ impl<'m> Vm<'m> {
                             rest.push(val);
                         }
                     }
+                    // A by-value object argument reads through an initialized
+                    // proxy (an uninitialized wrapper keeps its raw view —
+                    // array_splice's internal to-array, convert_to_array).
+                    let rest: Vec<Zval> = rest
+                        .into_iter()
+                        .map(|a| if self.is_lazy_value(&a) { self.proxy_view(a) } else { a })
+                        .collect();
                     let line = self.cur_line(top);
                     self.flush_diags(line)?;
                     let mut produced = Vec::new();
@@ -4590,6 +4614,11 @@ impl<'m> Vm<'m> {
                         if declared_slot {
                             value = self.coerce_typed_prop_write(ocid, &name, value)?;
                         }
+                    }
+                    // A declared slot written on a lazy wrapper (guarded writes
+                    // during its own initializer) keeps declaration order.
+                    if let Zval::Object(o) = &target {
+                        self.lazy_ordered_insert(o, &key);
                     }
                     if let Some(old) = write_property(&target, &key, value.clone())? {
                         self.gc_note(&old);
@@ -6471,6 +6500,9 @@ impl<'m> Vm<'m> {
             PropAccess::Slot(k) => k,
             _ => name.to_vec(),
         };
+        if let Zval::Object(o2) = &target {
+            self.lazy_ordered_insert(o2, &key);
+        }
         if let Some(old) = write_property(&target, &key, value)? {
             self.gc_note(&old);
         }
@@ -13825,6 +13857,45 @@ impl<'m> Vm<'m> {
         let top = self.frames.len() - 1;
         let entries: Vec<(Key, Zval)> = match self.frames[top].slots[slot as usize].deref_clone() {
             Zval::Array(a) => a.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect(),
+            other if deref_object(&other).is_some() => {
+                // Walking an OBJECT visits its property table; a lazy one
+                // initializes first (PHP 8.4). A by-ref callback binds each
+                // property's storage cell — a typed property's cell keeps
+                // enforcing its type (lazy_objects/array_walk).
+                let v = if self.is_lazy_value(&other) { self.realize_full(&other)? } else { other };
+                let o = deref_object(&v).expect("object checked above");
+                let cid = o.borrow().class_id as usize;
+                let keys: Vec<Box<[u8]>> = o
+                    .borrow()
+                    .props
+                    .iter()
+                    .filter(|(_, val)| !matches!(val, Zval::Undef))
+                    .map(|(k, _)| k.to_vec().into_boxed_slice())
+                    .collect();
+                for key in keys {
+                    let display = php_types::prop_display_name(&key).to_vec();
+                    let key_z = Zval::Str(PhpStr::new(display.clone()));
+                    if by_ref {
+                        let cell = prop_ref_cell(&o, &key);
+                        if let Some((decl, hint)) = prop_type_decl(&self.classes, cid, &display) {
+                            self.register_typed_ref(&cell, &o, decl, &display, hint);
+                        }
+                        let mut argv = vec![Zval::Ref(cell), key_z];
+                        if let Some(e) = &extra {
+                            argv.push(e.clone());
+                        }
+                        self.call_callable(callback.clone(), argv)?;
+                    } else {
+                        let val = o.borrow().props.get(&key).map(|v| v.deref_clone()).unwrap_or(Zval::Null);
+                        let mut argv = vec![val, key_z];
+                        if let Some(e) = &extra {
+                            argv.push(e.clone());
+                        }
+                        self.call_callable(callback.clone(), argv)?;
+                    }
+                }
+                return Ok(Zval::Bool(true));
+            }
             other => {
                 return Err(PhpError::TypeError(format!(
                     "array_walk(): Argument #1 ($array) must be of type array, {} given",
@@ -14339,15 +14410,26 @@ impl<'m> Vm<'m> {
         let Some((decl, hint)) = prop_type_decl(&self.classes, ocid, name) else {
             return Ok(value);
         };
+        // Zend names the CLASS of an object value in the mismatch message
+        // ("Cannot assign stdClass to …"); the scalar coercion layer only
+        // knows "object".
+        let obj_name = deref_object(&value)
+            .map(|o| String::from_utf8_lossy(&self.classes[o.borrow().class_id as usize].name).into_owned());
         let strict = self.frames.last().map(|f| f.module.strict).unwrap_or(self.module.strict);
         match self.coerce_or_check_hint(value, &hint, strict) {
             Ok(v) => Ok(v),
-            Err(given) => Err(PhpError::TypeError(format!(
-                "Cannot assign {given} to property {}::${} of type {}",
-                String::from_utf8_lossy(&self.classes[decl].name),
-                String::from_utf8_lossy(name),
-                hint.display_name(),
-            ))),
+            Err(given) => {
+                let given = match (given.as_str(), obj_name) {
+                    ("object", Some(n)) => n,
+                    _ => given,
+                };
+                Err(PhpError::TypeError(format!(
+                    "Cannot assign {given} to property {}::${} of type {}",
+                    String::from_utf8_lossy(&self.classes[decl].name),
+                    String::from_utf8_lossy(name),
+                    hint.display_name(),
+                )))
+            }
         }
     }
 
@@ -15166,9 +15248,18 @@ impl<'m> Vm<'m> {
                     self.lazy_initializing.insert(oid);
                     let r = self.call_callable(init.clone(), vec![v.clone()]);
                     self.lazy_initializing.remove(&oid);
+                    // A ghost initializer must return NULL/no value (PHP 8.4);
+                    // any failure rolls the wrapper back to its lazy state with
+                    // the initializer reinstalled (a later access retries).
+                    let r = match r {
+                        Ok(ret) if !matches!(ret.deref_clone(), Zval::Null | Zval::Undef) => {
+                            Err(PhpError::TypeError(
+                                "Lazy object initializer must return NULL or no value".to_string(),
+                            ))
+                        }
+                        other => other.map(|_| ()),
+                    };
                     if let Err(e) = r {
-                        // Roll the wrapper back to its uninitialized-lazy state;
-                        // the initializer stays installed (a later access retries).
                         {
                             let mut b = rc.borrow_mut();
                             b.props = saved_props;
@@ -15192,13 +15283,53 @@ impl<'m> Vm<'m> {
                     self.lazy_initializing.insert(oid);
                     let r = self.call_callable(factory.clone(), vec![v.clone()]);
                     self.lazy_initializing.remove(&oid);
+                    // Validate the factory's return: an object of the proxy's
+                    // own class, or of an ancestor the proxy subclasses without
+                    // additional properties or __destruct/__clone overrides
+                    // (initializer_must_return_the_right_type).
+                    let r = r.and_then(|real| {
+                        let rd = real.deref_clone();
+                        let Some(io) = deref_object(&rd) else {
+                            return Err(PhpError::TypeError(format!(
+                                "Lazy proxy factory must return an instance of a class compatible with {}, {} returned",
+                                String::from_utf8_lossy(&self.classes[cid].name),
+                                rd.type_name_for_error(),
+                            )));
+                        };
+                        {
+                            let b = io.borrow();
+                            if b.lazy.is_some() && b.proxy_instance.is_none() {
+                                return Err(PhpError::Error(
+                                    "Lazy proxy factory must return a non-lazy object".to_string(),
+                                ));
+                            }
+                        }
+                        let icid = io.borrow().class_id as usize;
+                        let decl_of = |c: ClassId, m: &[u8]| {
+                            resolve_method_runtime(&self.classes, c, m).map(|(d, _)| d)
+                        };
+                        let ok = icid == cid
+                            || (is_instance_of(&self.classes, self.stringable_id, cid, icid)
+                                && self.classes[cid].prop_defaults.len()
+                                    == self.classes[icid].prop_defaults.len()
+                                && decl_of(cid, b"__destruct") == decl_of(icid, b"__destruct")
+                                && decl_of(cid, b"__clone") == decl_of(icid, b"__clone"));
+                        if !ok {
+                            return Err(PhpError::TypeError(format!(
+                                "The real instance class {} is not compatible with the proxy class {}. The proxy must be a instance of the same class as the real instance, or a sub-class with no additional properties, and no overrides of the __destructor or __clone methods.",
+                                String::from_utf8_lossy(&self.classes[icid].name),
+                                String::from_utf8_lossy(&self.classes[cid].name),
+                            )));
+                        }
+                        Ok(rd)
+                    });
                     match r {
                         Ok(real) => {
                             rc.borrow_mut().proxy_instance = Some(Box::new(real));
                         }
                         Err(e) => {
-                            // A factory exception leaves the proxy uninitialized
-                            // and retryable (PHP 8.4).
+                            // A factory exception (or invalid return) leaves the
+                            // proxy uninitialized and retryable (PHP 8.4).
                             if let Some(sp) = saved_lazy_props {
                                 self.lazy_props.insert(oid, sp);
                             }
@@ -15259,6 +15390,14 @@ impl<'m> Vm<'m> {
             rc.borrow_mut().mark_readonly_init(prop);
         }
         }
+        // A raw write still enforces the declared type
+        // (lazy_objects/realize: "Cannot assign stdClass to property C::$a of
+        // type string"); a skip's `Undef` placeholder is not a write.
+        let value = if matches!(value, Zval::Undef) {
+            value
+        } else {
+            self.coerce_typed_prop_write(cid, php_types::prop_display_name(prop), value)?
+        };
         // Materialize IN DECLARATION ORDER: the lazy wrapper's table holds only
         // the typed placeholders, so a plain `set` of an untyped property would
         // append it after them (skipLazyInitialization on `$a` must not move it
@@ -15377,6 +15516,111 @@ impl<'m> Vm<'m> {
         deref_object(v).is_some_and(|o| o.borrow().lazy.is_some())
     }
 
+    /// Writing a *declared* property into a lazy wrapper's sparse table would
+    /// append it after the typed placeholders; rebuild in declaration order
+    /// first so later dumps match Zend
+    /// (init_exception_reverts_initializer_changes). The caller performs the
+    /// actual write into the `Null` placeholder this leaves behind.
+    fn lazy_ordered_insert(&self, o: &Rc<RefCell<Object>>, key: &[u8]) {
+        let cid = {
+            let b = o.borrow();
+            if b.lazy.is_none() || b.proxy_instance.is_some() || b.props.contains(key) {
+                return;
+            }
+            b.class_id as usize
+        };
+        if !self.classes[cid].prop_defaults.iter().any(|(k, _)| k.as_ref() == key) {
+            return; // dynamic properties append as usual
+        }
+        let mut b = o.borrow_mut();
+        let mut props = Props::new();
+        let mut declared: HashSet<&[u8]> = HashSet::new();
+        for (k, _) in &self.classes[cid].prop_defaults {
+            declared.insert(k.as_ref());
+            if k.as_ref() == key {
+                props.set(k, Zval::Null);
+            } else if let Some(cur) = b.props.get(k) {
+                props.set(k, cur.clone());
+            }
+        }
+        for (k, v) in b.props.iter() {
+            if !declared.contains(k) {
+                props.set(k, v.clone());
+            }
+        }
+        b.props = props;
+    }
+
+    /// The property name a dynamic step's key denotes: an object converts via
+    /// its `__toString` (typed_properties_001's stringable name); everything
+    /// else through the usual string cast.
+    fn dyn_prop_name_value(&mut self, k: &Zval) -> Result<Box<[u8]>, PhpError> {
+        let kd = k.deref_clone();
+        if let Some(o) = deref_object(&kd) {
+            let cid = o.borrow().class_id as usize;
+            if resolve_method_runtime(&self.classes, cid, b"__toString").is_some() {
+                let s = self.call_method_sync(kd.clone(), b"__toString", Vec::new())?;
+                return Ok(convert::to_zstr_cast(&s, &mut self.diags).as_bytes().to_vec().into());
+            }
+        }
+        Ok(convert::to_zstr_cast(&kd, &mut self.diags).as_bytes().to_vec().into())
+    }
+
+    /// Bind-into-property housekeeping for `BindRefTo(Checked)` on a
+    /// single-property path: stringifies a dynamic (possibly object) name in
+    /// `keys[0]`, validates the reference's current value against a typed
+    /// property (Zend errors at bind time) writing the coerced value through,
+    /// and registers the cell as a typed-reference source.
+    fn bind_ref_typed_check(
+        &mut self,
+        target: Option<&Zval>,
+        steps: &[FieldStep],
+        keys: &mut [Zval],
+        cell: &Rc<RefCell<Zval>>,
+    ) -> Result<(), PhpError> {
+        if steps.len() != 1 {
+            return Ok(());
+        }
+        let name: Box<[u8]> = match &steps[0] {
+            FieldStep::Prop(n) => n.clone(),
+            FieldStep::PropDyn => {
+                let Some(k) = keys.first().cloned() else { return Ok(()) };
+                let n = self.dyn_prop_name_value(&k)?;
+                keys[0] = Zval::Str(PhpStr::new(n.to_vec()));
+                n
+            }
+            _ => return Ok(()),
+        };
+        let Some(o) = target.and_then(deref_object) else { return Ok(()) };
+        let cid = o.borrow().class_id as usize;
+        if let Some((decl, hint)) = prop_type_decl(&self.classes, cid, &name) {
+            let cur = cell.borrow().clone();
+            let coerced = self.coerce_typed_prop_write(cid, &name, cur)?;
+            *cell.borrow_mut() = coerced;
+            self.register_typed_ref(cell, &o, decl, &name, hint);
+        }
+        Ok(())
+    }
+
+    /// Follow an *initialized* proxy's forwarding chain WITHOUT initializing:
+    /// the view a by-value consumer (a builtin argument, an `(array)` cast)
+    /// reads. An uninitialized wrapper passes through as-is.
+    fn proxy_view(&self, v: Zval) -> Zval {
+        let mut cur = v;
+        for _ in 0..64 {
+            let next = self.proxy_redirect(cur.clone());
+            let same = match (deref_object(&cur), deref_object(&next)) {
+                (Some(a), Some(b)) => Rc::ptr_eq(&a, &b),
+                _ => true,
+            };
+            cur = next;
+            if same {
+                break;
+            }
+        }
+        cur
+    }
+
     /// If a field path's base holds a *lazy* object and the walk starts with a
     /// property step, initialize/forward it (PHP 8.4) and return the object
     /// the walk should root at instead of the raw base slot — the walkers
@@ -15392,9 +15636,13 @@ impl<'m> Vm<'m> {
     ) -> Result<Option<Zval>, PhpError> {
         let n: Box<[u8]> = match steps.first() {
             Some(FieldStep::Prop(n)) => n.clone(),
-            // A dynamic first step's name is the first popped key.
+            // A dynamic first step's name is the first popped key (an object
+            // name converts via __toString, warning-free).
             Some(FieldStep::PropDyn) => match keys.first() {
-                Some(k) => convert::to_zstr_cast(k, &mut self.diags).as_bytes().to_vec().into(),
+                Some(k) => {
+                    let k = k.clone();
+                    self.dyn_prop_name_value(&k)?
+                }
                 None => return Ok(None),
             },
             _ => return Ok(None),
