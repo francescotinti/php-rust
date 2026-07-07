@@ -2660,7 +2660,41 @@ class SplFixedArray implements ArrayAccess, Countable, Iterator {
         return $a;
     }
 }
+// The Reflector interface every reflection object satisfies (it extends
+// Stringable). phpr does not yet render the full PHP export format in the
+// classes' __toString, but the interface membership itself is what code
+// type-hints and tests via `instanceof Reflector`.
+interface Reflector extends Stringable {}
+// The Reflection base: a handful of static helpers, chiefly getModifierNames().
+abstract class Reflection {
+    public static function getModifierNames($modifiers) {
+        $names = [];
+        // Order fixed by ext/reflection: abstract, final, visibility, static,
+        // readonly (NOT by bit value).
+        if ($modifiers & 64)  { $names[] = 'abstract'; }   // IS_ABSTRACT
+        if ($modifiers & 32)  { $names[] = 'final'; }      // IS_FINAL
+        if ($modifiers & 1)   { $names[] = 'public'; }     // IS_PUBLIC
+        if ($modifiers & 2)   { $names[] = 'protected'; }  // IS_PROTECTED
+        if ($modifiers & 4)   { $names[] = 'private'; }    // IS_PRIVATE
+        if ($modifiers & 16)  { $names[] = 'static'; }     // IS_STATIC
+        if ($modifiers & 128) { $names[] = 'readonly'; }   // IS_READONLY
+        return $names;
+    }
+}
 class ReflectionException extends Exception {}
+// A loaded Zend (C) extension. phpr has no C extensions, so this reflects the
+// bare name it is constructed with: enough for `new ReflectionZendExtension($n)`
+// and its accessors to exist.
+class ReflectionZendExtension implements Reflector {
+    public $name;
+    public function __construct($name) { $this->name = $name; }
+    public function __toString() { return ''; }
+    public function getName() { return $this->name; }
+    public function getVersion() { return ''; }
+    public function getAuthor() { return ''; }
+    public function getURL() { return ''; }
+    public function getCopyright() { return ''; }
+}
 class ReflectionAttribute {
     const IS_INSTANCEOF = 2;
     // Validate the $flags argument and apply the IS_INSTANCEOF filter. `$label` is
@@ -2761,7 +2795,7 @@ class ReflectionAttribute {
         return __reflect_attr_newinstance($this->__class, $this->__index);
     }
 }
-class ReflectionClass {
+class ReflectionClass implements Reflector {
     const SKIP_INITIALIZATION_ON_SERIALIZE = 8;
     const SKIP_DESTRUCTOR = 16;
     public $name;
@@ -3016,7 +3050,7 @@ class ReflectionNamedType extends ReflectionType {
         return $r;
     }
 }
-class ReflectionParameter {
+class ReflectionParameter implements Reflector {
     public $name;
     public $__pos; public $__optional; public $__variadic; public $__byref;
     public $__type; public $__hasDefault; public $__default;
@@ -3141,7 +3175,7 @@ class ReflectionConstant {
     }
     public function __toString() { return sprintf("Constant [ %s ]\n", $this->name); }
 }
-class ReflectionClassConstant {
+class ReflectionClassConstant implements Reflector {
     const IS_PUBLIC = 1;
     const IS_PROTECTED = 2;
     const IS_PRIVATE = 4;
@@ -3216,7 +3250,7 @@ class ReflectionEnum extends ReflectionClass {
         return $out;
     }
 }
-abstract class ReflectionFunctionAbstract {}
+abstract class ReflectionFunctionAbstract implements Reflector {}
 class ReflectionFunction extends ReflectionFunctionAbstract {
     public $name;
     public $__info;
@@ -3347,7 +3381,7 @@ class ReflectionMethod extends ReflectionFunctionAbstract {
         return ReflectionAttribute::__filter(__reflect_method_attributes($this->class, $this->name, $hostName), $name, $flags, 'ReflectionFunctionAbstract');
     }
 }
-class ReflectionProperty {
+class ReflectionProperty implements Reflector {
     public function getDocComment() { return false; }
     public function isFinal() { return false; }
     public function isAbstract() { return false; }
@@ -3462,7 +3496,7 @@ class ReflectionProperty {
         if ($msg !== null) { throw new ReflectionException($msg); }
     }
 }
-class ReflectionExtension {
+class ReflectionExtension implements Reflector {
     public $name;
     public function __construct($name) {
         if (!extension_loaded($name)) {
