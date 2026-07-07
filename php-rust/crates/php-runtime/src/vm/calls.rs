@@ -26,10 +26,24 @@ pub(super) fn builtin_ref_call(
 /// The fatal a call raises when a name isn't a callable VM builtin (defensive:
 /// the compiler already filters these, so this is a safety net).
 pub(super) fn undefined_builtin(name: &[u8]) -> PhpError {
+    log_missing_builtin(name);
     PhpError::Error(format!(
         "Call to undefined function {}()",
         String::from_utf8_lossy(name)
     ))
+}
+
+/// Coverage-audit aid: when the `PHPR_LOG_MISSING` env var names a file, append
+/// each called-but-undefined function name to it (one per line). A framework run
+/// then lists exactly which builtins it reached that phpr does not implement —
+/// prioritizing stdlib work by real use. A no-op when the var is unset.
+pub(super) fn log_missing_builtin(name: &[u8]) {
+    if let Ok(path) = std::env::var("PHPR_LOG_MISSING") {
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+            let _ = writeln!(f, "{}", String::from_utf8_lossy(name));
+        }
+    }
 }
 
 /// Flatten a runtime argument array into positional values for a spread call
@@ -760,10 +774,7 @@ impl<'m> Vm<'m> {
                         return Ok(());
                     }
                 }
-                Err(PhpError::Error(format!(
-                    "Call to undefined function {}()",
-                    String::from_utf8_lossy(written)
-                )))
+                Err(undefined_builtin(written))
             }
         }
     }
@@ -786,10 +797,7 @@ impl<'m> Vm<'m> {
         } else if self.is_name_callable(fallback) {
             self.invoke_named(fallback, args)
         } else {
-            Err(PhpError::Error(format!(
-                "Call to undefined function {}()",
-                String::from_utf8_lossy(name)
-            )))
+            Err(undefined_builtin(name))
         }
     }
 
