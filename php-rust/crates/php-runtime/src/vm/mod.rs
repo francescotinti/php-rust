@@ -13149,6 +13149,20 @@ impl<'m> Vm<'m> {
         Ok(Zval::Array(Rc::new(out)))
     }
 
+
+    /// `__reflect_class_real_name(name) -> string|false`: the CANONICAL declared
+    /// name of a class (class names resolve case-insensitively, but the reflected
+    /// `ReflectionClass::$name` must carry the real casing, not the argument's).
+    /// `false` when the class does not exist. Lets the prelude normalize a
+    /// `new ReflectionClass('MY\CLASS')` name back to `My\Class`
+    /// (Doctrine ClassMetadata::initializeReflection: ClassMetadataTest::testClassCaseSensitivity).
+    fn ho_reflect_class_real_name(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        match self.resolve_named_class_with_autoload(&args)? {
+            Some(cid) => Ok(Zval::Str(PhpStr::new(self.classes[cid].name.to_vec()))),
+            None => Ok(Zval::Bool(false)),
+        }
+    }
+
     /// `__reflect_class_doc(name) -> string|false`: the class declaration's
     /// retained `/** ... */` doc comment (ReflectionClass::getDocComment), false
     /// for none / an unknown class / a prelude ("internal") class.
@@ -17654,6 +17668,7 @@ host_builtins! {
     b"__dom_xpath" => vm.ho_dom_xpath(args),
     b"__dom_doc_meta" => vm.ho_dom_doc_meta(args),
     b"__reflect_class_loc" => vm.ho_reflect_class_loc(args),
+    b"__reflect_class_real_name" => vm.ho_reflect_class_real_name(args),
     b"array_diff" => vm.ho_array_diff(args),
     b"get_declared_classes" => vm.ho_get_declared(0),
     b"get_declared_interfaces" => vm.ho_get_declared(1),

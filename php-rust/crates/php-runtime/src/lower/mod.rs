@@ -2772,6 +2772,13 @@ class ReflectionClass {
         if (!is_object($objectOrClass) && !class_exists($this->name) && !interface_exists($this->name) && !trait_exists($this->name)) {
             throw new ReflectionException(sprintf('Class "%s" does not exist', $this->name));
         }
+        // Class names resolve case-insensitively but ReflectionClass::$name carries
+        // the CANONICAL declared casing (a `new ReflectionClass('MY\CLASS')` reports
+        // `My\Class`): normalize a string argument to it.
+        if (!is_object($objectOrClass)) {
+            $real = __reflect_class_real_name($this->name);
+            if ($real !== false) { $this->name = $real; }
+        }
     }
     public function getFileName() { $l = __reflect_class_loc($this->name); return $l[0]; }
     public function isInternal() { return $this->getFileName() === false; }
