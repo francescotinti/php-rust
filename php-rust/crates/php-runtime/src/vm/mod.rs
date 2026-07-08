@@ -9541,9 +9541,23 @@ impl<'m> Vm<'m> {
             let by_ref = func.param_by_ref.get(i).copied().unwrap_or(false);
             let ty = func.param_reflect_types.get(i).and_then(reflect_type_descriptor)
                 .unwrap_or_else(|| func.param_hints.get(i).map(typehint_descriptor).unwrap_or(Zval::Bool(false)));
-            let (has_default, default_val) = match func.param_defaults.get(i).and_then(|o| o.as_ref()) {
-                Some(thunk) => (true, self.run_value_thunk(thunk, cur_class)?),
-                None => (false, Zval::Null),
+            // A parameter default is evaluated LAZILY in PHP — only when
+            // getDefaultValue() is called. Evaluating it here is a convenience, but
+            // a default that can't be evaluated (an undefined/namespaced constant,
+            // say) must NOT abort building the descriptor and fatal the whole
+            // ReflectionParameter construction. On failure, defer the error to
+            // getDefaultValue(). `drive_to_return` already unwound the thunk's
+            // frames on error, so the VM stack is back at baseline here.
+            let (has_default, default_val, default_err) = match func.param_defaults.get(i).and_then(|o| o.as_ref()) {
+                Some(thunk) => match self.run_value_thunk(thunk, cur_class) {
+                    Ok(v) => (true, v, Zval::Bool(false)),
+                    Err(e) => {
+                        let m = e.message();
+                        let msg = if m.is_empty() { "the parameter default value could not be evaluated" } else { m };
+                        (true, Zval::Null, Zval::Str(PhpStr::new(msg.as_bytes().to_vec())))
+                    }
+                },
+                None => (false, Zval::Null, Zval::Bool(false)),
             };
             let mut p = php_types::PhpArray::new();
             let put = |a: &mut php_types::PhpArray, k: &[u8], v: Zval| {
@@ -9557,6 +9571,7 @@ impl<'m> Vm<'m> {
             put(&mut p, b"type", ty);
             put(&mut p, b"hasDefault", Zval::Bool(has_default));
             put(&mut p, b"default", default_val);
+            put(&mut p, b"defaultError", default_err);
             let default_const = match func.param_default_const.get(i).and_then(|o| o.as_ref()) {
                 Some(name) => Zval::Str(PhpStr::new(name.to_vec())),
                 None => Zval::Bool(false),

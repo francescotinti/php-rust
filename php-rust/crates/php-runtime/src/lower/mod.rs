@@ -3157,7 +3157,7 @@ class ReflectionParameter implements Reflector {
     public $name;
     public $__pos; public $__optional; public $__variadic; public $__byref;
     public $__type; public $__hasDefault; public $__default;
-    public $__declClass; public $__declFunc; public $__defaultConst;
+    public $__declClass; public $__declFunc; public $__defaultConst; public $__defaultError;
     public function __construct($function = null, $param = null) {
         if ($function === null) { return; } // internal factory path (__fromInfo)
         $info = is_array($function)
@@ -3178,6 +3178,7 @@ class ReflectionParameter implements Reflector {
         $this->__hasDefault = $p['hasDefault']; $this->__default = $p['default'];
         $this->__declClass = $p['declClass'] ?? ''; $this->__declFunc = $p['declFunc'] ?? '';
         $this->__defaultConst = $p['defaultConstant'] ?? false;
+        $this->__defaultError = $p['defaultError'] ?? false;
     }
     public function isDefaultValueConstant() {
         if (!$this->__hasDefault) {
@@ -3205,6 +3206,11 @@ class ReflectionParameter implements Reflector {
     public function getDefaultValue() {
         if (!$this->__hasDefault) {
             throw new ReflectionException('Internal error: Failed to retrieve the default value');
+        }
+        // A default that could not be evaluated surfaces its error here (lazily),
+        // never at ReflectionParameter construction (PHP evaluates on demand).
+        if ($this->__defaultError !== false) {
+            throw new Error($this->__defaultError);
         }
         return $this->__default;
     }
