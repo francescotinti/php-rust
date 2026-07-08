@@ -10418,6 +10418,51 @@ impl<'m> Vm<'m> {
     }
 
 
+    /// `__reflect_static_props($class)`: all static properties of `$class` (its own
+    /// and inherited) as a `name => value` map — backs
+    /// `ReflectionClass::getStaticProperties()`. Derived class first; a name already
+    /// seen (child redeclaration) keeps the derived value. A const default is
+    /// realized lazily, a not-yet-run thunk reads NULL (as the single-prop getter).
+    fn ho_reflect_static_props(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let class = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+        let lc = class.strip_prefix(b"\\").unwrap_or(&class).to_ascii_lowercase();
+        let Some(&cid) = self.class_index.get(&lc) else {
+            return Ok(Zval::Array(Rc::new(php_types::PhpArray::new())));
+        };
+        let mut chain: Vec<usize> = Vec::new();
+        let mut c = Some(cid);
+        while let Some(ci) = c {
+            chain.push(ci);
+            c = self.classes[ci].parent;
+        }
+        let mut seen: HashSet<Vec<u8>> = HashSet::new();
+        let mut out = php_types::PhpArray::new();
+        for ci in chain {
+            let props: Vec<(usize, Vec<u8>)> = self.classes[ci]
+                .static_props
+                .iter()
+                .enumerate()
+                .map(|(idx, sp)| (idx, sp.name.as_ref().to_vec()))
+                .collect();
+            for (idx, name) in props {
+                if !seen.insert(name.clone()) {
+                    continue;
+                }
+                let key = (ci, name.clone());
+                let val = if let Some(cell) = self.static_props.get(&key) {
+                    cell.borrow().deref_clone()
+                } else {
+                    match &self.classes[ci].static_props[idx].init {
+                        StaticInit::Const(cst) => cst.to_zval(),
+                        StaticInit::Thunk(_) => Zval::Null,
+                    }
+                };
+                out.insert(Key::from_bytes(&name), val);
+            }
+        }
+        Ok(Zval::Array(Rc::new(out)))
+    }
+
     /// `__reflect_prop_attributes($class, $prop, $filter = null)`: the host backing
     /// of `ReflectionProperty::getAttributes()`. Returns `ReflectionAttribute`s for
     /// the `#[…]` declared on `$class::$prop`, each carrying the lazy handle
@@ -10594,12 +10639,15 @@ impl<'m> Vm<'m> {
         let key = cname.strip_prefix(b"\\").unwrap_or(&cname).to_ascii_lowercase();
         let Some(&cid) = self.class_index.get(&key) else { return empty() };
         let Some(&ra_cid) = self.class_index.get(&b"reflectionattribute"[..]) else { return empty() };
-        let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, &method) else { return empty() };
+        // `find_method_reflect` also searches abstract signatures and the interface
+        // graph, so an interface/abstract method's `#[…]` attributes are visible
+        // (resolve_method_runtime only sees concrete `.methods`).
+        let Some((m, _defc, _)) = self.find_method_reflect(cid, &method) else { return empty() };
         let filter: Option<Vec<u8>> = match args.get(2).map(|v| v.deref_clone()) {
             Some(Zval::Str(s)) => { let raw = s.as_bytes(); Some(raw.strip_prefix(b"\\").unwrap_or(raw).to_vec()) }
             _ => None,
         };
-        let matches: Vec<(usize, Vec<u8>)> = self.classes[defc].methods[midx].func.attributes.iter().enumerate()
+        let matches: Vec<(usize, Vec<u8>)> = m.func.attributes.iter().enumerate()
             .filter(|(_, a)| match &filter { None => true, Some(f) => a.name.strip_prefix(b"\\").unwrap_or(&a.name).eq_ignore_ascii_case(f) })
             .map(|(i, a)| (i, a.name.to_vec())).collect();
         let target = self.classes[cid].name.to_vec();
@@ -10625,25 +10673,26 @@ impl<'m> Vm<'m> {
         let idx = match args.get(2) { Some(Zval::Long(i)) => *i as usize, _ => return Ok(Zval::Null) };
         let key = cname.strip_prefix(b"\\").unwrap_or(&cname).to_ascii_lowercase();
         let Some(&cid) = self.class_index.get(&key) else { return Ok(Zval::Null) };
-        let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, &method) else { return Ok(Zval::Null) };
-        let Some(attr) = self.classes[defc].methods[midx].func.attributes.get(idx) else { return Ok(Zval::Null) };
+        // `find_method_reflect` also resolves interface/abstract signatures, so a
+        // `#[…]` on a bodyless method instantiates like any other.
+        let Some((m, defc, _)) = self.find_method_reflect(cid, &method) else { return Ok(Zval::Null) };
+        let Some(attr) = m.func.attributes.get(idx) else { return Ok(Zval::Null) };
         let thunk = if get_args { &attr.args_thunk } else { &attr.new_thunk };
         log::debug!(
             target: "phpr::attr",
-            "run_method_attr {}::{} idx {} -> defc {} midx {} attr {} (of {}) ops={:?} consts={:?}",
+            "run_method_attr {}::{} idx {} -> defc {} attr {} (of {}) ops={:?} consts={:?}",
             String::from_utf8_lossy(&cname),
             String::from_utf8_lossy(&method),
             idx,
             defc,
-            midx,
             String::from_utf8_lossy(&attr.name),
-            self.classes[defc].methods[midx].func.attributes.len(),
+            m.func.attributes.len(),
             thunk.ops,
             thunk.consts
         );
         if !get_args {
             let attr_name = attr.name.to_vec();
-            let siblings: Vec<Vec<u8>> = self.classes[defc].methods[midx].func.attributes.iter().map(|a| a.name.to_vec()).collect();
+            let siblings: Vec<Vec<u8>> = m.func.attributes.iter().map(|a| a.name.to_vec()).collect();
             self.validate_attr(&attr_name, &siblings, 4, "method")?;
         }
         let baseline = self.frames.len();
@@ -11331,7 +11380,7 @@ impl<'m> Vm<'m> {
         let b = o.borrow();
         for (name, _) in b.props.iter() {
             if !declared.contains(name) && !name.starts_with(b"\0") {
-                arr.append(Zval::Str(PhpStr::new(name.to_vec())));
+                let _ = arr.append(Zval::Str(PhpStr::new(name.to_vec())));
             }
         }
         Ok(Zval::Array(Rc::new(arr)))
@@ -17712,6 +17761,7 @@ host_builtins! {
     b"__weak_create" => vm.ho_weak_create(args),
     b"__weak_get" => vm.ho_weak_get(args),
     b"__reflect_static_prop_get" => vm.ho_reflect_static_prop_get(args),
+    b"__reflect_static_props" => vm.ho_reflect_static_props(args),
     b"__reflect_static_prop_set" => vm.ho_reflect_static_prop_set(args),
     b"__zip_open" => vm.ho_zip_open(args),
     b"__zip_close" => vm.ho_zip_close(args),

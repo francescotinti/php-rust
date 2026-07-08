@@ -2961,6 +2961,36 @@ class ReflectionClass implements Reflector {
     public function isEnum() { return in_array('UnitEnum', class_implements($this->name)); }
     public function isFinal() { return __reflect_class_modifiers($this->name)['final']; }
     public function isAbstract() { return __reflect_class_modifiers($this->name)['abstract']; }
+    // Bitmask of class modifiers. Only an *explicit* `abstract class` sets 64;
+    // interfaces/traits (whose methods are implicitly abstract) return 0, as does
+    // a plain class. `final` is 32.
+    public function getModifiers() {
+        $m = 0;
+        if (!$this->isInterface() && !$this->isTrait() && $this->isAbstract()) { $m |= 64; }
+        if ($this->isFinal()) { $m |= 32; }
+        return $m;
+    }
+    public function isInstance($object) { return $object instanceof $this->name; }
+    // A class is iterable when it implements Traversable (via Iterator or
+    // IteratorAggregate); class_implements includes inherited interfaces.
+    public function isIterateable() {
+        return in_array('Traversable', class_implements($this->name), true)
+            || strcasecmp($this->name, 'Traversable') === 0;
+    }
+    public function isIterable() { return $this->isIterateable(); }
+    // Static properties as a `name => value` map (own + inherited), values current.
+    public function getStaticProperties() { return __reflect_static_props($this->name); }
+    public function getStaticPropertyValue($name, $default = null) {
+        $props = $this->getStaticProperties();
+        if (array_key_exists($name, $props)) { return $props[$name]; }
+        if (func_num_args() >= 2) { return $default; }
+        throw new ReflectionException(sprintf('Property %s::$%s does not exist', $this->name, $name));
+    }
+    public function setStaticPropertyValue($name, $value) {
+        if (!__reflect_static_prop_set($this->name, $name, $value)) {
+            throw new ReflectionException(sprintf('Class %s does not have a property named %s', $this->name, $name));
+        }
+    }
     public function hasMethod($name) { return method_exists($this->name, $name); }
     public function hasProperty($name) {
         if (!property_exists($this->name, $name)) { return false; }
@@ -3161,6 +3191,35 @@ class ReflectionParameter implements Reflector {
         }
         return $this->__default;
     }
+    // The declaring function/method of this parameter.
+    public function getDeclaringFunction() {
+        return $this->__declClass !== ''
+            ? new ReflectionMethod($this->__declClass, $this->__declFunc)
+            : new ReflectionFunction($this->__declFunc);
+    }
+    // The class the parameter is declared in, or null for a plain function.
+    public function getDeclaringClass() {
+        return $this->__declClass !== '' ? new ReflectionClass($this->__declClass) : null;
+    }
+    // Deprecated (pre-8.0): the ReflectionClass of a class-typed parameter, else
+    // null. `self`/`parent`/`static` resolve against the declaring class.
+    public function getClass() {
+        $t = $this->__type;
+        if ($t === false || isset($t['kind']) || $t['builtin']) { return null; }
+        $n = $t['name'];
+        if (strcasecmp($n, 'self') === 0 || strcasecmp($n, 'static') === 0) { $n = $this->__declClass; }
+        elseif (strcasecmp($n, 'parent') === 0) { $n = get_parent_class($this->__declClass); }
+        return $n === '' || $n === false ? null : new ReflectionClass($n);
+    }
+    // Deprecated type predicates (pre-8.0): true for a bare `array`/`callable` hint.
+    public function isArray() {
+        return $this->__type !== false && !isset($this->__type['kind'])
+            && strcasecmp($this->__type['name'], 'array') === 0;
+    }
+    public function isCallable() {
+        return $this->__type !== false && !isset($this->__type['kind'])
+            && strcasecmp($this->__type['name'], 'callable') === 0;
+    }
     // `Parameter #N [ <optional> Type $name = DEFAULT ]` (oracle format).
     // PHPUnit's mock generator parses the piece after ' = ' as *source code*
     // for an object default, so enum cases render `\FQCN::CASE`.
@@ -3312,6 +3371,7 @@ class ReflectionClassConstant implements Reflector {
     public function isProtected() { return $this->__info['visibility'] === 'protected'; }
     public function isPrivate() { return $this->__info['visibility'] === 'private'; }
     public function isFinal() { return $this->__info['final']; }
+    public function isDeprecated() { return count($this->getAttributes('Deprecated')) > 0; }
     public function isEnumCase() { return $this->__info['enumCase']; }
     public function getModifiers() {
         $m = 0;
@@ -3345,6 +3405,7 @@ class ReflectionEnumUnitCase extends ReflectionClassConstant {
     // getValue() is inherited: __reflect_class_const_info returns the case
     // singleton as the constant's value.
     public function getEnum() { return new ReflectionEnum($this->class); }
+    public function getDocComment() { return false; }
 }
 class ReflectionEnumBackedCase extends ReflectionEnumUnitCase {
     public function getBackingValue() { return $this->getValue()->value; }
@@ -3419,8 +3480,17 @@ class ReflectionFunction extends ReflectionFunctionAbstract {
     public function getEndLine() { return $this->__info['endLine'] ?? false; }
     public function isUserDefined() { return ($this->__info['file'] ?? false) !== false; }
     public function isInternal() { return ($this->__info['file'] ?? false) === false; }
+    public function isClosure() { return $this->__closure !== null; }
+    public function isAnonymous() { return $this->__closure !== null; }
+    // Deprecated via the #[\Deprecated] attribute (8.4).
+    public function isDeprecated() { return count($this->getAttributes('Deprecated')) > 0; }
     public function invoke(...$args) { return call_user_func_array($this->name, $args); }
     public function invokeArgs($args) { return call_user_func_array($this->name, $args); }
+    // The underlying closure (for a Closure-reflection) or the named function
+    // wrapped as one.
+    public function getClosure() {
+        return $this->__closure !== null ? $this->__closure : Closure::fromCallable($this->name);
+    }
     public function getAttributes($name = null, $flags = 0) {
         $hostName = ($flags & ReflectionAttribute::IS_INSTANCEOF) ? null : $name;
         $all = $this->__closure !== null
@@ -3584,7 +3654,26 @@ class ReflectionMethod extends ReflectionFunctionAbstract {
         }
     }
     public function isConstructor() { return strcasecmp($this->name, '__construct') === 0; }
+    // Named constructor (8.3): build from a "Class::method" string.
+    public static function createFromMethodName(string $method): static {
+        $parts = explode('::', $method, 2);
+        if (count($parts) !== 2) {
+            throw new ReflectionException(sprintf('%s is not a valid method name', $method));
+        }
+        return new static($parts[0], $parts[1]);
+    }
+    public function hasPrototype() { return $this->__protoScope() !== null; }
+    public function getPrototype() {
+        $proto = $this->__protoScope();
+        if ($proto === null) {
+            throw new ReflectionException(sprintf('Method %s::%s does not have a prototype', $this->class, $this->name));
+        }
+        return new ReflectionMethod($proto, $this->name);
+    }
     public function returnsReference() { return $this->__info['byRef'] ?? false; }
+    // A method is deprecated when it carries the #[\Deprecated] attribute (8.4);
+    // not inherited (an override without the attribute is not deprecated).
+    public function isDeprecated() { return count($this->getAttributes('Deprecated')) > 0; }
     public function hasTentativeReturnType() { return false; }
     public function getTentativeReturnType() { return null; }
     public function isUserDefined() { return ($this->__info['file'] ?? false) !== false; }
@@ -3607,6 +3696,13 @@ class ReflectionMethod extends ReflectionFunctionAbstract {
     public function invokeArgs($object, $args) {
         return __reflect_invoke($object, $this->class, $this->name, $args);
     }
+    // A Closure bound to the method: a static method ignores $object, an instance
+    // method binds it (8.0+ allows null for a static method).
+    public function getClosure($object = null) {
+        return $this->isStatic()
+            ? Closure::fromCallable($this->class . '::' . $this->name)
+            : Closure::fromCallable([$object, $this->name]);
+    }
     public function getAttributes($name = null, $flags = 0) {
         $hostName = ($flags & ReflectionAttribute::IS_INSTANCEOF) ? null : $name;
         return ReflectionAttribute::__filter(__reflect_method_attributes($this->class, $this->name, $hostName), $name, $flags, 'ReflectionFunctionAbstract');
@@ -3626,7 +3722,20 @@ class ReflectionProperty implements Reflector {
     public function getHooks() { return []; }
     public function hasHook($type) { return false; }
     public function getHook($type) { return null; }
-    public function isDynamic() { return false; }
+    public function isDynamic() { return $this->__info['dynamic'] ?? false; }
+    // A declared property is a "default" property; a dynamic one is not.
+    public function isDefault() { return !$this->isDynamic(); }
+    // The property's storage key in the object's property table: public keeps its
+    // name, protected is `\0*\0name`, private is `\0DeclaringClass\0name` (matches
+    // a `(array)` cast of the instance).
+    public function getMangledName() {
+        if ($this->isPublic()) { return $this->name; }
+        if ($this->isProtected()) { return "\0*\0" . $this->name; }
+        return "\0" . $this->__info['declaringClass'] . "\0" . $this->name;
+    }
+    // Without asymmetric visibility modelled, the settable type equals the type.
+    public function getSettableType() { return $this->getType(); }
+    public function setAccessible($accessible) {}
     public function isLazy($object = null) {
         return $object !== null && __lazy_prop_is_lazy($object, $this->class, $this->name);
     }
@@ -3665,7 +3774,8 @@ class ReflectionProperty implements Reflector {
         if (!is_array($this->__info)) {
             // A dynamic property: public, untyped, no default.
             $this->__info = ['visibility' => 'public', 'static' => false, 'readonly' => false,
-                'hasDefault' => false, 'default' => null, 'declaringClass' => $this->class];
+                'hasDefault' => false, 'default' => null, 'declaringClass' => $this->class,
+                'dynamic' => true];
         }
     }
     public function getName() { return $this->name; }
