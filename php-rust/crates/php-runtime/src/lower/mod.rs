@@ -3314,6 +3314,7 @@ final class ReflectionGenerator {
         return new ReflectionFunction($name);
     }
     public function getExecutingGenerator(): Generator { return $this->__gen; }
+    public function isClosed(): bool { return __reflect_gen_info($this->__gen)[4]; }
     // The suspended call stack is not modelled; return an empty trace rather than
     // erroring (best-effort; the other accessors are exact).
     public function getTrace($options = 1): array { return []; }
@@ -3482,6 +3483,18 @@ class ReflectionFunction extends ReflectionFunctionAbstract {
     public function isInternal() { return ($this->__info['file'] ?? false) === false; }
     public function isClosure() { return $this->__closure !== null; }
     public function isAnonymous() { return $this->__closure !== null; }
+    // Closure binding surface: null for a named-function reflection.
+    public function getClosureThis() {
+        return $this->__closure !== null ? __reflect_closure_bind($this->__closure)[0] : null;
+    }
+    public function getClosureScopeClass() {
+        if ($this->__closure === null) { return null; }
+        $s = __reflect_closure_bind($this->__closure)[1];
+        return $s === null ? null : new ReflectionClass($s);
+    }
+    public function isStatic() {
+        return $this->__closure !== null && __reflect_closure_bind($this->__closure)[2];
+    }
     // Deprecated via the #[\Deprecated] attribute (8.4).
     public function isDeprecated() { return count($this->getAttributes('Deprecated')) > 0; }
     public function invoke(...$args) { return call_user_func_array($this->name, $args); }

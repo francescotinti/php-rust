@@ -9612,6 +9612,24 @@ impl<'m> Vm<'m> {
     }
 
 
+    /// `__reflect_closure_bind($closure)`: the closure's binding info as
+    /// `[bound_this, scopeClassName|null, is_static]` — backs
+    /// `ReflectionFunction::getClosureThis`/`getClosureScopeClass`/`isStatic`.
+    fn ho_reflect_closure_bind(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(Zval::Closure(cl)) = args.first().map(|v| v.deref_clone()) else {
+            return Ok(Zval::Bool(false));
+        };
+        let mut out = php_types::PhpArray::new();
+        let _ = out.append(cl.bound_this.clone().unwrap_or(Zval::Null));
+        let scope = match cl.scope {
+            Some(cid) => Zval::Str(PhpStr::new(self.classes[cid].name.to_vec())),
+            None => Zval::Null,
+        };
+        let _ = out.append(scope);
+        let _ = out.append(Zval::Bool(cl.is_static));
+        Ok(Zval::Array(Rc::new(out)))
+    }
+
     /// The [`Func`] backing a closure value (its body, or the named function a
     /// first-class callable wraps) plus the module that owns it (for running an
     /// attribute thunk).
@@ -13386,9 +13404,9 @@ impl<'m> Vm<'m> {
             Some(Zval::Generator(g)) => g,
             _ => return Ok(Zval::Bool(false)),
         };
-        let (id, func_name) = {
+        let (id, func_name, is_done) = {
             let b = g.borrow();
-            (b.id, b.func_name.clone())
+            (b.id, b.func_name.clone(), matches!(b.status, GenStatus::Done))
         };
         let mut out = PhpArray::new();
         match self.generators.get(&id) {
@@ -13405,6 +13423,7 @@ impl<'m> Vm<'m> {
             }
         }
         out.insert(Key::Int(3), Zval::Str(PhpStr::new(func_name.to_vec())));
+        out.insert(Key::Int(4), Zval::Bool(is_done));
         Ok(Zval::Array(Rc::new(out)))
     }
 
@@ -17762,6 +17781,7 @@ host_builtins! {
     b"__weak_get" => vm.ho_weak_get(args),
     b"__reflect_static_prop_get" => vm.ho_reflect_static_prop_get(args),
     b"__reflect_static_props" => vm.ho_reflect_static_props(args),
+    b"__reflect_closure_bind" => vm.ho_reflect_closure_bind(args),
     b"__reflect_static_prop_set" => vm.ho_reflect_static_prop_set(args),
     b"__zip_open" => vm.ho_zip_open(args),
     b"__zip_close" => vm.ho_zip_close(args),
