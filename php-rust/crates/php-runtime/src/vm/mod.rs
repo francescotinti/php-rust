@@ -43,6 +43,7 @@ mod coroutines;
 mod dom;
 mod exceptions;
 mod host;
+mod host_reflect;
 mod oop;
 mod pdo;
 use arrays::*;
