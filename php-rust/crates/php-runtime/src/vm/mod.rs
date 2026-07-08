@@ -9557,6 +9557,11 @@ impl<'m> Vm<'m> {
             put(&mut p, b"type", ty);
             put(&mut p, b"hasDefault", Zval::Bool(has_default));
             put(&mut p, b"default", default_val);
+            let default_const = match func.param_default_const.get(i).and_then(|o| o.as_ref()) {
+                Some(name) => Zval::Str(PhpStr::new(name.to_vec())),
+                None => Zval::Bool(false),
+            };
+            put(&mut p, b"defaultConstant", default_const);
             put(&mut p, b"declClass", Zval::Str(PhpStr::new(owner_class.clone())));
             put(&mut p, b"declFunc", Zval::Str(PhpStr::new(owner_func.clone())));
             let _ = params.append(Zval::Array(Rc::new(p)));
@@ -9572,6 +9577,7 @@ impl<'m> Vm<'m> {
             None => Zval::Bool(false),
         };
         d.insert(Key::Str(PhpStr::new(b"doc".to_vec())), doc);
+        d.insert(Key::Str(PhpStr::new(b"isGenerator".to_vec())), Zval::Bool(func.is_generator));
         // Source location (getFileName/getStartLine/getEndLine, and the `@@` line of
         // the __toString export). The op line table spans the body; a body-less
         // method (abstract / empty `{}`) has no op lines, so fall back to the
@@ -10435,6 +10441,44 @@ impl<'m> Vm<'m> {
         Ok(Zval::Bool(true))
     }
 
+
+    /// `__reflect_static_vars($class|null, $function)`: a function's local
+    /// `static $v` variables as a `name => value` map — backs
+    /// `ReflectionFunctionAbstract::getStaticVariables()`. The current persistent
+    /// cell value wins; before the function has run the declared initial value is
+    /// used. `$class` selects a method, else a free function.
+    fn ho_reflect_static_vars(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let empty = || Ok(Zval::Array(Rc::new(php_types::PhpArray::new())));
+        let fname = match args.get(1).map(|v| v.deref_clone()) {
+            Some(Zval::Str(s)) => s.as_bytes().to_vec(),
+            _ => return empty(),
+        };
+        // (name, cell id, folded initial value). The Func ref lives for `'m`, so it
+        // coexists with the `self.statics` reads below.
+        let entries: Vec<(Vec<u8>, u32, Zval)> = match args.first().map(|v| v.deref_clone()) {
+            Some(Zval::Str(c)) => {
+                let key = c.as_bytes().strip_prefix(b"\\").unwrap_or(c.as_bytes()).to_ascii_lowercase();
+                let Some(&cid) = self.class_index.get(&key) else { return empty() };
+                let Some((m, _, _)) = self.find_method_reflect(cid, &fname) else { return empty() };
+                m.func.static_vars.iter().map(|s| (s.name.to_vec(), s.id, static_var_init(&s.init))).collect()
+            }
+            _ => {
+                let Some(func) = self.find_user_function(&fname) else { return empty() };
+                func.static_vars.iter().map(|s| (s.name.to_vec(), s.id, static_var_init(&s.init))).collect()
+            }
+        };
+        let mut arr = php_types::PhpArray::new();
+        for (name, id, init) in entries {
+            let val = self
+                .statics
+                .get(id as usize)
+                .and_then(|c| c.as_ref())
+                .map(|c| c.borrow().deref_clone())
+                .unwrap_or(init);
+            arr.insert(Key::from_bytes(&name), val);
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
 
     /// `__reflect_static_props($class)`: all static properties of `$class` (its own
     /// and inherited) as a `name => value` map — backs
@@ -17781,6 +17825,7 @@ host_builtins! {
     b"__weak_get" => vm.ho_weak_get(args),
     b"__reflect_static_prop_get" => vm.ho_reflect_static_prop_get(args),
     b"__reflect_static_props" => vm.ho_reflect_static_props(args),
+    b"__reflect_static_vars" => vm.ho_reflect_static_vars(args),
     b"__reflect_closure_bind" => vm.ho_reflect_closure_bind(args),
     b"__reflect_static_prop_set" => vm.ho_reflect_static_prop_set(args),
     b"__zip_open" => vm.ho_zip_open(args),
@@ -18380,6 +18425,15 @@ fn relocate_module_class_ids(module: &mut Module, remap: &[ClassId], static_base
 
 /// Apply [`relocate_module_class_ids`] to one function body: remap every
 /// class-id-carrying op and offset every static-cell op.
+/// A static variable's declared initial value (its folded constant; a
+/// non-constant initialiser reads as NULL before the function has run).
+fn static_var_init(init: &StaticInit) -> Zval {
+    match init {
+        StaticInit::Const(c) => c.to_zval(),
+        StaticInit::Thunk(_) => Zval::Null,
+    }
+}
+
 fn relocate_func(func: &mut Func, remap: &[ClassId], static_base: usize) {
     let base = static_base as u32;
     for op in func.ops.iter_mut() {
@@ -18427,6 +18481,12 @@ fn relocate_func(func: &mut Func, remap: &[ClassId], static_base: usize) {
     // rule as attribute thunks.
     for pd in func.param_defaults.iter_mut().flatten() {
         relocate_func(pd, remap, static_base);
+    }
+    // `getStaticVariables()` metadata carries the same cell ids as the Op::Static*
+    // stream, so relocate them identically (init values are folded constants,
+    // needing no relocation).
+    for sv in func.static_vars.iter_mut() {
+        sv.id += base;
     }
 }
 

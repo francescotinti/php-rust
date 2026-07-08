@@ -985,6 +985,10 @@ pub struct Func {
     pub lines: Vec<Line>,
     /// Per-function constant pool, indexed by [`Op::PushConst`].
     pub consts: Vec<Const>,
+    /// Function-local `static $v` variables (name → cell id + initial value),
+    /// for `getStaticVariables()`. Empty for synthetic thunks. Ids are relocated
+    /// at module load alongside the `Op::Static*` cells.
+    pub static_vars: Vec<StaticVarDecl>,
     /// Size of the frame's slot array (named locals). The compiler copies this
     /// from the source [`crate::hir::FnDecl::slots`] length (or
     /// [`crate::hir::Program::slots`] for the script body).
@@ -1036,6 +1040,11 @@ pub struct Func {
     /// `self::C` default evaluates as written). Not used by the call ABI, which has
     /// its own inline default prologue.
     pub param_defaults: Box<[Option<Func>]>,
+    /// For each parameter whose default is exactly a constant reference, that
+    /// constant's source name (`CONST_TEST_1`, `self::bar`) — else `None`. Backs
+    /// `ReflectionParameter::isDefaultValueConstant()` /
+    /// `getDefaultValueConstantName()`. Empty for synthetic thunks.
+    pub param_default_const: Box<[Option<Box<[u8]>>]>,
     /// `#[Attr]` attributes on each formal parameter (length `n_params`, parallel
     /// to `param_names`) — `ReflectionParameter::getAttributes()`. Each inner vec
     /// is empty for an unattributed parameter (the common case).
@@ -1170,6 +1179,18 @@ pub struct CompiledMethod {
 pub enum StaticInit {
     Const(Const),
     Thunk(Func),
+}
+
+/// A function-local `static $v = init;` variable, retained for
+/// `ReflectionFunctionAbstract::getStaticVariables()`. `id` indexes `Vm::statics`
+/// (relocated at module load like the `Op::Static*` cells); `init` is its declared
+/// initial value, used when the persistent cell has not been created yet (the
+/// function has never run). The current value wins once the cell exists.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StaticVarDecl {
+    pub name: Box<[u8]>,
+    pub id: u32,
+    pub init: StaticInit,
 }
 
 /// A static property declared on a class (OOP-2b): its name, visibility, and how

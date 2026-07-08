@@ -741,6 +741,9 @@ pub struct StaticBinding {
     pub slot: Slot,
     pub id: usize,
     pub init: Option<Expr>,
+    /// The variable name without the leading `$`, retained for
+    /// `ReflectionFunctionAbstract::getStaticVariables()`.
+    pub name: Box<[u8]>,
 }
 
 /// One `switch` case. `test` is `None` for the `default:` case.

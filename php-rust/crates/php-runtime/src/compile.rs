@@ -305,6 +305,7 @@ fn compile_body(
         ops: c.ops,
         lines: c.lines,
         consts: c.consts,
+        static_vars: c.static_vars,
         // Named locals plus the high-water mark of compiler temporaries.
         n_slots: n_locals + c.n_temps_max,
         n_params,
@@ -332,6 +333,11 @@ fn compile_body(
                     .filter(|_| !p.variadic)
                     .and_then(|e| compile_default_thunk(e, ctx, cur_class))
             })
+            .collect(),
+        // Constant-reference name of each default (for isDefaultValueConstant).
+        param_default_const: params
+            .iter()
+            .map(|p| p.default.as_ref().filter(|_| !p.variadic).and_then(default_const_name))
             .collect(),
         // Per-parameter `#[Attr]` thunks for `ReflectionParameter::getAttributes()`,
         // compiled in this body's class context (so a `self::C` argument resolves).
@@ -369,6 +375,7 @@ fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
         ops: vec![Op::Fatal(0)],
         lines: vec![fd.line],
         consts: vec![Const::Str(msg.into_bytes().into())],
+        static_vars: Vec::new(),
         slot_names: fd.slots.to_vec().into_boxed_slice(),
         n_slots: fd.slots.len() as u32,
         n_params: fd.params.len() as u32,
@@ -385,6 +392,7 @@ fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
         param_by_ref: fd.params.iter().map(|p| p.by_ref).collect(),
         param_hints: fd.params.iter().map(|p| p.hint.clone()).collect(),
         param_defaults: fd.params.iter().map(|_| None).collect(),
+        param_default_const: fd.params.iter().map(|_| None).collect(),
         param_attributes: fd.params.iter().map(|_| Vec::new()).collect(),
         param_reflect_types: fd.params.iter().map(|p| p.reflect_type.clone()).collect(),
         ret_reflect_type: fd.ret_reflect_type.clone(),
@@ -868,6 +876,7 @@ fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassI
         ops: c.ops,
         lines: c.lines,
         consts: c.consts,
+        static_vars: Vec::new(),
         n_slots: c.n_temps_max,
         n_params: 0,
         slot_names: Box::default(),
@@ -876,6 +885,7 @@ fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassI
         param_by_ref: Box::default(),
         param_hints: Box::default(),
         param_defaults: Box::default(),
+        param_default_const: Box::default(),
         param_attributes: Box::default(),
         param_reflect_types: Box::default(),
         ret_reflect_type: None,
@@ -905,6 +915,7 @@ fn compile_default_thunk(value: &Expr, ctx: &ProgramCtx, cur_class: Option<Class
         ops: c.ops,
         lines: c.lines,
         consts: c.consts,
+        static_vars: Vec::new(),
         n_slots: c.n_temps_max,
         n_params: 0,
         slot_names: Box::default(),
@@ -913,6 +924,7 @@ fn compile_default_thunk(value: &Expr, ctx: &ProgramCtx, cur_class: Option<Class
         param_by_ref: Box::default(),
         param_hints: Box::default(),
         param_defaults: Box::default(),
+        param_default_const: Box::default(),
         param_attributes: Box::default(),
         param_reflect_types: Box::default(),
         ret_reflect_type: None,
@@ -939,6 +951,7 @@ fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, decl_class: 
         ops: c.ops,
         lines: c.lines,
         consts: c.consts,
+        static_vars: Vec::new(),
         n_slots: c.n_temps_max,
         n_params: 0,
         slot_names: Box::default(),
@@ -947,6 +960,7 @@ fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, decl_class: 
         param_by_ref: Box::default(),
         param_hints: Box::default(),
         param_defaults: Box::default(),
+        param_default_const: Box::default(),
         param_attributes: Box::default(),
         param_reflect_types: Box::default(),
         ret_reflect_type: None,
@@ -994,6 +1008,7 @@ fn const_stub(name: &[u8], err: &CompileError) -> Func {
         ops: vec![Op::Fatal(0)],
         lines: vec![0],
         consts: vec![Const::Str(msg.into_bytes().into())],
+        static_vars: Vec::new(),
         n_slots: 0,
         n_params: 0,
         slot_names: Box::default(),
@@ -1002,6 +1017,7 @@ fn const_stub(name: &[u8], err: &CompileError) -> Func {
         param_by_ref: Box::default(),
         param_hints: Box::default(),
         param_defaults: Box::default(),
+        param_default_const: Box::default(),
         param_attributes: Box::default(),
         param_reflect_types: Box::default(),
         ret_reflect_type: None,
@@ -1037,6 +1053,31 @@ fn const_eval(e: &Expr) -> Option<Const> {
         ExprKind::Int(i) => Some(Const::Int(*i)),
         ExprKind::Float(f) => Some(Const::Float(*f)),
         ExprKind::Str(s) => Some(Const::Str(s.clone())),
+        _ => None,
+    }
+}
+
+/// If a parameter default is exactly a constant reference (a global `const` or a
+/// `Class::CONST`), the constant's name as `ReflectionParameter::
+/// getDefaultValueConstantName()` reports it — a class ref keeps its source text
+/// (`self::bar`, `Foo2::bar`), not the resolved class. `None` for any other
+/// default (a literal, an expression that merely contains a constant, …).
+fn default_const_name(e: &Expr) -> Option<Box<[u8]>> {
+    match &e.kind {
+        ExprKind::Const { name, .. } => Some(name.clone()),
+        ExprKind::ClassConst { class, name } => {
+            let cls: &[u8] = match class {
+                ClassRef::Named(n) => n,
+                ClassRef::SelfClass => b"self",
+                ClassRef::Parent => b"parent",
+                ClassRef::Static => b"static",
+                ClassRef::Dynamic(_) => return None,
+            };
+            let mut s = cls.to_vec();
+            s.extend_from_slice(b"::");
+            s.extend_from_slice(name);
+            Some(s.into_boxed_slice())
+        }
         _ => None,
     }
 }
@@ -1171,6 +1212,9 @@ struct FnCompiler<'a> {
     /// through the finally — the target is "outside" iff its scope depth is `<=` the
     /// outer depth (an address test breaks on a label marker at the try's boundary).
     goto_finally_meta: Vec<(std::ops::Range<Addr>, Addr, usize)>,
+    /// Function-local `static $v` declarations seen in this body (name, cell id,
+    /// initial value), collected for `Func::static_vars` / `getStaticVariables()`.
+    static_vars: Vec<crate::bytecode::StaticVarDecl>,
 }
 
 /// One active `finally` block, while its protected body/catches are compiled
@@ -1235,6 +1279,7 @@ impl<'a> FnCompiler<'a> {
             scope_path: Vec::new(),
             next_scope: 0,
             goto_finally_meta: Vec::new(),
+            static_vars: Vec::new(),
         }
     }
 
@@ -1600,6 +1645,14 @@ impl<'a> FnCompiler<'a> {
                     let alias = self.here();
                     self.patch(guard, Op::StaticGuard { id, skip: alias });
                     self.emit(Op::StaticAlias { slot: b.slot, id });
+                    // Record the declared initial value for getStaticVariables()
+                    // (used until the runtime cell exists). A non-const initialiser
+                    // that does not fold reads as NULL before the function runs.
+                    let init = match &b.init {
+                        Some(e) => const_eval(e).map_or(StaticInit::Const(Const::Null), StaticInit::Const),
+                        None => StaticInit::Const(Const::Null),
+                    };
+                    self.static_vars.push(crate::bytecode::StaticVarDecl { name: b.name.clone(), id, init });
                 }
             }
         }

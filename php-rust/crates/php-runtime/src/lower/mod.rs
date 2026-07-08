@@ -3012,13 +3012,17 @@ class ReflectionClass implements Reflector {
     public function getProperties($filter = null) {
         $out = [];
         foreach (__reflect_prop_names($this->name) as $n) {
-            // getProperties() INCLUDES an ancestor's private property (unlike a
-            // direct `new ReflectionProperty($child, $name)`, which throws for it):
-            // construct each with the DECLARING class as scope so the ancestor-
-            // private guard in the ctor does not fire (an ArrayObject subclass'
-            // inherited private $__storage would otherwise abort enumeration).
+            // Construct each with the DECLARING class as scope so the ancestor-
+            // private guard in the ctor does not fire (it would otherwise abort
+            // enumeration). Zend then OMITS an ancestor's private property from a
+            // subclass' getProperties() (_addproperty: PRIVATE && prop_info->ce !=
+            // ce), matching hasProperty()/getProperty() which reject it.
             $decl = __reflect_prop_declaring_class($this->name, $n);
-            $out[] = new ReflectionProperty($decl === false ? $this->name : $decl, $n);
+            $rp = new ReflectionProperty($decl === false ? $this->name : $decl, $n);
+            if ($decl !== false && strcasecmp($decl, $this->name) !== 0 && $rp->isPrivate()) {
+                continue;
+            }
+            $out[] = $rp;
         }
         return $out;
     }
@@ -3153,7 +3157,7 @@ class ReflectionParameter implements Reflector {
     public $name;
     public $__pos; public $__optional; public $__variadic; public $__byref;
     public $__type; public $__hasDefault; public $__default;
-    public $__declClass; public $__declFunc;
+    public $__declClass; public $__declFunc; public $__defaultConst;
     public function __construct($function = null, $param = null) {
         if ($function === null) { return; } // internal factory path (__fromInfo)
         $info = is_array($function)
@@ -3173,6 +3177,19 @@ class ReflectionParameter implements Reflector {
         $this->__byref = $p['byref']; $this->__type = $p['type'];
         $this->__hasDefault = $p['hasDefault']; $this->__default = $p['default'];
         $this->__declClass = $p['declClass'] ?? ''; $this->__declFunc = $p['declFunc'] ?? '';
+        $this->__defaultConst = $p['defaultConstant'] ?? false;
+    }
+    public function isDefaultValueConstant() {
+        if (!$this->__hasDefault) {
+            throw new ReflectionException('Internal error: Failed to retrieve the default value');
+        }
+        return $this->__defaultConst !== false;
+    }
+    public function getDefaultValueConstantName() {
+        if (!$this->__hasDefault) {
+            throw new ReflectionException('Internal error: Failed to retrieve the default value');
+        }
+        return $this->__defaultConst === false ? null : $this->__defaultConst;
     }
     public static function __fromInfo($p) { $r = new ReflectionParameter(); $r->__init($p); return $r; }
     public function getName() { return $this->name; }
@@ -3341,6 +3358,7 @@ class ReflectionConstant {
     }
     public function getName() { return $this->name; }
     public function getValue() { return constant($this->name); }
+    public function isDeprecated() { return count($this->getAttributes('Deprecated')) > 0; }
     public function getAttributes($name = null, $flags = 0) {
         $hostName = ($flags & ReflectionAttribute::IS_INSTANCEOF) ? null : $name;
         return ReflectionAttribute::__filter(__reflect_const_attributes($this->name, $hostName), $name, $flags, 'ReflectionConstant');
@@ -3373,6 +3391,9 @@ class ReflectionClassConstant implements Reflector {
     public function isPrivate() { return $this->__info['visibility'] === 'private'; }
     public function isFinal() { return $this->__info['final']; }
     public function isDeprecated() { return count($this->getAttributes('Deprecated')) > 0; }
+    // phpr does not retain a class-constant's doc comment; false (as PHP for one
+    // without a `/** */` block).
+    public function getDocComment() { return false; }
     public function isEnumCase() { return $this->__info['enumCase']; }
     public function getModifiers() {
         $m = 0;
@@ -3495,6 +3516,8 @@ class ReflectionFunction extends ReflectionFunctionAbstract {
     public function isStatic() {
         return $this->__closure !== null && __reflect_closure_bind($this->__closure)[2];
     }
+    public function getStaticVariables() { return __reflect_static_vars(null, $this->name); }
+    public function isGenerator() { return $this->__info['isGenerator'] ?? false; }
     // Deprecated via the #[\Deprecated] attribute (8.4).
     public function isDeprecated() { return count($this->getAttributes('Deprecated')) > 0; }
     public function invoke(...$args) { return call_user_func_array($this->name, $args); }
@@ -3687,6 +3710,8 @@ class ReflectionMethod extends ReflectionFunctionAbstract {
     // A method is deprecated when it carries the #[\Deprecated] attribute (8.4);
     // not inherited (an override without the attribute is not deprecated).
     public function isDeprecated() { return count($this->getAttributes('Deprecated')) > 0; }
+    public function getStaticVariables() { return __reflect_static_vars($this->class, $this->name); }
+    public function isGenerator() { return $this->__info['isGenerator'] ?? false; }
     public function hasTentativeReturnType() { return false; }
     public function getTentativeReturnType() { return null; }
     public function isUserDefined() { return ($this->__info['file'] ?? false) !== false; }
@@ -3893,6 +3918,10 @@ class ReflectionExtension implements Reflector {
     }
     public function getName() { return $this->name; }
     public function getVersion() { return phpversion($this->name); }
+    // phpr's registered extensions are all statically built in, never runtime-loaded.
+    public function isPersistent() { return true; }
+    public function isTemporary() { return false; }
+    public function getDependencies() { return []; }
     // info() prints the phpinfo() block for the extension. phpr models these
     // extensions with Rust crates, not the C internals whose text this reports,
     // so it emits nothing (the OpenSSL-text-rendering class of rabbit hole);

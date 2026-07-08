@@ -224,10 +224,11 @@ impl<'f> Lowerer<'f> {
                             (&c.variable, Some(self.lower_expr(c.value)?))
                         }
                     };
-                    let slot = self.slot_for(strip_dollar(var.name));
+                    let name = strip_dollar(var.name);
+                    let slot = self.slot_for(name);
                     let id = self.static_count;
                     self.static_count += 1;
-                    bindings.push(StaticBinding { slot, id, init });
+                    bindings.push(StaticBinding { slot, id, init, name: name.into() });
                 }
                 StmtKind::StaticVar(bindings)
             }
