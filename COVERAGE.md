@@ -73,7 +73,7 @@ deliberately, area by area.
 | `ext/random` | 8 | 46 | 🟠 WEAK |
 | `ext/zip` | 7 | 48 | 🟠 WEAK |
 | `ext/date` | 98 | 309 | 🟠 WEAK |
-| `ext/reflection` | 154 | 298 | 🟠 WEAK |
+| `ext/reflection` | 164 | 288 | 🟠 WEAK |
 | `ext/spl` | 142 | 511 | 🟠 WEAK |
 | `ext/uri` | 0 | 117 | 🔴 ABSENT (new in 8.5) |
 
