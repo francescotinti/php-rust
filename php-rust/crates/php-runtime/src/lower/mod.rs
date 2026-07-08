@@ -3462,9 +3462,67 @@ class ReflectionMethod extends ReflectionFunctionAbstract {
     public function getDocComment() { return $this->__info['doc'] ?? false; }
     public function getReturnType() { return ReflectionNamedType::__fromInfo($this->__info['returnType']); }
     public function hasReturnType() { return $this->__info['returnType'] !== false; }
+    // The hierarchy annotation Zend appends inside `<user...>` (see
+    // ext/reflection _function_string): `inherits X` when the body lives in an
+    // ancestor, `overwrites X` when this class redeclares a parent method, and
+    // `prototype X` for the topmost interface/abstract origin. Order matches Zend:
+    // inherits|overwrites, then prototype, then ctor.
+    private function __hierAnnot() {
+        $scope = $this->class;
+        $declaring = $this->__info['declaringClass'];
+        $out = '';
+        if (strcasecmp($declaring, $scope) !== 0) {
+            $out .= ", inherits $declaring";
+        } else {
+            $parent = get_parent_class($scope);
+            if ($parent !== false && method_exists($parent, $this->name)) {
+                $pm = new ReflectionMethod($parent, $this->name);
+                $ps = $pm->getDeclaringClass()->getName();
+                if (strcasecmp($ps, $scope) !== 0 && !$pm->isPrivate()) {
+                    $out .= ", overwrites $ps";
+                }
+            }
+        }
+        $proto = $this->__protoScope();
+        if ($proto !== null && strcasecmp($proto, $scope) !== 0) { $out .= ", prototype $proto"; }
+        if ($this->isConstructor()) { $out .= ', ctor'; }
+        return $out;
+    }
+    // Zend's `fptr->common.prototype->common.scope`: the topmost class or
+    // interface that declares this method (independent of which subclass reflects
+    // it, so computed from the declaring class). Interfaces are the ultimate
+    // origin; among ancestor classes the furthest one wins. Returns null when the
+    // method has no inherited counterpart (its prototype pointer is NULL in Zend).
+    private function __protoScope() {
+        $name = $this->name;
+        $declaring = $this->__info['declaringClass'];
+        // A root interface method that declares this name wins as the prototype.
+        foreach (class_implements($declaring) as $iface) {
+            if (method_exists($iface, $name)) {
+                $rm = new ReflectionMethod($iface, $name);
+                $root = $rm->getDeclaringClass()->getName();
+                // topmost interface: one whose own super-interfaces do not declare it
+                $topmost = true;
+                foreach (class_implements($root) as $sup) {
+                    if (strcasecmp($sup, $root) !== 0 && method_exists($sup, $name)) { $topmost = false; break; }
+                }
+                if ($topmost) { return $root; }
+            }
+        }
+        // Otherwise the furthest ancestor class that declares it.
+        $best = null;
+        for ($p = get_parent_class($declaring); $p !== false; $p = get_parent_class($p)) {
+            if (method_exists($p, $name)) {
+                $rm = new ReflectionMethod($p, $name);
+                if ($rm->isPrivate()) { break; }
+                $best = $rm->getDeclaringClass()->getName();
+            }
+        }
+        return $best;
+    }
     // The PHP `Reflection::export` string for a method (ext/reflection golden output).
     public function __toString() {
-        $src = $this->isUserDefined() ? '<user>' : '<internal>';
+        $src = $this->isUserDefined() ? ('<user' . $this->__hierAnnot() . '>') : ('<internal' . $this->__hierAnnot() . '>');
         $mods = '';
         if ($this->isAbstract()) { $mods .= 'abstract '; }
         if ($this->isFinal()) { $mods .= 'final '; }
