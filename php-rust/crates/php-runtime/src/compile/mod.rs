@@ -1103,9 +1103,6 @@ fn builtin_param_names(name: &[u8]) -> Option<&'static [&'static [u8]]> {
         b"strtotime" => &[b"datetime", b"baseTimestamp"],
         b"microtime" => &[b"as_float"],
         b"hrtime" => &[b"as_number"],
-        b"htmlspecialchars" | b"htmlentities" => {
-            &[b"string", b"flags", b"encoding", b"double_encode"]
-        }
         b"iterator_to_array" => &[b"iterator", b"preserve_keys"],
         b"mb_substr" => &[b"string", b"start", b"length", b"encoding"],
         b"mb_strtolower" | b"mb_strtoupper" => &[b"string", b"encoding"],
