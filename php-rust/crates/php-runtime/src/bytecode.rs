@@ -1065,6 +1065,10 @@ pub struct Func {
     pub is_generator: bool,
     /// Source line of the declaration, for diagnostics / stack traces.
     pub line: Line,
+    /// Line of the closing `}` of the body, for `getEndLine` / the `@@` export span
+    /// (set post-compile from `FnDecl::end_line`). 0 when unknown — the descriptor
+    /// then falls back to the op-line span.
+    pub end_line: Line,
     /// `#[Attr(args)]` attributes on the `function`/method declaration, retained
     /// for `ReflectionFunction`/`ReflectionMethod::getAttributes()`. Empty for
     /// closures, hooks, attribute thunks, and unattributed functions.

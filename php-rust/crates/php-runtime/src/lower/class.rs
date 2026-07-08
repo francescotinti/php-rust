@@ -1467,6 +1467,7 @@ impl<'f> Lowerer<'f> {
                 closure_shift: 0,
                 attributes: Vec::new(),
                 line,
+                end_line: 0,
             },
             hook_backed,
         ))
@@ -1600,6 +1601,7 @@ impl<'f> Lowerer<'f> {
                 closure_shift: 0,
                 attributes,
                 line,
+                end_line: self.line_of_end(method.span()),
             },
         })
     }
@@ -1663,6 +1665,7 @@ impl<'f> Lowerer<'f> {
                 closure_shift: 0,
             attributes,
             line,
+            end_line: self.line_of_end(func.span()),
         })
     }
 
@@ -1898,6 +1901,9 @@ impl<'f> Lowerer<'f> {
                 closure_shift: 0,
             attributes,
             line,
+            // A closure/arrow's end line is not tracked; fall back to the op-line
+            // span in the descriptor.
+            end_line: 0,
         });
         idx
     }

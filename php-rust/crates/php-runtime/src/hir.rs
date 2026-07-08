@@ -433,6 +433,10 @@ pub struct FnDecl {
     /// type (reflected through `ret_hint`). Reflection-only.
     pub ret_reflect_type: Option<ReflectType>,
     pub line: Line,
+    /// Line of the closing `}` of the body (`ReflectionFunctionAbstract::getEndLine`
+    /// and the `@@ start - end` export span). 0 when unknown (an abstract/interface
+    /// signature with no body).
+    pub end_line: Line,
 }
 
 /// One formal parameter. By-value by default; `by_ref` marks `&$x` parameters

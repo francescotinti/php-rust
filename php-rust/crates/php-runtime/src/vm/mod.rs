@@ -9604,7 +9604,14 @@ impl<'m> Vm<'m> {
             d.insert(Key::Str(PhpStr::new(b"endLine".to_vec())), Zval::Bool(false));
         } else {
             let start = func.lines.iter().copied().filter(|&l| l > 0).min().unwrap_or(func.line);
-            let end = func.lines.iter().copied().filter(|&l| l > 0).max().unwrap_or(func.line);
+            // The true closing-brace line when tracked (set from the FnDecl span);
+            // otherwise the op-line span's max (imprecise for a body whose last op
+            // is not on the closing-brace line).
+            let end = if func.end_line > 0 {
+                func.end_line
+            } else {
+                func.lines.iter().copied().filter(|&l| l > 0).max().unwrap_or(func.line)
+            };
             d.insert(Key::Str(PhpStr::new(b"file".to_vec())), Zval::Str(PhpStr::new(func.file.to_vec())));
             d.insert(Key::Str(PhpStr::new(b"startLine".to_vec())), Zval::Long(i64::from(start)));
             d.insert(Key::Str(PhpStr::new(b"endLine".to_vec())), Zval::Long(i64::from(end)));

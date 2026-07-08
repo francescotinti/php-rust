@@ -259,6 +259,7 @@ fn compile_fndecl(fd: &FnDecl, ctx: &ProgramCtx) -> R<Func> {
         f.attributes = compile_attrs(&fd.attributes, ctx, cur_class);
         f.ret_reflect_type = fd.ret_reflect_type.clone();
         f.doc = fd.doc.clone();
+        f.end_line = fd.end_line;
         f
     })
 }
@@ -355,6 +356,7 @@ fn compile_body(
         by_ref,
         is_generator,
         line: def_line,
+        end_line: 0,
         attributes: Vec::new(),
         exc_table: c.exc_regions,
     })
@@ -403,6 +405,7 @@ fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
         by_ref: fd.by_ref,
         is_generator: fd.is_generator,
         line: fd.line,
+        end_line: 0,
         attributes: Vec::new(),
         exc_table: Vec::new(),
     }
@@ -622,6 +625,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
             func.attributes = compile_attrs(&m.decl.attributes, ctx, Some(cid));
             func.ret_reflect_type = m.decl.ret_reflect_type.clone();
             func.doc = m.decl.doc.clone();
+            func.end_line = m.decl.end_line;
             CompiledMethod {
                 name: m.decl.name.clone(),
                 visibility: m.visibility,
@@ -702,6 +706,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
             func.attributes = compile_attrs(&m.decl.attributes, ctx, Some(cid));
             func.ret_reflect_type = m.decl.ret_reflect_type.clone();
             func.doc = m.decl.doc.clone();
+            func.end_line = m.decl.end_line;
             CompiledMethod {
                 name: m.decl.name.clone(),
                 visibility: m.visibility,
@@ -898,6 +903,7 @@ fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassI
         by_ref: false,
         is_generator: false,
         line: 0,
+        end_line: 0,
         attributes: Vec::new(),
         exc_table: c.exc_regions,
     })
@@ -938,6 +944,7 @@ fn compile_default_thunk(value: &Expr, ctx: &ProgramCtx, cur_class: Option<Class
         by_ref: false,
         is_generator: false,
         line: 0,
+        end_line: 0,
         attributes: Vec::new(),
         exc_table: Vec::new(),
     })
@@ -975,6 +982,7 @@ fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, decl_class: 
         by_ref: false,
         is_generator: false,
         line: 0,
+        end_line: 0,
         attributes: Vec::new(),
         exc_table: c.exc_regions,
     })
@@ -1033,6 +1041,7 @@ fn const_stub(name: &[u8], err: &CompileError) -> Func {
         by_ref: false,
         is_generator: false,
         line: 0,
+        end_line: 0,
         attributes: Vec::new(),
         exc_table: Vec::new(),
     }
