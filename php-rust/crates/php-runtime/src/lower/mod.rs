@@ -2836,8 +2836,18 @@ class ReflectionClass implements Reflector {
     }
     // The PHP `Reflection::export` string for a class (ext/reflection golden output).
     public function __toString() {
+        return $this->__exportString(false, []);
+    }
+    // Shared class/object export body. In object mode the header word is
+    // "Object of class" and a "- Dynamic properties [N]" section (from $dynNames)
+    // is inserted between the declared Properties and the Methods.
+    protected function __exportString($objectMode, $dynNames) {
         $src = $this->isUserDefined() ? '<user>' : '<internal>';
-        if ($this->isInterface()) { $head = 'Interface'; $kind = 'interface'; }
+        if ($objectMode) {
+            $head = 'Object of class';
+            $kind = ($this->isAbstract() ? 'abstract ' : '') . ($this->isFinal() ? 'final ' : '') . 'class';
+        }
+        elseif ($this->isInterface()) { $head = 'Interface'; $kind = 'interface'; }
         elseif ($this->isTrait()) { $head = 'Class'; $kind = 'trait'; }
         else {
             $head = 'Class';
@@ -2872,6 +2882,11 @@ class ReflectionClass implements Reflector {
         $s .= "\n  - Properties [" . count($iprops) . "] {\n";
         foreach ($iprops as $p) { $s .= "    " . rtrim((string) $p, "\n") . "\n"; }
         $s .= "  }\n";
+        if ($objectMode) {
+            $s .= "\n  - Dynamic properties [" . count($dynNames) . "] {\n";
+            foreach ($dynNames as $dn) { $s .= "    Property [ <dynamic> public \$$dn ]\n"; }
+            $s .= "  }\n";
+        }
         $s .= "\n  - Methods [" . count($imeth) . "] {\n";
         foreach ($imeth as $m) { $s .= $this->__indent($m, 4); }
         $s .= "  }\n";
@@ -3190,11 +3205,18 @@ class ReflectionParameter implements Reflector {
     }
 }
 class ReflectionObject extends ReflectionClass {
-    // Minimal, class-derived rendering (does NOT read the live instance, so it
-    // never triggers lazy initialization: init_trigger_reflection_object_toString).
-    // The full PHP Reflection export format is not reproduced.
+    // The reflected instance is held host-side (keyed by this object's id) rather
+    // than as a property, so a var_dump of a ReflectionObject shows only `name`
+    // (matching Zend, which keeps the pointer internally).
+    public function __construct($object) {
+        parent::__construct($object);
+        if (is_object($object)) { __reflect_object_bind($this, $object); }
+    }
+    // Full export format with the object's dynamic properties. The dynamic-prop
+    // names come from a host that reads the property table directly, so a lazy
+    // object is NOT initialized (init_trigger_reflection_object_toString).
     public function __toString() {
-        return sprintf("Object of class [ class %s ] {\n}\n", $this->name);
+        return $this->__exportString(true, __reflect_object_dynprops($this));
     }
 }
 // A reference an array element holds (7.4). `fromArrayElement` returns null when

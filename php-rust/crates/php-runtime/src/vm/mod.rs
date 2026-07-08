@@ -395,6 +395,7 @@ pub(crate) fn run_module_with_hir<'m>(
         lazy_props: HashMap::new(),
         var_dump_debug: HashMap::new(),
         lazy_options: HashMap::new(),
+        reflect_object_bound: HashMap::new(),
         lazy_initializing: HashSet::new(),
         zips: HashMap::new(),
         next_zip: 1,
@@ -1148,6 +1149,11 @@ struct Vm<'m> {
     /// `resetAsLazy*` `$options`): SKIP_INITIALIZATION_ON_SERIALIZE (8) and
     /// SKIP_DESTRUCTOR (16, consumed at reset time). Keyed by object id.
     lazy_options: HashMap<u32, u32>,
+    /// The instance a `ReflectionObject` was constructed for, keyed by the
+    /// ReflectionObject's own id. Zend keeps this pointer internally (invisible to
+    /// var_dump); the prelude cannot store it as a visible property, so it lives
+    /// here. Read by `ReflectionObject::__toString` to list dynamic properties.
+    reflect_object_bound: HashMap<u32, Zval>,
     /// Object ids whose initializer/factory is *currently running* (PHP 8.4):
     /// re-entering `resetAsLazy*` on such an object is an error ("Can not reset an
     /// object while it is being initialized"). Populated by `realize_lazy` around
@@ -11285,6 +11291,52 @@ impl<'m> Vm<'m> {
         Ok(arr)
     }
 
+    /// `__reflect_object_bind($reflectionObject, $instance)`: records the instance a
+    /// `ReflectionObject` was built for (keyed by the ReflectionObject's id), so the
+    /// prelude need not hold it as a var_dump-visible property.
+    fn ho_reflect_object_bind(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let ro = args.first().map(|v| v.deref_clone());
+        let inst = args.get(1).map(|v| v.deref_clone());
+        if let (Some(Zval::Object(r)), Some(inst)) = (ro, inst) {
+            let id = r.borrow().id;
+            self.reflect_object_bound.insert(id, inst);
+        }
+        Ok(Zval::Null)
+    }
+
+    /// `__reflect_object_dynprops($reflectionObject)`: the names of the bound
+    /// instance's *dynamic* (undeclared, unmangled) properties, in instance order.
+    /// Reads the property table directly — it does **not** realise a lazy object
+    /// (PHP's `ReflectionObject::__toString` enumerates dynamic props without
+    /// triggering init: Zend/tests/lazy_objects/init_trigger_reflection_object_toString).
+    fn ho_reflect_object_dynprops(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(Zval::Object(ro)) = args.into_iter().next().map(|v| v.deref_clone()) else {
+            return Ok(Zval::Array(Rc::new(PhpArray::new())));
+        };
+        let ro_id = ro.borrow().id;
+        let Some(Zval::Object(o)) = self.reflect_object_bound.get(&ro_id).cloned() else {
+            return Ok(Zval::Array(Rc::new(PhpArray::new())));
+        };
+        let cid = o.borrow().class_id as usize;
+        // Declared property names across the whole parent chain.
+        let mut declared: HashSet<Box<[u8]>> = HashSet::new();
+        let mut c = Some(cid);
+        while let Some(ci) = c {
+            for (name, _) in &self.classes[ci].own_prop_vis {
+                declared.insert(name.clone());
+            }
+            c = self.classes[ci].parent;
+        }
+        let mut arr = PhpArray::new();
+        let b = o.borrow();
+        for (name, _) in b.props.iter() {
+            if !declared.contains(name) && !name.starts_with(b"\0") {
+                arr.append(Zval::Str(PhpStr::new(name.to_vec())));
+            }
+        }
+        Ok(Zval::Array(Rc::new(arr)))
+    }
+
     /// `get_class_vars(string $class)`: the class's default property values as an
     /// associative `name => default` array, filtered by visibility from the calling
     /// scope. Instance properties come first (most-derived class first, declaration
@@ -17710,6 +17762,8 @@ host_builtins! {
     b"__reflect_closure_attr_new" => vm.ho_reflect_closure_attr_new(args),
     b"__reflect_closure_attr_args" => vm.ho_reflect_closure_attr_args(args),
     b"__reflect_method_info" => vm.ho_reflect_method_info(args),
+    b"__reflect_object_bind" => vm.ho_reflect_object_bind(args),
+    b"__reflect_object_dynprops" => vm.ho_reflect_object_dynprops(args),
     b"__reflect_invoke" => vm.ho_reflect_invoke(args),
     b"__reflect_class_modifiers" => vm.ho_reflect_class_modifiers(args),
     b"__reflect_new_no_ctor" => vm.ho_reflect_new_no_ctor(args),
