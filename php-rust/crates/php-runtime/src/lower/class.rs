@@ -1133,6 +1133,9 @@ impl<'f> Lowerer<'f> {
         static_out: &mut Vec<crate::hir::StaticPropDecl>,
         line: Line,
     ) -> Result<(), LowerError> {
+        // The property's `/** … */` doc block (shared by every item of a grouped
+        // `public $a, $b;`), for ReflectionProperty::getDocComment / the export.
+        let doc = self.doc_for(prop.span().start.offset);
         let plain = match prop {
             Property::Plain(p) => p,
             Property::Hooked(h) => {
@@ -1178,6 +1181,7 @@ impl<'f> Lowerer<'f> {
                 let reflect_type = h.hint.as_ref().and_then(|hh| lower_reflect_type(self, hh));
                 let attributes = self.lower_attributes(&h.attribute_lists, line)?;
                 out.push(PropDecl {
+                    doc,
                     name, visibility, set_visibility: set_visibility_of(h.modifiers.iter()),
                     default, get_hook, set_hook, backed, readonly, hint, abstract_hooks, attributes, reflect_type,
                 });
@@ -1206,6 +1210,7 @@ impl<'f> Lowerer<'f> {
                 // of a grouped `public $a, $b;` shares it.
                 let attributes = self.lower_attributes(&plain.attribute_lists, line)?;
                 out.push(PropDecl {
+                    doc: doc.clone(),
                     name,
                     visibility,
                     set_visibility: set_visibility_of(plain.modifiers.iter()),
@@ -1547,6 +1552,7 @@ impl<'f> Lowerer<'f> {
             let hint = pr.and_then(|pr| pr.hint.clone());
             let reflect_type = pr.and_then(|pr| pr.reflect_type.clone());
             props.push(PropDecl {
+                doc: p.doc,
                 name: p.name,
                 visibility: p.visibility,
                 // Promoted params do not carry asymmetric set visibility here
@@ -1746,6 +1752,8 @@ impl<'f> Lowerer<'f> {
                     backed,
                     readonly: p.modifiers.iter().any(|m| m.is_readonly()),
                     attributes: attributes.clone(),
+                    // The promoted property inherits the parameter's doc block.
+                    doc: self.doc_for(p.span().start.offset),
                 });
             }
             let default = match &p.default_value {

@@ -10312,6 +10312,8 @@ impl<'m> Vm<'m> {
                 put(&mut a, b"declaringClass", Zval::Str(PhpStr::new(decl)));
                 put(&mut a, b"hasDefault", Zval::Bool(!uninit));
                 put(&mut a, b"default", default.unwrap_or(Zval::Null));
+                let doc = pi.doc.as_ref().map_or(Zval::Bool(false), |d| Zval::Str(PhpStr::new(d.to_vec())));
+                put(&mut a, b"doc", doc);
                 return Ok(Zval::Array(Rc::new(a)));
             }
             if let Some(sp) = c.static_props.iter().find(|sp| sp.name.as_ref() == prop.as_slice()) {

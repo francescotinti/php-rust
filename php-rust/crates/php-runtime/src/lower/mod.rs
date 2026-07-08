@@ -2880,7 +2880,11 @@ class ReflectionClass implements Reflector {
         foreach ($smeth as $m) { $s .= $this->__indent($m, 4); }
         $s .= "  }\n";
         $s .= "\n  - Properties [" . count($iprops) . "] {\n";
-        foreach ($iprops as $p) { $s .= "    " . rtrim((string) $p, "\n") . "\n"; }
+        foreach ($iprops as $p) {
+            $doc = $p->getDocComment();
+            if ($doc !== false) { $s .= "    " . $doc . "\n"; }
+            $s .= "    " . rtrim((string) $p, "\n") . "\n";
+        }
         $s .= "  }\n";
         if ($objectMode) {
             $s .= "\n  - Dynamic properties [" . count($dynNames) . "] {\n";
@@ -3758,7 +3762,7 @@ class ReflectionMethod extends ReflectionFunctionAbstract {
     }
 }
 class ReflectionProperty implements Reflector {
-    public function getDocComment() { return false; }
+    public function getDocComment() { return $this->__info['doc'] ?? false; }
     public function isFinal() { return false; }
     public function isAbstract() { return false; }
     // Asymmetric visibility (8.4): phpr does not model aviz declarations, so
@@ -5075,6 +5079,7 @@ struct PromotedParam {
     backed: bool,
     readonly: bool,
     attributes: Vec<crate::hir::HirAttribute>,
+    doc: Option<Box<[u8]>>,
 }
 
 /// A trait whose members have been lowered and whose own `use` clauses have been

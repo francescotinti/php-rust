@@ -355,6 +355,10 @@ pub struct PropDecl {
     /// A composite (union/intersection) declared type, for `ReflectionProperty::
     /// getType()`. `None` for a single type (reflected through `hint`).
     pub reflect_type: Option<ReflectType>,
+    /// The `/** … */` doc comment immediately preceding the declaration, for
+    /// `ReflectionProperty::getDocComment()` and the class export. `None` when the
+    /// property has no doc block.
+    pub doc: Option<Box<[u8]>>,
 }
 
 /// One method (step 19, D-19.5). Wraps an ordinary [`FnDecl`] (so method calls

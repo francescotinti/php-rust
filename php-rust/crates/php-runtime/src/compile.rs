@@ -792,6 +792,7 @@ fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> CompiledClas
                     } else {
                         p.name.clone()
                     },
+                    doc: p.doc.clone(),
                 },
             );
         }

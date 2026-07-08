@@ -1395,6 +1395,9 @@ pub struct PropInfo {
     /// name today; reserved as the future target for private-property name mangling
     /// (so a subclass's `private $x` can shadow a parent's without colliding).
     pub storage_key: Box<[u8]>,
+    /// The `/** … */` doc comment of the most-derived declaration, for
+    /// `ReflectionProperty::getDocComment()` and the class export. `None` if absent.
+    pub doc: Option<Box<[u8]>>,
 }
 
 /// A whole compiled program: the script body plus the flat function / closure /
