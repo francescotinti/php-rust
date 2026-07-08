@@ -9577,6 +9577,7 @@ impl<'m> Vm<'m> {
                 None => Zval::Bool(false),
             };
             put(&mut p, b"defaultConstant", default_const);
+            put(&mut p, b"promoted", Zval::Bool(func.param_promoted.get(i).copied().unwrap_or(false)));
             put(&mut p, b"declClass", Zval::Str(PhpStr::new(owner_class.clone())));
             put(&mut p, b"declFunc", Zval::Str(PhpStr::new(owner_func.clone())));
             let _ = params.append(Zval::Array(Rc::new(p)));
@@ -9649,6 +9650,26 @@ impl<'m> Vm<'m> {
         let _ = out.append(scope);
         let _ = out.append(Zval::Bool(cl.is_static));
         Ok(Zval::Array(Rc::new(out)))
+    }
+
+    /// `__reflect_closure_uses($closure)`: the closure's captured variables
+    /// (`use (...)`, plus an arrow function's auto-captures) as a `name => value`
+    /// map — backs `ReflectionFunction::getClosureUsedVariables()`. A by-reference
+    /// capture keeps its `Zval::Ref` (so var_dump shows `&`); names come from the
+    /// closure body's slot table.
+    fn ho_reflect_closure_uses(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let empty = || Ok(Zval::Array(Rc::new(php_types::PhpArray::new())));
+        let Some(Zval::Closure(cl)) = args.into_iter().next().map(|v| v.deref_clone()) else {
+            return empty();
+        };
+        let Some((func, _)) = self.closure_func_mod(&cl) else { return empty() };
+        let mut arr = php_types::PhpArray::new();
+        for (slot, val) in &cl.captures {
+            if let Some(name) = func.slot_names.get(*slot as usize) {
+                arr.insert(Key::from_bytes(name), val.clone());
+            }
+        }
+        Ok(Zval::Array(Rc::new(arr)))
     }
 
     /// The [`Func`] backing a closure value (its body, or the named function a
@@ -17842,6 +17863,7 @@ host_builtins! {
     b"__reflect_static_props" => vm.ho_reflect_static_props(args),
     b"__reflect_static_vars" => vm.ho_reflect_static_vars(args),
     b"__reflect_closure_bind" => vm.ho_reflect_closure_bind(args),
+    b"__reflect_closure_uses" => vm.ho_reflect_closure_uses(args),
     b"__reflect_static_prop_set" => vm.ho_reflect_static_prop_set(args),
     b"__zip_open" => vm.ho_zip_open(args),
     b"__zip_close" => vm.ho_zip_close(args),

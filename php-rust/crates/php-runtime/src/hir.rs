@@ -459,6 +459,10 @@ pub struct Param {
     /// getType()` → `ReflectionUnionType`/`ReflectionIntersectionType`. `None` for
     /// a single type (which reflects through `hint`). Reflection-only.
     pub reflect_type: Option<ReflectType>,
+    /// `true` for a constructor-promoted parameter (`public int $x`), for
+    /// `ReflectionParameter::isPromoted()` (and, derived from it, the promoted
+    /// property's `ReflectionProperty::isPromoted()`).
+    pub promoted: bool,
 }
 
 /// One captured variable of a closure (step 18, D-18.3). At closure *creation*

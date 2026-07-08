@@ -339,6 +339,7 @@ fn compile_body(
             .iter()
             .map(|p| p.default.as_ref().filter(|_| !p.variadic).and_then(default_const_name))
             .collect(),
+        param_promoted: params.iter().map(|p| p.promoted).collect(),
         // Per-parameter `#[Attr]` thunks for `ReflectionParameter::getAttributes()`,
         // compiled in this body's class context (so a `self::C` argument resolves).
         param_attributes: params
@@ -393,6 +394,7 @@ fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
         param_hints: fd.params.iter().map(|p| p.hint.clone()).collect(),
         param_defaults: fd.params.iter().map(|_| None).collect(),
         param_default_const: fd.params.iter().map(|_| None).collect(),
+        param_promoted: fd.params.iter().map(|_| false).collect(),
         param_attributes: fd.params.iter().map(|_| Vec::new()).collect(),
         param_reflect_types: fd.params.iter().map(|p| p.reflect_type.clone()).collect(),
         ret_reflect_type: fd.ret_reflect_type.clone(),
@@ -886,6 +888,7 @@ fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, cid: ClassI
         param_hints: Box::default(),
         param_defaults: Box::default(),
         param_default_const: Box::default(),
+        param_promoted: Box::default(),
         param_attributes: Box::default(),
         param_reflect_types: Box::default(),
         ret_reflect_type: None,
@@ -925,6 +928,7 @@ fn compile_default_thunk(value: &Expr, ctx: &ProgramCtx, cur_class: Option<Class
         param_hints: Box::default(),
         param_defaults: Box::default(),
         param_default_const: Box::default(),
+        param_promoted: Box::default(),
         param_attributes: Box::default(),
         param_reflect_types: Box::default(),
         ret_reflect_type: None,
@@ -961,6 +965,7 @@ fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, decl_class: 
         param_hints: Box::default(),
         param_defaults: Box::default(),
         param_default_const: Box::default(),
+        param_promoted: Box::default(),
         param_attributes: Box::default(),
         param_reflect_types: Box::default(),
         ret_reflect_type: None,
@@ -1018,6 +1023,7 @@ fn const_stub(name: &[u8], err: &CompileError) -> Func {
         param_hints: Box::default(),
         param_defaults: Box::default(),
         param_default_const: Box::default(),
+        param_promoted: Box::default(),
         param_attributes: Box::default(),
         param_reflect_types: Box::default(),
         ret_reflect_type: None,

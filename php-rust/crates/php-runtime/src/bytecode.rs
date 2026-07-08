@@ -1045,6 +1045,9 @@ pub struct Func {
     /// `ReflectionParameter::isDefaultValueConstant()` /
     /// `getDefaultValueConstantName()`. Empty for synthetic thunks.
     pub param_default_const: Box<[Option<Box<[u8]>>]>,
+    /// Whether each parameter is constructor-promoted (`public int $x`), for
+    /// `ReflectionParameter::isPromoted()`. Empty for synthetic thunks.
+    pub param_promoted: Box<[bool]>,
     /// `#[Attr]` attributes on each formal parameter (length `n_params`, parallel
     /// to `param_names`) — `ReflectionParameter::getAttributes()`. Each inner vec
     /// is empty for an unattributed parameter (the common case).

@@ -1379,7 +1379,7 @@ impl<'f> Lowerer<'f> {
                     None => {
                         // Implicit `$value` parameter.
                         let slot = self.slot_for(b"value");
-                        vec![Param { slot, default: None, by_ref: false, variadic: false, hint: None, attributes: Vec::new(), reflect_type: None }]
+                        vec![Param { slot, default: None, by_ref: false, variadic: false, hint: None, attributes: Vec::new(), reflect_type: None, promoted: false }]
                     }
                 }
             } else {
@@ -1770,6 +1770,7 @@ impl<'f> Lowerer<'f> {
                 hint,
                 attributes,
                 reflect_type,
+                promoted: p.is_promoted_property(),
             });
         }
         Ok(params)

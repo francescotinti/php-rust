@@ -3157,7 +3157,7 @@ class ReflectionParameter implements Reflector {
     public $name;
     public $__pos; public $__optional; public $__variadic; public $__byref;
     public $__type; public $__hasDefault; public $__default;
-    public $__declClass; public $__declFunc; public $__defaultConst; public $__defaultError;
+    public $__declClass; public $__declFunc; public $__defaultConst; public $__defaultError; public $__promoted;
     public function __construct($function = null, $param = null) {
         if ($function === null) { return; } // internal factory path (__fromInfo)
         $info = is_array($function)
@@ -3179,7 +3179,9 @@ class ReflectionParameter implements Reflector {
         $this->__declClass = $p['declClass'] ?? ''; $this->__declFunc = $p['declFunc'] ?? '';
         $this->__defaultConst = $p['defaultConstant'] ?? false;
         $this->__defaultError = $p['defaultError'] ?? false;
+        $this->__promoted = $p['promoted'] ?? false;
     }
+    public function isPromoted() { return $this->__promoted; }
     public function isDefaultValueConstant() {
         if (!$this->__hasDefault) {
             throw new ReflectionException('Internal error: Failed to retrieve the default value');
@@ -3522,6 +3524,9 @@ class ReflectionFunction extends ReflectionFunctionAbstract {
     public function isStatic() {
         return $this->__closure !== null && __reflect_closure_bind($this->__closure)[2];
     }
+    public function getClosureUsedVariables() {
+        return $this->__closure !== null ? __reflect_closure_uses($this->__closure) : [];
+    }
     public function getStaticVariables() { return __reflect_static_vars(null, $this->name); }
     public function isGenerator() { return $this->__info['isGenerator'] ?? false; }
     // Deprecated via the #[\Deprecated] attribute (8.4).
@@ -3769,6 +3774,16 @@ class ReflectionProperty implements Reflector {
     public function isDynamic() { return $this->__info['dynamic'] ?? false; }
     // A declared property is a "default" property; a dynamic one is not.
     public function isDefault() { return !$this->isDynamic(); }
+    // Constructor-promoted iff the declaring class's constructor has a promoted
+    // parameter of the same name (derived from ReflectionParameter::isPromoted).
+    public function isPromoted() {
+        $ctor = (new ReflectionClass($this->class))->getConstructor();
+        if ($ctor === null) { return false; }
+        foreach ($ctor->getParameters() as $p) {
+            if (strcasecmp($p->getName(), $this->name) === 0 && $p->isPromoted()) { return true; }
+        }
+        return false;
+    }
     // The property's storage key in the object's property table: public keeps its
     // name, protected is `\0*\0name`, private is `\0DeclaringClass\0name` (matches
     // a `(array)` cast of the instance).
