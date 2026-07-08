@@ -5094,6 +5094,13 @@ impl<'f> Lowerer<'f> {
         self.file.line_number(span.start.offset) + 1
     }
 
+    /// 1-based source line of a span's LAST byte (its closing token, e.g. a class
+    /// body's `}`) — `ReflectionClass::getEndLine`. `span.end.offset` sits just past
+    /// the token, so step back one byte to land on the closing line itself.
+    fn line_of_end(&self, span: Span) -> Line {
+        self.file.line_number(span.end.offset.saturating_sub(1)) + 1
+    }
+
     /// The `/** ... */` doc comment lexically attached to a declaration starting
     /// at byte `decl_start` (Zend semantics): the closest preceding docblock
     /// separated from the declaration only by whitespace, attribute lists

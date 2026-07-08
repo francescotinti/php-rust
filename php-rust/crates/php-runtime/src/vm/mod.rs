@@ -13211,21 +13211,24 @@ impl<'m> Vm<'m> {
             .or_else(|| c.prop_init.as_ref().map(|f| &f.file[..]));
         match file {
             Some(f) if f != b"prelude" => {
-                let mut start = u32::MAX;
-                let mut end = 0u32;
-                for m in c.methods.iter().filter(|m| m.func.file[..] == f[..]) {
-                    for &l in m.func.lines.iter() {
-                        if l > 0 {
-                            start = start.min(l);
-                            end = end.max(l);
+                let _ = out.append(Zval::Str(PhpStr::new(f.to_vec())));
+                // getStartLine is the `class` keyword's line; getEndLine the closing
+                // `}` line, both recorded from the source span. Fall back to the
+                // method op-line span for a class compiled before this was tracked.
+                let start = c.line;
+                let end = if c.end_line > 0 {
+                    c.end_line
+                } else {
+                    let mut e = 0u32;
+                    for m in c.methods.iter().filter(|m| m.func.file[..] == f[..]) {
+                        for &l in m.func.lines.iter() {
+                            e = e.max(l);
                         }
                     }
-                }
-                let _ = out.append(Zval::Str(PhpStr::new(f.to_vec())));
-                // A methodless class falls back to its `class` keyword's line.
-                let start = if start == u32::MAX { c.line as i64 } else { start as i64 };
-                let _ = out.append(Zval::Long(start));
-                let _ = out.append(Zval::Long(end.max(start as u32) as i64));
+                    e.max(start)
+                };
+                let _ = out.append(Zval::Long(i64::from(start)));
+                let _ = out.append(Zval::Long(i64::from(end)));
             }
             _ => {
                 let _ = out.append(Zval::Bool(false));

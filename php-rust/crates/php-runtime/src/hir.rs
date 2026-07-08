@@ -227,6 +227,9 @@ pub struct ClassDecl {
     /// getTraitNames()` can report them. Empty when the class uses no traits.
     pub uses_traits: Vec<Box<[u8]>>,
     pub line: Line,
+    /// The line of the closing `}` of the class body (`ReflectionClass::getEndLine`
+    /// and the export `__toString` span). 0 when unknown.
+    pub end_line: Line,
 }
 
 /// One class attribute `#[Name(args...)]` retained for runtime reflection. The

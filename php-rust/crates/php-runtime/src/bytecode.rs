@@ -1237,6 +1237,9 @@ pub struct CompiledClass {
     /// to derive them from (`b"prelude"` marks an engine class → false/internal).
     pub file: Box<[u8]>,
     pub line: u32,
+    /// The line of the class body's closing `}` (`ReflectionClass::getEndLine` and
+    /// the `@@ start-end` span of the export `__toString`). 0 when unknown.
+    pub end_line: u32,
     /// The `/** ... */` doc comment (carried from `ClassDecl::doc`) —
     /// `ReflectionClass::getDocComment`.
     pub doc: Option<Box<[u8]>>,

@@ -520,6 +520,7 @@ impl<'f> Lowerer<'f> {
             attributes: Vec::new(),
             uses_traits: Vec::new(),
             line,
+            end_line: self.line_of_end(iface.span()),
         })
     }
 
@@ -572,6 +573,7 @@ impl<'f> Lowerer<'f> {
             line,
         )?;
         decl.doc = self.doc_for(class.span().start.offset);
+        decl.end_line = self.line_of_end(class.span());
         // A `readonly class` (PHP 8.2): every (non-static) instance property is
         // readonly, including promoted and trait-supplied ones.
         if class.modifiers.iter().any(|m| m.is_readonly()) {
@@ -915,6 +917,8 @@ impl<'f> Lowerer<'f> {
             attributes: Vec::new(),
             uses_traits,
             line,
+            // Placeholder; lower_class overrides with the real closing-brace line.
+            end_line: line,
         })
     }
 
@@ -1088,6 +1092,7 @@ impl<'f> Lowerer<'f> {
             attributes: self.lower_attributes(&en.attribute_lists, line)?,
             uses_traits,
             line,
+            end_line: self.line_of_end(en.span()),
         })
     }
 
