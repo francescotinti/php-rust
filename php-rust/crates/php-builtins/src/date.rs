@@ -230,6 +230,45 @@ pub fn gmdate(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     date(args, ctx)
 }
 
+/// `idate(string $format, ?int $timestamp = null): int|false` — a single numeric
+/// date token as an integer (`php_idate`). A format that is not exactly one
+/// character warns "idate format is one char" and returns false; a token outside
+/// the numeric set warns "Unrecognized date format token" and returns false.
+/// Every idate token renders as a numeric `date()` field, so this reuses
+/// [`format_php`] and parses the digits.
+pub fn idate(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let fmt = convert::to_zstr(
+        args.first().ok_or_else(|| {
+            PhpError::Error("idate() expects at least 1 argument, 0 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    if fmt.len() != 1 {
+        ctx.diags
+            .push(php_types::Diag::Warning("idate(): idate format is one char".to_string()));
+        return Ok(Zval::Bool(false));
+    }
+    let c = fmt.as_bytes()[0];
+    // The numeric tokens `php_idate` recognises; anything else is "unrecognized".
+    const VALID: &[u8] = b"djNwzWmntLyYoBghHGisIZU";
+    if !VALID.contains(&c) {
+        ctx.diags.push(php_types::Diag::Warning(
+            "idate(): Unrecognized date format token".to_string(),
+        ));
+        return Ok(Zval::Bool(false));
+    }
+    let epoch = match args.get(1) {
+        None | Some(Zval::Null) => now_epoch(),
+        Some(v) => convert::to_long_cast(v, ctx.diags),
+    };
+    let s = format_php(epoch, &[c]);
+    let n = std::str::from_utf8(&s)
+        .ok()
+        .and_then(|t| t.trim().parse::<i64>().ok())
+        .unwrap_or(0);
+    Ok(Zval::Long(n))
+}
+
 /// PHP's legacy two-digit-year fixup for `mktime`: 0..69 → 2000..2069,
 /// 70..100 → 1970..2000. Other values pass through unchanged.
 fn fixup_two_digit_year(year: i64) -> i64 {

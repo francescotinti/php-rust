@@ -51,6 +51,7 @@ pub fn registry() -> Registry {
     add(b"sizeof", array::count);
     add(b"date", date::date);
     add(b"gmdate", date::gmdate);
+    add(b"idate", date::idate);
     add(b"mktime", date::mktime);
     add(b"gmmktime", date::gmmktime);
     add(b"checkdate", date::checkdate);
