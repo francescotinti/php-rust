@@ -15,6 +15,7 @@ mod csv;
 mod ctype;
 mod curl;
 mod date;
+mod dateparse;
 mod encoding;
 mod env;
 mod html;
@@ -52,6 +53,7 @@ pub fn registry() -> Registry {
     add(b"date", date::date);
     add(b"gmdate", date::gmdate);
     add(b"idate", date::idate);
+    add(b"date_parse", dateparse::date_parse);
     add(b"mktime", date::mktime);
     add(b"gmmktime", date::gmmktime);
     add(b"checkdate", date::checkdate);
