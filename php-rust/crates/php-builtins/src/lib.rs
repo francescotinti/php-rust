@@ -96,6 +96,11 @@ pub fn registry() -> Registry {
     add(b"pack", pack::pack);
     add(b"unpack", pack::unpack);
     add(b"crypt", crypto::crypt);
+    add(b"password_hash", crypto::password_hash);
+    add(b"password_verify", crypto::password_verify);
+    add(b"password_get_info", crypto::password_get_info);
+    add(b"password_needs_rehash", crypto::password_needs_rehash);
+    add(b"password_algos", crypto::password_algos);
     // File / stream builtins (step 51; `fopen` is evaluator-dispatched).
     add(b"fread", file::fread);
     add(b"fwrite", file::fwrite);

@@ -1826,6 +1826,11 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"ARRAY_FILTER_USE_BOTH" => ExprKind::Int(1),
         b"COUNT_NORMAL" => ExprKind::Int(0),
         b"COUNT_RECURSIVE" => ExprKind::Int(1),
+        // ext/standard password_* (bcrypt only; PASSWORD_DEFAULT/BCRYPT are the
+        // string identifier "2y" in PHP 8.4+).
+        b"PASSWORD_DEFAULT" => ExprKind::Str(b"2y".to_vec().into()),
+        b"PASSWORD_BCRYPT" => ExprKind::Str(b"2y".to_vec().into()),
+        b"PASSWORD_BCRYPT_DEFAULT_COST" => ExprKind::Int(12),
         // extract() strategies.
         b"EXTR_OVERWRITE" => ExprKind::Int(0),
         b"EXTR_SKIP" => ExprKind::Int(1),
