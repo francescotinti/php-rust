@@ -8570,6 +8570,7 @@ host_builtins! {
     b"stream_set_chunk_size" => vm.ho_stream_set_chunk_size(args),
     b"stream_get_meta_data" => vm.ho_stream_get_meta_data(args),
     b"shell_exec" => vm.ho_shell_exec(args),
+    b"filter_input" => vm.ho_filter_input(args),
     b"proc_close" => vm.ho_proc_close(args),
     b"__stream_select" => vm.ho_stream_select(args),
     b"proc_get_status" => vm.ho_proc_get_status(args),

@@ -3470,6 +3470,56 @@ impl<'m> super::Vm<'m> {
         }
     }
 
+    /// `filter_input(int $type, string $var_name, int $filter = FILTER_DEFAULT, array|int $options = 0)`
+    /// — read `$var_name` from the request superglobal named by `$type`
+    /// (GET/POST/COOKIE/SERVER/ENV) and run it through `filter_var`. An absent
+    /// variable yields `null`; an unknown source id yields `false`. In CLI the
+    /// GET/POST/COOKIE superglobals are empty (so those return `null`, matching
+    /// the oracle); SERVER/ENV read the seeded superglobals.
+    pub(super) fn ho_filter_input(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let source = args
+            .first()
+            .map(|v| convert::to_long_cast(&v.deref_clone(), &mut self.diags))
+            .unwrap_or(0);
+        let name = args
+            .get(1)
+            .map(|v| convert::to_zstr_cast(&v.deref_clone(), &mut self.diags).as_bytes().to_vec())
+            .unwrap_or_default();
+        let sg: &[u8] = match source {
+            0 => b"_POST",
+            1 => b"_GET",
+            2 => b"_COOKIE",
+            4 => b"_ENV",
+            5 => b"_SERVER",
+            _ => {
+                return Err(PhpError::ValueError(
+                    "filter_input(): Argument #1 ($type) must be an INPUT_* constant".to_string(),
+                ))
+            }
+        };
+        let Some(idx) = crate::bytecode::superglobal_index(sg) else {
+            return Ok(Zval::Bool(false));
+        };
+        let val = match &self.superglobals[idx as usize] {
+            Zval::Array(a) => a.get(&Key::from_bytes(&name)).map(|v| v.deref_clone()),
+            _ => None,
+        };
+        // A variable that is not present returns null (no filtering happens).
+        let Some(val) = val else {
+            return Ok(Zval::Null);
+        };
+        // Delegate to the registry `filter_var($value, $filter, $options)`.
+        let filter = args.get(2).map(|v| v.deref_clone()).unwrap_or(Zval::Long(516));
+        let options = args.get(3).map(|v| v.deref_clone()).unwrap_or(Zval::Long(0));
+        let f = match self.registry.get(&b"filter_var"[..]) {
+            Some(crate::builtin::Builtin::Value(f)) => *f,
+            _ => return Ok(Zval::Bool(false)),
+        };
+        let top = self.frames.len() - 1;
+        let line = self.cur_line(top);
+        self.run_value_builtin(f, &[val, filter, options], line)
+    }
+
     /// Spawn `$command` through `/bin/sh -c`, capture its **stdout** (stderr is
     /// inherited to the terminal, as PHP's `popen(cmd, "r")` does), and return
     /// `(stdout_bytes, exit_code)`. `Err(())` means the shell could not be
