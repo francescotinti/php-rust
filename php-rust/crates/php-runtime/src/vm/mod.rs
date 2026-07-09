@@ -4664,6 +4664,8 @@ impl<'m> Vm<'m> {
             b"proc_open" => self.ho_proc_open(args),
             b"pcntl_sigprocmask" => self.ho_pcntl_sigprocmask(args),
             b"parse_str" => self.ho_parse_str(args),
+            b"system" => self.ho_system(args),
+            b"passthru" => self.ho_passthru(args),
             _ => Err(undefined_builtin(name)),
         }
     }
@@ -8563,6 +8565,7 @@ host_builtins! {
     b"stream_context_create" => vm.ho_stream_context_create(args),
     b"stream_set_chunk_size" => vm.ho_stream_set_chunk_size(args),
     b"stream_get_meta_data" => vm.ho_stream_get_meta_data(args),
+    b"shell_exec" => vm.ho_shell_exec(args),
     b"proc_close" => vm.ho_proc_close(args),
     b"__stream_select" => vm.ho_stream_select(args),
     b"proc_get_status" => vm.ho_proc_get_status(args),
@@ -8815,6 +8818,9 @@ pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usiz
         (b"proc_open", 2),
         // `&$old_signals` receives the previous signal mask (optional arg).
         (b"pcntl_sigprocmask", 2),
+        // `&$result_code` receives the child's exit status (optional arg).
+        (b"system", 1),
+        (b"passthru", 1),
     ];
     HOST_OUT
         .iter()

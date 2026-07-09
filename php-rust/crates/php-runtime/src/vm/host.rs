@@ -3436,6 +3436,146 @@ impl<'m> super::Vm<'m> {
         }
         Ok(Zval::Bool(false))
     }
+    /// `shell_exec(string $command): string|false|null` — run `$command` through
+    /// `/bin/sh -c` and return its **complete** standard output. stderr is
+    /// inherited (goes to the terminal, as PHP does). Returns `null` when the
+    /// command produced no stdout (PHP's contract, including a failed spawn or a
+    /// non-zero exit with empty output). The backtick operator lowers to this.
+    pub(super) fn ho_shell_exec(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        use std::os::unix::ffi::OsStrExt;
+        use std::process::{Command, Stdio};
+        let Some(cmd_arg) = args.first() else {
+            return Err(PhpError::Error(
+                "shell_exec() expects exactly 1 argument, 0 given".to_string(),
+            ));
+        };
+        let cmd = convert::to_zstr_cast(&cmd_arg.deref_clone(), &mut self.diags)
+            .as_bytes()
+            .to_vec();
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg(std::ffi::OsStr::from_bytes(&cmd))
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn();
+        let out = match child.and_then(|c| c.wait_with_output()) {
+            Ok(o) => o.stdout,
+            Err(_) => return Ok(Zval::Null),
+        };
+        if out.is_empty() {
+            Ok(Zval::Null)
+        } else {
+            Ok(Zval::Str(PhpStr::new(out)))
+        }
+    }
+
+    /// Spawn `$command` through `/bin/sh -c`, capture its **stdout** (stderr is
+    /// inherited to the terminal, as PHP's `popen(cmd, "r")` does), and return
+    /// `(stdout_bytes, exit_code)`. `Err(())` means the shell could not be
+    /// spawned (PHP's "Unable to fork").
+    fn spawn_shell_capture(&mut self, cmd: &[u8]) -> Result<(Vec<u8>, i64), ()> {
+        use std::os::unix::ffi::OsStrExt;
+        use std::process::{Command, Stdio};
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg(std::ffi::OsStr::from_bytes(cmd))
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn();
+        match child.and_then(|c| c.wait_with_output()) {
+            Ok(out) => Ok((out.stdout, out.status.code().map(|c| c as i64).unwrap_or(-1))),
+            Err(_) => Err(()),
+        }
+    }
+
+    /// The last line of shell output, right-trimmed of ASCII whitespace — the
+    /// value `exec`/`system` return (C `php_exec` + `strip_trailing_whitespace`).
+    /// A line is a `\n`-terminated (or final) chunk; a trailing `\n` does not
+    /// create an empty final line. Empty output yields `""`.
+    fn shell_last_line(output: &[u8]) -> Vec<u8> {
+        if output.is_empty() {
+            return Vec::new();
+        }
+        // Find the start of the final `\n`-delimited chunk (a trailing newline
+        // terminates the previous chunk rather than opening an empty one).
+        let mut last_start = 0;
+        for i in 0..output.len() {
+            if output[i] == b'\n' && i + 1 < output.len() {
+                last_start = i + 1;
+            }
+        }
+        let mut end = output.len();
+        while end > last_start && output[end - 1].is_ascii_whitespace() {
+            end -= 1;
+        }
+        output[last_start..end].to_vec()
+    }
+
+    /// Validate the `$command` argument shared by `system`/`passthru`/`exec`:
+    /// coerce to bytes, rejecting an empty command with the same `ValueError` PHP
+    /// raises (`Argument #1 ($command) must not be empty`).
+    fn shell_command_arg(&mut self, args: &[Zval], func: &str) -> Result<Vec<u8>, PhpError> {
+        let Some(v) = args.first() else {
+            return Err(PhpError::Error(format!(
+                "{func}() expects at least 1 argument, 0 given"
+            )));
+        };
+        let cmd = self.vm_stringify(&v.deref_clone())?.as_bytes().to_vec();
+        if cmd.is_empty() {
+            return Err(PhpError::ValueError(format!(
+                "{func}(): Argument #1 ($command) must not be empty"
+            )));
+        }
+        Ok(cmd)
+    }
+
+    /// `system(string $command, int &$result_code = null): string|false` — run
+    /// `$command`, write its stdout to the current output (ob-aware, like PHP),
+    /// and return the last line (right-trimmed); `$result_code` receives the exit
+    /// status. A spawn failure warns and returns `false` with code `-1`. The
+    /// returned pair is `(result, $result_code)`; the VM stores the code in the
+    /// by-ref arg.
+    pub(super) fn ho_system(&mut self, args: Vec<Zval>) -> Result<(Zval, Zval), PhpError> {
+        let cmd = self.shell_command_arg(&args, "system")?;
+        match self.spawn_shell_capture(&cmd) {
+            Ok((stdout, code)) => {
+                self.write_output(&stdout)?;
+                let last = Self::shell_last_line(&stdout);
+                Ok((Zval::Str(PhpStr::new(last)), Zval::Long(code)))
+            }
+            Err(()) => {
+                self.diags.push(Diag::Warning(format!(
+                    "Unable to fork [{}]",
+                    String::from_utf8_lossy(&cmd)
+                )));
+                Ok((Zval::Bool(false), Zval::Long(-1)))
+            }
+        }
+    }
+
+    /// `passthru(string $command, int &$result_code = null): ?false` — run
+    /// `$command` and write its raw stdout to the current output (ob-aware),
+    /// returning `null`; `$result_code` receives the exit status. A spawn failure
+    /// warns and returns `false` with code `-1`.
+    pub(super) fn ho_passthru(&mut self, args: Vec<Zval>) -> Result<(Zval, Zval), PhpError> {
+        let cmd = self.shell_command_arg(&args, "passthru")?;
+        match self.spawn_shell_capture(&cmd) {
+            Ok((stdout, code)) => {
+                self.write_output(&stdout)?;
+                Ok((Zval::Null, Zval::Long(code)))
+            }
+            Err(()) => {
+                self.diags.push(Diag::Warning(format!(
+                    "Unable to fork [{}]",
+                    String::from_utf8_lossy(&cmd)
+                )));
+                Ok((Zval::Bool(false), Zval::Long(-1)))
+            }
+        }
+    }
+
     /// `proc_open($command, $descriptor_spec, &$pipes, $cwd?, $env?)`: spawn a
     /// child process. A string command runs through `/bin/sh -c` (PHP's POSIX
     /// behaviour); an array is a direct argv (PHP 7.4+). Descriptors 0/1/2
