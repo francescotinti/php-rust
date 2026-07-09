@@ -39,10 +39,18 @@ non l'uso reale delle webapp target (WP/Composer/Doctrine/Laravel/Symfony).
   strtr, wordwrap, levenshtein, htmlspecialchars/htmlentities, strip_tags, …).
   Byte-identici all'oracle; introspection (is_string/gettype/get_class/var_dump)
   **esclusi** → nessuna chiamata `__toString` spuria (verificato). Zend 2322→2323.
-- **Residuo** (non ancora coperto): funzioni con oggetti dentro ARRAY-arg
-  (`implode`, `str_replace` con array, `array_map`→callback), e i format
-  (`sprintf`/`printf` %s). Estendere allowlist + far ricorrere `compute_stringify`
-  negli array per quei casi specifici. `to_zstr` VM-side (echo/concat) già OK da prima.
+- **Esteso agli ARRAY-arg** (`a7c0c63`): `implode`/`join` (host `ho_implode`: glue
+  ora via `vm_stringify` come gli elementi) + `str_replace`/`str_ireplace`
+  (deep gate: `compute_stringify(recurse_arrays=true)`, walk FIFO in ordine).
+- **Residuo minimo rimasto**:
+  (a) `sprintf`/`printf` `%s` — coercion PER-specifier (`%d` NON chiama `__toString`),
+      quindi un precompute eager sarebbe spurio; servirebbe che la builtin guidi la
+      coercion (non fattibile senza re-entrancy VM). **Deferito.**
+  (b) `str_replace` con **search E replace entrambi array di oggetti** con
+      `__toString` a side-effect: l'ORDINE delle chiamate `__toString` diverge
+      (mio: tutti i search poi tutti i replace; PHP: interleaved per-coppia). Il
+      RISULTATO è byte-identico; diverge solo l'ordine dei side-effect (raro).
+  `to_zstr` VM-side (echo/concat) già OK da prima.
 
 ### 1.2 Deprecation ZPP `null → parametro non-nullable`
 - **Sintomo**: passare `null` a un parametro interno non-nullable (es.
