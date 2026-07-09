@@ -11,6 +11,7 @@ php-types.workspace = true
 php-runtime.workspace = true
 time = "0.3.49"
 encoding_rs = "0.8.35"
+unicode-segmentation = "1.13"
 libc = "0.2"
 md-5 = "0.10"
 sha1 = "0.10"
