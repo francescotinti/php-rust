@@ -232,6 +232,70 @@ fn hash_file_bytes(
     }
 }
 
+/// `utf8_encode(string $string): string` — reinterpret ISO-8859-1 bytes as UTF-8
+/// (each byte is a U+00xx code point). Deprecated since 8.2.
+pub fn utf8_encode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = arg_str(args, ctx, "utf8_encode")?;
+    ctx.diags.push(php_types::Diag::Deprecated(
+        "Function utf8_encode() is deprecated since 8.2, visit the php.net documentation for various alternatives".to_string(),
+    ));
+    let mut out = Vec::with_capacity(s.as_bytes().len());
+    for &b in s.as_bytes() {
+        if b < 0x80 {
+            out.push(b);
+        } else {
+            out.push(0xC0 | (b >> 6));
+            out.push(0x80 | (b & 0x3F));
+        }
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
+/// `utf8_decode(string $string): string` — decode UTF-8 to ISO-8859-1: code
+/// points 0..=255 become that byte, anything higher (or a malformed sequence)
+/// becomes `?`. Deprecated since 8.2.
+pub fn utf8_decode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = arg_str(args, ctx, "utf8_decode")?;
+    ctx.diags.push(php_types::Diag::Deprecated(
+        "Function utf8_decode() is deprecated since 8.2, visit the php.net documentation for various alternatives".to_string(),
+    ));
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let cont = |x: u8| x & 0xC0 == 0x80;
+    let mut i = 0;
+    while i < b.len() {
+        let c = b[i];
+        let (cp, len): (u32, usize) = if c < 0x80 {
+            (c as u32, 1)
+        } else if c & 0xE0 == 0xC0 && i + 1 < b.len() && cont(b[i + 1]) {
+            (((c as u32 & 0x1F) << 6) | (b[i + 1] as u32 & 0x3F), 2)
+        } else if c & 0xF0 == 0xE0 && i + 2 < b.len() && cont(b[i + 1]) && cont(b[i + 2]) {
+            (
+                ((c as u32 & 0x0F) << 12) | ((b[i + 1] as u32 & 0x3F) << 6) | (b[i + 2] as u32 & 0x3F),
+                3,
+            )
+        } else if c & 0xF8 == 0xF0
+            && i + 3 < b.len()
+            && cont(b[i + 1])
+            && cont(b[i + 2])
+            && cont(b[i + 3])
+        {
+            (
+                ((c as u32 & 0x07) << 18)
+                    | ((b[i + 1] as u32 & 0x3F) << 12)
+                    | ((b[i + 2] as u32 & 0x3F) << 6)
+                    | (b[i + 3] as u32 & 0x3F),
+                4,
+            )
+        } else {
+            (0x100, 1) // malformed → '?', consume one byte
+        };
+        out.push(if cp <= 0xFF { cp as u8 } else { b'?' });
+        i += len;
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
 /// One hex nibble's value (caller guarantees `[0-9a-fA-F]`).
 fn qp_hexnib(b: u8) -> u8 {
     match b {
