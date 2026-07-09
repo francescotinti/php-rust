@@ -27,7 +27,7 @@ pub fn implode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
                 ));
             }
             match rest.first() {
-                Some(Zval::Array(a)) => (convert::to_zstr(sep, ctx.diags).as_bytes().to_vec(), a),
+                Some(Zval::Array(a)) => (ctx.to_zstr(sep).as_bytes().to_vec(), a),
                 Some(other) => {
                     return Err(PhpError::TypeError(format!(
                         "implode(): Argument #2 ($array) must be of type array, {} given",
@@ -44,12 +44,16 @@ pub fn implode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         }
     };
 
+    // Clone the elements up front so the per-element `ctx.to_zstr` (which
+    // borrows `ctx`) does not overlap the borrow of `arr` from `args`.
+    let elems: Vec<Zval> = arr.iter().map(|(_, v)| v.clone()).collect();
     let mut out = Vec::new();
-    for (i, (_, v)) in arr.iter().enumerate() {
+    for (i, v) in elems.iter().enumerate() {
         if i > 0 {
             out.extend_from_slice(&glue);
         }
-        out.extend_from_slice(convert::to_zstr(v, ctx.diags).as_bytes());
+        let s = ctx.to_zstr(v);
+        out.extend_from_slice(s.as_bytes());
     }
     Ok(Zval::Str(PhpStr::new(out)))
 }
@@ -214,7 +218,7 @@ pub fn str_replace(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let pairs = replacement_pairs(search, replace, ctx);
 
     let apply = |subj: &Zval, ctx: &mut Ctx| -> Vec<u8> {
-        let mut cur = convert::to_zstr(subj, ctx.diags).as_bytes().to_vec();
+        let mut cur = ctx.to_zstr(subj).as_bytes().to_vec();
         for (s, r) in &pairs {
             if !s.is_empty() {
                 cur = replace_all(&cur, s, r);
@@ -237,26 +241,27 @@ pub fn str_replace(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 
 /// Pair each search term with its replacement. Scalars become a single pair;
 /// an array search pairs element-wise with an array replace (missing entries
-/// replace with "") or with the same scalar replace for every term.
+/// replace with "") or with the same scalar replace for every term. Coercion
+/// goes through `ctx.to_zstr` so Stringable object terms honor `__toString`.
 fn replacement_pairs(search: &Zval, replace: &Zval, ctx: &mut Ctx) -> Vec<(Vec<u8>, Vec<u8>)> {
     match search {
         Zval::Array(searches) => {
             let repls: Option<Vec<Vec<u8>>> = match replace {
-                Zval::Array(r) => Some(
-                    r.iter()
-                        .map(|(_, v)| convert::to_zstr(v, ctx.diags).as_bytes().to_vec())
-                        .collect(),
-                ),
+                Zval::Array(r) => {
+                    let vals: Vec<Zval> = r.iter().map(|(_, v)| v.clone()).collect();
+                    Some(vals.iter().map(|v| ctx.to_zstr(v).as_bytes().to_vec()).collect())
+                }
                 _ => None,
             };
             let scalar_repl = repls
                 .is_none()
-                .then(|| convert::to_zstr(replace, ctx.diags).as_bytes().to_vec());
-            searches
+                .then(|| ctx.to_zstr(replace).as_bytes().to_vec());
+            let s_vals: Vec<Zval> = searches.iter().map(|(_, s)| s.clone()).collect();
+            s_vals
                 .iter()
                 .enumerate()
-                .map(|(i, (_, s))| {
-                    let s = convert::to_zstr(s, ctx.diags).as_bytes().to_vec();
+                .map(|(i, s)| {
+                    let s = ctx.to_zstr(s).as_bytes().to_vec();
                     let r = match &repls {
                         Some(list) => list.get(i).cloned().unwrap_or_default(),
                         None => scalar_repl.clone().unwrap(),
@@ -265,10 +270,11 @@ fn replacement_pairs(search: &Zval, replace: &Zval, ctx: &mut Ctx) -> Vec<(Vec<u
                 })
                 .collect()
         }
-        _ => vec![(
-            convert::to_zstr(search, ctx.diags).as_bytes().to_vec(),
-            convert::to_zstr(replace, ctx.diags).as_bytes().to_vec(),
-        )],
+        _ => {
+            let s = ctx.to_zstr(search).as_bytes().to_vec();
+            let r = ctx.to_zstr(replace).as_bytes().to_vec();
+            vec![(s, r)]
+        }
     }
 }
 
@@ -321,7 +327,7 @@ pub fn str_ireplace(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let pairs = replacement_pairs(search, replace, ctx);
 
     let apply = |subj: &Zval, ctx: &mut Ctx| -> Vec<u8> {
-        let mut cur = convert::to_zstr(subj, ctx.diags).as_bytes().to_vec();
+        let mut cur = ctx.to_zstr(subj).as_bytes().to_vec();
         for (s, r) in &pairs {
             if !s.is_empty() {
                 cur = replace_all_ci(&cur, s, r);

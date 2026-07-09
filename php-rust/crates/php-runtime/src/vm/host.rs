@@ -4123,7 +4123,10 @@ impl<'m> super::Vm<'m> {
                 }
                 match rest.first() {
                     Some(Zval::Array(a)) => {
-                        (convert::to_zstr(sep, &mut self.diags).as_bytes().to_vec(), Rc::clone(a))
+                        // The glue is string-coerced like the elements, so a
+                        // Stringable separator runs its `__toString` (vm_stringify),
+                        // not the object-fatal `convert::to_zstr` funnel.
+                        (self.vm_stringify(sep)?.as_bytes().to_vec(), Rc::clone(a))
                     }
                     Some(other) => {
                         return Err(PhpError::TypeError(format!(

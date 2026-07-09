@@ -1851,9 +1851,13 @@ impl<'m> super::Vm<'m> {
                     // A builtin that unconditionally string-coerces its (string)
                     // arguments gets each Stringable object's `__toString()`
                     // precomputed, so the pure builtin honors it (handed over via
-                    // `stringify_args`, taken in `run_value_builtin`).
+                    // `stringify_args`, taken in `run_value_builtin`). The `deep`
+                    // family (`implode`/`str_replace`) also coerces array
+                    // *elements*, so its precompute recurses into array arguments.
                     if value_builtin_string_coerces(&name) {
-                        self.stringify_args = self.compute_stringify(&args)?;
+                        self.stringify_args = self.compute_stringify(&args, false)?;
+                    } else if value_builtin_string_coerces_deep(&name) {
+                        self.stringify_args = self.compute_stringify(&args, true)?;
                     }
                     let line = self.cur_line(top);
                     let result = self.run_value_builtin(f, &args, line)?;
@@ -2021,7 +2025,7 @@ impl<'m> super::Vm<'m> {
                     // every other ref builtin).
                     let stringify = if ref_builtin_string_coerces(&name) {
                         let roots = ref_stringify_roots(&self.frames[top].slots[slot as usize].clone());
-                        self.compute_stringify(&roots)?
+                        self.compute_stringify(&roots, false)?
                     } else {
                         std::collections::HashMap::new()
                     };
@@ -2071,7 +2075,7 @@ impl<'m> super::Vm<'m> {
                     self.flush_diags(line)?;
                     let stringify = if ref_builtin_string_coerces(&name) {
                         let roots = ref_stringify_roots(&self.frames[top].slots[slot as usize].clone());
-                        self.compute_stringify(&roots)?
+                        self.compute_stringify(&roots, false)?
                     } else {
                         std::collections::HashMap::new()
                     };
@@ -2100,7 +2104,7 @@ impl<'m> super::Vm<'m> {
                     self.flush_diags(line)?;
                     let stringify = if ref_builtin_string_coerces(&name) {
                         let roots = ref_stringify_roots(&cell.borrow().clone());
-                        self.compute_stringify(&roots)?
+                        self.compute_stringify(&roots, false)?
                     } else {
                         std::collections::HashMap::new()
                     };

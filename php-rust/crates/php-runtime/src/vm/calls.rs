@@ -70,6 +70,17 @@ pub(super) fn value_builtin_string_coerces(name: &[u8]) -> bool {
     )
 }
 
+/// Value builtins that string-coerce not only their direct string arguments but
+/// also the *elements* of their array arguments (`str_replace` accepts array
+/// search/replace/subject). Their `__toString` precompute recurses into arrays.
+/// Excludes `sprintf`/`printf`, which coerce per format specifier (`%s` calls
+/// `__toString`, `%d` does not), so an eager precompute there would run
+/// `__toString` spuriously. (`implode`/`join` are host builtins with their own
+/// VM-aware coercion, so they are handled in `ho_implode`, not here.)
+pub(super) fn value_builtin_string_coerces_deep(name: &[u8]) -> bool {
+    matches!(name, b"str_replace" | b"str_ireplace")
+}
+
 /// The by-ref-first builtins that *unconditionally* string-coerce every element
 /// of their target array (natural-order sorts): the VM precomputes `__toString`
 /// for their Stringable elements before dispatch. A `SORT_REGULAR` sort is

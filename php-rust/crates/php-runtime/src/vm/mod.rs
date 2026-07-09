@@ -2709,46 +2709,54 @@ impl<'m> Vm<'m> {
     }
 
     /// Precompute `__toString()` for the Stringable object arguments of a
-    /// builtin that *unconditionally* string-coerces them (`natsort`, …),
-    /// returning object-id → the coerced string. `roots` are the values the
-    /// builtin will coerce (an array's elements for the sort family, the direct
-    /// arguments otherwise); only direct objects (through references) are
-    /// considered — this walker deliberately does **not** recurse into nested
-    /// arrays, so an object buried in a value that the builtin renders as
-    /// "Array" is not spuriously invoked. An object without `__toString` is
-    /// simply absent from the map (the builtin then hits its normal
-    /// non-coercible path). Cycle-guarded by id.
-    fn compute_stringify(&mut self, roots: &[Zval]) -> Result<HashMap<u32, php_types::ZStr>, PhpError> {
+    /// builtin that *unconditionally* string-coerces them (`natsort`, `implode`,
+    /// …), returning object-id → the coerced string. `roots` are the values the
+    /// builtin will coerce. With `recurse_arrays`, descends into array arguments
+    /// (for `implode`/`str_replace`, whose array elements are each coerced);
+    /// otherwise only direct objects (through references) are considered, so an
+    /// object a builtin renders as "Array" is not spuriously invoked.
+    ///
+    /// The walk is **in insertion order** (FIFO), so a user `__toString` with
+    /// side effects (e.g. `echo`) runs in the same order PHP coerces the
+    /// arguments. Cycle-guarded by id.
+    fn compute_stringify(
+        &mut self,
+        roots: &[Zval],
+        recurse_arrays: bool,
+    ) -> Result<HashMap<u32, php_types::ZStr>, PhpError> {
         let mut map: HashMap<u32, php_types::ZStr> = HashMap::new();
         let mut visited: std::collections::HashSet<u32> = std::collections::HashSet::new();
-        for root in roots {
-            // Follow a reference to its referent, then require a bare object.
-            let obj = match root {
-                Zval::Object(_) => root.clone(),
-                Zval::Ref(cell) => {
-                    let inner = cell.borrow().clone();
-                    if matches!(inner, Zval::Object(_)) {
-                        inner
-                    } else {
-                        continue;
+        // Index-driven FIFO queue: process in insertion order, appending
+        // referents / array elements to the back as they are discovered.
+        let mut queue: Vec<Zval> = roots.to_vec();
+        let mut i = 0;
+        while i < queue.len() {
+            let v = queue[i].clone();
+            i += 1;
+            match &v {
+                Zval::Ref(cell) => queue.push(cell.borrow().clone()),
+                Zval::Array(a) if recurse_arrays => {
+                    for (_, val) in a.iter() {
+                        queue.push(val.clone());
                     }
                 }
-                _ => continue,
-            };
-            let Zval::Object(o) = &obj else { continue };
-            let (id, cid) = {
-                let b = o.borrow();
-                (b.id, b.class_id as usize)
-            };
-            if !visited.insert(id) {
-                continue;
-            }
-            if resolve_method_runtime(&self.classes, cid, b"__toString").is_some() {
-                let res = self.call_method_sync(obj.clone(), b"__toString", Vec::new())?;
-                // PHP requires `__toString` to return a string; the funnel here
-                // string-coerces any (already-validated by the VM) return value.
-                let s = php_types::convert::to_zstr(&res, &mut self.diags);
-                map.insert(id, s);
+                Zval::Object(o) => {
+                    let (id, cid) = {
+                        let b = o.borrow();
+                        (b.id, b.class_id as usize)
+                    };
+                    if !visited.insert(id) {
+                        continue;
+                    }
+                    if resolve_method_runtime(&self.classes, cid, b"__toString").is_some() {
+                        let res = self.call_method_sync(v.clone(), b"__toString", Vec::new())?;
+                        // PHP requires `__toString` to return a string; the funnel
+                        // here string-coerces the (VM-validated) return value.
+                        let s = php_types::convert::to_zstr(&res, &mut self.diags);
+                        map.insert(id, s);
+                    }
+                }
+                _ => {}
             }
         }
         Ok(map)
