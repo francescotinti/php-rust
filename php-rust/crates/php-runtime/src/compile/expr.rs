@@ -809,6 +809,33 @@ impl<'a> super::FnCompiler<'a> {
         Ok(())
     }
 
+    /// Resolve a host builtin out-param argument to the slot the VM should write
+    /// its produced value into: a plain variable's own slot, or — for a
+    /// property/index target (`$this->pipes`) — a fresh temp whose value the
+    /// caller assigns into `*place_dst` after the call. `None` when the argument
+    /// was omitted; an unsupported target is a compile error.
+    fn resolve_out_slot(
+        &mut self,
+        arg: Option<&Expr>,
+        place_dst: &mut Option<Place>,
+    ) -> Result<Option<crate::hir::Slot>, CompileError> {
+        match arg {
+            None => Ok(None),
+            Some(e) => match &e.kind {
+                ExprKind::Var(slot) => Ok(Some(*slot)),
+                _ => match expr_field_place(e) {
+                    Some(place) => {
+                        *place_dst = Some(place);
+                        Ok(Some(self.alloc_temp()))
+                    }
+                    None => Err(CompileError::Unsupported(
+                        "host builtin out-param is not a plain variable".into(),
+                    )),
+                },
+            },
+        }
+    }
+
     /// Compile a named function call `name(args...)`.
     ///
     /// Resolution mirrors the evaluator: a *user* function (matched
@@ -904,28 +931,20 @@ impl<'a> super::FnCompiler<'a> {
         // real PHP never raises. Push `null` in its place (the builtin ignores the
         // input value there).
         if let Some((canon, out_idx)) = crate::vm::host_builtin_out_param(bname) {
+            // A builtin may have a *second* out-param (`exec`'s `&$result_code`).
+            let out_idx2 = crate::vm::host_builtin_out_param_second(bname);
             // A property/index out-param (`proc_open(..., $this->pipes)`) is
-            // written back through a temp slot after the call.
+            // written back through a temp slot after the call. Resolve each
+            // out-param arg to its target slot (+ optional place).
             let mut out_place: Option<Place> = None;
-            let out_slot = match args.get(out_idx) {
-                None => None, // out-param omitted (e.g. `preg_match($p, $s)`)
-                Some(e) => match &e.kind {
-                    ExprKind::Var(slot) => Some(*slot),
-                    _ => match expr_field_place(e) {
-                        Some(place) => {
-                            out_place = Some(place);
-                            Some(self.alloc_temp())
-                        }
-                        None => {
-                            return Err(CompileError::Unsupported(
-                                "host builtin out-param is not a plain variable".into(),
-                            ))
-                        }
-                    },
-                },
+            let mut out_place2: Option<Place> = None;
+            let out_slot = self.resolve_out_slot(args.get(out_idx), &mut out_place)?;
+            let out_slot2 = match out_idx2 {
+                Some(i) => self.resolve_out_slot(args.get(i), &mut out_place2)?,
+                None => None,
             };
             for (i, a) in args.iter().enumerate() {
-                if i == out_idx {
+                if i == out_idx || Some(i) == out_idx2 {
                     let k = self.konst(Const::Null);
                     self.emit(Op::PushConst(k));
                 } else if matches!(a.kind, ExprKind::Spread(_)) {
@@ -938,11 +957,22 @@ impl<'a> super::FnCompiler<'a> {
                 name: canon.into(),
                 out_slot,
                 out_index: out_idx as u32,
+                out_slot2,
+                out_index2: out_idx2.map(|i| i as u32).unwrap_or(u32::MAX),
                 argc: args.len() as u32,
             });
+            // Write back property/index out-params from their temps, in reverse
+            // allocation order (LIFO temp discipline). Each leaves `[result]` on top.
+            if let Some(place) = out_place2 {
+                let rhs = Expr {
+                    line: args[out_idx2.expect("out_place2 implies out_idx2")].line,
+                    kind: ExprKind::Var(out_slot2.expect("temp allocated with out_place2")),
+                };
+                self.assign_place(&place, &rhs)?;
+                self.emit(Op::Pop);
+                self.free_temp();
+            }
             if let Some(place) = out_place {
-                // [result] → assign the temp into the real place, drop the
-                // assignment's value, keep the call result on top.
                 let rhs = Expr {
                     line: args[out_idx].line,
                     kind: ExprKind::Var(out_slot.expect("temp allocated with out_place")),

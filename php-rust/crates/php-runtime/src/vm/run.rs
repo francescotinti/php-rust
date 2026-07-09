@@ -1945,18 +1945,38 @@ impl<'m> super::Vm<'m> {
                     let top = self.frames.len() - 1;
                     self.frames[top].stack.push(result);
                 }
-                Op::CallHostBuiltinOut { name, out_slot, out_index, argc } => {
+                Op::CallHostBuiltinOut { name, out_slot, out_index, out_slot2, out_index2, argc } => {
                     // A host builtin with a by-reference output parameter
                     // (`preg_match`/`preg_match_all`'s `&$matches`): dispatch with all
                     // args by value, then write the produced out-value into `out_slot`.
-                    let args = self.pop_keys(top, argc);
-                    let (result, out_val) =
+                    // `exec` additionally writes `&$result_code` into `out_slot2`.
+                    let _ = out_index2;
+                    let mut args = self.pop_keys(top, argc);
+                    // `exec` *appends* to a pre-existing `&$output` array, so it
+                    // needs that argument's current value (the compiler pushed a
+                    // placeholder `null` there). Read it straight from the slot —
+                    // no VarRead op, so an undefined variable warns nothing. Other
+                    // out-param builtins ignore this argument.
+                    if name[..] == *b"exec" {
+                        if let Some(slot) = out_slot {
+                            if let Some(a) = args.get_mut(out_index as usize) {
+                                *a = self.frames[top].slots[slot as usize].deref_clone();
+                            }
+                        }
+                    }
+                    let (result, out_val, out_val2) =
                         self.dispatch_host_builtin_out(&name, args, out_index as usize)?;
                     let top = self.frames.len() - 1;
                     if let Some(slot) = out_slot {
                         match &mut self.frames[top].slots[slot as usize] {
                             Zval::Ref(rc) => *rc.borrow_mut() = out_val,
                             cell => *cell = out_val,
+                        }
+                    }
+                    if let (Some(slot), Some(v2)) = (out_slot2, out_val2) {
+                        match &mut self.frames[top].slots[slot as usize] {
+                            Zval::Ref(rc) => *rc.borrow_mut() = v2,
+                            cell => *cell = v2,
                         }
                     }
                     self.frames[top].stack.push(result);

@@ -3576,6 +3576,72 @@ impl<'m> super::Vm<'m> {
         }
     }
 
+    /// `exec(string $command, array &$output = null, int &$result_code = null): string|false`
+    /// — run `$command` (no output emitted), append each output line (right-trimmed)
+    /// to `&$output`, and return the last line (right-trimmed); `&$result_code`
+    /// receives the exit status. Returns `(result, $output array, Some($result_code))`;
+    /// the VM stores the two by-ref values. A spawn failure warns and returns
+    /// `false` with an empty array and code `-1`. Ports C `php_exec` type 0/2.
+    pub(super) fn ho_exec(&mut self, args: Vec<Zval>) -> Result<(Zval, Zval, Option<Zval>), PhpError> {
+        let cmd = self.shell_command_arg(&args, "exec")?;
+        // PHP appends to a pre-existing `$output` array rather than replacing it
+        // (php_exec_ex: SEPARATE_ARRAY then add_next_index). Seed from the current
+        // value when it is already an array.
+        let mut lines = match args.get(1).map(|v| v.deref_clone()) {
+            Some(Zval::Array(a)) => (*a).clone(),
+            _ => PhpArray::new(),
+        };
+        match self.spawn_shell_capture(&cmd) {
+            Ok((stdout, code)) => {
+                for line in Self::shell_lines(&stdout) {
+                    let _ = lines.append(Zval::Str(PhpStr::new(line)));
+                }
+                let last = Self::shell_last_line(&stdout);
+                Ok((
+                    Zval::Str(PhpStr::new(last)),
+                    Zval::Array(Rc::new(lines)),
+                    Some(Zval::Long(code)),
+                ))
+            }
+            Err(()) => {
+                self.diags.push(Diag::Warning(format!(
+                    "Unable to fork [{}]",
+                    String::from_utf8_lossy(&cmd)
+                )));
+                Ok((Zval::Bool(false), Zval::Array(Rc::new(lines)), Some(Zval::Long(-1))))
+            }
+        }
+    }
+
+    /// Split shell output into lines the way C `php_exec` does for the
+    /// `&$output` array: each `\n`-terminated (or final) chunk becomes one
+    /// element, right-trimmed of ASCII whitespace; a trailing `\n` does not add a
+    /// trailing empty line. Empty output yields no lines.
+    fn shell_lines(output: &[u8]) -> Vec<Vec<u8>> {
+        let mut out = Vec::new();
+        let mut start = 0;
+        let mut i = 0;
+        while i < output.len() {
+            if output[i] == b'\n' {
+                let mut end = i; // exclude the '\n'
+                while end > start && output[end - 1].is_ascii_whitespace() {
+                    end -= 1;
+                }
+                out.push(output[start..end].to_vec());
+                start = i + 1;
+            }
+            i += 1;
+        }
+        if start < output.len() {
+            let mut end = output.len();
+            while end > start && output[end - 1].is_ascii_whitespace() {
+                end -= 1;
+            }
+            out.push(output[start..end].to_vec());
+        }
+        out
+    }
+
     /// `proc_open($command, $descriptor_spec, &$pipes, $cwd?, $env?)`: spawn a
     /// child process. A string command runs through `/bin/sh -c` (PHP's POSIX
     /// behaviour); an array is a direct argv (PHP 7.4+). Descriptors 0/1/2

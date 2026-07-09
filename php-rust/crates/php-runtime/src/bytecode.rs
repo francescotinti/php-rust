@@ -524,7 +524,19 @@ pub enum Op {
     /// `(result, out_value)` and the VM writes `out_value` into `out_slot` (a plain
     /// variable, following a reference) before pushing `result`. `out_slot` is
     /// `None` when the out-param argument was omitted (e.g. `preg_match($p,$s)`).
-    CallHostBuiltinOut { name: Box<[u8]>, out_slot: Option<Slot>, out_index: u32, argc: u32 },
+    ///
+    /// A builtin with a **second** by-reference out-param (`exec`'s `&$output`
+    /// at index 1 *and* `&$result_code` at index 2) sets `out_index2` to that
+    /// index (`u32::MAX` when there is none) and `out_slot2` to its target; the
+    /// builtin then returns `(result, out_value, Some(out_value2))`.
+    CallHostBuiltinOut {
+        name: Box<[u8]>,
+        out_slot: Option<Slot>,
+        out_index: u32,
+        out_slot2: Option<Slot>,
+        out_index2: u32,
+        argc: u32,
+    },
     /// `[arg0, arg1] -> [result]` — call a host builtin with **variadic** by-reference
     /// output parameters (`sscanf`/`fscanf`'s `...&$vars`). The two fixed arguments
     /// (string/stream + format) are pushed by value; `argc` is how many were actually

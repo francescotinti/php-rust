@@ -4646,28 +4646,32 @@ impl<'m> Vm<'m> {
 
 
     /// Dispatch a host builtin with a by-reference output parameter (Session:
-    /// out-param). Returns `(result, out_value)`; the VM writes `out_value` into the
-    /// caller's out-param slot. `_out_index` is the argument position of the
-    /// out-param (always the same per builtin; kept for symmetry / future use).
+    /// out-param). Returns `(result, out_value, out_value2)`; the VM writes
+    /// `out_value` into the caller's first out-param slot and `out_value2` (when
+    /// `Some`) into the second (`exec`'s `&$result_code`). `_out_index` is the
+    /// argument position of the primary out-param (kept for symmetry).
     fn dispatch_host_builtin_out(
         &mut self,
         name: &[u8],
         args: Vec<Zval>,
         _out_index: usize,
-    ) -> Result<(Zval, Zval), PhpError> {
-        match name {
-            b"preg_match" => self.ho_preg_match(args),
-            b"preg_match_all" => self.ho_preg_match_all(args),
-            b"mb_ereg" => self.ho_mb_ereg(false, args),
-            b"mb_eregi" => self.ho_mb_ereg(true, args),
-            b"preg_replace" => self.ho_preg_replace(args),
-            b"proc_open" => self.ho_proc_open(args),
-            b"pcntl_sigprocmask" => self.ho_pcntl_sigprocmask(args),
-            b"parse_str" => self.ho_parse_str(args),
-            b"system" => self.ho_system(args),
-            b"passthru" => self.ho_passthru(args),
-            _ => Err(undefined_builtin(name)),
-        }
+    ) -> Result<(Zval, Zval, Option<Zval>), PhpError> {
+        let (result, out) = match name {
+            b"preg_match" => self.ho_preg_match(args)?,
+            b"preg_match_all" => self.ho_preg_match_all(args)?,
+            b"mb_ereg" => self.ho_mb_ereg(false, args)?,
+            b"mb_eregi" => self.ho_mb_ereg(true, args)?,
+            b"preg_replace" => self.ho_preg_replace(args)?,
+            b"proc_open" => self.ho_proc_open(args)?,
+            b"pcntl_sigprocmask" => self.ho_pcntl_sigprocmask(args)?,
+            b"parse_str" => self.ho_parse_str(args)?,
+            b"system" => self.ho_system(args)?,
+            b"passthru" => self.ho_passthru(args)?,
+            // Two out-params: (result, $output array, Some($result_code)).
+            b"exec" => return self.ho_exec(args),
+            _ => return Err(undefined_builtin(name)),
+        };
+        Ok((result, out, None))
     }
 
 
@@ -8821,11 +8825,25 @@ pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usiz
         // `&$result_code` receives the child's exit status (optional arg).
         (b"system", 1),
         (b"passthru", 1),
+        // `exec`'s primary out-param is `&$output` (the array of lines); its
+        // secondary `&$result_code` is in `host_builtin_out_param_second`.
+        (b"exec", 1),
     ];
     HOST_OUT
         .iter()
         .find(|(h, _)| name.eq_ignore_ascii_case(h))
         .map(|&(h, i)| (h, i))
+}
+
+/// The *second* by-reference out-param index of a host builtin, when it has two
+/// (only `exec`'s `&$result_code` at index 2). `None` for every single-out
+/// builtin in [`host_builtin_out_param`].
+pub(crate) fn host_builtin_out_param_second(name: &[u8]) -> Option<usize> {
+    if name.eq_ignore_ascii_case(b"exec") {
+        Some(2)
+    } else {
+        None
+    }
 }
 
 /// Host builtins with **variadic** by-reference output parameters from a fixed
