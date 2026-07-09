@@ -1453,6 +1453,213 @@ pub fn stripcslashes(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Str(PhpStr::new(out)))
 }
 
+/// `str_increment(string $string): string` — the next value in the alphanumeric
+/// "Perl string increment" sequence (`"Az"`→`"Ba"`, `"Zz"`→`"AAa"`, `"a9"`→`"b0"`).
+/// Empty or non-alphanumeric-ASCII input is a `ValueError`. Mirrors the 8.3 C.
+pub fn str_increment(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = str_at(args, ctx, 0, "str_increment", 1)?;
+    if s.is_empty() {
+        return Err(PhpError::ValueError(
+            "str_increment(): Argument #1 ($string) must not be empty".into(),
+        ));
+    }
+    if !s.iter().all(u8::is_ascii_alphanumeric) {
+        return Err(PhpError::ValueError(
+            "str_increment(): Argument #1 ($string) must be composed only of alphanumeric ASCII characters".into(),
+        ));
+    }
+    let mut buf = s.clone();
+    let mut pos = buf.len() - 1;
+    let mut carry;
+    loop {
+        let c = buf[pos];
+        if c != b'z' && c != b'Z' && c != b'9' {
+            carry = false;
+            buf[pos] += 1;
+        } else {
+            carry = true;
+            buf[pos] = if c == b'9' { b'0' } else { c - 25 };
+        }
+        if !carry || pos == 0 {
+            break;
+        }
+        pos -= 1;
+    }
+    if carry {
+        let lead = if buf[0] == b'0' { b'1' } else { buf[0] };
+        let mut out = Vec::with_capacity(buf.len() + 1);
+        out.push(lead);
+        out.extend_from_slice(&buf);
+        return Ok(Zval::Str(PhpStr::new(out)));
+    }
+    Ok(Zval::Str(PhpStr::new(buf)))
+}
+
+/// `str_decrement(string $string): string` — the inverse of `str_increment`
+/// (`"B0"`→`"A9"`, `"aaa"`→`"zz"`). Empty/non-alphanumeric input, a leading `0`,
+/// or decrementing below the range is a `ValueError`. Mirrors the 8.3 C.
+pub fn str_decrement(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = str_at(args, ctx, 0, "str_decrement", 1)?;
+    if s.is_empty() {
+        return Err(PhpError::ValueError(
+            "str_decrement(): Argument #1 ($string) must not be empty".into(),
+        ));
+    }
+    if !s.iter().all(u8::is_ascii_alphanumeric) {
+        return Err(PhpError::ValueError(
+            "str_decrement(): Argument #1 ($string) must be composed only of alphanumeric ASCII characters".into(),
+        ));
+    }
+    let out_of_range = || {
+        PhpError::ValueError(format!(
+            "str_decrement(): Argument #1 ($string) \"{}\" is out of decrement range",
+            String::from_utf8_lossy(&s)
+        ))
+    };
+    if s[0] == b'0' {
+        return Err(out_of_range());
+    }
+    let mut buf = s.clone();
+    let mut pos = buf.len() - 1;
+    let mut carry;
+    loop {
+        let c = buf[pos];
+        if c != b'a' && c != b'A' && c != b'0' {
+            carry = false;
+            buf[pos] -= 1;
+        } else {
+            carry = true;
+            buf[pos] = if c == b'0' { b'9' } else { c + 25 };
+        }
+        if !carry || pos == 0 {
+            break;
+        }
+        pos -= 1;
+    }
+    if carry || (buf[0] == b'0' && buf.len() > 1) {
+        if buf.len() == 1 {
+            return Err(out_of_range());
+        }
+        return Ok(Zval::Str(PhpStr::new(buf[1..].to_vec())));
+    }
+    Ok(Zval::Str(PhpStr::new(buf)))
+}
+
+/// `count_chars(string $string, int $mode = 0)` — per-byte frequency: mode 0 all
+/// 256 bytes, 1 only present, 2 only absent, 3 present bytes as a string, 4 absent
+/// bytes as a string.
+pub fn count_chars(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = str_at(args, ctx, 0, "count_chars", 1)?;
+    let mode = args.get(1).map(|v| convert::to_long_cast(v, ctx.diags)).unwrap_or(0);
+    if !(0..=4).contains(&mode) {
+        return Err(PhpError::ValueError(
+            "count_chars(): Argument #2 ($mode) must be between 0 and 4 (inclusive)".into(),
+        ));
+    }
+    let mut counts = [0i64; 256];
+    for &b in &s {
+        counts[b as usize] += 1;
+    }
+    if mode >= 3 {
+        let want = mode == 3;
+        let mut out = Vec::new();
+        for (i, &n) in counts.iter().enumerate() {
+            if (n != 0) == want {
+                out.push(i as u8);
+            }
+        }
+        return Ok(Zval::Str(PhpStr::new(out)));
+    }
+    let mut arr = PhpArray::new();
+    for (i, &n) in counts.iter().enumerate() {
+        let keep = match mode {
+            0 => true,
+            1 => n != 0,
+            _ => n == 0,
+        };
+        if keep {
+            arr.insert(Key::Int(i as i64), Zval::Long(n));
+        }
+    }
+    Ok(Zval::Array(Rc::new(arr)))
+}
+
+/// Expand a `str_word_count` char-list into a 256-entry membership mask, honouring
+/// `a..z` ranges (php_charmask).
+fn word_charmask(list: &[u8]) -> [bool; 256] {
+    let mut mask = [false; 256];
+    let mut i = 0;
+    while i < list.len() {
+        let c = list[i];
+        if i + 3 < list.len() && list[i + 1] == b'.' && list[i + 2] == b'.' && list[i + 3] >= c {
+            for b in c..=list[i + 3] {
+                mask[b as usize] = true;
+            }
+            i += 4;
+            continue;
+        }
+        mask[c as usize] = true;
+        i += 1;
+    }
+    mask
+}
+
+/// `str_word_count(string $string, int $format = 0, ?string $characters = null)`
+/// — a word is a run of ASCII letters (plus `'`/`-`, never leading, `-` never
+/// trailing) and any extra `$characters`. Format 0 counts, 1 lists the words, 2
+/// maps byte-offset → word.
+pub fn str_word_count(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = str_at(args, ctx, 0, "str_word_count", 1)?;
+    let format = args.get(1).map(|v| convert::to_long_cast(v, ctx.diags)).unwrap_or(0);
+    if !matches!(format, 0 | 1 | 2) {
+        return Err(PhpError::ValueError(
+            "str_word_count(): Argument #2 ($format) must be a valid format value".into(),
+        ));
+    }
+    let (mask, has_list) = match args.get(2) {
+        None | Some(Zval::Null) => ([false; 256], false),
+        Some(v) => (word_charmask(convert::to_zstr(v, ctx.diags).as_bytes()), true),
+    };
+    if s.is_empty() {
+        return Ok(if format == 0 { Zval::Long(0) } else { Zval::Array(Rc::new(PhpArray::new())) });
+    }
+    let is_word = |c: u8| {
+        c.is_ascii_alphabetic() || (has_list && mask[c as usize]) || c == b'\'' || c == b'-'
+    };
+    let mut p = 0usize;
+    let mut e = s.len();
+    // A leading '/- (unless allowed) and a trailing - (unless allowed) are excluded.
+    if (s[p] == b'\'' && !(has_list && mask[b'\'' as usize]))
+        || (s[p] == b'-' && !(has_list && mask[b'-' as usize]))
+    {
+        p += 1;
+    }
+    if s[e - 1] == b'-' && !(has_list && mask[b'-' as usize]) {
+        e -= 1;
+    }
+    let mut arr = PhpArray::new();
+    let mut count = 0i64;
+    while p < e {
+        let start = p;
+        while p < e && is_word(s[p]) {
+            p += 1;
+        }
+        if p > start {
+            match format {
+                1 => {
+                    let _ = arr.append(Zval::Str(PhpStr::new(s[start..p].to_vec())));
+                }
+                2 => {
+                    arr.insert(Key::Int(start as i64), Zval::Str(PhpStr::new(s[start..p].to_vec())));
+                }
+                _ => count += 1,
+            }
+        }
+        p += 1;
+    }
+    Ok(if format == 0 { Zval::Long(count) } else { Zval::Array(Rc::new(arr)) })
+}
+
 /// `stripslashes($string)`: drop one backslash before any char (`\0` → NUL); a
 /// trailing lone backslash is removed.
 pub fn stripslashes(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {

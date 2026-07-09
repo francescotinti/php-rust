@@ -300,6 +300,10 @@ pub fn registry() -> Registry {
     add(b"str_split", string::str_split);
     add(b"substr_count", string::substr_count);
     add(b"substr_compare", string::substr_compare);
+    add(b"str_increment", string::str_increment);
+    add(b"str_decrement", string::str_decrement);
+    add(b"count_chars", string::count_chars);
+    add(b"str_word_count", string::str_word_count);
     add(b"mb_strlen", mbstring::mb_strlen);
     add(b"mb_substr", mbstring::mb_substr);
     add(b"mb_str_split", mbstring::mb_str_split);
