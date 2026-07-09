@@ -648,6 +648,93 @@ impl<'m> super::Vm<'m> {
         }
         Ok(Zval::Long(count))
     }
+    /// The "headers already sent by (output started at FILE:LINE)" message text
+    /// for the header-family warnings, using the recorded first-output location.
+    fn headers_sent_warning(&self) -> String {
+        match &self.output_start {
+            Some((f, l)) => format!(
+                "Cannot modify header information - headers already sent by \
+                 (output started at {}:{})",
+                String::from_utf8_lossy(f),
+                l
+            ),
+            None => "Cannot modify header information - headers already sent".to_string(),
+        }
+    }
+
+    /// `headers_sent(&$filename = null, &$line = null): bool` — whether output has
+    /// reached the sink (CLI). The by-reference out-parameters are not populated
+    /// (the bare no-arg form is what real code uses).
+    pub(super) fn ho_headers_sent(&mut self, _args: Vec<Zval>) -> Result<Zval, PhpError> {
+        Ok(Zval::Bool(self.output_started))
+    }
+
+    /// `header(string $header, bool $replace = true, int $response_code = 0): void`
+    /// — a CLI no-op; only warns if output has already been sent.
+    pub(super) fn ho_header(&mut self, _args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if self.output_started {
+            let msg = self.headers_sent_warning();
+            self.diags.push(Diag::Warning(msg));
+        }
+        Ok(Zval::Null)
+    }
+
+    /// `headers_list(): array` — always empty under the CLI SAPI.
+    pub(super) fn ho_headers_list(&mut self) -> Result<Zval, PhpError> {
+        Ok(Zval::Array(Rc::new(PhpArray::new())))
+    }
+
+    /// `setcookie(...) / setrawcookie(...): bool` — a CLI no-op returning `true`,
+    /// or `false` with the "headers already sent" Warning once output has started.
+    pub(super) fn ho_setcookie(&mut self, _args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if self.output_started {
+            let msg = self.headers_sent_warning();
+            self.diags.push(Diag::Warning(msg));
+            return Ok(Zval::Bool(false));
+        }
+        Ok(Zval::Bool(true))
+    }
+
+    /// `header_remove(?string $name = null): void` — a CLI no-op (warns if sent).
+    pub(super) fn ho_header_remove(&mut self, _args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if self.output_started {
+            let msg = self.headers_sent_warning();
+            self.diags.push(Diag::Warning(msg));
+        }
+        Ok(Zval::Null)
+    }
+
+    /// `http_response_code(int $response_code = 0): int|bool` — get returns the
+    /// stored code (or `false` if never set, under CLI); set stores it and returns
+    /// the previous code (or `true` on the first set).
+    pub(super) fn ho_http_response_code(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        match args.first() {
+            None | Some(Zval::Null) => Ok(match self.response_code {
+                Some(c) => Zval::Long(c),
+                None => Zval::Bool(false),
+            }),
+            Some(v) => {
+                // Setting the code once output has started is refused (its own
+                // message, distinct from header()'s).
+                if self.output_started {
+                    let loc = match &self.output_start {
+                        Some((f, l)) => format!(" (output started at {}:{})", String::from_utf8_lossy(f), l),
+                        None => String::new(),
+                    };
+                    self.diags.push(Diag::Warning(format!(
+                        "http_response_code(): Cannot set response code - headers already sent{loc}"
+                    )));
+                    return Ok(Zval::Bool(false));
+                }
+                let code = convert::to_long_cast(v, &mut self.diags);
+                let old = self.response_code.replace(code);
+                Ok(match old {
+                    Some(c) => Zval::Long(c),
+                    None => Zval::Bool(true),
+                })
+            }
+        }
+    }
     /// `mb_split($pattern, $string[, $limit])` (F2): split on matches, keeping
     /// empty fields. `$limit > 0` caps the piece count. Returns `false` on a bad
     /// pattern. Mirrors `eval::ho_mb_split`.

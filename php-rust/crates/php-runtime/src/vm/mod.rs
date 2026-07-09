@@ -386,6 +386,9 @@ pub(crate) fn run_module_with_hir<'m>(
         stringable_id: module.class_index.get(&b"stringable"[..]).copied(),
         jsonserializable_id: module.class_index.get(&b"jsonserializable"[..]).copied(),
         json_last_error: 0,
+        output_started: false,
+        output_start: None,
+        response_code: None,
         json_active: Vec::new(),
         enum_cache: HashMap::new(),
         constants: HashMap::new(),
@@ -1093,6 +1096,15 @@ struct Vm<'m> {
     /// reported by `json_last_error()`/`json_last_error_msg()` (0 = JSON_ERROR_NONE,
     /// 4 = SYNTAX, 11 = NON_BACKED_ENUM).
     json_last_error: i64,
+    /// Whether any output has reached the real sink (CLI stdout) — the point PHP
+    /// considers HTTP headers "sent". Set on the first non-empty *unbuffered*
+    /// write; `output_start` records the `(file, line)` for the
+    /// "headers already sent by (output started at …)" warning.
+    output_started: bool,
+    output_start: Option<(Vec<u8>, Line)>,
+    /// `http_response_code()` — `None` until explicitly set (CLI reports `false`
+    /// for an unset code).
+    response_code: Option<i64>,
     /// Object addresses whose `jsonSerialize()` is currently on the encode stack —
     /// tracked ACROSS nested `json_encode()` calls (unlike the per-call `visiting`
     /// path). A nested `json_encode()` of such an object is JSON_ERROR_RECURSION;
@@ -2018,6 +2030,16 @@ impl<'m> Vm<'m> {
                 self.emit_buffer_op(0)?;
             }
         } else {
+            // Output reaching the real sink is when PHP considers headers "sent";
+            // remember where it first happened for the header() warnings.
+            if !self.output_started && !bytes.is_empty() {
+                self.output_started = true;
+                if let Some(top) = self.frames.len().checked_sub(1) {
+                    let file = self.frames[top].module.file.to_vec();
+                    let line = self.cur_line(top);
+                    self.output_start = Some((file, line));
+                }
+            }
             self.stdout.extend_from_slice(bytes);
             self.rendered.extend_from_slice(bytes);
         }
@@ -8528,6 +8550,13 @@ host_builtins! {
     b"json_validate" => vm.ho_json_validate(args),
     b"compact" => vm.ho_compact(args),
     b"extract" => vm.ho_extract(args),
+    b"header" => vm.ho_header(args),
+    b"headers_sent" => vm.ho_headers_sent(args),
+    b"headers_list" => vm.ho_headers_list(),
+    b"setcookie" => vm.ho_setcookie(args),
+    b"setrawcookie" => vm.ho_setcookie(args),
+    b"header_remove" => vm.ho_header_remove(args),
+    b"http_response_code" => vm.ho_http_response_code(args),
     b"json_last_error" => vm.ho_json_last_error(args),
     b"json_last_error_msg" => vm.ho_json_last_error_msg(args),
     b"assert" => vm.ho_assert(args),

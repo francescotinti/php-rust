@@ -1906,7 +1906,14 @@ impl<'m> super::Vm<'m> {
                     // An evaluator-only host builtin (Session B): it may invoke a
                     // user callable via `call_callable` (a nested `run_loop`).
                     let args = self.pop_keys(top, argc);
+                    // Flush this builtin's own diagnostics at its call line, like
+                    // `run_value_builtin` does for registry builtins — otherwise a
+                    // warning it pushes (e.g. header()'s "headers already sent")
+                    // renders at a later, wrong line.
+                    let line = self.cur_line(top);
+                    self.flush_diags(line)?;
                     let result = self.dispatch_host_builtin(&name, args)?;
+                    self.flush_diags(line)?;
                     // `pcntl_async_signals(true)`: host-builtin returns are the
                     // async delivery points (a self-directed `posix_kill` is
                     // observed here, before the next PHP statement).
