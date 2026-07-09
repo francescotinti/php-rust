@@ -8488,6 +8488,8 @@ host_builtins! {
     b"restore_exception_handler" => vm.ho_restore_exception_handler(),
     b"set_error_handler" => vm.ho_set_error_handler(args),
     b"restore_error_handler" => vm.ho_restore_error_handler(),
+    b"get_error_handler" => vm.ho_get_error_handler(),
+    b"get_exception_handler" => vm.ho_get_exception_handler(),
     b"unserialize" => vm.ho_unserialize(args),
     b"fopen" => vm.ho_fopen(args),
     b"tmpfile" => vm.ho_tmpfile(),

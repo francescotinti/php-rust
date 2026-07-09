@@ -3106,6 +3106,16 @@ impl<'m> super::Vm<'m> {
         self.error_handlers.pop();
         Ok(Zval::Bool(true))
     }
+    /// `get_error_handler(): ?callable` (8.5): the current user error handler, or
+    /// `null` when the engine default is in effect.
+    pub(super) fn ho_get_error_handler(&mut self) -> Result<Zval, PhpError> {
+        Ok(self.error_handlers.last().map(|(cb, _)| cb.clone()).unwrap_or(Zval::Null))
+    }
+    /// `get_exception_handler(): ?callable` (8.5): the current top-level exception
+    /// handler, or `null`.
+    pub(super) fn ho_get_exception_handler(&mut self) -> Result<Zval, PhpError> {
+        Ok(self.exception_handlers.last().cloned().unwrap_or(Zval::Null))
+    }
     /// `serialize($value)`: the pure formatter (php-builtins) does the encoding;
     /// this host wrapper first runs the object hooks (`__serialize`/`__sleep`)
     /// the pure side cannot call. Hook-free graphs pass through untouched.
