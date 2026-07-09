@@ -3843,6 +3843,68 @@ impl<'m> super::Vm<'m> {
         ))
     }
 
+    /// `similar_text(string $string1, string $string2, float &$percent = null): int`
+    /// — the number of matching characters (recursive longest-common-substring,
+    /// C `php_similar_char`); `&$percent` receives `2*count/(len1+len2)*100`.
+    /// Returns `(count, percent)`; the VM stores `percent` into the by-ref arg.
+    pub(super) fn ho_similar_text(&mut self, args: Vec<Zval>) -> Result<(Zval, Zval), PhpError> {
+        let t1 = convert::to_zstr_cast(
+            &args.first().map(|v| v.deref_clone()).unwrap_or(Zval::Null),
+            &mut self.diags,
+        )
+        .as_bytes()
+        .to_vec();
+        let t2 = convert::to_zstr_cast(
+            &args.get(1).map(|v| v.deref_clone()).unwrap_or(Zval::Null),
+            &mut self.diags,
+        )
+        .as_bytes()
+        .to_vec();
+        if t1.is_empty() && t2.is_empty() {
+            return Ok((Zval::Long(0), Zval::Double(0.0)));
+        }
+        let sim = Self::similar_char(&t1, &t2);
+        let percent = sim as f64 * 200.0 / (t1.len() + t2.len()) as f64;
+        Ok((Zval::Long(sim as i64), Zval::Double(percent)))
+    }
+
+    /// The longest common substring of `t1`/`t2` (C `php_similar_str`): returns
+    /// `(max_len, count, pos1, pos2)`.
+    fn similar_str(t1: &[u8], t2: &[u8]) -> (usize, usize, usize, usize) {
+        let (mut max, mut count, mut pos1, mut pos2) = (0usize, 0usize, 0usize, 0usize);
+        for p in 0..t1.len() {
+            for q in 0..t2.len() {
+                let mut l = 0;
+                while p + l < t1.len() && q + l < t2.len() && t1[p + l] == t2[q + l] {
+                    l += 1;
+                }
+                if l > max {
+                    max = l;
+                    count += 1;
+                    pos1 = p;
+                    pos2 = q;
+                }
+            }
+        }
+        (max, count, pos1, pos2)
+    }
+
+    /// Recursive matching-character count (C `php_similar_char`): the LCS length
+    /// plus the counts of the left/right remainders around it.
+    fn similar_char(t1: &[u8], t2: &[u8]) -> usize {
+        let (max, count, pos1, pos2) = Self::similar_str(t1, t2);
+        let mut sum = max;
+        if max > 0 {
+            if pos1 > 0 && pos2 > 0 && count > 1 {
+                sum += Self::similar_char(&t1[..pos1], &t2[..pos2]);
+            }
+            if pos1 + max < t1.len() && pos2 + max < t2.len() {
+                sum += Self::similar_char(&t1[pos1 + max..], &t2[pos2 + max..]);
+            }
+        }
+        sum
+    }
+
     /// Spawn `$command` through `/bin/sh -c`, capture its **stdout** (stderr is
     /// inherited to the terminal, as PHP's `popen(cmd, "r")` does), and return
     /// `(stdout_bytes, exit_code)`. `Err(())` means the shell could not be

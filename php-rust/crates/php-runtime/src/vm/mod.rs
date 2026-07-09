@@ -4668,6 +4668,7 @@ impl<'m> Vm<'m> {
             b"system" => self.ho_system(args)?,
             b"passthru" => self.ho_passthru(args)?,
             b"grapheme_extract" => self.ho_grapheme_extract(args)?,
+            b"similar_text" => self.ho_similar_text(args)?,
             // Two out-params: (result, $output array, Some($result_code)).
             b"exec" => return self.ho_exec(args),
             _ => return Err(undefined_builtin(name)),
@@ -8835,6 +8836,8 @@ pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usiz
         (b"exec", 1),
         // `&$next` receives the byte offset after the extracted grapheme run.
         (b"grapheme_extract", 4),
+        // `&$percent` receives the similarity percentage.
+        (b"similar_text", 2),
     ];
     HOST_OUT
         .iter()
