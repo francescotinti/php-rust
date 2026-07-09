@@ -285,6 +285,13 @@ fn parse(input: &str) -> Parsed {
     if !matched_any && p.errors.is_empty() {
         p.errors.push((0, "Unexpected character".to_string()));
     }
+    // A structurally-parsed but calendar-invalid date (Feb 30, month 0, day 0,
+    // non-leap Feb 29) keeps its raw values and warns, at cursor `strlen + 1`.
+    if let (Some(y), Some(m), Some(d)) = (p.year, p.month, p.day) {
+        if !is_valid_calendar_date(y, m, d) {
+            p.warnings.push((input.len() + 1, "The parsed date was invalid".to_string()));
+        }
+    }
     p
 }
 
@@ -503,11 +510,31 @@ fn try_date(tokens: &[String], i: usize, p: &mut Parsed) -> Option<usize> {
             } else {
                 (parts[0].parse().ok()?, parts[1].parse().ok()?, parts[2].parse().ok()?)
             };
-            if valid_ymd(y, m, d) {
+            if structural_ymd(m, d) {
                 p.year = Some(y);
                 p.month = Some(m);
                 p.day = Some(d);
                 return Some(1);
+            }
+            return None;
+        }
+    }
+
+    // Two-part `Y-m` / `Y/m` (4-digit year) → day defaults to 1.
+    for sep in ['-', '/'] {
+        if tok.matches(sep).count() == 1 {
+            let parts: Vec<&str> = tok.split(sep).collect();
+            if parts[0].len() == 4
+                && parts.iter().all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+            {
+                let y: i64 = parts[0].parse().ok()?;
+                let m: i64 = parts[1].parse().ok()?;
+                if (0..=12).contains(&m) {
+                    p.year = Some(y);
+                    p.month = Some(m);
+                    p.day = Some(1);
+                    return Some(1);
+                }
             }
             return None;
         }
@@ -521,7 +548,7 @@ fn try_date(tokens: &[String], i: usize, p: &mut Parsed) -> Option<usize> {
             tokens.get(i + 1).and_then(|t| month_num(t)),
             tokens.get(i + 2).and_then(|t| t.parse::<i64>().ok()),
         ) {
-            if valid_ymd(y, m, d) {
+            if structural_ymd(m, d) {
                 p.year = Some(y);
                 p.month = Some(m);
                 p.day = Some(d);
@@ -534,7 +561,7 @@ fn try_date(tokens: &[String], i: usize, p: &mut Parsed) -> Option<usize> {
             tokens.get(i + 1).and_then(|t| t.parse::<i64>().ok()),
             tokens.get(i + 2).and_then(|t| t.parse::<i64>().ok()),
         ) {
-            if valid_ymd(y, m, d) {
+            if structural_ymd(m, d) {
                 p.year = Some(y);
                 p.month = Some(m);
                 p.day = Some(d);
@@ -545,8 +572,37 @@ fn try_date(tokens: &[String], i: usize, p: &mut Parsed) -> Option<usize> {
     None
 }
 
-fn valid_ymd(_y: i64, m: i64, d: i64) -> bool {
-    (1..=12).contains(&m) && (1..=31).contains(&d)
+/// Structural acceptance for a numeric/textual date token — timelib's scanner
+/// matches month `00..=12` and day `00..=31`; calendar validity is checked
+/// separately (an out-of-structural value takes the unmodelled scanner path).
+fn structural_ymd(m: i64, d: i64) -> bool {
+    (0..=12).contains(&m) && (0..=31).contains(&d)
+}
+
+fn is_leap(y: i64) -> bool {
+    y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)
+}
+
+fn days_in_month(y: i64, m: i64) -> i64 {
+    match m {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 => {
+            if is_leap(y) {
+                29
+            } else {
+                28
+            }
+        }
+        _ => 0,
+    }
+}
+
+/// Whether `(y, m, d)` is a real calendar date (month 1-12, day within the
+/// month). A structurally-parsed but calendar-invalid date keeps its raw values
+/// and gets the "The parsed date was invalid" warning.
+fn is_valid_calendar_date(y: i64, m: i64, d: i64) -> bool {
+    (1..=12).contains(&m) && d >= 1 && d <= days_in_month(y, m)
 }
 
 /// Build the `date_parse` array from a [`Parsed`].
