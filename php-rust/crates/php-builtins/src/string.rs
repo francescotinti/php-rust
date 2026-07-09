@@ -853,6 +853,9 @@ pub fn str_rot13(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 }
 
 /// Coerce positional arg `idx` (named `pname`) to bytes for a 2-string builtin.
+/// Goes through `ctx.to_zstr`, so a Stringable object argument is coerced via
+/// its precomputed `__toString()` result (the VM populates that only for the
+/// builtins gated in `value_builtin_string_coerces`; a plain funnel otherwise).
 pub(crate) fn str_at(args: &[Zval], ctx: &mut Ctx, idx: usize, fname: &str, expected: usize) -> Result<Vec<u8>, PhpError> {
     let v = args.get(idx).ok_or_else(|| {
         PhpError::Error(format!(
@@ -860,7 +863,7 @@ pub(crate) fn str_at(args: &[Zval], ctx: &mut Ctx, idx: usize, fname: &str, expe
             args.len()
         ))
     })?;
-    Ok(convert::to_zstr(v, ctx.diags).as_bytes().to_vec())
+    Ok(ctx.to_zstr(v).as_bytes().to_vec())
 }
 
 /// str_contains($haystack, $needle): an empty needle is always found.

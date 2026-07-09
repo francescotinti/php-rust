@@ -30,6 +30,46 @@ pub(super) fn builtin_ref_call(
     }
 }
 
+/// The value (non-ref) builtins that *unconditionally* string-coerce their
+/// string parameters (all of them route through `string::str_at`): the VM
+/// precomputes `__toString` for their Stringable object arguments before
+/// dispatch so the pure builtin sees the coerced string. Every function here
+/// takes only string/scalar parameters, so precomputing all object arguments is
+/// safe (an object only ever lands on a string parameter). Introspection and
+/// int/array builtins are intentionally excluded — no `__toString` runs for them.
+pub(super) fn value_builtin_string_coerces(name: &[u8]) -> bool {
+    matches!(
+        name,
+        b"str_contains"
+            | b"str_starts_with"
+            | b"str_ends_with"
+            | b"substr_count"
+            | b"substr_compare"
+            | b"substr_replace"
+            | b"bin2hex"
+            | b"hex2bin"
+            | b"addslashes"
+            | b"addcslashes"
+            | b"stripslashes"
+            | b"stripcslashes"
+            | b"str_increment"
+            | b"str_decrement"
+            | b"count_chars"
+            | b"str_word_count"
+            | b"nl2br"
+            | b"wordwrap"
+            | b"strtr"
+            | b"chunk_split"
+            | b"strip_tags"
+            | b"quotemeta"
+            | b"levenshtein"
+            | b"htmlspecialchars"
+            | b"htmlentities"
+            | b"htmlspecialchars_decode"
+            | b"html_entity_decode"
+    )
+}
+
 /// The by-ref-first builtins that *unconditionally* string-coerce every element
 /// of their target array (natural-order sorts): the VM precomputes `__toString`
 /// for their Stringable elements before dispatch. A `SORT_REGULAR` sort is

@@ -1848,6 +1848,13 @@ impl<'m> super::Vm<'m> {
                             continue;
                         }
                     }
+                    // A builtin that unconditionally string-coerces its (string)
+                    // arguments gets each Stringable object's `__toString()`
+                    // precomputed, so the pure builtin honors it (handed over via
+                    // `stringify_args`, taken in `run_value_builtin`).
+                    if value_builtin_string_coerces(&name) {
+                        self.stringify_args = self.compute_stringify(&args)?;
+                    }
                     let line = self.cur_line(top);
                     let result = self.run_value_builtin(f, &args, line)?;
                     self.frames[top].stack.push(result);
