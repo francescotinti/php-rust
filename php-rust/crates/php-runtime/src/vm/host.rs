@@ -735,6 +735,107 @@ impl<'m> super::Vm<'m> {
             }
         }
     }
+    /// The type name PHP 8 uses in `TypeError` messages, which names the singleton
+    /// values `true`/`false`/`null` rather than their type.
+    fn err_type_name(v: &Zval) -> String {
+        match v {
+            Zval::Bool(true) => "true".to_string(),
+            Zval::Bool(false) => "false".to_string(),
+            Zval::Null => "null".to_string(),
+            _ => v.type_name_for_error().to_string(),
+        }
+    }
+
+    /// An array key as a `Zval` (for the key-comparator callbacks).
+    fn key_as_zval(k: &Key) -> Zval {
+        match k {
+            Key::Int(i) => Zval::Long(*i),
+            Key::Str(s) => Zval::Str(PhpStr::new(s.as_bytes().to_vec())),
+        }
+    }
+
+    /// Shared engine for the callback-driven `array_udiff`/`array_uintersect`/
+    /// `array_diff_ukey`/`array_intersect_ukey`: keep each entry of the first array
+    /// whose value (or key, when `by_key`) is — via the trailing comparator (0 ==
+    /// equal) — absent from every other array (diff) or present in every one
+    /// (intersect). The first array's order and keys are preserved.
+    fn array_u_diff_intersect(
+        &mut self,
+        mut args: Vec<Zval>,
+        name: &str,
+        intersect: bool,
+        by_key: bool,
+    ) -> Result<Zval, PhpError> {
+        if args.len() < 2 {
+            return Err(PhpError::ArgumentCountError(format!(
+                "{name}() expects at least 2 arguments, {} given",
+                args.len()
+            )));
+        }
+        let cmp = args.pop().unwrap().deref_clone();
+        // The remaining args must all be arrays; collect their entries by value.
+        let mut arrays: Vec<Vec<(Key, Zval)>> = Vec::with_capacity(args.len());
+        for (i, a) in args.iter().enumerate() {
+            match a.deref_clone() {
+                Zval::Array(arr) => {
+                    arrays.push(arr.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect())
+                }
+                other => {
+                    // Only the first (non-variadic) parameter carries a name.
+                    let arg = if i == 0 {
+                        "Argument #1 ($array)".to_string()
+                    } else {
+                        format!("Argument #{}", i + 1)
+                    };
+                    return Err(PhpError::TypeError(format!(
+                        "{name}(): {arg} must be of type array, {} given",
+                        Self::err_type_name(&other)
+                    )));
+                }
+            }
+        }
+        let first = arrays.remove(0);
+        let others = arrays;
+        let mut out = PhpArray::new();
+        for (k, v) in first {
+            let a_side = if by_key { Self::key_as_zval(&k) } else { v.clone() };
+            let mut present_in_all = true;
+            let mut present_in_any = false;
+            for other in &others {
+                let mut found = false;
+                for (k2, v2) in other {
+                    let b_side = if by_key { Self::key_as_zval(k2) } else { v2.clone() };
+                    if self.compare_with_callback(&cmp, &a_side, &b_side)? == 0 {
+                        found = true;
+                        break;
+                    }
+                }
+                if found {
+                    present_in_any = true;
+                } else {
+                    present_in_all = false;
+                }
+            }
+            let keep = if intersect { present_in_all } else { !present_in_any };
+            if keep {
+                out.insert(k, v);
+            }
+        }
+        Ok(Zval::Array(Rc::new(out)))
+    }
+
+    pub(super) fn ho_array_udiff(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.array_u_diff_intersect(args, "array_udiff", false, false)
+    }
+    pub(super) fn ho_array_uintersect(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.array_u_diff_intersect(args, "array_uintersect", true, false)
+    }
+    pub(super) fn ho_array_diff_ukey(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.array_u_diff_intersect(args, "array_diff_ukey", false, true)
+    }
+    pub(super) fn ho_array_intersect_ukey(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.array_u_diff_intersect(args, "array_intersect_ukey", true, true)
+    }
     /// `mb_split($pattern, $string[, $limit])` (F2): split on matches, keeping
     /// empty fields. `$limit > 0` caps the piece count. Returns `false` on a bad
     /// pattern. Mirrors `eval::ho_mb_split`.
