@@ -4,6 +4,15 @@
 
 use super::*;
 
+/// How the `array_(u)diff/(u)intersect` family compares one dimension (value/key):
+/// ignored, by `(string)` equality (INTERNAL), or by a user comparator (USER).
+#[derive(Clone, Copy)]
+enum DiffCmp {
+    Ignore,
+    Standard,
+    Callback,
+}
+
 impl<'m> super::Vm<'m> {
     /// `gc_collect_cycles()` — force a cycle collection now, regardless of the
     /// root-buffer threshold. Returns the number of destroyed objects.
@@ -754,25 +763,47 @@ impl<'m> super::Vm<'m> {
         }
     }
 
-    /// Shared engine for the callback-driven `array_udiff`/`array_uintersect`/
-    /// `array_diff_ukey`/`array_intersect_ukey`: keep each entry of the first array
-    /// whose value (or key, when `by_key`) is — via the trailing comparator (0 ==
-    /// equal) — absent from every other array (diff) or present in every one
-    /// (intersect). The first array's order and keys are preserved.
-    fn array_u_diff_intersect(
+    /// Shared engine for the whole callback-driven `array_(u)diff/(u)intersect`
+    /// family. Each of value/key is compared as: ignored, by `(string)` equality
+    /// (INTERNAL), or by a user comparator (USER, 0 == equal). Two entries "match"
+    /// when both compared dimensions match. Keep each first-array entry that
+    /// matches NO entry in any other array (diff) or SOME entry in every other
+    /// array (intersect); order and keys of the first array are preserved.
+    /// `n_callbacks` trailing args are the comparators (for `_uassoc`: value then
+    /// key).
+    #[allow(clippy::too_many_arguments)]
+    fn array_diff_intersect(
         &mut self,
         mut args: Vec<Zval>,
         name: &str,
         intersect: bool,
-        by_key: bool,
+        value_mode: DiffCmp,
+        key_mode: DiffCmp,
+        n_callbacks: usize,
     ) -> Result<Zval, PhpError> {
-        if args.len() < 2 {
+        let min_args = 1 + n_callbacks;
+        if args.len() < min_args {
             return Err(PhpError::ArgumentCountError(format!(
-                "{name}() expects at least 2 arguments, {} given",
+                "{name}() expects at least {min_args} arguments, {} given",
                 args.len()
             )));
         }
-        let cmp = args.pop().unwrap().deref_clone();
+        // Peel off the comparators from the end: the last is the key comparator
+        // when the key uses USER, otherwise the value comparator; a second one
+        // (the `_uassoc` forms) is always the value comparator.
+        let mut value_cb = None;
+        let mut key_cb = None;
+        if n_callbacks >= 1 {
+            let cb = args.pop().unwrap().deref_clone();
+            if matches!(key_mode, DiffCmp::Callback) {
+                key_cb = Some(cb);
+            } else {
+                value_cb = Some(cb);
+            }
+        }
+        if n_callbacks >= 2 {
+            value_cb = Some(args.pop().unwrap().deref_clone());
+        }
         // The remaining args must all be arrays; collect their entries by value.
         let mut arrays: Vec<Vec<(Key, Zval)>> = Vec::with_capacity(args.len());
         for (i, a) in args.iter().enumerate() {
@@ -781,7 +812,6 @@ impl<'m> super::Vm<'m> {
                     arrays.push(arr.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect())
                 }
                 other => {
-                    // Only the first (non-variadic) parameter carries a name.
                     let arg = if i == 0 {
                         "Argument #1 ($array)".to_string()
                     } else {
@@ -798,14 +828,36 @@ impl<'m> super::Vm<'m> {
         let others = arrays;
         let mut out = PhpArray::new();
         for (k, v) in first {
-            let a_side = if by_key { Self::key_as_zval(&k) } else { v.clone() };
             let mut present_in_all = true;
             let mut present_in_any = false;
             for other in &others {
                 let mut found = false;
                 for (k2, v2) in other {
-                    let b_side = if by_key { Self::key_as_zval(k2) } else { v2.clone() };
-                    if self.compare_with_callback(&cmp, &a_side, &b_side)? == 0 {
+                    let value_ok = match value_mode {
+                        DiffCmp::Ignore => true,
+                        DiffCmp::Standard => {
+                            convert::to_zstr_cast(&v, &mut self.diags).as_bytes()
+                                == convert::to_zstr_cast(v2, &mut self.diags).as_bytes()
+                        }
+                        DiffCmp::Callback => {
+                            self.compare_with_callback(value_cb.as_ref().unwrap(), &v, v2)? == 0
+                        }
+                    };
+                    if !value_ok {
+                        continue;
+                    }
+                    let key_ok = match key_mode {
+                        DiffCmp::Ignore => true,
+                        DiffCmp::Standard => k == *k2,
+                        DiffCmp::Callback => {
+                            self.compare_with_callback(
+                                key_cb.as_ref().unwrap(),
+                                &Self::key_as_zval(&k),
+                                &Self::key_as_zval(k2),
+                            )? == 0
+                        }
+                    };
+                    if key_ok {
                         found = true;
                         break;
                     }
@@ -825,16 +877,34 @@ impl<'m> super::Vm<'m> {
     }
 
     pub(super) fn ho_array_udiff(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
-        self.array_u_diff_intersect(args, "array_udiff", false, false)
+        self.array_diff_intersect(args, "array_udiff", false, DiffCmp::Callback, DiffCmp::Ignore, 1)
     }
     pub(super) fn ho_array_uintersect(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
-        self.array_u_diff_intersect(args, "array_uintersect", true, false)
+        self.array_diff_intersect(args, "array_uintersect", true, DiffCmp::Callback, DiffCmp::Ignore, 1)
     }
     pub(super) fn ho_array_diff_ukey(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
-        self.array_u_diff_intersect(args, "array_diff_ukey", false, true)
+        self.array_diff_intersect(args, "array_diff_ukey", false, DiffCmp::Ignore, DiffCmp::Callback, 1)
     }
     pub(super) fn ho_array_intersect_ukey(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
-        self.array_u_diff_intersect(args, "array_intersect_ukey", true, true)
+        self.array_diff_intersect(args, "array_intersect_ukey", true, DiffCmp::Ignore, DiffCmp::Callback, 1)
+    }
+    pub(super) fn ho_array_udiff_assoc(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.array_diff_intersect(args, "array_udiff_assoc", false, DiffCmp::Callback, DiffCmp::Standard, 1)
+    }
+    pub(super) fn ho_array_uintersect_assoc(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.array_diff_intersect(args, "array_uintersect_assoc", true, DiffCmp::Callback, DiffCmp::Standard, 1)
+    }
+    pub(super) fn ho_array_diff_uassoc(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.array_diff_intersect(args, "array_diff_uassoc", false, DiffCmp::Standard, DiffCmp::Callback, 1)
+    }
+    pub(super) fn ho_array_intersect_uassoc(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.array_diff_intersect(args, "array_intersect_uassoc", true, DiffCmp::Standard, DiffCmp::Callback, 1)
+    }
+    pub(super) fn ho_array_udiff_uassoc(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.array_diff_intersect(args, "array_udiff_uassoc", false, DiffCmp::Callback, DiffCmp::Callback, 2)
+    }
+    pub(super) fn ho_array_uintersect_uassoc(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.array_diff_intersect(args, "array_uintersect_uassoc", true, DiffCmp::Callback, DiffCmp::Callback, 2)
     }
     /// `mb_split($pattern, $string[, $limit])` (F2): split on matches, keeping
     /// empty fields. `$limit > 0` caps the piece count. Returns `false` on a bad
