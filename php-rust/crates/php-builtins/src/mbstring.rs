@@ -932,6 +932,237 @@ pub fn mb_internal_encoding(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpErr
     }
 }
 
+/// Resolve an optional `$encoding` argument at `idx` (reported as argument
+/// `arg_num` on error) to a codec, defaulting to the internal encoding when the
+/// argument is absent or null. Mirrors C `php_mb_get_encoding`.
+fn enc_arg(
+    args: &[Zval],
+    idx: usize,
+    ctx: &mut Ctx,
+    func: &str,
+    arg_num: usize,
+) -> Result<Enc, PhpError> {
+    match args.get(idx) {
+        None | Some(Zval::Null) => {
+            let cur = MB_INTERNAL_ENCODING.with(std::cell::Cell::get);
+            Ok(resolve_encoding(cur.as_bytes()).expect("internal encoding is always valid"))
+        }
+        Some(v) => {
+            let name = convert::to_zstr(v, ctx.diags);
+            resolve_encoding(name.as_bytes()).ok_or_else(|| {
+                PhpError::ValueError(format!(
+                    "{func}(): Argument #{arg_num} ($encoding) must be a valid encoding, \"{}\" given",
+                    String::from_utf8_lossy(name.as_bytes())
+                ))
+            })
+        }
+    }
+}
+
+/// Coerce one `$map` element to a code value with `zval_try_get_long`
+/// semantics: int/float/bool/null and *fully* numeric strings only; a
+/// leading-numeric string ("5abc"), array, object or resource fails.
+fn map_elem_long(v: &Zval) -> Option<i64> {
+    match v {
+        Zval::Undef | Zval::Null => Some(0),
+        Zval::Bool(b) => Some(*b as i64),
+        Zval::Long(l) => Some(*l),
+        Zval::Double(d) => Some(convert::dval_to_lval(*d)),
+        Zval::Str(s) => {
+            php_types::numstr::parse_numeric_ex(s.as_bytes(), false).map(|i| match i.num {
+                php_types::numstr::Num::Long(l) => l,
+                php_types::numstr::Num::Double(d) => convert::dval_to_lval(d),
+            })
+        }
+        Zval::Ref(c) => map_elem_long(&c.borrow()),
+        _ => None,
+    }
+}
+
+/// Build the flat `[lo, hi, offset, mask]*` conversion map from the `$map`
+/// argument (C `make_conversion_map`): it must be an array whose element count
+/// is a multiple of 4 and whose values all coerce to int.
+fn build_convmap(args: &[Zval], func: &str) -> Result<Vec<u32>, PhpError> {
+    let arr = match args.get(1) {
+        Some(Zval::Array(a)) => a,
+        Some(other) => {
+            return Err(PhpError::TypeError(format!(
+                "{func}(): Argument #2 ($map) must be of type array, {} given",
+                other.type_name_for_error()
+            )))
+        }
+        None => {
+            return Err(PhpError::Error(format!(
+                "{func}() expects at least 2 arguments, {} given",
+                args.len()
+            )))
+        }
+    };
+    if arr.len() % 4 != 0 {
+        return Err(PhpError::ValueError(format!(
+            "{func}(): Argument #2 ($map) must have a multiple of 4 elements"
+        )));
+    }
+    let mut map = Vec::with_capacity(arr.len());
+    for (_, v) in arr.iter() {
+        match map_elem_long(v) {
+            Some(n) => map.push(n as u32),
+            None => {
+                return Err(PhpError::ValueError(format!(
+                    "{func}(): Argument #2 ($map) must only be composed of values of type int"
+                )))
+            }
+        }
+    }
+    Ok(map)
+}
+
+/// Encode side of the convmap: the first `[lo, hi, offset, mask]` group whose
+/// range contains `w` yields `(w + offset) & mask` (all u32, wrapping).
+fn convmap_encode(w: u32, map: &[u32]) -> Option<u32> {
+    for e in map.chunks_exact(4) {
+        if w >= e[0] && w <= e[1] {
+            return Some(w.wrapping_add(e[2]) & e[3]);
+        }
+    }
+    None
+}
+
+/// Decode side of the convmap: `codepoint = number - offset`; the first group
+/// whose range contains that codepoint yields it.
+fn convmap_decode(number: u32, map: &[u32]) -> Option<u32> {
+    for e in map.chunks_exact(4) {
+        let codepoint = number.wrapping_sub(e[2]);
+        if codepoint >= e[0] && codepoint <= e[1] {
+            return Some(codepoint);
+        }
+    }
+    None
+}
+
+/// mb_encode_numericentity($string, $map, ?$encoding = null, $hex = false):
+/// convert every code point falling in one of the `$map` ranges to a decimal
+/// (or hex, when `$hex`) HTML numeric entity `&#NNN;` / `&#xHH;`.
+pub fn mb_encode_numericentity(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    const FUNC: &str = "mb_encode_numericentity";
+    let s = arg_str(args, FUNC, ctx)?;
+    let map = build_convmap(args, FUNC)?;
+    let enc = enc_arg(args, 2, ctx, FUNC, 3)?;
+    let hex = args.get(3).map(|v| convert::to_bool(v, ctx.diags)).unwrap_or(false);
+
+    let text = decode_bytes(&enc.codec, s.as_bytes());
+    let mut out = String::with_capacity(text.len());
+    for ch in text.chars() {
+        match convmap_encode(ch as u32, &map) {
+            Some(v) => {
+                out.push('&');
+                out.push('#');
+                if hex {
+                    out.push('x');
+                    out.push_str(&format!("{v:X}"));
+                } else {
+                    out.push_str(&v.to_string());
+                }
+                out.push(';');
+            }
+            None => out.push(ch),
+        }
+    }
+    Ok(Zval::Str(PhpStr::new(encode_str(&enc.codec, &out))))
+}
+
+/// mb_decode_numericentity($string, $map, ?$encoding = null): the inverse of
+/// [`mb_encode_numericentity`] — replace `&#NNN;` / `&#xHH;` entities whose
+/// (offset-adjusted) value falls in a `$map` range with the code point. A
+/// non-matching or malformed entity is left verbatim; the terminating `;` is
+/// optional. Ports C `html_numeric_entity_decode` (whole-buffer form).
+pub fn mb_decode_numericentity(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    const FUNC: &str = "mb_decode_numericentity";
+    let s = arg_str(args, FUNC, ctx)?;
+    let map = build_convmap(args, FUNC)?;
+    let enc = enc_arg(args, 2, ctx, FUNC, 3)?;
+
+    let text = decode_bytes(&enc.codec, s.as_bytes());
+    let w: Vec<char> = text.chars().collect();
+    let n = w.len();
+    // "&#" + 1..=10 decimal digits; "&#x" + 1..=8 hex digits (C DEC/HEX
+    // ENTITY_MIN/MAXLEN, measured from the leading '&').
+    const DEC_MIN: usize = 3;
+    const DEC_MAX: usize = 12;
+    const HEX_MIN: usize = 4;
+    const HEX_MAX: usize = 11;
+
+    let is_dec = |c: char| c.is_ascii_digit();
+    let is_hex = |c: char| c.is_ascii_hexdigit();
+    let hexval = |c: char| -> u32 {
+        if c <= '9' {
+            c as u32 - '0' as u32
+        } else if c >= 'a' {
+            10 + (c as u32 - 'a' as u32)
+        } else {
+            10 + (c as u32 - 'A' as u32)
+        }
+    };
+
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+    while i < n {
+        if w[i] != '&' || i + 1 >= n || w[i + 1] != '#' {
+            out.push(w[i]);
+            i += 1;
+            continue;
+        }
+        // At a "&#..." candidate entity.
+        let hex = i + 2 < n && w[i + 2] == 'x';
+        let digits_start = if hex { i + 3 } else { i + 2 };
+        let mut j = digits_start;
+        if hex {
+            while j < n && is_hex(w[j]) {
+                j += 1;
+            }
+        } else {
+            while j < n && is_dec(w[j]) {
+                j += 1;
+            }
+        }
+        let len = j - i;
+        let (min, max) = if hex { (HEX_MIN, HEX_MAX) } else { (DEC_MIN, DEC_MAX) };
+        let mut ok = len >= min && len <= max;
+        let mut value: u32 = 0;
+        if ok {
+            if hex {
+                for k in digits_start..j {
+                    value = value.wrapping_mul(16).wrapping_add(hexval(w[k]));
+                }
+            } else {
+                for k in digits_start..j {
+                    // Reject on the same u32 multiplication-overflow boundary as C.
+                    if value > 0x1999_9999 {
+                        ok = false;
+                        break;
+                    }
+                    value = value * 10 + (w[k] as u32 - '0' as u32);
+                }
+            }
+        }
+        if ok {
+            if let Some(cp) = convmap_decode(value, &map) {
+                out.push(char::from_u32(cp).unwrap_or('\u{FFFD}'));
+                // The terminating ';' is optional; consume it when present.
+                i = if j < n && w[j] == ';' { j + 1 } else { j };
+                continue;
+            }
+        }
+        // Invalid or non-matching entity: emit the literal "&#..." run verbatim.
+        for &c in &w[i..j] {
+            out.push(c);
+        }
+        i = j;
+    }
+
+    Ok(Zval::Str(PhpStr::new(encode_str(&enc.codec, &out))))
+}
+
 fn decode_utf16(bytes: &[u8], be: bool) -> String {
     let words = bytes.chunks_exact(2).map(|c| {
         if be {
