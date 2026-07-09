@@ -1000,20 +1000,9 @@ pub(crate) fn get_loaded_extensions(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zv
     }
     Ok(Zval::Array(Rc::new(arr)))
 }
-/// inet_pton($ip): pack a human-readable IPv4/IPv6 address into its binary form
-/// (4 or 16 bytes), or `false` for an unparseable address. `std::net::IpAddr`
-/// parsing matches inet_pton's acceptance (dotted-quad IPv4, RFC 4291 IPv6).
-pub(crate) fn inet_pton(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let ip = convert::to_zstr(arg1(args, "inet_pton")?, ctx.diags);
-    let parsed = std::str::from_utf8(ip.as_bytes())
-        .ok()
-        .and_then(|s| s.parse::<std::net::IpAddr>().ok());
-    Ok(match parsed {
-        Some(std::net::IpAddr::V4(a)) => Zval::Str(PhpStr::new(a.octets().to_vec())),
-        Some(std::net::IpAddr::V6(a)) => Zval::Str(PhpStr::new(a.octets().to_vec())),
-        None => Zval::Bool(false),
-    })
-}
+// `inet_pton` moved to the `net` module (net.rs) — the lenient IPv4 parser there
+// accepts leading zeros (`192.168.01.1`) as PHP does, which `std::net::IpAddr`
+// rejects.
 /// setlocale($category, ...$locales): we do not model real C locales — accept the
 /// first non-empty candidate locale (a string arg, or an element of an array arg)
 /// and echo it back; an empty / "0" locale (a query) yields the default "C".

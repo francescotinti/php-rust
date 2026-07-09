@@ -26,6 +26,7 @@ mod image;
 mod json;
 mod math;
 mod mbstring;
+mod net;
 mod openssl;
 mod pack;
 mod serialize;
@@ -53,6 +54,10 @@ pub fn registry() -> Registry {
     add(b"date", date::date);
     add(b"gmdate", date::gmdate);
     add(b"idate", date::idate);
+    add(b"ip2long", net::ip2long);
+    add(b"long2ip", net::long2ip);
+    add(b"inet_pton", net::inet_pton);
+    add(b"inet_ntop", net::inet_ntop);
     add(b"date_parse", dateparse::date_parse);
     add(b"mktime", date::mktime);
     add(b"gmmktime", date::gmmktime);
@@ -454,7 +459,6 @@ pub fn registry() -> Registry {
     add(b"setlocale", setlocale);
     add(b"extension_loaded", extension_loaded);
     add(b"phpversion", phpversion);
-    add(b"inet_pton", inet_pton);
     add(b"get_loaded_extensions", get_loaded_extensions);
     add(b"boolval", boolval);
     add(b"filter_var", filter_var);
