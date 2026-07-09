@@ -17,23 +17,49 @@ pub enum Json {
     Object(Vec<(Vec<u8>, Json)>),
 }
 
+/// Why a parse failed: a malformed document (`JSON_ERROR_SYNTAX`) versus nesting
+/// deeper than the requested limit (`JSON_ERROR_DEPTH`).
+pub enum JsonError {
+    Syntax,
+    Depth,
+}
+
 /// Parse a complete JSON document. Returns `None` on any syntax error or
-/// trailing garbage.
+/// trailing garbage. Uses PHP's default nesting limit (512); callers that must
+/// distinguish a depth overflow use [`parse_depth`].
 pub fn parse(input: &[u8]) -> Option<Json> {
-    let mut p = Parser { s: input, i: 0 };
+    parse_depth(input, 512).ok()
+}
+
+/// Parse with an explicit maximum nesting depth (`json_validate`/`json_decode`'s
+/// `$depth`). PHP counts one level per `{`/`[` entered and errors once the count
+/// reaches `max_depth`, so a flat container needs `max_depth >= 2`. Distinguishes
+/// a depth overflow from a syntax error.
+pub fn parse_depth(input: &[u8], max_depth: u32) -> Result<Json, JsonError> {
+    let mut p = Parser { s: input, i: 0, depth: 0, max_depth, depth_exceeded: false };
     p.skip_ws();
-    let v = p.value()?;
+    let value = p.value();
+    if p.depth_exceeded {
+        return Err(JsonError::Depth);
+    }
+    let v = value.ok_or(JsonError::Syntax)?;
     p.skip_ws();
     if p.i == p.s.len() {
-        Some(v)
+        Ok(v)
     } else {
-        None
+        Err(JsonError::Syntax)
     }
 }
 
 struct Parser<'a> {
     s: &'a [u8],
     i: usize,
+    /// Current nesting level (0 at the document root, +1 per open container).
+    depth: u32,
+    /// Requested limit; entering a container that makes `depth >= max_depth`
+    /// aborts the parse with a depth error rather than a syntax error.
+    max_depth: u32,
+    depth_exceeded: bool,
 }
 
 impl Parser<'_> {
@@ -69,12 +95,27 @@ impl Parser<'_> {
         }
     }
 
+    /// Enter a container: deepen one level and flag (returning `false`) if that
+    /// reaches the configured `max_depth`.
+    fn enter(&mut self) -> bool {
+        self.depth += 1;
+        if self.depth >= self.max_depth {
+            self.depth_exceeded = true;
+            return false;
+        }
+        true
+    }
+
     fn object(&mut self) -> Option<Json> {
         self.i += 1; // '{'
+        if !self.enter() {
+            return None;
+        }
         let mut entries = Vec::new();
         self.skip_ws();
         if self.peek()? == b'}' {
             self.i += 1;
+            self.depth -= 1;
             return Some(Json::Object(entries));
         }
         loop {
@@ -96,6 +137,7 @@ impl Parser<'_> {
                 b',' => self.i += 1,
                 b'}' => {
                     self.i += 1;
+                    self.depth -= 1;
                     return Some(Json::Object(entries));
                 }
                 _ => return None,
@@ -105,10 +147,14 @@ impl Parser<'_> {
 
     fn array(&mut self) -> Option<Json> {
         self.i += 1; // '['
+        if !self.enter() {
+            return None;
+        }
         let mut items = Vec::new();
         self.skip_ws();
         if self.peek()? == b']' {
             self.i += 1;
+            self.depth -= 1;
             return Some(Json::Array(items));
         }
         loop {
@@ -119,6 +165,7 @@ impl Parser<'_> {
                 b',' => self.i += 1,
                 b']' => {
                     self.i += 1;
+                    self.depth -= 1;
                     return Some(Json::Array(items));
                 }
                 _ => return None,

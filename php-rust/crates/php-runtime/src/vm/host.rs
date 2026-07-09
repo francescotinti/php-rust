@@ -319,16 +319,16 @@ impl<'m> super::Vm<'m> {
             Some(v) => convert::to_bool(v, &mut self.diags),
             None => false,
         };
-        // `$depth` must be a positive nesting limit; a non-positive one is a
-        // ValueError before any parsing (json_decode_error). phpr does not enforce
-        // the limit itself, but it must reject an invalid argument.
-        if let Some(v) = args.get(2) {
-            let depth = convert::to_long_cast(v, &mut self.diags);
-            if depth <= 0 {
-                return Err(PhpError::ValueError(
-                    "json_decode(): Argument #3 ($depth) must be greater than 0".to_string(),
-                ));
-            }
+        // `$depth` is the nesting limit (default 512); a non-positive one is a
+        // ValueError before any parsing (json_decode_error).
+        let depth = match args.get(2) {
+            Some(v) => convert::to_long_cast(v, &mut self.diags),
+            None => 512,
+        };
+        if depth <= 0 {
+            return Err(PhpError::ValueError(
+                "json_decode(): Argument #3 ($depth) must be greater than 0".to_string(),
+            ));
         }
         let flags = args
             .get(3)
@@ -353,21 +353,91 @@ impl<'m> super::Vm<'m> {
             }
             return Ok(Zval::Null);
         }
-        match crate::json::parse(&json) {
-            Some(j) => {
+        let (err_code, err_msg) = match crate::json::parse_depth(&json, depth.min(u32::MAX as i64) as u32) {
+            Ok(j) => {
                 self.json_last_error = 0; // JSON_ERROR_NONE
-                self.vm_json_to_zval(&j, assoc)
+                return self.vm_json_to_zval(&j, assoc);
             }
-            None => {
+            Err(crate::json::JsonError::Depth) => (1, "Maximum stack depth exceeded"),
+            Err(crate::json::JsonError::Syntax) => (4, "Syntax error"),
+        };
+        self.json_last_error = err_code;
+        if flags & 4_194_304 != 0 {
+            // JSON_THROW_ON_ERROR
+            if let Some(cid) = self.class_index.get(&b"jsonexception"[..]).copied() {
+                let obj = self.synthesize_throwable(cid, err_msg)?;
+                return Err(PhpError::Thrown(obj));
+            }
+        }
+        Ok(Zval::Null)
+    }
+    /// `json_validate(string $json, int $depth = 512, int $flags = 0): bool` —
+    /// whether `$json` is a syntactically valid JSON document, using the same
+    /// parser as `json_decode` (and recording `json_last_error` identically)
+    /// without materializing the value. `$depth` must be positive; the only
+    /// accepted flag is `JSON_INVALID_UTF8_IGNORE` (0x100000).
+    pub(super) fn ho_json_validate(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(first) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "json_validate() expects at least 1 argument, 0 given".to_string(),
+            ));
+        };
+        let json = convert::to_zstr_cast(first, &mut self.diags).as_bytes().to_vec();
+        // Argument order mirrors PHP's observable contract for `json_last_error`:
+        // the `$flags` ValueError is raised BEFORE the error state is reset (so a
+        // prior error survives it), whereas the `$depth` ValueError is raised
+        // AFTER the reset (so it leaves JSON_ERROR_NONE behind).
+        let flags = args
+            .get(2)
+            .map(|v| convert::to_long_cast(v, &mut self.diags))
+            .unwrap_or(0);
+        // json_validate accepts only JSON_INVALID_UTF8_IGNORE.
+        if flags & !0x10_0000 != 0 {
+            return Err(PhpError::ValueError(
+                "json_validate(): Argument #3 ($flags) must be a valid flag \
+                 (allowed flags: JSON_INVALID_UTF8_IGNORE)"
+                    .to_string(),
+            ));
+        }
+        self.json_last_error = 0; // JSON_ERROR_NONE
+        // An empty string is a syntax error decided BEFORE the `$depth` validation
+        // (PHP short-circuits zero-length input, so `json_validate("", -1)` is
+        // `false`/JSON_ERROR_SYNTAX, not a depth ValueError).
+        if json.is_empty() {
+            self.json_last_error = 4; // JSON_ERROR_SYNTAX
+            return Ok(Zval::Bool(false));
+        }
+        let depth = match args.get(1) {
+            Some(v) => convert::to_long_cast(v, &mut self.diags),
+            None => 512,
+        };
+        if depth <= 0 {
+            return Err(PhpError::ValueError(
+                "json_validate(): Argument #2 ($depth) must be greater than 0".to_string(),
+            ));
+        }
+        if depth > i32::MAX as i64 {
+            return Err(PhpError::ValueError(
+                "json_validate(): Argument #2 ($depth) must be less than 2147483647".to_string(),
+            ));
+        }
+        let utf8_ignore = flags & 0x10_0000 != 0;
+        if !utf8_ignore && std::str::from_utf8(&json).is_err() {
+            self.json_last_error = 5; // JSON_ERROR_UTF8
+            return Ok(Zval::Bool(false));
+        }
+        match crate::json::parse_depth(&json, depth.min(u32::MAX as i64) as u32) {
+            Ok(_) => {
+                self.json_last_error = 0; // JSON_ERROR_NONE
+                Ok(Zval::Bool(true))
+            }
+            Err(crate::json::JsonError::Depth) => {
+                self.json_last_error = 1; // JSON_ERROR_DEPTH
+                Ok(Zval::Bool(false))
+            }
+            Err(crate::json::JsonError::Syntax) => {
                 self.json_last_error = 4; // JSON_ERROR_SYNTAX
-                if flags & 4_194_304 != 0 {
-                    // JSON_THROW_ON_ERROR
-                    if let Some(cid) = self.class_index.get(&b"jsonexception"[..]).copied() {
-                        let obj = self.synthesize_throwable(cid, "Syntax error")?;
-                        return Err(PhpError::Thrown(obj));
-                    }
-                }
-                Ok(Zval::Null)
+                Ok(Zval::Bool(false))
             }
         }
     }

@@ -53,6 +53,148 @@ pub fn dechex(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::str_from(&format!("{:x}", n as u64)))
 }
 
+const BASE_DIGITS: &[u8; 36] = b"0123456789abcdefghijklmnopqrstuvwxyz";
+
+/// `_php_math_basetozval`: read `s` as a number in `base` (2..=36), skipping any
+/// byte that is not a valid digit of that base. Accumulates in an `i64`; on
+/// overflow it switches to `f64` accumulation — losing precision exactly as PHP
+/// does. Returns `(long, double, used_double, invalid_char_count)`.
+fn basetozval(s: &[u8], base: i64) -> (i64, f64, bool, usize) {
+    // Skip leading/trailing whitespace (C `isspace`: space, \t, \n, \v, \f, \r).
+    let is_space = |b: u8| b == b' ' || (0x09..=0x0d).contains(&b);
+    let mut start = 0;
+    let mut end = s.len();
+    while start < end && is_space(s[start]) {
+        start += 1;
+    }
+    while end > start && is_space(s[end - 1]) {
+        end -= 1;
+    }
+    let mut s = &s[start..end];
+    // Strip a base-specific literal prefix (`0x`/`0o`/`0b`), only when at least
+    // two bytes remain — the RFC base_convert improvements.
+    if s.len() >= 2 && s[0] == b'0' {
+        let p = s[1];
+        if (base == 16 && (p == b'x' || p == b'X'))
+            || (base == 8 && (p == b'o' || p == b'O'))
+            || (base == 2 && (p == b'b' || p == b'B'))
+        {
+            s = &s[2..];
+        }
+    }
+    let mut num: i64 = 0;
+    let mut fnum: f64 = 0.0;
+    let mut mode_double = false;
+    let mut invalid = 0usize;
+    let cutoff = i64::MAX / base;
+    let cutlim = i64::MAX % base;
+    for &ch in s {
+        let c: i64 = match ch {
+            b'0'..=b'9' => (ch - b'0') as i64,
+            b'A'..=b'Z' => (ch - b'A' + 10) as i64,
+            b'a'..=b'z' => (ch - b'a' + 10) as i64,
+            _ => {
+                invalid += 1;
+                continue;
+            }
+        };
+        if c >= base {
+            invalid += 1;
+            continue;
+        }
+        if !mode_double {
+            if num < cutoff || (num == cutoff && c <= cutlim) {
+                num = num * base + c;
+                continue;
+            }
+            fnum = num as f64;
+            mode_double = true;
+        }
+        fnum = fnum * base as f64 + c as f64;
+    }
+    (num, fnum, mode_double, invalid)
+}
+
+/// Non-negative `i64` rendered in `base` (2..=36).
+fn long_to_base(mut n: i64, base: i64) -> Vec<u8> {
+    if n == 0 {
+        return vec![b'0'];
+    }
+    let mut buf = Vec::new();
+    while n > 0 {
+        buf.push(BASE_DIGITS[(n % base) as usize]);
+        n /= base;
+    }
+    buf.reverse();
+    buf
+}
+
+/// `_php_math_zvaltobase` double branch: `floor` the value then peel off digits
+/// with `(int)fmod(fvalue, base)` while dividing (fractional truncation recovers
+/// each digit — matching PHP's exact algorithm, precision loss included). Capped
+/// at 64 digits like PHP's fixed `(sizeof(double) << 3) + 1` buffer, so very
+/// large magnitudes keep the low 64 digits and drop the high ones, byte-for-byte.
+fn dbl_to_base(value: f64, base: i64) -> Vec<u8> {
+    let b = base as f64;
+    let mut fvalue = value.floor();
+    let mut buf = Vec::new();
+    loop {
+        let d = (fvalue % b).trunc() as i64;
+        buf.push(BASE_DIGITS[d.rem_euclid(base) as usize]);
+        fvalue /= b;
+        if buf.len() >= 64 || fvalue.abs() < 1.0 {
+            break;
+        }
+    }
+    buf.reverse();
+    buf
+}
+
+/// `base_convert(string $num, int $from_base, int $to_base): string` — reinterpret
+/// the digits of `$num` (read in `$from_base`, invalid digits skipped) into
+/// `$to_base`. Both bases must be 2..=36. Very large inputs overflow the integer
+/// accumulator to `double` and lose precision, exactly as PHP.
+pub fn base_convert(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let num_arg = args.first().ok_or_else(|| {
+        PhpError::ArgumentCountError("base_convert() expects exactly 3 arguments, 0 given".into())
+    })?;
+    // `$num` is a `Z_PARAM_STR` parameter: scalars (and Stringable objects)
+    // coerce, but an array or resource is a hard TypeError. (A non-Stringable
+    // object can only be detected VM-side, so it stays on the lenient path — the
+    // same limitation as `strlen` et al.)
+    if matches!(num_arg, Zval::Array(_) | Zval::Resource(_)) {
+        return Err(PhpError::TypeError(format!(
+            "base_convert(): Argument #1 ($num) must be of type string, {} given",
+            num_arg.type_name_for_error()
+        )));
+    }
+    let num = php_types::convert::to_zstr(num_arg, ctx.diags);
+    let from = to_int_arg(args, 1, "base_convert", 2, "from_base")?;
+    let to = to_int_arg(args, 2, "base_convert", 3, "to_base")?;
+    if !(2..=36).contains(&from) {
+        return Err(PhpError::ValueError(
+            "base_convert(): Argument #2 ($from_base) must be between 2 and 36 (inclusive)".into(),
+        ));
+    }
+    if !(2..=36).contains(&to) {
+        return Err(PhpError::ValueError(
+            "base_convert(): Argument #3 ($to_base) must be between 2 and 36 (inclusive)".into(),
+        ));
+    }
+    let (num_long, num_dbl, is_dbl, invalid) = basetozval(num.as_bytes(), from);
+    if invalid > 0 {
+        ctx.diags.push(php_types::Diag::Deprecated(
+            "Invalid characters passed for attempted conversion, these have been ignored".into(),
+        ));
+    }
+    let out = if is_dbl {
+        dbl_to_base(num_dbl, to)
+    } else {
+        long_to_base(num_long, to)
+    };
+    Ok(Zval::Str(php_types::PhpStr::new(out)))
+}
+
 /// decoct($num): octal digits, unsigned like dechex.
 pub fn decoct(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let n = to_int_arg(args, 0, "decoct", 1, "num")?;

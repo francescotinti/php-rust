@@ -1324,6 +1324,135 @@ pub fn addslashes(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Str(PhpStr::new(out)))
 }
 
+/// `substr_compare($haystack, $needle, $offset, ?$length = null, $case_insensitive = false): int`
+/// — compare `$needle` against `$haystack` starting at `$offset` (negative counts
+/// from the end), over at most `$length` bytes (default: the longer of the two
+/// remaining lengths). Mirrors `zend_binary_strncmp_l`: a byte `memcmp` of the
+/// common span, else the length difference. An offset past the end, or a negative
+/// `$length`, is a `ValueError` (PHP 8).
+pub fn substr_compare(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let main = str_at(args, ctx, 0, "substr_compare", 3)?;
+    let needle = str_at(args, ctx, 1, "substr_compare", 3)?;
+    let offset_v = args.get(2).ok_or_else(|| {
+        PhpError::ArgumentCountError(format!(
+            "substr_compare() expects at least 3 arguments, {} given",
+            args.len()
+        ))
+    })?;
+    let mut offset = convert::to_long_cast(offset_v, ctx.diags);
+    let (length, length_is_default) = match args.get(3) {
+        None | Some(Zval::Null) => (0i64, true),
+        Some(v) => (convert::to_long_cast(v, ctx.diags), false),
+    };
+    let case_insensitive = args.get(4).map(|v| convert::to_bool(v, ctx.diags)).unwrap_or(false);
+
+    if !length_is_default && length < 0 {
+        return Err(PhpError::ValueError(
+            "substr_compare(): Argument #4 ($length) must be greater than or equal to 0".into(),
+        ));
+    }
+    let main_len = main.len() as i64;
+    if offset < 0 {
+        offset = (main_len + offset).max(0);
+    }
+    if offset > main_len {
+        return Err(PhpError::ValueError(
+            "substr_compare(): Argument #3 ($offset) must be contained in argument #1 ($haystack)"
+                .into(),
+        ));
+    }
+    let s1 = &main[offset as usize..];
+    let len1 = s1.len();
+    let len2 = needle.len();
+    let cmp_len = if length_is_default { len1.max(len2) } else { length as usize };
+    let n = cmp_len.min(len1).min(len2);
+    let mut diff = 0i64;
+    for i in 0..n {
+        let (a, b) = if case_insensitive {
+            (s1[i].to_ascii_lowercase(), needle[i].to_ascii_lowercase())
+        } else {
+            (s1[i], needle[i])
+        };
+        if a != b {
+            diff = a as i64 - b as i64;
+            break;
+        }
+    }
+    // A byte mismatch yields the raw byte difference (like `memcmp`); an
+    // all-equal common span yields the *normalized* length difference
+    // (`ZEND_NORMALIZE_BOOL`: -1 / 0 / 1).
+    let result = if diff == 0 {
+        (cmp_len.min(len1) as i64 - cmp_len.min(len2) as i64).signum()
+    } else {
+        diff
+    };
+    Ok(Zval::Long(result))
+}
+
+/// One hex digit's value (caller guarantees it is `[0-9a-fA-F]`).
+fn hexval(b: u8) -> u32 {
+    match b {
+        b'0'..=b'9' => (b - b'0') as u32,
+        b'a'..=b'f' => (b - b'a' + 10) as u32,
+        b'A'..=b'F' => (b - b'A' + 10) as u32,
+        _ => 0,
+    }
+}
+
+/// `stripcslashes($string)`: inverse of `addcslashes` — decode C-style escapes
+/// (`\n \t \r \a \v \b \f \\`), octal `\ooo` (1-3 digits) and hex `\xHH` (1-2
+/// digits). Any other `\c` drops the backslash and keeps `c`; a trailing lone
+/// backslash is preserved. Mirrors `php_stripcslashes`.
+pub fn stripcslashes(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = str_at(args, ctx, 0, "stripcslashes", 1)?;
+    let end = s.len();
+    let mut out = Vec::with_capacity(end);
+    let mut i = 0usize;
+    while i < end {
+        if s[i] == b'\\' && i + 1 < end {
+            i += 1; // consume backslash; now at the escape char
+            match s[i] {
+                b'n' => { out.push(b'\n'); i += 1; }
+                b't' => { out.push(b'\t'); i += 1; }
+                b'r' => { out.push(b'\r'); i += 1; }
+                b'a' => { out.push(0x07); i += 1; }
+                b'v' => { out.push(0x0B); i += 1; }
+                b'b' => { out.push(0x08); i += 1; }
+                b'f' => { out.push(0x0C); i += 1; }
+                b'\\' => { out.push(b'\\'); i += 1; }
+                b'x' if i + 1 < end && s[i + 1].is_ascii_hexdigit() => {
+                    let mut val = hexval(s[i + 1]);
+                    i += 2; // past 'x' and first hex digit
+                    if i < end && s[i].is_ascii_hexdigit() {
+                        val = val * 16 + hexval(s[i]);
+                        i += 1;
+                    }
+                    out.push(val as u8);
+                }
+                _ => {
+                    let mut digits = 0;
+                    let mut val: u32 = 0;
+                    while digits < 3 && i < end && (b'0'..=b'7').contains(&s[i]) {
+                        val = val * 8 + (s[i] - b'0') as u32;
+                        i += 1;
+                        digits += 1;
+                    }
+                    if digits > 0 {
+                        out.push(val as u8);
+                    } else {
+                        out.push(s[i]); // unrecognized escape: keep the char verbatim
+                        i += 1;
+                    }
+                }
+            }
+        } else {
+            out.push(s[i]);
+            i += 1;
+        }
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
 /// `stripslashes($string)`: drop one backslash before any char (`\0` → NUL); a
 /// trailing lone backslash is removed.
 pub fn stripslashes(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {

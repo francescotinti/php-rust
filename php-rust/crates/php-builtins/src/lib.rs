@@ -254,6 +254,7 @@ pub fn registry() -> Registry {
     add(b"addcslashes", string::addcslashes);
     add(b"addslashes", string::addslashes);
     add(b"stripslashes", string::stripslashes);
+    add(b"stripcslashes", string::stripcslashes);
     add(b"substr_replace", string::substr_replace);
     add(b"nl2br", string::nl2br);
     add(b"wordwrap", string::wordwrap);
@@ -285,6 +286,7 @@ pub fn registry() -> Registry {
     add(b"str_ends_with", string::str_ends_with);
     add(b"str_split", string::str_split);
     add(b"substr_count", string::substr_count);
+    add(b"substr_compare", string::substr_compare);
     add(b"mb_strlen", mbstring::mb_strlen);
     add(b"mb_substr", mbstring::mb_substr);
     add(b"mb_str_split", mbstring::mb_str_split);
@@ -371,6 +373,7 @@ pub fn registry() -> Registry {
     add(b"min", math::min);
     add(b"intdiv", math::intdiv);
     add(b"dechex", math::dechex);
+    add(b"base_convert", math::base_convert);
     add(b"decoct", math::decoct);
     add(b"decbin", math::decbin);
     add(b"hexdec", math::hexdec);

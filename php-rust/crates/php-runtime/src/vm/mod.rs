@@ -8525,6 +8525,7 @@ host_builtins! {
     b"debug_print_backtrace" => vm.ho_debug_print_backtrace(),
     b"preg_replace_callback" => vm.ho_preg_replace_callback(args),
     b"json_decode" => vm.ho_json_decode(args),
+    b"json_validate" => vm.ho_json_validate(args),
     b"json_last_error" => vm.ho_json_last_error(args),
     b"json_last_error_msg" => vm.ho_json_last_error_msg(args),
     b"assert" => vm.ho_assert(args),
