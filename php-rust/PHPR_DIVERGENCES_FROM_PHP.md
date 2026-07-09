@@ -110,8 +110,8 @@ correct-or-absent.
 | `extract` | `EXTR_REFS` non supportato | il resto dei flag EXTR_* è fedele |
 | PDO/sqlite UDF | Le User-Defined Function SQLite sono deferite | richiedono re-entrancy della VM dentro il callback rusqlite |
 | `FETCH_CLASS` protected / `PDORow` / `FETCH_LAZY` | modalità PDO fetch residue | deferite |
-| `array_multisort` `SORT_NATURAL` | confrontato come `SORT_STRING` (ordine naturale non applicato) | serve `strnatcmp` in `php-types`/host (3 `*_natural` phpt) |
 | `array_multisort` con **oggetti** negli array | coercizione oggetti in fase di sort segue i gap object/Stringable (§1.1) | 2 `variation` phpt (SORT_NUMERIC/REGULAR su Stringable) |
+| `date_parse` casi d'ERRORE/warning | il grammar timelib per input BEN FORMATI è byte-identico; la generazione di warning/errori per input MALFORMATI (date invalide `2006-02-30`, doppi separatori, `garbage`→timezone-attempt con "Double timezone specification") richiede il port della validazione-campi timelib | phase 2; `date_parse_001`/`date_parse_error` phpt |
 
 ### 3.0 Backtrace di eccezioni lanciate da builtin (gap UNIVERSALE)
 - **Sintomo**: un'eccezione lanciata da un builtin (value o host) e **non
