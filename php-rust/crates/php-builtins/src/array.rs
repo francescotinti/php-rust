@@ -486,6 +486,35 @@ pub fn asort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, Php
     sort_assoc(arr, "asort", |a, b| ops::compare(&a.1, &b.1).cmp(&0))
 }
 
+/// `natsort(array &$array): true` / `natcasesort(...)` — sort by value using
+/// natural order (`strnatcmp`), preserving keys. Values are string-coerced once
+/// up front (the comparator has no `ctx`).
+fn natural_sort(arr: &mut Zval, fname: &str, ci: bool, ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let rc = as_array_mut(arr, fname)?;
+    let mut pairs: Vec<(Key, Zval, Vec<u8>)> = rc
+        .iter()
+        .map(|(k, v)| {
+            let s = convert::to_zstr(v, ctx.diags).as_bytes().to_vec();
+            (k.clone(), v.clone(), s)
+        })
+        .collect();
+    pairs.sort_by(|a, b| crate::string::strnatcmp_ex(&a.2, &b.2, ci).cmp(&0));
+    let mut out = PhpArray::new();
+    for (k, v, _) in pairs {
+        out.insert(k, v);
+    }
+    *arr = Zval::Array(Rc::new(out));
+    Ok(Zval::Bool(true))
+}
+
+pub fn natsort(arr: &mut Zval, _args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    natural_sort(arr, "natsort", false, ctx)
+}
+
+pub fn natcasesort(arr: &mut Zval, _args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    natural_sort(arr, "natcasesort", true, ctx)
+}
+
 /// `arsort(array &$array, int $flags = SORT_REGULAR): true` — sort by value
 /// descending, preserving keys.
 pub fn arsort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {

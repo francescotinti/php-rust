@@ -573,7 +573,7 @@ fn nat_compare_left(a: &[u8], ai: &mut usize, b: &[u8], bi: &mut usize) -> i64 {
 /// (`ext/standard/strnatcmp.c`, Martin Pool's algorithm): leading zeros and
 /// whitespace are skipped, digit runs compare by numeric magnitude, everything
 /// else byte-by-byte (upper-cased when `ci`). Returns -1/0/1.
-fn strnatcmp_ex(a: &[u8], b: &[u8], ci: bool) -> i64 {
+pub(crate) fn strnatcmp_ex(a: &[u8], b: &[u8], ci: bool) -> i64 {
     if a.is_empty() || b.is_empty() {
         return normalize_bool(a.len() as i64 - b.len() as i64);
     }

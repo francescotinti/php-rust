@@ -469,6 +469,8 @@ pub fn registry() -> Registry {
     add_ref(b"shuffle", array::shuffle);
     add_ref(b"rsort", array::rsort);
     add_ref(b"asort", array::asort);
+    add_ref(b"natsort", array::natsort);
+    add_ref(b"natcasesort", array::natcasesort);
     add_ref(b"arsort", array::arsort);
     add_ref(b"ksort", array::ksort);
     add_ref(b"krsort", array::krsort);
