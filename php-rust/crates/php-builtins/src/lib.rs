@@ -20,6 +20,7 @@ mod env;
 mod html;
 mod file;
 mod format;
+mod image;
 mod json;
 mod math;
 mod mbstring;
@@ -123,6 +124,10 @@ pub fn registry() -> Registry {
     add(b"http_clear_last_response_headers", file::http_clear_last_response_headers);
     add(b"file_put_contents", file::file_put_contents);
     add(b"error_log", file::error_log);
+    add(b"getimagesize", image::getimagesize);
+    add(b"getimagesizefromstring", image::getimagesizefromstring);
+    add(b"image_type_to_mime_type", image::image_type_to_mime_type);
+    add(b"image_type_to_extension", image::image_type_to_extension);
     add(b"file", file::file);
     add(b"readfile", file::readfile);
     add(b"fpassthru", file::fpassthru);
