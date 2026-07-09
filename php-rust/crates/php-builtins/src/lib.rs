@@ -451,6 +451,7 @@ pub fn registry() -> Registry {
     add(b"get_loaded_extensions", get_loaded_extensions);
     add(b"boolval", boolval);
     add(b"filter_var", filter_var);
+    add(b"filter_var_array", var::filter_var_array);
     add(b"print_r", print_r);
     // Environment / runtime-introspection stubs (no real engine state modelled).
     add(b"gc_collect_cycles", env::gc_collect_cycles);

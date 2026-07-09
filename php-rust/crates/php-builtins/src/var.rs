@@ -865,6 +865,75 @@ pub(crate) fn filter_var(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
         _ => Ok(Zval::Str(s)),
     }
 }
+/// `filter_var_array(array $array, array|int $options = FILTER_DEFAULT, bool $add_empty = true)`
+/// — apply filters to an array. A single filter int is applied to every element
+/// (result keyed like `$array`); an array `$options` is a per-key spec (result
+/// keyed by the spec's keys — a key absent from `$array` becomes `null` when
+/// `$add_empty`). Reuses [`filter_var`] per element.
+pub(crate) fn filter_var_array(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    const FILTER_DEFAULT: i64 = 516;
+    let arr = match args.first() {
+        Some(Zval::Array(a)) => Rc::clone(a),
+        Some(other) => {
+            return Err(PhpError::TypeError(format!(
+                "filter_var_array(): Argument #1 ($array) must be of type array, {} given",
+                other.type_name_for_error()
+            )))
+        }
+        None => {
+            return Err(PhpError::Error(
+                "filter_var_array() expects at least 1 argument, 0 given".to_string(),
+            ))
+        }
+    };
+    let add_empty = args.get(2).map(|v| convert::to_bool(v, ctx.diags)).unwrap_or(true);
+    let mut out = PhpArray::new();
+    match args.get(1) {
+        Some(Zval::Array(spec)) => {
+            // Per-key: iterate the spec's keys, filtering the matching input.
+            let entries: Vec<(Key, Zval)> = spec.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            for (k, filterspec) in entries {
+                match arr.get(&k) {
+                    Some(v) => {
+                        let filtered = filter_one(&v.deref_clone(), &filterspec, ctx)?;
+                        out.insert(k, filtered);
+                    }
+                    None if add_empty => out.insert(k, Zval::Null),
+                    None => {}
+                }
+            }
+        }
+        other => {
+            // A single filter int (or the default) applied to every element.
+            let filter_int = other.map_or(FILTER_DEFAULT, |v| convert::to_long_cast(v, ctx.diags));
+            let entries: Vec<(Key, Zval)> = arr.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            for (k, v) in entries {
+                let filtered = filter_var(&[v.deref_clone(), Zval::Long(filter_int)], ctx)?;
+                out.insert(k, filtered);
+            }
+        }
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// Filter one value against a `filter_var_array` per-key spec: an int filter id,
+/// or an `array{filter?, flags?, options?}` passed through to [`filter_var`] as
+/// its `$options` (so `flags` are honoured).
+fn filter_one(value: &Zval, spec: &Zval, ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    const FILTER_DEFAULT: i64 = 516;
+    match spec {
+        Zval::Array(a) => {
+            let filter = a
+                .get(&Key::from_bytes(b"filter"))
+                .map_or(FILTER_DEFAULT, |v| convert::to_long_cast(v, ctx.diags));
+            filter_var(&[value.clone(), Zval::Long(filter), spec.clone()], ctx)
+        }
+        other => {
+            let filter = convert::to_long_cast(other, ctx.diags);
+            filter_var(&[value.clone(), Zval::Long(filter)], ctx)
+        }
+    }
+}
 /// extension_loaded($name): whether a PHP extension is available (case-insensitive).
 pub(crate) fn extension_loaded(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let name = convert::to_zstr(arg1(args, "extension_loaded")?, ctx.diags);
