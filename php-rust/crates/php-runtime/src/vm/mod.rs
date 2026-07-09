@@ -400,6 +400,7 @@ pub(crate) fn run_module_with_hir<'m>(
         lazy_init: HashMap::new(),
         lazy_props: HashMap::new(),
         var_dump_debug: HashMap::new(),
+        stringify_args: HashMap::new(),
         lazy_options: HashMap::new(),
         reflect_object_bound: HashMap::new(),
         lazy_initializing: HashSet::new(),
@@ -1160,6 +1161,13 @@ struct Vm<'m> {
     /// only while dispatching a `var_dump` (and `mem::take`n right after), empty
     /// otherwise — never observed across ops.
     var_dump_debug: HashMap<u32, Zval>,
+    /// Scratch handoff from a string-coercing builtin's arg-walk to the builtin
+    /// dispatch: each Stringable object argument's `__toString()` result, keyed
+    /// by object id. Populated only while dispatching an unconditionally
+    /// string-coercing builtin (`natsort`/`natcasesort`/…) and `mem::take`n right
+    /// after; empty otherwise. Lets a pure builtin honor `__toString` without
+    /// re-entering the VM (see `Ctx::stringify` / `compute_stringify`).
+    stringify_args: HashMap<u32, php_types::ZStr>,
     /// Per-lazy-object option flags (PHP 8.4 `ReflectionClass::newLazy*` /
     /// `resetAsLazy*` `$options`): SKIP_INITIALIZATION_ON_SERIALIZE (8) and
     /// SKIP_DESTRUCTOR (16, consumed at reset time). Keyed by object id.
@@ -2109,12 +2117,16 @@ impl<'m> Vm<'m> {
         // A `var_dump` arg-walk left the objects' `__debugInfo()` results here;
         // take them so the pure builtin can render them (empty for every other).
         let debug_info = std::mem::take(&mut self.var_dump_debug);
+        // Likewise, a string-coercing builtin's arg-walk may have precomputed
+        // `__toString()` results (empty for every builtin that does not coerce).
+        let stringify = std::mem::take(&mut self.stringify_args);
         let res = {
             let mut ctx = Ctx {
                 out: &mut produced,
                 diags: &mut self.diags,
                 direct_out: &mut direct,
                 debug_info: &debug_info,
+                stringify: &stringify,
             };
             f(args, &mut ctx)
         };
@@ -2691,6 +2703,52 @@ impl<'m> Vm<'m> {
                     }
                 }
                 _ => {}
+            }
+        }
+        Ok(map)
+    }
+
+    /// Precompute `__toString()` for the Stringable object arguments of a
+    /// builtin that *unconditionally* string-coerces them (`natsort`, …),
+    /// returning object-id → the coerced string. `roots` are the values the
+    /// builtin will coerce (an array's elements for the sort family, the direct
+    /// arguments otherwise); only direct objects (through references) are
+    /// considered — this walker deliberately does **not** recurse into nested
+    /// arrays, so an object buried in a value that the builtin renders as
+    /// "Array" is not spuriously invoked. An object without `__toString` is
+    /// simply absent from the map (the builtin then hits its normal
+    /// non-coercible path). Cycle-guarded by id.
+    fn compute_stringify(&mut self, roots: &[Zval]) -> Result<HashMap<u32, php_types::ZStr>, PhpError> {
+        let mut map: HashMap<u32, php_types::ZStr> = HashMap::new();
+        let mut visited: std::collections::HashSet<u32> = std::collections::HashSet::new();
+        for root in roots {
+            // Follow a reference to its referent, then require a bare object.
+            let obj = match root {
+                Zval::Object(_) => root.clone(),
+                Zval::Ref(cell) => {
+                    let inner = cell.borrow().clone();
+                    if matches!(inner, Zval::Object(_)) {
+                        inner
+                    } else {
+                        continue;
+                    }
+                }
+                _ => continue,
+            };
+            let Zval::Object(o) = &obj else { continue };
+            let (id, cid) = {
+                let b = o.borrow();
+                (b.id, b.class_id as usize)
+            };
+            if !visited.insert(id) {
+                continue;
+            }
+            if resolve_method_runtime(&self.classes, cid, b"__toString").is_some() {
+                let res = self.call_method_sync(obj.clone(), b"__toString", Vec::new())?;
+                // PHP requires `__toString` to return a string; the funnel here
+                // string-coerces any (already-validated by the VM) return value.
+                let s = php_types::convert::to_zstr(&res, &mut self.diags);
+                map.insert(id, s);
             }
         }
         Ok(map)

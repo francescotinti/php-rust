@@ -488,14 +488,17 @@ pub fn asort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, Php
 
 /// `natsort(array &$array): true` / `natcasesort(...)` — sort by value using
 /// natural order (`strnatcmp`), preserving keys. Values are string-coerced once
-/// up front (the comparator has no `ctx`).
+/// up front; a Stringable object value is coerced through `ctx.to_zstr`, which
+/// honors the `__toString()` result the VM precomputed before dispatch (the
+/// comparator itself has no `ctx`).
 fn natural_sort(arr: &mut Zval, fname: &str, ci: bool, ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let rc = as_array_mut(arr, fname)?;
-    let mut pairs: Vec<(Key, Zval, Vec<u8>)> = rc
-        .iter()
+    let pairs_src: Vec<(Key, Zval)> = rc.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    let mut pairs: Vec<(Key, Zval, Vec<u8>)> = pairs_src
+        .into_iter()
         .map(|(k, v)| {
-            let s = convert::to_zstr(v, ctx.diags).as_bytes().to_vec();
-            (k.clone(), v.clone(), s)
+            let s = ctx.to_zstr(&v).as_bytes().to_vec();
+            (k, v, s)
         })
         .collect();
     pairs.sort_by(|a, b| crate::string::strnatcmp_ex(&a.2, &b.2, ci).cmp(&0));

@@ -9,8 +9,9 @@
 //! raise diagnostics.
 
 use std::collections::HashMap;
+use std::rc::Rc;
 
-use php_types::{Diags, PhpError, Zval};
+use php_types::{convert, Diags, PhpError, Zval, ZStr};
 
 /// The execution context handed to a builtin: the shared output sink and the
 /// diagnostic accumulator owned by the evaluator.
@@ -28,6 +29,38 @@ pub struct Ctx<'a> {
     /// PHP 8.4) and `var_dump` renders the returned array under the object header
     /// instead of the raw property slots. Empty for every other builtin.
     pub debug_info: &'a std::collections::HashMap<u32, Zval>,
+    /// Precomputed `__toString()` results for Stringable object arguments, keyed
+    /// by object id. Pure builtins cannot re-enter the VM to run a user method,
+    /// so for the builtins that *unconditionally* string-coerce an argument
+    /// (e.g. `natsort`), the VM invokes `__toString` before dispatch and hands
+    /// the result here; [`Ctx::to_zstr`] consults it. Empty for every builtin
+    /// that does not string-coerce (introspection/`SORT_REGULAR`/…), so no
+    /// spurious `__toString` call occurs. See `Vm::compute_stringify`.
+    pub stringify: &'a std::collections::HashMap<u32, ZStr>,
+}
+
+impl Ctx<'_> {
+    /// String-coerce `v` the way a builtin's `string` parameter would, honoring
+    /// a precomputed `__toString()` result for a Stringable object (see the
+    /// [`stringify`](Ctx::stringify) field). For every non-object — and any
+    /// object without a precomputed result — this is exactly the infallible
+    /// [`convert::to_zstr`] funnel.
+    pub fn to_zstr(&mut self, v: &Zval) -> ZStr {
+        match v {
+            Zval::Object(o) => {
+                let id = o.borrow().id;
+                if let Some(s) = self.stringify.get(&id) {
+                    return Rc::clone(s);
+                }
+                convert::to_zstr(v, self.diags)
+            }
+            Zval::Ref(c) => {
+                let inner = c.borrow();
+                self.to_zstr(&inner)
+            }
+            _ => convert::to_zstr(v, self.diags),
+        }
+    }
 }
 
 /// A by-value builtin: positional arguments in, a value (or fatal error) out.

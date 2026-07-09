@@ -2009,8 +2009,17 @@ impl<'m> super::Vm<'m> {
                         .collect();
                     let line = self.cur_line(top);
                     self.flush_diags(line)?;
+                    // Precompute __toString for a natural-sort's Stringable
+                    // elements so the pure comparator can order them (empty for
+                    // every other ref builtin).
+                    let stringify = if ref_builtin_string_coerces(&name) {
+                        let roots = ref_stringify_roots(&self.frames[top].slots[slot as usize].clone());
+                        self.compute_stringify(&roots)?
+                    } else {
+                        std::collections::HashMap::new()
+                    };
                     let mut produced = Vec::new();
-                    let result = builtin_ref_call(f, &mut self.frames[top].slots[slot as usize], &rest, &mut produced, &mut self.diags);
+                    let result = builtin_ref_call(f, &mut self.frames[top].slots[slot as usize], &rest, &mut produced, &mut self.diags, &stringify);
                     self.write_output(&produced)?;
                     self.flush_diags(line)?;
                     let result = result?;
@@ -2053,8 +2062,14 @@ impl<'m> super::Vm<'m> {
                         .collect();
                     let line = self.cur_line(top);
                     self.flush_diags(line)?;
+                    let stringify = if ref_builtin_string_coerces(&name) {
+                        let roots = ref_stringify_roots(&self.frames[top].slots[slot as usize].clone());
+                        self.compute_stringify(&roots)?
+                    } else {
+                        std::collections::HashMap::new()
+                    };
                     let mut produced = Vec::new();
-                    let result = builtin_ref_call(f, &mut self.frames[top].slots[slot as usize], &rest, &mut produced, &mut self.diags);
+                    let result = builtin_ref_call(f, &mut self.frames[top].slots[slot as usize], &rest, &mut produced, &mut self.diags, &stringify);
                     self.write_output(&produced)?;
                     self.flush_diags(line)?;
                     let result = result?;
@@ -2076,10 +2091,16 @@ impl<'m> super::Vm<'m> {
                     };
                     let line = self.cur_line(top);
                     self.flush_diags(line)?;
+                    let stringify = if ref_builtin_string_coerces(&name) {
+                        let roots = ref_stringify_roots(&cell.borrow().clone());
+                        self.compute_stringify(&roots)?
+                    } else {
+                        std::collections::HashMap::new()
+                    };
                     let mut produced = Vec::new();
                     let result = {
                         let mut leaf = cell.borrow_mut();
-                        builtin_ref_call(f, &mut leaf, &rest, &mut produced, &mut self.diags)
+                        builtin_ref_call(f, &mut leaf, &rest, &mut produced, &mut self.diags, &stringify)
                     };
                     self.write_output(&produced)?;
                     self.flush_diags(line)?;

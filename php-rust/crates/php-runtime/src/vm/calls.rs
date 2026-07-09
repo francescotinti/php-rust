@@ -9,17 +9,43 @@ pub(super) fn builtin_ref_call(
     rest: &[Zval],
     out: &mut Vec<u8>,
     diags: &mut Diags,
+    stringify: &std::collections::HashMap<u32, php_types::ZStr>,
 ) -> Result<Zval, PhpError> {
     // The ref-first family (sort/array_push/…) never writes to a stdout
     // stream, so its ob-bypass sink is a discarded local.
     let mut direct = Vec::new();
     let empty_debug = std::collections::HashMap::new();
-    let mut ctx = Ctx { out, diags, direct_out: &mut direct, debug_info: &empty_debug };
+    let mut ctx = Ctx {
+        out,
+        diags,
+        direct_out: &mut direct,
+        debug_info: &empty_debug,
+        stringify,
+    };
     if let Zval::Ref(rc) = cell {
         let mut guard = rc.borrow_mut();
         f(&mut guard, rest, &mut ctx)
     } else {
         f(cell, rest, &mut ctx)
+    }
+}
+
+/// The by-ref-first builtins that *unconditionally* string-coerce every element
+/// of their target array (natural-order sorts): the VM precomputes `__toString`
+/// for their Stringable elements before dispatch. A `SORT_REGULAR` sort is
+/// deliberately excluded — it compares objects structurally, not via `__toString`.
+pub(super) fn ref_builtin_string_coerces(name: &[u8]) -> bool {
+    matches!(name, b"natsort" | b"natcasesort")
+}
+
+/// The values a [`ref_builtin_string_coerces`] builtin will string-coerce: the
+/// elements of its target array (following a reference to it). One level only —
+/// the sort coerces the top-level values, not anything nested inside them.
+pub(super) fn ref_stringify_roots(cell: &Zval) -> Vec<Zval> {
+    match cell {
+        Zval::Array(a) => a.iter().map(|(_, v)| v.clone()).collect(),
+        Zval::Ref(c) => ref_stringify_roots(&c.borrow()),
+        _ => Vec::new(),
     }
 }
 
