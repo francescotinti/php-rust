@@ -2343,6 +2343,256 @@ pub fn soundex(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Str(PhpStr::new(out)))
 }
 
+/// Metaphone character-class codes for A..Z (`_codes` in ext/standard/metaphone.c).
+const MP_CODES: [u8; 26] = [
+    1, 16, 4, 16, 9, 2, 4, 16, 9, 2, 0, 2, 2, 2, 1, 4, 0, 2, 4, 4, 1, 0, 0, 0, 8, 0,
+];
+fn mp_encode(c: u8) -> u8 {
+    if c.is_ascii_uppercase() {
+        MP_CODES[(c - b'A') as usize]
+    } else {
+        0
+    }
+}
+fn mp_isvowel(c: u8) -> bool {
+    mp_encode(c) & 1 != 0
+}
+fn mp_affecth(c: u8) -> bool {
+    mp_encode(c) & 4 != 0
+} // C G P S T
+fn mp_makesoft(c: u8) -> bool {
+    mp_encode(c) & 8 != 0
+} // E I Y
+fn mp_noghtof(c: u8) -> bool {
+    mp_encode(c) & 16 != 0
+} // B D H
+
+/// Core of `metaphone` (ext/standard/metaphone.c), always with `traditional = 1`
+/// (the only mode PHP exposes), so the `!traditional` branches are omitted.
+/// `max` is the phoneme cap (0 = unlimited). Over-reads past the word read 0
+/// (the C NUL terminator).
+fn do_metaphone(word: &[u8], max: usize) -> Vec<u8> {
+    let at = |i: usize| -> u8 { word.get(i).copied().unwrap_or(0) };
+    let up = |b: u8| b.to_ascii_uppercase();
+    let mut out: Vec<u8> = Vec::new();
+    const SH: u8 = b'X';
+    const TH: u8 = b'0';
+
+    // Skip to the first alphabetic letter; nothing but non-letters → empty.
+    let mut w = 0usize;
+    loop {
+        let cur = at(w);
+        if cur == 0 {
+            return out;
+        }
+        if cur.is_ascii_alphabetic() {
+            break;
+        }
+        w += 1;
+    }
+
+    // The first phoneme is special-cased.
+    let curr = up(at(w));
+    match curr {
+        b'A' => {
+            if up(at(w + 1)) == b'E' {
+                out.push(b'E');
+                w += 2;
+            } else {
+                out.push(b'A');
+                w += 1;
+            }
+        }
+        b'G' | b'K' | b'P' => {
+            if up(at(w + 1)) == b'N' {
+                out.push(b'N');
+                w += 2;
+            }
+        }
+        b'W' => {
+            let nl = up(at(w + 1));
+            if nl == b'R' {
+                out.push(b'R');
+                w += 2;
+            } else if nl == b'H' || mp_isvowel(nl) {
+                out.push(b'W');
+                w += 2;
+            }
+        }
+        b'X' => {
+            out.push(b'S');
+            w += 1;
+        }
+        b'E' | b'I' | b'O' | b'U' => {
+            out.push(curr);
+            w += 1;
+        }
+        _ => {}
+    }
+
+    // Main phonization loop.
+    while at(w) != 0 {
+        if max != 0 && out.len() >= max {
+            break;
+        }
+        let raw = at(w);
+        if !raw.is_ascii_alphabetic() {
+            w += 1;
+            continue;
+        }
+        let curr = up(raw);
+        let prev = if w >= 1 { up(at(w - 1)) } else { 0 };
+        // Drop duplicate letters, except CC.
+        if curr == prev && curr != b'C' {
+            w += 1;
+            continue;
+        }
+        let next = up(at(w + 1));
+        // Read_After_Next_Letter: 0 if the next letter is the terminator.
+        let after_next = if at(w + 1) != 0 { up(at(w + 2)) } else { 0 };
+        let look_back = |n: usize| -> u8 {
+            if w >= n {
+                up(at(w - n))
+            } else {
+                0
+            }
+        };
+        let mut skip = 0usize;
+        match curr {
+            b'B' => {
+                if prev != b'M' {
+                    out.push(b'B');
+                }
+            }
+            b'C' => {
+                if mp_makesoft(next) {
+                    if next == b'I' && after_next == b'A' {
+                        out.push(SH);
+                    } else if prev == b'S' {
+                        // -SCI-/-SCE-/-SCY-: dropped
+                    } else {
+                        out.push(b'S');
+                    }
+                } else if next == b'H' {
+                    out.push(SH);
+                    skip += 1;
+                } else {
+                    out.push(b'K');
+                }
+            }
+            b'D' => {
+                if next == b'G' && mp_makesoft(after_next) {
+                    out.push(b'J');
+                    skip += 1;
+                } else {
+                    out.push(b'T');
+                }
+            }
+            b'G' => {
+                if next == b'H' {
+                    if !(mp_noghtof(look_back(3)) || look_back(4) == b'H') {
+                        out.push(b'F');
+                        skip += 1;
+                    }
+                    // else silent
+                } else if next == b'N' {
+                    // Look_Ahead_Letter(3) from w.
+                    let ahead3 = {
+                        let mut idx = 0;
+                        while at(w + idx) != 0 && idx < 3 {
+                            idx += 1;
+                        }
+                        up(at(w + idx))
+                    };
+                    // Isbreak(after_next): a non-letter (including the terminator).
+                    let is_break = !after_next.is_ascii_alphabetic();
+                    if is_break || (after_next == b'E' && ahead3 == b'D') {
+                        // dropped
+                    } else {
+                        out.push(b'K');
+                    }
+                } else if mp_makesoft(next) && prev != b'G' {
+                    out.push(b'J');
+                } else {
+                    out.push(b'K');
+                }
+            }
+            b'H' => {
+                if mp_isvowel(next) && !mp_affecth(prev) {
+                    out.push(b'H');
+                }
+            }
+            b'K' => {
+                if prev != b'C' {
+                    out.push(b'K');
+                }
+            }
+            b'P' => {
+                if next == b'H' {
+                    out.push(b'F');
+                } else {
+                    out.push(b'P');
+                }
+            }
+            b'Q' => out.push(b'K'),
+            b'S' => {
+                if next == b'I' && (after_next == b'O' || after_next == b'A') {
+                    out.push(SH);
+                } else if next == b'H' {
+                    out.push(SH);
+                    skip += 1;
+                } else {
+                    out.push(b'S');
+                }
+            }
+            b'T' => {
+                if next == b'I' && (after_next == b'O' || after_next == b'A') {
+                    out.push(SH);
+                } else if next == b'H' {
+                    out.push(TH);
+                    skip += 1;
+                } else if !(next == b'C' && after_next == b'H') {
+                    out.push(b'T');
+                }
+            }
+            b'V' => out.push(b'F'),
+            b'W' => {
+                if mp_isvowel(next) {
+                    out.push(b'W');
+                }
+            }
+            b'X' => {
+                out.push(b'K');
+                out.push(b'S');
+            }
+            b'Y' => {
+                if mp_isvowel(next) {
+                    out.push(b'Y');
+                }
+            }
+            b'Z' => out.push(b'S'),
+            b'F' | b'J' | b'L' | b'M' | b'N' | b'R' => out.push(curr),
+            _ => {}
+        }
+        w += 1 + skip;
+    }
+    out
+}
+
+/// `metaphone(string $string, int $phonemes = 0): string` — the Metaphone key.
+/// `$phonemes` caps the output length (0 = unlimited); a negative value is a
+/// `ValueError`.
+pub fn metaphone(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let word = str_at(args, ctx, 0, "metaphone", 1)?;
+    let phones = args.get(1).map(|v| convert::to_long_cast(v, ctx.diags)).unwrap_or(0);
+    if phones < 0 {
+        return Err(PhpError::ValueError(
+            "metaphone(): Argument #2 ($max_phonemes) must be greater than or equal to 0".to_string(),
+        ));
+    }
+    Ok(Zval::Str(PhpStr::new(do_metaphone(&word, phones as usize))))
+}
+
 /// levenshtein($string1, $string2): byte-oriented edit distance with unit
 /// insert/replace/delete costs (the default two-argument form). The weighted
 /// five-argument form is not implemented (scope-out D-57.2).
