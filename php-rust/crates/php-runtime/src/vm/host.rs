@@ -3650,6 +3650,9 @@ impl<'m> super::Vm<'m> {
         enum SortKey {
             Num(f64),
             Bytes(Vec<u8>),
+            // Raw bytes compared with `strnatcmp`; case-folding is done inside
+            // `natcmp`, so these are not pre-lowercased.
+            Natural(Vec<u8>),
             Regular(Zval),
         }
         let mut col_keys: Vec<Vec<SortKey>> = Vec::with_capacity(arrays.len());
@@ -3658,7 +3661,10 @@ impl<'m> super::Vm<'m> {
             for (_, v) in &cols[j] {
                 let key = match a.sort_type & !SORT_FLAG_CASE {
                     SORT_NUMERIC => SortKey::Num(convert::to_double(v)),
-                    SORT_STRING | SORT_LOCALE_STRING | SORT_NATURAL => {
+                    SORT_NATURAL => {
+                        SortKey::Natural(convert::to_zstr(v, &mut self.diags).as_bytes().to_vec())
+                    }
+                    SORT_STRING | SORT_LOCALE_STRING => {
                         let mut b = convert::to_zstr(v, &mut self.diags).as_bytes().to_vec();
                         if a.sort_type & SORT_FLAG_CASE != 0 {
                             b.make_ascii_lowercase();
@@ -3682,6 +3688,9 @@ impl<'m> super::Vm<'m> {
                         x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
                     }
                     (SortKey::Bytes(x), SortKey::Bytes(y)) => x.cmp(y),
+                    (SortKey::Natural(x), SortKey::Natural(y)) => {
+                        php_types::ops::natcmp(x, y, a.sort_type & SORT_FLAG_CASE != 0).cmp(&0)
+                    }
                     (SortKey::Regular(x), SortKey::Regular(y)) => {
                         php_types::ops::compare(x, y).cmp(&0)
                     }

@@ -590,6 +590,134 @@ pub fn compare(a: &Zval, b: &Zval) -> i32 {
     }
 }
 
+/// Natural-order byte comparison (`strnatcmp`), for callers outside the
+/// `php-builtins` crate (e.g. `array_multisort`'s SORT_NATURAL). A faithful port
+/// of PHP's `strnatcmp_ex` (Martin Pool's algorithm): leading zeros/whitespace
+/// are skipped, digit runs compare by numeric magnitude, the rest byte-by-byte
+/// (upper-cased when `ci`). Returns -1/0/1.
+pub fn natcmp(a: &[u8], b: &[u8], ci: bool) -> i32 {
+    fn norm(n: i64) -> i32 {
+        (n > 0) as i32 - (n < 0) as i32
+    }
+    fn isspace(c: u8) -> bool {
+        matches!(c, b' ' | b'\t' | b'\n' | 0x0B | 0x0C | b'\r')
+    }
+    fn at(s: &[u8], i: usize) -> u8 {
+        s.get(i).copied().unwrap_or(0)
+    }
+    // compare_right: longest digit run wins; equal length → greatest value (bias).
+    fn compare_right(a: &[u8], ai: &mut usize, b: &[u8], bi: &mut usize) -> i32 {
+        let mut bias = 0i32;
+        loop {
+            let ad = *ai < a.len() && a[*ai].is_ascii_digit();
+            let bd = *bi < b.len() && b[*bi].is_ascii_digit();
+            if !ad && !bd {
+                return bias;
+            } else if !ad {
+                return -1;
+            } else if !bd {
+                return 1;
+            } else if a[*ai] < b[*bi] {
+                if bias == 0 {
+                    bias = -1;
+                }
+            } else if a[*ai] > b[*bi] {
+                if bias == 0 {
+                    bias = 1;
+                }
+            }
+            *ai += 1;
+            *bi += 1;
+        }
+    }
+    // compare_left: left-aligned digit runs, first difference wins.
+    fn compare_left(a: &[u8], ai: &mut usize, b: &[u8], bi: &mut usize) -> i32 {
+        loop {
+            let ad = *ai < a.len() && a[*ai].is_ascii_digit();
+            let bd = *bi < b.len() && b[*bi].is_ascii_digit();
+            if !ad && !bd {
+                return 0;
+            } else if !ad {
+                return -1;
+            } else if !bd {
+                return 1;
+            } else if a[*ai] < b[*bi] {
+                return -1;
+            } else if a[*ai] > b[*bi] {
+                return 1;
+            }
+            *ai += 1;
+            *bi += 1;
+        }
+    }
+
+    if a.is_empty() || b.is_empty() {
+        return norm(a.len() as i64 - b.len() as i64);
+    }
+    let (mut ap, mut bp) = (0usize, 0usize);
+    let mut ca = a[ap];
+    let mut cb = b[bp];
+    while ca == b'0' && ap + 1 < a.len() && a[ap + 1].is_ascii_digit() {
+        ap += 1;
+        ca = a[ap];
+    }
+    while cb == b'0' && bp + 1 < b.len() && b[bp + 1].is_ascii_digit() {
+        bp += 1;
+        cb = b[bp];
+    }
+    loop {
+        while isspace(ca) {
+            ap += 1;
+            ca = at(a, ap);
+        }
+        while isspace(cb) {
+            bp += 1;
+            cb = at(b, bp);
+        }
+        if ca.is_ascii_digit() && cb.is_ascii_digit() {
+            let fractional = ca == b'0' || cb == b'0';
+            let result = if fractional {
+                compare_left(a, &mut ap, b, &mut bp)
+            } else {
+                compare_right(a, &mut ap, b, &mut bp)
+            };
+            if result != 0 {
+                return result;
+            } else if ap == a.len() && bp == b.len() {
+                return 0;
+            } else if ap == a.len() {
+                return -1;
+            } else if bp == b.len() {
+                return 1;
+            } else {
+                ca = a[ap];
+                cb = b[bp];
+            }
+        }
+        let (mut xa, mut xb) = (ca, cb);
+        if ci {
+            xa = xa.to_ascii_uppercase();
+            xb = xb.to_ascii_uppercase();
+        }
+        if xa < xb {
+            return -1;
+        } else if xa > xb {
+            return 1;
+        }
+        ap += 1;
+        bp += 1;
+        if ap >= a.len() && bp >= b.len() {
+            return 0;
+        } else if ap >= a.len() {
+            return -1;
+        } else if bp >= b.len() {
+            return 1;
+        }
+        ca = a[ap];
+        cb = b[bp];
+    }
+}
+
 /// _zendi_convert_scalar_to_number_silent: arrays pass through untouched.
 fn scalar_to_number_silent(v: &Zval) -> Zval {
     match v {
