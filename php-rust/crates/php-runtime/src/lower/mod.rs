@@ -1658,6 +1658,10 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"FILTER_SANITIZE_STRING" => ExprKind::Int(513),
         b"FILTER_SANITIZE_NUMBER_INT" => ExprKind::Int(519),
         b"FILTER_UNSAFE_RAW" => ExprKind::Int(516),
+        // ext/intl grapheme_extract() size-measurement types.
+        b"GRAPHEME_EXTR_COUNT" => ExprKind::Int(0),
+        b"GRAPHEME_EXTR_MAXBYTES" => ExprKind::Int(1),
+        b"GRAPHEME_EXTR_MAXCHARS" => ExprKind::Int(2),
         // `filter_input()` source ids (ext/filter): the superglobal to read from.
         b"INPUT_POST" => ExprKind::Int(0),
         b"INPUT_GET" => ExprKind::Int(1),

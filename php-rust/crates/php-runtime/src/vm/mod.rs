@@ -4667,6 +4667,7 @@ impl<'m> Vm<'m> {
             b"parse_str" => self.ho_parse_str(args)?,
             b"system" => self.ho_system(args)?,
             b"passthru" => self.ho_passthru(args)?,
+            b"grapheme_extract" => self.ho_grapheme_extract(args)?,
             // Two out-params: (result, $output array, Some($result_code)).
             b"exec" => return self.ho_exec(args),
             _ => return Err(undefined_builtin(name)),
@@ -8832,6 +8833,8 @@ pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usiz
         // `exec`'s primary out-param is `&$output` (the array of lines); its
         // secondary `&$result_code` is in `host_builtin_out_param_second`.
         (b"exec", 1),
+        // `&$next` receives the byte offset after the extracted grapheme run.
+        (b"grapheme_extract", 4),
     ];
     HOST_OUT
         .iter()

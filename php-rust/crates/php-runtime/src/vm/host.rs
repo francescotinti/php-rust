@@ -3726,6 +3726,123 @@ impl<'m> super::Vm<'m> {
         Ok((Zval::Bool(true), out))
     }
 
+    /// `grapheme_extract(string $haystack, int $size, int $type = GRAPHEME_EXTR_COUNT,
+    /// int $offset = 0, &$next = null): string|false` — extract a run of complete
+    /// grapheme clusters starting at byte `$offset`, bounded by `$size` measured as
+    /// clusters (COUNT=0), bytes (MAXBYTES=1) or code points (MAXCHARS=2). Returns
+    /// `(result, next)`; the VM writes `next` (byte offset after the run) into the
+    /// by-ref `&$next`. Ports C `PHP_FUNCTION(grapheme_extract)`.
+    pub(super) fn ho_grapheme_extract(
+        &mut self,
+        args: Vec<Zval>,
+    ) -> Result<(Zval, Zval), PhpError> {
+        use unicode_segmentation::UnicodeSegmentation;
+        let str_bytes = args
+            .first()
+            .map(|v| convert::to_zstr_cast(&v.deref_clone(), &mut self.diags).as_bytes().to_vec())
+            .unwrap_or_default();
+        let size = args.get(1).map(|v| convert::to_long_cast(&v.deref_clone(), &mut self.diags)).unwrap_or(0);
+        let extract_type = args.get(2).map(|v| convert::to_long_cast(&v.deref_clone(), &mut self.diags)).unwrap_or(0);
+        let mut lstart = args.get(3).map(|v| convert::to_long_cast(&v.deref_clone(), &mut self.diags)).unwrap_or(0);
+        let str_len = str_bytes.len() as i64;
+        if lstart < 0 {
+            lstart += str_len;
+        }
+        // `$next` defaults to the (possibly adjusted) start offset; it is
+        // overwritten with the run end on success. Errors below throw, so the
+        // out-value is irrelevant there.
+        // Validation order mirrors the C: type, then offset, then size.
+        if !(0..=2).contains(&extract_type) {
+            return Err(PhpError::ValueError(
+                "grapheme_extract(): Argument #3 ($type) must be one of GRAPHEME_EXTR_COUNT, GRAPHEME_EXTR_MAXBYTES, or GRAPHEME_EXTR_MAXCHARS".to_string(),
+            ));
+        }
+        if lstart > i64::from(i32::MAX) || lstart < 0 || lstart >= str_len {
+            return Ok((Zval::Bool(false), Zval::Long(lstart)));
+        }
+        if size < 0 {
+            return Err(PhpError::ValueError(
+                "grapheme_extract(): Argument #2 ($size) must be greater than or equal to 0".to_string(),
+            ));
+        }
+        if size > i64::from(i32::MAX) {
+            return Err(PhpError::ValueError(
+                "grapheme_extract(): Argument #2 ($size) is too large".to_string(),
+            ));
+        }
+        if size == 0 {
+            return Ok((Zval::Str(PhpStr::new(Vec::new())), Zval::Long(lstart)));
+        }
+        let size = size as usize;
+        let mut start = lstart as usize;
+        // If `$offset` lands on a UTF-8 continuation byte, advance to the next
+        // character boundary (C's "move forward to the start of the next char").
+        while start < str_bytes.len() && (str_bytes[start] & 0xC0) == 0x80 {
+            start += 1;
+        }
+        if start >= str_bytes.len() {
+            return Ok((Zval::Bool(false), Zval::Long(lstart)));
+        }
+        let rest = &str_bytes[start..];
+        // ASCII fast path: if the first min(size+1, len) bytes are ASCII, every
+        // unit (grapheme / byte / char) is one byte, so return min(size, len).
+        let check = (size + 1).min(rest.len());
+        if rest[..check].iter().all(|&b| b < 0x80) {
+            let nsize = size.min(rest.len());
+            return Ok((
+                Zval::Str(PhpStr::new(rest[..nsize].to_vec())),
+                Zval::Long((start + nsize) as i64),
+            ));
+        }
+        // General path: segment the valid-UTF-8 prefix into grapheme clusters.
+        let valid = match std::str::from_utf8(rest) {
+            Ok(s) => s,
+            Err(e) => std::str::from_utf8(&rest[..e.valid_up_to()]).unwrap_or(""),
+        };
+        let ret_pos = match extract_type {
+            // COUNT: the byte end of the `size`-th grapheme (or the string end).
+            0 => {
+                let mut ret = 0usize;
+                for (n, (bo, g)) in valid.grapheme_indices(true).enumerate() {
+                    if n >= size {
+                        break;
+                    }
+                    ret = bo + g.len();
+                }
+                ret
+            }
+            // MAXBYTES: include a grapheme only if it ends at or before `size` bytes.
+            1 => {
+                let mut ret = 0usize;
+                for (bo, g) in valid.grapheme_indices(true) {
+                    let end = bo + g.len();
+                    if end > size {
+                        break;
+                    }
+                    ret = end;
+                }
+                ret
+            }
+            // MAXCHARS: include graphemes while the cumulative code-point count ≤ size.
+            _ => {
+                let mut ret = 0usize;
+                let mut count = 0usize;
+                for (bo, g) in valid.grapheme_indices(true) {
+                    count += g.chars().count();
+                    if count > size {
+                        break;
+                    }
+                    ret = bo + g.len();
+                }
+                ret
+            }
+        };
+        Ok((
+            Zval::Str(PhpStr::new(rest[..ret_pos].to_vec())),
+            Zval::Long((start + ret_pos) as i64),
+        ))
+    }
+
     /// Spawn `$command` through `/bin/sh -c`, capture its **stdout** (stderr is
     /// inherited to the terminal, as PHP's `popen(cmd, "r")` does), and return
     /// `(stdout_bytes, exit_code)`. `Err(())` means the shell could not be
