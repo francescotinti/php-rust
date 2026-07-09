@@ -301,6 +301,7 @@ pub fn registry() -> Registry {
     add(b"str_starts_with", string::str_starts_with);
     add(b"str_ends_with", string::str_ends_with);
     add(b"str_split", string::str_split);
+    add(b"str_shuffle", string::str_shuffle);
     add(b"substr_count", string::substr_count);
     add(b"substr_compare", string::substr_compare);
     add(b"str_increment", string::str_increment);

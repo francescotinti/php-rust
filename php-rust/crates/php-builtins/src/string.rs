@@ -1453,6 +1453,22 @@ pub fn stripcslashes(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Str(PhpStr::new(out)))
 }
 
+/// `str_shuffle(string $string): string` — a random permutation of the bytes via
+/// the Fisher-Yates shuffle in `php_binary_string_shuffle`, drawing from the same
+/// Mt19937 state as `mt_rand`/`mt_srand` (so a seeded run is byte-reproducible).
+pub fn str_shuffle(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let mut bytes = str_at(args, ctx, 0, "str_shuffle", 1)?;
+    let mut n_left = bytes.len();
+    while n_left > 1 {
+        n_left -= 1;
+        let rnd = crate::math::mt_range(n_left as u32) as usize;
+        if rnd != n_left {
+            bytes.swap(n_left, rnd);
+        }
+    }
+    Ok(Zval::Str(PhpStr::new(bytes)))
+}
+
 /// `str_increment(string $string): string` — the next value in the alphanumeric
 /// "Perl string increment" sequence (`"Az"`→`"Ba"`, `"Zz"`→`"AAa"`, `"a9"`→`"b0"`).
 /// Empty or non-alphanumeric-ASCII input is a `ValueError`. Mirrors the 8.3 C.
