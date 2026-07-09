@@ -899,6 +899,39 @@ fn resolve_encoding(name: &[u8]) -> Option<Enc> {
     }
 }
 
+thread_local! {
+    /// The process-global mbstring internal encoding (canonical name). Batch-1
+    /// mb functions operate on UTF-8 regardless; this state is what
+    /// `mb_internal_encoding()` reports back (frameworks set it to "UTF-8" at
+    /// bootstrap — the common, effect-free case).
+    static MB_INTERNAL_ENCODING: std::cell::Cell<&'static str> = const { std::cell::Cell::new("UTF-8") };
+}
+
+/// `mb_internal_encoding(?string $encoding = null): string|bool` — get the current
+/// internal encoding (canonical name) or set it (returns `true`); an unsupported
+/// name is a `ValueError`.
+pub fn mb_internal_encoding(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    match args.first() {
+        None | Some(Zval::Null) => {
+            let cur = MB_INTERNAL_ENCODING.with(std::cell::Cell::get);
+            Ok(Zval::Str(PhpStr::from_str(cur)))
+        }
+        Some(v) => {
+            let name = convert::to_zstr(v, ctx.diags);
+            match resolve_encoding(name.as_bytes()) {
+                Some(enc) => {
+                    MB_INTERNAL_ENCODING.with(|c| c.set(enc.canonical));
+                    Ok(Zval::Bool(true))
+                }
+                None => Err(PhpError::ValueError(format!(
+                    "mb_internal_encoding(): Argument #1 ($encoding) must be a valid encoding, \"{}\" given",
+                    String::from_utf8_lossy(name.as_bytes())
+                ))),
+            }
+        }
+    }
+}
+
 fn decode_utf16(bytes: &[u8], be: bool) -> String {
     let words = bytes.chunks_exact(2).map(|c| {
         if be {
