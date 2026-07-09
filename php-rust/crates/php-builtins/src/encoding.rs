@@ -628,6 +628,161 @@ pub fn hash_equals(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Bool(equal))
 }
 
+/// Read `src[i]`, or 0 when past the end — PHP reads through a NUL-terminated
+/// `zend_string`, so an over-read yields the terminating 0 byte.
+#[inline]
+fn uu_at(src: &[u8], i: usize) -> u8 {
+    src.get(i).copied().unwrap_or(0)
+}
+
+/// `PHP_UU_ENC`: a 6-bit value → a printable char (`space`-based), with 0 → `` ` ``.
+#[inline]
+fn uu_enc(c: u8) -> u8 {
+    if c != 0 {
+        (c & 0o77) + b' '
+    } else {
+        b'`'
+    }
+}
+
+/// `PHP_UU_DEC`: a uuencoded char → its 6-bit value.
+#[inline]
+fn uu_dec(c: u8) -> u8 {
+    c.wrapping_sub(b' ') & 0o77
+}
+
+/// Port of C `php_uuencode` (ext/standard/uuencode.c): classic uuencoding in
+/// 45-byte lines, each prefixed with its length char and terminated by `\n`,
+/// closed by a `` ` ``/`\n` trailer.
+fn php_uuencode(src: &[u8]) -> Vec<u8> {
+    let e = src.len();
+    let mut p: Vec<u8> = Vec::with_capacity(src.len() / 2 * 3 + 46);
+    let mut s = 0usize;
+    let mut len = 45usize;
+    while s + 3 < e {
+        let mut ee = s + len;
+        if ee > e {
+            ee = e;
+            len = ee - s;
+            if len % 3 != 0 {
+                ee = s + (len / 3) * 3;
+            }
+        }
+        p.push(uu_enc(len as u8));
+        while s < ee {
+            p.push(uu_enc(uu_at(src, s) >> 2));
+            p.push(uu_enc(((uu_at(src, s) << 4) & 0o60) | ((uu_at(src, s + 1) >> 4) & 0o17)));
+            p.push(uu_enc(((uu_at(src, s + 1) << 2) & 0o74) | ((uu_at(src, s + 2) >> 6) & 0o3)));
+            p.push(uu_enc(uu_at(src, s + 2) & 0o77));
+            s += 3;
+        }
+        if len == 45 {
+            p.push(b'\n');
+        }
+    }
+    if s < e {
+        if len == 45 {
+            p.push(uu_enc((e - s) as u8));
+            len = 0;
+        }
+        p.push(uu_enc(uu_at(src, s) >> 2));
+        p.push(uu_enc(((uu_at(src, s) << 4) & 0o60) | ((uu_at(src, s + 1) >> 4) & 0o17)));
+        p.push(if e - s > 1 {
+            uu_enc(((uu_at(src, s + 1) << 2) & 0o74) | ((uu_at(src, s + 2) >> 6) & 0o3))
+        } else {
+            uu_enc(0)
+        });
+        p.push(if e - s > 2 {
+            uu_enc(uu_at(src, s + 2) & 0o77)
+        } else {
+            uu_enc(0)
+        });
+    }
+    if len < 45 {
+        p.push(b'\n');
+    }
+    p.push(uu_enc(0));
+    p.push(b'\n');
+    p
+}
+
+/// Port of C `php_uudecode`: `None` for a malformed stream (the caller warns and
+/// returns false). Decodes each length-prefixed line of 4-char → 3-byte groups,
+/// then the trailing partial group, truncating to the summed declared lengths.
+fn php_uudecode(src: &[u8]) -> Option<Vec<u8>> {
+    if src.is_empty() {
+        return None;
+    }
+    let src_len = src.len();
+    let e = src_len;
+    let mut s = 0usize;
+    let mut total_len = 0usize;
+    let mut out: Vec<u8> = Vec::with_capacity((src_len as f64 * 0.75).ceil() as usize + 1);
+    while s < e {
+        let len = uu_dec(src[s]) as usize;
+        s += 1;
+        if len == 0 {
+            break;
+        }
+        if len > src_len {
+            return None;
+        }
+        total_len += len;
+        let enc_len = if len == 45 { 60 } else { (len as f64 * 1.33).floor() as usize };
+        let ee = s + enc_len;
+        if ee > e {
+            return None;
+        }
+        while s < ee {
+            if s + 4 > e {
+                return None;
+            }
+            out.push(uu_dec(src[s]) << 2 | uu_dec(src[s + 1]) >> 4);
+            out.push(uu_dec(src[s + 1]) << 4 | uu_dec(src[s + 2]) >> 2);
+            out.push(uu_dec(src[s + 2]) << 6 | uu_dec(src[s + 3]));
+            s += 4;
+        }
+        if len < 45 {
+            break;
+        }
+        s += 1; // skip '\n'
+    }
+    // Trailing partial group: fill up to `total_len`, then truncate. Over-reads
+    // past the end read 0 (they land beyond `total_len` and are truncated away).
+    if total_len > out.len() {
+        out.push(uu_dec(uu_at(src, s)) << 2 | uu_dec(uu_at(src, s + 1)) >> 4);
+        if total_len > 1 {
+            out.push(uu_dec(uu_at(src, s + 1)) << 4 | uu_dec(uu_at(src, s + 2)) >> 2);
+            if total_len > 2 {
+                out.push(uu_dec(uu_at(src, s + 2)) << 6 | uu_dec(uu_at(src, s + 3)));
+            }
+        }
+    }
+    out.truncate(total_len);
+    Some(out)
+}
+
+/// `convert_uuencode(string $string): string` — uuencode `$string`.
+pub fn convert_uuencode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = arg_str(args, ctx, "convert_uuencode")?;
+    Ok(Zval::Str(PhpStr::new(php_uuencode(s.as_bytes()))))
+}
+
+/// `convert_uudecode(string $string): string|false` — decode a uuencoded string,
+/// warning and returning false on a malformed input.
+pub fn convert_uudecode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = arg_str(args, ctx, "convert_uudecode")?;
+    match php_uudecode(s.as_bytes()) {
+        Some(bytes) => Ok(Zval::Str(PhpStr::new(bytes))),
+        None => {
+            ctx.diags.push(php_types::Diag::Warning(
+                "convert_uudecode(): Argument #1 ($data) is not a valid uuencoded string".to_string(),
+            ));
+            Ok(Zval::Bool(false))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -264,6 +264,8 @@ pub fn registry() -> Registry {
     add(b"strip_tags", string::strip_tags);
     add(b"quotemeta", string::quotemeta);
     add(b"soundex", string::soundex);
+    add(b"convert_uuencode", encoding::convert_uuencode);
+    add(b"convert_uudecode", encoding::convert_uudecode);
     add(b"levenshtein", string::levenshtein);
     add(b"strstr", string::strstr);
     add(b"strchr", string::strstr);
