@@ -246,9 +246,46 @@ pub fn fflush(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
 }
 
 /// Strip Rust's " (os error N)" suffix so the text reads like PHP's strerror.
-fn strerror(e: &std::io::Error) -> String {
+pub(crate) fn strerror(e: &std::io::Error) -> String {
     let m = e.to_string();
     m.split(" (os error").next().unwrap_or(&m).to_string()
+}
+
+/// `error_log(string $message, int $message_type = 0, ?string $destination = null,
+/// ?string $additional_headers = null): bool`. phpr supports the two CLI-relevant
+/// destinations: type 0 (the SAPI error log — stderr in CLI, `$message` followed by
+/// a newline) and type 3 (append `$message` verbatim to the file `$destination`).
+/// Types 1/4 (email / SAPI handler) fall back to type 0. Returns `false` only when
+/// a type-3 append fails.
+pub fn error_log(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::io::Write;
+    let Some(msg_arg) = argv.first() else {
+        return Err(PhpError::ArgumentCountError(
+            "error_log() expects at least 1 argument, 0 given".to_string(),
+        ));
+    };
+    let msg = convert::to_zstr(msg_arg, ctx.diags);
+    let mtype = argv.get(1).map(|v| convert::to_long_cast(v, ctx.diags)).unwrap_or(0);
+    if mtype == 3 {
+        use std::os::unix::ffi::OsStrExt;
+        let Some(dest_arg) = argv.get(2) else {
+            return Ok(Zval::Bool(false));
+        };
+        let dest = convert::to_zstr(dest_arg, ctx.diags);
+        let path = std::ffi::OsStr::from_bytes(strip_file_wrapper(dest.as_bytes()));
+        let ok = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .and_then(|mut f| f.write_all(msg.as_bytes()))
+            .is_ok();
+        return Ok(Zval::Bool(ok));
+    }
+    // Type 0 (and the unsupported 1/4): the SAPI error log — stderr in CLI, one line.
+    let mut err = std::io::stderr();
+    let _ = err.write_all(msg.as_bytes());
+    let _ = err.write_all(b"\n");
+    Ok(Zval::Bool(true))
 }
 
 /// Whether `name` is an http:// or https:// URL (routed through the HTTP

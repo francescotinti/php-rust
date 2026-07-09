@@ -203,6 +203,51 @@ pub fn sha1(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(render_digest(&digest, binary_flag(args, 1)))
 }
 
+/// Read a file's raw bytes for the `*_file` hashers, mirroring
+/// `file_get_contents`' path handling and "Failed to open stream" Warning. An
+/// empty `$filename` is a `ValueError` (`Z_PARAM_PATH`); an open failure yields
+/// `Ok(None)` (Warning emitted) so the caller returns `false`.
+fn hash_file_bytes(
+    fname: &str,
+    args: &[Zval],
+    ctx: &mut Ctx,
+) -> Result<Option<Vec<u8>>, PhpError> {
+    use std::os::unix::ffi::OsStrExt;
+    let name = arg_str(args, ctx, fname)?;
+    if name.as_bytes().is_empty() {
+        return Err(PhpError::ValueError("Path must not be empty".to_string()));
+    }
+    let path = std::ffi::OsStr::from_bytes(crate::file::strip_file_wrapper(name.as_bytes()));
+    match std::fs::read(path) {
+        Ok(data) => Ok(Some(data)),
+        Err(e) => {
+            ctx.diags.push(php_types::Diag::Warning(format!(
+                "{}({}): Failed to open stream: {}",
+                fname,
+                String::from_utf8_lossy(name.as_bytes()),
+                crate::file::strerror(&e)
+            )));
+            Ok(None)
+        }
+    }
+}
+
+/// `md5_file(string $filename, bool $binary = false): string|false`.
+pub fn md5_file(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    match hash_file_bytes("md5_file", args, ctx)? {
+        Some(data) => Ok(render_digest(&Md5::digest(&data), binary_flag(args, 1))),
+        None => Ok(Zval::Bool(false)),
+    }
+}
+
+/// `sha1_file(string $filename, bool $binary = false): string|false`.
+pub fn sha1_file(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    match hash_file_bytes("sha1_file", args, ctx)? {
+        Some(data) => Ok(render_digest(&Sha1::digest(&data), binary_flag(args, 1))),
+        None => Ok(Zval::Bool(false)),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // crc32 (the standalone function: zlib/IEEE, reflected)
 // ---------------------------------------------------------------------------
