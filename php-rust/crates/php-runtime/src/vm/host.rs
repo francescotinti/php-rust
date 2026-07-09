@@ -441,6 +441,213 @@ impl<'m> super::Vm<'m> {
             }
         }
     }
+    /// Whether `name` is a syntactically valid PHP variable label: a leading
+    /// letter/underscore or high byte, then letters/digits/underscore/high bytes.
+    fn is_valid_php_label(name: &[u8]) -> bool {
+        match name.first() {
+            Some(&c) if c == b'_' || c.is_ascii_alphabetic() || c >= 0x80 => {}
+            _ => return false,
+        }
+        name[1..].iter().all(|&c| c == b'_' || c.is_ascii_alphanumeric() || c >= 0x80)
+    }
+
+    /// Read a named local of the caller's frame (named slot then dynamic
+    /// side-table), following references; `None` if unset. No warning — the
+    /// callers (`compact`/`extract`) decide their own diagnostics.
+    fn frame_local(&self, top: usize, name: &[u8]) -> Option<Zval> {
+        // `$this` lives in the frame header, not the named slots.
+        if name == b"this" {
+            return self.frames[top].this.clone();
+        }
+        if let Some(s) = self.frames[top].func.slot_names.iter().position(|n| n.as_ref() == name) {
+            let v = self.frames[top].slots[s].deref_clone();
+            if !matches!(v, Zval::Undef) {
+                return Some(v);
+            }
+        }
+        self.frames[top].dyn_vars.get(name).map(|v| v.deref_clone())
+    }
+
+    /// One `compact()` argument: a variable name (added to `out` if set, else a
+    /// Warning) or, recursively, an array of names. A non-string/array argument
+    /// warns with its top-level position `arg_num`. `seen` holds the identities of
+    /// the arrays currently being walked so a self-referential array raises
+    /// `Error: Recursion detected` instead of overflowing the stack.
+    fn compact_add(
+        &mut self,
+        top: usize,
+        item: &Zval,
+        arg_num: usize,
+        out: &mut PhpArray,
+        seen: &mut Vec<usize>,
+    ) -> Result<(), PhpError> {
+        match item {
+            Zval::Str(s) => {
+                let name = s.as_bytes().to_vec();
+                match self.frame_local(top, &name) {
+                    Some(v) => {
+                        out.insert(Key::from_bytes(&name), v);
+                    }
+                    // `compact("this")` outside an object scope is silently skipped
+                    // (no "undefined variable" Warning), unlike any other name.
+                    None if name == b"this" => {}
+                    None => self.diags.push(Diag::Warning(format!(
+                        "compact(): Undefined variable ${}",
+                        String::from_utf8_lossy(&name)
+                    ))),
+                }
+            }
+            Zval::Array(a) => {
+                let id = Rc::as_ptr(a) as usize;
+                if seen.contains(&id) {
+                    return Err(PhpError::Error("Recursion detected".to_string()));
+                }
+                seen.push(id);
+                let items: Vec<Zval> = a.iter().map(|(_, v)| v.deref_clone()).collect();
+                for it in &items {
+                    self.compact_add(top, it, arg_num, out, seen)?;
+                }
+                seen.pop();
+            }
+            other => {
+                // PHP 8 names bool values "true"/"false" (not "bool") in this message.
+                let tname = match other {
+                    Zval::Bool(true) => "true".to_string(),
+                    Zval::Bool(false) => "false".to_string(),
+                    _ => other.type_name_for_error().to_string(),
+                };
+                self.diags.push(Diag::Warning(format!(
+                    "compact(): Argument #{arg_num} must be string or array of strings, {tname} given"
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// `compact(mixed ...$var_names): array` — build an associative array of the
+    /// named locals that are set in the caller's scope; each name is a string or
+    /// (recursively) an array of strings. An undefined name warns and is skipped.
+    pub(super) fn ho_compact(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let top = self.frames.len() - 1;
+        let mut out = PhpArray::new();
+        let mut seen = Vec::new();
+        for (i, arg) in args.iter().enumerate() {
+            self.compact_add(top, arg, i + 1, &mut out, &mut seen)?;
+        }
+        Ok(Zval::Array(Rc::new(out)))
+    }
+
+    /// `extract(array $array, int $flags = EXTR_OVERWRITE, string $prefix = ""): int`
+    /// — import the array's entries as locals of the caller's scope, honouring the
+    /// EXTR_* strategy, and return how many were imported. Integer keys and invalid
+    /// labels are skipped unless a prefixing flag rescues them; `$this`/`$GLOBALS`
+    /// are never overwritten. EXTR_REFS degrades to a value copy (phpr has no
+    /// by-ref local aliasing here).
+    pub(super) fn ho_extract(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        const EXTR_OVERWRITE: i64 = 0;
+        const EXTR_SKIP: i64 = 1;
+        const EXTR_PREFIX_SAME: i64 = 2;
+        const EXTR_PREFIX_ALL: i64 = 3;
+        const EXTR_PREFIX_INVALID: i64 = 4;
+        const EXTR_PREFIX_IF_EXISTS: i64 = 5;
+        const EXTR_IF_EXISTS: i64 = 6;
+        const EXTR_REFS: i64 = 256;
+
+        let Some(first) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "extract() expects at least 1 argument, 0 given".to_string(),
+            ));
+        };
+        let Zval::Array(arr) = first else {
+            return Err(PhpError::TypeError(format!(
+                "extract(): Argument #1 ($array) must be of type array, {} given",
+                first.type_name_for_error()
+            )));
+        };
+        let arr = arr.clone();
+        let flags = args
+            .get(1)
+            .map(|v| convert::to_long_cast(v, &mut self.diags))
+            .unwrap_or(EXTR_OVERWRITE);
+        let extr_type = flags & !EXTR_REFS;
+        if !(EXTR_OVERWRITE..=EXTR_IF_EXISTS).contains(&extr_type) {
+            return Err(PhpError::ValueError(
+                "extract(): Argument #2 ($flags) must be a valid extract type".to_string(),
+            ));
+        }
+        // The prefixing strategies require an explicit prefix argument.
+        let is_prefix_type = (EXTR_PREFIX_SAME..=EXTR_PREFIX_IF_EXISTS).contains(&extr_type);
+        if is_prefix_type && args.get(2).is_none() {
+            return Err(PhpError::ValueError(
+                "extract(): Argument #3 ($prefix) is required when using this extract type"
+                    .to_string(),
+            ));
+        }
+        let prefix = args
+            .get(2)
+            .map(|v| convert::to_zstr_cast(v, &mut self.diags).as_bytes().to_vec())
+            .unwrap_or_default();
+        // A non-empty prefix must itself be a valid identifier.
+        if is_prefix_type && !prefix.is_empty() && !Self::is_valid_php_label(&prefix) {
+            return Err(PhpError::ValueError(
+                "extract(): Argument #3 ($prefix) must be a valid identifier".to_string(),
+            ));
+        }
+
+        let top = self.frames.len() - 1;
+        // Own the pairs before mutating the frame.
+        let pairs: Vec<(Key, Zval)> = arr.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect();
+        let mut count: i64 = 0;
+        for (key, value) in pairs {
+            let (key_bytes, key_is_valid) = match &key {
+                Key::Str(s) => (s.as_bytes().to_vec(), Self::is_valid_php_label(s.as_bytes())),
+                Key::Int(i) => (i.to_string().into_bytes(), false),
+            };
+            let exists = key_is_valid && self.frame_local(top, &key_bytes).is_some();
+            let prefixed = || {
+                let mut n = prefix.clone();
+                n.push(b'_');
+                n.extend_from_slice(&key_bytes);
+                n
+            };
+            let target: Option<Vec<u8>> = match extr_type {
+                EXTR_OVERWRITE => key_is_valid.then(|| key_bytes.clone()),
+                EXTR_SKIP => (key_is_valid && !exists).then(|| key_bytes.clone()),
+                EXTR_PREFIX_SAME => {
+                    // Only valid labels are eligible; an invalid/integer key is
+                    // skipped (unlike PREFIX_ALL/PREFIX_INVALID). A collision with
+                    // an existing local is resolved by prefixing.
+                    if !key_is_valid {
+                        None
+                    } else if exists {
+                        Some(prefixed())
+                    } else {
+                        Some(key_bytes.clone())
+                    }
+                }
+                // PREFIX_ALL prefixes every key EXCEPT an empty string key, which
+                // it skips outright (an integer key is still prefixed).
+                EXTR_PREFIX_ALL => (!key_bytes.is_empty()).then(prefixed),
+                EXTR_PREFIX_INVALID => {
+                    if key_is_valid {
+                        Some(key_bytes.clone())
+                    } else {
+                        Some(prefixed())
+                    }
+                }
+                EXTR_IF_EXISTS => (key_is_valid && exists).then(|| key_bytes.clone()),
+                EXTR_PREFIX_IF_EXISTS => (key_is_valid && exists).then(prefixed),
+                _ => None,
+            };
+            if let Some(name) = target {
+                if Self::is_valid_php_label(&name) && name != b"this" && name != b"GLOBALS" {
+                    self.var_dyn_write(top, &name, value)?;
+                    count += 1;
+                }
+            }
+        }
+        Ok(Zval::Long(count))
+    }
     /// `mb_split($pattern, $string[, $limit])` (F2): split on matches, keeping
     /// empty fields. `$limit > 0` caps the piece count. Returns `false` on a bad
     /// pattern. Mirrors `eval::ho_mb_split`.

@@ -1826,6 +1826,15 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"ARRAY_FILTER_USE_BOTH" => ExprKind::Int(1),
         b"COUNT_NORMAL" => ExprKind::Int(0),
         b"COUNT_RECURSIVE" => ExprKind::Int(1),
+        // extract() strategies.
+        b"EXTR_OVERWRITE" => ExprKind::Int(0),
+        b"EXTR_SKIP" => ExprKind::Int(1),
+        b"EXTR_PREFIX_SAME" => ExprKind::Int(2),
+        b"EXTR_PREFIX_ALL" => ExprKind::Int(3),
+        b"EXTR_PREFIX_INVALID" => ExprKind::Int(4),
+        b"EXTR_PREFIX_IF_EXISTS" => ExprKind::Int(5),
+        b"EXTR_IF_EXISTS" => ExprKind::Int(6),
+        b"EXTR_REFS" => ExprKind::Int(256),
         // array_change_key_case flags.
         b"CASE_LOWER" => ExprKind::Int(0),
         b"CASE_UPPER" => ExprKind::Int(1),

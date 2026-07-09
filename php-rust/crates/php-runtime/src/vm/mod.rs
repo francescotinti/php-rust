@@ -8526,6 +8526,8 @@ host_builtins! {
     b"preg_replace_callback" => vm.ho_preg_replace_callback(args),
     b"json_decode" => vm.ho_json_decode(args),
     b"json_validate" => vm.ho_json_validate(args),
+    b"compact" => vm.ho_compact(args),
+    b"extract" => vm.ho_extract(args),
     b"json_last_error" => vm.ho_json_last_error(args),
     b"json_last_error_msg" => vm.ho_json_last_error_msg(args),
     b"assert" => vm.ho_assert(args),
