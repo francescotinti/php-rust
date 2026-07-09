@@ -20,6 +20,14 @@ fallback. DEVI: (1) `/usr/bin/find . -name '._*' -type f -not -path './.git/*' -
 e (2) **riprovare ancora con Serena** la stessa operazione. Ripetere se ricompaiono.
 grep/Read diretti NON sono un fallback accettabile per evitare Serena.
 
+## Stato & copertura
+- **[COVERAGE.md](COVERAGE.md)** è la pagina dati (misurata, non stimata): funzioni
+  641/2143 (core stdlib 483/654 = 73%), corpus Zend 2324, aree complete, mancanti
+  per estensione. **[README.md](README.md)** è la home GitHub. Aggiornarle quando i
+  numeri cambiano in modo sostanziale. Divergenze note in
+  [PHPR_DIVERGENCES_FROM_PHP.md](PHPR_DIVERGENCES_FROM_PHP.md) (principio
+  **correct-or-absent**).
+
 ## Build & test (regole)
 - **⚠️ FILESYSTEM — il volume esterno "Extreme Pro" NON supporta la compilazione
   incrementale di Rust** (non sa hard-linkare la cache → cargo stampa "hard linking
