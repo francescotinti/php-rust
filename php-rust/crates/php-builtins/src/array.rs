@@ -15,6 +15,79 @@ fn key_to_zval(key: &Key) -> Zval {
     }
 }
 
+/// `array_rand(array $array, int $num = 1): int|string|array` — a random key
+/// (`$num == 1`) or an array of `$num` distinct random keys in array order.
+/// Mirrors `php_array_pick_keys` for gap-free arrays (phpr compacts on unset),
+/// drawing from the same Mt19937 state as `mt_rand`/`mt_srand` — so seeding makes
+/// it reproducible byte-for-byte.
+pub fn array_rand(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let arr = match args.first() {
+        Some(Zval::Array(a)) => a,
+        Some(other) => {
+            return Err(PhpError::TypeError(format!(
+                "array_rand(): Argument #1 ($array) must be of type array, {} given",
+                other.type_name_for_error()
+            )))
+        }
+        None => {
+            return Err(PhpError::ArgumentCountError(
+                "array_rand() expects at least 1 argument, 0 given".to_string(),
+            ))
+        }
+    };
+    let keys: Vec<Key> = arr.iter().map(|(k, _)| k.clone()).collect();
+    let num_avail = keys.len();
+    if num_avail == 0 {
+        return Err(PhpError::ValueError(
+            "array_rand(): Argument #1 ($array) must not be empty".to_string(),
+        ));
+    }
+    let num_req = args.get(1).map(|v| convert::to_long_cast(v, ctx.diags)).unwrap_or(1);
+    if num_req == 1 {
+        let idx = crate::math::mt_range((num_avail - 1) as u32) as usize;
+        return Ok(key_to_zval(&keys[idx]));
+    }
+    if num_req <= 0 || num_req > num_avail as i64 {
+        return Err(PhpError::ValueError(
+            "array_rand(): Argument #2 ($num) must be between 1 and the number of elements in argument #1 ($array)".to_string(),
+        ));
+    }
+    // Pick the smaller of the selected/unselected sets, then walk the array once
+    // including an index iff its bit is set (XOR the negation) — matching PHP so
+    // the result is in array order.
+    let mut req = num_req as usize;
+    let mut negative = false;
+    if req > num_avail / 2 {
+        negative = true;
+        req = num_avail - req;
+    }
+    let mut bitset = vec![false; num_avail];
+    let mut remaining = req;
+    let mut failures = 0;
+    while remaining > 0 {
+        let randval = crate::math::mt_range((num_avail - 1) as u32) as usize;
+        if bitset[randval] {
+            failures += 1;
+            if failures > 50 {
+                return Err(PhpError::Error(
+                    "Failed to generate an acceptable random number in 50 attempts".to_string(),
+                ));
+            }
+        } else {
+            bitset[randval] = true;
+            remaining -= 1;
+            failures = 0;
+        }
+    }
+    let mut out = PhpArray::new();
+    for (idx, k) in keys.iter().enumerate() {
+        if bitset[idx] ^ negative {
+            let _ = out.append(key_to_zval(k));
+        }
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
 /// count($value, $mode = COUNT_NORMAL).
 ///
 /// Only arrays (and Countable, unsupported here) are accepted; any scalar is a
