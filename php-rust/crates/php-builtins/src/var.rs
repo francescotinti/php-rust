@@ -934,6 +934,39 @@ fn filter_one(value: &Zval, spec: &Zval, ctx: &mut Ctx) -> Result<Zval, PhpError
         }
     }
 }
+
+/// `localeconv(): array` — numeric/monetary formatting for the current locale.
+/// phpr runs in the default "C" locale (no meaningful `setlocale`), so this is
+/// the fixed C-locale snapshot the oracle returns there: "." decimal point, no
+/// grouping, and the `CHAR_MAX` (127) sentinel for the unset monetary fields.
+pub(crate) fn localeconv(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let mut a = PhpArray::new();
+    let str_field = |a: &mut PhpArray, k: &[u8], v: &[u8]| {
+        a.insert(Key::from_bytes(k), Zval::Str(PhpStr::new(v.to_vec())));
+    };
+    let int_field = |a: &mut PhpArray, k: &[u8], v: i64| {
+        a.insert(Key::from_bytes(k), Zval::Long(v));
+    };
+    str_field(&mut a, b"decimal_point", b".");
+    str_field(&mut a, b"thousands_sep", b"");
+    str_field(&mut a, b"int_curr_symbol", b"");
+    str_field(&mut a, b"currency_symbol", b"");
+    str_field(&mut a, b"mon_decimal_point", b"");
+    str_field(&mut a, b"mon_thousands_sep", b"");
+    str_field(&mut a, b"positive_sign", b"");
+    str_field(&mut a, b"negative_sign", b"");
+    int_field(&mut a, b"int_frac_digits", 127);
+    int_field(&mut a, b"frac_digits", 127);
+    int_field(&mut a, b"p_cs_precedes", 127);
+    int_field(&mut a, b"p_sep_by_space", 127);
+    int_field(&mut a, b"n_cs_precedes", 127);
+    int_field(&mut a, b"n_sep_by_space", 127);
+    int_field(&mut a, b"p_sign_posn", 127);
+    int_field(&mut a, b"n_sign_posn", 127);
+    a.insert(Key::from_bytes(b"grouping"), Zval::Array(Rc::new(PhpArray::new())));
+    a.insert(Key::from_bytes(b"mon_grouping"), Zval::Array(Rc::new(PhpArray::new())));
+    Ok(Zval::Array(Rc::new(a)))
+}
 /// extension_loaded($name): whether a PHP extension is available (case-insensitive).
 pub(crate) fn extension_loaded(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let name = convert::to_zstr(arg1(args, "extension_loaded")?, ctx.diags);

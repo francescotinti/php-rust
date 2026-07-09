@@ -262,6 +262,7 @@ pub fn registry() -> Registry {
     add(b"chunk_split", string::chunk_split);
     add(b"strip_tags", string::strip_tags);
     add(b"quotemeta", string::quotemeta);
+    add(b"soundex", string::soundex);
     add(b"levenshtein", string::levenshtein);
     add(b"strstr", string::strstr);
     add(b"strchr", string::strstr);
@@ -452,6 +453,7 @@ pub fn registry() -> Registry {
     add(b"boolval", boolval);
     add(b"filter_var", filter_var);
     add(b"filter_var_array", var::filter_var_array);
+    add(b"localeconv", var::localeconv);
     add(b"print_r", print_r);
     // Environment / runtime-introspection stubs (no real engine state modelled).
     add(b"gc_collect_cycles", env::gc_collect_cycles);

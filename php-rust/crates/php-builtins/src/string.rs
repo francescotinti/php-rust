@@ -2305,6 +2305,44 @@ pub fn quotemeta(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Str(PhpStr::new(out)))
 }
 
+/// `soundex($string)` — the four-character Soundex key (`ext/standard/soundex.c`).
+/// The first letter is kept verbatim; following letters contribute their code
+/// digit unless it repeats the previous one; H/W/vowels reset the run (PHP's
+/// simple variant, so "Ashcraft" → "A226"). Non-letters are ignored; a string
+/// with no letters yields "0000".
+pub fn soundex(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    // Soundex code per A..Z (0 = vowel / H / W / Y, not emitted).
+    const T: [u8; 26] = [
+        0, b'1', b'2', b'3', 0, b'1', b'2', 0, 0, b'2', b'2', b'4', b'5', b'5', 0, b'1', b'2',
+        b'6', b'2', b'3', 0, b'1', 0, b'2', 0, b'2',
+    ];
+    let s = str_at(args, ctx, 0, "soundex", 1)?;
+    let mut out: Vec<u8> = Vec::with_capacity(4);
+    let mut last: i16 = -1;
+    for &b in &s {
+        if out.len() >= 4 {
+            break;
+        }
+        let up = b.to_ascii_uppercase();
+        if up.is_ascii_uppercase() {
+            let code = T[(up - b'A') as usize];
+            if out.is_empty() {
+                out.push(up);
+                last = code as i16;
+            } else if code as i16 != last {
+                if code != 0 {
+                    out.push(code);
+                }
+                last = code as i16;
+            }
+        }
+    }
+    while out.len() < 4 {
+        out.push(b'0');
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
 /// levenshtein($string1, $string2): byte-oriented edit distance with unit
 /// insert/replace/delete costs (the default two-argument form). The weighted
 /// five-argument form is not implemented (scope-out D-57.2).
