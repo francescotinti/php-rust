@@ -22,18 +22,27 @@ motore per invocare metodi utente, generare backtrace "veri", o consultare lo
 stato ZPP dell'engine. Limitano principalmente i **phpt di edge-case/di tipo**,
 non l'uso reale delle webapp target (WP/Composer/Doctrine/Laravel/Symfony).
 
-### 1.1 Coercion di oggetti `Stringable` nelle builtin pure  ⭐ il più frequente
-- **Sintomo**: una builtin che coerce un argomento a stringa (es. `natcasesort`,
-  `str_*`, `array_*` con valori oggetto) **non invoca `__toString()`** sugli
-  oggetti, perché il crate `php-builtins` non ha un ponte verso la VM.
-- **Effetto**: al posto della stringa prodotta da `__toString` viene emesso un
-  warning spurio "Object of class X could not be converted to string", oppure
-  la coercizione fallisce.
-- **Conteggio osservato**: è la causa dei 4 fail di `natcasesort`, e di quote
-  analoghe in numerose altre famiglie.
-- **Fix strutturale**: esporre un callback di coercizione VM-aware
-  (`ctx`-mediato) che le builtin pure possano chiamare per gli oggetti
-  `Stringable`. Una volta fatto, sblocca in blocco molti phpt.
+### 1.1 Coercion di oggetti `Stringable` nelle builtin pure  ✅ IN GRAN PARTE CHIUSO (`6f7cb31`+`f1fee67`)
+- **Era il gap più frequente**: una builtin che coerce un argomento a stringa
+  non invocava `__toString()` (il crate `php-builtins` è VM-stateless), emettendo
+  un warning spurio "Object of class X could not be converted to string".
+- **Meccanismo implementato** (rispecchia il precompute `__debugInfo` di
+  `var_dump`): `Ctx` ha una mappa `stringify: &HashMap<u32, ZStr>` (id oggetto →
+  risultato `__toString` precomputato) + helper `Ctx::to_zstr(&Zval)`. La VM,
+  **prima del dispatch** e SOLO per le builtin che coercono *incondizionatamente*
+  (gate `ref_builtin_string_coerces` / `value_builtin_string_coerces`), invoca
+  `__toString` via `resolve_method_runtime`+`call_method_sync` (`Vm::compute_stringify`,
+  no ricorsione negli array annidati, cycle-guard per id). Le builtin chiamano
+  `ctx.to_zstr` invece di `convert::to_zstr`.
+- **Coperti**: `natsort`/`natcasesort` (by-ref) + ~28 value builtin via
+  `string::str_at` (str_contains/starts_with/ends_with, substr_*, add(c)slashes,
+  strtr, wordwrap, levenshtein, htmlspecialchars/htmlentities, strip_tags, …).
+  Byte-identici all'oracle; introspection (is_string/gettype/get_class/var_dump)
+  **esclusi** → nessuna chiamata `__toString` spuria (verificato). Zend 2322→2323.
+- **Residuo** (non ancora coperto): funzioni con oggetti dentro ARRAY-arg
+  (`implode`, `str_replace` con array, `array_map`→callback), e i format
+  (`sprintf`/`printf` %s). Estendere allowlist + far ricorrere `compute_stringify`
+  negli array per quei casi specifici. `to_zstr` VM-side (echo/concat) già OK da prima.
 
 ### 1.2 Deprecation ZPP `null → parametro non-nullable`
 - **Sintomo**: passare `null` a un parametro interno non-nullable (es.
