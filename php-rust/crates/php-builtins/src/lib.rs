@@ -353,6 +353,7 @@ pub fn registry() -> Registry {
     add(b"grapheme_strripos", grapheme::grapheme_strripos);
     add(b"grapheme_strstr", grapheme::grapheme_strstr);
     add(b"grapheme_stristr", grapheme::grapheme_stristr);
+    add(b"grapheme_levenshtein", grapheme::grapheme_levenshtein);
     add(b"number_format", string::number_format);
     add(b"version_compare", string::version_compare);
     add(b"openssl_x509_parse", openssl::openssl_x509_parse);

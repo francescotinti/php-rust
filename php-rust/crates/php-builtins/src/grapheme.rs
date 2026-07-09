@@ -239,3 +239,52 @@ pub fn grapheme_strstr(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 pub fn grapheme_stristr(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     strstr_impl(args, ctx, true)
 }
+
+/// Validate a `grapheme_levenshtein` cost argument: it must be in `1..=0x3FFFFFFF`.
+fn levenshtein_cost(
+    args: &[Zval],
+    ctx: &mut Ctx,
+    idx: usize,
+    arg_num: usize,
+    name: &str,
+) -> Result<i64, PhpError> {
+    let c = args.get(idx).map(|v| convert::to_long_cast(v, ctx.diags)).unwrap_or(1);
+    if c < 1 || c > 0x3FFF_FFFF {
+        return Err(PhpError::ValueError(format!(
+            "grapheme_levenshtein(): Argument #{arg_num} (${name}) must be greater than 0 and less than or equal to 1073741823"
+        )));
+    }
+    Ok(c)
+}
+
+/// `grapheme_levenshtein(string $string1, string $string2, int $insertion_cost = 1,
+/// int $replacement_cost = 1, int $deletion_cost = 1): int` (PHP 8.5) — Levenshtein
+/// edit distance measured in **grapheme clusters** (a ZWJ emoji sequence is one
+/// unit), with per-operation costs. Standard DP, so a cheap delete+insert can
+/// beat an expensive replacement.
+pub fn grapheme_levenshtein(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let b1 = bytes_at(args, ctx, 0);
+    let b2 = bytes_at(args, ctx, 1);
+    let cost_ins = levenshtein_cost(args, ctx, 2, 3, "insertion_cost")?;
+    let cost_rep = levenshtein_cost(args, ctx, 3, 4, "replacement_cost")?;
+    let cost_del = levenshtein_cost(args, ctx, 4, 5, "deletion_cost")?;
+    let (Ok(s1), Ok(s2)) = (std::str::from_utf8(&b1), std::str::from_utf8(&b2)) else {
+        return Ok(Zval::Bool(false));
+    };
+    let g1: Vec<&str> = s1.graphemes(true).collect();
+    let g2: Vec<&str> = s2.graphemes(true).collect();
+    let m = g2.len();
+    // Row j of the DP is the distance transforming an empty prefix of g1 into
+    // g2[..j] (all insertions); each row down deletes one grapheme of g1.
+    let mut prev: Vec<i64> = (0..=m).map(|j| j as i64 * cost_ins).collect();
+    for gi in &g1 {
+        let mut cur = vec![0i64; m + 1];
+        cur[0] = prev[0] + cost_del;
+        for j in 1..=m {
+            let sub = if gi == &g2[j - 1] { prev[j - 1] } else { prev[j - 1] + cost_rep };
+            cur[j] = sub.min(prev[j] + cost_del).min(cur[j - 1] + cost_ins);
+        }
+        prev = cur;
+    }
+    Ok(Zval::Long(prev[m]))
+}
