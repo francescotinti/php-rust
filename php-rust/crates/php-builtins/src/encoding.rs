@@ -232,6 +232,106 @@ fn hash_file_bytes(
     }
 }
 
+/// One hex nibble's value (caller guarantees `[0-9a-fA-F]`).
+fn qp_hexnib(b: u8) -> u8 {
+    match b {
+        b'0'..=b'9' => b - b'0',
+        b'a'..=b'f' => b - b'a' + 10,
+        b'A'..=b'F' => b - b'A' + 10,
+        _ => 0,
+    }
+}
+
+/// `quoted_printable_encode(string $string): string` — RFC 2045 Quoted-Printable
+/// encoding with 75-column soft-wrapping. Mirrors `php_quot_print_encode`.
+pub fn quoted_printable_encode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    let s = arg_str(args, ctx, "quoted_printable_encode")?;
+    let b = s.as_bytes();
+    let n = b.len();
+    let mut out = Vec::new();
+    let mut lp: u64 = 0;
+    let mut i = 0;
+    while i < n {
+        let c = b[i];
+        let next = b.get(i + 1).copied();
+        if c == 0x0d && next == Some(0x0a) && (n - i - 1) > 0 {
+            out.push(0x0d);
+            out.push(0x0a);
+            i += 2;
+            lp = 0;
+            continue;
+        }
+        let encode = c.is_ascii_control()
+            || c == 0x7f
+            || (c & 0x80) != 0
+            || c == b'='
+            || (c == b' ' && next == Some(0x0d));
+        if encode {
+            lp += 3;
+            let wrap = (lp > 75 && c <= 0x7f)
+                || (c > 0x7f && c <= 0xdf && lp + 3 > 75)
+                || (c > 0xdf && c <= 0xef && lp + 6 > 75)
+                || (c > 0xef && c <= 0xf4 && lp + 9 > 75);
+            if wrap {
+                out.extend_from_slice(b"=\r\n");
+                lp = 3;
+            }
+            out.push(b'=');
+            out.push(HEX[(c >> 4) as usize]);
+            out.push(HEX[(c & 0x0f) as usize]);
+        } else {
+            lp += 1;
+            if lp > 75 {
+                out.extend_from_slice(b"=\r\n");
+                lp = 1;
+            }
+            out.push(c);
+        }
+        i += 1;
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
+/// `quoted_printable_decode(string $string): string` — decode `=HH` escapes and
+/// drop RFC 2045 soft line breaks; a `=` not starting a valid escape/break is kept
+/// literally. Mirrors `PHP_FUNCTION(quoted_printable_decode)`.
+pub fn quoted_printable_decode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = arg_str(args, ctx, "quoted_printable_decode")?;
+    let b = s.as_bytes();
+    let n = b.len();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < n {
+        if b[i] == b'=' {
+            if i + 2 < n && b[i + 1].is_ascii_hexdigit() && b[i + 2].is_ascii_hexdigit() {
+                out.push((qp_hexnib(b[i + 1]) << 4) | qp_hexnib(b[i + 2]));
+                i += 3;
+            } else {
+                // Soft line break: skip trailing spaces/tabs, then a CR/LF/CRLF.
+                let mut k = 1;
+                while i + k < n && (b[i + k] == 32 || b[i + k] == 9) {
+                    k += 1;
+                }
+                if i + k >= n {
+                    i += k;
+                } else if b[i + k] == 13 && i + k + 1 < n && b[i + k + 1] == 10 {
+                    i += k + 2;
+                } else if b[i + k] == 13 || b[i + k] == 10 {
+                    i += k + 1;
+                } else {
+                    out.push(b[i]);
+                    i += 1;
+                }
+            }
+        } else {
+            out.push(b[i]);
+            i += 1;
+        }
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
 /// `md5_file(string $filename, bool $binary = false): string|false`.
 pub fn md5_file(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     match hash_file_bytes("md5_file", args, ctx)? {

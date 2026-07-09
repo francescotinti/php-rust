@@ -88,6 +88,8 @@ pub fn registry() -> Registry {
     add(b"base64_decode", encoding::base64_decode);
     add(b"md5", encoding::md5);
     add(b"md5_file", encoding::md5_file);
+    add(b"quoted_printable_encode", encoding::quoted_printable_encode);
+    add(b"quoted_printable_decode", encoding::quoted_printable_decode);
     add(b"sha1", encoding::sha1);
     add(b"sha1_file", encoding::sha1_file);
     add(b"crc32", encoding::crc32);
