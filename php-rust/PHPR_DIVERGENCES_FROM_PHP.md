@@ -94,6 +94,24 @@ correct-or-absent.
 | PDO/sqlite UDF | Le User-Defined Function SQLite sono deferite | richiedono re-entrancy della VM dentro il callback rusqlite |
 | `FETCH_CLASS` protected / `PDORow` / `FETCH_LAZY` | modalità PDO fetch residue | deferite |
 
+### 3.1 Divergenze delle tabelle di encoding (codec mbstring)
+Il codec mbstring di phpr usa `encoding_rs` per gli encoding non gestiti a mano
+(UTF-8/ASCII/Latin-1/UTF-16 sono diretti). Alcune **tabelle di conversione**
+differiscono da quelle di libmbfl, e alcuni encoding non sono mappati. Questo
+impatta ogni `mb_*` che decodifica/ricodifica (`mb_convert_encoding`,
+`mb_encode_numericentity`, …), **non** la logica delle singole funzioni.
+
+| Encoding | Divergenza | Esempio |
+|---|---|---|
+| `ISO-2022-JP` | `encoding_rs` decodifica il segno di sterlina (`!r`) in `U+FFE1` (fullwidth) invece di `U+00A3` (regola libmbfl) | `mb_encode_numericentity` test #11 |
+| `UCS-4` / `UCS-4LE` / `UCS-2` … | non presenti in `resolve_encoding` → `ValueError "must be a valid encoding"` | `mb_decode_numericentity` test (linea 54) |
+| `SJIS`/`EUC-JP` (casi rari) | possibili scostamenti di mapping su codepoint di confine | (potenziale) |
+
+Nota: la **logica** di `mb_encode_numericentity`/`mb_decode_numericentity` è
+byte-identica all'oracle (convmap, offset/mask, overflow, `;` opzionale,
+pass-through) — verificata su tutte le asserzioni edge-case dei phpt, che
+riportano `(Good)`. Gli unici fail residui sono queste tabelle di encoding.
+
 ---
 
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
