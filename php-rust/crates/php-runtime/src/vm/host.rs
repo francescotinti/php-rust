@@ -3520,6 +3520,203 @@ impl<'m> super::Vm<'m> {
         self.run_value_builtin(f, &[val, filter, options], line)
     }
 
+    /// `array_multisort(&$array1, $order1?, $flags1?, &$array2, ...)`: sort one or
+    /// more arrays at once (SQL `ORDER BY` semantics), ported from C
+    /// `PHP_FUNCTION(array_multisort)`. Arguments interleave arrays with by-value
+    /// order (SORT_ASC/DESC) and type (SORT_REGULAR/NUMERIC/STRING/…) flags.
+    /// Returns `(true, sorted)` where `sorted[i]` is the reordered array for the
+    /// `i`-th argument (None for a flag argument); the VM writes each back into
+    /// its by-ref slot. Numeric keys are renumbered from 0, string keys preserved.
+    ///
+    /// SORT_NATURAL is compared as SORT_STRING (a documented residual); the other
+    /// flags are byte-identical.
+    pub(super) fn ho_array_multisort(
+        &mut self,
+        args: Vec<Zval>,
+    ) -> Result<(Zval, Vec<Option<Zval>>), PhpError> {
+        const SORT_REGULAR: i64 = 0;
+        const SORT_NUMERIC: i64 = 1;
+        const SORT_STRING: i64 = 2;
+        const SORT_DESC: i64 = 3;
+        const SORT_ASC: i64 = 4;
+        const SORT_LOCALE_STRING: i64 = 5;
+        const SORT_NATURAL: i64 = 6;
+        const SORT_FLAG_CASE: i64 = 8;
+
+        struct ArrCol {
+            arg_idx: usize,
+            arr: Rc<PhpArray>,
+            sort_type: i64,
+            sort_order: i64,
+        }
+        let argc = args.len();
+        let mut out: Vec<Option<Zval>> = vec![None; argc];
+        let mut arrays: Vec<ArrCol> = Vec::new();
+        let mut sort_order = SORT_ASC;
+        let mut sort_type = SORT_REGULAR;
+        let mut order_allowed = false;
+        let mut type_allowed = false;
+
+        for (i, arg) in args.iter().enumerate() {
+            let arg = arg.deref_clone();
+            // Only the first (fixed `$array`) parameter is named in errors; the
+            // variadic `$rest` arguments show no parameter name.
+            let al = if i == 0 { " ($array)" } else { "" };
+            match &arg {
+                Zval::Array(a) => {
+                    if let Some(last) = arrays.last_mut() {
+                        last.sort_type = sort_type;
+                        last.sort_order = sort_order;
+                        sort_order = SORT_ASC;
+                        sort_type = SORT_REGULAR;
+                    }
+                    arrays.push(ArrCol {
+                        arg_idx: i,
+                        arr: Rc::clone(a),
+                        sort_type: SORT_REGULAR,
+                        sort_order: SORT_ASC,
+                    });
+                    order_allowed = true;
+                    type_allowed = true;
+                }
+                Zval::Long(l) => match l & !SORT_FLAG_CASE {
+                    SORT_ASC | SORT_DESC => {
+                        if order_allowed {
+                            sort_order = if *l == SORT_DESC { SORT_DESC } else { SORT_ASC };
+                            order_allowed = false;
+                        } else {
+                            return Err(PhpError::TypeError(format!(
+                                "array_multisort(): Argument #{}{} must be an array or a sort flag that has not already been specified",
+                                i + 1, al
+                            )));
+                        }
+                    }
+                    SORT_REGULAR | SORT_NUMERIC | SORT_STRING | SORT_NATURAL
+                    | SORT_LOCALE_STRING => {
+                        if type_allowed {
+                            sort_type = *l;
+                            type_allowed = false;
+                        } else {
+                            return Err(PhpError::TypeError(format!(
+                                "array_multisort(): Argument #{}{} must be an array or a sort flag that has not already been specified",
+                                i + 1, al
+                            )));
+                        }
+                    }
+                    _ => {
+                        return Err(PhpError::ValueError(format!(
+                            "array_multisort(): Argument #{}{} must be a valid sort flag",
+                            i + 1, al
+                        )))
+                    }
+                },
+                _ => {
+                    return Err(PhpError::TypeError(format!(
+                        "array_multisort(): Argument #{}{} must be an array or a sort flag",
+                        i + 1, al
+                    )))
+                }
+            }
+        }
+        // Finalize the last array's accumulated flags.
+        if let Some(last) = arrays.last_mut() {
+            last.sort_type = sort_type;
+            last.sort_order = sort_order;
+        } else {
+            return Err(PhpError::TypeError(
+                "array_multisort(): Argument #1 must be an array or a sort flag".to_string(),
+            ));
+        }
+
+        // All arrays must be the same size.
+        let array_size = arrays[0].arr.len();
+        for a in &arrays[1..] {
+            if a.arr.len() != array_size {
+                return Err(PhpError::ValueError("Array sizes are inconsistent".to_string()));
+            }
+        }
+        if array_size < 1 {
+            return Ok((Zval::Bool(true), out));
+        }
+
+        // Snapshot each column's (key, value) entries in order.
+        let cols: Vec<Vec<(Key, Zval)>> = arrays
+            .iter()
+            .map(|a| a.arr.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect())
+            .collect();
+
+        // Precompute a comparison key per element per column (diags-aware string
+        // coercion happens here, before the sort closure).
+        enum SortKey {
+            Num(f64),
+            Bytes(Vec<u8>),
+            Regular(Zval),
+        }
+        let mut col_keys: Vec<Vec<SortKey>> = Vec::with_capacity(arrays.len());
+        for (j, a) in arrays.iter().enumerate() {
+            let mut keys = Vec::with_capacity(array_size);
+            for (_, v) in &cols[j] {
+                let key = match a.sort_type & !SORT_FLAG_CASE {
+                    SORT_NUMERIC => SortKey::Num(convert::to_double(v)),
+                    SORT_STRING | SORT_LOCALE_STRING | SORT_NATURAL => {
+                        let mut b = convert::to_zstr(v, &mut self.diags).as_bytes().to_vec();
+                        if a.sort_type & SORT_FLAG_CASE != 0 {
+                            b.make_ascii_lowercase();
+                        }
+                        SortKey::Bytes(b)
+                    }
+                    _ => SortKey::Regular(v.clone()),
+                };
+                keys.push(key);
+            }
+            col_keys.push(keys);
+        }
+
+        // Sort row indices by the multi-column comparison, tie-broken by the
+        // original position (PHP's stable_sort_fallback).
+        let mut order: Vec<usize> = (0..array_size).collect();
+        order.sort_by(|&ra, &rb| {
+            for (j, a) in arrays.iter().enumerate() {
+                let c = match (&col_keys[j][ra], &col_keys[j][rb]) {
+                    (SortKey::Num(x), SortKey::Num(y)) => {
+                        x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
+                    }
+                    (SortKey::Bytes(x), SortKey::Bytes(y)) => x.cmp(y),
+                    (SortKey::Regular(x), SortKey::Regular(y)) => {
+                        php_types::ops::compare(x, y).cmp(&0)
+                    }
+                    _ => std::cmp::Ordering::Equal,
+                };
+                let c = if a.sort_order == SORT_DESC { c.reverse() } else { c };
+                if c != std::cmp::Ordering::Equal {
+                    return c;
+                }
+            }
+            ra.cmp(&rb)
+        });
+
+        // Rebuild each array in the sorted order: numeric keys renumber from 0,
+        // string keys are preserved.
+        for (j, a) in arrays.iter().enumerate() {
+            let mut new_arr = PhpArray::new();
+            let mut n: i64 = 0;
+            for &row in &order {
+                let (key, val) = &cols[j][row];
+                match key {
+                    Key::Int(_) => {
+                        new_arr.insert(Key::Int(n), val.clone());
+                        n += 1;
+                    }
+                    Key::Str(s) => {
+                        new_arr.insert(Key::Str(s.clone()), val.clone());
+                    }
+                }
+            }
+            out[a.arg_idx] = Some(Zval::Array(Rc::new(new_arr)));
+        }
+        Ok((Zval::Bool(true), out))
+    }
+
     /// Spawn `$command` through `/bin/sh -c`, capture its **stdout** (stderr is
     /// inherited to the terminal, as PHP's `popen(cmd, "r")` does), and return
     /// `(stdout_bytes, exit_code)`. `Err(())` means the shell could not be

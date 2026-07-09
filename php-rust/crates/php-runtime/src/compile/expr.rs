@@ -996,6 +996,27 @@ impl<'a> super::FnCompiler<'a> {
             self.emit(Op::CallHostBuiltin { name: canon.into(), argc: args.len() as u32 });
             return Ok(());
         }
+        // `array_multisort`: all arguments are by-reference (arrays sorted in
+        // place, interleaved with by-value order/flag ints). Push every argument
+        // by value and capture the writeback slot of each plain-variable array.
+        if bname.eq_ignore_ascii_case(b"array_multisort") {
+            let mut slots: Vec<Option<crate::hir::Slot>> = Vec::with_capacity(args.len());
+            for a in args {
+                if matches!(a.kind, ExprKind::Spread(_)) {
+                    return Err(CompileError::Unsupported("argument unpacking (spread)".into()));
+                }
+                slots.push(match &a.kind {
+                    ExprKind::Var(slot) => Some(*slot),
+                    _ => None,
+                });
+                self.expr(a)?;
+            }
+            self.emit(Op::CallArrayMultisort {
+                arg_slots: slots.into_boxed_slice(),
+                argc: args.len() as u32,
+            });
+            return Ok(());
+        }
         // Host builtins with variadic by-reference output parameters (`sscanf`/
         // `fscanf`'s `...&$vars` from index 2): push the two fixed arguments by
         // value and capture each trailing out argument's slot (a non-variable

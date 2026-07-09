@@ -6036,6 +6036,9 @@ impl<'m> Vm<'m> {
             // are real functions to `function_exists`/`is_callable`.
             || host_builtin_out_param(name).is_some()
             || host_builtin_scanf(name).is_some()
+            // `array_multisort` is compiled to its own all-by-ref op, so it is
+            // not in any registry/host table but is a real callable function.
+            || name.eq_ignore_ascii_case(b"array_multisort")
     }
 
     /// Install a frame for an anonymous closure: bind its captured variables into

@@ -546,6 +546,12 @@ pub enum Op {
     /// out slots the builtin returns the parsed array; otherwise it assigns each slot
     /// and returns the successful-conversion count (`fscanf` returns `false` at EOF).
     CallHostBuiltinScanf { name: Box<[u8]>, argc: u32, out_slots: Box<[Option<Slot>]> },
+    /// `[arg0, …, arg{argc-1}] -> [result]` — `array_multisort`, whose arguments
+    /// are **all by-reference** (arrays sorted in place, interleaved with by-value
+    /// sort-order/flag ints). Every argument is pushed by value; `arg_slots[i]` is
+    /// the writeback slot for a plain-variable array argument (`None` for a literal
+    /// or non-variable), and the VM stores each sorted array back into its slot.
+    CallArrayMultisort { arg_slots: Box<[Option<Slot>]>, argc: u32 },
     /// `[] -> [value]` — read a *user-defined* constant `name` (from `define()`),
     /// resolved at run time from the VM's constant table (B3). Engine constants
     /// (`PHP_INT_MAX`, …) are folded at lowering and never reach here; an unknown

@@ -2023,6 +2023,26 @@ impl<'m> super::Vm<'m> {
                     };
                     self.frames[top].stack.push(result);
                 }
+                Op::CallArrayMultisort { arg_slots, argc } => {
+                    // All arguments by value; the sorted arrays are written back
+                    // into their captured variable slots.
+                    let args = self.pop_keys(top, argc);
+                    let line = self.cur_line(top);
+                    self.flush_diags(line)?;
+                    let (result, sorted) = self.ho_array_multisort(args)?;
+                    let top = self.frames.len() - 1;
+                    for (i, arr) in sorted.into_iter().enumerate() {
+                        if let (Some(slot), Some(arr)) =
+                            (arg_slots.get(i).copied().flatten(), arr)
+                        {
+                            match &mut self.frames[top].slots[slot as usize] {
+                                Zval::Ref(rc) => *rc.borrow_mut() = arr,
+                                cell => *cell = arr,
+                            }
+                        }
+                    }
+                    self.frames[top].stack.push(result);
+                }
                 Op::CallBuiltinRef { name, slot, argc } => {
                     let f = match self.registry.get(&name[..]) {
                         Some(Builtin::RefFirst(f)) => *f,
