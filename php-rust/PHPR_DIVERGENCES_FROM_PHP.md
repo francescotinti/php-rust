@@ -172,14 +172,19 @@ interpolazione+heredoc comuni** (`"$a {$b} ${c}"`, `"$a[0]"`, `"$a->b"`, heredoc
 Post-pass: T_OPEN_TAG/T_CLOSE_TAG inglobano 1 newline (con fix del numero di riga),
 `&`→409/410 context, `namespace\X`→T_NAME_RELATIVE, e context-machine interno alle stringhe
 (`{`→T_CURLY_OPEN, `${name}`→T_STRING_VARNAME, `$a[0]`→T_NUM_STRING, drop di T_ENCAPSED vuoto).
-Costanti TOKEN_PARSE/TOKEN_AS_OBJECT. Suite ufficiale `ext/tokenizer`: **34/49** runnable.
-Residui **phase-3** (error-handling / edge di mago):
+Costanti TOKEN_PARSE/TOKEN_AS_OBJECT. **Error-token recovery** (phase-3): su byte
+non riconosciuto mago consuma+errora → emetto `T_BAD_CHARACTER` e proseguo; su literale
+numerico invalido (`0177...787`) recupero lo span → `T_DNUMBER`. **Keyword dopo `->`/`?->`
+→ T_STRING** ("looking for property"). Suite ufficiale `ext/tokenizer`: **37/49** runnable.
+Residui:
 
-- **Flag `TOKEN_PARSE`**: deve lanciare `ParseError`/`CompileError` su sorgente invalido
-  (il flag su codice valido è già ok); ora phpr non lancia.
-- **Error tokens**: `T_BAD_CHARACTER`, literali octal/underscore invalidi, `parse_errors`.
-- **Heredoc complessi**: indentazione (PHP 7.3 flexible heredoc) e casi con più newline
-  ai bordi divergono ancora dai confini di mago.
+- **Flag `TOKEN_PARSE`**: deve lanciare `ParseError`/`CompileError` col **messaggio ESATTO di
+  PHP** su sorgente invalido (il flag su codice valido è già ok); i messaggi di mago ≠ PHP →
+  byte-identico non fattibile senza riprodurre gli errori del parser PHP. Hard.
+- **Heredoc complessi**: split del contenuto multi-riga e indentazione (PHP 7.3 flexible
+  heredoc) divergono dai confini di mago.
+- **Keyword-come-identificatore in altri contesti** (trait `use A { namespace as bar; }`):
+  PHP → T_STRING, mago → keyword. Solo `->`/`?->` gestito.
 - **`yield from`** = 1 token T_YIELD_FROM in PHP; mago = Yield + ws + From.
 - **`PhpToken::is(float)`**: coercizione ZPP float→int (deprecation §1.2) invece del TypeError.
 

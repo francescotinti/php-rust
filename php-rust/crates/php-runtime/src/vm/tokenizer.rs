@@ -14,6 +14,7 @@ use std::borrow::Cow;
 use std::rc::Rc;
 
 use mago_database::file::File;
+use mago_syntax::error::SyntaxError;
 use mago_syntax::lexer::Lexer;
 use mago_syntax::settings::LexerSettings;
 use mago_syntax::token::{DocumentKind, TokenKind};
@@ -78,12 +79,36 @@ pub fn token_get_all(src: &[u8]) -> Vec<Entry> {
     let input = Input::from_file(&file);
     let mut lexer = Lexer::new(input, LexerSettings::default());
     let mut out = Vec::new();
+    // Offset just past the last emitted token, and a pending invalid numeric
+    // literal (mago rejects e.g. `0177...787`; PHP tokenizes it as T_DNUMBER —
+    // its span runs from `last_end` to the next token's start).
+    let mut last_end = 0usize;
+    let mut pending_dnumber: Option<(usize, u32)> = None;
     while let Some(res) = lexer.advance() {
         let tok = match res {
             Ok(t) => t,
+            // An unrecognized byte (e.g. a control char): mago has already consumed
+            // it, so emit T_BAD_CHARACTER and keep lexing (PHP does the same).
+            Err(SyntaxError::UnrecognizedToken(_, byte, pos)) => {
+                let line = line_of(src, pos.offset as usize);
+                out.push(Entry { id: Some(411), text: vec![byte], line });
+                last_end = pos.offset as usize + 1;
+                continue;
+            }
+            // An invalid numeric literal: mago consumed it; recover its span later.
+            Err(SyntaxError::UnexpectedToken(..)) => {
+                pending_dnumber = Some((last_end, line_of(src, last_end)));
+                continue;
+            }
             Err(_) => break,
         };
+        // Flush a pending invalid number, now that we know where it ends.
+        if let Some((start, line)) = pending_dnumber.take() {
+            let end = (tok.start.offset as usize).min(src.len());
+            out.push(Entry { id: Some(261), text: src.get(start..end).unwrap_or(&[]).to_vec(), line });
+        }
         let line = line_of(src, tok.start.offset as usize);
+        last_end = tok.start.offset as usize + tok.value.len();
         // `namespace\Foo` is T_NAME_RELATIVE, not T_NAME_QUALIFIED.
         let mapped = if matches!(tok.kind, TokenKind::QualifiedIdentifier)
             && tok.value.starts_with(b"namespace\\")
@@ -97,11 +122,43 @@ pub fn token_get_all(src: &[u8]) -> Vec<Entry> {
             Map::Id(id) => out.push(Entry { id: Some(id), text: tok.value.to_vec(), line }),
         }
     }
+    if let Some((start, line)) = pending_dnumber.take() {
+        out.push(Entry { id: Some(261), text: src.get(start..).unwrap_or(&[]).to_vec(), line });
+    }
     merge_open_tag_whitespace(&mut out);
     merge_close_tag_newline(&mut out);
     classify_ampersands(&mut out);
+    fix_property_access(&mut out);
     fix_string_interpolation(&mut out);
     out
+}
+
+/// PHP's "looking for property" state: a keyword immediately after `->` / `?->`
+/// is an ordinary member name, i.e. T_STRING (`$o->list`, `$o->class`). mago
+/// keeps the keyword id; downgrade it to T_STRING.
+fn fix_property_access(entries: &mut [Entry]) {
+    let mut after_arrow = false;
+    for e in entries.iter_mut() {
+        if e.id == Some(397) {
+            continue; // whitespace between `->` and the name is allowed
+        }
+        if after_arrow {
+            if let Some(id) = e.id {
+                if id != 262 && id != 266 && is_bareword(&e.text) {
+                    e.id = Some(262); // T_STRING
+                }
+            }
+            after_arrow = false;
+        }
+        if matches!(e.id, Some(389) | Some(390)) {
+            after_arrow = true;
+        }
+    }
+}
+
+fn is_bareword(t: &[u8]) -> bool {
+    matches!(t.first(), Some(b'a'..=b'z' | b'A'..=b'Z' | b'_'))
+        && t.iter().all(|&b| b.is_ascii_alphanumeric() || b == b'_' || b >= 0x80)
 }
 
 /// PHP's `T_CLOSE_TAG` (`?>`) consumes one following newline (`\n` or `\r\n`);
