@@ -161,6 +161,27 @@ gcd/powm/invert/jacobi/kronecker/primi, bitwise two's-complement, operatori
   diverso). VALORI byte-identici.
 - **Deprecation ZPP** float→int su operandi/argomenti non emessa (cfr. §1.2); valore corretto.
 
+### 2.3 tokenizer — token_get_all/token_name/PhpToken (phase 1) sul lexer di mago
+
+`token_get_all`/`token_name` sono host builtin (`crates/php-runtime/src/vm/tokenizer.rs`)
+che girano il **lexer di mago** (già front-end di phpr) e mappano ogni `TokenKind` →
+id `T_*` di PHP (o stringa 1-char). 152 costanti `T_*` in `resolve_constant`; classe
+`PhpToken` nel prelude (delega a `token_get_all`). Byte-identico su codice reale
+(funzioni/classi/array/operatori/commenti/namespace/nullsafe/coalesce/attributi);
+post-pass per: T_OPEN_TAG che ingloba 1 whitespace, `&`→409/410 context-sensitive,
+`namespace\X`→T_NAME_RELATIVE. Suite ufficiale `ext/tokenizer`: **27/49** runnable.
+Residui **phase-2** (i confini interni del lexer di mago divergono da re2c di PHP):
+
+- **Interpolazione stringhe** `"$a {$b} ${c}"`: PHP spezza in T_ENCAPSED_AND_WHITESPACE /
+  T_CURLY_OPEN / T_DOLLAR_OPEN_CURLY_BRACES / T_STRING_VARNAME con confini precisi; mago usa
+  StringPart/LeftBrace/DollarLeftBrace con confini/nomi diversi.
+- **Heredoc/Nowdoc**: idem (DocumentStart/End/StringPart vs T_START_HEREDOC/END/ENCAPSED).
+- **Flag `TOKEN_PARSE`**: deve lanciare `ParseError`/`CompileError` su sorgente invalido;
+  ora phpr ferma il lexer senza throw.
+- **Error tokens**: `T_BAD_CHARACTER`, gestione octal/underscore invalidi, `parse_errors`.
+- **`yield from`** = 1 token T_YIELD_FROM in PHP; mago = Yield + ws + From.
+- **`PhpToken::is(float)`**: coercizione ZPP float→int (deprecation §1.2) invece del TypeError.
+
 ---
 
 ## 3. Divergenze di engine circoscritte (documentate nei topic-file di memoria)

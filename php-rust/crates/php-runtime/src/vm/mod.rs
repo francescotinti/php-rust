@@ -47,6 +47,7 @@ mod run;
 mod host_reflect;
 mod oop;
 mod pdo;
+mod tokenizer;
 use arrays::*;
 use calls::*;
 use oop::*;
@@ -8510,6 +8511,8 @@ host_builtins! {
     b"define" => vm.ho_define(args),
     b"defined" => vm.ho_defined(args),
     b"constant" => vm.ho_constant(args),
+    b"token_get_all" => vm.ho_token_get_all(args),
+    b"token_name" => vm.ho_token_name(args),
     b"array_map" => vm.ho_array_map(args),
     b"array_filter" => vm.ho_array_filter(args),
     b"array_reduce" => vm.ho_array_reduce(args),

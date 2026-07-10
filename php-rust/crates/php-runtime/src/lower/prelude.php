@@ -166,6 +166,58 @@ enum RoundingMode {
     case NegativeInfinity;
     case PositiveInfinity;
 }
+// ext/tokenizer: the PHP 8.0 object-oriented token (delegates to token_get_all).
+class PhpToken implements Stringable {
+    public int $id;
+    public string $text;
+    public int $line;
+    public int $pos;
+    final public function __construct(int $id, string $text, int $line = -1, int $pos = -1) {
+        $this->id = $id;
+        $this->text = $text;
+        $this->line = $line;
+        $this->pos = $pos;
+    }
+    public static function tokenize(string $code, int $flags = 0): array {
+        $out = [];
+        $pos = 0;
+        foreach (\token_get_all($code, $flags) as $t) {
+            if (\is_array($t)) {
+                $out[] = new static($t[0], $t[1], $t[2], $pos);
+                $pos += \strlen($t[1]);
+            } else {
+                $line = \substr_count(\substr($code, 0, $pos), "\n") + 1;
+                $out[] = new static(\ord($t), $t, $line, $pos);
+                $pos += \strlen($t);
+            }
+        }
+        return $out;
+    }
+    public function is(int|string|array $kind): bool {
+        if (\is_array($kind)) {
+            foreach ($kind as $k) {
+                if ($this->is($k)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return \is_int($kind) ? $this->id === $kind : $this->text === $kind;
+    }
+    public function isIgnorable(): bool {
+        return $this->id === 397 || $this->id === 392 || $this->id === 393 || $this->id === 394;
+    }
+    public function getTokenName(): ?string {
+        if ($this->id < 256) {
+            return \chr($this->id);
+        }
+        $n = \token_name($this->id);
+        return $n === 'UNKNOWN' ? null : $n;
+    }
+    public function __toString(): string {
+        return $this->text;
+    }
+}
 // Engine interfaces carry their real method signatures (compiled as
 // abstract_sigs): hasMethod/getMethods and PHPUnit interface mocks read them.
 interface Stringable {
