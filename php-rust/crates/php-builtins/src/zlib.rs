@@ -200,3 +200,112 @@ pub fn readgzfile(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     ctx.out.extend_from_slice(&data);
     Ok(Zval::Long(n))
 }
+
+// ---- gz stream ops -------------------------------------------------------
+// A gz stream is an ordinary stream resource (gzopen decodes up front / GzFile
+// buffers writes), so each gz op IS the corresponding file op — but PHP brands
+// its errors with the gz name ("gzread(): Argument #1 …"), so the aliases run
+// the file op and rebrand any error/diagnostic it produced.
+
+/// Replace the leading `from()` with `to()` in a message PHP brands by fname.
+fn rebrand(msg: &str, from: &str, to: &str) -> String {
+    let pfx = format!("{from}()");
+    match msg.strip_prefix(&pfx) {
+        Some(rest) => format!("{to}(){rest}"),
+        None => msg.to_string(),
+    }
+}
+
+/// Run a file op under a gz alias: any `PhpError` or diagnostic it raises has
+/// its `from()` prefix rebranded to `to()`.
+fn gz_alias(
+    f: fn(&[Zval], &mut Ctx) -> Result<Zval, PhpError>,
+    argv: &[Zval],
+    ctx: &mut Ctx,
+    from: &str,
+    to: &str,
+) -> Result<Zval, PhpError> {
+    let mark = ctx.diags.len();
+    let r = f(argv, ctx);
+    for d in ctx.diags[mark..].iter_mut() {
+        *d = match d {
+            Diag::Warning(m) => Diag::Warning(rebrand(m, from, to)),
+            Diag::Notice(m) => Diag::Notice(rebrand(m, from, to)),
+            Diag::Deprecated(m) => Diag::Deprecated(rebrand(m, from, to)),
+        };
+    }
+    r.map_err(|e| match e {
+        PhpError::Error(m) => PhpError::Error(rebrand(&m, from, to)),
+        PhpError::TypeError(m) => PhpError::TypeError(rebrand(&m, from, to)),
+        PhpError::ValueError(m) => PhpError::ValueError(rebrand(&m, from, to)),
+        PhpError::ArgumentCountError(m) => PhpError::ArgumentCountError(rebrand(&m, from, to)),
+        other => other,
+    })
+}
+
+/// Whether argument #1 is a gz stream, and which direction: `Some(true)` = a
+/// write stream (`GzFile` buffer), `Some(false)` = a read stream (decoded
+/// `Memory` with the gz `eof_on_exhaust` marker), `None` = not a gz stream.
+fn gz_stream_dir(argv: &[Zval]) -> Option<bool> {
+    let Some(Zval::Resource(rc)) = argv.first().map(|v| v.deref_clone()) else {
+        return None;
+    };
+    let mut b = rc.borrow_mut();
+    let s = b.as_stream_mut()?;
+    if matches!(s.backend, php_types::StreamBackend::GzFile { .. }) {
+        Some(true)
+    } else if s.eof_on_exhaust {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+pub fn gzread(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    // PHP: reading a write-mode gz stream is a silent `false` (no notice).
+    if gz_stream_dir(argv) == Some(true) {
+        return Ok(Zval::Bool(false));
+    }
+    gz_alias(crate::file::fread, argv, ctx, "fread", "gzread")
+}
+pub fn gzwrite(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    // PHP: writing a read-mode gz stream reports 0 bytes (no notice, not false).
+    if gz_stream_dir(argv) == Some(false) {
+        return Ok(Zval::Long(0));
+    }
+    gz_alias(crate::file::fwrite, argv, ctx, "fwrite", "gzwrite")
+}
+pub fn gzputs(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    if gz_stream_dir(argv) == Some(false) {
+        return Ok(Zval::Long(0));
+    }
+    gz_alias(crate::file::fwrite, argv, ctx, "fwrite", "gzputs")
+}
+pub fn gzclose(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    gz_alias(crate::file::fclose, argv, ctx, "fclose", "gzclose")
+}
+pub fn gzgets(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    gz_alias(crate::file::fgets, argv, ctx, "fgets", "gzgets")
+}
+pub fn gzgetc(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    gz_alias(crate::file::fgetc, argv, ctx, "fgetc", "gzgetc")
+}
+pub fn gzeof(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    gz_alias(crate::file::feof, argv, ctx, "feof", "gzeof")
+}
+pub fn gzrewind(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    // PHP: a write-mode gz stream cannot rewind — `false`, buffer untouched.
+    if gz_stream_dir(argv) == Some(true) {
+        return Ok(Zval::Bool(false));
+    }
+    gz_alias(crate::file::rewind, argv, ctx, "rewind", "gzrewind")
+}
+pub fn gztell(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    gz_alias(crate::file::ftell, argv, ctx, "ftell", "gztell")
+}
+pub fn gzseek(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    gz_alias(crate::file::fseek, argv, ctx, "fseek", "gzseek")
+}
+pub fn gzpassthru(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    gz_alias(crate::file::fpassthru, argv, ctx, "fpassthru", "gzpassthru")
+}

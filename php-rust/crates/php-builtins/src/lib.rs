@@ -283,18 +283,18 @@ pub fn registry() -> Registry {
     add(b"readgzfile", zlib::readgzfile);
     // gz stream ops: a gz stream is an ordinary stream resource (gzopen decodes
     // up front / GzFile buffers writes), so these are the file ops under their
-    // zlib aliases, exactly as PHP aliases them onto the same stream layer.
-    add(b"gzread", file::fread);
-    add(b"gzwrite", file::fwrite);
-    add(b"gzputs", file::fwrite);
-    add(b"gzclose", file::fclose);
-    add(b"gzgets", file::fgets);
-    add(b"gzgetc", file::fgetc);
-    add(b"gzeof", file::feof);
-    add(b"gzrewind", file::rewind);
-    add(b"gztell", file::ftell);
-    add(b"gzseek", file::fseek);
-    add(b"gzpassthru", file::fpassthru);
+    // zlib aliases — wrapped so their errors carry the gz name ("gzread(): …").
+    add(b"gzread", zlib::gzread);
+    add(b"gzwrite", zlib::gzwrite);
+    add(b"gzputs", zlib::gzputs);
+    add(b"gzclose", zlib::gzclose);
+    add(b"gzgets", zlib::gzgets);
+    add(b"gzgetc", zlib::gzgetc);
+    add(b"gzeof", zlib::gzeof);
+    add(b"gzrewind", zlib::gzrewind);
+    add(b"gztell", zlib::gztell);
+    add(b"gzseek", zlib::gzseek);
+    add(b"gzpassthru", zlib::gzpassthru);
     add(b"array_flip", array::array_flip);
     add(b"array_change_key_case", array::array_change_key_case);
     add(b"array_count_values", array::array_count_values);
