@@ -100,25 +100,28 @@ correct-or-absent.
 | `getimagesize` (formati rari + out-param) | Implementati GIF/JPEG/PNG/BMP/WebP; mancano formati rari e il parametro `&$image_info` | Parser per formati residui + supporto out-param |
 | `opcache_*` | Nessun opcache | (fuori scope) |
 
-### 2.1 bcmath — 14 funzioni procedurali + `BcMath\Number` (metodi) + `RoundingMode`; SOLO operatori differiti
+### 2.1 bcmath — 14 funzioni + `BcMath\Number` (metodi + operatori) + `RoundingMode`
 
 Le 14 funzioni procedurali (`bcadd`/`bcsub`/`bcmul`/`bcdiv`/`bcmod`/`bcdivmod`/
 `bcpow`/`bcpowmod`/`bcsqrt`/`bccomp`/`bcscale`/`bcfloor`/`bcceil`/`bcround`) sono
 implementate byte-identiche (port di `libbcmath`, `crates/php-builtins/src/bcmath.rs`;
-~4000 casi fuzz + battery verdi). La classe **`BcMath\Number`** è implementata come
-classe PHP nel prelude (`crates/php-runtime/src/lower/prelude_bcmath.php`) che delega
-ai builtin bc\*, con le regole di scala di `bcmath_number_*_internal` (add/sub=max,
-mul=somma, div/sqrt/pow⁻=+10 e collassa, ecc.). L'enum **`RoundingMode`** (8 casi) è
-nel prelude e `bcround`/`Number::round` lo mappano ai modi `PHP_ROUND_*`. Suite
-ufficiale `ext/bcmath`: 85/124 runnable. Residui consapevoli:
+~4000 casi fuzz + battery verdi). La classe **`BcMath\Number`** è una classe PHP nel
+prelude (`crates/php-runtime/src/lower/prelude_bcmath.php`) che delega ai builtin bc\*,
+con le regole di scala di `bcmath_number_*_internal` (add/sub=max, mul=somma,
+div/sqrt/pow⁻=+10 e collassa, ecc.). L'enum **`RoundingMode`** (8 casi) è nel prelude.
+**Overloading operatori IMPLEMENTATO** (`+ - * / % **`, `<=> == < > <= >=`, `++/--`,
+compound-assign): `apply_binop_ovl`/`try_number_binop` (vm/mod.rs) instrada gli operandi
+`Number` ai metodi PHP `Number::__op`/`__cmp` via `call_method_sync` (re-entrancy VM già
+usata per `__toString`/`offsetGet`); confronti con tipi non-numerici = UNCOMPARABLE; il
+path stringa-vs-oggetto salta il `__toString` per i Number. Suite ufficiale
+`ext/bcmath`: **100/124** runnable, Zend corpus invariato (0-regr). Residui consapevoli:
 
-- **Overloading operatori di `BcMath\Number`** (`+ - * / % **`, `<=> ==`, `++/--`,
-  compound-assign) NON implementato: richiede gli handler engine `do_operation` /
-  `compare_object`, cioè **re-entrancy della VM** (chiamare un metodo PHP dentro un
-  opcode aritmetico) — lo stesso vincolo per cui phpr differisce le UDF sqlite e
-  usa il deferred-dispatch per ArrayAccess. `apply_binop` (vm/mod.rs) è operand-puro.
-  Farlo bene tocca il core di dispatch aritmetico/confronto: alto rischio di
-  regressione sul corpus, quindi differito (correct-or-absent). ~28 phpt `operators/`.
+- **var_dump object-id** (`#N`): i risultati aritmetici creano un Number intermedio via
+  delega (`new Number(...)`), e il free-list degli handle di phpr ricicla gli id in modo
+  diverso da PHP → i `#id` in var_dump differiscono (i VALORI sono byte-identici). ~14
+  phpt (`operators/*_int|*_string`, `methods/divmod|sqrt`). Intrinseco alla delega.
+- **`pow($n, 2)` funzione** (non operatore): la builtin `pow()` non instrada ancora
+  gli oggetti Number a do_operation (1 phpt gh20006). L'operatore `**` funziona.
 - **Cast engine di `Number`**: `(bool)$n`/`(int)$n` usano `cast_object` in C (zero→false;
   int/float→warning). Una classe PHP non può ridefinire questi cast → `(bool)` di un
   Number è sempre truthy in phpr. ~2 phpt (`cast`, `cast_warning`).

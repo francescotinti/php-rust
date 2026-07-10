@@ -1899,6 +1899,16 @@ impl<'m> Vm<'m> {
     /// value (pure); a reference operand still mutates its shared cell, matching the
     /// pre-existing behaviour for that rare case.
     fn compute_incdec(&mut self, mut v: Zval, inc: bool) -> Result<(Zval, Vec<Diag>), PhpError> {
+        // `BcMath\Number` overloads ++/-- as `+ 1` / `- 1` (do_operation), like PHP.
+        if let Some(recv) = number_receiver(&v) {
+            let code = if inc { 0 } else { 1 }; // 0=add, 1=sub
+            let r = self.call_method_sync(
+                recv,
+                b"__op",
+                vec![Zval::Long(code), v.clone(), Zval::Long(1)],
+            )?;
+            return Ok((r, Vec::new()));
+        }
         let mut diags = Vec::new();
         if inc {
             ops::increment(&mut v, &mut diags)?;
@@ -2659,6 +2669,78 @@ impl<'m> Vm<'m> {
                 .expect("sync method result on caller stack"));
         }
         self.drive_to_return(baseline)
+    }
+
+    /// Operator overloading for `BcMath\Number` (the engine's `do_operation` /
+    /// `compare_object` for that class). Returns `Some(result)` when a Number is
+    /// involved and the operation applies, else `None` (the caller runs the
+    /// standard `apply_binop`, whose "Unsupported operand types" error already
+    /// covers array/null/other-object operands). Arithmetic dispatches to
+    /// `Number::__op`, comparison to `Number::__cmp`.
+    fn try_number_binop(
+        &mut self,
+        op: BinOp,
+        a: &Zval,
+        b: &Zval,
+    ) -> Result<Option<Zval>, PhpError> {
+        use BinOp::*;
+        let recv = match number_receiver(a).or_else(|| number_receiver(b)) {
+            Some(r) => r,
+            None => return Ok(None),
+        };
+        if let Some(code) = number_arith_opcode(op) {
+            if !(operand_arith_ok(a) && operand_arith_ok(b)) {
+                return Ok(None);
+            }
+            let r = self.call_method_sync(
+                recv,
+                b"__op",
+                vec![Zval::Long(code), a.clone(), b.clone()],
+            )?;
+            return Ok(Some(r));
+        }
+        if matches!(op, Eq | NotEq | Lt | Le | Gt | Ge | Spaceship) {
+            if operand_cmp_ok(a) && operand_cmp_ok(b) {
+                let c = match self.call_method_sync(recv, b"__cmp", vec![a.clone(), b.clone()])? {
+                    Zval::Long(n) => n,
+                    _ => 0,
+                };
+                let res = match op {
+                    Eq => Zval::Bool(c == 0),
+                    NotEq => Zval::Bool(c != 0),
+                    Lt => Zval::Bool(c < 0),
+                    Le => Zval::Bool(c <= 0),
+                    Gt => Zval::Bool(c > 0),
+                    Ge => Zval::Bool(c >= 0),
+                    Spaceship => Zval::Long(c),
+                    _ => unreachable!(),
+                };
+                return Ok(Some(res));
+            }
+            // A Number compared with a non-numeric string / array / other-object /
+            // resource is UNCOMPARABLE (PHP's compare handler → all relational and
+            // `==` false, `!=` true, `<=>` 1). null/bool keep the engine's default
+            // type ordering (fall through).
+            let other = if number_receiver(a).is_some() { b } else { a };
+            if operand_uncomparable(other) {
+                let res = match op {
+                    NotEq => Zval::Bool(true),
+                    Spaceship => Zval::Long(1),
+                    _ => Zval::Bool(false),
+                };
+                return Ok(Some(res));
+            }
+            return Ok(None);
+        }
+        Ok(None)
+    }
+
+    /// [`apply_binop`] with `BcMath\Number` operator overloading applied first.
+    fn apply_binop_ovl(&mut self, op: BinOp, a: &Zval, b: &Zval) -> Result<Zval, PhpError> {
+        if let Some(r) = self.try_number_binop(op, a, b)? {
+            return Ok(r);
+        }
+        apply_binop(op, a, b, &mut self.diags)
     }
 
     /// Walk `var_dump`'s argument tree and invoke `__debugInfo()` on every object
@@ -9499,6 +9581,84 @@ fn apply_binop(op: BinOp, a: &Zval, b: &Zval, d: &mut Diags) -> Result<Zval, Php
         Ge => Zval::Bool(ops::smaller_or_equal(b, a)),
         Spaceship => Zval::Long(ops::compare(a, b) as i64),
     })
+}
+
+/// If `v` is (or references) a `BcMath\Number` instance, return a clonable
+/// object Zval for it — the receiver for the overloaded-operator dispatch.
+fn number_receiver(v: &Zval) -> Option<Zval> {
+    let o = deref_object(v)?;
+    let is_num = o.borrow().class_name.as_bytes() == b"BcMath\\Number";
+    is_num.then(|| Zval::Object(o))
+}
+
+/// The `Number::__op` opcode for an arithmetic `BinOp` (the six PHP's
+/// `do_operation` handles), or `None` for everything else.
+fn number_arith_opcode(op: BinOp) -> Option<i64> {
+    use BinOp::*;
+    match op {
+        Add => Some(0),
+        Sub => Some(1),
+        Mul => Some(2),
+        Div => Some(3),
+        Mod => Some(4),
+        Pow => Some(5),
+        _ => None,
+    }
+}
+
+/// True if `v` is a Number or a scalar that `do_operation` coerces to one
+/// (int/float/any string — a malformed string surfaces the "cannot be
+/// converted" ValueError from `__op`, matching PHP).
+fn operand_arith_ok(v: &Zval) -> bool {
+    match v {
+        Zval::Object(o) => o.borrow().class_name.as_bytes() == b"BcMath\\Number",
+        Zval::Long(_) | Zval::Double(_) | Zval::Str(_) => true,
+        Zval::Ref(c) => operand_arith_ok(&c.borrow()),
+        _ => false,
+    }
+}
+
+/// Like [`operand_arith_ok`] but for comparison, where a malformed string is
+/// *uncomparable* (falls back to the engine) rather than an error.
+fn operand_cmp_ok(v: &Zval) -> bool {
+    match v {
+        Zval::Object(o) => o.borrow().class_name.as_bytes() == b"BcMath\\Number",
+        Zval::Long(_) | Zval::Double(_) => true,
+        Zval::Str(s) => bc_str_wellformed(s.as_bytes()),
+        Zval::Ref(c) => operand_cmp_ok(&c.borrow()),
+        _ => false,
+    }
+}
+
+/// Operands that are UNCOMPARABLE with a `BcMath\Number` (the compare handler
+/// yields no ordering): a non-numeric string, an array, a resource, or an object
+/// of another class. null/bool keep the engine's default ordering.
+fn operand_uncomparable(v: &Zval) -> bool {
+    match v {
+        Zval::Str(s) => !bc_str_wellformed(s.as_bytes()),
+        Zval::Array(_) | Zval::Resource(_) => true,
+        Zval::Object(o) => o.borrow().class_name.as_bytes() != b"BcMath\\Number",
+        Zval::Ref(c) => operand_uncomparable(&c.borrow()),
+        _ => false,
+    }
+}
+
+/// `[+-]?[0-9]*(\.[0-9]*)?` — libbcmath's number grammar.
+fn bc_str_wellformed(s: &[u8]) -> bool {
+    let mut i = 0;
+    if matches!(s.first(), Some(b'+' | b'-')) {
+        i += 1;
+    }
+    let mut seen_dot = false;
+    while i < s.len() {
+        match s[i] {
+            b'0'..=b'9' => {}
+            b'.' if !seen_dot => seen_dot = true,
+            _ => return false,
+        }
+        i += 1;
+    }
+    true
 }
 
 fn apply_unop(op: UnOp, a: &Zval, d: &mut Diags) -> Result<Zval, PhpError> {

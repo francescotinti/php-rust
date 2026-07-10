@@ -264,6 +264,78 @@ final class Number implements \Stringable
         return \bccomp($s, '0', self::trimScale($s)) === 0;
     }
 
+    /* ---- operator overloading support (called by the VM) ---- */
+
+    /** Coerce an operator operand for do_operation, side = "Left"/"Right". */
+    private static function opCoerce(mixed $v, string $side): array
+    {
+        if ($v instanceof Number) {
+            return [$v->value, $v->scale];
+        }
+        if (\is_int($v)) {
+            return [(string) $v, 0];
+        }
+        if (\is_float($v)) {
+            // do_operation coerces a float operand to int (PHP deprecates it;
+            // phpr does not emit that ZPP deprecation — see §1.2/§2.1).
+            return [(string) (int) $v, 0];
+        }
+        if (\is_string($v)) {
+            if (!self::wellFormed($v)) {
+                throw new \ValueError("$side string operand cannot be converted to BcMath\\Number");
+            }
+            return [$v, self::fracLen($v)];
+        }
+        // The VM only routes numeric-ish operands here; anything else falls back
+        // to the engine's "Unsupported operand types" path.
+        throw new \TypeError('Unsupported operand types');
+    }
+
+    /**
+     * do_operation: compute `$a <op> $b` where at least one is a Number.
+     * $op: 0=add 1=sub 2=mul 3=div 4=mod 5=pow. Invoked by the VM's binop
+     * dispatch (mirrors bcmath_number_do_operation).
+     */
+    public function __op(int $op, mixed $a, mixed $b): Number
+    {
+        [$as, $afs] = self::opCoerce($a, 'Left');
+        [$bs, $bfs] = self::opCoerce($b, 'Right');
+        switch ($op) {
+            case 0:
+                return self::make(\bcadd($as, $bs, \max($afs, $bfs)));
+            case 1:
+                return self::make(\bcsub($as, $bs, \max($afs, $bfs)));
+            case 2:
+                return self::make(\bcmul($as, $bs, $afs + $bfs));
+            case 3:
+                $full = $afs + 10;
+                return self::make(self::collapse(\bcdiv($as, $bs, $full), $full));
+            case 4:
+                return self::make(\bcmod($as, $bs, \max($afs, $bfs)));
+            default: // 5 = pow
+                if (!self::isIntegerValue($bs)) {
+                    throw new \ValueError('exponent cannot have a fractional part');
+                }
+                $exp = \bcadd($bs, '0', 0);
+                if ($exp === '0') {
+                    return self::make(\bcpow($as, '0', 0));
+                }
+                if ($exp[0] !== '-') {
+                    return self::make(\bcpow($as, $exp, $afs * (int) $exp));
+                }
+                $full = $afs + 10;
+                return self::make(self::collapse(\bcpow($as, $exp, $full), $full));
+        }
+    }
+
+    /** do_compare: `$a <=> $b` where at least one is a Number. Returns -1/0/1. */
+    public function __cmp(mixed $a, mixed $b): int
+    {
+        [$as] = self::opCoerce($a, 'Left');
+        [$bs] = self::opCoerce($b, 'Right');
+        return \bccomp($as, $bs, \max(self::trimScale($as), self::trimScale($bs)));
+    }
+
     /* ---- conversion / serialization ---- */
 
     public function __toString(): string
