@@ -14,7 +14,7 @@ _Last measured: 2026-07-10 · reference: PHP 8.5.7 (`get_defined_functions()`)._
 
 | Metric | Value |
 | --- | --- |
-| Internal functions implemented | **701 / 2143** (33%) |
+| Internal functions implemented | **703 / 2143** (33%) |
 | — of which **core / language stdlib** | **483 / 654** (73%) |
 | Zend test corpus (`Zend/tests/*.phpt`) | **2327 passing** — 61.2% of runnable (2327/3804) |
 | Fully-complete areas | ctype, json, SimpleXML, bcmath, PCRE core, SPL core |
@@ -59,6 +59,7 @@ language runtime and general stdlib; everything below it is a discrete extension
 | SimpleXML | 3 / 3 | **100%** | complete |
 | bcmath | 14 / 14 | **100%** | 14 fns + `BcMath\Number` (methods + operator overloading) + `RoundingMode` |
 | gmp | 46 / 51 | 90% | 49 fns + `GMP` class + operator overloading (num-bigint); random + import/export deferred |
+| tokenizer | 2 / 6 | — | `token_get_all`/`token_name`/`PhpToken` + 152 `T_*` (mago lexer); byte-identical on normal code, interpolation/heredoc deferred |
 | mbstring | 48 / 65 | 73% | codecs + grapheme family |
 | SPL | 11 / 15 | 73% | iterators, class_* |
 | PCRE | 8 / 11 | 72% | `preg_last_error*` pending |

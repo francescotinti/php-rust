@@ -14,7 +14,7 @@ interpreter, not to pass a toy subset.
 | | |
 | --- | --- |
 | Core / language stdlib functions | **483 / 654 (73%)** |
-| All internal functions | 701 / 2143 (33%) |
+| All internal functions | 703 / 2143 (33%) |
 | Zend test corpus passing | **2327** (61% of runnable) |
 
 Full, measured breakdown → **[COVERAGE.md](COVERAGE.md)**.
