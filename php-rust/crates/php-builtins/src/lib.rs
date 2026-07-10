@@ -35,6 +35,7 @@ mod serialize;
 mod string;
 mod url;
 mod var;
+mod zlib;
 pub(crate) use var::*;
 
 use std::rc::Rc;
@@ -267,6 +268,16 @@ pub fn registry() -> Registry {
     add(b"array_merge_recursive", array::array_merge_recursive);
     add(b"hash_algos", encoding::hash_algos);
     add(b"stream_get_wrappers", encoding::stream_get_wrappers);
+    // ext/zlib string (de)compression (zlib-rs backend, byte-identical).
+    add(b"gzdeflate", zlib::gzdeflate);
+    add(b"gzinflate", zlib::gzinflate);
+    add(b"gzcompress", zlib::gzcompress);
+    add(b"gzuncompress", zlib::gzuncompress);
+    add(b"gzencode", zlib::gzencode);
+    add(b"gzdecode", zlib::gzdecode);
+    add(b"zlib_encode", zlib::zlib_encode);
+    add(b"zlib_decode", zlib::zlib_decode);
+    add(b"zlib_get_coding_type", zlib::zlib_get_coding_type);
     add(b"array_flip", array::array_flip);
     add(b"array_change_key_case", array::array_change_key_case);
     add(b"array_count_values", array::array_count_values);
