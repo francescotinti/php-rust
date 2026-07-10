@@ -176,15 +176,25 @@ Costanti TOKEN_PARSE/TOKEN_AS_OBJECT. **Error-token recovery + heredoc** (phase-
 non riconosciuto mago consuma+errora → emetto `T_BAD_CHARACTER` e proseguo; su literale
 numerico invalido (`0177...787`) recupero lo span → `T_DNUMBER`; **keyword dopo `->`/`?->`
 → T_STRING** ("looking for property"); **coalescenza dei `T_ENCAPSED_AND_WHITESPACE` adiacenti**
-(mago spezza il contenuto stringa/heredoc per riga, PHP no). Suite ufficiale `ext/tokenizer`:
-**38/49** runnable. Residui:
+(mago spezza il contenuto stringa/heredoc per riga, PHP no). **Flag `TOKEN_PARSE`** (phase-3 group A):
+classe `ParseError`/`CompileError` aggiunte al prelude; sotto `TOKEN_PARSE` (a) i keyword
+semi-reserved dopo `::`/`const` diventano T_STRING (feedback del parser: `X::continue`, `X::class`,
+`const ARRAY`), (b) gli errori **lexer-level** che phpr rileva lanciano `ParseError` col messaggio
+FISSO di PHP ("Invalid numeric literal"; "Invalid UTF-8 codepoint escape sequence[: Codepoint too
+large]"), (c) `$o->__halt_compiler()` (metodo, non il costrutto) viene ri-lessato: mago entra in
+halt-mode e ingoia il resto come inline-HTML → rilego la coda come PHP e la reinserisco (riga
+rebased). Recovery octal-invalido ora sceglie T_LNUMBER/T_DNUMBER per magnitudine (`078`→LNUMBER).
+Suite ufficiale `ext/tokenizer`: **41/49** runnable. Residui:
 
-- **Flag `TOKEN_PARSE`**: deve lanciare `ParseError`/`CompileError` col **messaggio ESATTO di
-  PHP** su sorgente invalido (incl. heredoc non terminato); i messaggi di mago ≠ PHP →
-  byte-identico non fattibile senza riprodurre gli errori del parser PHP. Hard.
-- **`__halt_compiler`** (`bug54089`): tokenizzazione del contenuto post-halt diverge (mago Halt-mode).
+- **Messaggi di sintassi bison/yacc** (`TOKEN_PARSE_000` "unexpected identifier", heredoc non
+  terminato "unexpected end of file, expecting…", `gh19507_throw` stack-trace): i messaggi di mago ≠
+  PHP → byte-identico non fattibile senza riprodurre il layer di errori del parser PHP. Hard.
+- **`(double)`-cast deprecation** (`gh19507_eval`): richiede emettere E_DEPRECATED durante la
+  tokenizzazione (esegue l'error handler utente) — infra deprecation §1.2.
+- **`__halt_compiler` statement-level** (`bug54089`): la tokenizzazione del contenuto post-halt
+  diverge (span PHP-scanner-specifici, es. `" ABC"` come singolo token). Solo il caso `->` è gestito.
 - **Keyword-come-identificatore in altri contesti** (trait `use A { namespace as bar; }`):
-  PHP → T_STRING, mago → keyword. Solo `->`/`?->` gestito.
+  PHP → T_STRING, mago → keyword. Gestiti `->`/`?->` e (sotto TOKEN_PARSE) `::`/`const`.
 - **`yield from`** = 1 token T_YIELD_FROM in PHP; mago = Yield + ws + From.
 - **`PhpToken::is(float)`**: coercizione ZPP float→int (deprecation §1.2) invece del TypeError.
 

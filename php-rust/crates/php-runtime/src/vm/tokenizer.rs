@@ -25,10 +25,23 @@ use super::Vm;
 
 impl Vm<'_> {
     /// `token_get_all(string $code, int $flags = 0): array`.
+    ///
+    /// With `TOKEN_PARSE` (flag bit 1), PHP validates the source and reclassifies
+    /// semi-reserved keywords in member/const positions (via parser feedback); a
+    /// lexer-level error throws `ParseError`. We reproduce the reclassification and
+    /// the fixed-string lexer errors phpr can detect ("Invalid numeric literal",
+    /// "Invalid UTF-8 codepoint escape sequence[: Codepoint too large]"); genuine
+    /// bison/yacc syntax messages are not reproduced (see PHPR_DIVERGENCES §2.3).
     pub(super) fn ho_token_get_all(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let code = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags);
+        let flags = convert::to_long_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags);
+        let parse = flags & 1 != 0; // TOKEN_PARSE
+        let entries = match token_get_all_parse(code.as_bytes(), parse) {
+            Ok(entries) => entries,
+            Err(err) => return Err(self.tokenizer_parse_error(err)),
+        };
         let mut arr = PhpArray::new();
-        for e in token_get_all(code.as_bytes()) {
+        for e in entries {
             match e.id {
                 None => {
                     let _ = arr.append(Zval::Str(PhpStr::new(e.text)));
@@ -50,6 +63,32 @@ impl Vm<'_> {
         let id = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags);
         Ok(Zval::Str(PhpStr::from_str(token_name(id))))
     }
+
+    /// Materialise a `TOKEN_PARSE` failure as a throwable `ParseError` (its
+    /// `getLine()` is the 1-based line *within the parsed source*, not the call
+    /// site). Falls back to a plain engine `Error` if `ParseError` is somehow
+    /// unavailable.
+    fn tokenizer_parse_error(&mut self, err: TokErr) -> PhpError {
+        let Some(cid) = self.class_index.get(b"parseerror".as_slice()).copied() else {
+            return PhpError::Error(err.message);
+        };
+        match self.synthesize_throwable(cid, &err.message) {
+            Ok(obj) => {
+                if let Zval::Object(o) = &obj {
+                    o.borrow_mut().props.set(b"line", Zval::Long(err.line as i64));
+                }
+                PhpError::Thrown(obj)
+            }
+            Err(e) => e,
+        }
+    }
+}
+
+/// A `TOKEN_PARSE` lexer error: the `ParseError` message plus the 1-based line
+/// (within the tokenized source) it occurred on.
+pub struct TokErr {
+    pub message: String,
+    pub line: u32,
 }
 
 /// One `token_get_all` element: a single-char token (`id == None`, `text` is the
@@ -73,8 +112,12 @@ fn line_of(src: &[u8], offset: usize) -> u32 {
     1 + src[..offset.min(src.len())].iter().filter(|&&b| b == b'\n').count() as u32
 }
 
-/// Tokenize `src` into PHP `token_get_all` entries.
-pub fn token_get_all(src: &[u8]) -> Vec<Entry> {
+/// Tokenize `src`, honouring the `TOKEN_PARSE` flag (`parse`). With `parse`, a
+/// lexer-level error (invalid numeric literal, invalid `\u{}` escape) is reported
+/// as a [`TokErr`] instead of being recovered, and semi-reserved keywords in
+/// member/const positions are reclassified to T_STRING (as PHP's parser feedback
+/// does).
+pub fn token_get_all_parse(src: &[u8], parse: bool) -> Result<Vec<Entry>, TokErr> {
     let file = File::ephemeral(Cow::Borrowed(b"tokenizer".as_slice()), Cow::Owned(src.to_vec()));
     let input = Input::from_file(&file);
     let mut lexer = Lexer::new(input, LexerSettings::default());
@@ -105,7 +148,12 @@ pub fn token_get_all(src: &[u8]) -> Vec<Entry> {
         // Flush a pending invalid literal, now that we know where it ends.
         if let Some((start, line)) = pending_dnumber.take() {
             let end = (tok.start.offset as usize).min(src.len());
-            emit_recovered(&mut out, src.get(start..end).unwrap_or(&[]), line);
+            let span = src.get(start..end).unwrap_or(&[]);
+            // Under TOKEN_PARSE, a digit-leading invalid literal is fatal.
+            if parse && span.first().is_some_and(u8::is_ascii_digit) {
+                return Err(TokErr { message: "Invalid numeric literal".into(), line });
+            }
+            emit_recovered(&mut out, span, line);
         }
         let line = line_of(src, tok.start.offset as usize);
         last_end = tok.start.offset as usize + tok.value.len();
@@ -123,7 +171,11 @@ pub fn token_get_all(src: &[u8]) -> Vec<Entry> {
         }
     }
     if let Some((start, line)) = pending_dnumber.take() {
-        emit_recovered(&mut out, src.get(start..).unwrap_or(&[]), line);
+        let span = src.get(start..).unwrap_or(&[]);
+        if parse && span.first().is_some_and(u8::is_ascii_digit) {
+            return Err(TokErr { message: "Invalid numeric literal".into(), line });
+        }
+        emit_recovered(&mut out, span, line);
     }
     merge_open_tag_whitespace(&mut out);
     merge_close_tag_newline(&mut out);
@@ -131,7 +183,144 @@ pub fn token_get_all(src: &[u8]) -> Vec<Entry> {
     fix_property_access(&mut out);
     fix_string_interpolation(&mut out);
     merge_encapsed(&mut out);
-    out
+    if parse {
+        // Parser feedback reclassifies semi-reserved keywords (member/const names).
+        fix_semi_reserved(&mut out);
+        // Invalid `\u{}` escapes are a compile error PHP raises before returning.
+        if let Some(err) = scan_unicode_escapes(&out) {
+            return Err(err);
+        }
+    }
+    // `$o->__halt_compiler()` is a method call, not the halt construct; mago
+    // wrongly enters halt mode and swallows the rest as inline HTML. Re-lex it.
+    splice_halt_after_arrow(out, parse)
+}
+
+/// mago treats `__halt_compiler` as the halt construct unconditionally, so
+/// `$o->__halt_compiler()` (an ordinary method name) makes it swallow everything
+/// after it as one T_INLINE_HTML token. When `__halt_compiler` (already a
+/// T_STRING here via [`fix_property_access`]) follows `->`/`?->` and is trailed
+/// by that inline text, re-lex the swallowed tail as PHP and splice it back in,
+/// rebasing line numbers. Real statement-level `__halt_compiler` never follows an
+/// arrow, so it is left untouched.
+fn splice_halt_after_arrow(entries: Vec<Entry>, parse: bool) -> Result<Vec<Entry>, TokErr> {
+    // Locate `-> __halt_compiler` (now a T_STRING method name). mago still lexes
+    // the following `( ) ;` normally, then swallows everything up to EOF as one
+    // T_INLINE_HTML — that trailing token is the tail to re-lex.
+    let mut marker = None;
+    let mut prev: Option<u32> = None;
+    for (i, e) in entries.iter().enumerate() {
+        if e.id == Some(397) {
+            continue; // whitespace is not significant for the arrow test
+        }
+        if e.id == Some(262) && e.text == b"__halt_compiler" && matches!(prev, Some(389) | Some(390))
+        {
+            marker = Some(i);
+            break;
+        }
+        prev = e.id;
+    }
+    let Some(marker) = marker else {
+        return Ok(entries);
+    };
+    // The swallowed tail is the first inline-HTML token after the marker.
+    let Some(tail_idx) = entries[marker + 1..].iter().position(|e| e.id == Some(267)).map(|o| marker + 1 + o)
+    else {
+        return Ok(entries);
+    };
+    let base_line = entries[tail_idx].line;
+    let mut synthetic = b"<?php ".to_vec();
+    synthetic.extend_from_slice(&entries[tail_idx].text);
+    let mut relexed = token_get_all_parse(&synthetic, parse)?;
+    // Drop the synthetic open tag and rebase every line onto the real source.
+    if relexed.first().map(|e| e.id) == Some(Some(394)) {
+        relexed.remove(0);
+    }
+    for e in relexed.iter_mut() {
+        e.line += base_line - 1;
+    }
+    let mut out = entries;
+    out.splice(tail_idx..=tail_idx, relexed);
+    Ok(out)
+}
+
+/// Under `TOKEN_PARSE`, PHP's parser lets reserved keywords stand in as ordinary
+/// names in semi-reserved positions: immediately after `::` (T_DOUBLE_COLON) or
+/// after `const`, a keyword is emitted as T_STRING (`X::continue`, `X::class`,
+/// `const ARRAY = …`). The `->` / `?->` case is lexer-level and already handled
+/// unconditionally by [`fix_property_access`].
+fn fix_semi_reserved(entries: &mut [Entry]) {
+    let mut armed = false;
+    for e in entries.iter_mut() {
+        if e.id == Some(397) {
+            continue; // whitespace between the marker and the name is allowed
+        }
+        if armed {
+            if let Some(id) = e.id {
+                if id != 262 && id != 266 && is_bareword(&e.text) {
+                    e.id = Some(262); // T_STRING
+                }
+            }
+        }
+        // `::` (402) or `const` (312) arms the next name for reclassification.
+        armed = matches!(e.id, Some(402) | Some(312));
+    }
+}
+
+/// Scan double-quoted `T_CONSTANT_ENCAPSED_STRING` tokens for an invalid
+/// `\u{...}` codepoint escape, returning the first one's PHP error as a
+/// [`TokErr`]. Single-quoted strings and nowdocs don't process escapes.
+fn scan_unicode_escapes(entries: &[Entry]) -> Option<TokErr> {
+    for e in entries {
+        if e.id == Some(269) {
+            if let Some(message) = invalid_unicode_escape(&e.text) {
+                return Some(TokErr { message: message.into(), line: e.line });
+            }
+        }
+    }
+    None
+}
+
+/// If `text` (a double-quoted string literal, quotes included) contains an
+/// invalid `\u{...}` escape, return PHP's exact message; else `None`.
+fn invalid_unicode_escape(text: &[u8]) -> Option<&'static str> {
+    if text.first() != Some(&b'"') {
+        return None; // single-quoted: escapes are literal
+    }
+    let mut i = 0;
+    while i < text.len() {
+        if text[i] == b'\\' {
+            // `\u{` opens a codepoint escape; any other `\x` escapes one char.
+            if text.get(i + 1) == Some(&b'u') && text.get(i + 2) == Some(&b'{') {
+                let mut j = i + 3;
+                let (mut val, mut digits, mut too_large) = (0u64, 0u32, false);
+                while j < text.len() && text[j] != b'}' {
+                    let d = match text[j] {
+                        b'0'..=b'9' => text[j] - b'0',
+                        b'a'..=b'f' => text[j] - b'a' + 10,
+                        b'A'..=b'F' => text[j] - b'A' + 10,
+                        _ => return Some("Invalid UTF-8 codepoint escape sequence"),
+                    };
+                    val = val.saturating_mul(16).saturating_add(d as u64);
+                    too_large |= val > 0x10FFFF;
+                    digits += 1;
+                    j += 1;
+                }
+                if digits == 0 {
+                    return Some("Invalid UTF-8 codepoint escape sequence");
+                }
+                if too_large {
+                    return Some("Invalid UTF-8 codepoint escape sequence: Codepoint too large");
+                }
+                i = j + 1; // past the closing `}`
+                continue;
+            }
+            i += 2; // skip the escaped character (`\\`, `\"`, …)
+            continue;
+        }
+        i += 1;
+    }
+    None
 }
 
 /// mago splits multi-line string/heredoc content into one
@@ -173,15 +362,36 @@ fn fix_property_access(entries: &mut [Entry]) {
     }
 }
 
-/// Emit a span mago rejected as an unexpected token: a digit-leading run is an
-/// invalid numeric literal (PHP falls back to T_DNUMBER); otherwise treat it as a
-/// bareword (T_STRING) so non-numeric content isn't mislabelled a number.
+/// Emit a span mago rejected as an unexpected token. A digit-leading run is an
+/// invalid numeric literal: PHP emits T_LNUMBER when the value fits in a native
+/// integer and T_DNUMBER when it overflows (`078` → T_LNUMBER; `0177…787` →
+/// T_DNUMBER). Anything else is treated as a bareword (T_STRING) so non-numeric
+/// content isn't mislabelled a number.
 fn emit_recovered(out: &mut Vec<Entry>, span: &[u8], line: u32) {
     if span.is_empty() {
         return;
     }
-    let id = if span[0].is_ascii_digit() { 261 } else { 262 };
+    let id = if span[0].is_ascii_digit() { recovered_number_id(span) } else { 262 };
     out.push(Entry { id: Some(id), text: span.to_vec(), line });
+}
+
+/// T_LNUMBER (260) if the (decimal) digits of `span` fit in an `i64`, else
+/// T_DNUMBER (261). Underscores are ignored; any non-digit forces T_DNUMBER.
+fn recovered_number_id(span: &[u8]) -> u32 {
+    let mut val: u128 = 0;
+    for &b in span {
+        if b == b'_' {
+            continue;
+        }
+        if !b.is_ascii_digit() {
+            return 261;
+        }
+        val = val.saturating_mul(10).saturating_add((b - b'0') as u128);
+        if val > i64::MAX as u128 {
+            return 261;
+        }
+    }
+    260
 }
 
 fn is_bareword(t: &[u8]) -> bool {
