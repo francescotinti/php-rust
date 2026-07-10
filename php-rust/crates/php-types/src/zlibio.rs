@@ -10,9 +10,9 @@ use std::mem::{size_of, MaybeUninit};
 use std::os::raw::c_int;
 
 use libz_sys::{
-    deflate, deflateBound, deflateEnd, deflateInit2_, inflate, inflateEnd, inflateInit2_,
-    z_stream, zlibVersion, Bytef, Z_DEFAULT_STRATEGY, Z_DEFLATED, Z_FINISH, Z_NO_FLUSH, Z_OK,
-    Z_STREAM_END,
+    deflate, deflateBound, deflateEnd, deflateInit2_, deflateSetDictionary, inflate, inflateEnd,
+    inflateInit2_, inflateSetDictionary, z_stream, zlibVersion, Bytef, Z_DEFAULT_STRATEGY,
+    Z_DEFLATED, Z_FINISH, Z_NEED_DICT, Z_NO_FLUSH, Z_OK, Z_STREAM_END,
 };
 
 /// PHP's `ZLIB_ENCODING_*` == the zlib windowBits: raw = -15, zlib = 15, gzip = 31.
@@ -93,6 +93,123 @@ pub fn uncompress_one(data: &[u8], window_bits: i32) -> Option<(Vec<u8>, usize)>
 /// Decompress one stream, discarding the consumed count (the common case).
 pub fn uncompress(data: &[u8], window_bits: i32) -> Option<Vec<u8>> {
     uncompress_one(data, window_bits).map(|(v, _)| v)
+}
+
+/// A stateful (incremental) zlib context backing PHP's `deflate_init`/`inflate_init`
+/// family: the `z_stream` lives at a fixed heap address for the context's whole
+/// life (zlib's internal state back-references it), fed chunk by chunk via
+/// [`ZCtx::add`]. Dropped → `deflateEnd`/`inflateEnd` + dealloc.
+pub struct ZCtx {
+    z: *mut z_stream,
+    deflate: bool,
+    dict: Option<Vec<u8>>,
+    last_status: i32,
+}
+
+impl ZCtx {
+    fn alloc() -> *mut z_stream {
+        Box::into_raw(Box::new(MaybeUninit::<z_stream>::zeroed())) as *mut z_stream
+    }
+
+    /// A deflate context with PHP's `deflate_init` parameters (already mapped to
+    /// real windowBits). An optional preset dictionary is installed immediately.
+    pub fn new_deflate(level: i32, window_bits: i32, mem_level: i32, strategy: i32, dict: Option<Vec<u8>>) -> Option<ZCtx> {
+        unsafe {
+            let z = Self::alloc();
+            if deflateInit2_(
+                z,
+                level,
+                Z_DEFLATED,
+                window_bits,
+                mem_level,
+                strategy,
+                zlibVersion(),
+                size_of::<z_stream>() as c_int,
+            ) != Z_OK
+            {
+                drop(Box::from_raw(z as *mut MaybeUninit<z_stream>));
+                return None;
+            }
+            if let Some(d) = &dict {
+                deflateSetDictionary(z, d.as_ptr(), d.len() as _);
+            }
+            Some(ZCtx { z, deflate: true, dict, last_status: Z_OK })
+        }
+    }
+
+    /// An inflate context; a preset dictionary is installed on `Z_NEED_DICT`.
+    pub fn new_inflate(window_bits: i32, dict: Option<Vec<u8>>) -> Option<ZCtx> {
+        unsafe {
+            let z = Self::alloc();
+            if inflateInit2_(z, window_bits, zlibVersion(), size_of::<z_stream>() as c_int) != Z_OK {
+                drop(Box::from_raw(z as *mut MaybeUninit<z_stream>));
+                return None;
+            }
+            Some(ZCtx { z, deflate: false, dict, last_status: Z_OK })
+        }
+    }
+
+    /// Feed `data` with the given zlib `flush` mode, returning whatever output the
+    /// stream produces. `None` on a hard zlib error (the caller's "data error").
+    pub fn add(&mut self, data: &[u8], flush: i32) -> Option<Vec<u8>> {
+        unsafe {
+            let z = self.z;
+            (*z).next_in = data.as_ptr() as *mut Bytef;
+            (*z).avail_in = data.len() as _;
+            let mut out = Vec::new();
+            let mut buf = vec![0u8; 32768];
+            loop {
+                (*z).next_out = buf.as_mut_ptr();
+                (*z).avail_out = buf.len() as _;
+                let ret = if self.deflate { deflate(z, flush) } else { inflate(z, flush) };
+                out.extend_from_slice(&buf[..buf.len() - (*z).avail_out as usize]);
+                self.last_status = ret;
+                match ret {
+                    Z_STREAM_END => return Some(out),
+                    Z_NEED_DICT if !self.deflate => {
+                        // A preset dictionary satisfies the demand; without one
+                        // the stream cannot proceed.
+                        let Some(d) = &self.dict else { return None };
+                        if inflateSetDictionary(z, d.as_ptr(), d.len() as _) != Z_OK {
+                            return None;
+                        }
+                    }
+                    Z_OK => {
+                        if (*z).avail_in == 0 && (*z).avail_out != 0 {
+                            return Some(out); // consumed everything, output complete
+                        }
+                    }
+                    // Z_BUF_ERROR just means "no progress possible now" — with all
+                    // input consumed that is a normal end of this add() step.
+                    libz_sys::Z_BUF_ERROR if (*z).avail_in == 0 => return Some(out),
+                    _ => return None,
+                }
+            }
+        }
+    }
+
+    /// Total input bytes consumed so far (`inflate_get_read_len`).
+    pub fn total_in(&self) -> i64 {
+        unsafe { (*self.z).total_in as i64 }
+    }
+
+    /// The last zlib status code this context produced (`inflate_get_status`).
+    pub fn last_status(&self) -> i32 {
+        self.last_status
+    }
+}
+
+impl Drop for ZCtx {
+    fn drop(&mut self) {
+        unsafe {
+            if self.deflate {
+                deflateEnd(self.z);
+            } else {
+                inflateEnd(self.z);
+            }
+            drop(Box::from_raw(self.z as *mut MaybeUninit<z_stream>));
+        }
+    }
 }
 
 /// Decode a gz *file's* payload the way PHP's gz stream layer does: every

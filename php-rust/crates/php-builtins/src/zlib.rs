@@ -147,6 +147,22 @@ pub fn zlib_get_coding_type(_argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpE
     Ok(Zval::Bool(false))
 }
 
+/// The underlying path if `spec` targets the `compress.zlib://` wrapper (a
+/// nested `file://` is also stripped, as PHP's wrapper chain does).
+pub(crate) fn zlib_wrapped(spec: &[u8]) -> Option<&[u8]> {
+    let rest = spec.strip_prefix(b"compress.zlib://".as_slice())?;
+    Some(rest.strip_prefix(b"file://".as_slice()).unwrap_or(rest))
+}
+
+/// gzip-compress `data` (zlib default level, like the wrapper) and write `path`.
+pub(crate) fn write_gz_file(path: &[u8], data: &[u8]) -> std::io::Result<()> {
+    use std::os::unix::ffi::OsStrExt;
+    std::fs::write(
+        std::ffi::OsStr::from_bytes(path),
+        zlibio::compress(data, -1, zlibio::ENC_GZIP),
+    )
+}
+
 /// Read the gz file at `path` and decode it the way PHP's gz stream layer does:
 /// every concatenated gzip member; a file without the gzip magic reads
 /// transparently as plain bytes. `None` = open/decode failure.
@@ -308,4 +324,233 @@ pub fn gzseek(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 }
 pub fn gzpassthru(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     gz_alias(crate::file::fpassthru, argv, ctx, "fpassthru", "gzpassthru")
+}
+
+// ---- incremental (de)compression contexts --------------------------------
+// PHP's deflate_init/inflate_init family: a stateful z_stream fed chunk by
+// chunk. The PHP-visible DeflateContext/InflateContext are prelude classes
+// wrapping an id into this thread-local table (the curl-handle pattern); the
+// prelude functions marshal `$ctx->__id` into these `__`-prefixed builtins,
+// whose error strings are branded with the PUBLIC function names.
+
+thread_local! {
+    static ZCTXS: std::cell::RefCell<Vec<Option<php_types::zlibio::ZCtx>>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Validate and extract the `dictionary` option: a string, or an array of
+/// non-empty NUL-free words (concatenated). `fname` brands the ValueErrors.
+fn dict_option(opts: &PhpArray, fname: &str) -> Result<Option<Vec<u8>>, PhpError> {
+    let Some(v) = opts.get(&php_types::Key::from_bytes(b"dictionary")) else {
+        return Ok(None);
+    };
+    match v.deref_clone() {
+        Zval::Array(words) => {
+            let mut dict = Vec::new();
+            for (_, w) in words.iter() {
+                let w = w.deref_clone();
+                if let Zval::Object(o) = &w {
+                    // No VM here to run __toString: PHP's (string) failure text.
+                    return Err(PhpError::Error(format!(
+                        "Object of class {} could not be converted to string",
+                        String::from_utf8_lossy(o.borrow().class_name.as_bytes())
+                    )));
+                }
+                let bytes = match &w {
+                    Zval::Str(s) => s.as_bytes().to_vec(),
+                    other => {
+                        let mut d = Vec::new();
+                        let b = php_types::convert::to_zstr(other, &mut d).as_bytes().to_vec();
+                        b
+                    }
+                };
+                if bytes.is_empty() {
+                    return Err(PhpError::ValueError(format!(
+                        "{fname}(): Argument #2 ($options) must not contain empty strings"
+                    )));
+                }
+                if bytes.contains(&0) {
+                    return Err(PhpError::ValueError(format!(
+                        "{fname}(): Argument #2 ($options) must not contain strings with null bytes"
+                    )));
+                }
+                dict.extend_from_slice(&bytes);
+            }
+            Ok(Some(dict))
+        }
+        other => {
+            let mut d = Vec::new();
+            Ok(Some(php_types::convert::to_zstr(&other, &mut d).as_bytes().to_vec()))
+        }
+    }
+}
+
+/// An integer option in `opts`, defaulting to `default`.
+fn int_option(opts: &PhpArray, key: &[u8], default: i64, ctx: &mut Ctx) -> i64 {
+    opts.get(&php_types::Key::from_bytes(key))
+        .map(|v| convert::to_long_cast(&v.deref_clone(), ctx.diags))
+        .unwrap_or(default)
+}
+
+/// Map PHP's (encoding, window) pair to the real `windowBits`: RAW → -window,
+/// GZIP → window + 16, DEFLATE → window.
+fn window_bits_for(encoding: i64, window: i64) -> i32 {
+    match encoding {
+        ENC_RAW => -(window as i32),
+        ENC_GZIP => window as i32 + 16,
+        _ => window as i32,
+    }
+}
+
+/// `__deflate_init($encoding, $options)` → context id. Errors are PHP's exact
+/// `deflate_init()` messages.
+pub fn __deflate_init(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let encoding = argv.first().map(|v| convert::to_long_cast(v, ctx.diags)).unwrap_or(0);
+    if !matches!(encoding, ENC_RAW | ENC_DEFLATE | ENC_GZIP) {
+        return Err(PhpError::ValueError(
+            "deflate_init(): Argument #1 ($encoding) must be one of ZLIB_ENCODING_RAW, ZLIB_ENCODING_GZIP, or ZLIB_ENCODING_DEFLATE".to_string(),
+        ));
+    }
+    let empty = PhpArray::new();
+    let opts_z = argv.get(1).map(|v| v.deref_clone());
+    let opts = match &opts_z {
+        Some(Zval::Array(a)) => a.as_ref(),
+        _ => &empty,
+    };
+    let level = int_option(opts, b"level", -1, ctx);
+    if !(-1..=9).contains(&level) {
+        return Err(PhpError::ValueError(
+            "deflate_init(): \"level\" option must be between -1 and 9".to_string(),
+        ));
+    }
+    let memory = int_option(opts, b"memory", 8, ctx);
+    if !(1..=9).contains(&memory) {
+        return Err(PhpError::ValueError(
+            "deflate_init(): \"memory\" option must be between 1 and 9".to_string(),
+        ));
+    }
+    let window = int_option(opts, b"window", 15, ctx);
+    if !(8..=15).contains(&window) {
+        return Err(PhpError::ValueError(
+            "deflate_init(): \"window\" option must be between 8 and 15".to_string(),
+        ));
+    }
+    let strategy = int_option(opts, b"strategy", 0, ctx);
+    if !(0..=4).contains(&strategy) {
+        return Err(PhpError::ValueError(
+            "deflate_init(): \"strategy\" option must be one of ZLIB_FILTERED, ZLIB_HUFFMAN_ONLY, ZLIB_RLE, ZLIB_FIXED or ZLIB_DEFAULT_STRATEGY".to_string(),
+        ));
+    }
+    let dict = dict_option(opts, "deflate_init")?;
+    let Some(zc) = php_types::zlibio::ZCtx::new_deflate(
+        level as i32,
+        window_bits_for(encoding, window),
+        memory as i32,
+        strategy as i32,
+        dict,
+    ) else {
+        return Ok(Zval::Bool(false));
+    };
+    let id = ZCTXS.with(|t| {
+        let mut t = t.borrow_mut();
+        t.push(Some(zc));
+        t.len() - 1
+    });
+    Ok(Zval::Long(id as i64))
+}
+
+/// `__inflate_init($encoding, $options)` → context id. Note the legacy wording
+/// of the encoding error (unlike deflate_init's ZPP-style message).
+pub fn __inflate_init(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let encoding = argv.first().map(|v| convert::to_long_cast(v, ctx.diags)).unwrap_or(0);
+    if !matches!(encoding, ENC_RAW | ENC_DEFLATE | ENC_GZIP) {
+        return Err(PhpError::ValueError(
+            "Encoding mode must be ZLIB_ENCODING_RAW, ZLIB_ENCODING_GZIP or ZLIB_ENCODING_DEFLATE".to_string(),
+        ));
+    }
+    let empty = PhpArray::new();
+    let opts_z = argv.get(1).map(|v| v.deref_clone());
+    let opts = match &opts_z {
+        Some(Zval::Array(a)) => a.as_ref(),
+        _ => &empty,
+    };
+    let window = int_option(opts, b"window", 15, ctx);
+    if !(8..=15).contains(&window) {
+        return Err(PhpError::ValueError(
+            "inflate_init(): \"window\" option must be between 8 and 15".to_string(),
+        ));
+    }
+    let dict = dict_option(opts, "inflate_init")?;
+    let Some(zc) = php_types::zlibio::ZCtx::new_inflate(window_bits_for(encoding, window), dict)
+    else {
+        return Ok(Zval::Bool(false));
+    };
+    let id = ZCTXS.with(|t| {
+        let mut t = t.borrow_mut();
+        t.push(Some(zc));
+        t.len() - 1
+    });
+    Ok(Zval::Long(id as i64))
+}
+
+/// The flush-mode validation shared by deflate_add/inflate_add.
+fn flush_arg(argv: &[Zval], idx: usize, default: i64, ctx: &mut Ctx, fname: &str) -> Result<i32, PhpError> {
+    let f = argv.get(idx).map(|v| convert::to_long_cast(v, ctx.diags)).unwrap_or(default);
+    if !(0..=5).contains(&f) {
+        return Err(PhpError::ValueError(format!(
+            "{fname}(): Argument #3 ($flush_mode) must be one of ZLIB_NO_FLUSH, ZLIB_PARTIAL_FLUSH, ZLIB_SYNC_FLUSH, ZLIB_FULL_FLUSH, ZLIB_BLOCK, or ZLIB_FINISH"
+        )));
+    }
+    Ok(f as i32)
+}
+
+/// Run `add` on the context with `id`, mapping a hard zlib failure to `false`
+/// + a branded Warning.
+fn ctx_add(id: i64, data: &[u8], flush: i32, ctx: &mut Ctx, fname: &str) -> Result<Zval, PhpError> {
+    let out = ZCTXS.with(|t| {
+        let mut t = t.borrow_mut();
+        t.get_mut(id as usize).and_then(|s| s.as_mut()).map(|zc| zc.add(data, flush))
+    });
+    match out {
+        Some(Some(bytes)) => Ok(Zval::Str(PhpStr::new(bytes))),
+        Some(None) => {
+            ctx.diags.push(Diag::Warning(format!("{fname}(): data error")));
+            Ok(Zval::Bool(false))
+        }
+        None => Ok(Zval::Bool(false)), // unknown/dropped context id
+    }
+}
+
+/// `__deflate_add($id, $data, $flush_mode)`.
+pub fn __deflate_add(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let id = argv.first().map(|v| convert::to_long_cast(v, ctx.diags)).unwrap_or(-1);
+    let data = bytes_arg(argv, 1, ctx);
+    let flush = flush_arg(argv, 2, 2, ctx, "deflate_add")?; // default ZLIB_SYNC_FLUSH
+    ctx_add(id, &data, flush, ctx, "deflate_add")
+}
+
+/// `__inflate_add($id, $data, $flush_mode)`.
+pub fn __inflate_add(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let id = argv.first().map(|v| convert::to_long_cast(v, ctx.diags)).unwrap_or(-1);
+    let data = bytes_arg(argv, 1, ctx);
+    let flush = flush_arg(argv, 2, 2, ctx, "inflate_add")?;
+    ctx_add(id, &data, flush, ctx, "inflate_add")
+}
+
+/// `__inflate_get_status($id)` — the context's last zlib status code.
+pub fn __inflate_get_status(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let id = argv.first().map(|v| convert::to_long_cast(v, ctx.diags)).unwrap_or(-1);
+    let st = ZCTXS.with(|t| {
+        t.borrow().get(id as usize).and_then(|s| s.as_ref().map(|z| z.last_status()))
+    });
+    Ok(st.map(|s| Zval::Long(s as i64)).unwrap_or(Zval::Bool(false)))
+}
+
+/// `__inflate_get_read_len($id)` — total input bytes the context consumed.
+pub fn __inflate_get_read_len(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let id = argv.first().map(|v| convert::to_long_cast(v, ctx.diags)).unwrap_or(-1);
+    let n = ZCTXS.with(|t| {
+        t.borrow().get(id as usize).and_then(|s| s.as_ref().map(|z| z.total_in()))
+    });
+    Ok(n.map(Zval::Long).unwrap_or(Zval::Bool(false)))
 }

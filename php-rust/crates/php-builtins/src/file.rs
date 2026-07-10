@@ -820,6 +820,21 @@ pub fn file_put_contents(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
         }
         _ => {}
     }
+    // `compress.zlib://path`: gzip-compress the plaintext and write it; the
+    // return value counts the uncompressed bytes (the stream-layer write).
+    if let Some(p) = crate::zlib::zlib_wrapped(name.as_bytes()) {
+        return match crate::zlib::write_gz_file(p, &bytes) {
+            Ok(()) => Ok(Zval::Long(bytes.len() as i64)),
+            Err(e) => {
+                ctx.diags.push(Diag::Warning(format!(
+                    "file_put_contents({}): Failed to open stream: {}",
+                    String::from_utf8_lossy(name.as_bytes()),
+                    strerror(&e)
+                )));
+                Ok(Zval::Bool(false))
+            }
+        };
+    }
     let flags = argv
         .get(2)
         .map(|v| convert::to_long_cast(v, ctx.diags))
@@ -919,6 +934,25 @@ pub fn file(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// `readfile($filename)`: write the whole file to program output and return the
 /// byte count; `false` + Warning if it cannot be opened.
 pub fn readfile(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    // `compress.zlib://path`: emit the decoded contents (count is uncompressed).
+    if let Some(name) = argv.first().map(|v| convert::to_zstr(v, ctx.diags)) {
+        if let Some(p) = crate::zlib::zlib_wrapped(name.as_bytes()) {
+            return match crate::zlib::read_gz_file(p) {
+                Some(d) => {
+                    let n = d.len() as i64;
+                    ctx.out.extend_from_slice(&d);
+                    Ok(Zval::Long(n))
+                }
+                None => {
+                    ctx.diags.push(Diag::Warning(format!(
+                        "readfile({}): Failed to open stream: No such file or directory",
+                        String::from_utf8_lossy(name.as_bytes())
+                    )));
+                    Ok(Zval::Bool(false))
+                }
+            };
+        }
+    }
     let p = arg_os_path(argv, ctx);
     match std::fs::read(&p) {
         Ok(d) => {
@@ -1067,6 +1101,12 @@ pub fn ftruncate(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         .max(0) as u64;
     let mut res = r.borrow_mut();
     let stream = res.as_stream_mut().expect("open stream checked in stream_arg");
+    // A gz stream (either direction) refuses truncation with PHP's warning.
+    if stream.eof_on_exhaust || matches!(stream.backend, StreamBackend::GzFile { .. }) {
+        ctx.diags
+            .push(Diag::Warning("ftruncate(): Can't truncate this stream!".to_string()));
+        return Ok(Zval::Bool(false));
+    }
     let ok = match &mut stream.backend {
         StreamBackend::File(f) => f.set_len(size).is_ok(),
         StreamBackend::Memory(c) => {
@@ -1721,6 +1761,10 @@ pub fn fstat(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let Some(stream) = res.as_stream_mut() else {
         return Ok(Zval::Bool(false)); // directory / closed handle
     };
+    // PHP's gz streams have no fstat (the ZLIB wrapper lacks stream_stat).
+    if stream.eof_on_exhaust || matches!(stream.backend, StreamBackend::GzFile { .. }) {
+        return Ok(Zval::Bool(false));
+    }
     let vals = match &stream.backend {
         StreamBackend::File(f) => match f.metadata() {
             Ok(m) => stat_vals(&m),
@@ -1806,6 +1850,14 @@ fn os_path_at(argv: &[Zval], ctx: &mut Ctx, idx: usize) -> std::ffi::OsString {
 
 /// `unlink`: delete a file; `false` + "unlink(%s): %s" Warning on failure.
 pub fn unlink(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    // The ZLIB wrapper refuses unlink (PHP's exact warning); the file survives.
+    if let Some(name) = argv.first().map(|v| convert::to_zstr(v, ctx.diags)) {
+        if crate::zlib::zlib_wrapped(name.as_bytes()).is_some() {
+            ctx.diags
+                .push(Diag::Warning("unlink(): ZLIB does not allow unlinking".to_string()));
+            return Ok(Zval::Bool(false));
+        }
+    }
     let p = arg_os_path(argv, ctx);
     match std::fs::remove_file(&p) {
         Ok(()) => Ok(Zval::Bool(true)),
@@ -1825,6 +1877,12 @@ pub fn unlink(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// non-recursive create over an existing path fails with "mkdir(): File exists".
 pub fn mkdir(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     use std::os::unix::fs::DirBuilderExt;
+    // The ZLIB wrapper has no directory support: a silent `false` (no warning).
+    if let Some(name) = argv.first().map(|v| convert::to_zstr(v, ctx.diags)) {
+        if crate::zlib::zlib_wrapped(name.as_bytes()).is_some() {
+            return Ok(Zval::Bool(false));
+        }
+    }
     let p = arg_os_path(argv, ctx);
     let perms = argv
         .get(1)
@@ -1848,6 +1906,12 @@ pub fn mkdir(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 
 /// `rmdir`: remove an empty directory; "rmdir(%s): %s" Warning on failure.
 pub fn rmdir(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    // The ZLIB wrapper has no directory support: a silent `false` (no warning).
+    if let Some(name) = argv.first().map(|v| convert::to_zstr(v, ctx.diags)) {
+        if crate::zlib::zlib_wrapped(name.as_bytes()).is_some() {
+            return Ok(Zval::Bool(false));
+        }
+    }
     let p = arg_os_path(argv, ctx);
     match std::fs::remove_dir(&p) {
         Ok(()) => Ok(Zval::Bool(true)),
@@ -1870,6 +1934,16 @@ pub fn rename(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
             "rename() expects at least 2 arguments, {} given",
             argv.len()
         )));
+    }
+    // The ZLIB wrapper does not support renaming (PHP's exact warning).
+    for a in argv.iter().take(2) {
+        let name = convert::to_zstr(a, ctx.diags);
+        if crate::zlib::zlib_wrapped(name.as_bytes()).is_some() {
+            ctx.diags.push(Diag::Warning(
+                "rename(): ZLIB wrapper does not support renaming".to_string(),
+            ));
+            return Ok(Zval::Bool(false));
+        }
     }
     let from = arg_os_path(argv, ctx);
     let to = os_path_at(argv, ctx, 1);
@@ -1895,6 +1969,32 @@ pub fn copy(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
             "copy() expects at least 2 arguments, {} given",
             argv.len()
         )));
+    }
+    // `compress.zlib://` on either side: the wrapper chain reads DECODED source
+    // bytes and writes ENCODED destination bytes (a zlib→plain copy decompresses,
+    // a plain→zlib copy compresses, zlib→zlib recompresses the plaintext).
+    let from_name = convert::to_zstr(&argv[0], ctx.diags).as_bytes().to_vec();
+    let to_name = convert::to_zstr(&argv[1], ctx.diags).as_bytes().to_vec();
+    let from_gz = crate::zlib::zlib_wrapped(&from_name).map(<[u8]>::to_vec);
+    let to_gz = crate::zlib::zlib_wrapped(&to_name).map(<[u8]>::to_vec);
+    if from_gz.is_some() || to_gz.is_some() {
+        use std::os::unix::ffi::OsStrExt;
+        let data = match &from_gz {
+            Some(p) => crate::zlib::read_gz_file(p),
+            None => std::fs::read(std::ffi::OsStr::from_bytes(strip_file_wrapper(&from_name))).ok(),
+        };
+        let Some(data) = data else {
+            ctx.diags.push(Diag::Warning(format!(
+                "copy({}): Failed to open stream: No such file or directory",
+                String::from_utf8_lossy(&from_name)
+            )));
+            return Ok(Zval::Bool(false));
+        };
+        let written = match &to_gz {
+            Some(p) => crate::zlib::write_gz_file(p, &data),
+            None => std::fs::write(std::ffi::OsStr::from_bytes(strip_file_wrapper(&to_name)), &data),
+        };
+        return Ok(Zval::Bool(written.is_ok()));
     }
     let from = arg_os_path(argv, ctx);
     let to = os_path_at(argv, ctx, 1);

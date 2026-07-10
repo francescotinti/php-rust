@@ -5460,12 +5460,19 @@ impl<'m> Vm<'m> {
         }
         // compress.zlib://path — the zlib wrapper routes through the gz stream
         // machinery (transparent read of plain files, GzFile buffer on write).
+        // The stream keeps the FULL wrapper spec as its uri, which is what makes
+        // stream_get_meta_data report wrapper_type ZLIB (gzopen streams don't).
         if let Some(rest) = path.strip_prefix(b"compress.zlib://".as_slice()) {
             let rest = rest.to_vec();
-            let r = self.gz_open_stream(&rest, &mode, "fopen");
+            let r = self.gz_open_stream(&rest, &mode, "fopen")?;
+            if let Zval::Resource(rc) = &r {
+                if let Some(s) = rc.borrow_mut().as_stream_mut() {
+                    s.uri = path.clone();
+                }
+            }
             let line = self.cur_line(self.frames.len() - 1);
             self.flush_diags(line)?;
-            return r;
+            return Ok(r);
         }
         // A registered userland stream wrapper (stream_wrapper_register) claims
         // its scheme before the filesystem is consulted.

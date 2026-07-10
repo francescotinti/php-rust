@@ -66,6 +66,40 @@ function pfsockopen($hostname, $port = -1, &$error_code = null, &$error_string =
     $error_string = $r[2];
     return $r[0];
 }
+// ext/zlib incremental contexts: opaque PHP 8 objects wrapping an id into the
+// host-side z_stream table (__deflate_/__inflate_ builtins, the curl pattern).
+final class DeflateContext {
+    public $__id = 0;
+}
+final class InflateContext {
+    public $__id = 0;
+}
+function deflate_init(int $encoding, array $options = []) {
+    $id = __deflate_init($encoding, $options);
+    if ($id === false) { return false; }
+    $c = new DeflateContext;
+    $c->__id = $id;
+    return $c;
+}
+function deflate_add(DeflateContext $context, string $data, int $flush_mode = ZLIB_SYNC_FLUSH) {
+    return __deflate_add($context->__id, $data, $flush_mode);
+}
+function inflate_init(int $encoding, array $options = []) {
+    $id = __inflate_init($encoding, $options);
+    if ($id === false) { return false; }
+    $c = new InflateContext;
+    $c->__id = $id;
+    return $c;
+}
+function inflate_add(InflateContext $context, string $data, int $flush_mode = ZLIB_SYNC_FLUSH) {
+    return __inflate_add($context->__id, $data, $flush_mode);
+}
+function inflate_get_status(InflateContext $context): int {
+    return __inflate_get_status($context->__id);
+}
+function inflate_get_read_len(InflateContext $context): int {
+    return __inflate_get_read_len($context->__id);
+}
 function stream_select(&$read, &$write, &$except, $seconds, $microseconds = null) {
     $r = __stream_select($read ?? [], $write ?? [], $except ?? [], $seconds, $microseconds);
     if ($r === false) { return false; }

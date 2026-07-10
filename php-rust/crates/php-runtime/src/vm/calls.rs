@@ -1050,17 +1050,22 @@ impl<'m> Vm<'m> {
             Some(n) => format!(" (${})", String::from_utf8_lossy(n)),
             None => String::new(),
         };
+        let head = format!(
+            "{}(): Argument #{}{} must be of type {}, {} given",
+            self.qualified_callee_name(f),
+            arg_num,
+            named,
+            hint.display_name(),
+            given,
+        );
+        // A prelude-defined function stands in for a PHP *internal* function,
+        // whose argument TypeError has no ", called in …" suffix and reports the
+        // call site (not a definition site) — a plain TypeError does exactly that.
+        if f.file.as_ref() == b"prelude" {
+            return PhpError::TypeError(head);
+        }
         PhpError::TypeErrorAt {
-            msg: format!(
-                "{}(): Argument #{}{} must be of type {}, {} given, called in {} on line {}",
-                self.qualified_callee_name(f),
-                arg_num,
-                named,
-                hint.display_name(),
-                given,
-                file,
-                call_line,
-            ),
+            msg: format!("{head}, called in {file} on line {call_line}"),
             file: self.module.file.to_vec().into_boxed_slice(),
             line: f.line,
         }

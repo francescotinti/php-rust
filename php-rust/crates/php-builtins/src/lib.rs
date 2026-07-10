@@ -295,6 +295,13 @@ pub fn registry() -> Registry {
     add(b"gztell", zlib::gztell);
     add(b"gzseek", zlib::gzseek);
     add(b"gzpassthru", zlib::gzpassthru);
+    // Incremental contexts behind the prelude deflate_init/inflate_init family.
+    add(b"__deflate_init", zlib::__deflate_init);
+    add(b"__inflate_init", zlib::__inflate_init);
+    add(b"__deflate_add", zlib::__deflate_add);
+    add(b"__inflate_add", zlib::__inflate_add);
+    add(b"__inflate_get_status", zlib::__inflate_get_status);
+    add(b"__inflate_get_read_len", zlib::__inflate_get_read_len);
     add(b"array_flip", array::array_flip);
     add(b"array_change_key_case", array::array_change_key_case);
     add(b"array_count_values", array::array_count_values);

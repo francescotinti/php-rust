@@ -2007,6 +2007,7 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"ZLIB_FULL_FLUSH" => ExprKind::Int(3),
         b"ZLIB_FINISH" => ExprKind::Int(4),
         b"ZLIB_VERSION" => str_lit(b"1.2.12"),
+        b"ZLIB_VERNUM" => ExprKind::Int(0x12c0),
         // ext/tokenizer T_* token ids (PHP 8.5 parser values).
         b"T_LNUMBER" => ExprKind::Int(260),
         b"T_DNUMBER" => ExprKind::Int(261),

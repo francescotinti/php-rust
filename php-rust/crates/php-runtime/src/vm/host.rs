@@ -3509,27 +3509,45 @@ impl<'m> super::Vm<'m> {
             ));
         };
         use php_types::stream::StreamBackend;
-        let (stream_type, seekable) = match &s.backend {
-            StreamBackend::File(_) => ("STDIO", true),
-            StreamBackend::Memory(_) => ("MEMORY", true),
-            StreamBackend::Stdin | StreamBackend::Stdout | StreamBackend::Stderr => {
-                ("STDIO", false)
+        // A gz stream (either direction) reports stream_type ZLIB. Whether the
+        // wrapper keys appear depends on HOW it was opened: fopen("compress.
+        // zlib://…") keeps the wrapper spec as its uri → wrapper_type ZLIB + uri;
+        // gzopen(path) has a plain uri → PHP omits wrapper_type and uri entirely.
+        let is_gz = s.eof_on_exhaust || matches!(s.backend, StreamBackend::GzFile { .. });
+        let (stream_type, seekable) = if is_gz {
+            ("ZLIB", true)
+        } else {
+            match &s.backend {
+                StreamBackend::File(_) => ("STDIO", true),
+                StreamBackend::Memory(_) => ("MEMORY", true),
+                StreamBackend::Stdin | StreamBackend::Stdout | StreamBackend::Stderr => {
+                    ("STDIO", false)
+                }
+                StreamBackend::ChildStdin(_)
+                | StreamBackend::ChildStdout(_)
+                | StreamBackend::ChildStderr(_) => ("STDIO", false),
+                StreamBackend::Tcp(_) | StreamBackend::Udp(_) => ("tcp_socket/unknown", false),
+                StreamBackend::GzFile { .. } => ("ZLIB", true),
             }
-            StreamBackend::ChildStdin(_)
-            | StreamBackend::ChildStdout(_)
-            | StreamBackend::ChildStderr(_) => ("STDIO", false),
-            StreamBackend::Tcp(_) | StreamBackend::Udp(_) => ("tcp_socket/unknown", false),
-            StreamBackend::GzFile { .. } => ("ZLIB", true), // gz write stream
         };
-        let wrapper = if s.uri.starts_with(b"php://") { "PHP" } else { "plainfile" };
+        let via_zlib_wrapper = s.uri.starts_with(b"compress.zlib://");
+        let wrapper = if via_zlib_wrapper {
+            "ZLIB"
+        } else if s.uri.starts_with(b"php://") {
+            "PHP"
+        } else {
+            "plainfile"
+        };
         let mut arr = PhpArray::new();
         arr.insert(Key::from_bytes(b"timed_out"), Zval::Bool(false));
         arr.insert(Key::from_bytes(b"blocked"), Zval::Bool(true));
         arr.insert(Key::from_bytes(b"eof"), Zval::Bool(s.eof));
-        arr.insert(
-            Key::from_bytes(b"wrapper_type"),
-            Zval::Str(PhpStr::new(wrapper.as_bytes().to_vec())),
-        );
+        if !is_gz || via_zlib_wrapper {
+            arr.insert(
+                Key::from_bytes(b"wrapper_type"),
+                Zval::Str(PhpStr::new(wrapper.as_bytes().to_vec())),
+            );
+        }
         arr.insert(
             Key::from_bytes(b"stream_type"),
             Zval::Str(PhpStr::new(stream_type.as_bytes().to_vec())),
@@ -3537,7 +3555,9 @@ impl<'m> super::Vm<'m> {
         arr.insert(Key::from_bytes(b"mode"), Zval::Str(PhpStr::new(s.mode.clone())));
         arr.insert(Key::from_bytes(b"unread_bytes"), Zval::Long(0));
         arr.insert(Key::from_bytes(b"seekable"), Zval::Bool(seekable));
-        arr.insert(Key::from_bytes(b"uri"), Zval::Str(PhpStr::new(s.uri.clone())));
+        if !is_gz || via_zlib_wrapper {
+            arr.insert(Key::from_bytes(b"uri"), Zval::Str(PhpStr::new(s.uri.clone())));
+        }
         Ok(Zval::Array(Rc::new(arr)))
     }
     /// `stream_set_chunk_size($stream, $size)`: record the chunk size and return
@@ -4989,8 +5009,13 @@ impl<'m> super::Vm<'m> {
     }
 
     /// Shared gz stream open (gzopen and the `compress.zlib://` fopen wrapper).
+    /// The stream's `uri` is the plain path here; the fopen wrapper hook rewrites
+    /// it to the full `compress.zlib://…` spec afterwards, which is what makes
+    /// `stream_get_meta_data` report the wrapper keys for wrapper-opened streams.
     pub(super) fn gz_open_stream(&mut self, path: &[u8], mode: &[u8], fname: &str) -> Result<Zval, PhpError> {
         use std::os::unix::ffi::OsStrExt;
+        // A nested `file://` inside the wrapper chain resolves to the plain path.
+        let path = path.strip_prefix(b"file://".as_slice()).unwrap_or(path);
         // zlib streams are strictly one-directional: any '+' is rejected up
         // front (before touching the file — a `w+` must NOT truncate).
         if mode.contains(&b'+') {
@@ -5378,6 +5403,14 @@ impl<'m> super::Vm<'m> {
         let path = convert::to_zstr_cast(&path_arg.deref_clone(), &mut self.diags)
             .as_bytes()
             .to_vec();
+        // The ZLIB wrapper has no directory operations (PHP's exact warning).
+        if path.starts_with(b"compress.zlib://") {
+            self.diags.push(Diag::Warning(format!(
+                "opendir({}): Failed to open directory: not implemented",
+                String::from_utf8_lossy(&path)
+            )));
+            return Ok(Zval::Bool(false));
+        }
         match std::fs::read_dir(std::ffi::OsStr::from_bytes(&path)) {
             Ok(rd) => {
                 let mut entries = vec![b".".to_vec(), b"..".to_vec()];
