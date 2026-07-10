@@ -59,7 +59,7 @@ language runtime and general stdlib; everything below it is a discrete extension
 | SimpleXML | 3 / 3 | **100%** | complete |
 | bcmath | 14 / 14 | **100%** | 14 fns + `BcMath\Number` (methods + operator overloading) + `RoundingMode` |
 | gmp | 46 / 51 | 90% | 49 fns + `GMP` class + operator overloading (num-bigint); random + import/export deferred |
-| tokenizer | 2 / 6 | — | `token_get_all`/`token_name`/`PhpToken` + 152 `T_*` (mago lexer); byte-identical on normal code, interpolation/heredoc deferred |
+| tokenizer | 2 / 6 | — | `token_get_all`/`token_name`/`PhpToken` + 152 `T_*` (mago lexer); byte-identical on normal code + interpolation/heredoc; error-token handling deferred |
 | mbstring | 48 / 65 | 73% | codecs + grapheme family |
 | SPL | 11 / 15 | 73% | iterators, class_* |
 | PCRE | 8 / 11 | 72% | `preg_last_error*` pending |
