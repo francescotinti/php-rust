@@ -16,10 +16,10 @@ _Last measured: 2026-07-10 · reference: PHP 8.5.7 (`get_defined_functions()`)._
 | --- | --- |
 | Internal functions implemented | **641 / 2143** (30%) |
 | — of which **core / language stdlib** | **483 / 654** (73%) |
-| Zend test corpus (`Zend/tests/*.phpt`) | **2324 passing** — 61.1% of runnable (2324/3801) |
+| Zend test corpus (`Zend/tests/*.phpt`) | **2325 passing** — 61.1% of runnable (2325/3802) |
 | Fully-complete areas | ctype, json, SimpleXML, PCRE core, SPL core |
 
-Corpus breakdown: 5305 total · **2324 pass** · 1477 fail · 1504 skip (skips are
+Corpus breakdown: 5305 total · **2325 pass** · 1477 fail · 1503 skip (skips are
 mostly tests that need an extension `phpr` hasn't ported, or SAPI-specific setup).
 
 The single most important number is **73% of the core language stdlib**: the
@@ -57,6 +57,7 @@ language runtime and general stdlib; everything below it is a discrete extension
 | ctype | 11 / 11 | **100%** | complete |
 | json | 5 / 5 | **100%** | complete |
 | SimpleXML | 3 / 3 | **100%** | complete |
+| bcmath | 14 / 14 | **100%** | 14 fns + `BcMath\Number` (methods) + `RoundingMode`; operator overloading deferred |
 | mbstring | 48 / 65 | 73% | codecs + grapheme family |
 | SPL | 11 / 15 | 73% | iterators, class_* |
 | PCRE | 8 / 11 | 72% | `preg_last_error*` pending |
@@ -69,7 +70,7 @@ language runtime and general stdlib; everything below it is a discrete extension
 | intl | 11 / 187 | 5% | grapheme done; ICU surface huge |
 | gd | 2 / 107 | 1% | |
 | openssl | 1 / 64 | 1% | TLS handled at stream layer, not fn-level |
-| **not started (0%)** | — | 0% | pgsql, sodium, mysqli, gmp, ldap, odbc, sockets, ftp, zlib, sysv*, snmp, tidy, session, dba, bcmath, bz2, zip, gettext, finfo, exif |
+| **not started (0%)** | — | 0% | pgsql, sodium, mysqli, gmp, ldap, odbc, sockets, ftp, zlib, sysv*, snmp, tidy, session, dba, bz2, zip, gettext, finfo, exif |
 
 Extension totals of the missing 1502: intl 176, pgsql 123, sodium 110, mysqli
 106, gd 105, xml 64, openssl 63, ldap 55, gmp 51, odbc 48, sockets 40, posix 37,

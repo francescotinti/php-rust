@@ -15,7 +15,7 @@ interpreter, not to pass a toy subset.
 | --- | --- |
 | Core / language stdlib functions | **483 / 654 (73%)** |
 | All internal functions | 641 / 2143 (30%) |
-| Zend test corpus passing | **2324** (61% of runnable) |
+| Zend test corpus passing | **2325** (61% of runnable) |
 
 Full, measured breakdown → **[COVERAGE.md](COVERAGE.md)**.
 The 30%→73% spread is the whole story: the *language* is largely done; the
