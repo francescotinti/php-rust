@@ -13,6 +13,34 @@ enum DiffCmp {
     Callback,
 }
 
+/// An array key as the bytes PHP would use for it (int keys become their decimal
+/// text), for indexing stream-context wrapper/option sub-arrays.
+fn key_bytes(k: &php_types::Key) -> Vec<u8> {
+    match k {
+        php_types::Key::Str(s) => s.as_bytes().to_vec(),
+        php_types::Key::Int(i) => i.to_string().into_bytes(),
+    }
+}
+
+/// Set `options[wrapper][option] = value` on a stream-context resource, creating
+/// the wrapper sub-array if absent and preserving other options.
+fn ctx_set_one(rc: &Rc<RefCell<php_types::Resource>>, wrapper: &[u8], option: &[u8], value: Zval) {
+    let mut b = rc.borrow_mut();
+    let Some(Zval::Array(opts_rc)) = b.context_options_mut() else { return };
+    let opts = Rc::make_mut(opts_rc);
+    let wkey = php_types::Key::from_bytes(wrapper);
+    match opts.get_mut(&wkey) {
+        Some(Zval::Array(sub_rc)) => {
+            Rc::make_mut(sub_rc).insert(php_types::Key::from_bytes(option), value);
+        }
+        _ => {
+            let mut sub = PhpArray::new();
+            sub.insert(php_types::Key::from_bytes(option), value);
+            opts.insert(wkey, Zval::Array(Rc::new(sub)));
+        }
+    }
+}
+
 impl<'m> super::Vm<'m> {
     /// `gc_collect_cycles()` — force a cycle collection now, regardless of the
     /// root-buffer threshold. Returns the number of destroyed objects.
@@ -3261,6 +3289,94 @@ impl<'m> super::Vm<'m> {
             }
         };
         Ok(self.alloc_resource_context(options))
+    }
+
+    /// `stream_context_get_options($stream_or_context): array` — the context's
+    /// `wrapper => [option => value]` map. A plain stream carries no context in
+    /// phpr, so it yields `[]` (as PHP does for a context-less stream).
+    pub(super) fn ho_stream_context_get_options(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(arg) = args.first().map(|v| v.deref_clone()) else {
+            return Err(PhpError::ArgumentCountError(
+                "stream_context_get_options() expects exactly 1 argument, 0 given".to_string(),
+            ));
+        };
+        match arg {
+            Zval::Resource(rc) => Ok(rc
+                .borrow()
+                .context_options()
+                .map(|o| o.deref_clone())
+                .unwrap_or_else(|| Zval::Array(Rc::new(PhpArray::new())))),
+            other => Err(PhpError::TypeError(format!(
+                "stream_context_get_options(): Argument #1 ($stream_or_context) must be of type resource, {} given",
+                other.type_name_for_error()
+            ))),
+        }
+    }
+
+    /// `stream_context_set_option($context, $wrapper, $option, $value)` (4-arg) or
+    /// `stream_context_set_option($context, $options)` (2-arg, deprecated in 8.5 —
+    /// `stream_context_set_options()` is the replacement). Merges into the context
+    /// options and returns `true`.
+    pub(super) fn ho_stream_context_set_option(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let deprecated = matches!(args.get(1).map(|v| v.deref_clone()), Some(Zval::Array(_)));
+        let r = self.stream_context_set(args, "stream_context_set_option");
+        if r.is_ok() && deprecated {
+            self.diags.push(Diag::Deprecated(
+                "Calling stream_context_set_option() with 2 arguments is deprecated, use stream_context_set_options() instead"
+                    .to_string(),
+            ));
+        }
+        r
+    }
+
+    /// `stream_context_set_options($context, array $options): bool` (8.5) — the
+    /// non-deprecated 2-argument form of [`Self::ho_stream_context_set_option`].
+    pub(super) fn ho_stream_context_set_options(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.stream_context_set(args, "stream_context_set_options")
+    }
+
+    /// Shared body for `stream_context_set_option(s)`: dispatch the 4-arg
+    /// (wrapper/option/value) vs 2-arg (options map) forms and write the context.
+    fn stream_context_set(&mut self, args: Vec<Zval>, fname: &str) -> Result<Zval, PhpError> {
+        let Some(ctx) = args.first().map(|v| v.deref_clone()) else {
+            return Err(PhpError::ArgumentCountError(format!(
+                "{fname}() expects at least 2 arguments, 0 given"
+            )));
+        };
+        let Zval::Resource(rc) = ctx else {
+            return Err(PhpError::TypeError(format!(
+                "{fname}(): Argument #1 ($context) must be of type resource, {} given",
+                ctx.type_name_for_error()
+            )));
+        };
+        match args.get(1).map(|v| v.deref_clone()) {
+            None => Err(PhpError::ArgumentCountError(format!(
+                "{fname}() expects at least 2 arguments, 1 given"
+            ))),
+            Some(Zval::Array(map)) => {
+                // wrapper => [option => value]
+                for (wk, wv) in map.iter() {
+                    let Zval::Array(sub) = wv.deref_clone() else { continue };
+                    let wrapper = key_bytes(wk);
+                    for (ok, ov) in sub.iter() {
+                        ctx_set_one(&rc, &wrapper, &key_bytes(ok), ov.deref_clone());
+                    }
+                }
+                Ok(Zval::Bool(true))
+            }
+            Some(wrapper_val) => {
+                // string wrapper form needs both $option (#3) and $value (#4)
+                if args.len() < 4 {
+                    return Err(PhpError::ValueError(format!(
+                        "{fname}(): Argument #4 ($value) must be provided when argument #2 ($wrapper_or_options) is a string"
+                    )));
+                }
+                let wrapper = convert::to_zstr_cast(&wrapper_val, &mut self.diags).as_bytes().to_vec();
+                let option = convert::to_zstr_cast(&args[2].deref_clone(), &mut self.diags).as_bytes().to_vec();
+                ctx_set_one(&rc, &wrapper, &option, args[3].deref_clone());
+                Ok(Zval::Bool(true))
+            }
+        }
     }
     /// `fopen($filename, $mode, …)`: open a real file or a `php://` wrapper and mint
     /// a stream resource. A host builtin because it allocates a resource id. Args 3/4

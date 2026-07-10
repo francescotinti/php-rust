@@ -143,6 +143,14 @@ impl Resource {
         }
     }
 
+    /// Mutable access to the context options array (`stream_context_set_option`).
+    pub fn context_options_mut(&mut self) -> Option<&mut crate::Zval> {
+        match &mut self.kind {
+            ResKind::Context(opts) => Some(opts),
+            _ => None,
+        }
+    }
+
     /// `gettype` text: open resources are "resource", closed ones the special
     /// "resource (closed)" (oracle-verified, D-51.1/D-51.5).
     pub fn type_name(&self) -> &'static str {
