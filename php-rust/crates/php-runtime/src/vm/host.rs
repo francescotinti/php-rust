@@ -744,6 +744,27 @@ impl<'m> super::Vm<'m> {
             }
         }
     }
+
+    /// `set_time_limit(int $seconds): bool` — the CLI SAPI has no execution-time
+    /// limit, so this validates the argument and always succeeds (like php-cli).
+    pub(super) fn ho_set_time_limit(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let _ = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags);
+        Ok(Zval::Bool(true))
+    }
+
+    /// `ignore_user_abort(?bool $enable = null): int` — CLI has no client
+    /// connection, so this is a stored flag: return the previous value, and when
+    /// `$enable` is passed (non-null) update it.
+    pub(super) fn ho_ignore_user_abort(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let previous = self.user_abort_ignored as i64;
+        if let Some(v) = args.first() {
+            let v = v.deref_clone();
+            if !matches!(v, Zval::Null) {
+                self.user_abort_ignored = convert::to_bool(&v, &mut self.diags);
+            }
+        }
+        Ok(Zval::Long(previous))
+    }
     /// The type name PHP 8 uses in `TypeError` messages, which names the singleton
     /// values `true`/`false`/`null` rather than their type.
     fn err_type_name(v: &Zval) -> String {

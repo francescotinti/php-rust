@@ -390,6 +390,7 @@ pub(crate) fn run_module_with_hir<'m>(
         output_started: false,
         output_start: None,
         response_code: None,
+        user_abort_ignored: false,
         json_active: Vec::new(),
         enum_cache: HashMap::new(),
         constants: HashMap::new(),
@@ -1107,6 +1108,9 @@ struct Vm<'m> {
     /// `http_response_code()` — `None` until explicitly set (CLI reports `false`
     /// for an unset code).
     response_code: Option<i64>,
+    /// `ignore_user_abort()` flag; CLI has no client connection so it is purely a
+    /// stored value (default `0`, returned as the "previous" on each set).
+    user_abort_ignored: bool,
     /// Object addresses whose `jsonSerialize()` is currently on the encode stack —
     /// tracked ACROSS nested `json_encode()` calls (unlike the per-call `visiting`
     /// path). A nested `json_encode()` of such an object is JSON_ERROR_RECURSION;
@@ -8632,6 +8636,12 @@ host_builtins! {
     b"property_exists" => vm.ho_property_exists(args),
     b"get_called_class" => vm.ho_get_called_class(),
     b"error_reporting" => vm.ho_error_reporting(args),
+    // CLI runtime-environment stubs: no request/client connection or wall-clock
+    // limit, so these report the fixed CLI state (byte-identical to php-cli).
+    b"set_time_limit" => vm.ho_set_time_limit(args),
+    b"ignore_user_abort" => vm.ho_ignore_user_abort(args),
+    b"connection_aborted" => Ok(Zval::Long(0)), // never aborted under CLI
+    b"connection_status" => Ok(Zval::Long(0)),  // CONNECTION_NORMAL
     b"trigger_error" | b"user_error" => vm.ho_trigger_error(args),
     // Prelude-internal: raise an E_DEPRECATED attributed to the *caller* of the
     // prelude method (PHP reports an internal method's deprecation at the call
