@@ -40,6 +40,21 @@ impl Vm<'_> {
             Ok(entries) => entries,
             Err(err) => return Err(self.tokenizer_parse_error(err)),
         };
+        if parse {
+            // PHP compiles under TOKEN_PARSE, so a non-canonical cast raises its
+            // compile-time E_DEPRECATED (running any set_error_handler, which may
+            // throw or re-enter — GH-19507); `(real)` is a fatal ParseError. These
+            // fire in source order, before the token array is handed back.
+            for note in cast_notes(&entries) {
+                if note.fatal {
+                    return Err(self.tokenizer_parse_error(TokErr {
+                        message: note.message,
+                        line: note.line,
+                    }));
+                }
+                self.raise_diagnostic(8192, &note.message, note.line)?; // E_DEPRECATED
+            }
+        }
         let mut arr = PhpArray::new();
         for e in entries {
             match e.id {
@@ -89,6 +104,49 @@ impl Vm<'_> {
 pub struct TokErr {
     pub message: String,
     pub line: u32,
+}
+
+/// A compile-time diagnostic a non-canonical cast raises under `TOKEN_PARSE`:
+/// either an `E_DEPRECATED` (`fatal == false`) or the fatal `(real)`-removed
+/// `ParseError` (`fatal == true`).
+struct CastNote {
+    message: String,
+    line: u32,
+    fatal: bool,
+}
+
+/// PHP 8.5 deprecates the non-canonical cast aliases (and has removed `(real)`);
+/// this is raised at compile time, so `token_get_all($src, TOKEN_PARSE)` surfaces
+/// it. mago keeps the alias verbatim (`(double)`, `( Double )`, `(DOUBLE)` all map
+/// to T_DOUBLE_CAST), so we classify by the normalised cast keyword. Returned in
+/// source order.
+fn cast_notes(entries: &[Entry]) -> Vec<CastNote> {
+    let mut notes = Vec::new();
+    for e in entries {
+        // Only the int/float/string/bool casts have non-canonical aliases.
+        if !matches!(e.id, Some(381 | 382 | 383 | 386)) {
+            continue;
+        }
+        let (message, fatal): (&str, bool) = match normalized_cast(&e.text).as_str() {
+            "double" => ("Non-canonical cast (double) is deprecated, use the (float) cast instead", false),
+            "integer" => ("Non-canonical cast (integer) is deprecated, use the (int) cast instead", false),
+            "boolean" => ("Non-canonical cast (boolean) is deprecated, use the (bool) cast instead", false),
+            "binary" => ("Non-canonical cast (binary) is deprecated, use the (string) cast instead", false),
+            "real" => ("The (real) cast has been removed, use (float) instead", true),
+            _ => continue,
+        };
+        notes.push(CastNote { message: message.to_string(), line: e.line, fatal });
+    }
+    notes
+}
+
+/// The cast keyword with parentheses/whitespace stripped and lower-cased
+/// (`( Double )` → `double`), for matching against the alias set.
+fn normalized_cast(text: &[u8]) -> String {
+    text.iter()
+        .filter(|&&b| b != b'(' && b != b')' && !b.is_ascii_whitespace())
+        .map(|&b| b.to_ascii_lowercase() as char)
+        .collect()
 }
 
 /// One `token_get_all` element: a single-char token (`id == None`, `text` is the

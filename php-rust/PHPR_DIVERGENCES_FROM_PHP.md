@@ -184,13 +184,18 @@ FISSO di PHP ("Invalid numeric literal"; "Invalid UTF-8 codepoint escape sequenc
 large]"), (c) `$o->__halt_compiler()` (metodo, non il costrutto) viene ri-lessato: mago entra in
 halt-mode e ingoia il resto come inline-HTML → rilego la coda come PHP e la reinserisco (riga
 rebased). Recovery octal-invalido ora sceglie T_LNUMBER/T_DNUMBER per magnitudine (`078`→LNUMBER).
-Suite ufficiale `ext/tokenizer`: **41/49** runnable. Residui:
+**Deprecation dei cast non-canonici**: sotto TOKEN_PARSE PHP compila, quindi `(double)/(integer)/
+(boolean)/(binary)` alzano l'E_DEPRECATED compile-time "Non-canonical cast (x) is deprecated, use
+the (y) cast instead" (via `raise_diagnostic` → esegue l'error handler utente, che può lanciare o
+ri-entrare — GH-19507; phpr ri-lessa ogni chiamata da zero, quindi niente corruzione) e `(real)`
+lancia il ParseError fatale "The (real) cast has been removed, use (float) instead".
+Suite ufficiale `ext/tokenizer`: **42/49** runnable. Residui:
 
 - **Messaggi di sintassi bison/yacc** (`TOKEN_PARSE_000` "unexpected identifier", heredoc non
-  terminato "unexpected end of file, expecting…", `gh19507_throw` stack-trace): i messaggi di mago ≠
-  PHP → byte-identico non fattibile senza riprodurre il layer di errori del parser PHP. Hard.
-- **`(double)`-cast deprecation** (`gh19507_eval`): richiede emettere E_DEPRECATED durante la
-  tokenizzazione (esegue l'error handler utente) — infra deprecation §1.2.
+  terminato "unexpected end of file, expecting…"): i messaggi di mago ≠ PHP → byte-identico non
+  fattibile senza riprodurre il layer di errori del parser PHP. Hard.
+- **`gh19507_throw`**: l'handler invocato da un builtin dev'essere tracciato come `[internal
+  function]` con file-arg vuoto (`''`) — concern trasversale trace/handler, non del tokenizer.
 - **`__halt_compiler` statement-level** (`bug54089`): la tokenizzazione del contenuto post-halt
   diverge (span PHP-scanner-specifici, es. `" ABC"` come singolo token). Solo il caso `->` è gestito.
 - **Keyword-come-identificatore in altri contesti** (trait `use A { namespace as bar; }`):
