@@ -100,21 +100,34 @@ correct-or-absent.
 | `getimagesize` (formati rari + out-param) | Implementati GIF/JPEG/PNG/BMP/WebP; mancano formati rari e il parametro `&$image_info` | Parser per formati residui + supporto out-param |
 | `opcache_*` | Nessun opcache | (fuori scope) |
 
-### 2.1 bcmath — 14 funzioni procedurali COMPLETE; OOP/enum differiti
+### 2.1 bcmath — 14 funzioni procedurali + `BcMath\Number` (metodi) + `RoundingMode`; SOLO operatori differiti
 
 Le 14 funzioni procedurali (`bcadd`/`bcsub`/`bcmul`/`bcdiv`/`bcmod`/`bcdivmod`/
 `bcpow`/`bcpowmod`/`bcsqrt`/`bccomp`/`bcscale`/`bcfloor`/`bcceil`/`bcround`) sono
 implementate byte-identiche (port di `libbcmath`, `crates/php-builtins/src/bcmath.rs`;
-~4000 casi fuzz + battery verdi). Residui consapevoli:
+~4000 casi fuzz + battery verdi). La classe **`BcMath\Number`** è implementata come
+classe PHP nel prelude (`crates/php-runtime/src/lower/prelude_bcmath.php`) che delega
+ai builtin bc\*, con le regole di scala di `bcmath_number_*_internal` (add/sub=max,
+mul=somma, div/sqrt/pow⁻=+10 e collassa, ecc.). L'enum **`RoundingMode`** (8 casi) è
+nel prelude e `bcround`/`Number::round` lo mappano ai modi `PHP_ROUND_*`. Suite
+ufficiale `ext/bcmath`: 85/124 runnable. Residui consapevoli:
 
-- **`BcMath\Number`** (classe `final readonly`, 8.4+) NON implementata: richiede una
-  classe interna con proprietà virtuali `value`/`scale`, overloading operatori
-  (`do_operation`/`compare`) e `__serialize`. È un'intera superficie OOP separata —
-  ~77 phpt la esercitano. Da fare come feature dedicata.
-- **`RoundingMode`** enum non modellato: `bcround($num, $precision, $mode)` supporta
-  solo il default `HalfAwayFromZero` (= `PHP_ROUND_HALF_UP`), coerente con `round()`
-  del core che ha lo stesso limite. L'algoritmo interno di `bc_round` implementa già
-  tutti gli 8 modi: manca solo il ponte all'enum. ~12 phpt gated su `RoundingMode`.
+- **Overloading operatori di `BcMath\Number`** (`+ - * / % **`, `<=> ==`, `++/--`,
+  compound-assign) NON implementato: richiede gli handler engine `do_operation` /
+  `compare_object`, cioè **re-entrancy della VM** (chiamare un metodo PHP dentro un
+  opcode aritmetico) — lo stesso vincolo per cui phpr differisce le UDF sqlite e
+  usa il deferred-dispatch per ArrayAccess. `apply_binop` (vm/mod.rs) è operand-puro.
+  Farlo bene tocca il core di dispatch aritmetico/confronto: alto rischio di
+  regressione sul corpus, quindi differito (correct-or-absent). ~28 phpt `operators/`.
+- **Cast engine di `Number`**: `(bool)$n`/`(int)$n` usano `cast_object` in C (zero→false;
+  int/float→warning). Una classe PHP non può ridefinire questi cast → `(bool)` di un
+  Number è sempre truthy in phpr. ~2 phpt (`cast`, `cast_warning`).
+- **Coercizioni ZPP** su `Number`: float→int con deprecation nel costruttore
+  `string|int`, e la deprecation "Passing null to parameter" sui metodi non sono
+  emesse (cfr. §1.2). Risultato numerico corretto, manca la riga di deprecation.
+- **var_dump object-id**: i metodi che creano Number intermedi (`divmod`, `sqrt`)
+  spostano il contatore `#N` degli handle → i `#id` in var_dump possono differire
+  (limite intrinseco della delega a classe PHP, non un errore di valore).
 - **`bcmath.scale` INI**: lo scale di default (`bcscale()`) è tenuto in stato
   thread-local, non legato all'INI `bcmath.scale` (phpr non ha un registro INI reale,
   cfr. `get_cfg_var`). I phpt con `--INI-- bcmath.scale=N` sono skippati dal runner

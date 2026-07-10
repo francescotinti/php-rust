@@ -155,6 +155,17 @@ class Attribute {
 }
 interface UnitEnum {}
 interface BackedEnum extends UnitEnum {}
+// PHP 8.4 rounding mode enum (used by round() and bcround()/BcMath\Number).
+enum RoundingMode {
+    case HalfAwayFromZero;
+    case HalfTowardsZero;
+    case HalfEven;
+    case HalfOdd;
+    case TowardsZero;
+    case AwayFromZero;
+    case NegativeInfinity;
+    case PositiveInfinity;
+}
 // Engine interfaces carry their real method signatures (compiled as
 // abstract_sigs): hasMethod/getMethods and PHPUnit interface mocks read them.
 interface Stringable {

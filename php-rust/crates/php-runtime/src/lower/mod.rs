@@ -542,6 +542,10 @@ const PRELUDE_SRC: &[u8] = include_bytes!("prelude.php");
 /// (VM re-entrancy), so those calls keep the honest undefined-method error.
 const PRELUDE_NS_SRC: &[u8] = include_bytes!("prelude_ns.php");
 
+/// The `BcMath\Number` value object (PHP 8.4+): its own namespaced unit,
+/// hoisted alongside `Pdo\Sqlite`. Delegates to the bc* builtins.
+const PRELUDE_BC_SRC: &[u8] = include_bytes!("prelude_bcmath.php");
+
 /// The four owned products of lowering [`PRELUDE_SRC`]: the class table + its
 /// name→id index (step 20), and the global-function table + its name→index
 /// (step 35). Both are seeded into every real program before user declarations
@@ -612,6 +616,17 @@ fn lower_prelude_uncached() -> LoweredPrelude {
     );
     low.hoist_classes(program_ns.statements.as_slice())
         .expect("namespaced prelude must lower");
+    // `BcMath\Number`: another namespaced unit, same treatment.
+    let file_bc =
+        File::ephemeral(Cow::Borrowed(b"prelude".as_slice()), Cow::Borrowed(PRELUDE_BC_SRC));
+    let program_bc = parse_file(&arena, &file_bc);
+    debug_assert!(
+        !program_bc.has_errors(),
+        "bcmath prelude failed to parse: {:?}",
+        program_bc.errors
+    );
+    low.hoist_classes(program_bc.statements.as_slice())
+        .expect("bcmath prelude must lower");
     (low.classes, low.class_index, low.functions, low.fn_index)
 }
 

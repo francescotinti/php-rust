@@ -1037,10 +1037,34 @@ pub fn bcceil(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     ret_str(bc_floor_or_ceil(&num, false).format(0))
 }
 
+/// Map a `RoundingMode` enum-case argument to a `PHP_ROUND_*` mode. Mirrors
+/// `php_math_round_mode_from_enum` (keyed on the case name). Non-enum / missing
+/// arguments default to HalfAwayFromZero.
+fn round_mode_from_arg(v: Option<&Zval>) -> i64 {
+    use round_mode::*;
+    if let Some(Zval::Object(o)) = v {
+        let obj = o.borrow();
+        if let Some(Zval::Str(s)) = obj.props.get(b"name".as_slice()) {
+            return match s.as_bytes() {
+                b"HalfAwayFromZero" => HALF_UP,
+                b"HalfTowardsZero" => HALF_DOWN,
+                b"HalfEven" => HALF_EVEN,
+                b"HalfOdd" => HALF_ODD,
+                b"TowardsZero" => TOWARD_ZERO,
+                b"AwayFromZero" => AWAY_FROM_ZERO,
+                b"NegativeInfinity" => FLOOR,
+                b"PositiveInfinity" => CEILING,
+                _ => HALF_UP,
+            };
+        }
+    }
+    HALF_UP
+}
+
 pub fn bcround(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let num = parse_arg(args, ctx, 0, "bcround", 1, "num")?;
     let precision = args.get(1).map(|v| convert::to_long_cast(v, ctx.diags)).unwrap_or(0);
-    // The RoundingMode enum is not modelled in phpr; default HalfAwayFromZero.
-    let (result, scale) = bc_round(&num, precision, round_mode::HALF_UP);
+    let mode = round_mode_from_arg(args.get(2));
+    let (result, scale) = bc_round(&num, precision, mode);
     ret_str(result.format(scale))
 }
