@@ -27,9 +27,27 @@ pub enum ResKind {
     /// (`['http'=>[...], 'ssl'=>[...]]`) for the stream functions to read.
     /// Reports gettype "resource" and var_dump type "stream-context".
     Context(crate::Zval),
+    /// A stream opened through a userland wrapper (`stream_wrapper_register`):
+    /// the file ops dispatch to the wrapper object's `stream_*` methods. Reports
+    /// gettype "resource" and var_dump type "stream" like any byte stream.
+    UserStream(UserStream),
     /// After `fclose`: the handle keeps its id but the backend is gone. PHP
     /// reports `gettype` "resource (closed)" and var_dumps "of type (Unknown)".
     Closed,
+}
+
+/// A userland-wrapper stream (`stream_wrapper_register`): the wrapper object plus
+/// PHP's read-buffer state. The VM drives the `stream_*` method calls (it can
+/// re-enter the interpreter, which this crate cannot), so this is pure data: the
+/// `obj` handle, the `chunk` size PHP fills the buffer in (default 8192), the
+/// pending `buffer`, and a sticky `eof` flag `stream_eof()` sets.
+#[derive(Debug)]
+pub struct UserStream {
+    pub obj: crate::Zval,
+    pub uri: Vec<u8>,
+    pub mode: Vec<u8>,
+    pub buffer: Vec<u8>,
+    pub chunk: usize,
 }
 
 /// An open directory: the entries snapshot (including `.`/`..`, in readdir order)
@@ -135,6 +153,27 @@ impl Resource {
         }
     }
 
+    /// A userland-wrapper stream resource wrapping `us`.
+    pub fn new_user_stream(id: u32, us: UserStream) -> Resource {
+        Resource { id, kind: ResKind::UserStream(us) }
+    }
+
+    /// The userland-wrapper stream, if this resource is one.
+    pub fn as_user_stream(&self) -> Option<&UserStream> {
+        match &self.kind {
+            ResKind::UserStream(u) => Some(u),
+            _ => None,
+        }
+    }
+
+    /// Mutable access to the userland-wrapper stream.
+    pub fn as_user_stream_mut(&mut self) -> Option<&mut UserStream> {
+        match &mut self.kind {
+            ResKind::UserStream(u) => Some(u),
+            _ => None,
+        }
+    }
+
     /// The context options array, if this is a stream-context resource.
     pub fn context_options(&self) -> Option<&crate::Zval> {
         match &self.kind {
@@ -155,9 +194,11 @@ impl Resource {
     /// "resource (closed)" (oracle-verified, D-51.1/D-51.5).
     pub fn type_name(&self) -> &'static str {
         match self.kind {
-            ResKind::Stream(_) | ResKind::Dir(_) | ResKind::Context(_) | ResKind::Process(_) => {
-                "resource"
-            }
+            ResKind::Stream(_)
+            | ResKind::Dir(_)
+            | ResKind::Context(_)
+            | ResKind::UserStream(_)
+            | ResKind::Process(_) => "resource",
             ResKind::Closed => "resource (closed)",
         }
     }
@@ -172,7 +213,7 @@ impl Resource {
     /// "Unknown" once closed (oracle-verified, D-51.5).
     pub fn dump_type(&self) -> &'static str {
         match self.kind {
-            ResKind::Stream(_) | ResKind::Dir(_) => "stream",
+            ResKind::Stream(_) | ResKind::Dir(_) | ResKind::UserStream(_) => "stream",
             ResKind::Context(_) => "stream-context",
             ResKind::Process(_) => "process",
             ResKind::Closed => "Unknown",
@@ -182,7 +223,7 @@ impl Resource {
     pub fn as_stream_mut(&mut self) -> Option<&mut Stream> {
         match &mut self.kind {
             ResKind::Stream(s) => Some(s),
-            ResKind::Dir(_) | ResKind::Context(_) | ResKind::Process(_) | ResKind::Closed => None,
+            ResKind::Dir(_) | ResKind::Context(_) | ResKind::UserStream(_) | ResKind::Process(_) | ResKind::Closed => None,
         }
     }
 
@@ -198,7 +239,7 @@ impl Resource {
     pub fn as_dir_mut(&mut self) -> Option<&mut DirHandle> {
         match &mut self.kind {
             ResKind::Dir(d) => Some(d),
-            ResKind::Stream(_) | ResKind::Context(_) | ResKind::Process(_) | ResKind::Closed => {
+            ResKind::Stream(_) | ResKind::Context(_) | ResKind::UserStream(_) | ResKind::Process(_) | ResKind::Closed => {
                 None
             }
         }

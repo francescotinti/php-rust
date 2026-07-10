@@ -203,6 +203,23 @@ Suite ufficiale `ext/tokenizer`: **42/49** runnable. Residui:
 - **`yield from`** = 1 token T_YIELD_FROM in PHP; mago = Yield + ws + From.
 - **`PhpToken::is(float)`**: coercizione ZPP float→int (deprecation §1.2) invece del TypeError.
 
+### 2.4 Stream wrappers userland — stream_wrapper_register
+
+`stream_wrapper_register`/`unregister` (registry `scheme→classe`) + `fopen("scheme://…")` istanzia la
+classe handler (costruttore + default valutati, come `new`) e chiama `stream_open`; nasce una
+`ResKind::UserStream`. Le file-op (`fread`/`fwrite`/`feof`/`fclose`/`fgets`/`rewind`/`fseek`/`ftell`/
+`stream_get_contents`/`file_get_contents`) dispatchano ai metodi `stream_*` dell'oggetto (VM-re-entrant),
+via un fast-path in `CallBuiltin` che scatta SOLO se l'arg #1 è una UserStream → l'I/O di file normale è
+byte-identico e intatto. Fill bufferizzato fedele a PHP (`stream_read($chunk=8192)`+`stream_eof()`;
+bounded si ferma su short read, read-to-EOF su read vuota). **Byte-identico** sull'uso reale (wrapper
+read-only, file_get_contents, fopen/fgets). **Divergenze consapevoli**:
+- il **NUMERO di resource-id** in var_dump (contatore interno, classe §2.1) può differire.
+- la **sequenza esatta delle chiamate interne** `stream_eof`/`stream_seek` quando UN SOLO handle
+  mescola letture e scritture: PHP emette un `stream_seek(pos)` di sync read→write che phpr non emette →
+  osservabile solo da un wrapper di test che fa echo dei propri interni, mai dal codice reale.
+- differiti: `stream_wrapper_restore`/`stream_get_wrappers`, dir-ops (`dir_opendir`…), `url_stat`
+  (file_exists/stat sul wrapper), il flag `STREAM_USE_PATH` (`&$opened_path` accettato ma non propagato).
+
 ---
 
 ## 3. Divergenze di engine circoscritte (documentate nei topic-file di memoria)

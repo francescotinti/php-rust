@@ -3,6 +3,50 @@
 
 use super::*;
 
+/// A file op that a userland stream wrapper (`stream_wrapper_register`) can
+/// service via its `stream_*` methods, if its first argument is a `UserStream`.
+fn is_user_stream_op(name: &[u8]) -> bool {
+    matches!(
+        name,
+        b"fread"
+            | b"fwrite"
+            | b"fputs"
+            | b"feof"
+            | b"fclose"
+            | b"fgets"
+            | b"stream_get_contents"
+            | b"rewind"
+            | b"fseek"
+            | b"ftell"
+    )
+}
+
+/// The resource handle if `v` (following a ref) is a userland-wrapper stream.
+fn user_stream_rc(v: &Zval) -> Option<Rc<RefCell<php_types::Resource>>> {
+    match v.deref_clone() {
+        Zval::Resource(rc) if rc.borrow().as_user_stream().is_some() => Some(rc),
+        _ => None,
+    }
+}
+
+/// The URL bytes if `v` is a string whose scheme is a registered userland wrapper
+/// (so `file_get_contents` routes through the wrapper instead of the filesystem).
+fn user_wrapper_url(
+    v: &Zval,
+    wrappers: &std::collections::HashMap<Vec<u8>, Vec<u8>>,
+) -> Option<Vec<u8>> {
+    let s = match v.deref_clone() {
+        Zval::Str(s) => s.as_bytes().to_vec(),
+        _ => return None,
+    };
+    let pos = s.windows(3).position(|w| w == b"://")?;
+    if wrappers.contains_key(&s[..pos].to_ascii_lowercase()) {
+        Some(s)
+    } else {
+        None
+    }
+}
+
 impl<'m> super::Vm<'m> {
     /// The bounded dispatch loop: runs until the frame at `baseline` returns
     /// ([`RunExit::Returned`]) or a generator at `baseline` suspends at a `yield`
@@ -1853,6 +1897,32 @@ impl<'m> super::Vm<'m> {
                         if let Some(obj) = self.as_countable(&args[0]) {
                             let n = self.call_method_sync(obj, b"count", Vec::new())?;
                             self.frames[top].stack.push(n);
+                            continue;
+                        }
+                    }
+                    // A userland stream wrapper (stream_wrapper_register): a file
+                    // op whose first argument is such a resource dispatches to the
+                    // wrapper object's stream_* methods (VM re-entrant), never the
+                    // pure value builtin. Only fires for UserStream resources, so
+                    // ordinary file I/O is untouched.
+                    if argc >= 1 && is_user_stream_op(&name) {
+                        if let Some(rc) = user_stream_rc(&args[0]) {
+                            let line = self.cur_line(top);
+                            self.flush_diags(line)?;
+                            let result = self.user_stream_op(&name, rc, &args)?;
+                            self.flush_diags(line)?;
+                            self.frames[top].stack.push(result);
+                            continue;
+                        }
+                    }
+                    // `file_get_contents("scheme://…")` on a registered wrapper.
+                    if argc >= 1 && name[..] == *b"file_get_contents" {
+                        if let Some(path) = user_wrapper_url(&args[0], &self.stream_wrappers) {
+                            let line = self.cur_line(top);
+                            self.flush_diags(line)?;
+                            let result = self.user_wrapper_get_contents(&path)?;
+                            self.flush_diags(line)?;
+                            self.frames[top].stack.push(result);
                             continue;
                         }
                     }

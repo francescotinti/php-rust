@@ -391,6 +391,7 @@ pub(crate) fn run_module_with_hir<'m>(
         output_start: None,
         response_code: None,
         user_abort_ignored: false,
+        stream_wrappers: std::collections::HashMap::new(),
         json_active: Vec::new(),
         enum_cache: HashMap::new(),
         constants: HashMap::new(),
@@ -1111,6 +1112,11 @@ struct Vm<'m> {
     /// `ignore_user_abort()` flag; CLI has no client connection so it is purely a
     /// stored value (default `0`, returned as the "previous" on each set).
     user_abort_ignored: bool,
+    /// Userland stream wrappers (`stream_wrapper_register`): lower-cased `scheme`
+    /// → the handler class name (resolved to a class at `fopen` time, so a
+    /// late-defined class still works). `fopen("scheme://…")` instantiates it and
+    /// drives its `stream_*` methods.
+    stream_wrappers: std::collections::HashMap<Vec<u8>, Vec<u8>>,
     /// Object addresses whose `jsonSerialize()` is currently on the encode stack —
     /// tracked ACROSS nested `json_encode()` calls (unlike the per-call `visiting`
     /// path). A nested `json_encode()` of such an object is JSON_ERROR_RECURSION;
@@ -5451,6 +5457,17 @@ impl<'m> Vm<'m> {
                 }
             };
         }
+        // A registered userland stream wrapper (stream_wrapper_register) claims
+        // its scheme before the filesystem is consulted.
+        if let Some(pos) = path.windows(3).position(|w| w == b"://") {
+            let scheme = path[..pos].to_ascii_lowercase();
+            if self.stream_wrappers.contains_key(&scheme) {
+                let r = self.fopen_user_wrapper(&path, &mode);
+                let line = self.cur_line(self.frames.len() - 1);
+                self.flush_diags(line)?;
+                return r;
+            }
+        }
         match open_file_stream(&path, &mode) {
             Ok(stream) => Ok(self.alloc_resource(stream)),
             Err(msg) => {
@@ -8717,6 +8734,8 @@ host_builtins! {
     b"__fsockopen" => vm.ho_fsockopen(args),
     b"stream_set_timeout" => vm.ho_stream_set_timeout(args),
     b"stream_is_local" => vm.ho_stream_is_local(args),
+    b"stream_wrapper_register" | b"stream_register_wrapper" => vm.ho_stream_wrapper_register(args),
+    b"stream_wrapper_unregister" => vm.ho_stream_wrapper_unregister(args),
     b"serialize" => vm.ho_serialize(args),
     b"umask" => vm.ho_umask(args),
     b"__dom_new_doc" => vm.ho_dom_new_doc(args),

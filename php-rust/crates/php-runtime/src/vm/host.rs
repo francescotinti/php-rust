@@ -41,6 +41,16 @@ fn url_scheme(spec: &[u8]) -> String {
     }
 }
 
+/// Whether `scheme` (lower-cased) is a built-in wrapper phpr recognises, so
+/// `stream_wrapper_register` refuses to redefine it (matching PHP).
+fn is_builtin_scheme(scheme: &[u8]) -> bool {
+    matches!(
+        scheme,
+        b"file" | b"php" | b"http" | b"https" | b"ftp" | b"ftps" | b"data" | b"glob"
+            | b"phar" | b"zip" | b"compress.zlib" | b"compress.bzip2"
+    )
+}
+
 /// An array key as the bytes PHP would use for it (int keys become their decimal
 /// text), for indexing stream-context wrapper/option sub-arrays.
 fn key_bytes(k: &php_types::Key) -> Vec<u8> {
@@ -4853,6 +4863,322 @@ impl<'m> super::Vm<'m> {
                 true
             }
         }))
+    }
+
+    /// `stream_wrapper_register($protocol, $class, $flags = 0): bool` — register a
+    /// userland stream wrapper. Fails (Warning + false) if the scheme is already
+    /// taken (by another userland wrapper or a built-in one).
+    pub(super) fn ho_stream_wrapper_register(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let proto = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags)
+            .as_bytes()
+            .to_ascii_lowercase();
+        let class = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags)
+            .as_bytes()
+            .to_vec();
+        if self.stream_wrappers.contains_key(&proto) || is_builtin_scheme(&proto) {
+            self.diags.push(Diag::Warning(format!(
+                "stream_wrapper_register(): Protocol {}:// is already defined.",
+                String::from_utf8_lossy(&proto)
+            )));
+            return Ok(Zval::Bool(false));
+        }
+        self.stream_wrappers.insert(proto, class);
+        Ok(Zval::Bool(true))
+    }
+
+    /// `stream_wrapper_unregister($protocol): bool` — remove a userland wrapper.
+    pub(super) fn ho_stream_wrapper_unregister(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let proto = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags)
+            .as_bytes()
+            .to_ascii_lowercase();
+        if self.stream_wrappers.remove(&proto).is_some() {
+            Ok(Zval::Bool(true))
+        } else {
+            self.diags.push(Diag::Warning(format!(
+                "stream_wrapper_unregister(): Can't unregister URL stream wrapper {}://",
+                String::from_utf8_lossy(&proto)
+            )));
+            Ok(Zval::Bool(false))
+        }
+    }
+
+    /// Open a `scheme://…` URL whose scheme is a registered userland wrapper:
+    /// instantiate the handler class, call `stream_open($path,$mode,$options,&$opened)`,
+    /// and (on success) mint a `UserStream` resource. `false` + Warning otherwise.
+    pub(super) fn fopen_user_wrapper(&mut self, path: &[u8], mode: &[u8]) -> Result<Zval, PhpError> {
+        let scheme = url_scheme(path);
+        let Some(class) = self.stream_wrappers.get(scheme.as_bytes()).cloned() else {
+            return Ok(Zval::Bool(false));
+        };
+        let key = class.strip_prefix(b"\\").unwrap_or(&class).to_ascii_lowercase();
+        let cname = String::from_utf8_lossy(&class).into_owned();
+        let Some(&cid) = self.class_index.get(key.as_slice()) else {
+            self.diags.push(Diag::Warning(format!(
+                "fopen({}): Failed to open stream: wrapper class \"{cname}\" does not exist",
+                String::from_utf8_lossy(path)
+            )));
+            return Ok(Zval::Bool(false));
+        };
+        if resolve_method_runtime(&self.classes, cid, b"stream_open").is_none() {
+            self.diags.push(Diag::Warning(format!(
+                "fopen({}): Failed to open stream: \"{cname}::stream_open\" is not implemented",
+                String::from_utf8_lossy(path)
+            )));
+            return Ok(Zval::Bool(false));
+        }
+        let obj = self.instantiate_wrapper(cid)?;
+        let opened = Rc::new(RefCell::new(Zval::Null));
+        let ret = self.call_method_sync(
+            obj.clone(),
+            b"stream_open",
+            vec![
+                Zval::Str(PhpStr::new(path.to_vec())),
+                Zval::Str(PhpStr::new(mode.to_vec())),
+                Zval::Long(0),
+                Zval::Ref(Rc::clone(&opened)),
+            ],
+        )?;
+        if !convert::to_bool(&ret.deref_clone(), &mut self.diags) {
+            self.diags.push(Diag::Warning(format!(
+                "fopen({}): Failed to open stream: \"{cname}::stream_open\" call failed",
+                String::from_utf8_lossy(path)
+            )));
+            return Ok(Zval::Bool(false));
+        }
+        let id = self.next_resource_id;
+        self.next_resource_id += 1;
+        let us = php_types::stream::UserStream {
+            obj,
+            uri: path.to_vec(),
+            mode: mode.to_vec(),
+            buffer: Vec::new(),
+            chunk: 8192,
+        };
+        Ok(Zval::Resource(Rc::new(RefCell::new(Resource::new_user_stream(id, us)))))
+    }
+
+    /// Instantiate a wrapper class the way `new` does: allocate, run the evaluated
+    /// property-default thunk, then the constructor (if any) with no arguments.
+    fn instantiate_wrapper(&mut self, cid: ClassId) -> Result<Zval, PhpError> {
+        let obj = self.alloc_object(cid)?;
+        let cc = self.classes[cid];
+        if let Some(func) = cc.prop_init.as_ref() {
+            let baseline = self.frames.len();
+            let mut frame = Frame::new(func, self.class_mod(cid));
+            frame.this = Some(obj.clone());
+            frame.class = Some(cid);
+            frame.static_class = Some(cid);
+            frame.init_props = true;
+            self.frames.push(frame);
+            self.drive_to_return(baseline)?;
+        }
+        if resolve_method_runtime(&self.classes, cid, b"__construct").is_some() {
+            self.call_method_sync(obj.clone(), b"__construct", Vec::new())?;
+        }
+        Ok(obj)
+    }
+
+    /// `file_get_contents` over a registered userland wrapper: open, read to EOF,
+    /// close. Returns the contents, or `false` if the open failed.
+    pub(super) fn user_wrapper_get_contents(&mut self, path: &[u8]) -> Result<Zval, PhpError> {
+        let opened = self.fopen_user_wrapper(path, b"rb")?;
+        let Zval::Resource(rc) = opened else {
+            return Ok(Zval::Bool(false));
+        };
+        self.user_stream_fill(&rc, usize::MAX, true)?;
+        let data = rc
+            .borrow_mut()
+            .as_user_stream_mut()
+            .map(|u| std::mem::take(&mut u.buffer))
+            .unwrap_or_default();
+        let obj = rc.borrow().as_user_stream().map(|u| u.obj.clone());
+        if let Some(obj) = obj {
+            let cid = object_class_id(&obj).unwrap_or(0);
+            if resolve_method_runtime(&self.classes, cid, b"stream_close").is_some() {
+                self.call_method_sync(obj, b"stream_close", Vec::new())?;
+            }
+        }
+        Ok(Zval::Str(PhpStr::new(data)))
+    }
+
+    /// Dispatch a file op (`fread`/`fwrite`/…) on a `UserStream` to the wrapper
+    /// object's `stream_*` methods. Called from the `CallBuiltin` fast-path only
+    /// when arg #1 is such a resource, so normal file I/O is untouched.
+    pub(super) fn user_stream_op(
+        &mut self,
+        name: &[u8],
+        rc: Rc<RefCell<Resource>>,
+        args: &[Zval],
+    ) -> Result<Zval, PhpError> {
+        let Some(obj) = rc.borrow().as_user_stream().map(|u| u.obj.clone()) else {
+            return Ok(Zval::Bool(false));
+        };
+        let cid = object_class_id(&obj).unwrap_or(0);
+        let has = |vm: &Self, m: &[u8]| resolve_method_runtime(&vm.classes, cid, m).is_some();
+        match name {
+            b"fread" => {
+                let n = args
+                    .get(1)
+                    .map(|v| convert::to_long_cast(&v.deref_clone(), &mut self.diags))
+                    .unwrap_or(0)
+                    .max(0) as usize;
+                self.user_stream_fill(&rc, n, false)?;
+                let mut b = rc.borrow_mut();
+                let us = b.as_user_stream_mut().unwrap();
+                let take = n.min(us.buffer.len());
+                Ok(Zval::Str(PhpStr::new(us.buffer.drain(..take).collect::<Vec<u8>>())))
+            }
+            b"fwrite" | b"fputs" => {
+                let mut data = args
+                    .get(1)
+                    .map(|v| convert::to_zstr_cast(&v.deref_clone(), &mut self.diags).as_bytes().to_vec())
+                    .unwrap_or_default();
+                if let Some(l) = args.get(2).map(|v| convert::to_long_cast(&v.deref_clone(), &mut self.diags)) {
+                    if l >= 0 && (l as usize) < data.len() {
+                        data.truncate(l as usize);
+                    }
+                }
+                let r = self.call_method_sync(obj, b"stream_write", vec![Zval::Str(PhpStr::new(data))])?;
+                Ok(Zval::Long(convert::to_long_cast(&r.deref_clone(), &mut self.diags)))
+            }
+            b"feof" => {
+                if !rc.borrow().as_user_stream().map(|u| u.buffer.is_empty()).unwrap_or(true) {
+                    return Ok(Zval::Bool(false));
+                }
+                if has(self, b"stream_eof") {
+                    let r = self.call_method_sync(obj, b"stream_eof", Vec::new())?;
+                    Ok(Zval::Bool(convert::to_bool(&r.deref_clone(), &mut self.diags)))
+                } else {
+                    Ok(Zval::Bool(true))
+                }
+            }
+            b"fclose" => {
+                if has(self, b"stream_close") {
+                    self.call_method_sync(obj, b"stream_close", Vec::new())?;
+                }
+                rc.borrow_mut().kind = php_types::stream::ResKind::Closed;
+                Ok(Zval::Bool(true))
+            }
+            b"stream_get_contents" => {
+                self.user_stream_fill(&rc, usize::MAX, true)?;
+                let mut b = rc.borrow_mut();
+                let us = b.as_user_stream_mut().unwrap();
+                Ok(Zval::Str(PhpStr::new(std::mem::take(&mut us.buffer))))
+            }
+            b"fgets" => {
+                // Read up to a newline (inclusive), or the whole remaining stream.
+                let cap = args
+                    .get(1)
+                    .map(|v| convert::to_long_cast(&v.deref_clone(), &mut self.diags))
+                    .filter(|&l| l > 0)
+                    .map(|l| (l - 1) as usize);
+                loop {
+                    let (has_nl, len, want_more) = {
+                        let b = rc.borrow();
+                        let us = b.as_user_stream().unwrap();
+                        let nl = us.buffer.iter().position(|&c| c == b'\n');
+                        let reached = cap.map(|c| us.buffer.len() >= c).unwrap_or(false);
+                        (nl.is_some(), us.buffer.len(), !nl.is_some() && !reached)
+                    };
+                    let _ = len;
+                    if !want_more {
+                        break;
+                    }
+                    let before = rc.borrow().as_user_stream().unwrap().buffer.len();
+                    self.user_stream_fill(&rc, before + 1, false)?;
+                    if rc.borrow().as_user_stream().unwrap().buffer.len() == before {
+                        break; // no more data
+                    }
+                    let _ = has_nl;
+                }
+                let mut b = rc.borrow_mut();
+                let us = b.as_user_stream_mut().unwrap();
+                if us.buffer.is_empty() {
+                    return Ok(Zval::Bool(false));
+                }
+                let mut end = us.buffer.iter().position(|&c| c == b'\n').map(|i| i + 1).unwrap_or(us.buffer.len());
+                if let Some(c) = cap {
+                    end = end.min(c);
+                }
+                Ok(Zval::Str(PhpStr::new(us.buffer.drain(..end).collect::<Vec<u8>>())))
+            }
+            b"rewind" => {
+                let ok = if has(self, b"stream_seek") {
+                    let r = self.call_method_sync(obj, b"stream_seek", vec![Zval::Long(0), Zval::Long(0)])?;
+                    convert::to_bool(&r.deref_clone(), &mut self.diags)
+                } else {
+                    false
+                };
+                if ok {
+                    if let Some(us) = rc.borrow_mut().as_user_stream_mut() {
+                        us.buffer.clear();
+                    }
+                }
+                Ok(Zval::Bool(ok))
+            }
+            b"fseek" => {
+                let off = args.get(1).map(|v| convert::to_long_cast(&v.deref_clone(), &mut self.diags)).unwrap_or(0);
+                let whence = args.get(2).map(|v| convert::to_long_cast(&v.deref_clone(), &mut self.diags)).unwrap_or(0);
+                let ok = if has(self, b"stream_seek") {
+                    let r = self.call_method_sync(obj, b"stream_seek", vec![Zval::Long(off), Zval::Long(whence)])?;
+                    convert::to_bool(&r.deref_clone(), &mut self.diags)
+                } else {
+                    false
+                };
+                if ok {
+                    if let Some(us) = rc.borrow_mut().as_user_stream_mut() {
+                        us.buffer.clear();
+                    }
+                }
+                Ok(Zval::Long(if ok { 0 } else { -1 }))
+            }
+            b"ftell" => {
+                if has(self, b"stream_tell") {
+                    let r = self.call_method_sync(obj, b"stream_tell", Vec::new())?;
+                    Ok(Zval::Long(convert::to_long_cast(&r.deref_clone(), &mut self.diags)))
+                } else {
+                    Ok(Zval::Bool(false))
+                }
+            }
+            _ => Ok(Zval::Bool(false)),
+        }
+    }
+
+    /// Fill a `UserStream`'s read buffer by repeated `stream_read($chunk)` (each
+    /// followed by the `stream_eof()` PHP consults). Two modes match PHP's stream
+    /// layer: a bounded read (`to_eof == false`) stops once the buffer reaches
+    /// `want` **or** a short read is seen; a read-to-EOF (`to_eof == true`, for
+    /// `stream_get_contents`/`file_get_contents`) reads until an empty read.
+    fn user_stream_fill(
+        &mut self,
+        rc: &Rc<RefCell<Resource>>,
+        want: usize,
+        to_eof: bool,
+    ) -> Result<(), PhpError> {
+        loop {
+            let (have, chunk, obj) = {
+                let b = rc.borrow();
+                let Some(us) = b.as_user_stream() else { return Ok(()) };
+                (us.buffer.len(), us.chunk, us.obj.clone())
+            };
+            if !to_eof && have >= want {
+                break;
+            }
+            let r = self.call_method_sync(obj.clone(), b"stream_read", vec![Zval::Long(chunk as i64)])?;
+            let bytes = convert::to_zstr_cast(&r.deref_clone(), &mut self.diags).as_bytes().to_vec();
+            let got = bytes.len();
+            let cid = object_class_id(&obj).unwrap_or(0);
+            if resolve_method_runtime(&self.classes, cid, b"stream_eof").is_some() {
+                self.call_method_sync(obj.clone(), b"stream_eof", Vec::new())?;
+            }
+            if let Some(us) = rc.borrow_mut().as_user_stream_mut() {
+                us.buffer.extend_from_slice(&bytes);
+            }
+            if got == 0 || (!to_eof && got < chunk) {
+                break; // empty read ends any fill; a short read ends a bounded one
+            }
+        }
+        Ok(())
     }
     /// `opendir($directory)`: snapshot the directory entries (`.`/`..` first, then
     /// OS order) into a `DirHandle` resource; `false` + Warning on failure. Mirrors
