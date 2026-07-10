@@ -102,10 +102,10 @@ pub fn token_get_all(src: &[u8]) -> Vec<Entry> {
             }
             Err(_) => break,
         };
-        // Flush a pending invalid number, now that we know where it ends.
+        // Flush a pending invalid literal, now that we know where it ends.
         if let Some((start, line)) = pending_dnumber.take() {
             let end = (tok.start.offset as usize).min(src.len());
-            out.push(Entry { id: Some(261), text: src.get(start..end).unwrap_or(&[]).to_vec(), line });
+            emit_recovered(&mut out, src.get(start..end).unwrap_or(&[]), line);
         }
         let line = line_of(src, tok.start.offset as usize);
         last_end = tok.start.offset as usize + tok.value.len();
@@ -123,14 +123,31 @@ pub fn token_get_all(src: &[u8]) -> Vec<Entry> {
         }
     }
     if let Some((start, line)) = pending_dnumber.take() {
-        out.push(Entry { id: Some(261), text: src.get(start..).unwrap_or(&[]).to_vec(), line });
+        emit_recovered(&mut out, src.get(start..).unwrap_or(&[]), line);
     }
     merge_open_tag_whitespace(&mut out);
     merge_close_tag_newline(&mut out);
     classify_ampersands(&mut out);
     fix_property_access(&mut out);
     fix_string_interpolation(&mut out);
+    merge_encapsed(&mut out);
     out
+}
+
+/// mago splits multi-line string/heredoc content into one
+/// T_ENCAPSED_AND_WHITESPACE per line; PHP emits a single token spanning them.
+/// Coalesce adjacent T_ENCAPSED_AND_WHITESPACE fragments (keeping the first line).
+fn merge_encapsed(entries: &mut Vec<Entry>) {
+    let mut i = 0;
+    while i + 1 < entries.len() {
+        if entries[i].id == Some(268) && entries[i + 1].id == Some(268) {
+            let next = std::mem::take(&mut entries[i + 1].text);
+            entries[i].text.extend_from_slice(&next);
+            entries.remove(i + 1);
+        } else {
+            i += 1;
+        }
+    }
 }
 
 /// PHP's "looking for property" state: a keyword immediately after `->` / `?->`
@@ -154,6 +171,17 @@ fn fix_property_access(entries: &mut [Entry]) {
             after_arrow = true;
         }
     }
+}
+
+/// Emit a span mago rejected as an unexpected token: a digit-leading run is an
+/// invalid numeric literal (PHP falls back to T_DNUMBER); otherwise treat it as a
+/// bareword (T_STRING) so non-numeric content isn't mislabelled a number.
+fn emit_recovered(out: &mut Vec<Entry>, span: &[u8], line: u32) {
+    if span.is_empty() {
+        return;
+    }
+    let id = if span[0].is_ascii_digit() { 261 } else { 262 };
+    out.push(Entry { id: Some(id), text: span.to_vec(), line });
 }
 
 fn is_bareword(t: &[u8]) -> bool {
