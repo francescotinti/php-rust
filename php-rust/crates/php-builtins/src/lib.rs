@@ -10,6 +10,7 @@
 //! sprintf, array_*) is step 10.
 
 mod array;
+mod bcmath;
 mod crypto;
 mod csv;
 mod ctype;
@@ -58,6 +59,20 @@ pub fn registry() -> Registry {
     add(b"long2ip", net::long2ip);
     add(b"inet_pton", net::inet_pton);
     add(b"inet_ntop", net::inet_ntop);
+    add(b"bcadd", bcmath::bcadd);
+    add(b"bcsub", bcmath::bcsub);
+    add(b"bcmul", bcmath::bcmul);
+    add(b"bcdiv", bcmath::bcdiv);
+    add(b"bcmod", bcmath::bcmod);
+    add(b"bcdivmod", bcmath::bcdivmod);
+    add(b"bcpow", bcmath::bcpow);
+    add(b"bcpowmod", bcmath::bcpowmod);
+    add(b"bcsqrt", bcmath::bcsqrt);
+    add(b"bccomp", bcmath::bccomp);
+    add(b"bcscale", bcmath::bcscale);
+    add(b"bcfloor", bcmath::bcfloor);
+    add(b"bcceil", bcmath::bcceil);
+    add(b"bcround", bcmath::bcround);
     add(b"date_parse", dateparse::date_parse);
     add(b"mktime", date::mktime);
     add(b"gmmktime", date::gmmktime);
@@ -562,7 +577,7 @@ fn arg1<'a>(args: &'a [Zval], fname: &str) -> Result<&'a Zval, PhpError> {
 const LOADED_EXTENSIONS: &[&[u8]] = &[
     b"core", b"standard", b"spl", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
     b"zip", b"dom", b"libxml", b"reflection", b"ctype", b"curl", b"pcntl", b"posix",
-    b"pdo", b"pdo_sqlite", b"sqlite3", b"simplexml",
+    b"pdo", b"pdo_sqlite", b"sqlite3", b"simplexml", b"bcmath",
     // Declared for PHPUnit's bootstrap gate; their heavy surfaces (token_get_all,
     // xml_parser_*, XMLWriter) are filled in test-driven — a use ahead of the
     // implementation surfaces as an honest "undefined function".
@@ -574,7 +589,7 @@ const LOADED_EXTENSIONS: &[&[u8]] = &[
 const LOADED_EXTENSIONS_CASED: &[&[u8]] = &[
     b"Core", b"standard", b"SPL", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
     b"zip", b"dom", b"libxml", b"Reflection", b"ctype", b"curl", b"pcntl", b"posix",
-    b"PDO", b"pdo_sqlite", b"sqlite3",
+    b"PDO", b"pdo_sqlite", b"sqlite3", b"bcmath",
     b"xml", b"xmlwriter", b"tokenizer", b"Phar",
 ];
 

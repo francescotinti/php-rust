@@ -109,7 +109,7 @@ const UNSUPPORTED_SECTIONS: &[&str] = &[
 /// corresponding steps (pcre: 31/36/37, json: 26, date: 34/35, mbstring: 41–43).
 /// A test requiring anything else still skips. Names are compared lowercase.
 const SUPPORTED_EXTENSIONS: &[&str] =
-    &["core", "standard", "mbstring", "pcre", "json", "date", "ctype", "hash", "zip", "pdo", "pdo_sqlite", "sqlite3"];
+    &["core", "standard", "mbstring", "pcre", "json", "date", "ctype", "hash", "zip", "pdo", "pdo_sqlite", "sqlite3", "bcmath"];
 
 /// Options steering a run — today only `--run-skipif`.
 #[derive(Debug, Default, Clone, Copy)]

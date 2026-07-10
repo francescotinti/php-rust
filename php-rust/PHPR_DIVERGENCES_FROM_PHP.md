@@ -100,6 +100,29 @@ correct-or-absent.
 | `getimagesize` (formati rari + out-param) | Implementati GIF/JPEG/PNG/BMP/WebP; mancano formati rari e il parametro `&$image_info` | Parser per formati residui + supporto out-param |
 | `opcache_*` | Nessun opcache | (fuori scope) |
 
+### 2.1 bcmath — 14 funzioni procedurali COMPLETE; OOP/enum differiti
+
+Le 14 funzioni procedurali (`bcadd`/`bcsub`/`bcmul`/`bcdiv`/`bcmod`/`bcdivmod`/
+`bcpow`/`bcpowmod`/`bcsqrt`/`bccomp`/`bcscale`/`bcfloor`/`bcceil`/`bcround`) sono
+implementate byte-identiche (port di `libbcmath`, `crates/php-builtins/src/bcmath.rs`;
+~4000 casi fuzz + battery verdi). Residui consapevoli:
+
+- **`BcMath\Number`** (classe `final readonly`, 8.4+) NON implementata: richiede una
+  classe interna con proprietà virtuali `value`/`scale`, overloading operatori
+  (`do_operation`/`compare`) e `__serialize`. È un'intera superficie OOP separata —
+  ~77 phpt la esercitano. Da fare come feature dedicata.
+- **`RoundingMode`** enum non modellato: `bcround($num, $precision, $mode)` supporta
+  solo il default `HalfAwayFromZero` (= `PHP_ROUND_HALF_UP`), coerente con `round()`
+  del core che ha lo stesso limite. L'algoritmo interno di `bc_round` implementa già
+  tutti gli 8 modi: manca solo il ponte all'enum. ~12 phpt gated su `RoundingMode`.
+- **`bcmath.scale` INI**: lo scale di default (`bcscale()`) è tenuto in stato
+  thread-local, non legato all'INI `bcmath.scale` (phpr non ha un registro INI reale,
+  cfr. `get_cfg_var`). I phpt con `--INI-- bcmath.scale=N` sono skippati dal runner
+  (sezione INI non supportata), non un difetto dell'implementazione.
+- **Overflow di esponente estremo** (`bcpow` con exp che fa traboccare `SIZE_MAX`
+  cifre): phpr calcola invece di lanciare il `ValueError` "exponent is too large";
+  irrilevante nella pratica.
+
 ---
 
 ## 3. Divergenze di engine circoscritte (documentate nei topic-file di memoria)
