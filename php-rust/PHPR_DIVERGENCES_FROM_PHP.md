@@ -167,18 +167,19 @@ gcd/powm/invert/jacobi/kronecker/primi, bitwise two's-complement, operatori
 che girano il **lexer di mago** (già front-end di phpr) e mappano ogni `TokenKind` →
 id `T_*` di PHP (o stringa 1-char). 152 costanti `T_*` in `resolve_constant`; classe
 `PhpToken` nel prelude (delega a `token_get_all`). Byte-identico su codice reale
-(funzioni/classi/array/operatori/commenti/namespace/nullsafe/coalesce/attributi);
-post-pass per: T_OPEN_TAG che ingloba 1 whitespace, `&`→409/410 context-sensitive,
-`namespace\X`→T_NAME_RELATIVE. Suite ufficiale `ext/tokenizer`: **27/49** runnable.
-Residui **phase-2** (i confini interni del lexer di mago divergono da re2c di PHP):
+(funzioni/classi/array/operatori/commenti/namespace/nullsafe/coalesce/attributi) **e su
+interpolazione+heredoc comuni** (`"$a {$b} ${c}"`, `"$a[0]"`, `"$a->b"`, heredoc/nowdoc).
+Post-pass: T_OPEN_TAG/T_CLOSE_TAG inglobano 1 newline (con fix del numero di riga),
+`&`→409/410 context, `namespace\X`→T_NAME_RELATIVE, e context-machine interno alle stringhe
+(`{`→T_CURLY_OPEN, `${name}`→T_STRING_VARNAME, `$a[0]`→T_NUM_STRING, drop di T_ENCAPSED vuoto).
+Costanti TOKEN_PARSE/TOKEN_AS_OBJECT. Suite ufficiale `ext/tokenizer`: **34/49** runnable.
+Residui **phase-3** (error-handling / edge di mago):
 
-- **Interpolazione stringhe** `"$a {$b} ${c}"`: PHP spezza in T_ENCAPSED_AND_WHITESPACE /
-  T_CURLY_OPEN / T_DOLLAR_OPEN_CURLY_BRACES / T_STRING_VARNAME con confini precisi; mago usa
-  StringPart/LeftBrace/DollarLeftBrace con confini/nomi diversi.
-- **Heredoc/Nowdoc**: idem (DocumentStart/End/StringPart vs T_START_HEREDOC/END/ENCAPSED).
-- **Flag `TOKEN_PARSE`**: deve lanciare `ParseError`/`CompileError` su sorgente invalido;
-  ora phpr ferma il lexer senza throw.
-- **Error tokens**: `T_BAD_CHARACTER`, gestione octal/underscore invalidi, `parse_errors`.
+- **Flag `TOKEN_PARSE`**: deve lanciare `ParseError`/`CompileError` su sorgente invalido
+  (il flag su codice valido è già ok); ora phpr non lancia.
+- **Error tokens**: `T_BAD_CHARACTER`, literali octal/underscore invalidi, `parse_errors`.
+- **Heredoc complessi**: indentazione (PHP 7.3 flexible heredoc) e casi con più newline
+  ai bordi divergono ancora dai confini di mago.
 - **`yield from`** = 1 token T_YIELD_FROM in PHP; mago = Yield + ws + From.
 - **`PhpToken::is(float)`**: coercizione ZPP float→int (deprecation §1.2) invece del TypeError.
 

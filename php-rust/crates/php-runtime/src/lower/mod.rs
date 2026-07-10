@@ -2143,6 +2143,8 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG" => ExprKind::Int(410),
         b"T_BAD_CHARACTER" => ExprKind::Int(411),
         b"T_PAAMAYIM_NEKUDOTAYIM" => ExprKind::Int(402),
+        b"TOKEN_PARSE" => ExprKind::Int(1),
+        b"TOKEN_AS_OBJECT" => ExprKind::Int(1),
         // Math.
         b"M_PI" => ExprKind::Float(std::f64::consts::PI),
         b"M_E" => ExprKind::Float(std::f64::consts::E),

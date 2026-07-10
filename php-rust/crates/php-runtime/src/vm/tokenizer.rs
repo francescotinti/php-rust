@@ -98,8 +98,90 @@ pub fn token_get_all(src: &[u8]) -> Vec<Entry> {
         }
     }
     merge_open_tag_whitespace(&mut out);
+    merge_close_tag_newline(&mut out);
     classify_ampersands(&mut out);
+    fix_string_interpolation(&mut out);
     out
+}
+
+/// PHP's `T_CLOSE_TAG` (`?>`) consumes one following newline (`\n` or `\r\n`);
+/// mago emits it as the start of the next inline-HTML token. Move it back.
+fn merge_close_tag_newline(entries: &mut Vec<Entry>) {
+    let mut i = 0;
+    while i + 1 < entries.len() {
+        if entries[i].id == Some(396) && entries[i + 1].id == Some(267) {
+            let next = &entries[i + 1].text;
+            let take = if next.starts_with(b"\r\n") {
+                2
+            } else if next.starts_with(b"\n") {
+                1
+            } else {
+                0
+            };
+            if take > 0 {
+                let moved: Vec<u8> = entries[i + 1].text.drain(..take).collect();
+                entries[i].text.extend_from_slice(&moved);
+                if !entries[i + 1].text.is_empty() {
+                    entries[i + 1].line += 1; // one newline moved out
+                } else {
+                    entries.remove(i + 1);
+                }
+            }
+        }
+        i += 1;
+    }
+}
+
+/// Inside an interpolated string / heredoc, mago's sub-tokens differ slightly
+/// from PHP's re2c scanner. Walk the stream tracking string vs complex-brace
+/// (`{$...}` / `${...}`) context and reconcile:
+/// - a `{` opening `{$...}` → T_CURLY_OPEN (401), not a bare `{` char;
+/// - the name in `${name}` → T_STRING_VARNAME (270), not T_STRING;
+/// - a number in simple syntax `"$a[0]"` → T_NUM_STRING (271), not T_LNUMBER;
+/// - empty T_ENCAPSED_AND_WHITESPACE fragments are dropped (PHP omits them).
+fn fix_string_interpolation(entries: &mut Vec<Entry>) {
+    let mut in_string = false;
+    let mut brace_depth = 0u32;
+    let mut remove: Vec<usize> = Vec::new();
+    for i in 0..entries.len() {
+        let ch = if entries[i].id.is_none() { entries[i].text.first().copied() } else { None };
+        if brace_depth > 0 {
+            // Complex interpolation expression: normal tokens, just balance braces.
+            match ch {
+                Some(b'{') => brace_depth += 1,
+                Some(b'}') => brace_depth -= 1,
+                _ => {
+                    if entries[i].id == Some(262) && i > 0 && entries[i - 1].id == Some(400) {
+                        entries[i].id = Some(270); // ${name}: T_STRING_VARNAME
+                    }
+                }
+            }
+            continue;
+        }
+        if in_string {
+            match entries[i].id {
+                None if ch == Some(b'{') => {
+                    entries[i].id = Some(401); // T_CURLY_OPEN
+                    brace_depth = 1;
+                }
+                None if ch == Some(b'"') || ch == Some(b'`') => in_string = false,
+                Some(400) => brace_depth = 1, // ${ … }
+                Some(260) => entries[i].id = Some(271), // T_LNUMBER -> T_NUM_STRING
+                Some(268) if entries[i].text.is_empty() => remove.push(i),
+                Some(399) => in_string = false, // T_END_HEREDOC
+                _ => {}
+            }
+        } else {
+            match entries[i].id {
+                None if ch == Some(b'"') || ch == Some(b'`') => in_string = true,
+                Some(398) => in_string = true, // T_START_HEREDOC
+                _ => {}
+            }
+        }
+    }
+    for &idx in remove.iter().rev() {
+        entries.remove(idx);
+    }
 }
 
 /// PHP 8.1 splits `&` into T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG (409) when the
@@ -132,6 +214,11 @@ fn merge_open_tag_whitespace(entries: &mut Vec<Entry>) {
         {
             let b = entries[i + 1].text.remove(0);
             entries[i].text.push(b);
+            // The remaining whitespace now begins after that byte; if it was a
+            // newline, its line advances by one.
+            if b == b'\n' && !entries[i + 1].text.is_empty() {
+                entries[i + 1].line += 1;
+            }
             if entries[i + 1].text.is_empty() {
                 entries.remove(i + 1);
             }
