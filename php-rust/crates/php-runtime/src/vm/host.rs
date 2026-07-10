@@ -5016,6 +5016,28 @@ impl<'m> super::Vm<'m> {
         use std::os::unix::ffi::OsStrExt;
         // A nested `file://` inside the wrapper chain resolves to the plain path.
         let path = path.strip_prefix(b"file://".as_slice()).unwrap_or(path);
+        // A php:// meta-stream cannot back a gz stream (zlib needs seekability).
+        if path.starts_with(b"php://") {
+            let p = String::from_utf8_lossy(path);
+            self.diags.push(Diag::Warning(format!(
+                "{fname}({p}): could not make seekable - {p}"
+            )));
+            let line = self.cur_line(self.frames.len() - 1);
+            self.flush_diags(line)?;
+            return Ok(Zval::Bool(false));
+        }
+        // Mode `c` opens the underlying file but zlib's gzopen then rejects it:
+        // the file is CREATED (as PHP does) and the generic failure is raised.
+        if mode.first() == Some(&b'c') {
+            let _ = std::fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .open(std::ffi::OsStr::from_bytes(path));
+            self.diags.push(Diag::Warning(format!("{fname}(): gzopen failed")));
+            let line = self.cur_line(self.frames.len() - 1);
+            self.flush_diags(line)?;
+            return Ok(Zval::Bool(false));
+        }
         // zlib streams are strictly one-directional: any '+' is rejected up
         // front (before touching the file — a `w+` must NOT truncate).
         if mode.contains(&b'+') {

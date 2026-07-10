@@ -74,7 +74,7 @@ final class DeflateContext {
 final class InflateContext {
     public $__id = 0;
 }
-function deflate_init(int $encoding, array $options = []) {
+function deflate_init(int $encoding, $options = []) {
     $id = __deflate_init($encoding, $options);
     if ($id === false) { return false; }
     $c = new DeflateContext;

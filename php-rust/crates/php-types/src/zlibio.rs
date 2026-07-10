@@ -10,9 +10,9 @@ use std::mem::{size_of, MaybeUninit};
 use std::os::raw::c_int;
 
 use libz_sys::{
-    deflate, deflateBound, deflateEnd, deflateInit2_, deflateSetDictionary, inflate, inflateEnd,
-    inflateInit2_, inflateSetDictionary, z_stream, zlibVersion, Bytef, Z_DEFAULT_STRATEGY,
-    Z_DEFLATED, Z_FINISH, Z_NEED_DICT, Z_NO_FLUSH, Z_OK, Z_STREAM_END,
+    deflate, deflateBound, deflateEnd, deflateInit2_, deflateReset, deflateSetDictionary, inflate,
+    inflateEnd, inflateInit2_, inflateReset, inflateSetDictionary, z_stream, zlibVersion, Bytef,
+    Z_DEFAULT_STRATEGY, Z_DEFLATED, Z_FINISH, Z_NEED_DICT, Z_NO_FLUSH, Z_OK, Z_STREAM_END,
 };
 
 /// PHP's `ZLIB_ENCODING_*` == the zlib windowBits: raw = -15, zlib = 15, gzip = 31.
@@ -95,6 +95,16 @@ pub fn uncompress(data: &[u8], window_bits: i32) -> Option<Vec<u8>> {
     uncompress_one(data, window_bits).map(|(v, _)| v)
 }
 
+/// How a [`ZCtx::add`] step failed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ZErr {
+    /// A zlib data error (corrupt/invalid stream).
+    Data,
+    /// `Z_NEED_DICT` could not be satisfied: no preset dictionary, or its
+    /// adler32 does not match the stream's expectation.
+    DictMismatch,
+}
+
 /// A stateful (incremental) zlib context backing PHP's `deflate_init`/`inflate_init`
 /// family: the `z_stream` lives at a fixed heap address for the context's whole
 /// life (zlib's internal state back-references it), fed chunk by chunk via
@@ -137,7 +147,8 @@ impl ZCtx {
         }
     }
 
-    /// An inflate context; a preset dictionary is installed on `Z_NEED_DICT`.
+    /// An inflate context; a preset dictionary is installed on `Z_NEED_DICT` — or
+    /// immediately for a raw stream (negative windowBits), which never signals it.
     pub fn new_inflate(window_bits: i32, dict: Option<Vec<u8>>) -> Option<ZCtx> {
         unsafe {
             let z = Self::alloc();
@@ -145,15 +156,34 @@ impl ZCtx {
                 drop(Box::from_raw(z as *mut MaybeUninit<z_stream>));
                 return None;
             }
+            if window_bits < 0 {
+                if let Some(d) = &dict {
+                    inflateSetDictionary(z, d.as_ptr(), d.len() as _);
+                }
+            }
             Some(ZCtx { z, deflate: false, dict, last_status: Z_OK })
         }
     }
 
     /// Feed `data` with the given zlib `flush` mode, returning whatever output the
-    /// stream produces. `None` on a hard zlib error (the caller's "data error").
-    pub fn add(&mut self, data: &[u8], flush: i32) -> Option<Vec<u8>> {
+    /// stream produces. A finished context (previous step hit `Z_STREAM_END`) is
+    /// reset first, so it can be reused for a fresh stream (PHP's
+    /// deflate_init/inflate_init reuse semantics).
+    pub fn add(&mut self, data: &[u8], flush: i32) -> Result<Vec<u8>, ZErr> {
         unsafe {
             let z = self.z;
+            if self.last_status == Z_STREAM_END {
+                if self.deflate {
+                    deflateReset(z);
+                } else {
+                    inflateReset(z);
+                    // A raw stream's preset dictionary must be re-installed.
+                    if let Some(d) = &self.dict {
+                        inflateSetDictionary(z, d.as_ptr(), d.len() as _);
+                    }
+                }
+                self.last_status = Z_OK;
+            }
             (*z).next_in = data.as_ptr() as *mut Bytef;
             (*z).avail_in = data.len() as _;
             let mut out = Vec::new();
@@ -165,24 +195,24 @@ impl ZCtx {
                 out.extend_from_slice(&buf[..buf.len() - (*z).avail_out as usize]);
                 self.last_status = ret;
                 match ret {
-                    Z_STREAM_END => return Some(out),
+                    Z_STREAM_END => return Ok(out),
                     Z_NEED_DICT if !self.deflate => {
-                        // A preset dictionary satisfies the demand; without one
-                        // the stream cannot proceed.
-                        let Some(d) = &self.dict else { return None };
+                        // A preset dictionary satisfies the demand; a missing or
+                        // adler32-mismatched one is PHP's dictionary error.
+                        let Some(d) = &self.dict else { return Err(ZErr::DictMismatch) };
                         if inflateSetDictionary(z, d.as_ptr(), d.len() as _) != Z_OK {
-                            return None;
+                            return Err(ZErr::DictMismatch);
                         }
                     }
                     Z_OK => {
                         if (*z).avail_in == 0 && (*z).avail_out != 0 {
-                            return Some(out); // consumed everything, output complete
+                            return Ok(out); // consumed everything, output complete
                         }
                     }
                     // Z_BUF_ERROR just means "no progress possible now" — with all
                     // input consumed that is a normal end of this add() step.
-                    libz_sys::Z_BUF_ERROR if (*z).avail_in == 0 => return Some(out),
-                    _ => return None,
+                    libz_sys::Z_BUF_ERROR if (*z).avail_in == 0 => return Ok(out),
+                    _ => return Err(ZErr::Data),
                 }
             }
         }

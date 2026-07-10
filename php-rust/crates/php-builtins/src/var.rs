@@ -187,6 +187,20 @@ pub(crate) fn dump(
                 seen.pop();
                 return;
             }
+            // Opaque handle classes: PHP's native DeflateContext/InflateContext
+            // have NO properties — phpr's backing `__id` (into the host context
+            // table) is internal and hidden, matching `object(X)#N (0) {}`.
+            if matches!(obj.class_name.as_bytes(), b"DeflateContext" | b"InflateContext") {
+                out.extend_from_slice(
+                    format!("object({})#{} (0) {{\n", String::from_utf8_lossy(obj.class_name.as_bytes()), obj.id)
+                        .as_bytes(),
+                );
+                spaces(out, indent);
+                out.extend_from_slice(b"}\n");
+                drop(obj);
+                seen.pop();
+                return;
+            }
             // A WeakReference renders its (weak) referent under an "object" key —
             // the upgraded object, or NULL once it has been collected. The backing
             // `__h` property is the internal weak handle.

@@ -2008,6 +2008,16 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"ZLIB_FINISH" => ExprKind::Int(4),
         b"ZLIB_VERSION" => str_lit(b"1.2.12"),
         b"ZLIB_VERNUM" => ExprKind::Int(0x12c0),
+        // zlib status codes (inflate_get_status).
+        b"ZLIB_OK" => ExprKind::Int(0),
+        b"ZLIB_STREAM_END" => ExprKind::Int(1),
+        b"ZLIB_NEED_DICT" => ExprKind::Int(2),
+        b"ZLIB_ERRNO" => ExprKind::Int(-1),
+        b"ZLIB_STREAM_ERROR" => ExprKind::Int(-2),
+        b"ZLIB_DATA_ERROR" => ExprKind::Int(-3),
+        b"ZLIB_MEM_ERROR" => ExprKind::Int(-4),
+        b"ZLIB_BUF_ERROR" => ExprKind::Int(-5),
+        b"ZLIB_VERSION_ERROR" => ExprKind::Int(-6),
         // ext/tokenizer T_* token ids (PHP 8.5 parser values).
         b"T_LNUMBER" => ExprKind::Int(260),
         b"T_DNUMBER" => ExprKind::Int(261),

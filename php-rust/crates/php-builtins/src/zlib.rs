@@ -320,6 +320,16 @@ pub fn gztell(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     gz_alias(crate::file::ftell, argv, ctx, "ftell", "gztell")
 }
 pub fn gzseek(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    // PHP: SEEK_END is not supported on a gz stream in either direction — the
+    // warning fires and the position is untouched.
+    if gz_stream_dir(argv).is_some() {
+        let whence = argv.get(2).map(|v| convert::to_long_cast(v, ctx.diags)).unwrap_or(0);
+        if whence == 2 {
+            ctx.diags
+                .push(Diag::Warning("gzseek(): SEEK_END is not supported".to_string()));
+            return Ok(Zval::Long(-1));
+        }
+    }
     gz_alias(crate::file::fseek, argv, ctx, "fseek", "gzseek")
 }
 pub fn gzpassthru(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
@@ -374,7 +384,10 @@ fn dict_option(opts: &PhpArray, fname: &str) -> Result<Option<Vec<u8>>, PhpError
                         "{fname}(): Argument #2 ($options) must not contain strings with null bytes"
                     )));
                 }
+                // PHP joins the words NUL-separated with a trailing NUL (an array
+                // dictionary equals `implode("\0", $words) . "\0"`).
                 dict.extend_from_slice(&bytes);
+                dict.push(0);
             }
             Ok(Some(dict))
         }
@@ -382,6 +395,26 @@ fn dict_option(opts: &PhpArray, fname: &str) -> Result<Option<Vec<u8>>, PhpError
             let mut d = Vec::new();
             Ok(Some(php_types::convert::to_zstr(&other, &mut d).as_bytes().to_vec()))
         }
+    }
+}
+
+/// The `$options` argument as a table: an array as-is, an object via its
+/// property table (PHP's ZPP `h` accepts both — GH-17745), absent → empty.
+fn opts_table(argv: &[Zval], fname: &str) -> Result<PhpArray, PhpError> {
+    match argv.get(1).map(|v| v.deref_clone()) {
+        None | Some(Zval::Null) | Some(Zval::Undef) => Ok(PhpArray::new()),
+        Some(Zval::Array(a)) => Ok((*a).clone()),
+        Some(Zval::Object(o)) => {
+            let mut t = PhpArray::new();
+            for (n, v) in o.borrow().props.iter() {
+                t.insert(php_types::Key::from_bytes(n), v.deref_clone());
+            }
+            Ok(t)
+        }
+        Some(other) => Err(PhpError::TypeError(format!(
+            "{fname}(): Argument #2 ($options) must be of type array, {} given",
+            other.type_name_for_error()
+        ))),
     }
 }
 
@@ -411,12 +444,8 @@ pub fn __deflate_init(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
             "deflate_init(): Argument #1 ($encoding) must be one of ZLIB_ENCODING_RAW, ZLIB_ENCODING_GZIP, or ZLIB_ENCODING_DEFLATE".to_string(),
         ));
     }
-    let empty = PhpArray::new();
-    let opts_z = argv.get(1).map(|v| v.deref_clone());
-    let opts = match &opts_z {
-        Some(Zval::Array(a)) => a.as_ref(),
-        _ => &empty,
-    };
+    let opts = opts_table(argv, "deflate_init")?;
+    let opts = &opts;
     let level = int_option(opts, b"level", -1, ctx);
     if !(-1..=9).contains(&level) {
         return Err(PhpError::ValueError(
@@ -468,12 +497,8 @@ pub fn __inflate_init(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
             "Encoding mode must be ZLIB_ENCODING_RAW, ZLIB_ENCODING_GZIP or ZLIB_ENCODING_DEFLATE".to_string(),
         ));
     }
-    let empty = PhpArray::new();
-    let opts_z = argv.get(1).map(|v| v.deref_clone());
-    let opts = match &opts_z {
-        Some(Zval::Array(a)) => a.as_ref(),
-        _ => &empty,
-    };
+    let opts = opts_table(argv, "inflate_init")?;
+    let opts = &opts;
     let window = int_option(opts, b"window", 15, ctx);
     if !(8..=15).contains(&window) {
         return Err(PhpError::ValueError(
@@ -505,15 +530,21 @@ fn flush_arg(argv: &[Zval], idx: usize, default: i64, ctx: &mut Ctx, fname: &str
 }
 
 /// Run `add` on the context with `id`, mapping a hard zlib failure to `false`
-/// + a branded Warning.
+/// + a branded Warning (PHP distinguishes the dictionary-mismatch case).
 fn ctx_add(id: i64, data: &[u8], flush: i32, ctx: &mut Ctx, fname: &str) -> Result<Zval, PhpError> {
     let out = ZCTXS.with(|t| {
         let mut t = t.borrow_mut();
         t.get_mut(id as usize).and_then(|s| s.as_mut()).map(|zc| zc.add(data, flush))
     });
     match out {
-        Some(Some(bytes)) => Ok(Zval::Str(PhpStr::new(bytes))),
-        Some(None) => {
+        Some(Ok(bytes)) => Ok(Zval::Str(PhpStr::new(bytes))),
+        Some(Err(php_types::zlibio::ZErr::DictMismatch)) => {
+            ctx.diags.push(Diag::Warning(format!(
+                "{fname}(): Dictionary does not match expected dictionary (incorrect adler32 hash)"
+            )));
+            Ok(Zval::Bool(false))
+        }
+        Some(Err(php_types::zlibio::ZErr::Data)) => {
             ctx.diags.push(Diag::Warning(format!("{fname}(): data error")));
             Ok(Zval::Bool(false))
         }
