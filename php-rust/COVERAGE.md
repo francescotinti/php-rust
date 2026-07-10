@@ -72,7 +72,7 @@ language runtime and general stdlib; everything below it is a discrete extension
 | intl | 11 / 187 | 5% | grapheme done; ICU surface huge |
 | gd | 2 / 107 | 1% | |
 | openssl | 1 / 64 | 1% | TLS handled at stream layer, not fn-level |
-| zlib | 23 / 30 | 77% | (de)compression byte-identical via system zlib (libz-sys FFI, PHP's exact deflate params); gz file streams (gzopen & co.) + `compress.zlib://` wrapper; incremental contexts / ob_gzhandler / filters deferred |
+| zlib | 29 / 30 | 97% | byte-identical via system zlib (libz-sys FFI, PHP exact deflate params); gz streams, compress.zlib:// across the file builtins, incremental DeflateContext/InflateContext; only ob_gzhandler + stream filters left |
 | **not started (0%)** | — | 0% | pgsql, sodium, mysqli, ldap, odbc, sockets, ftp, sysv*, snmp, tidy, session, dba, bz2, gettext, finfo, exif |
 
 Extension totals of the missing 1502: intl 176, pgsql 123, sodium 110, mysqli
