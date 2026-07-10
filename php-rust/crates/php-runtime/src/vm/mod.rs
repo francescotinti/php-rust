@@ -4786,6 +4786,8 @@ impl<'m> Vm<'m> {
             b"similar_text" => self.ho_similar_text(args)?,
             // Two out-params: (result, $output array, Some($result_code)).
             b"exec" => return self.ho_exec(args),
+            // Two out-params: (stream|false, $error_code, Some($error_message)).
+            b"stream_socket_client" => return self.ho_stream_socket_client(args),
             _ => return Err(undefined_builtin(name)),
         };
         Ok((result, out, None))
@@ -8713,6 +8715,8 @@ host_builtins! {
     b"pcntl_async_signals" => vm.ho_pcntl_async_signals(args),
     b"posix_kill" => vm.ho_posix_kill(args),
     b"__fsockopen" => vm.ho_fsockopen(args),
+    b"stream_set_timeout" => vm.ho_stream_set_timeout(args),
+    b"stream_is_local" => vm.ho_stream_is_local(args),
     b"serialize" => vm.ho_serialize(args),
     b"umask" => vm.ho_umask(args),
     b"__dom_new_doc" => vm.ho_dom_new_doc(args),
@@ -8964,6 +8968,8 @@ pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usiz
         (b"grapheme_extract", 4),
         // `&$percent` receives the similarity percentage.
         (b"similar_text", 2),
+        // `&$error_code` (#2); `&$error_message` (#3) is the second out-param.
+        (b"stream_socket_client", 1),
     ];
     HOST_OUT
         .iter()
@@ -8975,7 +8981,7 @@ pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usiz
 /// (only `exec`'s `&$result_code` at index 2). `None` for every single-out
 /// builtin in [`host_builtin_out_param`].
 pub(crate) fn host_builtin_out_param_second(name: &[u8]) -> Option<usize> {
-    if name.eq_ignore_ascii_case(b"exec") {
+    if name.eq_ignore_ascii_case(b"exec") || name.eq_ignore_ascii_case(b"stream_socket_client") {
         Some(2)
     } else {
         None

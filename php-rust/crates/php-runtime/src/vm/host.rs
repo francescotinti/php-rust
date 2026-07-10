@@ -13,6 +13,34 @@ enum DiffCmp {
     Callback,
 }
 
+/// A socket connection error as `(errno, errstr)`, stripping Rust's " (os error
+/// N)" suffix so the message matches PHP's.
+fn sock_err(e: &std::io::Error) -> (i64, String) {
+    let errno = e.raw_os_error().unwrap_or(0) as i64;
+    let msg = e.to_string();
+    let msg = msg.split(" (os error").next().unwrap_or(&msg).to_string();
+    (errno, msg)
+}
+
+/// The `[result, errno, errstr]` triple the socket host builtins return for their
+/// prelude wrappers to spread into by-ref `&$errno`/`&$errstr`.
+fn socket_result(result: Zval, errno: i64, errstr: Vec<u8>) -> Zval {
+    let mut out = PhpArray::new();
+    let _ = out.append(result);
+    let _ = out.append(Zval::Long(errno));
+    let _ = out.append(Zval::Str(PhpStr::new(errstr)));
+    Zval::Array(Rc::new(out))
+}
+
+/// The lower-cased URL scheme of `spec` (bytes before `://`), or "" when there is
+/// none (a plain path).
+fn url_scheme(spec: &[u8]) -> String {
+    match spec.windows(3).position(|w| w == b"://") {
+        Some(i) => String::from_utf8_lossy(&spec[..i]).to_ascii_lowercase(),
+        None => String::new(),
+    }
+}
+
 /// An array key as the bytes PHP would use for it (int keys become their decimal
 /// text), for indexing stream-context wrapper/option sub-arrays.
 fn key_bytes(k: &php_types::Key) -> Vec<u8> {
@@ -4675,83 +4703,89 @@ impl<'m> super::Vm<'m> {
             _ => 60.0, // ini default_socket_timeout
         };
         let text = String::from_utf8_lossy(&target).into_owned();
-        let fail = |vm: &mut Self, errno: i64, errstr: String| -> Result<Zval, PhpError> {
-            vm.diags.push(Diag::Warning(format!(
-                "fsockopen(): Unable to connect to {text}:{port_arg} ({errstr})"
-            )));
-            let mut out = PhpArray::new();
-            let _ = out.append(Zval::Bool(false));
-            let _ = out.append(Zval::Long(errno));
-            let _ = out.append(Zval::Str(PhpStr::new(errstr.into_bytes())));
-            Ok(Zval::Array(Rc::new(out)))
+        match self.socket_connect(&text, port_arg, timeout) {
+            Ok(res) => Ok(socket_result(res, 0, Vec::new())),
+            Err((errno, errstr)) => {
+                self.diags.push(Diag::Warning(format!(
+                    "fsockopen(): Unable to connect to {text}:{port_arg} ({errstr})"
+                )));
+                Ok(socket_result(Zval::Bool(false), errno, errstr.into_bytes()))
+            }
+        }
+    }
+
+    /// `stream_socket_client($address, &$error_code, &$error_message, ?float $timeout, …)`
+    /// — a two-out-param host builtin (like `exec`): returns
+    /// `(stream|false, $error_code, Some($error_message))` for the VM to write into
+    /// the by-ref args. Shares [`Self::socket_connect`] with `fsockopen`; only the
+    /// Warning wording (the full address, not host:port) differs. `$flags`
+    /// (STREAM_CLIENT_*) and `$context` are a scope-out.
+    pub(super) fn ho_stream_socket_client(
+        &mut self,
+        args: Vec<Zval>,
+    ) -> Result<(Zval, Zval, Option<Zval>), PhpError> {
+        let address = args
+            .first()
+            .map(|v| convert::to_zstr_cast(&v.deref_clone(), &mut self.diags).as_bytes().to_vec())
+            .unwrap_or_default();
+        // `$timeout` is arg #4 (index 3); #2/#3 are the by-ref out-params.
+        let timeout = match args.get(3).map(|v| convert::to_double(&v.deref_clone())) {
+            Some(t) if t > 0.0 => t,
+            _ => 60.0, // ini default_socket_timeout
         };
-        let (scheme, rest) = match text.split_once("://") {
+        let text = String::from_utf8_lossy(&address).into_owned();
+        let (result, errno, errstr) = match self.socket_connect(&text, -1, timeout) {
+            Ok(res) => (res, 0, Vec::new()),
+            Err((errno, errstr)) => {
+                self.diags.push(Diag::Warning(format!(
+                    "stream_socket_client(): Unable to connect to {text} ({errstr})"
+                )));
+                (Zval::Bool(false), errno, errstr.into_bytes())
+            }
+        };
+        Ok((result, Zval::Long(errno), Some(Zval::Str(PhpStr::new(errstr)))))
+    }
+
+    /// Connect a `tcp://`/`udp://` socket, returning the stream-resource Zval or
+    /// `(errno, errstr)` on failure (raising no Warning — each caller words its
+    /// own). `explicit_port` (fsockopen's `$port`) is used only when the address
+    /// carries no `:port`. Shared by `fsockopen` and `stream_socket_client`.
+    fn socket_connect(&mut self, address: &str, explicit_port: i64, timeout: f64) -> Result<Zval, (i64, String)> {
+        let (scheme, rest) = match address.split_once("://") {
             Some((s, r)) => (s.to_ascii_lowercase(), r.to_string()),
-            None => ("tcp".to_string(), text.clone()),
+            None => ("tcp".to_string(), address.to_string()),
         };
         if scheme != "tcp" && scheme != "udp" {
-            return fail(
-                self,
-                0,
-                format!(
-                    "Unable to find the socket transport \"{scheme}\" - did you forget to enable it when you configured PHP?"
-                ),
-            );
+            return Err((0, format!(
+                "Unable to find the socket transport \"{scheme}\" - did you forget to enable it when you configured PHP?"
+            )));
         }
-        // host[:port] — an explicit :port in the target wins over the argument.
+        // host[:port] — an explicit :port in the address wins over the argument.
         let (host, port) = match rest.rsplit_once(':') {
-            Some((h, p)) if p.chars().all(|c| c.is_ascii_digit()) && !p.is_empty() => {
+            Some((h, p)) if !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) => {
                 (h.to_string(), p.parse::<i64>().unwrap_or(-1))
             }
-            _ => (rest.clone(), port_arg),
+            _ => (rest.clone(), explicit_port),
         };
         if !(0..=65535).contains(&port) {
-            return fail(self, 0, format!("Failed to parse address \"{rest}\""));
+            return Err((0, format!("Failed to parse address \"{rest}\"")));
         }
         use std::net::ToSocketAddrs;
-        let addr = match (host.as_str(), port as u16).to_socket_addrs() {
-            Ok(mut it) => match it.next() {
-                Some(a) => a,
-                None => {
-                    return fail(
-                        self,
-                        0,
-                        format!("php_network_getaddresses: getaddrinfo for {host} failed: nodename nor servname provided, or not known"),
-                    )
-                }
-            },
-            Err(_) => {
-                return fail(
-                    self,
-                    0,
-                    format!("php_network_getaddresses: getaddrinfo for {host} failed: nodename nor servname provided, or not known"),
-                )
-            }
+        let addr = match (host.as_str(), port as u16).to_socket_addrs().ok().and_then(|mut it| it.next()) {
+            Some(a) => a,
+            None => return Err((0, format!(
+                "php_network_getaddresses: getaddrinfo for {host} failed: nodename nor servname provided, or not known"
+            ))),
         };
         let backend = if scheme == "tcp" {
-            match std::net::TcpStream::connect_timeout(
-                &addr,
-                std::time::Duration::from_secs_f64(timeout),
-            ) {
+            match std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_secs_f64(timeout)) {
                 Ok(t) => php_types::stream::StreamBackend::Tcp(t),
-                Err(e) => {
-                    let errno = e.raw_os_error().unwrap_or(0) as i64;
-                    let msg = e.to_string();
-                    let msg = msg.split(" (os error").next().unwrap_or(&msg).to_string();
-                    return fail(self, errno, msg);
-                }
+                Err(e) => return Err(sock_err(&e)),
             }
         } else {
-            let sock = std::net::UdpSocket::bind("0.0.0.0:0")
-                .and_then(|s| s.connect(addr).map(|()| s));
-            match sock {
+            match std::net::UdpSocket::bind("0.0.0.0:0").and_then(|s| s.connect(addr).map(|()| s)) {
                 Ok(s) => php_types::stream::StreamBackend::Udp(s),
-                Err(e) => {
-                    let errno = e.raw_os_error().unwrap_or(0) as i64;
-                    let msg = e.to_string();
-                    let msg = msg.split(" (os error").next().unwrap_or(&msg).to_string();
-                    return fail(self, errno, msg);
-                }
+                Err(e) => return Err(sock_err(&e)),
             }
         };
         let id = self.next_resource_id;
@@ -4761,15 +4795,64 @@ impl<'m> super::Vm<'m> {
             readable: true,
             writable: true,
             eof: false,
-            uri: target,
+            uri: address.as_bytes().to_vec(),
             mode: b"r+".to_vec(),
         };
-        let res = Zval::Resource(Rc::new(RefCell::new(Resource::new(id, stream))));
-        let mut out = PhpArray::new();
-        let _ = out.append(res);
-        let _ = out.append(Zval::Long(0));
-        let _ = out.append(Zval::Str(PhpStr::new(Vec::new())));
-        Ok(Zval::Array(Rc::new(out)))
+        Ok(Zval::Resource(Rc::new(RefCell::new(Resource::new(id, stream)))))
+    }
+
+    /// `stream_set_timeout($stream, $seconds, $microseconds = 0): bool` — succeeds
+    /// only for socket streams (PHP returns `false` for files / memory streams).
+    /// The read timeout is applied to the underlying socket.
+    pub(super) fn ho_stream_set_timeout(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(Zval::Resource(rc)) = args.first().map(|v| v.deref_clone()) else {
+            return Ok(Zval::Bool(false));
+        };
+        let secs = args.get(1).map(|v| convert::to_long_cast(&v.deref_clone(), &mut self.diags)).unwrap_or(0);
+        let usecs = args.get(2).map(|v| convert::to_long_cast(&v.deref_clone(), &mut self.diags)).unwrap_or(0);
+        let dur = std::time::Duration::new(secs.max(0) as u64, (usecs.max(0) as u32).saturating_mul(1000));
+        let dur = (dur > std::time::Duration::ZERO).then_some(dur);
+        let mut b = rc.borrow_mut();
+        match b.as_stream_mut().map(|s| &s.backend) {
+            Some(php_types::stream::StreamBackend::Tcp(t)) => {
+                let _ = t.set_read_timeout(dur);
+                Ok(Zval::Bool(true))
+            }
+            Some(php_types::stream::StreamBackend::Udp(u)) => {
+                let _ = u.set_read_timeout(dur);
+                Ok(Zval::Bool(true))
+            }
+            _ => Ok(Zval::Bool(false)),
+        }
+    }
+
+    /// `stream_is_local($stream_or_url): bool` — true unless the wrapper is a
+    /// remote (URL) one. Classifies by scheme: no scheme / local wrappers → true;
+    /// http/https/ftp/ftps/data → false; an unknown scheme warns and returns true
+    /// (as PHP does for a wrapper it can't find).
+    pub(super) fn ho_stream_is_local(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let scheme = match args.first().map(|v| v.deref_clone()) {
+            Some(Zval::Resource(rc)) => rc
+                .borrow()
+                .as_stream_ref()
+                .map(|s| url_scheme(&s.uri))
+                .unwrap_or_default(),
+            Some(other) => {
+                let s = convert::to_zstr_cast(&other, &mut self.diags).as_bytes().to_vec();
+                url_scheme(&s)
+            }
+            None => return Ok(Zval::Bool(true)),
+        };
+        Ok(Zval::Bool(match scheme.as_str() {
+            "" | "file" | "php" | "phar" | "glob" | "zip" | "compress.zlib" | "compress.bzip2" => true,
+            "http" | "https" | "ftp" | "ftps" | "data" => false,
+            other => {
+                self.diags.push(Diag::Warning(format!(
+                    "stream_is_local(): Unable to find the wrapper \"{other}\" - did you forget to enable it when you configured PHP?"
+                )));
+                true
+            }
+        }))
     }
     /// `opendir($directory)`: snapshot the directory entries (`.`/`..` first, then
     /// OS order) into a `DirHandle` resource; `false` + Warning on failure. Mirrors

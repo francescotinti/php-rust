@@ -186,6 +186,14 @@ impl Resource {
         }
     }
 
+    /// Shared access to the byte stream, if this is a stream resource.
+    pub fn as_stream_ref(&self) -> Option<&Stream> {
+        match &self.kind {
+            ResKind::Stream(s) => Some(s),
+            _ => None,
+        }
+    }
+
     /// The directory handle, if this is an `opendir` resource (step 53c).
     pub fn as_dir_mut(&mut self) -> Option<&mut DirHandle> {
         match &mut self.kind {

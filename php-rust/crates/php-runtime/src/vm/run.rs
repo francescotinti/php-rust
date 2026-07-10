@@ -1972,8 +1972,14 @@ impl<'m> super::Vm<'m> {
                             }
                         }
                     }
+                    // Flush any diagnostic this builtin pushes at its call line
+                    // (like `CallHostBuiltin` does) so e.g. stream_socket_client's
+                    // connect Warning renders at the call, not the next statement.
+                    let line = self.cur_line(top);
+                    self.flush_diags(line)?;
                     let (result, out_val, out_val2) =
                         self.dispatch_host_builtin_out(&name, args, out_index as usize)?;
+                    self.flush_diags(line)?;
                     let top = self.frames.len() - 1;
                     if let Some(slot) = out_slot {
                         match &mut self.frames[top].slots[slot as usize] {
