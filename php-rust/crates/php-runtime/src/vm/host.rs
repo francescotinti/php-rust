@@ -4902,6 +4902,71 @@ impl<'m> super::Vm<'m> {
         }
     }
 
+    /// `stream_resolve_include_path($filename): string|false` — the real path of
+    /// `$filename` resolved against the include path. phpr's include path is the
+    /// working directory, so this is `realpath` of an existing file (absolute or
+    /// cwd-relative), else `false`.
+    pub(super) fn ho_stream_resolve_include_path(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        use std::os::unix::ffi::OsStrExt;
+        let path = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags)
+            .as_bytes()
+            .to_vec();
+        match std::fs::canonicalize(std::ffi::OsStr::from_bytes(&path)) {
+            Ok(p) => Ok(Zval::Str(PhpStr::new(p.as_os_str().as_bytes().to_vec()))),
+            Err(_) => Ok(Zval::Bool(false)),
+        }
+    }
+
+    /// `stream_get_line($stream, $length, $ending = ""): string|false` — read from
+    /// the stream up to (but not including) the first `$ending`, or `$length` bytes
+    /// (when `> 0`), or EOF. `false` only at EOF with nothing read. Works on both
+    /// byte streams and userland-wrapper streams.
+    pub(super) fn ho_stream_get_line(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(Zval::Resource(rc)) = args.first().map(|v| v.deref_clone()) else {
+            return Err(PhpError::TypeError(
+                "stream_get_line(): Argument #1 ($stream) must be of type resource".to_string(),
+            ));
+        };
+        let length = args.get(1).map(|v| convert::to_long_cast(&v.deref_clone(), &mut self.diags)).unwrap_or(0);
+        let ending = args
+            .get(2)
+            .map(|v| convert::to_zstr_cast(&v.deref_clone(), &mut self.diags).as_bytes().to_vec())
+            .unwrap_or_default();
+        let max = if length > 0 { length as usize } else { usize::MAX };
+        let is_user = rc.borrow().as_user_stream().is_some();
+        let mut out: Vec<u8> = Vec::new();
+        let mut read_any = false;
+        while out.len() < max {
+            let byte = if is_user {
+                self.user_stream_fill(&rc, 1, false)?;
+                let mut b = rc.borrow_mut();
+                let us = b.as_user_stream_mut().unwrap();
+                (!us.buffer.is_empty()).then(|| us.buffer.remove(0))
+            } else {
+                let mut b = rc.borrow_mut();
+                match b.as_stream_mut() {
+                    Some(s) => s.read(1).ok().and_then(|v| v.first().copied()),
+                    None => None,
+                }
+            };
+            match byte {
+                None => break,
+                Some(bb) => {
+                    read_any = true;
+                    out.push(bb);
+                    if !ending.is_empty() && out.ends_with(&ending) {
+                        out.truncate(out.len() - ending.len());
+                        return Ok(Zval::Str(PhpStr::new(out)));
+                    }
+                }
+            }
+        }
+        if !read_any {
+            return Ok(Zval::Bool(false));
+        }
+        Ok(Zval::Str(PhpStr::new(out)))
+    }
+
     /// Open a `scheme://…` URL whose scheme is a registered userland wrapper:
     /// instantiate the handler class, call `stream_open($path,$mode,$options,&$opened)`,
     /// and (on success) mint a `UserStream` resource. `false` + Warning otherwise.

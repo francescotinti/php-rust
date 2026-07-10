@@ -8736,6 +8736,8 @@ host_builtins! {
     b"stream_is_local" => vm.ho_stream_is_local(args),
     b"stream_wrapper_register" | b"stream_register_wrapper" => vm.ho_stream_wrapper_register(args),
     b"stream_wrapper_unregister" => vm.ho_stream_wrapper_unregister(args),
+    b"stream_resolve_include_path" => vm.ho_stream_resolve_include_path(args),
+    b"stream_get_line" => vm.ho_stream_get_line(args),
     b"serialize" => vm.ho_serialize(args),
     b"umask" => vm.ho_umask(args),
     b"__dom_new_doc" => vm.ho_dom_new_doc(args),
