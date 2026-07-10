@@ -57,7 +57,7 @@ language runtime and general stdlib; everything below it is a discrete extension
 | ctype | 11 / 11 | **100%** | complete |
 | json | 5 / 5 | **100%** | complete |
 | SimpleXML | 3 / 3 | **100%** | complete |
-| bcmath | 14 / 14 | **100%** | 14 fns + `BcMath\Number` (methods) + `RoundingMode`; operator overloading deferred |
+| bcmath | 14 / 14 | **100%** | 14 fns + `BcMath\Number` (methods + operator overloading) + `RoundingMode` |
 | mbstring | 48 / 65 | 73% | codecs + grapheme family |
 | SPL | 11 / 15 | 73% | iterators, class_* |
 | PCRE | 8 / 11 | 72% | `preg_last_error*` pending |
