@@ -3519,6 +3519,7 @@ impl<'m> super::Vm<'m> {
             | StreamBackend::ChildStdout(_)
             | StreamBackend::ChildStderr(_) => ("STDIO", false),
             StreamBackend::Tcp(_) | StreamBackend::Udp(_) => ("tcp_socket/unknown", false),
+            StreamBackend::GzFile { .. } => ("ZLIB", true), // gz write stream
         };
         let wrapper = if s.uri.starts_with(b"php://") { "PHP" } else { "plainfile" };
         let mut arr = PhpArray::new();
@@ -3602,6 +3603,7 @@ impl<'m> super::Vm<'m> {
                         eof: false,
                         uri,
                         mode: b"r+b".to_vec(),
+                        eof_on_exhaust: false,
                     };
                     return Ok(self.alloc_resource(stream));
                 }
@@ -4393,6 +4395,7 @@ impl<'m> super::Vm<'m> {
                 eof: false,
                 uri: b"pipe".to_vec(),
                 mode: if readable { b"r".to_vec() } else { b"w".to_vec() },
+                eof_on_exhaust: false,
             };
             vm.alloc_resource(stream)
         };
@@ -4807,6 +4810,7 @@ impl<'m> super::Vm<'m> {
             eof: false,
             uri: address.as_bytes().to_vec(),
             mode: b"r+".to_vec(),
+            eof_on_exhaust: false,
         };
         Ok(Zval::Resource(Rc::new(RefCell::new(Resource::new(id, stream)))))
     }
@@ -4965,6 +4969,122 @@ impl<'m> super::Vm<'m> {
             return Ok(Zval::Bool(false));
         }
         Ok(Zval::Str(PhpStr::new(out)))
+    }
+
+    /// `gzopen(string $filename, string $mode, int $use_include_path = 0)`:
+    /// open a gz file stream. Read mode decodes the whole file up front (every
+    /// concatenated gzip member; a plain file reads transparently) into a
+    /// `Memory`-backed stream, so fread/fgets/fseek work unchanged; write/append
+    /// mode mints a `GzFile` backend whose buffer `fclose` compresses. A level
+    /// digit in the mode (`"w9"`) selects the compression level.
+    pub(super) fn ho_gzopen(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let path = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags)
+            .as_bytes()
+            .to_vec();
+        let mode = args
+            .get(1)
+            .map(|v| convert::to_zstr_cast(&v.deref_clone(), &mut self.diags).as_bytes().to_vec())
+            .unwrap_or_default();
+        self.gz_open_stream(&path, &mode, "gzopen")
+    }
+
+    /// Shared gz stream open (gzopen and the `compress.zlib://` fopen wrapper).
+    pub(super) fn gz_open_stream(&mut self, path: &[u8], mode: &[u8], fname: &str) -> Result<Zval, PhpError> {
+        use std::os::unix::ffi::OsStrExt;
+        // zlib streams are strictly one-directional: any '+' is rejected up
+        // front (before touching the file — a `w+` must NOT truncate).
+        if mode.contains(&b'+') {
+            self.diags.push(Diag::Warning(format!(
+                "{fname}(): Cannot open a zlib stream for reading and writing at the same time!"
+            )));
+            let line = self.cur_line(self.frames.len() - 1);
+            self.flush_diags(line)?;
+            return Ok(Zval::Bool(false));
+        }
+        // Only r/w/a lead a valid gz mode (later letters/digits are flags/level).
+        if !matches!(mode.first(), Some(b'r' | b'w' | b'a')) {
+            self.diags.push(Diag::Warning(format!(
+                "{fname}({}): Failed to open stream: `{}' is not a valid mode for fopen",
+                String::from_utf8_lossy(path),
+                String::from_utf8_lossy(mode)
+            )));
+            let line = self.cur_line(self.frames.len() - 1);
+            self.flush_diags(line)?;
+            return Ok(Zval::Bool(false));
+        }
+        // A digit anywhere in the mode string is the compression level ("w9").
+        let level = mode
+            .iter()
+            .find(|b| b.is_ascii_digit())
+            .map(|&b| (b - b'0') as i32)
+            .unwrap_or(-1);
+        let append = mode.first() == Some(&b'a');
+        let write = append || mode.first() == Some(&b'w');
+        let stream = if write {
+            php_types::Stream {
+                backend: php_types::stream::StreamBackend::GzFile {
+                    path: path.to_vec(),
+                    buf: std::io::Cursor::new(Vec::new()),
+                    level,
+                    append,
+                },
+                readable: false,
+                writable: true,
+                eof: false,
+                uri: path.to_vec(),
+                mode: mode.to_vec(),
+                eof_on_exhaust: false,
+            }
+        } else {
+            // Read mode: decode the whole file now (members concatenated; plain
+            // files pass through) and serve it from a memory cursor.
+            let raw = match std::fs::read(std::ffi::OsStr::from_bytes(path)) {
+                Ok(d) => d,
+                Err(e) => {
+                    let msg = match e.kind() {
+                        std::io::ErrorKind::NotFound => "No such file or directory".to_string(),
+                        std::io::ErrorKind::PermissionDenied => "Permission denied".to_string(),
+                        _ => e.to_string(),
+                    };
+                    self.diags.push(Diag::Warning(format!(
+                        "{fname}({}): Failed to open stream: {msg}",
+                        String::from_utf8_lossy(path)
+                    )));
+                    let line = self.cur_line(self.frames.len() - 1);
+                    self.flush_diags(line)?;
+                    return Ok(Zval::Bool(false));
+                }
+            };
+            let decoded = if raw.starts_with(&[0x1f, 0x8b]) {
+                match php_types::zlibio::gzip_decode_members(&raw) {
+                    Some(d) => d,
+                    None => {
+                        self.diags.push(Diag::Warning(format!(
+                            "{fname}({}): data error",
+                            String::from_utf8_lossy(path)
+                        )));
+                        let line = self.cur_line(self.frames.len() - 1);
+                        self.flush_diags(line)?;
+                        return Ok(Zval::Bool(false));
+                    }
+                }
+            } else {
+                raw // transparent read of a plain file
+            };
+            php_types::Stream {
+                backend: php_types::stream::StreamBackend::Memory(std::io::Cursor::new(decoded)),
+                readable: true,
+                writable: false,
+                eof: false,
+                uri: path.to_vec(),
+                mode: mode.to_vec(),
+                // gz semantics: EOF as soon as the decoded data is consumed.
+                eof_on_exhaust: true,
+            }
+        };
+        let id = self.next_resource_id;
+        self.next_resource_id += 1;
+        Ok(Zval::Resource(Rc::new(RefCell::new(Resource::new(id, stream)))))
     }
 
     /// Open a `scheme://…` URL whose scheme is a registered userland wrapper:

@@ -444,6 +444,7 @@ pub(crate) fn run_module_with_hir<'m>(
                 eof: false,
                 uri: uri.to_vec(),
                 mode: mode.to_vec(),
+                eof_on_exhaust: false,
             },
         ))))
     };
@@ -5457,6 +5458,15 @@ impl<'m> Vm<'m> {
                 }
             };
         }
+        // compress.zlib://path — the zlib wrapper routes through the gz stream
+        // machinery (transparent read of plain files, GzFile buffer on write).
+        if let Some(rest) = path.strip_prefix(b"compress.zlib://".as_slice()) {
+            let rest = rest.to_vec();
+            let r = self.gz_open_stream(&rest, &mode, "fopen");
+            let line = self.cur_line(self.frames.len() - 1);
+            self.flush_diags(line)?;
+            return r;
+        }
         // A registered userland stream wrapper (stream_wrapper_register) claims
         // its scheme before the filesystem is consulted.
         if let Some(pos) = path.windows(3).position(|w| w == b"://") {
@@ -8738,6 +8748,7 @@ host_builtins! {
     b"stream_wrapper_unregister" => vm.ho_stream_wrapper_unregister(args),
     b"stream_resolve_include_path" => vm.ho_stream_resolve_include_path(args),
     b"stream_get_line" => vm.ho_stream_get_line(args),
+    b"gzopen" => vm.ho_gzopen(args),
     b"serialize" => vm.ho_serialize(args),
     b"umask" => vm.ho_umask(args),
     b"__dom_new_doc" => vm.ho_dom_new_doc(args),

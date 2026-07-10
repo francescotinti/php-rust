@@ -268,7 +268,8 @@ pub fn registry() -> Registry {
     add(b"array_merge_recursive", array::array_merge_recursive);
     add(b"hash_algos", encoding::hash_algos);
     add(b"stream_get_wrappers", encoding::stream_get_wrappers);
-    // ext/zlib string (de)compression (zlib-rs backend, byte-identical).
+    // ext/zlib string (de)compression (system zlib via php_types::zlibio,
+    // byte-identical).
     add(b"gzdeflate", zlib::gzdeflate);
     add(b"gzinflate", zlib::gzinflate);
     add(b"gzcompress", zlib::gzcompress);
@@ -278,6 +279,22 @@ pub fn registry() -> Registry {
     add(b"zlib_encode", zlib::zlib_encode);
     add(b"zlib_decode", zlib::zlib_decode);
     add(b"zlib_get_coding_type", zlib::zlib_get_coding_type);
+    add(b"gzfile", zlib::gzfile);
+    add(b"readgzfile", zlib::readgzfile);
+    // gz stream ops: a gz stream is an ordinary stream resource (gzopen decodes
+    // up front / GzFile buffers writes), so these are the file ops under their
+    // zlib aliases, exactly as PHP aliases them onto the same stream layer.
+    add(b"gzread", file::fread);
+    add(b"gzwrite", file::fwrite);
+    add(b"gzputs", file::fwrite);
+    add(b"gzclose", file::fclose);
+    add(b"gzgets", file::fgets);
+    add(b"gzgetc", file::fgetc);
+    add(b"gzeof", file::feof);
+    add(b"gzrewind", file::rewind);
+    add(b"gztell", file::ftell);
+    add(b"gzseek", file::fseek);
+    add(b"gzpassthru", file::fpassthru);
     add(b"array_flip", array::array_flip);
     add(b"array_change_key_case", array::array_change_key_case);
     add(b"array_count_values", array::array_count_values);

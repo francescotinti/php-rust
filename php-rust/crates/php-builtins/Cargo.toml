@@ -22,12 +22,6 @@ sha2 = "0.10"
 sha3 = "0.10"
 hmac = "0.12"
 crc32fast = "1.4"
-# ext/zlib calls the system zlib's deflateInit2/inflateInit2 DIRECTLY (via
-# libz-sys), with PHP's exact parameters (MAX_MEM_LEVEL, windowBits = the
-# encoding), so gzcompress/gzdeflate/gzencode output is byte-identical to PHP's —
-# a higher-level crate (flate2/miniz_oxide/zlib-rs) hard-codes DEF_MEM_LEVEL and
-# diverges on larger inputs. Links the same libz.1.2.12.dylib brew-php does.
-libz-sys = "1"
 xxhash-rust = { version = "0.8", features = ["xxh32", "xxh64", "xxh3"] }
 pwhash = "1"
 x509-parser = "0.18"

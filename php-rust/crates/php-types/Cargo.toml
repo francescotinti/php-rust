@@ -6,3 +6,8 @@ license.workspace = true
 
 [dependencies]
 libc = "0.2"
+# System zlib for ext/zlib (see src/zlibio.rs): shared by the value builtins
+# (gzcompress & co.) and the VM's gz stream handling, so the FFI lives once in
+# the bottom crate. Byte-identical to PHP requires the system libz + PHP's exact
+# deflate params — see zlibio.rs.
+libz-sys = "1"

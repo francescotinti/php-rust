@@ -132,10 +132,30 @@ pub fn stream_isatty(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
 }
 
 /// `fclose($stream)`: drop the backend and mark the handle closed; the same
-/// `Rc` is shared, so every alias of the resource now reads as closed.
+/// `Rc` is shared, so every alias of the resource now reads as closed. A gz
+/// write stream (`gzopen "w"/"a"`, `compress.zlib://`) finalises here: its
+/// buffered plaintext is gzip-compressed and written/appended to the file.
 pub fn fclose(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let r = stream_arg(argv, "fclose")?;
-    r.borrow_mut().kind = ResKind::Closed;
+    let mut res = r.borrow_mut();
+    if let Some(StreamBackend::GzFile { path, buf, level, append }) =
+        res.as_stream_mut().map(|s| &mut s.backend)
+    {
+        use std::io::Write as _;
+        use std::os::unix::ffi::OsStrExt;
+        let compressed =
+            php_types::zlibio::compress(buf.get_ref(), *level, php_types::zlibio::ENC_GZIP);
+        let target = std::ffi::OsStr::from_bytes(path);
+        let file = if *append {
+            std::fs::OpenOptions::new().create(true).append(true).open(target)
+        } else {
+            std::fs::File::create(target)
+        };
+        if let Ok(mut f) = file {
+            let _ = f.write_all(&compressed);
+        }
+    }
+    res.kind = ResKind::Closed;
     Ok(Zval::Bool(true))
 }
 
@@ -182,7 +202,12 @@ pub fn fgetc(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
 pub fn feof(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let r = stream_arg(argv, "feof")?;
     let mut res = r.borrow_mut();
-    let eof = res.as_stream_mut().map(|s| s.eof).unwrap_or(true);
+    // A gz read stream (`eof_on_exhaust`) is at EOF as soon as its decoded data
+    // is consumed; an ordinary stream only after a read attempt came up empty.
+    let eof = res
+        .as_stream_mut()
+        .map(|s| s.eof || (s.eof_on_exhaust && s.at_end()))
+        .unwrap_or(true);
     Ok(Zval::Bool(eof))
 }
 
@@ -512,6 +537,18 @@ pub fn file_get_contents(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
             Some(body) => body,
             None => return Ok(Zval::Bool(false)),
         }
+    } else if let Some(rest) = name.as_bytes().strip_prefix(b"compress.zlib://".as_slice()) {
+        // The zlib wrapper: decode every gzip member (plain files pass through).
+        match crate::zlib::read_gz_file(rest) {
+            Some(d) => d,
+            None => {
+                ctx.diags.push(Diag::Warning(format!(
+                    "file_get_contents({}): Failed to open stream: No such file or directory",
+                    String::from_utf8_lossy(name.as_bytes())
+                )));
+                return Ok(Zval::Bool(false));
+            }
+        }
     } else {
         let path = std::ffi::OsStr::from_bytes(strip_file_wrapper(name.as_bytes()));
         match std::fs::read(path) {
@@ -826,15 +863,27 @@ pub fn file(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         .unwrap_or(0);
     let ignore_nl = flags & 2 != 0;
     let skip_empty = flags & 4 != 0;
-    let data = match std::fs::read(&p) {
-        Ok(d) => d,
-        Err(e) => {
-            ctx.diags.push(Diag::Warning(format!(
-                "file({}): Failed to open stream: {}",
-                show_path(&p),
-                strerror(&e)
-            )));
-            return Ok(Zval::Bool(false));
+    // The zlib wrapper: file("compress.zlib://…") decodes before line-splitting.
+    let cz = {
+        use std::os::unix::ffi::OsStrExt;
+        p.as_os_str()
+            .as_bytes()
+            .strip_prefix(b"compress.zlib://".as_slice())
+            .and_then(crate::zlib::read_gz_file)
+    };
+    let data = if let Some(d) = cz {
+        d
+    } else {
+        match std::fs::read(&p) {
+            Ok(d) => d,
+            Err(e) => {
+                ctx.diags.push(Diag::Warning(format!(
+                    "file({}): Failed to open stream: {}",
+                    show_path(&p),
+                    strerror(&e)
+                )));
+                return Ok(Zval::Bool(false));
+            }
         }
     };
     let mut arr = PhpArray::new();

@@ -87,6 +87,10 @@ pub struct Stream {
     pub uri: Vec<u8>,
     /// The `fopen` mode as given (`"r"`, `"w+b"`) — `stream_get_meta_data()['mode']`.
     pub mode: Vec<u8>,
+    /// gz read streams report EOF as soon as the decoded data is exhausted (the
+    /// zlib layer saw `Z_STREAM_END`), unlike ordinary streams whose EOF flag is
+    /// set only by a read attempt that comes up empty. Set by `gzopen` read mode.
+    pub eof_on_exhaust: bool,
 }
 
 #[derive(Debug)]
@@ -109,6 +113,16 @@ pub enum StreamBackend {
     /// A connected UDP socket (`fsockopen("udp://...")`): writes send one
     /// datagram each, reads receive one. Unseekable, never EOF-terminated.
     Udp(std::net::UdpSocket),
+    /// A gz *write* stream (`gzopen($path, "w"/"a")` / `compress.zlib://`):
+    /// writes accumulate uncompressed in `buf`; `fclose` compresses the buffer
+    /// (gzip, `level`) and writes/appends it to `path`. Read mode never uses
+    /// this — a gz read stream decodes up front into a `Memory` backend.
+    GzFile {
+        path: Vec<u8>,
+        buf: Cursor<Vec<u8>>,
+        level: i32,
+        append: bool,
+    },
 }
 
 /// A `proc_open` child process: the handle, the command line it was launched
@@ -261,9 +275,10 @@ impl Stream {
                 StreamBackend::ChildStderr(p) => p.read(&mut buf[filled..]),
                 StreamBackend::Tcp(t) => t.read(&mut buf[filled..]),
                 StreamBackend::Udp(u) => u.recv(&mut buf[filled..]),
-                StreamBackend::Stdout | StreamBackend::Stderr | StreamBackend::ChildStdin(_) => {
-                    Ok(0)
-                }
+                StreamBackend::Stdout
+                | StreamBackend::Stderr
+                | StreamBackend::ChildStdin(_)
+                | StreamBackend::GzFile { .. } => Ok(0),
             };
             let got = match r {
                 Ok(g) => g,
@@ -300,9 +315,10 @@ impl Stream {
                 StreamBackend::ChildStderr(p) => p.read(&mut one),
                 StreamBackend::Tcp(t) => t.read(&mut one),
                 StreamBackend::Udp(u) => u.recv(&mut one),
-                StreamBackend::Stdout | StreamBackend::Stderr | StreamBackend::ChildStdin(_) => {
-                    Ok(0)
-                }
+                StreamBackend::Stdout
+                | StreamBackend::Stderr
+                | StreamBackend::ChildStdin(_)
+                | StreamBackend::GzFile { .. } => Ok(0),
             };
             let got = match r {
                 Ok(g) => g,
@@ -347,6 +363,8 @@ impl Stream {
             }
             StreamBackend::Tcp(t) => t.write(data),
             StreamBackend::Udp(u) => u.send(data),
+            // A gz write stream accumulates plaintext; fclose compresses it.
+            StreamBackend::GzFile { buf, .. } => buf.write(data),
             // The child's output ends are read-only; report zero bytes written.
             StreamBackend::ChildStdout(_) | StreamBackend::ChildStderr(_) => Ok(0),
         }
@@ -362,7 +380,17 @@ impl Stream {
             StreamBackend::ChildStdin(p) => p.flush(),
             StreamBackend::Tcp(t) => t.flush(),
             StreamBackend::Udp(_) => Ok(()),
+            StreamBackend::GzFile { .. } => Ok(()), // compressed only at fclose
             StreamBackend::ChildStdout(_) | StreamBackend::ChildStderr(_) => Ok(()),
+        }
+    }
+
+    /// Whether the in-memory data is fully consumed — the [`Self::eof_on_exhaust`]
+    /// (gz stream) EOF condition. Only a memory-backed stream can tell.
+    pub fn at_end(&self) -> bool {
+        match &self.backend {
+            StreamBackend::Memory(c) => c.position() >= c.get_ref().len() as u64,
+            _ => false,
         }
     }
 
@@ -371,6 +399,7 @@ impl Stream {
         let r = match &mut self.backend {
             StreamBackend::File(f) => f.seek(pos).is_ok(),
             StreamBackend::Memory(c) => c.seek(pos).is_ok(),
+            StreamBackend::GzFile { buf, .. } => buf.seek(pos).is_ok(),
             // std streams and child pipes are not seekable.
             _ => false,
         };
@@ -389,7 +418,7 @@ impl Stream {
         use std::os::unix::io::AsRawFd;
         Some(match &self.backend {
             StreamBackend::File(f) => f.as_raw_fd(),
-            StreamBackend::Memory(_) => return None,
+            StreamBackend::Memory(_) | StreamBackend::GzFile { .. } => return None,
             StreamBackend::Stdin => 0,
             StreamBackend::Stdout => 1,
             StreamBackend::Stderr => 2,
@@ -421,6 +450,9 @@ impl Stream {
         match &mut self.backend {
             StreamBackend::File(f) => f.stream_position().ok(),
             StreamBackend::Memory(c) => c.stream_position().ok(),
+            // A gz write stream's offset is its position in the *uncompressed*
+            // buffer (PHP's gztell on a write stream reports plaintext bytes).
+            StreamBackend::GzFile { buf, .. } => buf.stream_position().ok(),
             // std streams and child pipes have no byte offset.
             _ => None,
         }
@@ -486,6 +518,7 @@ pub fn open_data_stream(path: &[u8]) -> Option<Stream> {
         eof: false,
         uri: path.to_vec(),
         mode: b"rb".to_vec(),
+        eof_on_exhaust: false,
     })
 }
 
@@ -559,6 +592,7 @@ pub fn open_php_stream(spec: &[u8], mode: &[u8]) -> Option<Stream> {
         eof: false,
         uri,
         mode: mode.to_vec(),
+        eof_on_exhaust: false,
     })
 }
 
@@ -600,6 +634,7 @@ pub fn open_file_stream(path: &[u8], mode: &[u8]) -> Result<Stream, String> {
             eof: false,
             uri: path.to_vec(),
             mode: mode.to_vec(),
+            eof_on_exhaust: false,
         }),
         Err(e) => {
             let m = e.to_string();
