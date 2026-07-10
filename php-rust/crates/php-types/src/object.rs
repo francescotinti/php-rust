@@ -219,11 +219,15 @@ pub struct ObjectInfo {
     /// `print_r` render it as `enum(Name::Case)` rather than `object(...)`
     /// (step 23, D-23.5).
     pub is_enum_case: bool,
+    /// `true` on the synthetic carrier built for an object's `__serialize()`
+    /// payload: its "property" keys are actually array keys, so a canonical
+    /// integer key serializes as `i:N` (array semantics) rather than `s:…`.
+    pub opaque_array_keys: bool,
 }
 
 impl ObjectInfo {
     pub fn from_entries(entries: Vec<(Box<[u8]>, PropVis)>) -> Self {
-        ObjectInfo { entries, types: Vec::new(), is_enum_case: false }
+        ObjectInfo { entries, types: Vec::new(), is_enum_case: false, opaque_array_keys: false }
     }
 
     /// Like [`Self::from_entries`] but carrying the declared property type displays
@@ -232,13 +236,24 @@ impl ObjectInfo {
         entries: Vec<(Box<[u8]>, PropVis)>,
         types: Vec<(Box<[u8]>, Box<[u8]>)>,
     ) -> Self {
-        ObjectInfo { entries, types, is_enum_case: false }
+        ObjectInfo { entries, types, is_enum_case: false, opaque_array_keys: false }
     }
 
     /// `ObjectInfo` for an enum case singleton (step 23, D-23.5). The synthetic
     /// `name`/`value` properties are public.
     pub fn enum_case(entries: Vec<(Box<[u8]>, PropVis)>) -> Self {
-        ObjectInfo { entries, types: Vec::new(), is_enum_case: true }
+        ObjectInfo { entries, types: Vec::new(), is_enum_case: true, opaque_array_keys: false }
+    }
+
+    /// `ObjectInfo` for the synthetic carrier of an object's `__serialize()`
+    /// payload, whose keys serialize with array (not property) semantics.
+    pub fn opaque() -> Self {
+        ObjectInfo {
+            entries: Vec::new(),
+            types: Vec::new(),
+            is_enum_case: false,
+            opaque_array_keys: true,
+        }
     }
 
     /// The visibility of property `name`, defaulting to `Public` for a dynamic

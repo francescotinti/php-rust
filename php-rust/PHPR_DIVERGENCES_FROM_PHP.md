@@ -139,6 +139,28 @@ path stringa-vs-oggetto salta il `__toString` per i Number. Suite ufficiale
   cifre): phpr calcola invece di lanciare il `ValueError` "exponent is too large";
   irrilevante nella pratica.
 
+### 2.2 gmp — 49 funzioni + classe `GMP` + operatori (via num-bigint)
+
+Tutte le funzioni gmp non-random (49/51) sono implementate byte-identiche nei VALORI
+(port su `num-bigint`, `crates/php-builtins/src/gmp.rs` = primitive `_gmp_*` su stringhe
+decimali; classe `GMP` + wrapper `gmp_*` in `crates/php-runtime/src/lower/prelude_gmp.php`).
+Verificato con battery + fuzz (aritmetica, divisione+arrotondamenti, teoria dei numeri
+gcd/powm/invert/jacobi/kronecker/primi, bitwise two's-complement, operatori
+`+ - * / % ** & | ^ ~ << >>` + confronti + `++/--` + compound). Suite ufficiale
+`ext/gmp`: **46/90** runnable. Residui consapevoli:
+
+- **Random** (`gmp_random_bits`/`_range`/`_seed`): non-deterministico → non byte-matchabile,
+  assente. **`gmp_import`/`gmp_export`**: packing di byte con word-size/endianness, differito.
+- **Cast engine** `(int)$g`/`(float)$g`: usano `cast_object` in C (→ intval/float); una classe
+  PHP non può ridefinirli → phpr dà il cast oggetto di default. Come §2.1 (cast_object).
+- **Suffisso "called in …"**: i TypeError di argomento delle funzioni *userland* del prelude
+  aggiungono "called in FILE on line N", che le funzioni interne di PHP non hanno. Mitigato
+  usando parametri `mixed` + validazione manuale (`_int`/`_arg`), ma alcuni messaggi residui
+  differiscono. Gap uniforme delle funzioni-builtin-in-prelude.
+- **var_dump object-id** `#N`: come §2.1 (la delega crea GMP intermedi; free-list handle
+  diverso). VALORI byte-identici.
+- **Deprecation ZPP** float→int su operandi/argomenti non emessa (cfr. §1.2); valore corretto.
+
 ---
 
 ## 3. Divergenze di engine circoscritte (documentate nei topic-file di memoria)

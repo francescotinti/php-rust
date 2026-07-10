@@ -22,6 +22,7 @@ mod env;
 mod html;
 mod file;
 mod format;
+mod gmp;
 mod grapheme;
 mod image;
 mod json;
@@ -73,6 +74,37 @@ pub fn registry() -> Registry {
     add(b"bcfloor", bcmath::bcfloor);
     add(b"bcceil", bcmath::bcceil);
     add(b"bcround", bcmath::bcround);
+    // gmp low-level primitives (the `GMP` class + gmp_* wrappers live in the prelude).
+    add(b"_gmp_parse", gmp::parse);
+    add(b"_gmp_strval", gmp::strval);
+    add(b"_gmp_intval", gmp::intval);
+    add(b"_gmp_cmp", gmp::cmp);
+    add(b"_gmp_sign", gmp::sign);
+    add(b"_gmp_divq", gmp::divq);
+    add(b"_gmp_divr", gmp::divr);
+    add(b"_gmp_divqr", gmp::divqr);
+    add(b"_gmp_mod", gmp::modulo);
+    add(b"_gmp_bin", gmp::bin);
+    add(b"_gmp_un", gmp::un);
+    add(b"_gmp_powm", gmp::powm);
+    add(b"_gmp_gcdext", gmp::gcdext);
+    add(b"_gmp_invert", gmp::invert);
+    add(b"_gmp_root", gmp::root);
+    add(b"_gmp_rootrem", gmp::rootrem);
+    add(b"_gmp_sqrtrem", gmp::sqrtrem);
+    add(b"_gmp_fact", gmp::fact);
+    add(b"_gmp_binomial", gmp::binomial);
+    add(b"_gmp_probprime", gmp::probprime);
+    add(b"_gmp_nextprime", gmp::nextprime);
+    add(b"_gmp_kronecker", gmp::kronecker);
+    add(b"_gmp_perfsquare", gmp::perfsquare);
+    add(b"_gmp_perfpower", gmp::perfpower);
+    add(b"_gmp_setbit", gmp::setbit);
+    add(b"_gmp_testbit", gmp::testbit);
+    add(b"_gmp_scan0", gmp::scan0);
+    add(b"_gmp_scan1", gmp::scan1);
+    add(b"_gmp_popcount", gmp::popcount);
+    add(b"_gmp_hamdist", gmp::hamdist);
     add(b"date_parse", dateparse::date_parse);
     add(b"mktime", date::mktime);
     add(b"gmmktime", date::gmmktime);
@@ -577,7 +609,7 @@ fn arg1<'a>(args: &'a [Zval], fname: &str) -> Result<&'a Zval, PhpError> {
 const LOADED_EXTENSIONS: &[&[u8]] = &[
     b"core", b"standard", b"spl", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
     b"zip", b"dom", b"libxml", b"reflection", b"ctype", b"curl", b"pcntl", b"posix",
-    b"pdo", b"pdo_sqlite", b"sqlite3", b"simplexml", b"bcmath",
+    b"pdo", b"pdo_sqlite", b"sqlite3", b"simplexml", b"bcmath", b"gmp",
     // Declared for PHPUnit's bootstrap gate; their heavy surfaces (token_get_all,
     // xml_parser_*, XMLWriter) are filled in test-driven — a use ahead of the
     // implementation surfaces as an honest "undefined function".
@@ -589,7 +621,7 @@ const LOADED_EXTENSIONS: &[&[u8]] = &[
 const LOADED_EXTENSIONS_CASED: &[&[u8]] = &[
     b"Core", b"standard", b"SPL", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
     b"zip", b"dom", b"libxml", b"Reflection", b"ctype", b"curl", b"pcntl", b"posix",
-    b"PDO", b"pdo_sqlite", b"sqlite3", b"bcmath",
+    b"PDO", b"pdo_sqlite", b"sqlite3", b"bcmath", b"gmp",
     b"xml", b"xmlwriter", b"tokenizer", b"Phar",
 ];
 

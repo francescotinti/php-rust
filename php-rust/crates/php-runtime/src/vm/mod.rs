@@ -2684,12 +2684,15 @@ impl<'m> Vm<'m> {
         b: &Zval,
     ) -> Result<Option<Zval>, PhpError> {
         use BinOp::*;
-        let recv = match number_receiver(a).or_else(|| number_receiver(b)) {
+        let (recv, is_gmp) = match overload_receiver(a).or_else(|| overload_receiver(b)) {
             Some(r) => r,
             None => return Ok(None),
         };
-        if let Some(code) = number_arith_opcode(op) {
-            if !(operand_arith_ok(a) && operand_arith_ok(b)) {
+        if let Some(code) = overload_binop_opcode(op, is_gmp) {
+            // GMP always dispatches (its `__op` brands invalid-operand errors);
+            // Number dispatches only for numeric-ish operands, else the engine's
+            // standard "Unsupported operand types" applies.
+            if !is_gmp && !(operand_arith_ok(a) && operand_arith_ok(b)) {
                 return Ok(None);
             }
             let r = self.call_method_sync(
@@ -2700,7 +2703,7 @@ impl<'m> Vm<'m> {
             return Ok(Some(r));
         }
         if matches!(op, Eq | NotEq | Lt | Le | Gt | Ge | Spaceship) {
-            if operand_cmp_ok(a) && operand_cmp_ok(b) {
+            if is_gmp || (operand_cmp_ok(a) && operand_cmp_ok(b)) {
                 let c = match self.call_method_sync(recv, b"__cmp", vec![a.clone(), b.clone()])? {
                     Zval::Long(n) => n,
                     _ => 0,
@@ -2735,12 +2738,37 @@ impl<'m> Vm<'m> {
         Ok(None)
     }
 
-    /// [`apply_binop`] with `BcMath\Number` operator overloading applied first.
+    /// [`apply_binop`] with `BcMath\Number` / `GMP` operator overloading first.
     fn apply_binop_ovl(&mut self, op: BinOp, a: &Zval, b: &Zval) -> Result<Zval, PhpError> {
         if let Some(r) = self.try_number_binop(op, a, b)? {
             return Ok(r);
         }
         apply_binop(op, a, b, &mut self.diags)
+    }
+
+    /// [`apply_unop`] with overloading for `BcMath\Number` / `GMP`: unary `-` is
+    /// `x * -1` and (GMP only) `~` is `x ^ -1`, routed through `__op`.
+    fn apply_unop_ovl(&mut self, op: UnOp, a: &Zval) -> Result<Zval, PhpError> {
+        if let Some((recv, is_gmp)) = overload_receiver(a) {
+            match op {
+                UnOp::Neg => {
+                    return self.call_method_sync(
+                        recv,
+                        b"__op",
+                        vec![Zval::Long(2), a.clone(), Zval::Long(-1)],
+                    );
+                }
+                UnOp::BitNot if is_gmp => {
+                    return self.call_method_sync(
+                        recv,
+                        b"__op",
+                        vec![Zval::Long(8), a.clone(), Zval::Long(-1)],
+                    );
+                }
+                _ => {}
+            }
+        }
+        apply_unop(op, a, &mut self.diags)
     }
 
     /// Walk `var_dump`'s argument tree and invoke `__debugInfo()` on every object
@@ -5082,7 +5110,7 @@ impl<'m> Vm<'m> {
                         sb.props.remove(&k);
                     }
                     if opaque_keys {
-                        sb.info = Rc::new(php_types::ObjectInfo::default());
+                        sb.info = Rc::new(php_types::ObjectInfo::opaque());
                     }
                 }
                 let out = Zval::Object(synth.clone());
@@ -9583,17 +9611,33 @@ fn apply_binop(op: BinOp, a: &Zval, b: &Zval, d: &mut Diags) -> Result<Zval, Php
     })
 }
 
-/// If `v` is (or references) a `BcMath\Number` instance, return a clonable
-/// object Zval for it — the receiver for the overloaded-operator dispatch.
-fn number_receiver(v: &Zval) -> Option<Zval> {
+/// If `v` is (or references) an operator-overloaded arbitrary-precision object
+/// (`BcMath\Number` or `GMP`), return a clonable object Zval plus whether it is a
+/// `GMP` (which overloads bitwise ops and brands operand errors, unlike Number).
+fn overload_receiver(v: &Zval) -> Option<(Zval, bool)> {
     let o = deref_object(v)?;
-    let is_num = o.borrow().class_name.as_bytes() == b"BcMath\\Number";
-    is_num.then(|| Zval::Object(o))
+    let is_gmp = {
+        let b = o.borrow();
+        let cn = b.class_name.as_bytes();
+        if cn == b"BcMath\\Number" {
+            false
+        } else if cn == b"GMP" {
+            true
+        } else {
+            return None;
+        }
+    };
+    Some((Zval::Object(o), is_gmp))
 }
 
-/// The `Number::__op` opcode for an arithmetic `BinOp` (the six PHP's
-/// `do_operation` handles), or `None` for everything else.
-fn number_arith_opcode(op: BinOp) -> Option<i64> {
+/// Just the receiver Zval (for ++/-- which don't need the class kind).
+fn number_receiver(v: &Zval) -> Option<Zval> {
+    overload_receiver(v).map(|(z, _)| z)
+}
+
+/// The `__op` opcode for a `BinOp`: 0-5 arithmetic (both classes), 6-8 bitwise
+/// (GMP only). `None` for everything else.
+fn overload_binop_opcode(op: BinOp, is_gmp: bool) -> Option<i64> {
     use BinOp::*;
     match op {
         Add => Some(0),
@@ -9602,16 +9646,20 @@ fn number_arith_opcode(op: BinOp) -> Option<i64> {
         Div => Some(3),
         Mod => Some(4),
         Pow => Some(5),
+        BitAnd if is_gmp => Some(6),
+        BitOr if is_gmp => Some(7),
+        BitXor if is_gmp => Some(8),
+        Shl if is_gmp => Some(9),
+        Shr if is_gmp => Some(10),
         _ => None,
     }
 }
 
-/// True if `v` is a Number or a scalar that `do_operation` coerces to one
-/// (int/float/any string — a malformed string surfaces the "cannot be
-/// converted" ValueError from `__op`, matching PHP).
+/// True if `v` is an overloaded object or a scalar that `do_operation` coerces
+/// (int/float/any string — a malformed string surfaces `__op`'s error).
 fn operand_arith_ok(v: &Zval) -> bool {
     match v {
-        Zval::Object(o) => o.borrow().class_name.as_bytes() == b"BcMath\\Number",
+        Zval::Object(_) => overload_receiver(v).is_some(),
         Zval::Long(_) | Zval::Double(_) | Zval::Str(_) => true,
         Zval::Ref(c) => operand_arith_ok(&c.borrow()),
         _ => false,
@@ -9622,7 +9670,7 @@ fn operand_arith_ok(v: &Zval) -> bool {
 /// *uncomparable* (falls back to the engine) rather than an error.
 fn operand_cmp_ok(v: &Zval) -> bool {
     match v {
-        Zval::Object(o) => o.borrow().class_name.as_bytes() == b"BcMath\\Number",
+        Zval::Object(_) => overload_receiver(v).is_some(),
         Zval::Long(_) | Zval::Double(_) => true,
         Zval::Str(s) => bc_str_wellformed(s.as_bytes()),
         Zval::Ref(c) => operand_cmp_ok(&c.borrow()),
@@ -9637,7 +9685,7 @@ fn operand_uncomparable(v: &Zval) -> bool {
     match v {
         Zval::Str(s) => !bc_str_wellformed(s.as_bytes()),
         Zval::Array(_) | Zval::Resource(_) => true,
-        Zval::Object(o) => o.borrow().class_name.as_bytes() != b"BcMath\\Number",
+        Zval::Object(_) => overload_receiver(v).is_none(),
         Zval::Ref(c) => operand_uncomparable(&c.borrow()),
         _ => false,
     }

@@ -115,6 +115,23 @@ fn ser_into(out: &mut Vec<u8>, v: &Zval) -> Result<(), PhpError> {
                 if matches!(val, Zval::Undef) {
                     continue;
                 }
+                // `__serialize()` payload: keys keep array semantics, so a
+                // canonical integer key serializes as `i:N`, not `s:…`.
+                if obj.info.opaque_array_keys {
+                    let as_int = std::str::from_utf8(pname)
+                        .ok()
+                        .and_then(|s| s.parse::<i64>().ok().filter(|i| i.to_string() == s));
+                    match as_int {
+                        Some(i) => {
+                            out.extend_from_slice(b"i:");
+                            out.extend_from_slice(i.to_string().as_bytes());
+                            out.push(b';');
+                        }
+                        None => ser_str(out, pname),
+                    }
+                    ser_into(out, val)?;
+                    continue;
+                }
                 let is_plain = !pname.starts_with(b"\0");
                 if is_plain
                     && matches!(

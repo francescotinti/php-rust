@@ -381,10 +381,12 @@ impl<'m> super::Vm<'m> {
                                 return Ok(v);
                             }
                             if let Some(o) = deref_object(&v) {
-                                // `BcMath\Number` overloads comparison itself (its
-                                // compare handler runs in `apply_binop_ovl`); it must
-                                // NOT be pre-coerced to its `__toString` here.
-                                if o.borrow().class_name.as_bytes() == b"BcMath\\Number" {
+                                // `BcMath\Number` / `GMP` overload comparison
+                                // themselves (their compare handler runs in
+                                // `apply_binop_ovl`); they must NOT be pre-coerced
+                                // to their `__toString` for a string comparison.
+                                let cn = o.borrow().class_name.as_bytes().to_vec();
+                                if cn == b"BcMath\\Number" || cn == b"GMP" {
                                     return Ok(v);
                                 }
                                 let cid = o.borrow().class_id as usize;
@@ -405,7 +407,7 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::Unary(u) => {
                     let a = self.frames[top].stack.pop().expect("Unary operand");
-                    let r = apply_unop(u, &a, &mut self.diags)?;
+                    let r = self.apply_unop_ovl(u, &a)?;
                     self.frames[top].stack.push(r);
                 }
                 Op::Cast(k) => {

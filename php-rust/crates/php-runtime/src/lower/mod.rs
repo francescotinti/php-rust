@@ -546,6 +546,10 @@ const PRELUDE_NS_SRC: &[u8] = include_bytes!("prelude_ns.php");
 /// hoisted alongside `Pdo\Sqlite`. Delegates to the bc* builtins.
 const PRELUDE_BC_SRC: &[u8] = include_bytes!("prelude_bcmath.php");
 
+/// The `GMP` value object and the `gmp_*` functions (global namespace),
+/// delegating to the `_gmp_*` builtins. Hoisted for both classes AND functions.
+const PRELUDE_GMP_SRC: &[u8] = include_bytes!("prelude_gmp.php");
+
 /// The four owned products of lowering [`PRELUDE_SRC`]: the class table + its
 /// name→id index (step 20), and the global-function table + its name→index
 /// (step 35). Both are seeded into every real program before user declarations
@@ -627,6 +631,22 @@ fn lower_prelude_uncached() -> LoweredPrelude {
     );
     low.hoist_classes(program_bc.statements.as_slice())
         .expect("bcmath prelude must lower");
+    // `GMP`: global-namespace unit with a class AND functions — hoist both.
+    let file_gmp =
+        File::ephemeral(Cow::Borrowed(b"prelude".as_slice()), Cow::Borrowed(PRELUDE_GMP_SRC));
+    let program_gmp = parse_file(&arena, &file_gmp);
+    debug_assert!(
+        !program_gmp.has_errors(),
+        "gmp prelude failed to parse: {:?}",
+        program_gmp.errors
+    );
+    low.hoist_classes(program_gmp.statements.as_slice())
+        .expect("gmp prelude classes must lower");
+    for s in program_gmp.statements.as_slice() {
+        if let Statement::Function(func) = s {
+            low.hoist_function(func).expect("gmp prelude function must lower");
+        }
+    }
     (low.classes, low.class_index, low.functions, low.fn_index)
 }
 
@@ -1959,6 +1979,16 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"SORT_LOCALE_STRING" => ExprKind::Int(5),
         b"SORT_NATURAL" => ExprKind::Int(6),
         b"SORT_FLAG_CASE" => ExprKind::Int(8),
+        // GMP (ext/gmp).
+        b"GMP_ROUND_ZERO" => ExprKind::Int(0),
+        b"GMP_ROUND_PLUSINF" => ExprKind::Int(1),
+        b"GMP_ROUND_MINUSINF" => ExprKind::Int(2),
+        b"GMP_MSW_FIRST" => ExprKind::Int(1),
+        b"GMP_LSW_FIRST" => ExprKind::Int(2),
+        b"GMP_LITTLE_ENDIAN" => ExprKind::Int(4),
+        b"GMP_BIG_ENDIAN" => ExprKind::Int(8),
+        b"GMP_NATIVE_ENDIAN" => ExprKind::Int(16),
+        b"GMP_VERSION" => str_lit(b"6.3.0"),
         // Math.
         b"M_PI" => ExprKind::Float(std::f64::consts::PI),
         b"M_E" => ExprKind::Float(std::f64::consts::E),
