@@ -6,9 +6,9 @@ as they complete. Deliberate behavioural deviations are catalogued in
 [`PHPR_DIVERGENCES_FROM_PHP.md`](PHPR_DIVERGENCES_FROM_PHP.md); measured
 coverage in [`COVERAGE.md`](COVERAGE.md).
 
-Current state (2026-07-10): Zend corpus **2331** passing · missing functions
+Current state (2026-07-10): Zend corpus **2332** passing · missing functions
 (783-fn reference set) **183** · ext/tokenizer **42/49** · ext/zlib **complete**
-(30/30 fns, suite 113/115).
+(30/30 fns, suite 114/115).
 
 ---
 
@@ -73,14 +73,13 @@ Current state (2026-07-10): Zend corpus **2331** passing · missing functions
   The zlib playbook (system-library FFI in `php-types`, exact PHP parameters,
   oracle-locked contracts, suite-driven batches) is the template.
 
-### C.5 zlib — remaining edges (extension itself complete: 30/30, 113/115)
-- [ ] `__DIR__` must be ABSOLUTE under a relative script invocation (engine gap —
-  blocks `compress_zlib_wrapper`; see the improvement plan).
-- [ ] `bug71417` streaming partial-decode (decode-up-front cannot recover
-  partial output from corrupt input — documented divergence).
+### C.5 zlib — remaining edge (extension complete: 30/30, 114/115)
+- [x] ~~`__DIR__` absolute under relative invocation~~ — was never actually
+  broken; compress_zlib_wrapper passes. (The prior "fail" was a mislabelled
+  bug61820 panic, fixed in fb6ecbe.)
+- [ ] `bug71417` streaming partial-decode (decode-up-front cannot recover partial
+  output from corrupt input — documented divergence; the runner times it out).
 - [ ] gzopen `$use_include_path`; gzseek on write streams: forward-only + zero-fill.
-- [ ] Cosmetic: diagnostics raised *inside* an ob handler render before the
-  flushed buffer (PHP orders buffer first).
 
 ## D. Cross-cutting engine gaps (limit type-error phpts, not real usage)
 
