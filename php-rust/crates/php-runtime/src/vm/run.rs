@@ -3037,12 +3037,15 @@ impl<'m> super::Vm<'m> {
                             continue;
                         }
                         let ocid = o.borrow().class_id as usize;
-                        match prop_vis_decl(&self.classes, ocid, &name) {
-                            Some((vis, decl)) if !visible_from(&self.classes, cur, vis, decl) => false,
-                            _ => {
-                                let key = self.prop_storage_key(ocid, &name, cur);
-                                prop_isset(&target, &key)
-                            }
+                        // Resolve like any property access: the accessing
+                        // scope's OWN private wins over a subclass's same-name
+                        // redeclaration (prop_vis_decl saw only the most-derived
+                        // declaration, so `isset($this->data)` inside the parent
+                        // read the child's slot and answered false).
+                        match resolve_prop_access(&self.classes, ocid, &name, cur) {
+                            PropAccess::Denied { .. } => false,
+                            PropAccess::Slot(key) => prop_isset(&target, &key),
+                            PropAccess::Dynamic => prop_isset(&target, &name),
                         }
                     } else {
                         prop_isset(&target, &name)
@@ -3076,12 +3079,15 @@ impl<'m> super::Vm<'m> {
                         }
                         // No magic: an inaccessible declared property reads as not-set.
                         let ocid = o.borrow().class_id as usize;
-                        match prop_vis_decl(&self.classes, ocid, &name) {
-                            Some((vis, decl)) if !visible_from(&self.classes, cur, vis, decl) => false,
-                            _ => {
-                                let key = self.prop_storage_key(ocid, &name, cur);
-                                prop_isset(&target, &key)
-                            }
+                        // Resolve like any property access: the accessing
+                        // scope's OWN private wins over a subclass's same-name
+                        // redeclaration (prop_vis_decl saw only the most-derived
+                        // declaration, so `isset($this->data)` inside the parent
+                        // read the child's slot and answered false).
+                        match resolve_prop_access(&self.classes, ocid, &name, cur) {
+                            PropAccess::Denied { .. } => false,
+                            PropAccess::Slot(key) => prop_isset(&target, &key),
+                            PropAccess::Dynamic => prop_isset(&target, &name),
                         }
                     } else {
                         prop_isset(&target, &name)

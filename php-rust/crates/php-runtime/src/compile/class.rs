@@ -143,11 +143,17 @@ pub(super) fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> C
                 Some(c) => prop_defaults.push((skey.clone(), c)),
                 None => {
                     prop_defaults.push((skey.clone(), Const::Null));
-                    // The thunk writes by *name*; PropSet resolves the declared
-                    // slot at run time (prop_decl_storage_key). Known residue: of
-                    // two same-name private non-const defaults (dual slot), only
-                    // the most-derived one is materialised.
-                    init_items.push((name.clone(), e));
+                    // The thunk writes by *storage key*, not source name: for a
+                    // public/protected property they coincide, while a private's
+                    // mangled `\0Class\0name` bypasses PropSet's declared-slot
+                    // resolution (which picks the MOST-DERIVED declaration —
+                    // wrong for a parent's private shadowed by a subclass
+                    // redeclaration: the parent's default landed in the child's
+                    // slot and PHPUnit's TestCase::$data read null). The raw
+                    // fallback writes the exact declaring slot; hooks/type
+                    // checks are keyed by plain name and correctly stay out of
+                    // a default's materialisation.
+                    init_items.push((skey.clone(), e));
                 }
             },
         }

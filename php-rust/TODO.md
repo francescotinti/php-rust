@@ -6,7 +6,7 @@ as they complete. Deliberate behavioural deviations are catalogued in
 [`PHPR_DIVERGENCES_FROM_PHP.md`](PHPR_DIVERGENCES_FROM_PHP.md); measured
 coverage in [`COVERAGE.md`](COVERAGE.md).
 
-Current state (2026-07-11): Zend corpus **2350** passing · missing functions
+Current state (2026-07-11): Zend corpus **2351** passing · missing functions
 (783-fn reference set) **180** · ext/tokenizer **42/49** · ext/zlib **complete**
 (30/30 fns, suite 114/115). Class declarations now bind late (Zend late
 binding): a file whose class references an unloadable supertype compiles and
