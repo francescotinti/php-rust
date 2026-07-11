@@ -43,6 +43,7 @@ mod coroutines;
 mod dom;
 mod exceptions;
 mod host;
+mod ini;
 mod run;
 mod host_reflect;
 mod oop;
@@ -389,6 +390,7 @@ pub(crate) fn run_module_with_hir<'m>(
         json_last_error: 0,
         output_started: false,
         output_start: None,
+        ini: ini::IniTable::new(),
         response_code: None,
         user_abort_ignored: false,
         stream_wrappers: std::collections::HashMap::new(),
@@ -1112,6 +1114,9 @@ struct Vm<'m> {
     /// "headers already sent by (output started at …)" warning.
     output_started: bool,
     output_start: Option<(Vec<u8>, Line)>,
+    /// The mutable INI table (`ini_get`/`ini_set`/…); the session module reads
+    /// its `session.*` configuration from here. See [`ini::IniTable`].
+    ini: ini::IniTable,
     /// `http_response_code()` — `None` until explicitly set (CLI reports `false`
     /// for an unset code).
     response_code: Option<i64>,
@@ -9036,6 +9041,10 @@ host_builtins! {
     b"array_uintersect_uassoc" => vm.ho_array_uintersect_uassoc(args),
     b"header" => vm.ho_header(args),
     b"headers_sent" => vm.ho_headers_sent(args),
+    b"ini_get" => vm.ho_ini_get(args),
+    b"ini_set" => vm.ho_ini_set(args),
+    b"ini_restore" => vm.ho_ini_restore(args),
+    b"ini_get_all" => vm.ho_ini_get_all(args),
     b"headers_list" => vm.ho_headers_list(),
     b"setcookie" => vm.ho_setcookie(args),
     b"setrawcookie" => vm.ho_setcookie(args),

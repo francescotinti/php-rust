@@ -562,9 +562,8 @@ pub fn registry() -> Registry {
     add(b"memory_get_peak_usage", env::memory_get_usage);
     add(b"memory_reset_peak_usage", env::memory_reset_peak_usage);
     add(b"php_sapi_name", env::php_sapi_name);
-    add(b"ini_get", env::ini_get);
-    add(b"ini_set", env::ini_set);
-    add(b"ini_restore", env::ini_restore);
+    // ini_get/ini_set/ini_restore/ini_get_all are VM-side host builtins: the
+    // mutable INI table lives in the Vm (php-runtime vm/ini.rs).
     add(b"posix_geteuid", env::posix_geteuid);
     add(b"php_ini_loaded_file", env::php_ini_loaded_file);
     add(b"php_ini_scanned_files", env::php_ini_scanned_files);

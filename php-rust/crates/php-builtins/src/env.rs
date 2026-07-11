@@ -84,50 +84,6 @@ pub fn php_sapi_name(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Str(PhpStr::from_str("cli")))
 }
 
-/// `ini_get($name)` — no full INI table is modelled, but the handful of core
-/// directives that real code branches on are reported with their PHP CLI-default
-/// string value (a registered directive returns a *string*, never a bool). An
-/// unregistered directive returns `false`, exactly like PHP. Notably
-/// `allow_url_fopen` is `"1"` — phpr's `file_get_contents`/`fopen` do open http(s)
-/// URLs — so Composer's diagnose does not report it as missing. `memory_limit` is
-/// `"-1"` (the compiled-in CLI default): phpr enforces no limit, which also keeps
-/// Composer from trying to re-exec itself to raise it (needs `proc_open`).
-pub fn ini_get(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let name = match args.first() {
-        Some(v) => convert::to_zstr(v, ctx.diags),
-        None => return Ok(Zval::Bool(false)),
-    };
-    let val: Option<&str> = match name.as_bytes() {
-        b"allow_url_fopen" => Some("1"),
-        b"allow_url_include" => Some(""),
-        b"disable_functions" => Some(""),
-        b"enable_dl" => Some(""),
-        b"memory_limit" => Some("-1"),
-        b"max_execution_time" => Some("0"),
-        b"default_socket_timeout" => Some("60"),
-        b"precision" => Some("14"),
-        b"serialize_precision" => Some("-1"),
-        _ => None,
-    };
-    Ok(match val {
-        Some(s) => Zval::Str(PhpStr::from_str(s)),
-        None => Zval::Bool(false),
-    })
-}
-
-/// `ini_set($name, $value)` — setting always "fails" (`false`); no INI table is
-/// modelled. (PHP returns the previous value on success.)
-pub fn ini_set(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    Ok(Zval::Bool(false))
-}
-
-/// `ini_restore($name)` — void. phpr's INI table is immutable (ini_set never
-/// applies), so restoring is a no-op; existing so guard code like DBAL's
-/// StatementTest teardown runs.
-pub fn ini_restore(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    Ok(Zval::Null)
-}
-
 /// `posix_geteuid()` — the process's effective uid (libc, real value: DBAL's
 /// ExceptionTest skips its chmod-based test when running as root).
 pub fn posix_geteuid(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
@@ -195,11 +151,6 @@ mod tests {
             Zval::Str(s) => assert_eq!(s.as_bytes(), b"cli"),
             other => panic!("expected string, got {other:?}"),
         }
-        assert!(matches!(call(ini_get, &[Zval::Str(PhpStr::from_str("x"))]), Zval::Bool(false)));
-        assert!(matches!(
-            call(ini_set, &[Zval::Str(PhpStr::from_str("x")), Zval::Long(1)]),
-            Zval::Bool(false)
-        ));
     }
 }
 
