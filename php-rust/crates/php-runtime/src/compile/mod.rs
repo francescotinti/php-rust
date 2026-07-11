@@ -126,7 +126,7 @@ pub fn compile_program_stubbed(
         // failure becomes a stub that fatals only if the function is called —
         // rather than making every script uncompilable. `main`, below, is not
         // tolerant: if the script body itself is unsupported, the VM can't run it.
-        match compile_fndecl(fd, &ctx) {
+        match compile_fndecl(fd, &ctx, false) {
             Ok(f) => functions.push(f),
             Err(e) => functions.push(stub_func(fd, &e)),
         }
@@ -137,9 +137,9 @@ pub fn compile_program_stubbed(
     let closures = program
         .closures
         .iter()
-        .map(|fd| compile_fndecl(fd, &ctx).unwrap_or_else(|e| stub_func(fd, &e)))
+        .map(|fd| compile_fndecl(fd, &ctx, true).unwrap_or_else(|e| stub_func(fd, &e)))
         .collect();
-    let main = compile_body(b"", &program.file, &program.body, program.slots.len() as u32, &[], &program.slots, false, false, None, 0, &ctx, None, true, 0)?;
+    let main = compile_body(b"", &program.file, &program.body, program.slots.len() as u32, &[], &program.slots, false, false, None, 0, &ctx, None, false, true, 0)?;
     // Classes are compiled tolerantly too (see `compile_class`); a seed class
     // the VM already links compiles to an inert stub (see the doc above).
     let classes = program
@@ -291,6 +291,12 @@ struct FnCompiler<'a> {
     /// resolving `self::` / `parent::` at compile time; `None` for the script
     /// body and free functions.
     cur_class: Option<ClassId>,
+    /// True while compiling a CLOSURE/arrow body: `self::`/`parent::` then
+    /// compile to the run-time scope targets ([`ClassTarget::SelfScope`]/
+    /// [`ClassTarget::ParentScope`]) instead of collapsing to `cur_class`,
+    /// because `Closure::bind`/`bindTo`/`call` can rebind the scope after
+    /// compilation. False for methods/functions, whose scope is fixed.
+    closure_scope: bool,
     /// Added to every emitted closure index (see [`FnDecl::closure_shift`]); 0
     /// except for a trait body flattened in from another unit.
     closure_shift: i32,
@@ -393,6 +399,7 @@ impl<'a> FnCompiler<'a> {
             loops: Vec::new(),
             ctx,
             cur_class,
+            closure_scope: false,
             closure_shift: 0,
             is_main,
             returns_ref: false,

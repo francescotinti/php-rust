@@ -603,6 +603,14 @@ pub fn file_get_contents(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
             Some(body) => body,
             None => return Ok(Zval::Bool(false)),
         }
+    } else if name.as_bytes() == b"php://input"
+        || name.as_bytes() == b"php://memory"
+        || name.as_bytes() == b"php://temp"
+    {
+        // CLI SAPI: `php://input` (no request body) reads as empty —
+        // oracle-pinned, even with data piped on stdin; a fresh
+        // `php://memory`/`php://temp` is empty by construction.
+        Vec::new()
     } else if let Some(rest) = name.as_bytes().strip_prefix(b"compress.zlib://".as_slice()) {
         // The zlib wrapper: decode every gzip member (plain files pass through).
         match crate::zlib::read_gz_file(rest) {

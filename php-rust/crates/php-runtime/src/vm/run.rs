@@ -3308,12 +3308,7 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::StaticCall { target, method, forwarding, argc } => {
                     let args = self.pop_keys(top, argc);
-                    let start = match target {
-                        ClassTarget::Class(cid) => cid,
-                        ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
-                            PhpError::Error("Cannot use \"static\" in the global scope".to_string())
-                        })?,
-                    };
+                    let start = self.target_class_id(target, top)?;
                     // `Fiber::suspend` / `Fiber::getCurrent` are native static
                     // dispatch (GEN-4), handled before normal method resolution.
                     if self.fiber_class_id == Some(start) {
@@ -3356,12 +3351,7 @@ impl<'m> super::Vm<'m> {
                         ))
                     })?;
                     let oid = object_id(&recv);
-                    let start = match target {
-                        ClassTarget::Class(cid) => cid,
-                        ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
-                            PhpError::Error("Cannot use \"static\" in the global scope".to_string())
-                        })?,
-                    };
+                    let start = self.target_class_id(target, top)?;
                     // A user `get`/`set` hook on the named class runs as a frame.
                     // Extra arguments are ignored — it is an ordinary user function.
                     if let Some(func) = self.prop_hook(start, &prop, set) {
@@ -3423,12 +3413,7 @@ impl<'m> super::Vm<'m> {
                     // runtime array — integer keys positional, string keys named.
                     let argsval = self.frames[top].stack.pop().expect("StaticCallArgs array");
                     let (args, named) = split_args_from_array_value(argsval);
-                    let start = match target {
-                        ClassTarget::Class(cid) => cid,
-                        ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
-                            PhpError::Error("Cannot use \"static\" in the global scope".to_string())
-                        })?,
-                    };
+                    let start = self.target_class_id(target, top)?;
                     self.dispatch_static_call(top, start, &method, forwarding, args, named)?;
                 }
                 Op::StaticCallDynamic { method, argc } => {
@@ -3490,12 +3475,7 @@ impl<'m> super::Vm<'m> {
                         .pop()
                         .expect("StaticCallTargetDynamicMethodArgs array");
                     let (args, named) = split_args_from_array_value(argsval);
-                    let start = match target {
-                        ClassTarget::Class(cid) => cid,
-                        ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
-                            PhpError::Error("Cannot use \"static\" in the global scope".to_string())
-                        })?,
-                    };
+                    let start = self.target_class_id(target, top)?;
                     self.dispatch_static_call(top, start, &method, forwarding, args, named)?;
                 }
                 Op::StaticCallTargetDynamicMethod { target, forwarding, argc } => {
@@ -3507,12 +3487,7 @@ impl<'m> super::Vm<'m> {
                         .expect("StaticCallTargetDynamicMethod name");
                     let method = dyn_method_name(&mval)?;
                     let args = self.pop_keys(top, argc);
-                    let start = match target {
-                        ClassTarget::Class(cid) => cid,
-                        ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
-                            PhpError::Error("Cannot use \"static\" in the global scope".to_string())
-                        })?,
-                    };
+                    let start = self.target_class_id(target, top)?;
                     self.dispatch_static_call(top, start, &method, forwarding, args, Vec::new())?;
                 }
                 Op::ClassConstDynamic => {
@@ -3648,6 +3623,15 @@ impl<'m> super::Vm<'m> {
                         PhpError::Error("Cannot use \"static\" in the global scope".to_string())
                     })?;
                     let name = self.classes[start].name.to_vec();
+                    self.frames[top].stack.push(Zval::Str(PhpStr::new(name)));
+                }
+                Op::ClassNameScope { parent } => {
+                    // `self::class` / `parent::class` in a closure body: the scope
+                    // class follows any `Closure::bind` rebinding.
+                    let target =
+                        if parent { ClassTarget::ParentScope } else { ClassTarget::SelfScope };
+                    let cid = self.target_class_id(target, top)?;
+                    let name = self.classes[cid].name.to_vec();
                     self.frames[top].stack.push(Zval::Str(PhpStr::new(name)));
                 }
                 Op::EnumCase { class, case } => {

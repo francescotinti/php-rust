@@ -202,6 +202,13 @@ pub enum Engine {
     Regex(regex::Regex),
     Fancy(fancy_regex::Regex),
     Onig(onig::Regex),
+    /// PCRE_ANCHORED (`/A`): the inner engine compiled WITHOUT any `\A` wrap;
+    /// every search accepts a match only if it starts exactly at the search
+    /// offset. This is PCRE's semantics — `\A` would anchor to the *string*
+    /// start and never match `preg_match($re, $s, $m, 0, $offset)` at a
+    /// positive offset (symfony/expression-language's Lexer tokenises that
+    /// way), while lookbehinds must still see the bytes before the offset.
+    Anchored(Box<Engine>),
 }
 
 impl Engine {
@@ -213,6 +220,7 @@ impl Engine {
             // oniguruma counts groups WITHOUT the implicit whole-match slot; the
             // other backends include it, so add one for a common convention.
             Engine::Onig(r) => r.captures_len() + 1,
+            Engine::Anchored(inner) => inner.captures_len(),
         }
     }
 
@@ -243,6 +251,7 @@ impl Engine {
                 });
                 names
             }
+            Engine::Anchored(inner) => inner.capture_names(),
         }
     }
 
@@ -253,6 +262,7 @@ impl Engine {
             Engine::Regex(r) => r.captures(text).map(|c| caps_from_regex(&c)),
             Engine::Fancy(r) => r.captures(text).ok().flatten().map(|c| caps_from_fancy(&c)),
             Engine::Onig(r) => r.captures(text).map(|c| caps_from_onig(&c)),
+            Engine::Anchored(_) => self.captures_at(text, 0),
         }
     }
 
@@ -288,6 +298,11 @@ impl Engine {
                     .map(|_| caps_from_onig_region(text, &region))
                 }
             }
+            // Anchored: search from `start`, then require the match to begin
+            // exactly there (a later match is what PCRE would never have tried).
+            Engine::Anchored(inner) => inner
+                .captures_at(text, start)
+                .filter(|c| c.get(0).is_some_and(|m| m.start == start)),
         }
     }
 
@@ -313,6 +328,20 @@ impl Engine {
                 out
             }
             Engine::Onig(r) => r.captures_iter(text).map(|c| caps_from_onig(&c)).collect(),
+            // Anchored global scan (PCRE2_ANCHORED under preg_match_all): each
+            // match must start where the previous one ended; the first gap ends
+            // the scan. A zero-width match advances one byte so it terminates.
+            Engine::Anchored(_) => {
+                let mut out = Vec::new();
+                let mut pos = 0usize;
+                while pos <= text.len() {
+                    let Some(c) = self.captures_at(text, pos) else { break };
+                    let (s, e) = c.get(0).map(|m| (m.start, m.end)).unwrap_or((pos, pos));
+                    out.push(c);
+                    pos = if e > s { e } else { e + 1 };
+                }
+                out
+            }
         }
     }
 
@@ -334,8 +363,56 @@ impl Engine {
             // expand `repl` (already normalised to `${n}` / `$$` by
             // `translate_replacement`) by hand against every match.
             Engine::Onig(r) => onig_replace_all(r, text, repl),
+            // Anchored replace: only the contiguous run of matches from each
+            // scan position is replaced (same walk as `captures_iter`).
+            Engine::Anchored(_) => {
+                let mut out = String::new();
+                let mut last = 0usize;
+                for c in self.captures_iter(text) {
+                    let Some(m) = c.get(0) else { continue };
+                    out.push_str(&text[last..m.start]);
+                    out.push_str(&expand_caps_template(&c, repl));
+                    last = m.end;
+                }
+                out.push_str(&text[last..]);
+                out
+            }
         }
     }
+}
+
+/// Expand the `translate_replacement`-normalised template `repl` (`${n}`
+/// backreferences, `$$` → literal `$`) against one engine-neutral match.
+fn expand_caps_template(c: &Caps, repl: &str) -> String {
+    let rb = repl.as_bytes();
+    let mut out: Vec<u8> = Vec::new();
+    let mut i = 0;
+    while i < rb.len() {
+        if rb[i] == b'$' && rb.get(i + 1) == Some(&b'$') {
+            out.push(b'$');
+            i += 2;
+        } else if rb[i] == b'$' && rb.get(i + 1) == Some(&b'{') {
+            let ds = i + 2;
+            let mut j = ds;
+            while j < rb.len() && rb[j].is_ascii_digit() {
+                j += 1;
+            }
+            if j > ds && rb.get(j) == Some(&b'}') {
+                let n: usize = repl[ds..j].parse().unwrap_or(usize::MAX);
+                if let Some(m) = c.get(n) {
+                    out.extend_from_slice(&m.text);
+                }
+                i = j + 1;
+            } else {
+                out.push(rb[i]);
+                i += 1;
+            }
+        } else {
+            out.push(rb[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// Replace every non-overlapping match of `re` in `text`, expanding the
@@ -424,7 +501,7 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
     // routes such patterns to fancy-regex (D-37.1). With `D` the `$` keeps the
     // `\z` semantics we already have; with `m` it is per-line (and PHP ignores
     // `D` under `m`) — in both cases the rewrite is skipped.
-    let mut body: std::borrow::Cow<str> =
+    let body: std::borrow::Cow<str> =
         if !flags.contains(&b'm') && !flags.contains(&b'D') {
             match rewrite_dollar_anchor(body) {
                 Some(rw) => std::borrow::Cow::Owned(rw),
@@ -434,13 +511,45 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
             std::borrow::Cow::Borrowed(body)
         };
 
-    // PCRE_ANCHORED (`A`): force the match to start at offset 0. Neither engine
-    // has a portable builder switch, so the body is wrapped as `\A(?:…)`. The
-    // non-capturing group keeps group numbering intact and anchors a top-level
-    // alternation as a whole.
-    if flags.contains(&b'A') {
-        body = std::borrow::Cow::Owned(format!(r"\A(?:{body})"));
-    }
+    // PCRE reads `\<` and `\>` as redundant escapes of the LITERAL `<`/`>`;
+    // the `regex` crate (1.10+) reads them as zero-width word-START/END
+    // boundaries instead — an alternation like `…|\<|\>|…` (symfony
+    // expression-language's operator lexer) then "matches" the empty string
+    // at every word edge and a `$cursor += strlen($match)` tokeniser loops
+    // forever. Unescape them outside AND inside classes (`<`/`>` are never
+    // metacharacters), honouring `\\` pairs.
+    let body: std::borrow::Cow<str> = if body.contains(r"\<") || body.contains(r"\>") {
+        let src = body.as_bytes();
+        let mut out = Vec::with_capacity(src.len());
+        let mut i = 0;
+        while i < src.len() {
+            if src[i] == b'\\' && i + 1 < src.len() {
+                match src[i + 1] {
+                    b'<' | b'>' => out.push(src[i + 1]),
+                    c => {
+                        out.push(b'\\');
+                        out.push(c);
+                    }
+                }
+                i += 2;
+            } else {
+                out.push(src[i]);
+                i += 1;
+            }
+        }
+        std::borrow::Cow::Owned(String::from_utf8(out).ok()?)
+    } else {
+        body
+    };
+
+    // PCRE_ANCHORED (`A`): the match must start exactly at the search offset.
+    // A `\A(?:…)` wrap is WRONG for `preg_match(..., $offset)` at a positive
+    // offset (it anchors to the string start and never matches — symfony's
+    // expression-language Lexer broke on it), and slicing the subject would
+    // blind lookbehinds. Instead the compiled engine is wrapped in
+    // [`Engine::Anchored`], whose searches filter on `match.start == offset`.
+    let anchored = flags.contains(&b'A');
+    let wrap = |e: Engine| if anchored { Engine::Anchored(Box::new(e)) } else { e };
 
     // First attempt: the fast `regex` engine, with flags applied via the builder.
     // The same i/m/s/x flags are accumulated as an inline `(?..)` prefix for the
@@ -484,7 +593,7 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
         }
     }
     if let Ok(r) = b.build() {
-        return Some(Engine::Regex(r));
+        return Some(wrap(Engine::Regex(r)));
     }
 
     // Fallback: fancy-regex (backreferences + lookaround). Inline flags are
@@ -504,14 +613,14 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
         .backtrack_limit(1_000_000)
         .build()
     {
-        return Some(Engine::Fancy(r));
+        return Some(wrap(Engine::Fancy(r)));
     }
 
     // Last resort: oniguruma (PHP's own mbregex backend) under the `perl_ng`
     // dialect, which reads PCRE syntax including subroutine calls
     // (`(?&name)`, `(?R)`), `(?(DEFINE))` blocks and recursion — features
     // neither Rust engine can build. Flags map to oniguruma compile options;
-    // `A` was already folded into `body` as `\A(?:…)`, and a bare `$` was
+    // `A` is handled by the [`Engine::Anchored`] wrapper, and a bare `$` was
     // rewritten upstream, so here we mainly translate i/x/s and pin `^`/`$` to
     // whole-string anchors (PCRE default) unless `m` asked for per-line.
     let mut oo = onig::RegexOptions::REGEX_OPTION_NONE;
@@ -532,7 +641,7 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
     let body = onigify_python_groups(&body);
     onig::Regex::with_options(&body, oo, onig::Syntax::perl_ng())
         .ok()
-        .map(Engine::Onig)
+        .map(|r| wrap(Engine::Onig(r)))
 }
 
 /// Rewrite Python-style named-group syntax — `(?P<name>…)`, `(?P=name)`,

@@ -959,8 +959,14 @@ fn base64_decode_strict(s: &[u8]) -> Option<Vec<u8>> {
 pub fn open_php_stream(spec: &[u8], mode: &[u8]) -> Option<Stream> {
     let backend = if spec == b"memory" || spec == b"temp" || spec.starts_with(b"temp/") {
         StreamBackend::Memory(Cursor::new(Vec::new()))
-    } else if spec == b"stdin" || spec == b"input" {
-        // `php://input` is the raw request body; the CLI SAPI reads stdin.
+    } else if spec == b"input" {
+        // `php://input` is the raw request body. The CLI SAPI has none:
+        // oracle-pinned, it reads as EMPTY (immediate EOF) even with data
+        // piped on stdin — it is NOT an alias of `php://stdin` (mapping it to
+        // the real stdin made a `Request::getContent()` test suite block
+        // forever on a terminal that never closes).
+        StreamBackend::Memory(Cursor::new(Vec::new()))
+    } else if spec == b"stdin" {
         StreamBackend::Stdin
     } else if spec == b"stdout" {
         StreamBackend::Stdout

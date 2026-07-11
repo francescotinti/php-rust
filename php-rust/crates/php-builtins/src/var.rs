@@ -874,10 +874,312 @@ pub(crate) fn filter_var(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
             };
             if ok { Ok(Zval::Str(s)) } else { Ok(miss()) }
         }
+        // FILTER_VALIDATE_IP: faithful port of php_filter_validate_ip
+        // (ext/filter/logical_filters.c) — strict v4 (no leading zeros, no
+        // whitespace), the hand-rolled v6 grammar (`::` compression, bundled
+        // v4 tail), and the RFC 6890 special-purpose tables behind the
+        // IPV4/IPV6/NO_PRIV_RANGE/NO_RES_RANGE/GLOBAL_RANGE flags.
+        275 => {
+            if validate_ip(s.as_bytes(), flags) { Ok(Zval::Str(s)) } else { Ok(miss()) }
+        }
+        // FILTER_VALIDATE_MAC (same file): 17-byte `xx:xx:…`/`xx-xx-…` or
+        // 14-byte EUI-64 `xxxx.xxxx.xxxx`. The `separator` option must be one
+        // character; a mismatch is a plain validation miss.
+        276 => {
+            let sep = match args.get(2) {
+                Some(Zval::Array(a)) => match a.get(&Key::from_bytes(b"options")) {
+                    Some(o) => match o.deref_clone() {
+                        Zval::Array(opts) => match opts.get(&Key::from_bytes(b"separator")) {
+                            Some(v) => {
+                                let sv = convert::to_zstr_cast(&v.deref_clone(), ctx.diags);
+                                if sv.as_bytes().len() != 1 {
+                                    return Err(PhpError::ValueError(
+                                        "filter_var(): \"separator\" option must be one character long"
+                                            .to_string(),
+                                    ));
+                                }
+                                Some(sv.as_bytes()[0])
+                            }
+                            None => None,
+                        },
+                        _ => None,
+                    },
+                    None => None,
+                },
+                _ => None,
+            };
+            if validate_mac(s.as_bytes(), sep) { Ok(Zval::Str(s)) } else { Ok(miss()) }
+        }
         // FILTER_DEFAULT / FILTER_UNSAFE_RAW and the unimplemented validators return
         // the value as a string (no sanitisation), the documented default behaviour.
         _ => Ok(Zval::Str(s)),
     }
+}
+
+/// `_php_filter_validate_ipv4`: strict dotted-quad — exactly 4 decimal octets
+/// 0..=255, no leading zeros (octal ambiguity), no surrounding whitespace.
+fn parse_ipv4_strict(b: &[u8]) -> Option<[i32; 4]> {
+    let mut ip = [0i32; 4];
+    let mut i = 0usize;
+    let mut n = 0usize;
+    while i < b.len() {
+        if !b[i].is_ascii_digit() {
+            return None;
+        }
+        let leading_zero = b[i] == b'0';
+        let mut m = 1;
+        let mut num = (b[i] - b'0') as i32;
+        i += 1;
+        while i < b.len() && b[i].is_ascii_digit() {
+            num = num * 10 + (b[i] - b'0') as i32;
+            m += 1;
+            if num > 255 || m > 3 {
+                return None;
+            }
+            i += 1;
+        }
+        if leading_zero && (num != 0 || m > 1) {
+            return None;
+        }
+        ip[n] = num;
+        n += 1;
+        if n == 4 {
+            return if i == b.len() { Some(ip) } else { None };
+        }
+        if i >= b.len() || b[i] != b'.' {
+            return None;
+        }
+        i += 1;
+    }
+    None
+}
+
+/// `_php_filter_validate_ipv6`: PHP's hand-rolled v6 grammar. Returns the 8
+/// 16-bit blocks (after `::` expansion / bundled-v4 fix-up) on success.
+fn parse_ipv6_strict(bytes: &[u8]) -> Option<[i32; 8]> {
+    if !bytes.contains(&b':') {
+        return None;
+    }
+    let mut ip = [0i32; 8];
+    let mut len = bytes.len();
+    let mut ip4elm: Option<[i32; 4]> = None;
+    // Bundled IPv4 tail (`::ffff:1.2.3.4`): backtrack from the first '.' to the
+    // preceding ':', validate as v4, and shorten the v6 part.
+    if let Some(dot) = bytes.iter().position(|&c| c == b'.') {
+        let mut v4start = dot;
+        while v4start > 0 && bytes[v4start - 1] != b':' {
+            v4start -= 1;
+        }
+        let v4 = parse_ipv4_strict(&bytes[v4start..])?;
+        ip4elm = Some(v4);
+        len = v4start;
+        if len < 2 {
+            return None;
+        }
+        if bytes[v4start - 2] != b':' {
+            // don't include the ':' before the v4 unless it's a '::'
+            len -= 1;
+        }
+    }
+    let s = &bytes[..len];
+    let mut blocks: i32 = if ip4elm.is_some() { 2 } else { 0 };
+    let mut compressed_pos: i32 = -1;
+    let mut i = 0usize;
+    let mut goto_fixup = false;
+    while i < s.len() {
+        if s[i] == b':' {
+            i += 1;
+            if i >= s.len() {
+                return None; // cannot end in ':' without previous ':'
+            }
+            if s[i] == b':' {
+                if compressed_pos >= 0 {
+                    return None;
+                }
+                if (blocks as usize) < 8 {
+                    ip[blocks as usize] = -1;
+                }
+                compressed_pos = blocks;
+                blocks += 1;
+                i += 1;
+                if i == s.len() {
+                    if blocks > 8 {
+                        return None;
+                    }
+                    goto_fixup = true;
+                    break;
+                }
+            } else if i == 1 {
+                // leading ':' without another ':' following
+                return None;
+            }
+        }
+        let mut num: i32 = 0;
+        let mut n = 0usize;
+        while i < s.len() {
+            let d = match s[i] {
+                c @ b'0'..=b'9' => (c - b'0') as i32,
+                c @ b'a'..=b'f' => (c - b'a') as i32 + 10,
+                c @ b'A'..=b'F' => (c - b'A') as i32 + 10,
+                _ => break,
+            };
+            num = 16 * num + d;
+            n += 1;
+            i += 1;
+        }
+        if (blocks as usize) < 8 {
+            ip[blocks as usize] = num;
+        }
+        if n < 1 || n > 4 {
+            return None;
+        }
+        blocks += 1;
+        if blocks > 8 {
+            return None;
+        }
+    }
+    let _ = goto_fixup;
+    if let Some(v4) = ip4elm {
+        ip = [0, 0, 0, 0, 0, 0xffff, 256 * v4[0] + v4[1], 256 * v4[2] + v4[3]];
+    } else if compressed_pos >= 0 && blocks <= 8 {
+        let offset = (8 - blocks) as usize;
+        let cp = compressed_pos as usize;
+        let mut j = 7usize;
+        while j > cp + offset {
+            ip[j] = ip[j - offset];
+            j -= 1;
+        }
+        let mut j = cp + offset;
+        loop {
+            ip[j] = 0;
+            if j == cp {
+                break;
+            }
+            j -= 1;
+        }
+    }
+    if (compressed_pos >= 0 && blocks <= 8) || blocks == 8 {
+        Some(ip)
+    } else {
+        None
+    }
+}
+
+/// `ipv4_get_status_flags` (RFC 6890 table): `Some((global, reserved, private))`
+/// when the address falls in a special-purpose block, `None` otherwise.
+fn ipv4_status(ip: &[i32; 4]) -> Option<(bool, bool, bool)> {
+    let (g, r, p) = match ip {
+        [0, ..] => (false, true, false),                            // this network
+        [10, ..] => (false, false, true),                           // private
+        [100, b, ..] if (64..=127).contains(b) => (false, false, false), // shared space
+        [127, ..] => (false, true, false),                          // loopback
+        [169, 254, ..] => (false, true, false),                     // link local
+        [172, b, ..] if (16..=31).contains(b) => (false, false, true), // private
+        [192, 0, 0, _] => (false, false, false),                    // IETF assignments / DS-Lite
+        [192, 0, 2, _] => (false, false, false),                    // documentation
+        [192, 88, 99, _] => (true, false, false),                   // 6to4 relay
+        [192, 168, ..] => (false, false, true),                     // private
+        [198, b, ..] if (18..=19).contains(b) => (false, false, false), // benchmarking
+        [198, 51, 100, _] => (false, false, false),                 // documentation
+        [203, 0, 113, _] => (false, false, false),                  // documentation
+        [a, ..] if *a >= 240 => (false, true, false),               // reserved (incl. broadcast)
+        _ => return None,
+    };
+    Some((g, r, p))
+}
+
+/// `ipv6_get_status_flags` (RFC 6890 table).
+fn ipv6_status(ip: &[i32; 8]) -> Option<(bool, bool, bool)> {
+    let (g, r, p) = match ip {
+        [0, 0, 0, 0, 0, 0, 0, 0] => (false, true, false),           // unspecified
+        [0, 0, 0, 0, 0, 0, 0, 1] => (false, true, false),           // loopback
+        [0x0064, 0xff9b, ..] => (true, false, false),               // v4-v6 translation
+        [0, 0, 0, 0, 0, 0xffff, ..] => (false, true, false),        // v4-mapped
+        [0x0100, 0, 0, 0, ..] => (false, false, false),             // discard-only
+        [0x2001, 0x0000, ..] => (false, false, false),              // TEREDO
+        [0x2001, b, ..] if *b <= 0x01ff => (false, false, false),   // IETF assignments
+        [0x2001, 0x0002, 0, ..] => (false, false, false),           // benchmarking
+        [0x2001, 0x0db8, ..] => (false, false, false),              // documentation
+        [0x2001, b, ..] if (0x0010..=0x001f).contains(b) => (false, false, false), // ORCHID
+        [0x2002, ..] => (false, false, false),                      // 6to4
+        [a, ..] if (0xfc00..=0xfdff).contains(a) => (false, false, true), // unique-local
+        [a, ..] if (0xfe80..=0xfebf).contains(a) => (false, true, false), // link-scoped
+        _ => return None,
+    };
+    Some((g, r, p))
+}
+
+/// `php_filter_validate_ip`: format picked by the first ':' (v6) else '.' (v4);
+/// no trimming. The RFC 6890 range flags only apply to special-purpose blocks.
+fn validate_ip(b: &[u8], flags: i64) -> bool {
+    const FLAG_IPV4: i64 = 1_048_576;
+    const FLAG_IPV6: i64 = 2_097_152;
+    const FLAG_NO_RES: i64 = 4_194_304;
+    const FLAG_NO_PRIV: i64 = 8_388_608;
+    const FLAG_GLOBAL: i64 = 536_870_912;
+    let v6 = b.contains(&b':');
+    if !v6 && !b.contains(&b'.') {
+        return false;
+    }
+    let both = (flags & FLAG_IPV4 != 0) == (flags & FLAG_IPV6 != 0);
+    if !both {
+        if flags & FLAG_IPV4 != 0 && v6 {
+            return false;
+        }
+        if flags & FLAG_IPV6 != 0 && !v6 {
+            return false;
+        }
+    }
+    let status = if v6 {
+        match parse_ipv6_strict(b) {
+            Some(ip) => ipv6_status(&ip),
+            None => return false,
+        }
+    } else {
+        match parse_ipv4_strict(b) {
+            Some(ip) => ipv4_status(&ip),
+            None => return false,
+        }
+    };
+    let Some((global, reserved, private)) = status else {
+        return true; // no special block: every range flag passes
+    };
+    if flags & FLAG_GLOBAL != 0 && !global {
+        return false;
+    }
+    if flags & FLAG_NO_PRIV != 0 && private {
+        return false;
+    }
+    if flags & FLAG_NO_RES != 0 && reserved {
+        return false;
+    }
+    true
+}
+
+/// `php_filter_validate_mac`: `xx-xx-xx-xx-xx-xx`, `xx:xx:…` (17 bytes) or
+/// EUI-64 `xxxx.xxxx.xxxx` (14 bytes); `sep`, when given, must match.
+fn validate_mac(b: &[u8], sep: Option<u8>) -> bool {
+    let (tokens, length, separator) = match (b.len(), b.get(2)) {
+        (14, _) => (3usize, 4usize, b'.'),
+        (17, Some(b'-')) => (6, 2, b'-'),
+        (17, Some(b':')) => (6, 2, b':'),
+        _ => return false,
+    };
+    if let Some(s) = sep {
+        if s != separator {
+            return false;
+        }
+    }
+    for i in 0..tokens {
+        let off = i * (length + 1);
+        if i < tokens - 1 && b[off + length] != separator {
+            return false;
+        }
+        if !b[off..off + length].iter().all(|c| c.is_ascii_hexdigit()) {
+            return false;
+        }
+    }
+    true
 }
 /// `filter_var_array(array $array, array|int $options = FILTER_DEFAULT, bool $add_empty = true)`
 /// — apply filters to an array. A single filter int is applied to every element

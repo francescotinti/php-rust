@@ -7860,6 +7860,39 @@ impl<'m> Vm<'m> {
         (Zval::Array(Rc::new(arr)), s)
     }
 
+    /// Resolve a [`ClassTarget`] to the concrete class id in frame `top`'s
+    /// context: `Static` reads the LSB class, `SelfScope`/`ParentScope` the
+    /// closure frame's (rebindable) scope class, each with PHP's faithful
+    /// error when the context is missing.
+    pub(super) fn target_class_id(
+        &self,
+        target: ClassTarget,
+        top: usize,
+    ) -> Result<ClassId, PhpError> {
+        match target {
+            ClassTarget::Class(cid) => Ok(cid),
+            ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
+                PhpError::Error("Cannot use \"static\" in the global scope".to_string())
+            }),
+            ClassTarget::SelfScope => self.frames[top].class.ok_or_else(|| {
+                PhpError::Error("Cannot access \"self\" when no class scope is active".to_string())
+            }),
+            ClassTarget::ParentScope => {
+                let c = self.frames[top].class.ok_or_else(|| {
+                    PhpError::Error(
+                        "Cannot access \"parent\" when no class scope is active".to_string(),
+                    )
+                })?;
+                self.classes[c].parent.ok_or_else(|| {
+                    PhpError::Error(
+                        "Cannot access \"parent\" when current class scope has no parent"
+                            .to_string(),
+                    )
+                })
+            }
+        }
+    }
+
     /// Resolve and lazily initialise the persistent cell for static property
     /// `target::$name`, enforcing visibility against the running frame's class.
     /// Returns `Some(cell)` when ready, or `None` when a non-constant default's
@@ -7872,12 +7905,7 @@ impl<'m> Vm<'m> {
         top: usize,
         ip: usize,
     ) -> Result<Option<Rc<RefCell<Zval>>>, PhpError> {
-        let start = match target {
-            ClassTarget::Class(cid) => cid,
-            ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
-                PhpError::Error("Cannot use \"static\" in the global scope".to_string())
-            })?,
-        };
+        let start = self.target_class_id(target, top)?;
         let Some((decl, idx)) = find_static_prop(&self.classes, start, name) else {
             return Err(PhpError::Error(format!(
                 "Access to undeclared static property {}::${}",
@@ -8668,6 +8696,7 @@ host_builtins! {
     b"json_encode" => vm.ho_json_encode(args),
     b"is_callable" => vm.ho_is_callable(args),
     b"is_iterable" => vm.ho_is_iterable(args),
+    b"filter_var" => vm.ho_filter_var(args),
     b"define" => vm.ho_define(args),
     b"defined" => vm.ho_defined(args),
     b"constant" => vm.ho_constant(args),
@@ -9381,6 +9410,12 @@ fn relocate_func(func: &mut Func, remap: &[ClassId], static_base: usize) {
             Op::StaticCall { target, .. }
             | Op::HookCall { target, .. }
             | Op::StaticCallArgs { target, .. }
+            // `self::$m()` / `Class::$m()` (dynamic METHOD, compile-time class):
+            // missed here, an include-unit's `self::` cid indexed whatever class
+            // sat at the stale global slot (symfony's IpUtils::checkIp resolved
+            // its `self::$method(...)` to a test fixture enum).
+            | Op::StaticCallTargetDynamicMethod { target, .. }
+            | Op::StaticCallTargetDynamicMethodArgs { target, .. }
             | Op::StaticPropGet { target, .. }
             | Op::StaticPropSet { target, .. }
             | Op::StaticPropOpSet { target, .. }

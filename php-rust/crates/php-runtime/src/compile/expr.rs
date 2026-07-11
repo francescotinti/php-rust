@@ -534,7 +534,9 @@ impl<'a> super::FnCompiler<'a> {
                                 ClassTarget::Class(cid) => {
                                     self.resolve_method_compile(cid, method).map(|r| (cid, r))
                                 }
-                                ClassTarget::Static => None,
+                                // `static::` / a closure's rebindable scope:
+                                // callee unknown until run time.
+                                _ => None,
                             };
                             match resolved {
                                 Some((cid, (defc, midx))) => {
@@ -575,7 +577,9 @@ impl<'a> super::FnCompiler<'a> {
                                     self.can_emit_named_layout(fd, args, named)
                                 })
                             }
-                            ClassTarget::Static => None,
+                            // `static::` / a closure's rebindable scope:
+                            // callee unknown until run time.
+                            _ => None,
                         };
                         match layout {
                             Some((defc, midx)) => {
@@ -1797,6 +1801,16 @@ impl<'a> super::FnCompiler<'a> {
                     self.emit_dynamic_new(args, named)
                 }
             },
+            // A closure's `new self`/`new parent`: the scope is rebindable, so
+            // resolve its class name at run time and allocate dynamically.
+            ClassRef::SelfClass if self.closure_scope => {
+                self.emit(Op::ClassNameScope { parent: false });
+                self.emit_dynamic_new(args, named)
+            }
+            ClassRef::Parent if self.closure_scope => {
+                self.emit(Op::ClassNameScope { parent: true });
+                self.emit_dynamic_new(args, named)
+            }
             ClassRef::SelfClass => {
                 let cid = self
                     .cur_class
@@ -1929,13 +1943,25 @@ impl<'a> super::FnCompiler<'a> {
                     },
                 };
             }
-            ClassRef::SelfClass | ClassRef::Parent => {
-                let (ClassTarget::Class(cid), _) = self.resolve_target(class)? else {
-                    unreachable!("self/parent resolve to a class id")
-                };
-                self.expr(expr)?;
-                self.emit(Op::InstanceOf { class: cid });
-            }
+            ClassRef::SelfClass | ClassRef::Parent => match self.resolve_target(class)? {
+                (ClassTarget::Class(cid), _) => {
+                    self.expr(expr)?;
+                    self.emit(Op::InstanceOf { class: cid });
+                }
+                // A closure's `instanceof self/parent`: the scope is rebindable,
+                // so resolve its name at run time and test dynamically.
+                (ClassTarget::SelfScope, _) => {
+                    self.expr(expr)?;
+                    self.emit(Op::ClassNameScope { parent: false });
+                    self.emit(Op::InstanceOfDynamic);
+                }
+                (ClassTarget::ParentScope, _) => {
+                    self.expr(expr)?;
+                    self.emit(Op::ClassNameScope { parent: true });
+                    self.emit(Op::InstanceOfDynamic);
+                }
+                (ClassTarget::Static, _) => unreachable!("self/parent never resolve to static"),
+            },
             ClassRef::Static => {
                 self.expr(expr)?;
                 self.emit(Op::InstanceOfStatic);
@@ -1974,6 +2000,14 @@ impl<'a> super::FnCompiler<'a> {
                     ClassTarget::Static => {
                         self.emit(Op::ClassNameStatic);
                     }
+                    // A closure's `self::class`/`parent::class` follow the
+                    // run-time (rebindable) scope.
+                    ClassTarget::SelfScope => {
+                        self.emit(Op::ClassNameScope { parent: false });
+                    }
+                    ClassTarget::ParentScope => {
+                        self.emit(Op::ClassNameScope { parent: true });
+                    }
                 },
             }
             return Ok(());
@@ -2009,6 +2043,17 @@ impl<'a> super::FnCompiler<'a> {
             },
             ClassTarget::Static => {
                 self.emit(Op::ClassConstDyn { name: name.into() });
+            }
+            // A closure's `self::CONST`/`parent::CONST`: resolve the scope class
+            // at run time (its name pushed by ClassNameScope), then fetch the
+            // constant from it exactly like an unknown named class.
+            ClassTarget::SelfScope => {
+                self.emit(Op::ClassNameScope { parent: false });
+                self.emit(Op::ClassConstFromValue { name: name.into() });
+            }
+            ClassTarget::ParentScope => {
+                self.emit(Op::ClassNameScope { parent: true });
+                self.emit(Op::ClassConstFromValue { name: name.into() });
             }
         }
         Ok(())
@@ -2057,6 +2102,12 @@ impl<'a> super::FnCompiler<'a> {
                 })?;
                 Ok((ClassTarget::Class(cid), false))
             }
+            // Inside a CLOSURE body, `self`/`parent` cannot collapse to the
+            // lexical class: `Closure::bind` may rebind the scope after
+            // compilation, so they resolve at run time from the frame's scope
+            // class (also letting a free closure use them once bound).
+            ClassRef::SelfClass if self.closure_scope => Ok((ClassTarget::SelfScope, true)),
+            ClassRef::Parent if self.closure_scope => Ok((ClassTarget::ParentScope, true)),
             ClassRef::SelfClass => {
                 let cid = self
                     .cur_class

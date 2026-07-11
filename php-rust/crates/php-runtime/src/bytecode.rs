@@ -862,8 +862,13 @@ pub enum Op {
     EnumCase { class: ClassId, case: u32 },
     /// `[] -> [name]` — `static::class`: push the frame's LSB class name as a
     /// string. (`Class::class` / `self::class` / `parent::class` are folded to a
-    /// [`Op::PushConst`] at compile time.)
+    /// [`Op::PushConst`] at compile time — except inside closures, whose scope
+    /// is rebindable: see [`Op::ClassNameScope`].)
     ClassNameStatic,
+    /// `[] -> [name]` — `self::class` (`parent: false`) / `parent::class`
+    /// (`parent: true`) inside a CLOSURE body: push the frame's *scope* class
+    /// name (or its parent's), following any `Closure::bind` rebinding.
+    ClassNameScope { parent: bool },
     /// `[] -> [obj]` — `new static`: allocate an instance of the frame's LSB class
     /// (its property defaults materialised, fresh id). The constructor is run by a
     /// following [`Op::InvokeCtor`] (the actual class — hence the ctor — is only
@@ -1164,6 +1169,14 @@ pub enum ClassTarget {
     Class(ClassId),
     /// `static::` — resolved at run time from the frame's LSB class.
     Static,
+    /// `self::` inside a CLOSURE body — resolved at run time from the frame's
+    /// scope class (`frame.class`), because `Closure::bind`/`bindTo`/`call` can
+    /// rebind a closure's scope after compilation. An unscoped closure is PHP's
+    /// `Cannot access "self" when no class scope is active`.
+    SelfScope,
+    /// `parent::` inside a CLOSURE body — the run-time scope class's parent
+    /// (`Cannot access "parent" when current class scope has no parent`).
+    ParentScope,
 }
 
 

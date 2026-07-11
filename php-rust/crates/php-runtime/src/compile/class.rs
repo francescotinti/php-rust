@@ -186,6 +186,7 @@ pub(super) fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> C
                 ctx,
                 Some(cid),
                 false,
+                false,
                 m.decl.closure_shift,
             ) {
                 Ok(f) => f,
@@ -266,6 +267,7 @@ pub(super) fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> C
                 m.decl.line,
                 ctx,
                 Some(cid),
+                false,
                 false,
                 m.decl.closure_shift,
             ) {

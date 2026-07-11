@@ -1940,6 +1940,8 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"FILTER_VALIDATE_URL" => ExprKind::Int(273),
         b"FILTER_VALIDATE_EMAIL" => ExprKind::Int(274),
         b"FILTER_VALIDATE_IP" => ExprKind::Int(275),
+        b"FILTER_VALIDATE_MAC" => ExprKind::Int(276),
+        b"FILTER_CALLBACK" => ExprKind::Int(1024),
         b"FILTER_NULL_ON_FAILURE" => ExprKind::Int(134217728),
         b"FILTER_REQUIRE_SCALAR" => ExprKind::Int(33554432),
         b"FILTER_REQUIRE_ARRAY" => ExprKind::Int(16777216),
@@ -1947,6 +1949,22 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"FILTER_SANITIZE_STRING" => ExprKind::Int(513),
         b"FILTER_SANITIZE_NUMBER_INT" => ExprKind::Int(519),
         b"FILTER_UNSAFE_RAW" => ExprKind::Int(516),
+        // FILTER_VALIDATE_IP flags (+ the aggregate GLOBAL_RANGE, 8.2).
+        b"FILTER_FLAG_IPV4" => ExprKind::Int(1048576),
+        b"FILTER_FLAG_IPV6" => ExprKind::Int(2097152),
+        b"FILTER_FLAG_NO_RES_RANGE" => ExprKind::Int(4194304),
+        b"FILTER_FLAG_NO_PRIV_RANGE" => ExprKind::Int(8388608),
+        b"FILTER_FLAG_GLOBAL_RANGE" => ExprKind::Int(536870912),
+        // File-upload error codes (`$_FILES[...]['error']`); value 5 is unused
+        // in PHP itself.
+        b"UPLOAD_ERR_OK" => ExprKind::Int(0),
+        b"UPLOAD_ERR_INI_SIZE" => ExprKind::Int(1),
+        b"UPLOAD_ERR_FORM_SIZE" => ExprKind::Int(2),
+        b"UPLOAD_ERR_PARTIAL" => ExprKind::Int(3),
+        b"UPLOAD_ERR_NO_FILE" => ExprKind::Int(4),
+        b"UPLOAD_ERR_NO_TMP_DIR" => ExprKind::Int(6),
+        b"UPLOAD_ERR_CANT_WRITE" => ExprKind::Int(7),
+        b"UPLOAD_ERR_EXTENSION" => ExprKind::Int(8),
         // ext/intl grapheme_extract() size-measurement types.
         b"GRAPHEME_EXTR_COUNT" => ExprKind::Int(0),
         b"GRAPHEME_EXTR_MAXBYTES" => ExprKind::Int(1),

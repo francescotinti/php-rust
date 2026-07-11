@@ -5976,6 +5976,68 @@ impl<'m> super::Vm<'m> {
         };
         Ok(Zval::Bool(self.is_value_callable(&v.deref_clone())))
     }
+    /// `filter_var(...)` host wrapper: only `FILTER_CALLBACK` needs the VM (it
+    /// invokes a user callable per value); every other filter delegates to the
+    /// stateless registry implementation. PHP's callback semantics
+    /// (oracle-probed): the option must be a valid callable or it's a
+    /// `TypeError: filter_var(): Option must be a valid callback`; a scalar is
+    /// stringified before the call and the callback's return comes back
+    /// verbatim; an array applies the callback per element (recursively,
+    /// preserving keys).
+    pub(super) fn ho_filter_var(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        const FILTER_CALLBACK: i64 = 1024;
+        let filter = args
+            .get(1)
+            .map_or(516, |f| convert::to_long_cast(&f.deref_clone(), &mut self.diags));
+        if filter == FILTER_CALLBACK {
+            let callable = match args.get(2).map(|v| v.deref_clone()) {
+                Some(Zval::Array(a)) => {
+                    a.get(&Key::from_bytes(b"options")).map(|v| v.deref_clone())
+                }
+                _ => None,
+            };
+            let cb = match callable {
+                Some(cb) if self.is_value_callable(&cb) => cb,
+                _ => {
+                    return Err(PhpError::TypeError(
+                        "filter_var(): Option must be a valid callback".to_string(),
+                    ))
+                }
+            };
+            let value = args.first().map_or(Zval::Null, |v| v.deref_clone());
+            return self.filter_callback_apply(value, &cb);
+        }
+        match self.registry.get(&b"filter_var"[..]) {
+            Some(crate::builtin::Builtin::Value(f)) => {
+                let f = *f;
+                let line = self.cur_line(self.frames.len() - 1);
+                self.run_value_builtin(f, &args, line)
+            }
+            _ => Err(undefined_builtin(b"filter_var")),
+        }
+    }
+
+    /// One `FILTER_CALLBACK` application (see [`Self::ho_filter_var`]): arrays
+    /// recurse per element with keys preserved; anything else stringifies and
+    /// passes through the callable.
+    fn filter_callback_apply(&mut self, value: Zval, cb: &Zval) -> Result<Zval, PhpError> {
+        match value {
+            Zval::Array(a) => {
+                let entries: Vec<(Key, Zval)> =
+                    a.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect();
+                let mut out = PhpArray::new();
+                for (k, v) in entries {
+                    out.insert(k, self.filter_callback_apply(v, cb)?);
+                }
+                Ok(Zval::Array(Rc::new(out)))
+            }
+            other => {
+                let s = convert::to_zstr_cast(&other, &mut self.diags);
+                self.call_callable(cb.clone(), vec![Zval::Str(s)])
+            }
+        }
+    }
+
     /// `is_iterable($v)`: an array, a generator, or an object implementing
     /// `Traversable` (i.e. `Iterator` or `IteratorAggregate`).
     pub(super) fn ho_is_iterable(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {

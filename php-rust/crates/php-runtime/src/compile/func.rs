@@ -5,10 +5,12 @@ use super::*;
 /// Compile a user [`FnDecl`] into a [`Func`], resolving calls in its body against
 /// the program context (for forward references and recursion). A free function
 /// has no enclosing class (`cur_class = None`).
-pub(super) fn compile_fndecl(fd: &FnDecl, ctx: &ProgramCtx) -> R<Func> {
+pub(super) fn compile_fndecl(fd: &FnDecl, ctx: &ProgramCtx, is_closure: bool) -> R<Func> {
     // A closure/arrow inherits its lexically enclosing class (recorded by the
-    // lowerer) so `self::`/`parent::`/`new self` in its body resolve at compile
-    // time. Free functions carry no defining class → `cur_class = None`.
+    // lowerer) so `new self` and visibility still know the lexical class; but a
+    // closure's `self::`/`parent::` *ops* compile to run-time scope targets
+    // (`is_closure`), because `Closure::bind` can rebind the scope afterwards.
+    // Free functions carry no defining class → `cur_class = None`.
     let cur_class = fd
         .defining_class
         .as_ref()
@@ -26,6 +28,7 @@ pub(super) fn compile_fndecl(fd: &FnDecl, ctx: &ProgramCtx) -> R<Func> {
         fd.line,
         ctx,
         cur_class,
+        is_closure,
         false,
         fd.closure_shift,
     )
@@ -55,12 +58,14 @@ pub(super) fn compile_body(
     def_line: Line,
     ctx: &ProgramCtx,
     cur_class: Option<ClassId>,
+    closure_scope: bool,
     is_main: bool,
     closure_shift: i32,
 ) -> R<Func> {
     let n_params = params.len() as u32;
     let mut c = FnCompiler::new(ctx, n_locals, cur_class, is_main, slot_names);
     c.returns_ref = by_ref;
+    c.closure_scope = closure_scope;
     c.closure_shift = closure_shift;
     // Default-parameter prologue (PAR): fill any omitted optional parameter with
     // its default before the body runs. Runs in the callee frame, so a default
@@ -224,6 +229,7 @@ pub(super) fn compile_hook(fd: &crate::hir::FnDecl, ctx: &ProgramCtx, cid: Class
         fd.line,
         ctx,
         Some(cid),
+        false,
         false,
         fd.closure_shift,
     )
