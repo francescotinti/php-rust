@@ -6,12 +6,16 @@ as they complete. Deliberate behavioural deviations are catalogued in
 [`PHPR_DIVERGENCES_FROM_PHP.md`](PHPR_DIVERGENCES_FROM_PHP.md); measured
 coverage in [`COVERAGE.md`](COVERAGE.md).
 
-Current state (2026-07-11): Zend corpus **2352** passing · missing functions
-(783-fn reference set) **180** · ext/tokenizer **42/49** · ext/zlib **complete**
-(30/30 fns, suite 114/115). Class declarations now bind late (Zend late
-binding): a file whose class references an unloadable supertype compiles and
-errors only when the declaration executes — unlocked the Symfony
-http-foundation suite (1406 tests run; see the Symfony session notes).
+Current state (2026-07-11): Zend corpus **2352** passing · internal functions
+**754/2143** (core stdlib **514/654, 79%**) · missing functions (783-fn
+real-app reference set) **180** · ext/tokenizer **42/49** · ext/zlib
+**complete** (30/30, suite 114/115). **symfony/http-foundation: COMPLETE** —
+full component suite at **0 errors / 12 failures**, and the 12 are exactly the
+functional tests that spawn a real `php -S` server (needs a server SAPI).
+Landed on the way: Zend late binding for class declarations, Closure::bind
+scope rebinding, union weak coercion in Zend preference order, ob handler
+CLEAN|FINAL teardown, textual strtotime, filter_var completion,
+SplFileObject/SplTempFileObject, php://output.
 
 ---
 
