@@ -96,9 +96,12 @@ Current state (2026-07-10): Zend corpus **2332** passing · missing functions
 
 ## E. Pre-existing backlog
 
-- [ ] **Restore the doctrine/orm suite** (BLOCKING gate for arg-passing /
-  reference / reflection changes; was at 3 errors / 17 fails). Recreate via a
-  `composer require doctrine/orm` workspace.
+- [x] ~~**Restore the doctrine/orm suite**~~ ✅ e011438 — workspace rebuilt
+  (oracle-driven composer install, phpr runs phpunit 11.5.56); full run =
+  **3484 tests, 3 err / 17 fail**, identical to the last baseline (no drift).
+  Needed advertising the `filter` extension. The workspace is ephemeral
+  (session scratchpad); recreation recipe + baseline in memory. This gate is
+  MANDATORY for arg-passing / reference / reflection changes.
 - [ ] **Bounded ext areas toward 100%**: json, pcre, opcache, standard/strings,
   array — categorize fails by diff signature.
 - [ ] **lazy_objects hard queue** (8 deferred: by-ref proxy stack overflow,
