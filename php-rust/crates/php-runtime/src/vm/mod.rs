@@ -201,7 +201,29 @@ pub fn run_source_with(
         .map_err(|crate::compile::CompileError::Unsupported(what)| VmRunError::Unsupported(what))?;
     // Retain the lowered HIR so an `eval()` in the script can be compiled against
     // the image (step 57, Phase 1c-2c): both borrows outlive the run.
-    Ok(run_module_with_hir(&module, registry, Some(&program), None))
+    Ok(run_module_with_hir(&module, registry, Some(&program), None, &[]))
+}
+
+/// Like [`run_source_with`], with `php -d`-style INI overrides applied before
+/// the script runs (phpt `--INI--` sections). Each pair sets a REGISTERED
+/// directive's startup (global) and current value — an unknown name is
+/// silently ignored, exactly like `php -d unknown=x` (invisible to ini_get).
+pub fn run_source_with_ini(
+    name: &[u8],
+    source: &[u8],
+    registry: &Registry,
+    ini_overrides: &[(Vec<u8>, Vec<u8>)],
+) -> Result<VmOutcome, VmRunError> {
+    let program = match crate::lower_source(name, source) {
+        Ok(p) => p,
+        Err(crate::LowerError::Fatal { message, line }) => {
+            return Ok(compile_fatal_outcome(name, &message, line))
+        }
+        Err(e) => return Err(VmRunError::Lower(e)),
+    };
+    let module = crate::compile::compile_program(&program, registry)
+        .map_err(|crate::compile::CompileError::Unsupported(what)| VmRunError::Unsupported(what))?;
+    Ok(run_module_with_hir(&module, registry, Some(&program), None, ini_overrides))
 }
 
 /// Like [`run_source_with`] but for a real CLI invocation: seed the CLI
@@ -225,7 +247,7 @@ pub fn run_source_with_argv(
     let module = crate::compile::compile_program(&program, registry)
         .map_err(|crate::compile::CompileError::Unsupported(what)| VmRunError::Unsupported(what))?;
     log::debug!(target: "phpr::compile", "compiled {}: {} functions, {} classes", String::from_utf8_lossy(name), module.functions.len(), module.classes.len());
-    Ok(run_module_with_hir(&module, registry, Some(&program), Some(argv)))
+    Ok(run_module_with_hir(&module, registry, Some(&program), Some(argv), &[]))
 }
 
 /// Lower `source`, compile it, and run it on the VM with no builtins registered.
@@ -252,7 +274,7 @@ fn compile_fatal_outcome(file: &[u8], message: &str, line: Line) -> VmOutcome {
 /// already-compiled module and executes its `main`. Started without a retained
 /// HIR, so an `eval()` here lowers standalone (no compile-against-image).
 pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
-    run_module_with_hir(module, registry, None, None)
+    run_module_with_hir(module, registry, None, None, &[])
 }
 
 /// Seed the CLI superglobals into the VM superglobal store (`$_SERVER` with the
@@ -326,6 +348,7 @@ pub(crate) fn run_module_with_hir<'m>(
     registry: &'m Registry,
     main_hir: Option<&'m Program>,
     argv: Option<&[&[u8]]>,
+    ini_overrides: &[(Vec<u8>, Vec<u8>)],
 ) -> VmOutcome {
     // A fresh program starts a fresh handle space: ids freed by a PREVIOUS
     // run's teardown (same thread — in-process phpt batches, unit tests)
@@ -499,6 +522,16 @@ pub(crate) fn run_module_with_hir<'m>(
     // exist, so a script that never mentions `$_SERVER` is unaffected.
     if let (Some(argv), Some(prog)) = (argv, main_hir) {
         seed_cli_superglobals(&mut vm.superglobals, &mut vm.frames[0].slots, &prog.slots, argv);
+    }
+    // `php -d`-style INI overrides (phpt --INI-- sections): a registered
+    // directive gets the value as its startup default too (ini_restore under
+    // run-tests.php reverts to the -d value); an unknown name is ignored,
+    // invisible to ini_get exactly like `php -d unknown=x`. Validation and
+    // ext/session's module-startup deprecations render "in Unknown on line 0".
+    vm.apply_ini_overrides(ini_overrides);
+    // `session.auto_start=1` opens the session at request start (RINIT).
+    if vm.ini.get_bool(b"session.auto_start") {
+        let _ = vm.ho_session_start(Vec::new());
     }
     // `exit`/`die` is a clean termination (the exit code is surfaced, not a fatal);
     // any other `Err` is an uncaught fatal. A `Ok` carries the top-level return.
@@ -2017,11 +2050,21 @@ impl<'m> Vm<'m> {
                 let rline = if fi + 1 == self.frames.len() { line } else { self.cur_line(fi) };
                 (self.frames[fi].module.file.to_vec(), rline)
             };
-            let header = format!("\n{}: {} in ", errno_label(errno), message);
-            self.rendered.extend_from_slice(header.as_bytes());
-            self.rendered.extend_from_slice(&file);
-            let tail = format!(" on line {rline}\n");
-            self.rendered.extend_from_slice(tail.as_bytes());
+            let mut block = format!("\n{}: {} in ", errno_label(errno), message).into_bytes();
+            block.extend_from_slice(&file);
+            block.extend_from_slice(format!(" on line {rline}\n").as_bytes());
+            // Diagnostic display is ordinary output in PHP: it flows THROUGH
+            // the ob stack (captured, compressed, reordered with echoes) and
+            // marks headers-sent only when it reaches the real sink —
+            // oracle-verified (a buffered warning leaves session_id() free to
+            // change the id; an unbuffered one blocks it). Shutdown-time
+            // renders stay raw: the buffers are already flushed and a handler
+            // must not run this late.
+            if self.final_flush {
+                self.rendered.extend_from_slice(&block);
+            } else {
+                self.write_output(&block)?;
+            }
         }
         Ok(())
     }
@@ -10303,7 +10346,8 @@ mod tests {
             out.rendered,
             b"\nWarning: f(): Argument #1 ($x) must be passed by reference, value given in test.php on line 1\ndone".to_vec()
         );
-        assert_eq!(out.stdout, b"done");
+        // stdout carries rendered diagnostics too (diag-through-ob fix).
+        assert_eq!(out.stdout, out.rendered);
     }
 
     /// `call_user_func_array` with a plain (non-reference) element at a by-ref
@@ -11028,8 +11072,8 @@ mod tests {
             out.rendered,
             b"\nWarning: Array to string conversion in test.php on line 1\nArray".to_vec()
         );
-        // stdout stays the pure output (no diagnostic text).
-        assert_eq!(out.stdout, b"Array");
+        // stdout carries rendered diagnostics too (diag-through-ob fix).
+        assert_eq!(out.stdout, out.rendered);
     }
 
     #[test]
@@ -11041,7 +11085,7 @@ mod tests {
             out.rendered,
             b"\nNotice: Only variables should be assigned by reference in test.php on line 1\n5".to_vec()
         );
-        assert_eq!(out.stdout, b"5");
+        assert_eq!(out.stdout, out.rendered);
     }
 
     #[test]
@@ -11053,7 +11097,7 @@ mod tests {
             out.rendered,
             b"\nNotice: Only variable references should be returned by reference in test.php on line 1\n3".to_vec()
         );
-        assert_eq!(out.stdout, b"3");
+        assert_eq!(out.stdout, out.rendered);
     }
 
     #[test]
@@ -11065,7 +11109,7 @@ mod tests {
             out.rendered,
             b"a\nWarning: Undefined variable $undef in test.php on line 3\nb".to_vec()
         );
-        assert_eq!(out.stdout, b"ab");
+        assert_eq!(out.stdout, out.rendered);
     }
 
     #[test]
@@ -11088,7 +11132,7 @@ mod tests {
                 b"<?php try { echo @(1 % 0); } catch (\\DivisionByZeroError $e) { echo 'caught'; } \
                   echo $z;"
             ),
-            b"caught"
+            b"caught\nWarning: Undefined variable $z in test.php on line 1\n"
         );
         // The trailing `echo $z` warns normally — suppression did not leak past
         // the abandoned `@`.
@@ -11695,7 +11739,7 @@ mod tests {
         // guard makes the inner access fall through to a direct (null) read.
         assert_eq!(
             vm_stdout(b"<?php class C { function __get($n) { return $this->missing; } } $o = new C(); $x = $o->missing; echo ($x === null) ? 'null' : 'other';"),
-            b"null"
+            b"\nWarning: Undefined property: C::$missing in test.php on line 1\nnull"
         );
     }
 
@@ -14045,7 +14089,10 @@ mod tests {
         // The redefinition fails (false), the original value is kept, and the PHP
         // 8.5 deprecation warning is rendered inline.
         let out = vm_outcome(b"<?php define('FOO', 1); echo (define('FOO', 2))?'t':'f','|',FOO;");
-        assert_eq!(out.stdout, b"f|1");
+        assert_eq!(
+            out.stdout,
+            b"\nWarning: Constant FOO already defined, this will be an error in PHP 9 in test.php on line 1\nf|1"
+        );
         assert!(
             out.rendered.windows(b"Constant FOO already defined, this will be an error in PHP 9".len())
                 .any(|w| w == b"Constant FOO already defined, this will be an error in PHP 9"),
@@ -14351,7 +14398,7 @@ mod tests {
     #[test]
     fn unserialize_malformed_returns_false_with_warning() {
         let out = vm_outcome(b"<?php echo unserialize('garbage')===false?'F':'?';");
-        assert_eq!(out.stdout, b"F");
+        assert_eq!(out.stdout, out.rendered);
         assert!(
             out.rendered.windows(b"unserialize(): Error at offset 0 of 7 bytes".len())
                 .any(|w| w == b"unserialize(): Error at offset 0 of 7 bytes"),
@@ -14499,7 +14546,7 @@ mod tests {
     #[test]
     fn get_class_no_arg_uses_this_and_deprecates() {
         let out = vm_outcome(b"<?php class C{ function w(){ return get_class(); } } echo (new C)->w();");
-        assert_eq!(out.stdout, b"C");
+        assert_eq!(out.stdout, out.rendered);
         assert!(
             out.rendered.windows(b"Calling get_class() without arguments is deprecated".len())
                 .any(|w| w == b"Calling get_class() without arguments is deprecated"),
@@ -14555,7 +14602,7 @@ mod tests {
         // public x + dynamic dyn visible; protected y / private z hidden.
         assert_eq!(
             vm_stdout(b"<?php class C{ public $x=1; protected $y=2; private $z=3; } $o=new C; $o->dyn=9; $v=get_object_vars($o); echo $v['x'],$v['dyn'],(isset($v['y'])?'y':'n'),(isset($v['z'])?'z':'n');"),
-            b"19nn"
+            b"\nDeprecated: Creation of dynamic property C::$dyn is deprecated in test.php on line 1\n19nn"
         );
     }
 
@@ -14740,7 +14787,7 @@ mod tests {
     fn property_exists_declared_static_dynamic_inherited() {
         assert_eq!(
             vm_stdout(b"<?php class B{ public $base=1; static $st=9; } class C extends B{ protected $own=2; } $o=new C; $o->dyn=5; echo (property_exists('C','own')?1:0),(property_exists('C','base')?1:0),(property_exists('C','st')?1:0),(property_exists($o,'dyn')?1:0),(property_exists('C','dyn')?1:0);"),
-            b"11110"
+            b"\nDeprecated: Creation of dynamic property C::$dyn is deprecated in test.php on line 1\n11110"
         );
     }
 
@@ -14782,7 +14829,7 @@ mod tests {
     #[test]
     fn trigger_error_default_is_notice() {
         let out = vm_outcome(b"<?php trigger_error('hi'); echo 'A';");
-        assert_eq!(out.stdout, b"A");
+        assert_eq!(out.stdout, out.rendered);
         assert!(
             out.rendered.windows(b"Notice: hi in ".len()).any(|w| w == b"Notice: hi in "),
             "rendered: {}",
@@ -14793,7 +14840,7 @@ mod tests {
     #[test]
     fn trigger_error_user_warning_level() {
         let out = vm_outcome(b"<?php trigger_error('warn', E_USER_WARNING); echo 'B';");
-        assert_eq!(out.stdout, b"B");
+        assert_eq!(out.stdout, out.rendered);
         assert!(
             out.rendered.windows(b"Warning: warn in ".len()).any(|w| w == b"Warning: warn in "),
             "rendered: {}",
@@ -14871,7 +14918,7 @@ mod tests {
     fn error_get_last_reports_trigger_error() {
         assert_eq!(
             vm_stdout(b"<?php trigger_error('oops', E_USER_WARNING); $e=error_get_last(); echo $e['type'],'|',$e['message'],'|',$e['line'];"),
-            b"512|oops|1"
+            b"\nWarning: oops in test.php on line 1\n512|oops|1"
         );
     }
 
@@ -14888,7 +14935,7 @@ mod tests {
             b"<?php t_warn(); $e=error_get_last(); echo $e['type'],'|',$e['message'];",
             &fake_registry(),
         );
-        assert_eq!(out.stdout, b"2|from builtin");
+        assert_eq!(out.stdout, b"\nWarning: from builtin in test.php on line 1\n2|from builtin");
     }
 
     #[test]
@@ -14898,7 +14945,10 @@ mod tests {
             b"<?php trigger_error('u', E_USER_NOTICE); t_warn(); $e=error_get_last(); echo $e['type'],'|',$e['message'];",
             &fake_registry(),
         );
-        assert_eq!(out.stdout, b"2|from builtin");
+        assert_eq!(
+            out.stdout,
+            b"\nNotice: u in test.php on line 1\n\nWarning: from builtin in test.php on line 1\n2|from builtin"
+        );
     }
 
     #[test]
@@ -14919,7 +14969,7 @@ mod tests {
             b"<?php set_error_handler(function($n,$s){ return false; }); t_warn(); $e=error_get_last(); echo $e===null?'NULL':($e['type'].'|'.$e['message']);",
             &fake_registry(),
         );
-        assert_eq!(out.stdout, b"2|from builtin");
+        assert_eq!(out.stdout, b"\nWarning: from builtin in test.php on line 1\n2|from builtin");
     }
 
     // ----- Session 3: preg_replace_callback (vs PHP 8.5.7 CLI) -----

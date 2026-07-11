@@ -156,7 +156,7 @@ fn inline_html_interleaved() {
 #[test]
 fn undefined_variable_warns_and_yields_null() {
     let o = run_source(b"t.php", b"<?php echo $x;").expect("lowers");
-    assert_eq!(o.stdout, b""); // null → empty string
+    assert_eq!(o.stdout, b"\nWarning: Undefined variable $x in t.php on line 1\n"); // diag rides stdout
     assert_eq!(o.diags.len(), 1);
     assert!(matches!(&o.diags[0], Diag::Warning(m) if m == "Undefined variable $x"));
 }
@@ -176,7 +176,7 @@ fn string_increment_value_and_deprecation_captured() {
     // chokepoint (so a `set_error_handler` runs before the write-back), which
     // renders it into `rendered` rather than buffering it in `diags`.
     let o = run_source(b"t.php", b"<?php $x = 'a'; $x++; echo $x;").expect("lowers");
-    assert_eq!(o.stdout, b"b");
+    assert_eq!(o.stdout, b"\nDeprecated: Increment on non-numeric string is deprecated, use str_increment() instead in t.php on line 1\nb");
     let rendered = String::from_utf8(o.rendered).expect("utf8");
     assert!(
         rendered.contains("Increment on non-numeric string is deprecated"),
@@ -576,7 +576,7 @@ fn return_by_ref_non_lvalue_notices() {
         b"<?php function &f(){ return 1 + 2; } $y = &f(); echo $y;",
     )
     .expect("lowers");
-    assert_eq!(String::from_utf8(o.stdout).unwrap(), "3");
+    assert_eq!(String::from_utf8(o.stdout).unwrap(), "\nNotice: Only variable references should be returned by reference in t.php on line 1\n3");
     assert!(
         o.diags.iter().any(|d| matches!(d, Diag::Notice(m)
             if m == "Only variable references should be returned by reference")),
@@ -606,7 +606,7 @@ fn assign_ref_to_non_ref_function_notices() {
         b"<?php function f(){ return 5; } $y = &f(); echo $y;",
     )
     .expect("lowers");
-    assert_eq!(String::from_utf8(o.stdout).unwrap(), "5");
+    assert_eq!(String::from_utf8(o.stdout).unwrap(), "\nNotice: Only variables should be assigned by reference in t.php on line 1\n5");
     assert!(
         o.diags.iter().any(|d| matches!(d, Diag::Notice(m)
             if m == "Only variables should be assigned by reference")),
@@ -1263,7 +1263,7 @@ fn closure_does_not_capture_implicitly() {
     )
     .expect("lowers");
     // `$x` inside is undefined -> NULL, echoes nothing; a warning is raised.
-    assert_eq!(String::from_utf8(o.stdout).unwrap(), "");
+    assert_eq!(String::from_utf8(o.stdout).unwrap(), "\nWarning: Undefined variable $x in t.php on line 1\n");
     assert!(o.fatal.is_none());
 }
 
@@ -2669,7 +2669,7 @@ fn magic_get_recursion_guard_same_property() {
         out("<?php class C { \
              function __get($n){ return $this->foo === null ? 'guarded' : 'x'; } } \
              $c = new C(); echo $c->foo;"),
-        "guarded"
+        "\nWarning: Undefined property: C::$foo in t.php on line 1\nguarded"
     );
 }
 
@@ -2794,7 +2794,7 @@ fn magic_set_writes_real_property_under_guard() {
              function __get($n){ $this->hits++; return 99; } \
              function __set($n,$v){ $this->foo = $v; } } \
              $c = new C(); $c->foo = 7; echo $c->foo, ':', $c->hits;"),
-        "7:0"
+        "\nDeprecated: Creation of dynamic property C::$foo is deprecated in t.php on line 1\n7:0"
     );
 }
 
@@ -4568,7 +4568,10 @@ fn user_define_and_read() {
     assert_eq!(out("<?php define('GREETING', 'hi'); echo GREETING;"), "hi");
     // define() returns true; a second define of the same name returns false.
     assert_eq!(out("<?php echo define('X', 1) ? 't' : 'f';"), "t");
-    assert_eq!(out("<?php define('X', 1); echo define('X', 2) ? 't' : 'f'; echo X;"), "f1");
+    assert_eq!(
+        out("<?php define('X', 1); echo define('X', 2) ? 't' : 'f'; echo X;"),
+        "\nWarning: Constant X already defined, this will be an error in PHP 9 in t.php on line 1\nf1"
+    );
 }
 
 #[test]

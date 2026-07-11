@@ -170,9 +170,34 @@ impl IniTable {
     }
 }
 
+/// Bool-typed (OnUpdateBool) directives store their value NORMALIZED to
+/// "1"/"0" — `session_set_cookie_params_variation4`: setting "TRUE" reads
+/// back as "1". Other directives store the raw string.
+fn normalize_bool_ini(name: &[u8], value: Vec<u8>) -> Vec<u8> {
+    let bool_typed = matches!(
+        name,
+        b"session.use_cookies"
+            | b"session.use_only_cookies"
+            | b"session.use_strict_mode"
+            | b"session.use_trans_sid"
+            | b"session.cookie_secure"
+            | b"session.cookie_httponly"
+            | b"session.cookie_partitioned"
+            | b"session.lazy_write"
+            | b"session.auto_start"
+            | b"session.upload_progress.enabled"
+            | b"session.upload_progress.cleanup"
+    );
+    if bool_typed {
+        (if ini_bool(&value) { b"1" } else { b"0" }) .to_vec()
+    } else {
+        value
+    }
+}
+
 /// PHP's `zend_ini_parse_bool`: "1"/"true"/"yes"/"on" (case-insensitive) are
 /// true, any nonzero leading number too; everything else is false.
-fn ini_bool(v: &[u8]) -> bool {
+pub(super) fn ini_bool(v: &[u8]) -> bool {
     v.eq_ignore_ascii_case(b"true")
         || v.eq_ignore_ascii_case(b"yes")
         || v.eq_ignore_ascii_case(b"on")
@@ -227,6 +252,28 @@ fn trans_sid_exempt(name: &[u8]) -> bool {
     name == b"session.trans_sid_tags" || name == b"session.trans_sid_hosts"
 }
 
+/// The GET/POST-session deprecations (8.4): setting one of these directives to
+/// its deprecated STATE warns — falsy `use_only_cookies`, truthy
+/// `use_trans_sid`, any non-default `trans_sid_tags`/`trans_sid_hosts`/
+/// `referer_check` (deprecations.phpt: value-based, restoring the default is
+/// silent). Shared by ini_set, session_start options and the startup path.
+pub(super) fn session_state_deprecation(name: &[u8], value: &[u8]) -> Option<String> {
+    let deprecated = match name {
+        b"session.use_only_cookies" if !ini_bool(value) => {
+            return Some("Disabling session.use_only_cookies INI setting is deprecated".into())
+        }
+        b"session.use_trans_sid" if ini_bool(value) => {
+            return Some("Enabling session.use_trans_sid INI setting is deprecated".into())
+        }
+        b"session.trans_sid_tags" => value != b"a=href,area=href,frame=src,form=",
+        b"session.trans_sid_hosts" | b"session.referer_check" => !value.is_empty(),
+        _ => false,
+    };
+    deprecated.then(|| {
+        format!("Usage of {} INI setting is deprecated", String::from_utf8_lossy(name))
+    })
+}
+
 impl<'m> Vm<'m> {
     /// `ini_get(string $option): string|false` — the current local value of a
     /// registered directive; `false` (no diagnostic) otherwise. Case-sensitive.
@@ -271,7 +318,7 @@ impl<'m> Vm<'m> {
         if !user_settable {
             return Ok(Zval::Bool(false));
         }
-        if !self.ini_session_value_ok("ini_set", &name, &value) {
+        if !self.ini_session_value_ok("ini_set()", &name, &value) {
             return Ok(Zval::Bool(false));
         }
         if deprecated_off_default && value != global {
@@ -279,6 +326,9 @@ impl<'m> Vm<'m> {
                 "ini_set(): {} INI setting is deprecated",
                 String::from_utf8_lossy(&name)
             )));
+        }
+        if let Some(msg) = session_state_deprecation(&name, &value) {
+            self.diags.push(Diag::Deprecated(format!("ini_set(): {msg}")));
         }
         if int_typed && !quantity_is_clean(&value) {
             let s = trim_ascii(&value);
@@ -298,6 +348,7 @@ impl<'m> Vm<'m> {
                 detail
             )));
         }
+        let value = normalize_bool_ini(&name, value);
         let entry = self.ini.0.get_mut(&name).expect("checked above");
         let old = std::mem::replace(&mut entry.local, value);
         Ok(Zval::Str(PhpStr::new(old)))
@@ -363,46 +414,121 @@ impl<'m> Vm<'m> {
         Ok(Zval::Array(Rc::new(out)))
     }
 
-    /// Per-directive value validation shared by `ini_set` and the session
-    /// module's setters/start-options — the warning is attributed to `func`
-    /// (oracle: `session_name(): session.name "..." must not be numeric…`).
-    /// A refused value leaves the entry untouched.
-    pub(super) fn ini_session_value_ok(&mut self, func: &str, name: &[u8], value: &[u8]) -> bool {
-        if name == b"session.name" && !session_name_ok(value) {
-            self.diags.push(Diag::Warning(format!(
-                "{func}(): session.name \"{}\" must not be numeric, empty, contain null bytes \
+    /// Per-directive value validation shared by `ini_set`, the session
+    /// module's setters/start-options and the startup override path. `prefix`
+    /// is the attribution — `"ini_set()"` / `"session_name()"` /
+    /// `"PHP Startup"` (oracle: `Warning: PHP Startup: session.name "" must
+    /// not be numeric…`). A refused value leaves the entry untouched. When
+    /// `startup` the warning renders raw ("in Unknown on line 0") instead of
+    /// through the diag queue.
+    pub(super) fn ini_session_value_ok(&mut self, prefix: &str, name: &[u8], value: &[u8]) -> bool {
+        let startup = prefix == "PHP Startup";
+        let msg = if name == b"session.name" && !session_name_ok(value) {
+            Some(format!(
+                "{prefix}: session.name \"{}\" must not be numeric, empty, contain null bytes \
                  or any of the following characters \"=,;.[ \\t\\r\\n\\013\\014\"",
                 String::from_utf8_lossy(value)
-            )));
-            return false;
-        }
-        if name == b"session.save_handler" && value != b"files" {
-            self.diags.push(Diag::Warning(if value == b"user" {
-                format!("{func}(): Session save handler \"user\" cannot be set by ini_set()")
+            ))
+        } else if !startup && name == b"session.save_handler" && value != b"files" {
+            // At startup (php.ini / -d) an unknown handler is STORED raw and
+            // only refused at session_start ("session startup failed") —
+            // session_status() reports DISABLED meanwhile.
+            Some(if value == b"user" {
+                format!("{prefix}: Session save handler \"user\" cannot be set by ini_set()")
             } else {
                 format!(
-                    "{func}(): Session save handler \"{}\" cannot be found",
+                    "{prefix}: Session save handler \"{}\" cannot be found",
                     String::from_utf8_lossy(value)
                 )
-            }));
-            return false;
-        }
-        if name == b"session.serialize_handler"
+            })
+        } else if !startup
+            && name == b"session.serialize_handler"
             && !matches!(value, b"php" | b"php_binary" | b"php_serialize")
         {
-            self.diags.push(Diag::Warning(format!(
-                "{func}(): Serialization handler \"{}\" cannot be found",
+            Some(format!(
+                "{prefix}: Serialization handler \"{}\" cannot be found",
                 String::from_utf8_lossy(value)
-            )));
-            return false;
+            ))
+        } else if name == b"session.gc_probability" && leading_long(value) < 0 {
+            Some(format!("{prefix}: session.gc_probability must be greater than or equal to 0"))
+        } else if name == b"session.gc_divisor" && leading_long(value) < 1 {
+            Some(format!("{prefix}: session.gc_divisor must be greater than 0"))
+        } else {
+            None
+        };
+        let Some(msg) = msg else { return true };
+        if startup {
+            self.render_startup_diag("Warning", &msg);
+        } else {
+            self.diags.push(Diag::Warning(msg));
         }
-        true
+        false
+    }
+
+    /// Render a pre-main (startup) or shutdown diagnostic the way PHP does:
+    /// `Sev: PHP Startup: msg in Unknown on line 0`, straight onto the output
+    /// (no frame exists to attribute it to).
+    pub(super) fn render_startup_diag(&mut self, severity: &str, msg: &str) {
+        let block = format!("\n{severity}: {msg} in Unknown on line 0\n");
+        self.rendered.extend_from_slice(block.as_bytes());
+        self.stdout.extend_from_slice(block.as_bytes());
+    }
+
+    /// Apply `php -d`-style startup overrides (phpt `--INI--`): validated
+    /// values land as BOTH startup default and current value; ext/session's
+    /// module-startup deprecations then fire in session.c's fixed order.
+    pub(super) fn apply_ini_overrides(&mut self, overrides: &[(Vec<u8>, Vec<u8>)]) {
+        for (k, v) in overrides {
+            if !self.ini_session_value_ok("PHP Startup", k, v) {
+                continue;
+            }
+            // session.upload_progress.freq bounds (rfc1867 startup checks).
+            if k == b"session.upload_progress.freq" {
+                let n = leading_long(v);
+                if n < 0 {
+                    self.render_startup_diag(
+                        "Warning",
+                        "PHP Startup: session.upload_progress.freq must be greater than or equal to 0",
+                    );
+                    continue;
+                }
+                if v.ends_with(b"%") && n > 100 {
+                    self.render_startup_diag(
+                        "Warning",
+                        "PHP Startup: session.upload_progress.freq must be less than or equal to 100%",
+                    );
+                    continue;
+                }
+            }
+            if let Some(e) = self.ini.0.get_mut(k) {
+                let v = normalize_bool_ini(k, v.clone());
+                e.global = v.clone();
+                e.local = v;
+            }
+        }
+        let mut dep = Vec::new();
+        if !self.ini.get_bool(b"session.use_only_cookies") {
+            dep.push("PHP Startup: Disabling session.use_only_cookies INI setting is deprecated");
+        }
+        if self.ini.get_bool(b"session.use_trans_sid") {
+            dep.push("PHP Startup: Enabling session.use_trans_sid INI setting is deprecated");
+        }
+        if self.ini.get(b"session.sid_length") != Some(b"32") {
+            dep.push("PHP Startup: session.sid_length INI setting is deprecated");
+        }
+        if self.ini.get(b"session.sid_bits_per_character") != Some(b"4") {
+            dep.push("PHP Startup: session.sid_bits_per_character INI setting is deprecated");
+        }
+        for msg in dep {
+            self.render_startup_diag("Deprecated", msg);
+        }
     }
 
     /// Set a directive's local value directly — the session module's setters
     /// (`session_name`, start options, cookie params) already ran their own
     /// guards and validation, so no freeze/access checks re-apply here.
     pub(super) fn ini_set_local(&mut self, name: &[u8], value: Vec<u8>) {
+        let value = normalize_bool_ini(name, value);
         if let Some(e) = self.ini.0.get_mut(name) {
             e.local = value;
         }
@@ -415,7 +541,15 @@ impl<'m> Vm<'m> {
         if !name.starts_with(b"session.") || trans_sid_exempt(name) {
             return true;
         }
-        if self.output_started {
+        if self.session.active {
+            let suffix = self.sess_started_from();
+            self.diags.push(Diag::Warning(format!(
+                "{}(): Session ini settings cannot be changed when a session is active{suffix}",
+                String::from_utf8_lossy(func)
+            )));
+            return false;
+        }
+        if self.output_started && self.ini.get_bool(b"session.use_cookies") {
             let sent = match &self.output_start {
                 Some((f, l)) => {
                     format!(" (sent from {} on line {})", String::from_utf8_lossy(f), l)

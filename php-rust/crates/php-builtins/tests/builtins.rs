@@ -463,7 +463,11 @@ fn strtr_array_longest_first() {
 #[test]
 fn strtr_array_empty_key_warns_and_is_ignored() {
     let (o, diags) = out_diags("<?php echo strtr('abc', ['' => 'X', 'b' => 'Y']);");
-    assert_eq!(o, "aYc");
+    // stdout carries the rendered warning since the diag-through-ob fix.
+    assert_eq!(
+        o,
+        "\nWarning: strtr(): Ignoring replacement of empty string in t.php on line 1\naYc"
+    );
     assert!(
         diags.iter().any(|d| d.contains("Ignoring replacement of empty string")),
         "missing empty-key warning: {diags:?}"
@@ -3039,8 +3043,9 @@ fn mb_regex_encoding_and_options_defaults() {
 
 #[test]
 fn mb_ereg_invalid_pattern_returns_false() {
-    // A compile error yields false (PHP also emits a warning, on the side channel).
-    assert_eq!(out("<?php var_dump(mb_ereg('(', 'x', $m));"), "bool(false)\n");
+    // A compile error yields false; the warning rides the CLI stream (stdout
+    // carries diagnostics since the diag-through-ob fix), so silence it.
+    assert_eq!(out("<?php var_dump(@mb_ereg('(', 'x', $m));"), "bool(false)\n");
 }
 
 // --- step 43b: stateful search family (mb_ereg_search_*) ---
@@ -3661,10 +3666,10 @@ fn unserialize_values_observable() {
 
 #[test]
 fn unserialize_malformed_is_false() {
-    assert_eq!(out("<?php echo unserialize('z') === false ? 'F' : 'T';"), "F");
-    assert_eq!(out("<?php echo unserialize('') === false ? 'F' : 'T';"), "F");
+    assert_eq!(out("<?php echo @unserialize('z') === false ? 'F' : 'T';"), "F");
+    assert_eq!(out("<?php echo @unserialize('') === false ? 'F' : 'T';"), "F");
     // Trailing garbage after a valid value is rejected too.
-    assert_eq!(out("<?php echo unserialize('i:1;XX') === false ? 'F' : 'T';"), "F");
+    assert_eq!(out("<?php echo @unserialize('i:1;XX') === false ? 'F' : 'T';"), "F");
 }
 
 /// Round-trip a freshly serialized value through unserialize and back.
@@ -4173,12 +4178,15 @@ fn touch_sets_explicit_mtime() {
 
 #[test]
 fn csv_str_getcsv() {
-    assert_eq!(out("<?php echo json_encode(str_getcsv('a,b,c'));"), "[\"a\",\"b\",\"c\"]");
-    assert_eq!(out("<?php echo json_encode(str_getcsv('\"a,b\",c'));"), "[\"a,b\",\"c\"]");
-    assert_eq!(out("<?php echo json_encode(str_getcsv('\"x\"\"y\"'));"), "[\"x\\\"y\"]");
-    assert_eq!(out("<?php echo json_encode(str_getcsv('a,,c'));"), "[\"a\",\"\",\"c\"]");
-    assert_eq!(out("<?php echo json_encode(str_getcsv(''));"), "[null]");
-    assert_eq!(out("<?php echo json_encode(str_getcsv('a;b', ';'));"), "[\"a\",\"b\"]");
+    // $escape passed explicitly: stdout now carries diagnostics like the real
+    // CLI stream, so the escape deprecation would land in the compared output
+    // (it has its own test below).
+    assert_eq!(out("<?php echo json_encode(str_getcsv('a,b,c', ',', '\"', '\\\\'));"), "[\"a\",\"b\",\"c\"]");
+    assert_eq!(out("<?php echo json_encode(str_getcsv('\"a,b\",c', ',', '\"', '\\\\'));"), "[\"a,b\",\"c\"]");
+    assert_eq!(out("<?php echo json_encode(str_getcsv('\"x\"\"y\"', ',', '\"', '\\\\'));"), "[\"x\\\"y\"]");
+    assert_eq!(out("<?php echo json_encode(str_getcsv('a,,c', ',', '\"', '\\\\'));"), "[\"a\",\"\",\"c\"]");
+    assert_eq!(out("<?php echo json_encode(str_getcsv('', ',', '\"', '\\\\'));"), "[null]");
+    assert_eq!(out("<?php echo json_encode(str_getcsv('a;b', ';', '\"', '\\\\'));"), "[\"a\",\"b\"]");
 }
 
 #[test]

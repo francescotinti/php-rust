@@ -98,7 +98,7 @@ fn find<'a>(sections: &'a [(String, String)], name: &str) -> Option<&'a str> {
 /// environment we are not reproducing. `EXTENSIONS` is handled separately: a
 /// test gated only on extensions we *do* model is run (see [`SUPPORTED_EXTENSIONS`]).
 const UNSUPPORTED_SECTIONS: &[&str] = &[
-    "SKIPIF", "INI", "POST", "POST_RAW", "GET", "PUT", "COOKIE",
+    "SKIPIF", "POST", "POST_RAW", "GET", "PUT", "COOKIE",
     "STDIN", "ARGS", "ENV", "REQUEST", "CGI", "PHPDBG", "HEADERS", "XFAIL",
     "FILE_EXTERNAL", "FILEEOF",
 ];
@@ -109,7 +109,35 @@ const UNSUPPORTED_SECTIONS: &[&str] = &[
 /// corresponding steps (pcre: 31/36/37, json: 26, date: 34/35, mbstring: 41–43).
 /// A test requiring anything else still skips. Names are compared lowercase.
 const SUPPORTED_EXTENSIONS: &[&str] =
-    &["core", "standard", "mbstring", "pcre", "json", "date", "ctype", "hash", "zip", "pdo", "pdo_sqlite", "sqlite3", "bcmath", "gmp", "tokenizer", "zlib"];
+    &["core", "standard", "mbstring", "pcre", "json", "date", "ctype", "hash", "zip", "pdo", "pdo_sqlite", "sqlite3", "bcmath", "gmp", "tokenizer", "zlib", "session"];
+
+/// Parse a `--INI--` section into `php -d`-style overrides: one `key=value`
+/// per line, surrounding quotes stripped. run-tests.php's `{PWD}`/`{TMP}`/
+/// `{ENV:...}` substitutions are not modelled — a test using them skips.
+fn parse_ini_section(body: &str) -> Result<Vec<(Vec<u8>, Vec<u8>)>, String> {
+    let mut out = Vec::new();
+    for line in body.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with(';') {
+            continue;
+        }
+        let Some((k, v)) = line.split_once('=') else {
+            continue;
+        };
+        let (k, mut v) = (k.trim(), v.trim());
+        if v.contains('{') {
+            return Err(format!("--INI-- value substitution not modelled: {line}"));
+        }
+        if v.len() >= 2
+            && ((v.starts_with('"') && v.ends_with('"'))
+                || (v.starts_with('\'') && v.ends_with('\'')))
+        {
+            v = &v[1..v.len() - 1];
+        }
+        out.push((k.as_bytes().to_vec(), v.as_bytes().to_vec()));
+    }
+    Ok(out)
+}
 
 /// Options steering a run — today only `--run-skipif`.
 #[derive(Debug, Default, Clone, Copy)]
@@ -130,13 +158,18 @@ pub fn run_phpt(src: &[u8], name: &[u8], reg: &Registry) -> TestResult {
 /// Run the `--SKIPIF--` body as its own script (`<test>.skip.php`, so `__DIR__`
 /// and relative `require` resolve next to the test, exactly as run-tests.php's
 /// temp file does). Returns `Some(skip)` when the test must not run.
-fn eval_skipif(body: &str, name: &[u8], reg: &Registry) -> Option<TestResult> {
+fn eval_skipif(
+    body: &str,
+    name: &[u8],
+    reg: &Registry,
+    ini: &[(Vec<u8>, Vec<u8>)],
+) -> Option<TestResult> {
     let test_path = Path::new(OsStr::from_bytes(name));
     let skip_path = test_path.with_extension("skip.php");
     let skip_name = skip_path.to_string_lossy().into_owned().into_bytes();
     let source = body.as_bytes();
     let materialized = !skip_path.exists() && fs::write(&skip_path, source).is_ok();
-    let run = php_runtime::vm::run_source_with(&skip_name, source, reg);
+    let run = php_runtime::vm::run_source_with_ini(&skip_name, source, reg, ini);
     if materialized {
         let _ = fs::remove_file(&skip_path);
     }
@@ -173,13 +206,13 @@ fn eval_skipif(body: &str, name: &[u8], reg: &Registry) -> Option<TestResult> {
 /// Execute a `--CLEAN--` section (best-effort, output and errors discarded):
 /// tests use it to delete scratch files (PDO's `.db` files), and not running it
 /// leaves litter that breaks *other* tests on the next batch.
-fn eval_clean(body: &str, name: &[u8], reg: &Registry) {
+fn eval_clean(body: &str, name: &[u8], reg: &Registry, ini: &[(Vec<u8>, Vec<u8>)]) {
     let test_path = Path::new(OsStr::from_bytes(name));
     let clean_path = test_path.with_extension("clean.php");
     let clean_name = clean_path.to_string_lossy().into_owned().into_bytes();
     let source = body.as_bytes();
     let materialized = !clean_path.exists() && fs::write(&clean_path, source).is_ok();
-    let _ = php_runtime::vm::run_source_with(&clean_name, source, reg);
+    let _ = php_runtime::vm::run_source_with_ini(&clean_name, source, reg, ini);
     if materialized {
         let _ = fs::remove_file(&clean_path);
     }
@@ -213,9 +246,17 @@ pub fn run_phpt_opts(src: &[u8], name: &[u8], reg: &Registry, opts: RunOpts) -> 
             return TestResult::skip("section", format!("--{sname}-- section not modelled"));
         }
     }
+    // `--INI--` runs as `php -d` overrides (applied to SKIPIF and CLEAN too).
+    let ini: Vec<(Vec<u8>, Vec<u8>)> = match find(&sections, "INI") {
+        Some(body) => match parse_ini_section(body) {
+            Ok(v) => v,
+            Err(why) => return TestResult::skip("ini", why),
+        },
+        None => Vec::new(),
+    };
     if opts.run_skipif {
         if let Some(skipif) = find(&sections, "SKIPIF") {
-            if let Some(skip) = eval_skipif(skipif, name, reg) {
+            if let Some(skip) = eval_skipif(skipif, name, reg, &ini) {
                 return skip;
             }
         }
@@ -280,7 +321,7 @@ pub fn run_phpt_opts(src: &[u8], name: &[u8], reg: &Registry, opts: RunOpts) -> 
     // optional fatal message, and additionally reports a construct its compiler
     // rejects (a coverage gap, skipped distinctly).
     let run: Result<(Vec<u8>, Option<String>), TestResult> =
-        match php_runtime::vm::run_source_with(name, source, reg) {
+        match php_runtime::vm::run_source_with_ini(name, source, reg, &ini) {
             Ok(o) => Ok((o.rendered, o.fatal.as_ref().map(|e| e.message().to_string()))),
             Err(php_runtime::vm::VmRunError::Unsupported(what)) => {
                 Err(TestResult::skip("vm-unsupported", what))
@@ -295,7 +336,7 @@ pub fn run_phpt_opts(src: &[u8], name: &[u8], reg: &Registry, opts: RunOpts) -> 
     // The test ran: honour its --CLEAN-- section (scratch-file deletion), or
     // later tests inherit its litter (PDO's on-disk `.db` files).
     if let Some(clean) = find(&sections, "CLEAN") {
-        eval_clean(clean, name, reg);
+        eval_clean(clean, name, reg, &ini);
     }
     let (rendered, fatal_msg) = match run {
         Ok(v) => v,
