@@ -2018,6 +2018,20 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"ZLIB_MEM_ERROR" => ExprKind::Int(-4),
         b"ZLIB_BUF_ERROR" => ExprKind::Int(-5),
         b"ZLIB_VERSION_ERROR" => ExprKind::Int(-6),
+        // Stream filter directions (stream_filter_append).
+        b"STREAM_FILTER_READ" => ExprKind::Int(1),
+        b"STREAM_FILTER_WRITE" => ExprKind::Int(2),
+        b"STREAM_FILTER_ALL" => ExprKind::Int(3),
+        // Output-handler phase flags (ob_start callbacks).
+        b"PHP_OUTPUT_HANDLER_WRITE" | b"PHP_OUTPUT_HANDLER_CONT" => ExprKind::Int(0),
+        b"PHP_OUTPUT_HANDLER_START" => ExprKind::Int(1),
+        b"PHP_OUTPUT_HANDLER_CLEAN" => ExprKind::Int(2),
+        b"PHP_OUTPUT_HANDLER_FLUSH" => ExprKind::Int(4),
+        b"PHP_OUTPUT_HANDLER_FINAL" | b"PHP_OUTPUT_HANDLER_END" => ExprKind::Int(8),
+        b"PHP_OUTPUT_HANDLER_CLEANABLE" => ExprKind::Int(16),
+        b"PHP_OUTPUT_HANDLER_FLUSHABLE" => ExprKind::Int(32),
+        b"PHP_OUTPUT_HANDLER_REMOVABLE" => ExprKind::Int(64),
+        b"PHP_OUTPUT_HANDLER_STDFLAGS" => ExprKind::Int(112),
         // ext/tokenizer T_* token ids (PHP 8.5 parser values).
         b"T_LNUMBER" => ExprKind::Int(260),
         b"T_DNUMBER" => ExprKind::Int(261),

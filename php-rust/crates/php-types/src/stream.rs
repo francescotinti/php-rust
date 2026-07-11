@@ -31,9 +31,190 @@ pub enum ResKind {
     /// the file ops dispatch to the wrapper object's `stream_*` methods. Reports
     /// gettype "resource" and var_dump type "stream" like any byte stream.
     UserStream(UserStream),
+    /// A `stream_filter_append` handle: identifies one attached filter on its
+    /// stream, for `stream_filter_remove`.
+    Filter {
+        stream: std::rc::Rc<std::cell::RefCell<Resource>>,
+        filter_id: u32,
+    },
     /// After `fclose`: the handle keeps its id but the backend is gone. PHP
     /// reports `gettype` "resource (closed)" and var_dumps "of type (Unknown)".
     Closed,
+}
+
+/// One attached stream filter (`stream_filter_append`): a transform applied to
+/// bytes flowing through the stream. The zlib pair wraps an incremental
+/// [`crate::zlibio::ZCtx`]; the base64 pair buffers partial groups between
+/// calls. PHP flush semantics: per-write steps run `Z_NO_FLUSH` (zlib buffers
+/// internally), an explicit flush/seek runs `Z_SYNC_FLUSH`, and close/removal
+/// runs `Z_FINISH` (the base64 filters only act on grouping).
+pub enum StreamFilter {
+    ZlibDeflate(crate::zlibio::ZCtx),
+    ZlibInflate(crate::zlibio::ZCtx),
+    Base64Enc(Vec<u8>),
+    Base64Dec(Vec<u8>),
+}
+
+impl std::fmt::Debug for StreamFilter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            StreamFilter::ZlibDeflate(_) => "zlib.deflate",
+            StreamFilter::ZlibInflate(_) => "zlib.inflate",
+            StreamFilter::Base64Enc(_) => "convert.base64-encode",
+            StreamFilter::Base64Dec(_) => "convert.base64-decode",
+        })
+    }
+}
+
+const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+fn b64_val(c: u8) -> Option<u8> {
+    match c {
+        b'A'..=b'Z' => Some(c - b'A'),
+        b'a'..=b'z' => Some(c - b'a' + 26),
+        b'0'..=b'9' => Some(c - b'0' + 52),
+        b'+' => Some(62),
+        b'/' => Some(63),
+        _ => None,
+    }
+}
+
+/// Encode every full 3-byte group of `pending`, leaving the remainder in place.
+fn b64_encode_step(pending: &mut Vec<u8>) -> Vec<u8> {
+    let mut out = Vec::new();
+    let full = pending.len() / 3 * 3;
+    for c in pending[..full].chunks_exact(3) {
+        let n = ((c[0] as u32) << 16) | ((c[1] as u32) << 8) | c[2] as u32;
+        out.extend_from_slice(&[
+            B64[(n >> 18) as usize & 63],
+            B64[(n >> 12) as usize & 63],
+            B64[(n >> 6) as usize & 63],
+            B64[n as usize & 63],
+        ]);
+    }
+    pending.drain(..full);
+    out
+}
+
+/// Encode the final partial group (with `=` padding), emptying `pending`.
+fn b64_encode_tail(pending: &mut Vec<u8>) -> Vec<u8> {
+    let mut out = Vec::new();
+    match pending.len() {
+        1 => {
+            let n = (pending[0] as u32) << 16;
+            out.extend_from_slice(&[B64[(n >> 18) as usize & 63], B64[(n >> 12) as usize & 63], b'=', b'=']);
+        }
+        2 => {
+            let n = ((pending[0] as u32) << 16) | ((pending[1] as u32) << 8);
+            out.extend_from_slice(&[
+                B64[(n >> 18) as usize & 63],
+                B64[(n >> 12) as usize & 63],
+                B64[(n >> 6) as usize & 63],
+                b'=',
+            ]);
+        }
+        _ => {}
+    }
+    pending.clear();
+    out
+}
+
+/// Decode every full 4-char group of `pending`, leaving the remainder in place.
+fn b64_decode_step(pending: &mut Vec<u8>) -> Vec<u8> {
+    let mut out = Vec::new();
+    let full = pending.len() / 4 * 4;
+    for g in pending[..full].chunks_exact(4) {
+        let n = ((g[0] as u32) << 18) | ((g[1] as u32) << 12) | ((g[2] as u32) << 6) | g[3] as u32;
+        out.extend_from_slice(&[(n >> 16) as u8, (n >> 8) as u8, n as u8]);
+    }
+    pending.drain(..full);
+    out
+}
+
+/// Decode the final partial group (2 chars → 1 byte, 3 → 2), emptying `pending`.
+fn b64_decode_tail(pending: &mut Vec<u8>) -> Vec<u8> {
+    let mut out = Vec::new();
+    match pending.len() {
+        2 => {
+            let n = ((pending[0] as u32) << 18) | ((pending[1] as u32) << 12);
+            out.push((n >> 16) as u8);
+        }
+        3 => {
+            let n = ((pending[0] as u32) << 18) | ((pending[1] as u32) << 12) | ((pending[2] as u32) << 6);
+            out.extend_from_slice(&[(n >> 16) as u8, (n >> 8) as u8]);
+        }
+        _ => {}
+    }
+    pending.clear();
+    out
+}
+
+impl StreamFilter {
+    /// Build a filter by its PHP name. `level`/`window` apply to the zlib pair
+    /// (the filter's `window` is raw `windowBits`, default −15 = raw deflate).
+    pub fn from_name(name: &[u8], level: i32, window: i32) -> Option<StreamFilter> {
+        match name {
+            b"zlib.deflate" => {
+                crate::zlibio::ZCtx::new_deflate(level, window, 8, 0, None).map(StreamFilter::ZlibDeflate)
+            }
+            b"zlib.inflate" => crate::zlibio::ZCtx::new_inflate(window, None).map(StreamFilter::ZlibInflate),
+            b"convert.base64-encode" => Some(StreamFilter::Base64Enc(Vec::new())),
+            b"convert.base64-decode" => Some(StreamFilter::Base64Dec(Vec::new())),
+            _ => None,
+        }
+    }
+
+    /// Transform one chunk. `zflush` is the zlib flush mode for the zlib pair
+    /// (`0` = Z_NO_FLUSH per ordinary write, `2` = Z_SYNC_FLUSH on flush/seek).
+    fn apply(&mut self, data: &[u8], zflush: i32) -> Result<Vec<u8>, ()> {
+        match self {
+            StreamFilter::ZlibDeflate(z) | StreamFilter::ZlibInflate(z) => {
+                z.add(data, zflush).map_err(|_| ())
+            }
+            StreamFilter::Base64Enc(p) => {
+                p.extend_from_slice(data);
+                Ok(b64_encode_step(p))
+            }
+            StreamFilter::Base64Dec(p) => {
+                p.extend(data.iter().copied().filter(|&c| b64_val(c).is_some()).map(|c| b64_val(c).unwrap()));
+                Ok(b64_decode_step(p))
+            }
+        }
+    }
+
+    /// Final tail when the filter is closed/removed (`Z_FINISH` / padding).
+    fn finish(&mut self) -> Result<Vec<u8>, ()> {
+        match self {
+            StreamFilter::ZlibDeflate(z) | StreamFilter::ZlibInflate(z) => {
+                z.add(&[], 4 /* Z_FINISH */).map_err(|_| ())
+            }
+            StreamFilter::Base64Enc(p) => Ok(b64_encode_tail(p)),
+            StreamFilter::Base64Dec(p) => Ok(b64_decode_tail(p)),
+        }
+    }
+}
+
+/// The filters attached to a stream, per direction, plus the read-side buffer
+/// of filtered-but-unconsumed bytes. Attached ids identify a filter for
+/// `stream_filter_remove`.
+/// One attached filter: PHP only invokes a filter when data actually flowed
+/// through it, so a flush on a still-clean filter is a no-op (`dirty` tracks
+/// data seen since the last drain — a fresh gzip deflate must not emit its
+/// header at a pre-write rewind).
+#[derive(Debug)]
+pub struct AttachedFilter {
+    id: u32,
+    dirty: bool,
+    f: StreamFilter,
+}
+
+#[derive(Default, Debug)]
+pub struct FilterState {
+    pub read: Vec<AttachedFilter>,
+    pub write: Vec<AttachedFilter>,
+    read_buf: Vec<u8>,
+    read_done: bool,
+    next_id: u32,
 }
 
 /// A userland-wrapper stream (`stream_wrapper_register`): the wrapper object plus
@@ -91,6 +272,9 @@ pub struct Stream {
     /// zlib layer saw `Z_STREAM_END`), unlike ordinary streams whose EOF flag is
     /// set only by a read attempt that comes up empty. Set by `gzopen` read mode.
     pub eof_on_exhaust: bool,
+    /// Attached stream filters (`stream_filter_append`); `None` for the common
+    /// unfiltered stream.
+    pub filters: Option<Box<FilterState>>,
 }
 
 #[derive(Debug)]
@@ -212,6 +396,7 @@ impl Resource {
             | ResKind::Dir(_)
             | ResKind::Context(_)
             | ResKind::UserStream(_)
+            | ResKind::Filter { .. }
             | ResKind::Process(_) => "resource",
             ResKind::Closed => "resource (closed)",
         }
@@ -228,6 +413,7 @@ impl Resource {
     pub fn dump_type(&self) -> &'static str {
         match self.kind {
             ResKind::Stream(_) | ResKind::Dir(_) | ResKind::UserStream(_) => "stream",
+            ResKind::Filter { .. } => "stream filter",
             ResKind::Context(_) => "stream-context",
             ResKind::Process(_) => "process",
             ResKind::Closed => "Unknown",
@@ -237,7 +423,12 @@ impl Resource {
     pub fn as_stream_mut(&mut self) -> Option<&mut Stream> {
         match &mut self.kind {
             ResKind::Stream(s) => Some(s),
-            ResKind::Dir(_) | ResKind::Context(_) | ResKind::UserStream(_) | ResKind::Process(_) | ResKind::Closed => None,
+            ResKind::Dir(_)
+            | ResKind::Context(_)
+            | ResKind::UserStream(_)
+            | ResKind::Filter { .. }
+            | ResKind::Process(_)
+            | ResKind::Closed => None,
         }
     }
 
@@ -253,32 +444,194 @@ impl Resource {
     pub fn as_dir_mut(&mut self) -> Option<&mut DirHandle> {
         match &mut self.kind {
             ResKind::Dir(d) => Some(d),
-            ResKind::Stream(_) | ResKind::Context(_) | ResKind::UserStream(_) | ResKind::Process(_) | ResKind::Closed => {
-                None
-            }
+            ResKind::Stream(_)
+            | ResKind::Context(_)
+            | ResKind::UserStream(_)
+            | ResKind::Filter { .. }
+            | ResKind::Process(_)
+            | ResKind::Closed => None,
         }
     }
 }
 
 impl Stream {
+    /// One raw read from the backend into `buf` (no filters, no EOF bookkeeping).
+    fn backend_read_raw(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match &mut self.backend {
+            StreamBackend::File(f) => f.read(buf),
+            StreamBackend::Memory(c) => c.read(buf),
+            StreamBackend::Stdin => std::io::stdin().read(buf),
+            StreamBackend::ChildStdout(p) => p.read(buf),
+            StreamBackend::ChildStderr(p) => p.read(buf),
+            StreamBackend::Tcp(t) => t.read(buf),
+            StreamBackend::Udp(u) => u.recv(buf),
+            StreamBackend::Stdout
+            | StreamBackend::Stderr
+            | StreamBackend::ChildStdin(_)
+            | StreamBackend::GzFile { .. } => Ok(0),
+        }
+    }
+
+    // ---- stream filters (stream_filter_append) ----
+
+    /// Attach `f` to the read or write chain — at the end (`stream_filter_append`)
+    /// or the front (`stream_filter_prepend`) — returning its removal id.
+    pub fn attach_filter(&mut self, write: bool, front: bool, f: StreamFilter) -> u32 {
+        let fs = self.filters.get_or_insert_with(Default::default);
+        let id = fs.next_id;
+        fs.next_id += 1;
+        let entry = AttachedFilter { id, dirty: false, f };
+        let chain = if write { &mut fs.write } else { &mut fs.read };
+        if front {
+            chain.insert(0, entry);
+        } else {
+            chain.push(entry);
+        }
+        id
+    }
+
+    pub fn has_write_filters(&self) -> bool {
+        self.filters.as_ref().is_some_and(|f| !f.write.is_empty())
+    }
+
+    pub fn has_read_filters(&self) -> bool {
+        self.filters.as_ref().is_some_and(|f| !f.read.is_empty())
+    }
+
+    /// Detach the filter with `id`, finishing it; its tail (already passed
+    /// through any downstream write filters) should be written to the stream by
+    /// the caller. `None` if no such filter is attached.
+    pub fn remove_filter(&mut self, id: u32) -> Option<Vec<u8>> {
+        let fs = self.filters.as_mut()?;
+        if let Some(pos) = fs.write.iter().position(|a| a.id == id) {
+            let mut entry = fs.write.remove(pos);
+            let mut cur = if entry.dirty { entry.f.finish().unwrap_or_default() } else { Vec::new() };
+            for g in fs.write.iter_mut().skip(pos) {
+                if cur.is_empty() {
+                    break;
+                }
+                g.dirty = true;
+                cur = g.f.apply(&cur, 0).unwrap_or_default();
+            }
+            return Some(cur);
+        }
+        if let Some(pos) = fs.read.iter().position(|a| a.id == id) {
+            fs.read.remove(pos);
+            return Some(Vec::new()); // read-side removal discards pending state
+        }
+        None
+    }
+
+    /// Pass `data` through the write chain (ordinary write: `Z_NO_FLUSH`).
+    pub fn apply_write_filters(&mut self, data: &[u8]) -> Result<Vec<u8>, ()> {
+        let Some(fs) = self.filters.as_mut() else { return Ok(data.to_vec()) };
+        let mut cur = data.to_vec();
+        for a in fs.write.iter_mut() {
+            if !cur.is_empty() {
+                a.dirty = true;
+            }
+            cur = a.f.apply(&cur, 0)?;
+        }
+        Ok(cur)
+    }
+
+    /// Drain the write chain: each filter's flush tail (`Z_SYNC_FLUSH` when
+    /// `finish` is false — fflush/seek; `Z_FINISH` when true — close) is pushed
+    /// through the filters after it. A still-clean filter is skipped (PHP only
+    /// invokes a filter data flowed through — a fresh deflate must not emit its
+    /// header at a pre-write rewind). A finishing drain detaches the chain.
+    pub fn drain_write_filters(&mut self, finish: bool) -> Result<Vec<u8>, ()> {
+        let Some(fs) = self.filters.as_mut() else { return Ok(Vec::new()) };
+        let mut out = Vec::new();
+        let n = fs.write.len();
+        for i in 0..n {
+            if !fs.write[i].dirty {
+                continue;
+            }
+            let tail = if finish {
+                fs.write[i].f.finish()?
+            } else {
+                fs.write[i].f.apply(&[], 2 /* Z_SYNC_FLUSH */)?
+            };
+            fs.write[i].dirty = false;
+            let mut cur = tail;
+            for g in fs.write.iter_mut().skip(i + 1) {
+                if cur.is_empty() {
+                    break;
+                }
+                g.dirty = true;
+                cur = g.f.apply(&cur, 0)?;
+            }
+            out.extend_from_slice(&cur);
+        }
+        if finish {
+            fs.write.clear();
+        }
+        Ok(out)
+    }
+
+    /// Serve a filtered read: pull raw chunks from the backend through the read
+    /// chain into the buffer until `n` bytes (or end-of-data, which finishes the
+    /// chain once). A filter data error surfaces as `InvalidData`.
+    fn filtered_read(&mut self, n: usize) -> std::io::Result<Vec<u8>> {
+        let data_err = || std::io::Error::new(std::io::ErrorKind::InvalidData, "zlib: data error");
+        loop {
+            let (buf_len, done) = {
+                let fs = self.filters.as_ref().expect("filtered_read with filters");
+                (fs.read_buf.len(), fs.read_done)
+            };
+            if buf_len >= n || done {
+                break;
+            }
+            let mut raw = vec![0u8; 8192];
+            let got = match self.backend_read_raw(&mut raw) {
+                Ok(g) => g,
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => 0,
+                Err(e) => return Err(e),
+            };
+            let fs = self.filters.as_mut().expect("filtered_read with filters");
+            if got == 0 {
+                // Source exhausted: finish each read filter once, chaining tails.
+                let m = fs.read.len();
+                for i in 0..m {
+                    let tail = fs.read[i].f.finish().map_err(|_| data_err())?;
+                    let mut cur = tail;
+                    for g in fs.read.iter_mut().skip(i + 1) {
+                        cur = g.f.apply(&cur, 0).map_err(|_| data_err())?;
+                    }
+                    fs.read_buf.extend_from_slice(&cur);
+                }
+                fs.read_done = true;
+                break;
+            }
+            let mut cur = raw[..got].to_vec();
+            for a in fs.read.iter_mut() {
+                a.dirty = true;
+                cur = a.f.apply(&cur, 0).map_err(|_| data_err())?;
+            }
+            fs.read_buf.extend_from_slice(&cur);
+        }
+        let fs = self.filters.as_mut().expect("filtered_read with filters");
+        let take = n.min(fs.read_buf.len());
+        let out: Vec<u8> = fs.read_buf.drain(..take).collect();
+        if out.is_empty() && fs.read_done {
+            self.eof = true;
+        }
+        Ok(out)
+    }
+
     /// Read up to `n` bytes from the current position. Returns the bytes read
     /// (possibly fewer than `n`); sets the EOF flag when the read came up short.
     pub fn read(&mut self, n: usize) -> std::io::Result<Vec<u8>> {
+        if self.has_read_filters() {
+            return self.filtered_read(n);
+        }
         let mut buf = vec![0u8; n];
         let mut filled = 0;
         while filled < n {
-            let r = match &mut self.backend {
-                StreamBackend::File(f) => f.read(&mut buf[filled..]),
-                StreamBackend::Memory(c) => c.read(&mut buf[filled..]),
-                StreamBackend::Stdin => std::io::stdin().read(&mut buf[filled..]),
-                StreamBackend::ChildStdout(p) => p.read(&mut buf[filled..]),
-                StreamBackend::ChildStderr(p) => p.read(&mut buf[filled..]),
-                StreamBackend::Tcp(t) => t.read(&mut buf[filled..]),
-                StreamBackend::Udp(u) => u.recv(&mut buf[filled..]),
-                StreamBackend::Stdout
-                | StreamBackend::Stderr
-                | StreamBackend::ChildStdin(_)
-                | StreamBackend::GzFile { .. } => Ok(0),
+            let r = {
+                let dst = &mut buf[filled..];
+                self.backend_read_raw(dst)
             };
             let got = match r {
                 Ok(g) => g,
@@ -301,6 +654,24 @@ impl Stream {
     /// `max` bytes have been read (`fgets($f, $len)` caps at `$len - 1` bytes).
     /// Returns `None` at end-of-data (sets EOF), mirroring `fgets` → `false`.
     pub fn read_line(&mut self, max: Option<usize>) -> std::io::Result<Option<Vec<u8>>> {
+        // A filtered stream reads lines through the filter chain, byte by byte.
+        if self.has_read_filters() {
+            let mut out = Vec::new();
+            loop {
+                if matches!(max, Some(m) if out.len() >= m) {
+                    break;
+                }
+                let b = self.filtered_read(1)?;
+                if b.is_empty() {
+                    break;
+                }
+                out.push(b[0]);
+                if b[0] == b'\n' {
+                    break;
+                }
+            }
+            return Ok(if out.is_empty() { None } else { Some(out) });
+        }
         let mut out = Vec::new();
         let mut one = [0u8; 1];
         loop {
@@ -519,6 +890,7 @@ pub fn open_data_stream(path: &[u8]) -> Option<Stream> {
         uri: path.to_vec(),
         mode: b"rb".to_vec(),
         eof_on_exhaust: false,
+        filters: None,
     })
 }
 
@@ -593,6 +965,7 @@ pub fn open_php_stream(spec: &[u8], mode: &[u8]) -> Option<Stream> {
         uri,
         mode: mode.to_vec(),
         eof_on_exhaust: false,
+        filters: None,
     })
 }
 
@@ -635,6 +1008,7 @@ pub fn open_file_stream(path: &[u8], mode: &[u8]) -> Result<Stream, String> {
             uri: path.to_vec(),
             mode: mode.to_vec(),
             eof_on_exhaust: false,
+            filters: None,
         }),
         Err(e) => {
             let m = e.to_string();

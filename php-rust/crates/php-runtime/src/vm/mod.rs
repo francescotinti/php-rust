@@ -392,6 +392,7 @@ pub(crate) fn run_module_with_hir<'m>(
         response_code: None,
         user_abort_ignored: false,
         stream_wrappers: std::collections::HashMap::new(),
+        filtered_streams: Vec::new(),
         json_active: Vec::new(),
         enum_cache: HashMap::new(),
         constants: HashMap::new(),
@@ -445,6 +446,7 @@ pub(crate) fn run_module_with_hir<'m>(
                 uri: uri.to_vec(),
                 mode: mode.to_vec(),
                 eof_on_exhaust: false,
+                filters: None,
             },
         ))))
     };
@@ -546,6 +548,9 @@ pub(crate) fn run_module_with_hir<'m>(
     // `main` returns — or after a fatal, on a cleared stack (OOP-3d). Their output
     // flows through `emit_str`, so it lands in `rendered` after the fatal block.
     vm.run_shutdown_destructors();
+    // Streams with attached write filters flush their final tail when the stream
+    // is destroyed at request end (PHP filter close) — a script need not fclose.
+    vm.finalize_filtered_streams();
     // Flush any output buffers the script left open (PHP flushes the buffer stack
     // at request shutdown). Done last, so shutdown-function and destructor output
     // produced while a buffer was active is captured then emitted in order.
@@ -1118,6 +1123,10 @@ struct Vm<'m> {
     /// late-defined class still works). `fopen("scheme://…")` instantiates it and
     /// drives its `stream_*` methods.
     stream_wrappers: std::collections::HashMap<Vec<u8>, Vec<u8>>,
+    /// Streams that had a filter attached (`stream_filter_append`), so shutdown
+    /// can finish their write chains (PHP flushes filters when the stream is
+    /// destroyed at request end — a script need not fclose).
+    filtered_streams: Vec<Rc<RefCell<Resource>>>,
     /// Object addresses whose `jsonSerialize()` is currently on the encode stack —
     /// tracked ACROSS nested `json_encode()` calls (unlike the per-call `visiting`
     /// path). A nested `json_encode()` of such an object is JSON_ERROR_RECURSION;
@@ -1978,12 +1987,15 @@ impl<'m> Vm<'m> {
             let (file, rline) = if self.frames.is_empty() {
                 (self.module.file.to_vec(), line)
             } else {
-                // A prelude frame is detected via its *defining class* (the
-                // prelude lowers into the main unit, so module.file can't tell).
+                // A prelude frame is detected via its *defining class* — or, for
+                // a free prelude function (fsockopen, ob_gzhandler…), via the
+                // function's own defining file (the prelude lowers into the main
+                // unit, so module.file can't tell).
                 let is_prelude = |f: &Frame| {
                     f.class
                         .map(|c| self.classes[c].file.as_ref() == b"prelude")
                         .unwrap_or(false)
+                        || f.func.file.as_ref() == b"prelude"
                 };
                 let mut fi = self.frames.len() - 1;
                 while fi > 0 && is_prelude(&self.frames[fi]) {
@@ -8755,6 +8767,8 @@ host_builtins! {
     b"stream_wrapper_unregister" => vm.ho_stream_wrapper_unregister(args),
     b"stream_resolve_include_path" => vm.ho_stream_resolve_include_path(args),
     b"stream_get_line" => vm.ho_stream_get_line(args),
+    b"stream_filter_append" => vm.ho_stream_filter_append(args, false),
+    b"stream_filter_prepend" => vm.ho_stream_filter_append(args, true),
     b"gzopen" => vm.ho_gzopen(args),
     b"serialize" => vm.ho_serialize(args),
     b"umask" => vm.ho_umask(args),

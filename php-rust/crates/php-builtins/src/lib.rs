@@ -295,6 +295,7 @@ pub fn registry() -> Registry {
     add(b"gztell", zlib::gztell);
     add(b"gzseek", zlib::gzseek);
     add(b"gzpassthru", zlib::gzpassthru);
+    add(b"stream_filter_remove", file::stream_filter_remove);
     // Incremental contexts behind the prelude deflate_init/inflate_init family.
     add(b"__deflate_init", zlib::__deflate_init);
     add(b"__inflate_init", zlib::__inflate_init);

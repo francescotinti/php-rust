@@ -3624,6 +3624,7 @@ impl<'m> super::Vm<'m> {
                         uri,
                         mode: b"r+b".to_vec(),
                         eof_on_exhaust: false,
+                        filters: None,
                     };
                     return Ok(self.alloc_resource(stream));
                 }
@@ -4416,6 +4417,7 @@ impl<'m> super::Vm<'m> {
                 uri: b"pipe".to_vec(),
                 mode: if readable { b"r".to_vec() } else { b"w".to_vec() },
                 eof_on_exhaust: false,
+                filters: None,
             };
             vm.alloc_resource(stream)
         };
@@ -4831,6 +4833,7 @@ impl<'m> super::Vm<'m> {
             uri: address.as_bytes().to_vec(),
             mode: b"r+".to_vec(),
             eof_on_exhaust: false,
+            filters: None,
         };
         Ok(Zval::Resource(Rc::new(RefCell::new(Resource::new(id, stream)))))
     }
@@ -4923,6 +4926,125 @@ impl<'m> super::Vm<'m> {
                 String::from_utf8_lossy(&proto)
             )));
             Ok(Zval::Bool(false))
+        }
+    }
+
+    /// `stream_filter_append($stream, $filtername, $mode = 0, $params = null)`:
+    /// attach a transform filter to the stream's read and/or write chain and
+    /// return a filter-handle resource (`stream_filter_remove`'s argument).
+    /// Supported filters: `zlib.deflate`/`zlib.inflate` (options `level`,
+    /// `window` — raw windowBits, default −15 like PHP's filter) and
+    /// `convert.base64-encode`/`-decode`.
+    pub(super) fn ho_stream_filter_append(&mut self, args: Vec<Zval>, front: bool) -> Result<Zval, PhpError> {
+        let fname = if front { "stream_filter_prepend" } else { "stream_filter_append" };
+        let Some(Zval::Resource(rc)) = args.first().map(|v| v.deref_clone()) else {
+            return Err(PhpError::TypeError(format!(
+                "{fname}(): Argument #1 ($stream) must be of type resource"
+            )));
+        };
+        let name = args
+            .get(1)
+            .map(|v| convert::to_zstr_cast(&v.deref_clone(), &mut self.diags).as_bytes().to_vec())
+            .unwrap_or_default();
+        // Filter options: `level` / `window` from an array or an object's props.
+        let (mut level, mut window) = (-1i64, -15i64);
+        if let Some(opts) = args.get(3).map(|v| v.deref_clone()) {
+            let get = |key: &[u8], table: &PhpArray| -> Option<i64> {
+                table.get(&php_types::Key::from_bytes(key)).map(|v| {
+                    let mut d = Vec::new();
+                    convert::to_long_cast(&v.deref_clone(), &mut d)
+                })
+            };
+            let table = match opts {
+                Zval::Array(a) => Some((*a).clone()),
+                Zval::Object(o) => {
+                    let mut t = PhpArray::new();
+                    for (n, v) in o.borrow().props.iter() {
+                        t.insert(php_types::Key::from_bytes(n), v.deref_clone());
+                    }
+                    Some(t)
+                }
+                _ => None,
+            };
+            if let Some(t) = table {
+                if let Some(l) = get(b"level", &t) {
+                    level = l;
+                }
+                if let Some(w) = get(b"window", &t) {
+                    window = w;
+                }
+            }
+        }
+        // Direction: STREAM_FILTER_READ (1) / WRITE (2) / ALL (3); with no mode
+        // given, PHP attaches wherever the stream is open (read and/or write).
+        let mode = args
+            .get(2)
+            .map(|v| convert::to_long_cast(&v.deref_clone(), &mut self.diags))
+            .unwrap_or(0);
+        let (readable, writable) = {
+            let b = rc.borrow();
+            match b.as_stream_ref() {
+                Some(s) => (s.readable, s.writable),
+                None => (false, false),
+            }
+        };
+        let want_read = if mode == 0 { readable } else { mode & 1 != 0 };
+        let want_write = if mode == 0 { writable } else { mode & 2 != 0 };
+        let mut filter_id = None;
+        for write in [false, true] {
+            if (write && !want_write) || (!write && !want_read) {
+                continue;
+            }
+            let Some(f) = php_types::stream::StreamFilter::from_name(&name, level as i32, window as i32)
+            else {
+                self.diags.push(Diag::Warning(format!(
+                    "{fname}(): Unable to locate filter \"{}\"",
+                    String::from_utf8_lossy(&name)
+                )));
+                return Ok(Zval::Bool(false));
+            };
+            let mut b = rc.borrow_mut();
+            if let Some(s) = b.as_stream_mut() {
+                filter_id = Some(s.attach_filter(write, front, f));
+            }
+        }
+        let Some(filter_id) = filter_id else {
+            return Ok(Zval::Bool(false));
+        };
+        // Track for the shutdown flush, and mint the filter-handle resource.
+        self.filtered_streams.push(Rc::clone(&rc));
+        let id = self.next_resource_id;
+        self.next_resource_id += 1;
+        Ok(Zval::Resource(Rc::new(RefCell::new(Resource {
+            id,
+            kind: php_types::stream::ResKind::Filter { stream: rc, filter_id },
+        }))))
+    }
+
+    /// Finish the write-filter chains of every stream that ever had a filter
+    /// attached (request-shutdown flush): the final tail goes to the backend, or
+    /// into the VM's output for a stdout-backed stream.
+    pub(super) fn finalize_filtered_streams(&mut self) {
+        let streams = std::mem::take(&mut self.filtered_streams);
+        for rc in streams {
+            let (tail, to_stdout) = {
+                let mut b = rc.borrow_mut();
+                let Some(s) = b.as_stream_mut() else { continue };
+                if !s.has_write_filters() {
+                    continue;
+                }
+                let tail = s.drain_write_filters(true).unwrap_or_default();
+                let to_stdout =
+                    matches!(s.backend, php_types::stream::StreamBackend::Stdout);
+                if !to_stdout && !tail.is_empty() {
+                    let _ = s.write(&tail);
+                }
+                (tail, to_stdout)
+            };
+            if to_stdout && !tail.is_empty() {
+                self.stdout.extend_from_slice(&tail);
+                self.rendered.extend_from_slice(&tail);
+            }
         }
     }
 
@@ -5081,6 +5203,7 @@ impl<'m> super::Vm<'m> {
                 uri: path.to_vec(),
                 mode: mode.to_vec(),
                 eof_on_exhaust: false,
+                filters: None,
             }
         } else {
             // Read mode: decode the whole file now (members concatenated; plain
@@ -5127,6 +5250,7 @@ impl<'m> super::Vm<'m> {
                 mode: mode.to_vec(),
                 // gz semantics: EOF as soon as the decoded data is consumed.
                 eof_on_exhaust: true,
+                filters: None,
             }
         };
         let id = self.next_resource_id;

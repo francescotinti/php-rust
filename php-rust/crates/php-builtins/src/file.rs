@@ -67,6 +67,12 @@ pub fn fread(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     }
     match stream.read(len as usize) {
         Ok(bytes) => Ok(Zval::Str(PhpStr::new(bytes))),
+        // A read-filter data error (zlib.inflate on invalid input) is PHP's
+        // stream-layer notice; other read failures stay a silent `false`.
+        Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
+            ctx.diags.push(Diag::Notice(format!("fread(): {}", e)));
+            Ok(Zval::Bool(false))
+        }
         Err(_) => Ok(Zval::Bool(false)),
     }
 }
@@ -100,15 +106,29 @@ pub fn fwrite(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         )));
         return Ok(Zval::Bool(false));
     }
+    // Attached write filters transform the data first; fwrite still reports the
+    // SOURCE byte count (the transformed size lands in the backend/ftell).
+    let source_len = bytes.len();
+    let filtered;
+    let mut bytes: &[u8] = bytes;
+    if stream.has_write_filters() {
+        match stream.apply_write_filters(bytes) {
+            Ok(t) => {
+                filtered = t;
+                bytes = &filtered;
+            }
+            Err(()) => return Ok(Zval::Bool(false)),
+        }
+    }
     // `php://stdout` lands in the evaluator's stdout stream but BYPASSES the
     // ob_* stack, like PHP's stream layer (PHPUnit's printer relies on this
     // while tests hold an output buffer): route it through the direct sink.
     if matches!(stream.backend, StreamBackend::Stdout) {
         ctx.direct_out.extend_from_slice(bytes);
-        return Ok(Zval::Long(bytes.len() as i64));
+        return Ok(Zval::Long(source_len as i64));
     }
     match stream.write(bytes) {
-        Ok(n) => Ok(Zval::Long(n as i64)),
+        Ok(n) => Ok(Zval::Long(if stream.filters.is_some() { source_len } else { n } as i64)),
         Err(_) => Ok(Zval::Bool(false)),
     }
 }
@@ -135,9 +155,22 @@ pub fn stream_isatty(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// `Rc` is shared, so every alias of the resource now reads as closed. A gz
 /// write stream (`gzopen "w"/"a"`, `compress.zlib://`) finalises here: its
 /// buffered plaintext is gzip-compressed and written/appended to the file.
-pub fn fclose(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+pub fn fclose(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let r = stream_arg(argv, "fclose")?;
     let mut res = r.borrow_mut();
+    // Closing finishes any attached write filters (Z_FINISH / final padding);
+    // the tail goes where writes went — the direct sink for php://stdout.
+    if res.as_stream_mut().is_some_and(|s| s.has_write_filters()) {
+        let s = res.as_stream_mut().expect("stream checked above");
+        let tail = s.drain_write_filters(true).unwrap_or_default();
+        if !tail.is_empty() {
+            if matches!(s.backend, StreamBackend::Stdout) {
+                ctx.direct_out.extend_from_slice(&tail);
+            } else {
+                let _ = s.write(&tail);
+            }
+        }
+    }
     if let Some(StreamBackend::GzFile { path, buf, level, append }) =
         res.as_stream_mut().map(|s| &mut s.backend)
     {
@@ -238,7 +271,21 @@ pub fn fseek(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     };
     let mut res = r.borrow_mut();
     let stream = res.as_stream_mut().expect("open stream checked in stream_arg");
+    sync_write_filters(stream);
     Ok(Zval::Long(stream.seek(pos)))
+}
+
+/// A seek/flush on a write-filtered stream first drains the chain with a sync
+/// flush (PHP's filter FLUSH_INC), writing the pending transformed bytes to the
+/// backend at the current position.
+fn sync_write_filters(stream: &mut php_types::Stream) {
+    if stream.has_write_filters() {
+        if let Ok(tail) = stream.drain_write_filters(false) {
+            if !tail.is_empty() {
+                let _ = stream.write(&tail);
+            }
+        }
+    }
 }
 
 /// `ftell($stream)`: current byte offset, or `false` if not tellable.
@@ -257,6 +304,7 @@ pub fn rewind(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let r = stream_arg(argv, "rewind")?;
     let mut res = r.borrow_mut();
     let stream = res.as_stream_mut().expect("open stream checked in stream_arg");
+    sync_write_filters(stream);
     stream.seek(SeekFrom::Start(0));
     Ok(Zval::Bool(true))
 }
@@ -266,8 +314,40 @@ pub fn fflush(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let r = stream_arg(argv, "fflush")?;
     let mut res = r.borrow_mut();
     let stream = res.as_stream_mut().expect("open stream checked in stream_arg");
+    sync_write_filters(stream);
     let _ = stream.flush();
     Ok(Zval::Bool(true))
+}
+
+/// `stream_filter_remove($stream_filter)`: detach the filter its handle names,
+/// finishing it — the final tail (already chained through any downstream write
+/// filters) is written to the stream.
+pub fn stream_filter_remove(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let Some(Zval::Resource(handle)) = argv.first().map(|v| v.deref_clone()) else {
+        return Err(PhpError::TypeError(
+            "stream_filter_remove(): Argument #1 ($stream_filter) must be of type resource"
+                .to_string(),
+        ));
+    };
+    let (stream_rc, filter_id) = {
+        let b = handle.borrow();
+        match &b.kind {
+            ResKind::Filter { stream, filter_id } => (Rc::clone(stream), *filter_id),
+            _ => return Ok(Zval::Bool(false)),
+        }
+    };
+    let mut b = stream_rc.borrow_mut();
+    let Some(s) = b.as_stream_mut() else { return Ok(Zval::Bool(false)) };
+    match s.remove_filter(filter_id) {
+        Some(tail) => {
+            if !tail.is_empty() {
+                let _ = s.write(&tail);
+            }
+            handle.borrow_mut().kind = ResKind::Closed;
+            Ok(Zval::Bool(true))
+        }
+        None => Ok(Zval::Bool(false)),
+    }
 }
 
 /// Strip Rust's " (os error N)" suffix so the text reads like PHP's strerror.

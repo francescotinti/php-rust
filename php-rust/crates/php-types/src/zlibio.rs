@@ -229,6 +229,15 @@ impl ZCtx {
     }
 }
 
+impl std::fmt::Debug for ZCtx {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ZCtx")
+            .field("deflate", &self.deflate)
+            .field("last_status", &self.last_status)
+            .finish_non_exhaustive()
+    }
+}
+
 impl Drop for ZCtx {
     fn drop(&mut self) {
         unsafe {

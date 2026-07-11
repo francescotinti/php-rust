@@ -100,6 +100,26 @@ function inflate_get_status(InflateContext $context): int {
 function inflate_get_read_len(InflateContext $context): int {
     return __inflate_get_read_len($context->__id);
 }
+// ob_start("ob_gzhandler"): compress the buffered output per the client's
+// Accept-Encoding. Without one (the CLI case) PHP's handler declines with
+// false and the original output is used — byte-faithful for phpr's CLI SAPI.
+function ob_gzhandler($data, $flags) {
+    $enc = $_SERVER['HTTP_ACCEPT_ENCODING'] ?? '';
+    if (strpos($enc, 'gzip') !== false) {
+        header('Vary: Accept-Encoding');
+        header('Content-Encoding: gzip');
+        return gzencode($data);
+    }
+    if (strpos($enc, 'deflate') !== false) {
+        header('Vary: Accept-Encoding');
+        header('Content-Encoding: deflate');
+        return gzcompress($data);
+    }
+    // Declining still advertises the negotiation (PHP sends Vary regardless —
+    // under CLI this is the "headers already sent" warning once output began).
+    header('Vary: Accept-Encoding');
+    return false;
+}
 function stream_select(&$read, &$write, &$except, $seconds, $microseconds = null) {
     $r = __stream_select($read ?? [], $write ?? [], $except ?? [], $seconds, $microseconds);
     if ($r === false) { return false; }
