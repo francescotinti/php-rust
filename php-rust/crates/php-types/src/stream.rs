@@ -287,6 +287,11 @@ pub enum StreamBackend {
     Stdin,
     Stdout,
     Stderr,
+    /// `php://output`: writes land in the program's NORMAL output stream —
+    /// through the `ob_*` stack, exactly like `echo` (unlike `php://stdout`,
+    /// which bypasses it). The write itself is routed by the fwrite builtin
+    /// (`ctx.out`); this backend only tags the handle. Write-only.
+    Output,
     /// Pipes to a `proc_open` child: `$pipes[0]` writes to the child's stdin,
     /// `$pipes[1]`/`$pipes[2]` read its stdout/stderr. Unseekable.
     ChildStdin(std::process::ChildStdin),
@@ -467,6 +472,7 @@ impl Stream {
             StreamBackend::Udp(u) => u.recv(buf),
             StreamBackend::Stdout
             | StreamBackend::Stderr
+            | StreamBackend::Output
             | StreamBackend::ChildStdin(_)
             | StreamBackend::GzFile { .. } => Ok(0),
         }
@@ -688,6 +694,7 @@ impl Stream {
                 StreamBackend::Udp(u) => u.recv(&mut one),
                 StreamBackend::Stdout
                 | StreamBackend::Stderr
+                | StreamBackend::Output
                 | StreamBackend::ChildStdin(_)
                 | StreamBackend::GzFile { .. } => Ok(0),
             };
@@ -728,6 +735,11 @@ impl Stream {
                 e.write_all(data)?;
                 Ok(data.len())
             }
+            // `php://output` writes are routed to the program's output stream
+            // by the fwrite builtin (they must pass through the ob_* stack);
+            // a raw backend write has nowhere ob-aware to go, so report the
+            // bytes as accepted without emitting them here.
+            StreamBackend::Output => Ok(data.len()),
             StreamBackend::ChildStdin(p) => {
                 p.write_all(data)?;
                 Ok(data.len())
@@ -751,6 +763,7 @@ impl Stream {
             StreamBackend::ChildStdin(p) => p.flush(),
             StreamBackend::Tcp(t) => t.flush(),
             StreamBackend::Udp(_) => Ok(()),
+            StreamBackend::Output => Ok(()),
             StreamBackend::GzFile { .. } => Ok(()), // compressed only at fclose
             StreamBackend::ChildStdout(_) | StreamBackend::ChildStderr(_) => Ok(()),
         }
@@ -817,7 +830,9 @@ impl Stream {
         use std::os::unix::io::AsRawFd;
         Some(match &self.backend {
             StreamBackend::File(f) => f.as_raw_fd(),
-            StreamBackend::Memory(_) | StreamBackend::GzFile { .. } => return None,
+            StreamBackend::Memory(_) | StreamBackend::GzFile { .. } | StreamBackend::Output => {
+                return None
+            }
             StreamBackend::Stdin => 0,
             StreamBackend::Stdout => 1,
             StreamBackend::Stderr => 2,
@@ -972,12 +987,14 @@ pub fn open_php_stream(spec: &[u8], mode: &[u8]) -> Option<Stream> {
         StreamBackend::Stdout
     } else if spec == b"stderr" {
         StreamBackend::Stderr
+    } else if spec == b"output" {
+        StreamBackend::Output
     } else {
         return None;
     };
     let (readable, writable) = match backend {
         StreamBackend::Stdin => (true, false),
-        StreamBackend::Stdout | StreamBackend::Stderr => (false, true),
+        StreamBackend::Stdout | StreamBackend::Stderr | StreamBackend::Output => (false, true),
         // `php://memory` / `php://temp`: always readable (oracle: mode "a"
         // reads back; "r" reads the empty buffer); writable unless the mode is
         // read-only-ish — Zend's memory stream only knows a READONLY flag, set

@@ -1841,6 +1841,43 @@ class SplFileInfo {
     }
     public function __toString() { return $this->__path; }
 }
+// SplFileObject / SplTempFileObject: the SPL file-handle layer over the fopen
+// family (symfony BinaryFileResponse streams responses through them). Modelled:
+// construction, the f* passthroughs, eof/rewind, fstat. Residues: the
+// line-iterator protocol (current/next/key/valid, READ_CSV and friends), the
+// $useIncludePath/$context constructor args, flock's by-ref $wouldBlock.
+class SplFileObject extends SplFileInfo {
+    protected $__fh;
+    public function __construct($filename, $mode = 'r') {
+        parent::__construct($filename);
+        $h = @fopen($filename, $mode);
+        if ($h === false) {
+            throw new RuntimeException("SplFileObject::__construct($filename): Failed to open stream: No such file or directory");
+        }
+        $this->__fh = $h;
+    }
+    // A stream URI keeps its full spelling (oracle: getFilename() on
+    // "php://temp" is "php://temp", not basename's "temp").
+    public function getFilename() { return strpos($this->__path, '://') !== false ? $this->__path : parent::getFilename(); }
+    public function fread($length) { return fread($this->__fh, $length); }
+    public function fwrite($data, $length = null) { return $length === null ? fwrite($this->__fh, $data) : fwrite($this->__fh, $data, $length); }
+    public function fgets() { return fgets($this->__fh); }
+    public function fgetc() { return fgetc($this->__fh); }
+    public function fseek($offset, $whence = SEEK_SET) { return fseek($this->__fh, $offset, $whence); }
+    public function ftell() { return ftell($this->__fh); }
+    public function eof() { return feof($this->__fh); }
+    public function rewind() { rewind($this->__fh); }
+    public function fpassthru() { return fpassthru($this->__fh); }
+    public function fstat() { return fstat($this->__fh); }
+    public function ftruncate($size) { return ftruncate($this->__fh, $size); }
+    public function fflush() { return fflush($this->__fh); }
+    public function flock($operation) { return flock($this->__fh, $operation); }
+}
+class SplTempFileObject extends SplFileObject {
+    public function __construct($maxMemory = 2097152) {
+        parent::__construct('php://temp', 'w+b');
+    }
+}
 class FilesystemIterator extends SplFileInfo {
     const CURRENT_AS_FILEINFO = 0; const CURRENT_AS_PATHNAME = 32; const CURRENT_AS_SELF = 16;
     const KEY_AS_PATHNAME = 0; const KEY_AS_FILENAME = 256;

@@ -3520,9 +3520,10 @@ impl<'m> super::Vm<'m> {
             match &s.backend {
                 StreamBackend::File(_) => ("STDIO", true),
                 StreamBackend::Memory(_) => ("MEMORY", true),
-                StreamBackend::Stdin | StreamBackend::Stdout | StreamBackend::Stderr => {
-                    ("STDIO", false)
-                }
+                StreamBackend::Stdin
+                | StreamBackend::Stdout
+                | StreamBackend::Stderr
+                | StreamBackend::Output => ("STDIO", false),
                 StreamBackend::ChildStdin(_)
                 | StreamBackend::ChildStdout(_)
                 | StreamBackend::ChildStderr(_) => ("STDIO", false),

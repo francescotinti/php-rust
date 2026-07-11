@@ -127,6 +127,13 @@ pub fn fwrite(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         ctx.direct_out.extend_from_slice(bytes);
         return Ok(Zval::Long(source_len as i64));
     }
+    // `php://output` instead IS the ob-visible program output, exactly like
+    // `echo` (symfony BinaryFileResponse::sendContent streams into it while
+    // its tests hold an ob_start() buffer).
+    if matches!(stream.backend, StreamBackend::Output) {
+        ctx.out.extend_from_slice(bytes);
+        return Ok(Zval::Long(source_len as i64));
+    }
     match stream.write(bytes) {
         Ok(n) => Ok(Zval::Long(if stream.filters.is_some() { source_len } else { n } as i64)),
         Err(_) => Ok(Zval::Bool(false)),
@@ -166,6 +173,8 @@ pub fn fclose(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         if !tail.is_empty() {
             if matches!(s.backend, StreamBackend::Stdout) {
                 ctx.direct_out.extend_from_slice(&tail);
+            } else if matches!(s.backend, StreamBackend::Output) {
+                ctx.out.extend_from_slice(&tail);
             } else {
                 let _ = s.write(&tail);
             }
