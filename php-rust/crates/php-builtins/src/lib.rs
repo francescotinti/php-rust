@@ -56,6 +56,8 @@ pub fn registry() -> Registry {
     add(b"sizeof", array::count);
     add(b"date", date::date);
     add(b"gmdate", date::gmdate);
+    add(b"strftime", date::strftime);
+    add(b"gmstrftime", date::gmstrftime);
     add(b"idate", date::idate);
     add(b"ip2long", net::ip2long);
     add(b"long2ip", net::long2ip);

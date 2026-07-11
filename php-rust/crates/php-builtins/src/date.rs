@@ -230,6 +230,142 @@ pub fn gmdate(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     date(args, ctx)
 }
 
+/// Map one `strftime()` conversion char (the byte after `%`) to its output,
+/// appending to `out`. C/POSIX locale, UTC scope (phpr is UTC-only, so the
+/// timezone chars render the GMT values). Recursive specifiers (`%c %D %F %r %R
+/// %T %x %X`) expand into their component chars. An unknown char is emitted
+/// verbatim (without the `%`), matching glibc. Returns false only for `%%`-less
+/// bookkeeping — always Some output here.
+fn strftime_char(out: &mut Vec<u8>, c: u8, dt: &OffsetDateTime, epoch: i64) {
+    let year = dt.year();
+    let month = u8::from(dt.month());
+    let day = dt.day();
+    let hour = dt.hour();
+    let minute = dt.minute();
+    let second = dt.second();
+    let ordinal = dt.ordinal(); // 1..=366
+    let dow_sun0 = dt.weekday().number_days_from_sunday(); // 0=Sun..6=Sat
+    let push = |out: &mut Vec<u8>, s: &str| out.extend_from_slice(s.as_bytes());
+    let expand = |out: &mut Vec<u8>, pat: &[u8]| {
+        for &pc in pat {
+            strftime_char(out, pc, dt, epoch);
+        }
+    };
+    match c {
+        b'a' => push(out, DAYS_SHORT[dow_sun0 as usize]),
+        b'A' => push(out, DAYS_FULL[dow_sun0 as usize]),
+        b'b' | b'h' => push(out, MONTHS_SHORT[(month - 1) as usize]),
+        b'B' => push(out, MONTHS_FULL[(month - 1) as usize]),
+        // %c: "%a %b %e %H:%M:%S %Y" — the C-locale preferred date+time.
+        b'c' => expand(out, b"a b e H:M:S Y"),
+        b'C' => push(out, &format!("{:02}", year.div_euclid(100))),
+        b'd' => push(out, &format!("{day:02}")),
+        b'D' => expand(out, b"m/d/y"),
+        b'e' => push(out, &format!("{day:2}")), // space-padded day
+        b'F' => expand(out, b"Y-m-d"),
+        b'g' => push(out, &format!("{:02}", dt.to_iso_week_date().0.rem_euclid(100))),
+        b'G' => push(out, &format!("{}", dt.to_iso_week_date().0)),
+        b'H' => push(out, &format!("{hour:02}")),
+        b'I' => push(out, &format!("{:02}", hour12(hour))),
+        b'j' => push(out, &format!("{ordinal:03}")),
+        b'm' => push(out, &format!("{month:02}")),
+        b'M' => push(out, &format!("{minute:02}")),
+        b'n' => out.push(b'\n'),
+        b'p' => push(out, if hour < 12 { "AM" } else { "PM" }),
+        b'P' => push(out, if hour < 12 { "am" } else { "pm" }),
+        b'r' => expand(out, b"I:M:S p"),
+        b'R' => expand(out, b"H:M"),
+        b'S' => push(out, &format!("{second:02}")),
+        b't' => out.push(b'\t'),
+        b'T' => expand(out, b"H:M:S"),
+        b'u' => push(out, &format!("{}", dt.weekday().number_from_monday())), // 1=Mon..7=Sun
+        // %U: week of year, Sunday as the first day; days before the first Sunday
+        // are week 00. %W is the same with Monday as the first day.
+        b'U' => push(out, &format!("{:02}", (ordinal as i64 - 1 - dow_sun0 as i64 + 7) / 7)),
+        b'V' => push(out, &format!("{:02}", dt.iso_week())),
+        b'w' => push(out, &format!("{dow_sun0}")),
+        b'W' => {
+            let dow_mon0 = (dow_sun0 + 6) % 7; // 0=Mon..6=Sun
+            push(out, &format!("{:02}", (ordinal as i64 - 1 - dow_mon0 as i64 + 7) / 7));
+        }
+        b'x' => expand(out, b"m/d/y"),
+        b'X' => expand(out, b"H:M:S"),
+        b'y' => push(out, &format!("{:02}", year.rem_euclid(100))),
+        b'Y' => push(out, &format!("{year}")),
+        b'z' => push(out, "+0000"), // UTC scope
+        b'Z' => push(out, "GMT"),
+        b'%' => out.push(b'%'),
+        other => out.push(other),
+    }
+}
+
+/// Format `epoch` (Unix seconds, UTC) per a `strftime()` format string. A `%`
+/// starts a conversion (the following byte selects it); a trailing `%` is
+/// emitted literally. Non-`%` bytes pass through.
+fn format_strftime(epoch: i64, fmt: &[u8]) -> Vec<u8> {
+    let dt = match OffsetDateTime::from_unix_timestamp(epoch) {
+        Ok(dt) => dt,
+        Err(_) => return Vec::new(),
+    };
+    let mut out = Vec::with_capacity(fmt.len() * 2);
+    let mut i = 0;
+    while i < fmt.len() {
+        if fmt[i] == b'%' {
+            if i + 1 < fmt.len() {
+                strftime_char(&mut out, fmt[i + 1], &dt, epoch);
+                i += 2;
+            } else {
+                out.push(b'%');
+                i += 1;
+            }
+        } else {
+            out.push(fmt[i]);
+            i += 1;
+        }
+    }
+    out
+}
+
+/// `strftime(string $format, ?int $timestamp = null): string|false` — legacy
+/// C-library date formatting. Deprecated since 8.1. phpr is UTC-only, so this is
+/// identical to [`gmstrftime`]. An empty result (PHP returns `false` when the C
+/// library produces nothing) is reported as `false`.
+pub fn strftime(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    strftime_impl(args, ctx, "strftime")
+}
+
+/// `gmstrftime(string $format, ?int $timestamp = null): string|false` — the UTC
+/// variant of [`strftime`]; identical here (UTC scope). Deprecated since 8.1.
+pub fn gmstrftime(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    strftime_impl(args, ctx, "gmstrftime")
+}
+
+fn strftime_impl(args: &[Zval], ctx: &mut Ctx, fname: &str) -> Result<Zval, PhpError> {
+    ctx.diags.push(php_types::Diag::Deprecated(format!(
+        "Function {fname}() is deprecated since 8.1, use IntlDateFormatter::format() instead"
+    )));
+    let fmt = convert::to_zstr(
+        args.first().ok_or_else(|| {
+            PhpError::Error(format!("{fname}() expects at least 1 argument, 0 given"))
+        })?,
+        ctx.diags,
+    );
+    // PHP: an empty format string returns false.
+    if fmt.as_bytes().is_empty() {
+        return Ok(Zval::Bool(false));
+    }
+    let epoch = match args.get(1) {
+        None | Some(Zval::Null) => now_epoch(),
+        Some(v) => convert::to_long_cast(v, ctx.diags),
+    };
+    let out = format_strftime(epoch, fmt.as_bytes());
+    // The C library yields nothing (e.g. the buffer stays empty) → PHP false.
+    if out.is_empty() {
+        return Ok(Zval::Bool(false));
+    }
+    Ok(Zval::Str(PhpStr::new(out)))
+}
+
 /// `idate(string $format, ?int $timestamp = null): int|false` — a single numeric
 /// date token as an integer (`php_idate`). A format that is not exactly one
 /// character warns "idate format is one char" and returns false; a token outside

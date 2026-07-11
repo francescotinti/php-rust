@@ -261,6 +261,24 @@ byte-identica all'oracle (convmap, offset/mask, overflow, `;` opzionale,
 pass-through) — verificata su tutte le asserzioni edge-case dei phpt, che
 riportano `(Good)`. Gli unici fail residui sono queste tabelle di encoding.
 
+### 3.2 Classe `Directory` — wrapper prelude, non classe interna
+`dir($path)` ritorna un oggetto **`Directory`** definito come classe PHP nel
+prelude (proprietà `path`+`handle`, metodi `read`/`rewind`/`close` che delegano a
+`readdir`/`rewinddir`/`closedir` sull'handle `opendir`). **L'uso reale è
+byte-identico** all'oracle: costruzione via `dir()`, iterazione `read()`, `path`,
+`var_dump` (`object(Directory)#N (2)` con `handle` = `resource(N) of type
+(stream)`) — i 9 call-site reali rilevati dal detector.
+
+Restano divergenti le semantiche **C-level** della classe interna (`ext/standard`
+la crea via `create_object` custom con restrizioni non esprimibili in userland):
+`new Directory()` NON è bloccato, le proprietà NON sono `readonly`, l'oggetto è
+clonabile/serializzabile, e la struttura di reflection differisce. Impatta solo i
+phpt `DirectoryClass_cannot_construct/clone/serialize`,
+`DirectoryClass_readonly_{path,handle}`, `DirectoryClass_reflection_*` (8 test di
+sole-semantiche-interne, già falliti quando la classe era del tutto assente →
+nessuna regressione). Nessun framework reale istanzia/clona/serializza
+`Directory` direttamente.
+
 ---
 
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)

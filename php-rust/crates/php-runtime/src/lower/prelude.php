@@ -113,6 +113,33 @@ function ob_gzhandler($data, $flags) {
     // output uncompressed under CLI regardless of it.
     return false;
 }
+// The directory OOP surface: dir()/getdir() return a Directory whose read()/
+// rewind()/close() delegate to the procedural readdir/rewinddir/closedir over a
+// stored opendir() handle. Property order (path, handle) and the exposed handle
+// resource match the internal class var_dump byte-for-byte.
+class Directory {
+    public $path = '';
+    public $handle;
+    public function read($dir_handle = null) {
+        return readdir($dir_handle ?? $this->handle);
+    }
+    public function rewind($dir_handle = null) {
+        rewinddir($dir_handle ?? $this->handle);
+    }
+    public function close($dir_handle = null) {
+        closedir($dir_handle ?? $this->handle);
+    }
+}
+function dir($directory, $context = null) {
+    $handle = $context === null ? opendir($directory) : opendir($directory, $context);
+    if ($handle === false) {
+        return false;
+    }
+    $d = new Directory();
+    $d->path = $directory;
+    $d->handle = $handle;
+    return $d;
+}
 function stream_select(&$read, &$write, &$except, $seconds, $microseconds = null) {
     $r = __stream_select($read ?? [], $write ?? [], $except ?? [], $seconds, $microseconds);
     if ($r === false) { return false; }
