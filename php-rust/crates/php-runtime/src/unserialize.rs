@@ -39,6 +39,16 @@ pub fn parse(bytes: &[u8]) -> Option<Ser> {
     }
 }
 
+/// Parse one serialized value at the START of `bytes`, returning it together
+/// with the byte count consumed. The session `php`/`php_binary` decoders read
+/// concatenated `key|<value>` records, so trailing data belongs to the caller
+/// (unlike [`parse`], which rejects it).
+pub fn parse_prefix(bytes: &[u8]) -> Option<(Ser, usize)> {
+    let mut p = Parser { b: bytes, i: 0 };
+    let v = p.value()?;
+    Some((v, p.i))
+}
+
 struct Parser<'a> {
     b: &'a [u8],
     i: usize,

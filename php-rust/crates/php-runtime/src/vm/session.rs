@@ -1,0 +1,992 @@
+//! ext/session core (C1 of the port): the CLI `files` save handler, the
+//! session lifecycle (`session_start` → `$_SESSION` → commit), the `php` /
+//! `php_binary` / `php_serialize` serializers and the id generator. The user
+//! save-handler plumbing (`session_set_save_handler`, `SessionHandler`) is C2.
+//!
+//! Every contract below is oracle-pinned (PHP 8.5.7 probes, 2026-07-11/12):
+//! - Files land in `session.save_path` (or the system temp dir when empty) as
+//!   `sess_<id>`, mode 0600; the `files` module CREATES the file at read.
+//! - `php` format is `key|<serialized>` concatenated; a numeric key warns
+//!   "Skipping numeric key N" and is dropped; a key containing `|` fails the
+//!   whole encode ("Failed to write session data. Data contains invalid key").
+//! - Undecodable data at start/`session_decode` destroys the session (file
+//!   deleted, id cleared, `$_SESSION` emptied): "Failed to decode session
+//!   object. Session has been destroyed".
+//! - `session_destroy` deletes the file and clears the id but does NOT touch
+//!   `$_SESSION`; `session_unset` empties it; `session_reset` re-reads.
+//! - `session_regenerate_id(false)` first WRITES the current data under the
+//!   old id (both files end up with the current payload), `true` deletes the
+//!   old file; either way the session continues under a fresh id.
+//! - lazy_write: an unchanged payload at commit touches the file mtime
+//!   (updateTimestamp) instead of rewriting.
+//! - GC runs at start with probability gc_probability/gc_divisor and collects
+//!   `sess_*` files whose mtime is older than gc_maxlifetime; `session_gc()`
+//!   returns the collected count.
+//! - Headers-sent and session-active guards carry the "(sent from F on line
+//!   N)" / "(started from F on line N)" suffixes; the shutdown auto-flush runs
+//!   AFTER shutdown functions and destructors (both still see an ACTIVE
+//!   session and their writes are persisted).
+
+use std::io::Read as _;
+use std::io::Write as _;
+use std::path::PathBuf;
+use std::time::{Duration, SystemTime};
+
+use super::*;
+
+/// The session module's runtime state (one session per request, like PHP).
+#[derive(Default)]
+pub(super) struct SessionState {
+    pub active: bool,
+    /// Current session id ("" when none); survives a commit, cleared by
+    /// destroy and by a failed decode.
+    pub id: Vec<u8>,
+    /// Where the active session was started, for the "(started from F on line
+    /// N)" suffix of the active-session guards.
+    pub started_at: Option<(Vec<u8>, u32)>,
+    /// The raw payload read at start: commit compares against the re-encoded
+    /// data to pick write vs updateTimestamp (lazy_write). `None` forces a
+    /// write (fresh id after regenerate).
+    pub snapshot: Option<Vec<u8>>,
+    /// The save path captured when the session opened (an ini change while
+    /// active must not redirect the close-time write).
+    pub open_path: Vec<u8>,
+}
+
+/// The three serialize handlers `session.serialize_handler` can select.
+#[derive(Clone, Copy, PartialEq)]
+enum SerHandler {
+    Php,
+    PhpBinary,
+    PhpSerialize,
+}
+
+/// `bin_to_readable` (ext/session/session.c): pack random bytes into the
+/// session-id alphabet, `nbits` (4/5/6) per output character.
+fn bin_to_readable(bytes: &[u8], out_len: usize, nbits: u32) -> Vec<u8> {
+    const CHARS: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-,";
+    let mask = (1u32 << nbits) - 1;
+    let (mut w, mut have, mut p) = (0u32, 0u32, 0usize);
+    let mut out = Vec::with_capacity(out_len);
+    for _ in 0..out_len {
+        if have < nbits {
+            if p < bytes.len() {
+                w |= (bytes[p] as u32) << have;
+                p += 1;
+                have += 8;
+            } else {
+                // Out of entropy (never happens: the caller sizes the buffer).
+                break;
+            }
+        }
+        out.push(CHARS[(w & mask) as usize]);
+        w >>= nbits;
+        have -= nbits;
+    }
+    out
+}
+
+/// Whether `id`/`prefix` sticks to the session-id alphabet `[-,a-zA-Z0-9]`.
+fn sid_chars_ok(s: &[u8]) -> bool {
+    s.iter().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b','))
+}
+
+impl<'m> Vm<'m> {
+    // ---- configuration reads -------------------------------------------------
+
+    /// The directory the files module uses: `session.save_path`, or the
+    /// system temp dir when empty (PHP's php_get_temporary_directory()).
+    fn sess_dir(&self) -> PathBuf {
+        let p = self.ini.get(b"session.save_path").unwrap_or(b"");
+        if p.is_empty() {
+            std::env::temp_dir()
+        } else {
+            PathBuf::from(String::from_utf8_lossy(p).into_owned())
+        }
+    }
+
+    fn sess_file(&self, dir: &std::path::Path, id: &[u8]) -> PathBuf {
+        dir.join(format!("sess_{}", String::from_utf8_lossy(id)))
+    }
+
+    fn sess_ser_handler(&self) -> SerHandler {
+        match self.ini.get(b"session.serialize_handler") {
+            Some(b"php_binary") => SerHandler::PhpBinary,
+            Some(b"php_serialize") => SerHandler::PhpSerialize,
+            _ => SerHandler::Php,
+        }
+    }
+
+    // ---- guards ---------------------------------------------------------------
+
+    /// The "(sent from F on line N)" suffix once output has started.
+    fn sess_sent_from(&self) -> String {
+        match &self.output_start {
+            Some((f, l)) => format!(" (sent from {} on line {})", String::from_utf8_lossy(f), l),
+            None => String::new(),
+        }
+    }
+
+    /// The "(started from F on line N)" suffix of the active-session guards.
+    fn sess_started_from(&self) -> String {
+        match &self.session.started_at {
+            Some((f, l)) => {
+                format!(" (started from {} on line {})", String::from_utf8_lossy(f), l)
+            }
+            None => String::new(),
+        }
+    }
+
+    /// Refuse a setter while a session is active: `func(): <what> cannot be
+    /// changed when a session is active (started from F on line N)`.
+    fn sess_refuse_active(&mut self, func: &str, what: &str) -> bool {
+        if !self.session.active {
+            return false;
+        }
+        let suffix = self.sess_started_from();
+        self.diags.push(Diag::Warning(format!(
+            "{func}(): {what} cannot be changed when a session is active{suffix}"
+        )));
+        true
+    }
+
+    /// Refuse a setter once output has started: `func(): <what> cannot be
+    /// changed after headers have already been sent (sent from F on line N)`.
+    fn sess_refuse_sent(&mut self, func: &str, what: &str) -> bool {
+        if !self.output_started {
+            return false;
+        }
+        let suffix = self.sess_sent_from();
+        self.diags.push(Diag::Warning(format!(
+            "{func}(): {what} cannot be changed after headers have already been sent{suffix}"
+        )));
+        true
+    }
+
+    // ---- $_SESSION binding ----------------------------------------------------
+
+    /// The `$_SESSION` superglobal as an array (a non-array value — user
+    /// assigned a scalar — reads as empty, matching the oracle's empty write).
+    fn sess_read_superglobal(&self) -> PhpArray {
+        let idx = crate::bytecode::superglobal_index(b"_SESSION")
+            .expect("_SESSION is a superglobal") as usize;
+        match read_slot(&self.superglobals[idx]) {
+            Zval::Array(a) => (*a).clone(),
+            _ => PhpArray::new(),
+        }
+    }
+
+    fn sess_write_superglobal(&mut self, arr: PhpArray) {
+        let idx = crate::bytecode::superglobal_index(b"_SESSION")
+            .expect("_SESSION is a superglobal") as usize;
+        let old = store_slot(&mut self.superglobals[idx], Zval::Array(Rc::new(arr)));
+        self.gc_note(&old);
+    }
+
+    // ---- files module ---------------------------------------------------------
+
+    /// Read (creating, like mod_files' O_CREAT) the session file. `None` when
+    /// the directory itself is unusable.
+    fn sess_files_read(&mut self, id: &[u8]) -> Option<Vec<u8>> {
+        use std::os::unix::fs::OpenOptionsExt;
+        let dir = self.sess_dir();
+        let path = self.sess_file(&dir, id);
+        let mut f = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .mode(0o600)
+            .open(&path)
+            .ok()?;
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf).ok()?;
+        Some(buf)
+    }
+
+    fn sess_files_write(&mut self, id: &[u8], data: &[u8]) {
+        use std::os::unix::fs::OpenOptionsExt;
+        let dir = self.sess_dir_open();
+        let path = self.sess_file(&dir, id);
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&path)
+        {
+            let _ = f.write_all(data);
+        }
+    }
+
+    /// The directory for close-time operations: the one captured at open.
+    fn sess_dir_open(&self) -> PathBuf {
+        if self.session.open_path.is_empty() {
+            self.sess_dir()
+        } else {
+            PathBuf::from(String::from_utf8_lossy(&self.session.open_path).into_owned())
+        }
+    }
+
+    fn sess_files_destroy(&mut self, id: &[u8]) {
+        let dir = self.sess_dir_open();
+        let _ = std::fs::remove_file(self.sess_file(&dir, id));
+    }
+
+    fn sess_files_touch(&mut self, id: &[u8]) {
+        let dir = self.sess_dir_open();
+        if let Ok(f) = std::fs::OpenOptions::new().write(true).open(self.sess_file(&dir, id)) {
+            let _ = f.set_modified(SystemTime::now());
+        }
+    }
+
+    /// Collect stale `sess_*` files (mtime older than gc_maxlifetime).
+    fn sess_files_gc(&mut self) -> i64 {
+        let maxlife = self.ini.get_long(b"session.gc_maxlifetime").max(0) as u64;
+        let cutoff = SystemTime::now() - Duration::from_secs(maxlife);
+        let dir = self.sess_dir_open();
+        let Ok(entries) = std::fs::read_dir(&dir) else { return 0 };
+        let mut n = 0;
+        for e in entries.flatten() {
+            if !e.file_name().as_encoded_bytes().starts_with(b"sess_") {
+                continue;
+            }
+            let stale = e
+                .metadata()
+                .and_then(|m| m.modified())
+                .is_ok_and(|m| m < cutoff);
+            if stale && std::fs::remove_file(e.path()).is_ok() {
+                n += 1;
+            }
+        }
+        n
+    }
+
+    // ---- id generation ---------------------------------------------------------
+
+    /// A fresh session id per `session.sid_length`/`sid_bits_per_character`.
+    fn sess_generate_id(&mut self) -> Vec<u8> {
+        let len = self.ini.get_long(b"session.sid_length").clamp(22, 256) as usize;
+        let bits = self.ini.get_long(b"session.sid_bits_per_character").clamp(4, 6) as u32;
+        let nbytes = (len * bits as usize).div_ceil(8);
+        let mut buf = vec![0u8; nbytes];
+        if os_random_fill(&mut buf).is_err() {
+            // Entropy failure is not observable in practice; degrade to zeros.
+        }
+        bin_to_readable(&buf, len, bits)
+    }
+
+    // ---- serializers ------------------------------------------------------------
+
+    /// Encode `$_SESSION` with the configured handler. `Ok(None)` = encode
+    /// refused (a `|` key under `php`); warnings are attributed to `func`.
+    fn sess_encode_data(&mut self, func: &str) -> Result<Option<Vec<u8>>, PhpError> {
+        let arr = self.sess_read_superglobal();
+        match self.sess_ser_handler() {
+            SerHandler::PhpSerialize => {
+                let ser = self.ho_serialize(vec![Zval::Array(Rc::new(arr))])?;
+                Ok(Some(match ser {
+                    Zval::Str(s) => s.as_bytes().to_vec(),
+                    _ => Vec::new(),
+                }))
+            }
+            SerHandler::Php => {
+                let mut out = Vec::new();
+                for (k, v) in arr.iter() {
+                    let key = match k {
+                        Key::Int(n) => {
+                            self.diags.push(Diag::Warning(format!(
+                                "{func}(): Skipping numeric key {n}"
+                            )));
+                            continue;
+                        }
+                        Key::Str(s) => s.as_bytes().to_vec(),
+                    };
+                    if key.contains(&b'|') || key.contains(&b'!') {
+                        self.diags.push(Diag::Warning(format!(
+                            "{func}(): Failed to write session data. Data contains invalid key \"{}\"",
+                            String::from_utf8_lossy(&key)
+                        )));
+                        return Ok(None);
+                    }
+                    let ser = self.ho_serialize(vec![v.clone()])?;
+                    out.extend_from_slice(&key);
+                    out.push(b'|');
+                    if let Zval::Str(s) = ser {
+                        out.extend_from_slice(s.as_bytes());
+                    }
+                }
+                Ok(Some(out))
+            }
+            SerHandler::PhpBinary => {
+                let mut out = Vec::new();
+                for (k, v) in arr.iter() {
+                    let key = match k {
+                        Key::Int(n) => {
+                            self.diags.push(Diag::Warning(format!(
+                                "{func}(): Skipping numeric key {n}"
+                            )));
+                            continue;
+                        }
+                        Key::Str(s) => s.as_bytes().to_vec(),
+                    };
+                    if key.len() > 127 {
+                        // PS_BIN_MAX_KEYLEN: the binary format's length byte.
+                        continue;
+                    }
+                    let ser = self.ho_serialize(vec![v.clone()])?;
+                    out.push(key.len() as u8);
+                    out.extend_from_slice(&key);
+                    if let Zval::Str(s) = ser {
+                        out.extend_from_slice(s.as_bytes());
+                    }
+                }
+                Ok(Some(out))
+            }
+        }
+    }
+
+    /// Decode a payload into an array. `Ok(None)` = malformed (the caller
+    /// applies the destroy-on-failure contract).
+    fn sess_decode_data(&mut self, data: &[u8]) -> Result<Option<PhpArray>, PhpError> {
+        match self.sess_ser_handler() {
+            SerHandler::PhpSerialize => {
+                if data.is_empty() {
+                    return Ok(Some(PhpArray::new()));
+                }
+                match crate::unserialize::parse(data) {
+                    Some(s) => match self.vm_ser_to_zval(s)? {
+                        Zval::Array(a) => Ok(Some((*a).clone())),
+                        // A non-array top level still "decodes"; PHP leaves
+                        // $_SESSION empty.
+                        _ => Ok(Some(PhpArray::new())),
+                    },
+                    None => Ok(None),
+                }
+            }
+            SerHandler::Php => {
+                let mut arr = PhpArray::new();
+                let mut i = 0usize;
+                while i < data.len() {
+                    let Some(bar) = data[i..].iter().position(|b| *b == b'|') else {
+                        return Ok(None);
+                    };
+                    let key = &data[i..i + bar];
+                    i += bar + 1;
+                    let Some((ser, used)) = crate::unserialize::parse_prefix(&data[i..]) else {
+                        return Ok(None);
+                    };
+                    i += used;
+                    let v = self.vm_ser_to_zval(ser)?;
+                    arr.insert(Key::from_bytes(key), v);
+                }
+                Ok(Some(arr))
+            }
+            SerHandler::PhpBinary => {
+                let mut arr = PhpArray::new();
+                let mut i = 0usize;
+                while i < data.len() {
+                    let lenbyte = data[i];
+                    i += 1;
+                    let klen = (lenbyte & 0x7f) as usize;
+                    if i + klen > data.len() {
+                        return Ok(None);
+                    }
+                    let key = data[i..i + klen].to_vec();
+                    i += klen;
+                    if lenbyte & 0x80 != 0 {
+                        // Undef marker: a name without a value.
+                        continue;
+                    }
+                    let Some((ser, used)) = crate::unserialize::parse_prefix(&data[i..]) else {
+                        return Ok(None);
+                    };
+                    i += used;
+                    let v = self.vm_ser_to_zval(ser)?;
+                    arr.insert(Key::from_bytes(&key), v);
+                }
+                Ok(Some(arr))
+            }
+        }
+    }
+
+    // ---- lifecycle core ---------------------------------------------------------
+
+    /// The destroy-on-decode-failure path shared by `session_start` and
+    /// `session_decode`: warn, delete the file, clear id and `$_SESSION`.
+    fn sess_destroy_on_decode_failure(&mut self, func: &str) {
+        self.diags.push(Diag::Warning(format!(
+            "{func}(): Failed to decode session object. Session has been destroyed"
+        )));
+        let id = self.session.id.clone();
+        self.sess_files_destroy(&id);
+        self.session.active = false;
+        self.session.id = Vec::new();
+        self.session.started_at = None;
+        self.session.snapshot = None;
+        self.sess_write_superglobal(PhpArray::new());
+    }
+
+    /// Commit the active session: encode, write (or touch, lazy_write), close.
+    fn sess_commit(&mut self, func: &str) -> Result<(), PhpError> {
+        let encoded = self.sess_encode_data(func)?;
+        if let Some(data) = encoded {
+            let unchanged = self.session.snapshot.as_deref() == Some(data.as_slice())
+                && self.ini.get_bool(b"session.lazy_write");
+            let id = self.session.id.clone();
+            if unchanged {
+                self.sess_files_touch(&id);
+            } else {
+                self.sess_files_write(&id, &data);
+            }
+        }
+        self.session.active = false;
+        self.session.started_at = None;
+        self.session.snapshot = None;
+        self.session.open_path = Vec::new();
+        Ok(())
+    }
+
+    /// The automatic flush at request shutdown (after shutdown functions and
+    /// destructors — both still observe an active session). Errors swallowed:
+    /// shutdown is past the point of reporting.
+    pub(super) fn session_shutdown_flush(&mut self) {
+        if !self.session.active {
+            return;
+        }
+        // The frame stack is empty this late in shutdown; the serializer needs
+        // a caller frame (`cur_line`) — same synthetic-main trick as
+        // `run_shutdown_functions` (and the zlib ob-callback underflow lesson).
+        let synthetic = self.frames.is_empty();
+        if synthetic {
+            self.frames.push(Frame::new(&self.module.main, self.module));
+        }
+        let _ = self.sess_commit("session_write_close");
+        if synthetic {
+            self.frames.clear();
+        }
+    }
+
+    // ---- host builtins ------------------------------------------------------------
+
+    /// `session_status(): int` — NONE (1) or ACTIVE (2); never DISABLED.
+    pub(super) fn ho_session_status(&mut self) -> Result<Zval, PhpError> {
+        Ok(Zval::Long(if self.session.active { 2 } else { 1 }))
+    }
+
+    /// `session_id(?string $id = null): string|false` — get/set the id. The
+    /// setter does NOT validate the value (oracle: "bad id!!" is accepted).
+    pub(super) fn ho_session_id(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        match args.first().map(|v| v.deref_clone()) {
+            None | Some(Zval::Null) => {
+                Ok(Zval::Str(PhpStr::new(self.session.id.clone())))
+            }
+            Some(v) => {
+                if self.sess_refuse_active("session_id", "Session ID")
+                    || self.sess_refuse_sent("session_id", "Session ID")
+                {
+                    return Ok(Zval::Bool(false));
+                }
+                let new = convert::to_zstr(&v, &mut self.diags).as_bytes().to_vec();
+                let old = std::mem::replace(&mut self.session.id, new);
+                Ok(Zval::Str(PhpStr::new(old)))
+            }
+        }
+    }
+
+    /// `session_name(?string $name = null): string|false`.
+    pub(super) fn ho_session_name(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let cur = self.ini.get(b"session.name").unwrap_or(b"PHPSESSID").to_vec();
+        match args.first().map(|v| v.deref_clone()) {
+            None | Some(Zval::Null) => Ok(Zval::Str(PhpStr::new(cur))),
+            Some(v) => {
+                if self.sess_refuse_active("session_name", "Session name")
+                    || self.sess_refuse_sent("session_name", "Session name")
+                {
+                    return Ok(Zval::Bool(false));
+                }
+                let new = convert::to_zstr(&v, &mut self.diags).as_bytes().to_vec();
+                if !self.ini_session_value_ok("session_name", b"session.name", &new) {
+                    return Ok(Zval::Bool(false));
+                }
+                self.ini_set_local(b"session.name", new);
+                Ok(Zval::Str(PhpStr::new(cur)))
+            }
+        }
+    }
+
+    /// `session_save_path(?string $path = null): string|false`.
+    pub(super) fn ho_session_save_path(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let cur = self.ini.get(b"session.save_path").unwrap_or(b"").to_vec();
+        match args.first().map(|v| v.deref_clone()) {
+            None | Some(Zval::Null) => Ok(Zval::Str(PhpStr::new(cur))),
+            Some(v) => {
+                if self.sess_refuse_active("session_save_path", "Session save path")
+                    || self.sess_refuse_sent("session_save_path", "Session save path")
+                {
+                    return Ok(Zval::Bool(false));
+                }
+                let new = convert::to_zstr(&v, &mut self.diags).as_bytes().to_vec();
+                self.ini_set_local(b"session.save_path", new);
+                Ok(Zval::Str(PhpStr::new(cur)))
+            }
+        }
+    }
+
+    /// `session_module_name(?string $module = null): string|false` — only the
+    /// `files` module exists ('user' is selected via session_set_save_handler).
+    pub(super) fn ho_session_module_name(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let cur = self.ini.get(b"session.save_handler").unwrap_or(b"files").to_vec();
+        match args.first().map(|v| v.deref_clone()) {
+            None | Some(Zval::Null) => Ok(Zval::Str(PhpStr::new(cur))),
+            Some(v) => {
+                if self.sess_refuse_active("session_module_name", "Session save handler module")
+                {
+                    return Ok(Zval::Bool(false));
+                }
+                let new = convert::to_zstr(&v, &mut self.diags).as_bytes().to_vec();
+                if new != b"files" {
+                    self.diags.push(Diag::Warning(format!(
+                        "session_module_name(): Session handler module \"{}\" cannot be found",
+                        String::from_utf8_lossy(&new)
+                    )));
+                    return Ok(Zval::Bool(false));
+                }
+                self.ini_set_local(b"session.save_handler", new);
+                Ok(Zval::Str(PhpStr::new(cur)))
+            }
+        }
+    }
+
+    /// `session_cache_limiter(?string $value = null): string|false`.
+    pub(super) fn ho_session_cache_limiter(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let cur = self.ini.get(b"session.cache_limiter").unwrap_or(b"nocache").to_vec();
+        match args.first().map(|v| v.deref_clone()) {
+            None | Some(Zval::Null) => Ok(Zval::Str(PhpStr::new(cur))),
+            Some(v) => {
+                if self.sess_refuse_active("session_cache_limiter", "Session cache limiter")
+                    || self.sess_refuse_sent("session_cache_limiter", "Session cache limiter")
+                {
+                    return Ok(Zval::Bool(false));
+                }
+                let new = convert::to_zstr(&v, &mut self.diags).as_bytes().to_vec();
+                self.ini_set_local(b"session.cache_limiter", new);
+                Ok(Zval::Str(PhpStr::new(cur)))
+            }
+        }
+    }
+
+    /// `session_cache_expire(?int $value = null): int|false` — oracle oddity:
+    /// the active-session refusal still returns the CURRENT value, not false.
+    pub(super) fn ho_session_cache_expire(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let cur = self.ini.get_long(b"session.cache_expire");
+        match args.first().map(|v| v.deref_clone()) {
+            None | Some(Zval::Null) => Ok(Zval::Long(cur)),
+            Some(v) => {
+                if self.sess_refuse_active("session_cache_expire", "Session cache expiration") {
+                    return Ok(Zval::Long(cur));
+                }
+                let new = convert::to_long_cast(&v, &mut self.diags);
+                self.ini_set_local(b"session.cache_expire", new.to_string().into_bytes());
+                Ok(Zval::Long(cur))
+            }
+        }
+    }
+
+    /// `session_get_cookie_params(): array` — the seven keys in PHP's order.
+    pub(super) fn ho_session_get_cookie_params(&mut self) -> Result<Zval, PhpError> {
+        let mut a = PhpArray::new();
+        a.insert(Key::from_bytes(b"lifetime"), Zval::Long(self.ini.get_long(b"session.cookie_lifetime")));
+        let s = |v: Option<&[u8]>| Zval::Str(PhpStr::new(v.unwrap_or(b"").to_vec()));
+        a.insert(Key::from_bytes(b"path"), s(self.ini.get(b"session.cookie_path")));
+        a.insert(Key::from_bytes(b"domain"), s(self.ini.get(b"session.cookie_domain")));
+        a.insert(Key::from_bytes(b"secure"), Zval::Bool(self.ini.get_bool(b"session.cookie_secure")));
+        a.insert(Key::from_bytes(b"partitioned"), Zval::Bool(self.ini.get_bool(b"session.cookie_partitioned")));
+        a.insert(Key::from_bytes(b"httponly"), Zval::Bool(self.ini.get_bool(b"session.cookie_httponly")));
+        a.insert(Key::from_bytes(b"samesite"), s(self.ini.get(b"session.cookie_samesite")));
+        Ok(Zval::Array(Rc::new(a)))
+    }
+
+    /// `session_set_cookie_params(int|array $lifetime_or_options, ...): bool`.
+    pub(super) fn ho_session_set_cookie_params(
+        &mut self,
+        args: Vec<Zval>,
+    ) -> Result<Zval, PhpError> {
+        if self.sess_refuse_active("session_set_cookie_params", "Session cookie parameters")
+            || self.sess_refuse_sent("session_set_cookie_params", "Session cookie parameters")
+        {
+            return Ok(Zval::Bool(false));
+        }
+        let first = args.first().map(|v| v.deref_clone()).unwrap_or(Zval::Null);
+        let set = |vm: &mut Self, key: &str, val: Vec<u8>| {
+            vm.ini_set_local(format!("session.cookie_{key}").as_bytes(), val);
+        };
+        if let Zval::Array(opts) = first {
+            for (k, v) in opts.iter() {
+                let name = match k {
+                    Key::Str(s) => s.as_bytes().to_vec(),
+                    Key::Int(_) => continue,
+                };
+                let sval = match v.deref_clone() {
+                    Zval::Bool(b) => (if b { "1" } else { "0" }).into(),
+                    other => {
+                        String::from_utf8_lossy(convert::to_zstr(&other, &mut self.diags).as_bytes())
+                            .into_owned()
+                    }
+                };
+                match &name[..] {
+                    b"lifetime" | b"path" | b"domain" | b"secure" | b"httponly"
+                    | b"samesite" | b"partitioned" => {
+                        set(self, &String::from_utf8_lossy(&name), sval.into_bytes());
+                    }
+                    _ => {
+                        self.diags.push(Diag::Warning(format!(
+                            "session_set_cookie_params(): Argument #1 ($lifetime_or_options) \
+                             contains an unrecognized key \"{}\"",
+                            String::from_utf8_lossy(&name)
+                        )));
+                        return Ok(Zval::Bool(false));
+                    }
+                }
+            }
+            return Ok(Zval::Bool(true));
+        }
+        // Positional form: lifetime, path, domain, secure, httponly.
+        let lifetime = convert::to_long_cast(&first, &mut self.diags);
+        set(self, "lifetime", lifetime.to_string().into_bytes());
+        let keys = ["path", "domain", "secure", "httponly"];
+        for (i, key) in keys.iter().enumerate() {
+            if let Some(v) = args.get(i + 1) {
+                let v = v.deref_clone();
+                if matches!(v, Zval::Null) {
+                    continue;
+                }
+                let sval = match v {
+                    Zval::Bool(b) => if b { b"1".to_vec() } else { b"0".to_vec() },
+                    other => convert::to_zstr(&other, &mut self.diags).as_bytes().to_vec(),
+                };
+                set(self, key, sval);
+            }
+        }
+        Ok(Zval::Bool(true))
+    }
+
+    /// `session_start(array $options = []): bool`.
+    pub(super) fn ho_session_start(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if self.session.active {
+            let suffix = self.sess_started_from();
+            self.diags.push(Diag::Notice(format!(
+                "session_start(): Ignoring session_start() because a session is already active{suffix}"
+            )));
+            return Ok(Zval::Bool(true));
+        }
+        if self.output_started {
+            let suffix = self.sess_sent_from();
+            self.diags.push(Diag::Warning(format!(
+                "session_start(): Session cannot be started after headers have already been sent{suffix}"
+            )));
+            return Ok(Zval::Bool(false));
+        }
+        // Apply the per-start option overrides (they persist in the ini table,
+        // like PHP's zend_alter_ini_entry with PHP_INI_STAGE_RUNTIME).
+        let mut read_and_close = false;
+        if let Some(Zval::Array(opts)) = args.first().map(|v| v.deref_clone()) {
+            for (k, v) in opts.iter() {
+                let name = match k {
+                    Key::Str(s) => s.as_bytes().to_vec(),
+                    Key::Int(_) => continue,
+                };
+                let v = v.deref_clone();
+                if name == b"read_and_close" {
+                    read_and_close = convert::to_bool(&v, &mut self.diags);
+                    continue;
+                }
+                let ini_name = [b"session.", &name[..]].concat();
+                let sval = match v {
+                    Zval::Bool(b) => if b { b"1".to_vec() } else { b"0".to_vec() },
+                    other => convert::to_zstr(&other, &mut self.diags).as_bytes().to_vec(),
+                };
+                let known = self.ini.0.get(&ini_name).is_some_and(|e| e.access_user_settable());
+                let valid = known && self.ini_session_value_ok("session_start", &ini_name, &sval);
+                if valid {
+                    self.ini_set_local(&ini_name, sval);
+                } else {
+                    self.diags.push(Diag::Warning(format!(
+                        "session_start(): Setting option \"{}\" failed",
+                        String::from_utf8_lossy(&name)
+                    )));
+                }
+            }
+        }
+        // Session id: reuse the one set via session_id(), else generate; under
+        // strict mode an id with no backing file is discarded.
+        let mut id = std::mem::take(&mut self.session.id);
+        let strict = self.ini.get_bool(b"session.use_strict_mode");
+        let dir = self.sess_dir();
+        if id.is_empty()
+            || (strict && !self.sess_file(&dir, &id).exists())
+        {
+            id = self.sess_generate_id();
+        }
+        self.session.id = id.clone();
+        self.session.open_path = self.ini.get(b"session.save_path").unwrap_or(b"").to_vec();
+        // GC roll (gc_probability / gc_divisor).
+        let prob = self.ini.get_long(b"session.gc_probability");
+        let div = self.ini.get_long(b"session.gc_divisor").max(1);
+        if prob > 0 {
+            let mut r = [0u8; 8];
+            let _ = os_random_fill(&mut r);
+            let roll = u64::from_le_bytes(r) as f64 / u64::MAX as f64;
+            if roll < prob as f64 / div as f64 {
+                self.sess_files_gc();
+            }
+        }
+        // Read (creating the file) and decode.
+        let data = self.sess_files_read(&id).unwrap_or_default();
+        match self.sess_decode_data(&data)? {
+            Some(arr) => {
+                self.sess_write_superglobal(arr);
+                self.session.snapshot = Some(data);
+            }
+            None => {
+                self.session.active = true; // destroy path needs the open state
+                self.sess_destroy_on_decode_failure("session_start");
+                return Ok(Zval::Bool(false));
+            }
+        }
+        self.session.active = true;
+        let top = self.frames.len().saturating_sub(1);
+        let file = self.frames.get(top).map(|f| f.module.file.to_vec()).unwrap_or_default();
+        let line = self.cur_line(top);
+        self.session.started_at = Some((file, line));
+        if read_and_close {
+            self.session.active = false;
+            self.session.started_at = None;
+            self.session.snapshot = None;
+            self.session.open_path = Vec::new();
+        }
+        Ok(Zval::Bool(true))
+    }
+
+    /// `session_write_close(): bool` / `session_commit()`.
+    pub(super) fn ho_session_write_close(&mut self) -> Result<Zval, PhpError> {
+        if !self.session.active {
+            return Ok(Zval::Bool(false));
+        }
+        self.sess_commit("session_write_close")?;
+        Ok(Zval::Bool(true))
+    }
+
+    /// `session_abort(): bool` — close without writing; `$_SESSION` keeps its
+    /// contents, the id survives.
+    pub(super) fn ho_session_abort(&mut self) -> Result<Zval, PhpError> {
+        if !self.session.active {
+            return Ok(Zval::Bool(false));
+        }
+        self.session.active = false;
+        self.session.started_at = None;
+        self.session.snapshot = None;
+        self.session.open_path = Vec::new();
+        Ok(Zval::Bool(true))
+    }
+
+    /// `session_reset(): bool` — re-read the stored data into `$_SESSION`.
+    pub(super) fn ho_session_reset(&mut self) -> Result<Zval, PhpError> {
+        if !self.session.active {
+            return Ok(Zval::Bool(false));
+        }
+        let id = self.session.id.clone();
+        let data = self.sess_files_read(&id).unwrap_or_default();
+        match self.sess_decode_data(&data)? {
+            Some(arr) => {
+                self.sess_write_superglobal(arr);
+                self.session.snapshot = Some(data);
+                Ok(Zval::Bool(true))
+            }
+            None => {
+                self.sess_destroy_on_decode_failure("session_reset");
+                Ok(Zval::Bool(false))
+            }
+        }
+    }
+
+    /// `session_unset(): bool` — empty `$_SESSION` (active sessions only).
+    pub(super) fn ho_session_unset(&mut self) -> Result<Zval, PhpError> {
+        if !self.session.active {
+            return Ok(Zval::Bool(false));
+        }
+        self.sess_write_superglobal(PhpArray::new());
+        Ok(Zval::Bool(true))
+    }
+
+    /// `session_destroy(): bool` — delete the stored session; `$_SESSION` is
+    /// left as-is, the id is cleared.
+    pub(super) fn ho_session_destroy(&mut self) -> Result<Zval, PhpError> {
+        if !self.session.active {
+            self.diags.push(Diag::Warning(
+                "session_destroy(): Trying to destroy uninitialized session".to_string(),
+            ));
+            return Ok(Zval::Bool(false));
+        }
+        let id = std::mem::take(&mut self.session.id);
+        self.sess_files_destroy(&id);
+        self.session.active = false;
+        self.session.started_at = None;
+        self.session.snapshot = None;
+        self.session.open_path = Vec::new();
+        Ok(Zval::Bool(true))
+    }
+
+    /// `session_gc(): int|false` — run the collector explicitly.
+    pub(super) fn ho_session_gc(&mut self) -> Result<Zval, PhpError> {
+        if !self.session.active {
+            self.diags.push(Diag::Warning(
+                "session_gc(): Session cannot be garbage collected when there is no active session"
+                    .to_string(),
+            ));
+            return Ok(Zval::Bool(false));
+        }
+        let n = self.sess_files_gc();
+        Ok(Zval::Long(n))
+    }
+
+    /// `session_regenerate_id(bool $delete_old_session = false): bool` — the
+    /// current data is written under the OLD id first (or the old session is
+    /// destroyed), then the session continues under a fresh id.
+    pub(super) fn ho_session_regenerate_id(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if !self.session.active {
+            self.diags.push(Diag::Warning(
+                "session_regenerate_id(): Session ID cannot be regenerated when there is no active session"
+                    .to_string(),
+            ));
+            return Ok(Zval::Bool(false));
+        }
+        if self.output_started {
+            let suffix = self.sess_sent_from();
+            self.diags.push(Diag::Warning(format!(
+                "session_regenerate_id(): Session ID cannot be regenerated after headers have already been sent{suffix}"
+            )));
+            return Ok(Zval::Bool(false));
+        }
+        let delete_old = args
+            .first()
+            .map(|v| convert::to_bool(&v.deref_clone(), &mut self.diags))
+            .unwrap_or(false);
+        let old_id = self.session.id.clone();
+        if delete_old {
+            self.sess_files_destroy(&old_id);
+        } else if let Some(data) = self.sess_encode_data("session_regenerate_id")? {
+            self.sess_files_write(&old_id, &data);
+        }
+        self.session.id = self.sess_generate_id();
+        // A fresh id has no backing payload yet: force a write at commit.
+        self.session.snapshot = None;
+        Ok(Zval::Bool(true))
+    }
+
+    /// `session_create_id(string $prefix = ""): string|false`.
+    pub(super) fn ho_session_create_id(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let prefix = match args.first().map(|v| v.deref_clone()) {
+            None | Some(Zval::Null) => Vec::new(),
+            Some(v) => convert::to_zstr(&v, &mut self.diags).as_bytes().to_vec(),
+        };
+        if !sid_chars_ok(&prefix) {
+            self.diags.push(Diag::Warning(
+                "session_create_id(): Prefix cannot contain special characters. \
+                 Only the A-Z, a-z, 0-9, \"-\", and \",\" characters are allowed"
+                    .to_string(),
+            ));
+            return Ok(Zval::Bool(false));
+        }
+        // With an active files session, avoid colliding with an existing file.
+        let mut id = self.sess_generate_id();
+        if self.session.active {
+            let dir = self.sess_dir_open();
+            for _ in 0..3 {
+                if !self.sess_file(&dir, &id).exists() {
+                    break;
+                }
+                id = self.sess_generate_id();
+            }
+        }
+        let mut out = prefix;
+        out.extend_from_slice(&id);
+        Ok(Zval::Str(PhpStr::new(out)))
+    }
+
+    /// `session_encode(): string|false`.
+    pub(super) fn ho_session_encode(&mut self) -> Result<Zval, PhpError> {
+        if !self.session.active {
+            self.diags.push(Diag::Warning(
+                "session_encode(): Cannot encode non-existent session".to_string(),
+            ));
+            return Ok(Zval::Bool(false));
+        }
+        match self.sess_encode_data("session_encode")? {
+            Some(data) => Ok(Zval::Str(PhpStr::new(data))),
+            None => Ok(Zval::Bool(false)),
+        }
+    }
+
+    /// `session_decode(string $data): bool` — malformed input destroys the
+    /// session (oracle contract).
+    pub(super) fn ho_session_decode(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if !self.session.active {
+            self.diags.push(Diag::Warning(
+                "session_decode(): Session data cannot be decoded when there is no active session"
+                    .to_string(),
+            ));
+            return Ok(Zval::Bool(false));
+        }
+        let data = match args.first().map(|v| v.deref_clone()) {
+            Some(v) => convert::to_zstr(&v, &mut self.diags).as_bytes().to_vec(),
+            None => Vec::new(),
+        };
+        match self.sess_decode_data(&data)? {
+            Some(arr) => {
+                self.sess_write_superglobal(arr);
+                Ok(Zval::Bool(true))
+            }
+            None => {
+                self.sess_destroy_on_decode_failure("session_decode");
+                Ok(Zval::Bool(false))
+            }
+        }
+    }
+
+    /// `session_register_shutdown(): void` — queue `session_write_close` at
+    /// the current position of the shutdown-function list.
+    pub(super) fn ho_session_register_shutdown(&mut self) -> Result<Zval, PhpError> {
+        self.shutdown_fns
+            .push((Zval::Str(PhpStr::from_str("session_write_close")), Vec::new()));
+        Ok(Zval::Null)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bin_to_readable_charsets() {
+        let bytes = [0xff; 32];
+        let hex = bin_to_readable(&bytes, 32, 4);
+        assert_eq!(hex.len(), 32);
+        assert!(hex.iter().all(|b| b"0123456789abcdef".contains(b)));
+        let b5 = bin_to_readable(&bytes, 32, 5);
+        assert!(b5.iter().all(|b| b.is_ascii_digit() || (b'a'..=b'v').contains(b)));
+        let b6 = bin_to_readable(&bytes, 32, 6);
+        assert!(b6
+            .iter()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b',')));
+        // 0xff with 4 bits per char is all 'f'.
+        assert!(hex.iter().all(|b| *b == b'f'));
+    }
+
+    #[test]
+    fn sid_charset_check() {
+        assert!(sid_chars_ok(b"abc-DEF,123"));
+        assert!(sid_chars_ok(b""));
+        assert!(!sid_chars_ok(b"bad id"));
+        assert!(!sid_chars_ok(b"x!"));
+    }
+}

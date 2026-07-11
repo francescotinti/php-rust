@@ -1928,6 +1928,10 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"LIBXML_VERSION" => ExprKind::Int(21300),
         b"LIBXML_LOADED_VERSION" => ExprKind::Int(21300),
         b"LIBXML_DOTTED_VERSION" => str_lit(b"2.13.0"),
+        // ext/session status codes (session_status()).
+        b"PHP_SESSION_DISABLED" => ExprKind::Int(0),
+        b"PHP_SESSION_NONE" => ExprKind::Int(1),
+        b"PHP_SESSION_ACTIVE" => ExprKind::Int(2),
         // ext/filter validate/sanitize selectors + flags (`filter_var`). The
         // oracle build lacks ext/filter, but Composer's symfony polyfill and
         // ErrorHandler reference these, so we define them with the canonical values.

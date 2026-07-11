@@ -67,6 +67,13 @@ pub(super) struct IniEntry {
     deprecated_off_default: bool,
 }
 
+impl IniEntry {
+    /// Whether a runtime set (ini_set / session_start options) may change it.
+    pub(super) fn access_user_settable(&self) -> bool {
+        self.settable && self.access & INI_USER != 0
+    }
+}
+
 /// The table, ordered by directive name (`ini_get_all` lists alphabetically).
 pub(super) struct IniTable(pub BTreeMap<Vec<u8>, IniEntry>);
 
@@ -153,13 +160,11 @@ impl IniTable {
     /// A directive parsed as an integer the way the session module consumes
     /// its int-typed settings: leading integer digits of the stored string
     /// (the zend quantity parser's backwards-compatible reading), 0 when none.
-    #[allow(dead_code)] // consumed by the session module (C1 of the port)
     pub(super) fn get_long(&self, name: &[u8]) -> i64 {
         self.get(name).map_or(0, |v| leading_long(v))
     }
 
     /// A directive read as PHP's INI boolean (On/True/Yes/1 → true).
-    #[allow(dead_code)] // consumed by the session module (C1 of the port)
     pub(super) fn get_bool(&self, name: &[u8]) -> bool {
         self.get(name).is_some_and(ini_bool)
     }
@@ -253,49 +258,29 @@ impl<'m> Vm<'m> {
         if !self.ini_session_change_allowed(&name, b"ini_set") {
             return Ok(Zval::Bool(false));
         }
-        let Some(entry) = self.ini.0.get(&name) else {
+        // Capture the entry's flags up front: the validation below needs
+        // `&mut self` for its diagnostics.
+        let Some((user_settable, deprecated_off_default, int_typed, global)) = self
+            .ini
+            .0
+            .get(&name)
+            .map(|e| (e.access_user_settable(), e.deprecated_off_default, e.int_typed, e.global.clone()))
+        else {
             return Ok(Zval::Bool(false));
         };
-        if !entry.settable || entry.access & INI_USER == 0 {
+        if !user_settable {
             return Ok(Zval::Bool(false));
         }
-        // Per-directive validation, oracle-pinned warnings (a refused value
-        // leaves the entry untouched and returns false).
-        if name == b"session.name" && !session_name_ok(&value) {
-            self.diags.push(Diag::Warning(format!(
-                "ini_set(): session.name \"{}\" must not be numeric, empty, contain null bytes \
-                 or any of the following characters \"=,;.[ \\t\\r\\n\\013\\014\"",
-                String::from_utf8_lossy(&value)
-            )));
+        if !self.ini_session_value_ok("ini_set", &name, &value) {
             return Ok(Zval::Bool(false));
         }
-        if name == b"session.save_handler" && value != b"files" {
-            self.diags.push(Diag::Warning(if value == b"user" {
-                "ini_set(): Session save handler \"user\" cannot be set by ini_set()".to_string()
-            } else {
-                format!(
-                    "ini_set(): Session save handler \"{}\" cannot be found",
-                    String::from_utf8_lossy(&value)
-                )
-            }));
-            return Ok(Zval::Bool(false));
-        }
-        if name == b"session.serialize_handler"
-            && !matches!(&value[..], b"php" | b"php_binary" | b"php_serialize")
-        {
-            self.diags.push(Diag::Warning(format!(
-                "ini_set(): Serialization handler \"{}\" cannot be found",
-                String::from_utf8_lossy(&value)
-            )));
-            return Ok(Zval::Bool(false));
-        }
-        if entry.deprecated_off_default && value != entry.global {
+        if deprecated_off_default && value != global {
             self.diags.push(Diag::Deprecated(format!(
                 "ini_set(): {} INI setting is deprecated",
                 String::from_utf8_lossy(&name)
             )));
         }
-        if entry.int_typed && !quantity_is_clean(&value) {
+        if int_typed && !quantity_is_clean(&value) {
             let s = trim_ascii(&value);
             let detail = if leading_long(s) == 0 && !s.first().is_some_and(|b| b.is_ascii_digit()) {
                 "no valid leading digits, interpreting as \"0\"".to_string()
@@ -376,6 +361,51 @@ impl<'m> Vm<'m> {
             }
         }
         Ok(Zval::Array(Rc::new(out)))
+    }
+
+    /// Per-directive value validation shared by `ini_set` and the session
+    /// module's setters/start-options — the warning is attributed to `func`
+    /// (oracle: `session_name(): session.name "..." must not be numeric…`).
+    /// A refused value leaves the entry untouched.
+    pub(super) fn ini_session_value_ok(&mut self, func: &str, name: &[u8], value: &[u8]) -> bool {
+        if name == b"session.name" && !session_name_ok(value) {
+            self.diags.push(Diag::Warning(format!(
+                "{func}(): session.name \"{}\" must not be numeric, empty, contain null bytes \
+                 or any of the following characters \"=,;.[ \\t\\r\\n\\013\\014\"",
+                String::from_utf8_lossy(value)
+            )));
+            return false;
+        }
+        if name == b"session.save_handler" && value != b"files" {
+            self.diags.push(Diag::Warning(if value == b"user" {
+                format!("{func}(): Session save handler \"user\" cannot be set by ini_set()")
+            } else {
+                format!(
+                    "{func}(): Session save handler \"{}\" cannot be found",
+                    String::from_utf8_lossy(value)
+                )
+            }));
+            return false;
+        }
+        if name == b"session.serialize_handler"
+            && !matches!(value, b"php" | b"php_binary" | b"php_serialize")
+        {
+            self.diags.push(Diag::Warning(format!(
+                "{func}(): Serialization handler \"{}\" cannot be found",
+                String::from_utf8_lossy(value)
+            )));
+            return false;
+        }
+        true
+    }
+
+    /// Set a directive's local value directly — the session module's setters
+    /// (`session_name`, start options, cookie params) already ran their own
+    /// guards and validation, so no freeze/access checks re-apply here.
+    pub(super) fn ini_set_local(&mut self, name: &[u8], value: Vec<u8>) {
+        if let Some(e) = self.ini.0.get_mut(name) {
+            e.local = value;
+        }
     }
 
     /// The `session.*` change guard shared by `ini_set`/`ini_restore` (and by

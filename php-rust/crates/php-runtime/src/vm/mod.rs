@@ -45,6 +45,7 @@ mod exceptions;
 mod host;
 mod ini;
 mod run;
+mod session;
 mod host_reflect;
 mod oop;
 mod pdo;
@@ -391,6 +392,7 @@ pub(crate) fn run_module_with_hir<'m>(
         output_started: false,
         output_start: None,
         ini: ini::IniTable::new(),
+        session: session::SessionState::default(),
         response_code: None,
         user_abort_ignored: false,
         stream_wrappers: std::collections::HashMap::new(),
@@ -550,6 +552,10 @@ pub(crate) fn run_module_with_hir<'m>(
     // `main` returns — or after a fatal, on a cleared stack (OOP-3d). Their output
     // flows through `emit_str`, so it lands in `rendered` after the fatal block.
     vm.run_shutdown_destructors();
+    // An active session auto-commits at request shutdown — AFTER shutdown
+    // functions and destructors (both still see an active session and their
+    // $_SESSION writes are persisted; oracle-verified order).
+    vm.session_shutdown_flush();
     // Streams with attached write filters flush their final tail when the stream
     // is destroyed at request end (PHP filter close) — a script need not fclose.
     vm.finalize_filtered_streams();
@@ -1117,6 +1123,8 @@ struct Vm<'m> {
     /// The mutable INI table (`ini_get`/`ini_set`/…); the session module reads
     /// its `session.*` configuration from here. See [`ini::IniTable`].
     ini: ini::IniTable,
+    /// ext/session runtime state (`session_start` → `$_SESSION` → commit).
+    session: session::SessionState,
     /// `http_response_code()` — `None` until explicitly set (CLI reports `false`
     /// for an unset code).
     response_code: Option<i64>,
@@ -9045,6 +9053,27 @@ host_builtins! {
     b"ini_set" => vm.ho_ini_set(args),
     b"ini_restore" => vm.ho_ini_restore(args),
     b"ini_get_all" => vm.ho_ini_get_all(args),
+    b"session_status" => vm.ho_session_status(),
+    b"session_id" => vm.ho_session_id(args),
+    b"session_name" => vm.ho_session_name(args),
+    b"session_save_path" => vm.ho_session_save_path(args),
+    b"session_module_name" => vm.ho_session_module_name(args),
+    b"session_cache_limiter" => vm.ho_session_cache_limiter(args),
+    b"session_cache_expire" => vm.ho_session_cache_expire(args),
+    b"session_get_cookie_params" => vm.ho_session_get_cookie_params(),
+    b"session_set_cookie_params" => vm.ho_session_set_cookie_params(args),
+    b"session_start" => vm.ho_session_start(args),
+    b"session_write_close" | b"session_commit" => vm.ho_session_write_close(),
+    b"session_abort" => vm.ho_session_abort(),
+    b"session_reset" => vm.ho_session_reset(),
+    b"session_unset" => vm.ho_session_unset(),
+    b"session_destroy" => vm.ho_session_destroy(),
+    b"session_gc" => vm.ho_session_gc(),
+    b"session_regenerate_id" => vm.ho_session_regenerate_id(args),
+    b"session_create_id" => vm.ho_session_create_id(args),
+    b"session_encode" => vm.ho_session_encode(),
+    b"session_decode" => vm.ho_session_decode(args),
+    b"session_register_shutdown" => vm.ho_session_register_shutdown(),
     b"headers_list" => vm.ho_headers_list(),
     b"setcookie" => vm.ho_setcookie(args),
     b"setrawcookie" => vm.ho_setcookie(args),
