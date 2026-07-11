@@ -884,8 +884,11 @@ impl<'m> Vm<'m> {
     /// frame, so this is called *before* `frame` is pushed.
     pub(super) fn enter_callee(&mut self, frame: Frame<'m>) -> Result<(), PhpError> {
         // The call site is the caller's current line, reported in an arg TypeError
-        // (captured before the callee frame is pushed).
-        let call_line = self.cur_line(self.frames.len() - 1);
+        // (captured before the callee frame is pushed). There may be NO caller
+        // frame: an output-buffer callback (`ob_gzhandler`) invoked by the final
+        // buffer flush runs after `main` has returned and the frame stack is
+        // empty — treat that as line 0 rather than underflowing to `usize::MAX`.
+        let call_line = self.frames.len().checked_sub(1).map(|i| self.cur_line(i)).unwrap_or(0);
         // strict_types governs the CALL SITE's unit (Zend: the caller's file
         // decides argument coercion) — captured before the callee is pushed. A
         // strict main script must not leak strictness into weak vendor units.

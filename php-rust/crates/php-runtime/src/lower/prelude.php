@@ -104,20 +104,13 @@ function inflate_get_read_len(InflateContext $context): int {
 // Accept-Encoding. Without one (the CLI case) PHP's handler declines with
 // false and the original output is used — byte-faithful for phpr's CLI SAPI.
 function ob_gzhandler($data, $flags) {
-    $enc = $_SERVER['HTTP_ACCEPT_ENCODING'] ?? '';
-    if (strpos($enc, 'gzip') !== false) {
-        header('Vary: Accept-Encoding');
-        header('Content-Encoding: gzip');
-        return gzencode($data);
-    }
-    if (strpos($enc, 'deflate') !== false) {
-        header('Vary: Accept-Encoding');
-        header('Content-Encoding: deflate');
-        return gzcompress($data);
-    }
-    // Declining still advertises the negotiation (PHP sends Vary regardless —
-    // under CLI this is the "headers already sent" warning once output began).
-    header('Vary: Accept-Encoding');
+    // Output compression needs a real web SAPI to negotiate an encoding and send
+    // the Content-Encoding/Vary response headers. Under the CLI SAPI there is no
+    // such channel, so PHP's handler declines unconditionally: it returns false
+    // (the buffer passes through unchanged) and sends NO headers — hence no
+    // "headers already sent" warning even after output has begun (bug #61820).
+    // `$_SERVER['HTTP_ACCEPT_ENCODING']` is irrelevant here: the oracle leaves
+    // output uncompressed under CLI regardless of it.
     return false;
 }
 function stream_select(&$read, &$write, &$except, $seconds, $microseconds = null) {
