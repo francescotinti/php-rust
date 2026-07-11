@@ -488,6 +488,17 @@ pub enum Op {
     /// seed-trait image (a `trait` declared inside an executed branch), so a
     /// later unit's lowering can `use` it.
     DeclareTrait { idx: u32 },
+    /// `[] -> []` — bind the late-bound class-like [`Module::deferred`]`[idx]`
+    /// (its supertype was unresolvable when the unit was lowered): the VM
+    /// re-lowers the snippet against the current class image, autoloading the
+    /// supertype, and registers the declaration — or throws PHP's catchable
+    /// `Error: Class|Interface|Trait "X" not found` (Zend late binding).
+    DeclareDeferred { idx: u32 },
+    /// `[] -> [instance]` — evaluate the late-bound anonymous-class expression
+    /// [`Module::deferred`]`[idx]` (constructor arguments re-evaluate in the
+    /// caller's bridged scope) and push the instance; or throw the same
+    /// faithful `… not found` Error as [`Op::DeclareDeferred`].
+    NewAnonDeferred { idx: u32 },
     /// `[arg0, …, arg{argc-1}] -> [result]` — call the by-value builtin named
     /// `name` (resolved in the [`crate::builtin::Registry`] at run time, as the
     /// tree-walker does). Arguments are popped into a `&[Zval]`; the builtin runs
@@ -1447,6 +1458,10 @@ pub struct Module {
     /// Traits declared inside a branch (`(key, trait)`), registered into the
     /// VM's seed-trait image when their [`Op::DeclareTrait`] runs.
     pub conditional_traits: Vec<(Vec<u8>, crate::hir::LoweredTrait)>,
+    /// Late-bound class-like declarations (unresolvable supertype at lowering
+    /// time — Zend late binding), re-lowered by [`Op::DeclareDeferred`] /
+    /// [`Op::NewAnonDeferred`] at their execution point.
+    pub deferred: Vec<crate::hir::DeferredDecl>,
     /// Anonymous / arrow-function bodies — same index space as
     /// [`crate::hir::Program::closures`].
     pub closures: Vec<Func>,

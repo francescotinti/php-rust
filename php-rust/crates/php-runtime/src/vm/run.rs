@@ -1769,6 +1769,21 @@ impl<'m> super::Vm<'m> {
                     self.class_index.insert(key, cid);
                     self.serializable_link_check(cid)?;
                 }
+                Op::DeclareDeferred { idx } => {
+                    // A late-bound declaration statement was reached (its
+                    // supertype was unresolvable when the unit was lowered):
+                    // bind it now — re-lower the snippet against the current
+                    // class image, or throw PHP's `… "X" not found` Error.
+                    self.run_deferred(idx as usize, false)?;
+                }
+                Op::NewAnonDeferred { idx } => {
+                    // Late-bound anonymous class: bind and instantiate at the
+                    // expression's execution point, constructor arguments
+                    // re-evaluated in this frame's bridged scope.
+                    let v = self.run_deferred(idx as usize, true)?;
+                    let top = self.frames.len() - 1;
+                    self.frames[top].stack.push(v);
+                }
                 Op::Call { func, argc } => {
                     let m = self.frames[top].module;
                     let callee = &m.functions[func as usize];

@@ -384,6 +384,9 @@ impl<'a> super::FnCompiler<'a> {
             }
             ExprKind::Match { subject, arms } => self.match_expr(subject, arms)?,
             ExprKind::New { class, args, named } => self.new_obj(class, args, named)?,
+            ExprKind::NewAnonDeferred(idx) => {
+                self.emit(Op::NewAnonDeferred { idx: *idx as u32 });
+            }
             ExprKind::This => {
                 self.emit(Op::This);
             }

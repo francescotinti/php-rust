@@ -279,24 +279,62 @@ impl<'f> Lowerer<'f> {
                 if self.class_index.contains_key(&key) {
                     return Ok(None);
                 }
-                let decl = self.lower_class(class)?;
-                StmtKind::DeclareClass(self.push_conditional_class(decl))
+                let ctx = self.save_body_ctx();
+                match self.lower_class(class) {
+                    Ok(decl) => StmtKind::DeclareClass(self.push_conditional_class(decl)),
+                    // An unresolvable (post-autoload) supertype: bind at this
+                    // statement's execution instead, exactly as Zend skips early
+                    // binding then (a hoisted declaration lands here too — its
+                    // reserved name was dropped by `lower_class_bodies`).
+                    Err(LowerError::UndefinedClass { name, .. }) if self.deferrable(&name) => {
+                        self.restore_body_ctx(ctx);
+                        let fqn = join_ns(&self.cur_namespace, class.name.value);
+                        StmtKind::DeclareDeferred(self.push_deferred(
+                            class.span(),
+                            fqn,
+                            "class",
+                            false,
+                        ))
+                    }
+                    Err(e) => return Err(e),
+                }
             }
             Statement::Interface(iface) => {
                 let key = join_ns(&self.cur_namespace, iface.name.value).to_ascii_lowercase();
                 if self.class_index.contains_key(&key) {
                     return Ok(None);
                 }
-                let decl = self.lower_interface(iface)?;
-                StmtKind::DeclareClass(self.push_conditional_class(decl))
+                let ctx = self.save_body_ctx();
+                match self.lower_interface(iface) {
+                    Ok(decl) => StmtKind::DeclareClass(self.push_conditional_class(decl)),
+                    Err(LowerError::UndefinedClass { name, .. }) if self.deferrable(&name) => {
+                        self.restore_body_ctx(ctx);
+                        let fqn = join_ns(&self.cur_namespace, iface.name.value);
+                        StmtKind::DeclareDeferred(self.push_deferred(
+                            iface.span(),
+                            fqn,
+                            "interface",
+                            false,
+                        ))
+                    }
+                    Err(e) => return Err(e),
+                }
             }
             Statement::Enum(en) => {
                 let key = join_ns(&self.cur_namespace, en.name.value).to_ascii_lowercase();
                 if self.class_index.contains_key(&key) {
                     return Ok(None);
                 }
-                let decl = self.lower_enum(en)?;
-                StmtKind::DeclareClass(self.push_conditional_class(decl))
+                let ctx = self.save_body_ctx();
+                match self.lower_enum(en) {
+                    Ok(decl) => StmtKind::DeclareClass(self.push_conditional_class(decl)),
+                    Err(LowerError::UndefinedClass { name, .. }) if self.deferrable(&name) => {
+                        self.restore_body_ctx(ctx);
+                        let fqn = join_ns(&self.cur_namespace, en.name.value);
+                        StmtKind::DeclareDeferred(self.push_deferred(en.span(), fqn, "enum", false))
+                    }
+                    Err(e) => return Err(e),
+                }
             }
             // A trait declaration: the top-level ones were lowered into
             // `self.traits` and flattened into their consumers at lowering time
@@ -499,15 +537,73 @@ impl<'f> Lowerer<'f> {
         Ok(())
     }
 
+    /// The stand-in occupying a demoted-from-hoisting declaration's reserved
+    /// class-table slot (see [`Self::lower_class_bodies`]): its `\0`-prefixed
+    /// name is unreachable from PHP source and, being conditional, it is never
+    /// registered by name — it exists only to keep later reserved ids aligned.
+    fn placeholder_class(&self, idx: usize, line: Line) -> ClassDecl {
+        ClassDecl {
+            name: format!("\0deferred\0{idx}").into_bytes().into(),
+            doc: None,
+            file: self.unit_file(),
+            parent: None,
+            interfaces: Vec::new(),
+            is_abstract: true,
+            is_final: false,
+            is_interface: false,
+            props: Vec::new(),
+            static_props: Vec::new(),
+            consts: Vec::new(),
+            methods: Vec::new(),
+            abstract_methods: Vec::new(),
+            abstract_sigs: Vec::new(),
+            is_enum: false,
+            enum_backing: None,
+            enum_cases: Vec::new(),
+            attributes: Vec::new(),
+            uses_traits: Vec::new(),
+            line,
+            end_line: line,
+        }
+    }
+
     /// Lower the bodies of every class/interface/enum in one namespace block and
     /// append them to `classes`, in declaration order (matching reservation).
+    /// A body whose supertype is unresolvable *and deferrable* (see
+    /// [`super::DeferPolicy`]) is demoted from hoisting — exactly Zend, which
+    /// skips early binding then: its reserved name is dropped (so the main
+    /// pass's declaration statement re-attempts and defers to run time) and an
+    /// unreachable placeholder keeps the reserved indices of the classes after
+    /// it aligned.
     fn lower_class_bodies(&mut self, stmts: &[Statement]) -> Result<(), LowerError> {
         for s in stmts {
-            let decl = match s {
-                Statement::Class(c) => self.lower_class(c)?,
-                Statement::Interface(i) => self.lower_interface(i)?,
-                Statement::Enum(e) => self.lower_enum(e)?,
+            let (name, span) = match s {
+                Statement::Class(c) => (c.name.value, c.span()),
+                Statement::Interface(i) => (i.name.value, i.span()),
+                Statement::Enum(e) => (e.name.value, e.span()),
                 _ => continue,
+            };
+            let ctx = self.save_body_ctx();
+            let lowered = match s {
+                Statement::Class(c) => self.lower_class(c),
+                Statement::Interface(i) => self.lower_interface(i),
+                Statement::Enum(e) => self.lower_enum(e),
+                _ => unreachable!(),
+            };
+            let decl = match lowered {
+                Ok(d) => d,
+                Err(LowerError::UndefinedClass { name: missing, .. })
+                    if self.deferrable(&missing) =>
+                {
+                    self.restore_body_ctx(ctx);
+                    let key = join_ns(&self.cur_namespace, name).to_ascii_lowercase();
+                    self.class_index.remove(&key);
+                    let idx = self.classes.len();
+                    self.conditional_classes.insert(idx);
+                    self.classes.push(self.placeholder_class(idx, self.line_of(span)));
+                    continue;
+                }
+                Err(e) => return Err(e),
             };
             self.classes.push(decl);
         }

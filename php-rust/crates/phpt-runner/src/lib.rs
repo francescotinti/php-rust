@@ -245,7 +245,7 @@ pub fn run_phpt_opts(src: &[u8], name: &[u8], reg: &Registry, opts: RunOpts) -> 
             LowerError::Unsupported { what, line } => {
                 return TestResult::skip("unsupported", format!("{what} (line {line})"))
             }
-            LowerError::UndefinedClass { name, line } => {
+            LowerError::UndefinedClass { name, line, .. } => {
                 return TestResult::skip(
                     "unsupported",
                     format!("extends/implements undefined {} (line {line})", String::from_utf8_lossy(&name)),

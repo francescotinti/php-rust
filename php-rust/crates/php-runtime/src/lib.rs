@@ -28,5 +28,5 @@ pub use builtin::{Builtin, BuiltinFn, BuiltinRefFn, Ctx, Registry};
 // Session F: the bytecode VM is the sole production engine. `run_source` /
 // `run_source_with` / `Outcome` resolve to the VM; the tree-walking `eval` module
 // was deleted once every construct it handled became VM-native (F2).
-pub use lower::{lower_source, lower_source_seeded, LowerError};
+pub use lower::{lower_source, lower_source_seeded, DeferPolicy, LowerError, MissingSym};
 pub use vm::{run_source, run_source_with, run_source_with_argv, VmOutcome as Outcome, VmRunError};

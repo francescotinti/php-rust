@@ -2468,6 +2468,11 @@ impl<'m> Vm<'m> {
         if self.main_hir.is_none() {
             return Ok(crate::lower_source(name, src));
         }
+        // Names whose autoload failed: re-lower with them deferrable, so the
+        // affected declarations bind at their execution point (Zend late
+        // binding) instead of failing the whole unit — PHP compiles a file
+        // whose class extends a missing parent just fine.
+        let mut defer: std::collections::HashSet<Vec<u8>> = std::collections::HashSet::new();
         loop {
             match crate::lower_source_seeded(
                 name,
@@ -2477,19 +2482,122 @@ impl<'m> Vm<'m> {
                 &self.seed_traits,
                 &self.seed_globals,
                 &self.seed_aliases,
+                crate::DeferPolicy::Set(&defer),
             ) {
-                Err(crate::LowerError::UndefinedClass { name: pname, line }) => {
+                Err(crate::LowerError::UndefinedClass { name: pname, kind, line }) => {
                     // An undefined name may be a class/interface *or* a trait used
                     // by a class being lowered; autoload it (which may load a trait
                     // file into `seed_traits`) and retry.
                     if self.resolve_name_autoload(&pname)? {
                         continue;
                     }
-                    return Ok(Err(crate::LowerError::UndefinedClass { name: pname, line }));
+                    // Unloadable: mark it deferrable and re-lower. A name that
+                    // *stays* unresolved while already deferrable comes from a
+                    // non-deferrable site (e.g. a hoisted trait's own `use`) —
+                    // that one is the genuine failure.
+                    if defer.insert(pname.to_ascii_lowercase()) {
+                        continue;
+                    }
+                    return Ok(Err(crate::LowerError::UndefinedClass {
+                        name: pname,
+                        kind,
+                        line,
+                    }));
                 }
                 other => return Ok(other),
             }
         }
+    }
+
+    /// Execute a late-bound declaration ([`crate::hir::DeferredDecl`]) at its
+    /// statement/expression site: re-lower its snippet against the *current*
+    /// class image (autoloading supertypes that appeared since the unit was
+    /// loaded), link and drive it exactly like a mini-include of the original
+    /// file. A supertype still missing is PHP's faithful, catchable
+    /// `Error: Class|Interface|Trait "X" not found`. For an anonymous-class
+    /// expression (`expr = true`) the snippet `return`s the instance and the
+    /// caller's scope is bridged so constructor arguments see its variables.
+    fn run_deferred(&mut self, idx: usize, expr: bool) -> Result<Zval, PhpError> {
+        let caller = self.frames.len() - 1;
+        let unit = self.frames[caller].module;
+        let dd = &unit.deferred[idx];
+        if !expr {
+            if self.class_index.contains_key(&dd.name.to_ascii_lowercase()) {
+                return Err(PhpError::Error(format!(
+                    "Cannot declare {} {}, because the name is already in use",
+                    dd.kind_word,
+                    String::from_utf8_lossy(&dd.name)
+                )));
+            }
+        }
+        let file = unit.file.clone();
+        let snippet = dd.snippet.clone();
+        let line = dd.line;
+        let program = loop {
+            match crate::lower_source_seeded(
+                &file,
+                &snippet,
+                &self.seed_classes,
+                self.seed_static,
+                &self.seed_traits,
+                &self.seed_globals,
+                &self.seed_aliases,
+                crate::DeferPolicy::No,
+            ) {
+                Ok(p) => break p,
+                Err(crate::LowerError::UndefinedClass { name: missing, kind, line: eline }) => {
+                    // The supertype may have been loaded (or become autoloadable)
+                    // since the unit was lowered — that's the whole point of
+                    // binding late. Still missing → the PHP error, at the
+                    // declaration's (padded, so original) line.
+                    if self.resolve_name_autoload(&missing)? {
+                        continue;
+                    }
+                    self.fatal_line = if eline > 0 { eline } else { line };
+                    return Err(PhpError::Error(format!(
+                        "{} \"{}\" not found",
+                        kind.word(),
+                        String::from_utf8_lossy(&missing)
+                    )));
+                }
+                Err(e) => {
+                    log::warn!(
+                        target: "phpr::include",
+                        "deferred decl re-lower failed for {}: {:?}",
+                        String::from_utf8_lossy(&file),
+                        e
+                    );
+                    self.fatal_line = line;
+                    return Err(PhpError::Error(format!(
+                        "require(): Failed to compile '{}'",
+                        String::from_utf8_lossy(&file)
+                    )));
+                }
+            }
+        };
+        self.accumulate_seed(&program);
+        let stubs = self.seed_stub_mask(&program);
+        let module = match crate::compile::compile_program_stubbed(&program, self.registry, &stubs)
+        {
+            Ok(m) => m,
+            Err(e) => {
+                log::warn!(
+                    target: "phpr::include",
+                    "deferred decl compile failed for {}: {:?}",
+                    String::from_utf8_lossy(&file),
+                    e
+                );
+                self.fatal_line = line;
+                return Err(PhpError::Error(format!(
+                    "require(): Failed to compile '{}'",
+                    String::from_utf8_lossy(&file)
+                )));
+            }
+        };
+        // Bridge the calling frame's scope only for the expression form: its
+        // constructor arguments are re-evaluated inside the snippet and must
+        // see the caller's variables live.
+        self.drive_unit(module, None, if expr { Some(caller) } else { None })
     }
 
     /// Fold a freshly-lowered unit's *new* classes into the accumulating seed image

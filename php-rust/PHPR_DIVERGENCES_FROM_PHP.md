@@ -279,6 +279,31 @@ sole-semantiche-interne, già falliti quando la classe era del tutto assente →
 nessuna regressione). Nessun framework reale istanzia/clona/serializza
 `Directory` direttamente.
 
+### 3.3 Late binding delle dichiarazioni di classe — nessuna deferral nei corpi dei TRAIT
+Dal fix "Zend late binding" (una class-like con supertipo irrisolvibile compila
+comunque e si binda quando la dichiarazione ESEGUE — `StmtKind::DeclareDeferred`
+/ `ExprKind::NewAnonDeferred`, snippet ri-abbassato al punto di esecuzione con
+autoload + `Error: Class|Interface|Trait "X" not found` fedele), resta UNA
+eccezione consapevole: dentro i **corpi dei trait** la deferral è disattivata
+(`resolve_trait` forza `DeferConf::No`). Motivo: i membri dei trait vengono
+copiati verbatim nei consumer — anche in ALTRE unit — e l'indice nella tabella
+`deferred` per-modulo penzolerebbe (le closure hanno il meccanismo di shift
+cross-unit, i deferred no). Impatto: una classe anonima con supertipo
+non-caricabile DENTRO un metodo di trait resta un errore di lowering eager
+(pre-fix behaviour) invece del binding a runtime. Non osservato in alcun
+framework reale; se emerge, la soluzione è dare ai deferred lo stesso shift
+cross-unit delle closure. Nota bene: la permissività D-19.10 (forward reference
+a classi dichiarate DOPO nello stesso file, che Zend early-binda solo se il
+parent è già noto) resta INVARIATA — siamo più permissivi di PHP lì, e il
+corpus non lo distingue.
+
+### 3.4 `$this` nello scope-bridge delle classi anonime differite
+Gli argomenti del costruttore di una `new class(...)` differita rieseguono nello
+scope del chiamante via bridge per-nome dei named slots; `$this` non è un named
+slot, quindi `new class($this->x) extends Irrisolvibile {}` dentro un metodo
+non vede `$this` alla ri-esecuzione. Caso non osservato (i test Symfony usano
+solo locals); da chiudere se emerge.
+
 ---
 
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)

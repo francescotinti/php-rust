@@ -78,6 +78,32 @@ pub struct Program {
     /// constant's fully-qualified name — retained for
     /// `ReflectionConstant::getAttributes()`. Empty for the common case.
     pub const_attributes: Vec<(Box<[u8]>, Vec<HirAttribute>)>,
+    /// Class-like declarations whose `extends`/`implements`/`use` target could
+    /// not be resolved at lowering time (PHP compiles such a file fine and binds
+    /// the declaration when its statement *executes* — Zend's late binding).
+    /// Each carries a self-contained source snippet the VM re-lowers at the
+    /// declaration's execution point ([`StmtKind::DeclareDeferred`] /
+    /// [`ExprKind::NewAnonDeferred`]); a supertype still missing then is the
+    /// faithful `Error: Class|Interface|Trait "X" not found`.
+    pub deferred: Vec<DeferredDecl>,
+}
+
+/// One late-bound class-like declaration (see [`Program::deferred`]): a
+/// `<?php`-prefixed snippet reproducing the declaration in its lexical context
+/// (`declare(strict_types)`, `namespace`, `use` imports — all folded onto line 1,
+/// then blank-line padding so the declaration keeps its original line numbers).
+#[derive(Debug, Clone, PartialEq)]
+pub struct DeferredDecl {
+    /// Complete `<?php …` source to re-lower against the VM's class image.
+    pub snippet: Box<[u8]>,
+    /// Fully-qualified name (original case) of the declared class-like; empty
+    /// for an anonymous-class expression.
+    pub name: Box<[u8]>,
+    /// The PHP keyword for redeclaration fatals (`class`/`interface`/`enum`);
+    /// `class` for anonymous classes (never hit — their names are synthetic).
+    pub kind_word: &'static str,
+    /// Source line of the declaration, for diagnostics.
+    pub line: Line,
 }
 
 /// A trait lowered to its flattened members (step 21). Stored owned so it can be
@@ -725,6 +751,13 @@ pub enum StmtKind {
     /// [`Program::conditional_traits`]`[idx]` into the VM's seed-trait image
     /// when reached, so a LATER unit's lowering can `use` it.
     DeclareTrait(usize),
+    /// Late-bound class/interface/enum declaration ([`Program::deferred`]`[idx]`):
+    /// a supertype was unresolvable at lowering time, so — exactly like Zend,
+    /// which skips early binding then — the declaration binds when this
+    /// statement executes: the VM re-lowers the snippet (autoloading the
+    /// supertype) and registers the class, or throws the faithful
+    /// `Error: Class|Interface|Trait "X" not found`.
+    DeclareDeferred(usize),
 }
 
 /// One `catch (T1 | T2 $e) { body }` clause (step 20). `types` are the caught
@@ -1012,6 +1045,14 @@ pub enum ExprKind {
         args: Vec<Expr>,
         named: Vec<(Box<[u8]>, Expr)>,
     },
+
+    /// `new class(…) extends P implements I {…}` whose supertype was
+    /// unresolvable at lowering time ([`Program::deferred`]`[idx]`): the VM
+    /// re-lowers the snippet when the expression executes (Zend late binding),
+    /// sharing the caller's variable scope so constructor arguments evaluate
+    /// in place, and yields the instance — or throws the faithful
+    /// `Error: Class|Interface|Trait "X" not found`.
+    NewAnonDeferred(usize),
 
     /// `$obj->method(args...)` instance method call (step 19, D-19.7). `nullsafe`
     /// marks the `?->` form: a null receiver short-circuits to NULL instead of

@@ -67,6 +67,7 @@ impl<'f> Lowerer<'f> {
             None => {
                 return Err(LowerError::UndefinedClass {
                     name: join_ns(&self.cur_namespace, key),
+                    kind: MissingSym::Trait,
                     line: 0,
                 })
             }
@@ -78,6 +79,13 @@ impl<'f> Lowerer<'f> {
                 line,
             });
         }
+        // No late binding inside trait bodies: a trait's members are copied
+        // verbatim into consumers — possibly in *other* units, where a deferred
+        // declaration's index into this unit's `deferred` table would dangle
+        // (closures have a cross-unit shift mechanism; deferred decls do not).
+        // An unresolvable supertype in a trait member therefore stays the
+        // eager `UndefinedClass` (pre-late-binding behaviour). Restored below.
+        let saved_defer = std::mem::replace(&mut self.defer, DeferConf::No);
         let mut methods = Vec::new();
         let mut props = Vec::new();
         let mut static_props = Vec::new();
@@ -144,6 +152,7 @@ impl<'f> Lowerer<'f> {
         static_props.extend(t_static);
         consts.extend(t_consts);
         in_progress.remove(key);
+        self.defer = saved_defer;
         self.traits.insert(
             key.to_vec(),
             LoweredTrait {
@@ -257,6 +266,7 @@ impl<'f> Lowerer<'f> {
                     None => {
                         return Err(LowerError::UndefinedClass {
                             name: self.resolve_class(tn),
+                            kind: MissingSym::Trait,
                             line,
                         })
                     }
@@ -450,7 +460,11 @@ impl<'f> Lowerer<'f> {
             match self.class_index.get(&n.to_ascii_lowercase()) {
                 Some(&i) => out.push(i),
                 None => {
-                    return Err(LowerError::UndefinedClass { name: n.clone(), line })
+                    return Err(LowerError::UndefinedClass {
+                        name: n.clone(),
+                        kind: MissingSym::Interface,
+                        line,
+                    })
                 }
             }
         }
@@ -656,7 +670,11 @@ impl<'f> Lowerer<'f> {
                 match self.class_index.get(&pname.to_ascii_lowercase()) {
                     Some(&i) => Some(i),
                     None => {
-                        return Err(LowerError::UndefinedClass { name: pname, line })
+                        return Err(LowerError::UndefinedClass {
+                            name: pname,
+                            kind: MissingSym::Class,
+                            line,
+                        })
                     }
                 }
             }
@@ -945,14 +963,29 @@ impl<'f> Lowerer<'f> {
         nm.extend_from_slice(format!(":{line}${n}").as_bytes());
         let name: Box<[u8]> = nm.into();
         let is_abstract = anon.modifiers.iter().any(|m| m.is_abstract());
-        let mut decl = self.lower_class_body(
+        let ctx = self.save_body_ctx();
+        let mut decl = match self.lower_class_body(
             name.clone(),
             &anon.extends,
             &anon.implements,
             is_abstract,
             anon.members.iter(),
             line,
-        )?;
+        ) {
+            Ok(d) => d,
+            // An unresolvable (post-autoload) supertype: Zend binds an anonymous
+            // class when its `new` executes — defer the whole expression (the
+            // constructor arguments are part of the snippet and evaluate in the
+            // caller's scope via the VM's scope bridge).
+            Err(LowerError::UndefinedClass { name: missing, .. })
+                if self.deferrable(&missing) =>
+            {
+                self.restore_body_ctx(ctx);
+                let idx = self.push_deferred(anon.span(), Box::default(), "class", true);
+                return Ok(ExprKind::NewAnonDeferred(idx));
+            }
+            Err(e) => return Err(e),
+        };
         if anon.modifiers.iter().any(|m| m.is_readonly()) {
             for p in &mut decl.props {
                 p.readonly = true;

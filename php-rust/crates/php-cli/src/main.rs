@@ -85,8 +85,10 @@ fn main() -> ExitCode {
         }
         Ok(Err(e)) => {
             // A non-`Fatal` lowering error (e.g. a hard parse failure) — PHP would
-            // print a Parse error and exit 255.
-            eprintln!("PHP Parse error: {e:?}");
+            // print a Parse error and exit 255. (Unresolved supertypes no longer
+            // land here: they defer to run time — Zend late binding — and render
+            // as the faithful uncaught `Error`.)
+            eprintln!("PHP Parse error: {e}");
             ExitCode::from(255)
         }
         Err(panic) => {

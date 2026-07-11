@@ -169,6 +169,7 @@ pub fn compile_program_stubbed(
         conditional_fns: program.conditional_fns.clone(),
         conditional_classes: program.conditional_classes.clone(),
         conditional_traits: program.conditional_traits.clone(),
+        deferred: program.deferred.clone(),
         closures,
         classes,
         file: program.file.clone(),
@@ -527,6 +528,9 @@ impl<'a> FnCompiler<'a> {
             }
             StmtKind::DeclareTrait(idx) => {
                 self.emit(Op::DeclareTrait { idx: *idx as u32 });
+            }
+            StmtKind::DeclareDeferred(idx) => {
+                self.emit(Op::DeclareDeferred { idx: *idx as u32 });
             }
             StmtKind::Echo(values) => {
                 for e in values {
@@ -1299,6 +1303,7 @@ fn expr_name(k: &ExprKind) -> String {
         ExprKind::Include { .. } => "Include",
         ExprKind::Match { .. } => "Match",
         ExprKind::New { .. } => "New",
+        ExprKind::NewAnonDeferred(_) => "NewAnonDeferred",
         ExprKind::MethodCall { .. } => "MethodCall",
         ExprKind::MethodCallDyn { .. } => "MethodCallDyn",
         ExprKind::PropGet { .. } => "PropGet",

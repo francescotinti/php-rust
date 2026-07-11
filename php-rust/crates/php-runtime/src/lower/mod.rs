@@ -47,13 +47,38 @@ pub enum LowerError {
     Unsupported { what: &'static str, line: Line },
     /// A class declaration `extends`/`implements` a class/interface not yet known
     /// (step 57, Phase 3). When lowering an `eval`/`include` unit the VM resolves
-    /// `name` via autoload and retries; at top level it is the usual fatal.
-    UndefinedClass { name: Box<[u8]>, line: Line },
+    /// `name` via autoload and retries; a name that stays unresolvable defers the
+    /// declaration to its execution point (Zend late binding, [`DeferPolicy`]) —
+    /// only a non-deferrable site (e.g. a hoisted trait) leaves this as a fatal.
+    /// `kind` picks the faithful runtime message (`Class|Interface|Trait "X" not
+    /// found`).
+    UndefinedClass { name: Box<[u8]>, kind: MissingSym, line: Line },
     /// A program that PHP *compiles* but rejects with a `Fatal error:` at link
     /// time — e.g. an unresolved trait-method collision (step 21, D-21.5). Unlike
     /// `Unsupported`, this is faithful PHP behaviour: `run_source` turns it into
     /// an [`Outcome`](crate::Outcome) whose `rendered` stream carries the fatal.
     Fatal { message: String, line: Line },
+}
+
+/// What sort of symbol an [`LowerError::UndefinedClass`] was expected to be —
+/// PHP's runtime binding error names the *expected* kind: `extends` wants a
+/// `Class`, `implements`/interface-`extends` an `Interface`, `use` a `Trait`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MissingSym {
+    Class,
+    Interface,
+    Trait,
+}
+
+impl MissingSym {
+    /// The word PHP uses in `<word> "X" not found`.
+    pub fn word(self) -> &'static str {
+        match self {
+            MissingSym::Class => "Class",
+            MissingSym::Interface => "Interface",
+            MissingSym::Trait => "Trait",
+        }
+    }
 }
 
 impl std::fmt::Display for LowerError {
@@ -63,8 +88,13 @@ impl std::fmt::Display for LowerError {
             LowerError::Unsupported { what, line } => {
                 write!(f, "unsupported construct ({what}) on line {line}")
             }
-            LowerError::UndefinedClass { name, line } => {
-                write!(f, "undefined class {} on line {line}", String::from_utf8_lossy(name))
+            LowerError::UndefinedClass { name, kind, line } => {
+                write!(
+                    f,
+                    "{} \"{}\" not found on line {line}",
+                    kind.word(),
+                    String::from_utf8_lossy(name)
+                )
             }
             LowerError::Fatal { message, line } => write!(f, "{message} on line {line}"),
         }
@@ -76,7 +106,9 @@ impl std::error::Error for LowerError {}
 /// Parse `source` (named `name` for diagnostics) and lower it to HIR, seeding the
 /// class/function tables with the built-in prelude only.
 pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
-    lower_source_impl(name, source, None)
+    // The main script defers every unresolved supertype: autoload cannot run at
+    // lowering time, and Zend binds such declarations at execution anyway.
+    lower_source_impl(name, source, None, DeferPolicy::All)
 }
 
 /// Like [`lower_source`] but seeds the class table (and the static-id counter)
@@ -96,11 +128,13 @@ pub fn lower_source_seeded(
     seed_traits: &[(Vec<u8>, LoweredTrait)],
     seed_globals: &[Box<[u8]>],
     seed_aliases: &[(Vec<u8>, Vec<u8>)],
+    defer: DeferPolicy<'_>,
 ) -> Result<Program, LowerError> {
     lower_source_impl(
         name,
         source,
         Some((seed_classes, seed_static, seed_traits, seed_globals, seed_aliases)),
+        defer,
     )
 }
 
@@ -116,6 +150,7 @@ fn lower_source_impl(
     name: &[u8],
     source: &[u8],
     seed: Option<Seed<'_>>,
+    defer: DeferPolicy<'_>,
 ) -> Result<Program, LowerError> {
     let arena = Bump::new();
     let file = File::ephemeral(Cow::Owned(name.to_vec()), Cow::Owned(source.to_vec()));
@@ -132,6 +167,26 @@ fn lower_source_impl(
     }
 
     let mut low = Lowerer::new(&file, name);
+    low.defer = match defer {
+        DeferPolicy::All => DeferConf::All,
+        DeferPolicy::Set(s) => DeferConf::Set(s.clone()),
+        DeferPolicy::No => DeferConf::No,
+    };
+    // `declare(strict_types=1)` must be the file's first statement, but the
+    // main pass only reaches it after hoisting — pre-scan so a deferred-decl
+    // snippet built *during* hoisting (an anonymous class in a method body)
+    // carries the right strictness.
+    for s in program.statements.as_slice() {
+        if let Statement::Declare(node) = s {
+            for item in node.items.iter() {
+                if item.name.value.eq_ignore_ascii_case(b"strict_types") {
+                    if let Expression::Literal(Literal::Integer(i)) = item.value {
+                        low.strict = i.value == Some(1);
+                    }
+                }
+            }
+        }
+    }
     // Docblock trivia, for `getDocComment` retention (the AST drops comments).
     low.docs = program
         .trivia
@@ -273,6 +328,7 @@ fn lower_source_impl(
             .filter(|(k, _)| !seeded_trait_keys.contains(k))
             .collect(),
         const_attributes: low.const_attributes,
+        deferred: low.deferred,
     })
 }
 
@@ -653,7 +709,7 @@ fn lower_prelude_uncached() -> LoweredPrelude {
 /// A name→slot scope: the script globals, or one function's locals. Holds the
 /// slot *names* (positional, reproduced into `Program`/`FnDecl.slots`) and the
 /// reverse index for stable resolution.
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct Scope {
     slots: Vec<Box<[u8]>>,
     index: HashMap<Vec<u8>, Slot>,
@@ -789,6 +845,53 @@ struct Lowerer<'f> {
     /// `#[Attr]` attributes on top-level `const` declarations (FQN → attrs),
     /// accumulated while lowering and surfaced in [`Program::const_attributes`].
     const_attributes: Vec<(Box<[u8]>, Vec<crate::hir::HirAttribute>)>,
+    /// When may a class-like whose supertype is unresolvable be *deferred* to
+    /// its execution point (Zend late binding) instead of failing the unit?
+    /// See [`DeferPolicy`].
+    defer: DeferConf,
+    /// Late-bound declarations collected while lowering ([`Program::deferred`]).
+    deferred: Vec<crate::hir::DeferredDecl>,
+    /// Byte spans of the current namespace block's `use` statements, captured by
+    /// `collect_uses` so a deferred-declaration snippet can reproduce its import
+    /// context verbatim from the original source.
+    use_spans: Vec<(u32, u32)>,
+}
+
+/// Owned form of [`DeferPolicy`] held by the [`Lowerer`].
+enum DeferConf {
+    All,
+    Set(HashSet<Vec<u8>>),
+    No,
+}
+
+/// Saved lexical-body lowering context (see [`Lowerer::save_body_ctx`]).
+struct BodyCtx {
+    cur_class: Option<Box<[u8]>>,
+    cur_function: Option<Box<[u8]>>,
+    cur_trait: Option<Box<[u8]>>,
+    locals: Option<Scope>,
+    fn_by_ref: bool,
+    fn_saw_yield: bool,
+    hook_prop: Option<Box<[u8]>>,
+    hook_backed: bool,
+}
+
+/// When lowering hits a class-like declaration whose `extends`/`implements`/
+/// trait-`use` target is not in the class image, should the declaration be
+/// *deferred* to its execution point (as Zend does — it simply skips early
+/// binding then), or surface as [`LowerError::UndefinedClass`]?
+pub enum DeferPolicy<'a> {
+    /// Defer every unresolved supertype — the main script: autoload cannot run
+    /// at lowering time, so resolvability is only known at execution.
+    All,
+    /// Defer exactly these (lowercased, fully-qualified) names — an
+    /// `include`/`eval` unit: the VM autoload-retries first and adds a name
+    /// here only once autoload failed, keeping eager binding for everything
+    /// autoloadable.
+    Set(&'a HashSet<Vec<u8>>),
+    /// Never defer — re-lowering a deferred snippet at its execution point: an
+    /// unresolved supertype there IS the faithful `… "X" not found` error.
+    No,
 }
 
 /// One constructor-promoted parameter: its property name, declared visibility, the
@@ -845,6 +948,9 @@ impl<'f> Lowerer<'f> {
             anon_classes: Vec::new(),
             anon_count: 0,
             const_attributes: Vec::new(),
+            defer: DeferConf::No,
+            deferred: Vec::new(),
+            use_spans: Vec::new(),
         }
     }
 
@@ -1013,11 +1119,159 @@ impl<'f> Lowerer<'f> {
         self.use_classes.clear();
         self.use_functions.clear();
         self.use_consts.clear();
+        self.use_spans.clear();
         for s in stmts {
             if let Statement::Use(u) = s {
                 self.add_use(u);
+                self.use_spans.push((u.span().start.offset, u.span().end.offset));
             }
         }
+    }
+
+    /// Snapshot the lexical-body lowering context. A class-like lowering that
+    /// fails mid-member normally aborts the whole unit (so its half-updated
+    /// context is moot), but a *deferrable* failure resumes lowering — restore
+    /// from this first ([`Self::restore_body_ctx`]).
+    fn save_body_ctx(&self) -> BodyCtx {
+        BodyCtx {
+            cur_class: self.cur_class.clone(),
+            cur_function: self.cur_function.clone(),
+            cur_trait: self.cur_trait.clone(),
+            locals: self.locals.clone(),
+            fn_by_ref: self.fn_by_ref,
+            fn_saw_yield: self.fn_saw_yield,
+            hook_prop: self.hook_prop.clone(),
+            hook_backed: self.hook_backed,
+        }
+    }
+
+    /// Restore a [`Self::save_body_ctx`] snapshot after a deferrable failure.
+    fn restore_body_ctx(&mut self, ctx: BodyCtx) {
+        self.cur_class = ctx.cur_class;
+        self.cur_function = ctx.cur_function;
+        self.cur_trait = ctx.cur_trait;
+        self.locals = ctx.locals;
+        self.fn_by_ref = ctx.fn_by_ref;
+        self.fn_saw_yield = ctx.fn_saw_yield;
+        self.hook_prop = ctx.hook_prop;
+        self.hook_backed = ctx.hook_backed;
+        self.promoted.clear();
+    }
+
+    /// May a class-like whose supertype resolved to the unknown `name` be
+    /// deferred to its execution point? (See [`DeferPolicy`].)
+    fn deferrable(&self, name: &[u8]) -> bool {
+        match &self.defer {
+            DeferConf::All => true,
+            DeferConf::Set(s) => s.contains(&name.to_ascii_lowercase()),
+            DeferConf::No => false,
+        }
+    }
+
+    /// Byte offset where the docblock lexically attached to the declaration
+    /// starting at `decl_start` begins — the same walk as [`Self::doc_for`]
+    /// (whitespace, `#[...]` attribute lists and modifier keywords may sit
+    /// between), returning the doc's *start* so a deferred snippet can carry it.
+    fn attached_doc_start(&self, decl_start: u32) -> Option<u32> {
+        let idx = self.docs.partition_point(|&(_, end)| end <= decl_start);
+        let &(ds, de) = self.docs.get(idx.checked_sub(1)?)?;
+        let src = self.file.contents.as_ref();
+        let target = decl_start as usize;
+        let mut i = de as usize;
+        while i < target {
+            let b = src[i];
+            if b.is_ascii_whitespace() {
+                i += 1;
+            } else if b == b'#' && src.get(i + 1) == Some(&b'[') {
+                // Skip a balanced `#[...]` attribute list.
+                let mut depth = 0usize;
+                while i < target {
+                    match src[i] {
+                        b'[' => depth += 1,
+                        b']' => {
+                            depth -= 1;
+                            if depth == 0 {
+                                i += 1;
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                    i += 1;
+                }
+            } else if b.is_ascii_alphabetic() {
+                // A modifier keyword (`final`, `abstract`, `readonly`, …).
+                while i < target && (src[i].is_ascii_alphanumeric() || src[i] == b'_') {
+                    i += 1;
+                }
+            } else {
+                return None;
+            }
+        }
+        Some(ds)
+    }
+
+    /// Build the self-contained snippet for a deferred declaration and record it,
+    /// returning its index for the emitted op. The snippet reproduces the
+    /// declaration's lexical context — `declare(strict_types)`, `namespace`, the
+    /// block's `use` imports (all folded onto line 1) — then pads with blank
+    /// lines so the declaration text keeps its original line numbers, so every
+    /// diagnostic raised when the VM re-lowers it points at the real file:line.
+    /// `wrap_return` wraps the slice in `return …;` (an anonymous-class
+    /// *expression* — the unit's return value is the instance).
+    fn push_deferred(
+        &mut self,
+        span: Span,
+        name: Box<[u8]>,
+        kind_word: &'static str,
+        wrap_return: bool,
+    ) -> usize {
+        let src = self.file.contents.as_ref();
+        let start = if wrap_return {
+            span.start.offset
+        } else {
+            // A named declaration carries its attached docblock along (its
+            // Reflection surface must survive the re-lowering).
+            self.attached_doc_start(span.start.offset).unwrap_or(span.start.offset)
+        };
+        let line = self.file.line_number(start) + 1; // 1-based
+        let mut snippet = b"<?php ".to_vec();
+        if self.strict {
+            snippet.extend_from_slice(b"declare(strict_types=1); ");
+        }
+        if !self.cur_namespace.is_empty() {
+            snippet.extend_from_slice(b"namespace ");
+            snippet.extend_from_slice(&self.cur_namespace);
+            snippet.extend_from_slice(b"; ");
+        }
+        for &(us, ue) in &self.use_spans {
+            // `use` statements cannot contain string literals, so folding their
+            // newlines to spaces keeps them valid on one line.
+            for &b in &src[us as usize..ue as usize] {
+                snippet.push(if b == b'\n' || b == b'\r' { b' ' } else { b });
+            }
+            snippet.push(b' ');
+        }
+        // Everything so far sits on line 1; pad so the declaration text starts
+        // on its original line.
+        for _ in 1..line {
+            snippet.push(b'\n');
+        }
+        if wrap_return {
+            snippet.extend_from_slice(b"return ");
+        }
+        snippet.extend_from_slice(&src[start as usize..span.end.offset as usize]);
+        if wrap_return {
+            snippet.push(b';');
+        }
+        let line_out = self.line_of(span);
+        self.deferred.push(crate::hir::DeferredDecl {
+            snippet: snippet.into(),
+            name,
+            kind_word,
+            line: line_out,
+        });
+        self.deferred.len() - 1
     }
 
     /// Insert one import: `kind` is `None` for a class/namespace import, or the
