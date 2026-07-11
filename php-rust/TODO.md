@@ -40,12 +40,14 @@ Current state (2026-07-10): Zend corpus **2332** passing · missing functions
 - [ ] Known divergences (§2.4): resource-id numbers in var_dump; the internal
   `stream_eof`/`stream_seek` call sequence on a mixed read/write handle.
 
-## C. Missing-builtin detector — 183 remaining (real-app-usage ranked)
+## C. Missing-builtin detector — 180 remaining (real-app-usage ranked)
 
 ### C.1 Near-term (pure/deterministic, high real usage) — next candidates
-- [ ] **strftime / gmstrftime** (13 call sites): locale date formatting
-  (deprecated in 8.1 but widely used).
-- [ ] **dir** (9): the OOP `Directory` object (opendir/readdir/rewind/close as methods).
+- [x] ~~**strftime / gmstrftime**~~ ✅ a990d28 — full C-locale UTC formatter,
+  Deprecated notice, 28/28 runnable phpt. (Deferred: setlocale non-C locales.)
+- [x] ~~**dir** — OOP `Directory`~~ ✅ a990d28 — dir()->read()/rewind()/close()
+  byte-identical; internal-class semantics (readonly/no-construct) diverge, see
+  PHPR_DIVERGENCES §3.2.
 - [ ] **DNS family**: gethostbyname/gethostbyaddr/gethostbynamel/dns_get_record/
   checkdnsrr — std::net, but network-dependent; needs an honest local-resolution story.
 - [ ] **get_defined_constants** (7): needs an enumerable constant table
