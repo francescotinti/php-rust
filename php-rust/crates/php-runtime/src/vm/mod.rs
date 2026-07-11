@@ -9074,6 +9074,8 @@ host_builtins! {
     b"session_encode" => vm.ho_session_encode(),
     b"session_decode" => vm.ho_session_decode(args),
     b"session_register_shutdown" => vm.ho_session_register_shutdown(),
+    b"session_set_save_handler" => vm.ho_session_set_save_handler(args),
+    b"__session_files_op" => vm.ho_session_files_op(args),
     b"headers_list" => vm.ho_headers_list(),
     b"setcookie" => vm.ho_setcookie(args),
     b"setrawcookie" => vm.ho_setcookie(args),

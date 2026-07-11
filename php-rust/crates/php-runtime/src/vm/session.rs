@@ -49,8 +49,36 @@ pub(super) struct SessionState {
     /// write (fresh id after regenerate).
     pub snapshot: Option<Vec<u8>>,
     /// The save path captured when the session opened (an ini change while
-    /// active must not redirect the close-time write).
+    /// active must not redirect the close-time write; a SessionHandler
+    /// subclass may also pass a custom path to `parent::open`).
     pub open_path: Vec<u8>,
+    /// The save handler in use: the built-in files module, or the user
+    /// handler registered by `session_set_save_handler` (C2).
+    pub handler: SaveHandler,
+}
+
+/// The registered save handler.
+#[derive(Default)]
+pub(super) enum SaveHandler {
+    #[default]
+    Files,
+    User(Box<UserHandler>),
+}
+
+/// The user save-handler callables (`session_set_save_handler`): either the
+/// object form's `[obj, method]` pairs or the deprecated positional closures.
+pub(super) struct UserHandler {
+    open: Zval,
+    close: Zval,
+    read: Zval,
+    write: Zval,
+    destroy: Zval,
+    gc: Zval,
+    /// `SessionIdInterface::create_sid` when implemented/passed.
+    create_sid: Option<Zval>,
+    /// `SessionUpdateTimestampHandlerInterface` when implemented/passed.
+    validate_id: Option<Zval>,
+    update_timestamp: Option<Zval>,
 }
 
 /// The three serialize handlers `session.serialize_handler` can select.
@@ -261,6 +289,157 @@ impl<'m> Vm<'m> {
         n
     }
 
+    // ---- save-handler dispatch --------------------------------------------------
+
+    /// The user handler's callable for `which`, if one is registered.
+    fn sess_user_cb(&self, which: fn(&UserHandler) -> &Zval) -> Option<Zval> {
+        match &self.session.handler {
+            SaveHandler::Files => None,
+            SaveHandler::User(h) => Some(which(h).clone()),
+        }
+    }
+
+    fn sess_user_cb_opt(&self, which: fn(&UserHandler) -> &Option<Zval>) -> Option<Zval> {
+        match &self.session.handler {
+            SaveHandler::Files => None,
+            SaveHandler::User(h) => which(h).clone(),
+        }
+    }
+
+    /// The module name for the start-failure warnings ("files" / "user").
+    fn sess_mod_name(&self) -> String {
+        String::from_utf8_lossy(self.ini.get(b"session.save_handler").unwrap_or(b"files"))
+            .into_owned()
+    }
+
+    /// open(save_path, session_name) → whether the module initialized.
+    fn sess_mod_open(&mut self) -> Result<bool, PhpError> {
+        let path = self.session.open_path.clone();
+        if let Some(cb) = self.sess_user_cb(|h| &h.open) {
+            let name = self.ini.get(b"session.name").unwrap_or(b"PHPSESSID").to_vec();
+            let r = self.call_callable(
+                cb,
+                vec![
+                    Zval::Str(PhpStr::new(path)),
+                    Zval::Str(PhpStr::new(name)),
+                ],
+            )?;
+            return Ok(convert::to_bool(&r, &mut self.diags));
+        }
+        // files: the directory must exist (mod_files refuses a bogus path).
+        Ok(self.sess_dir_open().is_dir())
+    }
+
+    /// read(id) → the payload; `None` = the handler failed the read.
+    fn sess_mod_read(&mut self, id: &[u8]) -> Result<Option<Vec<u8>>, PhpError> {
+        if let Some(cb) = self.sess_user_cb(|h| &h.read) {
+            let r = self.call_callable(cb, vec![Zval::Str(PhpStr::new(id.to_vec()))])?;
+            return Ok(match r {
+                Zval::Bool(false) => None,
+                Zval::Str(s) => Some(s.as_bytes().to_vec()),
+                other => Some(convert::to_zstr(&other, &mut self.diags).as_bytes().to_vec()),
+            });
+        }
+        Ok(Some(self.sess_files_read(id).unwrap_or_default()))
+    }
+
+    fn sess_mod_write(&mut self, id: &[u8], data: &[u8]) -> Result<(), PhpError> {
+        if let Some(cb) = self.sess_user_cb(|h| &h.write) {
+            self.call_callable(
+                cb,
+                vec![
+                    Zval::Str(PhpStr::new(id.to_vec())),
+                    Zval::Str(PhpStr::new(data.to_vec())),
+                ],
+            )?;
+            return Ok(());
+        }
+        self.sess_files_write(id, data);
+        Ok(())
+    }
+
+    fn sess_mod_close(&mut self) -> Result<(), PhpError> {
+        if let Some(cb) = self.sess_user_cb(|h| &h.close) {
+            self.call_callable(cb, Vec::new())?;
+        }
+        Ok(())
+    }
+
+    fn sess_mod_destroy(&mut self, id: &[u8]) -> Result<(), PhpError> {
+        if let Some(cb) = self.sess_user_cb(|h| &h.destroy) {
+            self.call_callable(cb, vec![Zval::Str(PhpStr::new(id.to_vec()))])?;
+            return Ok(());
+        }
+        self.sess_files_destroy(id);
+        Ok(())
+    }
+
+    /// gc(maxlifetime) → collected count, `None` when the handler failed.
+    fn sess_mod_gc(&mut self) -> Result<Option<i64>, PhpError> {
+        let maxlife = self.ini.get_long(b"session.gc_maxlifetime");
+        if let Some(cb) = self.sess_user_cb(|h| &h.gc) {
+            let r = self.call_callable(cb, vec![Zval::Long(maxlife)])?;
+            return Ok(match r {
+                Zval::Bool(false) => None,
+                other => Some(convert::to_long_cast(&other, &mut self.diags)),
+            });
+        }
+        Ok(Some(self.sess_files_gc()))
+    }
+
+    /// The unchanged-payload commit path: updateTimestamp when the handler
+    /// supports it (files: touch the mtime), a plain write otherwise.
+    fn sess_mod_update_or_write(&mut self, id: &[u8], data: &[u8]) -> Result<(), PhpError> {
+        match &self.session.handler {
+            SaveHandler::Files => {
+                self.sess_files_touch(id);
+                Ok(())
+            }
+            SaveHandler::User(_) => {
+                if let Some(cb) = self.sess_user_cb_opt(|h| &h.update_timestamp) {
+                    self.call_callable(
+                        cb,
+                        vec![
+                            Zval::Str(PhpStr::new(id.to_vec())),
+                            Zval::Str(PhpStr::new(data.to_vec())),
+                        ],
+                    )?;
+                    Ok(())
+                } else {
+                    // No SessionUpdateTimestampHandlerInterface: always write.
+                    self.sess_mod_write(id, data)
+                }
+            }
+        }
+    }
+
+    /// create_sid via the handler when it implements SessionIdInterface.
+    fn sess_mod_create_sid(&mut self) -> Result<Vec<u8>, PhpError> {
+        if let Some(cb) = self.sess_user_cb_opt(|h| &h.create_sid) {
+            let r = self.call_callable(cb, Vec::new())?;
+            return Ok(convert::to_zstr(&r, &mut self.diags).as_bytes().to_vec());
+        }
+        Ok(self.sess_generate_id())
+    }
+
+    /// Strict-mode id validation: the handler's validateId when implemented
+    /// (missing → every id validates, like mod_user), file existence for files.
+    fn sess_mod_validate(&mut self, id: &[u8]) -> Result<bool, PhpError> {
+        match &self.session.handler {
+            SaveHandler::Files => {
+                let dir = self.sess_dir_open();
+                Ok(self.sess_file(&dir, id).exists())
+            }
+            SaveHandler::User(_) => match self.sess_user_cb_opt(|h| &h.validate_id) {
+                Some(cb) => {
+                    let r = self.call_callable(cb, vec![Zval::Str(PhpStr::new(id.to_vec()))])?;
+                    Ok(convert::to_bool(&r, &mut self.diags))
+                }
+                None => Ok(true),
+            },
+        }
+    }
+
     // ---- id generation ---------------------------------------------------------
 
     /// A fresh session id per `session.sid_length`/`sid_bits_per_character`.
@@ -412,21 +591,26 @@ impl<'m> Vm<'m> {
     // ---- lifecycle core ---------------------------------------------------------
 
     /// The destroy-on-decode-failure path shared by `session_start` and
-    /// `session_decode`: warn, delete the file, clear id and `$_SESSION`.
-    fn sess_destroy_on_decode_failure(&mut self, func: &str) {
+    /// `session_decode`: warn, destroy the stored session, clear id and
+    /// `$_SESSION`, close the module.
+    fn sess_destroy_on_decode_failure(&mut self, func: &str) -> Result<(), PhpError> {
         self.diags.push(Diag::Warning(format!(
             "{func}(): Failed to decode session object. Session has been destroyed"
         )));
         let id = self.session.id.clone();
-        self.sess_files_destroy(&id);
+        self.sess_mod_destroy(&id)?;
+        self.sess_mod_close()?;
         self.session.active = false;
         self.session.id = Vec::new();
         self.session.started_at = None;
         self.session.snapshot = None;
+        self.session.open_path = Vec::new();
         self.sess_write_superglobal(PhpArray::new());
+        Ok(())
     }
 
-    /// Commit the active session: encode, write (or touch, lazy_write), close.
+    /// Commit the active session: encode, write (or updateTimestamp when the
+    /// payload is unchanged under lazy_write), close.
     fn sess_commit(&mut self, func: &str) -> Result<(), PhpError> {
         let encoded = self.sess_encode_data(func)?;
         if let Some(data) = encoded {
@@ -434,11 +618,12 @@ impl<'m> Vm<'m> {
                 && self.ini.get_bool(b"session.lazy_write");
             let id = self.session.id.clone();
             if unchanged {
-                self.sess_files_touch(&id);
+                self.sess_mod_update_or_write(&id, &data)?;
             } else {
-                self.sess_files_write(&id, &data);
+                self.sess_mod_write(&id, &data)?;
             }
         }
+        self.sess_mod_close()?;
         self.session.active = false;
         self.session.started_at = None;
         self.session.snapshot = None;
@@ -717,18 +902,34 @@ impl<'m> Vm<'m> {
                 }
             }
         }
-        // Session id: reuse the one set via session_id(), else generate; under
-        // strict mode an id with no backing file is discarded.
+        // The module observes an active session during its own open/read
+        // calls (PHP flips the status before initializing); rolled back on
+        // any failure below.
+        self.session.active = true;
+        self.session.open_path = self.ini.get(b"session.save_path").unwrap_or(b"").to_vec();
+        // open(save_path, name); failure aborts the start (close still runs,
+        // oracle-verified).
+        if !self.sess_mod_open()? {
+            self.sess_mod_close()?;
+            self.sess_start_rollback();
+            let (path, module) = (self.sess_dir_open(), self.sess_mod_name());
+            self.diags.push(Diag::Warning(format!(
+                "session_start(): Failed to initialize storage module: {module} (path: {})",
+                path.display()
+            )));
+            return Ok(Zval::Bool(false));
+        }
+        // Session id: reuse the one set via session_id(), else create one;
+        // under strict mode an id the module does not recognize is discarded.
         let mut id = std::mem::take(&mut self.session.id);
         let strict = self.ini.get_bool(b"session.use_strict_mode");
-        let dir = self.sess_dir();
-        if id.is_empty()
-            || (strict && !self.sess_file(&dir, &id).exists())
-        {
-            id = self.sess_generate_id();
+        if !id.is_empty() && strict && !self.sess_mod_validate(&id)? {
+            id = Vec::new();
+        }
+        if id.is_empty() {
+            id = self.sess_mod_create_sid()?;
         }
         self.session.id = id.clone();
-        self.session.open_path = self.ini.get(b"session.save_path").unwrap_or(b"").to_vec();
         // GC roll (gc_probability / gc_divisor).
         let prob = self.ini.get_long(b"session.gc_probability");
         let div = self.ini.get_long(b"session.gc_divisor").max(1);
@@ -737,34 +938,48 @@ impl<'m> Vm<'m> {
             let _ = os_random_fill(&mut r);
             let roll = u64::from_le_bytes(r) as f64 / u64::MAX as f64;
             if roll < prob as f64 / div as f64 {
-                self.sess_files_gc();
+                self.sess_mod_gc()?;
             }
         }
-        // Read (creating the file) and decode.
-        let data = self.sess_files_read(&id).unwrap_or_default();
+        // Read (the files module creates the file) and decode.
+        let Some(data) = self.sess_mod_read(&id)? else {
+            self.sess_mod_close()?;
+            self.sess_start_rollback();
+            self.session.id = id; // a failed read keeps the id
+            let (path, module) = (self.sess_dir(), self.sess_mod_name());
+            self.diags.push(Diag::Warning(format!(
+                "session_start(): Failed to read session data: {module} (path: {})",
+                path.display()
+            )));
+            return Ok(Zval::Bool(false));
+        };
         match self.sess_decode_data(&data)? {
             Some(arr) => {
                 self.sess_write_superglobal(arr);
                 self.session.snapshot = Some(data);
             }
             None => {
-                self.session.active = true; // destroy path needs the open state
-                self.sess_destroy_on_decode_failure("session_start");
+                self.sess_destroy_on_decode_failure("session_start")?;
                 return Ok(Zval::Bool(false));
             }
         }
-        self.session.active = true;
         let top = self.frames.len().saturating_sub(1);
         let file = self.frames.get(top).map(|f| f.module.file.to_vec()).unwrap_or_default();
         let line = self.cur_line(top);
         self.session.started_at = Some((file, line));
         if read_and_close {
-            self.session.active = false;
-            self.session.started_at = None;
-            self.session.snapshot = None;
-            self.session.open_path = Vec::new();
+            self.sess_mod_close()?;
+            self.sess_start_rollback();
         }
         Ok(Zval::Bool(true))
+    }
+
+    /// Undo the active-state flip of a failing (or read_and_close) start.
+    fn sess_start_rollback(&mut self) {
+        self.session.active = false;
+        self.session.started_at = None;
+        self.session.snapshot = None;
+        self.session.open_path = Vec::new();
     }
 
     /// `session_write_close(): bool` / `session_commit()`.
@@ -795,7 +1010,9 @@ impl<'m> Vm<'m> {
             return Ok(Zval::Bool(false));
         }
         let id = self.session.id.clone();
-        let data = self.sess_files_read(&id).unwrap_or_default();
+        let Some(data) = self.sess_mod_read(&id)? else {
+            return Ok(Zval::Bool(false));
+        };
         match self.sess_decode_data(&data)? {
             Some(arr) => {
                 self.sess_write_superglobal(arr);
@@ -803,7 +1020,7 @@ impl<'m> Vm<'m> {
                 Ok(Zval::Bool(true))
             }
             None => {
-                self.sess_destroy_on_decode_failure("session_reset");
+                self.sess_destroy_on_decode_failure("session_reset")?;
                 Ok(Zval::Bool(false))
             }
         }
@@ -828,7 +1045,8 @@ impl<'m> Vm<'m> {
             return Ok(Zval::Bool(false));
         }
         let id = std::mem::take(&mut self.session.id);
-        self.sess_files_destroy(&id);
+        self.sess_mod_destroy(&id)?;
+        self.sess_mod_close()?;
         self.session.active = false;
         self.session.started_at = None;
         self.session.snapshot = None;
@@ -845,8 +1063,10 @@ impl<'m> Vm<'m> {
             ));
             return Ok(Zval::Bool(false));
         }
-        let n = self.sess_files_gc();
-        Ok(Zval::Long(n))
+        Ok(match self.sess_mod_gc()? {
+            Some(n) => Zval::Long(n),
+            None => Zval::Bool(false),
+        })
     }
 
     /// `session_regenerate_id(bool $delete_old_session = false): bool` — the
@@ -873,11 +1093,11 @@ impl<'m> Vm<'m> {
             .unwrap_or(false);
         let old_id = self.session.id.clone();
         if delete_old {
-            self.sess_files_destroy(&old_id);
+            self.sess_mod_destroy(&old_id)?;
         } else if let Some(data) = self.sess_encode_data("session_regenerate_id")? {
-            self.sess_files_write(&old_id, &data);
+            self.sess_mod_write(&old_id, &data)?;
         }
-        self.session.id = self.sess_generate_id();
+        self.session.id = self.sess_mod_create_sid()?;
         // A fresh id has no backing payload yet: force a write at commit.
         self.session.snapshot = None;
         Ok(Zval::Bool(true))
@@ -947,7 +1167,7 @@ impl<'m> Vm<'m> {
                 Ok(Zval::Bool(true))
             }
             None => {
-                self.sess_destroy_on_decode_failure("session_decode");
+                self.sess_destroy_on_decode_failure("session_decode")?;
                 Ok(Zval::Bool(false))
             }
         }
@@ -959,6 +1179,151 @@ impl<'m> Vm<'m> {
         self.shutdown_fns
             .push((Zval::Str(PhpStr::from_str("session_write_close")), Vec::new()));
         Ok(Zval::Null)
+    }
+
+    /// `session_set_save_handler(SessionHandlerInterface $handler, bool
+    /// $register_shutdown = true): bool` — or the deprecated positional form
+    /// `(open, close, read, write, destroy, gc, ?create_sid, ?validate_sid,
+    /// ?update_timestamp)`. Selects the 'user' module.
+    pub(super) fn ho_session_set_save_handler(
+        &mut self,
+        args: Vec<Zval>,
+    ) -> Result<Zval, PhpError> {
+        if self.sess_refuse_active("session_set_save_handler", "Session save handler") {
+            return Ok(Zval::Bool(false));
+        }
+        let first = args.first().map(|v| v.deref_clone()).unwrap_or(Zval::Null);
+        let handler = if args.len() <= 2 {
+            // Object form.
+            let Zval::Object(obj) = &first else {
+                return Err(PhpError::TypeError(format!(
+                    "session_set_save_handler(): Argument #1 ($handler) must be of type \
+                     SessionHandlerInterface, {} given",
+                    first.type_name_for_error()
+                )));
+            };
+            let cid = obj.borrow().class_id as usize;
+            let implements = |vm: &Self, iface: &[u8]| {
+                vm.class_index
+                    .get(iface)
+                    .is_some_and(|&t| is_instance_of(&vm.classes, vm.stringable_id, cid, t as usize))
+            };
+            if !implements(self, b"sessionhandlerinterface") {
+                return Err(PhpError::TypeError(format!(
+                    "session_set_save_handler(): Argument #1 ($handler) must be of type \
+                     SessionHandlerInterface, {} given",
+                    first.type_name_for_error()
+                )));
+            }
+            let method = |name: &str| {
+                let mut a = PhpArray::new();
+                let _ = a.append(first.clone());
+                let _ = a.append(Zval::Str(PhpStr::from_str(name)));
+                Zval::Array(Rc::new(a))
+            };
+            let has_create_sid = implements(self, b"sessionidinterface");
+            let has_ts = implements(self, b"sessionupdatetimestamphandlerinterface");
+            let register_shutdown = match args.get(1) {
+                Some(v) => convert::to_bool(&v.deref_clone(), &mut self.diags),
+                None => true,
+            };
+            if register_shutdown {
+                self.ho_session_register_shutdown()?;
+            }
+            UserHandler {
+                open: method("open"),
+                close: method("close"),
+                read: method("read"),
+                write: method("write"),
+                destroy: method("destroy"),
+                gc: method("gc"),
+                create_sid: has_create_sid.then(|| method("create_sid")),
+                validate_id: has_ts.then(|| method("validateId")),
+                update_timestamp: has_ts.then(|| method("updateTimestamp")),
+            }
+        } else {
+            // Positional-callables form (deprecated since 8.4).
+            self.diags.push(Diag::Deprecated(
+                "session_set_save_handler(): Providing individual callbacks instead of an \
+                 object implementing SessionHandlerInterface is deprecated"
+                    .to_string(),
+            ));
+            if args.len() < 6 {
+                return Err(PhpError::ArgumentCountError(format!(
+                    "session_set_save_handler() expects at least 6 arguments, {} given",
+                    args.len()
+                )));
+            }
+            let cb = |i: usize| args[i].deref_clone();
+            let opt = |i: usize| {
+                args.get(i)
+                    .map(|v| v.deref_clone())
+                    .filter(|v| !matches!(v, Zval::Null))
+            };
+            UserHandler {
+                open: cb(0),
+                close: cb(1),
+                read: cb(2),
+                write: cb(3),
+                destroy: cb(4),
+                gc: cb(5),
+                create_sid: opt(6),
+                validate_id: opt(7),
+                update_timestamp: opt(8),
+            }
+        };
+        self.session.handler = SaveHandler::User(Box::new(handler));
+        self.ini_set_local(b"session.save_handler", b"user".to_vec());
+        Ok(Zval::Bool(true))
+    }
+
+    /// `__session_files_op(op, ...)` — the prelude `SessionHandler` class
+    /// delegates to the built-in files module through this hook. Outside an
+    /// open session PHP throws: "Session is not active".
+    pub(super) fn ho_session_files_op(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if !self.session.active {
+            return Err(PhpError::Error("Session is not active".to_string()));
+        }
+        let op = args
+            .first()
+            .map(|v| convert::to_zstr(&v.deref_clone(), &mut self.diags).as_bytes().to_vec())
+            .unwrap_or_default();
+        let str_arg = |vm: &mut Self, i: usize| {
+            args.get(i)
+                .map(|v| convert::to_zstr(&v.deref_clone(), &mut vm.diags).as_bytes().to_vec())
+                .unwrap_or_default()
+        };
+        match &op[..] {
+            b"open" => {
+                // A SessionHandler subclass may hand a custom path to
+                // parent::open — it becomes the files module's directory.
+                let path = str_arg(self, 1);
+                self.session.open_path = path;
+                Ok(Zval::Bool(self.sess_dir_open().is_dir()))
+            }
+            b"close" => Ok(Zval::Bool(true)),
+            b"read" => {
+                let id = str_arg(self, 1);
+                Ok(Zval::Str(PhpStr::new(self.sess_files_read(&id).unwrap_or_default())))
+            }
+            b"write" => {
+                let id = str_arg(self, 1);
+                let data = str_arg(self, 2);
+                self.sess_files_write(&id, &data);
+                Ok(Zval::Bool(true))
+            }
+            b"destroy" => {
+                let id = str_arg(self, 1);
+                self.sess_files_destroy(&id);
+                Ok(Zval::Bool(true))
+            }
+            b"gc" => Ok(Zval::Long(self.sess_files_gc())),
+            b"create_sid" => Ok(Zval::Str(PhpStr::new(self.sess_generate_id()))),
+            other => Err(PhpError::Error(format!(
+                "__session_files_op: unknown op {}",
+                String::from_utf8_lossy(other)
+            ))),
+        }
     }
 }
 
