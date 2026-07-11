@@ -756,6 +756,34 @@ impl Stream {
         }
     }
 
+    /// Finalise a gz *write* stream: gzip-compress the buffered plaintext and
+    /// write/append it to the target file, draining the buffer (so a second
+    /// call is a no-op). Runs at `fclose` — and at request shutdown for streams
+    /// a script never closed, exactly like PHP's stream destructor flush.
+    pub fn finalize_gz_file(&mut self) {
+        use std::os::unix::ffi::OsStrExt;
+        if let StreamBackend::GzFile { path, buf, level, append } = &mut self.backend {
+            if buf.get_ref().is_empty() && *append {
+                return; // nothing buffered on an append handle: leave the file be
+            }
+            let compressed = crate::zlibio::compress(buf.get_ref(), *level, crate::zlibio::ENC_GZIP);
+            buf.get_mut().clear();
+            buf.set_position(0);
+            let target = std::ffi::OsStr::from_bytes(path);
+            let file = if *append {
+                std::fs::OpenOptions::new().create(true).append(true).open(target)
+            } else {
+                std::fs::File::create(target)
+            };
+            if let Ok(mut f) = file {
+                let _ = f.write_all(&compressed);
+            }
+            // Subsequent finalizes (shutdown after an explicit fclose ran, or a
+            // duplicate close) must append-not-truncate an already-written file.
+            *append = true;
+        }
+    }
+
     /// Whether the in-memory data is fully consumed — the [`Self::eof_on_exhaust`]
     /// (gz stream) EOF condition. Only a memory-backed stream can tell.
     pub fn at_end(&self) -> bool {

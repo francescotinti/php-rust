@@ -8,13 +8,14 @@ crates/php-server/
 **/._*
 .DS_Store
 
-# phpt-run scratch artifacts: tests executed with a cwd inside the repo write
-# their temp fixtures next to it (readgzfile_temp/, *.txt.gz, gz/hash fixtures,
-# 1-pixel images…). Never commit them.
-*.tmp
-*.txt.gz
-*.gz
-readgzfile_temp/
-1x1.jpg
-DataFile*.txt
-EmptyFile*.txt
+# phpt-run scratch artifacts: tests executed with a cwd of the repo ROOT write
+# their temp fixtures next to it. Anchored to the root (leading /) ON PURPOSE —
+# a bare *.gz would silently mask legitimate committed test fixtures anywhere in
+# the tree (bz2/zip/finfo assets, gz oracle fixtures), which is exactly the
+# class of file this project must never lose.
+/*.tmp
+/*.gz
+/readgzfile_temp/
+/1x1.jpg
+/DataFile*.txt
+/EmptyFile*.txt

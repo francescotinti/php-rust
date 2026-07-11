@@ -1,0 +1,31 @@
+# Build + unit-test gate. The full PHP oracle gates (byte-identical output vs
+# php-cli 8.5.7 and the Zend phpt corpus) run locally — they need the oracle
+# binary and the php-src test corpus — but build + 1500+ unit tests here catch
+# what those gates structurally cannot: cfg(test)-only breakage (a Ctx field
+# addition once left `cargo test` uncompilable for several sessions) and
+# platform drift.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      # libz-sys links the SYSTEM zlib (deliberate: byte-identical deflate needs
+      # PHP's exact library); zlib1g-dev ships on the runner image, this is a
+      # guard for image changes.
+      - name: System deps
+        run: sudo apt-get update && sudo apt-get install -y zlib1g-dev pkg-config
+      - name: Build (release)
+        run: cargo build --release --workspace
+      - name: Unit tests
+        run: cargo test --release --workspace

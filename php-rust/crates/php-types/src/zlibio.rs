@@ -266,3 +266,102 @@ pub fn gzip_decode_members(data: &[u8]) -> Option<Vec<u8>> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample() -> Vec<u8> {
+        // Repetitive + binary-ish, large enough to exercise the memLevel path.
+        let mut v = Vec::new();
+        for i in 0..40_000u32 {
+            v.extend_from_slice(format!("{i} ").as_bytes());
+            v.push((i % 251) as u8);
+        }
+        v
+    }
+
+    #[test]
+    fn roundtrip_all_framings_and_levels() {
+        let data = sample();
+        for wb in [ENC_RAW, ENC_DEFLATE, ENC_GZIP] {
+            for level in [-1, 0, 1, 6, 9] {
+                let c = compress(&data, level, wb);
+                assert!(!c.is_empty());
+                assert_eq!(uncompress(&c, wb).as_deref(), Some(&data[..]), "wb={wb} level={level}");
+            }
+        }
+        // Auto-detect accepts both wrapped framings.
+        assert_eq!(uncompress(&compress(&data, -1, ENC_GZIP), AUTODETECT).as_deref(), Some(&data[..]));
+        assert_eq!(uncompress(&compress(&data, -1, ENC_DEFLATE), AUTODETECT).as_deref(), Some(&data[..]));
+    }
+
+    #[test]
+    fn truncated_and_garbage_inputs_fail_cleanly() {
+        let c = compress(b"hello world hello world", -1, ENC_DEFLATE);
+        assert!(uncompress(&c[..c.len() - 3], ENC_DEFLATE).is_none(), "truncated");
+        assert!(uncompress(b"", ENC_DEFLATE).is_none(), "empty");
+        assert!(uncompress(b"not compressed at all", ENC_GZIP).is_none(), "garbage");
+    }
+
+    #[test]
+    fn multi_member_gzip_concatenates() {
+        let mut blob = compress(b"first-", -1, ENC_GZIP);
+        blob.extend_from_slice(&compress(b"second", -1, ENC_GZIP));
+        assert_eq!(gzip_decode_members(&blob).as_deref(), Some(&b"first-second"[..]));
+        // A single decode stops at the first member.
+        assert_eq!(uncompress(&blob, ENC_GZIP).as_deref(), Some(&b"first-"[..]));
+    }
+
+    #[test]
+    fn incremental_matches_one_shot_and_resets_on_reuse() {
+        let data = sample();
+        // Chunked NO_FLUSH adds + a FINISH tail must equal the one-shot stream.
+        let mut z = ZCtx::new_deflate(6, ENC_DEFLATE, 9, 0, None).unwrap();
+        let mut streamed = Vec::new();
+        for chunk in data.chunks(7_001) {
+            streamed.extend_from_slice(&z.add(chunk, 0).unwrap());
+        }
+        streamed.extend_from_slice(&z.add(&[], 4).unwrap());
+        assert_eq!(streamed, compress(&data, 6, ENC_DEFLATE));
+        // Reuse after Z_STREAM_END: the context resets and produces a fresh
+        // stream identical to the first.
+        let mut second = Vec::new();
+        for chunk in data.chunks(9_999) {
+            second.extend_from_slice(&z.add(chunk, 0).unwrap());
+        }
+        second.extend_from_slice(&z.add(&[], 4).unwrap());
+        assert_eq!(second, streamed);
+    }
+
+    #[test]
+    fn incremental_inflate_reports_status_and_read_len() {
+        let c = compress(b"Hello world.", -1, ENC_DEFLATE);
+        let mut z = ZCtx::new_inflate(ENC_DEFLATE, None).unwrap();
+        assert_eq!(z.last_status(), 0); // Z_OK before any input
+        let mut out = Vec::new();
+        for b in &c {
+            out.extend_from_slice(&z.add(std::slice::from_ref(b), 2).unwrap());
+        }
+        assert_eq!(out, b"Hello world.");
+        assert_eq!(z.last_status(), 1); // Z_STREAM_END
+        assert_eq!(z.total_in(), c.len() as i64);
+    }
+
+    #[test]
+    fn preset_dictionary_mismatch_is_a_distinct_error() {
+        let dict = b"the quick brown fox".to_vec();
+        let mut d = ZCtx::new_deflate(6, ENC_DEFLATE, 8, 0, Some(dict.clone())).unwrap();
+        let mut c = d.add(b"the quick brown fox jumps", 0).unwrap();
+        c.extend_from_slice(&d.add(&[], 4).unwrap());
+        // Correct dictionary round-trips…
+        let mut ok = ZCtx::new_inflate(ENC_DEFLATE, Some(dict)).unwrap();
+        assert_eq!(ok.add(&c, 4).unwrap(), b"the quick brown fox jumps");
+        // …a wrong one is DictMismatch (not a generic data error).
+        let mut bad = ZCtx::new_inflate(ENC_DEFLATE, Some(b"wrong words".to_vec())).unwrap();
+        assert_eq!(bad.add(&c, 4).unwrap_err(), ZErr::DictMismatch);
+        // …and none at all is too.
+        let mut none = ZCtx::new_inflate(ENC_DEFLATE, None).unwrap();
+        assert_eq!(none.add(&c, 4).unwrap_err(), ZErr::DictMismatch);
+    }
+}

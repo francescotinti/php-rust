@@ -5021,24 +5021,26 @@ impl<'m> super::Vm<'m> {
         }))))
     }
 
-    /// Finish the write-filter chains of every stream that ever had a filter
-    /// attached (request-shutdown flush): the final tail goes to the backend, or
-    /// into the VM's output for a stdout-backed stream.
+    /// Request-shutdown flush for every stream that needs a finaliser and was
+    /// never fclosed: finish attached write-filter chains (tail to the backend,
+    /// or into the VM output for a stdout-backed stream), then materialise gz
+    /// write buffers (PHP's stream destructor does both).
     pub(super) fn finalize_filtered_streams(&mut self) {
         let streams = std::mem::take(&mut self.filtered_streams);
         for rc in streams {
             let (tail, to_stdout) = {
                 let mut b = rc.borrow_mut();
                 let Some(s) = b.as_stream_mut() else { continue };
-                if !s.has_write_filters() {
-                    continue;
+                let mut tail = Vec::new();
+                if s.has_write_filters() {
+                    tail = s.drain_write_filters(true).unwrap_or_default();
                 }
-                let tail = s.drain_write_filters(true).unwrap_or_default();
                 let to_stdout =
                     matches!(s.backend, php_types::stream::StreamBackend::Stdout);
                 if !to_stdout && !tail.is_empty() {
                     let _ = s.write(&tail);
                 }
+                s.finalize_gz_file();
                 (tail, to_stdout)
             };
             if to_stdout && !tail.is_empty() {
@@ -5255,7 +5257,15 @@ impl<'m> super::Vm<'m> {
         };
         let id = self.next_resource_id;
         self.next_resource_id += 1;
-        Ok(Zval::Resource(Rc::new(RefCell::new(Resource::new(id, stream)))))
+        let is_gz_write = matches!(stream.backend, php_types::stream::StreamBackend::GzFile { .. });
+        let rc = Rc::new(RefCell::new(Resource::new(id, stream)));
+        // A gz WRITE stream only materialises its file when finalised; register
+        // it so request shutdown flushes a handle the script never fclosed
+        // (PHP's stream destructor does the same).
+        if is_gz_write {
+            self.filtered_streams.push(Rc::clone(&rc));
+        }
+        Ok(Zval::Resource(rc))
     }
 
     /// Open a `scheme://…` URL whose scheme is a registered userland wrapper:

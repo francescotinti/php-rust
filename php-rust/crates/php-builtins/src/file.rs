@@ -171,22 +171,8 @@ pub fn fclose(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
             }
         }
     }
-    if let Some(StreamBackend::GzFile { path, buf, level, append }) =
-        res.as_stream_mut().map(|s| &mut s.backend)
-    {
-        use std::io::Write as _;
-        use std::os::unix::ffi::OsStrExt;
-        let compressed =
-            php_types::zlibio::compress(buf.get_ref(), *level, php_types::zlibio::ENC_GZIP);
-        let target = std::ffi::OsStr::from_bytes(path);
-        let file = if *append {
-            std::fs::OpenOptions::new().create(true).append(true).open(target)
-        } else {
-            std::fs::File::create(target)
-        };
-        if let Ok(mut f) = file {
-            let _ = f.write_all(&compressed);
-        }
+    if let Some(s) = res.as_stream_mut() {
+        s.finalize_gz_file(); // gz write stream: compress + write the buffer
     }
     res.kind = ResKind::Closed;
     Ok(Zval::Bool(true))
