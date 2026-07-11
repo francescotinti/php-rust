@@ -3472,6 +3472,22 @@ impl<'m> Vm<'m> {
         Ok(())
     }
 
+    /// Discarded-teardown handler pass for a popped buffer: PHP still invokes
+    /// the handler when a buffer is destroyed WITHOUT flushing
+    /// (`ob_end_clean`/`ob_get_clean`), with `CLEAN|FINAL` (`|START` on first
+    /// use) and the handler's return discarded. PHPUnit 13's OutputBuffer
+    /// captures the test's output exactly there — skipping the pass made every
+    /// `expectOutputString()` assertion compare against "".
+    fn clean_buffer(&mut self, mut buf: OutputBuffer) -> Result<(), PhpError> {
+        if buf.callback.is_none() {
+            return Ok(());
+        }
+        let content = std::mem::take(&mut buf.content);
+        let phase = if buf.started { 2 | 8 } else { 2 | 8 | 1 };
+        let _ = self.apply_ob_callback(&buf.callback, content, phase)?;
+        Ok(())
+    }
+
     /// Flush every still-active output buffer at request shutdown (PHP implicitly
     /// flushes the buffer stack top-down, each into the next, finally to the SAPI).
     /// A flushing callback that throws is swallowed here (shutdown is past the point
@@ -5946,30 +5962,28 @@ impl<'m> Vm<'m> {
     /// closures and named user functions are inspected; anything else is false.
     fn callable_first_by_ref(&self, callee: &Zval) -> bool {
         match callee {
-            Zval::Closure(cl) => match &cl.named {
-                Some(name) => self.named_first_by_ref(name.as_bytes()),
-                None => self
-                    .module
-                    .closures
-                    .get(cl.fn_idx)
-                    .and_then(|f| f.param_by_ref.first())
-                    .copied()
-                    .unwrap_or(false),
-            },
+            // Resolve against the closure's OWN module (`closure_func_mod`):
+            // reading `self.module.closures[fn_idx]` looked the flag up in the
+            // *current* unit, so a `&$item` walk callback defined in an
+            // included file lost its by-ref binding (symfony's
+            // StreamedJsonResponse placeholder walk silently wrote nothing).
+            Zval::Closure(cl) => self
+                .closure_func_mod(cl)
+                .and_then(|(f, _)| f.param_by_ref.first().copied())
+                .unwrap_or(false),
             Zval::Str(s) => self.named_first_by_ref(s.as_bytes()),
             Zval::Ref(c) => self.callable_first_by_ref(&c.borrow()),
             _ => false,
         }
     }
 
-    /// First-parameter by-reference flag of a named user function (case-insensitive).
+    /// First-parameter by-reference flag of a named user function
+    /// (case-insensitive), searching the current module first and the
+    /// cross-unit `linked_functions` registry after — a string callable may
+    /// name a function another unit defined.
     fn named_first_by_ref(&self, name: &[u8]) -> bool {
-        self.module
-            .functions
-            .iter()
-            .find(|f| name_eq_ignore_case(&f.name, name))
-            .and_then(|f| f.param_by_ref.first())
-            .copied()
+        self.user_function_with_mod(name)
+            .and_then(|(f, _)| f.param_by_ref.first().copied())
             .unwrap_or(false)
     }
 
@@ -6094,7 +6108,18 @@ impl<'m> Vm<'m> {
             return if hint.nullable { Ok(Zval::Null) } else { Err("null".to_string()) };
         }
         match &hint.kind {
-            HintKind::Scalar(_) => {
+            HintKind::Scalar(st) => {
+                // Weak mode converts a __toString object for a `string` hint
+                // (Zend's zend_verify_weak_scalar_type_checks; strict mode
+                // rejects it) — symfony passes Stringable objects to ?string
+                // parameters (Response::setContent) and string returns.
+                // (Residue: a THROWING __toString here degrades to the
+                // TypeError instead of propagating the exception.)
+                if !strict && *st == crate::hir::ScalarType::String {
+                    if let Some(s) = self.object_to_string_weak(&v) {
+                        return Ok(Zval::Str(s));
+                    }
+                }
                 coerce_to_hint(value, hint, &mut self.diags, strict).map_err(str::to_string)
             }
             HintKind::Array => match v {
@@ -6133,9 +6158,11 @@ impl<'m> Vm<'m> {
                 let exact = |k: &HintKind| -> bool {
                     match k {
                         HintKind::Scalar(ScalarType::Int) => matches!(v, Zval::Long(_)),
-                        HintKind::Scalar(ScalarType::Float) => {
-                            matches!(v, Zval::Double(_) | Zval::Long(_))
-                        }
+                        // An int is NOT an exact float in a union: when `int`
+                        // is absent, Zend WIDENS it to float (`bool|float|string`
+                        // given 7 yields 7.0), which the preference loop below
+                        // performs — exact acceptance would keep it an int.
+                        HintKind::Scalar(ScalarType::Float) => matches!(v, Zval::Double(_)),
                         HintKind::Scalar(ScalarType::String) => matches!(v, Zval::Str(_)),
                         HintKind::Scalar(ScalarType::Bool) => matches!(v, Zval::Bool(_)),
                         HintKind::Array => matches!(v, Zval::Array(_)),
@@ -6155,21 +6182,48 @@ impl<'m> Vm<'m> {
                     return Ok(value);
                 }
                 if !strict {
-                    for k in members {
-                        if matches!(k, HintKind::Scalar(_)) {
-                            let single =
-                                TypeHint { kind: k.clone(), nullable: hint.nullable };
-                            if let Ok(c) =
-                                coerce_to_hint(value.clone(), &single, &mut self.diags, strict)
-                            {
-                                return Ok(c);
+                    // Weak union coercion follows Zend's PREFERENCE order —
+                    // int, float, string, bool — over the members present,
+                    // NOT the declared order (`bool|string` given 10 must
+                    // produce "10", not true: symfony's
+                    // addCacheControlDirective(bool|string) relies on it).
+                    use crate::hir::ScalarType as St;
+                    for want in [St::Int, St::Float, St::String, St::Bool] {
+                        if !members.iter().any(|k| matches!(k, HintKind::Scalar(s) if *s == want))
+                        {
+                            continue;
+                        }
+                        // An object converts only toward `string`, via __toString.
+                        if want == St::String {
+                            if let Some(s) = self.object_to_string_weak(&v) {
+                                return Ok(Zval::Str(s));
                             }
+                        }
+                        let single = TypeHint {
+                            kind: HintKind::Scalar(want),
+                            nullable: hint.nullable,
+                        };
+                        if let Ok(c) =
+                            coerce_to_hint(value.clone(), &single, &mut self.diags, strict)
+                        {
+                            return Ok(c);
                         }
                     }
                 }
                 Err(v.type_name_for_error())
             }
         }
+    }
+
+    /// Weak-mode `object → string` conversion for a `string`(-containing) type:
+    /// `Some(str)` when `v` is an object with a `__toString` method (invoked
+    /// synchronously), `None` otherwise. Strict mode must not call this.
+    fn object_to_string_weak(&mut self, v: &Zval) -> Option<php_types::ZStr> {
+        let Zval::Object(o) = v else { return None };
+        let cid = o.borrow().class_id as usize;
+        resolve_method_runtime(&self.classes, cid, b"__toString")?;
+        let res = self.call_method_sync(v.clone(), b"__toString", Vec::new()).ok()?;
+        Some(php_types::convert::to_zstr(&res, &mut self.diags))
     }
 
     /// Whether class `cid` permits dynamic (undeclared) properties without the
@@ -7674,6 +7728,25 @@ impl<'m> Vm<'m> {
         try_from: bool,
     ) -> Result<Zval, PhpError> {
         let arg = arg.unwrap_or(Zval::Null).deref_clone();
+        // An outright illegal argument type is PHP's TypeError, before any
+        // case matching ("Suit::from(): Argument #1 ($value) must be of type
+        // string|int, array given" — oracle wording for a string-backed enum).
+        if matches!(arg, Zval::Null | Zval::Undef | Zval::Array(_) | Zval::Object(_)) {
+            // Oracle-pinned wording: an int-backed enum says "int", a
+            // string-backed one "string|int". Backing type inferred from the
+            // first case's value constant.
+            let types = match self.classes[cid].enum_cases.first().and_then(|c| c.value.as_ref())
+            {
+                Some(crate::bytecode::Const::Int(_)) => "int",
+                _ => "string|int",
+            };
+            return Err(PhpError::TypeError(format!(
+                "{}::{}(): Argument #1 ($value) must be of type {types}, {} given",
+                String::from_utf8_lossy(&self.classes[cid].name),
+                if try_from { "tryFrom" } else { "from" },
+                arg.type_name_for_error(),
+            )));
+        }
         let n = self.classes[cid].enum_cases.len();
         for i in 0..n {
             let case = self.enum_case(cid, i as u32);

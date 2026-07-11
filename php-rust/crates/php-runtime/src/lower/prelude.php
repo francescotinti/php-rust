@@ -579,9 +579,31 @@ class DateTime implements DateTimeInterface {
         $this->__tz = is_string($timezone) ? $timezone : $timezone->getName();
         return $this;
     }
+    public function __unserialize(array $data) {
+        // Accept both this class's own state keys and the MANGLED private
+        // slots an `(array)` cast produces (symfony DatePoint's constructor
+        // does `$this->__unserialize((array) $now)` on our instances). Any
+        // OTHER key is a subclass property (inherited serialization round
+        // trip) and is restored under its unmangled name.
+        foreach ($data as $k => $v) {
+            if (substr($k, -4) === '__ts') { $this->__ts = $v; }
+            elseif (substr($k, -4) === '__us') { $this->__us = $v; }
+            elseif (substr($k, -4) === '__tz') { $this->__tz = $v; }
+            else {
+                $p = strrpos($k, "\0");
+                $this->{$p === false ? $k : substr($k, $p + 1)} = $v;
+            }
+        }
+    }
     public static function createFromInterface($object) {
-        $d = new DateTime("@" . $object->getTimestamp());
-        return $d->setTimezone($object->getTimezone());
+        // PHP's C implementation returns `static` and creates the instance
+        // WITHOUT invoking the subclass constructor (symfony DatePoint's
+        // would re-enter Clock::get() -> now() -> createFromInterface).
+        $d = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $d->__ts = $object->getTimestamp();
+        $d->__us = (int) $object->format('u');
+        $d->__tz = $object->getTimezone()->getName();
+        return $d;
     }
     public static function createFromImmutable($object) { return static::createFromInterface($object); }
     public function format($format) {
@@ -726,9 +748,31 @@ class DateTimeImmutable implements DateTimeInterface {
         $c->__tz = is_string($timezone) ? $timezone : $timezone->getName();
         return $c;
     }
+    public function __unserialize(array $data) {
+        // Accept both this class's own state keys and the MANGLED private
+        // slots an `(array)` cast produces (symfony DatePoint's constructor
+        // does `$this->__unserialize((array) $now)` on our instances). Any
+        // OTHER key is a subclass property (inherited serialization round
+        // trip) and is restored under its unmangled name.
+        foreach ($data as $k => $v) {
+            if (substr($k, -4) === '__ts') { $this->__ts = $v; }
+            elseif (substr($k, -4) === '__us') { $this->__us = $v; }
+            elseif (substr($k, -4) === '__tz') { $this->__tz = $v; }
+            else {
+                $p = strrpos($k, "\0");
+                $this->{$p === false ? $k : substr($k, $p + 1)} = $v;
+            }
+        }
+    }
     public static function createFromInterface($object) {
-        $d = new DateTimeImmutable("@" . $object->getTimestamp());
-        return $d->setTimezone($object->getTimezone());
+        // PHP's C implementation returns `static` and creates the instance
+        // WITHOUT invoking the subclass constructor (symfony DatePoint's
+        // would re-enter Clock::get() -> now() -> createFromInterface).
+        $d = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $d->__ts = $object->getTimestamp();
+        $d->__us = (int) $object->format('u');
+        $d->__tz = $object->getTimezone()->getName();
+        return $d;
     }
     public static function createFromMutable($object) { return static::createFromInterface($object); }
     public function format($format) {

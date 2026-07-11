@@ -76,12 +76,14 @@ pub fn explode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
             "explode(): Argument #1 ($separator) must not be empty".to_string(),
         ));
     }
-    let string = convert::to_zstr(
-        args.get(1).ok_or_else(|| {
+    // ctx.to_zstr honors a VM-precomputed __toString for a Stringable
+    // subject (`explode("\r\n", $response)` on a symfony Response).
+    let string = {
+        let arg = args.get(1).ok_or_else(|| {
             PhpError::Error("explode() expects at least 2 arguments, 1 given".to_string())
-        })?,
-        ctx.diags,
-    );
+        })?;
+        ctx.to_zstr(arg)
+    };
     let limit = match args.get(2) {
         Some(v) => convert::to_long_cast(v, ctx.diags),
         None => i64::MAX,

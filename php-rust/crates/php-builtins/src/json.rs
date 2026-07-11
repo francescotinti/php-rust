@@ -106,6 +106,33 @@ fn encode(
             }
         }
         Zval::Str(s) => {
+            // JSON_NUMERIC_CHECK (32): a numeric STRING value encodes as its
+            // number (values only — array/object keys go through the key
+            // path, which PHP does not numeric-check).
+            const NUMERIC_CHECK: i64 = 32;
+            if flags & NUMERIC_CHECK != 0 {
+                if let Some(info) = php_types::numstr::parse_numeric_ex(s.as_bytes(), true) {
+                    if !info.trailing {
+                        match info.num {
+                            php_types::numstr::Num::Long(n) => {
+                                out.extend_from_slice(n.to_string().as_bytes());
+                                return Ok(());
+                            }
+                            php_types::numstr::Num::Double(d) if d.is_finite() => {
+                                let mut buf = double_to_shortest(d);
+                                for b in buf.iter_mut() {
+                                    if *b == b'E' {
+                                        *b = b'e';
+                                    }
+                                }
+                                out.extend_from_slice(&buf);
+                                return Ok(());
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
             let before = out.len();
             if encode_string(s.as_bytes(), flags, out).is_err() {
                 if partial {
@@ -288,9 +315,22 @@ fn encode_string(s: &[u8], flags: i64, out: &mut Vec<u8>) -> Result<(), ()> {
         }
         Err(_) => return Err(()),
     };
+    // JSON_HEX_TAG (1) / _AMP (2) / _APOS (4) / _QUOT (8): HTML-safe escaping
+    // of <, >, &, ', " as \u00XX (symfony JsonResponse's default options).
+    const HEX_TAG: i64 = 1;
+    const HEX_AMP: i64 = 2;
+    const HEX_APOS: i64 = 4;
+    const HEX_QUOT: i64 = 8;
     out.push(b'"');
     for ch in text.chars() {
         match ch {
+            // php_json_encoder.c emits these as FIXED literals — uppercase hex
+            // (`<`), unlike the lowercase generic escaper below.
+            '<' if flags & HEX_TAG != 0 => out.extend_from_slice(b"\\u003C"),
+            '>' if flags & HEX_TAG != 0 => out.extend_from_slice(b"\\u003E"),
+            '&' if flags & HEX_AMP != 0 => out.extend_from_slice(b"\\u0026"),
+            '\'' if flags & HEX_APOS != 0 => out.extend_from_slice(b"\\u0027"),
+            '"' if flags & HEX_QUOT != 0 => out.extend_from_slice(b"\\u0022"),
             '"' => out.extend_from_slice(b"\\\""),
             '\\' => out.extend_from_slice(b"\\\\"),
             '/' => {

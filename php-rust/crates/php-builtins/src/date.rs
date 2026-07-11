@@ -78,8 +78,9 @@ fn ordinal_suffix(day: u8) -> &'static str {
 }
 
 /// Map a single PHP `date()` format char to its output, appending to `out`.
-/// `dt` is the instant interpreted in UTC.
-fn append_char(out: &mut Vec<u8>, c: u8, dt: &OffsetDateTime, epoch: i64) {
+/// `dt` is the instant interpreted in UTC. `gmt` marks a gmdate() caller
+/// (only `T` renders differently: "GMT" instead of "UTC").
+fn append_char(out: &mut Vec<u8>, c: u8, dt: &OffsetDateTime, epoch: i64, gmt: bool) {
     let year = dt.year();
     let month = u8::from(dt.month());
     let day = dt.day();
@@ -126,7 +127,10 @@ fn append_char(out: &mut Vec<u8>, c: u8, dt: &OffsetDateTime, epoch: i64) {
         b'B' => push(out, &format!("{:03}", swatch_beats(hour, minute, second))),
         // --- Timezone (UTC only, D-DT3) ---
         b'e' => push(out, "UTC"),
-        b'T' => push(out, "UTC"),
+        // `date('T')` under the (default) UTC zone shows "UTC"; `gmdate('T')`
+        // shows "GMT" (oracle-pinned) — the ONE formatting difference between
+        // the two under phpr's UTC-only scope.
+        b'T' => push(out, if gmt { "GMT" } else { "UTC" }),
         b'I' => push(out, "0"),
         b'O' => push(out, "+0000"),
         b'P' => push(out, "+00:00"),
@@ -173,7 +177,7 @@ fn swatch_beats(hour: u8, minute: u8, second: u8) -> u32 {
 
 /// Format `epoch` (Unix seconds, UTC) per the PHP `fmt` string. Backslash
 /// escapes the next byte (emitted literally). Unknown bytes pass through.
-pub fn format_php(epoch: i64, fmt: &[u8]) -> Vec<u8> {
+pub fn format_php(epoch: i64, fmt: &[u8], gmt: bool) -> Vec<u8> {
     let dt = match OffsetDateTime::from_unix_timestamp(epoch) {
         Ok(dt) => dt,
         Err(_) => return Vec::new(),
@@ -193,7 +197,7 @@ pub fn format_php(epoch: i64, fmt: &[u8]) -> Vec<u8> {
             }
             continue;
         }
-        append_char(&mut out, c, &dt, epoch);
+        append_char(&mut out, c, &dt, epoch, gmt);
         i += 1;
     }
     out
@@ -221,13 +225,23 @@ pub fn date(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         None | Some(Zval::Null) => now_epoch(),
         Some(v) => convert::to_long_cast(v, ctx.diags),
     };
-    Ok(Zval::Str(PhpStr::new(format_php(epoch, fmt.as_bytes()))))
+    Ok(Zval::Str(PhpStr::new(format_php(epoch, fmt.as_bytes(), false))))
 }
 
 /// `gmdate(string $format, ?int $timestamp = null)`. With UTC scope this is
 /// identical to `date()`.
 pub fn gmdate(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    date(args, ctx)
+    let fmt = convert::to_zstr(
+        args.first().ok_or_else(|| {
+            PhpError::Error("gmdate() expects at least 1 argument, 0 given".to_string())
+        })?,
+        ctx.diags,
+    );
+    let epoch = match args.get(1) {
+        None | Some(Zval::Null) => now_epoch(),
+        Some(v) => convert::to_long_cast(v, ctx.diags),
+    };
+    Ok(Zval::Str(PhpStr::new(format_php(epoch, fmt.as_bytes(), true))))
 }
 
 /// Map one `strftime()` conversion char (the byte after `%`) to its output,
@@ -397,7 +411,7 @@ pub fn idate(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         None | Some(Zval::Null) => now_epoch(),
         Some(v) => convert::to_long_cast(v, ctx.diags),
     };
-    let s = format_php(epoch, &[c]);
+    let s = format_php(epoch, &[c], false);
     let n = std::str::from_utf8(&s)
         .ok()
         .and_then(|t| t.trim().parse::<i64>().ok())
@@ -500,6 +514,120 @@ pub fn checkdate(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         && day >= 1
         && day <= days_in_month(year as i32, month as u8) as i64;
     Ok(Zval::Bool(ok))
+}
+
+/// Textual date formats (`strtotime`): the HTTP/cookie family —
+/// `[DayName[,]] dd[- ]MonthName[- ](YYYY|YY) [HH:MM[:SS]] [GMT|UTC|Z|±HH[:]MM]`
+/// (case-insensitive names; `Fri, 20-May-2011 15:25:52 GMT`,
+/// `Tuesday, 08-Feb-94 14:15:29 GMT`, `20 May 2011`). Oracle-pinned rules: a
+/// missing time is midnight; a two-digit year is 20YY below 70, 19YY from 70;
+/// a day-name that disagrees with the date pushes it FORWARD to the next such
+/// weekday. Named zones beyond the zero-offset ones (CEST, EST, …) would need
+/// timelib's table and stay a parse failure.
+fn parse_textual(s: &str) -> Option<i64> {
+    const DAYS: [&str; 7] =
+        ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    const MONTHS: [&str; 12] = [
+        "january", "february", "march", "april", "may", "june", "july", "august", "september",
+        "october", "november", "december",
+    ];
+    // Normalise the date core's dashes to spaces (`20-May-2011` → `20 May
+    // 2011`): only a dash TOUCHING a letter splits, so numeric offsets
+    // (`-0500`) survive.
+    let bytes = s.as_bytes();
+    let mut norm = String::with_capacity(s.len());
+    for (i, &c) in bytes.iter().enumerate() {
+        let prev_alpha = i > 0 && bytes[i - 1].is_ascii_alphabetic();
+        let next_alpha = bytes.get(i + 1).is_some_and(|n| n.is_ascii_alphabetic());
+        if c == b'-' && (prev_alpha || next_alpha) {
+            norm.push(' ');
+        } else {
+            norm.push(c as char);
+        }
+    }
+    let mut toks: Vec<&str> = norm.split_whitespace().collect();
+    if toks.is_empty() {
+        return None;
+    }
+    // Optional leading day name (with or without a trailing comma).
+    let mut want_dow: Option<i64> = None;
+    {
+        let head = toks[0].trim_end_matches(',').to_ascii_lowercase();
+        if let Some(d) = DAYS.iter().position(|n| head == n[..3] || head == **n) {
+            want_dow = Some(d as i64);
+            toks.remove(0);
+        }
+    }
+    // `dd MonthName YYYY` (the month name is what routes here at all).
+    if toks.len() < 3 {
+        return None;
+    }
+    if !toks[0].bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let day: i64 = toks[0].parse().ok()?;
+    let mon_l = toks[1].to_ascii_lowercase();
+    let month = 1 + MONTHS.iter().position(|m| mon_l == m[..3] || mon_l == **m)? as i64;
+    let yraw = toks[2];
+    if !yraw.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let mut year: i64 = yraw.parse().ok()?;
+    if yraw.len() <= 2 {
+        year = if year < 70 { 2000 + year } else { 1900 + year };
+    }
+    let mut i = 3;
+    // Optional `HH:MM[:SS]` (absent → midnight, unlike date-from-format).
+    let (mut h, mut mi, mut sec) = (0i64, 0i64, 0i64);
+    if let Some(t) = toks.get(i) {
+        if t.contains(':') {
+            let mut p = t.split(':');
+            h = p.next()?.parse().ok()?;
+            mi = p.next()?.parse().ok()?;
+            sec = match p.next() {
+                Some(x) => x.parse().ok()?,
+                None => 0,
+            };
+            if p.next().is_some() {
+                return None;
+            }
+            i += 1;
+        }
+    }
+    // Optional zone: zero-offset names or a numeric correction.
+    let mut off = 0i64;
+    if let Some(t) = toks.get(i) {
+        match t.to_ascii_uppercase().as_str() {
+            "UTC" | "GMT" | "Z" => {}
+            z if z.starts_with('+') || z.starts_with('-') => {
+                let sign = if z.starts_with('-') { -1 } else { 1 };
+                let digits: String = z[1..].chars().filter(|c| *c != ':').collect();
+                let (oh, om) = match digits.len() {
+                    2 => (digits.parse::<i64>().ok()?, 0),
+                    4 => (
+                        digits[..2].parse::<i64>().ok()?,
+                        digits[2..].parse::<i64>().ok()?,
+                    ),
+                    _ => return None,
+                };
+                off = sign * (oh * 3600 + om * 60);
+            }
+            _ => return None,
+        }
+        i += 1;
+    }
+    if toks.get(i).is_some() {
+        return None;
+    }
+    let mut base = civil_to_epoch(year, month, day, h, mi, sec)?;
+    // A disagreeing day-name pushes the date forward (same rule as the
+    // date-from-format `D`/`l` specifiers, oracle-pinned).
+    if let Some(want) = want_dow {
+        let days = base.div_euclid(86400);
+        let dow = (days + 4).rem_euclid(7);
+        base += (want - dow).rem_euclid(7) * 86400;
+    }
+    Some(base - off)
 }
 
 /// Parse an absolute date string in the supported subset: `Y-m-d` or `Y/m/d`,
@@ -1573,6 +1701,8 @@ pub fn strtotime(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     } else if lower == "now" {
         Some(base)
     } else if let Some(ts) = parse_absolute(trimmed) {
+        Some(ts)
+    } else if let Some(ts) = parse_textual(trimmed) {
         Some(ts)
     } else {
         parse_relative(&lower, base)

@@ -25,6 +25,20 @@ fn is_utf8_alias(b: &[u8]) -> bool {
         || b.eq_ignore_ascii_case(b"ASCII")
 }
 
+/// True when the `$encoding` argument at `idx` names the byte-transparent
+/// `8bit`/`BINARY` encoding: every byte is one unit (symfony's
+/// BinaryFileResponse measures fallback filenames with `mb_strlen(…, '8bit')`).
+fn is_8bit_arg(args: &[Zval], idx: usize, ctx: &mut Ctx) -> bool {
+    match args.get(idx) {
+        None | Some(Zval::Null) => false,
+        Some(v) => {
+            let enc = convert::to_zstr(v, ctx.diags);
+            enc.as_bytes().eq_ignore_ascii_case(b"8bit")
+                || enc.as_bytes().eq_ignore_ascii_case(b"BINARY")
+        }
+    }
+}
+
 /// Validate an optional trailing `$encoding` argument at `idx`. Absent or null
 /// means the internal encoding (UTF-8). A non-UTF-8 name raises the same
 /// `ValueError` PHP raises for an unknown encoding (D-MB1: valid-but-non-UTF-8
@@ -101,6 +115,9 @@ pub fn mb_strlen(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         })?,
         ctx.diags,
     );
+    if is_8bit_arg(args, 1, ctx) {
+        return Ok(Zval::Long(s.as_bytes().len() as i64));
+    }
     require_utf8(args, 1, ctx, "mb_strlen", 2, "encoding")?;
     Ok(Zval::Long(units(s.as_bytes()).len() as i64))
 }
@@ -121,10 +138,14 @@ pub fn mb_substr(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         })?,
         ctx.diags,
     );
-    require_utf8(args, 3, ctx, "mb_substr", 4, "encoding")?;
-
+    // `8bit`/`BINARY`: every byte is one unit (plain substr semantics).
     let bytes = s.as_bytes();
-    let u = units(bytes);
+    let u = if is_8bit_arg(args, 3, ctx) {
+        (0..bytes.len()).map(|i| (i, 1usize)).collect()
+    } else {
+        require_utf8(args, 3, ctx, "mb_substr", 4, "encoding")?;
+        units(bytes)
+    };
     let total = u.len() as i64;
     let start = if offset < 0 {
         (total + offset).max(0)

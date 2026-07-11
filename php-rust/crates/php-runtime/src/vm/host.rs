@@ -310,10 +310,15 @@ impl<'m> super::Vm<'m> {
         })
     }
     /// `ob_get_clean()`: return the current buffer's content and discard the
-    /// buffer (no flush to the parent). `false` if no buffer is active.
+    /// buffer (no flush to the parent) — the handler still runs, with
+    /// `CLEAN|FINAL`, its return discarded. `false` if no buffer is active.
     pub(super) fn ho_ob_get_clean(&mut self) -> Result<Zval, PhpError> {
         Ok(match self.ob_stack.pop() {
-            Some(b) => Zval::Str(PhpStr::new(b.content)),
+            Some(b) => {
+                let content = b.content.clone();
+                self.clean_buffer(b)?;
+                Zval::Str(PhpStr::new(content))
+            }
             None => Zval::Bool(false),
         })
     }
@@ -329,10 +334,12 @@ impl<'m> super::Vm<'m> {
         self.flush_buffer(buf)?;
         Ok(Zval::Str(PhpStr::new(content)))
     }
-    /// `ob_end_clean()`: discard the current buffer (no flush). `true` on success,
+    /// `ob_end_clean()`: discard the current buffer (no flush) — the handler
+    /// still runs with `CLEAN|FINAL`, its return discarded. `true` on success,
     /// `false` (with a notice) if no buffer is active.
     pub(super) fn ho_ob_end_clean(&mut self) -> Result<Zval, PhpError> {
-        if self.ob_stack.pop().is_some() {
+        if let Some(b) = self.ob_stack.pop() {
+            self.clean_buffer(b)?;
             Ok(Zval::Bool(true))
         } else {
             self.ob_no_buffer_notice("ob_end_clean(): Failed to delete buffer. No buffer to delete")?;
@@ -2903,6 +2910,14 @@ impl<'m> super::Vm<'m> {
                 continue;
             }
             if path.is_empty() {
+                // An unterminated `[` (no closing `]` anywhere): the FIRST
+                // bracket becomes `_` and the remainder joins the name
+                // verbatim (`61%5Bb=c` parses as key `61_b` — symfony's
+                // parseQuery round-trips through exactly this rule).
+                if base_end < key.len() {
+                    base.push(b'_');
+                    base.extend_from_slice(&key[base_end + 1..]);
+                }
                 result.insert(Key::from_bytes(&base), val);
                 continue;
             }
@@ -6008,11 +6023,79 @@ impl<'m> super::Vm<'m> {
             let value = args.first().map_or(Zval::Null, |v| v.deref_clone());
             return self.filter_callback_apply(value, &cb);
         }
+        // Array inputs: PHP filters per element only under REQUIRE_ARRAY /
+        // FORCE_ARRAY (recursing into nested arrays, keys preserved); without
+        // them an array is the validation miss. FORCE_ARRAY wraps a scalar
+        // result in a one-element array.
+        const REQUIRE_ARRAY: i64 = 16_777_216;
+        const FORCE_ARRAY: i64 = 67_108_864;
+        const NULL_ON_FAILURE: i64 = 134_217_728;
+        let flags = match args.get(2).map(|v| v.deref_clone()) {
+            Some(Zval::Array(a)) => a
+                .get(&Key::from_bytes(b"flags"))
+                .map_or(0, |v| convert::to_long_cast(&v.deref_clone(), &mut self.diags)),
+            Some(other) => convert::to_long_cast(&other, &mut self.diags),
+            None => 0,
+        };
+        let miss = || {
+            if flags & NULL_ON_FAILURE != 0 { Zval::Null } else { Zval::Bool(false) }
+        };
+        let value = args.first().map_or(Zval::Null, |v| v.deref_clone());
+        if let Zval::Array(a) = &value {
+            if flags & (REQUIRE_ARRAY | FORCE_ARRAY) == 0 {
+                return Ok(miss());
+            }
+            let arr = Rc::clone(a);
+            return self.filter_array_apply(&arr, &args);
+        }
+        if flags & REQUIRE_ARRAY != 0 {
+            return Ok(miss());
+        }
+        let scalar = self.filter_scalar_delegate(&args)?;
+        if flags & FORCE_ARRAY != 0 {
+            let mut out = PhpArray::new();
+            let _ = out.append(scalar);
+            return Ok(Zval::Array(Rc::new(out)));
+        }
+        Ok(scalar)
+    }
+
+    /// One per-element filter pass over an array value (`FILTER_REQUIRE_ARRAY`
+    /// / `FILTER_FORCE_ARRAY`): nested arrays recurse, keys are preserved,
+    /// each leaf runs the scalar filter with the same filter/options args.
+    fn filter_array_apply(
+        &mut self,
+        arr: &Rc<PhpArray>,
+        args: &[Zval],
+    ) -> Result<Zval, PhpError> {
+        let entries: Vec<(Key, Zval)> =
+            arr.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect();
+        let mut out = PhpArray::new();
+        for (k, v) in entries {
+            let filtered = match &v {
+                Zval::Array(inner) => {
+                    let inner = Rc::clone(inner);
+                    self.filter_array_apply(&inner, args)?
+                }
+                _ => {
+                    let mut leaf_args: Vec<Zval> = Vec::with_capacity(args.len());
+                    leaf_args.push(v);
+                    leaf_args.extend(args.iter().skip(1).map(|a| a.deref_clone()));
+                    self.filter_scalar_delegate(&leaf_args)?
+                }
+            };
+            out.insert(k, filtered);
+        }
+        Ok(Zval::Array(Rc::new(out)))
+    }
+
+    /// Delegate one scalar `filter_var` to the stateless registry implementation.
+    fn filter_scalar_delegate(&mut self, args: &[Zval]) -> Result<Zval, PhpError> {
         match self.registry.get(&b"filter_var"[..]) {
             Some(crate::builtin::Builtin::Value(f)) => {
                 let f = *f;
                 let line = self.cur_line(self.frames.len() - 1);
-                self.run_value_builtin(f, &args, line)
+                self.run_value_builtin(f, args, line)
             }
             _ => Err(undefined_builtin(b"filter_var")),
         }

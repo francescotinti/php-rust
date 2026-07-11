@@ -59,6 +59,14 @@ pub fn long2ip(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// packed 4-/16-byte form.
 pub fn inet_pton(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let s = convert::to_zstr(args.first().unwrap_or(&Zval::Null), ctx.diags);
+    // A NUL byte in the input is PHP's ValueError, not a plain false
+    // (symfony's IpUtils::anonymize probes rely on it to detect a PACKED
+    // binary address handed to the textual API).
+    if s.as_bytes().contains(&0) {
+        return Err(PhpError::ValueError(
+            "inet_pton(): Argument #1 ($ip) must not contain any null bytes".to_string(),
+        ));
+    }
     let text = match std::str::from_utf8(s.as_bytes()) {
         Ok(t) => t,
         Err(_) => return Ok(Zval::Bool(false)),
@@ -88,6 +96,16 @@ pub fn inet_ntop(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         16 => {
             let mut o = [0u8; 16];
             o.copy_from_slice(b);
+            // The system inet_ntop renders a v4-COMPATIBLE address (first six
+            // 16-bit words zero, seventh non-zero: `::123.234.0.0`) in dotted
+            // form — oracle-pinned; `::1`/`::2` (seventh word zero too) stay
+            // hex. Rust's Display only does this for the v4-MAPPED form.
+            let words0_5_zero = o[..12] == [0u8; 12];
+            if words0_5_zero && (o[12] != 0 || o[13] != 0) {
+                return Ok(Zval::Str(PhpStr::new(
+                    format!("::{}.{}.{}.{}", o[12], o[13], o[14], o[15]).into_bytes(),
+                )));
+            }
             Ok(Zval::Str(PhpStr::new(Ipv6Addr::from(o).to_string().into_bytes())))
         }
         _ => Ok(Zval::Bool(false)),

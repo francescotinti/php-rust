@@ -789,7 +789,15 @@ pub(crate) fn floatval(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> 
     Ok(Zval::Double(convert::to_double(arg1(args, "floatval")?)))
 }
 pub(crate) fn strval(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    Ok(Zval::Str(convert::to_zstr_cast(arg1(args, "strval")?, ctx.diags)))
+    let v = arg1(args, "strval")?;
+    // Honor the VM-precomputed `__toString` of a Stringable object argument
+    // (Ctx::stringify) — the pure funnel below cannot invoke user methods.
+    if let Zval::Object(o) = &v.deref_clone() {
+        if let Some(s) = ctx.stringify.get(&o.borrow().id) {
+            return Ok(Zval::Str(std::rc::Rc::clone(s)));
+        }
+    }
+    Ok(Zval::Str(convert::to_zstr_cast(v, ctx.diags)))
 }
 pub(crate) fn boolval(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Bool(convert::to_bool(arg1(args, "boolval")?, ctx.diags)))
@@ -814,6 +822,30 @@ pub(crate) fn filter_var(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
         Some(other) => convert::to_long_cast(other, ctx.diags),
         None => 0,
     };
+    // The `options` sub-array: min_range/max_range/default for VALIDATE_INT
+    // (and `default` on any validator's miss).
+    let opt = |name: &[u8]| -> Option<Zval> {
+        match args.get(2) {
+            Some(Zval::Array(a)) => match a.get(&Key::from_bytes(b"options")) {
+                Some(o) => match o.deref_clone() {
+                    Zval::Array(opts) => opts.get(&Key::from_bytes(name)).map(|v| v.deref_clone()),
+                    _ => None,
+                },
+                None => None,
+            },
+            _ => None,
+        }
+    };
+    let default_or_miss = || match opt(b"default") {
+        Some(d) => d,
+        None => {
+            if flags & NULL_ON_FAILURE != 0 {
+                Zval::Null
+            } else {
+                Zval::Bool(false)
+            }
+        }
+    };
     let miss = || if flags & NULL_ON_FAILURE != 0 { Zval::Null } else { Zval::Bool(false) };
     let s = convert::to_zstr_cast(value, ctx.diags);
     let text = String::from_utf8_lossy(s.as_bytes());
@@ -825,13 +857,33 @@ pub(crate) fn filter_var(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
             match trimmed.to_ascii_lowercase().as_str() {
                 "1" | "true" | "on" | "yes" => Ok(Zval::Bool(true)),
                 "0" | "false" | "off" | "no" | "" => Ok(Zval::Bool(false)),
-                _ => Ok(miss()),
+                _ => Ok(default_or_miss()),
             }
         }
-        VALIDATE_INT => match trimmed.parse::<i64>() {
-            Ok(n) => Ok(Zval::Long(n)),
-            Err(_) => Ok(miss()),
-        },
+        VALIDATE_INT => {
+            const ALLOW_OCTAL: i64 = 1;
+            const ALLOW_HEX: i64 = 2;
+            // Decimal, or (behind their flags) 0x-hex and 0-octal literals.
+            let parsed: Option<i64> = if flags & ALLOW_HEX != 0
+                && (trimmed.starts_with("0x") || trimmed.starts_with("0X"))
+            {
+                i64::from_str_radix(&trimmed[2..], 16).ok()
+            } else if flags & ALLOW_OCTAL != 0 && trimmed.len() > 1 && trimmed.starts_with('0') {
+                i64::from_str_radix(&trimmed[1..], 8).ok()
+            } else {
+                trimmed.parse::<i64>().ok()
+            };
+            // min_range / max_range bound the accepted value (PHP's
+            // php_filter_int): out of bounds is the validation miss.
+            let min = opt(b"min_range").map(|v| convert::to_long_cast(&v, ctx.diags));
+            let max = opt(b"max_range").map(|v| convert::to_long_cast(&v, ctx.diags));
+            match parsed {
+                Some(n) if min.is_none_or(|m| n >= m) && max.is_none_or(|m| n <= m) => {
+                    Ok(Zval::Long(n))
+                }
+                _ => Ok(default_or_miss()),
+            }
+        }
         VALIDATE_FLOAT => match trimmed.parse::<f64>() {
             Ok(f) => Ok(Zval::Double(f)),
             Err(_) => Ok(miss()),
@@ -910,6 +962,15 @@ pub(crate) fn filter_var(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
             };
             if validate_mac(s.as_bytes(), sep) { Ok(Zval::Str(s)) } else { Ok(miss()) }
         }
+        // FILTER_SANITIZE_NUMBER_INT: strip everything but digits, `+`, `-`
+        // (php_filter_number_int's [^0-9+-] deny list).
+        519 => Ok(Zval::Str(PhpStr::new(
+            s.as_bytes()
+                .iter()
+                .copied()
+                .filter(|b| b.is_ascii_digit() || *b == b'+' || *b == b'-')
+                .collect::<Vec<u8>>(),
+        ))),
         // FILTER_DEFAULT / FILTER_UNSAFE_RAW and the unimplemented validators return
         // the value as a string (no sanitisation), the documented default behaviour.
         _ => Ok(Zval::Str(s)),

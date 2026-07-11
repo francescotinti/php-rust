@@ -40,7 +40,12 @@ pub(super) fn builtin_ref_call(
 pub(super) fn value_builtin_string_coerces(name: &[u8]) -> bool {
     matches!(
         name,
-        b"str_contains"
+        // `strval` IS the coercion (symfony's array_map('strval', $cookies));
+        // `explode` takes only string/int parameters, so a Stringable subject
+        // (`explode("\r\n", $response)` on a Response) converts here too.
+        b"strval"
+            | b"explode"
+            | b"str_contains"
             | b"str_starts_with"
             | b"str_ends_with"
             | b"substr_count"
@@ -808,6 +813,15 @@ impl<'m> Vm<'m> {
         match self.registry.get(name) {
             Some(Builtin::Value(f)) => {
                 let f = *f;
+                // Same __toString precompute as the compiled Op::CallBuiltin
+                // path: a string-coercing builtin invoked as a CALLBACK
+                // (`array_map('strval', $cookies)`) must still honor
+                // Stringable objects.
+                if value_builtin_string_coerces(name) {
+                    self.stringify_args = self.compute_stringify(&args, false)?;
+                } else if value_builtin_string_coerces_deep(name) {
+                    self.stringify_args = self.compute_stringify(&args, true)?;
+                }
                 let line = self.cur_line(self.frames.len() - 1);
                 let result = self.run_value_builtin(f, &args, line)?;
                 let top = self.frames.len() - 1;
