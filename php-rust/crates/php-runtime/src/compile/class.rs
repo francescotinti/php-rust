@@ -118,7 +118,7 @@ pub(super) fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> C
     let mut uninit_props: Vec<Box<[u8]>> = Vec::new();
     // Type displays for the typed properties, for the uninitialized rendering.
     let mut prop_type_displays: Vec<(Box<[u8]>, Box<[u8]>)> = Vec::new();
-    for (skey, name, default, hint, rt) in &flat_defaults {
+    for (skey, _name, default, hint, rt) in &flat_defaults {
         // The `uninitialized(T)` display: the enforced hint's name, or — for a
         // type only the reflection record models (mixed / unions /
         // intersections) — a render of that record.

@@ -1183,6 +1183,10 @@ pub fn __date_from_format(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError
     // `u`/`v` fractional seconds (as microseconds).
     let mut tz_off: Option<(i64, Vec<u8>)> = None;
     let mut micros: i64 = 0;
+    // `D`/`l` textual weekday (0 = Sunday): oracle-pinned, a name that does
+    // not match the parsed date jumps it FORWARD to the next such weekday
+    // (`Sat, 12 Jul 2026` → the 18th), applied after all fields parse.
+    let mut want_dow: Option<i64> = None;
 
     let result = (|| {
         while fi < f.len() {
@@ -1231,6 +1235,41 @@ pub fn __date_from_format(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError
                     mo = read_digits(v, &mut vi, 2)?;
                     seen[1] = true;
                 }
+                b'M' | b'F' => {
+                    // Textual month, case-insensitive; PHP's parser accepts the
+                    // abbreviated and full names for either specifier.
+                    let start = vi;
+                    while vi < v.len() && v[vi].is_ascii_alphabetic() {
+                        vi += 1;
+                    }
+                    let w = v[start..vi].to_ascii_lowercase();
+                    const MONTHS: [&[u8]; 12] = [
+                        b"january", b"february", b"march", b"april", b"may", b"june", b"july",
+                        b"august", b"september", b"october", b"november", b"december",
+                    ];
+                    mo = 1 + MONTHS
+                        .iter()
+                        .position(|m| w.as_slice() == &m[..3.min(m.len())] || w.as_slice() == *m)?
+                        as i64;
+                    seen[1] = true;
+                }
+                b'D' | b'l' => {
+                    // Textual weekday, case-insensitive (see `want_dow`).
+                    let start = vi;
+                    while vi < v.len() && v[vi].is_ascii_alphabetic() {
+                        vi += 1;
+                    }
+                    let w = v[start..vi].to_ascii_lowercase();
+                    const DAYS: [&[u8]; 7] = [
+                        b"sunday", b"monday", b"tuesday", b"wednesday", b"thursday", b"friday",
+                        b"saturday",
+                    ];
+                    want_dow = Some(
+                        DAYS.iter()
+                            .position(|n| w.as_slice() == &n[..3] || w.as_slice() == *n)?
+                            as i64,
+                    );
+                }
                 b'd' | b'j' => {
                     d = read_digits(v, &mut vi, 2)?;
                     seen[2] = true;
@@ -1248,8 +1287,44 @@ pub fn __date_from_format(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError
                     seen[5] = true;
                 }
                 b'O' | b'P' | b'p' => {
-                    // `+0300` / `+03:00` (or a literal `Z` for UTC).
-                    if v.get(vi) == Some(&b'Z') {
+                    // `+0300` / `+03:00`, a literal `Z`, or — oracle-pinned —
+                    // a zero-offset NAME (`GMT`/`UTC`, optionally `GMT+0200`):
+                    // DATE_RFC2822 parses real HTTP dates ending in ` GMT`.
+                    // Other abbreviations (EST, CET, …) need timelib's table
+                    // and stay unsupported (parse fails, as before).
+                    if v.get(vi).is_some_and(|c| c.is_ascii_alphabetic()) && v.get(vi) != Some(&b'Z')
+                    {
+                        let start = vi;
+                        while vi < v.len() && v[vi].is_ascii_alphabetic() {
+                            vi += 1;
+                        }
+                        match v[start..vi].to_ascii_uppercase().as_slice() {
+                            b"GMT" | b"UTC" => {
+                                let name = v[start..vi].to_ascii_uppercase();
+                                if v.get(vi) == Some(&b'+') || v.get(vi) == Some(&b'-') {
+                                    // `GMT+0200`: fall through to the numeric
+                                    // correction below (name display dropped).
+                                    let sign = if v[vi] == b'-' { -1i64 } else { 1 };
+                                    vi += 1;
+                                    let hh = read_digits(v, &mut vi, 2)?;
+                                    if v.get(vi) == Some(&b':') {
+                                        vi += 1;
+                                    }
+                                    let mm = read_digits(v, &mut vi, 2)?;
+                                    let disp = format!(
+                                        "{}{:02}:{:02}",
+                                        if sign < 0 { '-' } else { '+' },
+                                        hh,
+                                        mm
+                                    );
+                                    tz_off = Some((sign * (hh * 3600 + mm * 60), disp.into_bytes()));
+                                } else {
+                                    tz_off = Some((0, name));
+                                }
+                            }
+                            _ => return None,
+                        }
+                    } else if v.get(vi) == Some(&b'Z') {
                         vi += 1;
                         tz_off = Some((0, b"+00:00".to_vec()));
                     } else {
@@ -1287,7 +1362,12 @@ pub fn __date_from_format(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError
                         return None;
                     }
                     match v[start..vi].to_ascii_uppercase().as_slice() {
-                        b"UTC" | b"GMT" | b"Z" => tz_off = Some((0, b"UTC".to_vec())),
+                        // Zero-offset names; the display keeps the name as
+                        // written uppercased (`format('T')` on a GMT-parsed
+                        // date shows GMT, oracle-pinned).
+                        up @ (b"UTC" | b"GMT" | b"Z") => {
+                            tz_off = Some((0, if up == b"Z" { b"UTC".to_vec() } else { up.to_vec() }))
+                        }
                         _ => return None,
                     }
                 }
@@ -1345,7 +1425,28 @@ pub fn __date_from_format(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError
         if vi != v.len() {
             return None;
         }
-        let base = civil_to_epoch(yr, mo, d, h, mi, s)?;
+        // timelib: once ANY time component is parsed, the unparsed time
+        // components are 0, not "now" (`H:i` gives :00 seconds; the date
+        // components still default to today).
+        if seen[3] || seen[4] || seen[5] {
+            if !seen[3] {
+                h = 0;
+            }
+            if !seen[4] {
+                mi = 0;
+            }
+            if !seen[5] {
+                s = 0;
+            }
+        }
+        let mut base = civil_to_epoch(yr, mo, d, h, mi, s)?;
+        // A textual weekday that disagrees with the parsed date pushes the
+        // wall date forward to the next such weekday (oracle-pinned).
+        if let Some(want) = want_dow {
+            let days = base.div_euclid(86400);
+            let dow = (days + 4).rem_euclid(7); // 1970-01-01 was a Thursday
+            base += (want - dow).rem_euclid(7) * 86400;
+        }
         // A parsed offset means the wall time above was *in* that offset.
         Some(base - tz_off.as_ref().map(|(o, _)| *o).unwrap_or(0))
     })();

@@ -587,19 +587,47 @@ class DateTime implements DateTimeInterface {
     public function format($format) {
         // 'u'/'v' (micro/milliseconds) come from this instance, not date():
         // substitute the digits as backslash-escaped literals in the format.
+        // An offset-style zone ("+02:00") renders its WALL time: the date()
+        // call below is fixed-UTC, so shift the timestamp by the offset and
+        // emit O/P/U/Z as literals from this instance instead.
+        $off = 0; $tzs = $this->__tz;
+        if (isset($tzs[0]) && ($tzs[0] === '+' || $tzs[0] === '-')) {
+            $off = ($tzs[0] === '-' ? -1 : 1) * ((int)substr($tzs, 1, 2) * 3600 + (int)substr($tzs, 4, 2) * 60);
+        }
         $out = ''; $esc = false;
         for ($i = 0, $len = strlen($format); $i < $len; $i++) {
             $c = $format[$i];
             if ($esc) { $out .= '\\' . $c; $esc = false; continue; }
             if ($c === '\\') { $esc = true; continue; }
+            if ($off !== 0 && ($c === 'O' || $c === 'P' || $c === 'U' || $c === 'Z')) {
+                $lit = match ($c) {
+                    'O' => str_replace(':', '', $tzs),
+                    'P' => $tzs,
+                    'U' => (string) $this->__ts,
+                    'Z' => (string) $off,
+                };
+                foreach (str_split($lit) as $d) { $out .= '\\' . $d; }
+                continue;
+            }
             if ($c === 'u' || $c === 'v') {
                 $n = $c === 'u' ? sprintf('%06d', $this->__us) : sprintf('%03d', intdiv($this->__us, 1000));
                 foreach (str_split($n) as $d) { $out .= '\\' . $d; }
                 continue;
             }
+            // 'T'/'e' come from this instance's timezone, not date()'s fixed
+            // UTC: 'e' shows it verbatim ("+02:00", "GMT", "UTC"); 'T' shows
+            // an offset-style zone as PHP's "GMT+0200" abbreviation.
+            if ($c === 'T' || $c === 'e') {
+                $tz = $this->__tz;
+                if ($c === 'T' && isset($tz[0]) && ($tz[0] === '+' || $tz[0] === '-')) {
+                    $tz = 'GMT' . str_replace(':', '', $tz);
+                }
+                foreach (str_split($tz) as $d) { $out .= '\\' . $d; }
+                continue;
+            }
             $out .= $c;
         }
-        return date($out, $this->__ts);
+        return date($out, $this->__ts + $off);
     }
     public function getTimestamp() { return $this->__ts; }
     public function setTimestamp($timestamp) { $this->__ts = $timestamp; return $this; }
@@ -706,19 +734,47 @@ class DateTimeImmutable implements DateTimeInterface {
     public function format($format) {
         // 'u'/'v' (micro/milliseconds) come from this instance, not date():
         // substitute the digits as backslash-escaped literals in the format.
+        // An offset-style zone ("+02:00") renders its WALL time: the date()
+        // call below is fixed-UTC, so shift the timestamp by the offset and
+        // emit O/P/U/Z as literals from this instance instead.
+        $off = 0; $tzs = $this->__tz;
+        if (isset($tzs[0]) && ($tzs[0] === '+' || $tzs[0] === '-')) {
+            $off = ($tzs[0] === '-' ? -1 : 1) * ((int)substr($tzs, 1, 2) * 3600 + (int)substr($tzs, 4, 2) * 60);
+        }
         $out = ''; $esc = false;
         for ($i = 0, $len = strlen($format); $i < $len; $i++) {
             $c = $format[$i];
             if ($esc) { $out .= '\\' . $c; $esc = false; continue; }
             if ($c === '\\') { $esc = true; continue; }
+            if ($off !== 0 && ($c === 'O' || $c === 'P' || $c === 'U' || $c === 'Z')) {
+                $lit = match ($c) {
+                    'O' => str_replace(':', '', $tzs),
+                    'P' => $tzs,
+                    'U' => (string) $this->__ts,
+                    'Z' => (string) $off,
+                };
+                foreach (str_split($lit) as $d) { $out .= '\\' . $d; }
+                continue;
+            }
             if ($c === 'u' || $c === 'v') {
                 $n = $c === 'u' ? sprintf('%06d', $this->__us) : sprintf('%03d', intdiv($this->__us, 1000));
                 foreach (str_split($n) as $d) { $out .= '\\' . $d; }
                 continue;
             }
+            // 'T'/'e' come from this instance's timezone, not date()'s fixed
+            // UTC: 'e' shows it verbatim ("+02:00", "GMT", "UTC"); 'T' shows
+            // an offset-style zone as PHP's "GMT+0200" abbreviation.
+            if ($c === 'T' || $c === 'e') {
+                $tz = $this->__tz;
+                if ($c === 'T' && isset($tz[0]) && ($tz[0] === '+' || $tz[0] === '-')) {
+                    $tz = 'GMT' . str_replace(':', '', $tz);
+                }
+                foreach (str_split($tz) as $d) { $out .= '\\' . $d; }
+                continue;
+            }
             $out .= $c;
         }
-        return date($out, $this->__ts);
+        return date($out, $this->__ts + $off);
     }
     public function getTimestamp() { return $this->__ts; }
     // Every "wither" clones: the runtime class survives (PHP returns `static`,
