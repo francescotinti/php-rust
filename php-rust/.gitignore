@@ -7,3 +7,14 @@ crates/php-server/
 ._*
 **/._*
 .DS_Store
+
+# phpt-run scratch artifacts: tests executed with a cwd inside the repo write
+# their temp fixtures next to it (readgzfile_temp/, *.txt.gz, gz/hash fixtures,
+# 1-pixel images…). Never commit them.
+*.tmp
+*.txt.gz
+*.gz
+readgzfile_temp/
+1x1.jpg
+DataFile*.txt
+EmptyFile*.txt

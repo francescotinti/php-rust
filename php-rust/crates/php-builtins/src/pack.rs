@@ -688,7 +688,8 @@ mod tests {
         let mut diags: Diags = Vec::new();
         let mut direct = Vec::new();
         let dbg = std::collections::HashMap::new();
-        let mut ctx = Ctx { out: &mut out, diags: &mut diags, direct_out: &mut direct, debug_info: &dbg };
+        let strf = std::collections::HashMap::new();
+        let mut ctx = Ctx { out: &mut out, diags: &mut diags, direct_out: &mut direct, debug_info: &dbg, stringify: &strf };
         f(args, &mut ctx).unwrap()
     }
 
