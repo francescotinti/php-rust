@@ -6,16 +6,18 @@ as they complete. Deliberate behavioural deviations are catalogued in
 [`PHPR_DIVERGENCES_FROM_PHP.md`](PHPR_DIVERGENCES_FROM_PHP.md); measured
 coverage in [`COVERAGE.md`](COVERAGE.md).
 
-Current state (2026-07-11): Zend corpus **2352** passing · internal functions
-**754/2143** (core stdlib **514/654, 79%**) · missing functions (783-fn
-real-app reference set) **180** · ext/tokenizer **42/49** · ext/zlib
-**complete** (30/30, suite 114/115). **symfony/http-foundation: COMPLETE** —
-full component suite at **0 errors / 12 failures**, and the 12 are exactly the
-functional tests that spawn a real `php -S` server (needs a server SAPI).
-Landed on the way: Zend late binding for class declarations, Closure::bind
-scope rebinding, union weak coercion in Zend preference order, ob handler
-CLEAN|FINAL teardown, textual strtotime, filter_var completion,
-SplFileObject/SplTempFileObject, php://output.
+Current state (2026-07-12): Zend corpus **2429** passing (the runner now
+executes `--INI--` sections) · internal functions **780/2143, 36%** (core
+stdlib **517/654, 79%**) · ext/tokenizer **42/49** · ext/zlib **complete**
+(30/30, suite 114/115) · **ext/session: COMPLETE** — all 23 functions +
+SessionHandler class family, official suite **150/229** with `--run-skipif`.
+**symfony/http-foundation**: no-session config at **0 errors / 12 failures**
+(the 12 spawn a real `php -S` server); the FULL 1790-test suite with
+Tests/Session re-admitted runs at **10 errors / 27 failures**, with PHPUnit
+process isolation spawning real `phpr` children (`-d`/stdin CLI). Landed on
+the way: a mutable INI table, diagnostics flowing through the ob stack
+(headers-sent at the real sink), unserialize autoloading unknown classes,
+by-ref binding on superglobals, `get/set_include_path`.
 
 ---
 

@@ -7,7 +7,7 @@ functions with `function_exists()` inside `phpr` (grouped by
 `ReflectionFunction::getExtensionName()`); the corpus number is the real pass
 count of the upstream Zend test suite under `phpt-runner`.
 
-_Last measured: 2026-07-11 · reference: PHP 8.5.7 (`get_defined_functions()`)._
+_Last measured: 2026-07-12 · reference: PHP 8.5.7 (`get_defined_functions()`)._
 
 ---
 
@@ -15,13 +15,15 @@ _Last measured: 2026-07-11 · reference: PHP 8.5.7 (`get_defined_functions()`)._
 
 | Metric | Value |
 | --- | --- |
-| Internal functions implemented | **754 / 2143** (35%) |
-| — of which **core / language stdlib** (standard + Core + date) | **514 / 654** (79%) |
-| Zend test corpus (`Zend/tests/*.phpt`) | **2352 passing** — 60.8% of runnable (2352/3867) |
-| Fully-complete areas | ctype, json, SimpleXML, zlib, bcmath, tokenizer, PDO core |
+| Internal functions implemented | **780 / 2143** (36%) |
+| — of which **core / language stdlib** (standard + Core + date) | **517 / 654** (79%) |
+| Zend test corpus (`Zend/tests/*.phpt`) | **2429 passing** — 60.0% of runnable (2429/4045) |
+| Fully-complete areas | ctype, json, SimpleXML, zlib, bcmath, tokenizer, **session**, PDO core |
 
-Corpus breakdown: 5305 total · **2352 pass** · 1515 fail · 1438 skip (skips are
-mostly tests that need an extension `phpr` hasn't ported, or SAPI-specific setup).
+Corpus breakdown: 5305 total · **2429 pass** · 1616 fail · 1260 skip (skips are
+mostly tests that need an extension `phpr` hasn't ported, or SAPI-specific
+setup; the runner now executes `--INI--` sections as `php -d`-style overrides,
+which moved ~180 formerly-skipped tests into the run).
 
 The single most important number is **79% of the core language stdlib**: the
 string / array / math / var / date / output / hashing / regex surface that
@@ -40,10 +42,17 @@ upstream PHP under `phpr` today:
 - **PHPUnit** — 11.5, 13.2 and 13.3-dev, byte-identical output.
 - **Doctrine** — ORM (3484 tests, 3 err / 15 fail), DBAL (3769/0/0), Collections,
   Lexer, Inflector, Event Manager.
-- **Symfony http-foundation** — full component test suite (1419 tests):
-  **0 errors**; the only 12 remaining failures are the functional tests that
-  spawn a real `php -S` server (needs a server SAPI). Plus String / Console /
-  Process, already validated earlier.
+- **Symfony http-foundation** — full component test suite **including
+  Tests/Session** (1790 tests): 10 errors / 27 failures, with PHPUnit's
+  process-isolation tests actually spawning `phpr` child processes. Without the
+  Session suite (1419 tests): **0 errors**, the only 12 failures being the
+  functional tests that spawn a real `php -S` server (needs a server SAPI).
+  Plus String / Console / Process, already validated earlier.
+- **ext/session** — all 23 functions + SessionHandler and the three handler
+  interfaces; files handler byte-identical (0600 `sess_<id>` files, php /
+  php_binary / php_serialize serializers, lazy_write, mtime GC); official
+  phpt suite 150/229 with `--run-skipif` (the tail is trans-sid URL rewriting
+  and the deprecated `SID` constant).
 - **PDO + pdo_sqlite + SQLite3** — on `rusqlite`.
 - **Monolog** — running.
 - **Reflection** — framework-grade (types, attributes, enums, union/intersection).
@@ -62,9 +71,10 @@ core language stdlib).
 
 | Area | have / total | % | Notes |
 | --- | ---: | ---: | --- |
-| **standard** | 434 / 544 | **80%** | string, array, math, var, filesystem, streams, output |
+| **standard** | 437 / 544 | **80%** | string, array, math, var, filesystem, streams, output, include_path |
 | **Core** | 50 / 62 | **81%** | class/function introspection, error handling |
 | **date** | 30 / 48 | 63% | DateTime classes, textual strtotime, HTTP-date formats |
+| session | 23 / 23 | **100%** | files + user save handlers, SessionHandler classes, `$_SESSION`; suite 150/229 |
 | ctype | 11 / 11 | **100%** | complete |
 | json | 5 / 5 | **100%** | complete (HEX_* flags, NUMERIC_CHECK, THROW_ON_ERROR) |
 | SimpleXML | 3 / 3 | **100%** | complete |
@@ -86,12 +96,12 @@ core language stdlib).
 | posix | 3 / 40 | 8% | |
 | intl | 11 / 187 | 6% | grapheme done; ICU surface huge |
 | openssl | 1 / 64 | 2% | TLS handled at stream layer, not fn-level |
-| **not started (0%)** | — | 0% | pgsql (123), sodium (110), mysqli (106), gd (105), ldap (55), odbc (48), xmlwriter (42), sockets (37), ftp (36), snmp (24), tidy (24), **session (23)**, xml (22), calendar (18), dba (15), readline (12), bz2/gettext/zip (10 each), opcache (8), sysv* (18), fileinfo (6), shmop (6), exif (4), dom (2), soap (2) |
+| **not started (0%)** | — | 0% | pgsql (123), sodium (110), mysqli (106), gd (105), ldap (55), odbc (48), xmlwriter (42), sockets (37), ftp (36), snmp (24), tidy (24), xml (22), calendar (18), dba (15), readline (12), bz2/gettext/zip (10 each), opcache (8), sysv* (18), fileinfo (6), shmop (6), exif (4), dom (2), soap (2) |
 
-1389 functions missing overall; the not-started extensions above account for
-~800 of them. The next planned port is **session** (23 fns + the SessionHandler
-class family) — it unblocks the 371 `Tests/Session` cases of symfony
-http-foundation and is the prerequisite for HttpKernel.
+1363 functions missing overall; the not-started extensions above account for
+~780 of them. With ext/session complete, the next target is
+**symfony/http-kernel** (its known prerequisites — event-dispatcher and
+session — are done).
 
 ---
 

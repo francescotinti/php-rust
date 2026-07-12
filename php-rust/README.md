@@ -5,18 +5,21 @@ a lexer, compiler, bytecode VM, and a growing standard library — no C PHP link
 in. The goal is to run **real PHP applications** byte-identically to the reference
 interpreter, not to pass a toy subset.
 
-> **Status:** Composer, PHPUnit 13, Doctrine ORM/DBAL, PDO/SQLite, Monolog and
-> Symfony components already execute under `phpr` with output identical to
-> upstream PHP 8.5.7. The complete **symfony/http-foundation** test suite runs
-> at **zero errors** (the only 12 remaining failures need a real HTTP server).
+> **Status:** Composer, PHPUnit 13 (including **process isolation** — child
+> runs spawned via `phpr -d … <stdin>`), Doctrine ORM/DBAL, PDO/SQLite, Monolog
+> and Symfony components already execute under `phpr` with output identical to
+> upstream PHP 8.5.7. **ext/session is complete** (all 23 functions + the
+> SessionHandler class family); symfony/http-foundation runs at **zero errors**
+> without its Session suite (12 failures need a real HTTP server) and at
+> 10 errors / 27 failures with all 1790 tests re-admitted.
 
 ## Coverage at a glance
 
 | | |
 | --- | --- |
-| Core / language stdlib functions | **514 / 654 (79%)** |
-| All internal functions | 754 / 2143 (35%) |
-| Zend test corpus passing | **2352** (61% of runnable) |
+| Core / language stdlib functions | **517 / 654 (79%)** |
+| All internal functions | 780 / 2143 (36%) |
+| Zend test corpus passing | **2429** (60% of runnable) |
 
 Full, measured breakdown → **[COVERAGE.md](COVERAGE.md)**.
 The 35%→79% spread is the whole story: the *language* is largely done; the
@@ -32,7 +35,10 @@ remaining gap is mostly un-started **database / crypto / network extensions**
   weak coercion in Zend's preference order.
 - **Runtime:** a real **cycle-collecting GC**, exceptions, `include`/`require`/
   `eval`, autoloading, output buffering **with handler phases** (PHPUnit's
-  output capture works), `strict_types` per-unit.
+  output capture works; diagnostics flow through the buffer stack like PHP's),
+  `strict_types` per-unit, a mutable **INI table** (`ini_set`, `php -d`-style
+  CLI overrides, phpt `--INI--` sections), **ext/session** on the files
+  handler with user save handlers.
 - **Reflection:** framework-grade — types, attributes, enums, union/intersection.
 - **Real apps:** Composer (`install`/`require`/`diagnose`, real HTTPS via rustls),
   PHPUnit 11.5/13.2/13.3, Doctrine ORM + DBAL (3769/0/0), **symfony
@@ -79,11 +85,11 @@ phpt-runner --isolate /path/to/php-8.5.7/Zend/tests
 Near-term, highest-leverage work (see [COVERAGE.md](COVERAGE.md) for the data,
 [TODO.md](TODO.md) for the full list):
 
-1. **ext/session** (23 fns + the SessionHandler class family) — unblocks the
-   371 `Tests/Session` cases of symfony http-foundation, prerequisite for
-   HttpKernel.
-2. **symfony/http-kernel** — the Request→Response cycle, next component in the
-   Symfony porting track.
+1. **symfony/http-kernel** — the Request→Response cycle, next component in the
+   Symfony porting track (event-dispatcher and ext/session, its prerequisites,
+   are done).
+2. ext/session tail — trans-sid URL rewriting, the `SID` constant, shared-ref
+   (`r:`) unserialize.
 3. Remaining **core stdlib** gaps — stream filters (userland), timezone
    objects, calendar.
 
