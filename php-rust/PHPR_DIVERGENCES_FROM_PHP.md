@@ -304,6 +304,37 @@ slot, quindi `new class($this->x) extends Irrisolvibile {}` dentro un metodo
 non vede `$this` alla ri-esecuzione. Caso non osservato (i test Symfony usano
 solo locals); da chiudere se emerge.
 
+### 3.5 INI table parziale (filone ext/session, 2026-07-12)
+La tabella INI (`vm/ini.rs`) registra solo le direttive modellate: 31 `session.*`
+(+ `session.trans_sid_tags`/`hosts`, esenti dal freeze headers-sent e dal listing
+`ini_get_all('session')`, oddity oracle-verificata), `include_path` e le ~9
+chiavi engine-hardwired storiche. Divergenze deliberate:
+- `ini_get_all(null)` elenca ~45 direttive, non le ~291 di PHP; un'estensione
+  diversa da `session` → warning "cannot be found" anche per estensioni che PHP
+  conosce (`Core`, `standard`, …).
+- `memory_limit` resta `-1` (PHP brew riporta `128M`): phpr non applica limiti e
+  questo evita il re-exec di Composer.
+- Le chiavi hardwired (`precision`, `memory_limit`, …) rifiutano `ini_set`
+  (ritorno `false`): meglio un set che fallisce di uno che mente (l'engine non
+  le consulterebbe).
+- `include_path` è settabile e viene EMBEDDED nei messaggi di include-failure,
+  ma il resolver resta cwd-based: `set_include_path('dir1:dir2')` non estende la
+  ricerca (Zend/tests `bug39542`, `exceptions/exception_during_include_stat`
+  fail onesti).
+
+### 3.6 ext/session: residui dichiarati (filone 2026-07-12)
+- **trans-sid / url rewriting assente** (`session.use_trans_sid=1` non riscrive
+  l'output; ~15-19 phpt): serve l'infrastruttura url_rewriter.
+- **Costante SID assente** (+ deprecation-on-read PHP 8.4): 52 phpt la citano.
+- `unserialize()` riporta sempre "Error at offset 0 of N bytes" (l'offset reale
+  non è tracciato) e non supporta i riferimenti condivisi `r:`/`R:` né il
+  C:-format con ref interni (bug79031).
+- `var_dump($_SESSION)` non mostra `&` sugli elementi referenziati (006/019/026).
+- `open_basedir` non modellata (gh13856); ReflectionFunction sulle funzioni
+  interne non costruisce descriptor (bug74541).
+- Il flusso `phpr -d`: gli override si applicano SOLO alle direttive registrate
+  (identico all'invisibilità di `php -d unknown=x` a `ini_get`).
+
 ---
 
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
