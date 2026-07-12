@@ -9,7 +9,7 @@ memoria: `php-rust-symfony-http-kernel`.
   (errori −46; molti ex-Error ora arrivano agli assert → +12 F "onesti").
   ⚠️ La run ora dura **~2 minuti**: il phpunit-bridge BOOTSTRAPPA (ClockMock
   attivo) da quando `self::${$n}` compila (DebugClassLoader).
-- Zend corpus **2442 pass** / 1610 fail / 1253 skip · ext/session 78 fail /
+- Zend corpus **2443 pass** / 1609 fail / 1253 skip · ext/session 78 fail /
   ext/date 435 fail / ext/reflection 294 fail (tutti invariati per nome) ·
   ORM **3e/15f** identico per nome · cargo **1530/0**.
 - Workspace: 56c2e188 `…/scratchpad/symfony/http-kernel` (v8.1.1). Se evaporato:
@@ -80,7 +80,7 @@ Due firme, UNA radice (la macchineria trait/closure/deferred cross-unit):
 
 ## Invarianti (identici) + 2 lezioni nuove
 - Gate per OGNI commit: probe byte-id vs oracle · corpus per NOME
-  (`--list-fails`; baseline .norm in 77155ebc/scratchpad: corpus-h.norm ecc.) ·
+  (`--list-fails`; baseline .norm in 77155ebc/scratchpad: corpus-i.norm ecc.) ·
   ext/session+date+reflection per nome · ORM (3e/15f) se ref/arg/reflection ·
   cargo test. MAI `cargo build` durante un gate phpt.
 - ⚠️ **MAI CARGO_TARGET_DIR dentro /private/tmp** (la build release da ~10GB
