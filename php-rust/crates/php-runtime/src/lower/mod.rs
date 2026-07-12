@@ -1746,6 +1746,7 @@ fn visibility_of<'a>(modifiers: impl Iterator<Item = &'a Modifier<'a>>) -> Visib
 fn set_visibility_of<'a>(modifiers: impl Iterator<Item = &'a Modifier<'a>>) -> Option<Visibility> {
     for m in modifiers {
         match m {
+            Modifier::PublicSet(_) => return Some(Visibility::Public),
             Modifier::ProtectedSet(_) => return Some(Visibility::Protected),
             Modifier::PrivateSet(_) => return Some(Visibility::Private),
             _ => {}

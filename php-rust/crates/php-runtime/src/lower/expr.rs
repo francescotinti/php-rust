@@ -126,8 +126,17 @@ impl<'f> Lowerer<'f> {
                             }
                             // Otherwise both sides are places: a bare variable or
                             // an array element (step 11d-2). `lower_place` rejects
-                            // anything that is not an lvalue.
-                            let source = self.lower_place(u.operand, line)?;
+                            // anything that is not an lvalue. A bare `Class::$p`
+                            // is a place ONLY here (ref-bind targets the live
+                            // static cell); everywhere else the dedicated
+                            // static-prop lowerings keep their routing.
+                            let source = if let Expression::Access(Access::StaticProperty(sp)) = u.operand {
+                                let class = self.class_ref_of(sp.class, line)?;
+                                let name = static_prop_name(&sp.property, line)?.into();
+                                Place { base: PlaceBase::StaticProp { class, name }, steps: Vec::new() }
+                            } else {
+                                self.lower_place(u.operand, line)?
+                            };
                             return Ok(Expr {
                                 line,
                                 kind: ExprKind::AssignRef { target, source },
@@ -1408,11 +1417,9 @@ impl<'f> Lowerer<'f> {
                     };
                     return Ok(Place { base, steps: Vec::new() });
                 }
-                // `Class::$arr[k]` — an *indexed* static-property target. Only the
-                // indexed form roots a `Place` at a static property (a bare
-                // `Class::$p` write goes through `StaticPropAssign`, and a bare
-                // read/`isset` stays unsupported as a place), so the base is built
-                // here rather than in a standalone `lower_place` arm (step 19-4).
+                // `Class::$arr[k]` — an *indexed* static-property target (a bare
+                // `Class::$p` write still goes through `StaticPropAssign`; the
+                // ref-assignment lowering builds its own bare-static place).
                 if let Expression::Access(Access::StaticProperty(sp)) = aa.array {
                     let class = self.class_ref_of(sp.class, line)?;
                     let name = static_prop_name(&sp.property, line)?.into();
@@ -1465,7 +1472,7 @@ impl<'f> Lowerer<'f> {
             // object via its handle; pure index writes land in the discarded
             // temp). Only expressions PHP itself treats as temporaries may root
             // a `Value` place — real places that are merely unsupported here
-            // (`$$x`, `?->`, bare `Class::$p`) keep the honest error, since a
+            // (`$$x`, `?->`) keep the honest error, since a
             // temp copy would silently drop their writes.
             Expression::Call(_) | Expression::Instantiation(_) | Expression::Clone(_) => {
                 Ok(Place {

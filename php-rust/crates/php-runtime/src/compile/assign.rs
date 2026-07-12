@@ -288,6 +288,34 @@ impl<'a> super::FnCompiler<'a> {
             self.emit(Op::BindRefTo { base: tbase, steps: tsteps.into() });
             return Ok(());
         }
+        // A static-property side (either one) roots at a temp via the RMW
+        // wrapper: the Ref cell minted inside the temp array is Rc-shared, so
+        // it survives the write-back and the alias stays live in both the
+        // bound variable and the stored static property
+        // (`$exists = &self::$existsCache[$k]`, ClassExistenceResource).
+        if let PlaceBase::StaticProp { class, name } = &target.base {
+            let (class, name) = (class.clone(), name.clone());
+            let src = source.clone();
+            return self.static_prop_rmw(&class, &name, &target.steps, false, move |s, local| {
+                s.assign_ref(local, &src)
+            });
+        }
+        if let PlaceBase::StaticProp { class, name } = &source.base {
+            let (class, name) = (class.clone(), name.clone());
+            // Bare `&Class::$sp` with a compile-time class: bind straight to
+            // the property's live storage cell (true two-way alias).
+            if source.steps.is_empty() && !self.is_runtime_class(&class) {
+                let cls_target = self.resolve_target(&class)?.0;
+                let (tbase, tsteps) = self.field_path(target)?;
+                self.emit(Op::StaticPropRef { target: cls_target, name: name.clone() });
+                self.emit(Op::BindRefTo { base: tbase, steps: tsteps.into() });
+                return Ok(());
+            }
+            let tgt = target.clone();
+            return self.static_prop_rmw(&class, &name, &source.steps, false, move |s, local| {
+                s.assign_ref(&tgt, local)
+            });
+        }
         if target.steps.is_empty() && source.steps.is_empty() {
             let t = dim_base(target)?;
             let s = dim_base(source)?;

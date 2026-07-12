@@ -2882,7 +2882,9 @@ impl<'m> super::Vm<'m> {
                                     ob.mark_readonly_init(&key);
                                 } else {
                                     let inited = o.borrow().is_readonly_init(&key);
-                                    if let Some(err) = readonly_write_error(&self.classes, cur, decl, &name, inited) {
+                                    let set_vis = prop_info(&self.classes, ocid, &name)
+                                        .and_then(|pi| pi.set_visibility);
+                                    if let Some(err) = readonly_write_error(&self.classes, cur, decl, &name, inited, set_vis) {
                                         return Err(err);
                                     }
                                     o.borrow_mut().mark_readonly_init(&key);
@@ -3756,6 +3758,15 @@ impl<'m> super::Vm<'m> {
                     let value = self.frames[top].stack.pop().expect("StaticPropSet value");
                     *cell.borrow_mut() = value.clone();
                     self.frames[top].stack.push(value);
+                }
+                Op::StaticPropRef { target, name } => {
+                    // `$x = &Class::$sp`: the property's storage cell itself,
+                    // wrapped as a reference value — the alias is live both ways.
+                    let cell = match self.ensure_static(target, &name, top, ip)? {
+                        Some(c) => c,
+                        None => continue,
+                    };
+                    self.frames[top].stack.push(Zval::Ref(cell));
                 }
                 Op::StaticPropOpSet { target, name, op } => {
                     let cell = match self.ensure_static(target, &name, top, ip)? {

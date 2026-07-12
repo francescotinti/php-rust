@@ -914,6 +914,10 @@ pub enum Op {
     /// `[value] -> [value]` — write `value` into `target::$name` (through the
     /// shared cell); leaves the assigned value.
     StaticPropSet { target: ClassTarget, name: Box<[u8]> },
+    /// `[] -> [ref]` — push the static property's own storage cell as a
+    /// reference value (`$x = &Class::$sp`): writes through the binding then
+    /// hit the live cell every other static-prop op reads.
+    StaticPropRef { target: ClassTarget, name: Box<[u8]> },
     /// `[rhs] -> [result]` — compound `target::$name op= rhs`.
     StaticPropOpSet { target: ClassTarget, name: Box<[u8]>, op: BinOp },
     /// `[] -> [result]` — `++`/`--` on `target::$name`.

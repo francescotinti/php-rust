@@ -457,31 +457,41 @@ pub(super) fn method_access_error(
 /// Returns the fatal to raise, or `None` if the write is a permitted first
 /// initialisation. Mirrors PHP 8.4: an already-initialised readonly property
 /// cannot be modified from *any* scope; an uninitialised one carries implicit
-/// `protected(set)` visibility, so it may only be initialised from within the
-/// declaring class hierarchy (else "from <scope>").
+/// `protected(set)` visibility — unless an explicit aviz modifier widens it
+/// (`public public(set) readonly`, Symfony's Cache attribute) or narrows it
+/// (`private(set) readonly`).
 pub(super) fn readonly_write_error(
     classes: &[&CompiledClass],
     cur: Option<ClassId>,
     decl: ClassId,
     name: &[u8],
     initialized: bool,
+    set_vis: Option<Visibility>,
 ) -> Option<PhpError> {
     let cls = String::from_utf8_lossy(&classes[decl].name);
     let prop = String::from_utf8_lossy(name);
     if initialized {
         return Some(PhpError::Error(format!("Cannot modify readonly property {cls}::${prop}")));
     }
-    // Uninitialised: allowed only from the declaring class or a subclass
-    // (protected(set) semantics).
-    if visible_from(classes, cur, Visibility::Protected, decl) {
+    // Uninitialised: allowed from scopes the (explicit or implicit) set
+    // visibility admits. An explicit aviz modifier also owns the error text —
+    // Zend then omits the "readonly" word ("Cannot modify private(set)
+    // property C::$p from global scope").
+    let vis = set_vis.unwrap_or(Visibility::Protected);
+    if visible_from(classes, cur, vis, decl) {
         return None;
     }
+    let kind = match (set_vis, vis) {
+        (Some(_), Visibility::Private) => "private(set) property",
+        (Some(_), _) => "protected(set) property",
+        (None, _) => "protected(set) readonly property",
+    };
     let scope = match cur {
         Some(c) => format!("scope {}", String::from_utf8_lossy(&classes[c].name)),
         None => "global scope".to_string(),
     };
     Some(PhpError::Error(format!(
-        "Cannot modify protected(set) readonly property {cls}::${prop} from {scope}"
+        "Cannot modify {kind} {cls}::${prop} from {scope}"
     )))
 }
 
