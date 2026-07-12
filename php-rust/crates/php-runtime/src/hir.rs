@@ -1243,6 +1243,12 @@ pub enum PlaceBase {
     /// into a temp, mutated, and written back at compile time — value-correct for
     /// PHP arrays (copy-on-write).
     StaticProp { class: ClassRef, name: Box<[u8]> },
+    /// `Class::${expr}` (dynamic property NAME) as the root of an indexed
+    /// write/unset/isset target — the same temp read-modify-write strategy as
+    /// [`PlaceBase::StaticProp`], with the name resolved at run time
+    /// (DebugClassLoader's `self::${$annotation}[$class] = …`). Reference
+    /// binding into a dynamic-name property stays unsupported.
+    StaticPropDyn { class: ClassRef, name: Box<Expr> },
     /// `Class::CONST` as the root of an `isset()`/`empty()` *read* test
     /// (`isset(self::TABLE[$k])`). The constant value is materialised into a temp
     /// and the index path tested on it — read-only, so this base never reaches a

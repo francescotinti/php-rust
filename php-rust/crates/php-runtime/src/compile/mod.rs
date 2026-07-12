@@ -1231,7 +1231,7 @@ fn dim_base(place: &Place) -> R<DimBase> {
         PlaceBase::Global(s) => Ok(DimBase::Global(s)),
         PlaceBase::Superglobal(i) => Ok(DimBase::Superglobal(i)),
         PlaceBase::This => Err(CompileError::Unsupported("$this property write".into())),
-        PlaceBase::StaticProp { .. } => {
+        PlaceBase::StaticProp { .. } | PlaceBase::StaticPropDyn { .. } => {
             Err(CompileError::Unsupported("static property dim base".into()))
         }
         PlaceBase::ClassConst { .. } => {

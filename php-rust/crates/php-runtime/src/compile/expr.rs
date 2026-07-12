@@ -1068,7 +1068,8 @@ impl<'a> super::FnCompiler<'a> {
                 // temp, mirroring the registry by-ref path.
                 ExprKind::StaticProp { class, name: prop } => {
                     let canon: Box<[u8]> = canon.into();
-                    return self.static_prop_rmw(class, prop, &[], true, |c, place| {
+                    let prop = super::assign::SpName::Lit(prop.clone());
+                    return self.static_prop_rmw(class, &prop, &[], true, |c, place| {
                         let slot = local_slot(place);
                         c.push_value_args(rest)?;
                         c.emit(Op::CallHostBuiltinRef {
@@ -1194,7 +1195,23 @@ impl<'a> super::FnCompiler<'a> {
                 // the catchable `Error` at the actual call site, after any output /
                 // argument side effects, matching the tree-walker.
                 if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
-                    return Err(CompileError::Unsupported("argument unpacking (spread)".into()));
+                    // Unknown function + spread: defer resolution to run time
+                    // exactly like the no-spread paths below, arguments from a
+                    // runtime array (ParameterBag's
+                    // `trigger_deprecation(...$this->deprecatedParameters[$name])`).
+                    if let Some(fb) = fallback {
+                        self.build_args_array(args)?;
+                        self.emit(Op::CallNsFallbackArgs {
+                            name: name.into(),
+                            fallback: fb.into(),
+                        });
+                    } else {
+                        let k = self.konst(Const::Str(name.into()));
+                        self.emit(Op::PushConst(k));
+                        self.build_args_array(args)?;
+                        self.emit(Op::CallValueArgs);
+                    }
+                    return Ok(());
                 }
                 // An unqualified call inside a namespace whose target resolved to
                 // neither a hoisted user function nor a builtin defers PHP's two-step
@@ -1697,7 +1714,8 @@ impl<'a> super::FnCompiler<'a> {
             // result), then write the mutated temp back into the property.
             ExprKind::StaticProp { class, name: prop } => {
                 let nm: Box<[u8]> = name.into();
-                self.static_prop_rmw(class, prop, &[], true, |c, place| {
+                let prop = super::assign::SpName::Lit(prop.clone());
+                self.static_prop_rmw(class, &prop, &[], true, |c, place| {
                     let slot = local_slot(place);
                     c.push_value_args(rest)?;
                     c.emit(Op::CallBuiltinRef { name: nm, slot, argc: rest.len() as u32 });
@@ -1737,7 +1755,8 @@ impl<'a> super::FnCompiler<'a> {
                 if let ExprKind::StaticProp { class, name: prop } = &cur.kind {
                     steps_rev.reverse();
                     let nm: Box<[u8]> = name.into();
-                    return self.static_prop_rmw(class, prop, &steps_rev, true, |c, place| {
+                    let prop = super::assign::SpName::Lit(prop.clone());
+                    return self.static_prop_rmw(class, &prop, &steps_rev, true, |c, place| {
                         let (base, psteps) = c.field_path(place)?;
                         c.emit(Op::MakeRef { base, steps: psteps.into() });
                         c.push_value_args(rest)?;
@@ -2072,9 +2091,10 @@ impl<'a> super::FnCompiler<'a> {
         }
     }
 
-    /// Push the run-time class value for a reference where [`Self::is_runtime_class`]
-    /// holds: the evaluated `$expr`, or the (already fully-qualified) class name as
-    /// a string the VM resolves via the class table.
+    /// Push the run-time class value for a reference: the evaluated `$expr`, the
+    /// (already fully-qualified) class name as a string the VM resolves via the
+    /// class table, or — for `self::`/`parent::` (dynamic static-property names,
+    /// `self::${$n}`) — the scope class name via [`Op::ClassNameScope`].
     pub(super) fn push_class_value(&mut self, class: &ClassRef) -> R<()> {
         match class {
             ClassRef::Dynamic(e) => self.expr(e),
@@ -2083,7 +2103,19 @@ impl<'a> super::FnCompiler<'a> {
                 self.emit(Op::PushConst(k));
                 Ok(())
             }
-            _ => unreachable!("push_class_value on a compile-time class ref"),
+            ClassRef::SelfClass => {
+                self.emit(Op::ClassNameScope { parent: false });
+                Ok(())
+            }
+            ClassRef::Parent => {
+                self.emit(Op::ClassNameScope { parent: true });
+                Ok(())
+            }
+            // No op pushes the late-static-binding class NAME yet; keep the
+            // residue explicit rather than silently wrong.
+            ClassRef::Static => Err(CompileError::Unsupported(
+                "`static::` as a runtime class value".into(),
+            )),
         }
     }
 
@@ -2222,6 +2254,7 @@ impl<'a> super::FnCompiler<'a> {
             PlaceBase::Global(_)
             | PlaceBase::Superglobal(_)
             | PlaceBase::StaticProp { .. }
+            | PlaceBase::StaticPropDyn { .. }
             | PlaceBase::ClassConst { .. }
             // Value bases are rewritten through a temp (`value_base_rmw`)
             // before any place operation, so they never reach here.
@@ -2251,6 +2284,7 @@ impl<'a> super::FnCompiler<'a> {
             PlaceBase::Global(_)
             | PlaceBase::Superglobal(_)
             | PlaceBase::StaticProp { .. }
+            | PlaceBase::StaticPropDyn { .. }
             | PlaceBase::ClassConst { .. }
             | PlaceBase::Value(_) => return Ok(false),
         }

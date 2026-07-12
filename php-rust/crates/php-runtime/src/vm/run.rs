@@ -909,6 +909,14 @@ impl<'m> super::Vm<'m> {
                     let callee = self.frames[top].stack.pop().expect("CallValueArgs callee");
                     self.invoke_value(callee, args)?;
                 }
+                Op::CallNsFallbackArgs { name, fallback } => {
+                    // Spread on the two-step namespaced lookup: arguments from a
+                    // runtime array, resolution deferred like `CallNsFallback`.
+                    let argsval =
+                        self.frames[top].stack.pop().expect("CallNsFallbackArgs array");
+                    let args = args_from_array_value(argsval);
+                    self.invoke_named_fallback(&name, &fallback, args)?;
+                }
                 Op::Throw => {
                     let v = self.frames[top].stack.pop().expect("throw operand");
                     return Err(PhpError::Thrown(v.deref_clone()));

@@ -1,6 +1,28 @@
 //! Statement tail: try/switch/match + assignment/lvalue/isset emission. Split from compile/mod.rs.
 use super::*;
 
+/// The static-property NAME for the rmw/read wrappers: a compile-time literal
+/// (`self::$arr[k]`) or an expression resolved at run time
+/// (`self::${$n}[k]`, DebugClassLoader), evaluated exactly once.
+pub(super) enum SpName {
+    Lit(Box<[u8]>),
+    Dyn(Expr),
+}
+
+/// The (class, name) parts of a static-property-rooted place, for the
+/// rmw/read wrappers — `None` for every other base.
+fn static_place_parts(base: &PlaceBase) -> Option<(ClassRef, SpName)> {
+    match base {
+        PlaceBase::StaticProp { class, name } => {
+            Some((class.clone(), SpName::Lit(name.clone())))
+        }
+        PlaceBase::StaticPropDyn { class, name } => {
+            Some((class.clone(), SpName::Dyn((**name).clone())))
+        }
+        _ => None,
+    }
+}
+
 impl<'a> super::FnCompiler<'a> {
     /// Lower a mixed property/index place (`$o->a[$k]`, `$this->x->y`, …) into a
     /// [`FieldBase`] plus a [`FieldStep`] list, emitting each `Index` step's key
@@ -127,7 +149,7 @@ impl<'a> super::FnCompiler<'a> {
             PlaceBase::This => FieldBase::This,
             // Indexed static-property targets are rewritten into a temp before
             // reaching the field-path walker (see `static_prop_rmw`).
-            PlaceBase::StaticProp { .. } => {
+            PlaceBase::StaticProp { .. } | PlaceBase::StaticPropDyn { .. } => {
                 return Err(CompileError::Unsupported("static property field path".into()))
             }
             // A class-constant base is read-only and materialised into a temp for
@@ -294,7 +316,7 @@ impl<'a> super::FnCompiler<'a> {
         // bound variable and the stored static property
         // (`$exists = &self::$existsCache[$k]`, ClassExistenceResource).
         if let PlaceBase::StaticProp { class, name } = &target.base {
-            let (class, name) = (class.clone(), name.clone());
+            let (class, name) = (class.clone(), SpName::Lit(name.clone()));
             let src = source.clone();
             return self.static_prop_rmw(&class, &name, &target.steps, false, move |s, local| {
                 s.assign_ref(local, &src)
@@ -312,6 +334,7 @@ impl<'a> super::FnCompiler<'a> {
                 return Ok(());
             }
             let tgt = target.clone();
+            let name = SpName::Lit(name);
             return self.static_prop_rmw(&class, &name, &source.steps, false, move |s, local| {
                 s.assign_ref(&tgt, local)
             });
@@ -416,8 +439,7 @@ impl<'a> super::FnCompiler<'a> {
             let e = (**e).clone();
             return self.value_base_rmw(&e, &place.steps, |s, p| s.assign_place(p, rhs));
         }
-        if let PlaceBase::StaticProp { class, name } = &place.base {
-            let (class, name) = (class.clone(), name.clone());
+        if let Some((class, name)) = static_place_parts(&place.base) {
             return self.static_prop_rmw(&class, &name, &place.steps, true, |s, p| {
                 s.assign_place(p, rhs)
             });
@@ -472,8 +494,7 @@ impl<'a> super::FnCompiler<'a> {
             let e = (**e).clone();
             return self.value_base_rmw(&e, &place.steps, |s, p| s.unset_place(p));
         }
-        if let PlaceBase::StaticProp { class, name } = &place.base {
-            let (class, name) = (class.clone(), name.clone());
+        if let Some((class, name)) = static_place_parts(&place.base) {
             return self.static_prop_rmw(&class, &name, &place.steps, false, |s, p| {
                 s.unset_place(p)
             });
@@ -497,27 +518,29 @@ impl<'a> super::FnCompiler<'a> {
     /// temp is written back into the static property — value-correct for PHP
     /// arrays (copy-on-write). When `leaves_value` is set, `core` leaves the
     /// expression's result on the stack and it is preserved across the write-back.
+    /// The property name may itself be dynamic ([`SpName::Dyn`]); it is then
+    /// evaluated exactly once into its own temp.
     /// Dynamic class references (`$cls::$arr[k]`) are out of scope.
     pub(super) fn static_prop_rmw(
         &mut self,
         class: &ClassRef,
-        name: &[u8],
+        name: &SpName,
         steps: &[PlaceStep],
         leaves_value: bool,
         core: impl FnOnce(&mut Self, &Place) -> R<()>,
     ) -> R<()> {
         // A class only known at run time (an autoloaded name, `$cls`) reads and
         // writes through the *Dynamic ops — the class value is pushed for each.
+        // A literal name on a compile-time class targets the resolved class
+        // directly; a dynamic name goes through the *DynName ops.
         let runtime = self.is_runtime_class(class);
-        let target = if runtime { None } else { Some(self.resolve_target(class)?.0) };
-        let nm: Box<[u8]> = name.into();
+        let target = match name {
+            SpName::Lit(_) if !runtime => Some(self.resolve_target(class)?.0),
+            _ => None,
+        };
+        let name_slot = self.sp_name_slot(name)?;
         let t = self.alloc_temp();
-        if runtime {
-            self.push_class_value(class)?;
-            self.emit(Op::StaticPropGetDynamic { name: nm.clone() });
-        } else {
-            self.emit(Op::StaticPropGet { target: target.unwrap(), name: nm.clone() });
-        }
+        self.sp_get(class, target, name, name_slot)?;
         self.emit(Op::StoreSlot(t));
         let local = Place {
             base: PlaceBase::Local(t),
@@ -528,27 +551,86 @@ impl<'a> super::FnCompiler<'a> {
             let t2 = self.alloc_temp();
             self.emit(Op::StoreSlot(t2)); // []
             self.emit(Op::LoadSlot(t));
-            if runtime {
-                self.push_class_value(class)?;
-                self.emit(Op::StaticPropSetDynamic { name: nm }); // [arr]
-            } else {
-                self.emit(Op::StaticPropSet { target: target.unwrap(), name: nm }); // [arr]
-            }
+            self.sp_set(class, target, name, name_slot)?; // [arr]
             self.emit(Op::Pop);
             self.emit(Op::LoadSlot(t2)); // [result]
             self.free_temp(); // t2
         } else {
             core(self, &local)?; // []
             self.emit(Op::LoadSlot(t));
-            if runtime {
-                self.push_class_value(class)?;
-                self.emit(Op::StaticPropSetDynamic { name: nm }); // [arr]
-            } else {
-                self.emit(Op::StaticPropSet { target: target.unwrap(), name: nm }); // [arr]
-            }
+            self.sp_set(class, target, name, name_slot)?; // [arr]
             self.emit(Op::Pop);
         }
         self.free_temp(); // t
+        if name_slot.is_some() {
+            self.free_temp(); // dynamic-name temp
+        }
+        Ok(())
+    }
+
+    /// Evaluate a dynamic static-property name exactly once into a temp; a
+    /// literal name needs no slot.
+    fn sp_name_slot(&mut self, name: &SpName) -> R<Option<u32>> {
+        match name {
+            SpName::Lit(_) => Ok(None),
+            SpName::Dyn(e) => {
+                let tn = self.alloc_temp();
+                self.expr(e)?;
+                self.emit(Op::StoreSlot(tn));
+                Ok(Some(tn))
+            }
+        }
+    }
+
+    /// Emit the read of `class::$name` for the rmw/read wrappers, dispatching
+    /// on literal vs dynamic name and compile-time vs runtime class.
+    fn sp_get(
+        &mut self,
+        class: &ClassRef,
+        target: Option<ClassTarget>,
+        name: &SpName,
+        name_slot: Option<u32>,
+    ) -> R<()> {
+        match (name, target) {
+            (SpName::Lit(nm), Some(t)) => {
+                self.emit(Op::StaticPropGet { target: t, name: nm.clone() });
+            }
+            (SpName::Lit(nm), None) => {
+                self.push_class_value(class)?;
+                self.emit(Op::StaticPropGetDynamic { name: nm.clone() });
+            }
+            (SpName::Dyn(_), _) => {
+                self.push_class_value(class)?;
+                self.emit(Op::LoadSlot(name_slot.expect("dynamic name slot")));
+                self.emit(Op::StaticPropGetDynName);
+            }
+        }
+        Ok(())
+    }
+
+    /// The write twin of [`Self::sp_get`]: consumes the value beneath the
+    /// class/name operands and leaves the assigned value on the stack.
+    fn sp_set(
+        &mut self,
+        class: &ClassRef,
+        target: Option<ClassTarget>,
+        name: &SpName,
+        name_slot: Option<u32>,
+    ) -> R<()> {
+        match (name, target) {
+            (SpName::Lit(nm), Some(t)) => {
+                self.emit(Op::StaticPropSet { target: t, name: nm.clone() });
+            }
+            (SpName::Lit(nm), None) => {
+                self.push_class_value(class)?;
+                self.emit(Op::StaticPropSetDynamic { name: nm.clone() });
+            }
+            (SpName::Dyn(_), _) => {
+                self.push_class_value(class)?;
+                self.emit(Op::LoadSlot(name_slot.expect("dynamic name slot")));
+                self.emit(Op::StaticPropSetDynName);
+            }
+        }
         Ok(())
     }
 
@@ -560,26 +642,28 @@ impl<'a> super::FnCompiler<'a> {
     pub(super) fn static_prop_read(
         &mut self,
         class: &ClassRef,
-        name: &[u8],
+        name: &SpName,
         steps: &[PlaceStep],
         core: impl FnOnce(&mut Self, &Place) -> R<()>,
     ) -> R<()> {
+        let runtime = self.is_runtime_class(class);
+        let target = match name {
+            SpName::Lit(_) if !runtime => Some(self.resolve_target(class)?.0),
+            _ => None,
+        };
+        let name_slot = self.sp_name_slot(name)?;
         let t = self.alloc_temp();
-        if self.is_runtime_class(class) {
-            // A run-time class (autoloaded name, `$cls`): read via the dynamic op.
-            self.push_class_value(class)?;
-            self.emit(Op::StaticPropGetDynamic { name: name.into() });
-        } else {
-            let (target, _) = self.resolve_target(class)?;
-            self.emit(Op::StaticPropGet { target, name: name.into() });
-        }
+        self.sp_get(class, target, name, name_slot)?;
         self.emit(Op::StoreSlot(t));
         let local = Place {
             base: PlaceBase::Local(t),
             steps: steps.to_vec(),
         };
         core(self, &local)?;
-        self.free_temp();
+        self.free_temp(); // t
+        if name_slot.is_some() {
+            self.free_temp(); // dynamic-name temp
+        }
         Ok(())
     }
 
@@ -641,8 +725,7 @@ impl<'a> super::FnCompiler<'a> {
             let e = (**e).clone();
             return self.value_base_rmw(&e, &place.steps, |s, p| s.assign_coalesce_place(p, rhs));
         }
-        if let PlaceBase::StaticProp { class, name } = &place.base {
-            let (class, name) = (class.clone(), name.clone());
+        if let Some((class, name)) = static_place_parts(&place.base) {
             return self.static_prop_rmw(&class, &name, &place.steps, true, |s, p| {
                 s.assign_coalesce_place(p, rhs)
             });
@@ -807,8 +890,7 @@ impl<'a> super::FnCompiler<'a> {
             let e = (**e).clone();
             return self.value_base_rmw(&e, &place.steps, |s, p| s.assign_op_place(op, p, rhs));
         }
-        if let PlaceBase::StaticProp { class, name } = &place.base {
-            let (class, name) = (class.clone(), name.clone());
+        if let Some((class, name)) = static_place_parts(&place.base) {
             return self.static_prop_rmw(&class, &name, &place.steps, true, |s, p| {
                 s.assign_op_place(op, p, rhs)
             });
@@ -868,8 +950,7 @@ impl<'a> super::FnCompiler<'a> {
             let e = (**e).clone();
             return self.value_base_rmw(&e, &place.steps, |s, p| s.incdec_place(p, inc, pre));
         }
-        if let PlaceBase::StaticProp { class, name } = &place.base {
-            let (class, name) = (class.clone(), name.clone());
+        if let Some((class, name)) = static_place_parts(&place.base) {
             return self.static_prop_rmw(&class, &name, &place.steps, true, |s, p| {
                 s.incdec_place(p, inc, pre)
             });
@@ -942,8 +1023,7 @@ impl<'a> super::FnCompiler<'a> {
             let e = (**e).clone();
             return self.value_base_rmw(&e, &place.steps, |s, p| s.isset_one(p));
         }
-        if let PlaceBase::StaticProp { class, name } = &place.base {
-            let (class, name) = (class.clone(), name.clone());
+        if let Some((class, name)) = static_place_parts(&place.base) {
             return self.static_prop_read(&class, &name, &place.steps, |s, p| s.isset_one(p));
         }
         if let PlaceBase::ClassConst { class, name } = &place.base {
@@ -977,8 +1057,7 @@ impl<'a> super::FnCompiler<'a> {
             let (class, name) = (class.clone(), name.clone());
             return self.class_const_read(&class, &name, &place.steps, |s, p| s.empty(p));
         }
-        if let PlaceBase::StaticProp { class, name } = &place.base {
-            let (class, name) = (class.clone(), name.clone());
+        if let Some((class, name)) = static_place_parts(&place.base) {
             return self.static_prop_read(&class, &name, &place.steps, |s, p| s.empty(p));
         }
         if let Some(name) = self.prop_place(place)? {

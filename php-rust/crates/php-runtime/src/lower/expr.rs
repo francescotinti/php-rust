@@ -1323,11 +1323,16 @@ impl<'f> Lowerer<'f> {
                 Expression::Self_(_) | Expression::Parent(_) | Expression::Static(_)
             ) {
                 let class = self.class_ref_of(sp.class, line)?;
-                let name = static_prop_name(&sp.property, line)?.into();
-                return Ok(Place {
-                    base: PlaceBase::StaticProp { class, name },
-                    steps: Vec::new(),
-                });
+                // `isset(self::${$p})` — dynamic property name reads through
+                // the same materialise-into-temp path as the literal form.
+                let base = if matches!(&sp.property, Variable::Direct(_)) {
+                    let name = static_prop_name(&sp.property, line)?.into();
+                    PlaceBase::StaticProp { class, name }
+                } else {
+                    let name = Box::new(self.lower_variable_name(&sp.property, line)?);
+                    PlaceBase::StaticPropDyn { class, name }
+                };
+                return Ok(Place { base, steps: Vec::new() });
             }
         }
         // `isset(self::TABLE[$k])` / `empty(Foo::MAP[$k])` — an index into a class
@@ -1422,12 +1427,17 @@ impl<'f> Lowerer<'f> {
                 // ref-assignment lowering builds its own bare-static place).
                 if let Expression::Access(Access::StaticProperty(sp)) = aa.array {
                     let class = self.class_ref_of(sp.class, line)?;
-                    let name = static_prop_name(&sp.property, line)?.into();
                     let index = PlaceStep::Index(self.lower_expr(aa.index)?);
-                    return Ok(Place {
-                        base: PlaceBase::StaticProp { class, name },
-                        steps: vec![index],
-                    });
+                    // `Class::${expr}[k]` — the property NAME is a runtime
+                    // value (DebugClassLoader's `self::${$annotation}[$class]`).
+                    let base = if matches!(&sp.property, Variable::Direct(_)) {
+                        let name = static_prop_name(&sp.property, line)?.into();
+                        PlaceBase::StaticProp { class, name }
+                    } else {
+                        let name = Box::new(self.lower_variable_name(&sp.property, line)?);
+                        PlaceBase::StaticPropDyn { class, name }
+                    };
+                    return Ok(Place { base, steps: vec![index] });
                 }
                 let mut place = self.lower_place(aa.array, line)?;
                 place.steps.push(PlaceStep::Index(self.lower_expr(aa.index)?));
@@ -1438,11 +1448,16 @@ impl<'f> Lowerer<'f> {
                 // indexed `Class::$arr[k]` target above).
                 if let Expression::Access(Access::StaticProperty(sp)) = ap.array {
                     let class = self.class_ref_of(sp.class, line)?;
-                    let name = static_prop_name(&sp.property, line)?.into();
-                    return Ok(Place {
-                        base: PlaceBase::StaticProp { class, name },
-                        steps: vec![PlaceStep::Append],
-                    });
+                    let base = if matches!(&sp.property, Variable::Direct(_)) {
+                        let name = static_prop_name(&sp.property, line)?.into();
+                        PlaceBase::StaticProp { class, name }
+                    } else {
+                        // `Class::${expr}[]` — dynamic property name (mirrors
+                        // the indexed target above).
+                        let name = Box::new(self.lower_variable_name(&sp.property, line)?);
+                        PlaceBase::StaticPropDyn { class, name }
+                    };
+                    return Ok(Place { base, steps: vec![PlaceStep::Append] });
                 }
                 let mut place = self.lower_place(ap.array, line)?;
                 place.steps.push(PlaceStep::Append);

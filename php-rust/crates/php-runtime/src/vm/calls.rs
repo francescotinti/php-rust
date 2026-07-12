@@ -645,6 +645,12 @@ impl<'m> Vm<'m> {
                         is_static: false,
                     })))
                 }
+                // An invokable object: the callable is its `__invoke` method
+                // (ControllerEvent's `$controller(...)` on an invokable
+                // controller lowers to `fromCallable($controller)`).
+                Some(v @ Zval::Object(_)) => {
+                    self.make_method_closure(&v, b"__invoke", caller_class).ok_or_else(nc)
+                }
                 // `[$object, 'method']` (instance) or `['Class', 'method']` (static).
                 Some(Zval::Array(a)) => {
                     let elems: Vec<Zval> = a.iter().map(|(_, v)| v.deref_clone()).collect();

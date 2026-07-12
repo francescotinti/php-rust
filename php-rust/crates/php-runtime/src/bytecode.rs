@@ -332,6 +332,10 @@ pub enum Op {
     /// exactly like [`Op::CallValue`]. The spread variant of `CallValue`, mirroring
     /// [`Op::MethodCallDynamicArgs`] for `$obj->$m(...$a)`.
     CallValueArgs,
+    /// `[argsArray] -> [ret]` — like [`Op::CallNsFallback`] but the arguments
+    /// are the values of a runtime array (spread on a not-yet-loaded function
+    /// inside a namespace: ParameterBag's `trigger_deprecation(...$dep)`).
+    CallNsFallbackArgs { name: Box<[u8]>, fallback: Box<[u8]> },
 
     // ----- exceptions (EXC) -----
     /// `[exc] -> ` (diverges) — pop the operand and unwind with
