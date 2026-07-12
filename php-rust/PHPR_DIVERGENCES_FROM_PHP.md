@@ -297,6 +297,21 @@ a classi dichiarate DOPO nello stesso file, che Zend early-binda solo se il
 parent è già noto) resta INVARIATA — siamo più permissivi di PHP lì, e il
 corpus non lo distingue.
 
+### 3.3-bis `class_uses()` su un NOME di trait → `[]` (uses dei trait non registrati)
+`get_parent_class`/`class_implements`/`class_parents`/`class_uses` accettano
+nomi di trait (2026-07-13, filone http-kernel: DebugClassLoader::checkClass gira
+su ogni simbolo autoloadato, trait inclusi). Oracle-pinned: parent → `false`,
+implements/parents → `array(0)` — fedeli sempre, perché un trait non può
+estendere né implementare. **`class_uses($trait)` invece riporta `[]` anche
+quando il trait usa altri trait**: i `use` dei trait sono appiattiti al lowering
+(`LoweredTrait` non conserva la lista). La *shape* (array, non false) è quella
+che i chiamanti unionano (DebugClassLoader:488 `+ class_uses($class, false)`);
+l'effetto residuo è solo la perdita delle deprecation ereditate via
+trait-di-trait nel DebugClassLoader. Da chiudere aggiungendo `uses` a
+`LoweredTrait`. Osservato anche (da verificare, pre-esistente):
+`class_implements(enum)` non include l'interfaccia implementata esplicitamente
+(solo UnitEnum/BackedEnum).
+
 ### 3.4 `$this` nello scope-bridge delle classi anonime differite
 Gli argomenti del costruttore di una `new class(...)` differita rieseguono nello
 scope del chiamante via bridge per-nome dei named slots; `$this` non è un named
@@ -366,6 +381,8 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-13: §3.3-bis — class_* su nomi di trait (class_uses(trait) → `[]`,
+  residuo trait-di-trait); nota class_implements(enum) da verificare.
 - 2026-07-09: creazione. Catalogati i 6 gap trasversali builtin, le assenze
   consapevoli Tier-A, le divergenze di engine circoscritte, gli invarianti
   byte-identici.

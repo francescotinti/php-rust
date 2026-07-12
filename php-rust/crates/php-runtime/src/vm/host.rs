@@ -1916,6 +1916,12 @@ impl<'m> super::Vm<'m> {
         if args.first().and_then(Self::engine_special_class_name).is_some() {
             return Ok(Zval::Bool(false));
         }
+        // A trait name is a valid argument with no parent (→ false), not the
+        // invalid-class TypeError (DebugClassLoader's checkClass runs on every
+        // autoloaded symbol, traits included).
+        if self.first_arg_is_trait_name(&args) {
+            return Ok(Zval::Bool(false));
+        }
         let top = self.frames.len() - 1;
         let cid: Option<ClassId> = match args.into_iter().next() {
             Some(a) => Some(self.class_arg_to_id(a.deref_clone(), "get_parent_class")?),
@@ -1935,6 +1941,10 @@ impl<'m> super::Vm<'m> {
         if args.first().and_then(Self::engine_special_class_name).is_some() {
             return Ok(Zval::Array(Rc::new(php_types::PhpArray::new())));
         }
+        // A trait cannot extend: a trait name yields `[]` (oracle-pinned).
+        if self.first_arg_is_trait_name(&args) {
+            return Ok(Zval::Array(Rc::new(php_types::PhpArray::new())));
+        }
         let Some(cid) = args.into_iter().next().and_then(|v| self.class_arg_or_warn(v, "class_parents")) else {
             return Ok(Zval::Bool(false));
         };
@@ -1947,10 +1957,25 @@ impl<'m> super::Vm<'m> {
         }
         Ok(Zval::Array(Rc::new(arr)))
     }
+    /// Whether the first argument is a string naming a declared trait —
+    /// `get_parent_class`/`class_implements`/`class_parents`/`class_uses` accept
+    /// trait names (oracle-pinned: parent → false, implements/parents → `[]`)
+    /// instead of the invalid-class path.
+    fn first_arg_is_trait_name(&self, args: &[Zval]) -> bool {
+        let Some(Zval::Str(s)) = args.first().map(|a| a.deref_clone()) else { return false };
+        let raw = s.as_bytes();
+        let want = raw.strip_prefix(b"\\").unwrap_or(raw).to_ascii_lowercase();
+        self.seed_traits.iter().any(|(_, t)| t.name.to_ascii_lowercase() == want)
+    }
     /// `class_implements($object_or_class)` — every interface the class implements,
     /// transitively (its own and its ancestors', plus interfaces those interfaces
     /// extend), as a `name => name` array; `false` for a bad argument.
     pub(super) fn ho_class_implements(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        // A trait cannot implement interfaces: a trait name yields `[]`
+        // (DebugClassLoader's getOwnInterfaces runs on traits too).
+        if self.first_arg_is_trait_name(&args) {
+            return Ok(Zval::Array(Rc::new(php_types::PhpArray::new())));
+        }
         // Generator implements Iterator (⊇ Traversable); Closure implements
         // nothing. Ordered as PHP returns them (Iterator, then Traversable).
         if let Some(kind) = args.first().and_then(Self::engine_special_class_name) {
@@ -2009,6 +2034,14 @@ impl<'m> super::Vm<'m> {
     /// order. `false` if the class does not exist. Mirrors PHP, which reports only
     /// the directly-`use`d traits.
     pub(super) fn ho_class_uses(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        // A trait name is a valid argument. Residue: trait-of-trait uses are
+        // flattened at lowering (LoweredTrait keeps no `uses` list), so this
+        // reports `[]` where Zend lists the used traits — documented in
+        // PHPR_DIVERGENCES_FROM_PHP.md; the shape (array, not false) is what
+        // callers union with (DebugClassLoader:488).
+        if self.first_arg_is_trait_name(&args) {
+            return Ok(Zval::Array(Rc::new(php_types::PhpArray::new())));
+        }
         let Some(cid) = args.into_iter().next().and_then(|v| self.class_arg_or_warn(v, "class_uses"))
         else {
             return Ok(Zval::Bool(false));
