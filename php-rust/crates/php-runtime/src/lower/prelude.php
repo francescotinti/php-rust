@@ -3317,6 +3317,7 @@ class ReflectionFunction extends ReflectionFunctionAbstract {
     }
     public function getStaticVariables() { return __reflect_static_vars(null, $this->name); }
     public function isGenerator() { return $this->__info['isGenerator'] ?? false; }
+    public function returnsReference() { return $this->__info['byRef'] ?? false; }
     // Deprecated via the #[\Deprecated] attribute (8.4).
     public function isDeprecated() { return count($this->getAttributes('Deprecated')) > 0; }
     public function invoke(...$args) { return call_user_func_array($this->name, $args); }

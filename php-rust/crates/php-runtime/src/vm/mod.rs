@@ -884,6 +884,19 @@ enum TraversableSource {
     Entries(Vec<(Zval, Zval)>),
 }
 
+/// `unserialize()` slot registry: pre-order value numbering mirroring
+/// `serialize()` (`R:` consumes no number; everything else, `r:` included,
+/// does). `targets` holds the slots some `R:` aliases (pre-collected), `cells`
+/// the shared reference cells built for them, `objs` each object slot's handle
+/// for `r:` repeats.
+#[derive(Default)]
+struct UnserCtx {
+    count: i64,
+    targets: std::collections::HashSet<i64>,
+    objs: std::collections::HashMap<i64, Zval>,
+    cells: std::collections::HashMap<i64, Rc<RefCell<Zval>>>,
+}
+
 /// The virtual machine: the module under execution plus the explicit call stack.
 /// PHP function calls grow `frames` rather than the Rust stack, so deep PHP
 /// recursion cannot overflow the host stack, and a frame is suspendable.
@@ -4341,6 +4354,8 @@ impl<'m> Vm<'m> {
         };
         d.insert(Key::Str(PhpStr::new(b"doc".to_vec())), doc);
         d.insert(Key::Str(PhpStr::new(b"isGenerator".to_vec())), Zval::Bool(func.is_generator));
+        // returnsReference(): the callable's `function &` marker.
+        d.insert(Key::Str(PhpStr::new(b"byRef".to_vec())), Zval::Bool(func.by_ref));
         // Source location (getFileName/getStartLine/getEndLine, and the `@@` line of
         // the __toString export). The op line table spans the body; a body-less
         // method (abstract / empty `{}`) has no op lines, so fall back to the
@@ -5342,9 +5357,61 @@ impl<'m> Vm<'m> {
     /// Turn a decoded [`Ser`](crate::unserialize::Ser) tree into a `Zval`, recursing
     /// into arrays/objects. Mirrors `eval::ser_to_zval`; objects go through
     /// [`Self::vm_make_unserialized_object`] (the VM's class table / id allocator).
+    // (see UnserCtx below `vm_ser_build` siblings)
     fn vm_ser_to_zval(&mut self, s: crate::unserialize::Ser) -> Result<Zval, PhpError> {
+        // Slot numbering mirrors serialize(): every value slot consumes a
+        // pre-order number except `R:` emissions (`r:` does consume one).
+        // Alias targets are pre-collected so their slots build into a shared
+        // `Zval::Ref` cell the `R:` occurrences then alias.
+        let mut ctx = UnserCtx::default();
+        crate::unserialize::collect_alias_targets(&s, &mut ctx.targets);
+        self.vm_ser_to_zval_slot(s, &mut ctx)
+    }
+
+    /// Number one wire slot, resolve `R:`, and cell-wrap alias targets.
+    fn vm_ser_to_zval_slot(
+        &mut self,
+        s: crate::unserialize::Ser,
+        ctx: &mut UnserCtx,
+    ) -> Result<Zval, PhpError> {
+        use crate::unserialize::Ser;
+        if let Ser::AliasRef(t) = s {
+            if let Some(cell) = ctx.cells.get(&t) {
+                return Ok(Zval::Ref(Rc::clone(cell)));
+            }
+            // An alias of an un-wrapped slot (malformed / forward reference)
+            // degrades to a value copy — never a fatal.
+            return Ok(ctx.objs.get(&t).cloned().unwrap_or(Zval::Null));
+        }
+        ctx.count += 1;
+        let n = ctx.count;
+        let built = self.vm_ser_build(s, n, ctx)?;
+        if ctx.targets.contains(&n) {
+            let cell = Rc::new(RefCell::new(built));
+            ctx.cells.insert(n, Rc::clone(&cell));
+            return Ok(Zval::Ref(cell));
+        }
+        Ok(built)
+    }
+
+    fn vm_ser_build(
+        &mut self,
+        s: crate::unserialize::Ser,
+        slot: i64,
+        ctx: &mut UnserCtx,
+    ) -> Result<Zval, PhpError> {
         use crate::unserialize::Ser;
         Ok(match s {
+            Ser::AliasRef(_) => Zval::Null, // handled by the slot layer
+            Ser::ObjRef(t) => match ctx.objs.get(&t) {
+                Some(v) => v.clone(),
+                // `r:` into an alias-wrapped slot copies the object handle out
+                // of the shared cell.
+                None => match ctx.cells.get(&t) {
+                    Some(cell) => cell.borrow().clone(),
+                    None => Zval::Null,
+                },
+            },
             Ser::Null => Zval::Null,
             Ser::Bool(b) => Zval::Bool(b),
             Ser::Long(n) => Zval::Long(n),
@@ -5359,7 +5426,7 @@ impl<'m> Vm<'m> {
                         Ser::Str(b) => Key::from_bytes(&b),
                         _ => continue,
                     };
-                    let val = self.vm_ser_to_zval(v)?;
+                    let val = self.vm_ser_to_zval_slot(v, ctx)?;
                     arr.insert(key, val);
                 }
                 Zval::Array(Rc::new(arr))
@@ -5393,12 +5460,16 @@ impl<'m> Vm<'m> {
                 // materialisation (PHP 7.4 protocol; wins over __wakeup).
                 if let Some(cid) = cid {
                     if resolve_method_runtime(&self.classes, cid, b"__unserialize").is_some() {
+                        // Create + register the instance BEFORE building the
+                        // data array, so a cyclic `r:<this>` resolves (Zend
+                        // registers on seeing `O:`).
+                        let obj = self.vm_make_unserialized_object(&class, Vec::new());
+                        ctx.objs.insert(slot, obj.clone());
                         let mut data = PhpArray::new();
                         for (name, v) in props {
-                            let val = self.vm_ser_to_zval(v)?;
+                            let val = self.vm_ser_to_zval_slot(v, ctx)?;
                             data.insert(Key::from_bytes(&name), val);
                         }
-                        let obj = self.vm_make_unserialized_object(&class, Vec::new());
                         self.call_method_sync(
                             obj.clone(),
                             b"__unserialize",
@@ -5407,11 +5478,14 @@ impl<'m> Vm<'m> {
                         return Ok(obj);
                     }
                 }
+                // Shell first (registered for cycles), fields second.
+                let obj = self.vm_unserialized_shell(&class);
+                ctx.objs.insert(slot, obj.clone());
                 let fields: Vec<(Vec<u8>, Zval)> = props
                     .into_iter()
-                    .map(|(name, v)| Ok((name, self.vm_ser_to_zval(v)?)))
+                    .map(|(name, v)| Ok((name, self.vm_ser_to_zval_slot(v, ctx)?)))
                     .collect::<Result<_, PhpError>>()?;
-                let obj = self.vm_make_unserialized_object(&class, fields);
+                self.vm_apply_unserialized_fields(&obj, fields);
                 // The legacy `__wakeup` runs after the props are materialised.
                 if let Some(cid) = cid {
                     if resolve_method_runtime(&self.classes, cid, b"__wakeup").is_some() {
@@ -5437,6 +5511,7 @@ impl<'m> Vm<'m> {
                     return Ok(Zval::Bool(false));
                 };
                 let obj = self.alloc_object(cid)?;
+                ctx.objs.insert(slot, obj.clone());
                 self.call_method_sync(
                     obj.clone(),
                     b"unserialize",
@@ -5452,8 +5527,20 @@ impl<'m> Vm<'m> {
     /// VM's machinery (`Self::alloc_object`'s construction, but with the serialized
     /// props instead of declared defaults). An unknown class falls back to
     /// `stdClass` (D-50).
-    fn vm_make_unserialized_object(&mut self, class: &[u8], mut fields: Vec<(Vec<u8>, Zval)>) -> Zval {
+    fn vm_make_unserialized_object(&mut self, class: &[u8], fields: Vec<(Vec<u8>, Zval)>) -> Zval {
+        let obj = self.vm_unserialized_shell(class);
+        self.vm_apply_unserialized_fields(&obj, fields);
+        obj
+    }
+
+    /// The instance-creation half of [`Self::vm_make_unserialized_object`]:
+    /// class resolution (unknown → `__PHP_Incomplete_Class` carrying the name),
+    /// declared defaults + prop-init thunk, no constructor. Split out so a
+    /// cyclic graph can register the object in the slot registry *before* its
+    /// serialized fields (which may `r:`-reference it) are built.
+    fn vm_unserialized_shell(&mut self, class: &[u8]) -> Zval {
         let lower = class.to_ascii_lowercase();
+        let mut fields: Vec<(Vec<u8>, Zval)> = Vec::new();
         // An unknown class becomes `__PHP_Incomplete_Class`, keeping the data
         // plus the original class name in `__PHP_Incomplete_Class_Name` (Zend).
         let mut cid = self.class_index.get(lower.as_slice()).copied();
@@ -5496,9 +5583,18 @@ impl<'m> Vm<'m> {
         // `Op::InitProps` after `Op::Alloc`. A failing thunk degrades to the
         // constant-only defaults (no fatal from inside unserialize).
         self.run_prop_init_thunk(cid, &rc);
-        // The serialized fields overwrite the defaults. A restored readonly
-        // property counts as already initialised (so a later write fatals, and a
-        // read does not raise the before-initialization error).
+        let out = Zval::Object(rc);
+        self.vm_apply_unserialized_fields(&out, fields);
+        out
+    }
+
+    /// The field-application half: the serialized fields overwrite the shell's
+    /// defaults. A restored readonly property counts as already initialised (so
+    /// a later write fatals, and a read does not raise the
+    /// before-initialization error).
+    fn vm_apply_unserialized_fields(&mut self, obj: &Zval, fields: Vec<(Vec<u8>, Zval)>) {
+        let Zval::Object(rc) = obj else { return };
+        let cid = rc.borrow().class_id as usize;
         for (k, v) in fields {
             // PHP's wire format mangles protected fields as `\0*\0name`; the
             // VM stores protected properties under the plain name. (A private
@@ -5512,7 +5608,6 @@ impl<'m> Vm<'m> {
             }
             rc.borrow_mut().props.set(&k, v);
         }
-        Zval::Object(rc)
     }
 
     /// Run a class's non-constant property-default thunk (`prop_init`) on a
@@ -14414,6 +14509,22 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php $o=unserialize('O:3:\"Zzz\":1:{s:1:\"a\";i:9;}'); echo get_class($o),':',$o->a,':',$o->__PHP_Incomplete_Class_Name;"),
             b"__PHP_Incomplete_Class:9:Zzz"
+        );
+    }
+
+    #[test]
+    fn serialize_and_unserialize_backrefs() {
+        // (The serialize side lives in php-builtins, absent from this harness;
+        // it is covered by the corpus and the oracle probes.) A self-cycle
+        // `r:` restores shared identity; `R:` restores a live alias.
+        assert_eq!(
+            vm_stdout(b"<?php $o=unserialize('O:8:\"stdClass\":1:{s:4:\"self\";r:1;}'); echo $o===$o->self?'C':'?';"),
+            b"C"
+        );
+        // `R:` aliases a slot: writes through one element reach the other.
+        assert_eq!(
+            vm_stdout(b"<?php $u=unserialize('a:2:{i:0;a:1:{i:0;i:1;}i:1;R:2;}'); $u[0][0]=9; echo $u[1][0];"),
+            b"9"
         );
     }
 

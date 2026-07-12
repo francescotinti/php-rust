@@ -20,8 +20,23 @@ pub fn serialize(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
         .first()
         .ok_or_else(|| PhpError::Error("serialize() expects exactly 1 argument, 0 given".into()))?;
     let mut out = Vec::new();
-    ser_into(&mut out, v)?;
+    let mut sc = SerCtx::default();
+    ser_into(&mut out, v, &mut sc)?;
     Ok(Zval::Str(PhpStr::new(out)))
+}
+
+/// Zend's `var_hash`: every serialized value slot gets a pre-order number
+/// (starting at 1; array keys and property names don't count). A repeated
+/// object emits `r:<first>;` (and still consumes a number); a repeated
+/// reference cell emits `R:<first>;` (consuming none). A first-seen reference
+/// shares its single number with its pointee.
+#[derive(Default)]
+struct SerCtx {
+    count: i64,
+    /// Object identity (`Rc` address) → the slot number it first appeared at.
+    objs: std::collections::HashMap<usize, i64>,
+    /// Reference-cell identity (`Rc` address) → its slot number.
+    refs: std::collections::HashMap<usize, i64>,
 }
 
 /// Append `s:<bytelen>:"<bytes>";` for a raw byte string (used for both string
@@ -34,7 +49,61 @@ fn ser_str(out: &mut Vec<u8>, bytes: &[u8]) {
     out.extend_from_slice(b"\";");
 }
 
-fn ser_into(out: &mut Vec<u8>, v: &Zval) -> Result<(), PhpError> {
+/// Serialize one value slot: assign its number, resolve `r:`/`R:` repeats,
+/// then render the concrete form via [`ser_body`].
+fn ser_into(out: &mut Vec<u8>, v: &Zval, sc: &mut SerCtx) -> Result<(), PhpError> {
+    match v {
+        Zval::Ref(cell) => {
+            let key = std::rc::Rc::as_ptr(cell) as usize;
+            if let Some(&n) = sc.refs.get(&key) {
+                out.extend_from_slice(b"R:");
+                out.extend_from_slice(n.to_string().as_bytes());
+                out.push(b';');
+                return Ok(());
+            }
+            let inner = cell.borrow();
+            // A fresh cell around an already-seen object still aliases it.
+            if let Zval::Object(o) = &*inner {
+                let okey = std::rc::Rc::as_ptr(o) as usize;
+                if let Some(&n) = sc.objs.get(&okey) {
+                    sc.refs.insert(key, n);
+                    out.extend_from_slice(b"R:");
+                    out.extend_from_slice(n.to_string().as_bytes());
+                    out.push(b';');
+                    return Ok(());
+                }
+            }
+            // First occurrence: the cell and its pointee share one number.
+            sc.count += 1;
+            let n = sc.count;
+            sc.refs.insert(key, n);
+            if let Zval::Object(o) = &*inner {
+                sc.objs.insert(std::rc::Rc::as_ptr(o) as usize, n);
+            }
+            ser_body(out, &inner, sc)
+        }
+        Zval::Object(o) => {
+            let key = std::rc::Rc::as_ptr(o) as usize;
+            if let Some(&n) = sc.objs.get(&key) {
+                // A repeated object emits `r:` and still consumes a number.
+                sc.count += 1;
+                out.extend_from_slice(b"r:");
+                out.extend_from_slice(n.to_string().as_bytes());
+                out.push(b';');
+                return Ok(());
+            }
+            sc.count += 1;
+            sc.objs.insert(key, sc.count);
+            ser_body(out, v, sc)
+        }
+        _ => {
+            sc.count += 1;
+            ser_body(out, v, sc)
+        }
+    }
+}
+
+fn ser_body(out: &mut Vec<u8>, v: &Zval, sc: &mut SerCtx) -> Result<(), PhpError> {
     match v {
         Zval::Undef | Zval::Null => out.extend_from_slice(b"N;"),
         Zval::Bool(b) => {
@@ -68,7 +137,7 @@ fn ser_into(out: &mut Vec<u8>, v: &Zval) -> Result<(), PhpError> {
                     }
                     Key::Str(s) => ser_str(out, s.as_bytes()),
                 }
-                ser_into(out, val)?;
+                ser_into(out, val, sc)?;
             }
             out.push(b'}');
         }
@@ -129,7 +198,7 @@ fn ser_into(out: &mut Vec<u8>, v: &Zval) -> Result<(), PhpError> {
                         }
                         None => ser_str(out, pname),
                     }
-                    ser_into(out, val)?;
+                    ser_into(out, val, sc)?;
                     continue;
                 }
                 let is_plain = !pname.starts_with(b"\0");
@@ -146,13 +215,13 @@ fn ser_into(out: &mut Vec<u8>, v: &Zval) -> Result<(), PhpError> {
                 } else {
                     ser_str(out, pname);
                 }
-                ser_into(out, val)?;
+                ser_into(out, val, sc)?;
             }
             out.push(b'}');
         }
-        // A reference is transparent here: serialize the pointee. PHP's r:/R:
-        // shared-reference markers are a step-50 scope-out (D-50).
-        Zval::Ref(cell) => ser_into(out, &cell.borrow())?,
+        // References are resolved in `ser_into` before the body renders; a
+        // nested cell (not producible by the VM) just re-enters the resolver.
+        Zval::Ref(cell) => ser_into(out, &cell.borrow(), sc)?,
         // PHP throws for these (Zend/zend_closures.c / generators).
         Zval::Closure(_) => {
             return Err(PhpError::Error(

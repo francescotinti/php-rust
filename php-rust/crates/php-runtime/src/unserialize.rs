@@ -6,8 +6,11 @@
 //!   N;  b:[01];  i:<int>;  d:<float>;  s:<len>:"<bytes>";
 //!   a:<n>:{<k><v>...}      O:<len>:"<class>":<n>:{<propname><v>...}
 //!
-//! Shared-reference markers `r:`/`R:` are not handled (step-50 scope-out, D-50):
-//! input using them parses to `None`, so `unserialize()` returns `false`.
+//! Shared-reference markers: `r:<n>;` (repeat of the object numbered `n`) and
+//! `R:<n>;` (alias of the value slot numbered `n`) parse to [`Ser::ObjRef`] /
+//! [`Ser::AliasRef`]; the evaluator resolves them against its slot registry
+//! (Zend numbers every serialized value pre-order; `R:` emissions consume no
+//! number, everything else — including `r:` — does).
 
 /// An intermediate node decoded from a serialized string.
 #[derive(Debug, Clone, PartialEq)]
@@ -24,6 +27,10 @@ pub enum Ser {
     /// `C:<len>:"<class>":<len>:{<payload>}` — a legacy `Serializable` record:
     /// class name and the raw opaque payload its `unserialize()` receives.
     CObject(Vec<u8>, Vec<u8>),
+    /// `r:<n>;` — the same object as the value numbered `n` (handle copy).
+    ObjRef(i64),
+    /// `R:<n>;` — a reference aliasing the value slot numbered `n`.
+    AliasRef(i64),
 }
 
 /// Parse a complete serialized value. Returns `None` on any malformed input or
@@ -47,6 +54,27 @@ pub fn parse_prefix(bytes: &[u8]) -> Option<(Ser, usize)> {
     let mut p = Parser { b: bytes, i: 0 };
     let v = p.value()?;
     Some((v, p.i))
+}
+
+/// Collect every slot number some `R:<n>;` in the tree aliases, so the
+/// evaluator can cell-wrap exactly those slots while building.
+pub fn collect_alias_targets(s: &Ser, targets: &mut std::collections::HashSet<i64>) {
+    match s {
+        Ser::AliasRef(n) => {
+            targets.insert(*n);
+        }
+        Ser::Array(items) => {
+            for (_, v) in items {
+                collect_alias_targets(v, targets);
+            }
+        }
+        Ser::Object(_, props) => {
+            for (_, v) in props {
+                collect_alias_targets(v, targets);
+            }
+        }
+        _ => {}
+    }
 }
 
 struct Parser<'a> {
@@ -107,6 +135,16 @@ impl Parser<'_> {
                 self.i += 1;
                 self.eat(b':')?;
                 Some(Ser::Long(self.int_until(b';')?))
+            }
+            b'r' => {
+                self.i += 1;
+                self.eat(b':')?;
+                Some(Ser::ObjRef(self.int_until(b';')?))
+            }
+            b'R' => {
+                self.i += 1;
+                self.eat(b':')?;
+                Some(Ser::AliasRef(self.int_until(b';')?))
             }
             b'd' => {
                 self.i += 1;
@@ -269,6 +307,22 @@ mod tests {
         assert_eq!(parse(b"i:1;XX"), None); // trailing garbage
         assert_eq!(parse(b"b:2;"), None); // bad bool
         assert_eq!(parse(b"a:2:{i:0;i:9;}"), None); // count mismatch
-        assert_eq!(parse(b"r:1;"), None); // reference markers unsupported (D-50)
+    }
+
+    #[test]
+    fn reference_markers_parse() {
+        assert_eq!(parse(b"r:1;"), Some(Ser::ObjRef(1)));
+        assert_eq!(parse(b"R:2;"), Some(Ser::AliasRef(2)));
+        // The canonical self-cycle: object slot 1 referenced from its own prop.
+        assert_eq!(
+            parse(b"O:8:\"stdClass\":1:{s:4:\"self\";r:1;}"),
+            Some(Ser::Object(
+                b"stdClass".to_vec(),
+                vec![(b"self".to_vec(), Ser::ObjRef(1))]
+            ))
+        );
+        let mut targets = std::collections::HashSet::new();
+        collect_alias_targets(&parse(b"a:2:{i:0;a:1:{i:0;i:1;}i:1;R:2;}").unwrap(), &mut targets);
+        assert_eq!(targets, std::collections::HashSet::from([2]));
     }
 }

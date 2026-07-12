@@ -1956,12 +1956,10 @@ impl<'f> Lowerer<'f> {
         // is observationally identical for them. Residue: PHP raises "Using
         // $this when not in object context" if a static closure DOES use $this,
         // and Closure::bind() on one fails; phpr does not enforce either yet.
-        if af.ampersand.is_some() {
-            return Err(LowerError::Unsupported {
-                what: "by-reference arrow function",
-                line,
-            });
-        }
+        // `fn &() => expr` returns by reference. The arrow still captures by
+        // value, so a ref into a captured variable points at the closure's own
+        // copy (Zend does the same); a ref through `$this->prop` is a real one.
+        let by_ref = af.ampersand.is_some();
 
         // Collect free variables of the body, then keep those that name an
         // enclosing-scope variable and are not the arrow's own parameters.
@@ -1984,7 +1982,7 @@ impl<'f> Lowerer<'f> {
 
         let saved_locals = self.locals.replace(Scope::default());
         let saved_tag = std::mem::replace(&mut self.after_closing_tag, false);
-        let saved_by_ref = std::mem::replace(&mut self.fn_by_ref, false);
+        let saved_by_ref = std::mem::replace(&mut self.fn_by_ref, by_ref);
         let saved_saw_yield = std::mem::replace(&mut self.fn_saw_yield, false);
         // Same as a closure: `__FUNCTION__` is `{closure}`, class is inherited.
         let saved_fn = self.cur_function.replace((*b"{closure}").into());
@@ -2000,11 +1998,19 @@ impl<'f> Lowerer<'f> {
                     by_ref: false,
                 });
             }
-            let body_expr = self.lower_expr(af.expression)?;
-            let body = vec![Stmt {
-                line,
-                kind: StmtKind::Return(Some(body_expr)),
-            }];
+            // Inside `fn &() => <lvalue>` the body returns a reference to the
+            // place, mirroring the `Statement::Return` arm in `lower_stmt`.
+            let body = if self.fn_by_ref && is_returnable_lvalue(af.expression) {
+                vec![Stmt {
+                    line,
+                    kind: StmtKind::ReturnRef(self.lower_place(af.expression, line)?),
+                }]
+            } else {
+                vec![Stmt {
+                    line,
+                    kind: StmtKind::Return(Some(self.lower_expr(af.expression)?)),
+                }]
+            };
             Ok((params, captures, body))
         })();
 
@@ -2025,9 +2031,9 @@ impl<'f> Lowerer<'f> {
             .as_ref()
             .and_then(|r| lower_reflect_type(self, &r.hint));
         let fn_idx =
-            self.push_closure(params, body, local_scope.slots, false, ret_hint, ret_reflect_type, is_generator, Vec::new(), line);
-        // An arrow function is never `static` here (rejected above), so it binds
-        // `$this` like an ordinary closure (step 19-6).
+            self.push_closure(params, body, local_scope.slots, by_ref, ret_hint, ret_reflect_type, is_generator, Vec::new(), line);
+        // An arrow function is never `static` here (see comment above), so it
+        // binds `$this` like an ordinary closure (step 19-6).
         Ok(ExprKind::Closure {
             fn_idx,
             captures,

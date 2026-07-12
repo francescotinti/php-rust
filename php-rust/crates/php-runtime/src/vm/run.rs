@@ -1309,6 +1309,8 @@ impl<'m> super::Vm<'m> {
                                     self.diags.push(Diag::Notice(
                                         "Only variables should be assigned by reference".to_string(),
                                     ));
+                                    let line = self.cur_line(top);
+                                    self.flush_diags(line)?;
                                     Rc::new(RefCell::new(other))
                                 }
                             };
@@ -1329,6 +1331,8 @@ impl<'m> super::Vm<'m> {
                             self.diags.push(Diag::Notice(
                                 "Only variables should be assigned by reference".to_string(),
                             ));
+                            let line = self.cur_line(top);
+                            self.flush_diags(line)?;
                             Rc::new(RefCell::new(other))
                         }
                     };
@@ -2285,6 +2289,13 @@ impl<'m> super::Vm<'m> {
                                 }
                             }
                         }
+                    }
+                    // A by-ref function that returned a plain value (the in-body
+                    // notice already fired) still hands the caller a *reference*
+                    // in Zend — so `$t = &f()` binds it silently instead of
+                    // raising a second "assigned by reference" notice.
+                    if func.by_ref && !func.is_generator && !matches!(ret, Zval::Ref(_)) {
+                        ret = Zval::Ref(Rc::new(RefCell::new(ret)));
                     }
                     let ret_cell = self.frames[top].ret_cell.take();
                     let ret_bool = self.frames[top].ret_bool;
@@ -4216,6 +4227,10 @@ impl<'m> super::Vm<'m> {
                     if let crate::bytecode::Const::Str(b) = &self.frames[top].func.consts[i as usize] {
                         let msg = String::from_utf8_lossy(b).into_owned();
                         self.diags.push(Diag::Notice(msg));
+                        // Flush at the emitting op's line — deferring to the next
+                        // flush point would stamp a later statement's line on it.
+                        let line = self.cur_line(top);
+                        self.flush_diags(line)?;
                     }
                 }
                 Op::Exit { has_arg } => {

@@ -323,6 +323,24 @@ impl<'a> super::FnCompiler<'a> {
             self.emit(Op::BindRefToChecked { base, steps: steps.into() });
             return Ok(());
         }
+        // `$t = &$f(...)` / `$t = &(expr)(...)`: like a method call, the callee's
+        // by-reference-ness is only known at run time (closure value / callable
+        // string), so emit the dynamic call and bind through `BindRefToChecked`.
+        if let ExprKind::CallDynamic { callee, args } = &call.kind {
+            let (base, steps) = self.field_path(target)?;
+            self.expr(callee)?;
+            if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
+                self.build_args_array(args)?;
+                self.emit(Op::CallValueArgs);
+            } else {
+                for a in args {
+                    self.expr(a)?;
+                }
+                self.emit(Op::CallValue { argc: args.len() as u32 });
+            }
+            self.emit(Op::BindRefToChecked { base, steps: steps.into() });
+            return Ok(());
+        }
         let ExprKind::Call { name, args, named, .. } = &call.kind else {
             return Err(CompileError::Unsupported("reference assignment from a non-call".into()));
         };
