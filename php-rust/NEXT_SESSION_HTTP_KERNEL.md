@@ -1,8 +1,7 @@
 # Prossima sessione: symfony/http-kernel — cluster E (trait cross-unit) e coda (da 68E/105F)
 
 Riprendiamo phpr (PHP 8.5.7 in Rust). La sessione 2026-07-12/13 ha chiuso il
-cluster F + un batch engine (3 commit gated: `8bf6daf`, `d5fee4f`, + il fix
-class_*-su-trait in coda di commit a fine sessione). Dettaglio completo in
+cluster F + un batch engine (3 commit gated: `8bf6daf`, `d5fee4f`, + `b627175` class_*-su-trait). Dettaglio completo in
 memoria: `php-rust-symfony-http-kernel`.
 
 ## Dove siamo
@@ -33,7 +32,7 @@ memoria: `php-rust-symfony-http-kernel`.
    Closure::fromCallable(oggetto invokable) → [$obj,'__invoke'] (cluster G);
    spread su fn sconosciuta: Op::CallNsFallbackArgs + PushConst+CallValueArgs
    (cluster J, trigger_deprecation di ParameterBag).
-3. (in commit) — class_* su NOMI di trait: get_parent_class→false,
+3. `b627175` — class_* su NOMI di trait: get_parent_class→false,
    class_implements/parents→[], class_uses→[] (residuo trait-di-trait
    documentato in PHPR_DIVERGENCES §3.3-bis). Sbloccava il TypeError di
    DebugClassLoader::checkClass su ogni trait autoloadato.
