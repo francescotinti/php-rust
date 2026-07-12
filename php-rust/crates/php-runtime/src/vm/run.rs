@@ -789,9 +789,15 @@ impl<'m> super::Vm<'m> {
                     // the same `Rc`, and push the cell's value (the assignment
                     // expression yields the aliased value). The two slot reads are
                     // sequential, so the borrows never overlap.
-                    let cell = make_cell(ref_base_mut(&mut self.frames, top, source));
+                    let cell = make_cell(ref_base_mut(
+                        &mut self.frames,
+                        &mut self.superglobals,
+                        top,
+                        source,
+                    ));
                     let value = cell.borrow().clone();
-                    *ref_base_mut(&mut self.frames, top, target) = Zval::Ref(cell);
+                    *ref_base_mut(&mut self.frames, &mut self.superglobals, top, target) =
+                        Zval::Ref(cell);
                     self.frames[top].stack.push(value);
                 }
                 Op::PushRef(slot) => {

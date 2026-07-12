@@ -644,7 +644,7 @@ fn arg1<'a>(args: &'a [Zval], fname: &str) -> Result<&'a Zval, PhpError> {
 /// takes the stream-wrapper path, while extension_loaded('curl') consumers
 /// (monolog's handlers, Guzzle's sync CurlHandler) get the easy surface.
 const LOADED_EXTENSIONS: &[&[u8]] = &[
-    b"core", b"standard", b"spl", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
+    b"core", b"session", b"standard", b"spl", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
     b"zip", b"dom", b"libxml", b"reflection", b"ctype", b"curl", b"pcntl", b"posix",
     b"pdo", b"pdo_sqlite", b"sqlite3", b"simplexml", b"bcmath", b"gmp",
     // filter_var / filter_var_array are implemented; the ext advertises them so
@@ -659,7 +659,7 @@ const LOADED_EXTENSIONS: &[&[u8]] = &[
 /// The same list with PHP's canonical casing, as `get_loaded_extensions()`
 /// reports it (the check side is case-insensitive, the listing is not).
 const LOADED_EXTENSIONS_CASED: &[&[u8]] = &[
-    b"Core", b"standard", b"SPL", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
+    b"Core", b"session", b"standard", b"SPL", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
     b"zip", b"dom", b"libxml", b"Reflection", b"ctype", b"curl", b"pcntl", b"posix",
     b"PDO", b"pdo_sqlite", b"sqlite3", b"bcmath", b"gmp",
     b"filter",

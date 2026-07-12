@@ -105,6 +105,13 @@ impl IniTable {
         add("default_socket_timeout", "60", INI_ALL, false, false);
         add("precision", "14", INI_ALL, false, false);
         add("serialize_precision", "-1", INI_ALL, false, false);
+        // phpr resolves includes against the working directory only; ".:" is
+        // the value its include-failure messages always embedded. Settable
+        // because PHPUnit's process-isolation runner round-trips it
+        // (get_include_path → child set_include_path) and the failure message
+        // reflects it; entries do not extend the resolver (documented
+        // divergence).
+        add("include_path", ".:", INI_ALL, true, false);
         // ext/session (31 directives, defaults from the 8.5.7 CLI oracle).
         add("session.auto_start", "0", INI_PERDIR, false, false);
         add("session.cache_expire", "180", INI_ALL, true, true);
@@ -352,6 +359,38 @@ impl<'m> Vm<'m> {
         let entry = self.ini.0.get_mut(&name).expect("checked above");
         let old = std::mem::replace(&mut entry.local, value);
         Ok(Zval::Str(PhpStr::new(old)))
+    }
+
+    /// `get_include_path(): string|false` — the include_path directive.
+    pub(super) fn ho_get_include_path(&mut self) -> Result<Zval, PhpError> {
+        Ok(match self.ini.get(b"include_path") {
+            Some(v) => Zval::Str(PhpStr::new(v.to_vec())),
+            None => Zval::Bool(false),
+        })
+    }
+
+    /// `set_include_path(string $include_path): string|false` — returns the
+    /// previous value. The resolver itself stays cwd-based (see the table).
+    pub(super) fn ho_set_include_path(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let new = match args.first() {
+            Some(v) => convert::to_zstr(&v.deref_clone(), &mut self.diags).as_bytes().to_vec(),
+            None => {
+                return Err(PhpError::ArgumentCountError(
+                    "set_include_path() expects exactly 1 argument, 0 given".to_string(),
+                ))
+            }
+        };
+        let old = self.ini.get(b"include_path").unwrap_or(b".").to_vec();
+        self.ini_set_local(b"include_path", new);
+        Ok(Zval::Str(PhpStr::new(old)))
+    }
+
+    /// `restore_include_path(): void`.
+    pub(super) fn ho_restore_include_path(&mut self) -> Result<Zval, PhpError> {
+        if let Some(e) = self.ini.0.get_mut(&b"include_path"[..]) {
+            e.local = e.global.clone();
+        }
+        Ok(Zval::Null)
     }
 
     /// `ini_restore(string $option): void` — reverts a directive to its startup

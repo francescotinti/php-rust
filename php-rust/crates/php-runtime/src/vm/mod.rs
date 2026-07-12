@@ -235,6 +235,7 @@ pub fn run_source_with_argv(
     source: &[u8],
     registry: &Registry,
     argv: &[&[u8]],
+    ini_overrides: &[(Vec<u8>, Vec<u8>)],
 ) -> Result<VmOutcome, VmRunError> {
     log::info!(target: "phpr::run", "run {} ({} bytes)", String::from_utf8_lossy(name), source.len());
     let program = match crate::lower_source(name, source) {
@@ -247,7 +248,7 @@ pub fn run_source_with_argv(
     let module = crate::compile::compile_program(&program, registry)
         .map_err(|crate::compile::CompileError::Unsupported(what)| VmRunError::Unsupported(what))?;
     log::debug!(target: "phpr::compile", "compiled {}: {} functions, {} classes", String::from_utf8_lossy(name), module.functions.len(), module.classes.len());
-    Ok(run_module_with_hir(&module, registry, Some(&program), Some(argv), &[]))
+    Ok(run_module_with_hir(&module, registry, Some(&program), Some(argv), ini_overrides))
 }
 
 /// Lower `source`, compile it, and run it on the VM with no builtins registered.
@@ -2804,19 +2805,24 @@ impl<'m> Vm<'m> {
         let line = self.cur_line(self.frames.len() - 1);
         let pstr = String::from_utf8_lossy(path).into_owned();
         let kw = mode.keyword();
+        // The message embeds the CURRENT include_path directive (PHP prints
+        // whatever set_include_path() left there; the resolver itself stays
+        // cwd-based — see the ini table note).
+        let ipath = String::from_utf8_lossy(self.ini.get(b"include_path").unwrap_or(b".:"))
+            .into_owned();
         self.diags.push(Diag::Warning(format!(
             "{kw}({pstr}): Failed to open stream: No such file or directory"
         )));
         if !mode.is_require() {
             self.diags.push(Diag::Warning(format!(
-                "{kw}(): Failed opening '{pstr}' for inclusion (include_path='.:')"
+                "{kw}(): Failed opening '{pstr}' for inclusion (include_path='{ipath}')"
             )));
         }
         self.flush_diags(line)?;
         if mode.is_require() {
             self.fatal_line = line;
             Err(PhpError::Error(format!(
-                "Failed opening required '{pstr}' (include_path='.:')"
+                "Failed opening required '{pstr}' (include_path='{ipath}')"
             )))
         } else {
             Ok(Zval::Bool(false))
@@ -5372,6 +5378,15 @@ impl<'m> Vm<'m> {
                         let obj = self.synthesize_throwable(cid, &msg)?;
                         return Err(PhpError::Thrown(obj));
                     }
+                }
+                // An unknown class goes through the autoloader first, exactly
+                // like PHP's unserialize (PHPUnit's process-isolation child
+                // unserializes its Configuration before anything loaded it).
+                if !self.class_index.contains_key(lower.as_slice()) {
+                    // The autoloader receives the name as serialized (no
+                    // leading backslash in the wire format); a throw inside
+                    // it aborts the unserialize like PHP.
+                    self.try_autoload(&class, &lower)?;
                 }
                 let cid = self.class_index.get(lower.as_slice()).copied();
                 // `__unserialize` receives the raw data array INSTEAD of prop
@@ -9096,6 +9111,9 @@ host_builtins! {
     b"ini_set" => vm.ho_ini_set(args),
     b"ini_restore" => vm.ho_ini_restore(args),
     b"ini_get_all" => vm.ho_ini_get_all(args),
+    b"get_include_path" => vm.ho_get_include_path(),
+    b"set_include_path" => vm.ho_set_include_path(args),
+    b"restore_include_path" => vm.ho_restore_include_path(),
     b"session_status" => vm.ho_session_status(),
     b"session_id" => vm.ho_session_id(args),
     b"session_name" => vm.ho_session_name(args),
@@ -9778,15 +9796,19 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Ve
 }
 
 /// The mutable cell a [`DimBase`] addresses: a slot in the current frame
-/// (`Local`) or in the global/script frame (`Global`). Mirrors the inline match
-/// `Op::UnsetPath` uses; factored out for the REF-1 `BindRef` arm.
-fn ref_base_mut<'f>(frames: &'f mut [Frame<'_>], top: usize, base: DimBase) -> &'f mut Zval {
+/// (`Local`), in the global/script frame (`Global`), or a data superglobal —
+/// Symfony's NativeSessionStorage aliases its bags into `$_SESSION` by
+/// reference, so a superglobal IS a legitimate `BindRef` base/target.
+fn ref_base_mut<'f>(
+    frames: &'f mut [Frame<'_>],
+    superglobals: &'f mut [Zval; 8],
+    top: usize,
+    base: DimBase,
+) -> &'f mut Zval {
     match base {
         DimBase::Local(s) => &mut frames[top].slots[s as usize],
         DimBase::Global(s) => &mut frames[0].slots[s as usize],
-        // `BindRef` is only emitted for `global $x` declarations (always a
-        // `DimBase::Global` source); a data superglobal is never a `BindRef` base.
-        DimBase::Superglobal(_) => unreachable!("superglobal is never a BindRef base"),
+        DimBase::Superglobal(i) => &mut superglobals[i as usize],
     }
 }
 

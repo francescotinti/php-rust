@@ -28,10 +28,78 @@ fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
 
 fn main() -> ExitCode {
     php_runtime::logging::init();
-    let Some(path) = std::env::args_os().nth(1) else {
-        eprintln!("usage: phpr <script.php>");
-        return ExitCode::from(1);
+    // Leading `php`-style options before the script path. `-d key[=value]`
+    // (separate or attached form) collects ini overrides — PHPUnit's
+    // process-isolation runner spawns `PHP_BINARY -d k=v … <file>`.
+    let mut ini_overrides: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
+    let mut raw = std::env::args_os().skip(1).peekable();
+    let mut path = None;
+    while let Some(arg) = raw.next() {
+        let bytes = arg.as_os_str().as_bytes();
+        if bytes == b"-d" {
+            if let Some(kv) = raw.next() {
+                let kv = kv.as_os_str().as_bytes();
+                let (k, v) = match kv.iter().position(|b| *b == b'=') {
+                    Some(p) => (&kv[..p], &kv[p + 1..]),
+                    None => (kv, &b"1"[..]),
+                };
+                ini_overrides.push((k.to_vec(), v.to_vec()));
+            }
+            continue;
+        }
+        if let Some(kv) = bytes.strip_prefix(b"-d") {
+            if !kv.is_empty() {
+                let (k, v) = match kv.iter().position(|b| *b == b'=') {
+                    Some(p) => (&kv[..p], &kv[p + 1..]),
+                    None => (kv, &b"1"[..]),
+                };
+                ini_overrides.push((k.to_vec(), v.to_vec()));
+            }
+            continue;
+        }
+        // `-n` (skip php.ini): phpr never loads one — accepted and ignored.
+        if bytes == b"-n" {
+            continue;
+        }
+        // `-f script`: explicit script-file form.
+        if bytes == b"-f" {
+            path = raw.next();
+            break;
+        }
+        // `-r code`: run the code string (implicit `<?php ` prefix).
+        if bytes == b"-r" {
+            let Some(code) = raw.next() else {
+                eprintln!("usage: phpr -r <code>");
+                return ExitCode::from(1);
+            };
+            let mut source = b"<?php ".to_vec();
+            source.extend_from_slice(code.as_os_str().as_bytes());
+            let mut argv_owned: Vec<Vec<u8>> = vec![b"Standard input code".to_vec()];
+            argv_owned.extend(raw.map(|a| a.as_os_str().as_bytes().to_vec()));
+            return run(b"Standard input code", &source, argv_owned, ini_overrides);
+        }
+        path = Some(arg);
+        break;
+    }
+    let Some(path) = path else {
+        // No script argument: PHP's CLI reads the program from stdin —
+        // PHPUnit's process-isolation runner pipes each test job this way.
+        let mut source = Vec::new();
+        use std::io::Read as _;
+        if std::io::stdin().read_to_end(&mut source).is_err() || source.is_empty() {
+            eprintln!("usage: phpr [-d key=value]... <script.php>");
+            return ExitCode::from(1);
+        }
+        if source.starts_with(b"#!") {
+            let end = source.iter().position(|&b| b == b'\n').map_or(source.len(), |p| p + 1);
+            source.drain(..end);
+        }
+        let argv_owned: Vec<Vec<u8>> = vec![b"-".to_vec()];
+        return run(b"Standard input code", &source, argv_owned, ini_overrides);
     };
+    // `$argv` starts at the script path — the consumed options do not appear.
+    let mut argv_owned: Vec<Vec<u8>> = vec![path.as_os_str().as_bytes().to_vec()];
+    argv_owned.extend(raw.map(|a| a.as_os_str().as_bytes().to_vec()));
 
     let mut source = match std::fs::read(&path) {
         Ok(s) => s,
@@ -55,22 +123,28 @@ fn main() -> ExitCode {
     // realpath — an absolute, symlink-resolved path — so canonicalize the invoked
     // path, falling back to it verbatim if that fails.
     let canonical = std::fs::canonicalize(&path).unwrap_or_else(|_| std::path::PathBuf::from(&path));
-    let name = canonical.to_string_lossy();
+    let name = canonical.to_string_lossy().into_owned();
+    run(name.as_bytes(), &source, argv_owned, ini_overrides)
+}
+
+/// Lower + run the program and translate the outcome into PHP's CLI exit
+/// status, behind a panic boundary: a bug in the runtime (a reachable
+/// `expect`, a broken VM invariant) must not abort the host with a raw Rust
+/// panic — it exits 255 with a labelled stderr line, like the isolated phpt
+/// worker does per test. AssertUnwindSafe is sound here because on panic we
+/// discard the runtime state and exit rather than reuse it.
+fn run(
+    name: &[u8],
+    source: &[u8],
+    argv_owned: Vec<Vec<u8>>,
+    ini_overrides: Vec<(Vec<u8>, Vec<u8>)>,
+) -> ExitCode {
     let registry = registry();
     // PHP CLI `$argv` / `$_SERVER['argv']`: element 0 is the script path, the rest
     // are the arguments after it (`phpr script.php a b` → ['script.php','a','b']).
-    let argv_owned: Vec<Vec<u8>> = std::env::args_os()
-        .skip(1)
-        .map(|a| a.as_os_str().as_bytes().to_vec())
-        .collect();
     let argv_refs: Vec<&[u8]> = argv_owned.iter().map(|v| v.as_slice()).collect();
-    // Panic boundary: a bug in the runtime (a reachable `expect`, a broken VM
-    // invariant) must not abort the host with a raw Rust panic — turn it into
-    // PHP's uncaught-fatal exit status (255) with a labelled stderr line, like the
-    // isolated phpt worker already does per test. AssertUnwindSafe is sound here
-    // because on panic we discard the runtime state and exit rather than reuse it.
     let result = catch_unwind(AssertUnwindSafe(|| {
-        run_source_with_argv(name.as_bytes(), &source, &registry, &argv_refs)
+        run_source_with_argv(name, source, &registry, &argv_refs, &ini_overrides)
     }));
     match result {
         Ok(Ok(outcome)) => {
