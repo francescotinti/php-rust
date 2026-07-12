@@ -3263,9 +3263,13 @@ class ReflectionFunction extends ReflectionFunctionAbstract {
     public $__closure;
     public function __construct($name) {
         if ($name instanceof Closure) {
-            $this->name = '{closure}';
             $this->__closure = $name;
             $this->__info = __reflect_closure_info($name);
+            // Zend reports the wrapped callable's name: the bare method name for
+            // a method-backed closure, the function name for a first-class
+            // callable, `{closure:file:line}` for a genuinely anonymous one.
+            $this->name = ($this->__info !== false && isset($this->__info['name']))
+                ? $this->__info['name'] : '{closure}';
         } else {
             $this->name = is_string($name) ? $name : '{closure}';
             $this->__info = __reflect_func_info($this->name);
@@ -3337,7 +3341,8 @@ class ReflectionFunction extends ReflectionFunctionAbstract {
     // The PHP `Reflection::export` string for a function (ext/reflection golden output).
     public function __toString() {
         $src = ($this->__info['file'] ?? false) !== false ? '<user>' : '<internal>';
-        $s = "Function [ $src function {$this->name} ] {\n";
+        $kind = $this->__closure !== null ? 'Closure' : 'Function';
+        $s = "$kind [ $src function {$this->name} ] {\n";
         if (($this->__info['file'] ?? false) !== false) {
             $s .= "  @@ " . $this->__info['file'] . " " . ($this->__info['startLine'] ?? 0) . " - " . ($this->__info['endLine'] ?? 0) . "\n";
         }

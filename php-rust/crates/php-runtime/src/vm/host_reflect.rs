@@ -296,6 +296,23 @@ impl<'m> super::Vm<'m> {
         };
         if let Some(name) = &cl.named {
             let nm = name.as_bytes().to_vec();
+            // A method callable (`$obj->m(...)`, `Closure::fromCallable([$o,'m'])`)
+            // carries `Class::method`: reflect the method it wraps, like Zend
+            // (getName() then reports the bare method name).
+            if let Some(pos) = nm.windows(2).position(|w| w == b"::") {
+                let key = nm[..pos]
+                    .strip_prefix(b"\\")
+                    .unwrap_or(&nm[..pos])
+                    .to_ascii_lowercase();
+                let mname = nm[pos + 2..].to_vec();
+                let Some(&cid) = self.class_index.get(&key) else {
+                    return Ok(Zval::Bool(false));
+                };
+                let Some((m, decl, _)) = self.find_method_reflect(cid, &mname) else {
+                    return Ok(Zval::Bool(false));
+                };
+                return Ok(Zval::Array(Rc::new(self.build_func_descriptor(&m.func, Some(decl))?)));
+            }
             return match self.find_user_function(&nm) {
                 Some(func) => Ok(Zval::Array(Rc::new(self.build_func_descriptor(func, None)?))),
                 None => Ok(Zval::Bool(false)),
