@@ -292,6 +292,18 @@ impl<'m> Vm<'m> {
         })
     }
 
+    /// `get_cfg_var(string $option): string|array|false` — the *startup* value
+    /// of a registered directive (`e.global`, which `php -d`/`--INI--` set),
+    /// `false` for an unknown key. `cfg_file_path` stays unknown → `false`:
+    /// phpr loads no php.ini, like `php -n`.
+    pub(super) fn ho_get_cfg_var(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let name = self.ini_string_arg(&args, 0, b"get_cfg_var", b"$option")?;
+        Ok(match self.ini.0.get(&name) {
+            Some(e) => Zval::Str(PhpStr::new(e.global.clone())),
+            None => Zval::Bool(false),
+        })
+    }
+
     /// `ini_set(string $option, string|int|float|bool|null $value): string|false`
     /// — stores the stringified value and returns the previous one.
     pub(super) fn ho_ini_set(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {

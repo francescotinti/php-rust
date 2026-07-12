@@ -432,7 +432,17 @@ class Error implements Throwable {
         return $r;
     }
 }
-class ErrorException extends Exception {}
+class ErrorException extends Exception {
+    protected $severity = E_ERROR;
+    public function __construct($message = "", $code = 0, $severity = E_ERROR, $filename = null, $line = null, $previous = null) {
+        parent::__construct($message, $code, $previous);
+        $this->severity = $severity;
+        // Absent filename/line keep the engine-stamped creation site.
+        if ($filename !== null) { $this->file = $filename; }
+        if ($line !== null) { $this->line = $line; }
+    }
+    final public function getSeverity() { return $this->severity; }
+}
 class LogicException extends Exception {}
 class BadFunctionCallException extends LogicException {}
 class BadMethodCallException extends BadFunctionCallException {}
@@ -3312,6 +3322,14 @@ class ReflectionFunction extends ReflectionFunctionAbstract {
         if ($this->__closure === null) { return null; }
         $s = __reflect_closure_bind($this->__closure)[1];
         return $s === null ? null : new ReflectionClass($s);
+    }
+    // The called scope: the bound $this's class when bound, else the scope
+    // class (static closures, Closure::bind(…, null, Class)) — oracle-pinned.
+    public function getClosureCalledClass() {
+        if ($this->__closure === null) { return null; }
+        $b = __reflect_closure_bind($this->__closure);
+        if (is_object($b[0])) { return new ReflectionClass(get_class($b[0])); }
+        return $b[1] === null ? null : new ReflectionClass($b[1]);
     }
     public function isStatic() {
         return $this->__closure !== null && __reflect_closure_bind($this->__closure)[2];

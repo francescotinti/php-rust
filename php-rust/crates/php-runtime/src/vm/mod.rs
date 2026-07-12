@@ -5692,7 +5692,11 @@ impl<'m> Vm<'m> {
     fn alloc_resource_context(&mut self, options: Zval) -> Zval {
         let id = self.next_resource_id;
         self.next_resource_id += 1;
-        Zval::Resource(Rc::new(RefCell::new(Resource::new_context(id, options))))
+        Zval::Resource(Rc::new(RefCell::new(Resource::new_context(
+            id,
+            options,
+            Zval::Array(Rc::new(PhpArray::new())),
+        ))))
     }
 
 
@@ -9120,6 +9124,8 @@ host_builtins! {
     b"opendir" => vm.ho_opendir(args),
     b"stream_context_create" => vm.ho_stream_context_create(args),
     b"stream_context_get_options" => vm.ho_stream_context_get_options(args),
+    b"stream_context_get_params" => vm.ho_stream_context_get_params(args),
+    b"stream_context_set_params" => vm.ho_stream_context_set_params(args),
     b"stream_context_set_option" => vm.ho_stream_context_set_option(args),
     b"stream_context_set_options" => vm.ho_stream_context_set_options(args),
     b"stream_set_chunk_size" => vm.ho_stream_set_chunk_size(args),
@@ -9203,6 +9209,7 @@ host_builtins! {
     b"header" => vm.ho_header(args),
     b"headers_sent" => vm.ho_headers_sent(args),
     b"ini_get" => vm.ho_ini_get(args),
+    b"get_cfg_var" => vm.ho_get_cfg_var(args),
     b"ini_set" => vm.ho_ini_set(args),
     b"ini_restore" => vm.ho_ini_restore(args),
     b"ini_get_all" => vm.ho_ini_get_all(args),
@@ -9263,6 +9270,7 @@ host_builtins! {
     b"ob_flush" => vm.ho_ob_flush(),
     b"ob_clean" => vm.ho_ob_clean(),
     b"ob_get_level" => Ok(Zval::Long(vm.ob_stack.len() as i64)),
+    b"ob_get_status" => vm.ho_ob_get_status(args),
     b"ob_get_length" => Ok(match vm.ob_stack.last() {
         Some(b) => Zval::Long(b.content.len() as i64),
         None => Zval::Bool(false),

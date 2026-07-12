@@ -26,7 +26,10 @@ pub enum ResKind {
     /// A `stream_context_create` context: carries its options array
     /// (`['http'=>[...], 'ssl'=>[...]]`) for the stream functions to read.
     /// Reports gettype "resource" and var_dump type "stream-context".
-    Context(crate::Zval),
+    /// `params` is the `stream_context_create`/`stream_context_set_params`
+    /// parameter array (e.g. `notification`) — kept separate from the
+    /// per-wrapper `options`, as in PHP.
+    Context { options: crate::Zval, params: crate::Zval },
     /// A stream opened through a userland wrapper (`stream_wrapper_register`):
     /// the file ops dispatch to the wrapper object's `stream_*` methods. Reports
     /// gettype "resource" and var_dump type "stream" like any byte stream.
@@ -333,10 +336,10 @@ impl Resource {
     }
 
     /// A `stream_context_create` resource carrying its options array.
-    pub fn new_context(id: u32, options: crate::Zval) -> Resource {
+    pub fn new_context(id: u32, options: crate::Zval, params: crate::Zval) -> Resource {
         Resource {
             id,
-            kind: ResKind::Context(options),
+            kind: ResKind::Context { options, params },
         }
     }
 
@@ -380,7 +383,7 @@ impl Resource {
     /// The context options array, if this is a stream-context resource.
     pub fn context_options(&self) -> Option<&crate::Zval> {
         match &self.kind {
-            ResKind::Context(opts) => Some(opts),
+            ResKind::Context { options, .. } => Some(options),
             _ => None,
         }
     }
@@ -388,7 +391,24 @@ impl Resource {
     /// Mutable access to the context options array (`stream_context_set_option`).
     pub fn context_options_mut(&mut self) -> Option<&mut crate::Zval> {
         match &mut self.kind {
-            ResKind::Context(opts) => Some(opts),
+            ResKind::Context { options, .. } => Some(options),
+            _ => None,
+        }
+    }
+
+    /// The context params array (`notification`, …), if this is a
+    /// stream-context resource.
+    pub fn context_params(&self) -> Option<&crate::Zval> {
+        match &self.kind {
+            ResKind::Context { params, .. } => Some(params),
+            _ => None,
+        }
+    }
+
+    /// Mutable access to the context params array (`stream_context_set_params`).
+    pub fn context_params_mut(&mut self) -> Option<&mut crate::Zval> {
+        match &mut self.kind {
+            ResKind::Context { params, .. } => Some(params),
             _ => None,
         }
     }
@@ -399,7 +419,7 @@ impl Resource {
         match self.kind {
             ResKind::Stream(_)
             | ResKind::Dir(_)
-            | ResKind::Context(_)
+            | ResKind::Context { .. }
             | ResKind::UserStream(_)
             | ResKind::Filter { .. }
             | ResKind::Process(_) => "resource",
@@ -419,7 +439,7 @@ impl Resource {
         match self.kind {
             ResKind::Stream(_) | ResKind::Dir(_) | ResKind::UserStream(_) => "stream",
             ResKind::Filter { .. } => "stream filter",
-            ResKind::Context(_) => "stream-context",
+            ResKind::Context { .. } => "stream-context",
             ResKind::Process(_) => "process",
             ResKind::Closed => "Unknown",
         }
@@ -429,7 +449,7 @@ impl Resource {
         match &mut self.kind {
             ResKind::Stream(s) => Some(s),
             ResKind::Dir(_)
-            | ResKind::Context(_)
+            | ResKind::Context { .. }
             | ResKind::UserStream(_)
             | ResKind::Filter { .. }
             | ResKind::Process(_)
@@ -450,7 +470,7 @@ impl Resource {
         match &mut self.kind {
             ResKind::Dir(d) => Some(d),
             ResKind::Stream(_)
-            | ResKind::Context(_)
+            | ResKind::Context { .. }
             | ResKind::UserStream(_)
             | ResKind::Filter { .. }
             | ResKind::Process(_)

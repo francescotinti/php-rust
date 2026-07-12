@@ -79,6 +79,31 @@ fn ctx_set_one(rc: &Rc<RefCell<php_types::Resource>>, wrapper: &[u8], option: &[
     }
 }
 
+/// Apply a `stream_context_create`/`stream_context_set_params` params array:
+/// the `options` key routes to the wrapper-options map (same path as
+/// `stream_context_set_option`), every other key (`notification`, …) lands in
+/// the context's params store.
+fn ctx_apply_params(rc: &Rc<RefCell<php_types::Resource>>, map: &PhpArray) {
+    for (k, v) in map.iter() {
+        let key = key_bytes(k);
+        if key == b"options" {
+            if let Zval::Array(sub) = v.deref_clone() {
+                for (wk, wv) in sub.iter() {
+                    let Zval::Array(osub) = wv.deref_clone() else { continue };
+                    let wrapper = key_bytes(wk);
+                    for (ok, ov) in osub.iter() {
+                        ctx_set_one(rc, &wrapper, &key_bytes(ok), ov.deref_clone());
+                    }
+                }
+            }
+            continue;
+        }
+        let mut b = rc.borrow_mut();
+        let Some(Zval::Array(params_rc)) = b.context_params_mut() else { continue };
+        Rc::make_mut(params_rc).insert(php_types::Key::from_bytes(&key), v.deref_clone());
+    }
+}
+
 impl<'m> super::Vm<'m> {
     /// `gc_collect_cycles()` — force a cycle collection now, regardless of the
     /// root-buffer threshold. Returns the number of destroyed objects.
@@ -300,6 +325,104 @@ impl<'m> super::Vm<'m> {
         self.ob_stack
             .push(OutputBuffer { content: Vec::new(), callback, chunk_size, started: false });
         Ok(Zval::Bool(true))
+    }
+    /// `ob_get_status(bool $full_status = false): array` — the top buffer's
+    /// status row, or one row per buffer with `$full_status`; `[]` with no
+    /// buffer active. Values oracle-pinned: default handler → name "default
+    /// output handler"/type 0/flags 112; user callback → type 1/flags 113
+    /// ("ob_gzhandler" counts as internal: 0/112); `buffer_size` is the chunk
+    /// size when chunked, else 16384 doubling while the content exceeds it.
+    pub(super) fn ho_ob_get_status(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let full = match args.first() {
+            Some(v) => convert::to_bool(v, &mut self.diags),
+            None => false,
+        };
+        let rows: Vec<Zval> = self
+            .ob_stack
+            .iter()
+            .enumerate()
+            .map(|(level, buf)| {
+                let (name, user) = self.ob_handler_status_name(buf.callback.as_ref());
+                let buffer_size = if buf.chunk_size > 0 {
+                    buf.chunk_size
+                } else {
+                    let mut s = 16384usize;
+                    while buf.content.len() > s {
+                        s *= 2;
+                    }
+                    s
+                };
+                let mut row = PhpArray::new();
+                row.insert(php_types::Key::from_bytes(b"name"), Zval::Str(PhpStr::new(name)));
+                row.insert(php_types::Key::from_bytes(b"type"), Zval::Long(user as i64));
+                row.insert(
+                    php_types::Key::from_bytes(b"flags"),
+                    Zval::Long(if user { 113 } else { 112 }),
+                );
+                row.insert(php_types::Key::from_bytes(b"level"), Zval::Long(level as i64));
+                row.insert(
+                    php_types::Key::from_bytes(b"chunk_size"),
+                    Zval::Long(buf.chunk_size as i64),
+                );
+                row.insert(
+                    php_types::Key::from_bytes(b"buffer_size"),
+                    Zval::Long(buffer_size as i64),
+                );
+                row.insert(
+                    php_types::Key::from_bytes(b"buffer_used"),
+                    Zval::Long(buf.content.len() as i64),
+                );
+                Zval::Array(Rc::new(row))
+            })
+            .collect();
+        if full {
+            let mut out = PhpArray::new();
+            for row in rows {
+                let _ = out.append(row);
+            }
+            return Ok(Zval::Array(Rc::new(out)));
+        }
+        Ok(match rows.into_iter().last() {
+            Some(row) => row,
+            None => Zval::Array(Rc::new(PhpArray::new())),
+        })
+    }
+    /// The `name` a callback renders as in `ob_get_status`, plus whether it
+    /// counts as a *user* handler (type 1/flags 113). No callback → the
+    /// default handler; "ob_gzhandler" reports as internal, like PHP's
+    /// zlib-aliased handler.
+    fn ob_handler_status_name(&self, cb: Option<&Zval>) -> (Vec<u8>, bool) {
+        let Some(cb) = cb else { return (b"default output handler".to_vec(), false) };
+        match cb.deref_clone() {
+            Zval::Str(s) => {
+                let internal = s.as_bytes().eq_ignore_ascii_case(b"ob_gzhandler");
+                (s.as_bytes().to_vec(), !internal)
+            }
+            Zval::Array(a) => {
+                let mut it = a.iter();
+                let cls = match it.next().map(|(_, v)| v.deref_clone()) {
+                    Some(Zval::Object(o)) => o.borrow().class_name.as_bytes().to_vec(),
+                    Some(Zval::Str(s)) => s.as_bytes().to_vec(),
+                    _ => b"Closure".to_vec(),
+                };
+                let method = match it.next().map(|(_, v)| v.deref_clone()) {
+                    Some(Zval::Str(s)) => s.as_bytes().to_vec(),
+                    _ => Vec::new(),
+                };
+                let mut name = cls;
+                name.extend_from_slice(b"::");
+                name.extend_from_slice(&method);
+                (name, true)
+            }
+            Zval::Closure(cl) => {
+                let name = self
+                    .closure_func_mod(&cl)
+                    .map(|(f, _)| f.name.to_vec())
+                    .unwrap_or_else(|| b"{closure}".to_vec());
+                (name, true)
+            }
+            _ => (b"default output handler".to_vec(), false),
+        }
     }
     /// `ob_get_contents()`: the current buffer's content as a string, or `false`
     /// if output buffering is not active.
@@ -3341,7 +3464,21 @@ impl<'m> super::Vm<'m> {
                 )))
             }
         };
-        Ok(self.alloc_resource_context(options))
+        let params = match args.get(1).map(|v| v.deref_clone()) {
+            None | Some(Zval::Null | Zval::Undef) => None,
+            Some(Zval::Array(p)) => Some(p),
+            Some(other) => {
+                return Err(PhpError::TypeError(format!(
+                    "stream_context_create(): Argument #2 ($params) must be of type ?array, {} given",
+                    other.type_name_for_error()
+                )))
+            }
+        };
+        let ctx = self.alloc_resource_context(options);
+        if let (Zval::Resource(rc), Some(p)) = (&ctx, params) {
+            ctx_apply_params(rc, &p);
+        }
+        Ok(ctx)
     }
 
     /// `stream_context_get_options($stream_or_context): array` — the context's
@@ -3386,6 +3523,63 @@ impl<'m> super::Vm<'m> {
     /// non-deprecated 2-argument form of [`Self::ho_stream_context_set_option`].
     pub(super) fn ho_stream_context_set_options(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         self.stream_context_set(args, "stream_context_set_options")
+    }
+
+    /// `stream_context_get_params($stream_or_context): array` — the params
+    /// array (`notification`, …) with the wrapper `options` appended as the
+    /// last key, PHP's rendering order.
+    pub(super) fn ho_stream_context_get_params(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(arg) = args.first().map(|v| v.deref_clone()) else {
+            return Err(PhpError::ArgumentCountError(
+                "stream_context_get_params() expects exactly 1 argument, 0 given".to_string(),
+            ));
+        };
+        let Zval::Resource(rc) = arg else {
+            return Err(PhpError::TypeError(format!(
+                "stream_context_get_params(): Argument #1 ($context) must be of type resource, {} given",
+                arg.type_name_for_error()
+            )));
+        };
+        let b = rc.borrow();
+        let mut out = match b.context_params() {
+            Some(Zval::Array(p)) => (**p).clone(),
+            _ => PhpArray::new(),
+        };
+        let options = b
+            .context_options()
+            .map(|o| o.deref_clone())
+            .unwrap_or_else(|| Zval::Array(Rc::new(PhpArray::new())));
+        out.insert(php_types::Key::from_bytes(b"options"), options);
+        Ok(Zval::Array(Rc::new(out)))
+    }
+
+    /// `stream_context_set_params($stream_or_context, array $params): bool` —
+    /// merge `notification`/`options` into the context. Returns `true`.
+    pub(super) fn ho_stream_context_set_params(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(ctx) = args.first().map(|v| v.deref_clone()) else {
+            return Err(PhpError::ArgumentCountError(
+                "stream_context_set_params() expects exactly 2 arguments, 0 given".to_string(),
+            ));
+        };
+        let Zval::Resource(rc) = ctx else {
+            return Err(PhpError::TypeError(format!(
+                "stream_context_set_params(): Argument #1 ($context) must be of type resource, {} given",
+                ctx.type_name_for_error()
+            )));
+        };
+        match args.get(1).map(|v| v.deref_clone()) {
+            Some(Zval::Array(p)) => {
+                ctx_apply_params(&rc, &p);
+                Ok(Zval::Bool(true))
+            }
+            Some(other) => Err(PhpError::TypeError(format!(
+                "stream_context_set_params(): Argument #2 ($params) must be of type array, {} given",
+                other.type_name_for_error()
+            ))),
+            None => Err(PhpError::ArgumentCountError(
+                "stream_context_set_params() expects exactly 2 arguments, 1 given".to_string(),
+            )),
+        }
     }
 
     /// Shared body for `stream_context_set_option(s)`: dispatch the 4-arg
