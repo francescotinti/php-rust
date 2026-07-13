@@ -10,19 +10,21 @@ interpreter, not to pass a toy subset.
 > and Symfony components already execute under `phpr` with output identical to
 > upstream PHP 8.5.7. **ext/session is complete** (all 23 functions + the
 > SessionHandler class family); symfony/http-foundation runs at **zero errors**
-> without its Session suite (12 failures need a real HTTP server) and at
-> 10 errors / 27 failures with all 1790 tests re-admitted.
+> without its Session suite (12 failures need a real HTTP server).
+> **symfony/http-kernel is in progress**: its 1663-test suite went from
+> 286 errors to **29 errors / 104 failures** — the DI container now compiles,
+> dumps and reloads under `phpr` (PhpDumper output byte-identical).
 
 ## Coverage at a glance
 
 | | |
 | --- | --- |
-| Core / language stdlib functions | **517 / 654 (79%)** |
-| All internal functions | 780 / 2143 (36%) |
-| Zend test corpus passing | **2429** (60% of runnable) |
+| Core / language stdlib functions | **521 / 654 (80%)** |
+| All internal functions | 784 / 2143 (37%) |
+| Zend test corpus passing | **2445** (60% of runnable) |
 
 Full, measured breakdown → **[COVERAGE.md](COVERAGE.md)**.
-The 35%→79% spread is the whole story: the *language* is largely done; the
+The 37%→80% spread is the whole story: the *language* is largely done; the
 remaining gap is mostly un-started **database / crypto / network extensions**
 (pgsql, mysqli, sodium, ldap, sockets, …), not missing language features.
 
@@ -85,9 +87,9 @@ phpt-runner --isolate /path/to/php-8.5.7/Zend/tests
 Near-term, highest-leverage work (see [COVERAGE.md](COVERAGE.md) for the data,
 [TODO.md](TODO.md) for the full list):
 
-1. **symfony/http-kernel** — the Request→Response cycle, next component in the
-   Symfony porting track (event-dispatcher and ext/session, its prerequisites,
-   are done).
+1. **symfony/http-kernel** — down to 29 errors / 104 failures (of 1663 tests);
+   the top engine item is runtime by-ref argument binding for array-element
+   arguments to dynamically-dispatched methods (Zend's FUNC_ARG fetch).
 2. ext/session tail — trans-sid URL rewriting, the `SID` constant, shared-ref
    (`r:`) unserialize.
 3. Remaining **core stdlib** gaps — stream filters (userland), timezone

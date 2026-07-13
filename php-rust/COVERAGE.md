@@ -7,7 +7,7 @@ functions with `function_exists()` inside `phpr` (grouped by
 `ReflectionFunction::getExtensionName()`); the corpus number is the real pass
 count of the upstream Zend test suite under `phpt-runner`.
 
-_Last measured: 2026-07-12 · reference: PHP 8.5.7 (`get_defined_functions()`)._
+_Last measured: 2026-07-13 · reference: PHP 8.5.7 (`get_defined_functions()`)._
 
 ---
 
@@ -15,19 +15,19 @@ _Last measured: 2026-07-12 · reference: PHP 8.5.7 (`get_defined_functions()`)._
 
 | Metric | Value |
 | --- | --- |
-| Internal functions implemented | **780 / 2143** (36%) |
-| — of which **core / language stdlib** (standard + Core + date) | **517 / 654** (79%) |
-| Zend test corpus (`Zend/tests/*.phpt`) | **2429 passing** — 60.0% of runnable (2429/4045) |
+| Internal functions implemented | **784 / 2143** (37%) |
+| — of which **core / language stdlib** (standard + Core + date) | **521 / 654** (80%) |
+| Zend test corpus (`Zend/tests/*.phpt`) | **2445 passing** — 60.3% of runnable (2445/4052) |
 | Fully-complete areas | ctype, json, SimpleXML, zlib, bcmath, tokenizer, **session**, PDO core |
 
-Corpus breakdown: 5305 total · **2429 pass** · 1616 fail · 1260 skip (skips are
+Corpus breakdown: 5305 total · **2445 pass** · 1607 fail · 1253 skip (skips are
 mostly tests that need an extension `phpr` hasn't ported, or SAPI-specific
 setup; the runner now executes `--INI--` sections as `php -d`-style overrides,
 which moved ~180 formerly-skipped tests into the run).
 
-The single most important number is **79% of the core language stdlib**: the
+The single most important number is **80% of the core language stdlib**: the
 string / array / math / var / date / output / hashing / regex surface that
-ordinary PHP code (and real frameworks) actually touch. The gap to 35%-overall is
+ordinary PHP code (and real frameworks) actually touch. The gap to 37%-overall is
 almost entirely **whole database/crypto/network extensions** that are simply not
 started yet — not holes in the language.
 
@@ -48,11 +48,18 @@ upstream PHP under `phpr` today:
   Session suite (1419 tests): **0 errors**, the only 12 failures being the
   functional tests that spawn a real `php -S` server (needs a server SAPI).
   Plus String / Console / Process, already validated earlier.
+- **Symfony http-kernel** — in progress: 1663-test suite from 286 errors down
+  to **29 errors / 104 failures**. The DI container pipeline works end-to-end:
+  ContainerBuilder compiles, PhpDumper dumps (byte-identical output — its
+  `preg_replace(..., limit: 1)` template pruning and `SplPriorityQueue`
+  ordering are faithful), the Kernel reloads the dumped container
+  (KernelTest 40/40).
 - **ext/session** — all 23 functions + SessionHandler and the three handler
   interfaces; files handler byte-identical (0600 `sess_<id>` files, php /
   php_binary / php_serialize serializers, lazy_write, mtime GC); official
-  phpt suite 150/229 with `--run-skipif` (the tail is trans-sid URL rewriting
-  and the deprecated `SID` constant).
+  phpt suite 160/229 with `--run-skipif` (the tail is trans-sid URL rewriting
+  and the deprecated `SID` constant). Symfony's SessionHandlerProxy write
+  path (handler calls during `session_write_close`) works.
 - **PDO + pdo_sqlite + SQLite3** — on `rusqlite`.
 - **Monolog** — running.
 - **Reflection** — framework-grade (types, attributes, enums, union/intersection).
@@ -71,10 +78,10 @@ core language stdlib).
 
 | Area | have / total | % | Notes |
 | --- | ---: | ---: | --- |
-| **standard** | 437 / 544 | **80%** | string, array, math, var, filesystem, streams, output, include_path |
+| **standard** | 441 / 544 | **81%** | string, array, math, var, filesystem, streams, output, include_path |
 | **Core** | 50 / 62 | **81%** | class/function introspection, error handling |
 | **date** | 30 / 48 | 63% | DateTime classes, textual strtotime, HTTP-date formats |
-| session | 23 / 23 | **100%** | files + user save handlers, SessionHandler classes, `$_SESSION`; suite 150/229 |
+| session | 23 / 23 | **100%** | files + user save handlers, SessionHandler classes, `$_SESSION`; suite 160/229 |
 | ctype | 11 / 11 | **100%** | complete |
 | json | 5 / 5 | **100%** | complete (HEX_* flags, NUMERIC_CHECK, THROW_ON_ERROR) |
 | SimpleXML | 3 / 3 | **100%** | complete |
@@ -85,9 +92,9 @@ core language stdlib).
 | gmp | 46 / 51 | 90% | `GMP` class + operators (num-bigint); random + import/export deferred |
 | random | 8 / 9 | 89% | Mt19937 bit-exact with PHP |
 | mbstring | 48 / 65 | 74% | codecs + grapheme family + 8bit/BINARY |
-| SPL | 11 / 15 | 73% | iterators, class_*, SplFileObject/SplTempFileObject |
+| SPL | 11 / 15 | 73% | iterators, class_*, SplFileObject/SplTempFileObject, SplPriorityQueue, FilesystemIterator |
 | pcre | 8 / 11 | 73% | `preg_last_error*` pending |
-| hash | 12 / 20 | 60% | common algos, byte-identical digests |
+| hash | 12 / 20 | 60% | common algos incl. crc32/crc32b/crc32c, byte-identical digests |
 | libxml | 4 / 8 | 50% | |
 | filter | 3 / 7 | 43% | `filter_var(_array)` incl. VALIDATE_IP (RFC 6890 flags), FILTER_CALLBACK, REQUIRE/FORCE_ARRAY, min/max ranges |
 | curl | 13 / 35 | 37% | easy API on `ureq` |
@@ -98,10 +105,10 @@ core language stdlib).
 | openssl | 1 / 64 | 2% | TLS handled at stream layer, not fn-level |
 | **not started (0%)** | — | 0% | pgsql (123), sodium (110), mysqli (106), gd (105), ldap (55), odbc (48), xmlwriter (42), sockets (37), ftp (36), snmp (24), tidy (24), xml (22), calendar (18), dba (15), readline (12), bz2/gettext/zip (10 each), opcache (8), sysv* (18), fileinfo (6), shmop (6), exif (4), dom (2), soap (2) |
 
-1363 functions missing overall; the not-started extensions above account for
-~780 of them. With ext/session complete, the next target is
-**symfony/http-kernel** (its known prerequisites — event-dispatcher and
-session — are done).
+1359 functions missing overall; the not-started extensions above account for
+~780 of them. The current front is **symfony/http-kernel** (29 errors /
+104 failures of 1663 tests); its top engine item is runtime by-ref argument
+binding for array-element arguments to dynamically-dispatched methods.
 
 ---
 

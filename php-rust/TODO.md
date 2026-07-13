@@ -6,18 +6,23 @@ as they complete. Deliberate behavioural deviations are catalogued in
 [`PHPR_DIVERGENCES_FROM_PHP.md`](PHPR_DIVERGENCES_FROM_PHP.md); measured
 coverage in [`COVERAGE.md`](COVERAGE.md).
 
-Current state (2026-07-12): Zend corpus **2429** passing (the runner now
-executes `--INI--` sections) · internal functions **780/2143, 36%** (core
-stdlib **517/654, 79%**) · ext/tokenizer **42/49** · ext/zlib **complete**
-(30/30, suite 114/115) · **ext/session: COMPLETE** — all 23 functions +
-SessionHandler class family, official suite **150/229** with `--run-skipif`.
-**symfony/http-foundation**: no-session config at **0 errors / 12 failures**
-(the 12 spawn a real `php -S` server); the FULL 1790-test suite with
-Tests/Session re-admitted runs at **10 errors / 27 failures**, with PHPUnit
-process isolation spawning real `phpr` children (`-d`/stdin CLI). Landed on
-the way: a mutable INI table, diagnostics flowing through the ob stack
-(headers-sent at the real sink), unserialize autoloading unknown classes,
-by-ref binding on superglobals, `get/set_include_path`.
+Current state (2026-07-13): Zend corpus **2445** passing · internal functions
+**784/2143, 37%** (core stdlib **521/654, 80%**) · ext/tokenizer **42/49** ·
+ext/zlib **complete** (30/30, suite 114/115) · **ext/session: COMPLETE** — all
+23 functions + SessionHandler class family, official suite **160/229** with
+`--run-skipif`. **symfony/http-foundation**: no-session config at **0 errors /
+12 failures** (the 12 spawn a real `php -S` server); the FULL 1790-test suite
+at **10 errors / 27 failures**. **symfony/http-kernel IN PROGRESS**: 1663-test
+suite from 286 errors down to **29 errors / 104 failures**; the DI container
+compiles, dumps (PhpDumper byte-identical) and reloads (KernelTest 40/40).
+Landed on the way in session 3: Zend's single class table honoured by every
+autoload path (trait/interface names never re-trigger the autoloader),
+`preg_replace` `$limit`, SplPriorityQueue + a real FilesystemIterator,
+named-args method dispatch using the defining unit's module, hash
+crc32/crc32c, session handlers operating during `session_write_close`,
+`headers_sent(&$file, &$line)` out-params. Top open engine item: **runtime
+by-ref binding for array-element args to dynamic method calls** (Zend
+FUNC_ARG; repro in NEXT_SESSION_HTTP_KERNEL.md).
 
 ---
 
