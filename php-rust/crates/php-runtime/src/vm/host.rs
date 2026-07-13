@@ -2058,6 +2058,12 @@ impl<'m> super::Vm<'m> {
         if self.first_arg_is_trait_name(&args) {
             return Ok(Zval::Array(Rc::new(php_types::PhpArray::new())));
         }
+        // Generator / Closure exist but use no traits (class_uses → []) — like
+        // class_parents/class_implements, they must answer consistently with
+        // class_exists (DebugClassLoader unions this with an interface array).
+        if args.first().and_then(Self::engine_special_class_name).is_some() {
+            return Ok(Zval::Array(Rc::new(php_types::PhpArray::new())));
+        }
         let Some(cid) = args.into_iter().next().and_then(|v| self.class_arg_or_warn(v, "class_uses"))
         else {
             return Ok(Zval::Bool(false));
@@ -2511,20 +2517,19 @@ impl<'m> super::Vm<'m> {
         Ok(Zval::Bool(self.is_name_callable(name)))
     }
     pub(super) fn ho_class_exists(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        // `Generator` and `Closure` are always-present engine classes phpr models
+        // as special zvals (no ClassId) — class_exists() must report them present
+        // (PHPUnit's assertInstanceOf(Generator::class, …)) and must decide
+        // BEFORE consulting the autoloader: Zend never autoloads a native class,
+        // and a userland loader in the chain (Symfony's DebugClassLoader) treats
+        // the spurious loadClass('Closure') as a real class load, whose
+        // annotation checks then die on phpr's table-less Closure.
+        if args.first().and_then(Self::engine_special_class_name).is_some() {
+            return Ok(Zval::Bool(true));
+        }
         let cid = self.resolve_named_class_with_autoload(&args)?;
         if matches!(cid, Some(c) if self.classes[c].instantiable != Instantiable::Interface) {
             return Ok(Zval::Bool(true));
-        }
-        // `Generator` and `Closure` are always-present engine classes phpr models
-        // as special zvals (no ClassId), so the ClassId lookup misses them —
-        // class_exists() must still report them present (PHPUnit's
-        // assertInstanceOf(Generator::class, …): QueryTest::testIterateWithDistinct).
-        if let Some(v) = args.first() {
-            let n = convert::to_zstr_cast(v, &mut self.diags);
-            let n = n.as_bytes().strip_prefix(b"\\").unwrap_or(n.as_bytes());
-            if n.eq_ignore_ascii_case(b"Generator") || n.eq_ignore_ascii_case(b"Closure") {
-                return Ok(Zval::Bool(true));
-            }
         }
         Ok(Zval::Bool(false))
     }
