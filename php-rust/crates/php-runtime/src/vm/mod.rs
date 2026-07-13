@@ -6873,6 +6873,7 @@ impl<'m> Vm<'m> {
             return Ok(());
         }
         self.autoloading.insert(key.to_vec());
+        log::debug!(target: "phpr::autoload", "autoload {}", String::from_utf8_lossy(name));
         let arg = Zval::Str(PhpStr::new(name.to_vec()));
         let loaders = self.autoloaders.clone();
         let mut outcome = Ok(());

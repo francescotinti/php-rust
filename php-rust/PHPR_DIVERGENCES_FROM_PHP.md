@@ -381,6 +381,24 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-13 (sessione 3, batch 2): trait_exists() su un nome già dichiarato
+  come classe/interfaccia → false SENZA ri-innescare l'autoloader (speculare
+  al fix trait: PhpDumper sonda trait_exists(HttpKernelInterface::class) e il
+  re-include collideva). preg_replace(): il 4° argomento $limit era IGNORATO
+  (sempre replace-all) — il PhpDumper pota il template del container con
+  limit:1 e la seconda rimozione produceva PHP corrotto ("expected Class");
+  ora Engine::replacen per-pattern-per-subject, &$count coerente, 0=nessuna,
+  -1=tutte. FilesystemIterator: era uno stub di sole costanti → implementata
+  (extends DirectoryIterator; SKIP_DOTS onorato come FLAG: il default 4096 li
+  salta, flags espliciti senza SKIP_DOTS mostrano `.`/`..` — oracle-pinned;
+  CURRENT_AS_PATHNAME/SELF/FILEINFO, KEY_AS_FILENAME, get/setFlags, seek).
+  ⚠️ GAP ENGINE emerso: **shadowing di METODI privati** — da scope X,
+  `$this->m()` con `m` privato in X deve chiamare X::m anche se il receiver
+  è una sottoclasse che ridefinisce `m` privato (le PROP hanno già lo
+  storage-key fix; i metodi no: phpr risolve sul receiver e lancia
+  visibility error). Workaround nel prelude: helper privati con nomi
+  per-classe (__dicur/__disync in DirectoryIterator). Da fixare in
+  resolve_method_runtime.
 - 2026-07-13 (sessione 3): autoload dei nomi di trait allineato alla class
   table unica di Zend (un trait dichiarato non ri-innesca MAI l'autoloader da
   class_exists/interface_exists/ReflectionClass — prima il re-include

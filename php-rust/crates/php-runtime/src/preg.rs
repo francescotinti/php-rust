@@ -379,6 +379,40 @@ impl Engine {
             }
         }
     }
+
+    /// Like [`Self::replace_all`] but replaces at most `limit` matches
+    /// (`limit == 0` means unlimited — the Rust `replacen` convention; the
+    /// caller maps preg_replace's `$limit = -1` onto it). Serves preg_replace's
+    /// 4th argument: PhpDumper prunes its container template with
+    /// `preg_replace(..., limit: 1)` and a second removal corrupts the dump.
+    pub fn replacen(&self, text: &str, limit: usize, repl: &str) -> String {
+        if limit == 0 {
+            return self.replace_all(text, repl);
+        }
+        match self {
+            Engine::Regex(r) => r.replacen(text, limit, repl).into_owned(),
+            Engine::Fancy(r) => r
+                .try_replacen(text, limit, repl)
+                .map(|c| c.into_owned())
+                .unwrap_or_else(|_| text.to_string()),
+            // Onig/Anchored: the same manual walk as `replace_all`, capped.
+            Engine::Onig(_) | Engine::Anchored(_) => {
+                let mut out = String::new();
+                let mut last = 0usize;
+                for (n, c) in self.captures_iter(text).into_iter().enumerate() {
+                    if n >= limit {
+                        break;
+                    }
+                    let Some(m) = c.get(0) else { continue };
+                    out.push_str(&text[last..m.start]);
+                    out.push_str(&expand_caps_template(&c, repl));
+                    last = m.end;
+                }
+                out.push_str(&text[last..]);
+                out
+            }
+        }
+    }
 }
 
 /// Expand the `translate_replacement`-normalised template `repl` (`${n}`

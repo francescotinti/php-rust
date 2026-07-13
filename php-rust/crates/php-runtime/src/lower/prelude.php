@@ -1974,11 +1974,66 @@ class SplTempFileObject extends SplFileObject {
         parent::__construct('php://temp', 'w+b');
     }
 }
-class FilesystemIterator extends SplFileInfo {
+// FilesystemIterator: DirectoryIterator with flag-shaped key()/current() and
+// (by default) dot entries skipped. Oracle-pinned on 8.5: SKIP_DOTS is in the
+// DEFAULT flags but an explicit flags argument without it DOES surface `.`/`..`
+// (Symfony Filesystem::remove spreads `[...new FilesystemIterator($dir, ...)]`).
+// Own private state: DirectoryIterator's fields are private (name-mangled).
+class FilesystemIterator extends DirectoryIterator {
     const CURRENT_AS_FILEINFO = 0; const CURRENT_AS_PATHNAME = 32; const CURRENT_AS_SELF = 16;
     const KEY_AS_PATHNAME = 0; const KEY_AS_FILENAME = 256;
     const FOLLOW_SYMLINKS = 512; const NEW_CURRENT_AND_KEY = 256;
     const SKIP_DOTS = 4096; const UNIX_PATHS = 8192;
+    private $__fsdir;
+    private $__fsnames = [];
+    private $__fspos = 0;
+    private $__fsflags;
+    // Default = KEY_AS_PATHNAME | CURRENT_AS_FILEINFO | SKIP_DOTS.
+    public function __construct($directory, $flags = 4096) {
+        if (!is_dir($directory)) {
+            throw new UnexpectedValueException("FilesystemIterator::__construct($directory): Failed to open directory: No such file or directory");
+        }
+        parent::__construct($directory);
+        $this->__fsdir = rtrim($directory, '/');
+        $this->__fsflags = $flags;
+        $names = scandir($directory);
+        if (($flags & self::SKIP_DOTS) === self::SKIP_DOTS) {
+            $keep = [];
+            foreach ($names as $n) { if ($n !== '.' && $n !== '..') { $keep[] = $n; } }
+            $names = $keep;
+        }
+        $this->__fsnames = $names;
+        $this->__fssync();
+    }
+    private function __fscur() { return $this->__fsdir . '/' . $this->__fsnames[$this->__fspos]; }
+    private function __fssync() {
+        if ($this->__fspos < count($this->__fsnames)) { $this->__path = $this->__fscur(); }
+    }
+    public function rewind(): void { $this->__fspos = 0; $this->__fssync(); }
+    public function valid(): bool { return $this->__fspos < count($this->__fsnames); }
+    public function next(): void { $this->__fspos++; $this->__fssync(); }
+    public function seek($offset): void { $this->__fspos = $offset; $this->__fssync(); }
+    public function key(): mixed {
+        if (($this->__fsflags & self::KEY_AS_FILENAME) === self::KEY_AS_FILENAME) {
+            return $this->__fsnames[$this->__fspos];
+        }
+        return $this->__fscur();
+    }
+    public function current(): mixed {
+        if (($this->__fsflags & self::CURRENT_AS_PATHNAME) === self::CURRENT_AS_PATHNAME) {
+            return $this->__fscur();
+        }
+        if (($this->__fsflags & self::CURRENT_AS_SELF) === self::CURRENT_AS_SELF) {
+            return $this;
+        }
+        return new SplFileInfo($this->__fscur());
+    }
+    public function isDot(): bool {
+        $n = $this->__fsnames[$this->__fspos] ?? '';
+        return $n === '.' || $n === '..';
+    }
+    public function getFlags() { return $this->__fsflags; }
+    public function setFlags($flags) { $this->__fsflags = $flags; }
 }
 // DirectoryIterator (flat, dots included): the native iterator is the current
 // entry, like RecursiveDirectoryIterator below (Symfony Console's completion
@@ -1994,16 +2049,21 @@ class DirectoryIterator extends SplFileInfo implements SeekableIterator {
         }
         $this->__dir = rtrim($directory, '/');
         $this->__names = scandir($directory);
-        $this->__sync();
+        $this->__disync();
     }
-    private function __cur() { return $this->__dir . '/' . $this->__names[$this->__pos]; }
-    private function __sync() {
-        if ($this->__pos < count($this->__names)) { $this->__path = $this->__cur(); }
+    // NB: helper names are per-class unique (__dicur/__disync) — phpr resolves
+    // $this->privateMethod() on the RECEIVER's class, so a same-named private
+    // in a subclass (RecursiveDirectoryIterator's __sync) would be picked from
+    // this ctor's chain and rejected as inaccessible (engine gap: private
+    // method shadowing; props already handle this via storage keys).
+    private function __dicur() { return $this->__dir . '/' . $this->__names[$this->__pos]; }
+    private function __disync() {
+        if ($this->__pos < count($this->__names)) { $this->__path = $this->__dicur(); }
     }
-    public function rewind(): void { $this->__pos = 0; $this->__sync(); }
+    public function rewind(): void { $this->__pos = 0; $this->__disync(); }
     public function valid(): bool { return $this->__pos < count($this->__names); }
-    public function next(): void { $this->__pos++; $this->__sync(); }
-    public function seek($offset): void { $this->__pos = $offset; $this->__sync(); }
+    public function next(): void { $this->__pos++; $this->__disync(); }
+    public function seek($offset): void { $this->__pos = $offset; $this->__disync(); }
     public function key(): mixed { return $this->__pos; }
     public function current(): mixed { return $this; }
     public function isDot(): bool {
@@ -2018,10 +2078,13 @@ class RecursiveDirectoryIterator extends FilesystemIterator implements Recursive
     private $__pos = 0;
     private $__sub = ''; // path of this level relative to the traversal root
     public function __construct($directory, $flags = 0) {
-        parent::__construct($directory);
+        // Validate BEFORE chaining up: the parent (FilesystemIterator) throws
+        // its own-branded message, but a bad directory must report
+        // "RecursiveDirectoryIterator::__construct(...)".
         if (!is_dir($directory)) {
             throw new UnexpectedValueException("RecursiveDirectoryIterator::__construct($directory): Failed to open directory: No such file or directory");
         }
+        parent::__construct($directory, $flags);
         $this->__dir = rtrim($directory, '/');
         $this->__flags = $flags;
         $names = scandir($directory);

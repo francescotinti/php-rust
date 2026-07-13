@@ -2070,6 +2070,14 @@ impl<'m> super::Vm<'m> {
         if present(self) {
             return Ok(Zval::Bool(true));
         }
+        // Zend keeps classes/interfaces/enums and traits in ONE class table: a
+        // name already declared as a class-like is "found", so trait_exists()
+        // is false WITHOUT re-running the autoloader (the re-include would
+        // collide with the file's declarations — PhpDumper probes
+        // trait_exists(HttpKernelInterface::class) while dumping containers).
+        if self.class_index.contains_key(&want) {
+            return Ok(Zval::Bool(false));
+        }
         if autoload {
             // The autoloader gets the name AS WRITTEN (PSR-4 file mapping is
             // case-sensitive); only the recursion-guard key is lowercased.
@@ -2672,8 +2680,9 @@ impl<'m> super::Vm<'m> {
     /// backreferences `$1`/`${1}`/`\1` in the replacement are honoured. Returns
     /// `(result, count)` — `&$count` (the number of replacements, symfony
     /// polyfill-intl-grapheme's `$len`) is written by the VM out-param path; the
-    /// plain dispatch drops it. Returns `null` on a bad pattern. Single scalar
-    /// pattern/subject and `$limit` stay a scope-out. Mirrors `eval::ho_preg_replace`.
+    /// plain dispatch drops it. Returns `null` on a bad pattern. `$limit` caps
+    /// replacements per pattern per subject (-1 = unlimited, 0 = none).
+    /// Mirrors `eval::ho_preg_replace`.
     pub(super) fn ho_preg_replace(&mut self, args: Vec<Zval>) -> Result<(Zval, Zval), PhpError> {
         if args.len() < 3 {
             return Err(PhpError::ArgumentCountError(
@@ -2728,6 +2737,12 @@ impl<'m> super::Vm<'m> {
             let r = repls.get(i).map(|r| r.as_slice()).unwrap_or(b"");
             pairs.push((re, crate::preg::translate_replacement(r)));
         }
+        // `$limit`: maximum replacements PER pattern PER subject; negative =
+        // unlimited (the default -1), 0 = replace nothing.
+        let limit = match args.get(3) {
+            Some(v) => convert::to_long_cast(&v.deref_clone(), &mut self.diags),
+            None => -1,
+        };
         let mut total = 0i64;
         let run_one = |subject: &[u8], total: &mut i64| -> Zval {
             let Some(txt) = crate::preg::subject_text(subject, any_unicode) else {
@@ -2742,8 +2757,17 @@ impl<'m> super::Vm<'m> {
                 } else {
                     String::from_utf8_lossy(repl).into_owned()
                 };
-                *total += re.captures_iter(&s).len() as i64;
-                s = re.replace_all(&s, repl.as_str()).to_string();
+                let matches = re.captures_iter(&s).len();
+                let done = if limit < 0 { matches } else { matches.min(limit as usize) };
+                *total += done as i64;
+                if done == 0 {
+                    continue;
+                }
+                s = if limit < 0 {
+                    re.replace_all(&s, repl.as_str())
+                } else {
+                    re.replacen(&s, done, repl.as_str())
+                };
             }
             let out = if latin1 { crate::preg::latin1_encode(&s) } else { s.into_bytes() };
             Zval::Str(PhpStr::new(out))
