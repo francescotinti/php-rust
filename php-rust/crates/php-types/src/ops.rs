@@ -40,7 +40,7 @@ fn type_pair_error(a: &Zval, b: &Zval, sym: &str) -> PhpError {
 /// op-specific TypeError).
 fn try_to_number(v: &Zval, diags: &mut Diags) -> Option<Num> {
     match v {
-        Zval::Undef | Zval::Null => Some(Num::Long(0)),
+        Zval::Undef | Zval::Null | Zval::ArgPlace(_) => Some(Num::Long(0)),
         Zval::Bool(b) => Some(Num::Long(*b as i64)),
         Zval::Long(l) => Some(Num::Long(*l)),
         Zval::Double(d) => Some(Num::Double(*d)),
@@ -71,7 +71,7 @@ fn try_to_number(v: &Zval, diags: &mut Diags) -> Option<Num> {
 /// (oracle: "9223372036854775808"|0 is silent, "1e100"|0 deprecates).
 fn try_to_long(v: &Zval, diags: &mut Diags) -> Option<i64> {
     match v {
-        Zval::Undef | Zval::Null => Some(0),
+        Zval::Undef | Zval::Null | Zval::ArgPlace(_) => Some(0),
         Zval::Bool(b) => Some(*b as i64),
         Zval::Long(l) => Some(*l),
         Zval::Double(d) => Some(dval_to_lval_safe(*d, diags)),
@@ -866,7 +866,7 @@ pub fn increment(v: &mut Zval, diags: &mut Diags) -> Result<(), PhpError> {
             };
         }
         Zval::Double(d) => *v = Zval::Double(*d + 1.0),
-        Zval::Undef | Zval::Null => *v = Zval::Long(1),
+        Zval::Undef | Zval::Null | Zval::ArgPlace(_) => *v = Zval::Long(1),
         Zval::Str(s) => match parse_numeric(s.as_bytes()) {
             Some(Num::Long(l)) => {
                 *v = match l.checked_add(1) {
@@ -988,7 +988,7 @@ pub fn decrement(v: &mut Zval, diags: &mut Diags) -> Result<(), PhpError> {
             };
         }
         Zval::Double(d) => *v = Zval::Double(*d - 1.0),
-        Zval::Undef | Zval::Null => {
+        Zval::Undef | Zval::Null | Zval::ArgPlace(_) => {
             diags.push(Diag::Warning(
                 "Decrement on type null has no effect, this will change in the next major version of PHP"
                     .to_string(),

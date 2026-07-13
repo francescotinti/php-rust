@@ -144,7 +144,7 @@ fn render(diags: Diags, outcome: Result<Zval, PhpError>) -> String {
 fn var_dump(v: &Zval, level: usize, out: &mut String) {
     let pad = "  ".repeat(level);
     match v {
-        Zval::Undef | Zval::Null => writeln!(out, "{pad}NULL").unwrap(),
+        Zval::Undef | Zval::Null | Zval::ArgPlace(_) => writeln!(out, "{pad}NULL").unwrap(),
         Zval::Bool(b) => writeln!(out, "{pad}bool({})", if *b { "true" } else { "false" }).unwrap(),
         Zval::Long(l) => writeln!(out, "{pad}int({l})").unwrap(),
         Zval::Double(d) => writeln!(

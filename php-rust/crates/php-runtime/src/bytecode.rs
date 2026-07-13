@@ -283,6 +283,16 @@ pub enum Op {
     /// `FieldBase`. The reference *source* of `$x = &$a[0]` and the value returned
     /// by `return $place;` in a `function &f()`.
     MakeRef { base: FieldBase, steps: Box<[FieldStep]> },
+    /// `[keys…] -> [argplace]` — SEND_VAR_EX for a *place* argument (Zend's
+    /// FETCH_DIM/OBJ_FUNC_ARG). Pop one key per `Index` step (pushed in source
+    /// order) and push a [`Zval::ArgPlace`] descriptor deferring the fetch of
+    /// an `Index`/`Prop` path rooted at `base`: the dynamic-dispatch binder
+    /// W-fetches (aliases) it for a by-reference parameter and R-fetches
+    /// (value + warnings) otherwise. `name` is the const-table index of the
+    /// root variable's bare name, for the R-branch's "Undefined variable"
+    /// warning. Emitted only in argument position of a dynamic call — every
+    /// dispatch funnel materializes it before use.
+    PushArgPlace { base: FieldBase, steps: Box<[FieldStep]>, name: u32 },
     /// `[keys…, ref] -> [v]` — REF-4. Pop a reference value, then bind the place
     /// (base + `Index` steps, keys beneath the ref in source order) to its shared
     /// cell: a step-less base is overwritten directly, a stepped leaf is written

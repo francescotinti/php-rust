@@ -24,4 +24,4 @@ pub use stream::{
     open_data_stream, open_file_stream, open_php_stream, DirHandle, ResKind, Resource, Stream, StreamBackend,
 };
 pub use zstr::{PhpStr, ZStr};
-pub use zval::{Closure, ClosureInfo, ClosureParam, ClosureRender, Zval};
+pub use zval::{ArgPlace, ArgPlaceBase, ArgPlaceStep, Closure, ClosureInfo, ClosureParam, ClosureRender, Zval};

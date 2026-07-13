@@ -59,6 +59,49 @@ pub enum Zval {
     /// `WeakMap` offsets upgrade it to an object or `null` via the internal
     /// `__weak_get` builtin, and `var_dump` special-cases the two classes.
     WeakHandle(std::rc::Weak<RefCell<Object>>),
+    /// A deferred function-argument *place* (Zend's FETCH_DIM_FUNC_ARG feeding
+    /// SEND_VAR_EX): an all-`Index` path rooted at a variable, passed as an
+    /// argument to a call whose callee — hence whether the parameter is
+    /// by-reference — is only known at bind time. The dispatch funnels
+    /// materialize it there: a by-reference parameter W-fetches (aliases the
+    /// element, creating a missing key silently), a by-value one R-fetches
+    /// (warns on a missing key, creates nothing). Never escapes the call
+    /// window — no other consumer sees this variant.
+    ArgPlace(Rc<ArgPlace>),
+}
+
+/// Payload of [`Zval::ArgPlace`]: which store roots the path, the steps to
+/// walk, the `Index` keys (already evaluated, source order), and the root
+/// variable's bare name for the R-branch's "Undefined variable" warning
+/// (empty when the base cannot be an undefined variable).
+#[derive(Debug)]
+pub struct ArgPlace {
+    pub base: ArgPlaceBase,
+    pub steps: Box<[ArgPlaceStep]>,
+    pub keys: Vec<Zval>,
+    pub name: Box<[u8]>,
+}
+
+/// The store rooting an [`ArgPlace`] path.
+#[derive(Clone, Copy, Debug)]
+pub enum ArgPlaceBase {
+    /// Caller-frame local slot.
+    Local(u32),
+    /// Slot in the global (bottom) frame.
+    Global(u32),
+    /// VM-level superglobal store index (`$_SESSION` &c.).
+    Superglobal(u8),
+    /// The caller frame's `$this` (a property path like `$this->data`).
+    This,
+}
+
+/// One step of an [`ArgPlace`] path: an array/ArrayAccess dimension (its key
+/// rides in `ArgPlace::keys`, one per `Index`, source order) or a literal
+/// property name. Dynamic property names (`->$n`) are never deferred.
+#[derive(Clone, Debug)]
+pub enum ArgPlaceStep {
+    Index,
+    Prop(Box<[u8]>),
 }
 
 /// A lowered-and-captured closure value (step 18). `fn_idx` selects the body
@@ -157,7 +200,7 @@ impl Zval {
     /// Type name as reported by gettype().
     pub fn gettype(&self) -> &'static str {
         match self {
-            Zval::Undef | Zval::Null => "NULL",
+            Zval::Undef | Zval::Null | Zval::ArgPlace(_) => "NULL",
             Zval::Bool(_) => "boolean",
             Zval::Long(_) => "integer",
             Zval::Double(_) => "double",
@@ -173,7 +216,7 @@ impl Zval {
     /// Type name as used in error messages (TypeError etc.).
     pub fn error_type_name(&self) -> &'static str {
         match self {
-            Zval::Undef | Zval::Null => "null",
+            Zval::Undef | Zval::Null | Zval::ArgPlace(_) => "null",
             Zval::Bool(_) => "bool",
             Zval::Long(_) => "int",
             Zval::Double(_) => "float",

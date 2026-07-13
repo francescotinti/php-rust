@@ -722,8 +722,19 @@ impl<'m> Vm<'m> {
         top: usize,
         this: Zval,
         method: &[u8],
-        args: Vec<Zval>,
+        mut args: Vec<Zval>,
     ) -> Result<(), PhpError> {
+        // Deferred place arguments (SEND_VAR_EX) resolve against the callee's
+        // by-ref mask now that the receiver — hence the callee — is known; a
+        // native receiver or a `__call` route takes every argument by value.
+        if args.iter().any(|a| matches!(a, Zval::ArgPlace(_))) {
+            let callee = self.instance_arg_ref_target(top, &this, method);
+            self.materialize_arg_places(top, &mut args, callee)?;
+            // R-fetch warnings report the CALL's line, not the callee's next
+            // emit point.
+            let line = self.cur_line(top);
+            self.flush_diags(line)?;
+        }
         // A `Generator` is not a user object: dispatch its built-in methods
         // (current/key/next/valid/rewind/…) directly (GEN).
         if let Zval::Generator(gs) = &this {

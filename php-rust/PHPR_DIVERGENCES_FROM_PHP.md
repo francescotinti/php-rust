@@ -381,6 +381,30 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-13 (sessione 4): ✅ CHIUSO il gap SEND_VAR_EX (repro p_ref3):
+  gli argomenti *place* (`$a['k']`, `$_SESSION[$k]`, `$this->p`, `$o->p['k']`)
+  verso callee risolti solo a runtime (receiver dinamico, `$cls::m()`,
+  `$obj->$m()`, `new` dinamico) ora viaggiano come **`Zval::ArgPlace`
+  differito** (`Op::PushArgPlace`: base + steps Index/Prop + chiavi valutate):
+  ogni funnel di dispatch (`method_call`, `dispatch_static_call`,
+  `Op::InvokeCtor`, ramo Fiber::suspend) li materializza contro la maschera
+  by-ref del callee risolto — by-ref → W-fetch via `make_ref_cell` (estratto
+  dal handler `Op::MakeRef`: alias, chiave mancante creata silente); by-value
+  → R-fetch fedele (`arg_place_read`: warning "Undefined variable"/"Undefined
+  array key" flushati con la LINEA della call, `offsetGet` sync per
+  ArrayAccess, `prop_read_sync` con hook/`__get` guidati inline via
+  `drive_to_return`). Inoltre i **costruttori** onorano i param by-ref:
+  ctor noto a compile time → `push_call_args` con maschera (prima SEMPRE
+  `push_value_args`); ctor dinamico → `push_dyn_args` + materializzazione in
+  `InvokeCtor`. Sblocca la catena Symfony Session (SessionBagProxy ctor
+  `array &$data` + `$bag->initialize($session[$key])`): p_sl1/p_sl2 BYTE-ID.
+  ⚠️ Residui: (a) place con step **PropDyn** (`->$n`) o base call-result non
+  differiti (restano by-value); (b) manca l'Error runtime "Argument #N ($p)
+  could not be passed by reference" per un NON-place (es. `$x ?? []`) passato
+  a un param by-ref di callee dinamico — phpr passa il valore silenziosamente;
+  (c) i warning R-fetch fuoriescono al BIND (linea della call, corretta) ma
+  DOPO la valutazione degli argomenti successivi — l'ordine relativo a side
+  effect di altri argomenti può divergere in casi patologici.
 - 2026-07-13 (sessione 3, batch 3): SessionState.committing — il prelude
   \SessionHandler opera DURANTE sess_commit (la sessione conta già chiusa per
   bug60634, ma la guardia PHP è "nessun handler aperto", non status==active:

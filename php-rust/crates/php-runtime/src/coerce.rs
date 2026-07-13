@@ -147,7 +147,7 @@ fn coerce_to_bool(value: Zval, diags: &mut Diags) -> Option<Zval> {
 /// `object`/`resource`.
 pub(crate) fn php_type_name(v: &Zval) -> &'static str {
     match v {
-        Zval::Undef | Zval::Null => "null",
+        Zval::Undef | Zval::Null | Zval::ArgPlace(_) => "null",
         Zval::Bool(_) => "bool",
         Zval::Long(_) => "int",
         Zval::Double(_) => "float",

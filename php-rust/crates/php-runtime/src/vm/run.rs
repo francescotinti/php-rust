@@ -998,245 +998,39 @@ impl<'m> super::Vm<'m> {
                     // cell, and push a reference to it. Keys (for `Index` steps)
                     // were pushed in source order and sit on top of the stack.
                     let keys = self.pop_field_keys(top, &steps);
-                    // First key retained past the cell walk (a dynamic-name
-                    // typed-ref registration needs it after keys are consumed).
-                    let keys_first_backup = keys.first().cloned();
-                    // EXCEPTION checked FIRST (it must pre-empt hook/lazy
-                    // machinery): a ref fetch under the wrapper's own
-                    // suppressed `__get` guard stays on the wrapper's raw
-                    // storage without initializing (gh20854's
-                    // `return $this->x;` in the wrapper's `&__get`).
-                    let guarded_ref_fetch = 'grf: {
-                        let n: Box<[u8]> = match &steps[..] {
-                            [FieldStep::Prop(n)] => n.clone(),
-                            [FieldStep::PropDyn] => match keys.first().cloned() {
-                                Some(k) => self.dyn_prop_name_value(&k)?,
-                                None => break 'grf false,
-                            },
-                            _ => break 'grf false,
-                        };
-                        let target = match base {
-                            FieldBase::Local(s) => self.frames[top].slots.get(s as usize).map(|v| v.deref_clone()),
-                            FieldBase::Global(s) => self.frames[0].slots.get(s as usize).map(|v| v.deref_clone()),
-                            FieldBase::Superglobal(i) => self.superglobals.get(i as usize).map(|v| v.deref_clone()),
-                            FieldBase::This => self.frames[top].this.as_ref().map(|v| v.deref_clone()),
-                        };
-                        let Some(o) = target.and_then(|v| deref_object(&v)) else { break 'grf false };
-                        let (uninit, oid, cid) = {
-                            let b = o.borrow();
-                            (b.lazy.is_some() && b.proxy_instance.is_none(), b.id, b.class_id as usize)
-                        };
-                        uninit
-                            && self.magic_guard.contains(&(oid, MagicKind::Get, n.to_vec()))
-                            && resolve_method_runtime(&self.classes, cid, b"__get").is_some()
-                    };
-                    // A `&get` hook makes the property addressable: the reference
-                    // the hook returns is the path's root (PHP 8.4).
-                    if !guarded_ref_fetch {
-                        if let Some(root) = self.byref_hook_root(base, top, &steps)? {
-                            let cell = if steps.len() == 1 {
-                                root
-                            } else {
-                                let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
-                                let mut root_val = Zval::Ref(root);
-                                field_cell(&mut root_val, &steps[1..], &mut keys.into_iter(), fs)
-                            };
-                            self.frames[top].stack.push(Zval::Ref(cell));
-                            continue;
-                        }
-                    }
-                    // A property whose set visibility excludes this scope hands
-                    // out a reference to a *copy* (PHP 8.4 asymmetric visibility).
-                    if let Some(cell) = self.asym_set_ref_copy(base, top, &steps) {
-                        self.frames[top].stack.push(Zval::Ref(cell));
-                        continue;
-                    }
-                    // Taking a reference *to* a hooked property is indirect modification.
-                    self.reject_indirect_hook(base, top, &steps)?;
-                    // A reference fetch of a lazy object's property initializes it
-                    // first (PHP 8.4, fetch_ref_initializes) — a skipped/raw-set
-                    // property does not — and a forwarding proxy binds the
-                    // *instance*'s cell, so the walk roots there (unless the
-                    // guarded-ref-fetch exception above applies).
-                    let lazy_root = if guarded_ref_fetch {
-                        None
-                    } else {
-                        self.field_lazy_root(base, top, &steps, &keys, false)?
-                    };
-                    // `&$o->magic` consults `__get` (gh21478-proxy-get-ref-
-                    // forward, gh20875_proxy_get_no_init): the magic result
-                    // binds as a fresh cell — an uninitialized proxy dispatches
-                    // on the wrapper WITHOUT initializing. Under an ACTIVE
-                    // guard the fetch degrades to an undefined READ (warning,
-                    // detached NULL cell — nothing materializes).
-                    let makeref_magic: Option<Rc<RefCell<Zval>>> = 'makeref_magic: {
-                        let n: Box<[u8]> = match &steps[..] {
-                            [FieldStep::Prop(n)] => n.clone(),
-                            [FieldStep::PropDyn] => {
-                                let Some(k) = keys.first().cloned() else { break 'makeref_magic None };
-                                self.dyn_prop_name_value(&k)?
-                            }
-                            _ => break 'makeref_magic None,
-                        };
-                        let target = match base {
-                            FieldBase::Local(s) => self.frames[top].slots.get(s as usize).map(|v| v.deref_clone()),
-                            FieldBase::Global(s) => self.frames[0].slots.get(s as usize).map(|v| v.deref_clone()),
-                            FieldBase::Superglobal(i) => self.superglobals.get(i as usize).map(|v| v.deref_clone()),
-                            FieldBase::This => self.frames[top].this.as_ref().map(|v| v.deref_clone()),
-                        };
-                        let Some(o) = target.and_then(|v| deref_object(&v)) else { break 'makeref_magic None };
-                        let cur = self.frames[top].class;
-                        let oid = o.borrow().id;
-                        // For a forwarding wrapper the guard may be held on the
-                        // instance's handle — honor both before dispatching.
-                        let inst = deref_object(&self.proxy_view(Zval::Object(Rc::clone(&o))));
-                        let inst_guard = inst
-                            .as_ref()
-                            .is_some_and(|io| self.magic_guard.contains(&(io.borrow().id, MagicKind::Get, n.to_vec())));
-                        if !inst_guard && self.magic_applies(&o, &n, cur, MagicKind::Get, b"__get").is_some() {
-                            let gkey = (oid, MagicKind::Get, n.to_vec());
-                            let ins = self.magic_guard.insert(gkey.clone());
-                            let r = self.call_method_sync(
-                                Zval::Object(Rc::clone(&o)),
-                                b"__get",
-                                vec![Zval::Str(PhpStr::new(n.to_vec()))],
-                            );
-                            if ins {
-                                self.magic_guard.remove(&gkey);
-                            }
-                            let v = r?;
-                            break 'makeref_magic Some(Rc::new(RefCell::new(v.deref_clone())));
-                        }
-                        // `__get` guard-suppressed on a forwarding PROXY WRAPPER
-                        // with an absent slot: Zend's ptr-fetch falls back to a
-                        // READ — undefined-property warning naming the INSTANCE
-                        // class, detached NULL cell, nothing materializes. (A
-                        // plain object instead materializes with the creation
-                        // deprecation — gh20854.)
-                        let is_wrapper = {
-                            let b = o.borrow();
-                            b.lazy.is_some() && b.proxy_instance.is_some()
-                        };
-                        if is_wrapper {
-                            let cid_o = o.borrow().class_id as usize;
-                            let has_get = resolve_method_runtime(&self.classes, cid_o, b"__get").is_some();
-                            let undeclared = matches!(
-                                resolve_prop_access(&self.classes, cid_o, &n, cur),
-                                PropAccess::Dynamic
-                            );
-                            let absent_on_inst = inst
-                                .as_ref()
-                                .is_some_and(|io| !io.borrow().props.contains(n.as_ref()));
-                            let guarded = inst_guard
-                                || self.magic_guard.contains(&(oid, MagicKind::Get, n.to_vec()));
-                            if has_get && undeclared && absent_on_inst && guarded {
-                                let icid = inst
-                                    .as_ref()
-                                    .map(|io| io.borrow().class_id as usize)
-                                    .unwrap_or(cid_o);
-                                self.diags.push(Diag::Warning(format!(
-                                    "Undefined property: {}::${}",
-                                    String::from_utf8_lossy(&self.classes[icid].name),
-                                    String::from_utf8_lossy(&n),
-                                )));
-                                break 'makeref_magic Some(Rc::new(RefCell::new(Zval::Null)));
-                            }
-                        }
-                        None
-                    };
-                    if let Some(cell) = makeref_magic {
-                        self.frames[top].stack.push(Zval::Ref(cell));
-                        continue;
-                    }
-                    // `&$o->undeclared` MATERIALIZES the property: on a class not
-                    // allowing dynamic props that is the creation deprecation
-                    // (gh20854's `&__get` returning an absent `$this->x`).
-                    if let [FieldStep::Prop(n)] = &steps[..] {
-                        let target = match &lazy_root {
-                            Some(r) => Some(r.clone()),
-                            None => match base {
-                                FieldBase::Local(s) => self.frames[top].slots.get(s as usize).map(|v| v.deref_clone()),
-                                FieldBase::Global(s) => self.frames[0].slots.get(s as usize).map(|v| v.deref_clone()),
-                                FieldBase::Superglobal(i) => self.superglobals.get(i as usize).map(|v| v.deref_clone()),
-                                FieldBase::This => self.frames[top].this.as_ref().map(|v| v.deref_clone()),
-                            },
-                        };
-                        if let Some(o) = target.as_ref().and_then(deref_object) {
-                            let ocid = o.borrow().class_id as usize;
-                            let dynamic = matches!(
-                                resolve_prop_access(&self.classes, ocid, n, self.frames[top].class),
-                                PropAccess::Dynamic
-                            );
-                            if dynamic
-                                && !o.borrow().props.contains(n.as_ref())
-                                && !self.allows_dynamic_props(ocid)
-                            {
-                                let cls = String::from_utf8_lossy(&self.classes[ocid].name).into_owned();
-                                let prop = String::from_utf8_lossy(n).into_owned();
-                                self.diags.push(Diag::Deprecated(format!(
-                                    "Creation of dynamic property {cls}::${prop} is deprecated"
-                                )));
-                            }
-                        }
-                    }
-                    // Taking a reference to an *uninitialized* non-nullable typed
-                    // property is an error (zend_fetch_property_address,
-                    // fetch_ref_skipped_prop_does_not_initialize).
-                    if let [FieldStep::Prop(n)] = &steps[..] {
-                        let target = match &lazy_root {
-                            Some(r) => Some(r.clone()),
-                            None => match base {
-                                FieldBase::Local(s) => self.frames[top].slots.get(s as usize).map(|v| v.deref_clone()),
-                                FieldBase::Global(s) => self.frames[0].slots.get(s as usize).map(|v| v.deref_clone()),
-                                FieldBase::Superglobal(i) => self.superglobals.get(i as usize).map(|v| v.deref_clone()),
-                                FieldBase::This => self.frames[top].this.as_ref().map(|v| v.deref_clone()),
-                            },
-                        };
-                        if let Some(o) = target.as_ref().and_then(deref_object) {
-                            let cid = o.borrow().class_id as usize;
-                            let key = self.prop_storage_key(cid, n, self.frames[top].class);
-                            if matches!(o.borrow().props.get(&key), Some(Zval::Undef)) {
-                                if let Some((decl, hint)) = prop_type_decl(&self.classes, cid, n) {
-                                    if !hint.nullable {
-                                        return Err(PhpError::Error(format!(
-                                            "Cannot access uninitialized non-nullable property {}::${} by reference",
-                                            String::from_utf8_lossy(&self.classes[decl].name),
-                                            String::from_utf8_lossy(n),
-                                        )));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    let cell = {
-                        let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
-                        if let Some(mut root) = lazy_root {
-                            field_cell(&mut root, &steps, &mut keys.into_iter(), fs)
-                        } else {
-                            let base_cell = field_base_mut(&mut self.frames, &mut self.superglobals, top, base)?;
-                            if steps.is_empty() {
-                                make_cell(base_cell)
-                            } else {
-                                field_cell(base_cell, &steps, &mut keys.into_iter(), fs)
-                            }
-                        }
-                    };
-                    // A reference to a *typed* property keeps enforcing its type
-                    // on writes through the alias (PHP's typed references).
-                    match &steps[..] {
-                        [FieldStep::Prop(name)] => {
-                            let name = name.clone();
-                            self.register_prop_typed_ref(base, top, &name, &cell);
-                        }
-                        [FieldStep::PropDyn] => {
-                            if let Some(k) = keys_first_backup.as_ref() {
-                                let name = self.dyn_prop_name_value(k)?;
-                                self.register_prop_typed_ref(base, top, &name, &cell);
-                            }
-                        }
-                        _ => {}
-                    }
+                    let cell = self.make_ref_cell(top, base, &steps, keys)?;
                     self.frames[top].stack.push(Zval::Ref(cell));
+                }
+                Op::PushArgPlace { base, steps, name } => {
+                    // SEND_VAR_EX place argument (FETCH_DIM/OBJ_FUNC_ARG):
+                    // capture the evaluated keys and defer the fetch to the
+                    // dispatch binder, which W-fetches (by-ref param) or
+                    // R-fetches.
+                    let keys = self.pop_field_keys(top, &steps);
+                    let pbase = match base {
+                        FieldBase::Local(s) => ArgPlaceBase::Local(s),
+                        FieldBase::Global(s) => ArgPlaceBase::Global(s),
+                        FieldBase::Superglobal(i) => ArgPlaceBase::Superglobal(i),
+                        FieldBase::This => ArgPlaceBase::This,
+                    };
+                    let psteps: Box<[ArgPlaceStep]> = steps
+                        .iter()
+                        .map(|s| match s {
+                            FieldStep::Index => ArgPlaceStep::Index,
+                            FieldStep::Prop(n) => ArgPlaceStep::Prop(n.clone()),
+                            _ => unreachable!("PushArgPlace step"),
+                        })
+                        .collect();
+                    let pname: Box<[u8]> = match &self.frames[top].func.consts[name as usize] {
+                        crate::bytecode::Const::Str(b) => b.clone(),
+                        _ => Box::default(),
+                    };
+                    self.frames[top].stack.push(Zval::ArgPlace(Rc::new(ArgPlace {
+                        base: pbase,
+                        steps: psteps,
+                        keys,
+                        name: pname,
+                    })));
                 }
                 Op::BindRefTo { base, steps } => {
                     // REF-4: pop the reference, bind the target place to its cell,
@@ -3343,7 +3137,7 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(Zval::Bool(result));
                 }
                 Op::StaticCall { target, method, forwarding, argc } => {
-                    let args = self.pop_keys(top, argc);
+                    let mut args = self.pop_keys(top, argc);
                     let start = self.target_class_id(target, top)?;
                     // `Fiber::suspend` / `Fiber::getCurrent` are native static
                     // dispatch (GEN-4), handled before normal method resolution.
@@ -3357,7 +3151,11 @@ impl<'m> super::Vm<'m> {
                                     ))
                                 }
                             };
-                            // Decay a reference pushed by a dynamic call (SEND_VAR_EX).
+                            // Decay a reference pushed by a dynamic call (SEND_VAR_EX);
+                            // a deferred place argument reads by value (native callee).
+                            if args.iter().any(|a| matches!(a, Zval::ArgPlace(_))) {
+                                self.materialize_arg_places(top, &mut args, None)?;
+                            }
                             let value = args.into_iter().next().map(decay_arg).unwrap_or(Zval::Null);
                             // Park the whole fiber segment; it is restored by resume.
                             let parked = self.frames.split_off(baseline);
@@ -3675,12 +3473,21 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(Zval::Object(obj));
                 }
                 Op::InvokeCtor { argc } => {
-                    let args = self.pop_keys(top, argc);
+                    let mut args = self.pop_keys(top, argc);
                     let recv = self.frames[top].stack.pop().expect("InvokeCtor receiver");
                     let this = recv.deref_clone();
                     let cid = object_class_id(&this).expect("InvokeCtor on a non-object");
                     match resolve_method_runtime(&self.classes, cid, b"__construct") {
                         Some((defc, midx)) => {
+                            // Deferred place arguments (SEND_VAR_EX) resolve against
+                            // the now-known constructor's by-ref mask.
+                            if args.iter().any(|a| matches!(a, Zval::ArgPlace(_))) {
+                                let cls = self.classes[defc];
+                                let ctor = &cls.methods[midx].func;
+                                self.materialize_arg_places(top, &mut args, Some(ctor))?;
+                                let line = self.cur_line(top);
+                                self.flush_diags(line)?;
+                            }
                             let callee = &self.classes[defc].methods[midx].func;
                             let mut frame = Frame::new(callee, self.class_mod(defc));
                             bind_params(&mut frame, args);
@@ -4302,5 +4109,254 @@ impl<'m> super::Vm<'m> {
                 Op::Nop => {}
             }
         }
+    }
+
+    /// Navigate a place (base + `steps`; `keys` already popped, source order) to
+    /// its leaf, promote it to a shared cell, and return that cell — the body of
+    /// [`Op::MakeRef`], shared with the dynamic-dispatch binder's by-reference
+    /// materialization of a deferred [`Zval::ArgPlace`] (SEND_VAR_EX).
+    pub(super) fn make_ref_cell(
+        &mut self,
+        top: usize,
+        base: FieldBase,
+        steps: &[FieldStep],
+        keys: Vec<Zval>,
+    ) -> Result<Rc<RefCell<Zval>>, PhpError> {
+            // First key retained past the cell walk (a dynamic-name
+            // typed-ref registration needs it after keys are consumed).
+            let keys_first_backup = keys.first().cloned();
+            // EXCEPTION checked FIRST (it must pre-empt hook/lazy
+            // machinery): a ref fetch under the wrapper's own
+            // suppressed `__get` guard stays on the wrapper's raw
+            // storage without initializing (gh20854's
+            // `return $this->x;` in the wrapper's `&__get`).
+            let guarded_ref_fetch = 'grf: {
+                let n: Box<[u8]> = match &steps[..] {
+                    [FieldStep::Prop(n)] => n.clone(),
+                    [FieldStep::PropDyn] => match keys.first().cloned() {
+                        Some(k) => self.dyn_prop_name_value(&k)?,
+                        None => break 'grf false,
+                    },
+                    _ => break 'grf false,
+                };
+                let target = match base {
+                    FieldBase::Local(s) => self.frames[top].slots.get(s as usize).map(|v| v.deref_clone()),
+                    FieldBase::Global(s) => self.frames[0].slots.get(s as usize).map(|v| v.deref_clone()),
+                    FieldBase::Superglobal(i) => self.superglobals.get(i as usize).map(|v| v.deref_clone()),
+                    FieldBase::This => self.frames[top].this.as_ref().map(|v| v.deref_clone()),
+                };
+                let Some(o) = target.and_then(|v| deref_object(&v)) else { break 'grf false };
+                let (uninit, oid, cid) = {
+                    let b = o.borrow();
+                    (b.lazy.is_some() && b.proxy_instance.is_none(), b.id, b.class_id as usize)
+                };
+                uninit
+                    && self.magic_guard.contains(&(oid, MagicKind::Get, n.to_vec()))
+                    && resolve_method_runtime(&self.classes, cid, b"__get").is_some()
+            };
+            // A `&get` hook makes the property addressable: the reference
+            // the hook returns is the path's root (PHP 8.4).
+            if !guarded_ref_fetch {
+                if let Some(root) = self.byref_hook_root(base, top, &steps)? {
+                    let cell = if steps.len() == 1 {
+                        root
+                    } else {
+                        let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
+                        let mut root_val = Zval::Ref(root);
+                        field_cell(&mut root_val, &steps[1..], &mut keys.into_iter(), fs)
+                    };
+                    return Ok(cell);
+                }
+            }
+            // A property whose set visibility excludes this scope hands
+            // out a reference to a *copy* (PHP 8.4 asymmetric visibility).
+            if let Some(cell) = self.asym_set_ref_copy(base, top, &steps) {
+                return Ok(cell);
+            }
+            // Taking a reference *to* a hooked property is indirect modification.
+            self.reject_indirect_hook(base, top, &steps)?;
+            // A reference fetch of a lazy object's property initializes it
+            // first (PHP 8.4, fetch_ref_initializes) — a skipped/raw-set
+            // property does not — and a forwarding proxy binds the
+            // *instance*'s cell, so the walk roots there (unless the
+            // guarded-ref-fetch exception above applies).
+            let lazy_root = if guarded_ref_fetch {
+                None
+            } else {
+                self.field_lazy_root(base, top, &steps, &keys, false)?
+            };
+            // `&$o->magic` consults `__get` (gh21478-proxy-get-ref-
+            // forward, gh20875_proxy_get_no_init): the magic result
+            // binds as a fresh cell — an uninitialized proxy dispatches
+            // on the wrapper WITHOUT initializing. Under an ACTIVE
+            // guard the fetch degrades to an undefined READ (warning,
+            // detached NULL cell — nothing materializes).
+            let makeref_magic: Option<Rc<RefCell<Zval>>> = 'makeref_magic: {
+                let n: Box<[u8]> = match &steps[..] {
+                    [FieldStep::Prop(n)] => n.clone(),
+                    [FieldStep::PropDyn] => {
+                        let Some(k) = keys.first().cloned() else { break 'makeref_magic None };
+                        self.dyn_prop_name_value(&k)?
+                    }
+                    _ => break 'makeref_magic None,
+                };
+                let target = match base {
+                    FieldBase::Local(s) => self.frames[top].slots.get(s as usize).map(|v| v.deref_clone()),
+                    FieldBase::Global(s) => self.frames[0].slots.get(s as usize).map(|v| v.deref_clone()),
+                    FieldBase::Superglobal(i) => self.superglobals.get(i as usize).map(|v| v.deref_clone()),
+                    FieldBase::This => self.frames[top].this.as_ref().map(|v| v.deref_clone()),
+                };
+                let Some(o) = target.and_then(|v| deref_object(&v)) else { break 'makeref_magic None };
+                let cur = self.frames[top].class;
+                let oid = o.borrow().id;
+                // For a forwarding wrapper the guard may be held on the
+                // instance's handle — honor both before dispatching.
+                let inst = deref_object(&self.proxy_view(Zval::Object(Rc::clone(&o))));
+                let inst_guard = inst
+                    .as_ref()
+                    .is_some_and(|io| self.magic_guard.contains(&(io.borrow().id, MagicKind::Get, n.to_vec())));
+                if !inst_guard && self.magic_applies(&o, &n, cur, MagicKind::Get, b"__get").is_some() {
+                    let gkey = (oid, MagicKind::Get, n.to_vec());
+                    let ins = self.magic_guard.insert(gkey.clone());
+                    let r = self.call_method_sync(
+                        Zval::Object(Rc::clone(&o)),
+                        b"__get",
+                        vec![Zval::Str(PhpStr::new(n.to_vec()))],
+                    );
+                    if ins {
+                        self.magic_guard.remove(&gkey);
+                    }
+                    let v = r?;
+                    break 'makeref_magic Some(Rc::new(RefCell::new(v.deref_clone())));
+                }
+                // `__get` guard-suppressed on a forwarding PROXY WRAPPER
+                // with an absent slot: Zend's ptr-fetch falls back to a
+                // READ — undefined-property warning naming the INSTANCE
+                // class, detached NULL cell, nothing materializes. (A
+                // plain object instead materializes with the creation
+                // deprecation — gh20854.)
+                let is_wrapper = {
+                    let b = o.borrow();
+                    b.lazy.is_some() && b.proxy_instance.is_some()
+                };
+                if is_wrapper {
+                    let cid_o = o.borrow().class_id as usize;
+                    let has_get = resolve_method_runtime(&self.classes, cid_o, b"__get").is_some();
+                    let undeclared = matches!(
+                        resolve_prop_access(&self.classes, cid_o, &n, cur),
+                        PropAccess::Dynamic
+                    );
+                    let absent_on_inst = inst
+                        .as_ref()
+                        .is_some_and(|io| !io.borrow().props.contains(n.as_ref()));
+                    let guarded = inst_guard
+                        || self.magic_guard.contains(&(oid, MagicKind::Get, n.to_vec()));
+                    if has_get && undeclared && absent_on_inst && guarded {
+                        let icid = inst
+                            .as_ref()
+                            .map(|io| io.borrow().class_id as usize)
+                            .unwrap_or(cid_o);
+                        self.diags.push(Diag::Warning(format!(
+                            "Undefined property: {}::${}",
+                            String::from_utf8_lossy(&self.classes[icid].name),
+                            String::from_utf8_lossy(&n),
+                        )));
+                        break 'makeref_magic Some(Rc::new(RefCell::new(Zval::Null)));
+                    }
+                }
+                None
+            };
+            if let Some(cell) = makeref_magic {
+                return Ok(cell);
+            }
+            // `&$o->undeclared` MATERIALIZES the property: on a class not
+            // allowing dynamic props that is the creation deprecation
+            // (gh20854's `&__get` returning an absent `$this->x`).
+            if let [FieldStep::Prop(n)] = &steps[..] {
+                let target = match &lazy_root {
+                    Some(r) => Some(r.clone()),
+                    None => match base {
+                        FieldBase::Local(s) => self.frames[top].slots.get(s as usize).map(|v| v.deref_clone()),
+                        FieldBase::Global(s) => self.frames[0].slots.get(s as usize).map(|v| v.deref_clone()),
+                        FieldBase::Superglobal(i) => self.superglobals.get(i as usize).map(|v| v.deref_clone()),
+                        FieldBase::This => self.frames[top].this.as_ref().map(|v| v.deref_clone()),
+                    },
+                };
+                if let Some(o) = target.as_ref().and_then(deref_object) {
+                    let ocid = o.borrow().class_id as usize;
+                    let dynamic = matches!(
+                        resolve_prop_access(&self.classes, ocid, n, self.frames[top].class),
+                        PropAccess::Dynamic
+                    );
+                    if dynamic
+                        && !o.borrow().props.contains(n.as_ref())
+                        && !self.allows_dynamic_props(ocid)
+                    {
+                        let cls = String::from_utf8_lossy(&self.classes[ocid].name).into_owned();
+                        let prop = String::from_utf8_lossy(n).into_owned();
+                        self.diags.push(Diag::Deprecated(format!(
+                            "Creation of dynamic property {cls}::${prop} is deprecated"
+                        )));
+                    }
+                }
+            }
+            // Taking a reference to an *uninitialized* non-nullable typed
+            // property is an error (zend_fetch_property_address,
+            // fetch_ref_skipped_prop_does_not_initialize).
+            if let [FieldStep::Prop(n)] = &steps[..] {
+                let target = match &lazy_root {
+                    Some(r) => Some(r.clone()),
+                    None => match base {
+                        FieldBase::Local(s) => self.frames[top].slots.get(s as usize).map(|v| v.deref_clone()),
+                        FieldBase::Global(s) => self.frames[0].slots.get(s as usize).map(|v| v.deref_clone()),
+                        FieldBase::Superglobal(i) => self.superglobals.get(i as usize).map(|v| v.deref_clone()),
+                        FieldBase::This => self.frames[top].this.as_ref().map(|v| v.deref_clone()),
+                    },
+                };
+                if let Some(o) = target.as_ref().and_then(deref_object) {
+                    let cid = o.borrow().class_id as usize;
+                    let key = self.prop_storage_key(cid, n, self.frames[top].class);
+                    if matches!(o.borrow().props.get(&key), Some(Zval::Undef)) {
+                        if let Some((decl, hint)) = prop_type_decl(&self.classes, cid, n) {
+                            if !hint.nullable {
+                                return Err(PhpError::Error(format!(
+                                    "Cannot access uninitialized non-nullable property {}::${} by reference",
+                                    String::from_utf8_lossy(&self.classes[decl].name),
+                                    String::from_utf8_lossy(n),
+                                )));
+                            }
+                        }
+                    }
+                }
+            }
+            let cell = {
+                let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
+                if let Some(mut root) = lazy_root {
+                    field_cell(&mut root, &steps, &mut keys.into_iter(), fs)
+                } else {
+                    let base_cell = field_base_mut(&mut self.frames, &mut self.superglobals, top, base)?;
+                    if steps.is_empty() {
+                        make_cell(base_cell)
+                    } else {
+                        field_cell(base_cell, &steps, &mut keys.into_iter(), fs)
+                    }
+                }
+            };
+            // A reference to a *typed* property keeps enforcing its type
+            // on writes through the alias (PHP's typed references).
+            match &steps[..] {
+                [FieldStep::Prop(name)] => {
+                    let name = name.clone();
+                    self.register_prop_typed_ref(base, top, &name, &cell);
+                }
+                [FieldStep::PropDyn] => {
+                    if let Some(k) = keys_first_backup.as_ref() {
+                        let name = self.dyn_prop_name_value(k)?;
+                        self.register_prop_typed_ref(base, top, &name, &cell);
+                    }
+                }
+                _ => {}
+            }
+            Ok(cell)
     }
 }

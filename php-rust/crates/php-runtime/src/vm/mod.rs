@@ -20,8 +20,8 @@ use std::collections::{BTreeMap, BinaryHeap, HashMap, HashSet};
 use std::rc::Rc;
 
 use php_types::{
-    convert, open_file_stream, open_php_stream, ops, Closure, ClosureInfo, ClosureParam,
-    ClosureRender, Diag,
+    convert, open_file_stream, open_php_stream, ops, ArgPlace, ArgPlaceBase, ArgPlaceStep, Closure,
+    ClosureInfo, ClosureParam, ClosureRender, Diag,
     Diags, DirHandle, GenKey, GenState, GenStatus, Key, LazyKind, Object, ObjectInfo, PhpArray, PhpError,
     PhpStr, PropVis, Props, ResKind, Resource, Stream, StreamBackend, Zval,
 };
@@ -6657,6 +6657,186 @@ impl<'m> Vm<'m> {
     }
 
     /// Dispatch a static method call `start::method(args)` whose starting class
+    /// The resolved user callee whose signature decides SEND_VAR_EX for a
+    /// dynamic *instance* call, or `None` when every argument is by-value
+    /// anyway (non-object/native receiver, `__call` routing, unresolved or
+    /// invisible method).
+    fn instance_arg_ref_target(&self, top: usize, this: &Zval, method: &[u8]) -> Option<&'m Func> {
+        let Zval::Object(o) = this else { return None };
+        let cid = o.borrow().class_id as usize;
+        let (defc, midx) = resolve_method_runtime(&self.classes, cid, method)?;
+        if !method_visible_from(
+            &self.classes,
+            self.frames[top].class,
+            self.classes[defc].methods[midx].visibility,
+            defc,
+            method,
+        ) {
+            return None; // routes to `__call`: arguments are by-value
+        }
+        let cls = self.classes[defc];
+        Some(&cls.methods[midx].func)
+    }
+
+    /// The static-call analogue of [`Self::instance_arg_ref_target`]:
+    /// `None` (all by-value) for a missing/invisible method (`__callStatic`).
+    fn static_arg_ref_target(&self, top: usize, start: ClassId, method: &[u8]) -> Option<&'m Func> {
+        let (defc, midx) = resolve_method_runtime(&self.classes, start, method)?;
+        if !method_visible_from(
+            &self.classes,
+            self.frames[top].class,
+            self.classes[defc].methods[midx].visibility,
+            defc,
+            method,
+        ) {
+            return None;
+        }
+        let cls = self.classes[defc];
+        Some(&cls.methods[midx].func)
+    }
+
+    /// Zend's SEND_VAR_EX decision point for deferred place arguments
+    /// ([`Zval::ArgPlace`], pushed by [`Op::PushArgPlace`]): resolve each
+    /// against the callee's by-reference mask. A by-ref parameter W-fetches
+    /// the place via [`Self::make_ref_cell`] (aliases it, silently creating a
+    /// missing key); a by-value one — or any argument of a `None` callee
+    /// (native / `__call` / unresolved) — R-fetches it (plain read semantics:
+    /// "Undefined variable"/"Undefined array key" warnings, nothing created).
+    /// Runs in the *caller's* frame, before the callee frame is built.
+    fn materialize_arg_places(
+        &mut self,
+        top: usize,
+        args: &mut [Zval],
+        callee: Option<&Func>,
+    ) -> Result<(), PhpError> {
+        for (i, a) in args.iter_mut().enumerate() {
+            let Zval::ArgPlace(p) = a else { continue };
+            let p = Rc::clone(p);
+            let by_ref = callee.is_some_and(|f| match f.variadic_slot {
+                Some(v) if i >= v as usize => f.param_by_ref.get(v as usize).copied().unwrap_or(false),
+                _ => f.param_by_ref.get(i).copied().unwrap_or(false),
+            });
+            let base = match p.base {
+                ArgPlaceBase::Local(s) => FieldBase::Local(s),
+                ArgPlaceBase::Global(s) => FieldBase::Global(s),
+                ArgPlaceBase::Superglobal(x) => FieldBase::Superglobal(x),
+                ArgPlaceBase::This => FieldBase::This,
+            };
+            *a = if by_ref {
+                let steps: Vec<FieldStep> = p
+                    .steps
+                    .iter()
+                    .map(|s| match s {
+                        ArgPlaceStep::Index => FieldStep::Index,
+                        ArgPlaceStep::Prop(n) => FieldStep::Prop(n.clone()),
+                    })
+                    .collect();
+                let cell = self.make_ref_cell(top, base, &steps, p.keys.clone())?;
+                Zval::Ref(cell)
+            } else {
+                self.arg_place_read(top, base, &p)?
+            };
+        }
+        Ok(())
+    }
+
+    /// R-fetch of a deferred place argument (the by-value branch of
+    /// SEND_VAR_EX): read the root like `Op::LoadVar` (an `Undef` slot warns
+    /// "Undefined variable"), then walk each step — `Index` like
+    /// `Op::FetchDim` (`offsetGet` for an ArrayAccess object, a warning read
+    /// otherwise), `Prop` like `Op::PropGet` driven synchronously.
+    fn arg_place_read(&mut self, top: usize, base: FieldBase, p: &ArgPlace) -> Result<Zval, PhpError> {
+        let mut v = match base {
+            FieldBase::Local(s) => {
+                if matches!(self.frames[top].slots[s as usize], Zval::Undef) && !p.name.is_empty() {
+                    self.diags.push(Diag::Warning(format!(
+                        "Undefined variable ${}",
+                        String::from_utf8_lossy(&p.name)
+                    )));
+                }
+                arrays::read_slot(&self.frames[top].slots[s as usize])
+            }
+            FieldBase::Global(s) => {
+                if matches!(self.frames[0].slots[s as usize], Zval::Undef) && !p.name.is_empty() {
+                    self.diags.push(Diag::Warning(format!(
+                        "Undefined variable ${}",
+                        String::from_utf8_lossy(&p.name)
+                    )));
+                }
+                arrays::read_slot(&self.frames[0].slots[s as usize])
+            }
+            FieldBase::Superglobal(i) => self.superglobals[i as usize].deref_clone(),
+            FieldBase::This => match &self.frames[top].this {
+                Some(t) => t.deref_clone(),
+                None => {
+                    return Err(PhpError::Error(
+                        "Using $this when not in object context".to_string(),
+                    ))
+                }
+            },
+        };
+        let mut keys = p.keys.iter();
+        for step in p.steps.iter() {
+            match step {
+                ArgPlaceStep::Index => {
+                    let k = keys.next().expect("arg place key per Index step");
+                    if let Some(recv) = self.as_arrayaccess(&v) {
+                        v = self.call_method_sync(recv, b"offsetGet", vec![k.clone()])?;
+                    } else {
+                        v = arrays::read_dim_warn(&v, k, &mut self.diags);
+                    }
+                }
+                ArgPlaceStep::Prop(n) => {
+                    v = self.prop_read_sync(top, v, n)?;
+                }
+            }
+        }
+        Ok(v)
+    }
+
+    /// Synchronous property read with `Op::PropGet` semantics, for the
+    /// R-branch of a deferred place argument: lazy initialization, `get`
+    /// hooks and `__get` (driven to completion inline), visibility check,
+    /// private-storage key, uninitialized-typed-property error, and the
+    /// "Undefined property"/"Attempt to read property" warnings.
+    fn prop_read_sync(&mut self, top: usize, obj: Zval, name: &[u8]) -> Result<Zval, PhpError> {
+        let cur = self.frames[top].class;
+        let target = self.lazy_prop_access(obj, name, cur, Some(false), (MagicKind::Get, b"__get"))?;
+        let mut key = name.to_vec();
+        if let Zval::Object(o) = &target {
+            let (oid, cid) = {
+                let b = o.borrow();
+                (b.id, b.class_id as usize)
+            };
+            if !self.hook_guarded(oid, name) {
+                if let Some(func) = self.prop_hook(cid, name, false) {
+                    let baseline = self.frames.len();
+                    self.push_hook(func, target.clone(), oid, name, None);
+                    return self.drive_to_return(baseline);
+                }
+                // A virtual hooked property with no get hook is write-only.
+                if self.is_virtual_hooked(cid, name) {
+                    return Err(PhpError::Error(format!(
+                        "Property {}::${} is write-only",
+                        String::from_utf8_lossy(&self.classes[cid].name),
+                        String::from_utf8_lossy(name),
+                    )));
+                }
+            }
+            if let Some((defc, midx, oid)) = self.magic_applies(o, name, cur, MagicKind::Get, b"__get") {
+                let baseline = self.frames.len();
+                self.push_magic_prop(defc, midx, oid, MagicKind::Get, target.clone(), name, None, None, false);
+                return self.drive_to_return(baseline);
+            }
+            check_prop_access(&self.classes, cur, o.borrow().class_id as usize, name)?;
+            key = self.prop_storage_key(o.borrow().class_id as usize, name, cur);
+            if let Some(err) = self.uninit_typed_read(o, &key, name) {
+                return Err(err);
+            }
+        }
+        Ok(read_property(&target, &key, &mut self.diags))
+    }
+
     /// `start` is already resolved (OOP-2a). `forwarding` is true for
     /// `self`/`parent`/`static` (keep the caller's LSB class and `$this`), false
     /// for a named/dynamic class (rebind LSB; forward `$this` only when the
@@ -6672,9 +6852,20 @@ impl<'m> Vm<'m> {
         start: ClassId,
         method: &[u8],
         forwarding: bool,
-        args: Vec<Zval>,
+        mut args: Vec<Zval>,
         named: Vec<(Box<[u8]>, Zval)>,
     ) -> Result<(), PhpError> {
+        // Deferred place arguments (SEND_VAR_EX) resolve against the callee's
+        // by-ref mask now that it is known; an unresolved/invisible target
+        // (`__callStatic`, enum builtin) takes every argument by value.
+        if args.iter().any(|a| matches!(a, Zval::ArgPlace(_))) {
+            let callee = self.static_arg_ref_target(top, start, method);
+            self.materialize_arg_places(top, &mut args, callee)?;
+            // R-fetch warnings report the CALL's line, not the callee's next
+            // emit point.
+            let line = self.cur_line(top);
+            self.flush_diags(line)?;
+        }
         // Enum built-in statics (`cases` / `from` / `tryFrom`) are reserved names
         // that shadow user resolution and produce a value directly rather than
         // entering a frame (step 23). `cases` is on every enum; `from`/`tryFrom`
@@ -9335,7 +9526,7 @@ fn allowed_targets_str(flags: i64) -> String {
 /// objects/closures/generators as `Object(Class)`, resources as `Resource id #N`.
 fn format_bt_arg(v: &Zval) -> String {
     match v {
-        Zval::Undef | Zval::Null => "NULL".to_string(),
+        Zval::Undef | Zval::Null | Zval::ArgPlace(_) => "NULL".to_string(),
         Zval::Bool(true) => "true".to_string(),
         Zval::Bool(false) => "false".to_string(),
         Zval::Long(n) => n.to_string(),
@@ -10299,7 +10490,7 @@ fn match_case_repr(v: &Zval) -> String {
         Zval::Long(i) => i.to_string(),
         Zval::Bool(true) => "true".to_string(),
         Zval::Bool(false) => "false".to_string(),
-        Zval::Null | Zval::Undef => "NULL".to_string(),
+        Zval::Null | Zval::Undef | Zval::ArgPlace(_) => "NULL".to_string(),
         Zval::Double(d) => {
             String::from_utf8_lossy(&php_types::dtoa::double_to_shortest(*d)).into_owned()
         }

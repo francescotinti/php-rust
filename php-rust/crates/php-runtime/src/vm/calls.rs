@@ -200,6 +200,10 @@ pub(super) fn pack_args(args: Vec<Zval>) -> Zval {
 pub(super) fn decay_arg(a: Zval) -> Zval {
     match a {
         Zval::Ref(cell) => cell.borrow().clone(),
+        // Backstop only: every dispatch funnel materializes deferred place
+        // arguments before any decay, so one reaching here is a missed funnel
+        // — degrade to NULL rather than leak the descriptor to user code.
+        Zval::ArgPlace(_) => Zval::Null,
         other => other,
     }
 }

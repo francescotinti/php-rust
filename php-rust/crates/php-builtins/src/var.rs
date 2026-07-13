@@ -35,7 +35,7 @@ pub(crate) fn dump(
     debug: &std::collections::HashMap<u32, Zval>,
 ) {
     match v {
-        Zval::Undef | Zval::Null => out.extend_from_slice(b"NULL\n"),
+        Zval::Undef | Zval::Null | Zval::ArgPlace(_) => out.extend_from_slice(b"NULL\n"),
         Zval::Bool(true) => out.extend_from_slice(b"bool(true)\n"),
         Zval::Bool(false) => out.extend_from_slice(b"bool(false)\n"),
         Zval::Long(n) => out.extend_from_slice(format!("int({n})\n").as_bytes()),
@@ -441,7 +441,7 @@ pub(crate) fn var_export(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
 /// (level > 1) is preceded by `(level-1)` spaces (and, for the opener, a newline).
 pub(crate) fn export_into(out: &mut Vec<u8>, v: &Zval, level: usize, seen: &mut Vec<usize>, diags: &mut Diags) {
     match v {
-        Zval::Undef | Zval::Null => out.extend_from_slice(b"NULL"),
+        Zval::Undef | Zval::Null | Zval::ArgPlace(_) => out.extend_from_slice(b"NULL"),
         Zval::Bool(true) => out.extend_from_slice(b"true"),
         Zval::Bool(false) => out.extend_from_slice(b"false"),
         Zval::Long(n) => out.extend_from_slice(n.to_string().as_bytes()),

@@ -105,7 +105,7 @@ fn ser_into(out: &mut Vec<u8>, v: &Zval, sc: &mut SerCtx) -> Result<(), PhpError
 
 fn ser_body(out: &mut Vec<u8>, v: &Zval, sc: &mut SerCtx) -> Result<(), PhpError> {
     match v {
-        Zval::Undef | Zval::Null => out.extend_from_slice(b"N;"),
+        Zval::Undef | Zval::Null | Zval::ArgPlace(_) => out.extend_from_slice(b"N;"),
         Zval::Bool(b) => {
             out.extend_from_slice(b"b:");
             out.push(if *b { b'1' } else { b'0' });

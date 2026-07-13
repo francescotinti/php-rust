@@ -1664,6 +1664,58 @@ impl<'a> super::FnCompiler<'a> {
                     self.emit(Op::PushRef(*slot));
                 }
                 _ => {
+                    // A *place* argument (`$a['k']`, `$_SESSION[$k]`, `$this->p`,
+                    // `$o->p['k']`…) defers its fetch to the dispatch binder
+                    // (Zend's FETCH_DIM/OBJ_FUNC_ARG): a by-ref parameter
+                    // W-fetches (aliases, creating a missing key silently), a
+                    // by-value one R-fetches (warns, creates nothing). Only
+                    // `Index`/literal-`Prop` paths rooted at a variable/`$this`
+                    // defer; a dynamic property name or call-result base stays
+                    // a plain value read (residual gap, documented).
+                    if let Some(place) = expr_field_place(a) {
+                        let base = match place.base {
+                            PlaceBase::Local(s) => Some(FieldBase::Local(s)),
+                            PlaceBase::Global(s) => Some(FieldBase::Global(s)),
+                            PlaceBase::Superglobal(i) => Some(FieldBase::Superglobal(i)),
+                            PlaceBase::This => Some(FieldBase::This),
+                            _ => None,
+                        };
+                        if let (Some(base), true) = (
+                            base,
+                            !place.steps.is_empty()
+                                && place
+                                    .steps
+                                    .iter()
+                                    .all(|s| matches!(s, PlaceStep::Index(_) | PlaceStep::Prop(_))),
+                        ) {
+                            let mut steps = Vec::with_capacity(place.steps.len());
+                            for step in &place.steps {
+                                match step {
+                                    PlaceStep::Index(k) => {
+                                        self.expr(k)?;
+                                        steps.push(FieldStep::Index);
+                                    }
+                                    PlaceStep::Prop(n) => steps.push(FieldStep::Prop(n.clone())),
+                                    _ => unreachable!("filtered above"),
+                                }
+                            }
+                            let name: Box<[u8]> = match place.base {
+                                PlaceBase::Local(s) => self
+                                    .slot_names
+                                    .get(s as usize)
+                                    .cloned()
+                                    .unwrap_or_default(),
+                                _ => Box::default(),
+                            };
+                            let name = self.konst(Const::Str(name));
+                            self.emit(Op::PushArgPlace {
+                                base,
+                                steps: steps.into(),
+                                name,
+                            });
+                            continue;
+                        }
+                    }
                     self.expr(a)?;
                 }
             }
@@ -1782,7 +1834,10 @@ impl<'a> super::FnCompiler<'a> {
             self.build_args_array_named(args, named)?;
             self.emit(Op::InvokeCtorArgs);
         } else {
-            self.push_value_args(args)?;
+            // The constructor — hence its by-ref params — is only known at run
+            // time: push plain variables by reference and places as deferred
+            // descriptors (SEND_VAR_EX); the `InvokeCtor` binder resolves them.
+            self.push_dyn_args(args)?;
             self.emit(Op::InvokeCtor { argc: args.len() as u32 });
         }
         Ok(())
@@ -1921,7 +1976,20 @@ impl<'a> super::FnCompiler<'a> {
         if let Some((defc, midx)) = ctor {
             self.emit(Op::Dup); // keep the instance as the result; the dup is the receiver
             let argc = if named.is_empty() {
-                self.push_value_args(args)?;
+                // Honour the constructor's by-reference parameters (REF-2) like
+                // any other compile-time-resolved callee: the caller's cell (or
+                // a `MakeRef`'d place) for a `&$p` slot, plain values otherwise.
+                let decl = &self.ctx.classes[defc].methods[midx].decl;
+                if decl.params.iter().any(|p| p.by_ref) {
+                    let by_ref: Vec<bool> = decl.params.iter().map(|p| p.by_ref).collect();
+                    let pnames: Vec<Box<[u8]>> =
+                        decl.slots.iter().take(decl.params.len()).cloned().collect();
+                    let mut fname = self.ctx.classes[cid].name.to_vec();
+                    fname.extend_from_slice(b"::__construct");
+                    self.push_call_args(args, &by_ref, &fname, &pnames)?;
+                } else {
+                    self.push_value_args(args)?;
+                }
                 args.len() as u32
             } else {
                 // Resolve named arguments against the constructor's parameters (PAR).

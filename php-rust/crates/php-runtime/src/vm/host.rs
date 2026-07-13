@@ -1714,7 +1714,7 @@ impl<'m> super::Vm<'m> {
             })?
             .deref_clone();
         let name: String = match &v {
-            Zval::Undef | Zval::Null => "null".to_string(),
+            Zval::Undef | Zval::Null | Zval::ArgPlace(_) => "null".to_string(),
             Zval::Bool(_) => "bool".to_string(),
             Zval::Long(_) => "int".to_string(),
             Zval::Double(_) => "float".to_string(),

@@ -12,7 +12,7 @@ use crate::{PhpStr, ZStr, Zval};
 /// "Warning: unexpected NAN value was coerced to bool").
 pub fn to_bool(v: &Zval, diags: &mut Diags) -> bool {
     match v {
-        Zval::Undef | Zval::Null => false,
+        Zval::Undef | Zval::Null | Zval::ArgPlace(_) => false,
         Zval::Bool(b) => *b,
         Zval::Long(l) => *l != 0,
         Zval::Double(d) => {
@@ -42,7 +42,7 @@ pub fn to_bool(v: &Zval, diags: &mut Diags) -> bool {
 pub fn is_true_silent(v: &Zval) -> bool {
     match v {
         Zval::Double(d) => *d != 0.0 || d.is_nan(),
-        Zval::Undef | Zval::Null => false,
+        Zval::Undef | Zval::Null | Zval::ArgPlace(_) => false,
         Zval::Bool(b) => *b,
         Zval::Long(l) => *l != 0,
         Zval::Str(s) => {
@@ -124,7 +124,7 @@ pub fn dval_to_lval_safe(d: f64, diags: &mut Diags) -> i64 {
 /// representable as an int, cast occurred").
 pub fn to_long_cast(v: &Zval, diags: &mut Diags) -> i64 {
     match v {
-        Zval::Undef | Zval::Null => 0,
+        Zval::Undef | Zval::Null | Zval::ArgPlace(_) => 0,
         Zval::Bool(b) => *b as i64,
         Zval::Long(l) => *l,
         Zval::Double(d) => {
@@ -156,7 +156,7 @@ pub fn to_long_cast(v: &Zval, diags: &mut Diags) -> i64 {
 /// zval_get_double semantics (silent).
 pub fn to_double(v: &Zval) -> f64 {
     match v {
-        Zval::Undef | Zval::Null => 0.0,
+        Zval::Undef | Zval::Null | Zval::ArgPlace(_) => 0.0,
         Zval::Bool(b) => *b as i64 as f64,
         Zval::Long(l) => *l as f64,
         Zval::Double(d) => *d,
@@ -178,7 +178,7 @@ pub fn to_double(v: &Zval) -> f64 {
 /// warning (they only TypeError in stricter contexts handled elsewhere).
 pub fn to_zstr(v: &Zval, diags: &mut Diags) -> ZStr {
     match v {
-        Zval::Undef | Zval::Null => PhpStr::empty(),
+        Zval::Undef | Zval::Null | Zval::ArgPlace(_) => PhpStr::empty(),
         Zval::Bool(false) => PhpStr::empty(),
         Zval::Bool(true) => PhpStr::from_str("1"),
         Zval::Long(l) => PhpStr::new(l.to_string().into_bytes()),
