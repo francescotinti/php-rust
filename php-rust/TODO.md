@@ -9,20 +9,26 @@ coverage in [`COVERAGE.md`](COVERAGE.md).
 Current state (2026-07-13): Zend corpus **2445** passing · internal functions
 **784/2143, 37%** (core stdlib **521/654, 80%**) · ext/tokenizer **42/49** ·
 ext/zlib **complete** (30/30, suite 114/115) · **ext/session: COMPLETE** — all
-23 functions + SessionHandler class family, official suite **160/229** with
+23 functions + SessionHandler class family, official suite **161/229** with
 `--run-skipif`. **symfony/http-foundation**: no-session config at **0 errors /
 12 failures** (the 12 spawn a real `php -S` server); the FULL 1790-test suite
 at **10 errors / 27 failures**. **symfony/http-kernel IN PROGRESS**: 1663-test
-suite from 286 errors down to **29 errors / 104 failures**; the DI container
+suite from 286 errors down to **29 errors / 103 failures**; the DI container
 compiles, dumps (PhpDumper byte-identical) and reloads (KernelTest 40/40).
-Landed on the way in session 3: Zend's single class table honoured by every
-autoload path (trait/interface names never re-trigger the autoloader),
-`preg_replace` `$limit`, SplPriorityQueue + a real FilesystemIterator,
-named-args method dispatch using the defining unit's module, hash
-crc32/crc32c, session handlers operating during `session_write_close`,
-`headers_sent(&$file, &$line)` out-params. Top open engine item: **runtime
-by-ref binding for array-element args to dynamic method calls** (Zend
-FUNC_ARG; repro in NEXT_SESSION_HTTP_KERNEL.md).
+Landed in session 4: **runtime by-ref argument binding** (Zend's SEND_VAR_EX /
+FUNC_ARG fetch) — place arguments (`$a['k']`, `$_SESSION[$k]`, `$this->p`,
+`$o->p['k']`) to dynamically-dispatched calls ride as deferred descriptors
+resolved against the callee's by-ref mask at dispatch (W-fetch aliases,
+R-fetch reads with warnings at the call line); **constructors honour by-ref
+parameters** (both compile-time-resolved and dynamic `new`); Doctrine ORM
+improved to **3 err / 14 fail**; `class_exists`/`class_uses` answer for the
+engine-native `Closure`/`Generator` before consulting the autoloader.
+Residual SEND_VAR_EX gaps (dynamic property-name steps, the
+"could not be passed by reference" Error for non-place args) are in
+PHPR_DIVERGENCES. Next: the http-kernel error queue
+(`DateTime*::getLastErrors` ×6, `Dom\HTML_NO_DEFAULT_NS` ×5, `$this`-context
+×3, …) and a first systematic map of the 103 failures
+(NEXT_SESSION_HTTP_KERNEL.md).
 
 ---
 

@@ -12,8 +12,11 @@ interpreter, not to pass a toy subset.
 > SessionHandler class family); symfony/http-foundation runs at **zero errors**
 > without its Session suite (12 failures need a real HTTP server).
 > **symfony/http-kernel is in progress**: its 1663-test suite went from
-> 286 errors to **29 errors / 104 failures** — the DI container now compiles,
-> dumps and reloads under `phpr` (PhpDumper output byte-identical).
+> 286 errors to **29 errors / 103 failures** — the DI container compiles,
+> dumps and reloads under `phpr` (PhpDumper output byte-identical), and
+> by-reference argument binding now matches Zend's runtime SEND_VAR_EX
+> semantics (array-element/property arguments and constructor by-ref
+> parameters alias correctly).
 
 ## Coverage at a glance
 
@@ -87,9 +90,12 @@ phpt-runner --isolate /path/to/php-8.5.7/Zend/tests
 Near-term, highest-leverage work (see [COVERAGE.md](COVERAGE.md) for the data,
 [TODO.md](TODO.md) for the full list):
 
-1. **symfony/http-kernel** — down to 29 errors / 104 failures (of 1663 tests);
-   the top engine item is runtime by-ref argument binding for array-element
-   arguments to dynamically-dispatched methods (Zend's FUNC_ARG fetch).
+1. **symfony/http-kernel** — down to 29 errors / 103 failures (of 1663 tests).
+   Runtime by-ref argument binding (Zend's FUNC_ARG fetch) is done: place
+   arguments ride as deferred descriptors resolved against the callee's
+   by-ref mask at dispatch, and constructors honour by-ref parameters. Next:
+   the error queue (`DateTime*::getLastErrors`, `Dom\HTML_NO_DEFAULT_NS`, …)
+   and a first systematic map of the 103 failures.
 2. ext/session tail — trans-sid URL rewriting, the `SID` constant, shared-ref
    (`r:`) unserialize.
 3. Remaining **core stdlib** gaps — stream filters (userland), timezone

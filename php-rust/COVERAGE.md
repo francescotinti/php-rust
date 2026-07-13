@@ -40,7 +40,7 @@ upstream PHP under `phpr` today:
 
 - **Composer** — `require`, `install`, `diagnose`, `about` (real HTTPS via rustls).
 - **PHPUnit** — 11.5, 13.2 and 13.3-dev, byte-identical output.
-- **Doctrine** — ORM (3484 tests, 3 err / 15 fail), DBAL (3769/0/0), Collections,
+- **Doctrine** — ORM (3484 tests, 3 err / 14 fail), DBAL (3769/0/0), Collections,
   Lexer, Inflector, Event Manager.
 - **Symfony http-foundation** — full component test suite **including
   Tests/Session** (1790 tests): 10 errors / 27 failures, with PHPUnit's
@@ -49,15 +49,18 @@ upstream PHP under `phpr` today:
   functional tests that spawn a real `php -S` server (needs a server SAPI).
   Plus String / Console / Process, already validated earlier.
 - **Symfony http-kernel** — in progress: 1663-test suite from 286 errors down
-  to **29 errors / 104 failures**. The DI container pipeline works end-to-end:
+  to **29 errors / 103 failures**. The DI container pipeline works end-to-end:
   ContainerBuilder compiles, PhpDumper dumps (byte-identical output — its
   `preg_replace(..., limit: 1)` template pruning and `SplPriorityQueue`
   ordering are faithful), the Kernel reloads the dumped container
-  (KernelTest 40/40).
+  (KernelTest 40/40). By-reference argument binding matches Zend's runtime
+  SEND_VAR_EX: array-element/property arguments to dynamically-dispatched
+  methods and constructor by-ref parameters alias correctly (deferred place
+  descriptors resolved against the callee's signature at dispatch).
 - **ext/session** — all 23 functions + SessionHandler and the three handler
   interfaces; files handler byte-identical (0600 `sess_<id>` files, php /
   php_binary / php_serialize serializers, lazy_write, mtime GC); official
-  phpt suite 160/229 with `--run-skipif` (the tail is trans-sid URL rewriting
+  phpt suite 161/229 with `--run-skipif` (the tail is trans-sid URL rewriting
   and the deprecated `SID` constant). Symfony's SessionHandlerProxy write
   path (handler calls during `session_write_close`) works.
 - **PDO + pdo_sqlite + SQLite3** — on `rusqlite`.
@@ -81,7 +84,7 @@ core language stdlib).
 | **standard** | 441 / 544 | **81%** | string, array, math, var, filesystem, streams, output, include_path |
 | **Core** | 50 / 62 | **81%** | class/function introspection, error handling |
 | **date** | 30 / 48 | 63% | DateTime classes, textual strtotime, HTTP-date formats |
-| session | 23 / 23 | **100%** | files + user save handlers, SessionHandler classes, `$_SESSION`; suite 160/229 |
+| session | 23 / 23 | **100%** | files + user save handlers, SessionHandler classes, `$_SESSION`; suite 161/229 |
 | ctype | 11 / 11 | **100%** | complete |
 | json | 5 / 5 | **100%** | complete (HEX_* flags, NUMERIC_CHECK, THROW_ON_ERROR) |
 | SimpleXML | 3 / 3 | **100%** | complete |
@@ -107,8 +110,9 @@ core language stdlib).
 
 1359 functions missing overall; the not-started extensions above account for
 ~780 of them. The current front is **symfony/http-kernel** (29 errors /
-104 failures of 1663 tests); its top engine item is runtime by-ref argument
-binding for array-element arguments to dynamically-dispatched methods.
+103 failures of 1663 tests); runtime by-ref argument binding (Zend's
+FUNC_ARG fetch, including constructor by-ref parameters) landed — next up is
+the remaining error queue and a systematic map of the failures.
 
 ---
 
