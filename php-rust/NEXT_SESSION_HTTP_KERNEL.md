@@ -1,62 +1,66 @@
-# Prossima sessione: symfony/http-kernel — da 0E/38F (TIMEZONE D-DT3 è il lavoro)
+# Prossima sessione: symfony/http-kernel — CHIUSURA da 0E/25F (poi WordPress)
 
-Riprendiamo phpr (PHP 8.5.7 in Rust). La sessione 2026-07-13 (sessione 6) ha
-chiuso TUTTI gli errori e 16 failure in un commit unico gated `2660ee0`:
-**3E/54F → 0E/38F**, e il corpus Zend è salito **2450 → 2469 (+19)**.
-Dettaglio in memoria: `php-rust-symfony-http-kernel` (sezione SESSIONE-6).
+Riprendiamo phpr (PHP 8.5.7 in Rust). La sessione 7 (2026-07-13) ha chiuso
+il big rock **TIMEZONE D-DT3** in un commit gated `78a2ea1`:
+**0E/38F → 0E/25F**, ext/date 160→**212** (+52), ORM 3E/14F→**3E/13F**.
+Dettaglio in memoria: `php-rust-symfony-http-kernel` (sezione SESSIONE-7).
+
+> 🎯 **Contesto roadmap (WP-first, memoria `php-rust-roadmap-wp-first`)**:
+> questa chiusura è PROPEDEUTICA al WP-track — non lasciarla a metà. Quando
+> la coda qui sotto è vuota (o ridotta ai soli test server-based fuori
+> scope), si passa a `NEXT_SESSION_WORDPRESS.md`.
 
 ## Dove siamo
-- Suite http-kernel (1663 test; oracle 0 fail): **0E/38F**.
-- Zend corpus **2469 pass** · ext/session 161 · ext/date 160 ·
-  ext/reflection 175 · ORM 3E/14F · cargo 1530/0.
+- Suite http-kernel (1663 test; oracle 0 fail): **0E/25F** (24 nomi).
+- Zend corpus **2469** · ext/session 161 · ext/date **212** ·
+  ext/reflection 175 · ORM **3E/13F** · cargo **1539/0**.
 - Workspace suite: 56c2e188 `…/scratchpad/symfony/http-kernel`. ORM:
   77b21d67/scratchpad/orm-work.
-- **Baselines gate correnti in 92692ea3/scratchpad**: corpus-d.norm,
-  sess-d.norm, date-d.norm, refl-d.norm, orm-d.names, hk-run11.log/names.
-  Probe sessione-6: p6_out (out-param), p6_tramp (trampolino magic),
-  p6_cname/p6_magic (nomi closure 8.4), p6_eval (scope-bridge),
-  p6_rounset (readonly unset); p6_data/2/3 nel workspace http-kernel.
+- **Baselines gate correnti in 3991dcd8/scratchpad** (gate-e, sessione 7):
+  corpus-e.norm, sess-e.norm, date-e.norm, refl-e.norm, orm-e.names,
+  hk-run12.log/names, gate-e.sh (ricetta completa). Probe p7_tz1.php
+  (timezone, byte-id vs oracle).
 
-## Coda run11 (38F) in ordine di lavoro
-1. **⭐ TIMEZONE (13F) — DateTimeValueResolverTest**: piano architetturale
-   PRONTO in memoria `php-rust-timezone-ddt3-plan`. Sintesi: (a) parser TZif
-   da /usr/share/zoneinfo in Rust (`offset_at` + `wall_to_epoch`, pinnare
-   gap/fold con l'oracle), (b) `default_timezone` VM + date_default_timezone_
-   set/get + INI date.timezone, (c) prelude DateTime: __tz col NOME zona +
-   host fn `__tz_offset`/`__tz_mkts` in ctor/format/getTimezone,
-   (d) setTimezone/diff/createFromInterface, (e) date()/strtotime nel default
-   tz. ⚠️ gate ext/date per NOME a ogni step (baseline 160); probe SEMPRE con
-   tz fissata (l'oracle gira nella zona di sistema).
-2. **Cluster resolver (~14F)**: ContainerControllerResolver 4,
-   QueryParameterValueResolver 4, ControllerResolver 2,
-   RequestAttributeValueResolver 2, ServiceValueResolver 1, NotTagged 1,
-   BackedEnum 1 — riclassificare su hk-run11.log: erano "arrays-equal",
-   alcuni potrebbero essere caduti di riflesso; guardare i diff PHPUnit.
-3. **HttpCache 3+1** (ESI/stale) · **ErrorListener 2** · singoli:
-   LoggerTest, InlineFragmentRenderer, CacheAttributeListener,
-   MergeExtensionConfigurationPass, ExceptionDataCollector.
+## Coda run12 (25F / 24 nomi) in ordine di lavoro
+1. **Cluster resolver (~14F)**: ContainerControllerResolver 4
+   (StaticController#2/#3, UndefinedController#14, RemovedControllerService),
+   QueryParameterValueResolver 4 (2 nomi @parameter), ControllerResolver 2
+   (StaticController#2/#3), RequestAttributeValueResolver 2 (out-of-range
+   int → 404), ServiceValueResolver 1 + NotTagged 1 (ControllerNameIsAnArray),
+   BackedEnum 1 (ResolveThrowsOnTypeError) — riclassificare su hk-run12.log:
+   guardare i diff PHPUnit, alcuni potrebbero cadere insieme.
+2. **HttpCache 3+1**: 2 ESI embedded-response, DegradationWhenCacheLocked,
+   ResponseCacheStrategy LastModifiedIsMerged.
+3. **ErrorListener 2** (LogLevelAttribute su interfaccia, HttpAttribute#3) ·
+   singoli: LoggerTest testLogsWithoutOutput, InlineFragmentRenderer
+   testRenderWithObjectsAsAttributes, CacheAttributeListener @closure,
+   MergeExtensionConfigurationPass testFooBundle, ExceptionDataCollector
+   testCollect.
 
-## Divergenze residue documentate (changelog PHPR_DIVERGENCES sessione-6)
-- Unit eval si chiama `eval()'d code`; Zend `file(line) : eval()'d code`
-  (tocca nomi closure in eval, backtrace, getFileName).
-- Messaggio fromCallable invalido: phpr "is not callable", Zend "Failed to
-  create closure from callable: …".
-- field_aa_walk è gated (prop dichiarata, ≥2 Index, container ArrayAccess);
-  UnsetPath NON walka gli intermedi AA (semantica indirect-modification).
-- __set dopo unset su typed prop non scatta (residuo sessione-5).
+## Divergenze residue documentate (changelog PHPR_DIVERGENCES sessione-7)
+- Timezone: epoch ≥2037 per zone DST usano l'ultimo tipo della tabella TZif
+  (footer POSIX non valutato); nomi IANA/abbreviazioni ("EST") DENTRO le
+  stringhe datetime non parsati (solo UTC/GMT/Z/±offset); DateTimeZone ctor
+  senza validazione (no DateInvalidTimeZoneException).
+- Sessione 6: unit eval `eval()'d code`; messaggio fromCallable; __set dopo
+  unset su typed prop.
 
 ## Lezioni operative (cumulative)
-- df PRIMA dei run pesanti (gate corpus ~4GB temp); `cargo clean` se serve.
-- isset($a[k][k2]) e isset($o->p[k][k2]) = OP DIVERSI (IssetPath/FieldIsset):
-  un fix ai path annidati va fatto in ENTRAMBI.
+- df PRIMA dei run pesanti (gate corpus ~4GB temp; la sessione 7 ha dovuto
+  cancellare la build debug a metà gate — ricostruirla se serve).
+- ⚠️ gm* e locali ora DIVERGONO: mai delegare una gm-variante alla variante
+  locale (bug gmmktime→mktime beccato dal probe in sessione 7).
+- Probe timezone SEMPRE con tz fissata (l'oracle gira nella zona di sistema).
 - Probe con vendor (Data, MockClock): eseguirli NEL workspace della suite.
-- pgrep -fl (non ps|perl); MAI cargo test/build durante un gate phpt;
-  gate per NOME sempre (`--list-fails`), mai solo conteggio.
+- pgrep -fl; MAI cargo test/build durante un gate phpt; gate per NOME sempre
+  (`--list-fails`), mai solo conteggio.
+- I fail phpt nei .txt del runner sono righe `--- /path.phpt ---`.
 
 ## Invarianti (identici)
 - Gate per OGNI commit: probe byte-id vs oracle · corpus per NOME
-  (baseline `corpus-d.norm`) · ext/session+date+reflection per nome ·
-  ORM (3E/14F, orm-d.names) se ref/arg/reflection · cargo test.
+  (baseline `corpus-e.norm`) · ext/session+date+reflection per nome
+  (sess-e/date-e/refl-e.norm) · ORM (3E/13F, orm-e.names) se
+  ref/arg/reflection/date · cargo test (1539/0).
 - Commit AND push a ogni step; run pesanti SEQUENZIALI e DETACHED; Serena
   per Rust, Vexp per il C di php-8.5.7; Read tool per i .php; log con
   `LC_ALL=C tr -d '\0'`.
