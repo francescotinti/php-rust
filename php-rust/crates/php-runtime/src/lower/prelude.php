@@ -2206,6 +2206,89 @@ class SplQueue extends SplDoublyLinkedList {
 class SplStack extends SplDoublyLinkedList {
     protected $__mode = 2; // IT_MODE_LIFO | IT_MODE_KEEP
 }
+// `SplPriorityQueue`: a max-heap keyed by an arbitrary $priority (Symfony's
+// DecoratorServicePass inserts [$priority, --$seq] array priorities). The
+// sift order replicates spl_heap.c exactly so equal-priority extraction
+// matches PHP byte-for-byte. Iteration is destructive, as in ext/spl.
+class SplPriorityQueue implements Iterator, Countable {
+    const EXTR_DATA = 1;
+    const EXTR_PRIORITY = 2;
+    const EXTR_BOTH = 3;
+    private $__h = [];  // binary heap of [data, priority]
+    private $__flags = self::EXTR_DATA;
+    public function compare($priority1, $priority2) {
+        return $priority1 <=> $priority2;
+    }
+    // spl_ptr_heap_insert: sift up while the parent compares strictly smaller.
+    public function insert($value, $priority) {
+        $node = [$value, $priority];
+        $i = count($this->__h);
+        $this->__h[] = $node;
+        while ($i > 0) {
+            $p = ($i - 1) >> 1;
+            if ($this->compare($this->__h[$p][1], $priority) < 0) {
+                $this->__h[$i] = $this->__h[$p];
+                $i = $p;
+            } else {
+                break;
+            }
+        }
+        $this->__h[$i] = $node;
+        return true;
+    }
+    public function extract() {
+        if (!$this->__h) { throw new RuntimeException("Can't extract from an empty heap"); }
+        $top = $this->__shape($this->__h[0]);
+        $this->__deleteTop();
+        return $top;
+    }
+    public function top() {
+        if (!$this->__h) { throw new RuntimeException("Can't peek at an empty heap"); }
+        return $this->__shape($this->__h[0]);
+    }
+    // spl_ptr_heap_delete_top: move the last leaf to the root and sift down,
+    // preferring the left child on compare ties.
+    private function __deleteTop() {
+        $last = array_pop($this->__h);
+        $n = count($this->__h);
+        if ($n === 0) { return; }
+        $i = 0;
+        while (true) {
+            $j = 2 * $i + 1;
+            if ($j >= $n) { break; }
+            if ($j + 1 < $n && $this->compare($this->__h[$j + 1][1], $this->__h[$j][1]) > 0) { $j += 1; }
+            if ($this->compare($last[1], $this->__h[$j][1]) >= 0) { break; }
+            $this->__h[$i] = $this->__h[$j];
+            $i = $j;
+        }
+        $this->__h[$i] = $last;
+    }
+    private function __shape($node) {
+        if ($this->__flags === self::EXTR_BOTH) {
+            return ['data' => $node[0], 'priority' => $node[1]];
+        }
+        return $this->__flags === self::EXTR_PRIORITY ? $node[1] : $node[0];
+    }
+    public function setExtractFlags($flags) {
+        if (($flags & self::EXTR_BOTH) === 0) {
+            throw new RuntimeException('Must specify at least one extract flag');
+        }
+        $this->__flags = $flags & self::EXTR_BOTH;
+    }
+    public function getExtractFlags() { return $this->__flags; }
+    public function count(): int { return count($this->__h); }
+    public function isEmpty() { return !$this->__h; }
+    public function isCorrupted() { return false; }
+    public function recoverFromCorruption() { return true; }
+    // Destructive iteration: `next()` drops the current top; `key()` is the
+    // remaining count - 1 (counts down to 0); a drained queue reports
+    // current() NULL / key() -1 with no error (oracle-pinned).
+    public function rewind(): void {}
+    public function valid(): bool { return (bool) $this->__h; }
+    public function current() { return $this->__h ? $this->__shape($this->__h[0]) : null; }
+    public function key() { return count($this->__h) - 1; }
+    public function next(): void { if ($this->__h) { $this->__deleteTop(); } }
+}
 class SplObjectStorage implements Countable, Iterator, ArrayAccess {
     private $__objs = [];  // spl_object_id => object (strong ref, as ext/spl)
     private $__data = [];  // spl_object_id => attached info

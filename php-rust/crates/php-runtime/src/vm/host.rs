@@ -2061,7 +2061,8 @@ impl<'m> super::Vm<'m> {
     pub(super) fn ho_trait_exists(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let Some(first) = args.first() else { return Ok(Zval::Bool(false)) };
         let raw = convert::to_zstr_cast(first, &mut self.diags).as_bytes().to_vec();
-        let want = raw.strip_prefix(b"\\").unwrap_or(&raw).to_ascii_lowercase();
+        let bare = raw.strip_prefix(b"\\").unwrap_or(&raw).to_vec();
+        let want = bare.to_ascii_lowercase();
         let autoload = !matches!(args.get(1).map(|v| v.deref_clone()), Some(Zval::Bool(false)));
         let present = |s: &Self| {
             s.seed_traits.iter().any(|(_, t)| t.name.to_ascii_lowercase() == want)
@@ -2070,7 +2071,9 @@ impl<'m> super::Vm<'m> {
             return Ok(Zval::Bool(true));
         }
         if autoload {
-            self.try_autoload(&want, &want)?;
+            // The autoloader gets the name AS WRITTEN (PSR-4 file mapping is
+            // case-sensitive); only the recursion-guard key is lowercased.
+            self.try_autoload(&bare, &want)?;
         }
         Ok(Zval::Bool(present(self)))
     }

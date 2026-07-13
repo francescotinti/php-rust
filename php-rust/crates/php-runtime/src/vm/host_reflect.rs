@@ -1414,9 +1414,20 @@ impl<'m> super::Vm<'m> {
     pub(super) fn ho_reflect_class_loc(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let mut out = PhpArray::new();
         let Some(cid) = self.resolve_named_class_with_autoload(&args)? else {
-            let _ = out.append(Zval::Bool(false));
-            let _ = out.append(Zval::Long(0));
-            let _ = out.append(Zval::Long(0));
+            // Zend's class table also holds traits: getFileName/getStartLine/
+            // getEndLine on a trait name report its declaring unit, located
+            // via its methods' op line tables (a trait is flattened into its
+            // consumers and records no file — same approximation as the
+            // first-method fallback for classes below).
+            if let Some((file, start, end)) = self.trait_loc(&args) {
+                let _ = out.append(Zval::Str(PhpStr::new(file)));
+                let _ = out.append(Zval::Long(i64::from(start)));
+                let _ = out.append(Zval::Long(i64::from(end)));
+            } else {
+                let _ = out.append(Zval::Bool(false));
+                let _ = out.append(Zval::Long(0));
+                let _ = out.append(Zval::Long(0));
+            }
             return Ok(Zval::Array(Rc::new(out)));
         };
         let c = &self.classes[cid];
@@ -1465,8 +1476,55 @@ impl<'m> super::Vm<'m> {
     pub(super) fn ho_reflect_class_real_name(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         match self.resolve_named_class_with_autoload(&args)? {
             Some(cid) => Ok(Zval::Str(PhpStr::new(self.classes[cid].name.to_vec()))),
-            None => Ok(Zval::Bool(false)),
+            // A trait name reflects too (Zend single class table): report its
+            // declared casing.
+            None => Ok(match self.named_trait(&args) {
+                Some(name) => Zval::Str(PhpStr::new(name)),
+                None => Zval::Bool(false),
+            }),
         }
+    }
+
+    /// The real (as-declared) name of the trait named by `args[0]`, matched
+    /// case-insensitively on the fully-qualified name; `None` for non-traits.
+    fn named_trait(&mut self, args: &[Zval]) -> Option<Vec<u8>> {
+        let a = args.first()?;
+        let raw = convert::to_zstr_cast(&a.deref_clone(), &mut self.diags);
+        let b = raw.as_bytes();
+        let want = b.strip_prefix(b"\\").unwrap_or(b).to_vec();
+        self.seed_traits
+            .iter()
+            .map(|(_, t)| t)
+            .find(|t| t.name.eq_ignore_ascii_case(&want))
+            .map(|t| t.name.to_vec())
+    }
+
+    /// The declaring file and approximate line span of the trait named by
+    /// `args[0]`, from its methods' op line tables (`None` for an unknown name,
+    /// a method-less trait, or a prelude one).
+    fn trait_loc(&mut self, args: &[Zval]) -> Option<(Vec<u8>, u32, u32)> {
+        let a = args.first()?;
+        let raw = convert::to_zstr_cast(&a.deref_clone(), &mut self.diags);
+        let b = raw.as_bytes();
+        let want = b.strip_prefix(b"\\").unwrap_or(b).to_vec();
+        let t = self
+            .seed_traits
+            .iter()
+            .map(|(_, t)| t)
+            .find(|t| t.name.eq_ignore_ascii_case(&want))?;
+        let file = t.methods.first().map(|m| m.decl.file.to_vec())?;
+        if file == b"prelude" {
+            return None;
+        }
+        let (mut start, mut end) = (u32::MAX, 0u32);
+        for m in t.methods.iter().filter(|m| m.decl.file[..] == file[..]) {
+            start = start.min(m.decl.line);
+            end = end.max(m.decl.end_line.max(m.decl.line));
+        }
+        if start == u32::MAX {
+            (start, end) = (0, 0);
+        }
+        Some((file, start, end))
     }
     /// `__reflect_ref_id(array, key) -> string|false`: the identity of the
     /// reference an array element holds, or `false` when the element is not a

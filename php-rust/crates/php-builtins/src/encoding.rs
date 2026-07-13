@@ -484,6 +484,32 @@ pub(crate) fn hash_raw(algo: &[u8], data: &[u8]) -> Option<Vec<u8>> {
         b"sha3-512" => Sha3_512::digest(data).to_vec(),
         // hash('crc32b') == the zlib/crc32() function output.
         b"crc32b" => crc_be(crc32fast::hash(data)).to_vec(),
+        // hash('crc32') is the BZIP2 variant (unreflected, poly 0x04C11DB7);
+        // hash('crc32c') is Castagnoli (reflected poly 0x82F63B78, what
+        // Symfony http-kernel's surrogate keys use). Both render big-endian
+        // like crc32b. Bitwise loops: test-sized inputs, no table needed.
+        b"crc32" => {
+            let mut crc: u32 = !0;
+            for &b in data {
+                crc ^= u32::from(b) << 24;
+                for _ in 0..8 {
+                    crc = (crc << 1) ^ (0x04C1_1DB7 & (crc >> 31).wrapping_neg());
+                }
+            }
+            // ext/hash renders THIS variant LSB-first (hash('crc32', 'abc') is
+            // "73bb8c64", the byte-swap of the CRC), unlike crc32b/crc32c.
+            (!crc).to_le_bytes().to_vec()
+        }
+        b"crc32c" => {
+            let mut crc: u32 = !0;
+            for &b in data {
+                crc ^= u32::from(b);
+                for _ in 0..8 {
+                    crc = (crc >> 1) ^ (0x82F6_3B78 & (crc & 1).wrapping_neg());
+                }
+            }
+            crc_be(!crc).to_vec()
+        }
         // xxHash family (PHP 8.1): big-endian digests, default seed 0. `xxh3`
         // is the 64-bit XXH3 (Composer keys its solver rules with it).
         b"xxh32" => xxhash_rust::xxh32::xxh32(data, 0).to_be_bytes().to_vec(),
@@ -502,7 +528,8 @@ pub fn hash_algos(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let mut out = PhpArray::new();
     for algo in [
         "md5", "sha1", "sha224", "sha256", "sha384", "sha512/224", "sha512/256", "sha512",
-        "sha3-224", "sha3-256", "sha3-384", "sha3-512", "crc32b", "xxh32", "xxh64", "xxh3",
+        "sha3-224", "sha3-256", "sha3-384", "sha3-512", "crc32", "crc32b", "crc32c", "xxh32",
+        "xxh64", "xxh3",
         "xxh128",
     ] {
         let _ = out.append(Zval::Str(PhpStr::from_str(algo)));
@@ -894,5 +921,10 @@ mod tests {
             as_str(&call(hash, &[s("crc32b"), s("abc")])),
             "352441c2"
         );
+        // Oracle-pinned (php 8.5.7): BZIP2 and Castagnoli variants.
+        assert_eq!(as_str(&call(hash, &[s("crc32"), s("abc")])), "73bb8c64");
+        assert_eq!(as_str(&call(hash, &[s("crc32c"), s("abc")])), "364b3fb7");
+        assert_eq!(as_str(&call(hash, &[s("crc32"), s("")])), "00000000");
+        assert_eq!(as_str(&call(hash, &[s("crc32c"), s("")])), "00000000");
     }
 }

@@ -6826,8 +6826,23 @@ impl<'m> Vm<'m> {
         if let Some(&id) = self.class_index.get(&key) {
             return Ok(Some(id));
         }
+        // Zend keeps traits in the same class table as classes/interfaces: a
+        // name already declared as a trait is "found" (so class_exists() is
+        // false WITHOUT re-running the autoloader — the re-include would
+        // collide with the file's other declarations: ReflectionClass on
+        // PriorityTaggedServiceTrait, whose file also declares a class).
+        if self.trait_declared(&key) {
+            return Ok(None);
+        }
         self.try_autoload(bare, &key)?;
         Ok(self.class_index.get(&key).copied())
+    }
+
+    /// Whether `key` (a fully-qualified name) matches a declared trait's real
+    /// name, case-insensitively. The autoload paths treat a known trait as
+    /// "already declared", mirroring Zend's single class table.
+    pub(super) fn trait_declared(&self, key: &[u8]) -> bool {
+        self.seed_traits.iter().any(|(_, t)| t.name.eq_ignore_ascii_case(key))
     }
 
     /// Whether `name` resolves (after autoload) to a class/interface *or* a trait.
@@ -6866,7 +6881,7 @@ impl<'m> Vm<'m> {
                 outcome = Err(e);
                 break;
             }
-            if self.class_index.contains_key(key) {
+            if self.class_index.contains_key(key) || self.trait_declared(key) {
                 break;
             }
         }

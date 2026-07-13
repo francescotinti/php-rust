@@ -381,6 +381,21 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-13 (sessione 3): autoload dei nomi di trait allineato alla class
+  table unica di Zend (un trait dichiarato non ri-innesca MAI l'autoloader da
+  class_exists/interface_exists/ReflectionClass — prima il re-include
+  collideva con le altre dichiarazioni del file, es. PriorityTaggedServiceUtil);
+  trait_exists($n, true) ora passa il nome case-preserved a PSR-4;
+  ReflectionClass su trait: getFileName reale, getName canonico —
+  getStartLine/getEndLine però = span dei METODI (approssimazione; l'oracle
+  riporta la riga di `trait`/`}`), e un trait senza metodi resta
+  getFileName=false. SplPriorityQueue nel prelude (sift di spl_heap.c
+  replicato: ordine pareggi byte-id; var_dump mostra le prop interne phpr,
+  non la shape di ext/spl). FIX ENGINE: il dispatch dei metodi con NAMED
+  ARGS usava il modulo corrente invece di class_mod → MakeClosure/Op::Call
+  risolvevano nell'unit sbagliata (i data provider PHPUnit chiamano i test
+  method con named args). hash(): aggiunti crc32 (BZIP2, digest LSB-first
+  come ext/hash) e crc32c (Castagnoli), oracle-pinned.
 - 2026-07-13: §3.3-bis — class_* su nomi di trait (class_uses(trait) → `[]`,
   residuo trait-di-trait); nota class_implements(enum) da verificare.
 - 2026-07-09: creazione. Catalogati i 6 gap trasversali builtin, le assenze

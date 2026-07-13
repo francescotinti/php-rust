@@ -798,7 +798,6 @@ impl<'m> Vm<'m> {
                 return Err(unknown_named_param(&named));
             }
         }
-        let module = self.module;
         let resolved = resolve_method_runtime(&self.classes, cid, method);
         let usable = resolved.filter(|&(defc, midx)| {
             method_visible_from(&self.classes, self.frames[top].class, self.classes[defc].methods[midx].visibility, defc, method)
@@ -811,7 +810,13 @@ impl<'m> Vm<'m> {
                     String::from_utf8_lossy(&self.classes[defc].name),
                     String::from_utf8_lossy(method)
                 );
-                let mut frame = build_named_frame(callee, module, &qn, positional, named)?;
+                // The frame's module must be the unit that COMPILED the method
+                // (class_mod), not the currently-running one: the body's
+                // bytecode indices (MakeClosure, Op::Call) resolve there. A
+                // PHPUnit test invoked with named data-provider args used to
+                // get the entry script's module here and die on MakeClosure.
+                let mut frame =
+                    build_named_frame(callee, self.class_mod(defc), &qn, positional, named)?;
                 frame.this = Some(this);
                 frame.class = Some(defc);
                 frame.static_class = Some(cid); // LSB = receiver's actual class

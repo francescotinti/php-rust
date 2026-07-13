@@ -824,10 +824,13 @@ impl<'m> super::Vm<'m> {
                     // not the consumer's (cross-unit trait-closure relocation is not
                     // yet implemented). Surface a catchable error rather than panic.
                     let Some(func) = m.closures.get(fn_idx as usize) else {
-                        return Err(PhpError::Error(
-                            "closure from a trait used across files is not yet supported"
-                                .to_string(),
-                        ));
+                        return Err(PhpError::Error(format!(
+                            "closure from a trait used across files is not yet supported \
+                             (closure #{fn_idx} of {} in unit '{}' [{} closures])",
+                            String::from_utf8_lossy(&self.frames[top].func.name),
+                            String::from_utf8_lossy(&m.file),
+                            m.closures.len(),
+                        )));
                     };
                     let info = Rc::new(ClosureInfo {
                         kind: ClosureRender::Closure {
