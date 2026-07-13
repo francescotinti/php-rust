@@ -16,7 +16,7 @@ phpr script.php        # a drop-in for `php`, but it's Rust all the way down
 
 ## 💡 The idea
 
-The Zend Engine — the heart of PHP — is ~280,000 lines of C that have piled up since 1999. It
+The Zend Engine — the heart of PHP — is ~270,000 lines of C that have piled up since 1999. It
 carries manual memory management, a custom garbage collector, a thread-safety layer (TSRM), a
 macro-generated VM, and a convoluted JIT. It's battle-tested but brittle: entire classes of
 vulnerabilities (*use-after-free*, *buffer overflow*) live there by construction.
@@ -65,9 +65,9 @@ more than any synthetic test.
 | **4. Exceptions & errors** | `try/catch/finally`, catchable engine errors, stack traces, line tracking | ✅ Done |
 | **5. Bytecode VM** | Generators, `yield from`, Fibers on explicit frames — **no `unsafe`, no stackful coroutines** | ✅ Done |
 | **6. Memory** | Cycle collector for circular references (the other big "dragon") | ✅ Done |
-| **7. Standard library** | ~500 builtins: array/string/math/json/preg/mbstring/hash/file/stream/date… | ✅ Substantial (long tail in progress) |
+| **7. Standard library** | 784 registered internal functions (measured): array/string/math/json/preg/mbstring/hash/file/stream/date/session… | ✅ Substantial (long tail in progress) |
 | **8. Real Composer** | `composer require monolog/monolog` **end-to-end**: resolution, HTTPS download (rustls), unzip, autoload — and the package **runs** | ✅ Done |
-| **8b. Real ecosystem** | **PHPUnit 13.2 green, byte-identical**; Doctrine **DBAL 3769 tests / 0 err / 0 fail** on native PDO+sqlite; **ORM 3484 tests / 12 err**; Monolog, collections, inflector, instantiator… | ✅/🔄 In progress |
+| **8b. Real ecosystem** | **PHPUnit 13 green, byte-identical** (incl. process isolation); Doctrine **DBAL 3769 tests / 0 err / 0 fail** on native PDO+sqlite; **ORM 3484 tests / 3 err / 14 fail**; symfony http-foundation full suite, http-kernel at 29 err / 103 fail of 1663; Monolog, collections, inflector, instantiator… | ✅/🔄 In progress |
 | **9. Framework bootstrap** | *Hello World* on Laravel / Symfony | ⏳ Next |
 | **10. Async & single-binary** | Tokio event loop + resident Axum web server, standalone distribution | ⏳ Future |
 | **11. JIT (Tier 3)** | Clean bytecode → Cranelift/LLVM for on-the-fly machine code | 🔭 Vision |
@@ -87,28 +87,33 @@ php-rust/crates/
                  type juggling, full-port from zend_operators.c). Zero internal dependencies.
   php-runtime    HIR + lowering from `mago`, and the bytecode VM:
                  compile.rs (HIR→bytecode) + vm/{mod,exceptions,coroutines,arrays,oop,calls}.rs
-  php-builtins   registry of ~380 pure builtins (var_dump, array_*, sprintf, json_*, preg_*,
-                 mb_*, hash/encoding, file/stream, …) + ~120 host builtins VM-side
-                 (reflection, callable, PDO/sqlite, dom/xml, curl, proc_open, …)
+  php-builtins   registry of pure value builtins (var_dump, array_*, sprintf, json_*, preg_*,
+                 mb_*, hash/encoding, file/stream, …); together with the VM-side host
+                 builtins (reflection, callable, PDO/sqlite, dom/xml, curl, proc_open,
+                 session, …) phpr registers 784 internal functions (measured by probe)
   php-cli        the `phpr` binary — drop-in for `php`, CLI-faithful streams + faithful exit code
   php-server     native web server (Axum + Tokio) — the bridgehead toward async
   phpt-runner    runs the official `.phpt` tests with capability scan and unified diff vs oracle
 diary/           methodological journal: 00-reconnaissance … 99-conclusions + metrics
 ```
 
-**Why Rust collapses Zend** — the structural payoff, in numbers:
+**Why Rust collapses Zend** — the structural payoff, in numbers (all LOC
+measured with `wc -l` on PHP 8.5.7 and on this repo, 2026-07-13):
 
 | Zend subsystem | C LOC | Rust replacement | Rust LOC |
 |---|---:|---|---:|
-| Generated VM + `zend_execute.c` | ~146,000 | bytecode VM (single engine) | inside `php-runtime` |
-| `zend_compile.c` (AST→opcodes) | ~12,400 | AST→HIR lowering + compile.rs | inside `php-runtime` |
-| re2c lexer + Bison parser + AST | ~25,000 | `mago` dependency + bridge | ~500 |
-| `zend_alloc` / `zend_gc` / TSRM / opcache / win32 | ~88,000 | ownership, `Rc`+COW, `Send`/`Sync` + cycle collector | ~1,000 |
-| `zend_operators.c` (type juggling) | ~3,900 | faithful full-port | ~1,500 |
+| Generated VM + `zend_execute.c` | ~136,000 | bytecode VM (single engine): `php-runtime/src/vm/` | ~37,300 |
+| `zend_compile.c` (AST→opcodes) | ~12,400 | HIR + lowering + compiler (`hir.rs`, `lower/`, `compile/`) | ~15,200 |
+| re2c lexer + Bison parser + AST | ~23,400 | `mago` dependency; the AST→HIR bridge is counted in the lowering row above | — |
+| `zend_alloc` / `zend_gc` / TSRM / opcache (incl. JIT) / win32 | ~108,000 | ownership, `Rc`+COW, `Send`/`Sync` + a cycle collector | ~1,000 |
+| `zend_operators.c` + numeric strings (type juggling) | ~3,900 | faithful full-port (`ops.rs`, `convert.rs`, `numstr.rs`) | ~1,700 |
 
-**~280K LOC of core C (extensions not counted) → ~68K LOC of total Rust today** — engine, stdlib,
-PDO/sqlite, dom/xml, TLS, and tooling included. The ~4:1 ratio holds even as functionality has
-grown by an order of magnitude over the first estimates.
+**~270K LOC of core Zend C (extensions not counted) → ~67K LOC of engine Rust**
+(`php-runtime` + `php-types`) — a ~4:1 engine-vs-engine collapse. The whole
+project today is **~96K LOC of Rust** plus ~5.7K of PHP prelude — and that
+total also includes the standard library, PDO/sqlite, dom/xml, TLS and the
+phpt tooling, functionality that on the C side lives in `ext/`/`sapi/` and is
+*not* part of the 270K.
 
 ---
 
@@ -130,11 +135,15 @@ But the real leap is that **the real ecosystem runs**:
 - **Doctrine DBAL: 3769 tests, 0 errors, 0 failures** — on a **native Rust implementation of
   PDO / pdo_sqlite / ext-sqlite3** (bundled rusqlite, with SQLSTATE/errmode/metadata semantics
   verified one by one against the oracle).
-- **Doctrine ORM: 3484 tests, 12 errors / 22 failures** (and falling) — hydration, UnitOfWork,
+- **Doctrine ORM: 3484 tests, 3 errors / 14 failures** (and falling) — hydration, UnitOfWork,
   XML mapping included. Collections, inflector, lexer, event-manager, instantiator: **green**.
+- **Symfony**: http-foundation full suite (0 errors without its server-bound tests),
+  http-kernel down to 29 errors / 103 failures of 1663 (DI container compiles, dumps and
+  reloads); String / Console / Process green.
 - Extensions modeled without C: `pdo`, `pdo_sqlite`, `sqlite3`, `dom`, `libxml`,
   **`simplexml`** (on the Rust DOM), `curl` (easy-API on ureq), `openssl`/TLS (rustls),
-  `zip`, `mbstring`, `pcre` (3 engines), `hash`, `json`, `pcntl`, `posix`, `ctype`.
+  `zip`, `mbstring`, `pcre` (3 engines), `hash`, `json`, `pcntl`, `posix`, `ctype`,
+  `session`, `zlib` (system FFI), `bcmath`, `gmp`, `tokenizer`.
 
 Two of the three historical "dragons" of a PHP port have already been tamed:
 
@@ -147,11 +156,11 @@ The third dragon — the **C extension ecosystem (PECL)** — is being tackled b
 rewrites (PDO/sqlite, dom/simplexml, and curl have already fallen that way); a compatibility FFI
 layer remains the long-term option for the tail.
 
-**Fidelity** (at HEAD `e0b5080`, 2026-07-07): differential type-juggling vs real PHP at
+**Fidelity** (at HEAD `479fc90`, 2026-07-13): differential type-juggling vs real PHP at
 **0 mismatches** (37,835 cases — this is the *operator* differential, a metric distinct from the
-`.phpt` corpus); 20 green Rust crate suites; on the official `Zend/tests` corpus **2,138 phpt pass**
-(58% of the runnable ones, growing every session, with a "zero pass→fail" gate on every commit);
-~650 commits of history tracked session by session.
+`.phpt` corpus); 1,530 green Rust unit/integration tests; on the official `Zend/tests` corpus
+**2,445 phpt pass** (60% of the runnable ones, growing every session, with a "zero pass→fail by
+name" gate on every commit); ~850 commits of history tracked session by session.
 
 > The detailed history of the ~70 build steps lives in **[HISTORY.md](HISTORY.md)**; the
 > replicable methodological journal is in **[diary/](diary/)**.
@@ -160,14 +169,13 @@ layer remains the long-term option for the tail.
 
 ## 🚀 Next steps
 
-1. **Close the last language constructs** — the bulk of the "compile-unsupported" bucket is already
-   back in (`--run-skipif`, dynamic named/spread args, variable variables, `C::{$expr}`, faithful
-   compile-time fatals: corpus 2,071→2,138); the next block is **by-ref property hooks**
-   (`&get`, PHP 8.4) and the remaining tail.
-2. **Doctrine ORM to zero** — the last 12 errors are triaged (XSD `schemaValidate`, typed props on
-   lazy proxies, singletons); the bulk of the work is done.
-3. **Framework bootstrap** — *Hello World* on Laravel/Symfony: the ultimate stress test for
-   autoloading and Reflection, now within reach given that PHPUnit and Doctrine already run.
+1. **symfony/http-kernel to zero** — 29 errors / 103 failures of 1663 left; runtime by-ref
+   argument binding (Zend's SEND_VAR_EX/FUNC_ARG, constructors included) just landed, next is
+   the error queue (`DateTime*::getLastErrors`, `Dom\HTML_NO_DEFAULT_NS`, …) and the failure map.
+2. **Doctrine ORM to zero** — down to 3 errors / 14 failures; the remainder is triaged
+   (XSD `schemaValidate`, lazy-proxy edges).
+3. **Framework bootstrap** — *Hello World* on Laravel / full Symfony kernel: the ultimate stress
+   test for autoloading and Reflection, within reach now that the DI container runs.
 4. **Robustness** — convert user-input-reachable `unwrap`/`expect` into typed VM errors + fuzz the
    `lower/compile` pipeline, for a *no-panic* guarantee.
 5. **The async leap** — integrate a **Tokio** event loop and consolidate `php-server` (Axum) into a
