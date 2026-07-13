@@ -5008,6 +5008,8 @@ impl<'m> Vm<'m> {
             b"exec" => return self.ho_exec(args),
             // Two out-params: (stream|false, $error_code, Some($error_message)).
             b"stream_socket_client" => return self.ho_stream_socket_client(args),
+            // Two out-params: (bool, $filename, Some($line)).
+            b"headers_sent" => return self.ho_headers_sent_out(args),
             _ => return Err(undefined_builtin(name)),
         };
         Ok((result, out, None))
@@ -9453,6 +9455,9 @@ pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usiz
         (b"similar_text", 2),
         // `&$error_code` (#2); `&$error_message` (#3) is the second out-param.
         (b"stream_socket_client", 1),
+        // `&$filename` (#1); `&$line` (#2) is the second out-param. PHP fills
+        // both whenever supplied — ""/0 before any output.
+        (b"headers_sent", 0),
     ];
     HOST_OUT
         .iter()
@@ -9466,6 +9471,8 @@ pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usiz
 pub(crate) fn host_builtin_out_param_second(name: &[u8]) -> Option<usize> {
     if name.eq_ignore_ascii_case(b"exec") || name.eq_ignore_ascii_case(b"stream_socket_client") {
         Some(2)
+    } else if name.eq_ignore_ascii_case(b"headers_sent") {
+        Some(1)
     } else {
         None
     }

@@ -38,6 +38,11 @@ use super::*;
 #[derive(Default)]
 pub(super) struct SessionState {
     pub active: bool,
+    /// True only while `sess_commit` runs the save handler: the session
+    /// already counts as closed (bug60634), but the prelude `\SessionHandler`
+    /// delegate must still operate — PHP's guard is "no save handler open",
+    /// not `status == active` (Symfony's SessionHandlerProxy write path).
+    pub committing: bool,
     /// Current session id ("" when none); survives a commit, cleared by
     /// destroy and by a failed decode.
     pub id: Vec<u8>,
@@ -708,6 +713,7 @@ impl<'m> Vm<'m> {
         // (bug60634), and the handler itself observes a closing session.
         self.session.active = false;
         self.session.started_at = None;
+        self.session.committing = true;
         let write_result = match encoded {
             Some(data) => {
                 let unchanged = snapshot.as_deref() == Some(data.as_slice())
@@ -723,6 +729,7 @@ impl<'m> Vm<'m> {
         let ok = match write_result {
             Ok(ok) => ok,
             Err(e) => {
+                self.session.committing = false;
                 self.session.open_path = Vec::new();
                 return Err(e);
             }
@@ -742,7 +749,9 @@ impl<'m> Vm<'m> {
                 self.diags.push(Diag::Warning(msg));
             }
         }
-        self.sess_mod_close()?;
+        let close_result = self.sess_mod_close();
+        self.session.committing = false;
+        close_result?;
         self.session.open_path = Vec::new();
         Ok(())
     }
@@ -1556,7 +1565,7 @@ impl<'m> Vm<'m> {
     /// delegates to the built-in files module through this hook. Outside an
     /// open session PHP throws: "Session is not active".
     pub(super) fn ho_session_files_op(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
-        if !self.session.active {
+        if !self.session.active && !self.session.committing {
             return Err(PhpError::Error("Session is not active".to_string()));
         }
         let op = args

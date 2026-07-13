@@ -868,10 +868,26 @@ impl<'m> super::Vm<'m> {
     }
 
     /// `headers_sent(&$filename = null, &$line = null): bool` — whether output has
-    /// reached the sink (CLI). The by-reference out-parameters are not populated
-    /// (the bare no-arg form is what real code uses).
+    /// reached the sink (CLI). This is the plain-dispatch form (dynamic string
+    /// callable): the out-params are dropped.
     pub(super) fn ho_headers_sent(&mut self, _args: Vec<Zval>) -> Result<Zval, PhpError> {
         Ok(Zval::Bool(self.output_started))
+    }
+
+    /// `headers_sent(&$filename, &$line)` with the out-params wired: PHP fills
+    /// BOTH whenever supplied — ""/0 before any output, the first-output site
+    /// after (Symfony NativeSessionStorage::start throws with them on true).
+    pub(super) fn ho_headers_sent_out(
+        &mut self,
+        _args: Vec<Zval>,
+    ) -> Result<(Zval, Zval, Option<Zval>), PhpError> {
+        let (file, line) = match &self.output_start {
+            Some((f, l)) if self.output_started => {
+                (Zval::Str(PhpStr::new(f.clone())), Zval::Long(i64::from(*l)))
+            }
+            _ => (Zval::Str(PhpStr::new(Vec::new())), Zval::Long(0)),
+        };
+        Ok((Zval::Bool(self.output_started), file, Some(line)))
     }
 
     /// `header(string $header, bool $replace = true, int $response_code = 0): void`

@@ -381,6 +381,21 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-13 (sessione 3, batch 3): SessionState.committing — il prelude
+  \SessionHandler opera DURANTE sess_commit (la sessione conta già chiusa per
+  bug60634, ma la guardia PHP è "nessun handler aperto", non status==active:
+  SessionHandlerProxy di Symfony chiamava write/close → "Session is not
+  active"). headers_sent(&$file, &$line): out-param CABLATI (tabella
+  host_builtin_out_param, secondo out come exec) — prima gli argomenti
+  venivano LETTI come valori (warning "Undefined variable" che, stampando,
+  rendevano headers_sent=true da sé). ⚠️ GAP ENGINE documentato (repro
+  p_ref3): **SEND_VAR_EX solo per variabili semplici** — un ELEMENTO di
+  array/prop passato a un metodo con receiver dinamico è pushato per VALORE,
+  quindi un param by-ref non aliasa (`$bag->initialize($session[$key])` dei
+  bag Symfony: unica failure residua di SessionListenerTest). Zend risolve
+  col fetch FUNC_ARG deciso a runtime; phpr richiede un descriptor di place
+  differito nel binder. I casi con receiver STATICAMENTE noto e le funzioni
+  libere già funzionano (push_call_args ha il ramo MakeRef).
 - 2026-07-13 (sessione 3, batch 2): trait_exists() su un nome già dichiarato
   come classe/interfaccia → false SENZA ri-innescare l'autoloader (speculare
   al fix trait: PhpDumper sonda trait_exists(HttpKernelInterface::class) e il

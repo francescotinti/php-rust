@@ -1,93 +1,80 @@
-# Prossima sessione: symfony/http-kernel — cluster E (trait cross-unit) e coda (da 68E/105F)
+# Prossima sessione: symfony/http-kernel — gap SEND_VAR_EX su elementi + coda (da 29E/104F)
 
-Riprendiamo phpr (PHP 8.5.7 in Rust). La sessione 2026-07-12/13 ha chiuso il
-cluster F + un batch engine (3 commit gated: `8bf6daf`, `d5fee4f`, + `b627175` class_*-su-trait). Dettaglio completo in
-memoria: `php-rust-symfony-http-kernel`.
+Riprendiamo phpr (PHP 8.5.7 in Rust). La sessione 2026-07-13 (sessione 3) ha
+chiuso il cluster E, il cluster container-dump e il cluster session in 3 commit
+gated: `eae74f0` (cluster E: trait autoload + named-args module + SplPriorityQueue
++ crc32/crc32c), `514783d` (trait_exists guard + preg_replace $limit +
+FilesystemIterator), batch-3 (SessionState.committing + headers_sent out-param).
+Dettaglio in memoria: `php-rust-symfony-http-kernel`.
 
 ## Dove siamo
-- Suite http-kernel (1663 test; oracle 0 fail): **114E/93F → 68E/105F**
-  (errori −46; molti ex-Error ora arrivano agli assert → +12 F "onesti").
-  ⚠️ La run ora dura **~2 minuti**: il phpunit-bridge BOOTSTRAPPA (ClockMock
-  attivo) da quando `self::${$n}` compila (DebugClassLoader).
-- Zend corpus **2443 pass** / 1609 fail / 1253 skip · ext/session 78 fail /
-  ext/date 435 fail / ext/reflection 294 fail (tutti invariati per nome) ·
-  ORM **3e/15f** identico per nome · cargo **1530/0**.
-- Workspace: 56c2e188 `…/scratchpad/symfony/http-kernel` (v8.1.1). Se evaporato:
-  clone v8.1.1 + `php composer.phar install` con l'oracolo brew +
-  `composer require --dev phpunit/phpunit:dev-main symfony/phpunit-bridge:8.2.x-dev`.
-- Probe oracle sessione-2 in 77155ebc/scratchpad: p_f2/p_f3, p_spd*, p_g1,
-  p_j2, p_gpc*, p_dcl1.
+- Suite http-kernel (1663 test; oracle 0 fail): **68E/105F → 29E/104F**
+  (−39 errori in una sessione). Run ~2-4 min.
+- Zend corpus **2445 pass** / 1607 fail (closure_047/048.phpt fixati in
+  sessione-3) · ext/session 78 / ext/date 435 / ext/reflection 294 invariati
+  per nome · ORM **3E/15F** identico per nome · cargo **1530/0**.
+- Workspace: 56c2e188 `…/scratchpad/symfony/http-kernel` (v8.1.1). Baseline
+  gate correnti: `corpus-l.norm` ecc. in 3520338b/scratchpad (fallback: -i in
+  77155ebc). ORM workspace: 77b21d67/scratchpad/orm-work.
+- Probe sessione-3 in 3520338b/scratchpad/e_probe: p_e1..6 (trait autoload),
+  p_spq1, p_crc, p_named1, p_pr1 (preg limit), p_fsi1, p_te2, p_hs1
+  (headers_sent), p_sess1..4 + p_sl1/2 (session), **p_ref1/2/3 (repro del gap
+  by-ref)**.
 
-## Fatto nella sessione precedente
-1. `8bf6daf` — cluster F builtins: ob_get_status (shape oracle-pinned; user
-   1/113, default e ob_gzhandler 0/112; buffer 16384-raddoppio o chunk),
-   get_cfg_var (IniEntry.global; phpr ≡ `php -n`), stream context params
-   (ResKind::Context{options,params} + get/set_params + 2° arg di create),
-   ErrorException ctor 6-arg reale + getSeverity, ReflectionFunction::
-   getClosureCalledClass. getLastErrors DIFFERITO (serve il date-parser vero).
-2. `d5fee4f` — engine: **dynamic static prop name** `self::${$expr}` come place
-   (PlaceBase::StaticPropDyn; SpName Lit/Dyn in compile/assign.rs; op DynName
-   già esistenti; push_class_value esteso a self/parent via Op::ClassNameScope,
-   `static::` = Unsupported esplicito) → DebugClassLoader compila → bridge OK;
-   Closure::fromCallable(oggetto invokable) → [$obj,'__invoke'] (cluster G);
-   spread su fn sconosciuta: Op::CallNsFallbackArgs + PushConst+CallValueArgs
-   (cluster J, trigger_deprecation di ParameterBag).
-3. `b627175` — class_* su NOMI di trait: get_parent_class→false,
-   class_implements/parents→[], class_uses→[] (residuo trait-di-trait
-   documentato in PHPR_DIVERGENCES §3.3-bis). Sbloccava il TypeError di
-   DebugClassLoader::checkClass su ogni trait autoloadato.
+## Obiettivo primario: GAP ENGINE — SEND_VAR_EX per elementi di array/prop
+**Repro minima (p_ref3)**: `(new P1)->m($j['k'])` con `m(&$x) { $x = 42; }` →
+oracle `int(42)`, phpr `int(1)`.
+- `push_dyn_args` (compile/expr.rs ~1591: receiver dinamico) pusha per CELLA
+  solo `ExprKind::Var` (Op::PushRef); un ELEMENTO (`$a['k']`, `$o->p`) va per
+  VALORE → un param by-ref non aliasa MAI. Con receiver STATICAMENTE noto il
+  ramo `push_call_args` (1584) ha già il MakeRef per i place — funziona.
+- Zend risolve col fetch **FUNC_ARG** deciso a runtime (ZEND_SHOULD_SEND_BY_REF
+  su arg_info del callee risolto). phpr deve introdurre l'equivalente: un
+  descriptor di place differito che il binder di Op::MethodCall risolve al
+  bind (by-ref → MakeRef sul place; by-value → read con warning undefined).
+  ⚠️ NON fare MakeRef eager su tutti gli args: creerebbe chiavi mancanti
+  (PHP: warning) e promuoverebbe elementi che PHP non promuove.
+- Impatto noto: SessionListenerTest::testSessionCookieWrittenNoCookieGiven
+  (1F residua — i bag Symfony si legano con `$bag->initialize($session[$key])`
+  su receiver dinamico) + silenziosi in giro (correttezza, non solo errori).
 
-## Obiettivo primario: Cluster E — trait cross-unit (~33 errori: 22+11)
-Due firme, UNA radice (la macchineria trait/closure/deferred cross-unit):
-- **22× `include(): Failed to compile 'PriorityTaggedServiceTrait.php'`** —
-  il file compila standalone; nel flusso reale fallisce nel percorso
-  "**deferred decl re-lower**" (vm/mod.rs ~2632: `lower failed … Unsupported {
-  what: "class/interface redeclaration", line: 165 }` — line 165 =
-  `class PriorityTaggedServiceUtil` nello STESSO file del trait: il re-lower
-  del decl differito ri-abbassa l'unità e collide col già-registrato).
-  🔧 Diagnosi: `PHPR_LOG=warn PHPR_LOG_FILE=… phpr vendor/bin/phpunit
-  --no-configuration --filter testBindScalarValueToControllerArgument
-  Tests/DependencyInjection/RegisterControllerArgumentLocatorsPassTest.php`.
-- **11× "closure from a trait used across files is not yet supported"**
-  (vm/run.rs ~825, Op::MakeClosure: fn_idx del trait punta all'unit del trait,
-  frame.module = unit del consumer). NOTA: `LoweredTrait` HA GIÀ
-  closures/closure_base/external per lo shift cross-unit (hir.rs:111) — il
-  lowering lo prevede, manca il pezzo runtime/linking. Cfr. PHPR_DIVERGENCES
-  §3.3 (deferral disattivata nei corpi dei trait, `DeferConf::No`).
-
-## Poi, in ordine di ROI (dalla mappa 68E)
-- **H (6)**: "Session is not active" (SessionListener; coda ext/session).
-- **getLastErrors (6)**: HARD differito — diagnostica del date parser
-  (false iniziale; shape warning_count/warnings/error_count/errors).
+## Poi, in ordine di ROI (dalla mappa 29E)
+- **getLastErrors (6)**: HARD differito — diagnostica del date parser.
 - **Dom\HTML_NO_DEFAULT_NS (5)**: costante ext/dom mancante.
-- **"Using $this when not in object context" (3)**: nuovo, da indagare.
+- **"Using $this when not in object context" (3)**: da indagare.
 - **Store::requestsMatch arg #3 null (3)**, ControllerEvent callable TypeError
-  (2), strtotime `'+ 1 hour'` (2+1, spazio dopo il segno), Constraint::$groups
-  typed-prop (2), `array + bool` (1), `::class` su null (1),
-  is_uploaded_file (1).
-- E i **105 FAILURES** (assert falliti) — mai analizzati sistematicamente:
-  estrarre la mappa con lo stesso perl sul log (`hk-f.log` in 77155ebc).
+  (2), BadRequestException Closure-not-allowed (2), strtotime `'+ 1 hour'`
+  (2+1), Constraint::$groups typed-prop (2), `::class` su null (1),
+  ReflectionMethod::isClosure (1), is_uploaded_file (1).
+- I **104 FAILURES**: mai analizzati sistematicamente — mappa con il perl su
+  `hk-run5.log` (3520338b/scratchpad).
+- GAP ENGINE secondario (documentato §changelog): **shadowing di METODI
+  privati** parent/child (le prop hanno lo storage-key fix; i metodi no) —
+  workaround nel prelude (__dicur/__disync), fix vero in
+  resolve_method_runtime.
 
-## Residui dichiarati (non regressioni)
-- class_uses(trait-che-usa-trait) → [] (§3.3-bis); class_implements(enum)
-  senza interfaccia esplicita (da verificare se pre-esistente).
-- Attribuzione RIGA dei warning dentro metodi statici (riga del chiamante
-  invece che interna) — PRE-esistente, vale anche per nomi letterali.
-- `&self::${$n}` (ref-bind su nome dinamico) = errore esplicito; `static::`
-  come class-value = Unsupported esplicito.
-- fn &() => S::$sp non aliasa; `&` marker perso in (array)$obj; R: persi con
-  __serialize/__sleep (ereditati dalla sessione 1).
+## Lezioni nuove di sessione-3
+- Il messaggio d'errore hardcoded può MENTIRE: "closure from a trait used
+  across files" era in realtà il dispatch named-args col modulo sbagliato
+  (frame.module = script phpunit). Ora il messaggio include unit/idx/len.
+- `class_exists`/`interface_exists`/`trait_exists`/ReflectionClass: la class
+  table di Zend è UNICA (classi+interfacce+enum+trait) — ogni lookup che
+  fallisce e ri-innesca l'autoload su un nome già dichiarato in un'altra
+  "tabella" phpr produce un re-include che collide (PriorityTaggedServiceUtil,
+  HttpKernelInterface). Guardie: trait_declared() in resolve_class_autoload /
+  try_autoload; class_index in ho_trait_exists.
+- preg_replace con $limit era silenziosamente replace-all: il PhpDumper
+  corrompeva il PROPRIO output (la riga FrozenParameterBag contiene anch'essa
+  "DEPRECATED_PARAMETERS"). Diagnosi: catturare i file di cache generati con
+  un copy-loop PRIMA del tearDown.
+- phpunit-run da cwd sbagliata = output vuoto silenzioso (il `&&` dopo cd
+  cambia directory: lanciare phpunit SEMPRE con cwd = workspace).
 
-## Invarianti (identici) + 2 lezioni nuove
+## Invarianti (identici)
 - Gate per OGNI commit: probe byte-id vs oracle · corpus per NOME
-  (`--list-fails`; baseline .norm in 77155ebc/scratchpad: corpus-i.norm ecc.) ·
-  ext/session+date+reflection per nome · ORM (3e/15f) se ref/arg/reflection ·
-  cargo test. MAI `cargo build` durante un gate phpt.
-- ⚠️ **MAI CARGO_TARGET_DIR dentro /private/tmp** (la build release da ~10GB
-  ha RIEMPITO il disco: ENOSPC blocca perfino i comandi del harness; se serve
-  un binario di prova mentre gira un gate, usare un target-dir su
-  /Volumes/Extreme Pro).
-- ⚠️ Suite appesa con CPU-time fermo (`ps -o etime,cputime`) = sleep reale →
-  bridge non bootstrappato.
-- Commit AND push a ogni step; run pesanti SEQUENZIALI e DETACHED; Serena per
-  Rust; Read tool per i .php; log con `LC_ALL=C tr -d '\0'`.
+  (`--list-fails`, baseline `corpus-l.norm`) · ext/session+date+reflection per
+  nome · ORM (3E/15F) se ref/arg/reflection · cargo test. MAI `cargo build`
+  durante un gate phpt. MAI CARGO_TARGET_DIR in /private/tmp.
+- Commit AND push a ogni step (⚠️ controllare `git status` per artifact
+  spurii PRIMA di `git add -A`); run pesanti SEQUENZIALI e DETACHED; Serena
+  per Rust; Read tool per i .php; log con `LC_ALL=C tr -d '\0'`.
