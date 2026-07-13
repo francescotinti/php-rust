@@ -381,6 +381,72 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-13 (sessione 5, batch 2): **le call non qualificate in namespace il
+  cui nome è un builtin ora compilano a `Op::CallNsFallback`** (prima:
+  `Op::CallBuiltin` diretto, che rendeva INERTE lo shadowing runtime — le
+  `sleep()`/`time()` eval-dichiarate da ClockMock del phpunit-bridge non
+  intercettavano mai: la suite http-kernel dormiva ~400s REALI nei test
+  stale-if-error). Direct-bind resta solo nel namespace globale (lì la
+  ridichiarazione è fatal). RESIDUO: i builtin **RefFirst** (sort…) e i
+  **host builtin** (fopen, is_callable…) chiamati non qualificati in ns
+  restano direct-bind (shadowing userland non visto).
+  **`unset()` su typed prop dichiarata = slot Undef + flag `typed_unset`**
+  (modello Zend: slot resta UNDEF ma il flag IS_PROP_UNINIT viene azzerato):
+  var_dump/reflection continuano a mostrare `uninitialized` (il primo
+  tentativo a slot-RIMOSSO regrediva lazy_objects/unset_* e
+  readonly_clone_success2 — beccato dal gate corpus per NOME), ma
+  `magic_applies` tratta Undef+flag come ASSENTE → lettura → `__get` se
+  esiste (l'idioma lazy di symfony Constraint::$groups), altrimenti lo stesso
+  Error before-init; never-initialized (Undef senza flag) = Error ANCHE con
+  `__get`. Matrice oracle-pinnata in p_b2.php (guard ricorsivo,
+  isset/isInitialized→false). RESIDUO: `__set` dopo unset su typed prop non
+  scatta (la write torna diretta); su prop UNTYPED il giro __set funziona già
+  (entry rimossa).
+  **`ReflectionFunction::isAnonymous()`** ora true solo per `{closure*}` (una
+  FCC method-backed riporta false → ArgumentMetadataFactory::getPrettyName e
+  ControllerResolver::checkController risolvono la classe).
+  **`is_callable`/hint `callable`**: fallback `__call`/`__callStatic` per
+  metodo mancante + check di VISIBILITÀ dallo scope chiamante
+  (method_visible_from; prima un metodo private/protected risultava callable
+  da fuori). **`array_pop`** decrementa nNextFreeElement quando poppa l'ultimo
+  auto-index (array.c:3579; pop+append riusa la chiave — RequestStack
+  push/pop/push di HttpKernel). **`intval($s, $base)`** onora base ≠ 10
+  (strtol + ramo "0b" di type.c). **include/eval ereditano `$this` e lo scope
+  di classe** (drive_unit propaga this/class/static_class — i template
+  .html.php di HtmlErrorRenderer usano `$this->` e chiamano metodi private).
+  **`DateTime(Immutable)::getLastErrors()`**: contratto minimo — stato
+  thread-local aggiornato SOLO da createFromFormat (il ctor testuale non lo
+  tocca — divergenza dichiarata), false quando pulito (PHP 8.2+), warning
+  "The parsed date/time was invalid" su overflow normalizzati, messaggi di
+  errore = sottoinsieme generico (niente wording per-specifier timelib);
+  `file_get_contents`/file.rs ora castano via `ctx.to_zstr` (stringify).
+- 2026-07-13 (sessione 5, batch 1): **`Dom\` API nuova (PHP 8.4) — subset
+  crawler-oriented**: `Dom\HTMLDocument::createFromString` + gerarchia
+  Node/CharacterData/Text/CDATASection/Comment/ProcessingInstruction/Element/
+  Attr/Document/DocumentType/NodeList/NamedNodeMap (prelude_ns.php) sopra un
+  **parser HTML5-lite host-side** (`DomDoc::parse_html`, vm/dom.rs): struttura
+  html/head/body implicita, void elements, rawtext (script/style) + RCDATA
+  (title/textarea), commenti/bogus comments/doctype, auto-close `<p>`/li/td…,
+  entità numeriche + core named (amp/lt/gt/quot/apos/nbsp), sniff `<meta
+  charset>` (label WHATWG famiglia Latin-1 → windows-1252/ISO-8859-15,
+  transcodifica a UTF-8). SCOPE-OUT dichiarati: adoption agency (formatting
+  reconstruction), table fostering, template contents, tabella completa named
+  entities (~2200), niente warning "tree error …" del parser lexbor (sotto la
+  Crawler sono comunque soppressi da libxml_use_internal_errors), `tagName`
+  sempre lowercase (= comportamento HTML_NO_DEFAULT_NS, l'unico flusso
+  esercitato). Costante `Dom\HTML_NO_DEFAULT_NS` seminata host-side (il
+  top-level del prelude non esegue). Probe p_dom1 byte-id vs oracle (tranne i
+  warning lexbor).
+  Inoltre: `is_uploaded_file` (sempre false su CLI, onesto);
+  `ReflectionMethod::isClosure()` → false; strtotime/DateTime **relnumber
+  timelib** `[+-]*[ \t]*[0-9]+` (segni staccati dalle cifre: "+ 1 hour",
+  "--2 hours"; ext/date +3: bug35456/40861/73858); upload_max_filesize "2M" +
+  post_max_size "8M" in tabella INI (default `php -n`); **arg path dei builtin
+  file (arg_os_path/os_path_at) via `ctx.to_zstr`** + famiglia path in
+  `value_builtin_string_coerces`: `rename($src, $splFileInfo)` e
+  `file_get_contents($splFileInfo)` ora guidano `__toString` precomputato
+  (prima: warning + path fantasma dal nome classe — rename creava file spurii
+  nel cwd, probabile fonte degli artifact 32-hex nel root del repo).
 - 2026-07-13 (sessione 4): ✅ CHIUSO il gap SEND_VAR_EX (repro p_ref3):
   gli argomenti *place* (`$a['k']`, `$_SESSION[$k]`, `$this->p`, `$o->p['k']`)
   verso callee risolti solo a runtime (receiver dinamico, `$cls::m()`,

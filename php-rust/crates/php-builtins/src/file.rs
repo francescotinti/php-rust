@@ -87,7 +87,7 @@ pub fn fwrite(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
             "fwrite() expects at least 2 arguments, 1 given".to_string(),
         ));
     };
-    let data = convert::to_zstr(data_arg, ctx.diags);
+    let data = ctx.to_zstr(data_arg);
     let mut bytes: &[u8] = data.as_bytes();
     if let Some(len_arg) = argv.get(2) {
         // `$length` caps the write, clamped to [0, len]: a negative length
@@ -364,14 +364,14 @@ pub fn error_log(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
             "error_log() expects at least 1 argument, 0 given".to_string(),
         ));
     };
-    let msg = convert::to_zstr(msg_arg, ctx.diags);
+    let msg = ctx.to_zstr(msg_arg);
     let mtype = argv.get(1).map(|v| convert::to_long_cast(v, ctx.diags)).unwrap_or(0);
     if mtype == 3 {
         use std::os::unix::ffi::OsStrExt;
         let Some(dest_arg) = argv.get(2) else {
             return Ok(Zval::Bool(false));
         };
-        let dest = convert::to_zstr(dest_arg, ctx.diags);
+        let dest = ctx.to_zstr(dest_arg);
         let path = std::ffi::OsStr::from_bytes(strip_file_wrapper(dest.as_bytes()));
         let ok = std::fs::OpenOptions::new()
             .create(true)
@@ -603,7 +603,7 @@ pub fn file_get_contents(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
             "file_get_contents() expects at least 1 argument, 0 given".to_string(),
         ));
     };
-    let name = convert::to_zstr(name_arg, ctx.diags);
+    let name = ctx.to_zstr(name_arg);
     // http(s):// URLs go through the rustls-backed HTTP transport rather than the
     // filesystem (the openssl/Composer-network filone); `$offset`/`$length` still
     // apply to the fetched body below, as for a file.
@@ -687,7 +687,7 @@ pub fn php_strip_whitespace(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpErr
             "php_strip_whitespace() expects exactly 1 argument, 0 given".to_string(),
         ));
     };
-    let name = convert::to_zstr(name_arg, ctx.diags);
+    let name = ctx.to_zstr(name_arg);
     let path = std::ffi::OsStr::from_bytes(strip_file_wrapper(name.as_bytes()));
     let src = match std::fs::read(path) {
         Ok(d) => d,
@@ -865,12 +865,12 @@ pub fn file_put_contents(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
             "file_put_contents() expects at least 2 arguments, 1 given".to_string(),
         ));
     };
-    let name = convert::to_zstr(name_arg, ctx.diags);
+    let name = ctx.to_zstr(name_arg);
     let bytes: Vec<u8> = match data_arg {
         Zval::Array(a) => {
             let mut v = Vec::new();
             for (_k, el) in a.iter() {
-                v.extend_from_slice(convert::to_zstr(el, ctx.diags).as_bytes());
+                v.extend_from_slice(ctx.to_zstr(el).as_bytes());
             }
             v
         }
@@ -887,7 +887,7 @@ pub fn file_put_contents(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
             }
             v
         }
-        other => convert::to_zstr(other, ctx.diags).as_bytes().to_vec(),
+        other => ctx.to_zstr(other).as_bytes().to_vec(),
     };
     // `php://` write targets: stdout/output feed the program's output stream,
     // stderr the host's (never compared byte-for-byte). PHPUnit's --debug
@@ -1018,7 +1018,7 @@ pub fn file(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// byte count; `false` + Warning if it cannot be opened.
 pub fn readfile(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     // `compress.zlib://path`: emit the decoded contents (count is uncompressed).
-    if let Some(name) = argv.first().map(|v| convert::to_zstr(v, ctx.diags)) {
+    if let Some(name) = argv.first().map(|v| ctx.to_zstr(v)) {
         if let Some(p) = crate::zlib::zlib_wrapped(name.as_bytes()) {
             return match crate::zlib::read_gz_file(p) {
                 Some(d) => {
@@ -1211,7 +1211,7 @@ pub fn getenv(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     use std::os::unix::ffi::OsStrExt;
     match argv.first() {
         Some(v) => {
-            let name = convert::to_zstr(v, ctx.diags);
+            let name = ctx.to_zstr(v);
             match std::env::var_os(std::ffi::OsStr::from_bytes(name.as_bytes())) {
                 Some(val) => Ok(Zval::Str(PhpStr::new(val.as_os_str().as_bytes().to_vec()))),
                 None => Ok(Zval::Bool(false)),
@@ -1350,14 +1350,14 @@ fn split_ext(base: &[u8]) -> (&[u8], Option<&[u8]>) {
 }
 
 pub fn basename(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let path = convert::to_zstr(&argv[0], ctx.diags);
-    let suffix = argv.get(1).map(|v| convert::to_zstr(v, ctx.diags));
+    let path = ctx.to_zstr(&argv[0]);
+    let suffix = argv.get(1).map(|v| ctx.to_zstr(v));
     let base = php_basename(path.as_bytes(), suffix.as_ref().map(|s| s.as_bytes()));
     Ok(Zval::Str(PhpStr::new(base)))
 }
 
 pub fn dirname(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let path = convert::to_zstr(&argv[0], ctx.diags);
+    let path = ctx.to_zstr(&argv[0]);
     let levels = argv
         .get(1)
         .map(|v| convert::to_long_cast(v, ctx.diags))
@@ -1366,7 +1366,7 @@ pub fn dirname(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 }
 
 pub fn pathinfo(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let path = convert::to_zstr(&argv[0], ctx.diags);
+    let path = ctx.to_zstr(&argv[0]);
     let p = path.as_bytes();
     let dir = php_dirname_once(p);
     let base = php_basename(p, None);
@@ -1418,7 +1418,8 @@ pub(crate) fn strip_file_wrapper(p: &[u8]) -> &[u8] {
 /// The OS path for a builtin's first argument (raw bytes → `OsString`).
 fn arg_os_path(argv: &[Zval], ctx: &mut Ctx) -> std::ffi::OsString {
     use std::os::unix::ffi::OsStrExt;
-    let s = convert::to_zstr(&argv[0], ctx.diags);
+    // ctx.to_zstr honors a precomputed `__toString` (SplFileInfo paths).
+    let s = ctx.to_zstr(&argv[0]);
     std::ffi::OsStr::from_bytes(strip_file_wrapper(s.as_bytes())).to_os_string()
 }
 
@@ -1434,6 +1435,14 @@ pub fn is_file(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Bool(
         std::fs::metadata(&p).map(|m| m.is_file()).unwrap_or(false),
     ))
+}
+
+/// `is_uploaded_file($filename)`: whether the file arrived via HTTP POST
+/// upload. The CLI SAPI never registers uploads, so this is `false` for every
+/// path (no warning), exactly like `php-cli`.
+pub fn is_uploaded_file(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let _ = arg_os_path(argv, ctx);
+    Ok(Zval::Bool(false))
 }
 
 pub fn is_dir(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
@@ -1626,7 +1635,7 @@ pub fn vfprintf(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         )));
     }
     let r = stream_arg(argv, "vfprintf")?;
-    let fmt = convert::to_zstr(&argv[1], ctx.diags).as_bytes().to_vec();
+    let fmt = ctx.to_zstr(&argv[1]).as_bytes().to_vec();
     let Zval::Array(a) = &argv[2] else {
         return Err(PhpError::TypeError(format!(
             "vfprintf(): Argument #3 ($values) must be of type array, {} given",
@@ -1653,7 +1662,7 @@ pub fn fputcsv(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let fields: Vec<Vec<u8>> = match argv.get(1) {
         Some(Zval::Array(a)) => a
             .iter()
-            .map(|(_, v)| convert::to_zstr(v, ctx.diags).as_bytes().to_vec())
+            .map(|(_, v)| ctx.to_zstr(v).as_bytes().to_vec())
             .collect(),
         _ => {
             return Err(PhpError::TypeError(
@@ -1665,7 +1674,7 @@ pub fn fputcsv(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let enc = crate::csv::first_byte(argv.get(3), ctx, b'"');
     let esc = crate::csv::escape_byte(argv.get(4), ctx);
     let eol = match argv.get(5) {
-        Some(v) => convert::to_zstr(v, ctx.diags).as_bytes().to_vec(),
+        Some(v) => ctx.to_zstr(v).as_bytes().to_vec(),
         None => vec![b'\n'],
     };
     let mut line = crate::csv::format_csv_line(&fields, sep, enc, esc);
@@ -1927,14 +1936,15 @@ fn show_path(p: &std::ffi::OsStr) -> String {
 /// The OS path for the `idx`-th argument (raw bytes → `OsString`).
 fn os_path_at(argv: &[Zval], ctx: &mut Ctx, idx: usize) -> std::ffi::OsString {
     use std::os::unix::ffi::OsStrExt;
-    let s = convert::to_zstr(&argv[idx], ctx.diags);
+    // ctx.to_zstr honors a precomputed `__toString` (SplFileInfo paths).
+    let s = ctx.to_zstr(&argv[idx]);
     std::ffi::OsStr::from_bytes(s.as_bytes()).to_os_string()
 }
 
 /// `unlink`: delete a file; `false` + "unlink(%s): %s" Warning on failure.
 pub fn unlink(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     // The ZLIB wrapper refuses unlink (PHP's exact warning); the file survives.
-    if let Some(name) = argv.first().map(|v| convert::to_zstr(v, ctx.diags)) {
+    if let Some(name) = argv.first().map(|v| ctx.to_zstr(v)) {
         if crate::zlib::zlib_wrapped(name.as_bytes()).is_some() {
             ctx.diags
                 .push(Diag::Warning("unlink(): ZLIB does not allow unlinking".to_string()));
@@ -1961,7 +1971,7 @@ pub fn unlink(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 pub fn mkdir(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     use std::os::unix::fs::DirBuilderExt;
     // The ZLIB wrapper has no directory support: a silent `false` (no warning).
-    if let Some(name) = argv.first().map(|v| convert::to_zstr(v, ctx.diags)) {
+    if let Some(name) = argv.first().map(|v| ctx.to_zstr(v)) {
         if crate::zlib::zlib_wrapped(name.as_bytes()).is_some() {
             return Ok(Zval::Bool(false));
         }
@@ -1990,7 +2000,7 @@ pub fn mkdir(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// `rmdir`: remove an empty directory; "rmdir(%s): %s" Warning on failure.
 pub fn rmdir(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     // The ZLIB wrapper has no directory support: a silent `false` (no warning).
-    if let Some(name) = argv.first().map(|v| convert::to_zstr(v, ctx.diags)) {
+    if let Some(name) = argv.first().map(|v| ctx.to_zstr(v)) {
         if crate::zlib::zlib_wrapped(name.as_bytes()).is_some() {
             return Ok(Zval::Bool(false));
         }
@@ -2020,7 +2030,7 @@ pub fn rename(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     }
     // The ZLIB wrapper does not support renaming (PHP's exact warning).
     for a in argv.iter().take(2) {
-        let name = convert::to_zstr(a, ctx.diags);
+        let name = ctx.to_zstr(a);
         if crate::zlib::zlib_wrapped(name.as_bytes()).is_some() {
             ctx.diags.push(Diag::Warning(
                 "rename(): ZLIB wrapper does not support renaming".to_string(),
@@ -2056,8 +2066,8 @@ pub fn copy(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     // `compress.zlib://` on either side: the wrapper chain reads DECODED source
     // bytes and writes ENCODED destination bytes (a zlib→plain copy decompresses,
     // a plain→zlib copy compresses, zlib→zlib recompresses the plaintext).
-    let from_name = convert::to_zstr(&argv[0], ctx.diags).as_bytes().to_vec();
-    let to_name = convert::to_zstr(&argv[1], ctx.diags).as_bytes().to_vec();
+    let from_name = ctx.to_zstr(&argv[0]).as_bytes().to_vec();
+    let to_name = ctx.to_zstr(&argv[1]).as_bytes().to_vec();
     let from_gz = crate::zlib::zlib_wrapped(&from_name).map(<[u8]>::to_vec);
     let to_gz = crate::zlib::zlib_wrapped(&to_name).map(<[u8]>::to_vec);
     if from_gz.is_some() || to_gz.is_some() {
@@ -2479,7 +2489,7 @@ fn brace_expand(pat: &[u8]) -> Vec<Vec<u8>> {
 /// GLOB_NOCHECK). Supports `*`/`?`/`[...]` across segments plus GLOB_MARK /
 /// GLOB_NOSORT / GLOB_NOCHECK / GLOB_BRACE / GLOB_ONLYDIR (D-52.11).
 pub fn glob(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let pat = convert::to_zstr(&argv[0], ctx.diags).as_bytes().to_vec();
+    let pat = ctx.to_zstr(&argv[0]).as_bytes().to_vec();
     let flags = argv
         .get(1)
         .map(|v| convert::to_long_cast(v, ctx.diags))
@@ -2518,7 +2528,7 @@ pub fn tempnam(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     use std::sync::atomic::{AtomicU64, Ordering};
     static CTR: AtomicU64 = AtomicU64::new(0);
     let dir = arg_os_path(argv, ctx);
-    let prefix = convert::to_zstr(&argv[1], ctx.diags);
+    let prefix = ctx.to_zstr(&argv[1]);
     for _ in 0..100 {
         let n = CTR.fetch_add(1, Ordering::Relaxed);
         let nanos = std::time::SystemTime::now()

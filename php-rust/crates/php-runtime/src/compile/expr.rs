@@ -1179,6 +1179,32 @@ impl<'a> super::FnCompiler<'a> {
         // Builtins: classify by-value vs by-reference-first via the registry.
         match self.ctx.registry.get(bname) {
             Some(Builtin::Value(_)) => {
+                // An unqualified call inside a namespace still resolves the
+                // NAMESPACED function first at run time, even when the bare
+                // name is a builtin: phpunit-bridge's ClockMock eval-declares
+                // `Tests\HttpCache\sleep()`/`time()`/… to shadow the engine
+                // ones. Only the global-namespace call (no fallback) may bind
+                // the builtin op directly (a global redeclaration is a PHP
+                // fatal, so that binding can never be shadowed).
+                if let Some(fb) = fallback {
+                    if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
+                        self.build_args_array(args)?;
+                        self.emit(Op::CallNsFallbackArgs {
+                            name: name.into(),
+                            fallback: fb.into(),
+                        });
+                        return Ok(());
+                    }
+                    for a in args {
+                        self.expr(a)?;
+                    }
+                    self.emit(Op::CallNsFallback {
+                        name: name.into(),
+                        fallback: fb.into(),
+                        argc: args.len() as u32,
+                    });
+                    return Ok(());
+                }
                 if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
                     return self.emit_builtin_spread(bname, args);
                 }

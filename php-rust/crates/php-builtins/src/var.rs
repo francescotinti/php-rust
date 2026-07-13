@@ -783,7 +783,73 @@ pub(crate) fn is_numeric(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError
     Ok(Zval::Bool(numeric))
 }
 pub(crate) fn intval(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    Ok(Zval::Long(convert::to_long_cast(arg1(args, "intval")?, ctx.diags)))
+    let v = arg1(args, "intval")?;
+    let base = args.get(1).map_or(10, |b| convert::to_long_cast(b, ctx.diags));
+    // A non-string subject or base 10 is the plain long cast; any other base
+    // is C strtol on the string, plus PHP's own "0b" handling for base 0/2
+    // (ext/standard/type.c PHP_FUNCTION(intval)).
+    if base != 10 {
+        if let Zval::Str(s) = &v.deref_clone() {
+            return Ok(Zval::Long(intval_base(s.as_bytes(), base)));
+        }
+    }
+    Ok(Zval::Long(convert::to_long_cast(v, ctx.diags)))
+}
+
+/// `intval($str, $base)` for base != 10: strtol semantics (leading whitespace,
+/// sign, `0x`/leading-`0` prefixes for base 16/0, digits until the first
+/// invalid one, clamp on overflow), with PHP's extra `0b` prefix for base 0/2.
+fn intval_base(s: &[u8], base: i64) -> i64 {
+    let mut i = 0;
+    while i < s.len() && s[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    let mut neg = false;
+    if i < s.len() && (s[i] == b'+' || s[i] == b'-') {
+        neg = s[i] == b'-';
+        i += 1;
+    }
+    let mut base = base;
+    if (base == 0 || base == 2)
+        && s.len() > i + 1
+        && s[i] == b'0'
+        && (s[i + 1] == b'b' || s[i + 1] == b'B')
+    {
+        base = 2;
+        i += 2;
+    } else if base == 0 {
+        if s[i..].starts_with(b"0x") || s[i..].starts_with(b"0X") {
+            base = 16;
+            i += 2;
+        } else if s.get(i) == Some(&b'0') {
+            base = 8;
+        } else {
+            base = 10;
+        }
+    } else if base == 16 && (s[i..].starts_with(b"0x") || s[i..].starts_with(b"0X")) {
+        i += 2;
+    }
+    if !(2..=36).contains(&base) {
+        return 0;
+    }
+    let mut acc: i64 = 0;
+    while i < s.len() {
+        let d = match s[i] {
+            b @ b'0'..=b'9' => i64::from(b - b'0'),
+            b @ b'a'..=b'z' => i64::from(b - b'a') + 10,
+            b @ b'A'..=b'Z' => i64::from(b - b'A') + 10,
+            _ => break,
+        };
+        if d >= base {
+            break;
+        }
+        match acc.checked_mul(base).and_then(|x| x.checked_add(d)) {
+            Some(x) => acc = x,
+            None => return if neg { i64::MIN } else { i64::MAX },
+        }
+        i += 1;
+    }
+    if neg { acc.wrapping_neg() } else { acc }
 }
 pub(crate) fn floatval(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Double(convert::to_double(arg1(args, "floatval")?)))

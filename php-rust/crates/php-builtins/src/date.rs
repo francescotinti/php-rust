@@ -15,6 +15,45 @@ use php_runtime::Ctx;
 use php_types::{convert, Key, PhpArray, PhpError, PhpStr, Zval};
 use time::{Date, Month, OffsetDateTime};
 
+/// timelib's request-global "last errors" container (`DateTime::getLastErrors`).
+/// Subset: refreshed by `createFromFormat` parses only — the textual ctor path
+/// does not update it, and the failure messages are the generic pair rather
+/// than timelib's per-specifier wording (documented in PHPR_DIVERGENCES).
+/// One phpr process models one PHP request, so `thread_local` is the right
+/// lifetime (phpt/PHPUnit isolation is per-process).
+#[derive(Default, Clone)]
+struct LastDateErrors {
+    warnings: Vec<(i64, &'static str)>,
+    errors: Vec<(i64, &'static str)>,
+}
+thread_local! {
+    static LAST_DATE_ERRORS: std::cell::RefCell<Option<LastDateErrors>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// `__date_get_last_errors()`: the shared state above in PHP shape — `false`
+/// when clean (PHP 8.2 changed the no-diagnostics return to `false`).
+pub fn __date_get_last_errors(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let state = LAST_DATE_ERRORS.with(|s| s.borrow().clone());
+    let Some(st) = state else { return Ok(Zval::Bool(false)) };
+    if st.warnings.is_empty() && st.errors.is_empty() {
+        return Ok(Zval::Bool(false));
+    }
+    let fill = |list: &[(i64, &'static str)]| {
+        let mut m = PhpArray::new();
+        for (pos, msg) in list {
+            m.insert(Key::Int(*pos), Zval::Str(PhpStr::from_str(msg)));
+        }
+        Zval::Array(Rc::new(m))
+    };
+    let mut out = PhpArray::new();
+    out.insert(Key::from_bytes(b"warning_count"), Zval::Long(st.warnings.len() as i64));
+    out.insert(Key::from_bytes(b"warnings"), fill(&st.warnings));
+    out.insert(Key::from_bytes(b"error_count"), Zval::Long(st.errors.len() as i64));
+    out.insert(Key::from_bytes(b"errors"), fill(&st.errors));
+    Ok(Zval::Array(Rc::new(out)))
+}
+
 const MONTHS_FULL: [&str; 12] = [
     "January",
     "February",
@@ -945,12 +984,28 @@ fn parse_rel_expr(s: &str) -> Option<RelExpr> {
                 }
             }
             _ => {
-                let n: i64 = t.parse().ok()?;
-                let unit = toks.get(i + 1)?.as_str();
+                // timelib relnumber is `[+-]* [ \t]* [0-9]+`: a run of signs
+                // (each `-` flips) may stand apart from its digits — `+ 1
+                // hour` and `--2 hours` both parse; the digits themselves
+                // must then be unsigned (`+ -2 hours` is false).
+                let signs = t.bytes().take_while(|b| matches!(b, b'+' | b'-')).count();
+                let neg = t.bytes().take(signs).filter(|&b| b == b'-').count() % 2 == 1;
+                let digits = &t[signs..];
+                let (num_tok, extra) = if digits.is_empty() && signs > 0 {
+                    (toks.get(i + 1)?.as_str(), 1)
+                } else {
+                    (digits, 0)
+                };
+                if !num_tok.bytes().all(|b| b.is_ascii_digit()) {
+                    return None;
+                }
+                let n: i64 = num_tok.parse().ok()?;
+                let n = if neg { -n } else { n };
+                let unit = toks.get(i + 1 + extra)?.as_str();
                 if !apply_unit(&mut r, unit, n) {
                     return None;
                 }
-                i += 1;
+                i += 1 + extra;
             }
         }
         applied = true;
@@ -1315,6 +1370,12 @@ pub fn __date_from_format(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError
     // not match the parsed date jumps it FORWARD to the next such weekday
     // (`Sat, 12 Jul 2026` → the 18th), applied after all fields parse.
     let mut want_dow: Option<i64> = None;
+    // getLastErrors bookkeeping: an out-of-range date/time that the epoch
+    // conversion then normalizes is timelib's "parsed date/time was invalid"
+    // *warning*; `fmt_consumed` distinguishes a leftover-input failure from a
+    // mid-format mismatch for the failure message.
+    let mut warn_invalid: Option<&'static str> = None;
+    let mut fmt_consumed = false;
 
     let result = (|| {
         while fi < f.len() {
@@ -1550,6 +1611,7 @@ pub fn __date_from_format(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError
             }
         }
         // The whole value must be consumed.
+        fmt_consumed = true;
         if vi != v.len() {
             return None;
         }
@@ -1567,6 +1629,13 @@ pub fn __date_from_format(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError
                 s = 0;
             }
         }
+        // Out-of-range fields normalize below but leave a getLastErrors
+        // warning, exactly what rejects `2012-21-07` under `Y-m-d`.
+        if !(1..=12).contains(&mo) || d < 1 || d > days_in_civil_month(yr, mo).unwrap_or(31) {
+            warn_invalid = Some("The parsed date was invalid");
+        } else if !(0..=23).contains(&h) || !(0..=59).contains(&mi) || !(0..=59).contains(&s) {
+            warn_invalid = Some("The parsed time was invalid");
+        }
         let mut base = civil_to_epoch(yr, mo, d, h, mi, s)?;
         // A textual weekday that disagrees with the parsed date pushes the
         // wall date forward to the next such weekday (oracle-pinned).
@@ -1578,6 +1647,31 @@ pub fn __date_from_format(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError
         // A parsed offset means the wall time above was *in* that offset.
         Some(base - tz_off.as_ref().map(|(o, _)| *o).unwrap_or(0))
     })();
+
+    // Refresh the getLastErrors container for this parse. Messages are the
+    // honest generic subset: exhausted input keeps timelib's wording; other
+    // failures use its catch-all (per-specifier wording is a scope-out).
+    LAST_DATE_ERRORS.with(|st| {
+        let mut diag = LastDateErrors::default();
+        match &result {
+            Some(_) => {
+                if let Some(w) = warn_invalid {
+                    diag.warnings.push((v.len() as i64, w));
+                }
+            }
+            None => {
+                let (pos, msg) = if fmt_consumed {
+                    (vi as i64, "Trailing data")
+                } else if vi >= v.len() {
+                    (v.len() as i64, "Not enough data available to satisfy format")
+                } else {
+                    (vi as i64, "Unexpected data found.")
+                };
+                diag.errors.push((pos, msg));
+            }
+        }
+        *st.borrow_mut() = Some(diag);
+    });
 
     Ok(match result {
         Some(ts) => {

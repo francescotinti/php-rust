@@ -41,6 +41,14 @@ pub struct Object {
     /// call leaves this empty, so a readonly write there still fatals. Empty for
     /// every object outside an active clone, so the common case costs nothing.
     pub readonly_clone_writable: Vec<Box<[u8]>>,
+    /// Declared TYPED properties explicitly `unset()` on this instance. Zend
+    /// keeps the slot UNDEF but clears its IS_PROP_UNINIT flag: the property
+    /// still renders `uninitialized` (var_dump/reflection), but a read now
+    /// dispatches `__get` (never-initialized reads keep the before-init
+    /// fatal instead — symfony Constraint's lazy-groups idiom). Meaningful
+    /// only while the slot holds `Undef`; a re-assignment makes it moot.
+    /// Empty for the common object, so it costs nothing.
+    pub typed_unset: Vec<Box<[u8]>>,
     /// Lazy-object marker (PHP 8.4): `Some` while the object is a lazy
     /// ghost/proxy. A **ghost** clears this to `None` on initialization (it
     /// becomes an ordinary object). A **proxy** keeps `Some(Proxy)` for life —
@@ -113,8 +121,21 @@ impl Object {
             info: Rc::clone(&self.info),
             readonly_init: self.readonly_init.clone(),
             readonly_clone_writable: self.readonly_clone_writable.clone(),
+            typed_unset: self.typed_unset.clone(),
             lazy: self.lazy,
             proxy_instance: self.proxy_instance.clone(),
+        }
+    }
+
+    /// Whether typed property `name` was explicitly `unset()` (see field doc).
+    pub fn is_typed_unset(&self, name: &[u8]) -> bool {
+        self.typed_unset.iter().any(|n| n.as_ref() == name)
+    }
+
+    /// Record that typed property `name` was explicitly `unset()` (idempotent).
+    pub fn mark_typed_unset(&mut self, name: &[u8]) {
+        if !self.is_typed_unset(name) {
+            self.typed_unset.push(name.into());
         }
     }
 

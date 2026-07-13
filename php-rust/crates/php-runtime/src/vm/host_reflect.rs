@@ -852,8 +852,14 @@ impl<'m> super::Vm<'m> {
             Some(c) => self.prop_decl_storage_key(c, &prop),
             None => prop.clone(),
         };
-        let v = read_property(&obj, &key, &mut self.diags);
-        Ok(Zval::Bool(!matches!(v, Zval::Undef)))
+        // Inspect the raw slot: `Undef` (never initialized) and a removed
+        // entry (explicitly unset) both read as NOT initialized — silently
+        // (read_property would raise the Undefined-property warning).
+        let init = match &obj {
+            Zval::Object(o) => !matches!(o.borrow().props.get(&key), None | Some(Zval::Undef)),
+            _ => true,
+        };
+        Ok(Zval::Bool(init))
     }
     /// `__reflect_prop_get($class, $prop, $obj)`: read property `$prop` (declared
     /// in `$class`) of `$obj` ignoring visibility — backs

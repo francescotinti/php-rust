@@ -24,6 +24,9 @@ pub(super) struct DomDoc {
     pub nodes: Vec<DomNode>,
     pub version: Vec<u8>,
     pub encoding: Option<Vec<u8>>,
+    /// The document encoding an HTML parse resolved (override argument, `<meta
+    /// charset>` sniff, or the UTF-8 default) — `Dom\Document::$inputEncoding`.
+    pub input_encoding: Option<Vec<u8>>,
 }
 
 pub(super) struct DomNode {
@@ -92,6 +95,7 @@ impl DomDoc {
             nodes: vec![DomNode { kind: DomKind::Document, parent: None, children: Vec::new() }],
             version: b"1.0".to_vec(),
             encoding: None,
+            input_encoding: None,
         }
     }
 
@@ -516,6 +520,548 @@ impl DomDoc {
             }
         }
     }
+}
+
+// ----- HTML5-lite parser (`Dom\HTMLDocument::createFromString`) -----
+//
+// A lenient HTML tree builder covering the surface the new `Dom\` API needs for
+// app-compat (symfony/dom-crawler parses every BrowserKit response body through
+// it): implied html/head/body structure, void elements, raw-text elements
+// (script/style + RCDATA title/textarea), comments, doctype, bogus comments,
+// attribute quoting forms, `<p>`/`<li>`-style auto-closing, numeric + core
+// named character references, and `<meta charset>` sniffing with the WHATWG
+// label→canonical mapping for the Latin-1 family. Real PHP wraps lexbor's full
+// HTML5 algorithm; scope-outs (adoption agency, table fostering, template
+// contents, the full named-entity table) are documented in
+// PHPR_DIVERGENCES_FROM_PHP.md.
+
+/// Void elements: start tags that never take children (HTML5 §13.1.2).
+fn html_void(name: &[u8]) -> bool {
+    matches!(
+        name,
+        b"area" | b"base" | b"basefont" | b"bgsound" | b"br" | b"col" | b"embed" | b"hr"
+            | b"img" | b"input" | b"keygen" | b"link" | b"meta" | b"param" | b"source"
+            | b"track" | b"wbr"
+    )
+}
+
+/// Start tags that implicitly close an open `<p>` (HTML5 "close a p element").
+fn html_closes_p(name: &[u8]) -> bool {
+    matches!(
+        name,
+        b"address" | b"article" | b"aside" | b"blockquote" | b"details" | b"div" | b"dl"
+            | b"fieldset" | b"figcaption" | b"figure" | b"footer" | b"form" | b"h1" | b"h2"
+            | b"h3" | b"h4" | b"h5" | b"h6" | b"header" | b"hgroup" | b"hr" | b"main"
+            | b"menu" | b"nav" | b"ol" | b"p" | b"pre" | b"section" | b"table" | b"ul"
+    )
+}
+
+/// Metadata tags routed into `<head>` while no body content has started.
+fn html_head_tag(name: &[u8]) -> bool {
+    matches!(
+        name,
+        b"base" | b"basefont" | b"bgsound" | b"link" | b"meta" | b"title" | b"style"
+            | b"script" | b"template" | b"noframes"
+    )
+}
+
+/// Raw-text elements: their content runs to the matching end tag with no tag
+/// tokenization. Returns `Some(decode_entities)` (RCDATA decodes references).
+fn html_rawtext(name: &[u8]) -> Option<bool> {
+    match name {
+        b"script" | b"style" => Some(false),
+        b"title" | b"textarea" => Some(true),
+        _ => None,
+    }
+}
+
+/// WHATWG encoding label → the canonical name phpr can transcode. `None` for
+/// an unknown label (PHP raises ValueError for an invalid override).
+pub(super) fn html_encoding_canonical(label: &[u8]) -> Option<&'static [u8]> {
+    let mut l = label.to_ascii_lowercase();
+    l.retain(|b| !b.is_ascii_whitespace());
+    Some(match l.as_slice() {
+        b"utf-8" | b"utf8" | b"unicode-1-1-utf-8" | b"unicode11utf8" | b"unicode20utf8"
+        | b"x-unicode20utf8" => b"UTF-8",
+        b"windows-1252" | b"cp1252" | b"x-cp1252" | b"iso-8859-1" | b"iso8859-1"
+        | b"iso88591" | b"iso_8859-1" | b"iso_8859-1:1987" | b"latin1" | b"l1"
+        | b"csisolatin1" | b"ibm819" | b"cp819" | b"ansi_x3.4-1968" | b"ascii"
+        | b"us-ascii" => b"windows-1252",
+        b"iso-8859-15" | b"iso8859-15" | b"iso885915" | b"iso_8859-15" | b"csisolatin9"
+        | b"l9" | b"latin9" => b"ISO-8859-15",
+        _ => return None,
+    })
+}
+
+/// Transcode `bytes` in `canonical` encoding to UTF-8 (the tree's encoding).
+fn html_to_utf8(bytes: &[u8], canonical: &[u8]) -> Vec<u8> {
+    // windows-1252's 0x80–0x9F block (WHATWG index); other bytes are Latin-1.
+    const W1252: [u32; 32] = [
+        0x20AC, 0x0081, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, 0x02C6, 0x2030,
+        0x0160, 0x2039, 0x0152, 0x008D, 0x017D, 0x008F, 0x0090, 0x2018, 0x2019, 0x201C,
+        0x201D, 0x2022, 0x2013, 0x2014, 0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0x009D,
+        0x017E, 0x0178,
+    ];
+    match canonical {
+        b"windows-1252" | b"ISO-8859-15" => {
+            let mut out = Vec::with_capacity(bytes.len());
+            for &b in bytes {
+                let cp = match (canonical, b) {
+                    (b"windows-1252", 0x80..=0x9F) => W1252[(b - 0x80) as usize],
+                    // ISO-8859-15 revisions over Latin-1.
+                    (b"ISO-8859-15", 0xA4) => 0x20AC,
+                    (b"ISO-8859-15", 0xA6) => 0x0160,
+                    (b"ISO-8859-15", 0xA8) => 0x0161,
+                    (b"ISO-8859-15", 0xB4) => 0x017D,
+                    (b"ISO-8859-15", 0xB8) => 0x017E,
+                    (b"ISO-8859-15", 0xBC) => 0x0152,
+                    (b"ISO-8859-15", 0xBD) => 0x0153,
+                    (b"ISO-8859-15", 0xBE) => 0x0178,
+                    _ => b as u32,
+                };
+                match char::from_u32(cp) {
+                    Some(c) => out.extend_from_slice(c.to_string().as_bytes()),
+                    None => out.push(b),
+                }
+            }
+            out
+        }
+        _ => bytes.to_vec(),
+    }
+}
+
+/// Sniff a `<meta charset=X>` / `<meta … content="…charset=X">` label in the
+/// first 1024 bytes (the HTML5 prescan), returning the canonical name.
+fn html_sniff_meta_charset(html: &[u8]) -> Option<&'static [u8]> {
+    let window = &html[..html.len().min(1024)];
+    let lower = window.to_ascii_lowercase();
+    let mut from = 0;
+    while let Some(p) = find_sub(&lower[from..], b"<meta") {
+        let start = from + p;
+        let end = lower[start..].iter().position(|&b| b == b'>').map(|e| start + e)?;
+        let tag = &lower[start..end];
+        if let Some(cp) = find_sub(tag, b"charset") {
+            let mut i = cp + b"charset".len();
+            while tag.get(i).is_some_and(|b| b.is_ascii_whitespace()) { i += 1 }
+            if tag.get(i) == Some(&b'=') {
+                i += 1;
+                while tag.get(i).is_some_and(|b| b.is_ascii_whitespace()) { i += 1 }
+                let quote = match tag.get(i) {
+                    Some(&q @ (b'"' | b'\'')) => { i += 1; Some(q) }
+                    _ => None,
+                };
+                let vs = i;
+                while i < tag.len() {
+                    let b = tag[i];
+                    let stop = match quote {
+                        Some(q) => b == q,
+                        None => b.is_ascii_whitespace() || b == b';' || b == b'/',
+                    };
+                    if stop { break }
+                    i += 1;
+                }
+                if let Some(c) = html_encoding_canonical(&tag[vs..i]) {
+                    return Some(c);
+                }
+            }
+        }
+        from = end + 1;
+    }
+    None
+}
+
+/// Naive substring find (ASCII haystacks from the prescan window).
+fn find_sub(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|w| w == needle)
+}
+
+/// Decode numeric character references plus the core named set; an unmatched
+/// `&` stays literal, as the HTML5 tokenizer specifies. (The full 2 200-entry
+/// named table is a documented scope-out.)
+fn html_decode_entities(text: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(text.len());
+    let mut i = 0;
+    while i < text.len() {
+        if text[i] == b'&' {
+            if let Some((rep, len)) = html_entity_at(&text[i..]) {
+                out.extend_from_slice(&rep);
+                i += len;
+                continue;
+            }
+        }
+        out.push(text[i]);
+        i += 1;
+    }
+    out
+}
+
+/// One reference starting at `&`: `(replacement, bytes consumed)`.
+fn html_entity_at(s: &[u8]) -> Option<(Vec<u8>, usize)> {
+    let end = s.iter().take(34).position(|&b| b == b';')?;
+    let body = &s[1..end];
+    let cp_bytes = |cp: u32| char::from_u32(cp).unwrap_or('\u{FFFD}').to_string().into_bytes();
+    let rep: Vec<u8> = if let Some(hex) = body.strip_prefix(b"#x").or_else(|| body.strip_prefix(b"#X")) {
+        cp_bytes(u32::from_str_radix(std::str::from_utf8(hex).ok()?, 16).ok()?)
+    } else if let Some(dec) = body.strip_prefix(b"#") {
+        cp_bytes(std::str::from_utf8(dec).ok()?.parse().ok()?)
+    } else {
+        match body {
+            b"amp" => b"&".to_vec(),
+            b"lt" => b"<".to_vec(),
+            b"gt" => b">".to_vec(),
+            b"quot" => b"\"".to_vec(),
+            b"apos" => b"'".to_vec(),
+            b"nbsp" => "\u{A0}".as_bytes().to_vec(),
+            _ => return None,
+        }
+    };
+    Some((rep, end + 1))
+}
+
+/// Tree-construction state: the implied html/head/body skeleton plus the open
+/// element stack for body content.
+struct HtmlTree {
+    doc: DomDoc,
+    html: Option<usize>,
+    head: Option<usize>,
+    body: Option<usize>,
+    /// Open elements under body (body itself excluded).
+    stack: Vec<usize>,
+    in_body: bool,
+}
+
+impl HtmlTree {
+    fn ensure_html(&mut self) -> usize {
+        match self.html {
+            Some(h) => h,
+            None => {
+                let h = self.doc.push(DomKind::Element { name: b"html".to_vec(), attrs: Vec::new() }, Some(0));
+                self.html = Some(h);
+                h
+            }
+        }
+    }
+
+    fn ensure_head(&mut self) -> usize {
+        let html = self.ensure_html();
+        match self.head {
+            Some(h) => h,
+            None => {
+                let h = self.doc.push(DomKind::Element { name: b"head".to_vec(), attrs: Vec::new() }, Some(html));
+                self.head = Some(h);
+                h
+            }
+        }
+    }
+
+    fn ensure_body(&mut self) -> usize {
+        self.ensure_head();
+        let html = self.ensure_html();
+        match self.body {
+            Some(b) => b,
+            None => {
+                let b = self.doc.push(DomKind::Element { name: b"body".to_vec(), attrs: Vec::new() }, Some(html));
+                self.body = Some(b);
+                b
+            }
+        }
+    }
+
+    /// Where body-mode content inserts: the innermost open element, else body.
+    fn insertion(&mut self) -> usize {
+        match self.stack.last() {
+            Some(&t) => t,
+            None => self.ensure_body(),
+        }
+    }
+
+    /// Merge attributes onto an existing element, keeping present ones (the
+    /// HTML5 rule for repeated `<html>`/`<body>` tags).
+    fn merge_attrs(&mut self, el: usize, new_attrs: Vec<(Vec<u8>, Vec<u8>)>) {
+        if let DomKind::Element { attrs, .. } = &mut self.doc.nodes[el].kind {
+            for (n, v) in new_attrs {
+                if !attrs.iter().any(|(en, _)| *en == n) {
+                    attrs.push((n, v));
+                }
+            }
+        }
+    }
+
+    /// A start tag. Returns the created element (rawtext callers append the
+    /// pending text under it).
+    fn start_tag(&mut self, name: &[u8], attrs: Vec<(Vec<u8>, Vec<u8>)>) -> usize {
+        match name {
+            b"html" => {
+                let h = self.ensure_html();
+                self.merge_attrs(h, attrs);
+                h
+            }
+            b"head" => {
+                let h = self.ensure_head();
+                self.merge_attrs(h, attrs);
+                h
+            }
+            b"body" => {
+                let b = self.ensure_body();
+                self.merge_attrs(b, attrs);
+                self.in_body = true;
+                b
+            }
+            _ if html_head_tag(name) && !self.in_body => {
+                let head = self.ensure_head();
+                self.doc.push(DomKind::Element { name: name.to_vec(), attrs }, Some(head))
+            }
+            _ => {
+                self.ensure_body();
+                self.in_body = true;
+                if html_closes_p(name) {
+                    if let Some(pos) = self.stack.iter().rposition(|&e| {
+                        matches!(&self.doc.nodes[e].kind, DomKind::Element { name, .. } if name.as_slice() == b"p")
+                    }) {
+                        self.stack.truncate(pos);
+                    }
+                }
+                // `<li><li>`, `<dt><dd>`, `<tr><tr>`, `<td><th>`… auto-close
+                // their open counterpart.
+                let group: &[&[u8]] = match name {
+                    b"li" => &[b"li"],
+                    b"dt" | b"dd" => &[b"dt", b"dd"],
+                    b"tr" => &[b"tr", b"td", b"th"],
+                    b"td" | b"th" => &[b"td", b"th"],
+                    b"option" | b"optgroup" => &[b"option"],
+                    _ => &[],
+                };
+                if !group.is_empty() {
+                    if let Some(pos) = self.stack.iter().rposition(|&e| {
+                        matches!(&self.doc.nodes[e].kind, DomKind::Element { name, .. } if group.contains(&name.as_slice()))
+                    }) {
+                        self.stack.truncate(pos);
+                    }
+                }
+                let parent = self.insertion();
+                let id = self.doc.push(DomKind::Element { name: name.to_vec(), attrs }, Some(parent));
+                if !html_void(name) {
+                    self.stack.push(id);
+                }
+                id
+            }
+        }
+    }
+
+    fn end_tag(&mut self, name: &[u8]) {
+        if matches!(name, b"html" | b"body" | b"head") {
+            return;
+        }
+        if let Some(pos) = self.stack.iter().rposition(|&e| {
+            matches!(&self.doc.nodes[e].kind, DomKind::Element { name: n, .. } if n.as_slice() == name)
+        }) {
+            self.stack.truncate(pos);
+        }
+    }
+
+    fn text(&mut self, decoded: Vec<u8>) {
+        if !self.in_body && self.stack.is_empty() {
+            // Pre-body whitespace is dropped by the before-head insertion
+            // modes; the first non-blank character opens the body.
+            let start = decoded.iter().position(|b| !b.is_ascii_whitespace());
+            let Some(start) = start else { return };
+            self.ensure_body();
+            self.in_body = true;
+            let parent = self.insertion();
+            self.doc.push_text(decoded[start..].to_vec(), parent);
+            return;
+        }
+        let parent = self.insertion();
+        self.doc.push_text(decoded, parent);
+    }
+
+    fn comment(&mut self, data: Vec<u8>) {
+        let parent = if self.in_body || !self.stack.is_empty() {
+            self.insertion()
+        } else if self.head.is_some() {
+            self.head.unwrap()
+        } else if self.html.is_some() {
+            self.html.unwrap()
+        } else {
+            0
+        };
+        self.doc.push(DomKind::Comment(data), Some(parent));
+    }
+}
+
+impl DomDoc {
+    /// Parse `html` (already UTF-8) into an implied-structure tree. Lenient:
+    /// never fails (HTML5 defines error recovery for every input).
+    pub(super) fn parse_html(html: &[u8]) -> DomDoc {
+        let mut t = HtmlTree {
+            doc: DomDoc::new(),
+            html: None,
+            head: None,
+            body: None,
+            stack: Vec::new(),
+            in_body: false,
+        };
+        let s = html;
+        let mut i = 0;
+        let mut saw_doctype = false;
+        while i < s.len() {
+            if s[i] != b'<' {
+                let end = s[i..].iter().position(|&b| b == b'<').map_or(s.len(), |p| i + p);
+                t.text(html_decode_entities(&s[i..end]));
+                i = end;
+                continue;
+            }
+            let rest = &s[i + 1..];
+            if rest.starts_with(b"!--") {
+                // Comment: data up to `-->` (unterminated runs to EOF).
+                let (data, consumed) = match find_sub(&rest[3..], b"-->") {
+                    Some(p) => (&rest[3..3 + p], 1 + 3 + p + 3),
+                    None => (&rest[3..], 1 + rest.len()),
+                };
+                t.comment(data.to_vec());
+                i += consumed;
+            } else if rest.first() == Some(&b'!') {
+                let close = rest.iter().position(|&b| b == b'>').map_or(rest.len(), |p| p + 1);
+                let body = &rest[1..close.saturating_sub(1).max(1)];
+                if body.len() >= 7 && body[..7].eq_ignore_ascii_case(b"doctype") {
+                    if !saw_doctype && t.html.is_none() {
+                        let name = body[7..]
+                            .split(|b| b.is_ascii_whitespace())
+                            .find(|w| !w.is_empty())
+                            .unwrap_or(b"html")
+                            .to_ascii_lowercase();
+                        t.doc.push(DomKind::DocType { name }, Some(0));
+                        saw_doctype = true;
+                    }
+                } else {
+                    // `<!…>` otherwise (incl. `<![CDATA[…]]>` in HTML) is a
+                    // bogus comment holding everything after `<!`.
+                    t.comment(body.to_vec());
+                }
+                i += 1 + close;
+            } else if rest.first() == Some(&b'?') {
+                // `<?…>` is a bogus comment in HTML (data includes the `?`).
+                let close = rest.iter().position(|&b| b == b'>').map_or(rest.len(), |p| p + 1);
+                t.comment(rest[..close.saturating_sub(1)].to_vec());
+                i += 1 + close;
+            } else if rest.first() == Some(&b'/') {
+                match html_tag_name(&rest[1..]) {
+                    Some((name, mut j)) => {
+                        // Skip to `>` (end tags carry no attributes).
+                        while rest.get(1 + j).is_some_and(|&b| b != b'>') { j += 1 }
+                        t.end_tag(&name);
+                        i += 1 + 1 + j + 1;
+                    }
+                    None => {
+                        // `</>` or `</3…>`: bogus comment per the spec.
+                        let close = rest.iter().position(|&b| b == b'>').map_or(rest.len(), |p| p + 1);
+                        t.comment(rest[1..close.saturating_sub(1)].to_vec());
+                        i += 1 + close;
+                    }
+                }
+            } else if rest.first().is_some_and(|b| b.is_ascii_alphabetic()) {
+                let (name, mut j) = html_tag_name(rest).expect("alphabetic start");
+                let mut attrs: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
+                // Attribute list up to `>`.
+                loop {
+                    while rest.get(j).is_some_and(|b| b.is_ascii_whitespace()) { j += 1 }
+                    match rest.get(j) {
+                        None => break,
+                        Some(b'>') => { j += 1; break }
+                        Some(b'/') => { j += 1; continue }
+                        _ => {}
+                    }
+                    let an_start = j;
+                    while rest.get(j).is_some_and(|&b| {
+                        !b.is_ascii_whitespace() && b != b'=' && b != b'>' && b != b'/'
+                    }) { j += 1 }
+                    let an = rest[an_start..j].to_ascii_lowercase();
+                    while rest.get(j).is_some_and(|b| b.is_ascii_whitespace()) { j += 1 }
+                    let av: Vec<u8> = if rest.get(j) == Some(&b'=') {
+                        j += 1;
+                        while rest.get(j).is_some_and(|b| b.is_ascii_whitespace()) { j += 1 }
+                        match rest.get(j) {
+                            Some(&q @ (b'"' | b'\'')) => {
+                                j += 1;
+                                let v_start = j;
+                                while rest.get(j).is_some_and(|&b| b != q) { j += 1 }
+                                let v = &rest[v_start..j.min(rest.len())];
+                                if rest.get(j).is_some() { j += 1 }
+                                html_decode_entities(v)
+                            }
+                            _ => {
+                                let v_start = j;
+                                while rest.get(j).is_some_and(|&b| !b.is_ascii_whitespace() && b != b'>') { j += 1 }
+                                html_decode_entities(&rest[v_start..j])
+                            }
+                        }
+                    } else {
+                        Vec::new()
+                    };
+                    if !an.is_empty() && !attrs.iter().any(|(n, _)| *n == an) {
+                        attrs.push((an, av));
+                    }
+                    if rest.get(j) == Some(&b'>') { j += 1; break }
+                }
+                let el = t.start_tag(&name, attrs);
+                i += 1 + j;
+                if let Some(decode) = html_rawtext(&name) {
+                    // Raw text runs to the matching case-insensitive end tag.
+                    let mut close_pat = Vec::with_capacity(name.len() + 2);
+                    close_pat.extend_from_slice(b"</");
+                    close_pat.extend_from_slice(&name);
+                    let lower = s[i..].to_ascii_lowercase();
+                    let (raw_end, after) = match find_sub(&lower, &close_pat) {
+                        Some(p) => {
+                            let gt = lower[p..].iter().position(|&b| b == b'>').map_or(lower.len() - p, |g| g + 1);
+                            (i + p, i + p + gt)
+                        }
+                        None => (s.len(), s.len()),
+                    };
+                    let mut raw = s[i..raw_end].to_vec();
+                    // `<pre>`/`<textarea>` drop one leading newline (§13.1.2.5
+                    // covers pre; the tree builder covers textarea).
+                    if name == b"textarea" && raw.first() == Some(&b'\n') {
+                        raw.remove(0);
+                    }
+                    if decode {
+                        raw = html_decode_entities(&raw);
+                    }
+                    if !raw.is_empty() {
+                        t.doc.push_text(raw, el);
+                    }
+                    // Rawtext elements never join the open stack, but
+                    // start_tag pushed non-void names: pop it back off.
+                    if t.stack.last() == Some(&el) {
+                        t.stack.pop();
+                    }
+                    i = after;
+                } else if name == b"pre" {
+                    if s.get(i) == Some(&b'\n') {
+                        i += 1;
+                    }
+                }
+            } else {
+                // A lone `<` (not a tag): literal text.
+                t.text(b"<".to_vec());
+                i += 1;
+            }
+        }
+        t.ensure_body();
+        t.doc
+    }
+}
+
+/// A tag name at the start of `s`: lowercased name + index just past it.
+fn html_tag_name(s: &[u8]) -> Option<(Vec<u8>, usize)> {
+    if !s.first().is_some_and(|b| b.is_ascii_alphabetic()) {
+        return None;
+    }
+    let mut j = 1;
+    while s.get(j).is_some_and(|&b| !b.is_ascii_whitespace() && b != b'>' && b != b'/') {
+        j += 1;
+    }
+    Some((s[..j].to_ascii_lowercase(), j))
 }
 
 /// libxml text/attribute escaping: `&`, `<`, `>` always; `"` (as `&quot;`) and
@@ -1408,6 +1954,34 @@ impl<'m> Vm<'m> {
         }
     }
 
+    /// `__dom_load_html(source, overrideEncoding|null) -> docId`: parse an
+    /// HTML5 document into a fresh handle (`Dom\HTMLDocument::createFromString`).
+    /// An unknown override label is the ValueError PHP raises.
+    pub(super) fn ho_dom_load_html(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let source = self.dom_str(&args, 0);
+        let override_enc = match args.get(1) {
+            None | Some(Zval::Null) => None,
+            _ => Some(self.dom_str(&args, 1)),
+        };
+        let enc: &[u8] = match override_enc {
+            Some(label) => html_encoding_canonical(&label).ok_or_else(|| {
+                PhpError::ValueError(
+                    "Dom\\HTMLDocument::createFromString(): Argument #3 ($overrideEncoding) \
+                     must be a valid document encoding"
+                        .to_string(),
+                )
+            })?,
+            None => html_sniff_meta_charset(&source).unwrap_or(b"UTF-8"),
+        };
+        let utf8 = html_to_utf8(&source, enc);
+        let mut doc = DomDoc::parse_html(&utf8);
+        doc.input_encoding = Some(enc.to_vec());
+        let id = self.next_dom;
+        self.next_dom += 1;
+        self.dom_docs.insert(id, doc);
+        Ok(Zval::Long(id as i64))
+    }
+
     /// `__dom_save_xml(docId, nodeId|-1) -> string`.
     pub(super) fn ho_dom_save_xml(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let n = self.dom_arg(&args, 1);
@@ -1776,6 +2350,10 @@ impl<'m> Vm<'m> {
         let mut arr = PhpArray::new();
         let _ = arr.append(Zval::Str(PhpStr::new(doc.version.clone())));
         let _ = arr.append(match &doc.encoding {
+            Some(e) => Zval::Str(PhpStr::new(e.clone())),
+            None => Zval::Null,
+        });
+        let _ = arr.append(match &doc.input_encoding {
             Some(e) => Zval::Str(PhpStr::new(e.clone())),
             None => Zval::Null,
         });

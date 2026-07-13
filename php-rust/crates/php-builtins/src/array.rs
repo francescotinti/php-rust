@@ -546,7 +546,14 @@ pub fn array_pop(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval,
     let rc = as_array_mut(arr, "array_pop")?;
     let last_key = rc.iter().last().map(|(k, _)| k.clone());
     match last_key {
-        Some(k) => Ok(Rc::make_mut(rc).remove(&k).unwrap_or(Zval::Null)),
+        Some(k) => {
+            let a = Rc::make_mut(rc);
+            let v = a.remove(&k).unwrap_or(Zval::Null);
+            // Popping the latest auto-indexed element frees its index for the
+            // next append (Zend, ext/standard/array.c:3579).
+            a.pop_adjust_next_free(&k);
+            Ok(v)
+        }
         None => Ok(Zval::Null),
     }
 }

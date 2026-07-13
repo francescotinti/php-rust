@@ -500,6 +500,10 @@ pub(crate) fn run_module_with_hir<'m>(
             .unwrap_or_else(|_| b"php".to_vec());
         vm.constants.insert(b"PHP_BINARY".to_vec(), Zval::Str(PhpStr::new(path)));
     }
+    // ext/dom "new DOM" namespaced constant (PHP 8.4+): parse HTML without the
+    // implicit HTML namespace. Registered here because it is namespace-
+    // qualified (the lowering's engine-constant fold is for global names).
+    vm.constants.insert(b"Dom\\HTML_NO_DEFAULT_NS".to_vec(), Zval::Long(2_147_483_648));
     // Link-time `Serializable` policy for the hoisted (unconditional) classes:
     // the deprecation is staged in `diags` (flushed with the first statement,
     // so it prints before any script output, like Zend's compile-time emission)
@@ -2499,9 +2503,24 @@ impl<'m> Vm<'m> {
                         if let Some(slot) = self.frames[caller].slots.get_mut(cs) {
                             frame.slots[i] = Zval::Ref(make_cell(slot));
                         }
+                    } else if let Some(dyn_slot) =
+                        self.frames[caller].dyn_vars.get_mut(&name[..])
+                    {
+                        // A variable the includer created by NAME at run time
+                        // (extract() in HtmlErrorRenderer::include feeds its
+                        // template context this way) shares the same way.
+                        frame.slots[i] = Zval::Ref(make_cell(dyn_slot));
                     }
                 }
             }
+            // An include/eval inside a method also inherits `$this` and the
+            // class scope: an included template may read `$this->prop` or call
+            // a private method of the including class (Zend runs the op_array
+            // with the caller's scope/This — symfony's HtmlErrorRenderer
+            // renders its .html.php views exactly this way).
+            frame.this = self.frames[caller].this.clone();
+            frame.class = self.frames[caller].class;
+            frame.static_class = self.frames[caller].static_class;
         }
         self.frames.push(frame);
         let outcome = self.drive_to_return(baseline);
@@ -5223,7 +5242,7 @@ impl<'m> Vm<'m> {
                         id: self.next_id(),
                         info: Rc::new(php_types::ObjectInfo::default()),
                         readonly_init: Vec::new(),
-                        readonly_clone_writable: Vec::new(),
+                        readonly_clone_writable: Vec::new(), typed_unset: Vec::new(),
                         lazy: None,
                         proxy_instance: None,
                     };
@@ -5575,7 +5594,7 @@ impl<'m> Vm<'m> {
             props.set(name, Zval::Undef);
         }
         let id = self.next_id();
-        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init: Vec::new(), readonly_clone_writable: Vec::new(), lazy: None, proxy_instance: None };
+        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init: Vec::new(), readonly_clone_writable: Vec::new(), typed_unset: Vec::new(), lazy: None, proxy_instance: None };
         let rc = Rc::new(RefCell::new(obj));
         // Track for `__destruct` (OOP-3d), like every other freshly minted object.
         self.created.insert(id, Rc::clone(&rc));
@@ -6231,13 +6250,28 @@ impl<'m> Vm<'m> {
     /// Whether `v` is callable (the predicate behind `is_callable`), without
     /// invoking it.
     fn is_value_callable(&self, v: &Zval) -> bool {
+        // zend_is_callable checks accessibility from the CALLING scope: a
+        // private/protected method is callable only from where a direct call
+        // would be; an inaccessible or missing method still counts when the
+        // magic trampoline exists (`__call` / `__callStatic`).
+        let scope = self.frames.last().and_then(|f| f.class);
+        let method_callable = |cid: ClassId, m: &[u8], magic: &[u8]| -> bool {
+            match resolve_method_runtime(&self.classes, cid, m) {
+                Some((decl, idx)) => {
+                    let vis = self.classes[decl].methods[idx].visibility;
+                    method_visible_from(&self.classes, scope, vis, decl, m)
+                        || resolve_method_runtime(&self.classes, cid, magic).is_some()
+                }
+                None => resolve_method_runtime(&self.classes, cid, magic).is_some(),
+            }
+        };
         match v {
             Zval::Closure(_) => true,
             Zval::Str(s) => {
                 let b = s.as_bytes();
                 if let Some(pos) = b.windows(2).position(|w| w == b"::") {
                     self.class_id_from_value(&Zval::Str(PhpStr::new(b[..pos].to_vec())))
-                        .map(|cid| resolve_method_runtime(&self.classes, cid, &b[pos + 2..]).is_some())
+                        .map(|cid| method_callable(cid, &b[pos + 2..], b"__callStatic"))
                         .unwrap_or(false)
                 } else {
                     self.is_name_callable(b)
@@ -6250,7 +6284,14 @@ impl<'m> Vm<'m> {
                 }
                 let Zval::Str(m) = &elems[1] else { return false };
                 match self.class_id_from_value(&elems[0]) {
-                    Some(cid) => resolve_method_runtime(&self.classes, cid, m.as_bytes()).is_some(),
+                    Some(cid) => {
+                        let magic = if matches!(elems[0], Zval::Object(_)) {
+                            &b"__call"[..]
+                        } else {
+                            &b"__callStatic"[..]
+                        };
+                        method_callable(cid, m.as_bytes(), magic)
+                    }
                     None => false,
                 }
             }
@@ -7097,8 +7138,25 @@ impl<'m> Vm<'m> {
     /// for a private); `name` is the plain name used for the type lookup and message.
     fn uninit_typed_read(&self, o: &Rc<RefCell<Object>>, key: &[u8], name: &[u8]) -> Option<PhpError> {
         let b = o.borrow();
-        if !matches!(b.props.get(key), Some(Zval::Undef)) {
-            return None;
+        match b.props.get(key) {
+            // Never initialized: the slot still holds `Undef`.
+            Some(Zval::Undef) => {}
+            Some(_) => return None,
+            // Explicitly `unset()`: the entry was removed. Every caller sits
+            // after the `__get` dispatch attempt, so reaching here means no
+            // magic handled it — for a *declared typed* property that is the
+            // same before-init fatal (Zend); an untyped/undeclared name falls
+            // through to the ordinary undefined-property read.
+            None => {
+                let ocid = b.class_id as usize;
+                drop(b);
+                let (decl, _) = prop_type_decl(&self.classes, ocid, name)?;
+                return Some(PhpError::Error(format!(
+                    "Typed property {}::${} must not be accessed before initialization",
+                    String::from_utf8_lossy(&self.classes[decl].name),
+                    String::from_utf8_lossy(name),
+                )));
+            }
         }
         let ocid = b.class_id as usize;
         drop(b);
@@ -7222,7 +7280,7 @@ impl<'m> Vm<'m> {
         let class_name = Rc::clone(&cc.class_name);
         let info = Rc::clone(&cc.info);
         let id = self.next_id();
-        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init: Vec::new(), readonly_clone_writable: Vec::new(), lazy: None, proxy_instance: None };
+        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init: Vec::new(), readonly_clone_writable: Vec::new(), typed_unset: Vec::new(), lazy: None, proxy_instance: None };
         let rc = Rc::new(RefCell::new(obj));
         // Track for `__destruct` (OOP-3d): the extra strong ref drives the sweep.
         self.created.insert(id, Rc::clone(&rc));
@@ -8075,7 +8133,7 @@ impl<'m> Vm<'m> {
             info: Rc::new(ObjectInfo::enum_case(entries)),
             // Enum-case immutability has its own dedicated check (is_enum_case).
             readonly_init: Vec::new(),
-            readonly_clone_writable: Vec::new(),
+            readonly_clone_writable: Vec::new(), typed_unset: Vec::new(),
             lazy: None,
             proxy_instance: None,
         };
@@ -9365,6 +9423,7 @@ host_builtins! {
     b"umask" => vm.ho_umask(args),
     b"__dom_new_doc" => vm.ho_dom_new_doc(args),
     b"__dom_load" => vm.ho_dom_load(args),
+    b"__dom_load_html" => vm.ho_dom_load_html(args),
     b"__dom_save_xml" => vm.ho_dom_save_xml(args),
     b"__dom_info" => vm.ho_dom_info(args),
     b"__dom_nav" => vm.ho_dom_nav(args),

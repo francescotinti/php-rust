@@ -139,6 +139,17 @@ impl PhpArray {
         self.count += 1;
     }
 
+    /// Zend's `array_pop` adjustment (ext/standard/array.c:3579): popping the
+    /// element whose int key was the latest auto-index (`next_free - 1`)
+    /// frees that index again, so pop-then-append reuses the same key.
+    pub fn pop_adjust_next_free(&mut self, popped: &Key) {
+        if let Key::Int(i) = popped {
+            if self.next_free != i64::MIN && *i == self.next_free - 1 {
+                self.next_free = *i;
+            }
+        }
+    }
+
     /// `$a[] = v`: uses the next free int index, which never decreases.
     /// Fails only when that slot is occupied (possible after saturation at
     /// i64::MAX), matching Zend's "next element is already occupied" error.

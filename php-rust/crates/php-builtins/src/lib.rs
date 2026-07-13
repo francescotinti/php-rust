@@ -126,6 +126,7 @@ pub fn registry() -> Registry {
     add(b"__date_diff", date::__date_diff);
     add(b"__interval_format", date::__interval_format);
     add(b"__date_from_format", date::__date_from_format);
+    add(b"__date_get_last_errors", date::__date_get_last_errors);
     add(b"json_encode", json::json_encode);
     // ext/curl easy-handle facade (curl.rs); the curl_* PHP surface is prelude
     // functions wrapping these id-keyed hosts around the CurlHandle class.
@@ -208,6 +209,7 @@ pub fn registry() -> Registry {
     add(b"pathinfo", file::pathinfo);
     add(b"file_exists", file::file_exists);
     add(b"is_file", file::is_file);
+    add(b"is_uploaded_file", file::is_uploaded_file);
     add(b"is_dir", file::is_dir);
     add(b"is_link", file::is_link);
     add(b"is_readable", file::is_readable);

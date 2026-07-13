@@ -2379,7 +2379,7 @@ impl<'m> super::Vm<'m> {
                             // A clone keeps the source's readonly props initialised.
                             readonly_init: b.readonly_init.clone(),
                             // Granted below if `__clone` runs (one re-init each).
-                            readonly_clone_writable: Vec::new(),
+                            readonly_clone_writable: Vec::new(), typed_unset: Vec::new(),
                             // A clone is a concrete copy; lazy state is not carried.
                             lazy: None,
                             proxy_instance: None,
@@ -2423,7 +2423,7 @@ impl<'m> super::Vm<'m> {
                             id: self.next_id(),
                             info: winfo,
                             readonly_init: Vec::new(),
-                            readonly_clone_writable: Vec::new(),
+                            readonly_clone_writable: Vec::new(), typed_unset: Vec::new(),
                             lazy: Some(LazyKind::Proxy),
                             proxy_instance: Some(Box::new(clone_val.clone())),
                         };
@@ -2983,18 +2983,22 @@ impl<'m> super::Vm<'m> {
                                 !(std::ptr::eq(t.obj.as_ptr(), op_ptr) && t.prop.as_ref() == &disp[..])
                             });
                         }
-                        // A declared TYPED property returns to the
-                        // *uninitialized* state on unset (isInitialized false,
-                        // read = "must not be accessed before initialization")
-                        // rather than becoming an undefined dynamic prop —
-                        // doctrine/persistence's TypedNoDefaultReflectionProperty
-                        // models `setValue(null)` exactly this way.
+                        // A declared TYPED property keeps its `Undef` slot on
+                        // unset (var_dump/reflection still render it
+                        // `uninitialized`, and the lazy/readonly bookkeeping
+                        // sees the slot), but is MARKED explicitly-unset:
+                        // Zend clears the IS_PROP_UNINIT flag, which is what
+                        // lets a later read dispatch `__get` (symfony
+                        // Constraint's lazy groups) while a never-initialized
+                        // read keeps the before-init fatal.
                         let ob = o.borrow();
                         let typed = ob.info.type_of(&key).is_some()
                             || ob.info.type_of(&name).is_some();
                         drop(ob);
                         if typed {
-                            o.borrow_mut().props.set(&key, Zval::Undef);
+                            let mut ob = o.borrow_mut();
+                            ob.props.set(&key, Zval::Undef);
+                            ob.mark_typed_unset(&key);
                             continue;
                         }
                     }

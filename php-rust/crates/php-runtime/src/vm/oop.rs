@@ -634,9 +634,16 @@ impl<'m> Vm<'m> {
             // private (mangled key) triggers magic from its own scope; a parent's
             // private resolved `Dynamic` from a child scope is "present" only if a
             // plain dynamic slot exists.
+            // An explicitly-unset typed property (slot kept `Undef`, marked)
+            // counts as ABSENT here, so `__get`/`__isset` dispatch for it —
+            // never-initialized typed slots (Undef, unmarked) stay "present"
+            // and keep the before-init fatal on read instead.
+            let undef_unset = |key: &[u8]| {
+                matches!(obj.props.get(key), Some(Zval::Undef)) && obj.is_typed_unset(key)
+            };
             let (present, accessible) = match resolve_prop_access(&self.classes, cid, name, cur_class) {
-                PropAccess::Slot(k) => (obj.props.contains(k.as_slice()), true),
-                PropAccess::Dynamic => (obj.props.contains(name), true),
+                PropAccess::Slot(k) => (obj.props.contains(k.as_slice()) && !undef_unset(&k), true),
+                PropAccess::Dynamic => (obj.props.contains(name) && !undef_unset(name), true),
                 PropAccess::Denied { .. } => (obj.props.contains(name), false),
             };
             (cid, obj.id, present, accessible)

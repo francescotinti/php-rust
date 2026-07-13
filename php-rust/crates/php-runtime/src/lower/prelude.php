@@ -723,6 +723,8 @@ class DateTime implements DateTimeInterface {
         $d->__us = $r[2];
         return $d;
     }
+    // Warnings/errors of the last createFromFormat parse; false when clean.
+    public static function getLastErrors() { return __date_get_last_errors(); }
     public function modify($modifier) { $this->__ts = strtotime($modifier, $this->__ts); return $this; }
     public function add($interval) { $this->__ts = $this->__apply($interval, 1); return $this; }
     public function sub($interval) { $this->__ts = $this->__apply($interval, -1); return $this; }
@@ -898,6 +900,8 @@ class DateTimeImmutable implements DateTimeInterface {
         $d->__us = $r[2];
         return $d;
     }
+    // Warnings/errors of the last createFromFormat parse; false when clean.
+    public static function getLastErrors() { return __date_get_last_errors(); }
     public function modify($modifier) {
         $r = strtotime($modifier, $this->__ts);
         if ($r === false) { return false; }
@@ -3459,7 +3463,12 @@ class ReflectionFunction extends ReflectionFunctionAbstract {
     public function isUserDefined() { return ($this->__info['file'] ?? false) !== false; }
     public function isInternal() { return ($this->__info['file'] ?? false) === false; }
     public function isClosure() { return $this->__closure !== null; }
-    public function isAnonymous() { return $this->__closure !== null; }
+    // Anonymous = a genuine `function () {}` literal; a first-class callable
+    // or method-backed closure reports the named function (Zend checks the
+    // ZEND_ACC_ANON_FUNCTION flag, visible here as the `{closure:…}` name).
+    public function isAnonymous() {
+        return $this->__closure !== null && strncmp($this->name, '{closure', 8) === 0;
+    }
     // Closure binding surface: null for a named-function reflection.
     public function getClosureThis() {
         return $this->__closure !== null ? __reflect_closure_bind($this->__closure)[0] : null;
@@ -3531,6 +3540,8 @@ class ReflectionMethod extends ReflectionFunctionAbstract {
     public $class;
     public $__info;
     public function getName() { return $this->name; }
+    // A declared method is never a closure (ReflectionFunctionAbstract).
+    public function isClosure() { return false; }
     public function getModifiers() {
         $bits = 0;
         if ($this->isPublic()) { $bits |= 1; }

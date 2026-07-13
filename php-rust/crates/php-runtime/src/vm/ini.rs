@@ -112,6 +112,11 @@ impl IniTable {
         // reflects it; entries do not extend the resolver (documented
         // divergence).
         add("include_path", ".:", INI_ALL, true, false);
+        // Upload limits (php -n defaults). phpr's CLI never receives uploads,
+        // but UploadedFile::getMaxFilesize() computes min(post_max_size,
+        // upload_max_filesize) from these.
+        add("upload_max_filesize", "2M", INI_PERDIR, false, false);
+        add("post_max_size", "8M", INI_PERDIR, false, false);
         // ext/session (31 directives, defaults from the 8.5.7 CLI oracle).
         add("session.auto_start", "0", INI_PERDIR, false, false);
         add("session.cache_expire", "180", INI_ALL, true, true);
