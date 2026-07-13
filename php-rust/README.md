@@ -12,19 +12,22 @@ interpreter, not to pass a toy subset.
 > SessionHandler class family); symfony/http-foundation runs at **zero errors**
 > without its Session suite (12 failures need a real HTTP server).
 > **symfony/http-kernel is in progress**: its 1663-test suite went from
-> 286 errors to **29 errors / 103 failures** — the DI container compiles,
-> dumps and reloads under `phpr` (PhpDumper output byte-identical), and
-> by-reference argument binding now matches Zend's runtime SEND_VAR_EX
-> semantics (array-element/property arguments and constructor by-ref
-> parameters alias correctly).
+> 286 errors to **0 errors / 38 failures** — the DI container compiles, dumps
+> and reloads under `phpr` (PhpDumper output byte-identical); `eval()` shares
+> the calling scope like `include`; anonymous functions carry PHP 8.4's
+> `{closure:Scope():line}` names; `Closure::fromCallable` builds
+> `__call`/`__callStatic` trampolines; and nested `isset`/`??` over
+> `ArrayAccess` dispatches the protocol on intermediate offsets (Zend's
+> BP_VAR_IS quiet fetch) — 13 of the remaining 38 failures are one gap:
+> real IANA timezone support.
 
 ## Coverage at a glance
 
 | | |
 | --- | --- |
-| Core / language stdlib functions | **521 / 654 (80%)** |
-| All internal functions | 784 / 2143 (37%) |
-| Zend test corpus passing | **2445** (60% of runnable) |
+| Core / language stdlib functions | **522 / 654 (80%)** |
+| All internal functions | 785 / 2143 (37%) |
+| Zend test corpus passing | **2469** (61% of runnable) |
 
 Full, measured breakdown → **[COVERAGE.md](COVERAGE.md)**.
 The 37%→80% spread is the whole story: the *language* is largely done; the
@@ -90,12 +93,12 @@ phpt-runner --isolate /path/to/php-8.5.7/Zend/tests
 Near-term, highest-leverage work (see [COVERAGE.md](COVERAGE.md) for the data,
 [TODO.md](TODO.md) for the full list):
 
-1. **symfony/http-kernel** — down to 29 errors / 103 failures (of 1663 tests).
-   Runtime by-ref argument binding (Zend's FUNC_ARG fetch) is done: place
-   arguments ride as deferred descriptors resolved against the callee's
-   by-ref mask at dispatch, and constructors honour by-ref parameters. Next:
-   the error queue (`DateTime*::getLastErrors`, `Dom\HTML_NO_DEFAULT_NS`, …)
-   and a first systematic map of the 103 failures.
+1. **symfony/http-kernel** — down to **0 errors / 38 failures** (of 1663
+   tests). The dominant remaining gap is **real IANA timezone support**
+   (13 failures): a TZif reader over the system zoneinfo database, a working
+   `date_default_timezone_set`, and zone-aware `DateTime` construction/
+   formatting (plan: NEXT_SESSION_HTTP_KERNEL.md). Then a ~14-failure
+   resolver cluster and HttpCache edge cases.
 2. ext/session tail — trans-sid URL rewriting, the `SID` constant, shared-ref
    (`r:`) unserialize.
 3. Remaining **core stdlib** gaps — stream filters (userland), timezone

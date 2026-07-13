@@ -6,29 +6,30 @@ as they complete. Deliberate behavioural deviations are catalogued in
 [`PHPR_DIVERGENCES_FROM_PHP.md`](PHPR_DIVERGENCES_FROM_PHP.md); measured
 coverage in [`COVERAGE.md`](COVERAGE.md).
 
-Current state (2026-07-13): Zend corpus **2445** passing · internal functions
-**784/2143, 37%** (core stdlib **521/654, 80%**) · ext/tokenizer **42/49** ·
+Current state (2026-07-13): Zend corpus **2469** passing · internal functions
+**785/2143, 37%** (core stdlib **522/654, 80%**) · ext/tokenizer **42/49** ·
 ext/zlib **complete** (30/30, suite 114/115) · **ext/session: COMPLETE** — all
 23 functions + SessionHandler class family, official suite **161/229** with
 `--run-skipif`. **symfony/http-foundation**: no-session config at **0 errors /
 12 failures** (the 12 spawn a real `php -S` server); the FULL 1790-test suite
 at **10 errors / 27 failures**. **symfony/http-kernel IN PROGRESS**: 1663-test
-suite from 286 errors down to **29 errors / 103 failures**; the DI container
-compiles, dumps (PhpDumper byte-identical) and reloads (KernelTest 40/40).
-Landed in session 4: **runtime by-ref argument binding** (Zend's SEND_VAR_EX /
-FUNC_ARG fetch) — place arguments (`$a['k']`, `$_SESSION[$k]`, `$this->p`,
-`$o->p['k']`) to dynamically-dispatched calls ride as deferred descriptors
-resolved against the callee's by-ref mask at dispatch (W-fetch aliases,
-R-fetch reads with warnings at the call line); **constructors honour by-ref
-parameters** (both compile-time-resolved and dynamic `new`); Doctrine ORM
-improved to **3 err / 14 fail**; `class_exists`/`class_uses` answer for the
-engine-native `Closure`/`Generator` before consulting the autoloader.
-Residual SEND_VAR_EX gaps (dynamic property-name steps, the
-"could not be passed by reference" Error for non-place args) are in
-PHPR_DIVERGENCES. Next: the http-kernel error queue
-(`DateTime*::getLastErrors` ×6, `Dom\HTML_NO_DEFAULT_NS` ×5, `$this`-context
-×3, …) and a first systematic map of the 103 failures
-(NEXT_SESSION_HTTP_KERNEL.md).
+suite from 286 errors down to **0 errors / 38 failures**. Sessions 5–6 closed
+the whole error queue and 65 failures: unqualified namespace calls to
+builtin-named functions bind at runtime (ClockMock), typed-property `unset`
+follows Zend's IS_PROP_UNINIT model, **`eval()` shares the calling scope**
+like `include`, anonymous functions carry **PHP 8.4 `{closure:Scope():line}`
+names** (`__FUNCTION__`/`__METHOD__` included), `Closure::fromCallable` /
+first-class callables on magic methods build `__call`/`__callStatic`
+trampolines, `unset()` of an uninitialized readonly property takes Zend's
+write path (lazy-ghost pattern), and **nested `isset`/`empty`/`??` over
+`ArrayAccess` dispatch the protocol on intermediate offsets** (VarDumper
+`Data`); out-params `flock(&$wouldBlock)` and `preg_replace_callback(&$count)`
+(+`$limit`) are wired. The corpus gained +24 across the two sessions with
+zero regressions by name. Next (NEXT_SESSION_HTTP_KERNEL.md): **real IANA
+timezone support** — 13 of the 38 remaining failures (TZif reader over the
+system zoneinfo, `date_default_timezone_set`, zone-aware DateTime; plan in
+memory `php-rust-timezone-ddt3-plan`) — then the ~14-failure resolver cluster
+and HttpCache.
 
 ---
 

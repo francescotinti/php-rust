@@ -15,12 +15,12 @@ _Last measured: 2026-07-13 · reference: PHP 8.5.7 (`get_defined_functions()`)._
 
 | Metric | Value |
 | --- | --- |
-| Internal functions implemented | **784 / 2143** (37%) |
-| — of which **core / language stdlib** (standard + Core + date) | **521 / 654** (80%) |
-| Zend test corpus (`Zend/tests/*.phpt`) | **2445 passing** — 60.3% of runnable (2445/4052) |
+| Internal functions implemented | **785 / 2143** (37%) |
+| — of which **core / language stdlib** (standard + Core + date) | **522 / 654** (80%) |
+| Zend test corpus (`Zend/tests/*.phpt`) | **2469 passing** — 60.9% of runnable (2469/4052) |
 | Fully-complete areas | ctype, json, SimpleXML, zlib, bcmath, tokenizer, **session**, PDO core |
 
-Corpus breakdown: 5305 total · **2445 pass** · 1607 fail · 1253 skip (skips are
+Corpus breakdown: 5305 total · **2469 pass** · 1583 fail · 1253 skip (skips are
 mostly tests that need an extension `phpr` hasn't ported, or SAPI-specific
 setup; the runner now executes `--INI--` sections as `php -d`-style overrides,
 which moved ~180 formerly-skipped tests into the run).
@@ -49,14 +49,21 @@ upstream PHP under `phpr` today:
   functional tests that spawn a real `php -S` server (needs a server SAPI).
   Plus String / Console / Process, already validated earlier.
 - **Symfony http-kernel** — in progress: 1663-test suite from 286 errors down
-  to **29 errors / 103 failures**. The DI container pipeline works end-to-end:
-  ContainerBuilder compiles, PhpDumper dumps (byte-identical output — its
-  `preg_replace(..., limit: 1)` template pruning and `SplPriorityQueue`
-  ordering are faithful), the Kernel reloads the dumped container
-  (KernelTest 40/40). By-reference argument binding matches Zend's runtime
-  SEND_VAR_EX: array-element/property arguments to dynamically-dispatched
-  methods and constructor by-ref parameters alias correctly (deferred place
-  descriptors resolved against the callee's signature at dispatch).
+  to **0 errors / 38 failures**. The DI container pipeline works end-to-end:
+  ContainerBuilder compiles, PhpDumper dumps (byte-identical output), the
+  Kernel reloads the dumped container (KernelTest 40/40); by-ref argument
+  binding matches Zend's runtime SEND_VAR_EX. The latest round closed the
+  whole error queue: `eval()` shares the calling scope like `include`
+  (ContainerBuilder's `new class($initializer)` proxies), anonymous functions
+  carry PHP 8.4's `{closure:Scope():line}` synthetic names (visible through
+  `__FUNCTION__`/`__METHOD__` and Reflection), `Closure::fromCallable`/
+  first-class callables on magic methods build `__call`/`__callStatic`
+  trampolines, `unset()` of an uninitialized readonly property follows Zend's
+  write path (Symfony's lazy-ghost `LazyClosure`), and nested
+  `isset`/`empty`/`??` over `ArrayAccess` dispatch `offsetExists`/`offsetGet`
+  on intermediate offsets (VarDumper `Data` — the profiler DataCollector
+  tests). 13 of the 38 remaining failures are a single gap: real IANA
+  timezone support.
 - **ext/session** — all 23 functions + SessionHandler and the three handler
   interfaces; files handler byte-identical (0600 `sess_<id>` files, php /
   php_binary / php_serialize serializers, lazy_write, mtime GC); official
@@ -81,7 +88,7 @@ core language stdlib).
 
 | Area | have / total | % | Notes |
 | --- | ---: | ---: | --- |
-| **standard** | 441 / 544 | **81%** | string, array, math, var, filesystem, streams, output, include_path |
+| **standard** | 442 / 544 | **81%** | string, array, math, var, filesystem, streams, output, include_path |
 | **Core** | 50 / 62 | **81%** | class/function introspection, error handling |
 | **date** | 30 / 48 | 63% | DateTime classes, textual strtotime, HTTP-date formats |
 | session | 23 / 23 | **100%** | files + user save handlers, SessionHandler classes, `$_SESSION`; suite 161/229 |
@@ -108,11 +115,12 @@ core language stdlib).
 | openssl | 1 / 64 | 2% | TLS handled at stream layer, not fn-level |
 | **not started (0%)** | — | 0% | pgsql (123), sodium (110), mysqli (106), gd (105), ldap (55), odbc (48), xmlwriter (42), sockets (37), ftp (36), snmp (24), tidy (24), xml (22), calendar (18), dba (15), readline (12), bz2/gettext/zip (10 each), opcache (8), sysv* (18), fileinfo (6), shmop (6), exif (4), dom (2), soap (2) |
 
-1359 functions missing overall; the not-started extensions above account for
-~780 of them. The current front is **symfony/http-kernel** (29 errors /
-103 failures of 1663 tests); runtime by-ref argument binding (Zend's
-FUNC_ARG fetch, including constructor by-ref parameters) landed — next up is
-the remaining error queue and a systematic map of the failures.
+1358 functions missing overall; the not-started extensions above account for
+~780 of them. The current front is **symfony/http-kernel** (0 errors /
+38 failures of 1663 tests); the whole error queue is closed — next up is
+**real IANA timezone support** (13 of the 38 failures: TZif reader,
+`date_default_timezone_set`, zone-aware DateTime), then the resolver
+cluster and HttpCache edge cases.
 
 ---
 

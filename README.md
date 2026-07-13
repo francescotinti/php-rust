@@ -65,9 +65,9 @@ more than any synthetic test.
 | **4. Exceptions & errors** | `try/catch/finally`, catchable engine errors, stack traces, line tracking | ✅ Done |
 | **5. Bytecode VM** | Generators, `yield from`, Fibers on explicit frames — **no `unsafe`, no stackful coroutines** | ✅ Done |
 | **6. Memory** | Cycle collector for circular references (the other big "dragon") | ✅ Done |
-| **7. Standard library** | 784 registered internal functions (measured): array/string/math/json/preg/mbstring/hash/file/stream/date/session… | ✅ Substantial (long tail in progress) |
+| **7. Standard library** | 785 registered internal functions (measured): array/string/math/json/preg/mbstring/hash/file/stream/date/session… | ✅ Substantial (long tail in progress) |
 | **8. Real Composer** | `composer require monolog/monolog` **end-to-end**: resolution, HTTPS download (rustls), unzip, autoload — and the package **runs** | ✅ Done |
-| **8b. Real ecosystem** | **PHPUnit 13 green, byte-identical** (incl. process isolation); Doctrine **DBAL 3769 tests / 0 err / 0 fail** on native PDO+sqlite; **ORM 3484 tests / 3 err / 14 fail**; symfony http-foundation full suite, http-kernel at 29 err / 103 fail of 1663; Monolog, collections, inflector, instantiator… | ✅/🔄 In progress |
+| **8b. Real ecosystem** | **PHPUnit 13 green, byte-identical** (incl. process isolation); Doctrine **DBAL 3769 tests / 0 err / 0 fail** on native PDO+sqlite; **ORM 3484 tests / 3 err / 14 fail**; symfony http-foundation full suite, http-kernel at **0 err / 38 fail** of 1663; Monolog, collections, inflector, instantiator… | ✅/🔄 In progress |
 | **9. Framework bootstrap** | *Hello World* on Laravel / Symfony | ⏳ Next |
 | **10. Async & single-binary** | Tokio event loop + resident Axum web server, standalone distribution | ⏳ Future |
 | **11. JIT (Tier 3)** | Clean bytecode → Cranelift/LLVM for on-the-fly machine code | 🔭 Vision |
@@ -90,7 +90,7 @@ php-rust/crates/
   php-builtins   registry of pure value builtins (var_dump, array_*, sprintf, json_*, preg_*,
                  mb_*, hash/encoding, file/stream, …); together with the VM-side host
                  builtins (reflection, callable, PDO/sqlite, dom/xml, curl, proc_open,
-                 session, …) phpr registers 784 internal functions (measured by probe)
+                 session, …) phpr registers 785 internal functions (measured by probe)
   php-cli        the `phpr` binary — drop-in for `php`, CLI-faithful streams + faithful exit code
   php-server     native web server (Axum + Tokio) — the bridgehead toward async
   phpt-runner    runs the official `.phpt` tests with capability scan and unified diff vs oracle
@@ -138,8 +138,9 @@ But the real leap is that **the real ecosystem runs**:
 - **Doctrine ORM: 3484 tests, 3 errors / 14 failures** (and falling) — hydration, UnitOfWork,
   XML mapping included. Collections, inflector, lexer, event-manager, instantiator: **green**.
 - **Symfony**: http-foundation full suite (0 errors without its server-bound tests),
-  http-kernel down to 29 errors / 103 failures of 1663 (DI container compiles, dumps and
-  reloads); String / Console / Process green.
+  http-kernel down to **0 errors / 38 failures** of 1663 (DI container compiles, dumps and
+  reloads; eval scope sharing, PHP 8.4 closure names, magic-method trampolines, nested
+  ArrayAccess protocol dispatch); String / Console / Process green.
 - Extensions modeled without C: `pdo`, `pdo_sqlite`, `sqlite3`, `dom`, `libxml`,
   **`simplexml`** (on the Rust DOM), `curl` (easy-API on ureq), `openssl`/TLS (rustls),
   `zip`, `mbstring`, `pcre` (3 engines), `hash`, `json`, `pcntl`, `posix`, `ctype`,
@@ -156,10 +157,10 @@ The third dragon — the **C extension ecosystem (PECL)** — is being tackled b
 rewrites (PDO/sqlite, dom/simplexml, and curl have already fallen that way); a compatibility FFI
 layer remains the long-term option for the tail.
 
-**Fidelity** (at HEAD `479fc90`, 2026-07-13): differential type-juggling vs real PHP at
+**Fidelity** (at HEAD `2660ee0`, 2026-07-13): differential type-juggling vs real PHP at
 **0 mismatches** (37,835 cases — this is the *operator* differential, a metric distinct from the
 `.phpt` corpus); 1,530 green Rust unit/integration tests; on the official `Zend/tests` corpus
-**2,445 phpt pass** (60% of the runnable ones, growing every session, with a "zero pass→fail by
+**2,469 phpt pass** (61% of the runnable ones, growing every session, with a "zero pass→fail by
 name" gate on every commit); ~850 commits of history tracked session by session.
 
 > The detailed history of the ~70 build steps lives in **[HISTORY.md](HISTORY.md)**; the
@@ -169,9 +170,9 @@ name" gate on every commit); ~850 commits of history tracked session by session.
 
 ## 🚀 Next steps
 
-1. **symfony/http-kernel to zero** — 29 errors / 103 failures of 1663 left; runtime by-ref
-   argument binding (Zend's SEND_VAR_EX/FUNC_ARG, constructors included) just landed, next is
-   the error queue (`DateTime*::getLastErrors`, `Dom\HTML_NO_DEFAULT_NS`, …) and the failure map.
+1. **symfony/http-kernel to zero** — **0 errors / 38 failures** of 1663 left; the whole error
+   queue is closed, and 13 of the remaining failures are a single gap: real IANA timezone
+   support (TZif reader, `date_default_timezone_set`, zone-aware DateTime — plan ready).
 2. **Doctrine ORM to zero** — down to 3 errors / 14 failures; the remainder is triaged
    (XSD `schemaValidate`, lazy-proxy edges).
 3. **Framework bootstrap** — *Hello World* on Laravel / full Symfony kernel: the ultimate stress
