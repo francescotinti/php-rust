@@ -1720,6 +1720,9 @@ impl<'f> Lowerer<'f> {
             // a free function, and `""` at the top level.
             MagicConstant::Method(_) => match (&self.cur_function, &self.cur_class) {
                 (None, _) => s(b""),
+                // Inside a closure body `__METHOD__` is the synthetic
+                // `{closure:…}` name itself, with no class prefix (PHP 8.4+).
+                (Some(f), _) if f.starts_with(b"{") => s(func),
                 (Some(_), Some(_)) => {
                     let mut v = cls.to_vec();
                     v.extend_from_slice(b"::");
@@ -1846,9 +1849,11 @@ impl<'f> Lowerer<'f> {
         let saved_tag = std::mem::replace(&mut self.after_closing_tag, false);
         let saved_by_ref = std::mem::replace(&mut self.fn_by_ref, by_ref);
         let saved_saw_yield = std::mem::replace(&mut self.fn_saw_yield, false);
-        // `__FUNCTION__` inside a closure is PHP's `{closure}`; the lexical class
-        // (for `__CLASS__`) is inherited from the enclosing scope (step 49).
-        let saved_fn = self.cur_function.replace((*b"{closure}").into());
+        // `__FUNCTION__`/`__METHOD__` inside a closure are its own synthetic
+        // `{closure:…}` name (PHP 8.4+); the lexical class (for `__CLASS__`) is
+        // inherited from the enclosing scope (step 49).
+        let cname = self.closure_name(line);
+        let saved_fn = self.cur_function.replace(cname.clone());
 
         let inner = (|| -> Result<LoweredClosure, LowerError> {
             let params = self.lower_params(&closure.parameter_list, line)?;
@@ -1884,7 +1889,7 @@ impl<'f> Lowerer<'f> {
             .and_then(|r| lower_reflect_type(self, &r.hint));
         let attributes = self.lower_attributes(&closure.attribute_lists, line)?;
         let fn_idx =
-            self.push_closure(params, body, local_scope.slots, by_ref, ret_hint, ret_reflect_type, is_generator, attributes, line);
+            self.push_closure(cname, params, body, local_scope.slots, by_ref, ret_hint, ret_reflect_type, is_generator, attributes, line);
         Ok(ExprKind::Closure {
             fn_idx,
             captures,
@@ -1892,11 +1897,42 @@ impl<'f> Lowerer<'f> {
         })
     }
 
+    /// Zend's synthetic anonymous-function name (PHP 8.4 format): `{closure:` +
+    /// the enclosing scope + `:line}` (the closure's own line). The scope is
+    /// `Class::method()` / `func()` inside a named callable, an enclosing
+    /// closure's own synthetic name verbatim (no `()`), or the program file at
+    /// top level. Computed BEFORE the body is lowered — it doubles as the
+    /// body's `__FUNCTION__`/`__METHOD__` (step 49; PHP 8.4 naming).
+    fn closure_name(&self, line: Line) -> Box<[u8]> {
+        let scope: Vec<u8> = match &self.cur_function {
+            Some(f) if f.starts_with(b"{") => f.to_vec(),
+            Some(f) => {
+                let mut v = match &self.cur_class {
+                    Some(c) => {
+                        let mut v = c.to_vec();
+                        v.extend_from_slice(b"::");
+                        v
+                    }
+                    None => Vec::new(),
+                };
+                v.extend_from_slice(f);
+                v.extend_from_slice(b"()");
+                v
+            }
+            None => self.prog_name.to_vec(),
+        };
+        format!("{{closure:{}:{}}}", String::from_utf8_lossy(&scope), line)
+            .into_bytes()
+            .into_boxed_slice()
+    }
+
     /// Append a lowered closure body to the flat table and return its index. The
-    /// `FnDecl.name` is the PHP `{closure:file:line}` synthetic name (step 18).
+    /// `FnDecl.name` is the PHP `{closure:scope:line}` synthetic name built by
+    /// [`Self::closure_name`] before the body was lowered (step 18).
     #[allow(clippy::too_many_arguments)]
     fn push_closure(
         &mut self,
+        name: Box<[u8]>,
         params: Vec<Param>,
         body: Vec<Stmt>,
         slots: Vec<Box<[u8]>>,
@@ -1907,13 +1943,6 @@ impl<'f> Lowerer<'f> {
         attributes: Vec<crate::hir::HirAttribute>,
         line: Line,
     ) -> usize {
-        let name = format!(
-            "{{closure:{}:{}}}",
-            String::from_utf8_lossy(&self.prog_name),
-            line
-        )
-        .into_bytes()
-        .into_boxed_slice();
         let idx = self.closures.len();
         let file = self.unit_file();
         self.closures.push(FnDecl {
@@ -1984,8 +2013,10 @@ impl<'f> Lowerer<'f> {
         let saved_tag = std::mem::replace(&mut self.after_closing_tag, false);
         let saved_by_ref = std::mem::replace(&mut self.fn_by_ref, by_ref);
         let saved_saw_yield = std::mem::replace(&mut self.fn_saw_yield, false);
-        // Same as a closure: `__FUNCTION__` is `{closure}`, class is inherited.
-        let saved_fn = self.cur_function.replace((*b"{closure}").into());
+        // Same as a closure: `__FUNCTION__` is the synthetic name, class is
+        // inherited.
+        let cname = self.closure_name(line);
+        let saved_fn = self.cur_function.replace(cname.clone());
 
         let inner = (|| -> Result<LoweredClosure, LowerError> {
             let params = self.lower_params(&af.parameter_list, line)?;
@@ -2031,7 +2062,7 @@ impl<'f> Lowerer<'f> {
             .as_ref()
             .and_then(|r| lower_reflect_type(self, &r.hint));
         let fn_idx =
-            self.push_closure(params, body, local_scope.slots, by_ref, ret_hint, ret_reflect_type, is_generator, Vec::new(), line);
+            self.push_closure(cname, params, body, local_scope.slots, by_ref, ret_hint, ret_reflect_type, is_generator, Vec::new(), line);
         // An arrow function is never `static` here (see comment above), so it
         // binds `$this` like an ordinary closure (step 19-6).
         Ok(ExprKind::Closure {

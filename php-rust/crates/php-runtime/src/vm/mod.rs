@@ -2395,9 +2395,11 @@ impl<'m> Vm<'m> {
     /// caller's user classes, so `eval("class Bar extends Foo {}")` flattens `Bar`'s
     /// inherited layout from `Foo`. Returns the unit's `return` value (or `null`);
     /// a parse/compile error yields `false` (MVP — PHP throws `ParseError`).
-    /// Limitations (MVP): the eval'd unit does not share the caller's variable
-    /// scope, and (with no retained HIR, e.g. unit tests via `run_module`) it
-    /// compiles standalone and cannot extend a caller's user class.
+    /// The unit shares the caller's variable scope like `include` (Zend runs
+    /// the op_array on the calling symbol table — symfony's ContainerBuilder
+    /// evals `new class($initializer) …` reading a local). Limitation (MVP):
+    /// with no retained HIR (unit tests via `run_module`) it compiles
+    /// standalone and cannot extend a caller's user class.
     fn run_eval(&mut self, src: &[u8]) -> Result<Zval, PhpError> {
         // Compile against the accumulating image when an HIR is retained, so an
         // eval class can extend/implement an already-loaded (or autoloaded) class;
@@ -2415,11 +2417,9 @@ impl<'m> Vm<'m> {
         // Record the eval()'s call site (the file/line of the frame invoking it) so
         // a backtrace can render this unit as `eval()` and attribute code it calls
         // to "<file>(<line>) : eval()'d code" (Phase 1c-2c).
-        let origin = {
-            let caller = self.frames.len() - 1;
-            (self.frames[caller].module.file.clone(), self.cur_line(caller))
-        };
-        self.drive_unit(module, Some(origin), None)
+        let caller = self.frames.len() - 1;
+        let origin = (self.frames[caller].module.file.clone(), self.cur_line(caller));
+        self.drive_unit(module, Some(origin), Some(caller))
     }
 
     /// Link a freshly-compiled `eval`/`include` unit into the running VM and drive
@@ -4405,12 +4405,22 @@ impl<'m> Vm<'m> {
 
 
 
-    /// The [`Func`] backing a closure value (its body, or the named function a
-    /// first-class callable wraps) plus the module that owns it (for running an
-    /// attribute thunk).
+    /// The [`Func`] backing a closure value (its body, or the named function /
+    /// method a first-class callable wraps) plus the module that owns it (for
+    /// running an attribute thunk).
     fn closure_func_mod(&self, cl: &php_types::Closure) -> Option<(&'m Func, &'m Module)> {
         if let Some(name) = &cl.named {
-            return self.user_function_with_mod(name.as_bytes());
+            let nb = name.as_bytes();
+            // A method callable carries `Class::method` (see `make_method_closure`):
+            // resolve the method's Func so getAttributes()/by-ref param info see
+            // the real signature. A magic trampoline stays unresolved (None).
+            if let Some(pos) = nb.windows(2).position(|w| w == b"::") {
+                let key = nb[..pos].strip_prefix(b"\\").unwrap_or(&nb[..pos]).to_ascii_lowercase();
+                let cid = *self.class_index.get(&key[..])?;
+                let (m, decl, _) = self.find_method_reflect(cid, &nb[pos + 2..])?;
+                return Some((&m.func, self.class_mod(decl)));
+            }
+            return self.user_function_with_mod(nb);
         }
         let m = self.modules[cl.module_id];
         m.closures.get(cl.fn_idx).map(|f| (f, m))
@@ -5016,6 +5026,8 @@ impl<'m> Vm<'m> {
             b"mb_ereg" => self.ho_mb_ereg(false, args)?,
             b"mb_eregi" => self.ho_mb_ereg(true, args)?,
             b"preg_replace" => self.ho_preg_replace(args)?,
+            b"preg_replace_callback" => self.ho_preg_replace_callback_out(args)?,
+            b"flock" => self.ho_flock_out(args)?,
             b"proc_open" => self.ho_proc_open(args)?,
             b"pcntl_sigprocmask" => self.ho_pcntl_sigprocmask(args)?,
             b"parse_str" => self.ho_parse_str(args)?,
@@ -8547,9 +8559,124 @@ impl<'m> Vm<'m> {
         })
     }
 
+    /// Resolve a MULTI-key isset/empty dim path with Zend's BP_VAR_IS quiet
+    /// fetch: raw containers walk silently, but an intermediate ArrayAccess
+    /// object dispatches `offsetExists` (false short-circuits to `Missing`)
+    /// then `offsetGet` — symfony VarDumper's `Data` nests exactly this way
+    /// (`isset($data['a']['b'])`). The leaf is handed back for protocol
+    /// dispatch when it lands on an ArrayAccess object, else pre-read raw.
+    fn dim_is_walk(
+        &mut self,
+        base: DimBase,
+        top: usize,
+        keys: &[Zval],
+    ) -> Result<DimIsLeaf, PhpError> {
+        let mut cur = self.base_cell(base, top).deref_clone();
+        // A bare `isset($x)`/`empty($x)` compiles with no keys: the base value
+        // itself is the leaf.
+        let Some((last, prefix)) = keys.split_last() else {
+            return Ok(DimIsLeaf::Raw(Some(cur)));
+        };
+        for k in prefix {
+            if matches!(cur, Zval::Object(_)) && self.object_implements(&cur, b"arrayaccess") {
+                let ex = self.call_method_sync(cur.clone(), b"offsetExists", vec![k.clone()])?;
+                if !convert::is_true_silent(&ex.deref_clone()) {
+                    return Ok(DimIsLeaf::Missing);
+                }
+                cur = self.call_method_sync(cur, b"offsetGet", vec![k.clone()])?.deref_clone();
+            } else {
+                match silent_get_path(&cur, std::slice::from_ref(k)) {
+                    Some(v) => cur = v,
+                    None => return Ok(DimIsLeaf::Missing),
+                }
+            }
+        }
+        if matches!(cur, Zval::Object(_)) && self.object_implements(&cur, b"arrayaccess") {
+            return Ok(DimIsLeaf::Aa(cur, last.clone()));
+        }
+        Ok(DimIsLeaf::Raw(silent_get_path(&cur, std::slice::from_ref(last))))
+    }
+
+    /// The fused-field analogue of [`Self::dim_is_walk`] for isset/empty:
+    /// when a *declared* property (or the bare local base) holds an
+    /// ArrayAccess object with TWO OR MORE trailing `Index` steps
+    /// (`isset($this->data['a']['b'])`, symfony VarDumper `Data`), the
+    /// intermediate indexes dispatch `offsetExists`/`offsetGet` (Zend's
+    /// BP_VAR_IS quiet fetch) and the leaf is handed back for protocol
+    /// dispatch. `None` keeps the existing raw/lazy paths (single-Index
+    /// leaves stay with [`Self::field_aa_leaf`]).
+    fn field_aa_walk(
+        &mut self,
+        base: FieldBase,
+        top: usize,
+        steps: &[FieldStep],
+        keys: &[Zval],
+    ) -> Result<Option<DimIsLeaf>, PhpError> {
+        let m = steps.iter().rev().take_while(|s| matches!(s, FieldStep::Index)).count();
+        if m < 2 || keys.len() < m {
+            return Ok(None);
+        }
+        let prefix = &steps[..steps.len() - m];
+        let split = keys.len() - m;
+        // Same conservative gate as `field_aa_leaf`: the step owning the
+        // trailing run must be a declared, accessible property (or the bare
+        // local base) so magic `__get` prefixes keep the plain walker.
+        let container = match prefix.split_last() {
+            Some((FieldStep::Prop(n), head)) => {
+                let head_consumed = head
+                    .iter()
+                    .filter(|s| matches!(s, FieldStep::Index | FieldStep::PropDyn))
+                    .count();
+                let Some(cont) = self.field_value(base, top, head, keys[..head_consumed].to_vec())
+                else {
+                    return Ok(None);
+                };
+                let Some(ccid) = object_class_id(&cont) else { return Ok(None) };
+                let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
+                if !fs.prop_is_declared_slot(ccid, n) {
+                    return Ok(None);
+                }
+                match self.field_value(base, top, prefix, keys[..split].to_vec()) {
+                    Some(v) => v,
+                    None => return Ok(None),
+                }
+            }
+            None => match self.base_field_cell(base, top) {
+                Some(c) => c.deref_clone(),
+                None => return Ok(None),
+            },
+            _ => return Ok(None),
+        };
+        if !(matches!(container, Zval::Object(_))
+            && self.object_implements(&container, b"arrayaccess"))
+        {
+            return Ok(None);
+        }
+        let mut cur = container;
+        let (last, mids) = keys[split..].split_last().expect("m >= 2");
+        for k in mids {
+            if matches!(cur, Zval::Object(_)) && self.object_implements(&cur, b"arrayaccess") {
+                let ex = self.call_method_sync(cur.clone(), b"offsetExists", vec![k.clone()])?;
+                if !convert::is_true_silent(&ex.deref_clone()) {
+                    return Ok(Some(DimIsLeaf::Missing));
+                }
+                cur = self.call_method_sync(cur, b"offsetGet", vec![k.clone()])?.deref_clone();
+            } else {
+                match silent_get_path(&cur, std::slice::from_ref(k)) {
+                    Some(v) => cur = v,
+                    None => return Ok(Some(DimIsLeaf::Missing)),
+                }
+            }
+        }
+        if matches!(cur, Zval::Object(_)) && self.object_implements(&cur, b"arrayaccess") {
+            return Ok(Some(DimIsLeaf::Aa(cur, last.clone())));
+        }
+        Ok(Some(DimIsLeaf::Raw(silent_get_path(&cur, std::slice::from_ref(last)))))
+    }
+
     /// The dim-path analogue of [`Self::field_aa_leaf`]: for a MULTI-key
-    /// isset/empty/unset whose prefix resolves to an ArrayAccess object,
-    /// return (receiver, final key) for protocol dispatch.
+    /// unset whose prefix resolves RAW to an ArrayAccess object, return
+    /// (receiver, final key) for protocol dispatch.
     fn dim_aa_leaf(&self, base: DimBase, top: usize, keys: &[Zval]) -> Option<(Zval, Zval)> {
         if keys.len() < 2 {
             return None;
@@ -9677,6 +9804,16 @@ extern "C" fn pcntl_mark_pending(signo: libc::c_int) {
     }
 }
 
+/// Outcome of [`Vm::dim_is_walk`] (nested isset/empty over ArrayAccess).
+enum DimIsLeaf {
+    /// A step of the path is definitely absent: isset=false / empty=true.
+    Missing,
+    /// The leaf container is an ArrayAccess object: dispatch the protocol.
+    Aa(Zval, Zval),
+    /// A raw leaf, pre-read (`None` = absent).
+    Raw(Option<Zval>),
+}
+
 pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usize)> {
     const HOST_OUT: &[(&[u8], usize)] = &[
         (b"preg_match", 2),
@@ -9689,6 +9826,10 @@ pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usiz
         // dynamic string-callable dispatch, so the compiler must consult this
         // table FIRST (see `FnCompiler::call`).
         (b"preg_replace", 4),
+        // `&$count` (number of replacements), like `preg_replace`.
+        (b"preg_replace_callback", 4),
+        // `&$would_block`: phpr is single-process, the lock never blocks (0).
+        (b"flock", 2),
         // `&$pipes` receives the pipe resources of the spawned child.
         (b"proc_open", 2),
         // `&$old_signals` receives the previous signal mask (optional arg).

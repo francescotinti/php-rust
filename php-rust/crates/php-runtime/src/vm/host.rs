@@ -2643,13 +2643,23 @@ impl<'m> super::Vm<'m> {
             )),
         }
     }
-    /// `preg_replace_callback($pattern, $callback, $subject)` (Session 3): replace
-    /// each match of `pattern` in `subject` with the string returned by `callback`
-    /// (called with the match array). A single pattern/subject, mirroring
-    /// `eval::ho_preg_replace_callback`; the callback runs via `call_callable` and
-    /// its result is stringified (honouring `__toString`). An invalid pattern yields
-    /// null. The optional `limit`/`count` arguments are a scope-out.
+    /// `preg_replace_callback($pattern, $callback, $subject, $limit, &$count)`
+    /// (Session 3): replace each match of `pattern` in `subject` with the string
+    /// returned by `callback` (called with the match array). A single
+    /// pattern/subject, mirroring `eval::ho_preg_replace_callback`; the callback
+    /// runs via `call_callable` and its result is stringified (honouring
+    /// `__toString`). An invalid pattern yields null. `$limit` caps replacements
+    /// (-1 = unlimited, 0 = none); `&$count` (the number performed) is written by
+    /// the VM out-param path — this plain dispatch drops it.
     pub(super) fn ho_preg_replace_callback(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        Ok(self.ho_preg_replace_callback_out(args)?.0)
+    }
+
+    /// Out-param form of [`Self::ho_preg_replace_callback`]: `(result, $count)`.
+    pub(super) fn ho_preg_replace_callback_out(
+        &mut self,
+        args: Vec<Zval>,
+    ) -> Result<(Zval, Zval), PhpError> {
         if args.len() < 3 {
             return Err(PhpError::ArgumentCountError(
                 "preg_replace_callback() expects at least 3 arguments".to_string(),
@@ -2660,7 +2670,7 @@ impl<'m> super::Vm<'m> {
         let subject =
             convert::to_zstr_cast(&args[2].deref_clone(), &mut self.diags).as_bytes().to_vec();
         let Some(re) = self.preg_compile(&pat) else {
-            return Ok(Zval::Null);
+            return Ok((Zval::Null, Zval::Long(0)));
         };
         // Byte-true subject handling: an invalid-UTF-8 subject fails a /u
         // pattern (PHP: null) or round-trips through latin1 for a byte-mode
@@ -2668,7 +2678,7 @@ impl<'m> super::Vm<'m> {
         // the splice below always slices the ORIGINAL subject bytes.
         let unicode = crate::preg::pattern_is_unicode(&pat);
         let Some(txt) = crate::preg::subject_text(&subject, unicode) else {
-            return Ok(Zval::Null);
+            return Ok((Zval::Null, Zval::Long(0)));
         };
         let latin1 = txt.is_latin1();
         let subj = txt.as_str().to_owned();
@@ -2685,17 +2695,45 @@ impl<'m> super::Vm<'m> {
                 (m0.start, m0.end, crate::preg::captures_array(&re, &caps, 0))
             })
             .collect();
+        // `$limit`: maximum replacements; negative = unlimited (default -1),
+        // 0 = replace nothing (Zend's rule, like `preg_replace`).
+        let limit = match args.get(3) {
+            Some(v) => convert::to_long_cast(&v.deref_clone(), &mut self.diags),
+            None => -1,
+        };
+        let mut count = 0i64;
         let mut out: Vec<u8> = Vec::new();
         let mut last = 0usize;
         for (start, end, match_arr) in hits {
+            if limit >= 0 && count >= limit {
+                break;
+            }
             out.extend_from_slice(&subject[last..start]);
             let ret = self.call_callable(callback.clone(), vec![match_arr])?;
             let rs = self.vm_stringify(&ret.deref_clone())?;
             out.extend_from_slice(rs.as_bytes());
             last = end;
+            count += 1;
         }
         out.extend_from_slice(&subject[last..]);
-        Ok(Zval::Str(PhpStr::new(out)))
+        Ok((Zval::Str(PhpStr::new(out)), Zval::Long(count)))
+    }
+
+    /// `flock($stream, $operation, &$would_block)` — out-param form of
+    /// [`php_builtins::file::flock`] (which stays registered for dynamic
+    /// dispatch): phpr runs single-process with no advisory-lock consumers, so
+    /// the lock always succeeds and `$would_block` is 0.
+    pub(super) fn ho_flock_out(&mut self, args: Vec<Zval>) -> Result<(Zval, Zval), PhpError> {
+        match args.first().map(|v| v.deref_clone()) {
+            Some(Zval::Resource(_)) => Ok((Zval::Bool(true), Zval::Long(0))),
+            Some(other) => Err(PhpError::TypeError(format!(
+                "flock(): Argument #1 ($stream) must be of type resource, {} given",
+                other.type_name_for_error()
+            ))),
+            None => Err(PhpError::ArgumentCountError(
+                "flock() expects at least 2 arguments, 0 given".to_string(),
+            )),
+        }
     }
     /// `preg_replace($pattern, $replacement, $subject, $limit, &$count)`:
     /// backreferences `$1`/`${1}`/`\1` in the replacement are honoured. Returns

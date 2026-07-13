@@ -645,6 +645,21 @@ impl<'m> super::Vm<'m> {
                 Op::CoalesceFetchDim => {
                     let key = self.frames[top].stack.pop().expect("CoalesceFetchDim key");
                     let base = self.frames[top].stack.pop().expect("CoalesceFetchDim base");
+                    // `$aa[$k] ?? $default` on an ArrayAccess object dispatches
+                    // the protocol quietly: !offsetExists → null (the coalesce
+                    // takes the default), else offsetGet (a null result also
+                    // falls through to the default).
+                    if let Some(recv) = self.as_arrayaccess(&base) {
+                        let ex = self
+                            .call_method_sync(recv.clone(), b"offsetExists", vec![key.clone()])?;
+                        let v = if convert::is_true_silent(&ex.deref_clone()) {
+                            self.call_method_sync(recv, b"offsetGet", vec![key])?.deref_clone()
+                        } else {
+                            Zval::Null
+                        };
+                        self.frames[top].stack.push(v);
+                        continue;
+                    }
                     self.frames[top].stack.push(read_dim_nullable(&base, &key));
                 }
                 Op::AssignPath { base, nkeys, append } => {
@@ -692,18 +707,19 @@ impl<'m> super::Vm<'m> {
                             continue;
                         }
                     }
-                    // Nested form landing on an ArrayAccess (`isset($m['k'][2])`
-                    // where the element holds one): protocol on the leaf.
-                    if let Some((recv, key)) = self.dim_aa_leaf(base, top, &keys) {
-                        let r = self.call_method_sync(recv, b"offsetExists", vec![key])?;
-                        let set = convert::is_true_silent(&r.deref_clone());
-                        self.frames[top].stack.push(Zval::Bool(set));
-                        continue;
-                    }
-                    let set = matches!(
-                        silent_get_path(self.base_cell(base, top), &keys),
-                        Some(v) if !matches!(v, Zval::Null | Zval::Undef)
-                    );
+                    // Nested form: BP_VAR_IS walk (an intermediate ArrayAccess
+                    // dispatches offsetExists/offsetGet; the protocol runs on
+                    // an ArrayAccess leaf).
+                    let set = match self.dim_is_walk(base, top, &keys)? {
+                        super::DimIsLeaf::Missing => false,
+                        super::DimIsLeaf::Aa(recv, key) => {
+                            let r = self.call_method_sync(recv, b"offsetExists", vec![key])?;
+                            convert::is_true_silent(&r.deref_clone())
+                        }
+                        super::DimIsLeaf::Raw(v) => {
+                            matches!(v, Some(v) if !matches!(v, Zval::Null | Zval::Undef))
+                        }
+                    };
                     self.frames[top].stack.push(Zval::Bool(set));
                 }
                 Op::EmptyPath { base, nkeys } => {
@@ -727,21 +743,23 @@ impl<'m> super::Vm<'m> {
                             continue;
                         }
                     }
-                    if let Some((recv, key)) = self.dim_aa_leaf(base, top, &keys) {
-                        let exists =
-                            self.call_method_sync(recv.clone(), b"offsetExists", vec![key.clone()])?;
-                        let empty = if convert::is_true_silent(&exists.deref_clone()) {
-                            let v = self.call_method_sync(recv, b"offsetGet", vec![key])?;
-                            !convert::is_true_silent(&v.deref_clone())
-                        } else {
-                            true
-                        };
-                        self.frames[top].stack.push(Zval::Bool(empty));
-                        continue;
-                    }
-                    let empty = match silent_get_path(self.base_cell(base, top), &keys) {
-                        Some(v) => !convert::is_true_silent(&v),
-                        None => true,
+                    // Nested form: same BP_VAR_IS walk as `isset` above.
+                    let empty = match self.dim_is_walk(base, top, &keys)? {
+                        super::DimIsLeaf::Missing => true,
+                        super::DimIsLeaf::Aa(recv, key) => {
+                            let exists = self
+                                .call_method_sync(recv.clone(), b"offsetExists", vec![key.clone()])?;
+                            if convert::is_true_silent(&exists.deref_clone()) {
+                                let v = self.call_method_sync(recv, b"offsetGet", vec![key])?;
+                                !convert::is_true_silent(&v.deref_clone())
+                            } else {
+                                true
+                            }
+                        }
+                        super::DimIsLeaf::Raw(v) => match v {
+                            Some(v) => !convert::is_true_silent(&v),
+                            None => true,
+                        },
                     };
                     self.frames[top].stack.push(Zval::Bool(empty));
                 }
@@ -2955,22 +2973,34 @@ impl<'m> super::Vm<'m> {
                             continue;
                         }
                         check_prop_access(&self.classes, cur, o.borrow().class_id as usize, &name)?;
-                        // A readonly property can never be unset (after the
+                        // `unset` takes the readonly *write* path (after the
                         // visibility check, so a private/protected one reports the
-                        // access error first, matching PHP) — except during `__clone`,
-                        // where an `unset` returns it to the re-assignable uninitialised
-                        // state (8.3).
+                        // access error first, matching PHP): an initialised
+                        // property (or an uninitialised one from outside its
+                        // set-visibility scope) fatals with the write-error
+                        // shapes, "unset" for "modify". An uninitialised IN-scope
+                        // unset is permitted — the lazy-ghost pattern (Symfony
+                        // LazyClosure's ctor unsets `$this->service` so `__get`
+                        // serves it later) — and falls through to the typed-unset
+                        // marking below. During `__clone`, `unset` returns the
+                        // property to the re-assignable uninitialised state (8.3).
                         let ocid = o.borrow().class_id as usize;
                         key = self.prop_storage_key(ocid, &name, cur);
                         if let Some(decl) = prop_readonly_decl(&self.classes, ocid, &name) {
                             if o.borrow().readonly_clone_writable(&key) {
                                 o.borrow_mut().clear_readonly_init(&key);
                             } else {
-                                let cls = String::from_utf8_lossy(&self.classes[decl].name).into_owned();
-                                let prop = String::from_utf8_lossy(&name).into_owned();
-                                return Err(PhpError::Error(format!(
-                                    "Cannot unset readonly property {cls}::${prop}"
-                                )));
+                                let inited = o.borrow().is_readonly_init(&key);
+                                let set_vis = prop_info(&self.classes, ocid, &name)
+                                    .and_then(|pi| pi.set_visibility);
+                                if let Some(err) =
+                                    readonly_write_error(&self.classes, cur, decl, &name, inited, set_vis)
+                                {
+                                    let PhpError::Error(m) = err else { return Err(err) };
+                                    return Err(PhpError::Error(
+                                        m.replacen("Cannot modify", "Cannot unset", 1),
+                                    ));
+                                }
                             }
                         }
                         // `unset` deletes the property's typed-reference source:
@@ -3902,6 +3932,23 @@ impl<'m> super::Vm<'m> {
                         self.frames[top].stack.push(Zval::Bool(set));
                         continue;
                     }
+                    // Nested Index run on an ArrayAccess property
+                    // (`isset($this->data['a']['b'])`): BP_VAR_IS walk.
+                    if let Some(res) = self.field_aa_walk(base, top, &steps, &keys)? {
+                        let set = match res {
+                            super::DimIsLeaf::Missing => false,
+                            super::DimIsLeaf::Aa(recv, key) => {
+                                let r =
+                                    self.call_method_sync(recv, b"offsetExists", vec![key])?;
+                                convert::is_true_silent(&r.deref_clone())
+                            }
+                            super::DimIsLeaf::Raw(v) => {
+                                matches!(v, Some(v) if !matches!(v, Zval::Null | Zval::Undef))
+                            }
+                        };
+                        self.frames[top].stack.push(Zval::Bool(set));
+                        continue;
+                    }
                     // A lazy base initializes and the walk roots at the realized
                     // object (isset through a wrapper reads the instance).
                     if let Some(root) = self.field_lazy_root(base, top, &steps, &keys, false)? {
@@ -3931,6 +3978,33 @@ impl<'m> super::Vm<'m> {
                             !convert::is_true_silent(&v.deref_clone())
                         } else {
                             true
+                        };
+                        self.frames[top].stack.push(Zval::Bool(empty));
+                        continue;
+                    }
+                    // Nested Index run on an ArrayAccess property: same
+                    // BP_VAR_IS walk as Op::FieldIsset above.
+                    if let Some(res) = self.field_aa_walk(base, top, &steps, &keys)? {
+                        let empty = match res {
+                            super::DimIsLeaf::Missing => true,
+                            super::DimIsLeaf::Aa(recv, key) => {
+                                let exists = self.call_method_sync(
+                                    recv.clone(),
+                                    b"offsetExists",
+                                    vec![key.clone()],
+                                )?;
+                                if convert::is_true_silent(&exists.deref_clone()) {
+                                    let v =
+                                        self.call_method_sync(recv, b"offsetGet", vec![key])?;
+                                    !convert::is_true_silent(&v.deref_clone())
+                                } else {
+                                    true
+                                }
+                            }
+                            super::DimIsLeaf::Raw(v) => match v {
+                                Some(v) => !convert::is_true_silent(&v),
+                                None => true,
+                            },
                         };
                         self.frames[top].stack.push(Zval::Bool(empty));
                         continue;

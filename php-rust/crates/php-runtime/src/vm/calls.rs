@@ -737,20 +737,32 @@ impl<'m> Vm<'m> {
             }
             _ => return None,
         };
-        let (defc, midx) = resolve_method_runtime(&self.classes, cid, method)?;
-        if !visible_from(
-            &self.classes,
-            caller_class,
-            self.classes[defc].methods[midx].visibility,
-            defc,
-        ) {
-            return None;
-        }
+        let (scope, params) = match resolve_method_runtime(&self.classes, cid, method) {
+            Some((defc, midx)) => {
+                if !visible_from(
+                    &self.classes,
+                    caller_class,
+                    self.classes[defc].methods[midx].visibility,
+                    defc,
+                ) {
+                    return None;
+                }
+                (defc, super::closure_params(&self.classes[defc].methods[midx].func))
+            }
+            // No such method, but the class has the magic receiver: PHP builds a
+            // *trampoline* closure (0 params, no file/line) that dispatches
+            // `__call`/`__callStatic` at call time (`enter_authorized_method`).
+            // Scope/called-class are both the callable's class.
+            None => {
+                let magic: &[u8] = if bound.is_some() { b"__call" } else { b"__callStatic" };
+                resolve_method_runtime(&self.classes, cid, magic)?;
+                (cid, Vec::new())
+            }
+        };
         let mut disp = self.classes[cid].name.to_vec();
         disp.extend_from_slice(b"::");
         disp.extend_from_slice(method);
         let ns = PhpStr::new(disp);
-        let params = super::closure_params(&self.classes[defc].methods[midx].func);
         let info = Rc::new(ClosureInfo {
             kind: ClosureRender::Function(ns.clone()),
             params,
@@ -764,7 +776,7 @@ impl<'m> Vm<'m> {
             id,
             info,
             module_id: 0,
-            scope: Some(defc),
+            scope: Some(scope),
             is_static: false,
         })))
     }
@@ -791,7 +803,24 @@ impl<'m> Vm<'m> {
                 frame.static_class = Some(cid); // LSB = the callable's class
                 self.enter_callee(frame)
             }
-            None => Err(undefined_method(&self.classes, cid, method)),
+            // A magic trampoline closure (`Closure::fromCallable` on a
+            // `__call`/`__callStatic` name): dispatch the magic receiver with
+            // `($method, $args)` — same packing as the regular magic-call path.
+            None => {
+                let magic: &[u8] = if this.is_some() { b"__call" } else { b"__callStatic" };
+                if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, magic) {
+                    let margs =
+                        vec![Zval::Str(PhpStr::new(method.to_vec())), pack_args(args)];
+                    let callee = &self.classes[defc].methods[midx].func;
+                    let mut frame = Frame::new(callee, self.class_mod(defc));
+                    bind_params(&mut frame, margs);
+                    frame.this = this;
+                    frame.class = Some(defc);
+                    frame.static_class = Some(cid);
+                    return self.enter_callee(frame);
+                }
+                Err(undefined_method(&self.classes, cid, method))
+            }
         }
     }
 

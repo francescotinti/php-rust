@@ -381,6 +381,27 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-13 (sessione 6): **eval() condivide lo scope del chiamante** come
+  include (prima: unit isolata → il `new class($initializer)` di
+  ContainerBuilder::createService riceveva null); **nomi sintetici dei closure
+  in formato PHP 8.4** `{closure:Scope():line}` (scope = `Class::method()` /
+  `func()` / nome del closure racchiudente verbatim / file a top-level;
+  `__FUNCTION__`/`__METHOD__` nel corpo = quel nome — residuo: le unit eval
+  si chiamano ancora `eval()'d code`, Zend usa `file(line) : eval()'d code`);
+  **Closure::fromCallable/first-class-callable su metodi magici** crea il
+  trampolino `__call`/`__callStatic` (ReflectionFunction: nome bare, 0 param,
+  no file — residuo: il messaggio d'errore per callable invalidi resta
+  "is not callable", Zend usa "Failed to create closure from callable: …");
+  **unset() su readonly** segue il write-path Zend (permesso su prop NON
+  inizializzata dallo scope set-visibility — pattern lazy-ghost LazyClosure —
+  messaggi "Cannot unset …" derivati da readonly_write_error); **isset/empty
+  con Index annidati su ArrayAccess** dispatchano offsetExists/offsetGet
+  sugli intermedi (BP_VAR_IS quiet fetch, dim-path e field-path) e **`?? `
+  su ArrayAccess** dispatcha il protocollo (VarDumper Data sbloccato:
+  LoggerDataCollector/RequestDataCollector interi file verdi); out-param
+  `flock(&$wouldBlock)` (sempre 0) e `preg_replace_callback(&$count)` +
+  `$limit` implementato; `ReflectionFunction::getAttributes()` sui closure
+  method-backed (closure_func_mod risolve `Class::method`).
 - 2026-07-13 (sessione 5, batch 2): **le call non qualificate in namespace il
   cui nome è un builtin ora compilano a `Op::CallNsFallback`** (prima:
   `Op::CallBuiltin` diretto, che rendeva INERTE lo shadowing runtime — le

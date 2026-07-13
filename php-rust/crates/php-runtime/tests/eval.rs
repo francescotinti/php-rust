@@ -4535,8 +4535,8 @@ fn magic_function_class_method() {
 fn magic_top_level_and_closure() {
     // At the top level every name-scoped magic constant is the empty string.
     assert_eq!(out("<?php echo '['.__FUNCTION__.']'.'['.__CLASS__.']';"), "[][]");
-    // `__FUNCTION__` inside a closure is PHP's `{closure}`.
-    assert_eq!(out("<?php $f = function(){ echo __FUNCTION__; }; $f();"), "{closure}");
+    // `__FUNCTION__` inside a closure is its full synthetic name (PHP 8.4+).
+    assert_eq!(out("<?php $f = function(){ echo __FUNCTION__; }; $f();"), "{closure:t.php:1}");
 }
 
 #[test]

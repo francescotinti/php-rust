@@ -309,6 +309,14 @@ impl<'m> super::Vm<'m> {
                     return Ok(Zval::Bool(false));
                 };
                 let Some((m, decl, _)) = self.find_method_reflect(cid, &mname) else {
+                    // A magic trampoline (`Closure::fromCallable([$o,'magic'])`):
+                    // Zend reflects the bare requested name with no parameters
+                    // and no source location (internal-like).
+                    if self.find_method_reflect(cid, b"__call").is_some()
+                        || self.find_method_reflect(cid, b"__callStatic").is_some()
+                    {
+                        return Ok(Zval::Array(Rc::new(magic_trampoline_descriptor(&mname))));
+                    }
                     return Ok(Zval::Bool(false));
                 };
                 return Ok(Zval::Array(Rc::new(self.build_func_descriptor(&m.func, Some(decl))?)));
@@ -1625,4 +1633,24 @@ impl<'m> super::Vm<'m> {
             _ => Zval::Bool(false),
         })
     }
+}
+
+/// The descriptor of a magic-trampoline closure (`Closure::fromCallable` on a
+/// `__call`/`__callStatic`-served name): Zend reports the bare requested name,
+/// zero parameters and no source location (internal-like function).
+fn magic_trampoline_descriptor(name: &[u8]) -> php_types::PhpArray {
+    let mut d = php_types::PhpArray::new();
+    let mut put = |k: &[u8], v: Zval| {
+        d.insert(Key::Str(PhpStr::new(k.to_vec())), v);
+    };
+    put(b"name", Zval::Str(PhpStr::new(name.to_vec())));
+    put(b"returnType", Zval::Bool(false));
+    put(b"params", Zval::Array(Rc::new(php_types::PhpArray::new())));
+    put(b"doc", Zval::Bool(false));
+    put(b"isGenerator", Zval::Bool(false));
+    put(b"byRef", Zval::Bool(false));
+    put(b"file", Zval::Bool(false));
+    put(b"startLine", Zval::Bool(false));
+    put(b"endLine", Zval::Bool(false));
+    d
 }
