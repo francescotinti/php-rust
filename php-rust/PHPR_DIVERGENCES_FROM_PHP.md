@@ -381,6 +381,29 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-13 (sessione 7): ✅ **CHIUSO il gap timezone D-DT3** — phpr non è
+  più UTC-only: lettore TZif v2/v3 sopra `/usr/share/zoneinfo` di sistema
+  (`php_types::tz`, cache per zona, gap/fold DST risolti alla timelib:
+  offset PRE-transizione in entrambi i casi, pinnato con l'oracle su
+  America/Toronto 2026), default timezone di processo reale
+  (`date_default_timezone_set/get`, INI `date.timezone` con propagazione da
+  `-d`/`ini_set`, Notice "Timezone ID '%s' is invalid" su ID sconosciuto),
+  `date`/`idate`/`strftime`/`mktime`/`getdate`/`localtime`/`strtotime` nel
+  default tz (relative wall-clock preserving attraverso i salti DST),
+  DateTime/DateTimeImmutable zone-aware (ctor `__strtotime_tz` con priorità
+  zona-nella-stringa > argomento > default; `format` con O/P/T/e/I/Z/c/r
+  dall'istanza; `setDate`/`setTime`/`add`/`sub`/`modify` con aritmetica wall
+  re-ancorata; `diff` sui tempi LOCALI dei due lati; `getOffset` +
+  `DateTimeZone::getOffset` + normalizzazione label offset "+0500"→"+05:00").
+  **Residui divergenti**: (a) epoch oltre l'ultima transizione memorizzata
+  (≥2037 per le zone DST) usano l'ultimo tipo della tabella — il footer
+  POSIX TZ non è valutato; (b) le stringhe datetime accettano solo
+  UTC/GMT/Z/±offset come zona inline — i nomi IANA e le abbreviazioni
+  ("EST", "America/Toronto") dentro le stringhe restano parse failure;
+  (c) `new DateTimeZone('Bogus')` non lancia DateInvalidTimeZoneException
+  (nessuna validazione nel ctor); (d) `timezone_identifiers_list`/
+  `DateTimeZone::listIdentifiers` resta la lista statica; (e) il default di
+  `__date_from_format` per i campi mancanti usa il "now" UTC, non locale.
 - 2026-07-13 (sessione 6): **eval() condivide lo scope del chiamante** come
   include (prima: unit isolata → il `new class($initializer)` di
   ContainerBuilder::createService riceveva null); **nomi sintetici dei closure

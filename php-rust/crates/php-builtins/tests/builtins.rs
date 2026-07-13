@@ -2337,16 +2337,37 @@ fn datetime_create_from_format_failure_and_immutable() {
 }
 
 #[test]
-fn date_default_timezone_utc_scope() {
-    // set returns true; get is always UTC (D-DT3). Setting a non-UTC zone is a
-    // documented no-op: date() keeps producing UTC.
+fn date_default_timezone_scope() {
+    // Real IANA zones (D-DT3): set/get round-trip and date() renders in the
+    // default zone (every value oracle-pinned, probe p7_tz1.php).
     assert_eq!(
         out("<?php var_dump(date_default_timezone_set('Europe/London')); echo date_default_timezone_get();"),
-        "bool(true)\nUTC"
+        "bool(true)\nEurope/London"
     );
     assert_eq!(
-        out("<?php date_default_timezone_set('America/Chicago'); echo date('H', 1718452845);"),
-        "12"
+        out("<?php date_default_timezone_set('America/Chicago'); echo date('H T I', 1718452845);"),
+        "07 CDT 1"
+    );
+    // An invalid ID notices, returns false, and leaves the zone untouched.
+    assert_eq!(
+        out("<?php var_dump(@date_default_timezone_set('Bogus/Zone')); echo date_default_timezone_get();"),
+        "bool(false)\nUTC"
+    );
+    // DST gap ("02:30" doesn't exist) and fold ("01:30" happens twice)
+    // resolve with the pre-transition offset, like timelib.
+    assert_eq!(
+        out("<?php date_default_timezone_set('America/Toronto'); var_dump(strtotime('2026-03-08 02:30:00'), strtotime('2026-11-01 01:30:00'));"),
+        "int(1772955000)\nint(1793511000)\n"
+    );
+    // DateTime carries the zone: explicit argument…
+    assert_eq!(
+        out("<?php $d=new DateTimeImmutable('2012-07-21 00:00:00', new DateTimeZone('Pacific/Honolulu')); echo $d->getTimezone()->getName(),' ',$d->getTimestamp(),' ',$d->format('Y-m-d H:i:s T P I');"),
+        "Pacific/Honolulu 1342864800 2012-07-21 00:00:00 HST -10:00 0"
+    );
+    // …or one carried by the string itself, which wins and keeps its label.
+    assert_eq!(
+        out("<?php $d=new DateTimeImmutable('2016-09-08 00:00:00 +05:00'); echo $d->getTimezone()->getName(),' ',$d->format('Y-m-d H:i:s P U');"),
+        "+05:00 2016-09-08 00:00:00 +05:00 1473274800"
     );
 }
 

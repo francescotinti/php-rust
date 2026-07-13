@@ -11,6 +11,7 @@ pub mod numstr;
 mod object;
 pub mod ops;
 pub mod stream;
+pub mod tz;
 pub mod zlibio;
 mod zstr;
 mod zval;

@@ -31,6 +31,118 @@ thread_local! {
         const { std::cell::RefCell::new(None) };
 }
 
+// --- Timezone plumbing (D-DT3): every local-time builtin renders in the
+// process default zone (php_types::tz), and DateTime carries a zone label
+// that resolves here. ---
+
+/// A DateTime-style zone label resolved for math/formatting: UTC, a fixed
+/// offset ("+05:00", "-1000", "Z"), or an IANA identifier.
+enum ZoneRef {
+    Utc,
+    Fixed { off: i64, label: String },
+    Named(String),
+}
+
+/// One instant viewed in one zone; `name` is what `date('e')` prints and
+/// `abbrev` what `date('T')` prints.
+struct ZoneView {
+    off: i64,
+    abbrev: String,
+    name: String,
+    isdst: bool,
+}
+
+/// `±HH:MM` / `±HHMM` / `±HH` → seconds east of UTC.
+fn parse_offset_label(s: &str) -> Option<i64> {
+    let b = s.as_bytes();
+    if b.len() < 3 || (b[0] != b'+' && b[0] != b'-') {
+        return None;
+    }
+    let digits: String = s[1..].chars().filter(|c| *c != ':').collect();
+    if !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let (h, m) = match digits.len() {
+        2 => (digits.parse::<i64>().ok()?, 0),
+        4 => (digits[..2].parse::<i64>().ok()?, digits[2..].parse::<i64>().ok()?),
+        _ => return None,
+    };
+    let sign = if b[0] == b'-' { -1 } else { 1 };
+    Some(sign * (h * 3600 + m * 60))
+}
+
+fn resolve_zone(label: &str) -> Option<ZoneRef> {
+    if label == "UTC" {
+        return Some(ZoneRef::Utc);
+    }
+    if label == "Z" {
+        // `getName()` of a `...Z` literal stays "Z" (oracle-pinned).
+        return Some(ZoneRef::Fixed { off: 0, label: "Z".to_string() });
+    }
+    if let Some(off) = parse_offset_label(label) {
+        return Some(ZoneRef::Fixed { off, label: label.to_string() });
+    }
+    if php_types::tz::is_valid_zone(label) {
+        return Some(ZoneRef::Named(label.to_string()));
+    }
+    None
+}
+
+fn default_zone() -> ZoneRef {
+    resolve_zone(&php_types::tz::default_timezone()).unwrap_or(ZoneRef::Utc)
+}
+
+fn zone_view(zr: &ZoneRef, epoch: i64) -> ZoneView {
+    match zr {
+        ZoneRef::Utc => ZoneView {
+            off: 0,
+            abbrev: "UTC".to_string(),
+            name: "UTC".to_string(),
+            isdst: false,
+        },
+        ZoneRef::Fixed { off, label } => ZoneView {
+            off: *off,
+            // PHP's `T` for a fixed-offset zone is the "GMT±HHMM" pseudo
+            // abbreviation (oracle-pinned in the prelude's format()).
+            abbrev: format!(
+                "GMT{}{:02}{:02}",
+                if *off < 0 { '-' } else { '+' },
+                off.abs() / 3600,
+                off.abs() % 3600 / 60
+            ),
+            name: label.clone(),
+            isdst: false,
+        },
+        ZoneRef::Named(n) => match php_types::tz::offset_at(n, epoch) {
+            Some(i) => ZoneView { off: i.off, abbrev: i.abbrev, name: n.clone(), isdst: i.isdst },
+            None => ZoneView { off: 0, abbrev: "UTC".to_string(), name: n.clone(), isdst: false },
+        },
+    }
+}
+
+/// Wall-clock time (civil fields packed as if UTC) → real epoch in `zr`,
+/// with timelib's DST gap/fold resolution for named zones.
+fn zone_wall_to_epoch(zr: &ZoneRef, wall: i64) -> i64 {
+    match zr {
+        ZoneRef::Utc => wall,
+        ZoneRef::Fixed { off, .. } => wall - off,
+        ZoneRef::Named(n) => php_types::tz::wall_to_epoch(n, wall).unwrap_or(wall),
+    }
+}
+
+/// A timezone found inside a datetime STRING: its offset at that instant and
+/// the display label `getTimezone()->getName()` keeps ("+05:00" normalized
+/// from "+0500"; "UTC"/"GMT"/"Z" verbatim).
+struct StrZone {
+    off: i64,
+    label: String,
+}
+
+fn str_zone_from_offset(sign: i64, h: i64, m: i64) -> StrZone {
+    let off = sign * (h * 3600 + m * 60);
+    StrZone { off, label: format!("{}{h:02}:{m:02}", if sign < 0 { '-' } else { '+' }) }
+}
+
 /// `__date_get_last_errors()`: the shared state above in PHP shape — `false`
 /// when clean (PHP 8.2 changed the no-diagnostics return to `false`).
 pub fn __date_get_last_errors(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
@@ -117,9 +229,9 @@ fn ordinal_suffix(day: u8) -> &'static str {
 }
 
 /// Map a single PHP `date()` format char to its output, appending to `out`.
-/// `dt` is the instant interpreted in UTC. `gmt` marks a gmdate() caller
-/// (only `T` renders differently: "GMT" instead of "UTC").
-fn append_char(out: &mut Vec<u8>, c: u8, dt: &OffsetDateTime, epoch: i64, gmt: bool) {
+/// `dt` is the instant already shifted into the zone (`epoch + z.off`);
+/// `epoch` stays the real instant (`U`, `B`); `z` supplies the zone fields.
+fn append_char(out: &mut Vec<u8>, c: u8, dt: &OffsetDateTime, epoch: i64, z: &ZoneView) {
     let year = dt.year();
     let month = u8::from(dt.month());
     let day = dt.day();
@@ -129,6 +241,14 @@ fn append_char(out: &mut Vec<u8>, c: u8, dt: &OffsetDateTime, epoch: i64, gmt: b
     // PHP w: 0=Sunday..6=Saturday. PHP N: 1=Monday..7=Sunday.
     let dow_sun0 = dt.weekday().number_days_from_sunday();
     let push = |out: &mut Vec<u8>, s: &str| out.extend_from_slice(s.as_bytes());
+    let off_hhmm = |sep: &str| -> String {
+        format!(
+            "{}{:02}{sep}{:02}",
+            if z.off < 0 { '-' } else { '+' },
+            z.off.abs() / 3600,
+            z.off.abs() % 3600 / 60
+        )
+    };
     match c {
         // --- Day ---
         b'd' => push(out, &format!("{day:02}")),
@@ -163,23 +283,23 @@ fn append_char(out: &mut Vec<u8>, c: u8, dt: &OffsetDateTime, epoch: i64, gmt: b
         b's' => push(out, &format!("{second:02}")),
         b'u' => push(out, "000000"),
         b'v' => push(out, "000"),
-        b'B' => push(out, &format!("{:03}", swatch_beats(hour, minute, second))),
-        // --- Timezone (UTC only, D-DT3) ---
-        b'e' => push(out, "UTC"),
-        // `date('T')` under the (default) UTC zone shows "UTC"; `gmdate('T')`
-        // shows "GMT" (oracle-pinned) — the ONE formatting difference between
-        // the two under phpr's UTC-only scope.
-        b'T' => push(out, if gmt { "GMT" } else { "UTC" }),
-        b'I' => push(out, "0"),
-        b'O' => push(out, "+0000"),
-        b'P' => push(out, "+00:00"),
-        b'Z' => push(out, "0"),
+        b'B' => push(out, &format!("{:03}", swatch_beats(epoch))),
+        // --- Timezone ---
+        b'e' => push(out, &z.name),
+        b'T' => push(out, &z.abbrev),
+        b'I' => push(out, if z.isdst { "1" } else { "0" }),
+        b'O' => push(out, &off_hhmm("")),
+        b'P' => push(out, &off_hhmm(":")),
+        b'Z' => push(out, &format!("{}", z.off)),
         // --- Full date/time ---
         b'c' => {
             // ISO 8601: Y-m-d\TH:i:sP
             push(
                 out,
-                &format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}+00:00"),
+                &format!(
+                    "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}{}",
+                    off_hhmm(":")
+                ),
             )
         }
         b'r' => {
@@ -187,9 +307,10 @@ fn append_char(out: &mut Vec<u8>, c: u8, dt: &OffsetDateTime, epoch: i64, gmt: b
             push(
                 out,
                 &format!(
-                    "{}, {day:02} {} {year:04} {hour:02}:{minute:02}:{second:02} +0000",
+                    "{}, {day:02} {} {year:04} {hour:02}:{minute:02}:{second:02} {}",
                     DAYS_SHORT[dow_sun0 as usize],
                     MONTHS_SHORT[(month - 1) as usize],
+                    off_hhmm(""),
                 ),
             )
         }
@@ -208,16 +329,23 @@ fn hour12(hour: u8) -> u8 {
     }
 }
 
-/// Swatch internet time (`B`): beats in Biel Mean Time (UTC+1), 0..999.
-fn swatch_beats(hour: u8, minute: u8, second: u8) -> u32 {
-    let secs = (hour as u32 + 1) % 24 * 3600 + minute as u32 * 60 + second as u32;
-    ((secs as f64) / 86.4) as u32 % 1000
+/// Swatch Internet Time: thousandths of the day in Biel Mean Time (UTC+1),
+/// zone-independent by definition.
+fn swatch_beats(epoch: i64) -> i64 {
+    (epoch + 3600).rem_euclid(86_400) * 1000 / 86_400
 }
 
-/// Format `epoch` (Unix seconds, UTC) per the PHP `fmt` string. Backslash
-/// escapes the next byte (emitted literally). Unknown bytes pass through.
+/// Format `epoch` (Unix seconds) per the PHP `fmt` string. Backslash escapes
+/// the next byte (emitted literally). Unknown bytes pass through. `gmt`
+/// callers (gmdate) render in UTC with the "GMT" abbreviation; everything
+/// else renders in the process default timezone.
 pub fn format_php(epoch: i64, fmt: &[u8], gmt: bool) -> Vec<u8> {
-    let dt = match OffsetDateTime::from_unix_timestamp(epoch) {
+    let z = if gmt {
+        ZoneView { off: 0, abbrev: "GMT".to_string(), name: "UTC".to_string(), isdst: false }
+    } else {
+        zone_view(&default_zone(), epoch)
+    };
+    let dt = match OffsetDateTime::from_unix_timestamp(epoch.saturating_add(z.off)) {
         Ok(dt) => dt,
         Err(_) => return Vec::new(),
     };
@@ -236,7 +364,7 @@ pub fn format_php(epoch: i64, fmt: &[u8], gmt: bool) -> Vec<u8> {
             }
             continue;
         }
-        append_char(&mut out, c, &dt, epoch, gmt);
+        append_char(&mut out, c, &dt, epoch, &z);
         i += 1;
     }
     out
@@ -352,11 +480,12 @@ fn strftime_char(out: &mut Vec<u8>, c: u8, dt: &OffsetDateTime, epoch: i64) {
     }
 }
 
-/// Format `epoch` (Unix seconds, UTC) per a `strftime()` format string. A `%`
-/// starts a conversion (the following byte selects it); a trailing `%` is
-/// emitted literally. Non-`%` bytes pass through.
-fn format_strftime(epoch: i64, fmt: &[u8]) -> Vec<u8> {
-    let dt = match OffsetDateTime::from_unix_timestamp(epoch) {
+/// Format `epoch` (Unix seconds) per a `strftime()` format string, shifted
+/// by `off` seconds into the rendering zone (`%s` stays the real epoch). A
+/// `%` starts a conversion (the following byte selects it); a trailing `%`
+/// is emitted literally. Non-`%` bytes pass through.
+fn format_strftime(epoch: i64, fmt: &[u8], off: i64) -> Vec<u8> {
+    let dt = match OffsetDateTime::from_unix_timestamp(epoch.saturating_add(off)) {
         Ok(dt) => dt,
         Err(_) => return Vec::new(),
     };
@@ -411,7 +540,9 @@ fn strftime_impl(args: &[Zval], ctx: &mut Ctx, fname: &str) -> Result<Zval, PhpE
         None | Some(Zval::Null) => now_epoch(),
         Some(v) => convert::to_long_cast(v, ctx.diags),
     };
-    let out = format_strftime(epoch, fmt.as_bytes());
+    // gmstrftime renders UTC; strftime renders the default timezone.
+    let off = if fname == "strftime" { zone_view(&default_zone(), epoch).off } else { 0 };
+    let out = format_strftime(epoch, fmt.as_bytes(), off);
     // The C library yields nothing (e.g. the buffer stays empty) → PHP false.
     if out.is_empty() {
         return Ok(Zval::Bool(false));
@@ -504,10 +635,33 @@ fn int_arg_or(args: &[Zval], i: usize, default: i64, ctx: &mut Ctx) -> i64 {
 }
 
 /// `mktime(?int $hour, ?int $minute, ?int $second, ?int $month, ?int $day,
-/// ?int $year)`. Omitted trailing components default to the current local
-/// (UTC, D-DT3) time — those paths read the real clock and are not
-/// differential-tested (D-DT5).
+/// ?int $year)`. Components are wall-clock values in the default timezone;
+/// omitted trailing ones default to the current local time — those paths
+/// read the real clock and are not differential-tested (D-DT5).
 pub fn mktime(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let zr = default_zone();
+    let now_ts = now_epoch();
+    let now = match OffsetDateTime::from_unix_timestamp(
+        now_ts.saturating_add(zone_view(&zr, now_ts).off),
+    ) {
+        Ok(dt) => dt,
+        Err(_) => return Ok(Zval::Bool(false)),
+    };
+    let hour = int_arg_or(args, 0, now.hour() as i64, ctx);
+    let minute = int_arg_or(args, 1, now.minute() as i64, ctx);
+    let second = int_arg_or(args, 2, now.second() as i64, ctx);
+    let month = int_arg_or(args, 3, u8::from(now.month()) as i64, ctx);
+    let day = int_arg_or(args, 4, now.day() as i64, ctx);
+    let year = fixup_two_digit_year(int_arg_or(args, 5, now.year() as i64, ctx));
+    match civil_to_epoch(year, month, day, hour, minute, second) {
+        Some(wall) => Ok(Zval::Long(zone_wall_to_epoch(&zr, wall))),
+        None => Ok(Zval::Bool(false)),
+    }
+}
+
+/// `gmmktime(...)`: like [`mktime`] but the components are UTC, whatever the
+/// default timezone.
+pub fn gmmktime(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let now = OffsetDateTime::now_utc();
     let hour = int_arg_or(args, 0, now.hour() as i64, ctx);
     let minute = int_arg_or(args, 1, now.minute() as i64, ctx);
@@ -519,11 +673,6 @@ pub fn mktime(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         Some(ts) => Ok(Zval::Long(ts)),
         None => Ok(Zval::Bool(false)),
     }
-}
-
-/// `gmmktime(...)`. Identical to `mktime` under the UTC scope (D-DT3).
-pub fn gmmktime(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    mktime(args, ctx)
 }
 
 /// `checkdate(int $month, int $day, int $year)`: true for a valid Gregorian
@@ -562,8 +711,10 @@ pub fn checkdate(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// missing time is midnight; a two-digit year is 20YY below 70, 19YY from 70;
 /// a day-name that disagrees with the date pushes it FORWARD to the next such
 /// weekday. Named zones beyond the zero-offset ones (CEST, EST, …) would need
-/// timelib's table and stay a parse failure.
-fn parse_textual(s: &str) -> Option<i64> {
+/// timelib's table and stay a parse failure. Returns the WALL time plus the
+/// zone the string itself carried, if any (same contract as
+/// [`parse_absolute`]).
+fn parse_textual(s: &str) -> Option<(i64, Option<StrZone>)> {
     const DAYS: [&str; 7] =
         ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
     const MONTHS: [&str; 12] = [
@@ -634,10 +785,12 @@ fn parse_textual(s: &str) -> Option<i64> {
         }
     }
     // Optional zone: zero-offset names or a numeric correction.
-    let mut off = 0i64;
+    let mut zone: Option<StrZone> = None;
     if let Some(t) = toks.get(i) {
         match t.to_ascii_uppercase().as_str() {
-            "UTC" | "GMT" | "Z" => {}
+            up @ ("UTC" | "GMT" | "Z") => {
+                zone = Some(StrZone { off: 0, label: up.to_string() })
+            }
             z if z.starts_with('+') || z.starts_with('-') => {
                 let sign = if z.starts_with('-') { -1 } else { 1 };
                 let digits: String = z[1..].chars().filter(|c| *c != ':').collect();
@@ -649,7 +802,7 @@ fn parse_textual(s: &str) -> Option<i64> {
                     ),
                     _ => return None,
                 };
-                off = sign * (oh * 3600 + om * 60);
+                zone = Some(str_zone_from_offset(sign, oh, om));
             }
             _ => return None,
         }
@@ -666,12 +819,15 @@ fn parse_textual(s: &str) -> Option<i64> {
         let dow = (days + 4).rem_euclid(7);
         base += (want - dow).rem_euclid(7) * 86400;
     }
-    Some(base - off)
+    Some((base, zone))
 }
 
 /// Parse an absolute date string in the supported subset: `Y-m-d` or `Y/m/d`,
-/// optionally followed by ` `/`T` and `H:i[:s]`. Returns the UTC epoch.
-fn parse_absolute(s: &str) -> Option<i64> {
+/// optionally followed by ` `/`T` and `H:i[:s]`. Returns the WALL-clock time
+/// (civil fields packed as if UTC) plus the timezone carried by the string
+/// itself, if any — the caller anchors wall times without one in the
+/// prevailing zone.
+fn parse_absolute(s: &str) -> Option<(i64, Option<StrZone>)> {
     // The ISO-8601 `T` separator only counts between digits — a blanket
     // replace would shred a trailing timezone NAME ("UTC" → "U C").
     let mut s = s.to_string();
@@ -686,12 +842,14 @@ fn parse_absolute(s: &str) -> Option<i64> {
     let date = parts.next()?;
     let time = parts.next();
     // Optional third token: a timezone name (`… 15:58:59.123456 UTC`) or an
-    // explicit offset. Only the zero-offset names are modelled (phpr renders
-    // everything in UTC); an unknown name stays a parse failure.
-    let mut name_offset: Option<i64> = None;
+    // explicit offset. Only the zero-offset names are modelled; an unknown
+    // name stays a parse failure.
+    let mut name_zone: Option<StrZone> = None;
     if let Some(tzn) = parts.next() {
         match tzn.to_ascii_uppercase().as_str() {
-            "UTC" | "GMT" | "Z" => name_offset = Some(0),
+            up @ ("UTC" | "GMT" | "Z") => {
+                name_zone = Some(StrZone { off: 0, label: up.to_string() })
+            }
             t if t.starts_with('+') || t.starts_with('-') => {
                 let sign = if t.starts_with('-') { -1 } else { 1 };
                 let digits: String = t[1..].chars().filter(|c| *c != ':').collect();
@@ -700,7 +858,7 @@ fn parse_absolute(s: &str) -> Option<i64> {
                     4 => (digits[..2].parse::<i64>().ok()?, digits[2..].parse::<i64>().ok()?),
                     _ => return None,
                 };
-                name_offset = Some(sign * (h * 3600 + m * 60));
+                name_zone = Some(str_zone_from_offset(sign, h, m));
             }
             _ => return None,
         }
@@ -723,24 +881,25 @@ fn parse_absolute(s: &str) -> Option<i64> {
         return None;
     }
     let (mut hour, mut min, mut sec) = (0i64, 0i64, 0i64);
-    let mut tz_offset = 0i64;
+    let mut time_zone: Option<StrZone> = None;
     if let Some(t) = time {
         // Split off a trailing ISO-8601 timezone (`Z`, `+HH:MM`, `-HHMM`,
         // `+HH`): the epoch is the civil time minus the offset.
         let mut t = t;
         if let Some(stripped) = t.strip_suffix('Z').or_else(|| t.strip_suffix('z')) {
             t = stripped;
+            time_zone = Some(StrZone { off: 0, label: "Z".to_string() });
         } else if let Some(pos) = t.rfind(['+', '-']) {
             if pos > 0 {
-                let (body, tz) = t.split_at(pos);
-                let sign = if tz.starts_with('-') { -1 } else { 1 };
-                let digits: String = tz[1..].chars().filter(|c| *c != ':').collect();
+                let (body, tzs) = t.split_at(pos);
+                let sign = if tzs.starts_with('-') { -1 } else { 1 };
+                let digits: String = tzs[1..].chars().filter(|c| *c != ':').collect();
                 let (h, m) = match digits.len() {
                     2 => (digits.parse::<i64>().ok()?, 0),
                     4 => (digits[..2].parse::<i64>().ok()?, digits[2..].parse::<i64>().ok()?),
                     _ => return None,
                 };
-                tz_offset = sign * (h * 3600 + m * 60);
+                time_zone = Some(str_zone_from_offset(sign, h, m));
                 t = body;
             }
         }
@@ -757,10 +916,10 @@ fn parse_absolute(s: &str) -> Option<i64> {
             return None;
         }
     }
-    if let Some(off) = name_offset {
-        tz_offset = off;
-    }
-    Some(civil_to_epoch(year, month, day, hour, min, sec)? - tz_offset)
+    // A standalone zone token wins over a time-suffix one (parity with the
+    // pre-refactor override order).
+    let zone = name_zone.or(time_zone);
+    Some((civil_to_epoch(year, month, day, hour, min, sec)?, zone))
 }
 
 /// Tokenize a relative expression (`[+-]N unit ...`, possibly repeated) into
@@ -1600,6 +1759,10 @@ pub fn __date_from_format(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError
                     let (y2, mo2, d2, h2, mi2, s2) = decompose(ts)?;
                     (yr, mo, d, h, mi, s) = (y2, mo2, d2, h2, mi2, s2);
                     seen = [true; 6];
+                    // An epoch is an absolute instant: PHP gives the object
+                    // the zero-offset zone, so the caller must NOT re-anchor
+                    // the result in a local zone (bug66836).
+                    tz_off = Some((0, b"+00:00".to_vec()));
                 }
                 other => {
                     if v.get(vi) == Some(&other) {
@@ -1758,16 +1921,33 @@ pub fn hrtime(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     }
 }
 
-/// `date_default_timezone_set(string $timezoneId)`: always returns `true`. With
-/// the UTC-only scope (D-DT3) the timezone is not actually stored — setting a
-/// non-UTC zone is a no-op, a documented divergence (formatting stays UTC).
-pub fn date_default_timezone_set(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    Ok(Zval::Bool(true))
+/// `date_default_timezone_set(string $timezoneId)`: install the request-wide
+/// default zone. An unknown ID leaves the state untouched and notices
+/// "Timezone ID '%s' is invalid" (returning `false`), like timelib.
+pub fn date_default_timezone_set(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let raw = convert::to_zstr(
+        args.first().ok_or_else(|| {
+            PhpError::Error(
+                "date_default_timezone_set() expects at least 1 argument, 0 given".to_string(),
+            )
+        })?,
+        ctx.diags,
+    );
+    let id = String::from_utf8_lossy(raw.as_bytes()).into_owned();
+    if php_types::tz::set_default_timezone(&id) {
+        Ok(Zval::Bool(true))
+    } else {
+        ctx.diags.push(php_types::Diag::Notice(format!(
+            "date_default_timezone_set(): Timezone ID '{id}' is invalid"
+        )));
+        Ok(Zval::Bool(false))
+    }
 }
 
-/// `date_default_timezone_get()`: always `"UTC"` (D-DT3 scope).
+/// `date_default_timezone_get()`: the request-wide default zone ("UTC" until
+/// something sets it).
 pub fn date_default_timezone_get(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    Ok(Zval::Str(PhpStr::new(b"UTC".to_vec())))
+    Ok(Zval::Str(PhpStr::new(php_types::tz::default_timezone().into_bytes())))
 }
 
 /// `strtotime(string $datetime, ?int $baseTimestamp = now)`. Supported subset
@@ -1785,25 +1965,124 @@ pub fn strtotime(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         Some(v) => convert::to_long_cast(v, ctx.diags),
     };
     let s = String::from_utf8_lossy(raw.as_bytes());
-    let trimmed = s.trim();
+    Ok(match strtotime_in(s.trim(), base, &default_zone()) {
+        Some((ts, _)) => Zval::Long(ts),
+        None => Zval::Bool(false),
+    })
+}
+
+/// The shared strtotime engine: parse `trimmed` against `base` with naked
+/// wall-clock times anchored in `zr`. Returns the epoch plus the display
+/// label of a zone the STRING itself carried (`None` when the prevailing
+/// zone applied) — the DateTime constructor keeps that label.
+fn strtotime_in(trimmed: &str, base: i64, zr: &ZoneRef) -> Option<(i64, Option<String>)> {
+    if trimmed.is_empty() {
+        return None;
+    }
     let lower = trimmed.to_ascii_lowercase();
+    if let Some(rest) = trimmed.strip_prefix('@') {
+        // `@N` is an absolute instant; PHP labels it with the zero offset.
+        return rest.parse::<i64>().ok().map(|ts| (ts, Some("+00:00".to_string())));
+    }
+    if lower == "now" {
+        return Some((base, None));
+    }
+    if let Some((wall, zone)) = parse_absolute(trimmed).or_else(|| parse_textual(trimmed)) {
+        return Some(match zone {
+            Some(z) => (wall - z.off, Some(z.label)),
+            None => (zone_wall_to_epoch(zr, wall), None),
+        });
+    }
+    // Relative expressions do their calendar math on the WALL clock of the
+    // zone (a "+1 day" across a DST jump keeps the wall time, spending 23 or
+    // 25 real hours — oracle-pinned).
+    let wall_base = base.saturating_add(zone_view(zr, base).off);
+    parse_relative(&lower, wall_base).map(|w| (zone_wall_to_epoch(zr, w), None))
+}
 
-    let result = if trimmed.is_empty() {
-        None
-    } else if let Some(rest) = trimmed.strip_prefix('@') {
-        rest.parse::<i64>().ok()
-    } else if lower == "now" {
-        Some(base)
-    } else if let Some(ts) = parse_absolute(trimmed) {
-        Some(ts)
-    } else if let Some(ts) = parse_textual(trimmed) {
-        Some(ts)
-    } else {
-        parse_relative(&lower, base)
+/// `__tz_offset(string $zone, int $ts)` (prelude-internal): `[offset_secs,
+/// abbrev, isdst]` of the instant in the zone — labels are IANA names,
+/// "±HH:MM"/"±HHMM" offsets, "UTC", "GMT" or "Z". `false` when the label
+/// does not resolve.
+pub fn __tz_offset(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let raw = convert::to_zstr(args.first().unwrap_or(&Zval::Null), ctx.diags);
+    let ts = match args.get(1) {
+        None | Some(Zval::Null) => now_epoch(),
+        Some(v) => convert::to_long_cast(v, ctx.diags),
     };
+    let label = String::from_utf8_lossy(raw.as_bytes());
+    let Some(zr) = resolve_zone(&label) else {
+        return Ok(Zval::Bool(false));
+    };
+    let v = zone_view(&zr, ts);
+    let mut out = PhpArray::new();
+    let _ = out.append(Zval::Long(v.off));
+    let _ = out.append(Zval::Str(PhpStr::new(v.abbrev.into_bytes())));
+    let _ = out.append(Zval::Bool(v.isdst));
+    Ok(Zval::Array(Rc::new(out)))
+}
 
-    Ok(match result {
-        Some(ts) => Zval::Long(ts),
+/// `__tz_wall_ts(string $zone, int $wall)` (prelude-internal): re-anchor a
+/// wall-clock time (civil fields packed as if UTC) in the zone, resolving
+/// DST gaps/folds the timelib way. An unresolvable label is the identity.
+pub fn __tz_wall_ts(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let raw = convert::to_zstr(args.first().unwrap_or(&Zval::Null), ctx.diags);
+    let wall = convert::to_long_cast(args.get(1).unwrap_or(&Zval::Null), ctx.diags);
+    let label = String::from_utf8_lossy(raw.as_bytes());
+    let ts = match resolve_zone(&label) {
+        Some(zr) => zone_wall_to_epoch(&zr, wall),
+        None => wall,
+    };
+    Ok(Zval::Long(ts))
+}
+
+/// `__tz_transition(string $zone, int $ts)` (prelude-internal):
+/// `[trans_offset, trans_time]` of the zone interval containing `$ts` —
+/// timelib's `timelib_get_time_zone_offset_info` pair, feeding the DST
+/// corrections of `timelib_diff_with_tzid`. Fixed-offset labels have no
+/// transitions: their interval starts at PHP_INT_MIN.
+pub fn __tz_transition(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let raw = convert::to_zstr(args.first().unwrap_or(&Zval::Null), ctx.diags);
+    let ts = convert::to_long_cast(args.get(1).unwrap_or(&Zval::Null), ctx.diags);
+    let label = String::from_utf8_lossy(raw.as_bytes());
+    let (off, start) = match resolve_zone(&label) {
+        Some(ZoneRef::Named(n)) => match php_types::tz::offset_at_ex(&n, ts) {
+            Some((i, start)) => (i.off, start),
+            None => (0, i64::MIN),
+        },
+        Some(ZoneRef::Fixed { off, .. }) => (off, i64::MIN),
+        Some(ZoneRef::Utc) | None => (0, i64::MIN),
+    };
+    let mut out = PhpArray::new();
+    let _ = out.append(Zval::Long(off));
+    let _ = out.append(Zval::Long(start));
+    Ok(Zval::Array(Rc::new(out)))
+}
+
+/// `__strtotime_tz(string $datetime, ?int $base, string $zone)`
+/// (prelude-internal): [`strtotime_in`] against an explicit zone — the
+/// DateTime constructor's parse. Returns `[epoch, zone-label-in-string|null]`
+/// or `false` on parse failure.
+pub fn __strtotime_tz(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let raw = convert::to_zstr(args.first().unwrap_or(&Zval::Null), ctx.diags);
+    let base = match args.get(1) {
+        None | Some(Zval::Null) => now_epoch(),
+        Some(v) => convert::to_long_cast(v, ctx.diags),
+    };
+    let zraw = convert::to_zstr(args.get(2).unwrap_or(&Zval::Null), ctx.diags);
+    let zlabel = String::from_utf8_lossy(zraw.as_bytes());
+    let zr = resolve_zone(&zlabel).unwrap_or(ZoneRef::Utc);
+    let s = String::from_utf8_lossy(raw.as_bytes());
+    Ok(match strtotime_in(s.trim(), base, &zr) {
+        Some((ts, label)) => {
+            let mut out = PhpArray::new();
+            let _ = out.append(Zval::Long(ts));
+            let _ = out.append(match label {
+                Some(l) => Zval::Str(PhpStr::new(l.into_bytes())),
+                None => Zval::Null,
+            });
+            Zval::Array(Rc::new(out))
+        }
         None => Zval::Bool(false),
     })
 }
@@ -1824,7 +2103,9 @@ pub fn getdate(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         None | Some(Zval::Null) => now_epoch(),
         Some(v) => convert::to_long_cast(v, ctx.diags),
     };
-    let dt = OffsetDateTime::from_unix_timestamp(ts)
+    // Broken-down components are local (default-timezone) wall time.
+    let local = ts.saturating_add(zone_view(&default_zone(), ts).off);
+    let dt = OffsetDateTime::from_unix_timestamp(local)
         .map_err(|_| PhpError::ValueError("getdate(): timestamp out of range".to_string()))?;
     let wday = dt.weekday().number_days_from_sunday() as usize;
     let mon = u8::from(dt.month()) as usize;
@@ -1846,15 +2127,16 @@ pub fn getdate(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// `localtime(?int $timestamp = null, bool $associative = false)`: the C
 /// `struct tm` fields of `$timestamp`. Default is a numeric array
 /// `[sec,min,hour,mday,mon(0-based),year-1900,wday,yday,isdst]`; with
-/// `$associative=true` the same values keyed `tm_*`. `isdst` is always 0 (UTC,
-/// D-DT3).
+/// `$associative=true` the same values keyed `tm_*`.
 pub fn localtime(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let ts = match args.first() {
         None | Some(Zval::Null) => now_epoch(),
         Some(v) => convert::to_long_cast(v, ctx.diags),
     };
     let assoc = args.get(1).is_some_and(|v| convert::to_bool(v, ctx.diags));
-    let dt = OffsetDateTime::from_unix_timestamp(ts)
+    // Broken-down components are local (default-timezone) wall time.
+    let view = zone_view(&default_zone(), ts);
+    let dt = OffsetDateTime::from_unix_timestamp(ts.saturating_add(view.off))
         .map_err(|_| PhpError::ValueError("localtime(): timestamp out of range".to_string()))?;
     let fields: [(&[u8], i64); 9] = [
         (b"tm_sec", dt.second() as i64),
@@ -1865,7 +2147,7 @@ pub fn localtime(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         (b"tm_year", dt.year() as i64 - 1900),
         (b"tm_wday", dt.weekday().number_days_from_sunday() as i64),
         (b"tm_yday", (dt.ordinal() - 1) as i64),
-        (b"tm_isdst", 0),
+        (b"tm_isdst", i64::from(view.isdst)),
     ];
     let mut arr = PhpArray::new();
     for (i, (name, val)) in fields.iter().enumerate() {

@@ -79,6 +79,10 @@ pub(super) struct IniTable(pub BTreeMap<Vec<u8>, IniEntry>);
 
 impl IniTable {
     pub(super) fn new() -> Self {
+        // Request (module-init) reset: the engine default timezone lives in a
+        // thread_local (php_types::tz) that outlives a Vm when several run on
+        // one thread (unit tests); re-anchor it to the table default.
+        let _ = php_types::tz::set_default_timezone("UTC");
         let mut t = BTreeMap::new();
         let mut add = |name: &str, default: &str, access: i64, settable: bool, int_typed: bool| {
             t.insert(
@@ -117,6 +121,10 @@ impl IniTable {
         // upload_max_filesize) from these.
         add("upload_max_filesize", "2M", INI_PERDIR, false, false);
         add("post_max_size", "8M", INI_PERDIR, false, false);
+        // The default timezone (D-DT3). The CLI oracle reports "UTC" under
+        // `-n`; writes propagate to php_types::tz so the date builtins and
+        // date_default_timezone_get() see them.
+        add("date.timezone", "UTC", INI_ALL, true, false);
         // ext/session (31 directives, defaults from the 8.5.7 CLI oracle).
         add("session.auto_start", "0", INI_PERDIR, false, false);
         add("session.cache_expire", "180", INI_ALL, true, true);
@@ -374,6 +382,11 @@ impl<'m> Vm<'m> {
         }
         let value = normalize_bool_ini(&name, value);
         let entry = self.ini.0.get_mut(&name).expect("checked above");
+        if name == b"date.timezone" {
+            let _ = php_types::tz::set_default_timezone(
+                &String::from_utf8_lossy(&value).into_owned(),
+            );
+        }
         let old = std::mem::replace(&mut entry.local, value);
         Ok(Zval::Str(PhpStr::new(old)))
     }
@@ -560,6 +573,13 @@ impl<'m> Vm<'m> {
                 let v = normalize_bool_ini(k, v.clone());
                 e.global = v.clone();
                 e.local = v;
+                if k == b"date.timezone" {
+                    // Invalid zones stay in the table but leave the engine
+                    // default (UTC) untouched, like timelib's lazy fallback.
+                    let _ = php_types::tz::set_default_timezone(
+                        &String::from_utf8_lossy(&e.local).into_owned(),
+                    );
+                }
             }
         }
         let mut dep = Vec::new();

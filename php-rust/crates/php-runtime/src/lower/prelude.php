@@ -569,9 +569,9 @@ interface DateTimeInterface {
     const RSS = 'D, d M Y H:i:s O';
     const W3C = 'Y-m-d\TH:i:sP';
 }
-// phpr models instants as UTC unix timestamps, so a timezone is carried for
-// `getName()`/`getTimezone()` but does not shift the stored timestamp (faithful
-// for the UTC zone Composer uses; tz-aware display is deliberately out of scope).
+// phpr models instants as UTC unix timestamps; the carried zone label (IANA
+// name or "±HH:MM" offset) resolves through the __tz_* host builtins (TZif
+// reader, D-DT3) for construction, formatting and calendar arithmetic.
 class DateTimeZone {
     const AFRICA = 1;
     const AMERICA = 2;
@@ -588,8 +588,19 @@ class DateTimeZone {
     const ALL_WITH_BC = 4095;
     const PER_COUNTRY = 4096;
     private $__name = "UTC";
-    public function __construct($timezone = "UTC") { $this->__name = (string)$timezone; }
+    public function __construct($timezone = "UTC") {
+        $tz = (string)$timezone;
+        // PHP normalizes offset identifiers: "+0500"/"+05" → "+05:00".
+        if (preg_match('/^([+-])(\d{1,2}):?(\d{2})?$/', $tz, $m) === 1) {
+            $tz = sprintf('%s%02d:%s', $m[1], (int)$m[2], isset($m[3]) && $m[3] !== '' ? $m[3] : '00');
+        }
+        $this->__name = $tz;
+    }
     public function getName() { return $this->__name; }
+    public function getOffset($datetime) {
+        $zi = __tz_offset($this->__name, $datetime->getTimestamp());
+        return $zi === false ? false : $zi[0];
+    }
     public function __toString() { return $this->__name; }
     // The oracle's 419 identifiers (macOS tzdata), comma-packed to keep the
     // prelude compact. Group/country filtering is not modelled: real consumers
@@ -603,30 +614,33 @@ class DateTime implements DateTimeInterface {
     private $__us = 0;
     private $__tz = "UTC";
     public function __construct($datetime = "now", $timezone = null) {
-        if ($timezone !== null) { $this->__tz = $timezone->getName(); }
+        // The instance zone: the $timezone argument, else the process default.
+        // A zone carried by the STRING itself (offset suffix, "UTC", a "@"
+        // timestamp's "+00:00") overrides both (PHP quirk).
+        $this->__tz = $timezone !== null ? $timezone->getName() : date_default_timezone_get();
         if ($datetime === "now" || $datetime === "" || $datetime === null) {
             $t = microtime(true);
             $this->__ts = (int) $t;
             $this->__us = (int) round(($t - (int) $t) * 1000000);
         } else {
-            // A leading '@' (unix timestamp) forces the UTC-offset zone "+00:00",
-            // ignoring any passed timezone (a PHP quirk).
-            if (is_string($datetime) && isset($datetime[0]) && $datetime[0] === "@") {
-                $this->__tz = "+00:00";
-            }
             $parse = $datetime;
             if (is_string($datetime) && preg_match('/\.(\d{1,6})/', $datetime, $m) === 1) {
                 $this->__us = (int) str_pad($m[1], 6, '0');
                 $parse = preg_replace('/\.\d{1,6}/', '', $datetime, 1);
             }
-            $r = strtotime($parse);
+            $r = __strtotime_tz($parse, null, $this->__tz);
             if ($r === false) {
                 throw new Exception("DateTime::__construct(): Failed to parse time string ($datetime)");
             }
-            $this->__ts = $r;
+            $this->__ts = $r[0];
+            if ($r[1] !== null) { $this->__tz = $r[1]; }
         }
     }
     public function getTimezone() { return new DateTimeZone($this->__tz); }
+    public function getOffset() {
+        $zi = __tz_offset($this->__tz, $this->__ts);
+        return $zi === false ? 0 : $zi[0];
+    }
     public function setTimezone($timezone) {
         $this->__tz = is_string($timezone) ? $timezone : $timezone->getName();
         return $this;
@@ -658,92 +672,153 @@ class DateTime implements DateTimeInterface {
         return $d;
     }
     public static function createFromImmutable($object) { return static::createFromInterface($object); }
-    public function format($format) {
-        // 'u'/'v' (micro/milliseconds) come from this instance, not date():
-        // substitute the digits as backslash-escaped literals in the format.
-        // An offset-style zone ("+02:00") renders its WALL time: the date()
-        // call below is fixed-UTC, so shift the timestamp by the offset and
-        // emit O/P/U/Z as literals from this instance instead.
-        $off = 0; $tzs = $this->__tz;
-        if (isset($tzs[0]) && ($tzs[0] === '+' || $tzs[0] === '-')) {
-            $off = ($tzs[0] === '-' ? -1 : 1) * ((int)substr($tzs, 1, 2) * 3600 + (int)substr($tzs, 4, 2) * 60);
-        }
+    public function format($format) { return DateTime::__fmt($format, $this->__ts, $this->__us, $this->__tz); }
+    // The shared DateTimeInterface::format engine: every zone-dependent
+    // specifier (O/P/U/Z/T/e/I, the composite c/r, and this instance's
+    // u/v microseconds) is emitted as backslash-escaped literals resolved
+    // from the instance zone via __tz_offset; the remaining civil fields
+    // come from gmdate() over the zone-shifted timestamp.
+    public static function __fmt($format, $ts, $us, $tzs) {
+        $zi = __tz_offset($tzs, $ts);
+        $off = $zi === false ? 0 : $zi[0];
+        $sign = $off < 0 ? '-' : '+';
+        $oh = intdiv(abs($off), 3600); $om = intdiv(abs($off) % 3600, 60);
         $out = ''; $esc = false;
         for ($i = 0, $len = strlen($format); $i < $len; $i++) {
             $c = $format[$i];
             if ($esc) { $out .= '\\' . $c; $esc = false; continue; }
             if ($c === '\\') { $esc = true; continue; }
-            if ($off !== 0 && ($c === 'O' || $c === 'P' || $c === 'U' || $c === 'Z')) {
-                $lit = match ($c) {
-                    'O' => str_replace(':', '', $tzs),
-                    'P' => $tzs,
-                    'U' => (string) $this->__ts,
-                    'Z' => (string) $off,
-                };
+            // PHP renders the composite specifiers with the INSTANCE offset:
+            // expand them so the trailing zone part is a literal.
+            if ($c === 'c') { $out .= 'Y-m-d\\TH:i:s'; $c = 'P'; }
+            elseif ($c === 'r') { $out .= 'D, d M Y H:i:s '; $c = 'O'; }
+            $lit = match ($c) {
+                'O' => sprintf('%s%02d%02d', $sign, $oh, $om),
+                'P', 'p' => sprintf('%s%02d:%02d', $sign, $oh, $om),
+                'U' => (string) $ts,
+                'Z' => (string) $off,
+                'T' => $zi === false ? $tzs : $zi[1],
+                'e' => $tzs,
+                'I' => ($zi !== false && $zi[2]) ? '1' : '0',
+                'u' => sprintf('%06d', $us),
+                'v' => sprintf('%03d', intdiv($us, 1000)),
+                default => null,
+            };
+            if ($lit !== null) {
                 foreach (str_split($lit) as $d) { $out .= '\\' . $d; }
-                continue;
-            }
-            if ($c === 'u' || $c === 'v') {
-                $n = $c === 'u' ? sprintf('%06d', $this->__us) : sprintf('%03d', intdiv($this->__us, 1000));
-                foreach (str_split($n) as $d) { $out .= '\\' . $d; }
-                continue;
-            }
-            // 'T'/'e' come from this instance's timezone, not date()'s fixed
-            // UTC: 'e' shows it verbatim ("+02:00", "GMT", "UTC"); 'T' shows
-            // an offset-style zone as PHP's "GMT+0200" abbreviation.
-            if ($c === 'T' || $c === 'e') {
-                $tz = $this->__tz;
-                if ($c === 'T' && isset($tz[0]) && ($tz[0] === '+' || $tz[0] === '-')) {
-                    $tz = 'GMT' . str_replace(':', '', $tz);
-                }
-                foreach (str_split($tz) as $d) { $out .= '\\' . $d; }
                 continue;
             }
             $out .= $c;
         }
-        return date($out, $this->__ts + $off);
+        return gmdate($out, $ts + $off);
     }
     public function getTimestamp() { return $this->__ts; }
     public function setTimestamp($timestamp) { $this->__ts = $timestamp; return $this; }
     public function setDate($year, $month, $day) {
-        $this->__ts = mktime((int)date('G', $this->__ts), (int)date('i', $this->__ts), (int)date('s', $this->__ts), $month, $day, $year);
+        $w = $this->__ts + $this->getOffset();
+        $this->__ts = __tz_wall_ts($this->__tz, gmmktime((int)gmdate('G', $w), (int)gmdate('i', $w), (int)gmdate('s', $w), $month, $day, $year));
         return $this;
     }
     public function setTime($hour, $minute, $second = 0) {
-        $this->__ts = mktime($hour, $minute, $second, (int)date('n', $this->__ts), (int)date('j', $this->__ts), (int)date('Y', $this->__ts));
+        $w = $this->__ts + $this->getOffset();
+        $this->__ts = __tz_wall_ts($this->__tz, gmmktime($hour, $minute, $second, (int)gmdate('n', $w), (int)gmdate('j', $w), (int)gmdate('Y', $w)));
         return $this;
     }
     public static function createFromFormat($format, $datetime, $timezone = null) {
         $r = __date_from_format($format, $datetime);
         if ($r === false) { return false; }
-        $d = new DateTime("@" . $r[0]);
-        // "@ts" leaves the "+00:00" offset tz; the real createFromFormat keeps
-        // the parsed offset, the $timezone argument, or the default (UTC).
-        $d->__tz = $r[1] !== null ? $r[1] : ($timezone !== null ? $timezone->getName() : 'UTC');
+        // The parsed value is a WALL time unless the string carried a zone
+        // (then $r[0] is already the epoch and $r[1] its display label); the
+        // wall time anchors in the $timezone argument or the default zone.
+        $tzName = $r[1] !== null ? $r[1] : ($timezone !== null ? $timezone->getName() : date_default_timezone_get());
+        $d = new DateTime("@" . ($r[1] !== null ? $r[0] : __tz_wall_ts($tzName, $r[0])));
+        $d->__tz = $tzName;
         $d->__us = $r[2];
         return $d;
     }
     // Warnings/errors of the last createFromFormat parse; false when clean.
     public static function getLastErrors() { return __date_get_last_errors(); }
-    public function modify($modifier) { $this->__ts = strtotime($modifier, $this->__ts); return $this; }
+    public function modify($modifier) {
+        // Relative math runs on this instance's zone (wall-clock preserving
+        // across DST), not the process default.
+        $r = __strtotime_tz($modifier, $this->__ts, $this->__tz);
+        if ($r !== false) { $this->__ts = $r[0]; }
+        return $this;
+    }
     public function add($interval) { $this->__ts = $this->__apply($interval, 1); return $this; }
     public function sub($interval) { $this->__ts = $this->__apply($interval, -1); return $this; }
     private function __apply($iv, $dir) {
+        // Calendar arithmetic on the instance's WALL clock, re-anchored in
+        // its zone (a +P1D across a DST jump keeps the wall time).
         $sign = $dir * ($iv->invert ? -1 : 1);
-        return mktime(
-            (int)date('G', $this->__ts) + $sign * $iv->h,
-            (int)date('i', $this->__ts) + $sign * $iv->i,
-            (int)date('s', $this->__ts) + $sign * $iv->s,
-            (int)date('n', $this->__ts) + $sign * $iv->m,
-            (int)date('j', $this->__ts) + $sign * $iv->d,
-            (int)date('Y', $this->__ts) + $sign * $iv->y);
+        $w = $this->__ts + $this->getOffset();
+        return __tz_wall_ts($this->__tz, gmmktime(
+            (int)gmdate('G', $w) + $sign * $iv->h,
+            (int)gmdate('i', $w) + $sign * $iv->i,
+            (int)gmdate('s', $w) + $sign * $iv->s,
+            (int)gmdate('n', $w) + $sign * $iv->m,
+            (int)gmdate('j', $w) + $sign * $iv->d,
+            (int)gmdate('Y', $w) + $sign * $iv->y));
     }
-    public function diff($other) {
-        $info = __date_diff($this->__ts, $other->getTimestamp());
+    public function diff($other) { return DateTime::__diff($this, $other); }
+    // Port of timelib_diff (ext/date/lib/interval.c). Same named zone →
+    // timelib_diff_with_tzid: calendar diff of the two WALL times plus the
+    // fall-back / spring-forward corrections around a transition. Anything
+    // else → the general branch: local-field diff sorted by instant with the
+    // offset delta folded into the seconds, and days = |Δsse| / 86400.
+    public static function __diff($a, $b) {
+        $tzA = $a->getTimezone()->getName(); $tzB = $b->getTimezone()->getName();
+        $tsA = $a->getTimestamp();           $tsB = $b->getTimestamp();
+        $zA = $a->getOffset();               $zB = $b->getOffset();
         $iv = new DateInterval("PT0S");
-        $iv->y = $info['y']; $iv->m = $info['m']; $iv->d = $info['d'];
-        $iv->h = $info['h']; $iv->i = $info['i']; $iv->s = $info['s'];
-        $iv->invert = $info['invert']; $iv->days = $info['days'];
+        $named = $tzA !== 'Z' && (!isset($tzA[0]) || ($tzA[0] !== '+' && $tzA[0] !== '-'));
+        if ($tzA === $tzB && $named) {
+            $invert = 0;
+            if ($tsA + $zA > $tsB + $zB) {
+                [$one, $two, $zOne, $zTwo] = [$tsB, $tsA, $zB, $zA];
+                $invert = 1;
+            } else {
+                [$one, $two, $zOne, $zTwo] = [$tsA, $tsB, $zA, $zB];
+            }
+            $dstOne = __tz_offset($tzA, $one)[2]; $dstTwo = __tz_offset($tzA, $two)[2];
+            $dstCorr = $zTwo - $zOne;
+            $info = __date_diff($one + $zOne, $two + $zTwo);
+            $d = $info['d']; $h = $info['h']; $i = $info['i']; $s = $info['s'];
+            if ($dstOne && !$dstTwo) { // fall back
+                if (($two - $one + $dstCorr) < 86400) {
+                    $h -= intdiv($dstCorr, 3600); $i -= intdiv($dstCorr % 3600, 60);
+                }
+            } elseif (!$dstOne && $dstTwo) { // spring forward
+                $tr = __tz_transition($tzA, $two);
+                if (!(($one + 86400 > $tr[1]) && ($one + 86400 <= $tr[1] + $dstCorr))
+                    && $two >= $tr[1]
+                    && (($two - $one + $dstCorr) % 86400) > ($two - $tr[1])) {
+                    $h -= intdiv($dstCorr, 3600); $i -= intdiv($dstCorr % 3600, 60);
+                }
+            } elseif ($two - $one >= 86400) {
+                // Transition-period special case (see interval.c:131).
+                $tr = __tz_transition($tzA, $two - $zTwo);
+                $corr = $zOne - $tr[0];
+                if ($two >= $tr[1] - $corr && $two < $tr[1]) { $d--; $h = 24; }
+            }
+            $iv->y = $info['y']; $iv->m = $info['m']; $iv->d = $d;
+            $iv->h = $h; $iv->i = $i; $iv->s = $s;
+            $iv->invert = $invert; $iv->days = $info['days'];
+        } else {
+            $invert = 0;
+            if ($tsA > $tsB) {
+                [$one, $two, $zOne] = [$tsB, $tsA, $zB];
+                $invert = 1;
+            } else {
+                [$one, $two, $zOne] = [$tsA, $tsB, $zA];
+            }
+            // Field diff with the offset delta folded into the seconds ==
+            // both walls rendered with the EARLIER side's offset.
+            $info = __date_diff($one + $zOne, $two + $zOne);
+            $iv->y = $info['y']; $iv->m = $info['m']; $iv->d = $info['d'];
+            $iv->h = $info['h']; $iv->i = $info['i']; $iv->s = $info['s'];
+            $iv->invert = $invert; $iv->days = intdiv(abs($two - $one), 86400);
+        }
         return $iv;
     }
 }
@@ -772,29 +847,31 @@ class DateTimeImmutable implements DateTimeInterface {
     private $__us = 0;
     private $__tz = "UTC";
     public function __construct($datetime = "now", $timezone = null) {
-        if ($timezone !== null) { $this->__tz = $timezone->getName(); }
+        // Same zone-resolution order as DateTime::__construct.
+        $this->__tz = $timezone !== null ? $timezone->getName() : date_default_timezone_get();
         if ($datetime === "now" || $datetime === "" || $datetime === null) {
             $t = microtime(true);
             $this->__ts = (int) $t;
             $this->__us = (int) round(($t - (int) $t) * 1000000);
         } else {
-            // A leading '@' (unix timestamp) forces the UTC-offset zone "+00:00".
-            if (is_string($datetime) && isset($datetime[0]) && $datetime[0] === "@") {
-                $this->__tz = "+00:00";
-            }
             $parse = $datetime;
             if (is_string($datetime) && preg_match('/\.(\d{1,6})/', $datetime, $m) === 1) {
                 $this->__us = (int) str_pad($m[1], 6, '0');
                 $parse = preg_replace('/\.\d{1,6}/', '', $datetime, 1);
             }
-            $r = strtotime($parse);
+            $r = __strtotime_tz($parse, null, $this->__tz);
             if ($r === false) {
                 throw new Exception("DateTimeImmutable::__construct(): Failed to parse time string ($datetime)");
             }
-            $this->__ts = $r;
+            $this->__ts = $r[0];
+            if ($r[1] !== null) { $this->__tz = $r[1]; }
         }
     }
     public function getTimezone() { return new DateTimeZone($this->__tz); }
+    public function getOffset() {
+        $zi = __tz_offset($this->__tz, $this->__ts);
+        return $zi === false ? 0 : $zi[0];
+    }
     public function setTimezone($timezone) {
         // `clone` keeps the runtime class, so a userland subclass (monolog's
         // JsonSerializableDateTimeImmutable) survives, like PHP's `static`.
@@ -829,51 +906,7 @@ class DateTimeImmutable implements DateTimeInterface {
         return $d;
     }
     public static function createFromMutable($object) { return static::createFromInterface($object); }
-    public function format($format) {
-        // 'u'/'v' (micro/milliseconds) come from this instance, not date():
-        // substitute the digits as backslash-escaped literals in the format.
-        // An offset-style zone ("+02:00") renders its WALL time: the date()
-        // call below is fixed-UTC, so shift the timestamp by the offset and
-        // emit O/P/U/Z as literals from this instance instead.
-        $off = 0; $tzs = $this->__tz;
-        if (isset($tzs[0]) && ($tzs[0] === '+' || $tzs[0] === '-')) {
-            $off = ($tzs[0] === '-' ? -1 : 1) * ((int)substr($tzs, 1, 2) * 3600 + (int)substr($tzs, 4, 2) * 60);
-        }
-        $out = ''; $esc = false;
-        for ($i = 0, $len = strlen($format); $i < $len; $i++) {
-            $c = $format[$i];
-            if ($esc) { $out .= '\\' . $c; $esc = false; continue; }
-            if ($c === '\\') { $esc = true; continue; }
-            if ($off !== 0 && ($c === 'O' || $c === 'P' || $c === 'U' || $c === 'Z')) {
-                $lit = match ($c) {
-                    'O' => str_replace(':', '', $tzs),
-                    'P' => $tzs,
-                    'U' => (string) $this->__ts,
-                    'Z' => (string) $off,
-                };
-                foreach (str_split($lit) as $d) { $out .= '\\' . $d; }
-                continue;
-            }
-            if ($c === 'u' || $c === 'v') {
-                $n = $c === 'u' ? sprintf('%06d', $this->__us) : sprintf('%03d', intdiv($this->__us, 1000));
-                foreach (str_split($n) as $d) { $out .= '\\' . $d; }
-                continue;
-            }
-            // 'T'/'e' come from this instance's timezone, not date()'s fixed
-            // UTC: 'e' shows it verbatim ("+02:00", "GMT", "UTC"); 'T' shows
-            // an offset-style zone as PHP's "GMT+0200" abbreviation.
-            if ($c === 'T' || $c === 'e') {
-                $tz = $this->__tz;
-                if ($c === 'T' && isset($tz[0]) && ($tz[0] === '+' || $tz[0] === '-')) {
-                    $tz = 'GMT' . str_replace(':', '', $tz);
-                }
-                foreach (str_split($tz) as $d) { $out .= '\\' . $d; }
-                continue;
-            }
-            $out .= $c;
-        }
-        return date($out, $this->__ts + $off);
-    }
+    public function format($format) { return DateTime::__fmt($format, $this->__ts, $this->__us, $this->__tz); }
     public function getTimestamp() { return $this->__ts; }
     // Every "wither" clones: the runtime class survives (PHP returns `static`,
     // monolog's JsonSerializableDateTimeImmutable relies on it), and so do
@@ -883,50 +916,50 @@ class DateTimeImmutable implements DateTimeInterface {
     }
     public function setDate($year, $month, $day) {
         $c = clone $this;
-        $c->__ts = mktime((int)date('G', $this->__ts), (int)date('i', $this->__ts), (int)date('s', $this->__ts), $month, $day, $year);
+        $w = $this->__ts + $this->getOffset();
+        $c->__ts = __tz_wall_ts($this->__tz, gmmktime((int)gmdate('G', $w), (int)gmdate('i', $w), (int)gmdate('s', $w), $month, $day, $year));
         return $c;
     }
     public function setTime($hour, $minute, $second = 0, $microsecond = 0) {
         $c = clone $this;
-        $c->__ts = mktime($hour, $minute, $second, (int)date('n', $this->__ts), (int)date('j', $this->__ts), (int)date('Y', $this->__ts));
+        $w = $this->__ts + $this->getOffset();
+        $c->__ts = __tz_wall_ts($this->__tz, gmmktime($hour, $minute, $second, (int)gmdate('n', $w), (int)gmdate('j', $w), (int)gmdate('Y', $w)));
         $c->__us = $microsecond;
         return $c;
     }
     public static function createFromFormat($format, $datetime, $timezone = null) {
         $r = __date_from_format($format, $datetime);
         if ($r === false) { return false; }
-        $d = new DateTimeImmutable("@" . $r[0]);
-        $d->__tz = $r[1] !== null ? $r[1] : ($timezone !== null ? $timezone->getName() : 'UTC');
+        // Wall time unless the string carried a zone (see DateTime).
+        $tzName = $r[1] !== null ? $r[1] : ($timezone !== null ? $timezone->getName() : date_default_timezone_get());
+        $d = new DateTimeImmutable("@" . ($r[1] !== null ? $r[0] : __tz_wall_ts($tzName, $r[0])));
+        $d->__tz = $tzName;
         $d->__us = $r[2];
         return $d;
     }
     // Warnings/errors of the last createFromFormat parse; false when clean.
     public static function getLastErrors() { return __date_get_last_errors(); }
     public function modify($modifier) {
-        $r = strtotime($modifier, $this->__ts);
+        // Relative math runs on this instance's zone (see DateTime::modify).
+        $r = __strtotime_tz($modifier, $this->__ts, $this->__tz);
         if ($r === false) { return false; }
-        $c = clone $this; $c->__ts = $r; return $c;
+        $c = clone $this; $c->__ts = $r[0]; return $c;
     }
     public function add($interval) { $c = clone $this; $c->__ts = $this->__apply($interval, 1); return $c; }
     public function sub($interval) { $c = clone $this; $c->__ts = $this->__apply($interval, -1); return $c; }
     private function __apply($iv, $dir) {
+        // Wall-clock calendar arithmetic re-anchored in the instance zone.
         $sign = $dir * ($iv->invert ? -1 : 1);
-        return mktime(
-            (int)date('G', $this->__ts) + $sign * $iv->h,
-            (int)date('i', $this->__ts) + $sign * $iv->i,
-            (int)date('s', $this->__ts) + $sign * $iv->s,
-            (int)date('n', $this->__ts) + $sign * $iv->m,
-            (int)date('j', $this->__ts) + $sign * $iv->d,
-            (int)date('Y', $this->__ts) + $sign * $iv->y);
+        $w = $this->__ts + $this->getOffset();
+        return __tz_wall_ts($this->__tz, gmmktime(
+            (int)gmdate('G', $w) + $sign * $iv->h,
+            (int)gmdate('i', $w) + $sign * $iv->i,
+            (int)gmdate('s', $w) + $sign * $iv->s,
+            (int)gmdate('n', $w) + $sign * $iv->m,
+            (int)gmdate('j', $w) + $sign * $iv->d,
+            (int)gmdate('Y', $w) + $sign * $iv->y));
     }
-    public function diff($other) {
-        $info = __date_diff($this->__ts, $other->getTimestamp());
-        $iv = new DateInterval("PT0S");
-        $iv->y = $info['y']; $iv->m = $info['m']; $iv->d = $info['d'];
-        $iv->h = $info['h']; $iv->i = $info['i']; $iv->s = $info['s'];
-        $iv->invert = $info['invert']; $iv->days = $info['days'];
-        return $iv;
-    }
+    public function diff($other) { return DateTime::__diff($this, $other); }
 }
 
 // --- Procedural date API (step 35): thin global-function wrappers over the OOP
