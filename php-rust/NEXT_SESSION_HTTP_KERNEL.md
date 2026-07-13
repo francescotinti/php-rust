@@ -3,7 +3,7 @@
 Riprendiamo phpr (PHP 8.5.7 in Rust). La sessione 2026-07-13 (sessione 4) ha
 CHIUSO il gap engine SEND_VAR_EX in 2 commit gated: `a4f2209` (ArgPlace
 differito per argomenti place a callee dinamici + costruttori by-ref) e
-`d74a4e7` (class_exists/class_uses coerenti per Closure/Generator, guardia
+`f0b0f4e` (class_exists/class_uses coerenti per Closure/Generator, guardia
 PRIMA dell'autoload). Dettaglio in memoria: `php-rust-symfony-http-kernel`.
 
 ## Dove siamo
