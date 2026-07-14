@@ -400,6 +400,16 @@ pub(crate) fn run_module_with_hir<'m>(
         seed_globals: main_hir.map(|p| p.slots.clone()).unwrap_or_default(),
         linked_functions: HashMap::new(),
         included_files: HashSet::new(),
+        unit_chain_fp: {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            // Seed the chain with the main unit's identity: two requests whose
+            // entry scripts differ must never share downstream cache entries.
+            module.file.hash(&mut h);
+            module.classes.len().hash(&mut h);
+            main_hir.is_some().hash(&mut h);
+            h.finish()
+        },
         autoloaders: Vec::new(),
         autoloading: HashSet::new(),
         registry,
@@ -1062,6 +1072,11 @@ struct Vm<'m> {
     /// (step 57, Phase 2), so a repeat `_once` of the same file no-ops and returns
     /// `true` without re-running it.
     included_files: HashSet<Vec<u8>>,
+    /// Hash chain of every unit-load event so far (main identity, then each
+    /// include's path+mtime+size and each eval's source): part of the unit-cache
+    /// fingerprint ([`Vm::unit_fp`]) — two VMs with equal chains loaded the same
+    /// code in the same order, so seeded lowering of the next unit is replayable.
+    unit_chain_fp: u64,
     /// Autoload callbacks registered by `spl_autoload_register` (step 57, Phase 3),
     /// in registration order. Consulted when a class name fails to resolve (a `new`
     /// / static reference / `class_exists` of an undeclared class), each given the
@@ -2586,7 +2601,11 @@ impl<'m> Vm<'m> {
         // Compile against the accumulating image when an HIR is retained, so an
         // eval class can extend/implement an already-loaded (or autoloaded) class;
         // otherwise stand alone.
-        let program = match self.lower_unit(b"eval()'d code", src)? {
+        // An eval can declare classes/functions: fold its source into the
+        // unit-load chain so later includes key their cache on it.
+        self.unit_chain_fp = fp_mix(self.unit_chain_fp, b"eval", src);
+        let mut eval_pure = true;
+        let program = match self.lower_unit(b"eval()'d code", src, &mut eval_pure)? {
             Ok(p) => p,
             Err(_) => return Ok(Zval::Bool(false)),
         };
@@ -2619,11 +2638,19 @@ impl<'m> Vm<'m> {
         eval_origin: Option<(Box<[u8]>, Line)>,
         scope_bridge: Option<usize>,
     ) -> Result<Zval, PhpError> {
-        // Build the eval-local -> global class-id remap: a name already in the
-        // global table dedups to the existing id, a genuinely new user class is
-        // appended. Against the caller image the dedup is an identity for every
-        // shared class, leaving only this unit's own declarations to relocate.
-        let static_off = self.statics.len();
+        let (class_remap, new_locals) = self.unit_class_remap(&module);
+        // Rewrite every op / class-metadata id in place (the module is still owned),
+        // and offset the unit's static-cell ids past the live `self.statics` range.
+        relocate_module_class_ids(&mut module, &class_remap, self.statics.len());
+        let leaked: &'static Module = Box::leak(Box::new(module));
+        self.run_linked(leaked, &new_locals, eval_origin, scope_bridge)
+    }
+
+    /// Build the unit-local -> global class-id remap: a name already in the
+    /// global table dedups to the existing id, a genuinely new user class is
+    /// appended. Against the caller image the dedup is an identity for every
+    /// shared class, leaving only this unit's own declarations to relocate.
+    fn unit_class_remap(&self, module: &Module) -> (Vec<ClassId>, Vec<usize>) {
         let mut class_remap: Vec<ClassId> = Vec::with_capacity(module.classes.len());
         let mut new_locals: Vec<usize> = Vec::new();
         for (i, cc) in module.classes.iter().enumerate() {
@@ -2645,19 +2672,28 @@ impl<'m> Vm<'m> {
                 new_locals.push(i);
             }
         }
-        // Rewrite every op / class-metadata id in place (the module is still owned),
-        // and offset the unit's static-cell ids past the live `self.statics` range.
-        relocate_module_class_ids(&mut module, &class_remap, static_off);
-        self.statics.resize(static_off + module.static_count, None);
+        (class_remap, new_locals)
+    }
 
-        let leaked: &'m Module = Box::leak(Box::new(module));
+    /// Register a linked (relocated, leaked) unit module into the VM and drive
+    /// its body — the back half of [`Self::drive_unit`], shared with the unit
+    /// cache: `run_include` re-drives a cached, already-relocated module through
+    /// here after verifying the remap/static baseline still matches.
+    fn run_linked(
+        &mut self,
+        leaked: &'m Module,
+        new_locals: &[usize],
+        eval_origin: Option<(Box<[u8]>, Line)>,
+        scope_bridge: Option<usize>,
+    ) -> Result<Zval, PhpError> {
+        self.statics.resize(self.statics.len() + leaked.static_count, None);
         // Append the new user classes to the global table (dedup'd prelude /
         // caller-image classes were already mapped to existing ids). A conditional
         // declaration still gets its global slot/id (so its ops relocate), but its
         // name is *not* registered until the unit body reaches its `Op::DeclareClass`
         // — so a guarded polyfill (`if (!class_exists(X)) { class X {} }`) respects
         // its condition, exactly as conditional functions do above.
-        for &i in &new_locals {
+        for &i in new_locals {
             self.classes.push(&leaked.classes[i]);
             self.class_module.push(leaked);
             if !leaked.conditional_classes.contains(&i) {
@@ -2794,10 +2830,14 @@ impl<'m> Vm<'m> {
     /// loads `Animal` first. With no retained image it lowers standalone. The outer
     /// `Result` carries a throwing autoloader's exception; the inner one a genuine
     /// lower failure (parse / unsupported / still-undefined parent).
+    /// `pure` is cleared when the lowering needed an autoload retry or a defer
+    /// re-lower — such a result depends on side effects (files loaded mid-lower)
+    /// the unit cache cannot replay, so only a first-shot success is cacheable.
     fn lower_unit(
         &mut self,
         name: &[u8],
         src: &[u8],
+        pure: &mut bool,
     ) -> Result<Result<Program, crate::LowerError>, PhpError> {
         if self.main_hir.is_none() {
             return Ok(crate::lower_source(name, src));
@@ -2822,6 +2862,7 @@ impl<'m> Vm<'m> {
                     // An undefined name may be a class/interface *or* a trait used
                     // by a class being lowered; autoload it (which may load a trait
                     // file into `seed_traits`) and retry.
+                    *pure = false;
                     if self.resolve_name_autoload(&pname)? {
                         continue;
                     }
@@ -2987,6 +3028,52 @@ impl<'m> Vm<'m> {
             .collect()
     }
 
+    /// Fingerprint of the VM state a unit's lowering/compilation/relocation can
+    /// observe: the chain of unit-load events so far ([`Vm::unit_chain_fp`])
+    /// plus the seed-image / global-table sizes and an order-independent digest
+    /// of the registered class ids and aliases. Equal fingerprints (same
+    /// binary) ⇒ seeded lowering of the same file bytes replays byte-identically,
+    /// so a cached unit ([`CachedUnit`]) is reusable as-is.
+    fn unit_fp(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        self.unit_chain_fp.hash(&mut h);
+        self.seed_classes.len().hash(&mut h);
+        self.seed_static.hash(&mut h);
+        // Trait keys and global names hash IN ORDER: a unit's lowering bakes
+        // global SLOT INDICES by position (and trait bodies by key), and
+        // runtime code can mint fresh global slots (`global $x`, `$GLOBALS`)
+        // in request-dependent order — same count, different layout.
+        for (k, _) in &self.seed_traits {
+            k.hash(&mut h);
+        }
+        for g in &self.seed_globals {
+            g.hash(&mut h);
+        }
+        self.classes.len().hash(&mut h);
+        self.statics.len().hash(&mut h);
+        self.linked_functions.len().hash(&mut h);
+        // Registered classes: (name, id) digest, XOR-combined so the HashMap's
+        // iteration order cannot leak into the fingerprint.
+        let mut acc: u64 = 0;
+        for (name, id) in &self.class_index {
+            let mut eh = std::collections::hash_map::DefaultHasher::new();
+            name.hash(&mut eh);
+            id.hash(&mut eh);
+            acc ^= eh.finish();
+        }
+        acc.hash(&mut h);
+        let mut aacc: u64 = 0;
+        for (alias, target) in &self.seed_aliases {
+            let mut eh = std::collections::hash_map::DefaultHasher::new();
+            alias.hash(&mut eh);
+            target.hash(&mut eh);
+            aacc ^= eh.finish();
+        }
+        aacc.hash(&mut h);
+        h.finish()
+    }
+
     /// Resolve an `include`/`require` path to a real file (step 57, Phase 2): an
     /// absolute path is used directly; a relative one is tried against the
     /// including file's directory first, then the process CWD (a minimal
@@ -3027,6 +3114,36 @@ impl<'m> Vm<'m> {
         if mode.is_once() && self.included_files.contains(&key) {
             return Ok(Zval::Bool(true));
         }
+        // Unit-cache probe: the same file bytes (path+mtime+size), lowered /
+        // compiled / relocated under the same VM fingerprint ([`Vm::unit_fp`]),
+        // reproduce a byte-identical module — a web server replaying the same
+        // include chain over a fresh VM skips lower+compile entirely. The reuse
+        // is double-checked structurally (static baseline, recomputed remap);
+        // a mismatch simply falls through to the fresh path.
+        let unit_key = std::fs::metadata(&real).ok().and_then(|m| unit_key_for(&key, &m));
+        let fp = self.unit_fp();
+        if let Some(uk) = &unit_key {
+            if let Some(cu) = unit_cache_get(uk, fp) {
+                let (remap, locals) = self.unit_class_remap(cu.module);
+                if cu.static_off == self.statics.len()
+                    && remap == cu.class_remap
+                    && locals == cu.new_locals
+                {
+                    self.included_files.insert(key.clone());
+                    self.unit_chain_fp = fp_mix_key(self.unit_chain_fp, uk);
+                    log::debug!(
+                        target: "phpr::include",
+                        "{:?} {} (unit cache)",
+                        mode,
+                        String::from_utf8_lossy(&key)
+                    );
+                    self.accumulate_seed(&cu.program);
+                    let caller = self.frames.len() - 1;
+                    let ret = self.run_linked(cu.module, &locals, None, Some(caller))?;
+                    return Ok(if matches!(ret, Zval::Null) { Zval::Long(1) } else { ret });
+                }
+            }
+        }
         let mut content = match std::fs::read(&real) {
             Ok(c) => c,
             Err(_) => return self.include_open_failed(&path, mode),
@@ -3042,33 +3159,62 @@ impl<'m> Vm<'m> {
         // Mark loaded before running, so a `_once` re-entry during the file's own
         // execution (mutual includes) sees it and short-circuits.
         self.included_files.insert(key.clone());
+        // Fold this load event into the chain exactly as the cache-hit path
+        // does, so hit and miss replays keep downstream fingerprints aligned.
+        self.unit_chain_fp = match &unit_key {
+            Some(uk) => fp_mix_key(self.unit_chain_fp, uk),
+            None => fp_mix(self.unit_chain_fp, b"include-nostat", &key),
+        };
         log::debug!(target: "phpr::include", "{:?} {}", mode, String::from_utf8_lossy(&key));
-        let program = match self.lower_unit(&key, &content)? {
+        let mut pure = true;
+        let program = match self.lower_unit(&key, &content, &mut pure)? {
             Ok(p) => p,
             Err(e) => {
                 log::warn!(target: "phpr::include", "lower failed for {}: {:?}", String::from_utf8_lossy(&key), e);
                 return self.include_compile_failed(&key, mode);
             }
         };
+        let program = Rc::new(program);
         self.accumulate_seed(&program);
         // Classes the VM already links compile as inert stubs — drive_unit dedups
         // them by name anyway; fully recompiling the whole accumulated seed image
         // per included file is quadratic (PHPUnit's preload() = ~1200 requires).
         let stubs = self.seed_stub_mask(&program);
-        let module = match crate::compile::compile_program_stubbed(&program, self.registry, &stubs) {
+        let mut module = match crate::compile::compile_program_stubbed(&program, self.registry, &stubs) {
             Ok(m) => m,
             Err(e) => {
                 log::warn!(target: "phpr::include", "compile failed for {}: {:?}", String::from_utf8_lossy(&key), e);
                 return self.include_compile_failed(&key, mode);
             }
         };
+        // Link inline (rather than via drive_unit) so the relocated module can
+        // be published to the unit cache before it runs.
+        let static_off = self.statics.len();
+        let (class_remap, new_locals) = self.unit_class_remap(&module);
+        relocate_module_class_ids(&mut module, &class_remap, static_off);
+        let leaked: &'static Module = Box::leak(Box::new(module));
+        if pure && self.main_hir.is_some() {
+            if let Some(uk) = unit_key {
+                unit_cache_put(
+                    uk,
+                    CachedUnit {
+                        fp,
+                        static_off,
+                        class_remap,
+                        new_locals: new_locals.clone(),
+                        program: Rc::clone(&program),
+                        module: leaked,
+                    },
+                );
+            }
+        }
         // PHP scope rule: an included file shares the *including* scope's variable
         // table — it reads the surrounding variables and the ones it assigns land
         // back in the includer (global scope and function scope alike). Bridged in
         // drive_unit by aliasing the unit frame's named slots to the includer's
         // cells (see `scope_bridge` there).
         let caller = self.frames.len() - 1;
-        let ret = self.drive_unit(module, None, Some(caller))?;
+        let ret = self.run_linked(leaked, &new_locals, None, Some(caller))?;
         // A file with no top-level `return` yields int(1); an explicit return passes
         // through (a literal `return null;` is the accepted edge that also yields 1).
         Ok(if matches!(ret, Zval::Null) { Zval::Long(1) } else { ret })
@@ -10582,6 +10728,88 @@ fn json_has_cycle(v: &Zval, visiting: &mut Vec<usize>) -> bool {
 /// global id for each eval-local class id; `static_base` is added to every
 /// static-cell id. The module must still be owned (pre-leak) so its bytecode and
 /// class metadata are mutable.
+/// One cached include unit: the lowered `Program` (for `accumulate_seed`) and
+/// the compiled, RELOCATED, leaked `Module`, valid for the exact VM state
+/// captured by `fp` ([`Vm::unit_fp`]). `static_off` and `class_remap` are the
+/// relocation baseline baked into the module's ops; a hit re-verifies both
+/// against the live VM before reuse (mismatch ⇒ treated as a miss).
+#[derive(Clone)]
+struct CachedUnit {
+    fp: u64,
+    static_off: usize,
+    class_remap: Vec<ClassId>,
+    new_locals: Vec<usize>,
+    program: Rc<Program>,
+    module: &'static Module,
+}
+
+/// File identity for the unit cache: canonical path + mtime + size. An edited
+/// file changes its key (and, through the load-event chain, the fingerprint of
+/// every unit loaded after it).
+#[derive(PartialEq, Eq, Hash, Clone)]
+struct UnitKey {
+    path: Vec<u8>,
+    mtime: (u64, u32),
+    size: u64,
+}
+
+/// Distinct fingerprints kept per file — a template re-included at shifting
+/// static offsets would otherwise grow its slot unboundedly.
+const UNIT_CACHE_WAYS: usize = 4;
+
+thread_local! {
+    /// The per-process (per-thread) unit cache. Entries hold leaked modules —
+    /// memory the include path leaks TODAY on every load; caching makes that
+    /// leak bounded by reusing the same module across requests.
+    static UNIT_CACHE: RefCell<HashMap<UnitKey, Vec<CachedUnit>>> =
+        RefCell::new(HashMap::new());
+}
+
+fn unit_key_for(path: &[u8], meta: &std::fs::Metadata) -> Option<UnitKey> {
+    let d = meta.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?;
+    Some(UnitKey {
+        path: path.to_vec(),
+        mtime: (d.as_secs(), d.subsec_nanos()),
+        size: meta.len(),
+    })
+}
+
+fn fp_mix(chain: u64, tag: &[u8], data: &[u8]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    chain.hash(&mut h);
+    tag.hash(&mut h);
+    data.hash(&mut h);
+    h.finish()
+}
+
+fn fp_mix_key(chain: u64, uk: &UnitKey) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    chain.hash(&mut h);
+    uk.hash(&mut h);
+    h.finish()
+}
+
+fn unit_cache_get(key: &UnitKey, fp: u64) -> Option<CachedUnit> {
+    UNIT_CACHE.with(|c| c.borrow().get(key)?.iter().find(|cu| cu.fp == fp).cloned())
+}
+
+fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
+    UNIT_CACHE.with(|c| {
+        let mut cache = c.borrow_mut();
+        let slot = cache.entry(key).or_default();
+        if let Some(pos) = slot.iter().position(|e| e.fp == cu.fp) {
+            slot[pos] = cu;
+        } else {
+            if slot.len() >= UNIT_CACHE_WAYS {
+                slot.remove(0);
+            }
+            slot.push(cu);
+        }
+    })
+}
+
 fn relocate_module_class_ids(module: &mut Module, remap: &[ClassId], static_base: usize) {
     // 1. Every function body (main, free functions, closures, and each class's
     //    methods / property-init thunk / const thunks / non-const static-prop

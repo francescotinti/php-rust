@@ -381,6 +381,30 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-15 (sessione WordPress-6): ⚡ **UNIT-CACHE per-request (opcache-like):
+  cache process-wide dei moduli include già lowerati+compilati+RILOCATI**,
+  chiave = identità file (path canonico + mtime ns + size) + fingerprint dello
+  stato VM osservabile dalla lowering seminata (`Vm::unit_fp`): hash-chain degli
+  eventi di load (identità del main; path+mtime+size di ogni include; sorgente
+  di ogni eval) + contatori seed/statics + digest ordinato di seed_globals
+  (gli SLOT globali sono baked per indice) e seed_traits + digest
+  order-independent di class_index (name→id: gli id classe sono baked negli
+  op) e seed_aliases. Un web server che riserve la stessa pagina rigioca la
+  stessa catena di include su una VM fresca → ogni step riproduce lo stesso
+  fingerprint → lower+compile+relocate saltati e il modulo (immutabile, già
+  leaked) ri-guidato as-is. Riuso double-checked strutturalmente per hit
+  (baseline statics + remap ricomputato == remap cached, che convalida anche
+  lo stub-mask); mismatch = miss con fallback al percorso fresco. Cacheable
+  solo lowering "pure" (nessun retry autoload/defer: quelle hanno side effect
+  non rigiocabili). `drive_unit` splittato in `unit_class_remap` +
+  `run_linked` (metà condivisa col percorso cached). Effetto misurato su
+  WordPress 7.0.1 (wp-p): home 1.85s → **1.2s** (-35%), dashboard ~2.9s →
+  ~2.0s; quota parse+lower+compile del tempo per-request 39% → 3.4%
+  (profilo `sample`). La cache limita anche la crescita di memoria del
+  server (i moduli include venivano già Box::leak-ati A OGNI load; ora il
+  leak è bounded dal riuso). Nessuna divergenza utente: batterie SAPI 48
+  probe, WP pretty 10/10, login-flow 5/5 e admin 12/12 a parità oracle
+  (residui = i legittimi WP-5: auto-draft id/orologio, capability gd).
 - 2026-07-14 (sessione WordPress-5): 🏁 **wp-admin VIA HTTP: login flow
   completo + dashboard + 12 pagine admin a parità oracle, e PRETTY
   PERMALINKS attivi con 10 rotte frontend BYTE-IDENTICHE senza alcuna

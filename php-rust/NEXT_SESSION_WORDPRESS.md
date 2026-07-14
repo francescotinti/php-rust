@@ -1,54 +1,51 @@
-# Rotta WORDPRESS-FIRST — WP-track (wp-admin + pretty permalinks da WP-5)
+# Rotta WORDPRESS-FIRST — WP-track (unit-cache per-request da WP-6)
 
-> 🏁 **WP-ADMIN VIA HTTP CHIUSO** (sessione WP-5, 2026-07-14): **login flow
-> completo (POST wp-login.php → cookie auth → dashboard) + 12 pagine
-> wp-admin a parità oracle** (dashboard 125854b e edit.php 109732b byte-id
-> modulo nonce/timestamp; residui solo legittimi: capability gd/webp/avif,
-> antispambot rand(), auto-draft id). **Pretty permalinks attivi**
-> (structure salvata via POST admin) con **10 rotte frontend
-> BYTE-IDENTICHE senza normalizzazione** (post, 301 canonico, page,
-> category, author, feed, 404, wp-json pretty, mese, home). Dettaglio dei
-> 10 fix engine (a)–(j) nel changelog di `PHPR_DIVERGENCES_FROM_PHP.md`
-> (sessione WordPress-5).
+> ⚡ **PERF PER-REQUEST: UNIT-CACHE ATTIVA** (sessione WP-6, 2026-07-15):
+> cache process-wide dei moduli include lowerati+compilati+rilocati,
+> chiave path+mtime+size + fingerprint dello stato VM (chain degli eventi
+> di load + digest seed/globals/class_index), riuso double-checked
+> (baseline statics + remap ricomputato). **Home WP 1.85s → 1.2s (-35%),
+> dashboard ~2.9 → ~2.0s; parse+lower+compile 39% → 3.4% del tempo.**
+> Dettaglio nel changelog di `PHPR_DIVERGENCES_FROM_PHP.md` (WordPress-6).
 
 Riprendiamo phpr (PHP 8.5.7 in Rust). **Roadmap (decisione 2026-07-13,
 memoria `php-rust-roadmap-wp-first`)**: obiettivo primario = 100%
 compatibilità WordPress. Laravel solo come validazione posteriore.
 
-## Cosa è entrato (sessione WP-5 — sintesi; dettaglio nel changelog)
-1. **Hoisting funzioni di unità incluse PRIMA del run** (Zend le hoista a
-   compile-time dell'include; l'hook admin_menu le chiama da un include
-   annidato) + **symbol table globale unica per catene di include a
-   global scope** (nome fresco con catena bridge fino a frame 0 → cella
-   globale, non locale staccata; `global $menu` di includes/menu.php).
-2. **By-ref attraverso i funnel dinamici**: call_user_func_array passa i
-   Ref vivi; build_args_array pusha i Var come PushRef (SEND_VAR_EX);
-   split_args_from_array_value/spread_pairs preservano i Ref; spread su
-   callee by-ref noti supportato (il Walker di WP usa entrambe le forme).
-3. ⭐ **zend_array_dup in PhpArray::clone**: le reference refcount-1
-   (residui foreach-by-ref) si SPEZZANO alla duplicazione dell'array,
-   come Zend — chiuso il write-through di WP_REST_Server::get_routes
-   dentro $this->endpoints (Allow "1", methods [1,1], preload amputato).
-4. **Tabella entità HTML 4.01 completa** (152 nomi; D-56.1 chiuso),
-   **`?>`-terminatore inghiotte il newline** (check sui byte sorgente),
-   **array_flip con ZVAL_DEREF**, **RecursiveArrayIterator**,
-   **timezone_open/offset_get/name_get + validazione ctor DateTimeZone**
-   (DateInvalidTimeZoneException/DateException, matrice oracle-pinned).
+## Cosa è entrato (sessione WP-6 — sintesi; dettaglio nel changelog)
+1. **Unit-cache** in vm/mod.rs: `CachedUnit` {fp, static_off, class_remap,
+   new_locals, Rc<Program>, &'static Module} in thread_local, 4 vie per
+   file; `Vm::unit_fp()` = unit_chain_fp (hash-chain: main identity, ogni
+   include path+mtime+size, ogni eval source) + contatori seed/statics +
+   digest IN ORDINE di seed_globals (slot baked per indice!) e seed_traits
+   + digest order-independent di class_index e seed_aliases. Solo lowering
+   "pure" (nessun retry autoload/defer) è cacheable.
+2. **drive_unit splittato**: `unit_class_remap` (dedup per nome / identità
+   seed-prefix / append) + `run_linked` (registrazioni + frame + drive) —
+   il percorso cached ricomputa il remap e lo confronta col cached (che
+   convalida anche lo stub-mask baked); mismatch ⇒ miss, fallback fresco.
+3. Il leak per-include (`Box::leak` a ogni load) ora è bounded dal riuso.
 
-## Stato (post sessione WP-5 — baseline gate-l in 4776cd24/scratchpad)
+## Stato (post sessione WP-6 — baseline gate-o in 4776cd24/scratchpad)
 - **WordPress 7.0.1: frontend + wp-admin + pretty permalinks via phpr -S a
-  parità oracle.** Workspace di verifica: 4776cd24/scratchpad (wp-o/wp-p
-  alberi gemelli con admin pass `phpr-wp5-Secret`, login-flow.sh,
-  admin-battery.sh + adm-diff.sh, pretty-battery.sh, post-probe.sh).
-- Gate: corpus/sess/date/refl per NOME (baseline gate-l) · hk 1663/3846
-  0F · ORM 3E/13F stessi 16 nomi · cargo 1550/0 · batteria SAPI 48 + WP.
+  parità oracle, ~1.2s/pagina frontend (era 1.85s), ~2s admin.**
+  Workspace: 4776cd24/scratchpad (wp-o/wp-p, admin pass `phpr-wp5-Secret`,
+  login-flow.sh, admin-battery.sh + adm-diff.sh, pretty-battery.sh);
+  batteria SAPI in 5f883ed2/scratchpad/sapi-probe/battery.sh (48 probe).
+- Gate: corpus/sess/date/refl per NOME (baseline gate-o) · hk 1663/3846
+  0F · ORM 3E/13F stessi 16 nomi · cargo test · batterie SAPI+WP+admin.
 
 ## Prossimo passo del WP-track (ordine roadmap)
-1. **Performance per-request**: ogni richiesta rilowera+ricompila l'unità
-   (~1.5-2s/pagina WP, admin più pesante). Piste: cache dei Module
-   compilati per path+mtime (opcache-like), condividere le Func compilate
-   del prelude tra i moduli unità (~12% residuo, nota WP-3), riusare il
-   VM warm tra richieste. PROFILARE PRIMA (`sample <pid>`, lezione WP-3).
+1. **Perf runtime (fase 2)**: dopo la unit-cache il profilo per-request è
+   ~96% esecuzione VM: run_loop, malloc/free (churn di Zval), SipHash
+   (lookup HashMap per nome: variabili dinamiche/funzioni/classi),
+   Zval::clone/drop, gc_note/gc_sweep. Piste: FxHash/interning sui path
+   caldi, meno cloni Zval (COW più aggressivo), arena per frame. PROFILARE
+   PRIMA (`sample <pid>`): i numeri sono in perf-home2.sample (4776cd24).
+   Ulteriore pista cache: le lower "impure" (retry autoload) non sono
+   cacheable — se il profilo admin mostra miss caldi, valutare replay dei
+   load annidati. Anche run_linked ha costi per-include (scan lineare
+   `saved.functions` per la dedup dei nomi — O(n²) potenziale).
 2. **mysqli** (roadmap tappa 4): WP con MySQL vero oltre che SQLite.
 3. **ext/gd & media** (roadmap tappa 5): chiude anche i residui admin
    documentati (webp/avif upload_error, site-health php_extensions).
@@ -58,38 +55,39 @@ compatibilità WordPress. Laravel solo come validazione posteriore.
    Warning procedurale timezone_open su tz invalida.
 5. Poi: **WP core test suite** (PHPUnit) come gate per nome del filone.
 
-## Lezioni operative (cumulative, aggiornate WP-5)
-- ⭐ WP-5: il probe-FIRST del login (curl cookie-jar sull'oracle, 5 step
-  pinnati) ha reso anche wp-admin un diff meccanico; le divergenze
-  restanti si classificano UNA a una come engine-bug o legit (rand,
-  capability, storia DB) — mai fermarsi al conteggio delle righe di diff.
-- ⭐ WP-5: un array che "perde" elementi dentro UNA SOLA funzione builtin
-  (array_flip vuoto ma json_encode/count/keys ok) = elemento Ref-wrapped
-  e match Rust senza deref: controllare il deref su OGNI builtin che
-  matcha i VALORI (il gemello della lezione WP-4 sui merge ricorsivi).
-- ⭐ WP-5: stato che "cambia da solo" tra due chiamate della stessa
-  funzione (get_routes 1a vs 2a chiamata) = write-through di un foreach
-  by-ref su una COPIA che condivide celle Ref con l'originale — la regola
-  Zend è che la DUP spezza i ref refcount-1; phpr ora la implementa in
-  PhpArray::clone.
-- ⭐ WP-5: `Fatal: Call to undefined function X()` in un file che la
-  DEFINISCE più su = ordine di pubblicazione (hoisting) — repro col
-  triangolo a.php→b.php(define+include)→c.php(call), 3 righe.
-- ⭐ WP-2/4/5: pgrep DOPO ogni pkill E lsof sulla porta prima di
+## Lezioni operative (cumulative, aggiornate WP-6)
+- ⭐ WP-6: la lowering seminata NON è pura rispetto al solo file: bake di
+  id classe (class_index), SLOT GLOBALI PER INDICE (seed_globals, che può
+  crescere A RUNTIME via `global $x`/$GLOBALS in ordine request-dependent),
+  offset statics, trait per chiave. Una cache di unità compilate deve
+  fingerprint-are TUTTO ciò che la lowering osserva e double-checkare
+  strutturalmente al riuso (remap + baseline statics), con fallback a miss.
+- ⭐ WP-6: il replay deterministico della stessa pagina è ciò che rende la
+  cache efficace: la chain fp (main + include mtime + eval src) invalida
+  a cascata tutto il downstream quando si edita UN file (dev workflow).
+- ⭐ WP-6: se si tocca il binario dopo aver lanciato i gate, i gate vanno
+  RILANCIATI sul binario definitivo — mai commitare con gate di un binario
+  diverso (kill phpt-runner, rebuild, relaunch: costa meno di un dubbio).
+- ⭐ WP-5: probe-FIRST del login (curl cookie-jar sull'oracle) rende anche
+  wp-admin un diff meccanico; classificare le divergenze UNA a una.
+- ⭐ WP-5: builtin che "perde" elementi = Ref senza deref nel match dei
+  valori; stato che "cambia da solo" tra 2 chiamate = write-through
+  foreach-by-ref su copia (la DUP Zend spezza i ref refcount-1).
+- ⭐ WP-5: `Fatal: undefined function` definita più su nel file = ordine di
+  pubblicazione (hoisting) — repro triangolo a→b(define+include)→c(call).
+- ⭐ WP-2/4/5/6: pgrep DOPO ogni pkill E lsof sulla porta prima di
   rilanciare: un server morente può tenere la porta e servire il binario
-  VECCHIO ("Failed to listen ... Address already in use" nello stderr del
-  nuovo = i probe stanno colpendo il vecchio).
-- ⭐ WP-5: normalizzatori di diff con `<TAG>` DENTRO stringhe zsh = zsh li
-  tratta come redirect → file vuoti → **falso OK del diff**: sempre
-  script bash su file E check size>0 prima del verdetto.
-- ⭐ WP-4: le regex WP muoiono in TRE modi sullo stesso engine-chain;
-  quando un chunk "sparisce", bisezione dei pattern con probe dedicata.
-- ⭐ WP-4: `empty()`/`isset()`/`??` = TRE semantiche magic diverse.
+  VECCHIO ("Address already in use" nello stderr del nuovo = probe sul
+  vecchio). In WP-6: anche i diff "48/48 falliti" possono essere solo la
+  PORTA diversa embedded nei body ($_SERVER) — normalizzare o stesso port.
+- ⭐ WP-5: normalizzatori con `<TAG>` in stringhe zsh = redirect → file
+  vuoti → falso OK: script bash su file + size check.
+- ⭐ WP-4: regex WP muoiono in TRE modi sullo stesso chain; bisezione con
+  probe dedicata. `empty()`/`isset()`/`??` = TRE semantiche magic diverse.
 - ⭐ WP-3: PROFILARE prima di ottimizzare (`sample <pid>`).
 - ⭐ WP-2: preg che non compila = null SILENZIOSO da preg_replace_callback.
-- df PRIMA dei run pesanti; probe con vendor NEL workspace della suite;
-  gate per NOME sempre; RTK collassa i body PHP (usare Write/Read tool);
-  zsh non espande i glob dentro variabili.
+- df PRIMA dei run pesanti; gate per NOME sempre; RTK collassa i body PHP
+  (Write/Read tool); zsh non espande i glob dentro variabili.
 
 ## Invarianti (identici)
 - Gate per OGNI commit: probe byte-id vs oracle · corpus per NOME ·
