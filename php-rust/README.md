@@ -11,15 +11,15 @@ interpreter, not to pass a toy subset.
 > upstream PHP 8.5.7. **ext/session is complete** (all 23 functions + the
 > SessionHandler class family); symfony/http-foundation runs at **zero errors**
 > without its Session suite (12 failures need a real HTTP server).
-> **symfony/http-kernel is in progress**: its 1663-test suite went from
-> 286 errors to **0 errors / 38 failures** — the DI container compiles, dumps
-> and reloads under `phpr` (PhpDumper output byte-identical); `eval()` shares
-> the calling scope like `include`; anonymous functions carry PHP 8.4's
-> `{closure:Scope():line}` names; `Closure::fromCallable` builds
-> `__call`/`__callStatic` trampolines; and nested `isset`/`??` over
-> `ArrayAccess` dispatches the protocol on intermediate offsets (Zend's
-> BP_VAR_IS quiet fetch) — 13 of the remaining 38 failures are one gap:
-> real IANA timezone support.
+> **symfony/http-kernel is CLOSED**: the full 1663-test suite passes with
+> **0 errors / 0 failures** — parity with the reference interpreter. Along
+> the way phpr gained **real IANA timezone support** (TZif reader over the
+> system zoneinfo database, DST gap/fold semantics pinned to timelib,
+> zone-aware `DateTime` arithmetic), PHP 8.4 `{closure:Scope():line}` names,
+> `eval()` scope sharing, magic-method trampolines for first-class callables,
+> ArrayAccess protocol dispatch in nested `isset`/`??`, real `flock(2)`
+> advisory locks, and Zend-faithful destructor timing (eager sweep after
+> every statement). Next front: **WordPress** (see Roadmap).
 
 ## Coverage at a glance
 
@@ -27,7 +27,7 @@ interpreter, not to pass a toy subset.
 | --- | --- |
 | Core / language stdlib functions | **522 / 654 (80%)** |
 | All internal functions | 785 / 2143 (37%) |
-| Zend test corpus passing | **2469** (61% of runnable) |
+| Zend test corpus passing | **2486** (61% of runnable) |
 
 Full, measured breakdown → **[COVERAGE.md](COVERAGE.md)**.
 The 37%→80% spread is the whole story: the *language* is largely done; the
@@ -93,12 +93,12 @@ phpt-runner --isolate /path/to/php-8.5.7/Zend/tests
 Near-term, highest-leverage work (see [COVERAGE.md](COVERAGE.md) for the data,
 [TODO.md](TODO.md) for the full list):
 
-1. **symfony/http-kernel** — down to **0 errors / 38 failures** (of 1663
-   tests). The dominant remaining gap is **real IANA timezone support**
-   (13 failures): a TZif reader over the system zoneinfo database, a working
-   `date_default_timezone_set`, and zone-aware `DateTime` construction/
-   formatting (plan: NEXT_SESSION_HTTP_KERNEL.md). Then a ~14-failure
-   resolver cluster and HttpCache edge cases.
+1. **WordPress** (roadmap reordered: WP before Laravel — it dominates the
+   web). symfony/http-kernel is **closed at 0/0**; the WP track is:
+   wp-cli from source + the official SQLite integration plugin (runs on the
+   already-green PDO/SQLite), then a real server SAPI (superglobals, headers,
+   multipart), then `mysqli` and media (gd/exif/zip). Plan:
+   NEXT_SESSION_WORDPRESS.md.
 2. ext/session tail — trans-sid URL rewriting, the `SID` constant, shared-ref
    (`r:`) unserialize.
 3. Remaining **core stdlib** gaps — stream filters (userland), timezone

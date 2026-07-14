@@ -17,10 +17,10 @@ _Last measured: 2026-07-13 · reference: PHP 8.5.7 (`get_defined_functions()`)._
 | --- | --- |
 | Internal functions implemented | **785 / 2143** (37%) |
 | — of which **core / language stdlib** (standard + Core + date) | **522 / 654** (80%) |
-| Zend test corpus (`Zend/tests/*.phpt`) | **2469 passing** — 60.9% of runnable (2469/4052) |
+| Zend test corpus (`Zend/tests/*.phpt`) | **2486 passing** — 61.4% of runnable (2486/4052) |
 | Fully-complete areas | ctype, json, SimpleXML, zlib, bcmath, tokenizer, **session**, PDO core |
 
-Corpus breakdown: 5305 total · **2469 pass** · 1583 fail · 1253 skip (skips are
+Corpus breakdown: 5305 total · **2486 pass** · 1566 fail · 1253 skip (skips are
 mostly tests that need an extension `phpr` hasn't ported, or SAPI-specific
 setup; the runner now executes `--INI--` sections as `php -d`-style overrides,
 which moved ~180 formerly-skipped tests into the run).
@@ -48,22 +48,18 @@ upstream PHP under `phpr` today:
   Session suite (1419 tests): **0 errors**, the only 12 failures being the
   functional tests that spawn a real `php -S` server (needs a server SAPI).
   Plus String / Console / Process, already validated earlier.
-- **Symfony http-kernel** — in progress: 1663-test suite from 286 errors down
-  to **0 errors / 38 failures**. The DI container pipeline works end-to-end:
-  ContainerBuilder compiles, PhpDumper dumps (byte-identical output), the
-  Kernel reloads the dumped container (KernelTest 40/40); by-ref argument
-  binding matches Zend's runtime SEND_VAR_EX. The latest round closed the
-  whole error queue: `eval()` shares the calling scope like `include`
-  (ContainerBuilder's `new class($initializer)` proxies), anonymous functions
-  carry PHP 8.4's `{closure:Scope():line}` synthetic names (visible through
-  `__FUNCTION__`/`__METHOD__` and Reflection), `Closure::fromCallable`/
-  first-class callables on magic methods build `__call`/`__callStatic`
-  trampolines, `unset()` of an uninitialized readonly property follows Zend's
-  write path (Symfony's lazy-ghost `LazyClosure`), and nested
-  `isset`/`empty`/`??` over `ArrayAccess` dispatch `offsetExists`/`offsetGet`
-  on intermediate offsets (VarDumper `Data` — the profiler DataCollector
-  tests). 13 of the 38 remaining failures are a single gap: real IANA
-  timezone support.
+- **Symfony http-kernel** — **CLOSED: the full 1663-test suite passes at
+  0 errors / 0 failures**, parity with the reference interpreter. The DI
+  container pipeline works end-to-end (ContainerBuilder compiles, PhpDumper
+  dumps byte-identically, the Kernel reloads the dumped container); by-ref
+  argument binding matches Zend's runtime SEND_VAR_EX; `eval()` shares the
+  calling scope; anonymous functions carry PHP 8.4's `{closure:Scope():line}`
+  names; first-class callables on magic methods build `__call`/`__callStatic`
+  trampolines; nested `isset`/`empty`/`??` over `ArrayAccess` dispatch the
+  protocol on intermediate offsets; **real IANA timezones** (TZif reader on
+  the system zoneinfo, timelib gap/fold semantics, zone-aware DateTime
+  arithmetic); real `flock(2)` advisory locks; and Zend-faithful destructor
+  timing (eager per-statement sweep, LIFO object-id reuse).
 - **ext/session** — all 23 functions + SessionHandler and the three handler
   interfaces; files handler byte-identical (0600 `sess_<id>` files, php /
   php_binary / php_serialize serializers, lazy_write, mtime GC); official
@@ -90,7 +86,7 @@ core language stdlib).
 | --- | ---: | ---: | --- |
 | **standard** | 442 / 544 | **81%** | string, array, math, var, filesystem, streams, output, include_path |
 | **Core** | 50 / 62 | **81%** | class/function introspection, error handling |
-| **date** | 30 / 48 | 63% | DateTime classes, textual strtotime, HTTP-date formats |
+| **date** | 30 / 48 | 63% | DateTime classes, textual strtotime, HTTP-date formats, **real IANA timezones** (system TZif, DST-correct); official suite 215 pass |
 | session | 23 / 23 | **100%** | files + user save handlers, SessionHandler classes, `$_SESSION`; suite 161/229 |
 | ctype | 11 / 11 | **100%** | complete |
 | json | 5 / 5 | **100%** | complete (HEX_* flags, NUMERIC_CHECK, THROW_ON_ERROR) |
@@ -116,11 +112,10 @@ core language stdlib).
 | **not started (0%)** | — | 0% | pgsql (123), sodium (110), mysqli (106), gd (105), ldap (55), odbc (48), xmlwriter (42), sockets (37), ftp (36), snmp (24), tidy (24), xml (22), calendar (18), dba (15), readline (12), bz2/gettext/zip (10 each), opcache (8), sysv* (18), fileinfo (6), shmop (6), exif (4), dom (2), soap (2) |
 
 1358 functions missing overall; the not-started extensions above account for
-~780 of them. The current front is **symfony/http-kernel** (0 errors /
-38 failures of 1663 tests); the whole error queue is closed — next up is
-**real IANA timezone support** (13 of the 38 failures: TZif reader,
-`date_default_timezone_set`, zone-aware DateTime), then the resolver
-cluster and HttpCache edge cases.
+~780 of them. **symfony/http-kernel is closed (0/0 on 1663 tests)** — the
+current front is **WordPress**: wp-cli from source on the official SQLite
+integration plugin first, then a real server SAPI, then `mysqli` and media
+(gd/exif/zip). See NEXT_SESSION_WORDPRESS.md.
 
 ---
 

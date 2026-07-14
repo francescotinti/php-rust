@@ -6,30 +6,27 @@ as they complete. Deliberate behavioural deviations are catalogued in
 [`PHPR_DIVERGENCES_FROM_PHP.md`](PHPR_DIVERGENCES_FROM_PHP.md); measured
 coverage in [`COVERAGE.md`](COVERAGE.md).
 
-Current state (2026-07-13): Zend corpus **2469** passing · internal functions
+Current state (2026-07-14): Zend corpus **2486** passing · internal functions
 **785/2143, 37%** (core stdlib **522/654, 80%**) · ext/tokenizer **42/49** ·
-ext/zlib **complete** (30/30, suite 114/115) · **ext/session: COMPLETE** — all
-23 functions + SessionHandler class family, official suite **161/229** with
-`--run-skipif`. **symfony/http-foundation**: no-session config at **0 errors /
-12 failures** (the 12 spawn a real `php -S` server); the FULL 1790-test suite
-at **10 errors / 27 failures**. **symfony/http-kernel IN PROGRESS**: 1663-test
-suite from 286 errors down to **0 errors / 38 failures**. Sessions 5–6 closed
-the whole error queue and 65 failures: unqualified namespace calls to
-builtin-named functions bind at runtime (ClockMock), typed-property `unset`
-follows Zend's IS_PROP_UNINIT model, **`eval()` shares the calling scope**
-like `include`, anonymous functions carry **PHP 8.4 `{closure:Scope():line}`
-names** (`__FUNCTION__`/`__METHOD__` included), `Closure::fromCallable` /
-first-class callables on magic methods build `__call`/`__callStatic`
-trampolines, `unset()` of an uninitialized readonly property takes Zend's
-write path (lazy-ghost pattern), and **nested `isset`/`empty`/`??` over
-`ArrayAccess` dispatch the protocol on intermediate offsets** (VarDumper
-`Data`); out-params `flock(&$wouldBlock)` and `preg_replace_callback(&$count)`
-(+`$limit`) are wired. The corpus gained +24 across the two sessions with
-zero regressions by name. Next (NEXT_SESSION_HTTP_KERNEL.md): **real IANA
-timezone support** — 13 of the 38 remaining failures (TZif reader over the
-system zoneinfo, `date_default_timezone_set`, zone-aware DateTime; plan in
-memory `php-rust-timezone-ddt3-plan`) — then the ~14-failure resolver cluster
-and HttpCache.
+ext/zlib **complete** (30/30, suite 114/115) · **ext/session: COMPLETE**
+(23/23 functions, official suite 161/229) · ext/date official suite **215**
+pass. **symfony/http-foundation**: no-session config at **0 errors /
+12 failures** (the 12 spawn a real `php -S` server). **symfony/http-kernel:
+CLOSED** — the full 1663-test suite passes at **0 errors / 0 failures**
+(parity with the oracle). Sessions 5–8 closed 286 errors / 84 failures in
+total; the last mile brought **real IANA timezones** (TZif reader over the
+system zoneinfo, timelib gap/fold DST semantics, zone-aware DateTime
+arithmetic, `date_default_timezone_set` + INI `date.timezone`), constructor
+visibility at `new`, ZPP-faithful `is_callable`/enum `from()`/int-range
+coercion, `DateTime` comparison semantics in the operator table, real
+`flock(2)` advisory locks, `error_log()` with the INI target, and
+**Zend-faithful destructor timing** (eager per-statement sweep with LIFO
+object-id reuse — Symfony DI configurators rely on `__destruct` running
+between statements). Corpus gained +41 across sessions 5–8 with zero
+regressions by name. **Next front (NEXT_SESSION_WORDPRESS.md, roadmap in
+memory `php-rust-roadmap-wp-first`): WORDPRESS** — wp-cli from source on
+the official SQLite integration plugin, then a real server SAPI, then
+`mysqli` and media (gd/exif/zip); Laravel afterwards as validation.
 
 ---
 
