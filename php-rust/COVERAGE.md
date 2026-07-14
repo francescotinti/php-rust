@@ -7,7 +7,7 @@ functions with `function_exists()` inside `phpr` (grouped by
 `ReflectionFunction::getExtensionName()`); the corpus number is the real pass
 count of the upstream Zend test suite under `phpt-runner`.
 
-_Last measured: 2026-07-13 · reference: PHP 8.5.7 (`get_defined_functions()`)._
+_Last measured: 2026-07-14 · reference: PHP 8.5.7 (`get_defined_functions()`)._
 
 ---
 
@@ -17,10 +17,10 @@ _Last measured: 2026-07-13 · reference: PHP 8.5.7 (`get_defined_functions()`)._
 | --- | --- |
 | Internal functions implemented | **785 / 2143** (37%) |
 | — of which **core / language stdlib** (standard + Core + date) | **522 / 654** (80%) |
-| Zend test corpus (`Zend/tests/*.phpt`) | **2486 passing** — 61.4% of runnable (2486/4052) |
+| Zend test corpus (`Zend/tests/*.phpt`) | **2493 passing** — 61.5% of runnable (2493/4056) |
 | Fully-complete areas | ctype, json, SimpleXML, zlib, bcmath, tokenizer, **session**, PDO core |
 
-Corpus breakdown: 5305 total · **2486 pass** · 1566 fail · 1253 skip (skips are
+Corpus breakdown: 5305 total · **2493 pass** · 1563 fail · 1249 skip (skips are
 mostly tests that need an extension `phpr` hasn't ported, or SAPI-specific
 setup; the runner now executes `--INI--` sections as `php -d`-style overrides,
 which moved ~180 formerly-skipped tests into the run).
@@ -112,8 +112,9 @@ core language stdlib).
 | **not started (0%)** | — | 0% | pgsql (123), sodium (110), mysqli (106), gd (105), ldap (55), odbc (48), xmlwriter (42), sockets (37), ftp (36), snmp (24), tidy (24), xml (22), calendar (18), dba (15), readline (12), bz2/gettext/zip (10 each), opcache (8), sysv* (18), fileinfo (6), shmop (6), exif (4), dom (2), soap (2) |
 
 1358 functions missing overall; the not-started extensions above account for
-~780 of them. **symfony/http-kernel is closed (0/0 on 1663 tests)** — the
-current front is **WordPress**: wp-cli from source on the official SQLite
+~780 of them. **symfony/http-kernel is closed (0/0 on 1663 tests)** and
+**wp-cli runs end-to-end from source** (`wp --info` at oracle parity) — the
+current front is **WordPress**: `wp core download` + the official SQLite
 integration plugin first, then a real server SAPI, then `mysqli` and media
 (gd/exif/zip). See NEXT_SESSION_WORDPRESS.md.
 

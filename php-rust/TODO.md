@@ -6,7 +6,7 @@ as they complete. Deliberate behavioural deviations are catalogued in
 [`PHPR_DIVERGENCES_FROM_PHP.md`](PHPR_DIVERGENCES_FROM_PHP.md); measured
 coverage in [`COVERAGE.md`](COVERAGE.md).
 
-Current state (2026-07-14): Zend corpus **2486** passing · internal functions
+Current state (2026-07-14, post session WP-1): Zend corpus **2493** passing · internal functions
 **785/2143, 37%** (core stdlib **522/654, 80%**) · ext/tokenizer **42/49** ·
 ext/zlib **complete** (30/30, suite 114/115) · **ext/session: COMPLETE**
 (23/23 functions, official suite 161/229) · ext/date official suite **215**
@@ -23,10 +23,19 @@ coercion, `DateTime` comparison semantics in the operator table, real
 **Zend-faithful destructor timing** (eager per-statement sweep with LIFO
 object-id reuse — Symfony DI configurators rely on `__destruct` running
 between statements). Corpus gained +41 across sessions 5–8 with zero
-regressions by name. **Next front (NEXT_SESSION_WORDPRESS.md, roadmap in
-memory `php-rust-roadmap-wp-first`): WORDPRESS** — wp-cli from source on
-the official SQLite integration plugin, then a real server SAPI, then
-`mysqli` and media (gd/exif/zip); Laravel afterwards as validation.
+regressions by name. **Session WP-1 (2026-07-14): wp-cli 2.13.0-alpha runs
+end-to-end from source** (`wp --info` / `wp cli version` at oracle parity);
+the engine gained dynamic `global $$name` binding (`Op::BindGlobalDyn`),
+compound assignment on variable-variables, **SEND_VAR_EX semantics for
+by-ref parameters of compile-time-unresolved / dynamic calls**, Stringable
+coercion in ~30 pure string builtins, `DirectoryIterator::__toString` +
+readdir iteration order, and unconditional `$argv`/`$argc` registration in
+the cross-unit global registry (+7 corpus, zero regressions by name).
+**Next front (NEXT_SESSION_WORDPRESS.md, roadmap in memory
+`php-rust-roadmap-wp-first`): WORDPRESS proper** — `wp core download`
+(expected wall: PharData/zip extraction), the official SQLite integration
+plugin, `wp core install`, then a real server SAPI, then `mysqli` and media
+(gd/exif/zip); Laravel afterwards as validation.
 
 ---
 

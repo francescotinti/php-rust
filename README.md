@@ -157,10 +157,10 @@ The third dragon — the **C extension ecosystem (PECL)** — is being tackled b
 rewrites (PDO/sqlite, dom/simplexml, and curl have already fallen that way); a compatibility FFI
 layer remains the long-term option for the tail.
 
-**Fidelity** (at HEAD `84ceed4`, 2026-07-14): differential type-juggling vs real PHP at
+**Fidelity** (at HEAD `8018850`, 2026-07-14): differential type-juggling vs real PHP at
 **0 mismatches** (37,835 cases — this is the *operator* differential, a metric distinct from the
 `.phpt` corpus); 1,550 green Rust unit/integration tests; on the official `Zend/tests` corpus
-**2,486 phpt pass** (61% of the runnable ones, growing every session, with a "zero pass→fail by
+**2,493 phpt pass** (61.5% of the runnable ones, growing every session, with a "zero pass→fail by
 name" gate on every commit); ~860 commits of history tracked session by session.
 
 > The detailed history of the ~70 build steps lives in **[HISTORY.md](HISTORY.md)**; the
@@ -171,9 +171,10 @@ name" gate on every commit); ~860 commits of history tracked session by session.
 ## 🚀 Next steps
 
 1. **WordPress** — the new primary target (roadmap reordered: WP before Laravel).
-   symfony/http-kernel is **done (0/0)**; the WP track: wp-cli from source on the official
-   SQLite integration plugin (runs on the already-green PDO/SQLite), then a real server SAPI,
-   then `mysqli` and media (gd/exif/zip). Plan: `php-rust/NEXT_SESSION_WORDPRESS.md`.
+   symfony/http-kernel is **done (0/0)** and **wp-cli already runs end-to-end from source**
+   (`wp --info` at oracle parity). Next: `wp core download` + the official SQLite integration
+   plugin (runs on the already-green PDO/SQLite), then a real server SAPI, then `mysqli` and
+   media (gd/exif/zip). Plan: `php-rust/NEXT_SESSION_WORDPRESS.md`.
 2. **Doctrine ORM to zero** — down to 3 errors / 14 failures; the remainder is triaged
    (XSD `schemaValidate`, lazy-proxy edges).
 3. **Framework bootstrap** — *Hello World* on Laravel / full Symfony kernel: the ultimate stress

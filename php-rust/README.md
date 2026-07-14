@@ -18,8 +18,11 @@ interpreter, not to pass a toy subset.
 > zone-aware `DateTime` arithmetic), PHP 8.4 `{closure:Scope():line}` names,
 > `eval()` scope sharing, magic-method trampolines for first-class callables,
 > ArrayAccess protocol dispatch in nested `isset`/`??`, real `flock(2)`
-> advisory locks, and Zend-faithful destructor timing (eager sweep after
-> every statement). Next front: **WordPress** (see Roadmap).
+> advisory locks, Zend-faithful destructor timing (eager sweep after
+> every statement), dynamic `global $$name` binding, and SEND_VAR_EX
+> semantics for by-ref parameters of cross-unit / dynamic calls.
+> **wp-cli runs end-to-end from source** (`wp --info` at oracle parity) —
+> the WordPress track is underway (see Roadmap).
 
 ## Coverage at a glance
 
@@ -27,7 +30,7 @@ interpreter, not to pass a toy subset.
 | --- | --- |
 | Core / language stdlib functions | **522 / 654 (80%)** |
 | All internal functions | 785 / 2143 (37%) |
-| Zend test corpus passing | **2486** (61% of runnable) |
+| Zend test corpus passing | **2493** (61.5% of runnable) |
 
 Full, measured breakdown → **[COVERAGE.md](COVERAGE.md)**.
 The 37%→80% spread is the whole story: the *language* is largely done; the
@@ -94,11 +97,12 @@ Near-term, highest-leverage work (see [COVERAGE.md](COVERAGE.md) for the data,
 [TODO.md](TODO.md) for the full list):
 
 1. **WordPress** (roadmap reordered: WP before Laravel — it dominates the
-   web). symfony/http-kernel is **closed at 0/0**; the WP track is:
-   wp-cli from source + the official SQLite integration plugin (runs on the
-   already-green PDO/SQLite), then a real server SAPI (superglobals, headers,
-   multipart), then `mysqli` and media (gd/exif/zip). Plan:
-   NEXT_SESSION_WORDPRESS.md.
+   web). symfony/http-kernel is **closed at 0/0** and **wp-cli from source
+   already runs end-to-end** (`wp --info` / `wp cli version` at oracle
+   parity). Next: `wp core download` + the official SQLite integration
+   plugin (runs on the already-green PDO/SQLite), then a real server SAPI
+   (superglobals, headers, multipart), then `mysqli` and media
+   (gd/exif/zip). Plan: NEXT_SESSION_WORDPRESS.md.
 2. ext/session tail — trans-sid URL rewriting, the `SID` constant, shared-ref
    (`r:`) unserialize.
 3. Remaining **core stdlib** gaps — stream filters (userland), timezone
