@@ -418,7 +418,7 @@ pub(super) fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> C
 }
 
 /// The class ancestry root→leaf (parent-first), for flattening properties.
-pub(super) fn class_chain(classes: &[ClassDecl], cid: ClassId) -> Vec<ClassId> {
+pub(super) fn class_chain(classes: &[std::rc::Rc<ClassDecl>], cid: ClassId) -> Vec<ClassId> {
     let mut chain = Vec::new();
     let mut c = Some(cid);
     while let Some(x) = c {

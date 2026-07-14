@@ -267,7 +267,7 @@ impl<'f> Lowerer<'f> {
                 // `DeclareFn` that registers it when this statement is reached.
                 let decl = self.lower_function(func)?;
                 let idx = self.functions.len();
-                self.functions.push(decl);
+                self.functions.push(std::rc::Rc::new(decl));
                 self.conditional_fns.insert(idx);
                 StmtKind::DeclareFn(idx)
             }
@@ -490,7 +490,7 @@ impl<'f> Lowerer<'f> {
         }
         let idx = self.functions.len();
         self.fn_index.insert(key, idx);
-        self.functions.push(decl);
+        self.functions.push(std::rc::Rc::new(decl));
         Ok(())
     }
 
@@ -501,7 +501,7 @@ impl<'f> Lowerer<'f> {
     /// name until its `DeclareClass` runs (mirrors `conditional_fns`).
     fn push_conditional_class(&mut self, decl: ClassDecl) -> usize {
         let idx = self.classes.len();
-        self.classes.push(decl);
+        self.classes.push(std::rc::Rc::new(decl));
         self.conditional_classes.insert(idx);
         idx
     }
@@ -614,12 +614,12 @@ impl<'f> Lowerer<'f> {
                     self.class_index.remove(&key);
                     let idx = self.classes.len();
                     self.conditional_classes.insert(idx);
-                    self.classes.push(self.placeholder_class(idx, self.line_of(span)));
+                    self.classes.push(std::rc::Rc::new(self.placeholder_class(idx, self.line_of(span))));
                     continue;
                 }
                 Err(e) => return Err(e),
             };
-            self.classes.push(decl);
+            self.classes.push(std::rc::Rc::new(decl));
         }
         Ok(())
     }

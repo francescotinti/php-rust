@@ -381,6 +381,23 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-14 (sessione WordPress-3): ⚡ **PERFORMANCE del load WP: il seeding
+  HIR per include è ora condiviso via `Rc` invece che deep-clonato** —
+  `wp option get` su WordPress 7.0.1/SQLite passa da **22.8s a 3.0s cold /
+  1.7s warm** (oracle 0.3s). Il profilo (`sample`) attribuiva ~88% del tempo
+  a clone+drop dell'immagine seed per ogni include (~200 file WP):
+  `low.classes = sclasses.to_vec()` deep-clonava TUTTE le ClassDecl
+  accumulate (metodi HIR compresi) e `prelude_functions()` deep-clonava le
+  FnDecl del prelude, poi il `Program` dell'unità li droppava tutti a fine
+  include — quadratico sull'autoload storm. Ora `Program.classes:
+  Vec<Rc<ClassDecl>>` e `Program.functions: Vec<Rc<FnDecl>>` (idem Lowerer,
+  cache prelude e `Vm::seed_classes`): il seeding è un bump di refcount e
+  il borrow checker dimostra che nessun sito muta i decl condivisi (zero
+  `DerefMut`). NESSUNA divergenza semantica: corpus/session/date/reflection
+  fail-set identici per NOME, http-kernel 1663/3846 contatori byte-id,
+  ORM 3E/13F stessi nomi, cargo test 0 fail. Residuo per-include (~12%
+  compile delle fn prelude per unità, ~20% lowering del file): pista futura
+  = condividere le `Func` COMPILATE del prelude tra i moduli unità.
 - 2026-07-14 (sessione WordPress-2): 🏁 **WordPress 7.0.1 INSTALLATO e
   interrogabile su SQLite sotto phpr**: `wp core download` (curl callbacks →
   Requests transport, zip estratto byte-id: 3951 file `diff -rq` puliti con

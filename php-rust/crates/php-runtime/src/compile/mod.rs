@@ -65,13 +65,13 @@ type R<T> = Result<T, CompileError>;
 /// and a case-insensitive name→[`ClassId`] index (for resolving
 /// [`ClassRef::Named`]). Bundled so a body's compiler can borrow it whole.
 struct ProgramCtx<'a> {
-    funcs: &'a [FnDecl],
+    funcs: &'a [std::rc::Rc<FnDecl>],
     /// Indices into `funcs` that are conditional declarations: they do NOT resolve
     /// a call by name at compile time (dispatched dynamically, callable only once
     /// their `DeclareFn` runs).
     conditional_fns: &'a HashSet<usize>,
     registry: &'a Registry,
-    classes: &'a [ClassDecl],
+    classes: &'a [std::rc::Rc<ClassDecl>],
     class_index: &'a HashMap<Vec<u8>, ClassId>,
 }
 

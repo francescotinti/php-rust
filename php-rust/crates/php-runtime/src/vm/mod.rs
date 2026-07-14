@@ -977,7 +977,7 @@ struct Vm<'m> {
     /// unit's *new* classes, so a later unit can `extend`/`implement` a class an
     /// earlier one (or an autoloaded one) declared. Ids stay aligned with the
     /// global compiled table. Empty (and unused) when no HIR is retained.
-    seed_classes: Vec<crate::hir::ClassDecl>,
+    seed_classes: Vec<std::rc::Rc<crate::hir::ClassDecl>>,
     /// The accumulating trait image (step 21, trait analogue of `seed_classes`):
     /// every loaded unit's declared traits, keyed by bare lowercase name, so a
     /// later (e.g. autoloaded) unit's `use T` resolves a trait an earlier unit

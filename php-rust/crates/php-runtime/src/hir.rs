@@ -33,7 +33,10 @@ pub struct Program {
     /// Top-level user-defined functions, hoisted at lowering time so a call may
     /// precede the declaration (PHP's function hoisting). Resolved by the
     /// evaluator's call path before the builtin registry (step 8).
-    pub functions: Vec<FnDecl>,
+    /// Behind `Rc`: a seeded (`include`/`eval`) unit re-seeds the prelude's
+    /// functions into its own table, and deep-cloning their HIR per included
+    /// file dominated WordPress's load (~200 includes × the whole prelude).
+    pub functions: Vec<std::rc::Rc<FnDecl>>,
     /// Indices into `functions` that are **conditional** declarations (a `function`
     /// inside a branch/block, possibly nested in another function/method body):
     /// they are not resolvable by name until their [`StmtKind::DeclareFn`] runs, so
@@ -67,7 +70,11 @@ pub struct Program {
     /// precede the declaration (PHP's class hoisting for unconditional decls).
     /// An [`ExprKind::New`] / method dispatch resolves a class by name against
     /// this table (step 19, D-19.3).
-    pub classes: Vec<ClassDecl>,
+    /// Behind `Rc` for the same reason as `functions`: the accumulated class
+    /// image (`Vm::seed_classes`) is re-seeded into every `include`/`eval`
+    /// unit's lowering, and a per-include deep clone is quadratic across an
+    /// autoload storm.
+    pub classes: Vec<std::rc::Rc<ClassDecl>>,
     /// Traits defined by this unit, keyed by their bare lowercase name (step 21).
     /// Traits are flattened into using classes, so they never enter `classes`;
     /// they are carried here so a later unit (an autoloaded file) can resolve a

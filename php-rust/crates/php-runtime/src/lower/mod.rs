@@ -123,7 +123,7 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
 pub fn lower_source_seeded(
     name: &[u8],
     source: &[u8],
-    seed_classes: &[crate::hir::ClassDecl],
+    seed_classes: &[std::rc::Rc<crate::hir::ClassDecl>],
     seed_static: usize,
     seed_traits: &[(Vec<u8>, LoweredTrait)],
     seed_globals: &[Box<[u8]>],
@@ -139,7 +139,7 @@ pub fn lower_source_seeded(
 }
 
 type Seed<'a> = (
-    &'a [crate::hir::ClassDecl],
+    &'a [std::rc::Rc<crate::hir::ClassDecl>],
     usize,
     &'a [(Vec<u8>, LoweredTrait)],
     &'a [Box<[u8]>],
@@ -303,7 +303,7 @@ fn lower_source_impl(
     for decl in std::mem::take(&mut low.anon_classes) {
         let key = decl.name.to_ascii_lowercase();
         low.class_index.insert(key, low.classes.len());
-        low.classes.push(decl);
+        low.classes.push(std::rc::Rc::new(decl));
     }
     // `goto`/label validation (step 45): the top-level script body is its own
     // function scope. Each user function / method / closure validates its own
@@ -613,9 +613,9 @@ const PRELUDE_GMP_SRC: &[u8] = include_bytes!("prelude_gmp.php");
 /// (step 35). Both are seeded into every real program before user declarations
 /// are hoisted, so user classes/functions get contiguous ids after them.
 type LoweredPrelude = (
-    Vec<ClassDecl>,
+    Vec<std::rc::Rc<ClassDecl>>,
     HashMap<Vec<u8>, usize>,
-    Vec<FnDecl>,
+    Vec<std::rc::Rc<FnDecl>>,
     HashMap<Vec<u8>, usize>,
 );
 
@@ -639,7 +639,7 @@ fn lower_prelude() -> LoweredPrelude {
 /// The prelude's *functions* only (table + name→index), for the seeded
 /// (`include`/`eval`) lowering path — it takes its classes from the seed image,
 /// so cloning the cached prelude classes there would be pure waste.
-fn prelude_functions() -> (Vec<FnDecl>, HashMap<Vec<u8>, usize>) {
+fn prelude_functions() -> (Vec<std::rc::Rc<FnDecl>>, HashMap<Vec<u8>, usize>) {
     PRELUDE_CACHE.with(|c| {
         let p = c.get_or_init(lower_prelude_uncached);
         (p.2.clone(), p.3.clone())
@@ -760,7 +760,7 @@ struct Lowerer<'f> {
     after_closing_tag: bool,
     /// Hoisted top-level user functions and a name→index map (ASCII-lowercased,
     /// since PHP function names are case-insensitive).
-    functions: Vec<FnDecl>,
+    functions: Vec<std::rc::Rc<FnDecl>>,
     fn_index: HashMap<Vec<u8>, usize>,
     /// Indices into `functions` that are *conditional* declarations (registered at
     /// run time by `DeclareFn`, not resolvable by name eagerly).
@@ -792,7 +792,7 @@ struct Lowerer<'f> {
     strict: bool,
     /// Hoisted user classes and a name→index map (ASCII-lowercased; PHP class
     /// names are case-insensitive), step 19.
-    classes: Vec<ClassDecl>,
+    classes: Vec<std::rc::Rc<ClassDecl>>,
     class_index: HashMap<Vec<u8>, usize>,
     /// How many leading `classes` entries came from the cross-unit seed image
     /// (0 for a standalone/main lowering). A statement-level class whose name

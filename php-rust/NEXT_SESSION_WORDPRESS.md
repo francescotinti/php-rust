@@ -1,4 +1,15 @@
-# Rotta WORDPRESS-FIRST — WP-track (WORDPRESS INSTALLATO da sessione WP-2)
+# Rotta WORDPRESS-FIRST — WP-track (WP installato; load 22.8s → 1.7s da WP-3)
+
+> ⚡ **PERFORMANCE CHIUSA** (sessione WP-3, 2026-07-14): il seeding HIR per
+> include è condiviso via `Rc` invece che deep-clonato (`Program.classes:
+> Vec<Rc<ClassDecl>>`, `Program.functions: Vec<Rc<FnDecl>>`, idem Lowerer/
+> cache prelude/`Vm::seed_classes`). `wp option get` su WP 7.0.1/SQLite:
+> **22.8s → 3.0s cold / 1.7s warm** (oracle 0.3s). Il profilo `sample`
+> attribuiva ~88% del tempo a clone+drop dell'immagine seed per include;
+> la "ricompilazione delle funzioni" ipotizzata in WP-2 pesava solo ~12%.
+> Gate integrale verde (dettagli sotto). Residuo per-include: compile delle
+> fn prelude per unità (~12%) + lowering del file — pista futura:
+> condividere le `Func` COMPILATE del prelude tra i moduli unità.
 
 > 🏁 **Tappe 2-3 COMPLETATE** (sessione WP-2, 2026-07-14): **WordPress 7.0.1
 > è INSTALLATO e interrogabile su SQLite sotto phpr.** Catena verde completa:
@@ -83,12 +94,11 @@ compatibilità WordPress. Laravel solo come validazione posteriore.
   la delete ricorsiva post-rename fallisce silenziosamente).
 
 ## Prossimo passo del WP-track
-1. **PERFORMANCE del load** (bloccante per l'uso vero): `wp option get` =
-   ~20s vs 0.3s oracle. Il costo è lowering+compile PER include con seed
-   crescente (~200 file WP): compile_program_stubbed ricompila TUTTE le
-   funzioni libere accumulate a ogni include (le classi hanno già lo
-   stub-mask, le funzioni no). Piste: fn-stub-mask con dispatch runtime
-   per nome, o cache dei moduli compilati per unità.
+1. ~~PERFORMANCE del load~~ ✅ **FATTO in WP-3** (Rc-seeding: 22.8s → 1.7s
+   warm). Se in futuro serve altro margine: condividere le `Func` compilate
+   del prelude tra i moduli unità (~12% del residuo) e ridurre il rebuild
+   di class_index/fn_index per include; il leak `Box::leak` dei moduli
+   include resta (ora senza HIR duplicato è molto più piccolo).
 2. **SAPI web server** (tappa roadmap): php-server/Axum bridgehead,
    superglobali da richiesta reale, header/cookie, multipart.
 3. **Divergenze residue WP da chiudere**: attribuzione file/riga dei
@@ -98,7 +108,14 @@ compatibilità WordPress. Laravel solo come validazione posteriore.
    stderr (riga "PHP Warning:" duplicata dell'oracle).
 4. Poi: **WP core test suite** (PHPUnit) come gate per nome del filone.
 
-## Lezioni operative (cumulative, aggiornate WP-2)
+## Lezioni operative (cumulative, aggiornate WP-3)
+- ⭐ WP-3: PROFILARE prima di ottimizzare (`sample <pid>` su macOS basta):
+  la diagnosi "a memoria" di WP-2 (compile delle funzioni per include)
+  pesava il 12%; il vero collo era il deep-clone+drop dell'HIR seed (88%).
+- ⭐ WP-3: Rc-ificare un container HIR condiviso è sicuro-per-costruzione:
+  il borrow checker elenca lui i siti di push (Rc::new) e dimostra
+  l'assenza di mutazioni (niente DerefMut su Rc); 13 errori tutti
+  meccanici, semantica invariata su TUTTI i gate.
 - ⭐ WP-2: un fatal con stack "impossibile" (frame di bootstrap a dispatch
   inoltrato) = stash `uncaught_throwable` stantio di un Err consumato
   host-side: cercare CHI ha valutato thunk speculativi prima.
