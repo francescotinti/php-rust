@@ -45,6 +45,38 @@ pub(super) fn value_builtin_string_coerces(name: &[u8]) -> bool {
         // (`explode("\r\n", $response)` on a Response) converts here too.
         b"strval"
             | b"explode"
+            // Pure string-parameter family: PHP's ZPP coerces a Stringable
+            // argument for every `string` parameter (wp-cli feeds a
+            // DirectoryIterator to `substr($filename, -4)`).
+            | b"substr"
+            | b"strlen"
+            | b"strtolower"
+            | b"strtoupper"
+            | b"ucfirst"
+            | b"lcfirst"
+            | b"ucwords"
+            | b"trim"
+            | b"ltrim"
+            | b"rtrim"
+            | b"strrev"
+            | b"str_pad"
+            | b"str_repeat"
+            | b"strpos"
+            | b"strrpos"
+            | b"stripos"
+            | b"strripos"
+            | b"strstr"
+            | b"stristr"
+            | b"strrchr"
+            | b"str_split"
+            | b"md5"
+            | b"sha1"
+            | b"crc32"
+            | b"urlencode"
+            | b"rawurlencode"
+            | b"urldecode"
+            | b"rawurldecode"
+            | b"base64_encode"
             | b"str_contains"
             | b"str_starts_with"
             | b"str_ends_with"
@@ -791,11 +823,18 @@ impl<'m> Vm<'m> {
         cid: usize,
         this: Option<Zval>,
         method: &[u8],
-        args: Vec<Zval>,
+        mut args: Vec<Zval>,
     ) -> Result<(), PhpError> {
         match resolve_method_runtime(&self.classes, cid, method) {
             Some((defc, midx)) => {
                 let callee = &self.classes[defc].methods[midx].func;
+                // Deferred place arguments (SEND_VAR_EX, from a dynamic call
+                // through a method first-class callable) resolve against the
+                // callee's by-ref mask now that the method is known.
+                if args.iter().any(|a| matches!(a, Zval::ArgPlace(_))) {
+                    let top = self.frames.len() - 1;
+                    self.materialize_arg_places(top, &mut args, Some(callee))?;
+                }
                 let mut frame = Frame::new(callee, self.class_mod(defc));
                 bind_params(&mut frame, args);
                 frame.this = this;
@@ -809,6 +848,12 @@ impl<'m> Vm<'m> {
             None => {
                 let magic: &[u8] = if this.is_some() { b"__call" } else { b"__callStatic" };
                 if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, magic) {
+                    // A magic route takes every argument by value: R-fetch any
+                    // deferred place argument before packing.
+                    if args.iter().any(|a| matches!(a, Zval::ArgPlace(_))) {
+                        let top = self.frames.len() - 1;
+                        self.materialize_arg_places(top, &mut args, None)?;
+                    }
                     let margs =
                         vec![Zval::Str(PhpStr::new(method.to_vec())), pack_args(args)];
                     let callee = &self.classes[defc].methods[midx].func;
@@ -857,7 +902,7 @@ impl<'m> Vm<'m> {
     /// Dispatch a call to a function *name* (a string callable / first-class
     /// callable / named closure): a user function (case-insensitive, shadows
     /// builtins) installs a frame; a value builtin runs and pushes its result.
-    pub(super) fn invoke_named(&mut self, name: &[u8], args: Vec<Zval>) -> Result<(), PhpError> {
+    pub(super) fn invoke_named(&mut self, name: &[u8], mut args: Vec<Zval>) -> Result<(), PhpError> {
         // A fully-qualified name (`'\trim'`) resolves like the bare one; the
         // undefined-function message keeps the name as written, as PHP does.
         let written = name;
@@ -870,6 +915,12 @@ impl<'m> Vm<'m> {
                 .then_some(i)
         }) {
             let callee = &self.module.functions[idx];
+            // Deferred place arguments (SEND_VAR_EX) resolve against the
+            // callee's by-ref mask now that it is known.
+            if args.iter().any(|a| matches!(a, Zval::ArgPlace(_))) {
+                let top = self.frames.len() - 1;
+                self.materialize_arg_places(top, &mut args, Some(callee))?;
+            }
             let mut frame = Frame::new(callee, self.module);
             bind_params(&mut frame, args);
             self.enter_callee(frame)?;
@@ -879,10 +930,20 @@ impl<'m> Vm<'m> {
         // and run its frame in the module that defined it.
         if let Some(&(fmod, idx)) = self.linked_functions.get(&name.to_ascii_lowercase()) {
             let callee = &fmod.functions[idx];
+            if args.iter().any(|a| matches!(a, Zval::ArgPlace(_))) {
+                let top = self.frames.len() - 1;
+                self.materialize_arg_places(top, &mut args, Some(callee))?;
+            }
             let mut frame = Frame::new(callee, fmod);
             bind_params(&mut frame, args);
             self.enter_callee(frame)?;
             return Ok(());
+        }
+        // Everything below (registry builtins, host builtins) takes arguments
+        // by value: R-fetch any deferred place argument, like a native callee.
+        if args.iter().any(|a| matches!(a, Zval::ArgPlace(_))) {
+            let top = self.frames.len() - 1;
+            self.materialize_arg_places(top, &mut args, None)?;
         }
         match self.registry.get(name) {
             Some(Builtin::Value(f)) => {

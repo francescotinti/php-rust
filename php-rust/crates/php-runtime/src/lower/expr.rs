@@ -162,13 +162,62 @@ impl<'f> Lowerer<'f> {
                 }
                 // `$$name = rhs` / `${expr} = rhs`: the target variable's NAME
                 // is a runtime value — not a `Place` (no compile-time slot).
-                if let AssignmentOperator::Assign(_) = a.operator {
-                    if let Expression::Variable(v) = a.lhs {
-                        if !matches!(v, Variable::Direct(_)) {
-                            let name = Box::new(self.lower_variable_name(v, line)?);
-                            let rhs = Box::new(self.lower_expr(a.rhs)?);
-                            return Ok(Expr { line, kind: ExprKind::VarDynAssign { name, rhs } });
-                        }
+                // Compound forms (`$$n .= r`) desugar to read-op-write with the
+                // name materialised ONCE into a temp, like Zend's single fetch;
+                // `??=` needs a lazily-evaluated rhs and stays out of scope.
+                if let Expression::Variable(v) = a.lhs {
+                    if !matches!(v, Variable::Direct(_)) {
+                        let op = match a.operator {
+                            AssignmentOperator::Assign(_) => None,
+                            AssignmentOperator::Coalesce(_) => {
+                                return Err(LowerError::Unsupported {
+                                    what: "`??=` on a variable variable",
+                                    line,
+                                })
+                            }
+                            AssignmentOperator::Addition(_) => Some(BinOp::Add),
+                            AssignmentOperator::Subtraction(_) => Some(BinOp::Sub),
+                            AssignmentOperator::Multiplication(_) => Some(BinOp::Mul),
+                            AssignmentOperator::Division(_) => Some(BinOp::Div),
+                            AssignmentOperator::Modulo(_) => Some(BinOp::Mod),
+                            AssignmentOperator::Exponentiation(_) => Some(BinOp::Pow),
+                            AssignmentOperator::Concat(_) => Some(BinOp::Concat),
+                            AssignmentOperator::BitwiseAnd(_) => Some(BinOp::BitAnd),
+                            AssignmentOperator::BitwiseOr(_) => Some(BinOp::BitOr),
+                            AssignmentOperator::BitwiseXor(_) => Some(BinOp::BitXor),
+                            AssignmentOperator::LeftShift(_) => Some(BinOp::Shl),
+                            AssignmentOperator::RightShift(_) => Some(BinOp::Shr),
+                        };
+                        let name_expr = self.lower_variable_name(v, line)?;
+                        let rhs = Box::new(self.lower_expr(a.rhs)?);
+                        let kind = match op {
+                            None => {
+                                ExprKind::VarDynAssign { name: Box::new(name_expr), rhs }
+                            }
+                            Some(bop) => {
+                                let temp = self.fresh_list_temp();
+                                let name = Expr {
+                                    line,
+                                    kind: ExprKind::Assign(temp, Box::new(name_expr)),
+                                };
+                                let read = Expr {
+                                    line,
+                                    kind: ExprKind::VarDyn(Box::new(Expr {
+                                        line,
+                                        kind: ExprKind::Var(temp),
+                                    })),
+                                };
+                                let combined = Expr {
+                                    line,
+                                    kind: ExprKind::Binary(bop, Box::new(read), rhs),
+                                };
+                                ExprKind::VarDynAssign {
+                                    name: Box::new(name),
+                                    rhs: Box::new(combined),
+                                }
+                            }
+                        };
+                        return Ok(Expr { line, kind });
                     }
                 }
                 // `C::$$x = rhs` / `C::${expr} = rhs`: the static-property NAME
@@ -647,7 +696,7 @@ impl<'f> Lowerer<'f> {
     /// The NAME expression of a variable variable: for `$$x` (nested) the name
     /// is `$x`'s value; for `${expr}` the braced expression itself; a direct
     /// inner variable reads like any `$x` (this / superglobal / slot).
-    fn lower_variable_name(&mut self, v: &Variable, line: u32) -> Result<Expr, LowerError> {
+    pub(super) fn lower_variable_name(&mut self, v: &Variable, line: u32) -> Result<Expr, LowerError> {
         Ok(match v {
             Variable::Direct(d) => {
                 let name = strip_dollar(d.name);

@@ -700,9 +700,11 @@ pub enum StmtKind {
     /// `unset($a, $b[k], ...);` — drops variables / array elements.
     Unset(Vec<Place>),
     /// `global $a, $b;` — alias each named global cell into the local frame
-    /// (step 12-2, D-12.2). Each binding records the local slot to install the
-    /// alias into and the global slot it aliases.
-    Global(Vec<GlobalBinding>),
+    /// (step 12-2, D-12.2). A compile-time name records the local slot to
+    /// install the alias into and the global slot it aliases; `global $$x`
+    /// carries the NAME expression, resolved at run time (wp-cli's
+    /// wp-config import: `global ${$key};`).
+    Global(Vec<GlobalItem>),
     /// `static $a = init, $b;` — alias each local slot to a persistent cell that
     /// survives across calls, initialised once on first execution (step 15).
     StaticVar(Vec<StaticBinding>),
@@ -776,6 +778,15 @@ pub struct CatchClause {
 pub struct GlobalBinding {
     pub local: Slot,
     pub global: Slot,
+}
+
+/// One variable of a `global` statement: slot-resolved when the name is a
+/// compile-time identifier, or the runtime NAME expression for the
+/// variable-variable form (`global $$x` / `global ${expr}`).
+#[derive(Debug, Clone, PartialEq)]
+pub enum GlobalItem {
+    Static(GlobalBinding),
+    Dyn(Expr),
 }
 
 /// One `static $x = init;` binding (step 15, D-15.2): the local slot to alias,

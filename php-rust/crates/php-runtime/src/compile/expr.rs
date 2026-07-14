@@ -289,9 +289,10 @@ impl<'a> super::FnCompiler<'a> {
                     self.build_args_array(args)?;
                     self.emit(Op::CallValueArgs);
                 } else {
-                    for a in args {
-                        self.expr(a)?;
-                    }
+                    // The callee — hence its by-ref mask — is a runtime value:
+                    // SEND_VAR_EX arguments, like any dynamic dispatch (a
+                    // closure/function with `&$param` invoked via `$f(...)`).
+                    self.push_dyn_args(args)?;
                     self.emit(Op::CallValue { argc: args.len() as u32 });
                 }
             }
@@ -1243,10 +1244,12 @@ impl<'a> super::FnCompiler<'a> {
                 // neither a hoisted user function nor a builtin defers PHP's two-step
                 // lookup (namespaced `name`, then global `fallback`) to run time — so
                 // a function defined in another unit (autoloaded / included) binds.
+                // The callee's by-ref mask is unknown here, so arguments go through
+                // the SEND_VAR_EX route (`push_dyn_args`): a cross-unit function
+                // with a `&$param` (wp-cli's `Utils\proc_open_compat(..., &$pipes)`)
+                // must alias the caller's cell, not receive a copy.
                 if let Some(fb) = fallback {
-                    for a in args {
-                        self.expr(a)?;
-                    }
+                    self.push_dyn_args(args)?;
                     self.emit(Op::CallNsFallback {
                         name: name.into(),
                         fallback: fb.into(),
@@ -1256,9 +1259,7 @@ impl<'a> super::FnCompiler<'a> {
                 }
                 let k = self.konst(Const::Str(name.into()));
                 self.emit(Op::PushConst(k));
-                for a in args {
-                    self.expr(a)?;
-                }
+                self.push_dyn_args(args)?;
                 self.emit(Op::CallValue { argc: args.len() as u32 });
                 Ok(())
             }

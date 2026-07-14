@@ -8,7 +8,7 @@ use mago_syntax::ast::{
 
 use crate::hir::{
     Case,
-    GlobalBinding, Line, StaticBinding, Stmt, StmtKind,
+    GlobalBinding, GlobalItem, Line, StaticBinding, Stmt, StmtKind,
 };
 
 use super::*;
@@ -170,26 +170,26 @@ impl<'f> Lowerer<'f> {
             }
 
             Statement::Global(node) => {
-                let mut bindings = Vec::new();
+                let mut items = Vec::new();
                 for v in node.variables.iter() {
                     let name = match v {
                         Variable::Direct(d) => strip_dollar(d.name),
-                        // `global $$x` (variable-variable) needs runtime name
-                        // resolution — outside step 12 scope (D-12.6).
+                        // `global $$x` / `global ${expr}`: the NAME is a
+                        // runtime value — carry its expression and bind at
+                        // execution (wp-cli's wp-config import).
                         _ => {
-                            return Err(LowerError::Unsupported {
-                                what: "variable-variable in `global`",
-                                line,
-                            })
+                            let name = self.lower_variable_name(v, line)?;
+                            items.push(GlobalItem::Dyn(name));
+                            continue;
                         }
                     };
                     // Local-frame slot for the alias, plus a (pre-registered)
                     // global-frame slot for the cell it aliases (D-12.2/D-12.4).
                     let local = self.slot_for(name);
                     let global = self.globals.slot_for(name);
-                    bindings.push(GlobalBinding { local, global });
+                    items.push(GlobalItem::Static(GlobalBinding { local, global }));
                 }
-                StmtKind::Global(bindings)
+                StmtKind::Global(items)
             }
 
             Statement::Declare(node) => {

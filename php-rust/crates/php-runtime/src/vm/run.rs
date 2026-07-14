@@ -177,6 +177,21 @@ impl<'m> super::Vm<'m> {
                     self.var_dyn_write(top, &name, rhs.clone())?;
                     self.frames[top].stack.push(rhs);
                 }
+                Op::BindGlobalDyn => {
+                    // `global $$x`: alias the same-named local to the global
+                    // cell resolved by the runtime name. An object name goes
+                    // through the throwing conversion (`global ${new stdClass}`
+                    // is Zend's catchable "could not be converted to string").
+                    let nv = self.frames[top].stack.pop().expect("BindGlobalDyn name");
+                    let nv = nv.deref_clone();
+                    let name = match &nv {
+                        Zval::Object(_) => self.vm_stringify(&nv)?.as_bytes().to_vec(),
+                        other => {
+                            convert::to_zstr_cast(other, &mut self.diags).as_bytes().to_vec()
+                        }
+                    };
+                    self.bind_global_dyn(top, &name)?;
+                }
                 Op::StaticGuard { id, skip } => {
                     // First execution of this `static` declaration falls through to
                     // run the initialiser; every later one skips to the alias. A

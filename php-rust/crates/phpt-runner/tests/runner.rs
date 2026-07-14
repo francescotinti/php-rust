@@ -44,10 +44,10 @@ fn expectf_wildcards_match() {
 
 #[test]
 fn unsupported_construct_is_skipped() {
-    // Promoted constructor properties are now supported, so use a
-    // variable-variable in `global` — still out of scope — as the example.
+    // `global $$name` is now supported, so use the `(void)` cast — still out
+    // of scope — as the example.
     let (st, cat) = status(
-        "--TEST--\nt\n--FILE--\n<?php global $$name; echo 1;\n--EXPECT--\n1\n",
+        "--TEST--\nt\n--FILE--\n<?php (void) 1; echo 1;\n--EXPECT--\n1\n",
     );
     assert_eq!(st, Status::Skip);
     assert_eq!(cat, "unsupported");

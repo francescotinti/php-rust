@@ -698,6 +698,11 @@ pub enum Op {
     /// `[name, rhs] -> [rhs]` — `$$x = rhs`: resolve/create the variable by its
     /// runtime NAME and store (writing through a reference like `StoreSlot`).
     StoreVarDyn,
+    /// `[name] -> []` — `global $$x`: dynamic-name form of the `global`
+    /// binding. Resolves-or-creates the global cell by the runtime NAME
+    /// (created as NULL, like Zend's global-fetch) and aliases the same-named
+    /// local to it (named slot, else the dynamic side-table).
+    BindGlobalDyn,
     /// `[classRef, name] -> [value]` — `C::{$expr}` (PHP 8.3): resolve the
     /// class (string/object, autoloading), then the constant by its runtime
     /// name through the parent/interface chain; `"class"` yields the class

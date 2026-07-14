@@ -54,8 +54,8 @@ pub fn crypt(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
             args.len()
         )));
     }
-    let password = convert::to_zstr(&args[0], ctx.diags);
-    let salt_z = convert::to_zstr(&args[1], ctx.diags);
+    let password = ctx.to_zstr(&args[0]);
+    let salt_z = ctx.to_zstr(&args[1]);
     let salt = salt_z.as_bytes();
     let salt = &salt[..salt.len().min(MAX_SALT_LEN)];
 
@@ -211,7 +211,7 @@ pub fn password_hash(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     // Value phase.
     let is_bcrypt = match &args[1] {
         Zval::Null | Zval::Long(1) => true,
-        v => convert::to_zstr(v, ctx.diags).as_bytes() == b"2y",
+        v => ctx.to_zstr(v).as_bytes() == b"2y",
     };
     if !is_bcrypt {
         return Err(PhpError::ValueError(
@@ -219,7 +219,7 @@ pub fn password_hash(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
                 .to_string(),
         ));
     }
-    let password = convert::to_zstr(&args[0], ctx.diags);
+    let password = ctx.to_zstr(&args[0]);
     if password.as_bytes().contains(&0) {
         return Err(PhpError::ValueError(
             "Bcrypt password must not contain null character".to_string(),
@@ -266,8 +266,8 @@ pub fn password_verify(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
             args.len()
         )));
     }
-    let password = convert::to_zstr(&args[0], ctx.diags);
-    let hash = convert::to_zstr(&args[1], ctx.diags);
+    let password = ctx.to_zstr(&args[0]);
+    let hash = ctx.to_zstr(&args[1]);
     // A hash that is not valid UTF-8, or too short to be a real setting, fails.
     let Ok(hash_str) = std::str::from_utf8(hash.as_bytes()) else {
         return Ok(Zval::Bool(false));
@@ -330,10 +330,10 @@ pub fn password_needs_rehash(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpEr
             )));
         }
     }
-    let hash = convert::to_zstr(&args[0], ctx.diags);
+    let hash = ctx.to_zstr(&args[0]);
     let want_bcrypt = match args.get(1) {
         None | Some(Zval::Null) | Some(Zval::Long(1)) => true,
-        Some(v) => convert::to_zstr(v, ctx.diags).as_bytes() == b"2y",
+        Some(v) => ctx.to_zstr(v).as_bytes() == b"2y",
     };
     match bcrypt_cost(hash.as_bytes()) {
         // A bcrypt hash needs a rehash if a different algorithm is requested or the

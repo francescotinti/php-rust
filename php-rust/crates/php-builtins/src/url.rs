@@ -288,7 +288,7 @@ pub(crate) fn php_url_parse(s: &[u8]) -> Option<ParsedUrl> {
 
 /// `parse_url($url, $component = -1)`.
 pub fn parse_url(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let url = convert::to_zstr(&args[0], ctx.diags);
+    let url = ctx.to_zstr(&args[0]);
     let key = match args.get(1) {
         Some(v) => convert::to_long_cast(v, ctx.diags),
         None => -1,
@@ -410,25 +410,25 @@ fn decode(bytes: &[u8], raw: bool) -> Vec<u8> {
 
 /// `urlencode($string)`.
 pub fn urlencode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let s = convert::to_zstr(&args[0], ctx.diags);
+    let s = ctx.to_zstr(&args[0]);
     Ok(Zval::Str(PhpStr::new(encode(s.as_bytes(), false))))
 }
 
 /// `rawurlencode($string)`.
 pub fn rawurlencode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let s = convert::to_zstr(&args[0], ctx.diags);
+    let s = ctx.to_zstr(&args[0]);
     Ok(Zval::Str(PhpStr::new(encode(s.as_bytes(), true))))
 }
 
 /// `urldecode($string)`.
 pub fn urldecode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let s = convert::to_zstr(&args[0], ctx.diags);
+    let s = ctx.to_zstr(&args[0]);
     Ok(Zval::Str(PhpStr::new(decode(s.as_bytes(), false))))
 }
 
 /// `rawurldecode($string)`.
 pub fn rawurldecode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let s = convert::to_zstr(&args[0], ctx.diags);
+    let s = ctx.to_zstr(&args[0]);
     Ok(Zval::Str(PhpStr::new(decode(s.as_bytes(), true))))
 }
 
@@ -455,11 +455,11 @@ pub fn http_build_query(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> 
     };
     let numeric_prefix = match args.get(1).map(|v| v.deref_clone()) {
         Some(Zval::Null) | None => Vec::new(),
-        Some(v) => convert::to_zstr(&v, ctx.diags).as_bytes().to_vec(),
+        Some(v) => ctx.to_zstr(&v).as_bytes().to_vec(),
     };
     let sep = match args.get(2).map(|v| v.deref_clone()) {
         Some(Zval::Null) | None => b"&".to_vec(),
-        Some(v) => convert::to_zstr(&v, ctx.diags).as_bytes().to_vec(),
+        Some(v) => ctx.to_zstr(&v).as_bytes().to_vec(),
     };
     let raw = matches!(args.get(3).map(|v| v.deref_clone()), Some(Zval::Long(2)));
     let mut parts: Vec<Vec<u8>> = Vec::new();
@@ -536,7 +536,7 @@ fn hbq_walk(
                 parts.push(pair);
             }
             other => {
-                let sv = convert::to_zstr(&other, ctx.diags);
+                let sv = ctx.to_zstr(&other);
                 let mut pair = encode(&composite, raw);
                 pair.push(b'=');
                 pair.extend_from_slice(&encode(sv.as_bytes(), raw));

@@ -64,11 +64,10 @@ pub fn implode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// (last element keeps the unsplit remainder); 0 behaves like 1; negative
 /// drops that many trailing pieces.
 pub fn explode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let sep = convert::to_zstr(
+    let sep = ctx.to_zstr(
         args.first().ok_or_else(|| {
             PhpError::Error("explode() expects at least 2 arguments, 0 given".to_string())
         })?,
-        ctx.diags,
     );
     let sep = sep.as_bytes();
     if sep.is_empty() {
@@ -125,11 +124,10 @@ pub fn explode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// Offsets and lengths may be negative (counted from the end). The resulting
 /// window is clamped into `[0, len]`; an empty window yields "".
 pub fn substr(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let s = convert::to_zstr(
+    let s = ctx.to_zstr(
         args.first().ok_or_else(|| {
             PhpError::Error("substr() expects at least 2 arguments, 0 given".to_string())
         })?,
-        ctx.diags,
     );
     let bytes = s.as_bytes();
     let len = bytes.len() as i64;
@@ -168,17 +166,15 @@ pub fn substr(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// or after `$offset`, or `false`. Negative offset counts from the end; an
 /// offset outside the string is a `ValueError`.
 pub fn strpos(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let haystack = convert::to_zstr(
+    let haystack = ctx.to_zstr(
         args.first().ok_or_else(|| {
             PhpError::Error("strpos() expects at least 2 arguments, 0 given".to_string())
         })?,
-        ctx.diags,
     );
-    let needle = convert::to_zstr(
+    let needle = ctx.to_zstr(
         args.get(1).ok_or_else(|| {
             PhpError::Error("strpos() expects at least 2 arguments, 1 given".to_string())
         })?,
-        ctx.diags,
     );
     let hay = haystack.as_bytes();
     let len = hay.len() as i64;
@@ -355,7 +351,7 @@ fn str_arg(args: &[Zval], ctx: &mut Ctx, fname: &str) -> Result<Vec<u8>, PhpErro
     let v = args
         .first()
         .ok_or_else(|| PhpError::Error(format!("{fname}() expects exactly 1 argument, 0 given")))?;
-    Ok(convert::to_zstr(v, ctx.diags).as_bytes().to_vec())
+    Ok(ctx.to_zstr(v).as_bytes().to_vec())
 }
 
 /// strtoupper($string): ASCII-only uppercasing (C locale); bytes >= 0x80 intact.
@@ -395,7 +391,7 @@ pub fn lcfirst(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 pub fn ucwords(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let mut b = str_arg(args, ctx, "ucwords")?;
     let delims: Vec<u8> = match args.get(1) {
-        Some(v) => convert::to_zstr(v, ctx.diags).as_bytes().to_vec(),
+        Some(v) => ctx.to_zstr(v).as_bytes().to_vec(),
         None => b" \t\r\n\x0c\x0b".to_vec(),
     };
     let mut at_word_start = true;
@@ -410,11 +406,10 @@ pub fn ucwords(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 
 /// str_repeat($string, $times): `$times` copies. Negative is a `ValueError`.
 pub fn str_repeat(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let s = convert::to_zstr(
+    let s = ctx.to_zstr(
         args.first().ok_or_else(|| {
             PhpError::Error("str_repeat() expects exactly 2 arguments, 0 given".to_string())
         })?,
-        ctx.diags,
     );
     let times = convert::to_long_cast(
         args.get(1).ok_or_else(|| {
@@ -462,7 +457,7 @@ fn cmp_arg_str(args: &[Zval], i: usize, name: &str, ctx: &mut Ctx) -> Result<Rc<
     let v = args.get(i).ok_or_else(|| {
         PhpError::Error(format!("{name}() expects at least {} arguments, {} given", i + 1, args.len()))
     })?;
-    Ok(convert::to_zstr(v, ctx.diags))
+    Ok(ctx.to_zstr(v))
 }
 
 /// `strcmp($s1, $s2)`: binary-safe byte comparison.
@@ -673,11 +668,10 @@ pub fn strnatcasecmp(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// right). A length <= the input length returns it unchanged; an empty pad
 /// string is a `ValueError`.
 pub fn str_pad(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let s = convert::to_zstr(
+    let s = ctx.to_zstr(
         args.first().ok_or_else(|| {
             PhpError::Error("str_pad() expects at least 2 arguments, 0 given".to_string())
         })?,
-        ctx.diags,
     );
     let s = s.as_bytes();
     let length = convert::to_long_cast(
@@ -687,7 +681,7 @@ pub fn str_pad(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         ctx.diags,
     );
     let pad = match args.get(2) {
-        Some(v) => convert::to_zstr(v, ctx.diags).as_bytes().to_vec(),
+        Some(v) => ctx.to_zstr(v).as_bytes().to_vec(),
         None => b" ".to_vec(),
     };
     let pad_type = match args.get(3) {
@@ -730,11 +724,10 @@ pub fn chr(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 
 /// ord($character): the value of the first byte (0 for an empty string).
 pub fn ord(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let s = convert::to_zstr(
+    let s = ctx.to_zstr(
         args.first().ok_or_else(|| {
             PhpError::Error("ord() expects exactly 1 argument, 0 given".to_string())
         })?,
-        ctx.diags,
     );
     Ok(Zval::Long(s.as_bytes().first().copied().unwrap_or(0) as i64))
 }
@@ -768,14 +761,13 @@ fn trim_mask(chars: &[u8]) -> [bool; 256] {
 
 /// Shared trim driver. `left`/`right` select which ends are stripped.
 fn do_trim(args: &[Zval], ctx: &mut Ctx, fname: &str, left: bool, right: bool) -> Result<Zval, PhpError> {
-    let s = convert::to_zstr(
+    let s = ctx.to_zstr(
         args.first()
             .ok_or_else(|| PhpError::Error(format!("{fname}() expects at least 1 argument, 0 given")))?,
-        ctx.diags,
     );
     let bytes = s.as_bytes();
     let chars = match args.get(1) {
-        Some(v) => convert::to_zstr(v, ctx.diags).as_bytes().to_vec(),
+        Some(v) => ctx.to_zstr(v).as_bytes().to_vec(),
         None => TRIM_DEFAULT.to_vec(),
     };
     let mask = trim_mask(&chars);
@@ -991,11 +983,11 @@ pub fn number_format(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         None => 0,
     };
     let dec_sep = match args.get(2) {
-        Some(v) => convert::to_zstr(v, ctx.diags).as_bytes().to_vec(),
+        Some(v) => ctx.to_zstr(v).as_bytes().to_vec(),
         None => b".".to_vec(),
     };
     let thousands_sep = match args.get(3) {
-        Some(v) => convert::to_zstr(v, ctx.diags).as_bytes().to_vec(),
+        Some(v) => ctx.to_zstr(v).as_bytes().to_vec(),
         None => b",".to_vec(),
     };
 
@@ -1104,17 +1096,15 @@ fn decimal_parts(v: f64) -> (Vec<u8>, Vec<u8>) {
 /// slice of `$haystack` from the first occurrence of `$needle` to the end, or
 /// the part before it when `$before_needle` is true; `false` if not found.
 pub fn strstr(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let haystack = convert::to_zstr(
+    let haystack = ctx.to_zstr(
         args.first().ok_or_else(|| {
             PhpError::Error("strstr() expects at least 2 arguments, 0 given".to_string())
         })?,
-        ctx.diags,
     );
-    let needle = convert::to_zstr(
+    let needle = ctx.to_zstr(
         args.get(1).ok_or_else(|| {
             PhpError::Error("strstr() expects at least 2 arguments, 1 given".to_string())
         })?,
-        ctx.diags,
     );
     let before = matches!(args.get(2), Some(v) if convert::to_bool(v, ctx.diags));
     let hay = haystack.as_bytes();
@@ -1130,17 +1120,15 @@ pub fn strstr(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// `stristr`: case-insensitive `strstr`. The match is located case-insensitively
 /// but the returned slice preserves the original casing of `$haystack`.
 pub fn stristr(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let haystack = convert::to_zstr(
+    let haystack = ctx.to_zstr(
         args.first().ok_or_else(|| {
             PhpError::Error("stristr() expects at least 2 arguments, 0 given".to_string())
         })?,
-        ctx.diags,
     );
-    let needle = convert::to_zstr(
+    let needle = ctx.to_zstr(
         args.get(1).ok_or_else(|| {
             PhpError::Error("stristr() expects at least 2 arguments, 1 given".to_string())
         })?,
-        ctx.diags,
     );
     let before = matches!(args.get(2), Some(v) if convert::to_bool(v, ctx.diags));
     let hay = haystack.as_bytes();
@@ -1158,17 +1146,15 @@ pub fn stristr(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// `strrchr($haystack, $needle)`: the slice from the *last* occurrence of the
 /// first byte of `$needle` to the end of `$haystack`; `false` if not present.
 pub fn strrchr(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let haystack = convert::to_zstr(
+    let haystack = ctx.to_zstr(
         args.first().ok_or_else(|| {
             PhpError::Error("strrchr() expects at least 2 arguments, 0 given".to_string())
         })?,
-        ctx.diags,
     );
-    let needle = convert::to_zstr(
+    let needle = ctx.to_zstr(
         args.get(1).ok_or_else(|| {
             PhpError::Error("strrchr() expects at least 2 arguments, 1 given".to_string())
         })?,
-        ctx.diags,
     );
     let hay = haystack.as_bytes();
     let Some(&ch) = needle.as_bytes().first() else {
@@ -1645,7 +1631,7 @@ pub fn str_word_count(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     }
     let (mask, has_list) = match args.get(2) {
         None | Some(Zval::Null) => ([false; 256], false),
-        Some(v) => (word_charmask(convert::to_zstr(v, ctx.diags).as_bytes()), true),
+        Some(v) => (word_charmask(ctx.to_zstr(v).as_bytes()), true),
     };
     if s.is_empty() {
         return Ok(if format == 0 { Zval::Long(0) } else { Zval::Array(Rc::new(PhpArray::new())) });
@@ -1792,7 +1778,7 @@ pub fn wordwrap(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         .unwrap_or(75)
         .max(1) as usize;
     let brk = match args.get(2) {
-        Some(v) => convert::to_zstr(v, ctx.diags).as_bytes().to_vec(),
+        Some(v) => ctx.to_zstr(v).as_bytes().to_vec(),
         None => b"\n".to_vec(),
     };
     let cut = match args.get(3) {
@@ -1849,19 +1835,17 @@ fn haystack_needle(
     ctx: &mut Ctx,
     fname: &str,
 ) -> Result<(Vec<u8>, Vec<u8>), PhpError> {
-    let hay = convert::to_zstr(
+    let hay = ctx.to_zstr(
         args.first().ok_or_else(|| {
             PhpError::Error(format!("{fname}() expects at least 2 arguments, 0 given"))
         })?,
-        ctx.diags,
     )
     .as_bytes()
     .to_vec();
-    let needle = convert::to_zstr(
+    let needle = ctx.to_zstr(
         args.get(1).ok_or_else(|| {
             PhpError::Error(format!("{fname}() expects at least 2 arguments, 1 given"))
         })?,
-        ctx.diags,
     )
     .as_bytes()
     .to_vec();
@@ -2141,7 +2125,7 @@ fn strtr_array(s: &[u8], map: &PhpArray, ctx: &mut Ctx) -> Vec<u8> {
             ));
             continue;
         }
-        let val = convert::to_zstr(v, ctx.diags).as_bytes().to_vec();
+        let val = ctx.to_zstr(v).as_bytes().to_vec();
         pairs.push((key, val));
     }
     // Longest key first; the stable sort keeps insertion order among equal lengths.
@@ -2194,7 +2178,7 @@ pub fn chunk_split(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         ));
     }
     let sep = match args.get(2) {
-        Some(v) => convert::to_zstr(v, ctx.diags).as_bytes().to_vec(),
+        Some(v) => ctx.to_zstr(v).as_bytes().to_vec(),
         None => b"\r\n".to_vec(),
     };
     let len = len as usize;
@@ -2815,12 +2799,12 @@ fn php_version_compare(o1: &[u8], o2: &[u8]) -> i64 {
 
 /// `version_compare($v1, $v2, $operator = null)`.
 pub fn version_compare(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let v1 = convert::to_zstr(&args[0], ctx.diags);
-    let v2 = convert::to_zstr(&args[1], ctx.diags);
+    let v1 = ctx.to_zstr(&args[0]);
+    let v2 = ctx.to_zstr(&args[1]);
     let cmp = php_version_compare(v1.as_bytes(), v2.as_bytes());
     let op = match args.get(2) {
         None | Some(Zval::Null) => return Ok(Zval::Long(cmp)),
-        Some(o) => convert::to_zstr(o, ctx.diags),
+        Some(o) => ctx.to_zstr(o),
     };
     let result = match op.as_bytes() {
         b"<" | b"lt" => cmp == -1,

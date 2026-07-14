@@ -1,6 +1,6 @@
 --TEST--
 unsupported construct -> skip
 --FILE--
-<?php global $$name; echo 1;
+<?php (void) 1; echo 1;
 --EXPECT--
 1

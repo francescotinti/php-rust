@@ -55,11 +55,10 @@ const B64_ALPHABET: &[u8; 64] =
 
 /// `base64_encode(string $string): string` — standard alphabet, `=` padding.
 pub fn base64_encode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let s = convert::to_zstr(
+    let s = ctx.to_zstr(
         args.first().ok_or_else(|| {
             PhpError::Error("base64_encode() expects exactly 1 argument, 0 given".to_string())
         })?,
-        ctx.diags,
     );
     let data = s.as_bytes();
     let mut out = Vec::with_capacity(data.len().div_ceil(3) * 4);
@@ -112,11 +111,10 @@ fn b64_reverse(c: u8) -> i16 {
 /// only whitespace, fails on an invalid byte, on any data after `=`, on a single
 /// leftover char in the final group, and on malformed padding length.
 pub fn base64_decode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let s = convert::to_zstr(
+    let s = ctx.to_zstr(
         args.first().ok_or_else(|| {
             PhpError::Error("base64_decode() expects at least 1 argument, 0 given".to_string())
         })?,
-        ctx.diags,
     );
     let strict = binary_flag(args, 1);
     let data = s.as_bytes();
@@ -186,7 +184,7 @@ fn arg_str(args: &[Zval], ctx: &mut Ctx, name: &str) -> Result<php_types::ZStr, 
     let v = args
         .first()
         .ok_or_else(|| PhpError::Error(format!("{name}() expects at least 1 argument, 0 given")))?;
-    Ok(convert::to_zstr(v, ctx.diags))
+    Ok(ctx.to_zstr(v))
 }
 
 /// `md5(string $string, bool $binary = false): string`.
@@ -439,17 +437,15 @@ fn crc_be(crc: u32) -> [u8; 4] {
 /// Supports the common algorithms used across the test corpus. An unknown
 /// algorithm is a `ValueError` (PHP 8 behaviour).
 pub fn hash(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let algo = convert::to_zstr(
+    let algo = ctx.to_zstr(
         args.first().ok_or_else(|| {
             PhpError::Error("hash() expects at least 2 arguments, 0 given".to_string())
         })?,
-        ctx.diags,
     );
-    let data = convert::to_zstr(
+    let data = ctx.to_zstr(
         args.get(1).ok_or_else(|| {
             PhpError::Error("hash() expects at least 2 arguments, 1 given".to_string())
         })?,
-        ctx.diags,
     );
     let binary = binary_flag(args, 2);
     let algo = algo.as_bytes();
@@ -583,23 +579,20 @@ pub(crate) fn hmac_raw(algo: &[u8], key: &[u8], data: &[u8]) -> Option<Vec<u8>> 
 /// authentication code. A non-cryptographic / unknown algorithm is a
 /// `ValueError` (PHP's "valid cryptographic hashing algorithm").
 pub fn hash_hmac(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let algo = convert::to_zstr(
+    let algo = ctx.to_zstr(
         args.first().ok_or_else(|| {
             PhpError::Error("hash_hmac() expects at least 3 arguments, 0 given".to_string())
         })?,
-        ctx.diags,
     );
-    let data = convert::to_zstr(
+    let data = ctx.to_zstr(
         args.get(1).ok_or_else(|| {
             PhpError::Error("hash_hmac() expects at least 3 arguments, 1 given".to_string())
         })?,
-        ctx.diags,
     );
-    let key = convert::to_zstr(
+    let key = ctx.to_zstr(
         args.get(2).ok_or_else(|| {
             PhpError::Error("hash_hmac() expects at least 3 arguments, 2 given".to_string())
         })?,
-        ctx.diags,
     );
     let binary = binary_flag(args, 3);
     let raw = hmac_raw(algo.as_bytes(), key.as_bytes(), data.as_bytes()).ok_or_else(|| {

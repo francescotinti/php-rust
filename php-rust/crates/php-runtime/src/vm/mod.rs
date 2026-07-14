@@ -528,6 +528,24 @@ pub(crate) fn run_module_with_hir<'m>(
     // exist, so a script that never mentions `$_SERVER` is unaffected.
     if let (Some(argv), Some(prog)) = (argv, main_hir) {
         seed_cli_superglobals(&mut vm.superglobals, &mut vm.frames[0].slots, &prog.slots, argv);
+        // Zend's CLI SAPI registers `$argv`/`$argc` in the global symbol table
+        // unconditionally (register_argc_argv=On), so `$GLOBALS['argv']` works
+        // from ANY unit — wp-cli's Runner reads it from a required file while
+        // the entry script never mentions it. Register the names in the
+        // cross-unit global registry; the named-slot path above already filled
+        // them when the main script declares the variables.
+        let mut arr = PhpArray::new();
+        for a in argv {
+            let _ = arr.append(Zval::Str(PhpStr::new(a.to_vec())));
+        }
+        let slot = vm.global_slot_by_name(b"argv");
+        if matches!(vm.frames[0].slots[slot], Zval::Undef) {
+            vm.frames[0].slots[slot] = Zval::Array(Rc::new(arr));
+        }
+        let slot = vm.global_slot_by_name(b"argc");
+        if matches!(vm.frames[0].slots[slot], Zval::Undef) {
+            vm.frames[0].slots[slot] = Zval::Long(argv.len() as i64);
+        }
     }
     // `php -d`-style INI overrides (phpt --INI-- sections): a registered
     // directive gets the value as its startup default too (ini_restore under
@@ -6142,6 +6160,32 @@ impl<'m> Vm<'m> {
         Ok(())
     }
 
+    /// `global $$x` (Op::BindGlobalDyn): the dynamic-name counterpart of the
+    /// static `global $x` BindRef pair. Resolves-or-creates the global cell by
+    /// name (a fresh cell is created as NULL, matching Zend's global fetch —
+    /// the entry appears in `$GLOBALS` even before any assignment), promotes
+    /// it to a shared cell, and installs the alias into the same-named local:
+    /// a named frame slot when the function declares one, otherwise the
+    /// dynamic side-table (`Frame::dyn_vars`).
+    fn bind_global_dyn(&mut self, top: usize, name: &[u8]) -> Result<(), PhpError> {
+        if name == b"this" {
+            return Err(PhpError::Error("Cannot re-assign $this".to_string()));
+        }
+        let cell = if let Some(idx) = crate::bytecode::superglobal_index(name) {
+            make_cell(&mut self.superglobals[idx as usize])
+        } else {
+            let slot = self.global_slot_by_name(name);
+            make_cell(&mut self.frames[0].slots[slot])
+        };
+        let named = self.frames[top].func.slot_names.iter().position(|n| n.as_ref() == name);
+        if let Some(s) = named {
+            self.frames[top].slots[s] = Zval::Ref(cell);
+        } else {
+            self.frames[top].dyn_vars.insert(name.to_vec(), Zval::Ref(cell));
+        }
+        Ok(())
+    }
+
     /// Dispatch a by-reference-first host builtin (`usort`, Session C): `slot` is
     /// the array variable in the current (caller) frame, taken by reference; `rest`
     /// are the remaining by-value arguments. The canonical name comes from
@@ -6667,7 +6711,7 @@ impl<'m> Vm<'m> {
     /// Install a frame for an anonymous closure: bind its captured variables into
     /// their slots, then the call arguments into the leading parameter slots, and
     /// the bound `$this`. Mirrors `eval::call_closure` (captures before params).
-    fn push_closure_frame(&mut self, cl: &Closure, args: Vec<Zval>) -> Result<(), PhpError> {
+    fn push_closure_frame(&mut self, cl: &Closure, mut args: Vec<Zval>) -> Result<(), PhpError> {
         // A closure carries a module-local `fn_idx` plus the `module_id` of the
         // unit that defined it, so it stays callable after control leaves that
         // module (e.g. a closure made in an `include`/`eval` unit and invoked
@@ -6679,6 +6723,12 @@ impl<'m> Vm<'m> {
                 "closure is not callable in this context".to_string(),
             ));
         };
+        // Deferred place arguments (SEND_VAR_EX, from a dynamic `$f(...)`)
+        // resolve against the closure's by-ref mask now that the body is known.
+        if args.iter().any(|a| matches!(a, Zval::ArgPlace(_))) {
+            let top = self.frames.len() - 1;
+            self.materialize_arg_places(top, &mut args, Some(callee))?;
+        }
         let mut frame = Frame::new(callee, m);
         // `static $x` in the body persists per this closure *instance* (id).
         frame.closure_id = Some(cl.id);

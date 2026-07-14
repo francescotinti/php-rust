@@ -381,6 +381,38 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-14 (sessione WordPress-1): 🏁 **wp-cli da sorgente gira end-to-end**
+  (`wp --info` / `wp cli version` a parità con l'oracle, modulo campi
+  ambiente-dipendenti: PHP binary=phpr, memory_limit=-1 senza php.ini).
+  Fix engine, tutti oracle-pinned:
+  **(a) `global $$x` / `global ${expr}`** (StmtKind::Global → Vec<GlobalItem>
+  Static/Dyn; nuovo Op::BindGlobalDyn: resolve-or-create della cella globale
+  per NOME runtime via global_slot_by_name — creata NULL come lo
+  zend_hash_add del global fetch, appare in $GLOBALS anche senza assign — e
+  alias nello slot named o in Frame::dyn_vars; wp-config import di wp-cli);
+  **(b) compound assign su variable-variable** (`$$n .= r`: desugar
+  read-op-write col NOME materializzato UNA volta in un temp; `??=` resta
+  assente, correct-or-absent);
+  **(c) SEND_VAR_EX per chiamate a funzione non risolte al compile time**
+  (CallValue/CallNsFallback e `$f(...)` dinamico ora passano gli argomenti
+  via push_dyn_args — PushRef/ArgPlace — e invoke_named/push_closure_frame
+  materializzano contro la by-ref mask del callee risolto; PRIMA un
+  `&$param` di una funzione cross-unit — `Utils\proc_open_compat(&$pipes)`
+  di wp-cli — riceveva una COPIA. Residuo documentato: argomento non-place
+  a param by-ref resta by-value silenzioso dove Zend darebbe Error);
+  **(d) coercizione Stringable negli argomenti string dei builtin puri**
+  (~30 nomi aggiunti alla value_builtin_string_coerces + swap
+  convert::to_zstr→ctx.to_zstr in string/url/crypto/encoding.rs: substr su
+  DirectoryIterator, md5, trim, strpos, urlencode, …);
+  **(e) DirectoryIterator::__toString = getFilename()** (override Zend; via
+  SplFileInfo ereditato dava il PATHNAME) e **ordine readdir** per
+  DirectoryIterator/FilesystemIterator/RecursiveDirectoryIterator
+  (scandir(SCANDIR_SORT_NONE), byte-id con l'oracle su APFS);
+  **(f) `$argv`/`$argc` registrati nel global registry cross-unit**
+  (Zend CLI li mette nel global symbol table SEMPRE con
+  register_argc_argv=On; prima erano seminati solo se l'unità MAIN li
+  menzionava — wp-cli li legge da un file required e perdeva TUTTI gli
+  argomenti, cadendo su `help`, il cui pager via proc_open causava il hang).
 - 2026-07-14 (sessione 8): ✅ **CHIUSA la suite symfony/http-kernel: 1663
   test, 0E/0F** (da 0E/25F). Fix engine, tutti oracle-pinned:
   **(a) visibilità del costruttore a `new`** (`check_new_ctor_access` nei 3

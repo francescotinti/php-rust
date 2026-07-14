@@ -753,18 +753,29 @@ impl<'a> FnCompiler<'a> {
             }
             StmtKind::Switch { subject, cases } => self.switch(subject, cases)?,
             StmtKind::Try { body, catches, finally } => self.try_stmt(body, catches, finally)?,
-            StmtKind::Global(bindings) => {
+            StmtKind::Global(items) => {
                 // REF-1. At script scope the named variable *is* the global
                 // (main's frame is the global frame), so `global` is a no-op —
                 // matching the tree-walker (D-12.2). Inside a function, alias each
                 // local slot to its global-frame cell via a shared reference.
-                if !self.is_main {
-                    for b in bindings {
-                        self.emit(Op::BindRef {
-                            target: DimBase::Local(b.local),
-                            source: DimBase::Global(b.global),
-                        });
-                        self.emit(Op::Pop); // statement: drop the BindRef value
+                for item in items {
+                    match item {
+                        crate::hir::GlobalItem::Static(b) => {
+                            if !self.is_main {
+                                self.emit(Op::BindRef {
+                                    target: DimBase::Local(b.local),
+                                    source: DimBase::Global(b.global),
+                                });
+                                self.emit(Op::Pop); // statement: drop the BindRef value
+                            }
+                        }
+                        // `global $$x`: the name resolves at run time; the op
+                        // also creates the global cell (as NULL) when missing,
+                        // so it runs at script scope too.
+                        crate::hir::GlobalItem::Dyn(name) => {
+                            self.expr(name)?;
+                            self.emit(Op::BindGlobalDyn);
+                        }
                     }
                 }
             }

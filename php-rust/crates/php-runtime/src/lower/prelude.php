@@ -2041,7 +2041,8 @@ class FilesystemIterator extends DirectoryIterator {
         parent::__construct($directory);
         $this->__fsdir = rtrim($directory, '/');
         $this->__fsflags = $flags;
-        $names = scandir($directory);
+        // Zend iterates in readdir (OS) order, not scandir's sorted default.
+        $names = scandir($directory, SCANDIR_SORT_NONE);
         if (($flags & self::SKIP_DOTS) === self::SKIP_DOTS) {
             $keep = [];
             foreach ($names as $n) { if ($n !== '.' && $n !== '..') { $keep[] = $n; } }
@@ -2093,7 +2094,8 @@ class DirectoryIterator extends SplFileInfo implements SeekableIterator {
             throw new UnexpectedValueException("DirectoryIterator::__construct($directory): Failed to open directory: No such file or directory");
         }
         $this->__dir = rtrim($directory, '/');
-        $this->__names = scandir($directory);
+        // Zend iterates in readdir (OS) order, not scandir's sorted default.
+        $this->__names = scandir($directory, SCANDIR_SORT_NONE);
         $this->__disync();
     }
     // NB: helper names are per-class unique (__dicur/__disync) — phpr resolves
@@ -2115,6 +2117,10 @@ class DirectoryIterator extends SplFileInfo implements SeekableIterator {
         $n = $this->__names[$this->__pos] ?? '';
         return $n === '.' || $n === '..';
     }
+    // Zend: DirectoryIterator stringifies to the current entry's FILENAME
+    // (SplFileInfo's inherited one would give the pathname) — wp-cli builds
+    // "$dir/$filename" include paths from it.
+    public function __toString(): string { return $this->getFilename(); }
 }
 class RecursiveDirectoryIterator extends FilesystemIterator implements RecursiveIterator {
     private $__dir;
@@ -2132,7 +2138,8 @@ class RecursiveDirectoryIterator extends FilesystemIterator implements Recursive
         parent::__construct($directory, $flags);
         $this->__dir = rtrim($directory, '/');
         $this->__flags = $flags;
-        $names = scandir($directory);
+        // Zend iterates in readdir (OS) order, not scandir's sorted default.
+        $names = scandir($directory, SCANDIR_SORT_NONE);
         if (($flags & self::SKIP_DOTS) === self::SKIP_DOTS) {
             $keep = [];
             foreach ($names as $n) { if ($n !== '.' && $n !== '..') { $keep[] = $n; } }
