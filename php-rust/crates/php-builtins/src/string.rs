@@ -278,17 +278,21 @@ fn replacement_pairs(search: &Zval, replace: &Zval, ctx: &mut Ctx) -> Vec<(Vec<u
 
 /// Replace every non-overlapping occurrence of `from` (non-empty) in `s`.
 fn replace_all(s: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(s.len());
-    let mut i = 0;
-    while i < s.len() {
-        if i + from.len() <= s.len() && &s[i..i + from.len()] == from {
-            out.extend_from_slice(to);
-            i += from.len();
-        } else {
-            out.push(s[i]);
-            i += 1;
-        }
+    // memmem-accelerated left-to-right non-overlapping replacement (the
+    // byte-at-a-time scan dominated WordPress profiles — the SQLite
+    // translator str_replace's every query). Semantics unchanged.
+    let mut it = memchr::memmem::find_iter(s, from).peekable();
+    if it.peek().is_none() {
+        return s.to_vec();
     }
+    let mut out = Vec::with_capacity(s.len());
+    let mut last = 0;
+    for pos in it {
+        out.extend_from_slice(&s[last..pos]);
+        out.extend_from_slice(to);
+        last = pos + from.len();
+    }
+    out.extend_from_slice(&s[last..]);
     out
 }
 

@@ -20,6 +20,13 @@ class Sqlite extends \PDO {
     public const OK = 0;
     public const DENY = 1;
     public const IGNORE = 2;
+    // PHP 8.4 driver method: a PHP callable as a sqlite scalar function
+    // (the WordPress sqlite-database-integration plugin registers ~45 MySQL
+    // compatibility functions through this). Delegates to the parent's BC
+    // sqliteCreateFunction, which holds the private connection handle.
+    public function createFunction(string $function_name, callable $callback, int $num_args = -1, int $flags = 0): bool {
+        return $this->__sqliteUdf($function_name, $callback, $num_args, $flags);
+    }
 }
 
 namespace Dom;

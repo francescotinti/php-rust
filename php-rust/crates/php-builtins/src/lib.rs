@@ -137,6 +137,7 @@ pub fn registry() -> Registry {
     add(b"__curl_init", curl::__curl_init);
     add(b"__curl_setopt", curl::__curl_setopt);
     add(b"__curl_exec", curl::__curl_exec);
+    add(b"__curl_set_cb_error", curl::__curl_set_cb_error);
     add(b"__curl_errno", curl::__curl_errno);
     add(b"__curl_error", curl::__curl_error);
     add(b"__curl_reset", curl::__curl_reset);

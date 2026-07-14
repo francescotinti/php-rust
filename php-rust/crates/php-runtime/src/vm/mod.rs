@@ -430,6 +430,7 @@ pub(crate) fn run_module_with_hir<'m>(
         signal_handlers: HashMap::new(),
         async_signals: false,
         uncaught_throwable: None,
+        retired_main: None,
         lazy_init: HashMap::new(),
         lazy_props: HashMap::new(),
         var_dump_debug: HashMap::new(),
@@ -771,6 +772,13 @@ struct Frame<'m> {
     /// gets fresh statics. Non-closure frames (`None`) use the program-global
     /// `Vm::statics`; closure frames key `Vm::closure_statics` by `(id, static_id)`.
     closure_id: Option<u32>,
+    /// Set on an include/eval unit frame that shares the includer's variable
+    /// scope (`drive_unit`'s `scope_bridge`): the caller frame index. In Zend
+    /// both run on ONE symbol table, so `global $x` inside the included file
+    /// rebinds the *shared* symbol — `bind_global_dyn` walks this chain and
+    /// installs the alias in every bridged ancestor too (wp-settings.php /
+    /// plugin.php require'd from inside WP_CLI's Runner::load_wordpress()).
+    bridge_caller: Option<usize>,
 }
 
 impl<'m> Frame<'m> {
@@ -803,6 +811,7 @@ impl<'m> Frame<'m> {
             clone_init: false,
             in_destructor: false,
             closure_id: None,
+            bridge_caller: None,
         }
     }
 }
@@ -1259,6 +1268,12 @@ struct Vm<'m> {
     /// trace (an engine error reaches the renderer after its frames are popped).
     /// Cleared when an exception is caught; the deepest capture is kept.
     uncaught_throwable: Option<Zval>,
+    /// The script `main` frame, parked when its `Ret` pops it: Zend tears the
+    /// global variables down only at request shutdown, AFTER the
+    /// `register_shutdown_function` callbacks ran — those callbacks re-install
+    /// this frame as their bottom frame so `global $x` / `$GLOBALS` still see
+    /// the script's values (`run_shutdown_functions`).
+    retired_main: Option<Frame<'m>>,
     /// Pending initializer closures of *uninitialized* lazy objects (PHP 8.4),
     /// keyed by object id. The `Object.lazy` marker says an object is lazy; this
     /// holds the ghost initializer / proxy factory until the object is realized
@@ -2510,6 +2525,15 @@ impl<'m> Vm<'m> {
             let lower = cc.name.to_ascii_lowercase();
             if let Some(&existing) = self.class_index.get(&lower) {
                 class_remap.push(existing);
+            } else if i < self.classes.len() && self.classes[i].name == cc.name {
+                // A seed-image entry whose name is NOT registered: a
+                // still-undeclared CONDITIONAL class of an earlier unit. The
+                // seed prefix mirrors the runtime table 1:1 (accumulate_seed
+                // keeps ids aligned), so remap by identity — re-appending it
+                // as "new" would eagerly register the name and flip the outer
+                // `if ( ! class_exists( … ) )` guard to skip its whole block
+                // (WordPress pomo/translations.php via pomo/mo.php).
+                class_remap.push(i);
             } else {
                 let new_id = self.classes.len() + new_locals.len();
                 class_remap.push(new_id);
@@ -2550,6 +2574,14 @@ impl<'m> Vm<'m> {
         // when the unit throws. Global scope aligns by index (the unit was
         // lowered seeded on `seed_globals`, so its leading slots mirror the
         // global frame); a function scope matches by name.
+        // Names the unit mentions that the includer does not have yet: PHP
+        // defines them in the SHARED scope when the unit assigns them (wp-cli
+        // collects wp-config.php's `$table_prefix` from an eval through
+        // get_defined_vars()). Bridge each through a fresh cell and publish it
+        // into the includer's dyn_vars after the run — but only if the unit
+        // actually DEFINED it (an eval that merely reads `$x` must not create
+        // `$x` in the caller).
+        let mut fresh_bridged: Vec<(Vec<u8>, Rc<RefCell<Zval>>)> = Vec::new();
         if let Some(caller) = scope_bridge {
             let names = &leaked.main.slot_names;
             if caller == 0 {
@@ -2572,6 +2604,10 @@ impl<'m> Vm<'m> {
                         // (extract() in HtmlErrorRenderer::include feeds its
                         // template context this way) shares the same way.
                         frame.slots[i] = Zval::Ref(make_cell(dyn_slot));
+                    } else {
+                        let cell = Rc::new(RefCell::new(Zval::Undef));
+                        frame.slots[i] = Zval::Ref(Rc::clone(&cell));
+                        fresh_bridged.push((name.to_vec(), cell));
                     }
                 }
             }
@@ -2583,10 +2619,24 @@ impl<'m> Vm<'m> {
             frame.this = self.frames[caller].this.clone();
             frame.class = self.frames[caller].class;
             frame.static_class = self.frames[caller].static_class;
+            // A `global` statement in this unit rebinds the SHARED symbol —
+            // record the includer so bind_global_dyn can walk the chain.
+            frame.bridge_caller = Some(caller);
         }
         self.frames.push(frame);
         let outcome = self.drive_to_return(baseline);
         self.module = saved;
+        // Publish unit-introduced variables into the includer scope (see
+        // fresh_bridged above): only names the unit left DEFINED.
+        if let Some(caller) = scope_bridge {
+            if caller != 0 && caller < self.frames.len() {
+                for (name, cell) in fresh_bridged {
+                    if !matches!(&*cell.borrow(), Zval::Undef) {
+                        self.frames[caller].dyn_vars.insert(name, Zval::Ref(cell));
+                    }
+                }
+            }
+        }
         // Register the unit's user functions (those not already provided by the
         // caller's module) so they are callable by name afterwards. Functions are
         // hoisted at unit load, so do this even if the body later threw.
@@ -4371,7 +4421,19 @@ impl<'m> Vm<'m> {
         frame.class = cur_class;
         frame.static_class = cur_class;
         self.frames.push(frame);
-        self.drive_to_return(baseline)
+        // The thunk is speculative: its caller reports a failure through the
+        // descriptor (defaultError) instead of a fatal, so a throwable stashed
+        // for `render_fatal` while unwinding THIS drive must not stay armed —
+        // it would mask a later, unrelated fatal with this stale trace (wp-cli
+        // reflects get_wp_details($abspath = ABSPATH) at bootstrap; the stash
+        // detonated on `wp option get` long after the Err was consumed).
+        let saved = self.uncaught_throwable.take();
+        let out = self.drive_to_return(baseline);
+        if let Some(cur) = self.uncaught_throwable.take() {
+            self.gc_note(&cur);
+        }
+        self.uncaught_throwable = saved;
+        out
     }
 
     /// Build the signature descriptor array a `ReflectionFunction`/`ReflectionMethod`
@@ -5107,6 +5169,8 @@ impl<'m> Vm<'m> {
             b"passthru" => self.ho_passthru(args)?,
             b"grapheme_extract" => self.ho_grapheme_extract(args)?,
             b"similar_text" => self.ho_similar_text(args)?,
+            b"str_replace" => self.ho_str_replace_out(args, false)?,
+            b"str_ireplace" => self.ho_str_replace_out(args, true)?,
             b"is_callable" => self.ho_is_callable_out(args)?,
             // Two out-params: (result, $output array, Some($result_code)).
             b"exec" => return self.ho_exec(args),
@@ -6177,11 +6241,23 @@ impl<'m> Vm<'m> {
             let slot = self.global_slot_by_name(name);
             make_cell(&mut self.frames[0].slots[slot])
         };
-        let named = self.frames[top].func.slot_names.iter().position(|n| n.as_ref() == name);
-        if let Some(s) = named {
-            self.frames[top].slots[s] = Zval::Ref(cell);
-        } else {
-            self.frames[top].dyn_vars.insert(name.to_vec(), Zval::Ref(cell));
+        // An include/eval unit shares the includer's variable scope (ONE Zend
+        // symbol table): `global` there rebinds the shared symbol, so install
+        // the alias in every bridged ancestor as well — up to, but not into,
+        // the global frame itself (frame 0 holds the cell already).
+        let mut f = top;
+        loop {
+            let named =
+                self.frames[f].func.slot_names.iter().position(|n| n.as_ref() == name);
+            if let Some(s) = named {
+                self.frames[f].slots[s] = Zval::Ref(cell.clone());
+            } else {
+                self.frames[f].dyn_vars.insert(name.to_vec(), Zval::Ref(cell.clone()));
+            }
+            match self.frames[f].bridge_caller {
+                Some(caller) if caller != 0 => f = caller,
+                _ => break,
+            }
         }
         Ok(())
     }
@@ -9560,6 +9636,7 @@ host_builtins! {
     b"__pdo_close" => vm.ho_pdo_close(args),
     b"__pdo_sqlite_version" => vm.ho_pdo_sqlite_version(),
     b"__pdo_exec" => vm.ho_pdo_exec(args),
+    b"__pdo_create_function" => vm.ho_pdo_create_function(args),
     b"__pdo_run" => vm.ho_pdo_run(args),
     b"__pdo_prepare" => vm.ho_pdo_prepare(args),
     b"__pdo_last_id" => vm.ho_pdo_last_id(args),
@@ -9686,6 +9763,19 @@ host_builtins! {
                 if !matches!(v, Zval::Undef) {
                     arr.insert(Key::from_bytes(name), v);
                 }
+            }
+        }
+        // Dynamically-created names too: an eval'd unit publishing a NEW
+        // variable into this scope lands in dyn_vars (wp-cli reads
+        // wp-config.php's $table_prefix this way), as do $$name writes.
+        let dyn_pairs: Vec<(Vec<u8>, Zval)> = vm.frames[top]
+            .dyn_vars
+            .iter()
+            .map(|(k, v)| (k.clone(), v.deref_clone()))
+            .collect();
+        for (k, v) in dyn_pairs {
+            if !matches!(v, Zval::Undef) && !arr.contains_key(&Key::from_bytes(&k)) {
+                arr.insert(Key::from_bytes(&k), v);
             }
         }
         Ok(Zval::Array(Rc::new(arr)))
@@ -10036,6 +10126,11 @@ pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usiz
         (b"grapheme_extract", 4),
         // `&$percent` receives the similarity percentage.
         (b"similar_text", 2),
+        // `&$count` (number of replacements) — WordPress's _deep_replace()
+        // loops until it reads 0. Compiled calls WITHOUT the fourth argument
+        // keep the registry fast path (see `FnCompiler::call`).
+        (b"str_replace", 3),
+        (b"str_ireplace", 3),
         // `&$callable_name` receives the display name (zend_get_callable_name).
         (b"is_callable", 2),
         // `&$error_code` (#2); `&$error_message` (#3) is the second out-param.
@@ -10518,7 +10613,17 @@ fn ref_base_mut<'f>(
 ) -> &'f mut Zval {
     match base {
         DimBase::Local(s) => &mut frames[top].slots[s as usize],
-        DimBase::Global(s) => &mut frames[0].slots[s as usize],
+        DimBase::Global(s) => {
+            // The bottom frame can be smaller than the cross-unit global
+            // registry (a synthetic shutdown-phase frame, or a main whose
+            // unit declared fewer top-level names than later includes added):
+            // grow it — the registry indices are stable, missing cells are
+            // simply still-undefined globals.
+            if s as usize >= frames[0].slots.len() {
+                frames[0].slots.resize_with(s as usize + 1, || Zval::Undef);
+            }
+            &mut frames[0].slots[s as usize]
+        }
         DimBase::Superglobal(i) => &mut superglobals[i as usize],
     }
 }

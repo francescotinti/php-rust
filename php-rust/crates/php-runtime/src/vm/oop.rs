@@ -670,8 +670,19 @@ impl<'m> Vm<'m> {
         if self.shutdown_fns.is_empty() {
             return;
         }
-        self.frames.clear();
-        self.frames.push(Frame::new(&self.module.main, self.module));
+        // Zend runs shutdown callbacks BEFORE the globals teardown: the bottom
+        // (global) frame must survive, because its slots ARE the global
+        // variables (`global $upgrading` in WP_Fatal_Error_Handler::handle, or
+        // any callback reading $GLOBALS). After a normal end the frame was
+        // parked by `Ret` (`retired_main`); after a fatal it is still the
+        // unwind floor. The synthetic stand-in covers the no-frames edge.
+        self.frames.truncate(1);
+        if self.frames.is_empty() {
+            match self.retired_main.take() {
+                Some(f) => self.frames.push(f),
+                None => self.frames.push(Frame::new(&self.module.main, self.module)),
+            }
+        }
         for (cb, args) in std::mem::take(&mut self.shutdown_fns) {
             // `exit`/`die` in a shutdown callback aborts the remaining callbacks
             // (PHP). Other throws are swallowed (a separate fatal is not modelled).
@@ -679,7 +690,7 @@ impl<'m> Vm<'m> {
                 break;
             }
         }
-        self.frames.clear();
+        self.frames.truncate(1);
     }
 
     pub(super) fn run_shutdown_destructors(&mut self) {

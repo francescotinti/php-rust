@@ -10,6 +10,7 @@ hostname = "0.4"
 php-types.workspace = true
 php-runtime.workspace = true
 time = "0.3.49"
+memchr = "2"
 encoding_rs = "0.8.35"
 unicode-segmentation = "1.13"
 num-bigint = "0.4"

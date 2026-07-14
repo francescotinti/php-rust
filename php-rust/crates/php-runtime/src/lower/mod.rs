@@ -241,6 +241,7 @@ fn lower_source_impl(
                 low.globals.slot_for(g);
             }
             low.classes = sclasses.to_vec();
+            low.seed_class_len = sclasses.len();
             let mut ci: HashMap<Vec<u8>, usize> = HashMap::new();
             for (i, cd) in sclasses.iter().enumerate() {
                 ci.entry(cd.name.to_ascii_lowercase()).or_insert(i);
@@ -592,10 +593,11 @@ const PRELUDE_SRC: &[u8] = include_bytes!("prelude.php");
 
 /// The namespaced prelude tail: PHP forbids `namespace` after global code, so
 /// `Pdo\Sqlite` (PHP 8.4's driver subclass) is its own unit, hoisted into the
-/// same class table by [`lower_prelude_uncached`]. The sqlite-specific UDF
-/// family (createFunction/createAggregate/createCollation/setAuthorizer) is
-/// NOT declared: it needs PHP callbacks running inside sqlite's step loop
-/// (VM re-entrancy), so those calls keep the honest undefined-method error.
+/// same class table by [`lower_prelude_uncached`]. `createFunction` (and the
+/// BC `PDO::sqliteCreateFunction`) run PHP callbacks inside sqlite's step
+/// loop via the ACTIVE_VM re-entry pointer in vm/pdo.rs; the rest of the UDF
+/// family (createAggregate/createCollation/setAuthorizer) keeps the honest
+/// undefined-method error.
 const PRELUDE_NS_SRC: &[u8] = include_bytes!("prelude_ns.php");
 
 /// The `BcMath\Number` value object (PHP 8.4+): its own namespaced unit,
@@ -792,6 +794,11 @@ struct Lowerer<'f> {
     /// names are case-insensitive), step 19.
     classes: Vec<ClassDecl>,
     class_index: HashMap<Vec<u8>, usize>,
+    /// How many leading `classes` entries came from the cross-unit seed image
+    /// (0 for a standalone/main lowering). A statement-level class whose name
+    /// maps into the seed prefix is a RE-declaration from a re-included file
+    /// — it must lower fresh, not be suppressed (bug63741).
+    seed_class_len: usize,
     /// Lowered traits, keyed by ASCII-lowercased name (step 21). Held only in the
     /// Lowerer — traits are not types and never enter `Program.classes`. Each
     /// entry is fully resolved (nested `use` already flattened), so a consuming
@@ -933,6 +940,7 @@ impl<'f> Lowerer<'f> {
             strict: false,
             classes: Vec::new(),
             class_index: HashMap::new(),
+            seed_class_len: 0,
             traits: HashMap::new(),
             cur_class: None,
             cur_function: None,
@@ -979,6 +987,11 @@ impl<'f> Lowerer<'f> {
     fn resolve_qualified(&self, raw: &[u8]) -> Box<[u8]> {
         let first = first_segment(raw);
         let rest = &raw[first.len()..]; // includes the leading `\` of the remainder
+        // PHP's namespace operator: `namespace\foo` names `CURNS\foo` (never
+        // an import) — wp-cli's `namespace\strip_tags($message)`.
+        if first.eq_ignore_ascii_case(b"namespace") {
+            return join_ns(&self.cur_namespace, &rest[1..]);
+        }
         match self.use_classes.get(&first.to_ascii_lowercase()) {
             Some(fqn) => {
                 let mut v = fqn.clone();
@@ -2280,6 +2293,11 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"SORT_LOCALE_STRING" => ExprKind::Int(5),
         b"SORT_NATURAL" => ExprKind::Int(6),
         b"SORT_FLAG_CASE" => ExprKind::Int(8),
+        // ini_get_all() access levels (WordPress wp_is_ini_value_changeable).
+        b"INI_USER" => ExprKind::Int(1),
+        b"INI_PERDIR" => ExprKind::Int(2),
+        b"INI_SYSTEM" => ExprKind::Int(4),
+        b"INI_ALL" => ExprKind::Int(7),
         // GMP (ext/gmp).
         b"GMP_ROUND_ZERO" => ExprKind::Int(0),
         b"GMP_ROUND_PLUSINF" => ExprKind::Int(1),

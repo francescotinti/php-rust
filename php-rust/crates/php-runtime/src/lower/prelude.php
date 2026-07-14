@@ -159,6 +159,13 @@ function hash_hmac_file($algo, $filename, $key, $binary = false) {
 // take this path.
 final class CurlHandle {
     public $__id = 0;
+    // Response-sink options live PHP-side (the host builtin cannot re-enter
+    // the VM): curl_exec() below feeds headers/body to them after the raw
+    // transfer. Null = option unset, exactly like a fresh libcurl handle.
+    public $__writefn = null;     // CURLOPT_WRITEFUNCTION
+    public $__headerfn = null;    // CURLOPT_HEADERFUNCTION
+    public $__file = null;        // CURLOPT_FILE (stream)
+    public $__writeheader = null; // CURLOPT_WRITEHEADER (stream)
 }
 function curl_init($url = null) {
     $h = new CurlHandle;
@@ -166,19 +173,80 @@ function curl_init($url = null) {
     if ($url !== null) { curl_setopt($h, CURLOPT_URL, $url); }
     return $h;
 }
-function curl_setopt($handle, $option, $value) { return __curl_setopt($handle->__id, $option, $value); }
+function curl_setopt($handle, $option, $value) {
+    switch ($option) {
+        case CURLOPT_WRITEFUNCTION:  $handle->__writefn = $value; return true;
+        case CURLOPT_HEADERFUNCTION: $handle->__headerfn = $value; return true;
+        case CURLOPT_FILE:           $handle->__file = $value; return true;
+        case CURLOPT_WRITEHEADER:    $handle->__writeheader = $value; return true;
+    }
+    return __curl_setopt($handle->__id, $option, $value);
+}
 function curl_setopt_array($handle, $options) {
     foreach ($options as $k => $v) {
         if (!curl_setopt($handle, $k, $v)) { return false; }
     }
     return true;
 }
-function curl_exec($handle) { return __curl_exec($handle->__id); }
+function curl_exec($handle) {
+    if ($handle->__writefn === null && $handle->__headerfn === null
+        && $handle->__file === null && $handle->__writeheader === null) {
+        return __curl_exec($handle->__id);
+    }
+    // Raw mode: [header_block, body, return_transfer, include_header].
+    $r = __curl_exec($handle->__id, true);
+    if ($r === false) { return false; }
+    [$hdr, $body, $ret, $inc] = $r;
+    if ($handle->__headerfn !== null) {
+        // libcurl hands the block to the callback one line at a time, line
+        // terminator included, closing with the blank "\r\n" line. A short
+        // return aborts the transfer with CURLE_WRITE_ERROR.
+        $fn = $handle->__headerfn;
+        $off = 0; $len = strlen($hdr);
+        while ($off < $len) {
+            $eol = strpos($hdr, "\n", $off);
+            $line = $eol === false ? substr($hdr, $off) : substr($hdr, $off, $eol - $off + 1);
+            $off += strlen($line);
+            if ($fn($handle, $line) !== strlen($line)) {
+                __curl_set_cb_error($handle->__id, 23, 'Failed writing header');
+                return false;
+            }
+        }
+    } elseif ($handle->__writeheader !== null) {
+        fwrite($handle->__writeheader, $hdr);
+    }
+    $payload = $inc ? $hdr . $body : $body;
+    if ($handle->__writefn !== null) {
+        // Body reaches the callback in chunks of at most CURL_MAX_WRITE_SIZE
+        // (16384); the write callback overrides RETURNTRANSFER/FILE sinks.
+        $fn = $handle->__writefn;
+        $off = 0; $len = strlen($payload);
+        while ($off < $len) {
+            $chunk = substr($payload, $off, 16384);
+            $off += strlen($chunk);
+            if ($fn($handle, $chunk) !== strlen($chunk)) {
+                __curl_set_cb_error($handle->__id, 23, 'Failed writing received data to disk/application');
+                return false;
+            }
+        }
+        return true;
+    }
+    if ($handle->__file !== null) { fwrite($handle->__file, $payload); return true; }
+    if ($ret) { return $payload; }
+    echo $payload;
+    return true;
+}
 function curl_errno($handle) { return __curl_errno($handle->__id); }
 function curl_error($handle) { return __curl_error($handle->__id); }
 function curl_getinfo($handle, $option = null) { return __curl_getinfo($handle->__id, $option); }
 // curl_close() is a host builtin (no-op + 8.5 deprecation with caller attribution).
-function curl_reset($handle) { __curl_reset($handle->__id); }
+function curl_reset($handle) {
+    __curl_reset($handle->__id);
+    $handle->__writefn = null;
+    $handle->__headerfn = null;
+    $handle->__file = null;
+    $handle->__writeheader = null;
+}
 function curl_escape($handle, $string) { return rawurlencode($string); }
 function curl_unescape($handle, $string) { return rawurldecode($string); }
 function curl_version() {
@@ -973,6 +1041,7 @@ class DateTimeImmutable implements DateTimeInterface {
 // --- Procedural date API (step 35): thin global-function wrappers over the OOP
 // API above. PHP exposes both styles; these delegate so the two stay identical.
 function date_create($datetime = "now") { return new DateTime($datetime); }
+function timezone_identifiers_list($timezoneGroup = DateTimeZone::ALL, $countryCode = null) { return DateTimeZone::listIdentifiers($timezoneGroup, $countryCode); }
 function date_create_immutable($datetime = "now") { return new DateTimeImmutable($datetime); }
 function date_format($object, $format) { return $object->format($format); }
 function date_timestamp_get($object) { return $object->getTimestamp(); }
@@ -1203,6 +1272,17 @@ class PDO {
     }
     public function __destruct() {
         if ($this->__h !== null) { __pdo_close($this->__h); $this->__h = null; }
+    }
+    // Register a PHP callable as a sqlite scalar function (the private $__h
+    // lives on PDO, so both public surfaces delegate here).
+    protected function __sqliteUdf(string $function_name, $callback, int $num_args, int $flags): bool {
+        return __pdo_create_function($this->__h, $function_name, $callback, $num_args, $flags) === true;
+    }
+    // pdo_sqlite's BC method: deprecated in 8.5 in favour of the driver
+    // subclass method Pdo\Sqlite::createFunction().
+    public function sqliteCreateFunction(string $function_name, $callback, int $num_args = -1, int $flags = 0): bool {
+        __deprecated_from_caller('Method PDO::sqliteCreateFunction() is deprecated since 8.5, use Pdo\Sqlite::createFunction() instead');
+        return $this->__sqliteUdf($function_name, $callback, $num_args, $flags);
     }
     // PHP 8.4 static factory (doctrine/dbal's PDOConnect prefers it): returns
     // the driver subclass (Pdo\Sqlite) for a sqlite DSN, like the real one.

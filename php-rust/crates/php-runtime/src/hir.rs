@@ -773,11 +773,15 @@ pub struct CatchClause {
 }
 
 /// One `global $x;` binding: the local-frame slot the alias is installed into,
-/// and the global-frame slot it aliases (step 12-2, D-12.2).
+/// and the global-frame slot it aliases (step 12-2, D-12.2). `name` is kept
+/// for main-style units, whose top-level can also execute inside a function
+/// frame (a file include'd from a function body) — there the alias must be
+/// resolved by name at run time.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GlobalBinding {
     pub local: Slot,
     pub global: Slot,
+    pub name: Box<[u8]>,
 }
 
 /// One variable of a `global` statement: slot-resolved when the name is a

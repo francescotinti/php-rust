@@ -77,15 +77,25 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(v);
                 }
                 Op::ConstFetch { name, fallback } => {
-                    // A user constant (B3): engine constants were folded at lowering.
-                    // An unqualified constant inside a namespace is looked up as
-                    // `CURNS\NAME` first, then the global `NAME` (step 50); an
-                    // "Undefined constant" error reports the namespaced name.
+                    // A user constant (B3). An unqualified constant inside a
+                    // namespace is looked up as `CURNS\NAME` first, then the
+                    // global `NAME` (step 50) — where the global step ALSO
+                    // consults the engine-constant table: inside a namespace
+                    // the lowering cannot fold `INI_ALL` eagerly (a namespaced
+                    // `const INI_ALL` shadows it — ns_043), so the fold happens
+                    // here on the fallback. An "Undefined constant" error
+                    // reports the namespaced name.
                     let v = self
                         .constants
                         .get(&name[..])
                         .or_else(|| fallback.as_ref().and_then(|g| self.constants.get(&g[..])))
                         .cloned()
+                        .or_else(|| {
+                            fallback
+                                .as_ref()
+                                .and_then(|g| crate::lower::resolve_constant(g))
+                                .and_then(super::calls::const_literal_to_zval)
+                        })
                         .ok_or_else(|| {
                             PhpError::Error(format!(
                                 "Undefined constant \"{}\"",
@@ -2150,12 +2160,21 @@ impl<'m> super::Vm<'m> {
                         }
                     }
                     let dead = self.frames.pop().expect("Ret pops the active frame");
-                    // The returning frame's locals, leftover operands and `$this`
-                    // release their references now: note any tracked objects so
-                    // the next sweep reconsiders them (drives destruction of an
-                    // object whose last reference was a returning function's local).
-                    self.gc_note_frame(&dead);
-                    drop(dead);
+                    if self.frames.is_empty() && !self.final_flush {
+                        // The script `main` is returning: park its frame — the
+                        // slots ARE the global variables, and Zend keeps them
+                        // alive through the shutdown-function phase. Object
+                        // destruction is unaffected (survivors are driven from
+                        // `created`, not from this frame's drop).
+                        self.retired_main = Some(dead);
+                    } else {
+                        // The returning frame's locals, leftover operands and `$this`
+                        // release their references now: note any tracked objects so
+                        // the next sweep reconsiders them (drives destruction of an
+                        // object whose last reference was a returning function's local).
+                        self.gc_note_frame(&dead);
+                        drop(dead);
+                    }
                     for key in guard {
                         self.magic_guard.remove(&key);
                     }

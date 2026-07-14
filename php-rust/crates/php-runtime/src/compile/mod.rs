@@ -767,6 +767,17 @@ impl<'a> FnCompiler<'a> {
                                     source: DimBase::Global(b.global),
                                 });
                                 self.emit(Op::Pop); // statement: drop the BindRef value
+                            } else {
+                                // A main-style unit's top-level can also run
+                                // inside a function frame (include from a
+                                // function body — wp-settings.php/plugin.php):
+                                // the alias must resolve by NAME at run time.
+                                // At true global scope BindGlobalDyn is the
+                                // oracle-verified near-no-op (creates the
+                                // $GLOBALS entry, installs a self-alias).
+                                let k = self.konst(Const::Str(b.name.clone().into()));
+                                self.emit(Op::PushConst(k));
+                                self.emit(Op::BindGlobalDyn);
                             }
                         }
                         // `global $$x`: the name resolves at run time; the op

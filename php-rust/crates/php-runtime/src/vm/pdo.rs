@@ -16,11 +16,59 @@
 //! and throws/reports the `PDOException` (message, int/string code and
 //! errorInfo triple faithful to ext/pdo's formatting).
 
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use php_types::{convert, Key, PhpArray, PhpError, PhpStr, Zval};
 
 use super::Vm;
+
+thread_local! {
+    /// VM re-entry pointer for PHP-defined SQLite UDFs (`createFunction`):
+    /// set around every statement/batch execution on a PDO connection so the
+    /// rusqlite scalar-function closure (which must be `'static`) can call
+    /// back into the PHP callable while sqlite is stepping. The VM is
+    /// single-threaded and the outer `&mut self` is suspended inside sqlite
+    /// while the callback runs — the same shape as php-src re-entering its
+    /// executor from the UDF hook.
+    static ACTIVE_VM: Cell<*mut ()> = const { Cell::new(std::ptr::null_mut()) };
+    /// A PhpError raised by a UDF's PHP callback. sqlite only carries an
+    /// error *string* out of the step loop, so the original error (a thrown
+    /// exception object, say) is parked here and re-raised by the host op
+    /// that ran the statement — PHP propagates the callback's exception.
+    static UDF_ERROR: RefCell<Option<PhpError>> = const { RefCell::new(None) };
+}
+
+/// A PHP callable captured by a sqlite UDF closure. rusqlite requires the
+/// closure to be `Send + UnwindSafe`, but a `Zval` is `Rc`-based: safe here
+/// because the `Connection` and the VM live and die on this one thread, and
+/// the process aborts on a Rust panic (no unwinding into sqlite).
+struct UdfCallable(Zval);
+unsafe impl Send for UdfCallable {}
+impl std::panic::UnwindSafe for UdfCallable {}
+impl UdfCallable {
+    /// Accessor instead of direct `.0` field use inside the UDF closure:
+    /// edition-2021 disjoint capture would otherwise capture the bare `Zval`
+    /// field and bypass this wrapper's `Send` assertion.
+    fn get(&self) -> Zval {
+        self.0.clone()
+    }
+}
+
+/// Install the VM re-entry pointer for the duration of a statement run;
+/// restores the previous value on drop (UDF-triggered nested statements).
+struct VmReentry(*mut ());
+impl VmReentry {
+    fn install(vm: &mut Vm<'_>) -> Self {
+        let p = vm as *mut Vm<'_> as *mut ();
+        VmReentry(ACTIVE_VM.replace(p))
+    }
+}
+impl Drop for VmReentry {
+    fn drop(&mut self) {
+        ACTIVE_VM.set(self.0);
+    }
+}
 
 /// The `[message, code, sqlstate, native-msg]` error payload (see module doc).
 fn pdo_err(message: &str, code: i64, state: Option<(&str, &str)>) -> Zval {
@@ -226,17 +274,26 @@ impl<'m> Vm<'m> {
         let id = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags) as u32;
         let sql = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags);
         let sql = String::from_utf8_lossy(sql.as_bytes()).into_owned();
-        let Some(conn) = self.pdo_conns.get(&id) else {
+        // Same take-out/re-entry dance as ho_pdo_run: a UDF may run mid-batch.
+        let Some(conn) = self.pdo_conns.remove(&id) else {
             return Ok(stmt_err(21, "library routine called out of sequence"));
         };
-        match conn.execute_batch(&sql) {
-            Ok(()) => {
-                let mut out = PhpArray::new();
-                out.insert(Key::from_bytes(b"changes"), Zval::Long(conn.changes() as i64));
-                Ok(Zval::Array(Rc::new(out)))
+        let out = {
+            let _reentry = VmReentry::install(self);
+            match conn.execute_batch(&sql) {
+                Ok(()) => {
+                    let mut out = PhpArray::new();
+                    out.insert(Key::from_bytes(b"changes"), Zval::Long(conn.changes() as i64));
+                    Zval::Array(Rc::new(out))
+                }
+                Err(e) => stmt_err_of(&e),
             }
-            Err(e) => Ok(stmt_err_of(&e)),
+        };
+        self.pdo_conns.insert(id, conn);
+        if let Some(pe) = UDF_ERROR.with(|u| u.borrow_mut().take()) {
+            return Err(pe);
         }
+        Ok(out)
     }
 
     /// `__pdo_run($id, $sql, $params, $strict)` (the `PDOStatement::execute`
@@ -254,22 +311,51 @@ impl<'m> Vm<'m> {
         let sql = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags);
         let sql = String::from_utf8_lossy(sql.as_bytes()).into_owned();
         let strict = matches!(args.get(3), Some(Zval::Bool(true)));
-        let Some(conn) = self.pdo_conns.get(&id) else {
+        let params = args.get(2).map(|a| a.deref_clone());
+        // Take the connection OUT of the table for the run: a UDF callback
+        // re-enters the VM through ACTIVE_VM, and must not find an aliasing
+        // borrow of this connection (a nested statement on the same handle
+        // reads as "out of sequence", like sqlite's own re-entrancy guard).
+        let Some(conn) = self.pdo_conns.remove(&id) else {
             return Ok(stmt_err(21, "library routine called out of sequence"));
         };
-        let mut stmt = match conn.prepare(&sql) {
+        let out = {
+            let _reentry = VmReentry::install(self);
+            run_prepared(&conn, &sql, params, strict)
+        };
+        self.pdo_conns.insert(id, conn);
+        // A UDF callback that errored parked the original PhpError (thrown
+        // exception): re-raise it so it propagates as PHP does, instead of
+        // the flattened sqlite error text.
+        if let Some(pe) = UDF_ERROR.with(|u| u.borrow_mut().take()) {
+            return Err(pe);
+        }
+        Ok(out)
+    }
+}
+
+/// The prepare/bind/step body of [`Vm::ho_pdo_run`], self-borrow-free so the
+/// UDF re-entry pointer is the only live route to the VM while sqlite steps.
+fn run_prepared(
+    conn: &rusqlite::Connection,
+    sql: &str,
+    params: Option<Zval>,
+    strict: bool,
+) -> Zval {
+    {
+        let mut stmt = match conn.prepare(sql) {
             Ok(s) => s,
-            Err(e) => return Ok(stmt_err_of(&e)),
+            Err(e) => return stmt_err_of(&e),
         };
         let pc = stmt.parameter_count();
-        if let Some(Zval::Array(params)) = args.get(2).map(|a| a.deref_clone()) {
-            // Oracle-checked shape: an execute(array) whose *size* differs from
-            // the placeholder count fails with SQLITE_RANGE, while a named key
-            // that matches no placeholder is silently skipped (both paths); a
-            // positional bind out of range is sqlite's own RANGE error.
-            if strict && params.len() != pc {
-                return Ok(range_err());
-            }
+        let _ = strict;
+        if let Some(Zval::Array(params)) = params {
+            // Oracle (8.5) shape: placeholders left UNBOUND read as sqlite
+            // NULL with no error — execute(array()) with named placeholders is
+            // fine (the sqlite plugin's pragma_table_info(:table_name) probe).
+            // Binding an UNKNOWN name or an out-of-range position is the
+            // SQLITE_RANGE error, on both the execute(array) and bindValue
+            // paths.
             for (k, v) in params.iter() {
                 let pos = match k {
                     Key::Int(i) => *i,
@@ -281,18 +367,15 @@ impl<'m> Vm<'m> {
                         n.extend_from_slice(name.as_bytes());
                         match std::str::from_utf8(&n).ok().and_then(|n| stmt.parameter_index(n).ok().flatten()) {
                             Some(i) => i as i64,
-                            // execute(array) skips an unmatched name silently;
-                            // a bindValue'd one errors at execute (oracle 25).
-                            None if strict => continue,
-                            None => return Ok(range_err()),
+                            None => return range_err(),
                         }
                     }
                 };
                 if pos < 1 || pos as usize > pc {
-                    return Ok(range_err());
+                    return range_err();
                 }
                 if stmt.raw_bind_parameter(pos as usize, zval_to_sql(v)).is_err() {
-                    return Ok(range_err());
+                    return range_err();
                 }
             }
         }
@@ -336,23 +419,83 @@ impl<'m> Vm<'m> {
                         let _ = rows_out.append(Zval::Array(Rc::new(vals)));
                     }
                     Ok(None) => break,
-                    Err(e) => return Ok(stmt_err_of(&e)),
+                    Err(e) => return stmt_err_of(&e),
                 }
             }
             let mut out = PhpArray::new();
             out.insert(Key::from_bytes(b"cols"), Zval::Array(Rc::new(cols)));
             out.insert(Key::from_bytes(b"rows"), Zval::Array(Rc::new(rows_out)));
             out.insert(Key::from_bytes(b"meta"), Zval::Array(Rc::new(meta)));
-            Ok(Zval::Array(Rc::new(out)))
+            Zval::Array(Rc::new(out))
         } else {
             match stmt.raw_execute() {
                 Ok(n) => {
                     let mut out = PhpArray::new();
                     out.insert(Key::from_bytes(b"changes"), Zval::Long(n as i64));
-                    Ok(Zval::Array(Rc::new(out)))
+                    Zval::Array(Rc::new(out))
                 }
-                Err(e) => Ok(stmt_err_of(&e)),
+                Err(e) => stmt_err_of(&e),
             }
+        }
+    }
+}
+
+impl<'m> Vm<'m> {
+    /// `__pdo_create_function($id, $name, $callback, $argc, $flags)` — the
+    /// host side of `Pdo\Sqlite::createFunction` / `PDO::sqliteCreateFunction`:
+    /// register a PHP callable as a sqlite scalar function on the connection.
+    /// The callable runs mid-query via the ACTIVE_VM re-entry pointer.
+    /// `true` on success, the error payload on a registration failure.
+    pub(super) fn ho_pdo_create_function(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        use rusqlite::functions::FunctionFlags;
+        let id = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags) as u32;
+        let name = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags);
+        let name = String::from_utf8_lossy(name.as_bytes()).into_owned();
+        let cb = UdfCallable(args.get(2).cloned().unwrap_or(Zval::Null).deref_clone());
+        let argc = args
+            .get(3)
+            .map(|v| convert::to_long_cast(v, &mut self.diags))
+            .unwrap_or(-1);
+        let php_flags = args
+            .get(4)
+            .map(|v| convert::to_long_cast(v, &mut self.diags))
+            .unwrap_or(0);
+        let Some(conn) = self.pdo_conns.get(&id) else {
+            return Ok(stmt_err(21, "library routine called out of sequence"));
+        };
+        let mut flags = FunctionFlags::SQLITE_UTF8;
+        if php_flags & 2048 != 0 {
+            // PDO::SQLITE_DETERMINISTIC
+            flags |= FunctionFlags::SQLITE_DETERMINISTIC;
+        }
+        let r = conn.create_scalar_function(name.as_str(), argc as i32, flags, move |fctx| {
+            let p = ACTIVE_VM.get();
+            if p.is_null() {
+                return Err(rusqlite::Error::UserFunctionError(
+                    "phpr: no active VM for a SQLite UDF".into(),
+                ));
+            }
+            // SAFETY: single-threaded VM; the outer &mut self that installed
+            // the pointer is suspended inside sqlite's step loop while this
+            // callback runs, and the connection was moved out of Vm.pdo_conns
+            // for the duration (no aliasing through the VM).
+            let vm: &mut Vm<'static> = unsafe { &mut *(p as *mut Vm<'static>) };
+            let mut argv = Vec::with_capacity(fctx.len());
+            for i in 0..fctx.len() {
+                argv.push(sql_to_zval(fctx.get_raw(i)));
+            }
+            match vm.call_callable(cb.get(), argv) {
+                Ok(v) => Ok(zval_to_sql(&v)),
+                Err(e) => {
+                    let msg = e.message().to_owned();
+                    UDF_ERROR.with(|u| *u.borrow_mut() = Some(e));
+                    Err(rusqlite::Error::UserFunctionError(msg.into()))
+                }
+            }
+        });
+        match r {
+            Ok(()) => Ok(Zval::Bool(true)),
+            Err(e) => Ok(stmt_err_of(&e)),
         }
     }
 

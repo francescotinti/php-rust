@@ -381,6 +381,90 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-14 (sessione WordPress-2): 🏁 **WordPress 7.0.1 INSTALLATO e
+  interrogabile su SQLite sotto phpr**: `wp core download` (curl callbacks →
+  Requests transport, zip estratto byte-id: 3951 file `diff -rq` puliti con
+  l'oracle), `wp config create`, `wp core install` su
+  sqlite-database-integration (drop-in db.php ufficiale) **senza alcun
+  database error**, poi `wp core is-installed`/`option get`/`post list`/
+  `user list` (roles=administrator) a parità con l'oracle. Fix engine,
+  tutti oracle-pinned:
+  **(a) curl response-sink options** (CURLOPT_WRITEFUNCTION/HEADERFUNCTION/
+  FILE/WRITEHEADER vivono sul CurlHandle prelude; `__curl_exec(id, true)`
+  restituisce [header_block, body, return_transfer, include_header] e il
+  curl_exec del prelude smista: header callback riga-per-riga CRLF inclusa,
+  body a chunk ≤16384, short-return → errno 23 via __curl_set_cb_error;
+  probe p30 byte-id, incluso abort e array-callable);
+  **(b) `uncaught_throwable` stash scopato in `run_value_thunk`** (il
+  default-param thunk speculativo della reflection lasciava armato lo stash
+  di render_fatal: un fatal successivo mostrava lo stack STANTIO del thunk —
+  i comandi wp after_wp_load morivano su "Undefined constant ABSPATH" di
+  Core_Command::get_wp_details riflesso al bootstrap);
+  **(c) costanti `INI_USER/INI_PERDIR/INI_SYSTEM/INI_ALL`** (wp_initial_constants
+  → wp_is_ini_value_changeable) **+ fold namespace-aware delle costanti
+  engine** (dentro un namespace `const INI_ALL = 0` DEVE vincere: il fold
+  compile-time ora avviene solo a namespace vuoto/nome fully-qualified
+  mono-segmento, e Op::ConstFetch consulta la tabella engine sul fallback
+  globale — ns_043/ns_050);
+  **(d) `global $x` nelle unità main-style eseguite in scope funzione**
+  (compile-time no-op era sbagliato per wp-settings.php/plugin.php require'd
+  da Runner::load_wordpress: ora PushConst(nome)+BindGlobalDyn, e
+  bind_global_dyn RIBINDA il simbolo lungo la catena dei bridge di scope —
+  Frame::bridge_caller — perché in Zend includer e incluso condividono UNA
+  symbol table);
+  **(e) shutdown functions coi globali VIVI** (`Ret` del main parcheggia il
+  frame in `Vm::retired_main` invece di droppare gli slot — che SONO le
+  variabili globali — e run_shutdown_functions lo reinstalla; prima
+  register_shutdown_function leggeva NULL da ogni global: p36);
+  **(f) classi condizionali di unità esterne non più registrate eagerly**
+  (drive_unit: una classe del SEED non ancora dichiarata veniva ri-appesa e
+  registrata da QUALSIASI include annidato, flippando il guard
+  `if (!class_exists(...))` esterno — pomo/translations.php via mo.php
+  perdeva Gettext_Translations; ora remap identità sul prefisso seed) **+
+  ri-dichiarazione da file re-inclusi** (nome nel prefisso seed a livello
+  statement → si ri-abbassa la dichiarazione, non si sopprime: bug63741);
+  **(g) variabili NUOVE definite da eval/include pubblicate nello scope del
+  chiamante** (bridge con cella fresca + publish in dyn_vars solo se
+  DEFINITE, e get_defined_vars include dyn_vars: il
+  `eval(get_wp_config_code()); foreach (get_defined_vars() ...)` di wp-cli
+  perdeva `$table_prefix` → tabelle senza prefisso `wp_` → il lexer del
+  plugin SQLite trattava `options` come keyword MySQL);
+  **(h) `Pdo\Sqlite::createFunction` / `PDO::sqliteCreateFunction`**
+  (UDF PHP dentro sqlite via puntatore di re-entry ACTIVE_VM thread-local,
+  pattern php-src; connection estratta da Vm.pdo_conns durante la query;
+  eccezione del callback ri-propagata originale via slot UDF_ERROR; il
+  plugin SQLite di WordPress ne registra ~45 — deprecation 8.5 sul metodo
+  BC compresa);
+  **(i) semantica execute/bind pdo_sqlite ri-pinnata all'oracle 8.5**
+  (placeholder NON bindati = NULL senza errore — execute(array()) su
+  pragma_table_info(:table_name) è legale; bind di nome/posizione IGNOTI =
+  SQLITE_RANGE 25; PRIMA execute(array) con size≠pc errava sempre);
+  **(j) operatore `namespace\` nei nomi qualificati** (resolve_qualified:
+  primo segmento `namespace` → namespace corrente; il
+  `namespace\strip_tags()` di utils-wp.php componeva
+  "WP_CLI\Utils\namespace\strip_tags");
+  **(k) pattern PCRE che MISCHIANO gruppi nominati e backreference numerati**
+  (fancy-regex e oniguruma li rifiutano: demix_numbered_backrefs assegna
+  nomi sintetici `__phprbgN` ai gruppi target e riscrive `\N`→`\k<...>`,
+  capture_names() li nasconde; il FILE_DIR_PATTERN di wp-cli Path
+  restituiva stringa vuota → wp-config MAI eseguito);
+  **(l) `str_replace`/`str_ireplace` col 4° parametro by-ref `&$count`**
+  (in HOST_OUT a indice 3, solo quando l'argomento è presente — il
+  percorso registry resta per le chiamate a 3 argomenti, ora
+  memmem-accelerato; `_deep_replace` di WordPress fa
+  `while ($count) { str_replace(..., $count) }` → loop infinito in
+  esc_url a WP_Sitemaps init);
+  **(m) `timezone_identifiers_list()`** (alias prelude di
+  DateTimeZone::listIdentifiers; sblocca populate_options — il group-filter
+  e i nomi BC restano non modellati: timezones-list.phpt/bug46111.phpt sono
+  fail "ex-skip" documentati, prima il runner li saltava per builtin
+  assente).
+  Divergenze residue note: `user list` ecc. ~20s vs 0.3s oracle (costo
+  lowering/compile per-include, quadratico sul seed — prossimo lavoro perf);
+  attribuzione file/riga dei Warning dentro unità incluse a volte spostata
+  (visto su a.php:5 vs b.php:4 in p34 pre-fix e su prelude:1465);
+  log_errors CLI su stderr non modellato (niente riga "PHP Warning:"
+  duplicata, solo display_errors).
 - 2026-07-14 (sessione WordPress-1): 🏁 **wp-cli da sorgente gira end-to-end**
   (`wp --info` / `wp cli version` a parità con l'oracle, modulo campi
   ambiente-dipendenti: PHP binary=phpr, memory_limit=-1 senza php.ini).

@@ -5,10 +5,13 @@
 //! absent so dual-backend consumers that probe for it (Composer's
 //! `HttpDownloader::isCurlEnabled`) keep taking the stream-wrapper path, while
 //! `function_exists('curl_exec')` consumers (monolog's `Curl\Util`, Guzzle's
-//! sync `CurlHandler`) get a working surface. Callback/stream sink options
-//! (`CURLOPT_WRITEFUNCTION`, `CURLOPT_FILE`, …) need VM re-entry that a
-//! registry builtin cannot do, so `curl_setopt` refuses them with a Warning
-//! rather than silently dropping response data.
+//! sync `CurlHandler`, rmccue/requests — wp-cli/WordPress) get a working
+//! surface. Response-sink options (`CURLOPT_WRITEFUNCTION`, `CURLOPT_FILE`,
+//! `CURLOPT_HEADERFUNCTION`, `CURLOPT_WRITEHEADER`) need VM re-entry that a
+//! registry builtin cannot do: the prelude keeps them on the CurlHandle and
+//! its curl_exec() re-dispatches headers/body over `__curl_exec(id, true)`.
+//! Request-side callbacks (READFUNCTION/INFILE) are still refused with a
+//! Warning rather than silently dropping data.
 //!
 //! A handle's state lives in a thread-local table keyed by an integer id; the
 //! PHP-visible `CurlHandle` object is a prelude class wrapping that id (the
@@ -52,15 +55,13 @@ const CURLOPT_PUT: i64 = 54;
 const CURLOPT_FAILONERROR: i64 = 45;
 const CURLOPT_REFERER: i64 = 10016;
 const CURLOPT_COOKIE: i64 = 10022;
-// Options that require calling back into PHP (closures) or writing to a PHP
-// stream mid-transfer — not expressible from a registry builtin.
+// Request-side callback/stream options with no host counterpart. The
+// response-side sinks (CURLOPT_FILE/WRITEHEADER/WRITEFUNCTION/HEADERFUNCTION)
+// never reach here: the prelude's curl_setopt keeps them on the CurlHandle
+// object and its curl_exec re-dispatches over `__curl_exec(id, true)`.
 const CALLBACK_OPTS: &[i64] = &[
-    10001, // CURLOPT_FILE
     10009, // CURLOPT_INFILE
-    10029, // CURLOPT_WRITEHEADER
-    20011, // CURLOPT_WRITEFUNCTION
     20012, // CURLOPT_READFUNCTION
-    20079, // CURLOPT_HEADERFUNCTION
 ];
 
 const CURLINFO_EFFECTIVE_URL: i64 = 1048577;
@@ -707,8 +708,21 @@ pub fn __curl_exec(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         }
     })();
 
+    // `__curl_exec(id, true)` is prelude-internal: skip the sink logic and
+    // hand back [header_block, body, return_transfer, include_header] so the
+    // prelude's curl_exec can feed CURLOPT_WRITEFUNCTION & co. — VM re-entry
+    // a registry builtin cannot perform.
+    let raw = matches!(argv.get(1).map(|v| v.deref_clone()), Some(Zval::Bool(true)));
     let result = match outcome {
         None => Zval::Bool(false),
+        Some(body) if raw => {
+            let mut a = PhpArray::new();
+            let _ = a.insert(Key::Int(0), Zval::Str(PhpStr::new(st.last.header_block.clone())));
+            let _ = a.insert(Key::Int(1), Zval::Str(PhpStr::new(body)));
+            let _ = a.insert(Key::Int(2), Zval::Bool(st.return_transfer));
+            let _ = a.insert(Key::Int(3), Zval::Bool(st.include_header));
+            Zval::Array(Rc::new(a))
+        }
         Some(body) => {
             let mut payload = Vec::new();
             if st.include_header {
@@ -730,6 +744,26 @@ pub fn __curl_exec(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         s.last = st.last.clone();
     })?;
     Ok(result)
+}
+
+/// `__curl_set_cb_error(id, errno, message)`: prelude-internal — record a
+/// sink-callback abort (CURLE_WRITE_ERROR) hit while the prelude's curl_exec
+/// was feeding WRITEFUNCTION/HEADERFUNCTION, so errno/error read like curl's.
+pub fn __curl_set_cb_error(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let id = handle_id(argv, "curl_exec")?;
+    let errno = match argv.get(1).map(|v| v.deref_clone()) {
+        Some(Zval::Long(n)) => n,
+        _ => 23,
+    };
+    let msg = argv
+        .get(2)
+        .map(|v| String::from_utf8_lossy(&opt_bytes(&v.deref_clone(), ctx)).into_owned())
+        .unwrap_or_default();
+    with_state(id, "curl_exec", |s| {
+        s.errno = errno;
+        s.error = msg;
+    })?;
+    Ok(Zval::Bool(true))
 }
 
 /// `__curl_errno(id) -> int`.

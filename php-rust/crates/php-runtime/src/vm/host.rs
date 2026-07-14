@@ -3333,6 +3333,106 @@ impl<'m> super::Vm<'m> {
         }
         Ok((Zval::Null, Zval::Array(Rc::new(result))))
     }
+    /// `str_replace`/`str_ireplace` with the by-reference `&$count` out-param
+    /// (index 3): the same replacement semantics as the php-builtins registry
+    /// version, plus the replacement tally. WordPress's `_deep_replace()` spins
+    /// on it — `while ( $count ) { $subject = str_replace(..., $count); }` —
+    /// so a missing out-param write means an infinite loop (esc_url at
+    /// WP_Sitemaps init was the repro). Compiled calls WITHOUT the fourth
+    /// argument keep the registry fast path (see `FnCompiler::call`).
+    pub(super) fn ho_str_replace_out(
+        &mut self,
+        args: Vec<Zval>,
+        ci: bool,
+    ) -> Result<(Zval, Zval), PhpError> {
+        let name = if ci { "str_ireplace" } else { "str_replace" };
+        if args.len() < 3 {
+            return Err(PhpError::ArgumentCountError(format!(
+                "{name}() expects at least 3 arguments, {} given",
+                args.len()
+            )));
+        }
+        fn one_pass(s: &[u8], from: &[u8], to: &[u8], ci: bool) -> (Vec<u8>, i64) {
+            if from.is_empty() {
+                return (s.to_vec(), 0);
+            }
+            let mut out = Vec::with_capacity(s.len());
+            let mut n = 0i64;
+            let mut i = 0;
+            while i < s.len() {
+                let hit = i + from.len() <= s.len()
+                    && if ci {
+                        s[i..i + from.len()].eq_ignore_ascii_case(from)
+                    } else {
+                        &s[i..i + from.len()] == from
+                    };
+                if hit {
+                    out.extend_from_slice(to);
+                    i += from.len();
+                    n += 1;
+                } else {
+                    out.push(s[i]);
+                    i += 1;
+                }
+            }
+            (out, n)
+        }
+        let search = args[0].deref_clone();
+        let replace = args[1].deref_clone();
+        let subject = args[2].deref_clone();
+        let mut pairs: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
+        if let Zval::Array(searches) = &search {
+            let repls: Option<Vec<Vec<u8>>> = match &replace {
+                Zval::Array(r) => Some(
+                    r.iter()
+                        .map(|(_, v)| {
+                            convert::to_zstr_cast(v, &mut self.diags).as_bytes().to_vec()
+                        })
+                        .collect(),
+                ),
+                _ => None,
+            };
+            let scalar = repls
+                .is_none()
+                .then(|| convert::to_zstr_cast(&replace, &mut self.diags).as_bytes().to_vec());
+            for (i, (_, sv)) in searches.iter().enumerate() {
+                let sb = convert::to_zstr_cast(sv, &mut self.diags).as_bytes().to_vec();
+                let rb = match &repls {
+                    Some(list) => list.get(i).cloned().unwrap_or_default(),
+                    None => scalar.clone().unwrap_or_default(),
+                };
+                pairs.push((sb, rb));
+            }
+        } else {
+            pairs.push((
+                convert::to_zstr_cast(&search, &mut self.diags).as_bytes().to_vec(),
+                convert::to_zstr_cast(&replace, &mut self.diags).as_bytes().to_vec(),
+            ));
+        }
+        let mut count = 0i64;
+        let mut apply = |subj: &Zval, diags: &mut Vec<php_types::Diag>| -> Vec<u8> {
+            let mut cur = convert::to_zstr_cast(subj, diags).as_bytes().to_vec();
+            for (s, r) in &pairs {
+                let (next, n) = one_pass(&cur, s, r, ci);
+                cur = next;
+                count += n;
+            }
+            cur
+        };
+        let result = if let Zval::Array(a) = &subject {
+            let mut out = PhpArray::new();
+            let entries: Vec<_> = a.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            for (k, v) in entries {
+                let replaced = apply(&v, &mut self.diags);
+                out.insert(k, Zval::Str(PhpStr::new(replaced)));
+            }
+            Zval::Array(Rc::new(out))
+        } else {
+            Zval::Str(PhpStr::new(apply(&subject, &mut self.diags)))
+        };
+        Ok((result, Zval::Long(count)))
+    }
+
     /// `preg_match($pattern, $subject, &$matches = null, $flags = 0)`: returns 1 on
     /// a match, 0 on none, `false` on a bad pattern. Yields `(ret, matches_array)`;
     /// `$matches` is written by the VM out-param path. Mirrors `eval::ho_preg_match`.
@@ -3879,16 +3979,20 @@ impl<'m> super::Vm<'m> {
     /// (use_include_path, context) are a scope-out. On failure: Warning + `false`.
     /// Mirrors `eval::ho_fopen`.
     /// `get_declared_classes()` / `get_declared_interfaces()` (`which` 0 / 1):
-    /// names of every linked class table entry of that kind, in declaration
-    /// order — prelude first, then user/included units, matching PHP's
-    /// internal-then-user ordering. Residue: a compiled-but-not-executed
-    /// conditional class is already listed. Consumers (PHPUnit's
-    /// TestSuiteLoader) diff the list around a `require`, which this serves.
+    /// names of every REGISTERED class table entry of that kind, in
+    /// declaration order — prelude first, then user/included units, matching
+    /// PHP's internal-then-user ordering. A compiled-but-not-executed
+    /// conditional class is NOT listed (its `Op::DeclareClass` never ran):
+    /// listing it made doctrine/persistence's ColocatedMappingDriver reflect
+    /// Composer\BinProxyWrapper — declared only on PHP < 8 — and die.
+    /// Consumers (PHPUnit's TestSuiteLoader) diff the list around a `require`.
     pub(super) fn ho_get_declared(&mut self, which: i64) -> Result<Zval, PhpError> {
         let mut arr = PhpArray::new();
         for c in self.classes.iter() {
             let is_iface = matches!(c.instantiable, crate::bytecode::Instantiable::Interface);
-            if (which == 1) == is_iface {
+            if (which == 1) == is_iface
+                && self.class_index.contains_key(&c.name.to_ascii_lowercase())
+            {
                 let _ = arr.append(Zval::Str(PhpStr::new(c.name.to_vec())));
             }
         }

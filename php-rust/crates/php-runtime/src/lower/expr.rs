@@ -398,10 +398,36 @@ impl<'f> Lowerer<'f> {
             // here (D-18.7); any other name becomes a runtime `Const` read,
             // resolved against `define()`'d constants at eval time (step 49c).
             Expression::ConstantAccess(ca) => {
-                // Engine constants (`true`/`PHP_INT_MAX`/…) fold here, on the bare
-                // last segment so they resolve regardless of the current namespace
-                // (they are global, case-insensitive for the language ones).
-                if let Some(kind) = resolve_constant(bare_last_segment(&ca.name)) {
+                // Engine constants fold to literals here (D-18.7) — but only
+                // where a user constant cannot shadow them: `true/false/null`
+                // (reserved words) everywhere, other names in the global
+                // namespace or as single-segment fully-qualified `\NAME`.
+                // Inside a namespace `const INI_ALL = 0;` shadows the engine
+                // INI_ALL (ns_043), so the unqualified form lowers to a
+                // runtime ConstFetch whose global FALLBACK consults the
+                // engine table (vm/run.rs).
+                let bare = bare_last_segment(&ca.name);
+                let reserved = bare.eq_ignore_ascii_case(b"true")
+                    || bare.eq_ignore_ascii_case(b"false")
+                    || bare.eq_ignore_ascii_case(b"null");
+                let foldable = reserved
+                    || match &ca.name {
+                        Identifier::FullyQualified(f) => {
+                            !strip_leading_backslash(f.value).contains(&b'\\')
+                        }
+                        // `use const PHP_EOL;` pins the name to ONE global
+                        // constant — foldable even inside a namespace
+                        // (PHPUnit's TextUI\Application imports PHP_EOL).
+                        Identifier::Local(l) => match self
+                            .use_consts
+                            .get(&l.value.to_ascii_lowercase())
+                        {
+                            Some(fqn) => !fqn.contains(&b'\\'),
+                            None => self.cur_namespace.is_empty(),
+                        },
+                        Identifier::Qualified(_) => false,
+                    };
+                if let Some(kind) = foldable.then(|| resolve_constant(bare)).flatten() {
                     kind
                 } else {
                     // Otherwise a runtime read. An *unqualified* name inside a

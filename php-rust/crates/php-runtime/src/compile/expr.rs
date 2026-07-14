@@ -938,7 +938,15 @@ impl<'a> super::FnCompiler<'a> {
         // undefined) variable and emit a spurious "Undefined variable" warning the
         // real PHP never raises. Push `null` in its place (the builtin ignores the
         // input value there).
-        if let Some((canon, out_idx)) = crate::vm::host_builtin_out_param(bname) {
+        // str_replace/str_ireplace also live in the value-builtin registry;
+        // their out-param wrapper only matters when `&$count` is actually
+        // passed — the common 3-arg call keeps the (hot) registry path.
+        let count_only_out = |n: &[u8]| {
+            n.eq_ignore_ascii_case(b"str_replace") || n.eq_ignore_ascii_case(b"str_ireplace")
+        };
+        if let Some((canon, out_idx)) = crate::vm::host_builtin_out_param(bname)
+            .filter(|&(_, out_idx)| args.len() > out_idx || !count_only_out(bname))
+        {
             // A builtin may have a *second* out-param (`exec`'s `&$result_code`).
             let out_idx2 = crate::vm::host_builtin_out_param_second(bname);
             // A property/index out-param (`proc_open(..., $this->pipes)`) is

@@ -226,8 +226,15 @@ impl Engine {
 
     /// Capture-group names by index (`None` for unnamed / the whole match),
     /// collected to owned strings so both backends share one return type.
+    /// Synthetic names introduced by [`demix_numbered_backrefs`] are hidden
+    /// (their groups read as unnamed, exactly like the original pattern).
     pub fn capture_names(&self) -> Vec<Option<String>> {
-        match self {
+        let strip_synthetic = |v: Vec<Option<String>>| -> Vec<Option<String>> {
+            v.into_iter()
+                .map(|n| n.filter(|s| !s.starts_with(SYN_BACKREF_PREFIX)))
+                .collect()
+        };
+        return strip_synthetic(match self {
             Engine::Regex(r) => r
                 .capture_names()
                 .map(|n| n.map(|s| s.to_string()))
@@ -252,7 +259,7 @@ impl Engine {
                 names
             }
             Engine::Anchored(inner) => inner.capture_names(),
-        }
+        });
     }
 
     /// First match in `text`, engine-neutral. A `fancy-regex` runtime error
@@ -649,6 +656,28 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
     {
         return Some(wrap(Engine::Fancy(r)));
     }
+    // PCRE allows mixing NAMED groups with NUMBERED backreferences in one
+    // pattern; both fallback engines reject that ("numbered backref/call is
+    // not allowed") — wp-cli's FILE_DIR_PATTERN skips quoted strings via
+    // `(?=(\\?))\1` next to `(?<file>__FILE__)`. Rewrite the numbered refs to
+    // synthetic named form and retry; `capture_names()` hides the synthetic
+    // names again so PHP's $matches shape is unchanged.
+    let demixed = demix_numbered_backrefs(&body);
+    if let Some(demixed_body) = &demixed {
+        let mut pat = String::new();
+        if !inline.is_empty() {
+            pat.push_str("(?");
+            pat.push_str(&inline);
+            pat.push(')');
+        }
+        pat.push_str(demixed_body);
+        if let Ok(r) = fancy_regex::RegexBuilder::new(&pat)
+            .backtrack_limit(1_000_000)
+            .build()
+        {
+            return Some(wrap(Engine::Fancy(r)));
+        }
+    }
 
     // Last resort: oniguruma (PHP's own mbregex backend) under the `perl_ng`
     // dialect, which reads PCRE syntax including subroutine calls
@@ -672,10 +701,197 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
         // as per-line by default, so opt into SINGLELINE to match PCRE).
         oo |= onig::RegexOptions::REGEX_OPTION_SINGLELINE;
     }
-    let body = onigify_python_groups(&body);
+    let body = onigify_python_groups(demixed.as_deref().unwrap_or(&body));
     onig::Regex::with_options(&body, oo, onig::Syntax::perl_ng())
         .ok()
         .map(|r| wrap(Engine::Onig(r)))
+}
+
+/// The name prefix for capturing groups synthesised by
+/// [`demix_numbered_backrefs`]; [`Engine::capture_names`] hides them.
+const SYN_BACKREF_PREFIX: &str = "__phprbg";
+
+/// Rewrite a pattern that mixes NAMED capture groups with NUMBERED
+/// backreferences (allowed by PCRE, rejected by fancy-regex and oniguruma):
+/// every unnamed group a numbered backref targets gets a synthetic name and
+/// the backref becomes `\k<name>`. Returns `None` when no rewrite is needed
+/// (no named groups, no numbered backrefs) or when the pattern uses
+/// constructs that shift group numbering (`(?|`) or conditionals (`(?(`),
+/// which this rewriter does not model.
+fn demix_numbered_backrefs(body: &str) -> Option<String> {
+    let b = body.as_bytes();
+    // Pass A: inventory the capturing groups (index → native name, if any).
+    let mut group_names: Vec<Option<String>> = vec![None]; // slot 0 = pad
+    let mut has_named = false;
+    let mut in_class = false;
+    let mut i = 0;
+    while i < b.len() {
+        let c = b[i];
+        if c == b'\\' && i + 1 < b.len() {
+            i += 2;
+            continue;
+        }
+        if in_class {
+            if c == b']' {
+                in_class = false;
+            }
+            i += 1;
+            continue;
+        }
+        match c {
+            b'[' => in_class = true,
+            b'(' => {
+                if b.get(i + 1) == Some(&b'?') {
+                    if b.get(i + 2) == Some(&b'|') || b.get(i + 2) == Some(&b'(') {
+                        return None; // branch-reset / conditional: numbering games
+                    }
+                    // Named forms: (?<name> (not lookbehind), (?P<name>, (?'name'
+                    let (open, close, start) = match (b.get(i + 2), b.get(i + 3)) {
+                        (Some(b'<'), Some(d)) if *d != b'=' && *d != b'!' => (b'<', b'>', i + 3),
+                        (Some(b'P'), Some(b'<')) => (b'<', b'>', i + 4),
+                        (Some(b'\''), _) => (b'\'', b'\'', i + 3),
+                        _ => {
+                            i += 1;
+                            continue; // non-capturing / lookaround / atomic / flags
+                        }
+                    };
+                    let _ = open;
+                    let mut j = start;
+                    while j < b.len() && b[j] != close {
+                        j += 1;
+                    }
+                    group_names.push(Some(String::from_utf8_lossy(&b[start..j]).into_owned()));
+                    has_named = true;
+                } else {
+                    group_names.push(None);
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    let n_groups = group_names.len() - 1;
+    if !has_named || n_groups == 0 {
+        return None;
+    }
+    // Pass B+C: rewrite backrefs, naming the targeted unnamed groups.
+    let mut targets: Vec<bool> = vec![false; n_groups + 1];
+    let parse_ref = |i: usize| -> Option<(usize, usize)> {
+        // `\N` / `\NN` at byte i+1; two digits win when that group exists (PCRE).
+        let d1 = *b.get(i + 1)?;
+        if !d1.is_ascii_digit() || d1 == b'0' {
+            return None;
+        }
+        let n1 = (d1 - b'0') as usize;
+        if let Some(&d2) = b.get(i + 2) {
+            if d2.is_ascii_digit() {
+                let n2 = n1 * 10 + (d2 - b'0') as usize;
+                if n2 <= n_groups {
+                    return Some((n2, 3));
+                }
+            }
+        }
+        (n1 <= n_groups).then_some((n1, 2))
+    };
+    // First sweep marks the targets so pass C can name their groups.
+    let mut any_ref = false;
+    {
+        let mut in_class = false;
+        let mut i = 0;
+        while i < b.len() {
+            let c = b[i];
+            if c == b'\\' && i + 1 < b.len() {
+                if !in_class {
+                    if let Some((n, w)) = parse_ref(i) {
+                        targets[n] = true;
+                        any_ref = true;
+                        i += w;
+                        continue;
+                    }
+                }
+                i += 2;
+                continue;
+            }
+            if c == b'[' && !in_class {
+                in_class = true;
+            } else if c == b']' && in_class {
+                in_class = false;
+            }
+            i += 1;
+        }
+    }
+    if !any_ref {
+        return None;
+    }
+    // Pass C: emit, renaming group openings and rewriting the refs. Built as
+    // bytes (multibyte UTF-8 passes through untouched).
+    let mut out: Vec<u8> = Vec::with_capacity(body.len() + 16);
+    let mut in_class = false;
+    let mut group_no = 0usize;
+    let mut i = 0;
+    while i < b.len() {
+        let c = b[i];
+        if c == b'\\' && i + 1 < b.len() {
+            if !in_class {
+                if let Some((n, w)) = parse_ref(i) {
+                    out.extend_from_slice(b"\\k<");
+                    match &group_names[n] {
+                        Some(name) => out.extend_from_slice(name.as_bytes()),
+                        None => {
+                            out.extend_from_slice(SYN_BACKREF_PREFIX.as_bytes());
+                            out.extend_from_slice(n.to_string().as_bytes());
+                        }
+                    }
+                    out.push(b'>');
+                    i += w;
+                    continue;
+                }
+            }
+            out.push(c);
+            out.push(b[i + 1]);
+            i += 2;
+            continue;
+        }
+        if in_class {
+            if c == b']' {
+                in_class = false;
+            }
+            out.push(c);
+            i += 1;
+            continue;
+        }
+        match c {
+            b'[' => {
+                in_class = true;
+                out.push(b'[');
+            }
+            b'(' => {
+                if b.get(i + 1) == Some(&b'?') {
+                    // Count named groups (pass A logic) but emit unchanged.
+                    match (b.get(i + 2), b.get(i + 3)) {
+                        (Some(b'<'), Some(d)) if *d != b'=' && *d != b'!' => group_no += 1,
+                        (Some(b'P'), Some(b'<')) => group_no += 1,
+                        (Some(b'\''), _) => group_no += 1,
+                        _ => {}
+                    }
+                    out.push(b'(');
+                } else {
+                    group_no += 1;
+                    if targets[group_no] && group_names[group_no].is_none() {
+                        out.extend_from_slice(b"(?<");
+                        out.extend_from_slice(SYN_BACKREF_PREFIX.as_bytes());
+                        out.extend_from_slice(group_no.to_string().as_bytes());
+                        out.push(b'>');
+                    } else {
+                        out.push(b'(');
+                    }
+                }
+            }
+            _ => out.push(c),
+        }
+        i += 1;
+    }
+    String::from_utf8(out).ok()
 }
 
 /// Rewrite Python-style named-group syntax — `(?P<name>…)`, `(?P=name)`,

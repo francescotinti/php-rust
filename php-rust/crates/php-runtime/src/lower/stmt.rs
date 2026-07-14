@@ -187,7 +187,11 @@ impl<'f> Lowerer<'f> {
                     // global-frame slot for the cell it aliases (D-12.2/D-12.4).
                     let local = self.slot_for(name);
                     let global = self.globals.slot_for(name);
-                    items.push(GlobalItem::Static(GlobalBinding { local, global }));
+                    items.push(GlobalItem::Static(GlobalBinding {
+                        local,
+                        global,
+                        name: name.to_vec().into_boxed_slice(),
+                    }));
                 }
                 StmtKind::Global(items)
             }
@@ -276,8 +280,18 @@ impl<'f> Lowerer<'f> {
             // when this statement is reached — PHP's conditional class declaration.
             Statement::Class(class) => {
                 let key = join_ns(&self.cur_namespace, class.name.value).to_ascii_lowercase();
-                if self.class_index.contains_key(&key) {
-                    return Ok(None);
+                if let Some(&existing) = self.class_index.get(&key) {
+                    // A same-unit hoisted duplicate statement is a no-op; a
+                    // name that maps into the SEED prefix is a re-included
+                    // file re-declaring its class — lower THIS declaration
+                    // fresh, so its conditional `Op::DeclareClass` can still
+                    // register it (the seed copy may never have been declared:
+                    // an autoloader `include __FILE__` re-entry, bug63741).
+                    // Whichever declaration executes first wins, exactly like
+                    // PHP; a second execution is the duplicate-name fatal.
+                    if existing >= self.seed_class_len {
+                        return Ok(None);
+                    }
                 }
                 let ctx = self.save_body_ctx();
                 match self.lower_class(class) {
