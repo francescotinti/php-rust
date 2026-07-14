@@ -2059,6 +2059,39 @@ pub fn __tz_transition(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Array(Rc::new(out)))
 }
 
+/// `__tz_transitions(string $zone, int $begin, int $end)` (prelude-internal,
+/// feeds DateTimeZone::getTransitions): list of `[ts, offset, isdst, abbr]`
+/// rows — the state at `$begin` first, then every transition in range. The
+/// prelude rejects non-identifier zones before calling (PHP returns false for
+/// offset/abbreviation zones); UTC yields its single steady row.
+pub fn __tz_transitions(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let raw = convert::to_zstr(args.first().unwrap_or(&Zval::Null), ctx.diags);
+    let begin = convert::to_long_cast(args.get(1).unwrap_or(&Zval::Null), ctx.diags);
+    let end = convert::to_long_cast(args.get(2).unwrap_or(&Zval::Null), ctx.diags);
+    let label = String::from_utf8_lossy(raw.as_bytes());
+    let rows: Vec<(i64, php_types::tz::TzInfo)> = match resolve_zone(&label) {
+        Some(ZoneRef::Named(n)) => match php_types::tz::transitions_between(&n, begin, end) {
+            Some(r) => r,
+            None => return Ok(Zval::Bool(false)),
+        },
+        Some(ZoneRef::Utc) => vec![(
+            begin,
+            php_types::tz::TzInfo { off: 0, abbrev: "UTC".to_string(), isdst: false },
+        )],
+        _ => return Ok(Zval::Bool(false)),
+    };
+    let mut out = PhpArray::new();
+    for (ts, info) in rows {
+        let mut row = PhpArray::new();
+        let _ = row.append(Zval::Long(ts));
+        let _ = row.append(Zval::Long(info.off));
+        let _ = row.append(Zval::Bool(info.isdst));
+        let _ = row.append(Zval::Str(PhpStr::new(info.abbrev.into_bytes())));
+        let _ = out.append(Zval::Array(Rc::new(row)));
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
 /// `__strtotime_tz(string $datetime, ?int $base, string $zone)`
 /// (prelude-internal): [`strtotime_in`] against an explicit zone — the
 /// DateTime constructor's parse. Returns `[epoch, zone-label-in-string|null]`

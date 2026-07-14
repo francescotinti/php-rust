@@ -896,6 +896,13 @@ impl<'a> super::FnCompiler<'a> {
             if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
                 let callee = &self.ctx.funcs[idx];
                 if callee.by_ref || callee.params.iter().any(|p| p.by_ref) {
+                    // KNOWN by-ref callee + spread stays with the TREE-WALKER:
+                    // it implements element write-back through a by-ref
+                    // variadic (`test1(...$array)` mutates `$array`,
+                    // arg_unpack/by_ref.phpt) and the "by unpacking a
+                    // Traversable" warning, which the CallSpread op does not.
+                    // Dynamic dispatch (`$this->m(...)`, unknown callees) keeps
+                    // the reference-passing runtime-args path.
                     return Err(CompileError::Unsupported(
                         "spread call to a by-reference function".into(),
                     ));
@@ -1566,12 +1573,25 @@ impl<'a> super::FnCompiler<'a> {
     pub(super) fn build_args_array(&mut self, args: &[Expr]) -> R<()> {
         self.emit(Op::ArrayInit);
         for a in args {
-            if let ExprKind::Spread(src) = &a.kind {
-                self.expr(src)?;
-                self.emit(Op::ArrayAppendSpread);
-            } else {
-                self.expr(a)?;
-                self.emit(Op::ArrayPush);
+            match &a.kind {
+                ExprKind::Spread(src) => {
+                    self.expr(src)?;
+                    self.emit(Op::ArrayAppendSpread);
+                }
+                // A plain-variable component rides as a REFERENCE (SEND_VAR_EX,
+                // like `push_dyn_args`): the callee isn't known here, so a by-ref
+                // parameter must be able to write through — WordPress' Walker
+                // does `$this->start_el( $output, $el, $depth, ...$args )` with
+                // `start_el(&$output, …)`. The runtime binder decays the
+                // reference at a by-value position.
+                ExprKind::Var(slot) => {
+                    self.emit(Op::PushRef(*slot));
+                    self.emit(Op::ArrayPush);
+                }
+                _ => {
+                    self.expr(a)?;
+                    self.emit(Op::ArrayPush);
+                }
             }
         }
         Ok(())

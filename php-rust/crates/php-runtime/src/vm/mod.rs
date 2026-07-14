@@ -2668,6 +2668,24 @@ impl<'m> Vm<'m> {
 
         let saved = self.module;
         self.module = leaked;
+        // Register the unit's user functions (those not already provided by the
+        // caller's module) BEFORE driving the body: Zend hoists top-level
+        // functions at compile time of the include/eval, so a nested include
+        // (or a hook fired from one) must already see them — wp-admin/menu.php
+        // registers '_add_themes_utility_last' on 'admin_menu' and the hook
+        // fires from wp-admin/includes/menu.php, included before menu.php ends.
+        // Only the unconditionally-hoisted functions are registered here; a
+        // conditional declaration registers itself via its `Op::DeclareFn` when
+        // the unit body reaches it (so a guarded polyfill respects its condition).
+        for (idx, f) in leaked.functions.iter().enumerate() {
+            if leaked.conditional_fns.contains(&idx) {
+                continue;
+            }
+            let already = saved.functions.iter().any(|cf| name_eq_ignore_case(&cf.name, &f.name));
+            if !already {
+                self.linked_functions.entry(f.name.to_ascii_lowercase()).or_insert((leaked, idx));
+            }
+        }
         let baseline = self.frames.len();
         let mut frame = Frame::new(&leaked.main, leaked);
         frame.eval_origin = eval_origin;
@@ -2688,6 +2706,25 @@ impl<'m> Vm<'m> {
         // `$x` in the caller).
         let mut fresh_bridged: Vec<(Vec<u8>, Rc<RefCell<Zval>>)> = Vec::new();
         if let Some(caller) = scope_bridge {
+            // Is the includer itself running at GLOBAL scope? Walk the bridge
+            // chain: a top-level include-of-include bottoms out at frame 0
+            // through unit frames only; an include inside a function stops at
+            // the function frame. At global scope Zend has ONE symbol table,
+            // so a name this unit introduces must alias the GLOBAL cell (the
+            // unit's lowering already registered it in `seed_globals`) — a
+            // detached fresh cell would leave `global $x` / `$GLOBALS` in a
+            // deeper include reading NULL (wp-admin/menu.php builds `$menu`,
+            // wp-admin/includes/menu.php does `global $menu` and uksort()s it).
+            let global_scope = {
+                let mut root = caller;
+                while root != 0 {
+                    match self.frames[root].bridge_caller {
+                        Some(up) => root = up,
+                        None => break,
+                    }
+                }
+                root == 0
+            };
             let names = &leaked.main.slot_names;
             if caller == 0 {
                 let n = names.len().min(self.frames[0].slots.len());
@@ -2709,6 +2746,12 @@ impl<'m> Vm<'m> {
                         // (extract() in HtmlErrorRenderer::include feeds its
                         // template context this way) shares the same way.
                         frame.slots[i] = Zval::Ref(make_cell(dyn_slot));
+                    } else if global_scope {
+                        // Global-scope include chain: the fresh name lives in
+                        // the global symbol table, immediately (Zend has one
+                        // table for the whole chain — see note above).
+                        let slot = self.global_slot_by_name(name);
+                        frame.slots[i] = Zval::Ref(make_cell(&mut self.frames[0].slots[slot]));
                     } else {
                         let cell = Rc::new(RefCell::new(Zval::Undef));
                         frame.slots[i] = Zval::Ref(Rc::clone(&cell));
@@ -2740,21 +2783,6 @@ impl<'m> Vm<'m> {
                         self.frames[caller].dyn_vars.insert(name, Zval::Ref(cell));
                     }
                 }
-            }
-        }
-        // Register the unit's user functions (those not already provided by the
-        // caller's module) so they are callable by name afterwards. Functions are
-        // hoisted at unit load, so do this even if the body later threw.
-        // Only the unconditionally-hoisted functions are registered here; a
-        // conditional declaration registers itself via its `Op::DeclareFn` when the
-        // unit body reaches it (so a guarded polyfill respects its condition).
-        for (idx, f) in leaked.functions.iter().enumerate() {
-            if leaked.conditional_fns.contains(&idx) {
-                continue;
-            }
-            let already = saved.functions.iter().any(|cf| name_eq_ignore_case(&cf.name, &f.name));
-            if !already {
-                self.linked_functions.entry(f.name.to_ascii_lowercase()).or_insert((leaked, idx));
             }
         }
         outcome
@@ -8605,7 +8633,19 @@ impl<'m> Vm<'m> {
     /// array-merge logic of `Op::ArrayAppendSpread`.
     fn spread_pairs(&mut self, src: Zval) -> Result<Vec<(Key, Zval)>, PhpError> {
         match src.deref_clone() {
-            Zval::Array(s) => Ok(s.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect()),
+            // A reference element stays a live reference (Zend passes it by-ref
+            // when the parameter is by-ref; frame binding decays it at a
+            // by-value position) — `f(...[&$out, 'x'])` writes through.
+            Zval::Array(s) => Ok(s
+                .iter()
+                .map(|(k, v)| {
+                    let v = match v {
+                        Zval::Ref(rc) => Zval::Ref(Rc::clone(rc)),
+                        other => other.clone(),
+                    };
+                    (k.clone(), v)
+                })
+                .collect()),
             Zval::Generator(rc) => {
                 let mut out = Vec::new();
                 self.ensure_started(&rc)?;

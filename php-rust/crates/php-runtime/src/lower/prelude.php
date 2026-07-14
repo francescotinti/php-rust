@@ -645,6 +645,9 @@ interface DateTimeInterface {
     const RSS = 'D, d M Y H:i:s O';
     const W3C = 'Y-m-d\TH:i:sP';
 }
+// Date exception hierarchy (PHP 8.3+): only the members phpr actually throws.
+class DateException extends Exception {}
+class DateInvalidTimeZoneException extends DateException {}
 // phpr models instants as UTC unix timestamps; the carried zone label (IANA
 // name or "±HH:MM" offset) resolves through the __tz_* host builtins (TZif
 // reader, D-DT3) for construction, formatting and calendar arithmetic.
@@ -666,9 +669,15 @@ class DateTimeZone {
     private $__name = "UTC";
     public function __construct($timezone = "UTC") {
         $tz = (string)$timezone;
-        // PHP normalizes offset identifiers: "+0500"/"+05" → "+05:00".
-        if (preg_match('/^([+-])(\d{1,2}):?(\d{2})?$/', $tz, $m) === 1) {
+        // PHP normalizes offset identifiers: "+0500"/"+05"/"GMT+2" → "+05:00"
+        // and a lone "z" → "Z"; anything else must be a known identifier or
+        // abbreviation, else DateInvalidTimeZoneException (oracle-pinned).
+        if (preg_match('/^(?:GMT)?([+-])(\d{1,2}):?(\d{2})?$/', $tz, $m) === 1) {
             $tz = sprintf('%s%02d:%s', $m[1], (int)$m[2], isset($m[3]) && $m[3] !== '' ? $m[3] : '00');
+        } elseif ($tz === 'z') {
+            $tz = 'Z';
+        } elseif (__tz_offset($tz, 0) === false) {
+            throw new DateInvalidTimeZoneException("DateTimeZone::__construct(): Unknown or bad timezone ($tz)");
         }
         $this->__name = $tz;
     }
@@ -676,6 +685,32 @@ class DateTimeZone {
     public function getOffset($datetime) {
         $zi = __tz_offset($this->__name, $datetime->getTimestamp());
         return $zi === false ? false : $zi[0];
+    }
+    // var_dump shows the engine's debug pair (timezone_open_basic1):
+    // type 1 = UTC offset, 2 = abbreviation, 3 = identifier.
+    public function __debugInfo() {
+        $n = $this->__name;
+        $type = ($n !== '' && ($n[0] === '+' || $n[0] === '-')) ? 1
+              : ((strpos($n, '/') !== false || $n === 'UTC') ? 3 : 2);
+        return ['timezone_type' => $type, 'timezone' => $n];
+    }
+    // Transitions exist only for identifier zones (type 3): offset and
+    // abbreviation zones return false, oracle-pinned. Row 0 is the state AT
+    // $timestampBegin; wp-admin/options-general.php reads row 1 for the next
+    // DST change.
+    public function getTransitions($timestampBegin = PHP_INT_MIN, $timestampEnd = PHP_INT_MAX) {
+        $n = $this->__name;
+        $type = ($n !== '' && ($n[0] === '+' || $n[0] === '-')) ? 1
+              : ((strpos($n, '/') !== false || $n === 'UTC') ? 3 : 2);
+        if ($type !== 3) { return false; }
+        $raw = __tz_transitions($n, $timestampBegin, $timestampEnd);
+        if ($raw === false) { return false; }
+        $out = [];
+        foreach ($raw as $r) {
+            $out[] = ['ts' => $r[0], 'time' => gmdate('Y-m-d\TH:i:sP', $r[0]),
+                      'offset' => $r[1], 'isdst' => $r[2], 'abbr' => $r[3]];
+        }
+        return $out;
     }
     public function __toString() { return $this->__name; }
     // The oracle's 419 identifiers (macOS tzdata), comma-packed to keep the
@@ -1042,6 +1077,32 @@ class DateTimeImmutable implements DateTimeInterface {
 // API above. PHP exposes both styles; these delegate so the two stay identical.
 function date_create($datetime = "now") { return new DateTime($datetime); }
 function timezone_identifiers_list($timezoneGroup = DateTimeZone::ALL, $countryCode = null) { return DateTimeZone::listIdentifiers($timezoneGroup, $countryCode); }
+// timezone_open() returns false where the constructor throws (WP's
+// wp_timezone_override_offset probes the option value exactly this way).
+function timezone_open($timezone) {
+    try { return new DateTimeZone($timezone); } catch (Exception $e) { return false; }
+}
+function timezone_offset_get($object, $datetime) {
+    if (!($object instanceof DateTimeZone)) {
+        throw new TypeError("timezone_offset_get(): Argument #1 (\$object) must be of type DateTimeZone, " . get_debug_type($object) . " given");
+    }
+    if (!($datetime instanceof DateTimeInterface)) {
+        throw new TypeError("timezone_offset_get(): Argument #2 (\$datetime) must be of type DateTimeInterface, " . get_debug_type($datetime) . " given");
+    }
+    return $object->getOffset($datetime);
+}
+function timezone_name_get($object) {
+    if (!($object instanceof DateTimeZone)) {
+        throw new TypeError("timezone_name_get(): Argument #1 (\$object) must be of type DateTimeZone, " . get_debug_type($object) . " given");
+    }
+    return $object->getName();
+}
+function timezone_transitions_get($object, $timestampBegin = PHP_INT_MIN, $timestampEnd = PHP_INT_MAX) {
+    if (!($object instanceof DateTimeZone)) {
+        throw new TypeError("timezone_transitions_get(): Argument #1 (\$object) must be of type DateTimeZone, " . get_debug_type($object) . " given");
+    }
+    return $object->getTransitions($timestampBegin, $timestampEnd);
+}
 function date_create_immutable($datetime = "now") { return new DateTimeImmutable($datetime); }
 function date_format($object, $format) { return $object->format($format); }
 function date_timestamp_get($object) { return $object->getTimestamp(); }
@@ -2588,6 +2649,21 @@ class ArrayIterator implements Iterator, ArrayAccess, Countable {
     public function count() { return count($this->__storage); }
     public function getArrayCopy() { return $this->__storage; }
     public function append($value) { $this->__storage[] = $value; }
+}
+// `RecursiveArrayIterator`: ArrayIterator whose array/object elements are
+// recursable children (WpOrg\Requests walks header data through
+// RecursiveIteratorIterator(new RecursiveArrayIterator($data))).
+class RecursiveArrayIterator extends ArrayIterator implements RecursiveIterator {
+    const CHILD_ARRAYS_ONLY = 4;
+    public function hasChildren(): bool {
+        $cur = $this->current();
+        return is_array($cur) || is_object($cur);
+    }
+    public function getChildren() {
+        $cur = $this->current();
+        if ($cur instanceof self) { return $cur; }
+        return new static($cur);
+    }
 }
 class ArrayObject implements IteratorAggregate, ArrayAccess, Countable {
     private $__storage = [];

@@ -1148,7 +1148,11 @@ pub fn array_flip(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let arr = arr_arg(args, "array_flip")?;
     let mut out = PhpArray::new();
     for (k, v) in arr.iter() {
-        let new_key = match v {
+        // ZVAL_DEREF first: a reference element flips by its referent
+        // (WP_Theme::get_page_templates' map reaches array_flip with a
+        // ref-wrapped title under wp-admin).
+        let v = v.deref_clone();
+        let new_key = match &v {
             Zval::Long(i) => Key::Int(*i),
             Zval::Str(s) => Key::from_zstr(s),
             _ => continue,

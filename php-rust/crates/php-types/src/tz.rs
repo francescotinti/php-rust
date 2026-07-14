@@ -90,6 +90,28 @@ pub fn offset_at_ex(name: &str, epoch: i64) -> Option<(TzInfo, i64)> {
     Some((TzInfo { off: t.off, abbrev: t.abbrev.clone(), isdst: t.isdst }, start))
 }
 
+/// Transitions of `name` within `[begin, end]`, PHP `getTransitions`-shaped:
+/// first the state AT `begin` (its `ts` is `begin` itself), then every
+/// transition instant inside the range. `None` for an unknown zone.
+pub fn transitions_between(name: &str, begin: i64, end: i64) -> Option<Vec<(i64, TzInfo)>> {
+    let z = zone(name)?;
+    let info = |ty: usize| {
+        let t = &z.types[ty];
+        TzInfo { off: t.off, abbrev: t.abbrev.clone(), isdst: t.isdst }
+    };
+    let idx = z.trans.partition_point(|&t| t <= begin);
+    let cur = if idx == 0 { z.first_type } else { z.trans_type[idx - 1] };
+    let mut out = vec![(begin, info(cur))];
+    for i in idx..z.trans.len() {
+        let t = z.trans[i];
+        if t > end {
+            break;
+        }
+        out.push((t, info(z.trans_type[i])));
+    }
+    Some(out)
+}
+
 /// Convert a wall-clock time (`wall` = the civil fields packed as if they
 /// were UTC) in the named zone to the real UTC epoch, resolving DST gaps and
 /// folds the way timelib does (oracle-pinned, America/Toronto 2026):

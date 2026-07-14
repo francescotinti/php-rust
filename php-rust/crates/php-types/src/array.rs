@@ -79,7 +79,7 @@ pub struct ArrayAppendError;
 /// iteration order is insertion order (survives unset), tombstones like Zend's
 /// IS_UNDEF buckets, `next_free` never decreases on unset. The internal
 /// packed/mixed distinction of Zend is invisible and not reproduced.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct PhpArray {
     entries: Vec<Option<(Key, Zval)>>,
     index: HashMap<Key, u32>,
@@ -95,6 +95,52 @@ pub struct PhpArray {
     /// pointer when the pointed bucket is deleted). `foreach` snapshots and does not
     /// touch it (PHP 8). Carried by `Clone`/COW like the rest of the array state.
     cursor: usize,
+}
+
+impl Clone for PhpArray {
+    /// Duplicate the array like `zend_array_dup` (Zend/zend_hash.c): an element
+    /// that is a REFERENCE this array is the only holder of (refcount 1 —
+    /// typically `foreach (… as &$v)` residue after the alias variable died)
+    /// is SPLIT into a plain value in the duplicate; a reference someone else
+    /// still aliases stays shared. Without the split, a by-ref foreach over a
+    /// COW copy writes through the surviving cells into every other holder
+    /// (WP_REST_Server::get_routes corrupted `$this->endpoints` this way).
+    fn clone(&self) -> Self {
+        let entries = self
+            .entries
+            .iter()
+            .map(|e| {
+                e.as_ref().map(|(k, v)| {
+                    let v = match v {
+                        Zval::Ref(cell) if Rc::strong_count(cell) == 1 => {
+                            // …UNLESS the referent is this very array (a
+                            // `$a[] =& $a` self-cycle): zend_array_dup keeps
+                            // that reference shared (bug69376) —
+                            // `Z_ARRVAL_P(Z_REFVAL_P(data)) != source`.
+                            let self_ref = matches!(
+                                &*cell.borrow(),
+                                Zval::Array(rc) if std::ptr::eq(Rc::as_ptr(rc), self as *const PhpArray)
+                            );
+                            if self_ref {
+                                Zval::Ref(Rc::clone(cell))
+                            } else {
+                                cell.borrow().clone()
+                            }
+                        }
+                        other => other.clone(),
+                    };
+                    (k.clone(), v)
+                })
+            })
+            .collect();
+        PhpArray {
+            entries,
+            index: self.index.clone(),
+            next_free: self.next_free,
+            count: self.count,
+            cursor: self.cursor,
+        }
+    }
 }
 
 impl Default for PhpArray {

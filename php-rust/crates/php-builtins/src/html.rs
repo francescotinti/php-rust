@@ -25,6 +25,56 @@ const LATIN1: [&[u8]; 96] = [
     b"uuml", b"yacute", b"thorn", b"yuml",
 ];
 
+/// HTML 4.01 named entities beyond the Latin-1 supplement (the `symbols` +
+/// `special` tables of Zend/ext/standard/html_tables.h), name → code point.
+/// Completes D-56.1: WordPress' `WP_Scripts::localize` html_entity_decode()s
+/// every translated string (`Crunching&hellip;` must round-trip to `…`).
+const HTML401_EXT: [(&[u8], u32); 152] = [
+    (b"fnof", 402),
+    (b"Alpha", 913), (b"Beta", 914), (b"Gamma", 915), (b"Delta", 916),
+    (b"Epsilon", 917), (b"Zeta", 918), (b"Eta", 919), (b"Theta", 920),
+    (b"Iota", 921), (b"Kappa", 922), (b"Lambda", 923), (b"Mu", 924),
+    (b"Nu", 925), (b"Xi", 926), (b"Omicron", 927), (b"Pi", 928),
+    (b"Rho", 929), (b"Sigma", 931), (b"Tau", 932), (b"Upsilon", 933),
+    (b"Phi", 934), (b"Chi", 935), (b"Psi", 936), (b"Omega", 937),
+    (b"alpha", 945), (b"beta", 946), (b"gamma", 947), (b"delta", 948),
+    (b"epsilon", 949), (b"zeta", 950), (b"eta", 951), (b"theta", 952),
+    (b"iota", 953), (b"kappa", 954), (b"lambda", 955), (b"mu", 956),
+    (b"nu", 957), (b"xi", 958), (b"omicron", 959), (b"pi", 960),
+    (b"rho", 961), (b"sigmaf", 962), (b"sigma", 963), (b"tau", 964),
+    (b"upsilon", 965), (b"phi", 966), (b"chi", 967), (b"psi", 968),
+    (b"omega", 969), (b"thetasym", 977), (b"upsih", 978), (b"piv", 982),
+    (b"bull", 8226), (b"hellip", 8230), (b"prime", 8242), (b"Prime", 8243),
+    (b"oline", 8254), (b"frasl", 8260),
+    (b"weierp", 8472), (b"image", 8465), (b"real", 8476), (b"trade", 8482),
+    (b"alefsym", 8501),
+    (b"larr", 8592), (b"uarr", 8593), (b"rarr", 8594), (b"darr", 8595),
+    (b"harr", 8596), (b"crarr", 8629), (b"lArr", 8656), (b"uArr", 8657),
+    (b"rArr", 8658), (b"dArr", 8659), (b"hArr", 8660),
+    (b"forall", 8704), (b"part", 8706), (b"exist", 8707), (b"empty", 8709),
+    (b"nabla", 8711), (b"isin", 8712), (b"notin", 8713), (b"ni", 8715),
+    (b"prod", 8719), (b"sum", 8721), (b"minus", 8722), (b"lowast", 8727),
+    (b"radic", 8730), (b"prop", 8733), (b"infin", 8734), (b"ang", 8736),
+    (b"and", 8743), (b"or", 8744), (b"cap", 8745), (b"cup", 8746),
+    (b"int", 8747), (b"there4", 8756), (b"sim", 8764), (b"cong", 8773),
+    (b"asymp", 8776), (b"ne", 8800), (b"equiv", 8801), (b"le", 8804),
+    (b"ge", 8805), (b"sub", 8834), (b"sup", 8835), (b"nsub", 8836),
+    (b"sube", 8838), (b"supe", 8839), (b"oplus", 8853), (b"otimes", 8855),
+    (b"perp", 8869), (b"sdot", 8901),
+    (b"lceil", 8968), (b"rceil", 8969), (b"lfloor", 8970), (b"rfloor", 8971),
+    (b"lang", 9001), (b"rang", 9002),
+    (b"loz", 9674), (b"spades", 9824), (b"clubs", 9827), (b"hearts", 9829),
+    (b"diams", 9830),
+    (b"OElig", 338), (b"oelig", 339), (b"Scaron", 352), (b"scaron", 353),
+    (b"Yuml", 376), (b"circ", 710), (b"tilde", 732),
+    (b"ensp", 8194), (b"emsp", 8195), (b"thinsp", 8201), (b"zwnj", 8204),
+    (b"zwj", 8205), (b"lrm", 8206), (b"rlm", 8207),
+    (b"ndash", 8211), (b"mdash", 8212), (b"lsquo", 8216), (b"rsquo", 8217),
+    (b"sbquo", 8218), (b"ldquo", 8220), (b"rdquo", 8221), (b"bdquo", 8222),
+    (b"dagger", 8224), (b"Dagger", 8225), (b"permil", 8240),
+    (b"lsaquo", 8249), (b"rsaquo", 8250), (b"euro", 8364),
+];
+
 fn flags_of(args: &[Zval], idx: usize, ctx: &mut Ctx) -> (bool, bool) {
     let flags = args
         .get(idx)
@@ -151,6 +201,10 @@ pub fn htmlentities(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
                 out.push(b'&');
                 out.extend_from_slice(LATIN1[(cp - 0xa0) as usize]);
                 out.push(b';');
+            } else if let Some((name, _)) = HTML401_EXT.iter().find(|&&(_, c)| c == cp) {
+                out.push(b'&');
+                out.extend_from_slice(name);
+                out.push(b';');
             } else {
                 out.extend_from_slice(&s[i..i + len]);
             }
@@ -183,10 +237,14 @@ fn decode_entity(ent: &[u8], full: bool, single: bool, double: bool) -> Option<V
         return Some(encode_utf8(cp));
     }
     // Named Latin-1 entity → its code point.
-    LATIN1
+    if let Some(idx) = LATIN1.iter().position(|&name| name == ent) {
+        return Some(encode_utf8(0xa0 + idx as u32));
+    }
+    // HTML 4.01 symbols/special (Greek, dashes, quotes, arrows, maths, …).
+    HTML401_EXT
         .iter()
-        .position(|&name| name == ent)
-        .map(|idx| encode_utf8(0xa0 + idx as u32))
+        .find(|&&(name, _)| name == ent)
+        .map(|&(_, cp)| encode_utf8(cp))
 }
 
 fn decode_all(s: &[u8], full: bool, single: bool, double: bool) -> Vec<u8> {

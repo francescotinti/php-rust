@@ -231,9 +231,17 @@ pub(super) fn split_args_from_array_value(v: Zval) -> (Vec<Zval>, Vec<(Box<[u8]>
             let mut positional = Vec::new();
             let mut named = Vec::new();
             for (k, v) in a.iter() {
+                // A reference element stays a live reference (Zend passes it
+                // by-ref when the parameter is by-ref; the frame binder decays
+                // it at a by-value position) — `build_args_array` pushes plain
+                // variables as references for exactly this.
+                let v = match v {
+                    Zval::Ref(rc) => Zval::Ref(Rc::clone(rc)),
+                    other => other.clone(),
+                };
                 match k {
-                    Key::Int(_) => positional.push(v.deref_clone()),
-                    Key::Str(s) => named.push((s.as_bytes().to_vec().into_boxed_slice(), v.deref_clone())),
+                    Key::Int(_) => positional.push(v),
+                    Key::Str(s) => named.push((s.as_bytes().to_vec().into_boxed_slice(), v)),
                 }
             }
             (positional, named)

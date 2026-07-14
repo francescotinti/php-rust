@@ -38,7 +38,17 @@ impl<'f> Lowerer<'f> {
 
             Statement::Inline(inline) => {
                 let mut bytes: &[u8] = inline.value;
-                if std::mem::take(&mut self.after_closing_tag) {
+                // `?>` consumes one trailing newline (Zend lexer rule). The
+                // flag covers a standalone `Statement::ClosingTag`; when `?>`
+                // instead TERMINATES the previous statement (`echo $k ?>` with
+                // no `;`, wp-includes/media-template.php), the parser absorbs
+                // it as the terminator and no ClosingTag node exists — so also
+                // check the two source bytes right before this inline chunk.
+                let after_close = std::mem::take(&mut self.after_closing_tag) || {
+                    let start = inline.span().start.offset as usize;
+                    start >= 2 && self.file.contents.as_ref().get(start - 2..start) == Some(b"?>")
+                };
+                if after_close {
                     bytes = strip_one_newline(bytes);
                 }
                 StmtKind::InlineHtml(bytes.into())

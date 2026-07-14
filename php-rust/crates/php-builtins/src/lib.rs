@@ -130,6 +130,7 @@ pub fn registry() -> Registry {
     add(b"__tz_offset", date::__tz_offset);
     add(b"__tz_wall_ts", date::__tz_wall_ts);
     add(b"__tz_transition", date::__tz_transition);
+    add(b"__tz_transitions", date::__tz_transitions);
     add(b"__strtotime_tz", date::__strtotime_tz);
     add(b"json_encode", json::json_encode);
     // ext/curl easy-handle facade (curl.rs); the curl_* PHP surface is prelude

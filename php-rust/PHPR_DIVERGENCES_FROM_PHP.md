@@ -381,6 +381,116 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-14 (sessione WordPress-5): 🏁 **wp-admin VIA HTTP: login flow
+  completo + dashboard + 12 pagine admin a parità oracle, e PRETTY
+  PERMALINKS attivi con 10 rotte frontend BYTE-IDENTICHE senza alcuna
+  normalizzazione** (post /2026/07/hello-world/, redirect canonico 301
+  senza slash, page, category, author, feed, 404 pretty, /wp-json/wp/v2/
+  pretty, archivio mese, home). Login flow pinnato probe-FIRST sull'oracle
+  (curl cookie-jar): GET wp-login 4593b → POST credenziali 302 →
+  /wp-admin/ (cookie auth wordpress_* con path /wp-content/plugins +
+  /wp-admin + logged_in; struttura Set-Cookie identica, diverge solo il
+  token di sessione random) → dashboard 125854b → edit.php 109732b →
+  bad-login 4957b: tutti byte-id modulo nonce/timestamp. Write-path
+  verificato: POST options.php con nonce → 302 settings-updated + opzione
+  persistita nel DB; POST options-permalink.php attiva la structure.
+  Fix engine della sessione (ognuno ridotto a repro minimale):
+  **(a) hoisting delle funzioni di unità inclusa PRIMA del run del body**:
+  drive_unit registrava le `linked_functions` solo a unità completata —
+  Zend le hoista a compile-time dell'include, quindi un include annidato
+  (o un hook che scatta da lì) deve già vederle (wp-admin/menu.php
+  registra `_add_themes_utility_last` su admin_menu e il do_action parte
+  da wp-admin/includes/menu.php, incluso prima che menu.php finisca).
+  **(b) symbol table globale UNICA per le catene di include a global
+  scope**: un nome fresco introdotto da un'unità il cui includer non è il
+  frame 0 ma la cui catena bridge_caller arriva a frame 0 ora aliasa la
+  cella GLOBALE (global_slot_by_name) invece di una cella locale staccata
+  — menu.php costruiva `$menu`, includes/menu.php faceva `global $menu` e
+  leggeva la cella globale NULL: uksort(null) fatal.
+  **(c) call_user_func_array passa gli elementi-reference BY-REFERENCE**
+  (prima li decadeva pur sapendo quali erano ref): il Walker di WP
+  accumula l'output con `call_user_func_array([$this,'start_el'],
+  array_merge(array(&$output,…), $args))`.
+  **(d) spread by-ref (SEND_VAR_EX sui componenti)**: `build_args_array`
+  pusha i componenti plain-Var come PushRef (Walker 6.x: `$this->
+  start_el( $output, $el, $depth, ...array_values($args) )` con
+  `start_el(&$output,…)`); split_args_from_array_value e spread_pairs
+  preservano i Ref (il binder li decade sui param by-value). NB: per i
+  callee NOTI al compile-time con parametri by-ref lo spread resta
+  Unsupported→skip (il gate l'ha imposto: instradarli su CallSpread
+  perdeva il write-back degli elementi di `test1(...$array)` con
+  variadic by-ref e il warning "by unpacking a Traversable" —
+  arg_unpack/by_ref*.phpt); il caso WordPress è il dispatch dinamico
+  di metodo, che è coperto.
+  **(e) ⭐ `zend_array_dup`: PhpArray::clone SPEZZA le reference con
+  refcount 1** (residuo di `foreach (… as &$v)` dopo la morte dell'alias)
+  come Zend/zend_hash.c — senza lo split, il by-ref foreach di
+  WP_REST_Server::get_routes sulla COPIA di `$this->endpoints` scriveva
+  attraverso le celle sopravvissute dentro la property: Allow header "1"
+  (strtoupper(true)), methods [1,1], e il preload REST del block editor
+  amputato di ~190KB su post-new.php. Con l'ECCEZIONE Zend-esatta del
+  self-cycle: il ref il cui referente è l'array sorgente stesso
+  (`$a[] =& $a`) resta condiviso (`Z_ARRVAL_P(Z_REFVAL_P(data)) !=
+  source` in zend_array_dup_element; bug69376/bug69376_2 — il gate l'ha
+  beccata). Lo split ha anche FIXATO 5 test corpus di vecchia data
+  (bug72543, dynamic_call/bug52940, gc/bug60138, switch/bug71756,
+  switch/bug72508).
+  **(f) tabella entità HTML 4.01 COMPLETA** (152 nomi symbols+special:
+  hellip, mdash/ndash, quote tipografiche, greche, frecce, matematici,
+  euro, carte…) in htmlentities/html_entity_decode — chiude il vecchio
+  scope-out D-56.1; WP_Scripts::localize() html_entity_decode-a OGNI
+  stringa localizzata (`Crunching&hellip;` deve tornare `…`).
+  **(g) `?>` da TERMINATORE di statement inghiotte il newline**: quando
+  `?>` chiude uno statement senza `;` (`echo $key\n?>`) il parser lo
+  assorbe come terminator e il nodo ClosingTag non esiste — ora il check
+  guarda i 2 byte di sorgente prima del chunk Inline (l'attributo
+  `preload=` dei template media di wp-includes/media-template.php).
+  **(h) array_flip fa ZVAL_DEREF sugli elementi** (la map di
+  WP_Theme::get_page_templates arrivava col titolo Ref-wrapped → il
+  <select> Template della Quick Edit di edit.php?post_type=page spariva).
+  **(i) RecursiveArrayIterator** nel prelude (WpOrg\Requests
+  Curl::get_expect_header cammina gli header data con
+  RecursiveIteratorIterator).
+  **(j) timezone_open/timezone_offset_get/timezone_name_get + VALIDAZIONE
+  del costruttore DateTimeZone** (matrice oracle-pinned: `GMT+2`→`+02:00`,
+  `z`→`Z`, offset ±H[H][:MM] normalizzati, identificatori/abbreviazioni
+  validati con probe __tz_offset, altrimenti DateInvalidTimeZoneException
+  — gerarchia DateException aggiunta; wp_timezone_override_offset moriva
+  su timezone_string=UTC). Più DateTimeZone::__debugInfo (var_dump con
+  timezone_type 1/2/3 + timezone, timezone_open_basic1 verde), ZPP
+  TypeError su timezone_offset_get/name_get, e
+  **DateTimeZone::getTransitions + timezone_transitions_get** (nuovo host
+  `__tz_transitions` sul TZif: riga 0 = stato a $timestampBegin poi ogni
+  transizione nel range, byte-id all'oracle su Europe/Rome/UTC; false per
+  zone offset/abbreviazione come PHP — options-general.php col
+  timezone_string settato mostra il prossimo cambio DST da lì). Residui EX-SKIP documentati
+  (test che prima venivano saltati per builtin mancante e ora girano):
+  timezone_open_warning (il Warning procedurale su tz invalida non è
+  emesso — ritorna solo false), timezone_offset_get_error /
+  DateTime_construct_error / date_create-1 (il parser datetime di phpr
+  non accetta un NOME di timezone nudo come stringa datetime: `new
+  DateTime("GMT")` → Failed to parse; e niente ArgumentCountError
+  sull'arità del ctor), bug78139 (lettere militari singole come
+  abbreviazione: `x`→`X` type 2), bug79580 (messaggio del parser "A
+  'day of year' can only come after a year has been found" vs
+  "Unexpected data found.").
+  Divergenze admin RESIDUE legittime e documentate: `webp_upload_error`/
+  `avif_upload_error` in plupload e il site-health test php_extensions
+  "required modules missing" (ext/gd e affini non implementate — tappa
+  media della roadmap WP); antispambot() usa rand() per carattere (non
+  riproducibile per costruzione); post_ID auto-draft e pagegen_timestamp
+  dipendono dalla storia del DB/istante.
+  Gate-n finale (4776cd24/scratchpad): corpus **2527 pass** (+5 fixati
+  dal ref-split: bug72543, dynamic_call/bug52940, gc/bug60138,
+  switch/bug71756, switch/bug72508; 0 nuovi fail) · sess 162 e refl 175
+  IDENTICI per nome · date **225 pass** (+9 vs baseline: fixati
+  DateTimeZone_clone_basic1, DateTimeZone_construct_basic, bug68406,
+  DateTimeZone_getTransitions_basic1, DateTimeZone_getTransitions_bug1,
+  bug80963, bug81504; +6 ex-skip sopra documentati) · ORM 3E/13F stessi
+  16 nomi · hk 1663/3846 0F · cargo 1550/0 · batteria SAPI 47/48
+  byte-id (1 = Max-Age dipendente dall'orologio) + 8 pagine WP byte-id ·
+  login 5/5, admin 12/12 (modulo clock), pretty 10/10 byte-id ·
+  wp-cli smoke identico.
 - 2026-07-14 (sessione WordPress-4): 🏁 **SAPI WEB SERVER: `phpr -S host:port
   [-t docroot] [router.php]`, work-alike del cli-server di PHP** — e
   **WordPress 7.0.1 SERVITO VIA HTTP a parità byte con l'oracle `php -S`**:

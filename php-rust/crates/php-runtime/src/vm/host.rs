@@ -1531,12 +1531,19 @@ impl<'m> super::Vm<'m> {
             )));
         }
         let callee = args[0].deref_clone();
-        // Track which elements were references: `_array` can pass those by reference,
-        // so only the *non*-reference elements at by-ref positions warn.
+        // Track which elements were references: `_array` passes those by
+        // REFERENCE — keep the live `Zval::Ref` so a by-ref parameter aliases
+        // the caller's cell (frame binding derefs it at by-value positions).
+        // WordPress' Walker accumulates its whole output through
+        // `call_user_func_array([$this,'start_el'], array_merge([&$output, …]))`.
+        // Only the *non*-reference elements at by-ref positions warn.
         let (argv, arg_is_ref): (Vec<Zval>, Vec<bool>) = match args[1].deref_clone() {
             Zval::Array(a) => a
                 .iter()
-                .map(|(_, v)| (v.deref_clone(), matches!(v, Zval::Ref(_))))
+                .map(|(_, v)| match v {
+                    Zval::Ref(rc) => (Zval::Ref(Rc::clone(rc)), true),
+                    other => (other.clone(), false),
+                })
                 .unzip(),
             other => {
                 return Err(PhpError::TypeError(format!(
