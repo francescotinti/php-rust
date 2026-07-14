@@ -78,8 +78,11 @@
 //! - classes/enums/static props/consts → method bodies compile to [`Func`]s; the
 //!   class metadata stays in the HIR [`ClassDecl`] table the VM consults.
 
-use std::collections::HashMap;
 use std::rc::Rc;
+
+/// Fx-hashed (see vm/mod.rs): read on hot runtime paths — `class_index` on
+/// class-name resolution, `prop_info` on every property access.
+type HashMap<K, V> = rustc_hash::FxHashMap<K, V>;
 
 use php_types::{ObjectInfo, PhpStr, Zval};
 
@@ -1423,7 +1426,7 @@ pub struct CompiledClass {
     /// `readonly_props` / `prop_types` / `prop_hooks` fields and the
     /// `resolve_prop_decl` / `resolve_readonly_decl` / `resolve_prop_type` parent
     /// walks. (`own_prop_vis` is kept solely for ordered per-class enumeration.)
-    pub prop_info: std::collections::HashMap<Box<[u8]>, PropInfo>,
+    pub prop_info: HashMap<Box<[u8]>, PropInfo>,
 }
 
 /// The compiled `get`/`set` hooks of one property (step 50). Each hook is a

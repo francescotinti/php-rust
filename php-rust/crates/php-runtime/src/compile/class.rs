@@ -357,7 +357,7 @@ pub(super) fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> C
     // non-readonly redeclaration clears the inherited type / readonly), and then
     // folds in the already-flattened `prop_hooks`. Every declared property (backed
     // or virtual) gets an entry; storage stays name-keyed via `storage_key`.
-    let mut prop_info: HashMap<Box<[u8]>, PropInfo> = HashMap::new();
+    let mut prop_info: rustc_hash::FxHashMap<Box<[u8]>, PropInfo> = rustc_hash::FxHashMap::default();
     for &x in &chain {
         for p in &ctx.classes[x].props {
             prop_info.insert(

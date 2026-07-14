@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 php-types.workspace = true
+rustc-hash.workspace = true
 log.workspace = true
 log4rs.workspace = true
 mago-syntax = "1.30"

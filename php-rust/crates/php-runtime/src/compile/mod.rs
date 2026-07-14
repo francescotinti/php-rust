@@ -72,7 +72,7 @@ struct ProgramCtx<'a> {
     conditional_fns: &'a HashSet<usize>,
     registry: &'a Registry,
     classes: &'a [std::rc::Rc<ClassDecl>],
-    class_index: &'a HashMap<Vec<u8>, ClassId>,
+    class_index: &'a rustc_hash::FxHashMap<Vec<u8>, ClassId>,
 }
 
 /// Compile a lowered [`Program`] into an executable [`Module`].
@@ -101,7 +101,7 @@ pub fn compile_program_stubbed(
 ) -> R<Module> {
     // Case-insensitive name→id index for resolving `ClassRef::Named`; the first
     // declaration of a name wins (PHP forbids redeclaration).
-    let mut class_index: HashMap<Vec<u8>, ClassId> = HashMap::new();
+    let mut class_index: rustc_hash::FxHashMap<Vec<u8>, ClassId> = rustc_hash::FxHashMap::default();
     for (i, cd) in program.classes.iter().enumerate() {
         // A conditional declaration is not resolvable by name until its
         // `Op::DeclareClass` runs, so it stays out of the eager index (its

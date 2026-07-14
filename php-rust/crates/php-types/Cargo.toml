@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 libc = "0.2"
+rustc-hash.workspace = true
 # System zlib for ext/zlib (see src/zlibio.rs): shared by the value builtins
 # (gzcompress & co.) and the VM's gz stream handling, so the FFI lives once in
 # the bottom crate. Byte-identical to PHP requires the system libz + PHP's exact

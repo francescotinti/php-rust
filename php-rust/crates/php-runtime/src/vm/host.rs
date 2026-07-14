@@ -2093,7 +2093,7 @@ impl<'m> super::Vm<'m> {
             return Ok(Zval::Bool(false));
         };
         let mut arr = php_types::PhpArray::new();
-        let mut seen: HashSet<ClassId> = HashSet::new();
+        let mut seen: HashSet<ClassId> = HashSet::default();
         let mut klass = Some(cid);
         while let Some(c) = klass {
             let ifaces = self.classes[c].interfaces.clone();
@@ -3749,7 +3749,7 @@ impl<'m> super::Vm<'m> {
         };
         let v = first.deref_clone();
         let prepared = if self.has_serialize_hooks(&v, &mut Vec::new()) {
-            self.prepare_serialize(v, &mut HashMap::new())?
+            self.prepare_serialize(v, &mut HashMap::default())?
         } else {
             v
         };

@@ -1,5 +1,10 @@
-use std::collections::HashMap;
 use std::rc::Rc;
+
+/// Fx-hashed key index: PHP array keys are hashed on every dim access, where
+/// Zend reads a precomputed zend_string hash — SipHash here was ~10% of the
+/// per-request profile. Insertion order lives in `entries`, so the hasher is
+/// not observable.
+type HashMap<K, V> = rustc_hash::FxHashMap<K, V>;
 
 use crate::{PhpStr, Zval};
 
@@ -147,7 +152,7 @@ impl Default for PhpArray {
     fn default() -> Self {
         PhpArray {
             entries: Vec::new(),
-            index: HashMap::new(),
+            index: HashMap::default(),
             next_free: i64::MIN,
             count: 0,
             cursor: 0,

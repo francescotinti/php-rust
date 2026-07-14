@@ -16,8 +16,15 @@
 //! data and steers control flow.
 
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BinaryHeap, HashMap, HashSet};
+use std::collections::{BTreeMap, BinaryHeap};
 use std::rc::Rc;
+
+/// Fx-hashed engine maps (class/function/constant tables, caches, GC sets):
+/// stands in for Zend's precomputed zend_string hashes; iteration order of
+/// these maps is never observable (std's was already random per instance).
+/// `Vm::unit_fp` keeps its own std `DefaultHasher` — do not conflate.
+type HashMap<K, V> = rustc_hash::FxHashMap<K, V>;
+type HashSet<T> = rustc_hash::FxHashSet<T>;
 
 use php_types::{
     convert, open_file_stream, open_php_stream, ops, ArgPlace, ArgPlaceBase, ArgPlaceStep, Closure,
@@ -398,8 +405,8 @@ pub(crate) fn run_module_with_hir<'m>(
         seed_traits: main_hir.map(|p| p.traits.clone()).unwrap_or_default(),
         seed_static: main_hir.map_or(0, |p| p.static_count),
         seed_globals: main_hir.map(|p| p.slots.clone()).unwrap_or_default(),
-        linked_functions: HashMap::new(),
-        included_files: HashSet::new(),
+        linked_functions: HashMap::default(),
+        included_files: HashSet::default(),
         unit_chain_fp: {
             use std::hash::{Hash, Hasher};
             let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -411,7 +418,7 @@ pub(crate) fn run_module_with_hir<'m>(
             h.finish()
         },
         autoloaders: Vec::new(),
-        autoloading: HashSet::new(),
+        autoloading: HashSet::default(),
         registry,
         stdout: Vec::new(),
         rendered: Vec::new(),
@@ -428,24 +435,24 @@ pub(crate) fn run_module_with_hir<'m>(
         suppress_depth: 0,
         suppress_marks: Vec::new(),
         superglobals: std::array::from_fn(|_| Zval::Undef),
-        preg_cache: HashMap::new(),
+        preg_cache: HashMap::default(),
         frames: Vec::new(),
         next_object_id: 1,
         next_resource_id: 5,
-        static_props: HashMap::new(),
+        static_props: HashMap::default(),
         statics: vec![None; module.static_count],
-        closure_statics: HashMap::new(),
-        magic_guard: HashSet::new(),
+        closure_statics: HashMap::default(),
+        magic_guard: HashSet::default(),
         typed_refs: Vec::new(),
         created: BTreeMap::new(),
-        destructed: HashSet::new(),
-        gc_roots: HashMap::new(),
+        destructed: HashSet::default(),
+        gc_roots: HashMap::default(),
         gc_queue: BinaryHeap::new(),
-        gc_cycle_roots: HashSet::new(),
+        gc_cycle_roots: HashSet::default(),
         gc_light_demoted: Vec::new(),
         shutdown_fns: Vec::new(),
-        generators: HashMap::new(),
-        fibers: HashMap::new(),
+        generators: HashMap::default(),
+        fibers: HashMap::default(),
         fiber_stack: Vec::new(),
         fiber_class_id: module.class_index.get(&b"fiber"[..]).copied(),
         throwable_id: module.class_index.get(&b"throwable"[..]).copied(),
@@ -469,29 +476,29 @@ pub(crate) fn run_module_with_hir<'m>(
         stream_wrappers: std::collections::HashMap::new(),
         filtered_streams: Vec::new(),
         json_active: Vec::new(),
-        enum_cache: HashMap::new(),
-        constants: HashMap::new(),
+        enum_cache: HashMap::default(),
+        constants: HashMap::default(),
         mb_regex: crate::mbregex::MbRegexState::default(),
         strtok: None,
-        signal_handlers: HashMap::new(),
+        signal_handlers: HashMap::default(),
         async_signals: false,
         uncaught_throwable: None,
         retired_main: None,
-        lazy_init: HashMap::new(),
-        lazy_props: HashMap::new(),
-        var_dump_debug: HashMap::new(),
-        stringify_args: HashMap::new(),
-        lazy_options: HashMap::new(),
-        reflect_object_bound: HashMap::new(),
-        lazy_initializing: HashSet::new(),
-        zips: HashMap::new(),
+        lazy_init: HashMap::default(),
+        lazy_props: HashMap::default(),
+        var_dump_debug: std::collections::HashMap::new(),
+        stringify_args: std::collections::HashMap::new(),
+        lazy_options: HashMap::default(),
+        reflect_object_bound: HashMap::default(),
+        lazy_initializing: HashSet::default(),
+        zips: HashMap::default(),
         next_zip: 1,
-        pdo_conns: HashMap::new(),
+        pdo_conns: HashMap::default(),
         next_pdo: 1,
-        stream_chunk_sizes: HashMap::new(),
+        stream_chunk_sizes: HashMap::default(),
         seed_aliases: Vec::new(),
         umask: 0o22,
-        dom_docs: HashMap::new(),
+        dom_docs: HashMap::default(),
         next_dom: 1,
         libxml_internal: false,
         libxml_errors: Vec::new(),
@@ -747,7 +754,7 @@ struct Frame<'m> {
     /// Variables created by NAME at run time (`$$x = v` with a name outside
     /// the function's static slot set). Read/written only by the variable
     /// variable ops; empty (no allocation) for ordinary frames.
-    dyn_vars: std::collections::HashMap<Vec<u8>, Zval>,
+    dyn_vars: HashMap<Vec<u8>, Zval>,
     /// The object bound to `$this` while running a method, or `None` for the
     /// script body and free functions. Read by [`Op::This`]; set when a
     /// [`Op::MethodCall`] / [`Op::InvokeMethod`] pushes a method frame.
@@ -858,7 +865,7 @@ impl<'m> Frame<'m> {
             ip: 0,
             slots: vec![Zval::Undef; func.n_slots as usize],
             stack: Vec::new(),
-            dyn_vars: std::collections::HashMap::new(),
+            dyn_vars: HashMap::default(),
             this: None,
             class: None,
             static_class: None,
@@ -1381,14 +1388,16 @@ struct Vm<'m> {
     /// debuggable object's `__debugInfo()` result, keyed by object id. Populated
     /// only while dispatching a `var_dump` (and `mem::take`n right after), empty
     /// otherwise — never observed across ops.
-    var_dump_debug: HashMap<u32, Zval>,
+    // (std map: the type crosses into php-builtins' `Ctx`, and the path is cold.)
+    var_dump_debug: std::collections::HashMap<u32, Zval>,
     /// Scratch handoff from a string-coercing builtin's arg-walk to the builtin
     /// dispatch: each Stringable object argument's `__toString()` result, keyed
     /// by object id. Populated only while dispatching an unconditionally
     /// string-coercing builtin (`natsort`/`natcasesort`/…) and `mem::take`n right
     /// after; empty otherwise. Lets a pure builtin honor `__toString` without
     /// re-entering the VM (see `Ctx::stringify` / `compute_stringify`).
-    stringify_args: HashMap<u32, php_types::ZStr>,
+    // (std map: crosses into php-builtins like `var_dump_debug`; cold path.)
+    stringify_args: std::collections::HashMap<u32, php_types::ZStr>,
     /// Per-lazy-object option flags (PHP 8.4 `ReflectionClass::newLazy*` /
     /// `resetAsLazy*` `$options`): SKIP_INITIALIZATION_ON_SERIALIZE (8) and
     /// SKIP_DESTRUCTOR (16, consumed at reset time). Keyed by object id.
@@ -1867,9 +1876,9 @@ impl<'m> Vm<'m> {
             }
         }
 
-        let mut handles: HashMap<Node, Handle> = HashMap::new();
-        let mut in_edges: HashMap<Node, usize> = HashMap::new();
-        let mut children: HashMap<Node, Vec<Node>> = HashMap::new();
+        let mut handles: HashMap<Node, Handle> = HashMap::default();
+        let mut in_edges: HashMap<Node, usize> = HashMap::default();
+        let mut children: HashMap<Node, Vec<Node>> = HashMap::default();
         let mut work: VecDeque<Node> = VecDeque::new();
         for &id in roots {
             let Some(rc) = self.created.get(&id) else { continue };
@@ -1915,7 +1924,7 @@ impl<'m> Vm<'m> {
         // without an outside holder: our own handle clone, and `created` for a
         // tracked object. An untracked object (interned enum case) is immortal.
         let mut live: VecDeque<Node> = VecDeque::new();
-        let mut is_live: HashSet<Node> = HashSet::new();
+        let mut is_live: HashSet<Node> = HashSet::default();
         for (node, h) in &handles {
             let external = match (node, h) {
                 (Node::Obj(id), Handle::Obj(o)) => {
@@ -3395,8 +3404,11 @@ impl<'m> Vm<'m> {
     /// (init_trigger_var_dump_debug_info_001/002). Recurses through arrays,
     /// references, the (non-debuggable) object's own slots, and each debug
     /// result, so nested debuggable objects are rendered too. Cycle-guarded by id.
-    fn compute_debug_info(&mut self, args: &[Zval]) -> Result<HashMap<u32, Zval>, PhpError> {
-        let mut map: HashMap<u32, Zval> = HashMap::new();
+    fn compute_debug_info(
+        &mut self,
+        args: &[Zval],
+    ) -> Result<std::collections::HashMap<u32, Zval>, PhpError> {
+        let mut map: std::collections::HashMap<u32, Zval> = std::collections::HashMap::new();
         let mut stack: Vec<Zval> = args.to_vec();
         let mut visited: std::collections::HashSet<u32> = std::collections::HashSet::new();
         // Reference cells and arrays can form cycles without any object in the
@@ -3460,8 +3472,8 @@ impl<'m> Vm<'m> {
         &mut self,
         roots: &[Zval],
         recurse_arrays: bool,
-    ) -> Result<HashMap<u32, php_types::ZStr>, PhpError> {
-        let mut map: HashMap<u32, php_types::ZStr> = HashMap::new();
+    ) -> Result<std::collections::HashMap<u32, php_types::ZStr>, PhpError> {
+        let mut map: std::collections::HashMap<u32, php_types::ZStr> = std::collections::HashMap::new();
         let mut visited: std::collections::HashSet<u32> = std::collections::HashSet::new();
         // Index-driven FIFO queue: process in insertion order, appending
         // referents / array elements to the back as they are discovered.
@@ -4564,7 +4576,7 @@ impl<'m> Vm<'m> {
     /// parent chain, then interfaces transitively; a child redeclaration shadows
     /// the inherited one): `(name, declaring class, index in that class's consts)`.
     fn collect_class_consts(&self, start: ClassId) -> Vec<(Vec<u8>, ClassId, usize)> {
-        let mut seen: HashSet<Vec<u8>> = HashSet::new();
+        let mut seen: HashSet<Vec<u8>> = HashSet::default();
         let mut order: Vec<(Vec<u8>, ClassId, usize)> = Vec::new();
         let mut c = Some(start);
         while let Some(x) = c {
@@ -5216,7 +5228,7 @@ impl<'m> Vm<'m> {
             c = self.classes[ci].parent;
         }
         let mut order: Vec<Box<[u8]>> = Vec::new();
-        let mut declared: HashSet<Box<[u8]>> = HashSet::new();
+        let mut declared: HashSet<Box<[u8]>> = HashSet::default();
         for ci in chain.iter().rev() {
             for (name, _) in &self.classes[*ci].own_prop_vis {
                 if declared.insert(name.clone()) {
@@ -5332,7 +5344,7 @@ impl<'m> Vm<'m> {
             c = self.classes[ci].parent;
         }
         let mut order: Vec<Box<[u8]>> = Vec::new();
-        let mut declared: HashSet<Box<[u8]>> = HashSet::new();
+        let mut declared: HashSet<Box<[u8]>> = HashSet::default();
         for ci in chain.iter().rev() {
             for (name, _) in &self.classes[*ci].own_prop_vis {
                 if declared.insert(name.clone()) {
@@ -7900,7 +7912,7 @@ impl<'m> Vm<'m> {
             // it held, matching PHP); a preserved slot keeps its value.
             let mut props = Props::new();
             let mut dropped: Vec<Zval> = Vec::new();
-            let mut declared: HashSet<&[u8]> = HashSet::new();
+            let mut declared: HashSet<&[u8]> = HashSet::default();
             for (key, _) in &self.classes[ocid].prop_defaults {
                 declared.insert(key.as_ref());
                 if reflected.contains(key.as_ref()) && !preserved_ro.contains(key) {
@@ -8024,7 +8036,7 @@ impl<'m> Vm<'m> {
                         .unwrap_or_default();
                     let mut b = rc.borrow_mut();
                     let mut props = Props::new();
-                    let mut declared: HashSet<&[u8]> = HashSet::new();
+                    let mut declared: HashSet<&[u8]> = HashSet::default();
                     for (name, c) in &cc.prop_defaults {
                         declared.insert(name.as_ref());
                         if still.contains(name.as_ref()) {
@@ -8354,7 +8366,7 @@ impl<'m> Vm<'m> {
         }
         let mut b = o.borrow_mut();
         let mut props = Props::new();
-        let mut declared: HashSet<&[u8]> = HashSet::new();
+        let mut declared: HashSet<&[u8]> = HashSet::default();
         for (k, _) in &self.classes[cid].prop_defaults {
             declared.insert(k.as_ref());
             if k.as_ref() == key {
@@ -10762,7 +10774,7 @@ thread_local! {
     /// memory the include path leaks TODAY on every load; caching makes that
     /// leak bounded by reusing the same module across requests.
     static UNIT_CACHE: RefCell<HashMap<UnitKey, Vec<CachedUnit>>> =
-        RefCell::new(HashMap::new());
+        RefCell::new(HashMap::default());
 }
 
 fn unit_key_for(path: &[u8], meta: &std::fs::Metadata) -> Option<UnitKey> {

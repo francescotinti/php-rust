@@ -1040,7 +1040,7 @@ impl<'m> super::Vm<'m> {
             chain.push(ci);
             c = self.classes[ci].parent;
         }
-        let mut seen: HashSet<Vec<u8>> = HashSet::new();
+        let mut seen: HashSet<Vec<u8>> = HashSet::default();
         let mut out = php_types::PhpArray::new();
         for ci in chain {
             let props: Vec<(usize, Vec<u8>)> = self.classes[ci]
@@ -1401,7 +1401,7 @@ impl<'m> super::Vm<'m> {
         };
         let cid = o.borrow().class_id as usize;
         // Declared property names across the whole parent chain.
-        let mut declared: HashSet<Box<[u8]>> = HashSet::new();
+        let mut declared: HashSet<Box<[u8]>> = HashSet::default();
         let mut c = Some(cid);
         while let Some(ci) = c {
             for (name, _) in &self.classes[ci].own_prop_vis {
