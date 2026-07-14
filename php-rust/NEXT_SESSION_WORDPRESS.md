@@ -36,15 +36,14 @@ a WP: wp_timezone, strtotime, date dei post). Dettaglio in memoria
   footer POSIX non valutato; nomi IANA/abbreviazioni dentro le stringhe
   datetime non parsati; DateTimeZone ctor senza validazione).
 
-## Stato (post sessione 7, commit `78a2ea1`)
-- Suite http-kernel (1663 test; oracle 0 fail): **0E/25F** (era 0E/38F;
-  13F timezone risolte — DateTimeValueResolverTest 39/39).
-- Zend corpus **2469 pass** (identico per nome) · ext/session 161 ·
-  ext/date **212** (+52) · ext/reflection 175 · ORM **3E/13F**
-  (testExportDateTimeZone fixato, sottoinsieme stretto) · cargo **1539/0**.
-- **Baselines gate correnti in 3991dcd8/scratchpad** (gate-e): corpus-e.norm,
-  sess-e.norm, date-e.norm, refl-e.norm, orm-e.names, hk-run12.log/names.
-  Probe: p7_tz1.php byte-id (60 assert timezone vs oracle).
+## Stato (post sessione 8, commit `84ceed4` — verificato dall'audit 2026-07-14)
+- Suite http-kernel (1663 test; oracle 0 fail): **0E/0F — CHIUSA** (hk-run14:
+  restano solo warning/deprecation, come l'oracle).
+- Zend corpus **2486 pass** (zero nuovi fail per nome) · ext/session 161 ·
+  ext/date **215** · ext/reflection 175 · ORM **3E/13F** · cargo **1550/0**.
+- **Baselines gate correnti in 85e6296a/scratchpad** (gate-g): corpus-g.norm,
+  sess-g.norm, date-g.norm, refl-g.norm, orm-g.names (per data-set),
+  hk-run14.log. Probe: p7_tz1.php byte-id (60 assert timezone) + p8_*.
 - Workspace suite: 56c2e188 `…/scratchpad/symfony/http-kernel`. ORM:
   77b21d67/scratchpad/orm-work.
 
@@ -73,8 +72,11 @@ ogni statement in ogni body** (semantica refcount Zend).
 **Harness**: wp-cli = harness CLI per far girare WP PRIMA del SAPI (playbook
 Doctrine/Symfony: suite → errori → fix gated). Poi WP core test suite
 (PHPUnit) = gate per nome del filone; top plugin (WooCommerce, Yoast) come
-suite extra. **Primo passo concreto**: recon wp-cli — scaricare wp-cli.phar,
-`phpr wp-cli.phar --info`, prime rotture = nuova coda di lavoro.
+suite extra. **Primo passo concreto**: recon wp-cli **DA SORGENTE** — ext/phar
+è a ZERO (565 test), quindi NIENTE wp-cli.phar: `git clone wp-cli/wp-cli` +
+`composer install` (già collaudato sotto phpr) → `phpr vendor/bin/wp --info`
+(o il bin del pacchetto wp-cli/wp-cli-bundle), prime rotture = nuova coda di
+lavoro. Stesso playbook di PHPUnit/Doctrine.
 
 **Policy fedeltà** (confermata): byte-parity per tutto ciò che rientra in
 una stringa PHP; functional-parity (crate Rust) per ciò che esce dal
@@ -92,8 +94,9 @@ processo (immagini, rete, mail).
 
 ## Invarianti (identici)
 - Gate per OGNI commit: probe byte-id vs oracle · corpus per NOME
-  (baseline `corpus-e.txt`) · ext/session+date+reflection per nome ·
-  ORM (3E/14F, orm-d.names) se ref/arg/reflection · cargo test.
+  (baseline `corpus-g.norm`) · ext/session+date+reflection per nome ·
+  ORM (**3E/13F**, orm-g.names) se ref/arg/reflection · **http-kernel resta
+  0E/0F** (hk-run14 è la nuova baseline: mai regredirla) · cargo test.
 - Commit AND push a ogni step; run pesanti SEQUENZIALI e DETACHED; Serena
   per Rust, Vexp per il C di php-8.5.7; Read tool per i .php; log con
   `LC_ALL=C tr -d '\0'`.
