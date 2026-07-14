@@ -73,7 +73,17 @@ fn coerce_to_int(value: Zval, diags: &mut Diags) -> Option<Zval> {
     match value {
         Zval::Long(_) => Some(value),
         Zval::Bool(b) => Some(Zval::Long(b as i64)),
-        Zval::Double(d) => Some(Zval::Long(convert::dval_to_lval_safe(d, diags))),
+        // A float (or float-string below) OUTSIDE the long range is a hard
+        // TypeError in weak mode, not a saturating cast — Zend's
+        // zend_parse_arg_long_weak rejects NaN / !ZEND_DOUBLE_FITS_LONG before
+        // the lossy-precision deprecation ("9223372036854775808" to an `int`
+        // parameter must not truncate; Symfony maps the TypeError to a 404).
+        Zval::Double(d) => {
+            if d.is_nan() || !double_fits_long(d) {
+                return None;
+            }
+            Some(Zval::Long(convert::dval_to_lval_safe(d, diags)))
+        }
         Zval::Str(ref s) => {
             let info = numstr::parse_numeric_ex(s.as_bytes(), false)?;
             if info.trailing {
@@ -82,6 +92,9 @@ fn coerce_to_int(value: Zval, diags: &mut Diags) -> Option<Zval> {
             match info.num {
                 numstr::Num::Long(l) => Some(Zval::Long(l)),
                 numstr::Num::Double(d) => {
+                    if d.is_nan() || !double_fits_long(d) {
+                        return None;
+                    }
                     let l = convert::dval_to_lval(d);
                     if !convert::is_long_compatible(d, l) {
                         diags.push(Diag::Deprecated(format!(
@@ -95,6 +108,13 @@ fn coerce_to_int(value: Zval, diags: &mut Diags) -> Option<Zval> {
         }
         _ => None,
     }
+}
+
+/// Zend's `ZEND_DOUBLE_FITS_LONG`: the double is strictly inside
+/// `[LONG_MIN, LONG_MAX]` once rounded to double ((double)LONG_MAX is 2^63,
+/// which does NOT fit).
+fn double_fits_long(d: f64) -> bool {
+    !(d >= i64::MAX as f64 || d < i64::MIN as f64)
 }
 
 /// Weak coercion to `float`: numeric strings (incl. scientific) convert; others

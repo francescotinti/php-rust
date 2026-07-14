@@ -2117,6 +2117,46 @@ fn strtotime_failure() {
 // DateTime is a prelude PHP class holding its epoch internally and delegating
 // to the pure date()/mktime()/strtotime() builtins. Oracle-verified.
 
+// Session 8: Zend's date_object_compare — DateTimeInterface instances compare
+// by absolute instant, cross-class and cross-timezone; arrays holding the same
+// instance are `==` (loose_eq array arm). Oracle-verified.
+#[test]
+fn datetime_objects_compare_by_instant() {
+    assert_eq!(
+        out("<?php date_default_timezone_set('UTC');
+             $a = new DateTimeImmutable('2024-08-12 10:00:00'); $b = new DateTime('2024-08-12 11:00:00');
+             $c = new DateTimeImmutable('2024-08-12 12:00:00+01:00');
+             echo $a < $b ? 1 : 0, $a == $b ? 1 : 0, $b == $c ? 1 : 0, $a <=> $b, $b <=> $a,
+                  max($a, $b) === $b ? 'M' : 'x', [$a] == [$a] ? 'E' : 'x';"),
+        "101-11ME"
+    );
+}
+
+// Session 8: FILTER_VALIDATE_REGEXP (php_filter_validate_regexp) — a non-match
+// is the validation miss (false / NULL under FILTER_NULL_ON_FAILURE).
+#[test]
+fn filter_validate_regexp_miss_and_null_on_failure() {
+    assert_eq!(
+        out("<?php var_dump(filter_var('Fabien', FILTER_VALIDATE_REGEXP, ['options' => ['regexp' => '/John/']]));
+             var_dump(filter_var('Fabien', FILTER_VALIDATE_REGEXP, ['options' => ['regexp' => '/John/'], 'flags' => FILTER_NULL_ON_FAILURE]));
+             var_dump(filter_var('John', FILTER_VALIDATE_REGEXP, ['options' => ['regexp' => '/John/']]));"),
+        "bool(false)\nNULL\nstring(4) \"John\"\n"
+    );
+}
+
+// Session 8: class-target attributes on INTERFACES are reflected (Symfony's
+// ErrorListener resolves #[WithHttpStatus] declared on an exception interface).
+#[test]
+fn interface_attributes_reflected() {
+    assert_eq!(
+        out("<?php #[Attribute(Attribute::TARGET_CLASS)] class Mark { public function __construct(public string $v) {} }
+             #[Mark('on-iface')] interface I {}
+             $a = (new ReflectionClass('I'))->getAttributes(Mark::class);
+             echo count($a), '|', $a[0]->newInstance()->v;"),
+        "1|on-iface"
+    );
+}
+
 #[test]
 fn datetime_construct_and_format() {
     assert_eq!(

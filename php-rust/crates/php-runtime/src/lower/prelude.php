@@ -379,9 +379,13 @@ class Exception implements Throwable {
     private $trace = [];
     private $traceString = "#0 {main}";
     public function __construct($message = "", $code = 0, $previous = null) {
-        $this->message = $message;
-        $this->code = $code;
-        $this->previous = $previous;
+        // Zend (zend_exceptions.c ctor): each slot is written ONLY when the
+        // argument was supplied (message) or is non-zero/non-null (code,
+        // previous) — a subclass redeclaring a property default keeps it
+        // otherwise (ExceptionDataCollector's 'non-integer-code').
+        if (func_num_args() >= 1 && $message !== null) { $this->message = $message; }
+        if ($code) { $this->code = $code; }
+        if ($previous !== null) { $this->previous = $previous; }
     }
     public function getMessage() { return $this->message; }
     public function getCode() { return $this->code; }
@@ -410,9 +414,13 @@ class Error implements Throwable {
     private $trace = [];
     private $traceString = "#0 {main}";
     public function __construct($message = "", $code = 0, $previous = null) {
-        $this->message = $message;
-        $this->code = $code;
-        $this->previous = $previous;
+        // Zend (zend_exceptions.c ctor): each slot is written ONLY when the
+        // argument was supplied (message) or is non-zero/non-null (code,
+        // previous) — a subclass redeclaring a property default keeps it
+        // otherwise (ExceptionDataCollector's 'non-integer-code').
+        if (func_num_args() >= 1 && $message !== null) { $this->message = $message; }
+        if ($code) { $this->code = $code; }
+        if ($previous !== null) { $this->previous = $previous; }
     }
     public function getMessage() { return $this->message; }
     public function getCode() { return $this->code; }
@@ -2883,8 +2891,17 @@ class ReflectionClass implements Reflector {
         $hostName = ($flags & ReflectionAttribute::IS_INSTANCEOF) ? null : $name;
         return ReflectionAttribute::__filter(__reflect_class_attributes($this->name, $hostName), $name, $flags, 'ReflectionClass');
     }
-    public function newInstance(...$args) { return new $this->name(...$args); }
-    public function newInstanceArgs($args = []) { return new $this->name(...$args); }
+    public function newInstance(...$args) { $this->__checkCtorPublic(); return new $this->name(...$args); }
+    public function newInstanceArgs($args = []) { $this->__checkCtorPublic(); return new $this->name(...$args); }
+    private function __checkCtorPublic() {
+        // Zend: reflection_class_new_instance refuses a non-public constructor
+        // with ReflectionException (the `new` below would otherwise raise the
+        // scope-based Error naming ReflectionClass as the calling scope).
+        $ctor = $this->getConstructor();
+        if ($ctor !== null && !$ctor->isPublic()) {
+            throw new ReflectionException('Access to non-public constructor of class ' . $this->name);
+        }
+    }
     public function newInstanceWithoutConstructor() {
         // Internal final classes cannot skip their constructor (Zend rejects
         // it; doctrine/instantiator's PDORow probe relies on the refusal).

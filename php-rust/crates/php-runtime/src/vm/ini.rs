@@ -116,6 +116,10 @@ impl IniTable {
         // reflects it; entries do not extend the resolver (documented
         // divergence).
         add("include_path", ".:", INI_ALL, true, false);
+        // Destination file of error_log()/engine diagnostics ("" = the SAPI
+        // log, stderr under CLI). Settable: Symfony's HttpKernel Logger
+        // round-trips it (ini_set to a temp file, log, restore).
+        add("error_log", "", INI_ALL, true, false);
         // Upload limits (php -n defaults). phpr's CLI never receives uploads,
         // but UploadedFile::getMaxFilesize() computes min(post_max_size,
         // upload_max_filesize) from these.

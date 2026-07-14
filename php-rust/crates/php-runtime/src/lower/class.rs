@@ -531,7 +531,10 @@ impl<'f> Lowerer<'f> {
             is_enum: false,
             enum_backing: None,
             enum_cases: Vec::new(),
-            attributes: Vec::new(),
+            // Interfaces carry class-target attributes like classes do —
+            // Symfony's ErrorListener resolves #[WithHttpStatus]/#[WithLogLevel]
+            // declared on an exception INTERFACE via ReflectionClass.
+            attributes: self.lower_attributes(&iface.attribute_lists, line)?,
             uses_traits: Vec::new(),
             line,
             end_line: self.line_of_end(iface.span()),

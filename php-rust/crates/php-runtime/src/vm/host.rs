@@ -15,6 +15,41 @@ enum DiffCmp {
 
 /// A socket connection error as `(errno, errstr)`, stripping Rust's " (os error
 /// N)" suffix so the message matches PHP's.
+/// php_log_err's "[13-Jul-2026 23:10:45 Europe/Rome] " prefix: wall time in
+/// the default timezone, English month abbreviation, then the zone name.
+fn error_log_stamp() -> Vec<u8> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let zone = php_types::tz::default_timezone();
+    let off = php_types::tz::offset_at(&zone, now).map(|i| i.off).unwrap_or(0);
+    let wall = now + off;
+    let (days, secs) = (wall.div_euclid(86_400), wall.rem_euclid(86_400));
+    // Howard Hinnant's civil_from_days.
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    const MON: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    format!(
+        "[{:02}-{}-{} {:02}:{:02}:{:02} {}] ",
+        d,
+        MON[(m - 1) as usize],
+        y,
+        secs / 3600,
+        (secs / 60) % 60,
+        secs % 60,
+        zone
+    )
+    .into_bytes()
+}
+
 fn sock_err(e: &std::io::Error) -> (i64, String) {
     let errno = e.raw_os_error().unwrap_or(0) as i64;
     let msg = e.to_string();
@@ -2719,13 +2754,108 @@ impl<'m> super::Vm<'m> {
         Ok((Zval::Str(PhpStr::new(out)), Zval::Long(count)))
     }
 
+    /// `error_log($message, $type = 0, $destination = null)` — host-side so
+    /// the `error_log` INI is honoured (the stateless builtin can't see it):
+    /// when the INI names a file, a type-0 message is appended as
+    /// "[d-M-Y H:i:s TZ] message\n" (php_log_err's stamp, default timezone);
+    /// when empty, the CLI SAPI log is stderr, message + newline. Type 3
+    /// appends the raw message to `$destination`; types 1/4 degrade to 0.
+    pub(super) fn ho_error_log(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        use std::io::Write;
+        use std::os::unix::ffi::OsStrExt;
+        let Some(first) = args.first() else {
+            return Err(PhpError::ArgumentCountError(
+                "error_log() expects at least 1 argument, 0 given".to_string(),
+            ));
+        };
+        let msg = self.vm_stringify(&first.deref_clone())?;
+        let mtype = args
+            .get(1)
+            .map(|v| convert::to_long_cast(&v.deref_clone(), &mut self.diags))
+            .unwrap_or(0);
+        if mtype == 3 {
+            let Some(dest) = args.get(2) else { return Ok(Zval::Bool(false)) };
+            let dest = convert::to_zstr_cast(&dest.deref_clone(), &mut self.diags);
+            let ok = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(std::ffi::OsStr::from_bytes(dest.as_bytes()))
+                .and_then(|mut f| f.write_all(msg.as_bytes()))
+                .is_ok();
+            return Ok(Zval::Bool(ok));
+        }
+        let ini_dest = self.ini.get(b"error_log").unwrap_or(b"").to_vec();
+        if ini_dest.is_empty() {
+            let mut err = std::io::stderr();
+            let _ = err.write_all(msg.as_bytes());
+            let _ = err.write_all(b"\n");
+            return Ok(Zval::Bool(true));
+        }
+        let mut line = error_log_stamp();
+        line.extend_from_slice(msg.as_bytes());
+        line.push(b'\n');
+        let ok = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(std::ffi::OsStr::from_bytes(&ini_dest))
+            .and_then(|mut f| f.write_all(&line))
+            .is_ok();
+        Ok(Zval::Bool(ok))
+    }
+
     /// `flock($stream, $operation, &$would_block)` — out-param form of
     /// [`php_builtins::file::flock`] (which stays registered for dynamic
-    /// dispatch): phpr runs single-process with no advisory-lock consumers, so
-    /// the lock always succeeds and `$would_block` is 0.
+    /// dispatch). A file-backed stream takes a REAL advisory lock via
+    /// flock(2), so two handles on the same file contend even within one
+    /// process (Symfony's HttpCache opens a second Store to detect its own
+    /// lock; the old always-true stub let it steal the lock and re-enter the
+    /// backend). A LOCK_NB miss returns false with `$would_block = 1`;
+    /// dropping the resource releases the lock, like PHP's fclose. Non-file
+    /// backends (memory, sockets, pipes) don't support locking: false, as PHP.
     pub(super) fn ho_flock_out(&mut self, args: Vec<Zval>) -> Result<(Zval, Zval), PhpError> {
+        use std::os::unix::io::AsRawFd;
+        let op = args
+            .get(1)
+            .map(|v| convert::to_long_cast(&v.deref_clone(), &mut self.diags));
         match args.first().map(|v| v.deref_clone()) {
-            Some(Zval::Resource(_)) => Ok((Zval::Bool(true), Zval::Long(0))),
+            Some(Zval::Resource(r)) => {
+                let Some(op) = op else {
+                    return Err(PhpError::ArgumentCountError(
+                        "flock() expects at least 2 arguments, 1 given".to_string(),
+                    ));
+                };
+                const LOCK_NB: i64 = 4;
+                let fd = {
+                    let mut b = r.borrow_mut();
+                    match b.as_stream_mut().map(|s| &s.backend) {
+                        Some(php_types::stream::StreamBackend::File(f)) => Some(f.as_raw_fd()),
+                        _ => None,
+                    }
+                };
+                let Some(fd) = fd else {
+                    return Ok((Zval::Bool(false), Zval::Long(0)));
+                };
+                let mut flags = match op & 3 {
+                    1 => libc::LOCK_SH,
+                    2 => libc::LOCK_EX,
+                    3 => libc::LOCK_UN,
+                    _ => {
+                        return Err(PhpError::ValueError(
+                            "flock(): Argument #2 ($operation) must be one of LOCK_SH, LOCK_EX, or LOCK_UN".to_string(),
+                        ))
+                    }
+                };
+                if op & LOCK_NB != 0 {
+                    flags |= libc::LOCK_NB;
+                }
+                if unsafe { libc::flock(fd, flags) } == 0 {
+                    Ok((Zval::Bool(true), Zval::Long(0)))
+                } else {
+                    let errno = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
+                    let wb = (errno == libc::EWOULDBLOCK || errno == libc::EAGAIN) as i64;
+                    Ok((Zval::Bool(false), Zval::Long(wb)))
+                }
+            }
             Some(other) => Err(PhpError::TypeError(format!(
                 "flock(): Argument #1 ($stream) must be of type resource, {} given",
                 other.type_name_for_error()
@@ -6294,16 +6424,102 @@ impl<'m> super::Vm<'m> {
         store_slot(&mut self.frames[top].slots[slot as usize], Zval::Array(Rc::new(out)));
         Ok(Zval::Bool(true))
     }
-    /// `is_callable($value)`: a closure / FCC, a string naming a function or
-    /// `Class::method`, a `[target, method]` array, or an object with `__invoke`
-    /// (mirrors `eval::ho_is_callable`; does not invoke the callable).
+    /// `is_callable($value[, $syntax_only[, &$callable_name]])`: a closure /
+    /// FCC, a string naming a function or `Class::method`, a `[target, method]`
+    /// array, or an object with `__invoke` (mirrors `eval::ho_is_callable`;
+    /// does not invoke the callable). `$syntax_only` checks the SHAPE only
+    /// (zend_is_callable CHECK_SYNTAX_ONLY): any string, any closure, or a
+    /// 2-element array with keys 0 => string|object and 1 => string —
+    /// existence, staticness and visibility are not consulted (Symfony's
+    /// ServiceValueResolver normalises "not yet loaded" controllers this way).
+    /// The `&$callable_name` variant dispatches via the out-param table to
+    /// [`Self::ho_is_callable_out`].
     pub(super) fn ho_is_callable(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let Some(v) = args.first() else {
             return Err(PhpError::ArgumentCountError(
                 "is_callable() expects at least 1 argument, 0 given".to_string(),
             ));
         };
-        Ok(Zval::Bool(self.is_value_callable(&v.deref_clone())))
+        let v = v.deref_clone();
+        let syntax_only = args
+            .get(1)
+            .map(|a| convert::to_bool(&a.deref_clone(), &mut self.diags))
+            .unwrap_or(false);
+        let ok = if syntax_only { Self::callable_syntax_only(&v) } else { self.is_value_callable(&v) };
+        Ok(Zval::Bool(ok))
+    }
+
+    /// The `$syntax_only` predicate of `is_callable` — see [`Self::ho_is_callable`].
+    fn callable_syntax_only(v: &Zval) -> bool {
+        match v {
+            Zval::Closure(_) | Zval::Str(_) => true,
+            Zval::Array(a) => {
+                a.len() == 2
+                    && a.get(&Key::Int(0))
+                        .is_some_and(|z| matches!(z.deref_clone(), Zval::Str(_) | Zval::Object(_)))
+                    && a.get(&Key::Int(1)).is_some_and(|z| matches!(z.deref_clone(), Zval::Str(_)))
+            }
+            Zval::Ref(r) => Self::callable_syntax_only(&r.borrow()),
+            _ => false,
+        }
+    }
+
+    /// `is_callable(..., &$callable_name)` (out-param table entry): PHP fills
+    /// the name whether or not the value is callable (zend_get_callable_name) —
+    /// "C::m" for strings/arrays, "Class::__invoke" for an object (even without
+    /// `__invoke`), the synthetic `{closure:file:line}` name for a closure, the
+    /// string cast of a scalar, and "Array" for a malformed array.
+    pub(super) fn ho_is_callable_out(&mut self, args: Vec<Zval>) -> Result<(Zval, Zval), PhpError> {
+        let v = args.first().map(|a| a.deref_clone()).unwrap_or(Zval::Null);
+        let ok = self.ho_is_callable(args)?;
+        let name = self.callable_display_name(&v);
+        Ok((ok, Zval::Str(PhpStr::new(name))))
+    }
+
+    /// The display name of a would-be callable — see [`Self::ho_is_callable_out`].
+    fn callable_display_name(&mut self, v: &Zval) -> Vec<u8> {
+        match v {
+            Zval::Str(s) => s.as_bytes().to_vec(),
+            Zval::Closure(cl) => match &cl.named {
+                // An FCC keeps the wrapped name ("strlen", "C::stat").
+                Some(n) => n.as_bytes().to_vec(),
+                None => self
+                    .closure_func_mod(cl)
+                    .map(|(f, _)| f.name.to_vec())
+                    .filter(|n| !n.is_empty())
+                    .unwrap_or_else(|| b"{closure}".to_vec()),
+            },
+            Zval::Object(o) => {
+                let mut n = o.borrow().class_name.as_bytes().to_vec();
+                n.extend_from_slice(b"::__invoke");
+                n
+            }
+            Zval::Array(a) => {
+                if a.len() == 2 {
+                    if let (Some(c), Some(Zval::Str(m))) = (
+                        a.get(&Key::Int(0)).map(|z| z.deref_clone()),
+                        a.get(&Key::Int(1)).map(|z| z.deref_clone()),
+                    ) {
+                        let cls = match &c {
+                            Zval::Str(cs) => Some(cs.as_bytes().to_vec()),
+                            Zval::Object(o) => Some(o.borrow().class_name.as_bytes().to_vec()),
+                            _ => None,
+                        };
+                        if let Some(mut n) = cls {
+                            n.extend_from_slice(b"::");
+                            n.extend_from_slice(m.as_bytes());
+                            return n;
+                        }
+                    }
+                }
+                b"Array".to_vec()
+            }
+            Zval::Ref(r) => {
+                let inner = r.borrow().clone();
+                self.callable_display_name(&inner)
+            }
+            other => convert::to_zstr_cast(other, &mut self.diags).as_bytes().to_vec(),
+        }
     }
     /// `filter_var(...)` host wrapper: only `FILTER_CALLBACK` needs the VM (it
     /// invokes a user callable per value); every other filter delegates to the

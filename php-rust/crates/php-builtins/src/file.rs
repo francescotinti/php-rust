@@ -2566,9 +2566,45 @@ pub fn tempnam(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// `flock($stream, $operation, &$would_block = null)`: phpr runs single-process
 /// with no advisory-lock consumers, so the lock always "succeeds" (true). The
 /// stream argument is still type-checked.
-pub fn flock(argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+/// Dynamic-dispatch form of `flock` (the compiler routes literal calls to the
+/// VM's out-param variant, which owns the full flock(2) semantics — see
+/// `Vm::ho_flock_out`). Mirrors it minus `$would_block`: a real advisory lock
+/// on a file-backed stream, false on backends that can't lock.
+pub fn flock(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::os::unix::io::AsRawFd;
     match argv.first().map(|v| v.deref_clone()) {
-        Some(Zval::Resource(_)) => Ok(Zval::Bool(true)),
+        Some(Zval::Resource(r)) => {
+            let op = argv
+                .get(1)
+                .map(|v| convert::to_long_cast(&v.deref_clone(), ctx.diags))
+                .ok_or_else(|| {
+                    PhpError::ArgumentCountError(
+                        "flock() expects at least 2 arguments, 1 given".to_string(),
+                    )
+                })?;
+            let fd = {
+                let mut b = r.borrow_mut();
+                match b.as_stream_mut().map(|s| &s.backend) {
+                    Some(StreamBackend::File(f)) => Some(f.as_raw_fd()),
+                    _ => None,
+                }
+            };
+            let Some(fd) = fd else { return Ok(Zval::Bool(false)) };
+            let mut flags = match op & 3 {
+                1 => libc::LOCK_SH,
+                2 => libc::LOCK_EX,
+                3 => libc::LOCK_UN,
+                _ => {
+                    return Err(PhpError::ValueError(
+                        "flock(): Argument #2 ($operation) must be one of LOCK_SH, LOCK_EX, or LOCK_UN".to_string(),
+                    ))
+                }
+            };
+            if op & 4 != 0 {
+                flags |= libc::LOCK_NB;
+            }
+            Ok(Zval::Bool(unsafe { libc::flock(fd, flags) } == 0))
+        }
         Some(other) => Err(PhpError::TypeError(format!(
             "flock(): Argument #1 ($stream) must be of type resource, {} given",
             other.type_name_for_error()

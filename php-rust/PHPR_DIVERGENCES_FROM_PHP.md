@@ -381,6 +381,61 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-14 (sessione 8): ✅ **CHIUSA la suite symfony/http-kernel: 1663
+  test, 0E/0F** (da 0E/25F). Fix engine, tutti oracle-pinned:
+  **(a) visibilità del costruttore a `new`** (`check_new_ctor_access` nei 3
+  Op::Alloc*: "Call to private C::__construct() from {scope}" senza la parola
+  "method", classe DICHIARANTE nel messaggio, abstract/interface/enum vincono;
+  le allocazioni interne — unserialize/reflection/host — NON checkano, come
+  object_init; `ReflectionClass::newInstance{,Args}` → ReflectionException
+  "Access to non-public constructor of class X");
+  **(b) is_callable ZPP completo**: static-style (`'C::m'`/`['C','m']`) su
+  metodo d'istanza VISIBILE → false senza fallback a `__callStatic` (metodo
+  inaccessibile/mancante → callable sse `__callStatic` esiste); param
+  `$syntax_only` (shape-only: ogni stringa, closure, array `[0=>str|obj,
+  1=>str]`); 3° param by-ref `&$callable_name` via out-param table
+  (zend_get_callable_name: "C::m", "Class::__invoke", `{closure:file:line}`,
+  cast scalare, "Array" per array malformato);
+  **(c) FILTER_VALIDATE_REGEXP** (php_filter_validate_regexp: miss →
+  false/NULL_ON_FAILURE, "regexp" mancante → ValueError);
+  **(d) weak coercion int con range check** (zend_parse_arg_long_weak:
+  numeric-string/float FUORI dal range long → TypeError, non troncamento —
+  prima `'9223372036854775808'` → int param troncava con Deprecated);
+  **(e) enum from/tryFrom = port dello ZPP di zend_enum_from_base**
+  (int-backed: Z_PARAM_LONG con coercion weak completa; string-backed:
+  STR_OR_LONG weak / STR strict del CHIAMANTE; null → deprecation
+  "Passing null … of type string|int" + valore zero; messaggi "int" per
+  int-backed, "string|int" per string-backed);
+  **(f) date_object_compare in ops.rs**: DateTime/DateTimeImmutable
+  confrontano per ISTANTE assoluto (epoch+µs, cross-class e cross-timezone)
+  in compare()/loose_eq; identità `Rc::ptr_eq` → 0 nel ramo ordering; NUOVO
+  arm loose_eq (Array,Array) con uguaglianza LOOSE dei valori (prima due
+  array contenenti la STESSA istanza oggetto non erano mai `==`);
+  **(g) flock(2) REALE sui file stream** (due handle sullo stesso file
+  contendono anche in-process — Store di HttpCache; LOCK_NB miss → false +
+  `$would_block=1`; backend non-file → false come PHP);
+  **(h) INI `error_log` onorata da error_log()** (append
+  "[d-M-Y H:i:s TZ] msg" nel default tz; ⚠️ le DIAGNOSTICHE engine
+  (Warning/Deprecated) vanno ancora a stderr anche con error_log settata);
+  **(i) attributi sulle INTERFACCE riflessi** (lower_interface li scartava);
+  **(j) ctor di Exception/Error scrive message/code/previous SOLO se
+  forniti/non-zero** (zend_exceptions.c: una sottoclasse che ridichiara i
+  default li mantiene — `protected $code = 'non-integer-code'`);
+  **(k) ⭐ SWEEP DISTRUTTORI EAGER OVUNQUE**: Op::Sweep emesso dopo OGNI
+  statement in OGNI body (prima: solo top-level) — Zend distrugge a
+  refcount-zero; i configurator Symfony DI registrano le definizioni in
+  `__destruct` e la riga dopo le legge (granularità statement, non
+  sub-espressione: resta teoricamente osservabile in `f(new Temp(), g())`).
+  Divergenze RESIDUE nuove documentate: ordine di `class_implements`
+  (phpr: ordine di dichiarazione; Zend: ordine interno diverso);
+  attribuzione di LINEA delle deprecation di coercion implicita (Zend: riga
+  del RECV nel callee; phpr: riga della chiamata) e della deprecation
+  null-arg flushata durante l'unwinding (+1 riga);
+  `ReflectionProperty::getValue` su typed prop non inizializzata non lancia
+  (oracle: Error "must not be accessed before initialization"); i frame
+  builtin non compaiono nei backtrace dei fatal (`#0 {main}` vs
+  `#0 file(line): fn()`); stderr non riceve la copia "PHP Fatal error:"/
+  "PHP Deprecated:" dei diagnostici (solo stdout).
 - 2026-07-13 (sessione 7): ✅ **CHIUSO il gap timezone D-DT3** — phpr non è
   più UTC-only: lettore TZif v2/v3 sopra `/usr/share/zoneinfo` di sistema
   (`php_types::tz`, cache per zona, gap/fold DST risolti alla timelib:

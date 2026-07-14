@@ -1003,7 +1003,12 @@ pub enum Op {
     /// (OOP-3d). Emitted by the compiler after each top-level (`main`) statement,
     /// mirroring the tree-walker's global-scope `sweep_destructors`; never inside a
     /// function/method body. A no-op when nothing is unreachable.
-    Sweep,
+    Sweep {
+        /// True for global-scope statement boundaries: additionally re-examines
+        /// the objects light (in-body) sweeps demoted since the last main sweep,
+        /// closing the window for temp deaths the drop sites don't gc_note.
+        main: bool,
+    },
 
     /// No-op. Kept so a [`crate::hir::StmtKind::Nop`] / `Label` has a stable
     /// address to compile pass-throughs against without special-casing empty

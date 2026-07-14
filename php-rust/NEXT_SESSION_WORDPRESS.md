@@ -1,9 +1,10 @@
-# Rotta WORDPRESS-FIRST — si parte QUI a chiusura http-kernel avvenuta
+# Rotta WORDPRESS-FIRST — SI PARTE QUI (http-kernel chiuso in sessione 8)
 
-> ⚠️ **Prerequisito**: la chiusura di symfony/http-kernel NON è ancora
-> completa — il kickoff operativo della prossima sessione resta
-> `NEXT_SESSION_HTTP_KERNEL.md` (coda residua). Questo documento è la rotta
-> che scatta subito dopo: non lasciare http-kernel a metà.
+> ✅ **Prerequisito SODDISFATTO** (sessione 8, 2026-07-14): symfony/http-kernel
+> è CHIUSO — 1663 test, 0 error / 0 failure (parità con l'oracle). Questo è
+> ORA il kickoff operativo della prossima sessione. Dettaglio sessione 8 in
+> memoria `php-rust-symfony-http-kernel` (SESSIONE-8) e nel changelog di
+> `PHPR_DIVERGENCES_FROM_PHP.md` (2026-07-14).
 
 Riprendiamo phpr (PHP 8.5.7 in Rust). **Roadmap riordinata (decisione
 2026-07-13, memoria `php-rust-roadmap-wp-first`)**: obiettivo primario =
@@ -47,13 +48,18 @@ a WP: wp_timezone, strtotime, date dei post). Dettaglio in memoria
 - Workspace suite: 56c2e188 `…/scratchpad/symfony/http-kernel`. ORM:
   77b21d67/scratchpad/orm-work.
 
-## Piano
+## Cosa è entrato (sessione 8 — chiusura http-kernel, engine fix riusabili da WP)
+Visibilità del costruttore a `new`; is_callable ZPP completo (static-style,
+$syntax_only, &$callable_name); FILTER_VALIDATE_REGEXP; range-check nella weak
+coercion a int (overflow → TypeError); enum from/tryFrom = port di
+zend_enum_from_base; **DateTime comparabili per istante** (date_object_compare
+in ops.rs — WP confronta date dei post!) + `==` di array con valori loose;
+**flock(2) reale** sui file stream (WP usa file lock per cache/cron);
+**INI error_log onorata da error_log()** (WP debug.log!); attributi sulle
+interfacce; ctor Exception/Error condizionale; ⭐ **distruttori eager dopo
+ogni statement in ogni body** (semantica refcount Zend).
 
-### A. PRIMA: chiusura http-kernel (coda residua)
-Operativa in `NEXT_SESSION_HTTP_KERNEL.md` — cluster resolver, HttpCache,
-ErrorListener e singoli. Propedeutica al WP-track: non lasciarla a metà.
-
-### B. POI: WP-track (dalla memoria php-rust-roadmap-wp-first — 5 tappe)
+## Piano: WP-track (dalla memoria php-rust-roadmap-wp-first — 5 tappe)
 1. ~~Timezone/date~~ ✅ (sessione 7).
 2. **SAPI web server** — superglobali da richiesta reale, header/cookie,
    multipart upload, request lifecycle (php-server/Axum è il bridgehead).

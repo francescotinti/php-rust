@@ -954,6 +954,27 @@ pub(crate) fn filter_var(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
             Ok(f) => Ok(Zval::Double(f)),
             Err(_) => Ok(miss()),
         },
+        // FILTER_VALIDATE_REGEXP: php_filter_validate_regexp — the value must
+        // match the `regexp` option (a full PCRE pattern, delimiters included);
+        // a missing option is the ValueError, a failed compile or a non-match
+        // is the validation miss (Symfony's QueryParameterValueResolver maps
+        // the miss to a 404 / null under FILTER_NULL_ON_FAILURE).
+        272 => {
+            let Some(pat) = opt(b"regexp") else {
+                return Err(PhpError::ValueError(
+                    "filter_var(): \"regexp\" option is missing".to_string(),
+                ));
+            };
+            let pat = convert::to_zstr_cast(&pat, ctx.diags);
+            let matched = php_runtime::preg::compile(pat.as_bytes()).is_some_and(|re| {
+                php_runtime::preg::subject_text(
+                    s.as_bytes(),
+                    php_runtime::preg::pattern_is_unicode(pat.as_bytes()),
+                )
+                .is_some_and(|st| re.captures(st.as_str()).is_some())
+            });
+            if matched { Ok(Zval::Str(s)) } else { Ok(default_or_miss()) }
+        }
         // FILTER_VALIDATE_URL: port of php_filter_url (logical_filters.c) over
         // the same php_url_parse the parse_url builtin uses. A URL must parse,
         // carry a scheme, and (unless mailto/news/file) a host; an http(s)

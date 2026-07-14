@@ -2298,6 +2298,7 @@ impl<'m> super::Vm<'m> {
                     }
                 }
                 Op::Alloc { class } => {
+                    self.check_new_ctor_access(self.frames[top].class, class)?;
                     let obj = self.alloc_object(class)?;
                     self.frames[top].stack.push(obj);
                 }
@@ -2305,6 +2306,7 @@ impl<'m> super::Vm<'m> {
                     let cid = self.frames[top].static_class.ok_or_else(|| {
                         PhpError::Error("Cannot use \"static\" in the global scope".to_string())
                     })?;
+                    self.check_new_ctor_access(self.frames[top].class, cid)?;
                     let obj = self.alloc_object(cid)?;
                     self.frames[top].stack.push(obj);
                 }
@@ -2312,6 +2314,7 @@ impl<'m> super::Vm<'m> {
                     // `new $cls` (PAR): resolve the class reference at run time.
                     let classval = self.frames[top].stack.pop().expect("AllocDynamic class");
                     let cid = self.resolve_dynamic_class(&classval)?;
+                    self.check_new_ctor_access(self.frames[top].class, cid)?;
                     let obj = self.alloc_object(cid)?;
                     self.frames[top].stack.push(obj);
                 }
@@ -4181,8 +4184,12 @@ impl<'m> super::Vm<'m> {
                         match_case_repr(&subj)
                     )));
                 }
-                Op::Sweep => {
-                    self.gc_sweep(top, ip)?;
+                Op::Sweep { main } => {
+                    // A destructor body's statement sweeps no-op — see
+                    // Frame::in_destructor (handle-id release order).
+                    if !self.frames[top].in_destructor {
+                        self.gc_sweep(top, ip, main)?;
+                    }
                 }
                 Op::Nop => {}
             }

@@ -511,6 +511,24 @@ pub fn compare(a: &Zval, b: &Zval) -> i32 {
             (Zval::Long(l), Zval::Double(r)) => return threeway(*l as f64, *r),
             (Zval::Double(l), Zval::Double(r)) => return threeway(*l, *r),
             (Zval::Array(l), Zval::Array(r)) => return compare_arrays(l, r),
+            // Zend's date_object_compare: DateTime / DateTimeImmutable compare
+            // by absolute instant, cross-class and cross-timezone. The same
+            // instance orders equal (zend_compare's identity fast path). Any
+            // other object pair keeps the generic uncomparable result (1),
+            // exactly what the `_` arm below produced for objects.
+            (Zval::Object(l), Zval::Object(r)) => {
+                if Rc::ptr_eq(l, r) {
+                    return 0;
+                }
+                if let (Some(x), Some(y)) = (datetime_instant(&l.borrow()), datetime_instant(&r.borrow())) {
+                    return match x.cmp(&y) {
+                        std::cmp::Ordering::Less => -1,
+                        std::cmp::Ordering::Equal => 0,
+                        std::cmp::Ordering::Greater => 1,
+                    };
+                }
+                return 1;
+            }
             // Two resources compare by their numeric id (oracle: `$a < $b` is
             // `id_a < id_b`, step 51).
             (Zval::Resource(l), Zval::Resource(r)) => {
@@ -718,6 +736,35 @@ pub fn natcmp(a: &[u8], b: &[u8], ci: bool) -> i32 {
     }
 }
 
+/// The `(epoch seconds, microseconds)` instant of a DateTime /
+/// DateTimeImmutable instance, or `None` for any other object. phpr's date
+/// classes are prelude PHP classes whose state lives in private `__ts`/`__us`
+/// slots, storage-mangled under the declaring ROOT class — so the two mangled
+/// keys identify a date object structurally, subclasses included (userland
+/// cannot implement DateTimeInterface directly, so the two roots cover every
+/// instance). Powers Zend's date_object_compare in [`compare`]/[`loose_eq`].
+fn datetime_instant(o: &crate::Object) -> Option<(i64, i64)> {
+    let ts = o
+        .props
+        .get(b"\0DateTime\0__ts")
+        .or_else(|| o.props.get(b"\0DateTimeImmutable\0__ts"))?;
+    let ts = match ts.deref_clone() {
+        Zval::Long(l) => l,
+        Zval::Double(d) => d as i64,
+        _ => return None,
+    };
+    let us = o
+        .props
+        .get(b"\0DateTime\0__us")
+        .or_else(|| o.props.get(b"\0DateTimeImmutable\0__us"));
+    let us = match us.map(|z| z.deref_clone()) {
+        Some(Zval::Long(l)) => l,
+        Some(Zval::Double(d)) => d as i64,
+        _ => 0,
+    };
+    Some((ts, us))
+}
+
 /// _zendi_convert_scalar_to_number_silent: arrays pass through untouched.
 fn scalar_to_number_silent(v: &Zval) -> Zval {
     match v {
@@ -763,6 +810,20 @@ pub fn loose_eq(a: &Zval, b: &Zval) -> bool {
         (Zval::Long(l), Zval::Double(r)) => *l as f64 == *r,
         (Zval::Double(l), Zval::Long(r)) => *l == *r as f64,
         (Zval::Str(l), Zval::Str(r)) => smart_streq(l, r),
+        // Two arrays are loosely equal iff same size and every key of the left
+        // exists on the right with `==` values (zend_hash_compare, unordered,
+        // with is_equal): value equality must be LOOSE equality — an identical
+        // object instance nested in both arrays is equal, which the ordering
+        // walk below (object => uncomparable => 1) cannot express.
+        (Zval::Array(l), Zval::Array(r)) => {
+            if Rc::ptr_eq(l, r) {
+                return true;
+            }
+            if l.len() != r.len() {
+                return false;
+            }
+            l.iter().all(|(k, v1)| r.get(k).is_some_and(|v2| loose_eq(v1, v2)))
+        }
         // Two objects are loosely equal iff they are the same instance, or share
         // the same class and every property is loosely equal (PHP object `==`).
         // For enum case singletons this reduces to identity (step 23).
@@ -771,6 +832,12 @@ pub fn loose_eq(a: &Zval, b: &Zval) -> bool {
                 return true;
             }
             let (lb, rb) = (l.borrow(), r.borrow());
+            // Two date objects are `==` iff they denote the same instant —
+            // cross-class (DateTime vs DateTimeImmutable) and cross-timezone
+            // (Zend's date_object_compare), unlike the per-property rule.
+            if let (Some(x), Some(y)) = (datetime_instant(&lb), datetime_instant(&rb)) {
+                return x == y;
+            }
             lb.class_id == rb.class_id
                 && lb.props.len() == rb.props.len()
                 && lb

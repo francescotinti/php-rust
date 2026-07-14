@@ -400,6 +400,7 @@ pub(crate) fn run_module_with_hir<'m>(
         gc_roots: HashMap::new(),
         gc_queue: BinaryHeap::new(),
         gc_cycle_roots: HashSet::new(),
+        gc_light_demoted: Vec::new(),
         shutdown_fns: Vec::new(),
         generators: HashMap::new(),
         fibers: HashMap::new(),
@@ -740,6 +741,12 @@ struct Frame<'m> {
     /// permission (`Object::readonly_clone_writable`) is revoked, so a *manual*
     /// `$o->__clone()` call (no permission) still fatals on a readonly write.
     clone_init: bool,
+    /// True for a frame running `__destruct` via the GC sweep. Its body's
+    /// per-statement `Op::Sweep`s no-op: objects the destructor displaces are
+    /// collected by the OUTER sweep that resumes after this frame returns, so
+    /// the dying receiver releases its handle id FIRST — Zend's LIFO reuse
+    /// order (gh10168: the receiver's id is reused before its displacees').
+    in_destructor: bool,
     /// The instance id of the closure this frame is running, if any. `static $x`
     /// inside a closure persists **per closure instance** (PHP binds the static to
     /// the Closure object, not the op-array): a fresh closure from the same literal
@@ -776,6 +783,7 @@ impl<'m> Frame<'m> {
             init_props: false,
             eval_origin: None,
             clone_init: false,
+            in_destructor: false,
             closure_id: None,
         }
     }
@@ -1118,6 +1126,13 @@ struct Vm<'m> {
     /// collector runs a trial-deletion pass over these ids. Ids only —
     /// `created` keeps the objects alive; stale ids are filtered at collection.
     gc_cycle_roots: HashSet<u32>,
+    /// Objects a LIGHT (in-body) sweep demoted to `gc_cycle_roots` since the
+    /// last MAIN sweep. A temp consumed off the operand stack mid-statement is
+    /// not gc_note'd, so its death is only observable by re-checking the
+    /// refcount; the enclosing global statement's main sweep re-seeds exactly
+    /// these ids once — the same set the pre-eager-sweep buffer would have
+    /// held for that statement (no asymptotic cost change).
+    gc_light_demoted: Vec<u32>,
     /// Callbacks registered with `register_shutdown_function`, each with its bound
     /// arguments, run in registration order at script end — after the main run (and
     /// any uncaught-fatal banner), before object destructors.
@@ -1378,16 +1393,29 @@ impl<'m> Vm<'m> {
         }
     }
 
-    fn gc_sweep(&mut self, top: usize, ip: usize) -> Result<(), PhpError> {
-        self.gc_sweep_impl(Some((top, ip)))
+    fn gc_sweep(&mut self, top: usize, ip: usize, main: bool) -> Result<(), PhpError> {
+        self.gc_sweep_impl(Some((top, ip)), main)
     }
 
     /// The sweep body. `resume = Some((top, ip))` is the statement-level mode:
     /// a found destructor is *scheduled* (frame pushed, `ip` rewound so the
     /// `Sweep` op re-runs after it returns). `None` drives each destructor to
     /// completion synchronously — the reset-as-lazy path, where PHP runs the
-    /// displaced contents' destructors inside the reset itself.
-    fn gc_sweep_impl(&mut self, resume: Option<(usize, usize)>) -> Result<(), PhpError> {
+    /// displaced contents' destructors inside the reset itself. `main` (global
+    /// statement boundaries, and every synchronous caller) first re-seeds what
+    /// LIGHT sweeps demoted, so unhooked mid-statement temp deaths are caught.
+    fn gc_sweep_impl(&mut self, resume: Option<(usize, usize)>, main: bool) -> Result<(), PhpError> {
+        if main && !self.gc_light_demoted.is_empty() {
+            for id in std::mem::take(&mut self.gc_light_demoted) {
+                if let Some(o) = self.created.get(&id) {
+                    if let std::collections::hash_map::Entry::Vacant(e) = self.gc_roots.entry(id) {
+                        e.insert(Rc::clone(o));
+                        self.gc_queue.push(id);
+                        self.gc_cycle_roots.remove(&id);
+                    }
+                }
+            }
+        }
         log::trace!(
             target: "phpr::gc",
             "sweep: {} tracked / {} candidate objects",
@@ -1414,6 +1442,11 @@ impl<'m> Vm<'m> {
                     Some(_) => {
                         self.gc_roots.remove(&id);
                         self.gc_cycle_roots.insert(id);
+                        // A light sweep's demotion must be re-checked by the
+                        // enclosing main sweep (unhooked temp deaths).
+                        if !main {
+                            self.gc_light_demoted.push(id);
+                        }
                     }
                 }
             };
@@ -1514,6 +1547,7 @@ impl<'m> Vm<'m> {
                 frame.this = Some(Zval::Object(Rc::clone(&o)));
                 frame.class = Some(defc);
                 frame.static_class = Some(cid);
+                frame.in_destructor = true;
                 // Discard the destructor's return (don't disturb the caller's
                 // operand stack).
                 frame.ret_cell = Some(Rc::new(RefCell::new(Zval::Null)));
@@ -1610,13 +1644,23 @@ impl<'m> Vm<'m> {
             // A finished `__destruct`'s receiver has already been removed from
             // `created`, so the sweep cannot cascade it: if this frame holds its
             // last reference, do that cascade here before it is freed (otherwise
-            // objects it owned would never be re-examined).
+            // objects it owned would never be re-examined). Do NOT gc_note it —
+            // re-buffering a destructed object only delays its handle-id
+            // release past objects its destructor displaced, flipping Zend's
+            // LIFO reuse order (gh10168: the second `new Test` must reuse the
+            // NEWEST freed id).
             if let Zval::Object(o) = this {
-                if Rc::strong_count(o) == 1 && self.destructed.contains(&o.borrow().id) {
-                    self.gc_cascade(o);
+                let id = o.borrow().id;
+                if self.destructed.contains(&id) && !self.created.contains_key(&id) {
+                    if Rc::strong_count(o) == 1 {
+                        self.gc_cascade(o);
+                    }
+                } else {
+                    self.gc_note(this);
                 }
+            } else {
+                self.gc_note(this);
             }
-            self.gc_note(this);
         }
     }
 
@@ -3008,12 +3052,22 @@ impl<'m> Vm<'m> {
         let mut map: HashMap<u32, Zval> = HashMap::new();
         let mut stack: Vec<Zval> = args.to_vec();
         let mut visited: std::collections::HashSet<u32> = std::collections::HashSet::new();
+        // Reference cells and arrays can form cycles without any object in the
+        // loop (`$a[] =& $a`; gc_041 dumps a destructor-resurrected graph):
+        // walk each shared cell/table once, by pointer identity.
+        let mut seen_cells: std::collections::HashSet<usize> = std::collections::HashSet::new();
         while let Some(v) = stack.pop() {
             match &v {
-                Zval::Ref(cell) => stack.push(cell.borrow().clone()),
+                Zval::Ref(cell) => {
+                    if seen_cells.insert(Rc::as_ptr(cell) as usize) {
+                        stack.push(cell.borrow().clone());
+                    }
+                }
                 Zval::Array(a) => {
-                    for (_, val) in a.iter() {
-                        stack.push(val.clone());
+                    if seen_cells.insert(Rc::as_ptr(a) as usize) {
+                        for (_, val) in a.iter() {
+                            stack.push(val.clone());
+                        }
                     }
                 }
                 Zval::Object(o) => {
@@ -5035,6 +5089,7 @@ impl<'m> Vm<'m> {
             b"passthru" => self.ho_passthru(args)?,
             b"grapheme_extract" => self.ho_grapheme_extract(args)?,
             b"similar_text" => self.ho_similar_text(args)?,
+            b"is_callable" => self.ho_is_callable_out(args)?,
             // Two out-params: (result, $output array, Some($result_code)).
             b"exec" => return self.ho_exec(args),
             // Two out-params: (stream|false, $error_code, Some($error_message)).
@@ -6267,12 +6322,31 @@ impl<'m> Vm<'m> {
         // would be; an inaccessible or missing method still counts when the
         // magic trampoline exists (`__call` / `__callStatic`).
         let scope = self.frames.last().and_then(|f| f.class);
-        let method_callable = |cid: ClassId, m: &[u8], magic: &[u8]| -> bool {
+        // Zend's one legacy exception for static-style instance methods: the
+        // calling frame's `$this`, when an instance of the NAMED class, makes
+        // "C::m" callable as an instance call (bug48899 — a method calling
+        // is_callable(['OwnClass','ownMethod']) sees true).
+        let this_instance_of = |cid: ClassId| -> bool {
+            self.frames
+                .last()
+                .and_then(|f| f.this.as_ref())
+                .and_then(object_class_id)
+                .is_some_and(|tc| is_instance_of(&self.classes, self.stringable_id, tc, cid))
+        };
+        let method_callable = |cid: ClassId, m: &[u8], magic: &[u8], static_style: bool| -> bool {
             match resolve_method_runtime(&self.classes, cid, m) {
                 Some((decl, idx)) => {
-                    let vis = self.classes[decl].methods[idx].visibility;
-                    method_visible_from(&self.classes, scope, vis, decl, m)
-                        || resolve_method_runtime(&self.classes, cid, magic).is_some()
+                    let mm = &self.classes[decl].methods[idx];
+                    if method_visible_from(&self.classes, scope, mm.visibility, decl, m) {
+                        // A VISIBLE instance method referenced static-style
+                        // ("C::m" / ['C','m']) is not callable — PHP 8 removed
+                        // static-style instance calls — and does NOT fall back
+                        // to __callStatic (the method exists). An inaccessible
+                        // one does (Zend zend_is_callable_check_func).
+                        !static_style || mm.is_static || this_instance_of(cid)
+                    } else {
+                        resolve_method_runtime(&self.classes, cid, magic).is_some()
+                    }
                 }
                 None => resolve_method_runtime(&self.classes, cid, magic).is_some(),
             }
@@ -6283,7 +6357,7 @@ impl<'m> Vm<'m> {
                 let b = s.as_bytes();
                 if let Some(pos) = b.windows(2).position(|w| w == b"::") {
                     self.class_id_from_value(&Zval::Str(PhpStr::new(b[..pos].to_vec())))
-                        .map(|cid| method_callable(cid, &b[pos + 2..], b"__callStatic"))
+                        .map(|cid| method_callable(cid, &b[pos + 2..], b"__callStatic", true))
                         .unwrap_or(false)
                 } else {
                     self.is_name_callable(b)
@@ -6297,12 +6371,9 @@ impl<'m> Vm<'m> {
                 let Zval::Str(m) = &elems[1] else { return false };
                 match self.class_id_from_value(&elems[0]) {
                     Some(cid) => {
-                        let magic = if matches!(elems[0], Zval::Object(_)) {
-                            &b"__call"[..]
-                        } else {
-                            &b"__callStatic"[..]
-                        };
-                        method_callable(cid, m.as_bytes(), magic)
+                        let is_obj = matches!(elems[0], Zval::Object(_));
+                        let magic = if is_obj { &b"__call"[..] } else { &b"__callStatic"[..] };
+                        method_callable(cid, m.as_bytes(), magic, !is_obj)
                     }
                     None => false,
                 }
@@ -7245,6 +7316,37 @@ impl<'m> Vm<'m> {
         }))
     }
 
+    /// The `new`-site constructor visibility check (Zend's
+    /// zend_std_get_constructor): a private/protected `__construct` — possibly
+    /// inherited — must be visible from the calling scope `cur`, else
+    /// "Call to {private,protected} C::__construct() from {scope}" naming the
+    /// DECLARING class (no "method" in the wording). Non-instantiable classes
+    /// return Ok so [`Self::alloc_object`]'s abstract/interface/enum fatal wins.
+    /// Only `new` runs this — internal allocations (unserialize, reflection,
+    /// host code) bypass constructor visibility like Zend's object_init does.
+    fn check_new_ctor_access(&self, cur: Option<ClassId>, cid: ClassId) -> Result<(), PhpError> {
+        let Some(cc) = self.classes.get(cid) else { return Ok(()) };
+        if !matches!(cc.instantiable, Instantiable::Yes) {
+            return Ok(());
+        }
+        let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, b"__construct") else {
+            return Ok(());
+        };
+        let vis = self.classes[defc].methods[midx].visibility;
+        if visible_from(&self.classes, cur, vis, defc) {
+            return Ok(());
+        }
+        let kind = if matches!(vis, Visibility::Private) { "private" } else { "protected" };
+        let scope = match cur {
+            Some(c) => format!("scope {}", String::from_utf8_lossy(&self.classes[c].name)),
+            None => "global scope".to_string(),
+        };
+        Err(PhpError::Error(format!(
+            "Call to {kind} {}::__construct() from {scope}",
+            String::from_utf8_lossy(&self.classes[defc].name)
+        )))
+    }
+
     /// Build a fresh instance of class `cid`: its declared property defaults
     /// materialised, a fresh handle id, shared class-name / visibility metadata.
     /// Fatal if the class is non-instantiable (abstract / interface / enum) or
@@ -7447,7 +7549,7 @@ impl<'m> Vm<'m> {
         }
         drop(dropped);
         if had_content {
-            self.gc_sweep_impl(None)?;
+            self.gc_sweep_impl(None, true)?;
         }
         // A class with no eligible (reset) properties is never uninitialized
         // (PHP 8.4, support_stdClass): the object stays a plain instance and
@@ -7750,7 +7852,7 @@ impl<'m> Vm<'m> {
         if let Some(old) = old {
             self.gc_note(&old);
             drop(old);
-            self.gc_sweep_impl(None)?;
+            self.gc_sweep_impl(None, true)?;
         }
         Ok(())
     }
@@ -8177,25 +8279,64 @@ impl<'m> Vm<'m> {
         try_from: bool,
     ) -> Result<Zval, PhpError> {
         let arg = arg.unwrap_or(Zval::Null).deref_clone();
-        // An outright illegal argument type is PHP's TypeError, before any
-        // case matching ("Suit::from(): Argument #1 ($value) must be of type
-        // string|int, array given" — oracle wording for a string-backed enum).
-        if matches!(arg, Zval::Null | Zval::Undef | Zval::Array(_) | Zval::Object(_)) {
-            // Oracle-pinned wording: an int-backed enum says "int", a
-            // string-backed one "string|int". Backing type inferred from the
-            // first case's value constant.
-            let types = match self.classes[cid].enum_cases.first().and_then(|c| c.value.as_ref())
-            {
-                Some(crate::bytecode::Const::Int(_)) => "int",
-                _ => "string|int",
-            };
-            return Err(PhpError::TypeError(format!(
-                "{}::{}(): Argument #1 ($value) must be of type {types}, {} given",
-                String::from_utf8_lossy(&self.classes[cid].name),
-                if try_from { "tryFrom" } else { "from" },
-                arg.type_name_for_error(),
-            )));
-        }
+        let method = if try_from { "tryFrom" } else { "from" };
+        let cls = String::from_utf8_lossy(&self.classes[cid].name).into_owned();
+        // Port of zend_enum_from_base's ZPP: an int-backed enum declares
+        // Z_PARAM_LONG (the full weak long coercion — numeric strings, bools,
+        // lossy floats with the deprecation, out-of-range → TypeError "int");
+        // a string-backed one Z_PARAM_STR_OR_LONG in weak mode (scalars
+        // stringify) and Z_PARAM_STR under a strict_types caller. Diagnostics
+        // name the STUB type "string|int" except the int-backed TypeError,
+        // which Zend words as "int". Backing type inferred from the first
+        // case's value constant.
+        let int_backed = matches!(
+            self.classes[cid].enum_cases.first().and_then(|c| c.value.as_ref()),
+            Some(crate::bytecode::Const::Int(_))
+        );
+        let strict = self.frames.last().map(|f| f.module.strict).unwrap_or(self.module.strict);
+        let type_err = |types: &str, given: &str| {
+            PhpError::TypeError(format!(
+                "{cls}::{method}(): Argument #1 ($value) must be of type {types}, {given} given"
+            ))
+        };
+        let arg = match arg {
+            // A weak-mode null gets the internal-function deprecation, then
+            // ZPP's zero value (0 / ""); a strict-mode null falls through to
+            // the TypeError below.
+            Zval::Null | Zval::Undef if !strict => {
+                self.diags.push(Diag::Deprecated(format!(
+                    "{cls}::{method}(): Passing null to parameter #1 ($value) of type string|int is deprecated"
+                )));
+                if int_backed { Zval::Long(0) } else { Zval::Str(PhpStr::new(Vec::new())) }
+            }
+            other => other,
+        };
+        let arg = if int_backed {
+            let hint = TypeHint { kind: HintKind::Scalar(ScalarType::Int), nullable: false };
+            match coerce_to_hint(arg, &hint, &mut self.diags, strict) {
+                Ok(v) => v,
+                Err(given) => return Err(type_err("int", given)),
+            }
+        } else if strict {
+            match arg {
+                Zval::Str(_) => arg,
+                other => return Err(type_err("string", &other.type_name_for_error())),
+            }
+        } else {
+            match arg {
+                Zval::Str(_) => arg,
+                Zval::Long(l) => Zval::Str(PhpStr::new(l.to_string().into_bytes())),
+                Zval::Double(_) | Zval::Bool(_) => {
+                    Zval::Str(convert::to_zstr(&arg, &mut self.diags))
+                }
+                // Z_PARAM_STR weak accepts a __toString object.
+                Zval::Object(_) => match self.object_to_string_weak(&arg) {
+                    Some(s) => Zval::Str(s),
+                    None => return Err(type_err("string|int", &arg.type_name_for_error())),
+                },
+                other => return Err(type_err("string|int", &other.type_name_for_error())),
+            }
+        };
         let n = self.classes[cid].enum_cases.len();
         for i in 0..n {
             let case = self.enum_case(cid, i as u32);
@@ -9604,6 +9745,7 @@ host_builtins! {
     b"header" => vm.ho_header(args),
     b"headers_sent" => vm.ho_headers_sent(args),
     b"ini_get" => vm.ho_ini_get(args),
+    b"error_log" => vm.ho_error_log(args),
     b"get_cfg_var" => vm.ho_get_cfg_var(args),
     b"ini_set" => vm.ho_ini_set(args),
     b"ini_restore" => vm.ho_ini_restore(args),
@@ -9844,6 +9986,8 @@ pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usiz
         (b"grapheme_extract", 4),
         // `&$percent` receives the similarity percentage.
         (b"similar_text", 2),
+        // `&$callable_name` receives the display name (zend_get_callable_name).
+        (b"is_callable", 2),
         // `&$error_code` (#2); `&$error_message` (#3) is the second out-param.
         (b"stream_socket_client", 1),
         // `&$filename` (#1); `&$line` (#2) is the second out-param. PHP fills
@@ -14605,6 +14749,111 @@ mod tests {
     #[test]
     fn define_and_read_user_constant() {
         assert_eq!(vm_stdout(b"<?php define('FOO', 42); echo FOO;"), b"42");
+    }
+
+    // ----- Session 8: constructor visibility, is_callable ZPP, enum from,
+    // date comparison, eager destructor sweep (vs PHP 8.5.7 CLI) -----
+
+    #[test]
+    fn new_private_ctor_from_outside_is_error() {
+        let out = vm_stdout(
+            b"<?php class P { private function __construct() {} public static function make() { return new self(); } }
+              try { new P(); } catch (Error $e) { echo $e->getMessage(); }
+              echo '|', get_class(P::make());",
+        );
+        assert_eq!(out, b"Call to private P::__construct() from global scope|P");
+    }
+
+    #[test]
+    fn new_protected_ctor_subclass_ok_abstract_wins() {
+        let out = vm_stdout(
+            b"<?php abstract class A { private function __construct() {} }
+              class B { protected function __construct() {} }
+              class C extends B { public static function make() { return new C(); } }
+              try { new A(); } catch (Error $e) { echo $e->getMessage(); }
+              try { new B(); } catch (Error $e) { echo '|', $e->getMessage(); }
+              echo '|', get_class(C::make());",
+        );
+        assert_eq!(
+            out,
+            b"Cannot instantiate abstract class A|Call to protected B::__construct() from global scope|C".to_vec()
+        );
+    }
+
+    #[test]
+    fn is_callable_static_style_instance_method_false() {
+        // A VISIBLE instance method referenced static-style is not callable
+        // (and does not fall back to __callStatic); an inaccessible or
+        // missing one is callable iff __callStatic exists.
+        let out = vm_stdout(
+            b"<?php class C { public function i() {} public static function s() {} protected function p() {} public static function __callStatic($n, $a) {} }
+              class D { public function i() {} }
+              echo is_callable(['C','i'])?1:0, is_callable('C::i')?1:0, is_callable(['C','s'])?1:0,
+                   is_callable(['C','p'])?1:0, is_callable(['C','nope'])?1:0, is_callable(['D','i'])?1:0, is_callable(['D','nope'])?1:0;",
+        );
+        assert_eq!(out, b"0011100");
+    }
+
+    #[test]
+    fn is_callable_syntax_only_and_callable_name() {
+        let out = vm_stdout(
+            b"<?php class C { public function i() {} }
+              echo is_callable(['NoSuch','m'], true)?1:0, is_callable(['C','i'], true)?1:0,
+                   is_callable('anything at all', true)?1:0, is_callable([2=>'C',3=>'m'], true)?1:0,
+                   is_callable(new stdClass, true)?1:0, '|';
+              is_callable(['C','i'], true, $n1); is_callable([1,'m'], true, $n2); is_callable(new C, false, $n3);
+              echo $n1, '|', $n2, '|', $n3;",
+        );
+        assert_eq!(out, b"11100|C::i|Array|C::__invoke");
+    }
+
+    #[test]
+    fn weak_int_coercion_rejects_out_of_range() {
+        // Zend's zend_parse_arg_long_weak: an overflowing numeric string (or
+        // float) for an `int` parameter is a TypeError, not a saturating cast.
+        let out = vm_stdout(
+            b"<?php $f = static fn (int $v): int => $v;
+              foreach (['9223372036854775808', '09223372036854775808', 9223372036854775808.0] as $v) {
+                  try { $f($v); echo 'ok'; } catch (TypeError $e) { echo 'T'; }
+              }
+              echo $f('06'), $f('9223372036854775807') === PHP_INT_MAX ? 'M' : 'x';",
+        );
+        assert_eq!(out, b"TTT6M");
+    }
+
+    #[test]
+    fn enum_from_applies_zpp_coercion() {
+        let out = vm_stdout(
+            b"<?php enum I: int { case A = 1; } enum S: string { case A = 'a'; }
+              try { I::from('value'); } catch (TypeError $e) { echo 'T'; }
+              echo I::from('1')->name, I::from(true)->name, I::tryFrom('1')->name;
+              try { S::from(5); } catch (ValueError $e) { echo '|', $e->getMessage(); }",
+        );
+        assert_eq!(out, b"TAAA|\"5\" is not a valid backing value for enum S");
+    }
+
+    #[test]
+    fn exception_subclass_keeps_redeclared_defaults() {
+        // The ctor writes message/code/previous only when supplied (Zend's
+        // zend_exceptions.c): a subclass redeclaring a default keeps it.
+        let out = vm_stdout(
+            b"<?php class E extends Exception { protected $code = 'strcode'; protected $message = 'preset'; }
+              $e = new E(); echo $e->getCode(), '|', $e->getMessage(), '|', (new E('x'))->getMessage(), '|', (new Exception('m', 7))->getCode();",
+        );
+        assert_eq!(out, b"strcode|preset|x|7");
+    }
+
+    #[test]
+    fn destructor_runs_eagerly_inside_functions() {
+        // Zend destructs on refcount-zero anywhere: a temporary dying inside a
+        // function runs __destruct before the next statement (Symfony's DI
+        // configurators register definitions in __destruct).
+        let out = vm_stdout(
+            b"<?php class D { public function __construct(public $cb) {} public function __destruct() { ($this->cb)(); } }
+              function f(&$hit) { new D(function () use (&$hit) { $hit = true; }); echo $hit ? 'eager' : 'late'; }
+              $h = false; f($h);",
+        );
+        assert_eq!(out, b"eager");
     }
 
     #[test]

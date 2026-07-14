@@ -513,11 +513,16 @@ impl<'a> FnCompiler<'a> {
         self.scope_path.push(id);
         for s in stmts {
             self.stmt(s)?;
-            // At global scope, sweep unreachable objects after each statement
-            // (OOP-3d); inside functions/methods the tree-walker does not.
-            if self.is_main {
-                self.emit(Op::Sweep);
-            }
+            // Sweep unreachable objects after EVERY statement, in every body
+            // (OOP-3d): Zend destructs on refcount-zero anywhere, so a
+            // temporary dying inside a function must run its `__destruct`
+            // before the next statement — Symfony's DI configurators register
+            // their definition in `__destruct` and the very next line reads it
+            // (a deferred sweep silently dropped the service). The sweep is
+            // O(buffered candidates), so a statement that allocated nothing
+            // pays one no-op opcode. Global-scope sweeps are `main`: they also
+            // re-examine what in-body sweeps demoted (see Vm::gc_sweep_impl).
+            self.emit(Op::Sweep { main: self.is_main });
         }
         self.scope_path.pop();
         Ok(())
