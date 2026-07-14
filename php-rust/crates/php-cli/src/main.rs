@@ -17,6 +17,11 @@ use php_runtime::run_source_with_argv;
 mod mime;
 mod server;
 
+/// The evaluator's per-request workload is allocation-bound (Zval/PhpArray
+/// churn); mimalloc's sharded free lists stand in for Zend's bin/chunk ZMM.
+#[global_allocator]
+static GLOBAL_ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 /// Best-effort human text from a caught panic payload (the common `&str` /
 /// `String` cases; anything else is reported opaquely).
 fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {

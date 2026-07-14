@@ -17,3 +17,4 @@ php-types.workspace = true
 php-runtime.workspace = true
 php-builtins.workspace = true
 regex = "1"
+mimalloc.workspace = true

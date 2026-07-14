@@ -23,3 +23,7 @@ php-builtins = { path = "crates/php-builtins" }
 # configurable backend installed by the binaries (see `php_runtime::logging`).
 log = "0.4"
 log4rs = "1.3"
+# Global allocator for the binaries (phpr / phpt-runner): the per-request
+# workload is allocation-bound (Zval/PhpArray churn), where mimalloc's
+# free-list sharding recovers most of what Zend's bin/chunk ZMM buys PHP.
+mimalloc = "0.1"

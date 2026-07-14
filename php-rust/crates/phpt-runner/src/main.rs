@@ -26,6 +26,11 @@ use phpt_runner::{
 /// such tests are handled (parsed deeply, or run) rather than aborting the run.
 const WORKER_STACK: usize = 1 << 30; // 1 GiB
 
+/// Same global allocator as `phpr` (see php-cli): keeps the harness measuring
+/// the engine under the allocator it actually ships with.
+#[global_allocator]
+static GLOBAL_ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 /// Per-test wall-clock cap for `--isolate`. A `.phpt` that drives our evaluator
 /// into an unbounded loop (e.g. `while (true) $a[] = 1;`) would otherwise run
 /// forever, exhausting RAM and freezing the host — there is no `timeout(1)` on
