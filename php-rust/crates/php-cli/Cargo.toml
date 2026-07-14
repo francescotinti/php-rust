@@ -13,3 +13,4 @@ php-types.workspace = true
 php-runtime.workspace = true
 php-builtins.workspace = true
 log.workspace = true
+libc = "0.2"

@@ -688,6 +688,12 @@ pub enum Op {
     /// `[obj] -> [bool]` — `isset($o->p)`: true iff the property exists and is not
     /// null (silent, no warning).
     PropIsset { name: Box<[u8]> },
+    /// `[obj] -> [bool]` — the fetch gate of `$o->p ?? d` / `$o->p ??= d`
+    /// (zend read_property BP_VAR_IS): like [`Op::PropIsset`], EXCEPT that a
+    /// class defining `__get` without `__isset` answers `true` for a missing
+    /// property — the following `PropGet(Silent)` then routes to `__get`
+    /// (oracle-pinned; `isset()`/`empty()` do NOT take this fallback).
+    PropIssetFetchGate { name: Box<[u8]> },
     /// `[obj, name] -> [bool]` — `isset($o->{expr})` / `isset($o->$k)`: the
     /// dynamic-name twin of [`Op::PropIsset`] (same hook/`__isset` dispatch).
     PropIssetDyn,

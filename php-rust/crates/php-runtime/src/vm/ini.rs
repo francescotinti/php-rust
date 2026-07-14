@@ -129,6 +129,15 @@ impl IniTable {
         // `-n`; writes propagate to php_types::tz so the date builtins and
         // date_default_timezone_get() see them.
         add("date.timezone", "UTC", INI_ALL, true, false);
+        // Diagnostics-display directives (CLI defaults; the web SAPI swaps in
+        // its own at request init — html_errors=1, output_buffering=4096).
+        // html_errors/display_errors/log_errors are honoured by the render
+        // chokepoints; output_buffering/implicit_flush are report-only.
+        add("display_errors", "1", INI_ALL, true, false);
+        add("log_errors", "1", INI_ALL, true, false);
+        add("html_errors", "0", INI_ALL, true, false);
+        add("output_buffering", "0", INI_PERDIR, false, false);
+        add("implicit_flush", "1", INI_ALL, false, false);
         // ext/session (31 directives, defaults from the 8.5.7 CLI oracle).
         add("session.auto_start", "0", INI_PERDIR, false, false);
         add("session.cache_expire", "180", INI_ALL, true, true);

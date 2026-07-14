@@ -2931,6 +2931,43 @@ impl<'m> super::Vm<'m> {
                     };
                     self.frames[top].stack.push(Zval::Bool(set));
                 }
+                Op::PropIssetFetchGate { name } => {
+                    // The `??`/`??=` fetch gate: PropIsset semantics, plus the
+                    // BP_VAR_IS fallback — no `__isset` but an applicable
+                    // `__get` answers true (the follow-up PropGet routes to it).
+                    let obj = self.frames[top].stack.pop().expect("PropIssetFetchGate object");
+                    let cur = self.frames[top].class;
+                    let target = self.lazy_prop_access(obj.deref_clone(), &name, cur, Some(false), (MagicKind::Isset, b"__isset"))?;
+                    let set = if let Zval::Object(o) = &target {
+                        let (oid, cid) = { let b = o.borrow(); (b.id, b.class_id as usize) };
+                        if !self.hook_guarded(oid, &name) {
+                            if let Some(func) = self.prop_hook(cid, &name, false) {
+                                self.push_hook(func, target.clone(), oid, &name, None);
+                                self.frames.last_mut().unwrap().ret_isset = true;
+                                continue;
+                            }
+                        }
+                        if let Some((defc, midx, oid)) =
+                            self.magic_applies(o, &name, cur, MagicKind::Isset, b"__isset")
+                        {
+                            self.push_magic_prop(defc, midx, oid, MagicKind::Isset, target.clone(), &name, None, None, true);
+                            continue;
+                        }
+                        let ocid = o.borrow().class_id as usize;
+                        let declared = match resolve_prop_access(&self.classes, ocid, &name, cur) {
+                            PropAccess::Denied { .. } => false,
+                            PropAccess::Slot(key) => prop_isset(&target, &key),
+                            PropAccess::Dynamic => prop_isset(&target, &name),
+                        };
+                        declared
+                            || self
+                                .magic_applies(o, &name, cur, MagicKind::Get, b"__get")
+                                .is_some()
+                    } else {
+                        prop_isset(&target, &name)
+                    };
+                    self.frames[top].stack.push(Zval::Bool(set));
+                }
                 Op::PropIsset { name } => {
                     let obj = self.frames[top].stack.pop().expect("PropIsset object");
                     let cur = self.frames[top].class;
@@ -3873,90 +3910,12 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(if pre { newv } else { old });
                 }
                 Op::FieldIsset { base, steps } => {
-                    let mut keys = self.pop_field_keys(top, &steps);
-                    // Magic protocol at the path start (`isset($o->magic['k'])`,
-                    // gh18038 / the bug40833 family): `__isset` decides, then
-                    // `__get` supplies the value the rest of the path tests. An
-                    // initialized proxy dispatches on its instance; an
-                    // uninitialized wrapper dispatches on itself (no init).
-                    let magic_set: Option<bool> = 'magic_isset: {
-                        let (name, rest, key_used): (Vec<u8>, &[FieldStep], usize) = match steps.split_first() {
-                            Some((FieldStep::Prop(n), rest)) => (n.to_vec(), rest, 0),
-                            Some((FieldStep::PropDyn, rest)) => {
-                                let Some(k) = keys.first() else { break 'magic_isset None };
-                                (convert::to_zstr_cast(k, &mut self.diags).as_bytes().to_vec(), rest, 1)
-                            }
-                            _ => break 'magic_isset None,
-                        };
-                        let base_val = match base {
-                            FieldBase::Local(s) => self.frames[top].slots.get(s as usize),
-                            FieldBase::Global(s) => self.frames[0].slots.get(s as usize),
-                            FieldBase::Superglobal(i) => self.superglobals.get(i as usize),
-                            FieldBase::This => self.frames[top].this.as_ref(),
-                        };
-                        let Some(mut v) = base_val.map(|v| v.deref_clone()) else { break 'magic_isset None };
-                        // Follow *initialized* proxy forwarding (no initialization).
-                        for _ in 0..64 {
-                            let next = self.proxy_redirect(v.clone());
-                            let same = match (deref_object(&v), deref_object(&next)) {
-                                (Some(a), Some(b)) => Rc::ptr_eq(&a, &b),
-                                _ => true,
-                            };
-                            v = next;
-                            if same {
-                                break;
-                            }
-                        }
-                        let Some(o) = deref_object(&v) else { break 'magic_isset None };
-                        let cur = self.frames[top].class;
-                        let has_isset =
-                            self.magic_applies(&o, &name, cur, MagicKind::Isset, b"__isset").is_some();
-                        let has_get =
-                            self.magic_applies(&o, &name, cur, MagicKind::Get, b"__get").is_some();
-                        if !has_isset && !has_get {
-                            break 'magic_isset None;
-                        }
-                        let oid = o.borrow().id;
-                        let name_z = Zval::Str(PhpStr::new(name.clone()));
-                        let read_through_get = |vm: &mut Self, keys: Vec<Zval>| -> Result<bool, PhpError> {
-                            let gkey = (oid, MagicKind::Get, name.clone());
-                            let ins = vm.magic_guard.insert(gkey.clone());
-                            let r = vm.call_method_sync(v.clone(), b"__get", vec![name_z.clone()]);
-                            if ins {
-                                vm.magic_guard.remove(&gkey);
-                            }
-                            let gv = r?.deref_clone();
-                            let fs = FieldScope { classes: &vm.classes, scope: cur };
-                            let mut it = keys.into_iter();
-                            Ok(matches!(
-                                field_get(&gv, rest, &mut it, fs),
-                                Some(x) if !matches!(x, Zval::Null | Zval::Undef)
-                            ))
-                        };
-                        let set = if has_isset {
-                            let gkey = (oid, MagicKind::Isset, name.clone());
-                            let ins = self.magic_guard.insert(gkey.clone());
-                            let r = self.call_method_sync(v.clone(), b"__isset", vec![name_z.clone()]);
-                            if ins {
-                                self.magic_guard.remove(&gkey);
-                            }
-                            let mut set = convert::to_bool(&r?.deref_clone(), &mut self.diags);
-                            if set && !rest.is_empty() {
-                                set = if has_get {
-                                    read_through_get(self, keys.split_off(key_used))?
-                                } else {
-                                    false
-                                };
-                            }
-                            set
-                        } else {
-                            // `__isset` guarded (a re-entrant check inside it) or
-                            // absent: read through `__get` for the offset test.
-                            read_through_get(self, keys.split_off(key_used))?
-                        };
-                        Some(set)
-                    };
-                    if let Some(set) = magic_set {
+                    let keys = self.pop_field_keys(top, &steps);
+                    // Magic protocol at ANY property step along the path
+                    // (`isset($o->magic['k'])`, gh18038 / bug40833; and a magic
+                    // leaf one hop in: `isset($block->block_type->uses_context)`,
+                    // WP_Block_Type) — see field_magic_probe.
+                    if let Some(set) = self.field_magic_probe(base, top, &steps, &keys, false)? {
                         self.frames[top].stack.push(Zval::Bool(set));
                         continue;
                     }
@@ -4005,6 +3964,13 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::FieldEmpty { base, steps } => {
                     let keys = self.pop_field_keys(top, &steps);
+                    // Magic protocol at any property step (the empty() twin of
+                    // FieldIsset's probe): `__isset` gates, `__get` supplies the
+                    // value whose truthiness decides.
+                    if let Some(empty) = self.field_magic_probe(base, top, &steps, &keys, true)? {
+                        self.frames[top].stack.push(Zval::Bool(empty));
+                        continue;
+                    }
                     // ArrayAccess leaf: !offsetExists short-circuits to empty,
                     // else !truthy(offsetGet) — mirrors Op::EmptyPath.
                     if let Some((recv, key)) = self.field_aa_leaf(base, top, &steps, &keys) {

@@ -583,6 +583,44 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
         body
     };
 
+    // PCRE reads a bare `[` inside a character class as the LITERAL bracket
+    // (`[([{"\-]`, wptexturize's openers class); the Rust engines read it as a
+    // nested-class opener and fail to parse — which matters when the pattern
+    // then needs fancy-regex (variable-length lookbehind: oniguruma, the last
+    // fallback, rejects those). Escape it, leaving POSIX classes
+    // (`[[:alpha:]]`) intact.
+    let body: std::borrow::Cow<str> = match escape_class_brackets(&body) {
+        Some(rw) => std::borrow::Cow::Owned(rw),
+        None => body,
+    };
+
+    // A negative lookbehind over an ALTERNATION decomposes into a conjunction
+    // of single-branch lookbehinds (De Morgan: not(A or B) = not A and not B)
+    // — `(?<!A|B|C)` → `(?<!A)(?<!B)(?<!C)`. The variable-length alternation
+    // form is what the backend engines reject in combination with other fancy
+    // constructs (wptexturize's `(?<!<spaces>)'(?!\Z|…)` apostrophe rule); the
+    // fixed-length conjuncts compile everywhere.
+    let body: std::borrow::Cow<str> = match split_neg_lookbehind_alternation(&body) {
+        Some(rw) => std::borrow::Cow::Owned(rw),
+        None => body,
+    };
+
+    // PCRE conditional groups with a LOOKAHEAD condition — `(?(?=A)B|C)` — are
+    // rejected by every backend engine (regex, fancy-regex, oniguruma
+    // perl_ng). They rewrite EXACTLY to a guarded alternation
+    // `(?:(?=A)B|(?!A)C)`: PCRE commits to one branch on the condition and
+    // never falls back to the other, which is precisely what the mutually
+    // exclusive guards encode. WordPress' wp_html_split/wptexturize regexes
+    // live on this construct.
+    let body: std::borrow::Cow<str> = if body.contains("(?(?=") || body.contains("(?(?!") {
+        match rewrite_lookahead_conditionals(&body) {
+            Some(rw) => std::borrow::Cow::Owned(rw),
+            None => body,
+        }
+    } else {
+        body
+    };
+
     // PCRE_ANCHORED (`A`): the match must start exactly at the search offset.
     // A `\A(?:…)` wrap is WRONG for `preg_match(..., $offset)` at a positive
     // offset (it anchors to the string start and never matches — symfony's
@@ -705,6 +743,322 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
     onig::Regex::with_options(&body, oo, onig::Syntax::perl_ng())
         .ok()
         .map(|r| wrap(Engine::Onig(r)))
+}
+
+/// Escape a bare `[` inside a character class (`[([{"\-]` → `[(\[{"\-]`):
+/// PCRE reads it as the literal bracket, the Rust engines as a nested class.
+/// A POSIX class (`[[:alpha:]]`) keeps its inner bracket. Returns `None`
+/// when nothing needed escaping.
+fn escape_class_brackets(body: &str) -> Option<String> {
+    let s = body.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(s.len() + 4);
+    let mut changed = false;
+    let mut in_class = false;
+    let mut class_start = 0usize; // position just after the class's `[` (and `^`)
+    let mut i = 0;
+    while i < s.len() {
+        let b = s[i];
+        if b == b'\\' && i + 1 < s.len() {
+            out.extend_from_slice(&s[i..i + 2]);
+            i += 2;
+            continue;
+        }
+        if !in_class {
+            if b == b'[' {
+                in_class = true;
+                out.push(b);
+                i += 1;
+                if s.get(i) == Some(&b'^') {
+                    out.push(b'^');
+                    i += 1;
+                }
+                // A leading `]` is the literal bracket in PCRE.
+                if s.get(i) == Some(&b']') {
+                    out.extend_from_slice(b"\\]");
+                    changed = true;
+                    i += 1;
+                }
+                class_start = i;
+                continue;
+            }
+            out.push(b);
+            i += 1;
+            continue;
+        }
+        // Inside a class.
+        match b {
+            b']' => {
+                in_class = false;
+                out.push(b);
+                i += 1;
+            }
+            b'[' => {
+                // `[:alpha:]` / `[.x.]` / `[=x=]` POSIX forms stay verbatim.
+                if matches!(s.get(i + 1), Some(b':') | Some(b'.') | Some(b'=')) {
+                    let punct = s[i + 1];
+                    if let Some(close) = s[i + 2..]
+                        .windows(2)
+                        .position(|w| w == [punct, b']'])
+                    {
+                        out.extend_from_slice(&s[i..i + 2 + close + 2]);
+                        i += 2 + close + 2;
+                        continue;
+                    }
+                }
+                out.extend_from_slice(b"\\[");
+                changed = true;
+                i += 1;
+            }
+            _ => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    let _ = class_start;
+    if !changed {
+        return None;
+    }
+    String::from_utf8(out).ok()
+}
+
+/// Split `(?<!A|B|C)` into `(?<!A)(?<!B)(?<!C)` (exact De Morgan equivalence
+/// for negative lookbehind). Only applied when the body has a top-level `|`
+/// and contains no groups at all (branches with groups keep their form — the
+/// simple character/literal alternations are the ones the engines reject).
+/// Returns `None` when nothing was rewritten.
+fn split_neg_lookbehind_alternation(body: &str) -> Option<String> {
+    let s = body.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(s.len());
+    let mut changed = false;
+    let mut in_class = false;
+    let mut i = 0;
+    while i < s.len() {
+        if s[i] == b'\\' && i + 1 < s.len() {
+            out.extend_from_slice(&s[i..i + 2]);
+            i += 2;
+            continue;
+        }
+        if in_class {
+            if s[i] == b']' {
+                in_class = false;
+            }
+            out.push(s[i]);
+            i += 1;
+            continue;
+        }
+        if s[i] == b'[' {
+            in_class = true;
+            out.push(s[i]);
+            i += 1;
+            continue;
+        }
+        if s[i..].starts_with(b"(?<!") {
+            // Find the matching close, tracking classes/escapes; bail on
+            // nested groups (those alternations stay as-is).
+            let mut depth = 1i32;
+            let mut cls = false;
+            let mut has_group = false;
+            let mut splits: Vec<usize> = Vec::new(); // top-level `|` offsets
+            let mut j = i + 4;
+            let mut end = None;
+            while j < s.len() {
+                match s[j] {
+                    b'\\' => j += 1,
+                    b'[' if !cls => cls = true,
+                    b']' if cls => cls = false,
+                    b'(' if !cls => {
+                        depth += 1;
+                        has_group = true;
+                    }
+                    b')' if !cls => {
+                        depth -= 1;
+                        if depth == 0 {
+                            end = Some(j);
+                            break;
+                        }
+                    }
+                    b'|' if !cls && depth == 1 => splits.push(j),
+                    _ => {}
+                }
+                j += 1;
+            }
+            let Some(end) = end else {
+                out.extend_from_slice(&s[i..]);
+                break;
+            };
+            if splits.is_empty() || has_group {
+                out.extend_from_slice(&s[i..=end]);
+                i = end + 1;
+                continue;
+            }
+            let mut start = i + 4;
+            let mut bounds = splits;
+            bounds.push(end);
+            for b in bounds {
+                out.extend_from_slice(b"(?<!");
+                out.extend_from_slice(&s[start..b]);
+                out.push(b')');
+                start = b + 1;
+            }
+            changed = true;
+            i = end + 1;
+            continue;
+        }
+        out.push(s[i]);
+        i += 1;
+    }
+    if !changed {
+        return None;
+    }
+    String::from_utf8(out).ok()
+}
+
+/// Rewrite PCRE conditionals whose condition is a pure lookahead —
+/// `(?(?=A)B|C)` → `(?:(?=A)B|(?!A)C)` and `(?(?!A)B|C)` → `(?:(?!A)B|(?=A)C)`
+/// — recursively (branches and conditions may nest further conditionals).
+/// Returns `None` when nothing was rewritten, or when a condition contains a
+/// capturing group (the guard duplicates the condition, which would renumber
+/// `$matches` — such patterns stay with the engines as-is).
+fn rewrite_lookahead_conditionals(body: &str) -> Option<String> {
+    /// Whether `s` contains a capturing group outside character classes
+    /// (plain `(`, `(?P<`, `(?<name>`, `(?'name'`).
+    fn has_capturing_group(s: &[u8]) -> bool {
+        let mut in_class = false;
+        let mut i = 0;
+        while i < s.len() {
+            match s[i] {
+                b'\\' => i += 1,
+                b'[' if !in_class => in_class = true,
+                b']' if in_class => in_class = false,
+                b'(' if !in_class => {
+                    if s.get(i + 1) != Some(&b'?') {
+                        return true;
+                    }
+                    match s.get(i + 2) {
+                        Some(b'P') | Some(b'\'') => return true,
+                        Some(b'<') if !matches!(s.get(i + 3), Some(b'=') | Some(b'!')) => {
+                            return true
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        false
+    }
+    /// Index of the `)` matching the `(` at `open` (class- and escape-aware).
+    fn close_paren(s: &[u8], open: usize) -> Option<usize> {
+        let mut depth = 0i32;
+        let mut in_class = false;
+        let mut i = open;
+        while i < s.len() {
+            match s[i] {
+                b'\\' => i += 1,
+                b'[' if !in_class => in_class = true,
+                b']' if in_class => in_class = false,
+                b'(' if !in_class => depth += 1,
+                b')' if !in_class => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(i);
+                    }
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        None
+    }
+    fn rw(s: &[u8], changed: &mut bool) -> Option<Vec<u8>> {
+        let mut out: Vec<u8> = Vec::with_capacity(s.len());
+        let mut in_class = false;
+        let mut i = 0;
+        while i < s.len() {
+            if s[i] == b'\\' && i + 1 < s.len() {
+                out.extend_from_slice(&s[i..i + 2]);
+                i += 2;
+                continue;
+            }
+            if in_class {
+                if s[i] == b']' {
+                    in_class = false;
+                }
+                out.push(s[i]);
+                i += 1;
+                continue;
+            }
+            if s[i] == b'[' {
+                in_class = true;
+                out.push(s[i]);
+                i += 1;
+                continue;
+            }
+            if s[i..].starts_with(b"(?(?=") || s[i..].starts_with(b"(?(?!") {
+                let whole_end = close_paren(s, i)?; // `)` of the conditional
+                let cond_open = i + 2; // `(` of the lookahead condition
+                let cond_end = close_paren(s, cond_open)?;
+                let neg = s[i + 4] == b'!';
+                let cond_inner = &s[cond_open + 3..cond_end];
+                if has_capturing_group(cond_inner) {
+                    return None;
+                }
+                // Split yes|no at depth 0 between the condition and the close.
+                let mut depth = 0i32;
+                let mut cls = false;
+                let mut split = None;
+                let mut j = cond_end + 1;
+                while j < whole_end {
+                    match s[j] {
+                        b'\\' => j += 1,
+                        b'[' if !cls => cls = true,
+                        b']' if cls => cls = false,
+                        b'(' if !cls => depth += 1,
+                        b')' if !cls => depth -= 1,
+                        b'|' if !cls && depth == 0 => {
+                            split = Some(j);
+                            break;
+                        }
+                        _ => {}
+                    }
+                    j += 1;
+                }
+                let (yes_raw, no_raw) = match split {
+                    Some(p) => (&s[cond_end + 1..p], &s[p + 1..whole_end]),
+                    None => (&s[cond_end + 1..whole_end], &b""[..]),
+                };
+                let cond = rw(cond_inner, changed)?;
+                let yes = rw(yes_raw, changed)?;
+                let no = rw(no_raw, changed)?;
+                let (g, ng) = if neg { (b'!', b'=') } else { (b'=', b'!') };
+                out.extend_from_slice(b"(?:(?");
+                out.push(g);
+                out.extend_from_slice(&cond);
+                out.push(b')');
+                out.extend_from_slice(&yes);
+                out.extend_from_slice(b"|(?");
+                out.push(ng);
+                out.extend_from_slice(&cond);
+                out.push(b')');
+                out.extend_from_slice(&no);
+                out.push(b')');
+                *changed = true;
+                i = whole_end + 1;
+                continue;
+            }
+            out.push(s[i]);
+            i += 1;
+        }
+        Some(out)
+    }
+    let mut changed = false;
+    let out = rw(body.as_bytes(), &mut changed)?;
+    if !changed {
+        return None;
+    }
+    String::from_utf8(out).ok()
 }
 
 /// The name prefix for capturing groups synthesised by

@@ -78,15 +78,56 @@ fn encode_utf8(cp: u32) -> Vec<u8> {
     }
 }
 
-/// `htmlspecialchars($string, $flags = …)`: encode only the five ASCII specials.
+/// With `$double_encode=false`, an `&` opening an existing entity is left
+/// alone. Returns the entity length (`&` through `;`) or `None`. PHP checks
+/// the doctype's entity table; this accepts any well-formed named/numeric
+/// body — WordPress pre-normalizes unknown entities to `&amp;…` before the
+/// double_encode=false call, so the shapes agree where it matters.
+fn entity_len(s: &[u8]) -> Option<usize> {
+    if s.first() != Some(&b'&') {
+        return None;
+    }
+    let body_ok = |body: &[u8]| -> bool {
+        if let Some(num) = body.strip_prefix(b"#") {
+            if let Some(hex) = num.strip_prefix(b"x").or_else(|| num.strip_prefix(b"X")) {
+                return !hex.is_empty() && hex.iter().all(|b| b.is_ascii_hexdigit());
+            }
+            return !num.is_empty() && num.iter().all(|b| b.is_ascii_digit());
+        }
+        // Named bodies: every real HTML entity name is >= 2 chars (lt, gt,
+        // mu, …) — a 1-char body is never valid and PHP re-encodes its `&`.
+        body.len() >= 2
+            && body[0].is_ascii_alphabetic()
+            && body.iter().all(|b| b.is_ascii_alphanumeric())
+    };
+    let end = s[1..].iter().take(32).position(|&b| b == b';')? + 1;
+    body_ok(&s[1..end]).then_some(end + 1)
+}
+
+/// `htmlspecialchars($string, $flags = …, $encoding = null, $double_encode = true)`:
+/// encode only the five ASCII specials.
 pub fn htmlspecialchars(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let s = super::string::str_at(args, ctx, 0, "htmlspecialchars", 1)?;
     let (single, double) = flags_of(args, 1, ctx);
+    let double_encode = match args.get(3) {
+        Some(v) => convert::to_bool(v, ctx.diags),
+        None => true,
+    };
     let mut out = Vec::with_capacity(s.len());
-    for &b in &s {
+    let mut i = 0;
+    while i < s.len() {
+        let b = s[i];
+        if b == b'&' && !double_encode {
+            if let Some(len) = entity_len(&s[i..]) {
+                out.extend_from_slice(&s[i..i + len]);
+                i += len;
+                continue;
+            }
+        }
         if !encode_special(&mut out, b, single, double) {
             out.push(b);
         }
+        i += 1;
     }
     Ok(Zval::Str(PhpStr::new(out)))
 }

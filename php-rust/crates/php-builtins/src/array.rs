@@ -333,25 +333,28 @@ pub fn array_replace_recursive(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, Ph
         }
     };
     for (i, arg) in args.iter().enumerate().skip(1) {
-        let Zval::Array(a) = arg else {
+        let Zval::Array(a) = arg.deref_clone() else {
             return Err(replace_arg_err("array_replace_recursive", i + 1, arg));
         };
-        replace_recursive_into(&mut out, a);
+        replace_recursive_into(&mut out, &a);
     }
     Ok(Zval::Array(Rc::new(out)))
 }
 
 /// Merge `repl` into `base` following array_replace_recursive semantics: a key
 /// that is an array on both sides recurses; anything else overwrites in place.
+/// Values are matched through references: a `&$var` element that holds an
+/// array still recurses (WordPress' WP_Theme_JSON::merge feeds ref-carrying
+/// arrays and the oracle keeps the deep merge).
 fn replace_recursive_into(base: &mut PhpArray, repl: &PhpArray) {
     for (k, v) in repl.iter() {
-        let new_val = match (base.get(k), v) {
+        let new_val = match (base.get(k).map(Zval::deref_clone), v.deref_clone()) {
             (Some(Zval::Array(existing)), Zval::Array(incoming)) => {
-                let mut merged = (**existing).clone();
-                replace_recursive_into(&mut merged, incoming);
+                let mut merged = (*existing).clone();
+                replace_recursive_into(&mut merged, &incoming);
                 Zval::Array(Rc::new(merged))
             }
-            _ => v.clone(),
+            (_, other) => other,
         };
         base.insert(k.clone(), new_val);
     }

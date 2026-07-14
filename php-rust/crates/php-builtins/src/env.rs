@@ -79,9 +79,23 @@ pub fn posix_getpid(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Long(std::process::id() as i64))
 }
 
-/// `php_sapi_name()` — this engine runs as the command-line SAPI.
+/// `php_sapi_name()` — `cli`, or the name the web host installed at startup
+/// (`cli-server` under `phpr -S`).
 pub fn php_sapi_name(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    Ok(Zval::Str(PhpStr::from_str("cli")))
+    Ok(Zval::Str(PhpStr::from_str(php_types::sapi::sapi_name())))
+}
+
+/// `getallheaders()` / `apache_request_headers()` — the request headers in
+/// wire order with their original case. Registered only under the web SAPI
+/// (the CLI oracle has neither function).
+pub fn getallheaders(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let mut a = php_types::PhpArray::new();
+    if let Some(req) = php_types::sapi::web_request() {
+        for (k, v) in &req.headers {
+            a.insert(php_types::Key::from_bytes(k), Zval::Str(PhpStr::new(v.clone())));
+        }
+    }
+    Ok(Zval::Array(std::rc::Rc::new(a)))
 }
 
 /// `posix_geteuid()` — the process's effective uid (libc, real value: DBAL's

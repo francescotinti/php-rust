@@ -733,14 +733,23 @@ impl<'a> super::FnCompiler<'a> {
         if let Some(name) = self.prop_place(place)? {
             // stack: [obj]
             self.emit(Op::Dup); // [obj, obj]
-            self.emit(Op::PropIsset { name: name.clone() }); // [obj, isset]
+            // Fetch gate (BP_VAR_IS): `__get` without `__isset` answers set —
+            // a non-null `__get` value is the result and nothing is written; a
+            // null one still assigns (oracle-pinned).
+            self.emit(Op::PropIssetFetchGate { name: name.clone() }); // [obj, isset]
             let to_set = self.emit(Op::JumpIfFalse(Addr::MAX)); // unset → set; [obj]
-            self.emit(Op::PropGet { name: name.clone() }); // set: existing value → [value]
-            let to_end = self.emit(Op::Jump(Addr::MAX));
+            self.emit(Op::Dup); // [obj, obj]
+            self.emit(Op::PropGet { name: name.clone() }); // set: existing value → [obj, value]
+            let to_nn = self.emit(Op::JumpIfNotNull(Addr::MAX)); // null → popped; [obj]
             let set_at = self.here();
             self.patch(to_set, Op::JumpIfFalse(set_at));
             self.expr(rhs)?; // [obj, rhs]
             self.emit(Op::PropSet { name }); // [value]
+            let to_end = self.emit(Op::Jump(Addr::MAX));
+            let nn_at = self.here();
+            self.patch(to_nn, Op::JumpIfNotNull(nn_at)); // [obj, value]
+            self.emit(Op::Swap); // [value, obj]
+            self.emit(Op::Pop); // [value]
             let end = self.here();
             self.patch(to_end, Op::Jump(end));
             return Ok(());

@@ -50,6 +50,7 @@ mod host_reflect;
 mod oop;
 mod pdo;
 mod tokenizer;
+mod websapi;
 use arrays::*;
 use calls::*;
 use oop::*;
@@ -74,6 +75,17 @@ pub struct VmOutcome {
     pub return_value: Zval,
     /// Process exit code from `exit`/`die`, `0..=255`; `None` for a clean run.
     pub exit_code: Option<u8>,
+    /// Web SAPI only: the response headers the script accumulated (full
+    /// `Name: value` lines, in order, `X-Powered-By` first). Empty under CLI.
+    pub headers: Vec<Vec<u8>>,
+    /// Web SAPI only: the response code set via `http_response_code()` /
+    /// `header()` (with the optional custom reason phrase from a raw
+    /// `header("HTTP/1.1 …")`); `None` = 200.
+    pub response_code: Option<i64>,
+    pub response_reason: Option<Vec<u8>>,
+    /// Web SAPI only: `log_errors` lines ("PHP Warning:  … in F on line N",
+    /// multiline for a fatal) for the host to timestamp onto stderr.
+    pub error_log: Vec<Vec<u8>>,
 }
 
 impl Default for VmOutcome {
@@ -85,6 +97,10 @@ impl Default for VmOutcome {
             fatal: None,
             return_value: Zval::Null,
             exit_code: None,
+            headers: Vec::new(),
+            response_code: None,
+            response_reason: None,
+            error_log: Vec::new(),
         }
     }
 }
@@ -262,6 +278,22 @@ pub fn run_source(name: &[u8], source: &[u8]) -> Result<VmOutcome, VmRunError> {
 /// "Uncaught" prefix or "thrown in" tail.
 fn compile_fatal_outcome(file: &[u8], message: &str, line: Line) -> VmOutcome {
     let file_s = String::from_utf8_lossy(file);
+    // Under the web SAPI the fatal renders in html_errors form and feeds the
+    // host's stderr log (the response still carries the X-Powered-By header).
+    if php_types::sapi::web_request().is_some() {
+        let rendered = format!(
+            "<br />\n<b>Fatal error</b>:  {message} in <b>{file_s}</b> on line <b>{line}</b><br />\n"
+        );
+        return VmOutcome {
+            rendered: rendered.into_bytes(),
+            fatal: Some(PhpError::Error(message.to_string())),
+            headers: vec![b"X-Powered-By: PHP/8.5.7".to_vec()],
+            error_log: vec![
+                format!("PHP Fatal error:  {message} in {file_s} on line {line}").into_bytes(),
+            ],
+            ..VmOutcome::default()
+        };
+    }
     let rendered =
         format!("\nFatal error: {message} in {file_s} on line {line}\nStack trace:\n#0 {{main}}\n");
     VmOutcome {
@@ -419,6 +451,10 @@ pub(crate) fn run_module_with_hir<'m>(
         ini: ini::IniTable::new(),
         session: session::SessionState::default(),
         response_code: None,
+        web: false,
+        response_headers: Vec::new(),
+        response_reason: None,
+        error_log: Vec::new(),
         user_abort_ignored: false,
         stream_wrappers: std::collections::HashMap::new(),
         filtered_streams: Vec::new(),
@@ -523,6 +559,25 @@ pub(crate) fn run_module_with_hir<'m>(
         }
     }
     vm.frames.push(Frame::new(&module.main, module));
+    // A web request installed on this thread (phpr -S) switches the run to
+    // web-SAPI behaviour and seeds the request superglobals; the `argv` CLI
+    // seeding below is skipped (the cli-server registers no argv/argc).
+    if let Some(req) = php_types::sapi::web_request() {
+        vm.web = true;
+        vm.response_headers.push(b"X-Powered-By: PHP/8.5.7".to_vec());
+        websapi::seed_web_superglobals(&mut vm.superglobals, &req);
+        // The cli-server SAPI's own startup INI values (oracle-pinned).
+        for (name, value) in [
+            (&b"html_errors"[..], &b"1"[..]),
+            (b"output_buffering", b"4096"),
+            (b"implicit_flush", b""),
+        ] {
+            if let Some(e) = vm.ini.0.get_mut(name) {
+                e.global = value.to_vec();
+                e.local = value.to_vec();
+            }
+        }
+    }
     // Seed the CLI superglobals (`$_SERVER`/`$argv`/`$argc`/`$_ENV`) into the
     // script frame's global slots for a real CLI run; the test harness passes
     // `None`, leaving them undefined as before. Only slots the script references
@@ -628,6 +683,10 @@ pub(crate) fn run_module_with_hir<'m>(
         fatal,
         return_value,
         exit_code,
+        headers: vm.response_headers,
+        response_code: vm.response_code,
+        response_reason: vm.response_reason,
+        error_log: vm.error_log,
     }
 }
 
@@ -1221,6 +1280,20 @@ struct Vm<'m> {
     /// `http_response_code()` — `None` until explicitly set (CLI reports `false`
     /// for an unset code).
     response_code: Option<i64>,
+    /// Whether this run serves a web request (a [`php_types::sapi::WebRequest`]
+    /// is installed on the thread): the header family becomes stateful, the
+    /// diagnostics render in `html_errors` form, and the web superglobals are
+    /// seeded. The cli-server SAPI buffers the whole response, so headers are
+    /// never "sent" mid-script (oracle-pinned).
+    web: bool,
+    /// Web response headers as full `Name: value` lines in emission order
+    /// (`X-Powered-By: PHP/8.5.7` pre-seeded, like PHP with expose_php on).
+    response_headers: Vec<Vec<u8>>,
+    /// Custom reason phrase from a raw `header("HTTP/1.1 404 Custom")`.
+    response_reason: Option<Vec<u8>>,
+    /// Web `log_errors` sink: one entry per rendered diagnostic (host adds
+    /// timestamps and writes stderr).
+    error_log: Vec<Vec<u8>>,
     /// `ignore_user_abort()` flag; CLI has no client connection so it is purely a
     /// stored value (default `0`, returned as the "previous" on each set).
     user_abort_ignored: bool,
@@ -2145,9 +2218,41 @@ impl<'m> Vm<'m> {
                 let rline = if fi + 1 == self.frames.len() { line } else { self.cur_line(fi) };
                 (self.frames[fi].module.file.to_vec(), rline)
             };
-            let mut block = format!("\n{}: {} in ", errno_label(errno), message).into_bytes();
-            block.extend_from_slice(&file);
-            block.extend_from_slice(format!(" on line {rline}\n").as_bytes());
+            // Web SAPI: the log_errors line the host timestamps onto stderr.
+            if self.web && self.ini.get_bool(b"log_errors") {
+                self.error_log.push(
+                    format!(
+                        "PHP {}:  {} in {} on line {}",
+                        errno_label(errno),
+                        message,
+                        String::from_utf8_lossy(&file),
+                        rline
+                    )
+                    .into_bytes(),
+                );
+            }
+            // `display_errors=0` suppresses the visible render only (the
+            // last_error record above and the log line still happened).
+            if !self.ini.get_bool(b"display_errors") {
+                return Ok(());
+            }
+            let block = if self.ini.get_bool(b"html_errors") {
+                // html_errors display form (the web SAPI default; oracle-pinned,
+                // note the double space after the colon).
+                format!(
+                    "<br />\n<b>{}</b>:  {} in <b>{}</b> on line <b>{}</b><br />\n",
+                    errno_label(errno),
+                    message,
+                    String::from_utf8_lossy(&file),
+                    rline
+                )
+                .into_bytes()
+            } else {
+                let mut block = format!("\n{}: {} in ", errno_label(errno), message).into_bytes();
+                block.extend_from_slice(&file);
+                block.extend_from_slice(format!(" on line {rline}\n").as_bytes());
+                block
+            };
             // Diagnostic display is ordinary output in PHP: it flows THROUGH
             // the ob stack (captured, compressed, reordered with echoes) and
             // marks headers-sent only when it reaches the real sink —
@@ -8759,6 +8864,149 @@ impl<'m> Vm<'m> {
         field_get(cell, steps, &mut keys.into_iter(), fs)
     }
 
+    /// The BP_VAR_IS walk behind `Op::FieldIsset`/`Op::FieldEmpty` with the
+    /// `__isset`/`__get` protocol dispatched at ANY property step — not just
+    /// the path start (`isset($block->block_type->uses_context)`: the magic
+    /// leaf sits one hop in; WP_Block_Type keys its private props on it).
+    /// Walks the plain prefix silently, runs the protocol at the first magic
+    /// boundary, finishes the rest through the plain walker. `Ok(None)` = no
+    /// magic boundary met — the caller keeps its plain machinery (ArrayAccess
+    /// leaves, lazy roots, the raw field walk). Oracle-pinned protocol:
+    /// - intermediate step: `__isset` gates (false → unset); the value then
+    ///   comes from `__get` (also without `__isset` — the dim-fetch rule);
+    /// - terminal `isset()`: `__isset` result; only-`__get` answers false
+    ///   WITHOUT calling it;
+    /// - terminal `empty()`: `__isset` false → true; true → `!truthy(__get)`;
+    ///   only-`__get` answers true WITHOUT calling it.
+    fn field_magic_probe(
+        &mut self,
+        base: FieldBase,
+        top: usize,
+        steps: &[FieldStep],
+        keys: &[Zval],
+        empty_mode: bool,
+    ) -> Result<Option<bool>, PhpError> {
+        let cur = self.frames[top].class;
+        let base_val = match base {
+            FieldBase::Local(s) => self.frames[top].slots.get(s as usize),
+            FieldBase::Global(s) => self.frames[0].slots.get(s as usize),
+            FieldBase::Superglobal(i) => self.superglobals.get(i as usize),
+            FieldBase::This => self.frames[top].this.as_ref(),
+        };
+        let Some(mut v) = base_val.map(|x| x.deref_clone()) else { return Ok(None) };
+        let mut i = 0usize;
+        let mut kpos = 0usize;
+        while i < steps.len() {
+            // Follow *initialized* proxy forwarding (no initialization).
+            for _ in 0..64 {
+                let next = self.proxy_redirect(v.clone());
+                let same = match (deref_object(&v), deref_object(&next)) {
+                    (Some(a), Some(b)) => Rc::ptr_eq(&a, &b),
+                    _ => true,
+                };
+                v = next;
+                if same {
+                    break;
+                }
+            }
+            let step = &steps[i];
+            let (name, step_keys): (Option<Vec<u8>>, usize) = match step {
+                FieldStep::Prop(n) => (Some(n.to_vec()), 0),
+                FieldStep::PropDyn => {
+                    let Some(k) = keys.get(kpos) else { return Ok(None) };
+                    (
+                        Some(convert::to_zstr_cast(k, &mut self.diags).as_bytes().to_vec()),
+                        1,
+                    )
+                }
+                FieldStep::Index => (None, 1),
+                FieldStep::Append => (None, 0),
+            };
+            if let (Some(name), Some(o)) = (&name, deref_object(&v)) {
+                let has_isset =
+                    self.magic_applies(&o, name, cur, MagicKind::Isset, b"__isset").is_some();
+                let has_get =
+                    self.magic_applies(&o, name, cur, MagicKind::Get, b"__get").is_some();
+                if has_isset || has_get {
+                    let rest = &steps[i + 1..];
+                    let rest_keys: Vec<Zval> = keys[kpos + step_keys..].to_vec();
+                    let oid = o.borrow().id;
+                    let name_z = Zval::Str(PhpStr::new(name.clone()));
+                    let isset_res = if has_isset {
+                        let gkey = (oid, MagicKind::Isset, name.clone());
+                        let ins = self.magic_guard.insert(gkey.clone());
+                        let r = self.call_method_sync(v.clone(), b"__isset", vec![name_z.clone()]);
+                        if ins {
+                            self.magic_guard.remove(&gkey);
+                        }
+                        Some(convert::to_bool(&r?.deref_clone(), &mut self.diags))
+                    } else {
+                        None
+                    };
+                    fn fetch_get(
+                        vm: &mut Vm,
+                        oid: u32,
+                        v: &Zval,
+                        name: &[u8],
+                        name_z: &Zval,
+                    ) -> Result<Zval, PhpError> {
+                        let gkey = (oid, MagicKind::Get, name.to_vec());
+                        let ins = vm.magic_guard.insert(gkey.clone());
+                        let r = vm.call_method_sync(v.clone(), b"__get", vec![name_z.clone()]);
+                        if ins {
+                            vm.magic_guard.remove(&gkey);
+                        }
+                        Ok(r?.deref_clone())
+                    }
+                    let result = if rest.is_empty() {
+                        match (isset_res, empty_mode) {
+                            (Some(false), false) => false,
+                            (Some(false), true) => true,
+                            (Some(true), false) => true,
+                            (Some(true), true) => {
+                                if has_get {
+                                    !convert::is_true_silent(&fetch_get(
+                                        self, oid, &v, name, &name_z,
+                                    )?)
+                                } else {
+                                    false
+                                }
+                            }
+                            (None, false) => false,
+                            (None, true) => true,
+                        }
+                    } else if !isset_res.unwrap_or(true) || !has_get {
+                        // Unset (or unfetchable) intermediate: the whole path
+                        // reads as missing.
+                        empty_mode
+                    } else {
+                        let gv = fetch_get(self, oid, &v, name, &name_z)?;
+                        let fs = FieldScope { classes: &self.classes, scope: cur };
+                        let leaf = field_get(&gv, rest, &mut rest_keys.into_iter(), fs);
+                        match (leaf, empty_mode) {
+                            (Some(x), false) => !matches!(x, Zval::Null | Zval::Undef),
+                            (Some(x), true) => !convert::is_true_silent(&x),
+                            (None, false) => false,
+                            (None, true) => true,
+                        }
+                    };
+                    return Ok(Some(result));
+                }
+            }
+            // Plain step: advance one hop through the silent walker.
+            let fs = FieldScope { classes: &self.classes, scope: cur };
+            let step_key_vec: Vec<Zval> = keys[kpos..kpos + step_keys].to_vec();
+            let next = field_get(&v, std::slice::from_ref(step), &mut step_key_vec.into_iter(), fs);
+            match next {
+                Some(nv) => v = nv,
+                None => return Ok(None),
+            }
+            kpos += step_keys;
+            i += 1;
+        }
+        Ok(None)
+    }
+
     /// For the fused field ops (isset/empty/unset): when the path's LAST step
     /// is an Index whose prefix resolves to an ArrayAccess OBJECT, the op must
     /// dispatch the protocol instead of array-walking. Returns the receiver
@@ -9917,8 +10165,8 @@ host_builtins! {
     b"session_set_save_handler" => vm.ho_session_set_save_handler(args),
     b"__session_files_op" => vm.ho_session_files_op(args),
     b"headers_list" => vm.ho_headers_list(),
-    b"setcookie" => vm.ho_setcookie(args),
-    b"setrawcookie" => vm.ho_setcookie(args),
+    b"setcookie" => vm.ho_setcookie(args, false),
+    b"setrawcookie" => vm.ho_setcookie(args, true),
     b"header_remove" => vm.ho_header_remove(args),
     b"http_response_code" => vm.ho_http_response_code(args),
     b"json_last_error" => vm.ho_json_last_error(args),

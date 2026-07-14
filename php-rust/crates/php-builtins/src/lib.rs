@@ -215,6 +215,7 @@ pub fn registry() -> Registry {
     add(b"file_exists", file::file_exists);
     add(b"is_file", file::is_file);
     add(b"is_uploaded_file", file::is_uploaded_file);
+    add(b"move_uploaded_file", file::move_uploaded_file);
     add(b"is_dir", file::is_dir);
     add(b"is_link", file::is_link);
     add(b"is_readable", file::is_readable);
@@ -276,6 +277,7 @@ pub fn registry() -> Registry {
     add(b"array_chunk", array::array_chunk);
     add(b"array_merge_recursive", array::array_merge_recursive);
     add(b"hash_algos", encoding::hash_algos);
+    add(b"hash_hmac_algos", encoding::hash_hmac_algos);
     add(b"stream_get_wrappers", encoding::stream_get_wrappers);
     // ext/zlib string (de)compression (system zlib via php_types::zlibio,
     // byte-identical).
@@ -569,6 +571,12 @@ pub fn registry() -> Registry {
     add(b"memory_get_peak_usage", env::memory_get_usage);
     add(b"memory_reset_peak_usage", env::memory_reset_peak_usage);
     add(b"php_sapi_name", env::php_sapi_name);
+    // Web-SAPI-only functions: the CLI oracle does not define them at all
+    // (function_exists must stay false there).
+    if php_types::sapi::sapi_name() != "cli" {
+        add(b"getallheaders", env::getallheaders);
+        add(b"apache_request_headers", env::getallheaders);
+    }
     // ini_get/ini_set/ini_restore/ini_get_all are VM-side host builtins: the
     // mutable INI table lives in the Vm (php-runtime vm/ini.rs).
     add(b"posix_geteuid", env::posix_geteuid);

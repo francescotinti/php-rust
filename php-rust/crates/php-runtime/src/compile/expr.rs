@@ -317,16 +317,23 @@ impl<'a> super::FnCompiler<'a> {
                     if !nullsafe {
                         self.coalesce_load(object)?; // [obj] — silent: `$x->a->b ?? d`
                         self.emit(Op::Dup); // [obj, obj]
-                        self.emit(Op::PropIsset { name: name.clone() }); // [obj, isset]
+                        // Fetch gate, not plain isset: `__get` without `__isset`
+                        // must serve the value (BP_VAR_IS; WP_Block->attributes).
+                        self.emit(Op::PropIssetFetchGate { name: name.clone() }); // [obj, isset]
                         let to_default = self.emit(Op::JumpIfFalse(Addr::MAX)); // unset → default; [obj]
                         self.emit(Op::PropGet { name: name.clone() }); // set → [value]
-                        let to_end = self.emit(Op::Jump(Addr::MAX));
+                        // A `__get` routed through the gate may still return
+                        // null — `??` takes the default then (oracle-pinned).
+                        let to_end = self.emit(Op::JumpIfNotNull(Addr::MAX));
+                        self.expr(b)?; // [default] (the null was popped)
+                        let to_end2 = self.emit(Op::Jump(Addr::MAX));
                         let default_at = self.here();
                         self.patch(to_default, Op::JumpIfFalse(default_at));
                         self.emit(Op::Pop); // drop the kept object
                         self.expr(b)?; // [default]
                         let end = self.here();
-                        self.patch(to_end, Op::Jump(end));
+                        self.patch(to_end, Op::JumpIfNotNull(end));
+                        self.patch(to_end2, Op::Jump(end));
                         return Ok(());
                     }
                 }
@@ -1850,6 +1857,34 @@ impl<'a> super::FnCompiler<'a> {
                         c.emit(Op::CallBuiltinRefCell { name: nm, argc: rest.len() as u32 });
                         Ok(())
                     });
+                }
+                // A prop/dim chain whose ROOT is a non-place expression
+                // (`array_unshift(wp_styles()->queue, $h)`, WordPress): evaluate
+                // the root once into a temp and take the reference cell through
+                // `<tmp>->prop…` — mutations reach the real object because
+                // objects are by-handle (mirrors the host-builtin path above).
+                if let Some((root, steps)) = expr_rooted_field_chain(first) {
+                    let root_tmp = self.alloc_temp();
+                    self.expr(root)?;
+                    // BindRefTo REPLACES the temp's binding (a plain StoreSlot
+                    // would write through a stale ref left from a previous
+                    // call/loop iteration).
+                    self.emit(Op::BindRefTo {
+                        base: FieldBase::Local(root_tmp),
+                        steps: [].into(),
+                    });
+                    self.emit(Op::Pop);
+                    let place = Place { base: PlaceBase::Local(root_tmp), steps };
+                    let (base, fsteps) = self.field_path(&place)?;
+                    self.emit(Op::MakeRef { base, steps: fsteps.into() });
+                    self.push_value_args(rest)?;
+                    self.emit(Op::CallBuiltinRefCell {
+                        name: name.into(),
+                        argc: rest.len() as u32,
+                    });
+                    self.clear_temp_binding(root_tmp);
+                    self.free_temp();
+                    return Ok(());
                 }
                 Err(CompileError::Unsupported(
                     "by-reference builtin whose first argument is not a plain variable".into(),

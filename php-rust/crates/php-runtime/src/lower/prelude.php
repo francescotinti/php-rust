@@ -1856,6 +1856,15 @@ class RegexIterator implements Iterator {
     public function key(): mixed { return $this->__it->key(); }
     public function next(): void { $this->__it->next(); $this->__advance(); }
 }
+// La variante ricorsiva: stesso filtro, con la discesa delegata all'iteratore
+// interno (WordPress la usa per lo scan dei template dei block theme — spesso
+// solo per la costante GET_MATCH ereditata, passata a un RegexIterator).
+class RecursiveRegexIterator extends RegexIterator implements RecursiveIterator {
+    public function hasChildren(): bool { return $this->getInnerIterator()->hasChildren(); }
+    public function getChildren(): RecursiveRegexIterator {
+        return new static($this->getInnerIterator()->getChildren(), $this->getRegex(), $this->getMode(), $this->getFlags(), 0);
+    }
+}
 // ext/sqlite3 sul medesimo backing rusqlite dei __pdo_* (stessa registry di
 // connessioni): SQLite3Stmt tiene SQL+parametri e ri-prepara a ogni execute,
 // SQLite3Result e' il rowset materializzato. Quirk oracle-verificati: exec

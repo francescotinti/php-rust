@@ -904,9 +904,10 @@ impl<'m> super::Vm<'m> {
 
     /// `headers_sent(&$filename = null, &$line = null): bool` — whether output has
     /// reached the sink (CLI). This is the plain-dispatch form (dynamic string
-    /// callable): the out-params are dropped.
+    /// callable): the out-params are dropped. Under the web SAPI the cli-server
+    /// buffers the whole response, so headers are never "sent" (oracle-pinned).
     pub(super) fn ho_headers_sent(&mut self, _args: Vec<Zval>) -> Result<Zval, PhpError> {
-        Ok(Zval::Bool(self.output_started))
+        Ok(Zval::Bool(!self.web && self.output_started))
     }
 
     /// `headers_sent(&$filename, &$line)` with the out-params wired: PHP fills
@@ -916,18 +917,23 @@ impl<'m> super::Vm<'m> {
         &mut self,
         _args: Vec<Zval>,
     ) -> Result<(Zval, Zval, Option<Zval>), PhpError> {
+        let sent = !self.web && self.output_started;
         let (file, line) = match &self.output_start {
-            Some((f, l)) if self.output_started => {
+            Some((f, l)) if sent => {
                 (Zval::Str(PhpStr::new(f.clone())), Zval::Long(i64::from(*l)))
             }
             _ => (Zval::Str(PhpStr::new(Vec::new())), Zval::Long(0)),
         };
-        Ok((Zval::Bool(self.output_started), file, Some(line)))
+        Ok((Zval::Bool(sent), file, Some(line)))
     }
 
     /// `header(string $header, bool $replace = true, int $response_code = 0): void`
-    /// — a CLI no-op; only warns if output has already been sent.
-    pub(super) fn ho_header(&mut self, _args: Vec<Zval>) -> Result<Zval, PhpError> {
+    /// — stateful under the web SAPI; a CLI no-op that only warns if output has
+    /// already been sent.
+    pub(super) fn ho_header(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if self.web {
+            return self.web_header(&args);
+        }
         if self.output_started {
             let msg = self.headers_sent_warning();
             self.diags.push(Diag::Warning(msg));
@@ -935,14 +941,25 @@ impl<'m> super::Vm<'m> {
         Ok(Zval::Null)
     }
 
-    /// `headers_list(): array` — always empty under the CLI SAPI.
+    /// `headers_list(): array` — the accumulated response headers under the web
+    /// SAPI; always empty under CLI.
     pub(super) fn ho_headers_list(&mut self) -> Result<Zval, PhpError> {
-        Ok(Zval::Array(Rc::new(PhpArray::new())))
+        let mut a = PhpArray::new();
+        if self.web {
+            for line in &self.response_headers {
+                let _ = a.append(Zval::Str(PhpStr::new(line.clone())));
+            }
+        }
+        Ok(Zval::Array(Rc::new(a)))
     }
 
-    /// `setcookie(...) / setrawcookie(...): bool` — a CLI no-op returning `true`,
-    /// or `false` with the "headers already sent" Warning once output has started.
-    pub(super) fn ho_setcookie(&mut self, _args: Vec<Zval>) -> Result<Zval, PhpError> {
+    /// `setcookie(...) / setrawcookie(...): bool` — appends a `Set-Cookie`
+    /// response header under the web SAPI; a CLI no-op returning `true`, or
+    /// `false` with the "headers already sent" Warning once output has started.
+    pub(super) fn ho_setcookie(&mut self, args: Vec<Zval>, raw: bool) -> Result<Zval, PhpError> {
+        if self.web {
+            return self.web_setcookie(&args, raw);
+        }
         if self.output_started {
             let msg = self.headers_sent_warning();
             self.diags.push(Diag::Warning(msg));
@@ -951,8 +968,25 @@ impl<'m> super::Vm<'m> {
         Ok(Zval::Bool(true))
     }
 
-    /// `header_remove(?string $name = null): void` — a CLI no-op (warns if sent).
-    pub(super) fn ho_header_remove(&mut self, _args: Vec<Zval>) -> Result<Zval, PhpError> {
+    /// `header_remove(?string $name = null): void` — removes the matching
+    /// accumulated headers under the web SAPI (all of them without a name);
+    /// a CLI no-op (warns if sent).
+    pub(super) fn ho_header_remove(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        if self.web {
+            match args.first() {
+                None | Some(Zval::Null) => self.response_headers.clear(),
+                Some(v) => {
+                    let name = convert::to_zstr_cast(v, &mut self.diags).as_bytes().to_vec();
+                    self.response_headers.retain(|h| {
+                        match h.iter().position(|&b| b == b':') {
+                            Some(p) => !h[..p].eq_ignore_ascii_case(&name),
+                            None => true,
+                        }
+                    });
+                }
+            }
+            return Ok(Zval::Null);
+        }
         if self.output_started {
             let msg = self.headers_sent_warning();
             self.diags.push(Diag::Warning(msg));
@@ -961,18 +995,21 @@ impl<'m> super::Vm<'m> {
     }
 
     /// `http_response_code(int $response_code = 0): int|bool` — get returns the
-    /// stored code (or `false` if never set, under CLI); set stores it and returns
-    /// the previous code (or `true` on the first set).
+    /// stored code (or `false` if never set, under CLI; 200 under the web SAPI);
+    /// set stores it and returns the previous code (or `true` on the first CLI
+    /// set; 200 under web).
     pub(super) fn ho_http_response_code(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         match args.first() {
             None | Some(Zval::Null) => Ok(match self.response_code {
                 Some(c) => Zval::Long(c),
+                None if self.web => Zval::Long(200),
                 None => Zval::Bool(false),
             }),
             Some(v) => {
                 // Setting the code once output has started is refused (its own
-                // message, distinct from header()'s).
-                if self.output_started {
+                // message, distinct from header()'s) — CLI only: the web SAPI
+                // buffers the response, so the code stays settable throughout.
+                if !self.web && self.output_started {
                     let loc = match &self.output_start {
                         Some((f, l)) => format!(" (output started at {}:{})", String::from_utf8_lossy(f), l),
                         None => String::new(),
@@ -984,8 +1021,12 @@ impl<'m> super::Vm<'m> {
                 }
                 let code = convert::to_long_cast(v, &mut self.diags);
                 let old = self.response_code.replace(code);
+                if self.web {
+                    self.response_reason = None;
+                }
                 Ok(match old {
                     Some(c) => Zval::Long(c),
+                    None if self.web => Zval::Long(200),
                     None => Zval::Bool(true),
                 })
             }

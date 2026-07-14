@@ -1152,12 +1152,28 @@ impl<'m> Vm<'m> {
             )));
             return Ok(Zval::Bool(false));
         }
-        // Session id: reuse the one set via session_id(), else create one;
-        // under strict mode an id the module does not recognize is discarded.
+        // Session id: reuse the one set via session_id(), else (web SAPI) the
+        // request cookie, else create one; under strict mode an id the module
+        // does not recognize is discarded. An id arriving via the cookie
+        // suppresses the response Set-Cookie (PHP sends it only for a new id).
         let mut id = std::mem::take(&mut self.session.id);
+        let mut from_cookie = false;
+        if self.web && id.is_empty() && self.ini.get_bool(b"session.use_cookies") {
+            let name = self.ini.get(b"session.name").unwrap_or(b"PHPSESSID").to_vec();
+            let idx = crate::bytecode::superglobal_index(b"_COOKIE").expect("_COOKIE") as usize;
+            if let Zval::Array(c) = &self.superglobals[idx] {
+                if let Some(Zval::Str(v)) = c.get(&Key::from_bytes(&name)) {
+                    if !v.as_bytes().is_empty() {
+                        id = v.as_bytes().to_vec();
+                        from_cookie = true;
+                    }
+                }
+            }
+        }
         let strict = self.ini.get_bool(b"session.use_strict_mode");
         if !id.is_empty() && strict && !self.sess_mod_validate(&id)? {
             id = Vec::new();
+            from_cookie = false;
         }
         if id.is_empty() {
             id = self.sess_mod_create_sid()?;
@@ -1195,6 +1211,10 @@ impl<'m> Vm<'m> {
                 self.sess_destroy_on_decode_failure("session_start")?;
                 return Ok(Zval::Bool(false));
             }
+        }
+        // Web SAPI: the session cookie (new ids only) + cache-limiter headers.
+        if self.web {
+            self.web_session_headers(!from_cookie);
         }
         let top = self.frames.len().saturating_sub(1);
         let file = self.frames.get(top).map(|f| f.module.file.to_vec()).unwrap_or_default();

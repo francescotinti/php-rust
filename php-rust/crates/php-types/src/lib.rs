@@ -10,6 +10,7 @@ mod generator;
 pub mod numstr;
 mod object;
 pub mod ops;
+pub mod sapi;
 pub mod stream;
 pub mod tz;
 pub mod zlibio;

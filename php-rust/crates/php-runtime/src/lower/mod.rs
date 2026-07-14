@@ -1830,7 +1830,9 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"PHP_RELEASE_VERSION" => ExprKind::Int(7),
         b"PHP_VERSION_ID" => ExprKind::Int(80507),
         b"PHP_EXTRA_VERSION" => str_lit(b""),
-        b"PHP_SAPI" => str_lit(b"cli"),
+        // The web host sets the SAPI name at startup, before anything is
+        // lowered, so the compile-time fold is safe (PRELUDE_CACHE included).
+        b"PHP_SAPI" => str_lit(php_types::sapi::sapi_name().as_bytes()),
         // Build flavour — PHP 8.5 reports these as bool. phpr is a non-debug,
         // non-thread-safe build, matching the oracle.
         b"PHP_DEBUG" => ExprKind::Bool(false),
@@ -2059,6 +2061,8 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"ENT_QUOTES" => ExprKind::Int(3),
         b"ENT_IGNORE" => ExprKind::Int(4),
         b"ENT_SUBSTITUTE" => ExprKind::Int(8),
+        b"ENT_XML1" => ExprKind::Int(16),
+        b"ENT_XHTML" => ExprKind::Int(32),
         b"ENT_HTML5" => ExprKind::Int(48),
         // scandir() sort order (step 52e).
         b"SCANDIR_SORT_ASCENDING" => ExprKind::Int(0),

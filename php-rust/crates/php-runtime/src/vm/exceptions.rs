@@ -66,13 +66,36 @@ impl<'m> Vm<'m> {
         // ends "…returned") uses the standard " in F:L". `file`/`line` are the
         // throwable's, which for these errors are the definition site.
         let arg_type_err = class == "TypeError" && message.contains(", called in ");
-        let head = if arg_type_err {
-            format!("\nFatal error: {label} and defined in {file}:{line}\n")
+        let joiner = if arg_type_err { " and defined in" } else { " in" };
+        // Web SAPI: the log_errors line for the host's stderr (multiline —
+        // continuation lines stay unstamped, like the oracle).
+        if self.web && self.ini.get_bool(b"log_errors") {
+            self.error_log.push(
+                format!(
+                    "PHP Fatal error:  {label}{joiner} {file}:{line}\nStack trace:\n\
+                     {trace}\n  thrown in {file} on line {line}"
+                )
+                .into_bytes(),
+            );
+        }
+        if !self.ini.get_bool(b"display_errors") {
+            return;
+        }
+        if self.ini.get_bool(b"html_errors") {
+            // html_errors form (oracle-pinned: the head's file:line stays
+            // plain, the "thrown in" tail is bolded).
+            let block = format!(
+                "<br />\n<b>Fatal error</b>:  {label}{joiner} {file}:{line}\nStack trace:\n\
+                 {trace}\n  thrown in <b>{file}</b> on line <b>{line}</b><br />\n"
+            );
+            self.rendered.extend_from_slice(block.as_bytes());
         } else {
-            format!("\nFatal error: {label} in {file}:{line}\n")
-        };
-        let block = format!("{head}Stack trace:\n{trace}\n  thrown in {file} on line {line}\n");
-        self.rendered.extend_from_slice(block.as_bytes());
+            let block = format!(
+                "\nFatal error: {label}{joiner} {file}:{line}\nStack trace:\n{trace}\n  \
+                 thrown in {file} on line {line}\n"
+            );
+            self.rendered.extend_from_slice(block.as_bytes());
+        }
     }
 
     /// Find the innermost `try` whose protected range covers the in-flight

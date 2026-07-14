@@ -533,6 +533,20 @@ pub fn hash_algos(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Array(Rc::new(out)))
 }
 
+/// `hash_hmac_algos(): array` — the [`hash_algos`] subset usable with HMAC
+/// (PHP excludes the non-cryptographic algorithms: crc*, xxh*; so does
+/// [`hash_hmac`]'s backend). WordPress feature-detects wp_hash() with it.
+pub fn hash_hmac_algos(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let mut out = PhpArray::new();
+    for algo in [
+        "md5", "sha1", "sha224", "sha256", "sha384", "sha512/224", "sha512/256", "sha512",
+        "sha3-224", "sha3-256", "sha3-384", "sha3-512",
+    ] {
+        let _ = out.append(Zval::Str(PhpStr::from_str(algo)));
+    }
+    Ok(Zval::Array(Rc::new(out)))
+}
+
 /// `stream_get_wrappers(): array` — the stream wrappers this runtime actually
 /// opens (`open_file_stream` / `open_php_stream` / the ureq-backed http(s)
 /// layer). Userland feature-detects with `in_array($scheme, ...)`; notably

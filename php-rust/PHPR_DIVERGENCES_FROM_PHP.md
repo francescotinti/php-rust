@@ -381,6 +381,79 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-14 (sessione WordPress-4): 🏁 **SAPI WEB SERVER: `phpr -S host:port
+  [-t docroot] [router.php]`, work-alike del cli-server di PHP** — e
+  **WordPress 7.0.1 SERVITO VIA HTTP a parità byte con l'oracle `php -S`**:
+  sullo stesso albero+DB SQLite, 8/8 risposte identiche (homepage, ?p=1,
+  ?page_id=2, 404, wp-login.php, /wp-json/, /robots.txt→301, ?feed=rss2),
+  più la batteria SAPI di 48 probe byte-id (headers normalizzati solo su
+  Date/porta/tmp-path) e il log stderr identico riga per riga (banner,
+  Accepted/[code]/Closing, diagnostiche "PHP Warning:" timestampate).
+  Architettura: server sequenziale hand-rolled su `TcpListener` in
+  php-cli/server.rs (la VM è piena di `Rc`, e serve controllo byte-level su
+  status-line e ordine header); per-request `WebRequest` thread-local in
+  `php_types::sapi` (php://input, getallheaders, upload registry) + VM in
+  modalità web (`vm.web`). Semantica oracle-pinned:
+  **(a) superglobali web** (ordine esatto $_SERVER del cli-server, HTTP_* in
+  wire-order con CONTENT_TYPE/LENGTH doppi, $_GET/$_POST/$_COOKIE con le
+  asimmetrie vere: nome cookie NON urldecodato, first-wins; multipart
+  rfc1867 → $_FILES con nesting per-attributo, tmp file registrati per
+  is_uploaded_file/move_uploaded_file e spazzati a fine request);
+  **(b) header-family stateful** (header/headers_list/header_remove/
+  setcookie/setrawcookie/http_response_code; replace = REMOVE+APPEND in
+  coda, non in-place — pinned col Content-Type tardivo del feed RSS;
+  Location→302 implicito; il cli-server bufferizza la risposta INTERA →
+  headers_sent() sempre false e header() funziona anche dopo output);
+  **(c) display html_errors=1** (`<br />\n<b>Warning</b>:  … in <b>F</b> on
+  line <b>N</b><br />`, fatal col tail "thrown in" boldato) + error_log
+  lines per lo stderr del server; ini registrate display_errors/log_errors/
+  html_errors/output_buffering/implicit_flush (default CLI + override web);
+  **(d) risoluzione path del cli-server** (walk longest-prefix con
+  PATH_INFO, index.php/index.html nelle dir, **fallback a index.php del
+  docroot con PATH_INFO=path per gli URL virtuali** — è ciò che serve
+  /robots.txt e /wp-json/ di WP senza router; router script con
+  SCRIPT_NAME=path e fall-through su `return false`; 404 template
+  byte-identico; mime map generata da sapi/cli/mime_type_map.h, charset
+  solo su text/*; statiche con Content-Length, PHP senza);
+  **(e) session web** (id dal cookie di richiesta; Set-Cookie PHPSESSID
+  solo per id nuovi; cache-limiter nocache: Expires/Cache-Control/Pragma).
+  Fix engine emersi servendo WP, tutti probe-pinned:
+  **(f) condizionali PCRE con condizione lookahead** `(?(?=A)B|C)` →
+  riscrittura equivalente `(?:(?=A)B|(?!A)C)` (wp_html_split/wptexturize);
+  **(g) `[` NUDO dentro le character class** escapato (`[([{"\-]` di
+  wptexturize uccideva regex/fancy e il fallback onig rifiuta i lookbehind
+  variabili) e **(h) `(?<!A|B|C)` decomposto in `(?<!A)(?<!B)(?<!C)`**
+  (De Morgan, esatto) — la regola apostrofi di wptexturize compilava NULL
+  e svuotava i chunk (Sample Page coi paragrafi vuoti);
+  **(i) `array_replace_recursive` con elementi `Ref`-wrappati**: il match
+  diretto su Zval::Array saltava i ref (residui di foreach by-ref) e
+  SOSTITUIVA invece di ricorrere — WP_Theme_JSON::merge perdeva TUTTI i
+  preset default di theme.json (palette/gradients/shadows dal CSS globale);
+  **(j) gate BP_VAR_IS per `??`/`??=`** (`Op::PropIssetFetchGate`): una
+  classe con `__get` senza `__isset` serve il valore (WP_Block->attributes
+  è lazy così; `$b->attributes['k'] ?? d` dava sempre il default e i
+  blocchi perdevano i default degli attributi), con il null da `__get` che
+  prende comunque il default/assegna (oracle-pinned);
+  **(k) `field_magic_probe`: isset()/empty() su CATENE con proprietà magica
+  a QUALSIASI step** (prima il protocollo __isset/__get valeva solo al
+  primo step: `empty($this->block_type->uses_context)` — privata dietro
+  __get in WP_Block_Type — rispondeva true e il context dei blocchi non
+  fluiva: classi wp-block-navigation-item perse); pinned anche i terminali:
+  isset() con solo __get = false SENZA chiamarlo, empty() idem;
+  **(l) `htmlspecialchars($s, $f, $cs, double_encode: false)`** onorato
+  (entity esistenti non ri-encodate; nomi ≥2 alfanumerici — approssimazione
+  della tabella per-doctype, WP normalizza prima con kses quindi combacia);
+  **(m) `RecursiveRegexIterator`** nel prelude (scan template block theme),
+  **`hash_hmac_algos()`**, **`move_uploaded_file`/`getallheaders`/
+  `apache_request_headers`** (le ultime due SOLO sotto SAPI web, come
+  l'oracle), **ENT_XML1/ENT_XHTML**, **PHP_SAPI/php_sapi_name()**
+  configurabili dal host (fold compile-time sicuro: set prima di ogni
+  lowering). Residui documentati: niente chunked request body né
+  PHP_CLI_SERVER_WORKERS; headers_sent() resta false anche oltre i 4096
+  byte (l'oracle flusha lì); l'escape `"\u{...}"` manca nel lexer; il
+  doppio confine magico nella STESSA catena isset non ridispatcha (il rest
+  cammina plain). Gate: batteria 48 probe + 8 pagine WP byte-id, corpus/
+  sess/date/refl per NOME, hk 1663/3846 0F, ORM 3E/13F, cargo 0F.
 - 2026-07-14 (sessione WordPress-3): ⚡ **PERFORMANCE del load WP: il seeding
   HIR per include è ora condiviso via `Rc` invece che deep-clonato** —
   `wp option get` su WordPress 7.0.1/SQLite passa da **22.8s a 3.0s cold /

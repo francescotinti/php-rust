@@ -612,13 +612,12 @@ pub fn file_get_contents(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
             Some(body) => body,
             None => return Ok(Zval::Bool(false)),
         }
-    } else if name.as_bytes() == b"php://input"
-        || name.as_bytes() == b"php://memory"
-        || name.as_bytes() == b"php://temp"
-    {
-        // CLI SAPI: `php://input` (no request body) reads as empty —
-        // oracle-pinned, even with data piped on stdin; a fresh
-        // `php://memory`/`php://temp` is empty by construction.
+    } else if name.as_bytes() == b"php://input" {
+        // The raw request body under a web SAPI; empty under CLI —
+        // oracle-pinned, even with data piped on stdin.
+        php_types::sapi::request_body()
+    } else if name.as_bytes() == b"php://memory" || name.as_bytes() == b"php://temp" {
+        // A fresh `php://memory`/`php://temp` is empty by construction.
         Vec::new()
     } else if let Some(rest) = name.as_bytes().strip_prefix(b"compress.zlib://".as_slice()) {
         // The zlib wrapper: decode every gzip member (plain files pass through).
@@ -1438,10 +1437,39 @@ pub fn is_file(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 }
 
 /// `is_uploaded_file($filename)`: whether the file arrived via HTTP POST
-/// upload. The CLI SAPI never registers uploads, so this is `false` for every
-/// path (no warning), exactly like `php-cli`.
+/// upload — membership in this request's rfc1867 tmp-file registry. The CLI
+/// SAPI never registers uploads, so it stays `false` there (no warning),
+/// exactly like `php-cli`.
 pub fn is_uploaded_file(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let _ = arg_os_path(argv, ctx);
+    use std::os::unix::ffi::OsStrExt;
+    let p = arg_os_path(argv, ctx);
+    Ok(Zval::Bool(php_types::sapi::is_uploaded_file(p.as_os_str().as_bytes())))
+}
+
+/// `move_uploaded_file($from, $to)`: move only if `$from` is one of this
+/// request's uploads (else `false`, no warning — oracle-pinned); the moved
+/// file leaves the registry, so the host's request-end sweep skips it.
+pub fn move_uploaded_file(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::os::unix::ffi::OsStrExt;
+    let from = arg_os_path(argv, ctx);
+    if !php_types::sapi::is_uploaded_file(from.as_os_str().as_bytes()) {
+        return Ok(Zval::Bool(false));
+    }
+    let to = {
+        let s = ctx.to_zstr(argv.get(1).unwrap_or(&Zval::Null));
+        std::ffi::OsStr::from_bytes(strip_file_wrapper(s.as_bytes())).to_os_string()
+    };
+    // Like PHP: rename, falling back to copy+unlink across devices.
+    let moved = std::fs::rename(&from, &to).is_ok()
+        || (std::fs::copy(&from, &to).is_ok() && std::fs::remove_file(&from).is_ok());
+    if moved {
+        php_types::sapi::remove_uploaded_file(from.as_os_str().as_bytes());
+        return Ok(Zval::Bool(true));
+    }
+    ctx.diags.push(Diag::Warning(format!(
+        "move_uploaded_file({}): Failed to open stream: No such file or directory",
+        String::from_utf8_lossy(to.as_os_str().as_bytes())
+    )));
     Ok(Zval::Bool(false))
 }
 

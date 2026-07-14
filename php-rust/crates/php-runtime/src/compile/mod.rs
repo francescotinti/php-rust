@@ -1002,7 +1002,9 @@ impl<'a> FnCompiler<'a> {
                 // `$o->p ?? d` uses.
                 self.expr(object)?; // [obj]
                 self.emit(Op::Dup); // [obj, obj]
-                self.emit(Op::PropIsset { name: name.clone() }); // [obj, isset]
+                // Fetch gate (BP_VAR_IS): `__get` without `__isset` serves the
+                // base (`WP_Block->attributes['k'] ?? d`).
+                self.emit(Op::PropIssetFetchGate { name: name.clone() }); // [obj, isset]
                 let to_null = self.emit(Op::JumpIfFalse(Addr::MAX)); // unset → null; [obj]
                 self.emit(Op::PropGetSilent { name: name.clone() }); // [value]
                 let to_end = self.emit(Op::Jump(Addr::MAX));

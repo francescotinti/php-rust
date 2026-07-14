@@ -14,6 +14,9 @@ use std::process::ExitCode;
 use php_builtins::registry;
 use php_runtime::run_source_with_argv;
 
+mod mime;
+mod server;
+
 /// Best-effort human text from a caught panic payload (the common `&str` /
 /// `String` cases; anything else is reported opaquely).
 fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
@@ -60,6 +63,14 @@ fn main() -> ExitCode {
         // `-n` (skip php.ini): phpr never loads one — accepted and ignored.
         if bytes == b"-n" {
             continue;
+        }
+        // `-S host:port [-t docroot] [router.php]`: the built-in web server.
+        if bytes == b"-S" {
+            let Some(addr) = raw.next() else {
+                eprintln!("usage: phpr -S <addr>:<port> [-t docroot] [router.php]");
+                return ExitCode::from(1);
+            };
+            return ExitCode::from(server::serve(&addr.to_string_lossy(), raw));
         }
         // `-f script`: explicit script-file form.
         if bytes == b"-f" {

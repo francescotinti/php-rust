@@ -995,12 +995,13 @@ pub fn open_php_stream(spec: &[u8], mode: &[u8]) -> Option<Stream> {
     let backend = if spec == b"memory" || spec == b"temp" || spec.starts_with(b"temp/") {
         StreamBackend::Memory(Cursor::new(Vec::new()))
     } else if spec == b"input" {
-        // `php://input` is the raw request body. The CLI SAPI has none:
+        // `php://input` is the raw request body. Under a web SAPI the host
+        // installed the request on this thread; the CLI SAPI has none:
         // oracle-pinned, it reads as EMPTY (immediate EOF) even with data
         // piped on stdin — it is NOT an alias of `php://stdin` (mapping it to
         // the real stdin made a `Request::getContent()` test suite block
         // forever on a terminal that never closes).
-        StreamBackend::Memory(Cursor::new(Vec::new()))
+        StreamBackend::Memory(Cursor::new(crate::sapi::request_body()))
     } else if spec == b"stdin" {
         StreamBackend::Stdin
     } else if spec == b"stdout" {
