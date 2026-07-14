@@ -381,6 +381,30 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-15 (sessione WordPress-7): ⚡ **PERF INFRASTRUTTURALE, gradini 1+2
+  (allocatore + hasher)** — la controparte phpr dell'infrastruttura di Zend
+  (ZMM a bin/chunk; zend_string con hash precomputato). Gradino 1
+  (`b574eff`): **mimalloc `#[global_allocator]`** nei binari phpr e
+  phpt-runner (il profilo post-unit-cache dava malloc/free di sistema a
+  ~16% dei campioni): home WP 1.20s → **0.91s** (-24%), dashboard 1.25s →
+  **0.95s** (-24%); mi_malloc+mi_free ~5% nel sample post-swap. Gradino 2
+  (`de67428`): **rustc-hash (FxHash) sulle mappe calde** — PhpArray::index
+  (l'ordinamento osservabile vive in `entries`, l'hasher non è osservabile),
+  tutte le mappe del Vm via alias di modulo (class_index, linked_functions,
+  constants, preg_cache, enum_cache, included_files, static_props,
+  closure_statics, gc_roots/destructed/gc_cycle_roots, generators, fibers,
+  ecc.), Frame::dyn_vars, Module::class_index e CompiledClass::prop_info
+  (letto a ogni accesso a proprietà). `Vm::unit_fp` NON toccato (suo
+  DefaultHasher, indipendente); var_dump_debug/stringify_args restano std
+  (attraversano l'API di php-builtins, path freddi). Home 0.91s → **0.76s**
+  (-17%), dashboard 0.95s → **0.81s** (-15%). **Cumulato WP-7: home 1.20 →
+  0.76s (-37%), dashboard 1.25 → 0.81s (-35%)**; SipHash sparito dal
+  top-of-stack del sample (era ~10%): restano memmove/memcmp e clone/drop
+  di Zval (churn COW/arena per-request: in agenda DOPO la roadmap
+  funzionale). Nessuna divergenza utente: gate per nome su corpus/sess/
+  date/refl IDENTICI, ORM 3E/13F stessi 16, hk 1663/3846 0F, cargo 1550/0,
+  SAPI 48, pretty 10/10 byte-id, admin 12/12, login 5/5 — su ENTRAMBI i
+  gradini, ciascuno sul proprio binario definitivo.
 - 2026-07-15 (sessione WordPress-6): ⚡ **UNIT-CACHE per-request (opcache-like):
   cache process-wide dei moduli include già lowerati+compilati+RILOCATI**,
   chiave = identità file (path canonico + mtime ns + size) + fingerprint dello
