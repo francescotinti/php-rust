@@ -2,6 +2,8 @@
 
 *Read this in [Italiano](italiano.md).*
 
+*🌐 Official website: **[phprust.com](https://phprust.com/)***
+
 *📊 Live [test coverage & PHP compatibility](COVERAGE.md) — parity with the official PHP test suite, area by area.*
 
 > **PHP, reimplemented from scratch in Rust.** A modern, memory-safe, async-ready
