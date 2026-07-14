@@ -35,25 +35,41 @@ compatibilità WordPress. Laravel solo come validazione posteriore.
 - Gate: corpus/sess/date/refl per NOME (baseline gate-o) · hk 1663/3846
   0F · ORM 3E/13F stessi 16 nomi · cargo test · batterie SAPI+WP+admin.
 
-## Prossimo passo del WP-track (ordine roadmap)
-1. **Perf runtime (fase 2)**: dopo la unit-cache il profilo per-request è
-   ~96% esecuzione VM: run_loop, malloc/free (churn di Zval), SipHash
-   (lookup HashMap per nome: variabili dinamiche/funzioni/classi),
-   Zval::clone/drop, gc_note/gc_sweep. Piste: FxHash/interning sui path
-   caldi, meno cloni Zval (COW più aggressivo), arena per frame. PROFILARE
-   PRIMA (`sample <pid>`): i numeri sono in perf-home2.sample (4776cd24).
-   Ulteriore pista cache: le lower "impure" (retry autoload) non sono
-   cacheable — se il profilo admin mostra miss caldi, valutare replay dei
-   load annidati. Anche run_linked ha costi per-include (scan lineare
-   `saved.functions` per la dedup dei nomi — O(n²) potenziale).
-2. **mysqli** (roadmap tappa 4): WP con MySQL vero oltre che SQLite.
-3. **ext/gd & media** (roadmap tappa 5): chiude anche i residui admin
+## Prossimo passo: SESSIONE WP-7 = perf infrastrutturale, gradini 1+2
+**(decisione Francesco 2026-07-15, dopo verifica su zend_alloc.c: la
+velocità di Zend è infrastruttura — ZMM a bin/chunk con reset bulk a fine
+richiesta, zend_string interned con hash precomputato, zval inline 16B —
+e il profilo post-unit-cache di phpr mostra esattamente quei buchi:
+malloc/free ~16% dei campioni, SipHash ~9%, Zval clone/drop, gc.)**
+
+SOLO i due gradini a ROI alto, misurando ciascuno; i gradini grossi
+(churn Zval/COW, arena per-request stile ZMM) restano in agenda DOPO la
+roadmap funzionale.
+1. **Swap del global allocator**: `#[global_allocator]` mimalloc (fallback:
+   jemalloc) nei binari phpr/phpt-runner. ~5 righe + Cargo.toml. Misura:
+   timing home/dashboard (batteria da 5 curl) + `sample` prima/dopo
+   (baseline: perf-home2.sample in 4776cd24, home warm ~1.2s).
+2. **FxHash/ahash sulle mappe calde + interning dei nomi**: class_index,
+   linked_functions, dyn_vars, constants, preg_cache, ecc. (⚠️ NON
+   cambiare l'ordinamento osservabile di PhpArray). Interning simboli
+   (nome→u32 con hash cache) se il tempo lo consente — replica
+   zend_string; altrimenti solo hasher swap e si rimanda.
+   Nota: `Vm::unit_fp` usa DefaultHasher suo — indipendente, non toccare.
+   In coda se avanza tempo: dedup O(n²) in run_linked (scan lineare di
+   saved.functions per nome).
+Gate COMPLETI su ogni gradino (engine-core toccato): corpus/sess/date/
+refl per NOME + ORM 3E/13F + hk 0F + cargo + pretty 10 + admin 12 +
+SAPI 48. Commit separato per gradino.
+
+## Poi, ordine roadmap (riprende qui)
+1. **mysqli** (roadmap tappa 3b): WP con MySQL vero oltre che SQLite.
+2. **ext/gd & media** (roadmap tappa 5): chiude anche i residui admin
    documentati (webp/avif upload_error, site-health php_extensions).
-4. **Divergenze SAPI residue**: chunked request body; headers_sent()
+3. **Divergenze SAPI residue**: chunked request body; headers_sent()
    oltre output_buffering=4096; `"\u{...}"` escape del lexer; doppio
    confine magico nella stessa catena isset; PHP_CLI_SERVER_WORKERS;
    Warning procedurale timezone_open su tz invalida.
-5. Poi: **WP core test suite** (PHPUnit) come gate per nome del filone.
+4. Poi: **WP core test suite** (PHPUnit) come gate per nome del filone.
 
 ## Lezioni operative (cumulative, aggiornate WP-6)
 - ⭐ WP-6: la lowering seminata NON è pura rispetto al solo file: bake di
