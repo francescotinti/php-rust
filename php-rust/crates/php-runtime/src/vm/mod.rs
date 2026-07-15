@@ -56,6 +56,7 @@ mod session;
 mod host_reflect;
 mod oop;
 mod pdo;
+mod mysqli;
 mod tokenizer;
 mod websapi;
 use arrays::*;
@@ -495,6 +496,9 @@ pub(crate) fn run_module_with_hir<'m>(
         next_zip: 1,
         pdo_conns: HashMap::default(),
         next_pdo: 1,
+        mysqli_conns: HashMap::default(),
+        mysqli_stmts: HashMap::default(),
+        next_mysqli: 1,
         stream_chunk_sizes: HashMap::default(),
         seed_aliases: Vec::new(),
         umask: 0o22,
@@ -1425,6 +1429,14 @@ struct Vm<'m> {
     pdo_conns: HashMap<u32, rusqlite::Connection>,
     /// Next PDO handle id (monotonic; ids are never reused within a run).
     next_pdo: u32,
+    /// Open mysqli connections (ext/mysqli): handle id → wire connection +
+    /// client-side state, backing the `__mysqli_*` host builtins the prelude
+    /// `mysqli` class delegates to (see vm/mysqli.rs).
+    mysqli_conns: HashMap<u32, mysqli::MysqliConn>,
+    /// Server-side prepared statements (`mysqli_stmt`): handle id → statement.
+    mysqli_stmts: HashMap<u32, mysqli::MysqliStmt>,
+    /// Next mysqli handle id (shared by connections and statements).
+    next_mysqli: u32,
     /// Per-stream chunk size set by `stream_set_chunk_size` (resource id → size).
     /// phpr's I/O is unbuffered so the value has no read-path effect; it is kept
     /// only so the builtin can return the previous size (default 8192), as PHP does.
@@ -10090,6 +10102,21 @@ host_builtins! {
     b"__pdo_stmt_readonly" => vm.ho_pdo_stmt_readonly(args),
     b"__pdo_changes" => vm.ho_pdo_changes(args),
     b"__pdo_param_count" => vm.ho_pdo_param_count(args),
+    b"__mysqli_connect" => vm.ho_mysqli_connect(args),
+    b"__mysqli_close" => vm.ho_mysqli_close(args),
+    b"__mysqli_query" => vm.ho_mysqli_query(args),
+    b"__mysqli_more_results" => vm.ho_mysqli_more_results(args),
+    b"__mysqli_next_result" => vm.ho_mysqli_next_result(args),
+    b"__mysqli_select_db" => vm.ho_mysqli_select_db(args),
+    b"__mysqli_set_charset" => vm.ho_mysqli_set_charset(args),
+    b"__mysqli_charset" => vm.ho_mysqli_charset(args),
+    b"__mysqli_escape" => vm.ho_mysqli_escape(args),
+    b"__mysqli_ping" => vm.ho_mysqli_ping(args),
+    b"__mysqli_stat" => vm.ho_mysqli_stat(args),
+    b"__mysqli_prepare" => vm.ho_mysqli_prepare(args),
+    b"__mysqli_multi_query" => vm.ho_mysqli_multi_query(args),
+    b"__mysqli_stmt_execute" => vm.ho_mysqli_stmt_execute(args),
+    b"__mysqli_stmt_close" => vm.ho_mysqli_stmt_close(args),
     b"get_parent_class" => vm.ho_get_parent_class(args),
     b"class_parents" => vm.ho_class_parents(args),
     b"class_implements" => vm.ho_class_implements(args),
@@ -10193,6 +10220,22 @@ host_builtins! {
         let line = vm.cur_line(caller);
         vm.flush_diags(line)?;
         vm.raise_diagnostic(8192, &String::from_utf8_lossy(&msg), line)?;
+        Ok(Zval::Null)
+    },
+    // Prelude-internal: raise an E_WARNING attributed to the *caller* of the
+    // prelude function/method (same shape as __deprecated_from_caller): the
+    // mysqli REPORT_ERROR path reports at the mysqli_query() call site.
+    b"__warning_from_caller" => {
+        let msg = convert::to_zstr_cast(
+            &args.first().map(|a| a.deref_clone()).unwrap_or(Zval::Null),
+            &mut vm.diags,
+        )
+        .as_bytes()
+        .to_vec();
+        let caller = vm.frames.len().saturating_sub(2);
+        let line = vm.cur_line(caller);
+        vm.flush_diags(line)?;
+        vm.raise_diagnostic(2, &String::from_utf8_lossy(&msg), line)?;
         Ok(Zval::Null)
     },
     b"error_get_last" => vm.ho_error_get_last(),

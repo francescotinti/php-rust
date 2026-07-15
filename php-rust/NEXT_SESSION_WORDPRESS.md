@@ -1,97 +1,90 @@
-# Rotta WORDPRESS-FIRST — WP-track (perf infra chiusa in WP-7)
+# Rotta WORDPRESS-FIRST — WP-track (mysqli chiusa in WP-8)
 
-> ⚡ **PERF: WP-7 CHIUSA (2026-07-15, commit `b574eff` + `de67428`)**:
-> mimalloc `#[global_allocator]` + FxHash sulle mappe calde.
-> **Home WP 1.20s → 0.76s (-37%), dashboard 1.25s → 0.81s (-35%)**
-> (sul già -35% della unit-cache di WP-6: dal pre-WP-6 1.85s → 0.76s,
-> -59%). SipHash e malloc spariti dal top-of-stack; ora dominano
-> memmove/memcmp e clone/drop di Zval → churn COW/arena per-request
-> restano IN AGENDA DOPO la roadmap funzionale (decisione 2026-07-15).
-> Dettaglio nel changelog di `PHPR_DIVERGENCES_FROM_PHP.md` (WordPress-7).
+> 🏁 **WP-8 CHIUSA (2026-07-15)**: **ext/mysqli nativa (crate `mysql` v28) —
+> WordPress 7.0.1 installato (`wp core install`) e servito su MySQL 9.7.1
+> VERO a parità oracle**: 11/11 probe byte-id, schema dbDelta 0 diff,
+> 13 rotte front + login flow byte-id, admin = soli volatili noti.
+> Cade la dipendenza dal plugin sqlite-database-integration.
+> Dettaglio nel changelog di `PHPR_DIVERGENCES_FROM_PHP.md` (WordPress-8, §2.5).
 
 Riprendiamo phpr (PHP 8.5.7 in Rust). **Roadmap (decisione 2026-07-13,
 memoria `php-rust-roadmap-wp-first`)**: obiettivo primario = 100%
 compatibilità WordPress. Laravel solo come validazione posteriore.
 
-## Cosa è entrato (sessione WP-7 — sintesi; dettaglio nel changelog)
-1. **Gradino 1 (`b574eff`)**: mimalloc global allocator in php-cli e
-   phpt-runner (~5 righe + Cargo.toml). Home -24%, dash -24%.
-2. **Gradino 2 (`de67428`)**: rustc-hash su PhpArray::index (ordine
-   osservabile in `entries`, hasher invisibile), alias di modulo in
-   vm/mod.rs per tutte le mappe del Vm + Frame::dyn_vars,
-   Module::class_index + CompiledClass::prop_info in bytecode.rs.
-   `Vm::unit_fp` NON toccato; var_dump_debug/stringify_args restano std
-   (attraversano l'API php-builtins). Home -17%, dash -15% ulteriori.
-3. Gate COMPLETI su ciascun gradino, sul binario definitivo di ciascuno.
+## Cosa è entrato (sessione WP-8 — sintesi; dettaglio nel changelog)
+1. `vm/mysqli.rs`: host builtin `__mysqli_*` sul crate `mysql` v28 (sync,
+   caching_sha2 + RSA full-auth ok); conn/stmt = handle in Vm; result set
+   bufferizzati; multi_query = split client-side; errori client 2002/2019
+   sintetizzati, server verbatim; NUM_FLAG + SET NAMES per parità metadata.
+2. `lower/prelude_mysqli.php` (5° prelude): 6 classi + ~75 fn procedurali;
+   ~100 costanti MYSQLI_* in `resolve_constant`; ext `mysqli`+`mysqlnd`
+   annunciate; nuovo `__warning_from_caller` (E_WARNING al call-site).
+3. Harness WP-MySQL end-to-end (oracle E phpr) + batteria probe/HTTP.
 
-## Stato (post WP-7 — baseline gate-o resta il riferimento per nome)
-- **WordPress 7.0.1: frontend + wp-admin + pretty permalinks via phpr -S a
-  parità oracle, ~0.76s/pagina frontend, ~0.81s dashboard.**
-  Workspace: 4776cd24/scratchpad (wp-o/wp-p, admin pass `phpr-wp5-Secret`,
-  login-flow.sh, admin-battery.sh + adm-diff.sh, pretty-battery.sh);
-  batteria SAPI in 5f883ed2/scratchpad/sapi-probe/battery.sh (48 probe).
-  ⚠️ I capture oracle (adm-oracle, flow-oracle) sono del 14/07: i diff
-  raw contengono drift di orologio/auto-draft — usare adm-diff.sh e
-  classificare; pretty resta byte-id senza normalizzazione.
-- Gate: corpus 1528 / sess 67 / date 377 / refl 294 per NOME (baseline
-  gate-o) · hk 1663/3846 0F · ORM 3E/13F stessi 16 · cargo 1550/0 ·
-  batterie SAPI 48 + pretty 10 + admin 12 + login 5.
+## Ambiente/harness (per riprodurre — ⚠️ il reboot svuota /private/tmp!)
+- **MySQL 9.7.1 brew, datadir PERSISTENTE su disco esterno**. Avvio:
+  `/opt/homebrew/opt/mysql/bin/mysqld --datadir="/Volumes/Extreme Pro/Claude/mysql-wp8/data"
+  --tmpdir="/Volumes/Extreme Pro/Claude/mysql-wp8/tmp" --port=3306
+  --bind-address=127.0.0.1 --socket=/private/tmp/mysql-wp8.sock
+  --log-error="/Volumes/Extreme Pro/Claude/mysql-wp8/mysqld.err" &`
+  (socket NON sul volume esterno: "Operation not supported"). Utenti:
+  root/'' e wp/'wp-secret-Pass1' (caching_sha2); DB: probe, wp_o (WP
+  installato dall'oracle, pretty permalinks ON), wp_p (installato da phpr).
+- **Batterie PERSISTENTI in `/Volumes/Extreme Pro/Claude/wp8-harness/`**:
+  `mysqli-probe/run-probes.sh` (11 probe oracle-vs-phpr, exit≠0 su diff) e
+  `battery.sh` (front+login+admin; ricetta ricostruzione albero WP in testa).
+  Gli ALBERI wp (wp-mo/wp-mp) e i workspace wp-cli/ORM/HK vivevano in
+  /private/tmp e vanno ricostruiti (ricette: testa di battery.sh per WP;
+  memoria `php-rust-orm-gate-recipe` per ORM; per http-kernel: clone shallow
+  symfony/http-kernel + `composer update` + `composer require --dev
+  phpunit/phpunit:^11.5 -W` con l'oracolo — il tip si muove: baseline
+  2026-07-15 = 1665 test 0E/0F).
+- ⚠️ watch: un crash una-tantum di `phpr -S` (widgets.php, primo passaggio
+  della prima batteria) NON riprodotto in 3 run completi dopo; se ricompare,
+  RUST_BACKTRACE=1 e log server.
 
-## Prossimo passo: SESSIONE WP-8 = mysqli (roadmap tappa 3b)
-WordPress con MySQL vero oltre che SQLite (chiude il paragone col
-plugin sqlite-database-integration e apre gli hosting reali):
-- ext/mysqli work-alike (OOP + procedurale) su un client MySQL nativo
-  Rust (candidato: crate `mysql` sync; valutare TLS e auth caching_sha2).
-- Parità messaggi d'errore wpdb (`mysqli_real_connect`,
-  `mysqli::__construct`, error/errno/sqlstate) — WP li mostra all'utente.
-- Harness: MySQL locale (brew mysql o container), `wp core install` su
-  DB MySQL con l'oracle → stessa sequenza con phpr; poi batterie HTTP
-  esistenti puntate al wp-tree MySQL (pretty/admin/login).
-- Metodo collaudato: probe-FIRST sull'oracle (script minimi mysqli),
-  poi delega-a-builtin; pattern OOP-stdlib come bcmath/gmp
-  (classe PHP prelude + builtin host) se conviene.
+## Stato gate (post WP-8)
+- corpus 1528 / sess 67 / date 377 / refl 294 per NOME (invariati) ·
+  ORM 3484 3E/13F nei residui catalogati · hk (tip) 1665 0E/0F ·
+  cargo 1550/0 · probe mysqli 11/11 byte-id · WP-MySQL: front 13 rotte +
+  login 5 step byte-id, admin 12 = volatili noti, widgets 500 parità.
 
-## Poi, ordine roadmap (riprende qui)
-1. **ext/gd & media** (roadmap tappa 5): chiude anche i residui admin
-   documentati (webp/avif upload_error, site-health php_extensions).
-2. **Divergenze SAPI residue**: chunked request body; headers_sent()
-   oltre output_buffering=4096; `"\u{...}"` escape del lexer; doppio
-   confine magico nella stessa catena isset; PHP_CLI_SERVER_WORKERS;
-   Warning procedurale timezone_open su tz invalida.
-3. Poi: **WP core test suite** (PHPUnit) come gate per nome del filone.
-4. (Dopo la roadmap funzionale) perf profonda: churn Zval/COW, arena
-   per-request stile ZMM, interning simboli (nome→u32, replica
-   zend_string), dedup O(n²) in run_linked.
+## Prossimo passo: SESSIONE WP-9 = ext/gd & media (roadmap tappa 5)
+Chiude i residui admin documentati (upload webp/avif `upload_error`,
+site-health `php_extensions` gd) e il media pipeline WP:
+- ext/gd work-alike su crate Rust (candidati: `image` + `imageproc`;
+  attenzione a byte-parity dei formati: WP fa resize/crop/thumbnail via
+  GD — la parità sui BYTE dei file generati è probabilmente impossibile
+  (algoritmi di resampling diversi), quindi **functional-parity** (policy
+  roadmap: ciò che esce dal processo = functional) + parità dei METADATI
+  (dimensioni, mime, srcset generati nelle pagine).
+- Superficie: imagecreatefrom{jpeg,png,gif,webp,avif}, imagesx/y,
+  imagecopyresampled, imagejpeg/png/webp/avif, imagerotate, exif_read_data?
+  (site-health), getimagesize (già?), image_type_to_mime_type.
+- Harness: `wp media import` + pagina upload.php + srcset nelle pagine
+  frontend; site-health "gd" verde.
+- Poi (ordine roadmap): divergenze SAPI residue (chunked body,
+  headers_sent oltre 4096, PHP_CLI_SERVER_WORKERS, …) → WP core test
+  suite (PHPUnit) come gate per nome → perf profonda (churn Zval/COW,
+  arena per-request, interning).
 
-## Lezioni operative (cumulative, aggiornate WP-7)
-- ⭐ WP-7: swap infrastrutturali (allocator/hasher) = engine-core a tutti
-  gli effetti: gate COMPLETI per nome su ogni gradino, commit separati.
-  L'iterazione delle HashMap std era GIÀ random per istanza → nessun
-  output può dipendere dall'ordine: lo swap a FxHash (deterministico) è
-  sicuro per costruzione; l'ordine osservabile di PhpArray vive in
-  `entries` (Vec), non nell'indice hash.
-- ⭐ WP-7: i tipi che attraversano il confine di crate (Ctx di
-  php-builtins) NON vanno swappati alla cieca: lasciare std dove il path
-  è freddo costa zero e tiene il diff contenuto.
-- ⭐ WP-7: estrazione dei fail-set: marker `--- <path> ---` coi PATH CON
-  SPAZI → regex `^--- (.+\.phpt) ---$`, MAI `\S+`; conteggio>0
-  obbligatorio prima del verdetto (0 estratti = regex rotta, non 0 fail).
-- ⭐ WP-7: capture oracle invecchiano: diff raw vs capture del giorno
-  prima = drift orologio (Max-Age, "overdue by N hours", orari nelle
-  option) + contatori auto-draft. Classificare col char-level diff prima
-  di gridare alla regressione; widgets.php 500 è PARITÀ (block theme
-  senza sidebar, anche l'oracle dà 500).
-- ⭐ WP-6: se si tocca il binario dopo aver lanciato i gate, i gate vanno
-  RILANCIATI sul binario definitivo.
-- ⭐ WP-5: probe-FIRST del login (curl cookie-jar sull'oracle) rende anche
-  wp-admin un diff meccanico; classificare le divergenze UNA a una.
-- ⭐ WP-5: builtin che "perde" elementi = Ref senza deref; stato che
-  "cambia da solo" tra 2 chiamate = write-through foreach-by-ref su copia.
-- ⭐ WP-2/4/5/6: pgrep DOPO ogni pkill E lsof sulla porta prima di
-  rilanciare (server morente = binario VECCHIO in servizio; diff "tutti
-  falliti" può essere solo la PORTA embedded nei body).
-- ⭐ WP-4/5: normalizzatori bash su file + size check; regex WP muoiono in
-  TRE modi sullo stesso chain; `empty()`/`isset()`/`??` = TRE semantiche.
+## Lezioni operative (cumulative, aggiornate WP-8)
+- ⭐ WP-8: harness e baseline SEMPRE su disco esterno (`wp8-harness/`), MAI
+  solo in /private/tmp: il reboot li azzera (persi i workspace WP-5/ORM/HK
+  storici; ricostruiti da ricetta in ~15 min).
+- ⭐ WP-8: probe-FIRST paga — 6/10 probe byte-id al primo colpo; i 4 fix
+  emersi (DriverError→2002, sqlstate connect HY000, NUM_FLAG client-side,
+  SET NAMES per charsetnr) erano tutti INVISIBILI senza probe.
+- ⭐ WP-8: per il diff HTTP oracle-vs-phpr, servire lo STESSO albero+DB in
+  SEQUENZA sulla stessa porta = byte-parity senza normalizzazioni (le due
+  install separate divergono solo su cron/timestamp/hash-di-path e la
+  SECONDA login crea la sessione doppia → "log out everywhere" in profile).
+- ⭐ WP-8: `mysql -e "…"` di brew ok; mysqld si inizializza con
+  `--initialize-insecure` e NON supporta socket su exFAT.
+- ⭐ WP-7: estrazione fail-set con `^--- (.+\.phpt) ---$` (path con SPAZI),
+  conteggio>0 obbligatorio prima del verdetto.
+- ⭐ WP-6: binario ricompilato dopo il lancio dei gate → gate da RILANCIARE.
+- ⭐ WP-2/4/5/6: pgrep dopo ogni pkill E lsof sulla porta prima di rilanciare.
 - ⭐ WP-3: PROFILARE prima di ottimizzare (`sample <pid>`).
 - df PRIMA dei run pesanti; gate per NOME sempre; RTK collassa i body PHP
   (Write/Read tool); zsh non espande i glob dentro variabili.
@@ -99,9 +92,10 @@ plugin sqlite-database-integration e apre gli hosting reali):
 ## Invarianti (identici)
 - Gate per OGNI commit: probe byte-id vs oracle · corpus per NOME ·
   ext/session+date+reflection per nome · ORM (**3E/13F**) se
-  ref/arg/reflection · **http-kernel 1663/3846 0F** · cargo test ·
+  ref/arg/reflection · **http-kernel 0E/0F** · cargo test ·
   batteria SAPI 48 probe + 8 pagine WP se si tocca server/websapi ·
-  batteria admin 12 pagine + pretty 10 rotte se si tocca engine-core.
+  batteria admin 12 pagine + pretty 10 rotte se si tocca engine-core ·
+  probe mysqli 11/11 se si tocca mysqli/prelude.
 - Commit AND push a ogni step; run pesanti SEQUENZIALI e DETACHED; Serena
   per Rust, Vexp per il C di php-8.5.7; Read tool per i .php; log con
   `LC_ALL=C tr -d '\0'`.

@@ -220,6 +220,34 @@ read-only, file_get_contents, fopen/fgets). **Divergenze consapevoli**:
 - differiti: `stream_wrapper_restore`/`stream_get_wrappers`, dir-ops (`dir_opendir`…), `url_stat`
   (file_exists/stat sul wrapper), il flag `STREAM_USE_PATH` (`&$opened_path` accettato ma non propagato).
 
+### 2.5 mysqli — client MySQL nativo Rust (crate `mysql` v28, sessione WordPress-8)
+
+Classi `mysqli`/`mysqli_result`/`mysqli_stmt`/`mysqli_driver`/`mysqli_sql_exception`/`mysqli_warning`
++ ~75 funzioni procedurali nel 5° prelude (`lower/prelude_mysqli.php`), delegate agli host builtin
+`__mysqli_*` (`vm/mysqli.rs`); connessioni e prepared statement = handle nativi in `Vm.mysqli_conns`/
+`mysqli_stmts` (pattern `__pdo_*`). **11/11 probe byte-id vs oracle** (init/connect, errori di
+connessione 1045/2002/1049, query/fetch_* coi TIPI del protocollo testo=stringhe e binario=nativi,
+error/errno/sqlstate/error_list + REPORT_STRICT/ERROR, escape, fetch_field completo, multi_query/
+next_result, OOP surface, prepared statements bind_param/get_result/bind_result, costanti MYSQLI_*,
+caching_sha2 full-auth con password su TCP). NUM_FLAG (32768) ricostruito client-side per i tipi
+numerici (il crate lo maschera; DECIMAL escluso, come mysqlnd); handshake riallineato con
+`SET NAMES utf8mb4` (charsetnr 255 come mysqlnd, non 45). **Divergenze consapevoli**:
+- **`MYSQLI_USE_RESULT` si comporta come STORE** (result set sempre bufferizzato host-side):
+  osservabile solo su memoria/latency, mai sui byte.
+- **`multi_query` = split client-side** delle statement (quote/backtick/commenti rispettati) eseguite
+  in sequenza: il server reale si ferma anch'esso alla prima statement fallita → osservabilmente
+  equivalente; diverge solo il timing (esecuzione lazy vs eager) per side-effect di statement dopo
+  la prima, mai per i risultati.
+- **`max_length` nei field metadata = 0 costante** (fedele a mysqlnd PHP ≥ 8.1).
+- Le costanti deprecate (`MYSQLI_REFRESH_*`) esistono col valore giusto ma l'USO non emette
+  E_DEPRECATED (folding compile-time in `resolve_constant`).
+- `mysqli_options`/`ssl_set`/`attr_set` accettate e ignorate (no-op true); `stat()` assemblato da
+  SHOW GLOBAL STATUS (formato fedele, valori reali); `refresh`/`dump_debug_info` → false;
+  `mysqli_warning` stub. `host_info` "Localhost via UNIX socket" solo con socket esplicito
+  (host `localhost` senza socket va in TCP su 127.0.0.1, come i config WP reali).
+- Deprecation di `mysqli_ping()` emessa dal prelude; propr. dinamiche/`var_dump($mysqli)` mostrano
+  anche i prop privati `__h`/`__stash` (rappresentazione interna, non surface wpdb).
+
 ---
 
 ## 3. Divergenze di engine circoscritte (documentate nei topic-file di memoria)
@@ -381,6 +409,39 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-15 (sessione WordPress-8): 🏁 **ext/mysqli NATIVA (crate `mysql` v28)
+  — WORDPRESS 7.0.1 INSTALLATO E SERVITO SU MYSQL VERO A PARITÀ ORACLE**
+  (chiude roadmap tappa 3b: cade la dipendenza dal plugin
+  sqlite-database-integration, si aprono gli hosting reali). Architettura:
+  5° prelude `prelude_mysqli.php` (6 classi + ~75 funzioni procedurali, §2.5)
+  → host builtin `__mysqli_*` in `vm/mysqli.rs` (connessioni/stmt =
+  handle in `Vm.mysqli_conns`/`mysqli_stmts`, pattern `__pdo_*`); result set
+  bufferizzati host-side e cursore lato PHP; ~100 costanti MYSQLI_* in
+  `resolve_constant`; `mysqli`+`mysqlnd` annunciate da extension_loaded;
+  nuovo builtin `__warning_from_caller` (E_WARNING attribuito al call-site,
+  gemello di `__deprecated_from_caller`) per il path REPORT_ERROR.
+  Fedeltà chiave (probe-FIRST, **11/11 probe byte-id** vs oracle su MySQL
+  9.7.1 locale): protocollo testo → TUTTE stringhe, protocollo binario
+  (prepared) → tipi nativi; errori server verbatim (1045/1049/1064/1146/
+  1062 + sqlstate); errori client sintetizzati (2002 "Connection refused",
+  2019 charset, sqlstate connect sempre HY000); NUM_FLAG client-side come
+  mysqlnd; charsetnr 255 via SET NAMES post-handshake; caching_sha2
+  full-auth (RSA su TCP) col crate, byte-id anche il fail path.
+  **Harness WP-MySQL**: `wp core install` (wp-cli da sorgente) su MySQL
+  9.7.1 con l'oracle E con phpr → **schema dbDelta 0 diff, wp_options
+  identiche salvo 5 volatili** (cron/timestamp/hash-di-path); poi STESSO
+  albero+DB (install oracle, pretty permalinks) servito da `php -S` e
+  `phpr -S` in sequenza: **13 rotte front+feed+rest+robots+404 e login
+  flow 5 step BYTE-IDENTICI**, admin 12 pagine con soli volatili noti
+  (nonce/orologio, auto-draft id, antispambot rand, webp/avif gd,
+  site-health moduli+loopback, sessione doppia da cattura sequenziale;
+  widgets.php 500 = parità block-theme, body 2796b identico). Gate: corpus
+  1528 / sess 67 / date 377 / refl 294 **fail-set IDENTICI per nome** ·
+  ORM 3484 test **3E/13F tutti nei residui catalogati** · http-kernel
+  (tip aggiornato) 1665 test **0E/0F** · cargo 1550/0 · probe battery
+  11/11 anche post-reboot. ⚠️ un crash una-tantum di `phpr -S` al primo
+  passaggio su widgets.php NON riprodotto in 3 batterie complete
+  successive (watch). Divergenze consapevoli in §2.5.
 - 2026-07-15 (sessione WordPress-7): ⚡ **PERF INFRASTRUTTURALE, gradini 1+2
   (allocatore + hasher)** — la controparte phpr dell'infrastruttura di Zend
   (ZMM a bin/chunk; zend_string con hash precomputato). Gradino 1

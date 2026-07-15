@@ -608,6 +608,11 @@ const PRELUDE_BC_SRC: &[u8] = include_bytes!("prelude_bcmath.php");
 /// delegating to the `_gmp_*` builtins. Hoisted for both classes AND functions.
 const PRELUDE_GMP_SRC: &[u8] = include_bytes!("prelude_gmp.php");
 
+/// ext/mysqli: the `mysqli`/`mysqli_result`/`mysqli_stmt` classes and the
+/// mysqli_* procedural functions (global namespace), delegating to the
+/// `__mysqli_*` host builtins (mysql crate) in vm/mysqli.rs.
+const PRELUDE_MYSQLI_SRC: &[u8] = include_bytes!("prelude_mysqli.php");
+
 /// The four owned products of lowering [`PRELUDE_SRC`]: the class table + its
 /// name→id index (step 20), and the global-function table + its name→index
 /// (step 35). Both are seeded into every real program before user declarations
@@ -703,6 +708,22 @@ fn lower_prelude_uncached() -> LoweredPrelude {
     for s in program_gmp.statements.as_slice() {
         if let Statement::Function(func) = s {
             low.hoist_function(func).expect("gmp prelude function must lower");
+        }
+    }
+    // `mysqli`: global-namespace unit with classes AND functions — hoist both.
+    let file_mysqli =
+        File::ephemeral(Cow::Borrowed(b"prelude".as_slice()), Cow::Borrowed(PRELUDE_MYSQLI_SRC));
+    let program_mysqli = parse_file(&arena, &file_mysqli);
+    debug_assert!(
+        !program_mysqli.has_errors(),
+        "mysqli prelude failed to parse: {:?}",
+        program_mysqli.errors
+    );
+    low.hoist_classes(program_mysqli.statements.as_slice())
+        .expect("mysqli prelude classes must lower");
+    for s in program_mysqli.statements.as_slice() {
+        if let Statement::Function(func) = s {
+            low.hoist_function(func).expect("mysqli prelude function must lower");
         }
     }
     (low.classes, low.class_index, low.functions, low.fn_index)
@@ -2312,6 +2333,105 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"GMP_BIG_ENDIAN" => ExprKind::Int(8),
         b"GMP_NATIVE_ENDIAN" => ExprKind::Int(16),
         b"GMP_VERSION" => str_lit(b"6.3.0"),
+        // ext/mysqli (values from the PHP 8.5 oracle probe, WP-8).
+        b"MYSQLI_REPORT_OFF" => ExprKind::Int(0),
+        b"MYSQLI_REPORT_ERROR" => ExprKind::Int(1),
+        b"MYSQLI_REPORT_STRICT" => ExprKind::Int(2),
+        b"MYSQLI_REPORT_INDEX" => ExprKind::Int(4),
+        b"MYSQLI_REPORT_ALL" => ExprKind::Int(255),
+        b"MYSQLI_STORE_RESULT" => ExprKind::Int(0),
+        b"MYSQLI_USE_RESULT" => ExprKind::Int(1),
+        b"MYSQLI_ASYNC" => ExprKind::Int(8),
+        b"MYSQLI_STORE_RESULT_COPY_DATA" => ExprKind::Int(16),
+        b"MYSQLI_ASSOC" => ExprKind::Int(1),
+        b"MYSQLI_NUM" => ExprKind::Int(2),
+        b"MYSQLI_BOTH" => ExprKind::Int(3),
+        b"MYSQLI_NOT_NULL_FLAG" => ExprKind::Int(1),
+        b"MYSQLI_PRI_KEY_FLAG" => ExprKind::Int(2),
+        b"MYSQLI_UNIQUE_KEY_FLAG" => ExprKind::Int(4),
+        b"MYSQLI_MULTIPLE_KEY_FLAG" => ExprKind::Int(8),
+        b"MYSQLI_BLOB_FLAG" => ExprKind::Int(16),
+        b"MYSQLI_UNSIGNED_FLAG" => ExprKind::Int(32),
+        b"MYSQLI_ZEROFILL_FLAG" => ExprKind::Int(64),
+        b"MYSQLI_BINARY_FLAG" => ExprKind::Int(128),
+        b"MYSQLI_ENUM_FLAG" => ExprKind::Int(256),
+        b"MYSQLI_AUTO_INCREMENT_FLAG" => ExprKind::Int(512),
+        b"MYSQLI_TIMESTAMP_FLAG" => ExprKind::Int(1024),
+        b"MYSQLI_SET_FLAG" => ExprKind::Int(2048),
+        b"MYSQLI_NO_DEFAULT_VALUE_FLAG" => ExprKind::Int(4096),
+        b"MYSQLI_ON_UPDATE_NOW_FLAG" => ExprKind::Int(8192),
+        b"MYSQLI_PART_KEY_FLAG" => ExprKind::Int(16384),
+        b"MYSQLI_GROUP_FLAG" => ExprKind::Int(32768),
+        b"MYSQLI_NUM_FLAG" => ExprKind::Int(32768),
+        b"MYSQLI_TYPE_DECIMAL" => ExprKind::Int(0),
+        b"MYSQLI_TYPE_TINY" => ExprKind::Int(1),
+        b"MYSQLI_TYPE_CHAR" => ExprKind::Int(1),
+        b"MYSQLI_TYPE_SHORT" => ExprKind::Int(2),
+        b"MYSQLI_TYPE_LONG" => ExprKind::Int(3),
+        b"MYSQLI_TYPE_FLOAT" => ExprKind::Int(4),
+        b"MYSQLI_TYPE_DOUBLE" => ExprKind::Int(5),
+        b"MYSQLI_TYPE_NULL" => ExprKind::Int(6),
+        b"MYSQLI_TYPE_TIMESTAMP" => ExprKind::Int(7),
+        b"MYSQLI_TYPE_LONGLONG" => ExprKind::Int(8),
+        b"MYSQLI_TYPE_INT24" => ExprKind::Int(9),
+        b"MYSQLI_TYPE_DATE" => ExprKind::Int(10),
+        b"MYSQLI_TYPE_TIME" => ExprKind::Int(11),
+        b"MYSQLI_TYPE_DATETIME" => ExprKind::Int(12),
+        b"MYSQLI_TYPE_YEAR" => ExprKind::Int(13),
+        b"MYSQLI_TYPE_NEWDATE" => ExprKind::Int(14),
+        b"MYSQLI_TYPE_BIT" => ExprKind::Int(16),
+        b"MYSQLI_TYPE_VECTOR" => ExprKind::Int(242),
+        b"MYSQLI_TYPE_JSON" => ExprKind::Int(245),
+        b"MYSQLI_TYPE_NEWDECIMAL" => ExprKind::Int(246),
+        b"MYSQLI_TYPE_ENUM" => ExprKind::Int(247),
+        b"MYSQLI_TYPE_SET" => ExprKind::Int(248),
+        b"MYSQLI_TYPE_TINY_BLOB" => ExprKind::Int(249),
+        b"MYSQLI_TYPE_MEDIUM_BLOB" => ExprKind::Int(250),
+        b"MYSQLI_TYPE_LONG_BLOB" => ExprKind::Int(251),
+        b"MYSQLI_TYPE_BLOB" => ExprKind::Int(252),
+        b"MYSQLI_TYPE_VAR_STRING" => ExprKind::Int(253),
+        b"MYSQLI_TYPE_STRING" => ExprKind::Int(254),
+        b"MYSQLI_TYPE_GEOMETRY" => ExprKind::Int(255),
+        b"MYSQLI_CLIENT_FOUND_ROWS" => ExprKind::Int(2),
+        b"MYSQLI_CLIENT_NO_SCHEMA" => ExprKind::Int(16),
+        b"MYSQLI_CLIENT_COMPRESS" => ExprKind::Int(32),
+        b"MYSQLI_CLIENT_IGNORE_SPACE" => ExprKind::Int(256),
+        b"MYSQLI_CLIENT_INTERACTIVE" => ExprKind::Int(1024),
+        b"MYSQLI_CLIENT_SSL" => ExprKind::Int(2048),
+        b"MYSQLI_CLIENT_SSL_VERIFY_SERVER_CERT" => ExprKind::Int(1073741824),
+        b"MYSQLI_CLIENT_SSL_DONT_VERIFY_SERVER_CERT" => ExprKind::Int(64),
+        b"MYSQLI_OPT_CONNECT_TIMEOUT" => ExprKind::Int(0),
+        b"MYSQLI_INIT_COMMAND" => ExprKind::Int(3),
+        b"MYSQLI_SET_CHARSET_NAME" => ExprKind::Int(7),
+        b"MYSQLI_OPT_LOCAL_INFILE" => ExprKind::Int(8),
+        b"MYSQLI_OPT_READ_TIMEOUT" => ExprKind::Int(11),
+        b"MYSQLI_OPT_INT_AND_FLOAT_NATIVE" => ExprKind::Int(201),
+        b"MYSQLI_OPT_NET_CMD_BUFFER_SIZE" => ExprKind::Int(202),
+        b"MYSQLI_OPT_NET_READ_BUFFER_SIZE" => ExprKind::Int(203),
+        b"MYSQLI_OPT_SSL_VERIFY_SERVER_CERT" => ExprKind::Int(21),
+        b"MYSQLI_SERVER_PUBLIC_KEY" => ExprKind::Int(35),
+        b"MYSQLI_TRANS_START_WITH_CONSISTENT_SNAPSHOT" => ExprKind::Int(1),
+        b"MYSQLI_TRANS_START_READ_WRITE" => ExprKind::Int(2),
+        b"MYSQLI_TRANS_START_READ_ONLY" => ExprKind::Int(4),
+        b"MYSQLI_TRANS_COR_AND_CHAIN" => ExprKind::Int(1),
+        b"MYSQLI_TRANS_COR_AND_NO_CHAIN" => ExprKind::Int(2),
+        b"MYSQLI_TRANS_COR_RELEASE" => ExprKind::Int(4),
+        b"MYSQLI_TRANS_COR_NO_RELEASE" => ExprKind::Int(8),
+        b"MYSQLI_REFRESH_GRANT" => ExprKind::Int(1),
+        b"MYSQLI_REFRESH_LOG" => ExprKind::Int(2),
+        b"MYSQLI_REFRESH_TABLES" => ExprKind::Int(4),
+        b"MYSQLI_REFRESH_HOSTS" => ExprKind::Int(8),
+        b"MYSQLI_REFRESH_STATUS" => ExprKind::Int(16),
+        b"MYSQLI_REFRESH_THREADS" => ExprKind::Int(32),
+        b"MYSQLI_REFRESH_REPLICA" => ExprKind::Int(64),
+        b"MYSQLI_REFRESH_SLAVE" => ExprKind::Int(64),
+        b"MYSQLI_REFRESH_MASTER" => ExprKind::Int(128),
+        b"MYSQLI_DEBUG_TRACE_ENABLED" => ExprKind::Int(0),
+        b"MYSQLI_SERVER_QUERY_NO_GOOD_INDEX_USED" => ExprKind::Int(16),
+        b"MYSQLI_SERVER_QUERY_NO_INDEX_USED" => ExprKind::Int(32),
+        b"MYSQLI_SERVER_QUERY_WAS_SLOW" => ExprKind::Int(2048),
+        b"MYSQLI_SERVER_PS_OUT_PARAMS" => ExprKind::Int(4096),
+        b"MYSQLI_IS_MARIADB" => ExprKind::Int(0),
         // ext/zlib: encodings (deflate windowBits), strategies, version.
         b"ZLIB_ENCODING_RAW" => ExprKind::Int(-15),
         b"ZLIB_ENCODING_DEFLATE" => ExprKind::Int(15),

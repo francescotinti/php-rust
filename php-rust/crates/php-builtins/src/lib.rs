@@ -663,6 +663,9 @@ const LOADED_EXTENSIONS: &[&[u8]] = &[
     b"core", b"session", b"standard", b"spl", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
     b"zip", b"dom", b"libxml", b"reflection", b"ctype", b"curl", b"pcntl", b"posix",
     b"pdo", b"pdo_sqlite", b"sqlite3", b"simplexml", b"bcmath", b"gmp",
+    // ext/mysqli on the native Rust client (vm/mysqli.rs); mysqlnd is what the
+    // oracle reports too (WP's utf8mb4 capability check keys off it).
+    b"mysqli", b"mysqlnd",
     // filter_var / filter_var_array are implemented; the ext advertises them so
     // PHPUnit's bootstrap extension gate passes.
     b"filter",
@@ -678,6 +681,7 @@ const LOADED_EXTENSIONS_CASED: &[&[u8]] = &[
     b"Core", b"session", b"standard", b"SPL", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
     b"zip", b"dom", b"libxml", b"Reflection", b"ctype", b"curl", b"pcntl", b"posix",
     b"PDO", b"pdo_sqlite", b"sqlite3", b"bcmath", b"gmp",
+    b"mysqli", b"mysqlnd",
     b"filter",
     b"xml", b"xmlwriter", b"tokenizer", b"Phar",
 ];
