@@ -165,6 +165,19 @@ fn parse_jpeg(d: &[u8]) -> Option<Gfx> {
     None
 }
 
+/// AVIF (IMAGETYPE_AVIF = 19): dimensions/bits/channels via the minimal
+/// libavifinfo work-alike in exif.rs.
+fn parse_avif(d: &[u8]) -> Option<Gfx> {
+    let info = crate::exif::parse_avif_info(d)?;
+    Some(Gfx {
+        width: info.width,
+        height: info.height,
+        itype: 19,
+        bits: info.bits,
+        channels: info.channels,
+    })
+}
+
 /// Recognise an image from its leading bytes and extract its geometry. Only the
 /// common formats are parsed; everything else is `None`.
 fn parse_image(d: &[u8]) -> Option<Gfx> {
@@ -178,9 +191,60 @@ fn parse_image(d: &[u8]) -> Option<Gfx> {
         parse_bmp(d)
     } else if d.len() >= 12 && &d[0..4] == b"RIFF" && &d[8..12] == b"WEBP" {
         parse_webp(d)
+    } else if d.len() >= 12 && &d[4..8] == b"ftyp" {
+        parse_avif(d)
     } else {
         None
     }
+}
+
+/// Collect the JPEG APPn segments into the `&$image_info` out-array, keyed
+/// `"APP0"`…`"APP15"`, first tag of each kind only (php_read_APP).
+fn collect_app_info(d: &[u8]) -> PhpArray {
+    let mut info = PhpArray::new();
+    if !(d.len() >= 3 && d[0] == 0xFF && d[1] == 0xD8 && d[2] == 0xFF) {
+        return info;
+    }
+    let mut i = 2usize;
+    while i < d.len() {
+        while i < d.len() && d[i] != 0xFF {
+            i += 1;
+        }
+        while i < d.len() && d[i] == 0xFF {
+            i += 1;
+        }
+        if i >= d.len() {
+            break;
+        }
+        let marker = d[i];
+        i += 1;
+        match marker {
+            0xD9 | 0xDA => break,
+            0x01 | 0xD0..=0xD7 => continue,
+            _ => {}
+        }
+        if i + 2 > d.len() {
+            break;
+        }
+        let length = be16(d, i) as usize;
+        if length < 2 || i + length > d.len() {
+            break;
+        }
+        if (0xE0..=0xEF).contains(&marker) {
+            let key = format!("APP{}", marker - 0xE0);
+            let k = Key::from_bytes(key.as_bytes());
+            if info.get(&k).is_none() {
+                info.insert(k, Zval::Str(PhpStr::new(d[i + 2..i + length].to_vec())));
+            }
+        }
+        i += length;
+    }
+    info
+}
+
+/// The `image/…` MIME type for an IMAGETYPE_* value (shared with exif.rs).
+pub(crate) fn mime_for_type(itype: i64) -> &'static [u8] {
+    mime_for(itype)
 }
 
 /// The `image/…` MIME type for an IMAGETYPE_* value; unknown → the generic
@@ -282,6 +346,14 @@ pub fn getimagesize(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
             return Ok(Zval::Bool(false));
         }
     };
+    if data.len() < 12 {
+        // php_getimagetype could not read its 12 signature bytes (E_NOTICE).
+        ctx.diags.push(php_types::Diag::Notice(format!(
+            "getimagesize(): Error reading from {}!",
+            String::from_utf8_lossy(name.as_bytes())
+        )));
+        return Ok(Zval::Bool(false));
+    }
     Ok(match parse_image(&data) {
         Some(g) => size_array(&g),
         None => Zval::Bool(false),
@@ -298,10 +370,77 @@ pub fn getimagesizefromstring(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpE
         })?,
         ctx.diags,
     );
+    if s.as_bytes().len() < 12 {
+        ctx.diags.push(php_types::Diag::Notice(format!(
+            "getimagesizefromstring(): Error reading from {}!",
+            String::from_utf8_lossy(s.as_bytes())
+        )));
+        return Ok(Zval::Bool(false));
+    }
     Ok(match parse_image(s.as_bytes()) {
         Some(g) => size_array(&g),
         None => Zval::Bool(false),
     })
+}
+
+/// `__getimagesize_info($filename)` → `[result, info]`: the registry-visible
+/// pair form the VM's CallHostBuiltinOut dispatch splits for
+/// `getimagesize($f, &$image_info)`. The info array is always (re)built —
+/// PHP re-initialises the out zval even on failure.
+pub fn getimagesize_info(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use std::os::unix::ffi::OsStrExt;
+    let name = convert::to_zstr(args.first().unwrap_or(&Zval::Null), ctx.diags);
+    let path = std::ffi::OsStr::from_bytes(crate::file::strip_file_wrapper(name.as_bytes()));
+    let mut pair = PhpArray::new();
+    match std::fs::read(path) {
+        Ok(data) => {
+            if data.len() < 12 {
+                ctx.diags.push(php_types::Diag::Notice(format!(
+                    "getimagesize(): Error reading from {}!",
+                    String::from_utf8_lossy(name.as_bytes())
+                )));
+                let _ = pair.append(Zval::Bool(false));
+                let _ = pair.append(Zval::Array(Rc::new(PhpArray::new())));
+                return Ok(Zval::Array(Rc::new(pair)));
+            }
+            let _ = pair.append(match parse_image(&data) {
+                Some(g) => size_array(&g),
+                None => Zval::Bool(false),
+            });
+            let _ = pair.append(Zval::Array(Rc::new(collect_app_info(&data))));
+        }
+        Err(e) => {
+            ctx.diags.push(php_types::Diag::Warning(format!(
+                "getimagesize({}): Failed to open stream: {}",
+                String::from_utf8_lossy(name.as_bytes()),
+                crate::file::strerror(&e)
+            )));
+            let _ = pair.append(Zval::Bool(false));
+            let _ = pair.append(Zval::Array(Rc::new(PhpArray::new())));
+        }
+    }
+    Ok(Zval::Array(Rc::new(pair)))
+}
+
+/// `__getimagesizefromstring_info($data)` → `[result, info]`.
+pub fn getimagesizefromstring_info(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = convert::to_zstr(args.first().unwrap_or(&Zval::Null), ctx.diags);
+    let mut pair = PhpArray::new();
+    if s.as_bytes().len() < 12 {
+        ctx.diags.push(php_types::Diag::Notice(format!(
+            "getimagesizefromstring(): Error reading from {}!",
+            String::from_utf8_lossy(s.as_bytes())
+        )));
+        let _ = pair.append(Zval::Bool(false));
+        let _ = pair.append(Zval::Array(Rc::new(PhpArray::new())));
+        return Ok(Zval::Array(Rc::new(pair)));
+    }
+    let _ = pair.append(match parse_image(s.as_bytes()) {
+        Some(g) => size_array(&g),
+        None => Zval::Bool(false),
+    });
+    let _ = pair.append(Zval::Array(Rc::new(collect_app_info(s.as_bytes()))));
+    Ok(Zval::Array(Rc::new(pair)))
 }
 
 /// `image_type_to_mime_type(int $image_type): string`.

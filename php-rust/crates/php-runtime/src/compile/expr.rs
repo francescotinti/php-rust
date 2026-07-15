@@ -956,7 +956,10 @@ impl<'a> super::FnCompiler<'a> {
         // their out-param wrapper only matters when `&$count` is actually
         // passed — the common 3-arg call keeps the (hot) registry path.
         let count_only_out = |n: &[u8]| {
-            n.eq_ignore_ascii_case(b"str_replace") || n.eq_ignore_ascii_case(b"str_ireplace")
+            n.eq_ignore_ascii_case(b"str_replace")
+                || n.eq_ignore_ascii_case(b"str_ireplace")
+                || n.eq_ignore_ascii_case(b"getimagesize")
+                || n.eq_ignore_ascii_case(b"getimagesizefromstring")
         };
         if let Some((canon, out_idx)) = crate::vm::host_builtin_out_param(bname)
             .filter(|&(_, out_idx)| args.len() > out_idx || !count_only_out(bname))

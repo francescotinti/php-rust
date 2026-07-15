@@ -3742,12 +3742,50 @@ impl<'m> super::Vm<'m> {
     /// this host wrapper first runs the object hooks (`__serialize`/`__sleep`)
     /// the pure side cannot call. Hook-free graphs pass through untouched.
     pub(super) fn ho_serialize(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        fn find_opaque_in_graph(v: &Zval, seen: &mut Vec<usize>) -> Option<String> {
+            match v {
+                Zval::Ref(r) => {
+                    let addr = Rc::as_ptr(r) as usize;
+                    if seen.contains(&addr) {
+                        return None;
+                    }
+                    seen.push(addr);
+                    find_opaque_in_graph(&r.borrow(), seen)
+                }
+                Zval::Array(a) => a.iter().find_map(|(_, val)| find_opaque_in_graph(val, seen)),
+                Zval::Object(orc) => {
+                    let addr = Rc::as_ptr(orc) as usize;
+                    if seen.contains(&addr) {
+                        return None;
+                    }
+                    seen.push(addr);
+                    let b = orc.borrow();
+                    if crate::vm::is_opaque_handle_class(b.class_name.as_bytes()) {
+                        return Some(String::from_utf8_lossy(b.class_name.as_bytes()).into_owned());
+                    }
+                    let vals: Vec<Zval> = b.props.iter().map(|(_, val)| val.clone()).collect();
+                    drop(b);
+                    vals.iter().find_map(|val| find_opaque_in_graph(val, seen))
+                }
+                _ => None,
+            }
+        }
         let Some(first) = args.first() else {
             return Err(PhpError::ArgumentCountError(
                 "serialize() expects exactly 1 argument, 0 given".to_string(),
             ));
         };
         let v = first.deref_clone();
+        // Opaque handle classes (GdImage) refuse serialization anywhere in the
+        // value graph, like their internal PHP counterparts.
+        if let Some(cls) = find_opaque_in_graph(&v, &mut Vec::new()) {
+            let msg = format!("Serialization of '{}' is not allowed", cls);
+            if let Some(cid) = self.class_index.get(&b"exception"[..]).copied() {
+                let obj = self.synthesize_throwable(cid, &msg)?;
+                return Err(PhpError::Thrown(obj));
+            }
+            return Err(PhpError::Error(msg));
+        }
         let prepared = if self.has_serialize_hooks(&v, &mut Vec::new()) {
             self.prepare_serialize(v, &mut HashMap::default())?
         } else {

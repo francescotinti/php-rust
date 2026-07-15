@@ -657,6 +657,10 @@ impl<'m> super::Vm<'m> {
         if let Some(first) = args.first() {
             let raw = convert::to_zstr_cast(first, &mut self.diags).as_bytes().to_vec();
             let key = raw.strip_prefix(b"\\").unwrap_or(&raw).to_ascii_lowercase();
+            // An opaque handle class (GdImage) reflects with no properties.
+            if php_types::is_opaque_handle_class(&key) {
+                return Ok(Zval::Array(std::rc::Rc::new(a)));
+            }
             if let Some(&cid) = self.class_index.get(&key) {
                 for (n, _) in &self.classes[cid].prop_defaults {
                     // Slots are storage-keyed (mangled for privates); reflection
@@ -678,6 +682,10 @@ impl<'m> super::Vm<'m> {
         if let Some(first) = args.first() {
             let raw = convert::to_zstr_cast(first, &mut self.diags).as_bytes().to_vec();
             let key = raw.strip_prefix(b"\\").unwrap_or(&raw).to_ascii_lowercase();
+            // An opaque handle class (GdImage) reflects with no methods.
+            if php_types::is_opaque_handle_class(&key) {
+                return Ok(Zval::Array(std::rc::Rc::new(a)));
+            }
             if let Some(&cid) = self.class_index.get(&key) {
                 let mut seen: std::collections::HashSet<Vec<u8>> = std::collections::HashSet::new();
                 let mut out: Vec<Vec<u8>> = Vec::new();

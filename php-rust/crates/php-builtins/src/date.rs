@@ -866,20 +866,34 @@ fn parse_absolute(s: &str) -> Option<(i64, Option<StrZone>)> {
     if parts.next().is_some() {
         return None;
     }
-    let sep = if date.contains('-') {
-        '-'
-    } else if date.contains('/') {
-        '/'
-    } else {
-        return None;
-    };
-    let mut d = date.split(sep);
-    let year: i64 = d.next()?.parse().ok()?;
-    let month: i64 = d.next()?.parse().ok()?;
-    let day: i64 = d.next()?.parse().ok()?;
-    if d.next().is_some() {
-        return None;
-    }
+    // timelib "datenocolon": a bare 8-digit YYYYMMDD date token (what IPTC
+    // 2#055 carries into WordPress' wp_read_image_metadata).
+    let (year, month, day): (i64, i64, i64) =
+        if date.len() == 8 && date.bytes().all(|b| b.is_ascii_digit()) {
+            let y: i64 = date[..4].parse().ok()?;
+            let m: i64 = date[4..6].parse().ok()?;
+            let d: i64 = date[6..8].parse().ok()?;
+            if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+                return None;
+            }
+            (y, m, d)
+        } else {
+            let sep = if date.contains('-') {
+                '-'
+            } else if date.contains('/') {
+                '/'
+            } else {
+                return None;
+            };
+            let mut d = date.split(sep);
+            let year: i64 = d.next()?.parse().ok()?;
+            let month: i64 = d.next()?.parse().ok()?;
+            let day: i64 = d.next()?.parse().ok()?;
+            if d.next().is_some() {
+                return None;
+            }
+            (year, month, day)
+        };
     let (mut hour, mut min, mut sec) = (0i64, 0i64, 0i64);
     let mut time_zone: Option<StrZone> = None;
     if let Some(t) = time {
@@ -903,17 +917,25 @@ fn parse_absolute(s: &str) -> Option<(i64, Option<StrZone>)> {
                 t = body;
             }
         }
-        let mut tp = t.split(':');
-        hour = tp.next()?.parse().ok()?;
-        min = tp.next()?.parse().ok()?;
-        sec = match tp.next() {
-            // Fractional seconds are accepted and truncated (PHP returns an
-            // integer epoch).
-            Some(x) => x.split('.').next()?.parse().ok()?,
-            None => 0,
-        };
-        if tp.next().is_some() {
-            return None;
+        if t.len() == 6 && t.bytes().all(|b| b.is_ascii_digit()) {
+            // timelib "timenocolon": HHMMSS (IPTC 2#060, e.g. "101112+0000" —
+            // the offset suffix was already split off above).
+            hour = t[..2].parse().ok()?;
+            min = t[2..4].parse().ok()?;
+            sec = t[4..6].parse().ok()?;
+        } else {
+            let mut tp = t.split(':');
+            hour = tp.next()?.parse().ok()?;
+            min = tp.next()?.parse().ok()?;
+            sec = match tp.next() {
+                // Fractional seconds are accepted and truncated (PHP returns an
+                // integer epoch).
+                Some(x) => x.split('.').next()?.parse().ok()?,
+                None => 0,
+            };
+            if tp.next().is_some() {
+                return None;
+            }
         }
     }
     // A standalone zone token wins over a time-suffix one (parity with the

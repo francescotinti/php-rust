@@ -1,101 +1,97 @@
-# Rotta WORDPRESS-FIRST — WP-track (mysqli chiusa in WP-8)
+# Rotta WORDPRESS-FIRST — WP-track (ext/gd & media chiusa in WP-9)
 
-> 🏁 **WP-8 CHIUSA (2026-07-15)**: **ext/mysqli nativa (crate `mysql` v28) —
-> WordPress 7.0.1 installato (`wp core install`) e servito su MySQL 9.7.1
-> VERO a parità oracle**: 11/11 probe byte-id, schema dbDelta 0 diff,
-> 13 rotte front + login flow byte-id, admin = soli volatili noti.
-> Cade la dipendenza dal plugin sqlite-database-integration.
-> Dettaglio nel changelog di `PHPR_DIVERGENCES_FROM_PHP.md` (WordPress-8, §2.5).
+> 🏁 **WP-9 CHIUSA (2026-07-15)**: **ext/gd sulla LIBGD DI SISTEMA via FFI +
+> ext/exif — media pipeline WordPress a PARITÀ BYTE TOTALE**: 11/11 probe
+> gd/exif byte-id, media-probe (sideload+subsizes+srcset+EXIF/IPTC+editor
+> ops+conversioni webp/avif) byte-id **inclusi gli md5 dei file generati**,
+> batteria HTTP 32/32 risposte byte-identiche SENZA normalizzazione
+> (site-health e upload webp/avif chiusi). Dettaglio nel changelog di
+> `PHPR_DIVERGENCES_FROM_PHP.md` (WordPress-9, §2.6).
 
 Riprendiamo phpr (PHP 8.5.7 in Rust). **Roadmap (decisione 2026-07-13,
 memoria `php-rust-roadmap-wp-first`)**: obiettivo primario = 100%
 compatibilità WordPress. Laravel solo come validazione posteriore.
 
-## Cosa è entrato (sessione WP-8 — sintesi; dettaglio nel changelog)
-1. `vm/mysqli.rs`: host builtin `__mysqli_*` sul crate `mysql` v28 (sync,
-   caching_sha2 + RSA full-auth ok); conn/stmt = handle in Vm; result set
-   bufferizzati; multi_query = split client-side; errori client 2002/2019
-   sintetizzati, server verbatim; NUM_FLAG + SET NAMES per parità metadata.
-2. `lower/prelude_mysqli.php` (5° prelude): 6 classi + ~75 fn procedurali;
-   ~100 costanti MYSQLI_* in `resolve_constant`; ext `mysqli`+`mysqlnd`
-   annunciate; nuovo `__warning_from_caller` (E_WARNING al call-site).
-3. Harness WP-MySQL end-to-end (oracle E phpr) + batteria probe/HTTP.
+## Cosa è entrato (sessione WP-9 — sintesi; dettaglio nel changelog)
+1. `php-types/src/gdio.rs` + `build.rs`: FFI alla libgd brew (la STESSA dylib
+   dell'oracle → codec identici → byte-parity dei file), GdImg RAII,
+   error-callback va_list→vsnprintf; `vm/gd.rs`: 25 host builtin `__gd_*`,
+   handle in `Vm.gd_images`; 6° prelude `prelude_gd.php` (GdImage + ~60 fn);
+   ~90 costanti; classe opaca engine-level (`is_opaque_handle_class`).
+2. `php-builtins/exif.rs`: exif_read_data (IFD0/EXIF/GPS/THUMBNAIL/COMPUTED/
+   COMMENT), exif_imagetype, iptcparse; getimagesize: AVIF + `&$image_info`
+   (HOST_OUT + pair-builtin); `__notice_from_caller`; strtotime datenocolon/
+   timenocolon (IPTC → created_timestamp).
+3. Harness persistente `/Volumes/Extreme Pro/Claude/wp9-harness/`:
+   `gd-probe/` (11 probe + assets deterministici — MAI rigenerare gli assets:
+   FileDateTime=mtime pinnato nei ref), `run-media.sh` (pipeline media con
+   reset DB via dump), `run-http.sh` (batteria HTTP sequenziale con extra
+   site-health?tab=debug e media-new), `gate.sh` (gate integrale con
+   ricostruzione baseline per NOME da worktree del commit gated).
 
 ## Ambiente/harness (per riprodurre — ⚠️ il reboot svuota /private/tmp!)
-- **MySQL 9.7.1 brew, datadir PERSISTENTE su disco esterno**. Avvio:
+- MySQL 9.7.1 brew, datadir persistente: avvio identico a WP-8 (vedi sotto);
+  DB: wp_o (install oracle, pretty ON) usato da wp9-harness/wp-mo.
   `/opt/homebrew/opt/mysql/bin/mysqld --datadir="/Volumes/Extreme Pro/Claude/mysql-wp8/data"
   --tmpdir="/Volumes/Extreme Pro/Claude/mysql-wp8/tmp" --port=3306
   --bind-address=127.0.0.1 --socket=/private/tmp/mysql-wp8.sock
   --log-error="/Volumes/Extreme Pro/Claude/mysql-wp8/mysqld.err" &`
-  (socket NON sul volume esterno: "Operation not supported"). Utenti:
-  root/'' e wp/'wp-secret-Pass1' (caching_sha2); DB: probe, wp_o (WP
-  installato dall'oracle, pretty permalinks ON), wp_p (installato da phpr).
-- **Batterie PERSISTENTI in `/Volumes/Extreme Pro/Claude/wp8-harness/`**:
-  `mysqli-probe/run-probes.sh` (11 probe oracle-vs-phpr, exit≠0 su diff) e
-  `battery.sh` (front+login+admin; ricetta ricostruzione albero WP in testa).
-  Gli ALBERI wp (wp-mo/wp-mp) e i workspace wp-cli/ORM/HK vivevano in
-  /private/tmp e vanno ricostruiti (ricette: testa di battery.sh per WP;
-  memoria `php-rust-orm-gate-recipe` per ORM; per http-kernel: clone shallow
-  symfony/http-kernel + `composer update` + `composer require --dev
-  phpunit/phpunit:^11.5 -W` con l'oracolo — il tip si muove: baseline
-  2026-07-15 = 1665 test 0E/0F).
-- ⚠️ watch: un crash una-tantum di `phpr -S` (widgets.php, primo passaggio
-  della prima batteria) NON riprodotto in 3 run completi dopo; se ricompare,
-  RUST_BACKTRACE=1 e log server.
+- Albero WP: `wp9-harness/wp-mo` (wp-config a mano su wp_o; niente wp-cli:
+  la media-probe usa media_handle_sideload da CLI). Sorgente WP 7.0.1 anche
+  in `wp9-harness/wp-src/` (zip dalla cache wp-cli).
+- Batterie WP-8 ancora valide: `wp8-harness/battery.sh` (riusata da
+  run-http.sh) e `wp8-harness/mysqli-probe/run-probes.sh`.
 
-## Stato gate (post WP-8)
-- corpus 1528 / sess 67 / date 377 / refl 294 per NOME (invariati) ·
-  ORM 3484 3E/13F nei residui catalogati · hk (tip) 1665 0E/0F ·
-  cargo 1550/0 · probe mysqli 11/11 byte-id · WP-MySQL: front 13 rotte +
-  login 5 step byte-id, admin 12 = volatili noti, widgets 500 parità.
+## Stato gate (post WP-9) — fail-set per NOME vs baseline da99e8f ricostruita
+- corpus / sess / date / refl: vedi `wp9-harness/gate-out/progress.txt`
+  (baseline dal worktree del commit gated, target separata su disco esterno).
+- ORM 3484 3E/13F nei residui catalogati · hk (tip) 1665 0E/0F · cargo verde ·
+  probe mysqli 11/11 · probe gd 11/11 · media-probe byte-id · HTTP 32/32.
+- Misura nuova: suite phpt ext/gd ed ext/exif (report in gate-out/*.log —
+  molte fail attese: superfici non implementate tipo ttf/filter/arc).
 
-## Prossimo passo: SESSIONE WP-9 = ext/gd & media (roadmap tappa 5)
-Chiude i residui admin documentati (upload webp/avif `upload_error`,
-site-health `php_extensions` gd) e il media pipeline WP:
-- ext/gd work-alike su crate Rust (candidati: `image` + `imageproc`;
-  attenzione a byte-parity dei formati: WP fa resize/crop/thumbnail via
-  GD — la parità sui BYTE dei file generati è probabilmente impossibile
-  (algoritmi di resampling diversi), quindi **functional-parity** (policy
-  roadmap: ciò che esce dal processo = functional) + parità dei METADATI
-  (dimensioni, mime, srcset generati nelle pagine).
-- Superficie: imagecreatefrom{jpeg,png,gif,webp,avif}, imagesx/y,
-  imagecopyresampled, imagejpeg/png/webp/avif, imagerotate, exif_read_data?
-  (site-health), getimagesize (già?), image_type_to_mime_type.
-- Harness: `wp media import` + pagina upload.php + srcset nelle pagine
-  frontend; site-health "gd" verde.
-- Poi (ordine roadmap): divergenze SAPI residue (chunked body,
-  headers_sent oltre 4096, PHP_CLI_SERVER_WORKERS, …) → WP core test
-  suite (PHPUnit) come gate per nome → perf profonda (churn Zval/COW,
-  arena per-request, interning).
+## Prossimo passo: SESSIONE WP-10 (ordine roadmap)
+1. **Divergenze SAPI residue** (chiusura tappa server): chunked request body,
+   headers_sent() oltre output_buffering=4096, PHP_CLI_SERVER_WORKERS,
+   router `return false`, escape `"\u{...}"` lexer (residui WP-4).
+2. **WP core test suite (PHPUnit) come gate per nome del filone** — il vero
+   moltiplicatore di copertura: harness `wordpress-develop` + `wp-tests-config`,
+   richiede probabilmente mysqli TEST_DB + fixture; partire con un sottoinsieme
+   (tests/phpunit/tests/media in primis, ora che gd c'è).
+3. Poi: perf profonda per-request (churn Zval/COW, arena, interning — piste
+   profilate in WP-7), Laravel validazione.
 
-## Lezioni operative (cumulative, aggiornate WP-8)
-- ⭐ WP-8: harness e baseline SEMPRE su disco esterno (`wp8-harness/`), MAI
-  solo in /private/tmp: il reboot li azzera (persi i workspace WP-5/ORM/HK
-  storici; ricostruiti da ricetta in ~15 min).
-- ⭐ WP-8: probe-FIRST paga — 6/10 probe byte-id al primo colpo; i 4 fix
-  emersi (DriverError→2002, sqlstate connect HY000, NUM_FLAG client-side,
-  SET NAMES per charsetnr) erano tutti INVISIBILI senza probe.
-- ⭐ WP-8: per il diff HTTP oracle-vs-phpr, servire lo STESSO albero+DB in
-  SEQUENZA sulla stessa porta = byte-parity senza normalizzazioni (le due
-  install separate divergono solo su cron/timestamp/hash-di-path e la
-  SECONDA login crea la sessione doppia → "log out everywhere" in profile).
-- ⭐ WP-8: `mysql -e "…"` di brew ok; mysqld si inizializza con
-  `--initialize-insecure` e NON supporta socket su exFAT.
-- ⭐ WP-7: estrazione fail-set con `^--- (.+\.phpt) ---$` (path con SPAZI),
-  conteggio>0 obbligatorio prima del verdetto.
+## Lezioni operative (cumulative, aggiornate WP-9)
+- ⭐ WP-9: **quando la libreria C dell'oracle è sul sistema, FFI > crate**
+  (pattern zlibio→gdio): byte-parity gratis e semantica esatta con wrapper
+  sottili; il crate `image` avrebbe dato solo functional-parity a costo alto.
+- ⭐ WP-9: probe-FIRST ancora vincente — 5/11 byte-id al primo colpo; i diff
+  emersi (speed AVIF -1→6 mappato da PHP non da gd, IMAGETYPE_COUNT 22,
+  Notice "Error reading from", forma opaca GdImage) erano tutti invisibili
+  senza probe. exif_read_data byte-id al primo colpo dopo il port del subset.
+- ⭐ WP-9: le classi-handle opache PHP 8 (GdImage & co.) hanno UNA superficie
+  engine trasversale: clone/serialize/dump/export/json/reflection — helper
+  condiviso in php-types + name-check nei ~7 siti; var_dump si risolve con un
+  debug-info vuoto sintetico nella mappa di compute_debug_info.
+- ⭐ WP-9: assets probe con mtime nei riferimenti (exif FileDateTime) = MAI
+  rigenerarli; il redirect `2>"$dir/log"` dentro `(cd … && …)` vuole il path
+  ASSOLUTO; mysqldump con GTID vuole `--set-gtid-purged=OFF` per il restore.
+- ⭐ WP-8: harness/baseline su disco esterno; per il gate per NOME senza
+  baseline superstite: worktree del commit gated + CARGO_TARGET_DIR dedicata.
+- ⭐ WP-7: estrazione fail-set con path con SPAZI, conteggio>0 obbligatorio.
 - ⭐ WP-6: binario ricompilato dopo il lancio dei gate → gate da RILANCIARE.
 - ⭐ WP-2/4/5/6: pgrep dopo ogni pkill E lsof sulla porta prima di rilanciare.
-- ⭐ WP-3: PROFILARE prima di ottimizzare (`sample <pid>`).
 - df PRIMA dei run pesanti; gate per NOME sempre; RTK collassa i body PHP
   (Write/Read tool); zsh non espande i glob dentro variabili.
 
-## Invarianti (identici)
+## Invarianti (identici + nuovi WP-9)
 - Gate per OGNI commit: probe byte-id vs oracle · corpus per NOME ·
   ext/session+date+reflection per nome · ORM (**3E/13F**) se
   ref/arg/reflection · **http-kernel 0E/0F** · cargo test ·
-  batteria SAPI 48 probe + 8 pagine WP se si tocca server/websapi ·
-  batteria admin 12 pagine + pretty 10 rotte se si tocca engine-core ·
-  probe mysqli 11/11 se si tocca mysqli/prelude.
+  batteria SAPI/pagine WP se si tocca server/websapi · batteria admin+pretty
+  se si tocca engine-core · probe mysqli 11/11 se si tocca mysqli/prelude ·
+  **probe gd 11/11 + media-probe + run-http 32/32 se si tocca
+  gd/exif/image/prelude_gd o i codec** (e dopo ogni upgrade brew di gd!).
 - Commit AND push a ogni step; run pesanti SEQUENZIALI e DETACHED; Serena
   per Rust, Vexp per il C di php-8.5.7; Read tool per i .php; log con
   `LC_ALL=C tr -d '\0'`.

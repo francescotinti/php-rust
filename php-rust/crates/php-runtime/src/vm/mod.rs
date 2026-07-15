@@ -57,6 +57,7 @@ mod host_reflect;
 mod oop;
 mod pdo;
 mod mysqli;
+mod gd;
 mod tokenizer;
 mod websapi;
 use arrays::*;
@@ -499,6 +500,8 @@ pub(crate) fn run_module_with_hir<'m>(
         mysqli_conns: HashMap::default(),
         mysqli_stmts: HashMap::default(),
         next_mysqli: 1,
+        gd_images: HashMap::default(),
+        next_gd: 1,
         stream_chunk_sizes: HashMap::default(),
         seed_aliases: Vec::new(),
         umask: 0o22,
@@ -1435,6 +1438,12 @@ struct Vm<'m> {
     mysqli_conns: HashMap<u32, mysqli::MysqliConn>,
     /// Server-side prepared statements (`mysqli_stmt`): handle id → statement.
     mysqli_stmts: HashMap<u32, mysqli::MysqliStmt>,
+    /// Open gd images (ext/gd): handle id → system-libgd image, backing the
+    /// `__gd_*` host builtins the prelude `GdImage` class delegates to
+    /// (see vm/gd.rs); freed by GdImage::__destruct via `__gd_destroy`.
+    gd_images: HashMap<u32, php_types::gdio::GdImg>,
+    /// Next gd handle id.
+    next_gd: u32,
     /// Next mysqli handle id (shared by connections and statements).
     next_mysqli: u32,
     /// Per-stream chunk size set by `stream_set_chunk_size` (resource id → size).
@@ -3449,6 +3458,13 @@ impl<'m> Vm<'m> {
                     if !visited.insert(id) {
                         continue;
                     }
+                    // Opaque handle classes (GdImage) dump with no properties,
+                    // like their internal counterparts: a synthetic empty
+                    // debug-info entry hides the prelude's `$__h`.
+                    if is_opaque_handle_class(o.borrow().class_name.as_bytes()) {
+                        map.insert(id, Zval::Array(Rc::new(PhpArray::new())));
+                        continue;
+                    }
                     if resolve_method_runtime(&self.classes, cid, b"__debugInfo").is_some() {
                         let res = self.call_method_sync(v.clone(), b"__debugInfo", Vec::new())?;
                         if let Zval::Array(a) = &res {
@@ -3718,6 +3734,15 @@ impl<'m> Vm<'m> {
                     return Err(PhpError::Error("Recursion detected".to_string()));
                 }
                 let cid = object_class_id(&v).expect("object has a class id");
+                // An opaque handle class (GdImage) encodes as `{}` — its hidden
+                // handle prop stays invisible.
+                if deref_object(&v)
+                    .is_some_and(|o| is_opaque_handle_class(o.borrow().class_name.as_bytes()))
+                {
+                    if let Some(&std_cid) = self.class_index.get(&b"stdclass"[..]) {
+                        return self.alloc_object(std_cid);
+                    }
+                }
                 if self.jsonserializable_id.is_some_and(|j| is_instance_of(&self.classes, self.stringable_id, cid, j)) {
                     // A jsonSerialize() that returns the SAME object (directly or
                     // deeper) is encoded by its plain public properties — NOT by
@@ -5474,6 +5499,8 @@ impl<'m> Vm<'m> {
             b"similar_text" => self.ho_similar_text(args)?,
             b"str_replace" => self.ho_str_replace_out(args, false)?,
             b"str_ireplace" => self.ho_str_replace_out(args, true)?,
+            b"getimagesize" => self.ho_getimagesize_out(args, false)?,
+            b"getimagesizefromstring" => self.ho_getimagesize_out(args, true)?,
             b"is_callable" => self.ho_is_callable_out(args)?,
             // Two out-params: (result, $output array, Some($result_code)).
             b"exec" => return self.ho_exec(args),
@@ -10117,6 +10144,31 @@ host_builtins! {
     b"__mysqli_multi_query" => vm.ho_mysqli_multi_query(args),
     b"__mysqli_stmt_execute" => vm.ho_mysqli_stmt_execute(args),
     b"__mysqli_stmt_close" => vm.ho_mysqli_stmt_close(args),
+    b"__gd_create" => vm.ho_gd_create(args),
+    b"__gd_destroy" => vm.ho_gd_destroy(args),
+    b"__gd_decode" => vm.ho_gd_decode(args),
+    b"__gd_decode_auto" => vm.ho_gd_decode_auto(args),
+    b"__gd_encode" => vm.ho_gd_encode(args),
+    b"__gd_stat" => vm.ho_gd_stat(args),
+    b"__gd_flag" => vm.ho_gd_flag(args),
+    b"__gd_color" => vm.ho_gd_color(args),
+    b"__gd_colortransparent" => vm.ho_gd_colortransparent(args),
+    b"__gd_colorsforindex" => vm.ho_gd_colorsforindex(args),
+    b"__gd_colorat" => vm.ho_gd_colorat(args),
+    b"__gd_setpixel" => vm.ho_gd_setpixel(args),
+    b"__gd_draw" => vm.ho_gd_draw(args),
+    b"__gd_copy" => vm.ho_gd_copy(args),
+    b"__gd_rotate" => vm.ho_gd_rotate(args),
+    b"__gd_flip" => vm.ho_gd_flip(args),
+    b"__gd_crop" => vm.ho_gd_crop(args),
+    b"__gd_scale" => vm.ho_gd_scale(args),
+    b"__gd_setinterpolation" => vm.ho_gd_setinterpolation(args),
+    b"__gd_t2p" => vm.ho_gd_t2p(args),
+    b"__gd_p2t" => vm.ho_gd_p2t(args),
+    b"__gd_string" => vm.ho_gd_string(args),
+    b"__gd_char" => vm.ho_gd_char(args),
+    b"__gd_fontsize" => vm.ho_gd_fontsize(args),
+    b"__gd_version" => vm.ho_gd_version(),
     b"get_parent_class" => vm.ho_get_parent_class(args),
     b"class_parents" => vm.ho_class_parents(args),
     b"class_implements" => vm.ho_class_implements(args),
@@ -10209,6 +10261,19 @@ host_builtins! {
     // Prelude-internal: raise an E_DEPRECATED attributed to the *caller* of the
     // prelude method (PHP reports an internal method's deprecation at the call
     // site, not inside the implementation — SplObjectStorage::attach & co.).
+    b"__notice_from_caller" => {
+        let msg = convert::to_zstr_cast(
+            &args.first().map(|a| a.deref_clone()).unwrap_or(Zval::Null),
+            &mut vm.diags,
+        )
+        .as_bytes()
+        .to_vec();
+        let caller = vm.frames.len().saturating_sub(2);
+        let line = vm.cur_line(caller);
+        vm.flush_diags(line)?;
+        vm.raise_diagnostic(8, &String::from_utf8_lossy(&msg), line)?;
+        Ok(Zval::Null)
+    },
     b"__deprecated_from_caller" => {
         let msg = convert::to_zstr_cast(
             &args.first().map(|a| a.deref_clone()).unwrap_or(Zval::Null),
@@ -10585,6 +10650,10 @@ enum DimIsLeaf {
     Raw(Option<Zval>),
 }
 
+/// Opaque internal handle classes (PHP 8 resource-object wrappers): the
+/// canonical predicate lives in php-types (shared with the pure builtins).
+pub(crate) use php_types::is_opaque_handle_class;
+
 pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usize)> {
     const HOST_OUT: &[(&[u8], usize)] = &[
         (b"preg_match", 2),
@@ -10627,6 +10696,11 @@ pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usiz
         // `&$filename` (#1); `&$line` (#2) is the second out-param. PHP fills
         // both whenever supplied — ""/0 before any output.
         (b"headers_sent", 0),
+        // `&$image_info` receives the JPEG APPn segments (IPTC path). Calls
+        // WITHOUT the second argument keep the registry fast path (see
+        // `FnCompiler::call`, same filter as str_replace's `&$count`).
+        (b"getimagesize", 1),
+        (b"getimagesizefromstring", 1),
     ];
     HOST_OUT
         .iter()

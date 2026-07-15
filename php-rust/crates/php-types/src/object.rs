@@ -176,6 +176,15 @@ impl Object {
 /// class's [`ObjectInfo`] (`Public` for a dynamic / undeclared property). Used by
 /// every consumer that iterates an object's stored slots for display
 /// (`var_dump`/`print_r`/`var_export`/`json_encode`/`serialize`) or scope views.
+/// Opaque internal handle classes (PHP 8 resource-object wrappers, e.g.
+/// `GdImage`): no visible properties or methods, not instantiable, cloneable
+/// or serializable. Shared by the VM (clone/serialize/var_dump/Reflection)
+/// and the pure builtins (var_export/print_r/json) so the prelude's hidden
+/// handle prop stays invisible everywhere.
+pub fn is_opaque_handle_class(name: &[u8]) -> bool {
+    name.eq_ignore_ascii_case(b"gdimage")
+}
+
 pub fn unmangle_prop_key<'a>(key: &'a [u8], info: &ObjectInfo) -> (&'a [u8], PropVis) {
     if let Some(rest) = key.strip_prefix(b"\0") {
         if let Some(sep) = rest.iter().position(|&b| b == 0) {

@@ -248,6 +248,45 @@ numerici (il crate lo maschera; DECIMAL escluso, come mysqlnd); handshake rialli
 - Deprecation di `mysqli_ping()` emessa dal prelude; propr. dinamiche/`var_dump($mysqli)` mostrano
   anche i prop privati `__h`/`__stash` (rappresentazione interna, non surface wpdb).
 
+### 2.6 gd + exif — ext/gd sulla **libgd di SISTEMA** via FFI (sessione WordPress-9)
+
+Classe opaca `GdImage` + ~60 funzioni `image*` nel 6° prelude (`lower/prelude_gd.php`),
+delegate agli host builtin `__gd_*` (`vm/gd.rs`) sopra la FFI `php_types::gdio`
+(`build.rs` linka `/opt/homebrew/opt/gd/lib/libgd.dylib` — **la stessa dylib che
+l'oracle brew linka**, pattern zlibio). Upgrade rispetto alla policy roadmap
+(functional-parity via crate): decode/encode passano dagli **stessi codec**
+(libjpeg-turbo/libpng/libwebp/libavif) → **i file generati sono BYTE-IDENTICI**
+(11/11 probe gd byte-id; pipeline media WP byte-id: subsizes, -scaled 2560,
+conversioni webp/avif). ext/exif: `exif_read_data`/`exif_imagetype` +
+`iptcparse` + `getimagesize` con `&$image_info` (APPn) e parser AVIF
+(php-builtins/exif.rs, port del subset di exif.c: IFD0/EXIF/GPS/IFD1-thumbnail,
+COMPUTED, COMMENT, UndefinedTag:0x%04X, rationals "n/d").
+`GdImage` è **engine-opaca** (`is_opaque_handle_class` in php-types, consultata
+da clone/serialize/var_dump/var_export/print_r/json/Reflection): il prop handle
+`$__h` e i metodi helper del prelude restano invisibili; `new`→Error,
+`clone`→Error, `serialize`→Exception coi messaggi Zend esatti.
+**Divergenze consapevoli**:
+- **Byte-parity dei file generati vale finché oracle e phpr linkano la STESSA
+  libgd** (upgrade brew di gd/codecs → divergenza *comune* ai due lati, ma
+  ricontrollare le probe p04–p06). `GD_VERSION`/`GD_*_VERSION` sono foldate
+  compile-time a 2.3.3; `gd_info()['GD Version']` è runtime (`gdVersionString`).
+- Assenti (correct-or-absent): `imagettftext`/`imagettfbbox`/`imageftbbox`
+  (FreeType), `imagefilter`, `imageconvolution`, `imagegammacorrect`,
+  `imagelayereffect`, `imagesetthickness`/`setstyle`/`setbrush`/`settile`,
+  `imagearc`/`imagepolygon` family, `imagewbmp`/`imagexbm`/`imagebmp`/`imagegd(2)`
+  output, `imagegrabscreen`, affine/interpolation avanzate. `gd_info()` dichiara
+  FreeType true (verità della libgd linkata) anche se imagettftext non è esposta.
+- `imagecolorat` su truecolor usa `gdImageGetTrueColorPixel`; palette semantics,
+  antialias flag e interlace sono write-through sulla struct C (layout 2.3.3).
+- exif: MakerNote/INTEROP/FPIX/WINXP non decodificati (i pointer-tag restano
+  valori grezzi); `EXIF_USE_MBSTRING` re-encoding fuori scope; il filtro
+  `$required_sections` non è enforced (output sempre completo, come osservato
+  per i casi WP). AVIF in getimagesize = mini-parser ispe/pixi/auxC (primo
+  `ispe`/`pixi` in ipco + auxC "alpha"), non il libavifinfo completo (item
+  grid/ipma associations fuori scope).
+- `getimagesize`: `&$image_info` popolato solo per JPEG (APP0..APP15,
+  first-wins come php_read_APP); segmenti >64KB multi-APP non ricomposti.
+
 ---
 
 ## 3. Divergenze di engine circoscritte (documentate nei topic-file di memoria)
@@ -409,6 +448,53 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-15 (sessione WordPress-9): 🏁 **ext/gd sulla LIBGD DI SISTEMA via FFI
+  + ext/exif — MEDIA PIPELINE WORDPRESS A PARITÀ BYTE TOTALE** (§2.6).
+  Decisione di design: invece del crate `image` (functional-parity prevista
+  dalla roadmap), FFI alla stessa `libgd.3.dylib` che l'oracle brew linka
+  (pattern zlibio): stessi codec ⇒ **file generati byte-identici**, wrapper
+  sottili ⇒ semantica GD esatta gratis (resampling, palette, alpha, colori).
+  Superficie: `php_types::gdio` (FFI + GdImg RAII + error-callback va_list
+  formattato con vsnprintf, mappato in Warnings dal prelude via
+  `__warning_from_caller`); `vm/gd.rs` (25 host builtin `__gd_*`, handle in
+  `Vm.gd_images`, liberati eagerly dal `__destruct` del prelude); 6° prelude
+  `prelude_gd.php` (GdImage opaca + ~60 fn: create/from{jpeg,png,gif,webp,
+  avif,bmp,wbmp,tga,string}, jpeg/png/gif/webp/avif output su file/OB/stream
+  resource via I/O PHP-side, copyresampled/resized/copy, rotate, flip, crop,
+  scale, palette↔truecolor, colori/alpha/at/sforindex, draw primitives,
+  bitmap font string/char, interlace/antialias/blending/savealpha,
+  setinterpolation, imagetypes 495, gd_info oracle-shape, imagedestroy
+  deprecato 8.5); ~90 costanti IMG_*/GD_*/PNG_* + EXIF_USE_MBSTRING in
+  `resolve_constant` (IMAGETYPE_COUNT corretta 21→22); `gd`+`exif` in
+  extension_loaded. **Classe opaca engine-level**: `is_opaque_handle_class`
+  (php-types) consultata da Op::Clone (Error), serialize (Exception,
+  graph-walk), var_dump (debug-info vuoto sintetico), var_export/print_r
+  (props nascoste), json_encode ({}), Reflection (0 metodi/0 props).
+  ext/exif nuovo `php-builtins/exif.rs`: `exif_imagetype` (detection
+  php_getimagetype completa incl. AVIF ftyp-brands), `exif_read_data`
+  (JPEG/TIFF: IFD0+EXIF+GPS+IFD1 thumbnail in ordine file, COMPUTED con
+  html/ByteOrderMotorola/ApertureFNumber/Copyright/Thumbnail.*, COMMENT gd,
+  SectionsFound, formati rational "n/d", UndefinedTag:0x%04X, FileDateTime/
+  FileSize/MimeType, modalità $as_arrays), `iptcparse` (dataset 2#NNN,
+  extended length). `getimagesize`: parser AVIF (ispe/pixi/auxC) con
+  bits/channels oracle-shape, out-param `&$image_info` (APPn first-wins) via
+  CallHostBuiltinOut (nuove entry HOST_OUT + pair-builtin registry
+  `__getimagesize_info`), Notice "Error reading from %s!" per input <12 byte.
+  Fix `strtotime`: formati timelib datenocolon `YYYYMMDD` + timenocolon
+  `HHMMSS[+ZZZZ]` (IPTC 2#055/2#060 → created_timestamp di
+  wp_read_image_metadata). Nuovo builtin `__notice_from_caller` (E_NOTICE al
+  call-site, per imagecolorat out-of-bounds). **Verifiche**: 11/11 probe
+  gd/exif BYTE-ID (costanti/classe/load+warnings libjpeg formattati/save
+  md5 su tutti i formati e qualità/pipeline resize WP md5/rotate+flip/
+  palette/OB+stream/getimagesize+iptc/exif Canon completo/misc);
+  media-probe WP (media_handle_sideload di foto EXIF 5472px + png alpha +
+  gif palette su WP 7.0.1/MySQL): metadata+subsizes+srcset+image_meta
+  EXIF/IPTC+editor rotate/flip/crop+conversioni webp/avif **BYTE-ID,
+  inclusi gli md5 di TUTTI i file generati**; batteria HTTP sequenziale
+  `php -S` vs `phpr -S`: **32/32 risposte BYTE-IDENTICHE senza
+  normalizzazione** (13 front + login 5 + admin 12 con site-health e
+  upload.php + site-health?tab=debug + media-new.php) — i residui webp/avif
+  e php_extensions gd di WP-5/8 sono CHIUSI.
 - 2026-07-15 (sessione WordPress-8): 🏁 **ext/mysqli NATIVA (crate `mysql` v28)
   — WORDPRESS 7.0.1 INSTALLATO E SERVITO SU MYSQL VERO A PARITÀ ORACLE**
   (chiude roadmap tappa 3b: cade la dipendenza dal plugin

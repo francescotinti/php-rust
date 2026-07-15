@@ -516,13 +516,16 @@ pub(crate) fn export_into(out: &mut Vec<u8>, v: &Zval, level: usize, seen: &mut 
             }
             // All properties are exported by value, with no visibility markers
             // (a private property is exported under its plain, unmangled name).
-            for (k, val) in obj.props.iter() {
-                let (disp, _) = php_types::unmangle_prop_key(k, &obj.info);
-                spaces(out, level + 2);
-                export_str(out, disp);
-                out.extend_from_slice(b" => ");
-                export_into(out, val, level + 2, seen, diags);
-                out.extend_from_slice(b",\n");
+            // An opaque handle class (GdImage) exports none at all.
+            if !php_types::is_opaque_handle_class(obj.class_name.as_bytes()) {
+                for (k, val) in obj.props.iter() {
+                    let (disp, _) = php_types::unmangle_prop_key(k, &obj.info);
+                    spaces(out, level + 2);
+                    export_str(out, disp);
+                    out.extend_from_slice(b" => ");
+                    export_into(out, val, level + 2, seen, diags);
+                    out.extend_from_slice(b",\n");
+                }
             }
             drop(obj);
             seen.pop();
@@ -680,8 +683,9 @@ pub(crate) fn print_r_into(out: &mut Vec<u8>, v: &Zval, indent: usize, ctx: &mut
                 return;
             }
             seen.push(ptr);
+            let opaque = php_types::is_opaque_handle_class(obj.class_name.as_bytes());
             for (k, val) in obj.props.iter() {
-                if pdo_hidden_prop(k) {
+                if pdo_hidden_prop(k) || opaque {
                     continue;
                 }
                 let (disp, vis) = php_types::unmangle_prop_key(k, &obj.info);

@@ -22,6 +22,7 @@ mod env;
 mod html;
 mod file;
 mod format;
+mod exif;
 mod gmp;
 mod grapheme;
 mod image;
@@ -198,6 +199,11 @@ pub fn registry() -> Registry {
     add(b"getimagesizefromstring", image::getimagesizefromstring);
     add(b"image_type_to_mime_type", image::image_type_to_mime_type);
     add(b"image_type_to_extension", image::image_type_to_extension);
+    add(b"__getimagesize_info", image::getimagesize_info);
+    add(b"__getimagesizefromstring_info", image::getimagesizefromstring_info);
+    add(b"exif_imagetype", exif::exif_imagetype);
+    add(b"exif_read_data", exif::exif_read_data);
+    add(b"iptcparse", exif::iptcparse);
     add(b"file", file::file);
     add(b"readfile", file::readfile);
     add(b"fpassthru", file::fpassthru);
@@ -663,6 +669,9 @@ const LOADED_EXTENSIONS: &[&[u8]] = &[
     b"core", b"session", b"standard", b"spl", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
     b"zip", b"dom", b"libxml", b"reflection", b"ctype", b"curl", b"pcntl", b"posix",
     b"pdo", b"pdo_sqlite", b"sqlite3", b"simplexml", b"bcmath", b"gmp",
+    // ext/gd on the system libgd (vm/gd.rs + prelude_gd.php); ext/exif's
+    // reader lives in exif.rs. WP's site-health keys off both names.
+    b"gd", b"exif",
     // ext/mysqli on the native Rust client (vm/mysqli.rs); mysqlnd is what the
     // oracle reports too (WP's utf8mb4 capability check keys off it).
     b"mysqli", b"mysqlnd",
@@ -681,6 +690,7 @@ const LOADED_EXTENSIONS_CASED: &[&[u8]] = &[
     b"Core", b"session", b"standard", b"SPL", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
     b"zip", b"dom", b"libxml", b"Reflection", b"ctype", b"curl", b"pcntl", b"posix",
     b"PDO", b"pdo_sqlite", b"sqlite3", b"bcmath", b"gmp",
+    b"gd", b"exif",
     b"mysqli", b"mysqlnd",
     b"filter",
     b"xml", b"xmlwriter", b"tokenizer", b"Phar",

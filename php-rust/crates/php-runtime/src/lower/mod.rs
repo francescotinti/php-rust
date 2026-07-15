@@ -613,6 +613,11 @@ const PRELUDE_GMP_SRC: &[u8] = include_bytes!("prelude_gmp.php");
 /// `__mysqli_*` host builtins (mysql crate) in vm/mysqli.rs.
 const PRELUDE_MYSQLI_SRC: &[u8] = include_bytes!("prelude_mysqli.php");
 
+/// ext/gd: the `GdImage` opaque handle class and the `image*` procedural
+/// functions (global namespace), delegating to the `__gd_*` host builtins
+/// (system-libgd FFI) in vm/gd.rs.
+const PRELUDE_GD_SRC: &[u8] = include_bytes!("prelude_gd.php");
+
 /// The four owned products of lowering [`PRELUDE_SRC`]: the class table + its
 /// name→id index (step 20), and the global-function table + its name→index
 /// (step 35). Both are seeded into every real program before user declarations
@@ -724,6 +729,22 @@ fn lower_prelude_uncached() -> LoweredPrelude {
     for s in program_mysqli.statements.as_slice() {
         if let Statement::Function(func) = s {
             low.hoist_function(func).expect("mysqli prelude function must lower");
+        }
+    }
+    // ext/gd: global-namespace unit with the GdImage class AND functions.
+    let file_gd =
+        File::ephemeral(Cow::Borrowed(b"prelude".as_slice()), Cow::Borrowed(PRELUDE_GD_SRC));
+    let program_gd = parse_file(&arena, &file_gd);
+    debug_assert!(
+        !program_gd.has_errors(),
+        "gd prelude failed to parse: {:?}",
+        program_gd.errors
+    );
+    low.hoist_classes(program_gd.statements.as_slice())
+        .expect("gd prelude classes must lower");
+    for s in program_gd.statements.as_slice() {
+        if let Statement::Function(func) = s {
+            low.hoist_function(func).expect("gd prelude function must lower");
         }
     }
     (low.classes, low.class_index, low.functions, low.fn_index)
@@ -2241,7 +2262,7 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"IMAGETYPE_WEBP" => ExprKind::Int(18),
         b"IMAGETYPE_AVIF" => ExprKind::Int(19),
         b"IMAGETYPE_HEIF" => ExprKind::Int(20),
-        b"IMAGETYPE_COUNT" => ExprKind::Int(21),
+        b"IMAGETYPE_COUNT" => ExprKind::Int(22),
         // ext/standard password_* (bcrypt only; PASSWORD_DEFAULT/BCRYPT are the
         // string identifier "2y" in PHP 8.4+).
         b"PASSWORD_DEFAULT" => ExprKind::Str(b"2y".to_vec().into()),
@@ -2432,6 +2453,96 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"MYSQLI_SERVER_QUERY_WAS_SLOW" => ExprKind::Int(2048),
         b"MYSQLI_SERVER_PS_OUT_PARAMS" => ExprKind::Int(4096),
         b"MYSQLI_IS_MARIADB" => ExprKind::Int(0),
+        // ext/gd (values from the PHP 8.5 oracle probe p01, WP-9).
+        b"IMG_GIF" => ExprKind::Int(1),
+        b"IMG_JPG" | b"IMG_JPEG" => ExprKind::Int(2),
+        b"IMG_PNG" => ExprKind::Int(4),
+        b"IMG_WBMP" => ExprKind::Int(8),
+        b"IMG_XPM" => ExprKind::Int(16),
+        b"IMG_WEBP" => ExprKind::Int(32),
+        b"IMG_BMP" => ExprKind::Int(64),
+        b"IMG_TGA" => ExprKind::Int(128),
+        b"IMG_AVIF" => ExprKind::Int(256),
+        b"IMG_WEBP_LOSSLESS" => ExprKind::Int(101),
+        b"IMG_FLIP_HORIZONTAL" => ExprKind::Int(1),
+        b"IMG_FLIP_VERTICAL" => ExprKind::Int(2),
+        b"IMG_FLIP_BOTH" => ExprKind::Int(3),
+        b"IMG_COLOR_STYLED" => ExprKind::Int(-2),
+        b"IMG_COLOR_BRUSHED" => ExprKind::Int(-3),
+        b"IMG_COLOR_STYLEDBRUSHED" => ExprKind::Int(-4),
+        b"IMG_COLOR_TILED" => ExprKind::Int(-5),
+        b"IMG_COLOR_TRANSPARENT" => ExprKind::Int(-6),
+        b"IMG_ARC_ROUNDED" | b"IMG_ARC_PIE" => ExprKind::Int(0),
+        b"IMG_ARC_CHORD" => ExprKind::Int(1),
+        b"IMG_ARC_NOFILL" => ExprKind::Int(2),
+        b"IMG_ARC_EDGED" => ExprKind::Int(4),
+        b"IMG_GD2_RAW" => ExprKind::Int(1),
+        b"IMG_GD2_COMPRESSED" => ExprKind::Int(2),
+        b"IMG_EFFECT_REPLACE" => ExprKind::Int(0),
+        b"IMG_EFFECT_ALPHABLEND" => ExprKind::Int(1),
+        b"IMG_EFFECT_NORMAL" => ExprKind::Int(2),
+        b"IMG_EFFECT_OVERLAY" => ExprKind::Int(3),
+        b"IMG_EFFECT_MULTIPLY" => ExprKind::Int(4),
+        b"IMG_CROP_DEFAULT" => ExprKind::Int(0),
+        b"IMG_CROP_TRANSPARENT" => ExprKind::Int(1),
+        b"IMG_CROP_BLACK" => ExprKind::Int(2),
+        b"IMG_CROP_WHITE" => ExprKind::Int(3),
+        b"IMG_CROP_SIDES" => ExprKind::Int(4),
+        b"IMG_CROP_THRESHOLD" => ExprKind::Int(5),
+        b"IMG_BELL" => ExprKind::Int(1),
+        b"IMG_BESSEL" => ExprKind::Int(2),
+        b"IMG_BILINEAR_FIXED" => ExprKind::Int(3),
+        b"IMG_BICUBIC" => ExprKind::Int(4),
+        b"IMG_BICUBIC_FIXED" => ExprKind::Int(5),
+        b"IMG_BLACKMAN" => ExprKind::Int(6),
+        b"IMG_BOX" => ExprKind::Int(7),
+        b"IMG_BSPLINE" => ExprKind::Int(8),
+        b"IMG_CATMULLROM" => ExprKind::Int(9),
+        b"IMG_GAUSSIAN" => ExprKind::Int(10),
+        b"IMG_GENERALIZED_CUBIC" => ExprKind::Int(11),
+        b"IMG_HERMITE" => ExprKind::Int(12),
+        b"IMG_HAMMING" => ExprKind::Int(13),
+        b"IMG_HANNING" => ExprKind::Int(14),
+        b"IMG_MITCHELL" => ExprKind::Int(15),
+        b"IMG_NEAREST_NEIGHBOUR" => ExprKind::Int(16),
+        b"IMG_POWER" => ExprKind::Int(17),
+        b"IMG_QUADRATIC" => ExprKind::Int(18),
+        b"IMG_SINC" => ExprKind::Int(19),
+        b"IMG_TRIANGLE" => ExprKind::Int(20),
+        b"IMG_WEIGHTED4" => ExprKind::Int(21),
+        b"IMG_AFFINE_TRANSLATE" => ExprKind::Int(0),
+        b"IMG_AFFINE_SCALE" => ExprKind::Int(1),
+        b"IMG_AFFINE_ROTATE" => ExprKind::Int(2),
+        b"IMG_AFFINE_SHEAR_HORIZONTAL" => ExprKind::Int(3),
+        b"IMG_AFFINE_SHEAR_VERTICAL" => ExprKind::Int(4),
+        b"IMG_FILTER_NEGATE" => ExprKind::Int(0),
+        b"IMG_FILTER_GRAYSCALE" => ExprKind::Int(1),
+        b"IMG_FILTER_BRIGHTNESS" => ExprKind::Int(2),
+        b"IMG_FILTER_CONTRAST" => ExprKind::Int(3),
+        b"IMG_FILTER_COLORIZE" => ExprKind::Int(4),
+        b"IMG_FILTER_EDGEDETECT" => ExprKind::Int(5),
+        b"IMG_FILTER_EMBOSS" => ExprKind::Int(6),
+        b"IMG_FILTER_GAUSSIAN_BLUR" => ExprKind::Int(7),
+        b"IMG_FILTER_SELECTIVE_BLUR" => ExprKind::Int(8),
+        b"IMG_FILTER_MEAN_REMOVAL" => ExprKind::Int(9),
+        b"IMG_FILTER_SMOOTH" => ExprKind::Int(10),
+        b"IMG_FILTER_PIXELATE" => ExprKind::Int(11),
+        b"IMG_FILTER_SCATTER" => ExprKind::Int(12),
+        b"GD_VERSION" => str_lit(b"2.3.3"),
+        b"GD_MAJOR_VERSION" => ExprKind::Int(2),
+        b"GD_MINOR_VERSION" => ExprKind::Int(3),
+        b"GD_RELEASE_VERSION" => ExprKind::Int(3),
+        b"GD_EXTRA_VERSION" => str_lit(b""),
+        b"GD_BUNDLED" => ExprKind::Int(0),
+        b"PNG_NO_FILTER" => ExprKind::Int(0),
+        b"PNG_FILTER_NONE" => ExprKind::Int(8),
+        b"PNG_FILTER_SUB" => ExprKind::Int(16),
+        b"PNG_FILTER_UP" => ExprKind::Int(32),
+        b"PNG_FILTER_AVG" => ExprKind::Int(64),
+        b"PNG_FILTER_PAETH" => ExprKind::Int(128),
+        b"PNG_ALL_FILTERS" => ExprKind::Int(248),
+        // ext/exif.
+        b"EXIF_USE_MBSTRING" => ExprKind::Int(1),
         // ext/zlib: encodings (deflate windowBits), strategies, version.
         b"ZLIB_ENCODING_RAW" => ExprKind::Int(-15),
         b"ZLIB_ENCODING_DEFLATE" => ExprKind::Int(15),
