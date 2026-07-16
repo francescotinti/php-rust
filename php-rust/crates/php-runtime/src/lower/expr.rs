@@ -759,7 +759,27 @@ impl<'f> Lowerer<'f> {
             Literal::Float(f) => ExprKind::Float(*f.value),
             Literal::Integer(i) => lower_int(i, line)?,
             Literal::String(s) => match s.value {
-                Some(bytes) => ExprKind::Str(bytes.into()),
+                Some(bytes) => {
+                    // mago's unescaper leaves `\u{...}` untouched; PHP decodes
+                    // the codepoint (WP-10). Re-unescape from the RAW source —
+                    // never from `value`, where `\\u{..}` (escaped backslash)
+                    // has already collapsed and would decode wrongly. Narrow
+                    // path: double-quoted literals that actually contain `\u`.
+                    // (Interpolated strings and heredocs already go through
+                    // `unescape_double_quoted`.) Invalid sequences stay
+                    // literal — PHP raises "Parse error: Invalid UTF-8
+                    // codepoint escape sequence", which rides on the general
+                    // parse-error rendering (documented divergence).
+                    if s.raw.first() == Some(&b'"')
+                        && s.raw.len() >= 2
+                        && s.raw.windows(2).any(|w| w == b"\\u")
+                    {
+                        let inner = &s.raw[1..s.raw.len() - 1];
+                        ExprKind::Str(unescape_double_quoted(inner, true).into())
+                    } else {
+                        ExprKind::Str(bytes.into())
+                    }
+                }
                 // Interpolated content is `CompositeString`, not `Literal::String`,
                 // so a `None` here is an unparsable literal we defer.
                 None => {
@@ -1544,6 +1564,28 @@ impl<'f> Lowerer<'f> {
             // place (e.g. `(new C)->x = 1`) are rare and stay unsupported via the
             // base's own `lower_place`.
             Expression::Access(Access::Property(p)) => {
+                // `Class::$obj->prop = …` (WP core suite: `self::$wpdb->
+                // last_error = null`): the static property is the OBJECT BASE
+                // of a deeper write. Handled here — NOT as a general
+                // lower_place arm — because a bare `Class::$p = v` must keep
+                // falling through to `StaticPropAssign`, whose typed-property
+                // validation the Place path does not run.
+                if let Expression::Access(Access::StaticProperty(sp)) = p.object {
+                    let class = self.class_ref_of(sp.class, line)?;
+                    let base = if matches!(&sp.property, Variable::Direct(_)) {
+                        let name = static_prop_name(&sp.property, line)?.into();
+                        PlaceBase::StaticProp { class, name }
+                    } else {
+                        let name = Box::new(self.lower_variable_name(&sp.property, line)?);
+                        PlaceBase::StaticPropDyn { class, name }
+                    };
+                    let mut place = Place { base, steps: Vec::new() };
+                    match self.member_sel(&p.property, line)? {
+                        MemberSel::Static(name) => place.steps.push(PlaceStep::Prop(name)),
+                        MemberSel::Dynamic(name) => place.steps.push(PlaceStep::PropDyn(name)),
+                    }
+                    return Ok(place);
+                }
                 let mut place = self.lower_place(p.object, line)?;
                 match self.member_sel(&p.property, line)? {
                     MemberSel::Static(name) => {

@@ -125,6 +125,9 @@ impl IniTable {
         // upload_max_filesize) from these.
         add("upload_max_filesize", "2M", INI_PERDIR, false, false);
         add("post_max_size", "8M", INI_PERDIR, false, false);
+        // WP site-health's debug tab reads both (WP-10).
+        add("file_uploads", "1", INI_SYSTEM, false, false);
+        add("max_file_uploads", "20", INI_SYSTEM, false, false);
         // The default timezone (D-DT3). The CLI oracle reports "UTC" under
         // `-n`; writes propagate to php_types::tz so the date builtins and
         // date_default_timezone_get() see them.

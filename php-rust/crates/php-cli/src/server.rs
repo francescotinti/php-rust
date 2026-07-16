@@ -231,20 +231,29 @@ fn read_request(stream: &mut TcpStream) -> Option<HttpRequest> {
         }
         headers.push((name, value.to_vec()));
     }
-    // Body: Content-Length bytes (the dev server has no chunked-decode; PHP's
-    // parser does — divergence accepted for now).
-    let clen: usize = header_value(&headers, b"content-length")
-        .and_then(|v| String::from_utf8_lossy(v).trim().parse().ok())
-        .unwrap_or(0);
-    let clen = clen.min(512 * 1024 * 1024);
-    while rest.len() < clen {
-        let n = stream.read(&mut tmp).ok()?;
-        if n == 0 {
-            break;
+    // Body: `Transfer-Encoding: chunked` is decoded like PHP's parser
+    // (php://input carries the DE-chunked bytes; CONTENT_LENGTH stays unset
+    // because the request has no Content-Length header); otherwise
+    // Content-Length bytes.
+    let te_chunked = header_value(&headers, b"transfer-encoding")
+        .map(|v| v.to_ascii_lowercase())
+        .is_some_and(|v| v.windows(7).any(|w| w == b"chunked"));
+    if te_chunked {
+        rest = read_chunked_body(stream, rest)?;
+    } else {
+        let clen: usize = header_value(&headers, b"content-length")
+            .and_then(|v| String::from_utf8_lossy(v).trim().parse().ok())
+            .unwrap_or(0);
+        let clen = clen.min(512 * 1024 * 1024);
+        while rest.len() < clen {
+            let n = stream.read(&mut tmp).ok()?;
+            if n == 0 {
+                break;
+            }
+            rest.extend_from_slice(&tmp[..n]);
         }
-        rest.extend_from_slice(&tmp[..n]);
+        rest.truncate(clen);
     }
-    rest.truncate(clen);
     Some(HttpRequest {
         method,
         target,
@@ -252,6 +261,66 @@ fn read_request(stream: &mut TcpStream) -> Option<HttpRequest> {
         headers,
         body: rest,
     })
+}
+
+/// Decode a `Transfer-Encoding: chunked` request body: `already` holds the
+/// bytes read past the header block; more are pulled from the stream as
+/// needed. Returns the de-chunked payload (trailers are consumed and dropped).
+fn read_chunked_body(stream: &mut TcpStream, already: Vec<u8>) -> Option<Vec<u8>> {
+    let mut raw = already;
+    let mut pos = 0usize;
+    let mut out = Vec::new();
+    let mut tmp = [0u8; 8192];
+    // Ensure at least `need` bytes exist past `pos`, reading as necessary.
+    macro_rules! ensure {
+        ($need:expr) => {
+            while raw.len() - pos < $need {
+                let n = stream.read(&mut tmp).ok()?;
+                if n == 0 {
+                    return None;
+                }
+                raw.extend_from_slice(&tmp[..n]);
+            }
+        };
+    }
+    loop {
+        // Chunk-size line: hex[;extensions]\r\n.
+        let line_end = loop {
+            if let Some(p) = raw[pos..].windows(2).position(|w| w == b"\r\n") {
+                break pos + p;
+            }
+            ensure!(raw.len() - pos + 1);
+        };
+        let line = &raw[pos..line_end];
+        let hex_part = line.split(|&b| b == b';').next().unwrap_or(line);
+        let size = usize::from_str_radix(String::from_utf8_lossy(hex_part).trim(), 16).ok()?;
+        pos = line_end + 2;
+        if size == 0 {
+            // Trailer section ends at the first empty line; a bare CRLF right
+            // here is the common no-trailer case.
+            loop {
+                ensure!(2);
+                if let Some(p) = raw[pos..].windows(2).position(|w| w == b"\r\n") {
+                    let blank = p == 0;
+                    pos += p + 2;
+                    if blank {
+                        return Some(out);
+                    }
+                } else {
+                    ensure!(raw.len() - pos + 1);
+                }
+            }
+        }
+        if size > 512 * 1024 * 1024 {
+            return None;
+        }
+        ensure!(size + 2);
+        out.extend_from_slice(&raw[pos..pos + size]);
+        pos += size;
+        if &raw[pos..pos + 2] == b"\r\n" {
+            pos += 2;
+        }
+    }
 }
 
 /// What the docroot walk resolved the request path to.
@@ -397,8 +466,13 @@ fn handle_client(
     );
 
     // Router script first: any return value other than boolean false ends the
-    // request; false falls through to the normal docroot resolution (the
-    // router's output is discarded then, like PHP).
+    // request; false falls through to the normal docroot resolution. Anything
+    // the router ECHOED before returning false is NOT discarded (oracle-pinned
+    // WP-10): for a PHP target it lands at the front of the script's body (the
+    // oracle runs both in one request sharing the output stream); for a static
+    // file / 404 page it is flushed RAW on the socket ahead of the response
+    // head (yes: the oracle emits a malformed response there).
+    let mut router_prefix: Vec<u8> = Vec::new();
     if let Some(router) = &cfg.router {
         let outcome = run_php(
             cfg, registry, &req, &peer, router, decoded.clone(), None, query.clone(),
@@ -406,7 +480,8 @@ fn handle_client(
         match outcome {
             Some((outcome, routed)) if routed => {
                 let detail = fatal_detail(&outcome);
-                let code = write_php_response(stream, &req, host.as_deref(), &outcome, head);
+                let code =
+                    write_php_response(stream, &req, host.as_deref(), &outcome, head, b"");
                 log_request(&peer, code, &uri_label, detail.as_deref());
                 return;
             }
@@ -415,7 +490,10 @@ fn handle_client(
                 log_request(&peer, code, &uri_label, None);
                 return;
             }
-            _ => {} // returned false — fall through
+            Some((outcome, _)) => {
+                // returned false — fall through, keeping its output.
+                router_prefix = outcome.rendered.clone();
+            }
         }
     }
 
@@ -424,7 +502,14 @@ fn handle_client(
             match run_php(cfg, registry, &req, &peer, &file, vpath, path_info, query) {
                 Some((outcome, _)) => {
                     let detail = fatal_detail(&outcome);
-                    let code = write_php_response(stream, &req, host.as_deref(), &outcome, head);
+                    let code = write_php_response(
+                        stream,
+                        &req,
+                        host.as_deref(),
+                        &outcome,
+                        head,
+                        &router_prefix,
+                    );
                     log_request(&peer, code, &uri_label, detail.as_deref());
                 }
                 None => {
@@ -435,6 +520,9 @@ fn handle_client(
         }
         Resolved::Static(file) => {
             let body = std::fs::read(&file).unwrap_or_default();
+            if !router_prefix.is_empty() {
+                let _ = stream.write_all(&router_prefix);
+            }
             let mut out = response_head(req.protocol, 200, "OK", host.as_deref());
             let ext = file
                 .extension()
@@ -459,6 +547,9 @@ fn handle_client(
             let mut page = ERROR_PAGE_HEAD.as_bytes().to_vec();
             page.extend_from_slice(&decoded);
             page.extend_from_slice(ERROR_PAGE_TAIL.as_bytes());
+            if !router_prefix.is_empty() {
+                let _ = stream.write_all(&router_prefix);
+            }
             let mut out = response_head(req.protocol, 404, "Not Found", host.as_deref());
             out.extend_from_slice(b"X-Powered-By: PHP/8.5.7\r\n");
             out.extend_from_slice(b"Content-Type: text/html; charset=UTF-8\r\n");
@@ -564,6 +655,7 @@ fn write_php_response(
     host: Option<&[u8]>,
     outcome: &php_runtime::Outcome,
     head: bool,
+    body_prefix: &[u8],
 ) -> i64 {
     let code = outcome.response_code.unwrap_or(200);
     let reason_owned;
@@ -590,6 +682,7 @@ fn write_php_response(
     }
     out.extend_from_slice(b"\r\n");
     if !head {
+        out.extend_from_slice(body_prefix);
         out.extend_from_slice(&outcome.rendered);
     }
     let _ = stream.write_all(&out);

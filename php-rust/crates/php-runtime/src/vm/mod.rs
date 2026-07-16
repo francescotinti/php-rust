@@ -2374,8 +2374,18 @@ impl<'m> Vm<'m> {
             }
         } else {
             // Output reaching the real sink is when PHP considers headers "sent";
-            // remember where it first happened for the header() warnings.
-            if !self.output_started && !bytes.is_empty() {
+            // remember where it first happened for the header() warnings. Under
+            // the web SAPI the cli-server buffers 4096 bytes before the first
+            // socket write, so "sent" flips only when the sink CROSSES that
+            // threshold — and PHP's recorded first-output site is the statement
+            // whose write crossed it (WP-10 hs probe), not the first echo.
+            let crossed = if self.web {
+                let before = self.rendered.len();
+                before < WEB_SEND_THRESHOLD && before + bytes.len() >= WEB_SEND_THRESHOLD
+            } else {
+                !self.output_started && !bytes.is_empty()
+            };
+            if crossed {
                 self.output_started = true;
                 if let Some(top) = self.frames.len().checked_sub(1) {
                     let file = self.frames[top].module.file.to_vec();
@@ -5501,6 +5511,7 @@ impl<'m> Vm<'m> {
             b"str_ireplace" => self.ho_str_replace_out(args, true)?,
             b"getimagesize" => self.ho_getimagesize_out(args, false)?,
             b"getimagesizefromstring" => self.ho_getimagesize_out(args, true)?,
+            b"getopt" => self.ho_getopt_out(args)?,
             b"is_callable" => self.ho_is_callable_out(args)?,
             // Two out-params: (result, $output array, Some($result_code)).
             b"exec" => return self.ho_exec(args),
@@ -7196,7 +7207,18 @@ impl<'m> Vm<'m> {
         method: &[u8],
         args: Vec<Zval>,
     ) -> Result<(), PhpError> {
-        let resolved = resolve_method_runtime(&self.classes, cid, method);
+        let mut resolved = resolve_method_runtime(&self.classes, cid, method);
+        // A caller-scope private with this name wins over the subclass method
+        // (Zend non-virtual private dispatch, see `parent_private_rebind`).
+        if let Some(rb) = parent_private_rebind(
+            &self.classes,
+            self.frames[top].class,
+            cid,
+            method,
+            resolved,
+        ) {
+            resolved = Some(rb);
+        }
         // Usable only if found *and* visible from the caller's scope.
         let usable = resolved.filter(|&(defc, midx)| {
             method_visible_from(&self.classes, self.frames[top].class, self.classes[defc].methods[midx].visibility, defc, method)
@@ -7244,7 +7266,17 @@ impl<'m> Vm<'m> {
     fn instance_arg_ref_target(&self, top: usize, this: &Zval, method: &[u8]) -> Option<&'m Func> {
         let Zval::Object(o) = this else { return None };
         let cid = o.borrow().class_id as usize;
-        let (defc, midx) = resolve_method_runtime(&self.classes, cid, method)?;
+        let resolved = resolve_method_runtime(&self.classes, cid, method);
+        // Mirror the dispatch's private-rebind so the by-ref mask matches the
+        // method that will actually run.
+        let (defc, midx) = parent_private_rebind(
+            &self.classes,
+            self.frames[top].class,
+            cid,
+            method,
+            resolved,
+        )
+        .or(resolved)?;
         if !method_visible_from(
             &self.classes,
             self.frames[top].class,
@@ -10144,6 +10176,7 @@ host_builtins! {
     b"__mysqli_multi_query" => vm.ho_mysqli_multi_query(args),
     b"__mysqli_stmt_execute" => vm.ho_mysqli_stmt_execute(args),
     b"__mysqli_stmt_close" => vm.ho_mysqli_stmt_close(args),
+    b"getopt" => vm.ho_getopt(args),
     b"__gd_create" => vm.ho_gd_create(args),
     b"__gd_destroy" => vm.ho_gd_destroy(args),
     b"__gd_decode" => vm.ho_gd_decode(args),
@@ -10654,6 +10687,11 @@ enum DimIsLeaf {
 /// canonical predicate lives in php-types (shared with the pure builtins).
 pub(crate) use php_types::is_opaque_handle_class;
 
+/// The cli-server SAPI write-buffer size: sink output beyond this many bytes
+/// has hit the socket, so headers count as "sent" under the web SAPI
+/// (oracle-pinned by the WP-10 hs probe: 100 bytes → false, 5000 → true).
+pub(crate) const WEB_SEND_THRESHOLD: usize = 4096;
+
 pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usize)> {
     const HOST_OUT: &[(&[u8], usize)] = &[
         (b"preg_match", 2),
@@ -10701,6 +10739,9 @@ pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usiz
         // `FnCompiler::call`, same filter as str_replace's `&$count`).
         (b"getimagesize", 1),
         (b"getimagesizefromstring", 1),
+        // `&$rest_index` (#2, optional): index of the first non-option argv
+        // entry. Calls without it take the plain host arm.
+        (b"getopt", 2),
     ];
     HOST_OUT
         .iter()

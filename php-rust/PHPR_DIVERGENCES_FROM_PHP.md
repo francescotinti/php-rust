@@ -448,6 +448,41 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-15 (sessione WordPress-10): 🏁 **RESIDUI SAPI CHIUSI + WP CORE TEST
+  SUITE AVVIATA (gruppo option A PARITÀ ORACLE: 413 test 0E/0F)**.
+  SAPI (15/15 probe byte-id, wp10-harness/sapi-probe): body
+  `Transfer-Encoding: chunked` decodificato come PHP (php://input
+  de-chunked, CONTENT_LENGTH assente, $_POST dal body decodificato);
+  router `return false` NON scarta l'output del router (oracle-pinned:
+  per target .php si accoda IN TESTA al body dello script; per statici/404
+  è flushato RAW sul socket PRIMA della status line — sì, risposta
+  malformata anche nell'oracle); `headers_sent()` sotto il web SAPI flippa
+  quando il sink ATTRAVERSA il write-buffer 4096 del cli-server
+  (`WEB_SEND_THRESHOLD`), con "output started at FILE:LINE" = lo statement
+  che attraversa (non il primo echo) e header()/setcookie() successivi →
+  Warning "Cannot modify header information" + drop;
+  `PHP_CLI_SERVER_WORKERS` accettato (esecuzione resta sequenziale =
+  workers 1, divergenza dichiarata). Lexer: escape `\u{...}` decodificato
+  nei literal double-quoted (ri-unescape dal RAW, così `\\u{..}` resta
+  letterale; heredoc/interpolate già coperti); le sequenze INVALIDE
+  restano letterali (PHP: Parse error — cavalca il rendering parse-error
+  non fedele, divergenza esistente). Nuovi: `getopt()` fedele
+  (stop al primo non-option, rest_index by-ref via HOST_OUT, cluster
+  corti, ripetute→array, `--`, long =/separato — il launcher di PHPUnit 9
+  lo usa); base statica nei write-target (`self::$wpdb->last_error = …`,
+  lower_place arm StaticProperty); **DISPATCH PRIVATO NON-VIRTUALE**
+  (`parent_private_rebind`, port di zend_get_parent_private_method):
+  `$this->m()` dallo scope che dichiara una private `m` lega a QUELLA
+  anche se la sottoclasse la ridefinisce — PHPUnit 9 runBare→
+  checkRequirements() era il consumer (408 errori→0 nel gruppo option);
+  applicato al dispatch istanza (posizionale+named+arg-ref-target), NON
+  al dispatch statico; `timezone_identifiers_list(ALL_WITH_BC)` = +179
+  zone BC con sort case-insensitive (sanitize_option timezone_string di
+  WP; il bit 2048 da solo resta vuoto come nell'oracle).
+  **Harness WP core test suite** (wordpress-develop + wp-tests-config su
+  MySQL wptests, ricetta in NEXT_SESSION): gruppo option 413 test
+  **IDENTICO all'oracle** (1 phpunit-warning + 3 skip); gruppo media
+  prima passata 680 test/11F + 82 non caricati (triage → WP-11).
 - 2026-07-15 (sessione WordPress-9): 🏁 **ext/gd sulla LIBGD DI SISTEMA via FFI
   + ext/exif — MEDIA PIPELINE WORDPRESS A PARITÀ BYTE TOTALE** (§2.6).
   Decisione di design: invece del crate `image` (functional-parity prevista

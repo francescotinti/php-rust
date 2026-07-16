@@ -960,6 +960,7 @@ impl<'a> super::FnCompiler<'a> {
                 || n.eq_ignore_ascii_case(b"str_ireplace")
                 || n.eq_ignore_ascii_case(b"getimagesize")
                 || n.eq_ignore_ascii_case(b"getimagesizefromstring")
+                || n.eq_ignore_ascii_case(b"getopt")
         };
         if let Some((canon, out_idx)) = crate::vm::host_builtin_out_param(bname)
             .filter(|&(_, out_idx)| args.len() > out_idx || !count_only_out(bname))

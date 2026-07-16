@@ -888,9 +888,169 @@ impl<'m> super::Vm<'m> {
         }
         Ok(Zval::Long(count))
     }
+    /// `getopt(string $short, array $long = [], int &$rest_index = null)`
+    /// (WP-10: PHPUnit 9's bin script calls `getopt('', ['prepend:'])`).
+    /// Oracle-pinned rules: scanning starts at argv[1] and STOPS at the first
+    /// non-option token (whose index becomes `$rest_index`; `--` also stops,
+    /// with the index just past it); a repeated option collects an array; a
+    /// no-value option stores `false`; `x:` takes the attached rest of the
+    /// token or the NEXT argv entry; `x::` only the attached form;
+    /// `--long=v` / `--long v` for required, `--long=v` only for optional.
+    /// Unknown options are skipped silently.
+    pub(super) fn ho_getopt_out(
+        &mut self,
+        args: Vec<Zval>,
+    ) -> Result<(Zval, Zval), PhpError> {
+        // The argv the CLI seeded into $_SERVER.
+        let sg = crate::bytecode::superglobal_index(b"_SERVER").unwrap_or(0);
+        let argv: Vec<Vec<u8>> = match &self.superglobals[sg as usize] {
+            Zval::Array(server) => match server.get(&Key::from_bytes(b"argv")) {
+                Some(Zval::Array(a)) => a
+                    .iter()
+                    .map(|(_, v)| {
+                        convert::to_zstr(&v.deref_clone(), &mut self.diags).as_bytes().to_vec()
+                    })
+                    .collect(),
+                _ => return Ok((Zval::Bool(false), Zval::Long(1))),
+            },
+            _ => return Ok((Zval::Bool(false), Zval::Long(1))),
+        };
+        let short = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags)
+            .as_bytes()
+            .to_vec();
+        // Short spec: char → 0 none / 1 required / 2 optional.
+        let mut sspec: std::collections::HashMap<u8, u8> = std::collections::HashMap::new();
+        {
+            let b = &short;
+            let mut i = 0;
+            while i < b.len() {
+                let c = b[i];
+                let mut mode = 0u8;
+                while i + 1 < b.len() && b[i + 1] == b':' {
+                    mode += 1;
+                    i += 1;
+                    if mode == 2 {
+                        break;
+                    }
+                }
+                sspec.insert(c, mode.min(2));
+                i += 1;
+            }
+        }
+        // Long spec: name → mode, from the trailing `:`/`::`.
+        let mut lspec: Vec<(Vec<u8>, u8)> = Vec::new();
+        if let Some(Zval::Array(a)) = args.get(1).map(|v| v.deref_clone()) {
+            for (_, v) in a.iter() {
+                let s = convert::to_zstr(&v.deref_clone(), &mut self.diags).as_bytes().to_vec();
+                let (name, mode) = if s.ends_with(b"::") {
+                    (s[..s.len() - 2].to_vec(), 2)
+                } else if s.ends_with(b":") {
+                    (s[..s.len() - 1].to_vec(), 1)
+                } else {
+                    (s, 0)
+                };
+                lspec.push((name, mode));
+            }
+        }
+        let mut out = PhpArray::new();
+        let push = |out: &mut PhpArray, name: &[u8], val: Zval| {
+            let k = Key::from_bytes(name);
+            match out.get_mut(&k) {
+                Some(Zval::Array(list)) => {
+                    let _ = Rc::make_mut(list).append(val);
+                }
+                Some(existing) => {
+                    let old = existing.clone();
+                    let mut list = PhpArray::new();
+                    let _ = list.append(old);
+                    let _ = list.append(val);
+                    out.insert(k, Zval::Array(Rc::new(list)));
+                }
+                None => {
+                    out.insert(k, val);
+                }
+            }
+        };
+        let mut i = 1usize;
+        while i < argv.len() {
+            let arg = &argv[i];
+            if arg == b"--" {
+                i += 1;
+                break;
+            }
+            if arg.first() != Some(&b'-') || arg.len() < 2 {
+                break; // first non-option: parsing ends here
+            }
+            if arg[1] == b'-' {
+                // --long[=value]
+                let body = &arg[2..];
+                let (name, attached) = match body.iter().position(|&b| b == b'=') {
+                    Some(p) => (&body[..p], Some(body[p + 1..].to_vec())),
+                    None => (body, None),
+                };
+                if let Some((_, mode)) = lspec.iter().find(|(n, _)| n == name) {
+                    match mode {
+                        0 => push(&mut out, name, Zval::Bool(false)),
+                        1 => {
+                            if let Some(v) = attached {
+                                push(&mut out, name, Zval::Str(PhpStr::new(v)));
+                            } else if i + 1 < argv.len() {
+                                let v = argv[i + 1].clone();
+                                i += 1;
+                                push(&mut out, name, Zval::Str(PhpStr::new(v)));
+                            }
+                        }
+                        _ => match attached {
+                            Some(v) => push(&mut out, name, Zval::Str(PhpStr::new(v))),
+                            None => push(&mut out, name, Zval::Bool(false)),
+                        },
+                    }
+                }
+                i += 1;
+                continue;
+            }
+            // Short cluster: -abc, value options end the cluster.
+            let cluster = &arg[1..];
+            let mut c = 0usize;
+            while c < cluster.len() {
+                let ch = cluster[c];
+                match sspec.get(&ch).copied() {
+                    Some(0) => push(&mut out, &[ch], Zval::Bool(false)),
+                    Some(1) => {
+                        if c + 1 < cluster.len() {
+                            push(&mut out, &[ch], Zval::Str(PhpStr::new(cluster[c + 1..].to_vec())));
+                        } else if i + 1 < argv.len() {
+                            let v = argv[i + 1].clone();
+                            i += 1;
+                            push(&mut out, &[ch], Zval::Str(PhpStr::new(v)));
+                        }
+                        break;
+                    }
+                    Some(_) => {
+                        if c + 1 < cluster.len() {
+                            push(&mut out, &[ch], Zval::Str(PhpStr::new(cluster[c + 1..].to_vec())));
+                        } else {
+                            push(&mut out, &[ch], Zval::Bool(false));
+                        }
+                        break;
+                    }
+                    None => {}
+                }
+                c += 1;
+            }
+            i += 1;
+        }
+        Ok((Zval::Array(Rc::new(out)), Zval::Long(i as i64)))
+    }
+
+    /// Plain-dispatch `getopt` (no `&$rest_index` supplied).
+    pub(super) fn ho_getopt(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.ho_getopt_out(args).map(|(r, _)| r)
+    }
+
     /// The "headers already sent by (output started at FILE:LINE)" message text
     /// for the header-family warnings, using the recorded first-output location.
-    fn headers_sent_warning(&self) -> String {
+    pub(super) fn headers_sent_warning(&self) -> String {
         match &self.output_start {
             Some((f, l)) => format!(
                 "Cannot modify header information - headers already sent by \
@@ -903,11 +1063,12 @@ impl<'m> super::Vm<'m> {
     }
 
     /// `headers_sent(&$filename = null, &$line = null): bool` — whether output has
-    /// reached the sink (CLI). This is the plain-dispatch form (dynamic string
-    /// callable): the out-params are dropped. Under the web SAPI the cli-server
-    /// buffers the whole response, so headers are never "sent" (oracle-pinned).
+    /// reached the sink. This is the plain-dispatch form (dynamic string
+    /// callable): the out-params are dropped. Under the web SAPI `output_started`
+    /// flips when the sink crosses the cli-server's 4096-byte write buffer
+    /// (see `write_output`), matching the oracle.
     pub(super) fn ho_headers_sent(&mut self, _args: Vec<Zval>) -> Result<Zval, PhpError> {
-        Ok(Zval::Bool(!self.web && self.output_started))
+        Ok(Zval::Bool(self.output_started))
     }
 
     /// `headers_sent(&$filename, &$line)` with the out-params wired: PHP fills
@@ -917,7 +1078,7 @@ impl<'m> super::Vm<'m> {
         &mut self,
         _args: Vec<Zval>,
     ) -> Result<(Zval, Zval, Option<Zval>), PhpError> {
-        let sent = !self.web && self.output_started;
+        let sent = self.output_started;
         let (file, line) = match &self.output_start {
             Some((f, l)) if sent => {
                 (Zval::Str(PhpStr::new(f.clone())), Zval::Long(i64::from(*l)))

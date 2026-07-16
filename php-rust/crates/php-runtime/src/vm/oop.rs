@@ -240,6 +240,36 @@ pub(super) fn method_visible_from(
     visible_from(classes, cur, vis, root)
 }
 
+/// Zend's non-virtual private dispatch (`zend_get_parent_private_method`):
+/// when instance dispatch on `cid` resolves `method` in a class OTHER than the
+/// caller's scope, but the scope is an ANCESTOR of `cid` and declares its OWN
+/// private method with that name, the call binds to the scope's private — a
+/// private method is never overridden; the subclass's same-name method exists
+/// only for calls from other scopes. Consumer of record (WP-10): PHPUnit 9's
+/// `TestCase::runBare` → `$this->checkRequirements()` must reach TestCase's
+/// private, not WP_UnitTestCase_Base's protected override (which would then
+/// call `parent::checkRequirements()` and fatal).
+pub(super) fn parent_private_rebind(
+    classes: &[&CompiledClass],
+    scope: Option<ClassId>,
+    cid: ClassId,
+    method: &[u8],
+    resolved: Option<(ClassId, usize)>,
+) -> Option<(ClassId, usize)> {
+    let scope = scope?;
+    let (defc, _) = resolved?;
+    if defc == scope || scope == cid || !class_is_a(classes, cid, scope) {
+        return None;
+    }
+    let (mi, m) = classes
+        .get(scope)?
+        .methods
+        .iter()
+        .enumerate()
+        .find(|(_, m)| m.func.name.eq_ignore_ascii_case(method))?;
+    (m.visibility == Visibility::Private).then_some((scope, mi))
+}
+
 /// Look up the unified, compile-time-resolved metadata for a declared instance
 /// property — a single hashmap lookup over the parent-flattened `prop_info` table
 /// (the flattening, with all shadowing rules applied, happened in `compile_class`).
@@ -827,7 +857,17 @@ impl<'m> Vm<'m> {
                 return Err(unknown_named_param(&named));
             }
         }
-        let resolved = resolve_method_runtime(&self.classes, cid, method);
+        let mut resolved = resolve_method_runtime(&self.classes, cid, method);
+        // Caller-scope private wins (Zend non-virtual private dispatch).
+        if let Some(rb) = parent_private_rebind(
+            &self.classes,
+            self.frames[top].class,
+            cid,
+            method,
+            resolved,
+        ) {
+            resolved = Some(rb);
+        }
         let usable = resolved.filter(|&(defc, midx)| {
             method_visible_from(&self.classes, self.frames[top].class, self.classes[defc].methods[midx].visibility, defc, method)
         });

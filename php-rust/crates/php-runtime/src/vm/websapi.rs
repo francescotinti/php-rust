@@ -537,6 +537,13 @@ impl<'m> Vm<'m> {
                     .to_string(),
             ));
         }
+        // Once the sink crossed the cli-server write buffer the headers are on
+        // the wire: warn and drop, like PHP (WP-10 hs probe).
+        if self.output_started {
+            let msg = self.headers_sent_warning();
+            self.diags.push(php_types::Diag::Warning(msg));
+            return Ok(Zval::Null);
+        }
         let replace = match args.get(1) {
             Some(v) => convert::to_bool(v, &mut self.diags),
             None => true,
@@ -582,6 +589,11 @@ impl<'m> Vm<'m> {
     /// `Set-Cookie:` line (oracle-pinned attribute order) and append it.
     pub(super) fn web_setcookie(&mut self, args: &[Zval], raw: bool) -> Result<Zval, PhpError> {
         let func = if raw { "setrawcookie" } else { "setcookie" };
+        if self.output_started {
+            let msg = self.headers_sent_warning();
+            self.diags.push(php_types::Diag::Warning(msg));
+            return Ok(Zval::Bool(false));
+        }
         let name = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags)
             .as_bytes()
             .to_vec();
