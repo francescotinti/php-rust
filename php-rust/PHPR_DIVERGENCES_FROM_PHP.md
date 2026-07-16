@@ -483,6 +483,17 @@ l'oracle e vanno preservati:
   MySQL wptests, ricetta in NEXT_SESSION): gruppo option 413 test
   **IDENTICO all'oracle** (1 phpunit-warning + 3 skip); gruppo media
   prima passata 680 test/11F + 82 non caricati (triage → WP-11).
+  Gate finale: corpus 1526 (2 test FIXATI dal dispatch privato:
+  dynamic_call/bug46246, inheritance/bug38772; 0 nuovi), altre 5 suite
+  identiche, ORM 3E/13F per nome, hk 1665 0E/0F, batterie tutte verdi.
+  Residuo documentato: il debug tab di site-health legge anche
+  max_input_vars/max_execution_time/memory_limit (sotto -S l oracle
+  mostra 128M, phpr -1) — 4 chiavi INI da allineare (WP-11). Lezione
+  infrastruttura: ENOSPC a metà gate tronca i binari allo strip e un
+  rebuild sul target exFAT produce binari INCONSISTENTI (falsi fail):
+  recovery = cargo clean dei crate del workspace + rebuild sul target
+  interno; il phpt-runner NON viene ricompilato da `build -p php-cli`
+  (binari separati: buildare SEMPRE entrambi prima di un gate).
 - 2026-07-15 (sessione WordPress-9): 🏁 **ext/gd sulla LIBGD DI SISTEMA via FFI
   + ext/exif — MEDIA PIPELINE WORDPRESS A PARITÀ BYTE TOTALE** (§2.6).
   Decisione di design: invece del crate `image` (functional-parity prevista
