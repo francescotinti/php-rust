@@ -99,13 +99,25 @@ impl IniTable {
         };
         // The engine-hardwired directives the retired php-builtins ini_get
         // reported, same values (real code branches on them; Composer needs
-        // allow_url_fopen "1" and memory_limit "-1", see the old env.rs notes).
+        // allow_url_fopen "1", see the old env.rs notes).
         add("allow_url_fopen", "1", INI_SYSTEM, false, false);
         add("allow_url_include", "", INI_SYSTEM, false, false);
         add("disable_functions", "", INI_SYSTEM, false, false);
         add("enable_dl", "", INI_SYSTEM, false, false);
-        add("memory_limit", "-1", INI_ALL, false, false);
+        // The brew oracle's php.ini pins memory_limit=128M under every SAPI;
+        // WP site-health's debug tab reports it verbatim (WP-11). Settable:
+        // wp_raise_memory_limit() ini_sets 256M in admin and site-health then
+        // reports BOTH values (memory_limit + admin_memory_limit) — phpr never
+        // enforces the limit either way, so accepting the write is the
+        // faithful observable state.
+        add("memory_limit", "128M", INI_ALL, true, false);
+        // Zend's CLI SAPI hardwires 0 / -1; `phpr -S` swaps in the php.ini
+        // web values (30 / 60) at request init, see the web_request block in
+        // vm/mod.rs. Both report-only: phpr has no execution/input clock.
         add("max_execution_time", "0", INI_ALL, false, false);
+        add("max_input_time", "-1", INI_PERDIR, false, false);
+        // Superglobal-parsing cap, same value under every SAPI (site-health).
+        add("max_input_vars", "1000", INI_PERDIR, false, false);
         add("default_socket_timeout", "60", INI_ALL, false, false);
         add("precision", "14", INI_ALL, false, false);
         add("serialize_precision", "-1", INI_ALL, false, false);
@@ -715,7 +727,9 @@ mod tests {
         let t = IniTable::new();
         assert_eq!(t.get(b"session.name"), Some(&b"PHPSESSID"[..]));
         assert_eq!(t.get(b"session.save_handler"), Some(&b"files"[..]));
-        assert_eq!(t.get(b"memory_limit"), Some(&b"-1"[..]));
+        assert_eq!(t.get(b"memory_limit"), Some(&b"128M"[..]));
+        assert_eq!(t.get(b"max_input_vars"), Some(&b"1000"[..]));
+        assert_eq!(t.get(b"max_input_time"), Some(&b"-1"[..]));
         assert_eq!(t.get(b"session.unknown"), None);
         assert_eq!(t.get_long(b"session.sid_length"), 32);
         assert_eq!(t.get_long(b"session.gc_divisor"), 1000);

@@ -239,12 +239,23 @@ impl<'m> Vm<'m> {
         // `@` is per-execution-context: park the caller's suppression state and
         // run the fiber body under its OWN (restored from its last suspend), so
         // `@$fiber->start()` does not silence diagnostics inside the fiber.
+        // The caller's silence also masked `error_level` (BEGIN_SILENCE) —
+        // unmask to its pre-`@` value for the fiber body, and re-apply the
+        // fiber's own mask if it suspended inside a `@` of its own.
         let caller_depth = std::mem::take(&mut self.suppress_depth);
         let caller_marks = std::mem::take(&mut self.suppress_marks);
+        let caller_silence = std::mem::take(&mut self.silence_saved);
+        if let Some(&outer) = caller_silence.first() {
+            self.error_level = outer;
+        }
         if let Some(st) = self.fibers.get_mut(&id) {
-            let (d, m) = std::mem::take(&mut st.suppress);
+            let (d, m, s) = std::mem::take(&mut st.suppress);
             self.suppress_depth = d;
             self.suppress_marks = m;
+            self.silence_saved = s;
+            if !self.silence_saved.is_empty() && self.error_level & !4437 != 0 {
+                self.error_level &= 4437;
+            }
         }
         let outcome = loop {
             match self.run_loop(baseline) {
@@ -257,11 +268,23 @@ impl<'m> Vm<'m> {
         };
         self.fiber_stack.pop();
         // Park the fiber's suppression state (survives a suspend inside `@`)
-        // and restore the caller's.
+        // and restore the caller's — including the caller's silence mask on
+        // `error_level` (its region is still open). A fiber suspended inside
+        // its own `@` unmasks first (conditionally, END_SILENCE style), so an
+        // error_reporting() write inside the fiber still propagates out.
         let fiber_depth = std::mem::replace(&mut self.suppress_depth, caller_depth);
         let fiber_marks = std::mem::replace(&mut self.suppress_marks, caller_marks);
+        let fiber_silence = std::mem::replace(&mut self.silence_saved, caller_silence);
+        if let Some(&outer) = fiber_silence.first() {
+            if self.error_level & !4437 == 0 && outer & !4437 != 0 {
+                self.error_level = outer;
+            }
+        }
+        if !self.silence_saved.is_empty() && self.error_level & !4437 != 0 {
+            self.error_level &= 4437;
+        }
         if let Some(st) = self.fibers.get_mut(&id) {
-            st.suppress = (fiber_depth, fiber_marks);
+            st.suppress = (fiber_depth, fiber_marks, fiber_silence);
         }
         match outcome {
             Ok(RunExit::Suspended { value }) => {
@@ -322,7 +345,7 @@ impl<'m> Vm<'m> {
                 status: FiberStatus::Running,
                 parked: Vec::new(),
                 ret: Zval::Null,
-                suppress: (0, Vec::new()),
+                suppress: (0, Vec::new(), Vec::new()),
             },
         );
         let baseline = self.frames.len();

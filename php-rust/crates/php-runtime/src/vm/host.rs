@@ -3764,6 +3764,12 @@ impl<'m> super::Vm<'m> {
     /// `error_reporting($level = null)` (Session 1): set the active reporting
     /// bitmask (consulted by [`Self::flush_diags`]) and return the previous one; a
     /// `null`/absent argument reads without changing it.
+    ///
+    /// Inside an `@` region `error_level` IS the masked EG(error_reporting)
+    /// (`Op::SuppressBegin` applied `&= 4437`, Zend's BEGIN_SILENCE), so reads
+    /// report the silence mask — what PHPUnit's error handler consults to
+    /// decline @-suppressed diagnostics — and a write lands directly, subject
+    /// to END_SILENCE's conditional restore (bug27731).
     pub(super) fn ho_error_reporting(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let old = self.error_level;
         if let Some(a) = args.first() {
@@ -6175,6 +6181,122 @@ impl<'m> super::Vm<'m> {
             }
         }
         Ok(Zval::Str(PhpStr::new(data)))
+    }
+
+    /// Call the wrapper's `url_stat($path, $flags)`. `None` when the scheme has
+    /// no registered wrapper / handler class / `url_stat` method; otherwise the
+    /// dereferenced return value — a stat array on success, `false` on failure,
+    /// exactly what the userland method answered.
+    pub(super) fn user_wrapper_url_stat(
+        &mut self,
+        path: &[u8],
+        flags: i64,
+    ) -> Result<Option<Zval>, PhpError> {
+        let scheme = url_scheme(path);
+        let Some(class) = self.stream_wrappers.get(scheme.as_bytes()).cloned() else {
+            return Ok(None);
+        };
+        let key = class.strip_prefix(b"\\").unwrap_or(&class).to_ascii_lowercase();
+        let Some(&cid) = self.class_index.get(key.as_slice()) else {
+            return Ok(None);
+        };
+        if resolve_method_runtime(&self.classes, cid, b"url_stat").is_none() {
+            return Ok(None);
+        }
+        let obj = self.instantiate_wrapper(cid)?;
+        let ret = self.call_method_sync(
+            obj,
+            b"url_stat",
+            vec![Zval::Str(PhpStr::new(path.to_vec())), Zval::Long(flags)],
+        )?;
+        Ok(Some(ret.deref_clone()))
+    }
+
+    /// Service a path-taking builtin on a userland-wrapper URL. The stat family
+    /// goes through the wrapper's `url_stat` (QUIET flags like php_stat; plain
+    /// `stat()` passes 0 and warns on failure); the image/exif introspectors
+    /// read the stream to EOF and reuse the byte-based builtins.
+    pub(super) fn user_wrapper_path_op(
+        &mut self,
+        name: &[u8],
+        path: &[u8],
+        args: &[Zval],
+    ) -> Result<Zval, PhpError> {
+        // Read a stat-array field by assoc key, numeric index as fallback
+        // (statbuf_from_array in streams/userspace.c goes by name).
+        fn stat_field(st: &Zval, key: &[u8], idx: i64) -> Option<i64> {
+            let Zval::Array(a) = st else { return None };
+            let v = a.get(&Key::from_bytes(key)).or_else(|| a.get(&Key::Int(idx)))?;
+            match v.deref_clone() {
+                Zval::Long(n) => Some(n),
+                Zval::Double(d) => Some(d as i64),
+                Zval::Str(s) => std::str::from_utf8(s.as_bytes()).ok()?.parse().ok(),
+                _ => None,
+            }
+        }
+        if let b"getimagesize" | b"exif_read_data" | b"exif_imagetype" = name {
+            let Zval::Str(data) = self.user_wrapper_get_contents(path)? else {
+                return Ok(Zval::Bool(false));
+            };
+            let (reg_name, call_args): (&[u8], Vec<Zval>) = match name {
+                b"getimagesize" => (b"getimagesizefromstring", vec![Zval::Str(data)]),
+                b"exif_imagetype" => (b"__exif_imagetype_bytes", vec![Zval::Str(data)]),
+                _ => {
+                    // FileDateTime comes from the wrapper's stat, 0 when absent.
+                    let mtime = self
+                        .user_wrapper_url_stat(path, 2)?
+                        .and_then(|st| stat_field(&st, b"mtime", 9))
+                        .unwrap_or(0);
+                    let mut a = vec![
+                        Zval::Str(data),
+                        Zval::Str(PhpStr::new(path.to_vec())),
+                        Zval::Long(mtime),
+                    ];
+                    a.extend(args.iter().skip(1).map(|v| v.deref_clone()));
+                    (b"__exif_read_data_bytes", a)
+                }
+            };
+            let f = match self.registry.get(reg_name) {
+                Some(crate::builtin::Builtin::Value(f)) => *f,
+                _ => return Ok(Zval::Bool(false)),
+            };
+            let line = self.cur_line(self.frames.len() - 1);
+            return self.run_value_builtin(f, &call_args, line);
+        }
+        let flags = if name == b"stat" { 0 } else { 2 };
+        let Some(st) = self.user_wrapper_url_stat(path, flags)? else {
+            return Ok(Zval::Bool(false));
+        };
+        let ok = matches!(st, Zval::Array(_));
+        let mode = stat_field(&st, b"mode", 2);
+        Ok(match name {
+            b"file_exists" => Zval::Bool(ok),
+            b"is_file" => Zval::Bool(mode.is_some_and(|m| m & 0o170000 == 0o100000)),
+            b"is_dir" => Zval::Bool(mode.is_some_and(|m| m & 0o170000 == 0o040000)),
+            b"is_readable" => Zval::Bool(ok && mode.is_some_and(|m| m & 0o444 != 0)),
+            b"is_writable" | b"is_writeable" => {
+                Zval::Bool(ok && mode.is_some_and(|m| m & 0o222 != 0))
+            }
+            b"filesize" | b"filemtime" | b"stat" => {
+                let v = match name {
+                    b"filesize" => stat_field(&st, b"size", 7).map(Zval::Long),
+                    b"filemtime" => stat_field(&st, b"mtime", 9).map(Zval::Long),
+                    _ => ok.then(|| st.clone()),
+                };
+                match v {
+                    Some(v) => v,
+                    None => {
+                        self.diags.push(Diag::Warning(format!(
+                            "{}(): stat failed for {}",
+                            String::from_utf8_lossy(name),
+                            String::from_utf8_lossy(path)
+                        )));
+                        Zval::Bool(false)
+                    }
+                }
+            }
+            _ => Zval::Bool(false),
+        })
     }
 
     /// Dispatch a file op (`fread`/`fwrite`/…) on a `UserStream` to the wrapper

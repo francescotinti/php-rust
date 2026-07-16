@@ -3,10 +3,11 @@
 //!
 //! The header parsers are ported from `php_handle_*`, reading the whole image
 //! into a byte buffer and using absolute offsets (verified byte-identical to the
-//! oracle). The common WordPress-media formats are covered — GIF, JPEG, PNG, BMP
-//! and WebP; other formats (TIFF, ICO, PSD, JP2, AVIF, …) are reported as
-//! unrecognised (`getimagesize` returns `false`). The optional `&$image_info`
-//! out-parameter (IPTC/APP markers) is not populated.
+//! oracle). Covered: GIF, JPEG, PNG, BMP, WebP, AVIF, TIFF (II/MM), JP2/JPC,
+//! PSD and ICO — every format WP's `file_is_valid_image` corpus exercises;
+//! the exotic rest (SWF, IFF, WBMP, XBM…) reports unrecognised
+//! (`getimagesize` returns `false`). The optional `&$image_info` out-parameter
+//! carries the JPEG APPn segments (IPTC lives in APP13).
 
 use php_runtime::Ctx;
 use php_types::{convert, Key, PhpArray, PhpError, PhpStr, Zval};
@@ -16,7 +17,13 @@ use std::rc::Rc;
 const T_GIF: i64 = 1;
 const T_JPEG: i64 = 2;
 const T_PNG: i64 = 3;
+const T_PSD: i64 = 5;
 const T_BMP: i64 = 6;
+const T_TIFF_II: i64 = 7;
+const T_TIFF_MM: i64 = 8;
+const T_JPC: i64 = 9;
+const T_JP2: i64 = 10;
+const T_ICO: i64 = 17;
 const T_WEBP: i64 = 18;
 
 /// The extracted geometry of a recognised image.
@@ -178,6 +185,141 @@ fn parse_avif(d: &[u8]) -> Option<Gfx> {
     })
 }
 
+/// `php_handle_tiff`: walk IFD0's inline-valued entries for ImageWidth /
+/// ImageLength (plain 0x0100/0x0101 or "compressed" 0xA002/0xA003). Zend
+/// reports no bits/channels for TIFF.
+fn parse_tiff_size(d: &[u8], motorola: bool) -> Option<Gfx> {
+    let g16 = if motorola { be16 } else { le16 };
+    let g32 = if motorola { be32 } else { le32 };
+    if d.len() < 8 {
+        return None;
+    }
+    let ifd = g32(d, 4) as usize;
+    if ifd + 2 > d.len() {
+        return None;
+    }
+    let n = g16(d, ifd) as usize;
+    if ifd + 2 + n * 12 + 4 > d.len() {
+        return None; // C reads the whole directory at once; short read → NULL
+    }
+    let (mut w, mut h) = (0u32, 0u32);
+    for i in 0..n {
+        let e = ifd + 2 + i * 12;
+        let tag = g16(d, e);
+        // Inline value only, by TAG_FMT: BYTE/SBYTE, USHORT/SSHORT, ULONG/SLONG.
+        let val = match g16(d, e + 2) {
+            1 | 6 => d[e + 8] as u32,
+            3 | 8 => g16(d, e + 8),
+            4 | 9 => g32(d, e + 8),
+            _ => continue,
+        };
+        match tag {
+            0x0100 | 0xA002 => w = val,
+            0x0101 | 0xA003 => h = val,
+            _ => {}
+        }
+    }
+    (w != 0 && h != 0).then_some(Gfx {
+        width: w,
+        height: h,
+        itype: if motorola { T_TIFF_MM } else { T_TIFF_II },
+        bits: 0,
+        channels: 0,
+    })
+}
+
+/// `php_handle_psd`: height/width are the big-endian longs at header offsets
+/// 14/18 (after the `8BPS` signature + version + reserved + channel count).
+fn parse_psd(d: &[u8]) -> Option<Gfx> {
+    if d.len() < 22 {
+        return None;
+    }
+    Some(Gfx { width: be32(d, 18), height: be32(d, 14), itype: T_PSD, bits: 0, channels: 0 })
+}
+
+/// `php_handle_jpc`: the SIZ segment right after SOC. `pos` is the offset of
+/// the SIZ marker's low byte (0x51). Width/height from Xsiz/Ysiz, channels
+/// from Csiz, bits = the highest per-component depth (Ssiz[i] + 1).
+fn parse_jpc(d: &[u8], pos: usize, itype: i64) -> Option<Gfx> {
+    if d.get(pos) != Some(&0x51) {
+        return None; // corrupt codestream: SIZ must follow SOC
+    }
+    let p = pos + 1 + 4; // skip Lsiz + Rsiz
+    if p + 8 > d.len() {
+        return None;
+    }
+    let (w, h) = (be32(d, p), be32(d, p + 4));
+    let p = p + 8 + 24; // skip XOsiz..YTOsiz
+    if p + 2 > d.len() {
+        return None;
+    }
+    let ch = be16(d, p) as usize;
+    if ch == 0 || ch > 256 {
+        return None;
+    }
+    let p = p + 2;
+    let mut bits = 0u32;
+    for i in 0..ch {
+        bits = bits.max(*d.get(p + i * 3)? as u32 + 1);
+    }
+    Some(Gfx { width: w, height: h, itype, bits, channels: ch as u32 })
+}
+
+/// `php_handle_jp2`: scan the root-level boxes for the first `jp2c`
+/// codestream and hand its payload (skipping the 3 SOC bytes, as the C does
+/// to "emulate the file type examination") to the JPC parser.
+fn parse_jp2(d: &[u8]) -> Option<Gfx> {
+    let mut p = 12usize; // after the 12-byte JP2 signature box
+    loop {
+        if p + 8 > d.len() {
+            return None;
+        }
+        let lbox = be32(d, p);
+        if lbox == 1 {
+            return None; // XLBoxes unhandled, like the C
+        }
+        if &d[p + 4..p + 8] == b"jp2c" {
+            return parse_jpc(d, p + 8 + 3, T_JP2);
+        }
+        if lbox as i32 <= 0 {
+            return None; // last box, no codestream found
+        }
+        p += lbox as usize;
+    }
+}
+
+/// `php_handle_ico`: scan the ICONDIR entries, keeping the last one whose bit
+/// count is >= the best so far; a stored 0 dimension means 256.
+fn parse_ico(d: &[u8]) -> Option<Gfx> {
+    if d.len() < 6 {
+        return None;
+    }
+    let n = le16(d, 4);
+    if !(1..=255).contains(&n) {
+        return None;
+    }
+    let (mut w, mut h, mut bits) = (0u32, 0u32, 0u32);
+    for i in 0..n as usize {
+        let e = 6 + i * 16;
+        if e + 16 > d.len() {
+            break;
+        }
+        let bc = le16(d, e + 6);
+        if bc >= bits {
+            w = d[e] as u32;
+            h = d[e + 1] as u32;
+            bits = bc;
+        }
+    }
+    Some(Gfx {
+        width: if w == 0 { 256 } else { w },
+        height: if h == 0 { 256 } else { h },
+        itype: T_ICO,
+        bits,
+        channels: 0,
+    })
+}
+
 /// Recognise an image from its leading bytes and extract its geometry. Only the
 /// common formats are parsed; everything else is `None`.
 fn parse_image(d: &[u8]) -> Option<Gfx> {
@@ -193,6 +335,16 @@ fn parse_image(d: &[u8]) -> Option<Gfx> {
         parse_webp(d)
     } else if d.len() >= 12 && &d[4..8] == b"ftyp" {
         parse_avif(d)
+    } else if d.len() >= 4 && (&d[0..4] == b"II\x2A\x00" || &d[0..4] == b"MM\x00\x2A") {
+        parse_tiff_size(d, d[0] == b'M')
+    } else if d.len() >= 4 && &d[0..4] == b"8BPS" {
+        parse_psd(d)
+    } else if d.len() >= 12 && &d[0..12] == b"\x00\x00\x00\x0CjP  \r\n\x87\n" {
+        parse_jp2(d)
+    } else if d.len() >= 4 && &d[0..3] == b"\xFF\x4F\xFF" {
+        parse_jpc(d, 3, T_JPC)
+    } else if d.len() >= 4 && &d[0..4] == b"\x00\x00\x01\x00" {
+        parse_ico(d)
     } else {
         None
     }
@@ -325,7 +477,6 @@ fn size_array(g: &Gfx) -> Zval {
 /// file (missing → the "Failed to open stream" Warning + `false`) and parses its
 /// header; an unrecognised image is `false`.
 pub fn getimagesize(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    use std::os::unix::ffi::OsStrExt;
     let name = convert::to_zstr(
         args.first().ok_or_else(|| {
             PhpError::ArgumentCountError(
@@ -334,17 +485,8 @@ pub fn getimagesize(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         })?,
         ctx.diags,
     );
-    let path = std::ffi::OsStr::from_bytes(crate::file::strip_file_wrapper(name.as_bytes()));
-    let data = match std::fs::read(path) {
-        Ok(d) => d,
-        Err(e) => {
-            ctx.diags.push(php_types::Diag::Warning(format!(
-                "getimagesize({}): Failed to open stream: {}",
-                String::from_utf8_lossy(name.as_bytes()),
-                crate::file::strerror(&e)
-            )));
-            return Ok(Zval::Bool(false));
-        }
+    let Some(data) = crate::file::read_for_builtin(name.as_bytes(), "getimagesize", ctx) else {
+        return Ok(Zval::Bool(false));
     };
     if data.len() < 12 {
         // php_getimagetype could not read its 12 signature bytes (E_NOTICE).
@@ -388,12 +530,10 @@ pub fn getimagesizefromstring(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpE
 /// `getimagesize($f, &$image_info)`. The info array is always (re)built —
 /// PHP re-initialises the out zval even on failure.
 pub fn getimagesize_info(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    use std::os::unix::ffi::OsStrExt;
     let name = convert::to_zstr(args.first().unwrap_or(&Zval::Null), ctx.diags);
-    let path = std::ffi::OsStr::from_bytes(crate::file::strip_file_wrapper(name.as_bytes()));
     let mut pair = PhpArray::new();
-    match std::fs::read(path) {
-        Ok(data) => {
+    match crate::file::read_for_builtin(name.as_bytes(), "getimagesize", ctx) {
+        Some(data) => {
             if data.len() < 12 {
                 ctx.diags.push(php_types::Diag::Notice(format!(
                     "getimagesize(): Error reading from {}!",
@@ -409,12 +549,7 @@ pub fn getimagesize_info(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
             });
             let _ = pair.append(Zval::Array(Rc::new(collect_app_info(&data))));
         }
-        Err(e) => {
-            ctx.diags.push(php_types::Diag::Warning(format!(
-                "getimagesize({}): Failed to open stream: {}",
-                String::from_utf8_lossy(name.as_bytes()),
-                crate::file::strerror(&e)
-            )));
+        None => {
             let _ = pair.append(Zval::Bool(false));
             let _ = pair.append(Zval::Array(Rc::new(PhpArray::new())));
         }

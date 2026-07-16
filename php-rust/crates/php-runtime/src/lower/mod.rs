@@ -1289,6 +1289,14 @@ impl<'f> Lowerer<'f> {
             // Reflection surface must survive the re-lowering).
             self.attached_doc_start(span.start.offset).unwrap_or(span.start.offset)
         };
+        // A docblock attached across intervening statements (Zend consume
+        // semantics, see `doc_span_for`) is outside the contiguous slice; the
+        // snippet re-emits it separately just before the declaration.
+        let detached_doc = if wrap_return || start != span.start.offset {
+            None
+        } else {
+            self.doc_span_for(span.start.offset)
+        };
         let line = self.file.line_number(start) + 1; // 1-based
         let mut snippet = b"<?php ".to_vec();
         if self.strict {
@@ -1308,9 +1316,29 @@ impl<'f> Lowerer<'f> {
             snippet.push(b' ');
         }
         // Everything so far sits on line 1; pad so the declaration text starts
-        // on its original line.
-        for _ in 1..line {
-            snippet.push(b'\n');
+        // on its original line. A detached docblock goes in first, at its own
+        // original line, the remaining padding after it — so both it and the
+        // declaration keep their file positions and the re-lowering re-attaches
+        // it by simple adjacency.
+        if let Some((ds, de)) = detached_doc {
+            let doc = &src[ds as usize..de as usize];
+            let doc_line = self.file.line_number(ds) + 1;
+            for _ in 1..doc_line {
+                snippet.push(b'\n');
+            }
+            snippet.extend_from_slice(doc);
+            let doc_end_line = doc_line + doc.iter().filter(|&&b| b == b'\n').count() as u32;
+            if line > doc_end_line {
+                for _ in doc_end_line..line {
+                    snippet.push(b'\n');
+                }
+            } else {
+                snippet.push(b' ');
+            }
+        } else {
+            for _ in 1..line {
+                snippet.push(b'\n');
+            }
         }
         if wrap_return {
             snippet.extend_from_slice(b"return ");
@@ -1395,9 +1423,23 @@ impl<'f> Lowerer<'f> {
     /// The `/** ... */` doc comment lexically attached to a declaration starting
     /// at byte `decl_start` (Zend semantics): the closest preceding docblock
     /// separated from the declaration only by whitespace, attribute lists
-    /// (`#[...]`) and member-modifier keywords. `None` otherwise — "none", never
-    /// a wrong one.
+    /// (`#[...]`) and member-modifier keywords — or, failing that, by statements
+    /// that provably contain no construct Zend's `backup_doc_comment` would have
+    /// consumed it with (see `doc_survives_across`). Zend keeps the last scanned
+    /// docblock in `CG(doc_comment)` until a declaration consumes it, so
+    /// `/** @group x */ require_once ...; class C {}` attaches to `C` (WP's test
+    /// files rely on this). When the intervening code can't be cleared safely the
+    /// answer stays `None` — "none", never a wrong one.
     fn doc_for(&self, decl_start: u32) -> Option<Box<[u8]>> {
+        let (ds, de) = self.doc_span_for(decl_start)?;
+        let src = self.file.contents.as_ref();
+        Some(src.get(ds as usize..de as usize)?.to_vec().into())
+    }
+
+    /// The `(start, end)` byte span of the docblock `doc_for` attaches to the
+    /// declaration at `decl_start`, without slicing it (the deferred-snippet
+    /// builder needs the offsets).
+    fn doc_span_for(&self, decl_start: u32) -> Option<(u32, u32)> {
         let idx = self.docs.partition_point(|&(_, end)| end <= decl_start);
         let &(ds, de) = self.docs.get(idx.checked_sub(1)?)?;
         let src = self.file.contents.as_ref();
@@ -1439,13 +1481,89 @@ impl<'f> Lowerer<'f> {
                     b"readonly", b"var",
                 ];
                 if !MODIFIERS.iter().any(|m| src[start..i].eq_ignore_ascii_case(m)) {
-                    return None;
+                    return Self::doc_survives_across(src, de as usize, target).then_some((ds, de));
                 }
             } else {
-                return None;
+                return Self::doc_survives_across(src, de as usize, target).then_some((ds, de));
             }
         }
-        Some(src.get(ds as usize..de as usize)?.to_vec().into())
+        Some((ds, de))
+    }
+
+    /// Whether the pending docblock ending at byte `from` survives to the
+    /// declaration at byte `to` under Zend's consume semantics. Statements do
+    /// not reset `CG(doc_comment)`; only another declaration consumes it and a
+    /// `namespace` declaration resets it. The scan clears the gap when it can
+    /// prove no such construct occurs: string/comment/`$identifier` contents are
+    /// skipped, and it bails out (→ `false`, i.e. "absent", the safe direction)
+    /// on any consumer or member-modifier keyword, on braces (a `{...}` body in
+    /// the gap means a declaration or an unanalyzable region), and on heredocs.
+    fn doc_survives_across(src: &[u8], from: usize, to: usize) -> bool {
+        const BAIL_WORDS: &[&[u8]] = &[
+            // Declarations whose grammar rule carries `backup_doc_comment`
+            // (they'd have consumed the pending docblock)...
+            b"function", b"fn", b"class", b"interface", b"trait", b"enum", b"const", b"case",
+            // ...the reset point...
+            b"namespace",
+            // ...and member modifiers: a member declaration in the gap consumes
+            // too, and its leading modifier is the cheapest tell.
+            b"public", b"protected", b"private", b"static", b"final", b"abstract", b"readonly",
+            b"var",
+        ];
+        let mut i = from;
+        while i < to {
+            match src[i] {
+                b'{' | b'}' => return false,
+                b'\'' | b'"' | b'`' => {
+                    let q = src[i];
+                    i += 1;
+                    while i < to && src[i] != q {
+                        if src[i] == b'\\' {
+                            i += 1;
+                        }
+                        i += 1;
+                    }
+                    i += 1;
+                }
+                b'<' if src.get(i + 1) == Some(&b'<') && src.get(i + 2) == Some(&b'<') => {
+                    return false; // heredoc/nowdoc: not worth parsing, stay absent
+                }
+                b'/' if src.get(i + 1) == Some(&b'/') => {
+                    while i < to && src[i] != b'\n' {
+                        i += 1;
+                    }
+                }
+                b'/' if src.get(i + 1) == Some(&b'*') => {
+                    i += 2;
+                    while i + 1 < to && !(src[i] == b'*' && src[i + 1] == b'/') {
+                        i += 1;
+                    }
+                    i += 2;
+                }
+                b'#' if src.get(i + 1) != Some(&b'[') => {
+                    while i < to && src[i] != b'\n' {
+                        i += 1;
+                    }
+                }
+                b'$' => {
+                    i += 1;
+                    while i < to && (src[i].is_ascii_alphanumeric() || src[i] == b'_') {
+                        i += 1;
+                    }
+                }
+                c if c.is_ascii_alphabetic() || c == b'_' => {
+                    let start = i;
+                    while i < to && (src[i].is_ascii_alphanumeric() || src[i] == b'_') {
+                        i += 1;
+                    }
+                    if BAIL_WORDS.iter().any(|w| src[start..i].eq_ignore_ascii_case(w)) {
+                        return false;
+                    }
+                }
+                _ => i += 1,
+            }
+        }
+        true
     }
 
     /// PHP requires a `namespace` declaration to be the very first statement in

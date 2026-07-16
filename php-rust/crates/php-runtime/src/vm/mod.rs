@@ -155,11 +155,11 @@ struct FiberState<'m> {
     status: FiberStatus,
     parked: Vec<Frame<'m>>,
     ret: Zval,
-    /// The fiber's own `@` suppression state (depth, diag marks), parked at
-    /// suspend: error suppression is per-execution-context in PHP, so the
-    /// caller's `@$fiber->start()` must not silence diagnostics raised inside
-    /// the fiber body (and vice versa).
-    suppress: (u32, Vec<usize>),
+    /// The fiber's own `@` suppression state (depth, diag marks, saved
+    /// error_reporting levels), parked at suspend: error suppression is
+    /// per-execution-context in PHP, so the caller's `@$fiber->start()` must
+    /// not silence diagnostics raised inside the fiber body (and vice versa).
+    suppress: (u32, Vec<usize>, Vec<i64>),
 }
 
 /// The currently-running fiber context (GEN-4), pushed while a fiber executes.
@@ -436,6 +436,7 @@ pub(crate) fn run_module_with_hir<'m>(
         final_flush: false,
         suppress_depth: 0,
         suppress_marks: Vec::new(),
+        silence_saved: Vec::new(),
         superglobals: std::array::from_fn(|_| Zval::Undef),
         preg_cache: HashMap::default(),
         frames: Vec::new(),
@@ -595,6 +596,10 @@ pub(crate) fn run_module_with_hir<'m>(
             (&b"html_errors"[..], &b"1"[..]),
             (b"output_buffering", b"4096"),
             (b"implicit_flush", b""),
+            // Zend's CLI SAPI hardwires these two; the cli-server keeps the
+            // php.ini values (site-health debug tab reads them, WP-11).
+            (b"max_execution_time", b"30"),
+            (b"max_input_time", b"60"),
         ] {
             if let Some(e) = vm.ini.0.get_mut(name) {
                 e.global = value.to_vec();
@@ -1152,14 +1157,21 @@ struct Vm<'m> {
     /// `render_fatal`, and shutdown destructors must render raw and never call a
     /// user error handler. Load-bearing guard in [`Vm::raise_diagnostic`].
     final_flush: bool,
-    /// `@` error-suppression nesting depth (step 48): while `> 0`, `flush_diags`
-    /// renders nothing, and the diagnostics raised inside are dropped when the
-    /// suppressed expression finishes (`Op::SuppressEnd`).
+    /// `@` error-suppression nesting depth (step 48). The silencing itself
+    /// happens through `error_level` (Zend's BEGIN_SILENCE masks
+    /// EG(error_reporting) with E_FATAL_ERRORS = 4437); the depth only tracks
+    /// nesting for the fiber save/restore.
     suppress_depth: u32,
     /// Saved `diags` lengths, one per active `@` (innermost last): `Op::SuppressEnd`
     /// truncates back to its mark, dropping the diagnostics raised under it. An
     /// unwind past an active `@` truncates to the outermost mark and resets both.
     suppress_marks: Vec<usize>,
+    /// Saved `error_level` values, one per active `@` (Zend's BEGIN_SILENCE
+    /// result temp). `Op::SuppressEnd` — and the unwind past an abandoned `@` —
+    /// restores conditionally, END_SILENCE style: only when the current level
+    /// is still fatal-only and the saved one was not (an `error_reporting($x)`
+    /// call inside the region survives it — bug27731/bug33771).
+    silence_saved: Vec<i64>,
     /// The data superglobals (`$_SERVER`, …), indexed by
     /// [`crate::bytecode::SUPERGLOBAL_NAMES`]. Stored VM-wide (not per-frame) so a
     /// superglobal resolves by name from any unit/frame — an included file reads
@@ -2151,11 +2163,11 @@ impl<'m> Vm<'m> {
     }
 
     fn flush_diags(&mut self, line: Line) -> Result<(), PhpError> {
-        // Under `@` (step 48) nothing renders; the suppressed diagnostics are
-        // dropped at `Op::SuppressEnd` once the expression finishes.
-        if self.suppress_depth > 0 {
-            return Ok(());
-        }
+        // Under `@` the flush still runs: Zend delivers a suppressed diagnostic
+        // to the user error handler (which sees error_reporting() == 4437 and
+        // usually declines it) — only the default render is swallowed, which
+        // `raise_diagnostic` gates on `suppress_depth` itself. `Op::SuppressEnd`
+        // flushes any leftovers before dropping them.
         while self.diags_rendered < self.diags.len() {
             // Map each built-in diagnostic to its E_* number, then route through the
             // shared chokepoint. The message is cloned and `diags_rendered` advanced
@@ -2232,12 +2244,10 @@ impl<'m> Vm<'m> {
         //    recording is independent of `error_reporting` (which gates only the
         //    visible render below).
         self.last_error = Some((errno, message.as_bytes().to_vec(), line));
-        // An enclosing `@` swallows the default render — the `last_error`
-        // record above still happened, like PHP's error_get_last under
-        // suppression (a nested call's trigger_error is inside the region).
-        if self.suppress_depth > 0 {
-            return Ok(());
-        }
+        // An enclosing `@` swallows the default render through the masked
+        // `error_level` (BEGIN_SILENCE `&= 4437`) — the gate below — while the
+        // `last_error` record above still happened, like PHP's error_get_last
+        // under suppression (a nested call's trigger_error is in the region).
         // Default render (Session 1 behaviour), gated on `error_reporting`.
         // Attributed to the nearest NON-prelude frame: a prelude-authored
         // class raising a user-level warning (PDO/SQLite3 ERRMODE_WARNING)

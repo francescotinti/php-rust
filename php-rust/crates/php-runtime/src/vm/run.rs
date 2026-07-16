@@ -29,9 +29,30 @@ fn user_stream_rc(v: &Zval) -> Option<Rc<RefCell<php_types::Resource>>> {
     }
 }
 
+/// A path-taking builtin serviceable on a registered userland wrapper URL:
+/// stat-family via the wrapper's `url_stat`, image/exif introspection via an
+/// open/read-to-EOF/close of the wrapper stream (see `user_wrapper_path_op`).
+pub(super) fn is_user_wrapper_path_op(name: &[u8]) -> bool {
+    matches!(
+        name,
+        b"file_exists"
+            | b"is_file"
+            | b"is_dir"
+            | b"is_readable"
+            | b"is_writable"
+            | b"is_writeable"
+            | b"filesize"
+            | b"filemtime"
+            | b"stat"
+            | b"getimagesize"
+            | b"exif_read_data"
+            | b"exif_imagetype"
+    )
+}
+
 /// The URL bytes if `v` is a string whose scheme is a registered userland wrapper
 /// (so `file_get_contents` routes through the wrapper instead of the filesystem).
-fn user_wrapper_url(
+pub(super) fn user_wrapper_url(
     v: &Zval,
     wrappers: &std::collections::HashMap<Vec<u8>, Vec<u8>>,
 ) -> Option<Vec<u8>> {
@@ -1794,6 +1815,18 @@ impl<'m> super::Vm<'m> {
                             let line = self.cur_line(top);
                             self.flush_diags(line)?;
                             let result = self.user_wrapper_get_contents(&path)?;
+                            self.flush_diags(line)?;
+                            self.frames[top].stack.push(result);
+                            continue;
+                        }
+                    }
+                    // Stat-family / image / exif builtins on a wrapper URL:
+                    // url_stat or read-to-EOF through the wrapper object.
+                    if argc >= 1 && is_user_wrapper_path_op(&name) {
+                        if let Some(path) = user_wrapper_url(&args[0], &self.stream_wrappers) {
+                            let line = self.cur_line(top);
+                            self.flush_diags(line)?;
+                            let result = self.user_wrapper_path_op(&name, &path, &args)?;
                             self.flush_diags(line)?;
                             self.frames[top].stack.push(result);
                             continue;
@@ -4166,28 +4199,44 @@ impl<'m> super::Vm<'m> {
                     return Err(PhpError::Exit(code));
                 }
                 Op::SuppressBegin => {
+                    // Deliver everything queued BEFORE the `@` with normal
+                    // semantics first, so the mark cleanly separates the
+                    // suppressed region from the statement's earlier diagnostics.
+                    let line = self.cur_line(top);
+                    self.flush_diags(line)?;
                     self.suppress_marks.push(self.diags.len());
+                    // Zend's BEGIN_SILENCE: save EG(error_reporting) and mask it
+                    // down to the fatal-only bits (never silence fatals). The
+                    // masked value is what error_reporting() reads inside the
+                    // region — PHPUnit's handler declines diagnostics on it.
+                    self.silence_saved.push(self.error_level);
+                    if self.error_level & !4437 != 0 {
+                        self.error_level &= 4437;
+                    }
                     self.suppress_depth += 1;
                 }
                 Op::SuppressEnd => {
+                    // Deliver the region's queued diagnostics while the level is
+                    // still masked: Zend calls the user error handler even under
+                    // `@`; only the default render is swallowed (gated by the
+                    // masked error_reporting). The default-handler path still
+                    // records error_get_last (monolog's StreamHandler appends
+                    // error_get_last()['message'] after an @fopen).
+                    let line = self.cur_line(top);
+                    self.flush_diags(line)?;
+                    // Zend's END_SILENCE: restore only if the current level is
+                    // still fatal-only and the saved one was not — an
+                    // error_reporting($x) inside the region survives it
+                    // (bug27731).
+                    if let Some(saved) = self.silence_saved.pop() {
+                        if self.error_level & !4437 == 0 && saved & !4437 != 0 {
+                            self.error_level = saved;
+                        }
+                    }
                     self.suppress_depth = self.suppress_depth.saturating_sub(1);
                     if let Some(saved) = self.suppress_marks.pop() {
-                        // Drop the diagnostics raised under `@` (never rendered, as
-                        // `flush_diags` was a no-op while suppressed) — but `@` does
-                        // NOT hide them from error_get_last (monolog's StreamHandler
-                        // appends error_get_last()['message'] after an @fopen): the
-                        // last suppressed one is recorded like the default handler
-                        // would have.
-                        if let Some(d) = self.diags.get(saved..).and_then(|s| s.last()) {
-                            let (errno, message) = match d {
-                                Diag::Warning(m) => (2, m),
-                                Diag::Notice(m) => (8, m),
-                                Diag::Deprecated(m) => (8192, m),
-                            };
-                            let line = self.cur_line(top);
-                            self.last_error = Some((errno, message.as_bytes().to_vec(), line));
-                        }
                         self.diags.truncate(saved);
+                        self.diags_rendered = self.diags_rendered.min(saved);
                     }
                 }
                 Op::MatchError(slot) => {

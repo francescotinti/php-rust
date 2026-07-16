@@ -125,8 +125,18 @@ impl<'m> Vm<'m> {
         // `@` silences warnings, not engine errors / thrown objects).
         if let Some(&outer) = self.suppress_marks.first() {
             self.diags.truncate(outer);
+            self.diags_rendered = self.diags_rendered.min(outer);
             self.suppress_marks.clear();
             self.suppress_depth = 0;
+        }
+        // Unwind the abandoned silence regions innermost-first, each with
+        // END_SILENCE's conditional restore: a level changed inside the
+        // region survives the exception (bug33771: 30711 set before the
+        // throw is what error_reporting() reads after the catch).
+        while let Some(saved) = self.silence_saved.pop() {
+            if self.error_level & !4437 == 0 && saved & !4437 != 0 {
+                self.error_level = saved;
+            }
         }
         // The in-flight Throwable object. A user `throw` of an object is itself
         // (EXC-1). An engine error (EXC-3a) is resolved to its prelude class by

@@ -390,9 +390,43 @@ pub fn error_log(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 
 /// Whether `name` is an http:// or https:// URL (routed through the HTTP
 /// transport rather than the filesystem). Scheme match is case-insensitive.
-fn is_http_url(name: &[u8]) -> bool {
+pub(crate) fn is_http_url(name: &[u8]) -> bool {
     let head = name.get(..8).unwrap_or(name).to_ascii_lowercase();
     head.starts_with(b"http://") || head.starts_with(b"https://")
+}
+
+/// Read `name` for a path-taking builtin: http(s):// URLs go through the HTTP
+/// transport (Zend's stream layer does the same for getimagesize/exif_*),
+/// everything else the filesystem. On failure the caller-labelled
+/// "Failed to open stream" warning is raised and `None` returned.
+pub(crate) fn read_for_builtin(name: &[u8], caller: &str, ctx: &mut Ctx) -> Option<Vec<u8>> {
+    read_for_builtin_named(name, name, caller, ctx)
+}
+
+/// [`read_for_builtin`] with a distinct display name for the filesystem
+/// warning (exif_read_data reports the basename, exif.c docref style).
+pub(crate) fn read_for_builtin_named(
+    name: &[u8],
+    display: &[u8],
+    caller: &str,
+    ctx: &mut Ctx,
+) -> Option<Vec<u8>> {
+    use std::os::unix::ffi::OsStrExt;
+    if is_http_url(name) {
+        return http_get(name, None, caller, ctx);
+    }
+    let path = std::ffi::OsStr::from_bytes(strip_file_wrapper(name));
+    match std::fs::read(path) {
+        Ok(d) => Some(d),
+        Err(e) => {
+            ctx.diags.push(Diag::Warning(format!(
+                "{caller}({}): Failed to open stream: {}",
+                String::from_utf8_lossy(display),
+                strerror(&e)
+            )));
+            None
+        }
+    }
 }
 
 thread_local! {
@@ -504,14 +538,14 @@ fn parse_http_options(context: Option<&Zval>) -> HttpOptions {
 /// status (so a 4xx status stays readable via `http_get_last_response_headers()`,
 /// as Composer relies on). TLS uses ureq's default secure verification against the
 /// bundled webpki roots, matching PHP's `verify_peer` default.
-fn http_get(url: &[u8], context: Option<&Zval>, ctx: &mut Ctx) -> Option<Vec<u8>> {
+fn http_get(url: &[u8], context: Option<&Zval>, caller: &str, ctx: &mut Ctx) -> Option<Vec<u8>> {
     let Ok(url_str) = std::str::from_utf8(url) else {
         return None;
     };
     let opts = parse_http_options(context);
     let mut warn = |why: String| {
         ctx.diags.push(Diag::Warning(format!(
-            "file_get_contents({url_str}): Failed to open stream: {why}"
+            "{caller}({url_str}): Failed to open stream: {why}"
         )));
     };
     // A non-2xx status is not a transport error here (we still want the headers).
@@ -608,7 +642,7 @@ pub fn file_get_contents(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
     // filesystem (the openssl/Composer-network filone); `$offset`/`$length` still
     // apply to the fetched body below, as for a file.
     let mut data = if is_http_url(name.as_bytes()) {
-        match http_get(name.as_bytes(), argv.get(2), ctx) {
+        match http_get(name.as_bytes(), argv.get(2), "file_get_contents", ctx) {
             Some(body) => body,
             None => return Ok(Zval::Bool(false)),
         }

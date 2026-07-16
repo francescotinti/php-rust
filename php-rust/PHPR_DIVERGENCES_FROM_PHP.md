@@ -448,6 +448,57 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-16 (sessione WordPress-11): 🏁 **WP CORE SUITE, GRUPPO MEDIA A PARITÀ
+  ORACLE: 762/762 test, 0E/0F** (da 680 test/11F — 82 test non si caricavano
+  nemmeno). Fix engine trasversali:
+  **(a) docblock stile Zend**: `CG(doc_comment)` sopravvive agli statement
+  interposti e viene consumato dalla dichiarazione successiva
+  (`backup_doc_comment` nella grammatica) — `doc_for`/`doc_span_for` in
+  lower/mod.rs attaccano attraverso il gap con una bail-list conservativa
+  (keyword consumatrici, modificatori, graffe, heredoc: mai un docblock
+  sbagliato, al peggio assente) e `push_deferred` re-emette il docblock
+  staccato nello snippet deferred. Era il bug degli 82 test media invisibili:
+  `/** @group media */ require_once …; class X` perdeva i gruppi PHPUnit.
+  **(b) `@` a semantica BEGIN/END_SILENCE esatta**: `error_level` salvato e
+  mascherato con `&= 4437` (E_FATAL_ERRORS) all'ingresso, ripristino
+  condizionale all'uscita e sull'unwind da eccezione (solo se il corrente è
+  fatal-only e il salvato no); l'handler utente VIENE chiamato sotto `@`
+  (flush a SuppressBegin/End) e legge `error_reporting()`==4437 — il
+  protocollo con cui PHPUnit scarta le warning soppresse; le scritture di
+  `error_reporting($x)` dentro `@` sopravvivono alla regione. Fixa anche
+  bug27731/bug33771/error_reporting02/03/08/09/10 e restore_error_reporting
+  del corpus. Stato `@` parcheggiato per-fiber (incluso il mask).
+  **(c) getimagesize: TIFF II/MM, JP2/JPC, PSD, ICO** (port fedele dei
+  php_handle_* di image.c, con `bits`/`channels` e mime oracle-esatti).
+  **(d) exif**: `COMPUTED.UserComment`/`UserCommentEncoding` (header 8 byte
+  ASCII/UNICODE→ISO-8859-15/JIS-raw/UNDEFINED + strip spazi Olympus),
+  `ApertureFNumber` con overwrite-FNumber/fallback-APEX in f32 (exif.c),
+  IFD INTEROP (tag 0xA005 → sezione INTEROP, tabella IOP).
+  **(e) stream wrapper userland oltre fopen**: famiglia stat via `url_stat`
+  (file_exists/is_file/is_dir/is_readable/is_writable/filesize/filemtime/
+  stat, flags QUIET=2 come php_stat) e getimagesize/exif_imagetype/
+  exif_read_data via lettura-a-EOF del wrapper (`__exif_read_data_bytes`/
+  `__exif_imagetype_bytes` interni; `Vm::user_wrapper_path_op`).
+  **(f) return-by-ref di elemento di proprietà statica**
+  (`function &f(){ return self::$a[$k]; }`) via `static_prop_rmw` — il ref
+  cell coniato nella copia e la write-back la installa (separazione alla
+  Zend); era l'errore `get_directory_ref` di WP_Test_Stream.
+  **(g) http(s):// nei builtin path-taking**: getimagesize/exif_imagetype/
+  exif_read_data leggono via il trasporto HTTP (come lo stream layer Zend) —
+  `read_for_builtin` in file.rs; chiude `test_wp_crop_image_with_url` (crop
+  byte-identico all'oracle, 3477 byte).
+  **(h) INI site-health**: memory_limit 128M (ora SETTABLE: wp_raise_memory_limit
+  scrive 256M in admin e site-health riporta memory_limit+admin_memory_limit —
+  phpr non applica comunque il limite), max_input_vars 1000, max_input_time e
+  max_execution_time SAPI-dipendenti (CLI 0/-1 hardwired alla Zend, cli-server
+  30/60 nello swap web di vm/mod.rs).
+  Residui documentati: **ext/fileinfo assente** (12 skip media che l'oracle
+  passa: `@requires extension fileinfo`; da valutare per WP-12),
+  `curl_version` e blocco opcache di site-health (phpr non ha curl di sistema
+  né opcache: righe assenti), nonce/timestamp volatili nell'http battery.
+  Provider full-suite noti: `mb_convert_encoding` BIG-5 (Tests_DB_Charset) e
+  un throw in `data_wp_validate_site_data` via current_time (Tests_Multisite_Site)
+  → ErrorTestCase; backlog full-suite.
 - 2026-07-15 (sessione WordPress-10): 🏁 **RESIDUI SAPI CHIUSI + WP CORE TEST
   SUITE AVVIATA (gruppo option A PARITÀ ORACLE: 413 test 0E/0F)**.
   SAPI (15/15 probe byte-id, wp10-harness/sapi-probe): body

@@ -741,10 +741,14 @@ impl<'a> FnCompiler<'a> {
             StmtKind::ReturnRef(place) => {
                 // `function &f()` returning an lvalue (REF-4b): push a reference
                 // to the place's cell and return it raw, so `$y = &f()` aliases
-                // it. `field_path`/`MakeRef` handle index, property and `[]` steps.
-                let (base, steps) = self.field_path(place)?;
-                self.emit(Op::MakeRef { base, steps: steps.into() });
-                self.emit(Op::Ret);
+                // it. `field_path`/`MakeRef` handle index, property and `[]`
+                // steps; a static-property root takes its own path (no static
+                // base in `field_path`).
+                if !self.return_ref_static_prop(place)? {
+                    let (base, steps) = self.field_path(place)?;
+                    self.emit(Op::MakeRef { base, steps: steps.into() });
+                    self.emit(Op::Ret);
+                }
             }
             StmtKind::Unset(places) => {
                 for place in places {

@@ -298,6 +298,16 @@ const TAG_GPS: &[(u16, &str)] = &[
     (0x001E, "GPSDifferential"),
 ];
 
+/// exif.c `tag_table_IOP` (the Interoperability IFD, reached via
+/// TAG_INTEROP_IFD_POINTER 0xA005).
+const TAG_IOP: &[(u16, &str)] = &[
+    (0x0001, "InterOperabilityIndex"),
+    (0x0002, "InterOperabilityVersion"),
+    (0x1000, "RelatedFileFormat"),
+    (0x1001, "RelatedImageWidth"),
+    (0x1002, "RelatedImageHeight"),
+];
+
 fn tag_name(table: &[(u16, &str)], tag: u16) -> String {
     for &(t, n) in table {
         if t == tag {
@@ -482,7 +492,6 @@ fn be32(b: &[u8], i: usize) -> u32 {
 
 /// `exif_imagetype(string $filename): int|false`.
 pub fn exif_imagetype(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    use std::os::unix::ffi::OsStrExt;
     let name = convert::to_zstr(
         args.first().ok_or_else(|| {
             PhpError::ArgumentCountError(
@@ -491,17 +500,8 @@ pub fn exif_imagetype(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         })?,
         ctx.diags,
     );
-    let path = std::ffi::OsStr::from_bytes(crate::file::strip_file_wrapper(name.as_bytes()));
-    let data = match std::fs::read(path) {
-        Ok(d) => d,
-        Err(e) => {
-            ctx.diags.push(Diag::Warning(format!(
-                "exif_imagetype({}): Failed to open stream: {}",
-                String::from_utf8_lossy(name.as_bytes()),
-                crate::file::strerror(&e)
-            )));
-            return Ok(Zval::Bool(false));
-        }
+    let Some(data) = crate::file::read_for_builtin(name.as_bytes(), "exif_imagetype", ctx) else {
+        return Ok(Zval::Bool(false));
     };
     Ok(match detect_imagetype(&data) {
         Some(t) => Zval::Long(t),
@@ -584,8 +584,16 @@ struct TiffParse {
     thumbnail: Vec<TagVal>,
     /// (offset, length) of the IFD1 embedded thumbnail, tiff-relative.
     thumb_data: Option<(usize, usize)>,
-    fnumber: Option<(i64, i64)>,
-    aperture: Option<(i64, i64)>,
+    /// Running COMPUTED.ApertureFNumber, exif.c order semantics: TAG_FNUMBER
+    /// overwrites, TAG_APERTURE/TAG_MAX_APERTURE apply only while it is 0
+    /// (f32 like ImageInfo.ApertureFNumber, so the "f/%.1F" render matches).
+    aperture_f: f32,
+    /// Raw TAG_USER_COMMENT bytes (8-byte encoding header included), for
+    /// COMPUTED.UserComment / UserCommentEncoding.
+    user_comment: Option<Vec<u8>>,
+    /// TAG_INTEROP_IFD_POINTER, then the parsed INTEROP section.
+    interop_ptr: Option<usize>,
+    interop: Vec<TagVal>,
     copyright: Option<Vec<u8>>,
 }
 
@@ -709,19 +717,36 @@ fn parse_ifd(
             0x8769 => *exif_ptr = Some(rd.u32(ent + 8)? as usize),
             0x8825 => *gps_ptr = Some(rd.u32(ent + 8)? as usize),
             0x829D => {
+                // TAG_FNUMBER: "simplest way of expressing aperture" —
+                // overwrites any previously computed value (exif.c).
                 if let Zval::Str(s) = &value {
                     if let Some((a, b)) = parse_rational_str(s.as_bytes()) {
-                        tp.fnumber = Some((a, b));
+                        if b != 0 {
+                            tp.aperture_f = a as f32 / b as f32;
+                        }
                     }
                 }
             }
-            0x9202 => {
+            0x9202 | 0x9205 => {
+                // TAG_APERTURE / TAG_MAX_APERTURE (APEX): only while no better
+                // aperture information was seen yet.
                 if let Zval::Str(s) = &value {
                     if let Some((a, b)) = parse_rational_str(s.as_bytes()) {
-                        tp.aperture = Some((a, b));
+                        if tp.aperture_f == 0.0 && b != 0 {
+                            tp.aperture_f =
+                                ((a as f32 / b as f32) * std::f32::consts::LN_2 * 0.5).exp();
+                        }
                     }
                 }
             }
+            0x9286 => {
+                // TAG_USER_COMMENT: raw bytes, decoded into COMPUTED at
+                // assembly time (encoding header included).
+                if let Zval::Str(s) = &value {
+                    tp.user_comment = Some(s.as_bytes().to_vec());
+                }
+            }
+            0xA005 => tp.interop_ptr = rd.u32(ent + 8).map(|v| v as usize),
             0x8298 => {
                 if let Zval::Str(s) = &value {
                     tp.copyright = Some(s.as_bytes().to_vec());
@@ -757,8 +782,10 @@ fn parse_tiff(d: &[u8]) -> Option<TiffParse> {
         gps: Vec::new(),
         thumbnail: Vec::new(),
         thumb_data: None,
-        fnumber: None,
-        aperture: None,
+        aperture_f: 0.0,
+        user_comment: None,
+        interop_ptr: None,
+        interop: Vec::new(),
         copyright: None,
     };
     let mut exif_ptr = None;
@@ -809,7 +836,80 @@ fn parse_tiff(d: &[u8]) -> Option<TiffParse> {
         let _ = parse_ifd(&rd, p, TAG_GPS, &mut g, &mut e2, &mut g2, &mut tp);
         tp.gps = g;
     }
+    // The Interoperability IFD (pointer tag 0xA005, usually inside EXIF).
+    if let Some(p) = tp.interop_ptr {
+        let mut io = Vec::new();
+        let mut e2 = None;
+        let mut g2 = None;
+        let _ = parse_ifd(&rd, p, TAG_IOP, &mut io, &mut e2, &mut g2, &mut tp);
+        tp.interop = io;
+    }
     Some(tp)
+}
+
+/// exif.c `exif_process_user_comment`: strip the 8-byte encoding header;
+/// ASCII/UNDEFINED bodies lose their Olympus trailing-space padding and stop
+/// at the first NUL; UNICODE decodes UTF-16 (BOM if present, else the TIFF
+/// byte order) into the `exif.encode_unicode` default ISO-8859-15, '?' for
+/// unmappable code points like the mbstring converter; JIS stays raw (the
+/// empty `exif.encode_jis` default makes the C conversion fail into the raw
+/// copy). No recognisable header → no encoding, whole value as string.
+fn decode_user_comment(raw: &[u8], motorola: bool) -> (Option<&'static [u8]>, Vec<u8>) {
+    fn strip_and_cut(s: &[u8]) -> Vec<u8> {
+        let mut end = s.len();
+        while end > 1 && s[end - 1] == b' ' {
+            end -= 1; // exif.c never blanks index 0 (`for (a = ByteCount-1; a && ...`)
+        }
+        let t = &s[..end];
+        let cut = t.iter().position(|&b| b == 0).unwrap_or(t.len());
+        t[..cut].to_vec()
+    }
+    fn ucs2_to_8859_15(u: u16) -> u8 {
+        match u {
+            0x20AC => 0xA4,
+            0x0160 => 0xA6,
+            0x0161 => 0xA8,
+            0x017D => 0xB4,
+            0x017E => 0xB8,
+            0x0152 => 0xBC,
+            0x0153 => 0xBD,
+            0x0178 => 0xBE,
+            // The Latin-1 slots ISO-8859-15 repurposes are unmappable.
+            0xA4 | 0xA6 | 0xA8 | 0xB4 | 0xB8 | 0xBC | 0xBD | 0xBE => b'?',
+            u if u <= 0xFF => u as u8,
+            _ => b'?',
+        }
+    }
+    if raw.len() >= 8 {
+        match &raw[..8] {
+            b"UNICODE\0" => {
+                let mut body = &raw[8..];
+                let be = if body.len() >= 2 && &body[..2] == b"\xFE\xFF" {
+                    body = &body[2..];
+                    true
+                } else if body.len() >= 2 && &body[..2] == b"\xFF\xFE" {
+                    body = &body[2..];
+                    false
+                } else {
+                    motorola
+                };
+                let out = body
+                    .chunks_exact(2)
+                    .map(|c| {
+                        let u =
+                            if be { u16::from_be_bytes([c[0], c[1]]) } else { u16::from_le_bytes([c[0], c[1]]) };
+                        ucs2_to_8859_15(u)
+                    })
+                    .collect();
+                return (Some(b"UNICODE"), out);
+            }
+            b"ASCII\0\0\0" => return (Some(b"ASCII"), strip_and_cut(&raw[8..])),
+            b"JIS\0\0\0\0\0" => return (Some(b"JIS"), raw[8..].to_vec()),
+            b"\0\0\0\0\0\0\0\0" => return (Some(b"UNDEFINED"), strip_and_cut(&raw[8..])),
+            _ => {}
+        }
+    }
+    (None, strip_and_cut(raw))
 }
 
 /// The pieces scanned out of a JPEG (or TIFF) for exif_read_data.
@@ -916,16 +1016,11 @@ pub fn exif_read_data(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let as_arrays = args.get(2).map(|v| convert::to_bool(v, ctx.diags)).unwrap_or(false);
     let base = basename(name.as_bytes()).to_vec();
     let path = std::ffi::OsStr::from_bytes(crate::file::strip_file_wrapper(name.as_bytes()));
-    let data = match std::fs::read(path) {
-        Ok(d) => d,
-        Err(e) => {
-            ctx.diags.push(Diag::Warning(format!(
-                "exif_read_data({}): Failed to open stream: {}",
-                String::from_utf8_lossy(&base),
-                crate::file::strerror(&e)
-            )));
-            return Ok(Zval::Bool(false));
-        }
+    // The warning names the basename, not the full path (exif.c docref).
+    let Some(data) =
+        crate::file::read_for_builtin_named(name.as_bytes(), &base, "exif_read_data", ctx)
+    else {
+        return Ok(Zval::Bool(false));
     };
     let mtime = std::fs::metadata(path)
         .ok()
@@ -933,8 +1028,40 @@ pub fn exif_read_data(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
+    exif_core(&data, &base, mtime, as_arrays, ctx)
+}
 
-    let scan = match detect_imagetype(&data) {
+/// `__exif_read_data_bytes($data, $display_path, $mtime, ...$rest)` —
+/// VM-internal twin of `exif_read_data` for bytes already read through a
+/// userland stream wrapper (the VM does the open/read/close; `$rest` are the
+/// original call's trailing arguments, so `$as_arrays` sits at index 4).
+pub fn exif_read_data_bytes(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let data = convert::to_zstr(args.first().unwrap_or(&Zval::Null), ctx.diags);
+    let name = convert::to_zstr(args.get(1).unwrap_or(&Zval::Null), ctx.diags);
+    let mtime = args.get(2).map(|v| convert::to_long_cast(v, ctx.diags)).unwrap_or(0);
+    let as_arrays = args.get(4).map(|v| convert::to_bool(v, ctx.diags)).unwrap_or(false);
+    let base = basename(name.as_bytes()).to_vec();
+    exif_core(data.as_bytes(), &base, mtime, as_arrays, ctx)
+}
+
+/// `__exif_imagetype_bytes($data)` — VM-internal twin of `exif_imagetype` for
+/// wrapper-read bytes: the IMAGETYPE_* constant, or `false` when unrecognised.
+pub fn exif_imagetype_bytes(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let data = convert::to_zstr(args.first().unwrap_or(&Zval::Null), ctx.diags);
+    Ok(detect_imagetype(data.as_bytes()).map(Zval::Long).unwrap_or(Zval::Bool(false)))
+}
+
+/// The shared back half of `exif_read_data`: scan `data`, assemble the
+/// FILE/COMPUTED/sections output. `base` is the display name for warnings and
+/// FileName, `mtime` fills FileDateTime.
+fn exif_core(
+    data: &[u8],
+    base: &[u8],
+    mtime: i64,
+    as_arrays: bool,
+    ctx: &mut Ctx,
+) -> Result<Zval, PhpError> {
+    let scan = match detect_imagetype(data) {
         Some(2) => scan_jpeg(&data),
         Some(t @ (7 | 8)) => {
             let tiff = parse_tiff(&data);
@@ -970,7 +1097,10 @@ pub fn exif_read_data(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     };
 
     // SectionsFound, in exif.c's fixed section order.
-    let has_tags = scan.tiff.as_ref().is_some_and(|t| !t.ifd0.is_empty() || !t.exif.is_empty());
+    let has_tags = scan
+        .tiff
+        .as_ref()
+        .is_some_and(|t| !t.ifd0.is_empty() || !t.exif.is_empty() || !t.interop.is_empty());
     let mut sections: Vec<&str> = Vec::new();
     if has_tags {
         sections.push("ANY_TAG");
@@ -989,6 +1119,9 @@ pub fn exif_read_data(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     }
     if scan.tiff.as_ref().is_some_and(|t| !t.gps.is_empty()) {
         sections.push("GPS");
+    }
+    if scan.tiff.as_ref().is_some_and(|t| !t.interop.is_empty()) {
+        sections.push("INTEROP");
     }
     let sections_found = sections.join(", ");
 
@@ -1011,21 +1144,17 @@ pub fn exif_read_data(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
             Key::from_bytes(b"ByteOrderMotorola"),
             Zval::Long(if tp.motorola { 1 } else { 0 }),
         );
-        if let Some((n, d)) = tp.fnumber {
-            if d != 0 {
-                computed.insert(
-                    Key::from_bytes(b"ApertureFNumber"),
-                    zstr(format!("f/{:.1}", n as f64 / d as f64).into_bytes()),
-                );
-            }
-        } else if let Some((n, d)) = tp.aperture {
-            if d != 0 {
-                let apex = n as f64 / d as f64;
-                computed.insert(
-                    Key::from_bytes(b"ApertureFNumber"),
-                    zstr(format!("f/{:.1}", (apex * std::f64::consts::LN_2 * 0.5).exp())
-                        .into_bytes()),
-                );
+        if tp.aperture_f != 0.0 {
+            computed.insert(
+                Key::from_bytes(b"ApertureFNumber"),
+                zstr(format!("f/{:.1}", tp.aperture_f).into_bytes()),
+            );
+        }
+        if let Some(uc) = &tp.user_comment {
+            let (enc, text) = decode_user_comment(uc, tp.motorola);
+            computed.insert(Key::from_bytes(b"UserComment"), zstr(&text));
+            if let Some(e) = enc {
+                computed.insert(Key::from_bytes(b"UserCommentEncoding"), zstr(e));
             }
         }
         if let Some(c) = &tp.copyright {
@@ -1083,6 +1212,9 @@ pub fn exif_read_data(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
             if !tp.gps.is_empty() {
                 out.insert(Key::from_bytes(b"GPS"), tags_array(&tp.gps));
             }
+            if !tp.interop.is_empty() {
+                out.insert(Key::from_bytes(b"INTEROP"), tags_array(&tp.interop));
+            }
         }
         if !scan.comments.is_empty() {
             let mut c = PhpArray::new();
@@ -1108,6 +1240,7 @@ pub fn exif_read_data(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
             if !tp.gps.is_empty() {
                 push_tags(&mut out, &tp.gps);
             }
+            push_tags(&mut out, &tp.interop);
         }
         if !scan.comments.is_empty() {
             let mut c = PhpArray::new();

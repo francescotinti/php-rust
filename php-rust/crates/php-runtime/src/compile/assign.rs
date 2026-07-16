@@ -568,6 +568,35 @@ impl<'a> super::FnCompiler<'a> {
         Ok(())
     }
 
+    /// `return self::$arr[$k];` in a by-ref function (`function &f()`):
+    /// `field_path` has no static base, so mint the reference through the rmw
+    /// wrapper — the ref cell is created inside the temp copy and the
+    /// write-back installs that copy (ref included) as the live property
+    /// value, the same separation Zend performs (WP_Test_Stream's
+    /// `&get_directory_ref`). A bare `return self::$prop;` aliases the live
+    /// storage cell directly. Returns `false` when the place is not
+    /// static-property-rooted, so the caller falls through to the plain path.
+    pub(super) fn return_ref_static_prop(&mut self, place: &Place) -> R<bool> {
+        let Some((class, name)) = static_place_parts(&place.base) else {
+            return Ok(false);
+        };
+        if place.steps.is_empty() && !self.is_runtime_class(&class) {
+            if let SpName::Lit(n) = &name {
+                let target = self.resolve_target(&class)?.0;
+                self.emit(Op::StaticPropRef { target, name: n.clone() });
+                self.emit(Op::Ret);
+                return Ok(true);
+            }
+        }
+        self.static_prop_rmw(&class, &name, &place.steps, true, |s, p| {
+            let (base, steps) = s.field_path(p)?;
+            s.emit(Op::MakeRef { base, steps: steps.into() });
+            Ok(())
+        })?;
+        self.emit(Op::Ret);
+        Ok(true)
+    }
+
     /// Evaluate a dynamic static-property name exactly once into a temp; a
     /// literal name needs no slot.
     fn sp_name_slot(&mut self, name: &SpName) -> R<Option<u32>> {

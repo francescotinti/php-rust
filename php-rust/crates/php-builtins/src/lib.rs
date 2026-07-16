@@ -203,6 +203,10 @@ pub fn registry() -> Registry {
     add(b"__getimagesizefromstring_info", image::getimagesizefromstring_info);
     add(b"exif_imagetype", exif::exif_imagetype);
     add(b"exif_read_data", exif::exif_read_data);
+    // VM-internal twins for userland-wrapper URLs (the VM reads the stream
+    // and hands the bytes over — see Vm::user_wrapper_path_op).
+    add(b"__exif_imagetype_bytes", exif::exif_imagetype_bytes);
+    add(b"__exif_read_data_bytes", exif::exif_read_data_bytes);
     add(b"iptcparse", exif::iptcparse);
     add(b"file", file::file);
     add(b"readfile", file::readfile);

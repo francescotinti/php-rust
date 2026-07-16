@@ -497,6 +497,28 @@ impl<'m> Vm<'m> {
         args: Vec<Zval>,
         from_string: bool,
     ) -> Result<(Zval, Zval), PhpError> {
+        let mut args = args;
+        let mut from_string = from_string;
+        // A registered userland-wrapper URL: read it to EOF through the
+        // wrapper and continue on the from-string twin.
+        if !from_string {
+            if let Some(path) =
+                args.first().and_then(|a| super::run::user_wrapper_url(a, &self.stream_wrappers))
+            {
+                match self.user_wrapper_get_contents(&path)? {
+                    Zval::Str(s) => {
+                        args[0] = Zval::Str(s);
+                        from_string = true;
+                    }
+                    _ => {
+                        return Ok((
+                            Zval::Bool(false),
+                            Zval::Array(std::rc::Rc::new(PhpArray::new())),
+                        ))
+                    }
+                }
+            }
+        }
         let name: &[u8] =
             if from_string { b"__getimagesizefromstring_info" } else { b"__getimagesize_info" };
         let f = match self.registry.get(name) {
