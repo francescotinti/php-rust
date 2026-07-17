@@ -50,7 +50,19 @@ $ORACLE vendor/bin/phpunit --group restapi # 3514, oracle ~150s 1E/4W/6S
 - **gate13.sh riusabile**: `/Volumes/Extreme Pro/Claude/wp13-harness/gate13.sh`
   (4 suite phpt per nome vs worktree baseline + ORM + hk + cargo + batterie
   gd/mysqli/media/http + WP option/media/post/user/query + restapi + misura
-  fileinfo). Baseline worktree: `git worktree add /private/tmp/wpN-base HEAD`
+  fileinfo).
+- ⚠️ **WATCHDOG ANTI-HANG OBBLIGATORIO per ogni run PHPUnit lunga** (phpr può
+  appendersi su un bug engine; restapi in WP-13 = 3 run da 40+ min buttate):
+  `/Volumes/Extreme Pro/Claude/wp13-harness/run-with-watchdog.sh
+  [-t total_s] [-s stall_s] [-p progress_file] [-o outdir] -- cmd…`.
+  Già cablato in gate13.sh su TUTTE le invocazioni phpr (ORM/hk 900s,
+  gruppi WP 900-1200s, restapi 1800s). Prima di uccidere salva
+  `sample <pid>` in `outdir/watchdog-sample-<epoch>.txt` (post-mortem
+  pronto); exit 124 su kill. Con `-p` (es. TESTLOG) il criterio diventa
+  "M secondi SENZA progresso", che distingue lento-ma-avanza da fermo.
+  Le suite phpt sono già coperte dal timeout per-test di phpt-runner
+  (10s, `PHPT_TIMEOUT_SECS`). macOS non ha `timeout(1)`: usare SEMPRE
+  questo wrapper, anche per run manuali fuori gate. Baseline worktree: `git worktree add /private/tmp/wpN-base HEAD`
   + copiare crates/php-server (gitignorato!) e Cargo.lock DENTRO php-rust/,
   build con CARGO_TARGET_DIR esterno. Workspace ORM/HK: `/private/tmp/
   wp11-gates/` (tarball sorgente in wp9-harness/gates/).
