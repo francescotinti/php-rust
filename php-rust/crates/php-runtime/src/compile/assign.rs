@@ -935,11 +935,15 @@ impl<'a> super::FnCompiler<'a> {
         }
         if let Some(name) = self.prop_place(place)? {
             // `$o->p op= rhs` as read-modify-write so a magic property routes
-            // through `__get` then `__set` (each op leaves its result for the
-            // next): [obj] → Dup → PropGet → rhs → Binary → PropSet → [result].
-            self.emit(Op::Dup);
-            self.emit(Op::PropGet { name: name.clone() });
-            self.expr(rhs)?;
+            // through `__get` then `__set`. Zend evaluates the RHS *before*
+            // reading the property (ASSIGN_OBJ_OP), so a RHS that mutates the
+            // target contributes its post-mutation value:
+            // [obj] → Dup → rhs → Swap → PropGet → Swap → Binary → PropSet.
+            self.emit(Op::Dup); // [obj, obj]
+            self.expr(rhs)?; // [obj, obj, rhs]
+            self.emit(Op::Swap); // [obj, rhs, obj]
+            self.emit(Op::PropGet { name: name.clone() }); // [obj, rhs, val]
+            self.emit(Op::Swap); // [obj, val, rhs]
             self.emit(Op::Binary(op));
             self.emit(Op::PropSet { name });
             return Ok(());
@@ -952,9 +956,10 @@ impl<'a> super::FnCompiler<'a> {
         }
         if let PlaceBase::Global(s) = place.base {
             if place.steps.is_empty() {
-                // `$GLOBALS['x'] op= rhs`.
-                self.emit(Op::LoadGlobal(s));
+                // `$GLOBALS['x'] op= rhs` (RHS first, like every ASSIGN_OP).
                 self.expr(rhs)?;
+                self.emit(Op::LoadGlobal(s));
+                self.emit(Op::Swap);
                 self.emit(Op::Binary(op));
                 self.emit(Op::Dup);
                 self.emit(Op::StoreGlobal(s));
@@ -963,9 +968,10 @@ impl<'a> super::FnCompiler<'a> {
         }
         if let PlaceBase::Superglobal(i) = place.base {
             if place.steps.is_empty() {
-                // `$_SERVER op= rhs`.
-                self.emit(Op::LoadSuperglobal(i));
+                // `$_SERVER op= rhs` (RHS first, like every ASSIGN_OP).
                 self.expr(rhs)?;
+                self.emit(Op::LoadSuperglobal(i));
+                self.emit(Op::Swap);
                 self.emit(Op::Binary(op));
                 self.emit(Op::Dup);
                 self.emit(Op::StoreSuperglobal(i));

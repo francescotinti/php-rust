@@ -88,8 +88,13 @@ impl<'a> super::FnCompiler<'a> {
                 self.emit(Op::LoadSlot(*temp));
             }
             ExprKind::AssignOp(op, slot, rhs) => {
-                self.emit(Op::LoadSlot(*slot));
+                // Zend's ASSIGN_OP evaluates the RHS *before* fetching the
+                // target, so a RHS that mutates the target contributes its
+                // post-mutation value: `$at += strcspn($s, '<', ++$at)` adds
+                // to the incremented $at (WP's validate_custom_css loop).
                 self.expr(rhs)?;
+                self.emit(Op::LoadSlot(*slot));
+                self.emit(Op::Swap); // [target, rhs]
                 self.emit(Op::Binary(*op));
                 self.emit(Op::Dup);
                 self.emit(Op::StoreSlot(*slot));

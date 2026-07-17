@@ -790,7 +790,9 @@ pub fn array_unique(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let mut seen: Vec<Vec<u8>> = Vec::new();
     let mut out = PhpArray::new();
     for (k, v) in entries {
-        let repr = convert::to_zstr(&v, ctx.diags).as_bytes().to_vec();
+        // ctx.to_zstr honors the VM-precomputed `__toString` of a Stringable
+        // element (PHPUnit's array_unique over ExecutionOrderDependency).
+        let repr = ctx.to_zstr(&v).as_bytes().to_vec();
         if !seen.contains(&repr) {
             seen.push(repr);
             out.insert(k, v);

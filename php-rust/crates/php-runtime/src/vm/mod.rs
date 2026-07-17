@@ -491,6 +491,7 @@ pub(crate) fn run_module_with_hir<'m>(
         lazy_props: HashMap::default(),
         var_dump_debug: std::collections::HashMap::new(),
         stringify_args: std::collections::HashMap::new(),
+        reflect_method_info_cache: std::collections::HashMap::new(),
         lazy_options: HashMap::default(),
         reflect_object_bound: HashMap::default(),
         lazy_initializing: HashSet::default(),
@@ -1417,6 +1418,13 @@ struct Vm<'m> {
     /// re-entering the VM (see `Ctx::stringify` / `compute_stringify`).
     // (std map: crosses into php-builtins like `var_dump_debug`; cold path.)
     stringify_args: std::collections::HashMap<u32, php_types::ZStr>,
+    /// Memoized `__reflect_method_info` descriptors, keyed by (resolved class
+    /// id, lowercased method name). Sound because a declared class's method
+    /// table and ancestry never change afterwards (no runkit); later class
+    /// declarations cannot alter an existing cid's resolution. PHPUnit builds
+    /// thousands of `ReflectionMethod`s over the same (class, method) pairs
+    /// during suite construction — this turns each repeat into an Rc clone.
+    reflect_method_info_cache: std::collections::HashMap<(ClassId, Vec<u8>), Zval>,
     /// Per-lazy-object option flags (PHP 8.4 `ReflectionClass::newLazy*` /
     /// `resetAsLazy*` `$options`): SKIP_INITIALIZATION_ON_SERIALIZE (8) and
     /// SKIP_DESTRUCTOR (16, consumed at reset time). Keyed by object id.
@@ -2467,6 +2475,19 @@ impl<'m> Vm<'m> {
         line: Line,
     ) -> Result<Zval, PhpError> {
         self.flush_diags(line)?;
+        // PHP's ZPP dereferences a reference argument for every by-value
+        // parameter, and the Value family is by-value by construction — but a
+        // dynamic call site (unknown callee ⇒ prefer-ref sends) can deliver
+        // `Zval::Ref` cells here (`$f = 'is_numeric'; $f($x)`, WordPress's
+        // rest_get_best_type_for_value), which a variant-matching predicate
+        // would misread. Unwrap them at this single choke point.
+        let derefed: Vec<Zval>;
+        let args: &[Zval] = if args.iter().any(|a| matches!(a, Zval::Ref(_))) {
+            derefed = args.iter().map(Zval::deref_clone).collect();
+            &derefed
+        } else {
+            args
+        };
         let mut produced = Vec::new();
         let mut direct = Vec::new();
         // A `var_dump` arg-walk left the objects' `__debugInfo()` results here;
@@ -3521,6 +3542,28 @@ impl<'m> Vm<'m> {
         roots: &[Zval],
         recurse_arrays: bool,
     ) -> Result<std::collections::HashMap<u32, php_types::ZStr>, PhpError> {
+        // Fast path: string builtins (trim/substr/str_replace/…) are among the
+        // hottest calls WP makes and virtually never receive objects — an
+        // alloc-free pre-scan skips the queue/map/set machinery entirely
+        // (std::HashMap::new() does not allocate until first insert).
+        fn any_object(v: &Zval, recurse_arrays: bool, budget: &mut u32) -> bool {
+            if *budget == 0 {
+                return true; // pathological nesting: fall to the guarded walk
+            }
+            *budget -= 1;
+            match v {
+                Zval::Object(_) => true,
+                Zval::Ref(c) => any_object(&c.borrow(), recurse_arrays, budget),
+                Zval::Array(a) if recurse_arrays => {
+                    a.iter().any(|(_, val)| any_object(val, recurse_arrays, budget))
+                }
+                _ => false,
+            }
+        }
+        let mut budget = 4096u32;
+        if !roots.iter().any(|r| any_object(r, recurse_arrays, &mut budget)) {
+            return Ok(std::collections::HashMap::new());
+        }
         let mut map: std::collections::HashMap<u32, php_types::ZStr> = std::collections::HashMap::new();
         let mut visited: std::collections::HashSet<u32> = std::collections::HashSet::new();
         // Index-driven FIFO queue: process in insertion order, appending
@@ -4727,15 +4770,17 @@ impl<'m> Vm<'m> {
     /// searched — an abstract class satisfies `hasMethod`/`getMethod` for a method
     /// it merely inherits from an interface, declared by that interface.
     fn find_method_reflect(&self, cid: ClassId, method: &[u8]) -> Option<(&'m CompiledMethod, ClassId, bool)> {
+        // Allocation-free candidate compare: PHPUnit's suite build walks these
+        // tables tens of thousands of times (one per ReflectionMethod).
         let lc = method.to_ascii_lowercase();
         let mut ifaces: Vec<ClassId> = Vec::new();
         let mut cur = Some(cid);
         while let Some(c) = cur {
-            if let Some(m) = self.classes[c].methods.iter().find(|m| m.name.to_ascii_lowercase() == lc) {
+            if let Some(m) = self.classes[c].methods.iter().find(|m| m.name.eq_ignore_ascii_case(&lc)) {
                 return Some((m, c, false));
             }
             if let Some(m) =
-                self.classes[c].abstract_sigs.iter().find(|m| m.name.to_ascii_lowercase() == lc)
+                self.classes[c].abstract_sigs.iter().find(|m| m.name.eq_ignore_ascii_case(&lc))
             {
                 return Some((m, c, true));
             }
@@ -4747,7 +4792,7 @@ impl<'m> Vm<'m> {
             let c = ifaces[i];
             i += 1;
             if let Some(m) =
-                self.classes[c].abstract_sigs.iter().find(|m| m.name.to_ascii_lowercase() == lc)
+                self.classes[c].abstract_sigs.iter().find(|m| m.name.eq_ignore_ascii_case(&lc))
             {
                 return Some((m, c, true));
             }

@@ -65,6 +65,8 @@ pub fn registry() -> Registry {
     add(b"long2ip", net::long2ip);
     add(b"inet_pton", net::inet_pton);
     add(b"inet_ntop", net::inet_ntop);
+    add(b"gethostbyname", net::gethostbyname);
+    add(b"gethostbynamel", net::gethostbynamel);
     add(b"bcadd", bcmath::bcadd);
     add(b"bcsub", bcmath::bcsub);
     add(b"bcmul", bcmath::bcmul);

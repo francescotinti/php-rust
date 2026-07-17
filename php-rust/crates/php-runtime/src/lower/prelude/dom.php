@@ -771,11 +771,33 @@ class SimpleXMLElement implements ArrayAccess, Countable, Iterator, Stringable {
     }
     public function asXML($filename = null) {
         $n = $this->__node(); if ($n < 0) { return false; }
-        $xml = __dom_save_xml($this->__d, $n);
+        // On the DOCUMENT element PHP serializes the whole document (XML
+        // declaration + trailing newline); a non-root element is bare.
+        $xml = ($n === __dom_doc_element($this->__d))
+            ? __dom_save_xml($this->__d, -1)
+            : __dom_save_xml($this->__d, $n);
         if ($filename !== null) { return file_put_contents((string)$filename, $xml) !== false; }
         return $xml;
     }
     public function saveXML($filename = null) { return $this->asXML($filename); }
+    public function addChild($qualifiedName, $value = null, $namespace = null) {
+        $n = $this->__node(); if ($n < 0) { return null; }
+        $c = __dom_create($this->__d, 1, (string)$qualifiedName, '');
+        if ($c < 0) { throw new Exception('SimpleXMLElement::addChild(): Invalid element name'); }
+        __dom_mutate($this->__d, 0, $n, $c, -1);
+        if ($value !== null && (string)$value !== '') {
+            // PHP treats the value as already-escaped XML text (the documented
+            // addChild gotcha): entities decode on the way in, the serializer
+            // re-escapes on the way out (WP passes esc_html()ed values).
+            $t = __dom_create($this->__d, 3, html_entity_decode((string)$value, ENT_QUOTES), '');
+            __dom_mutate($this->__d, 0, $c, $t, -1);
+        }
+        return SimpleXMLElement::__mk($this->__d, 'e', $c);
+    }
+    public function addAttribute($qualifiedName, $value = '', $namespace = null) {
+        $n = $this->__node(); if ($n < 0) { return; }
+        __dom_attr($this->__d, $n, 1, (string)$qualifiedName, html_entity_decode((string)$value, ENT_QUOTES));
+    }
     public function rewind() {
         $this->__it = array();
         if ($this->__k === 'A') {

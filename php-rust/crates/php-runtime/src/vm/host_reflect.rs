@@ -424,6 +424,10 @@ impl<'m> super::Vm<'m> {
         };
         let key = cname.strip_prefix(b"\\").unwrap_or(&cname).to_ascii_lowercase();
         let Some(&cid) = self.class_index.get(&key) else { return Ok(Zval::Bool(false)) };
+        let cache_key = (cid, mname.to_ascii_lowercase());
+        if let Some(hit) = self.reflect_method_info_cache.get(&cache_key) {
+            return Ok(hit.clone());
+        }
         let Some((m, decl, is_abstract)) = self.find_method_reflect(cid, &mname) else {
             return Ok(Zval::Bool(false));
         };
@@ -444,7 +448,9 @@ impl<'m> super::Vm<'m> {
         d.insert(Key::Str(PhpStr::new(b"declaringClass".to_vec())), Zval::Str(PhpStr::new(decl_name)));
         // file / startLine / endLine are added by build_func_descriptor (shared with
         // ReflectionFunction), with a declaration-line fallback for body-less methods.
-        Ok(Zval::Array(Rc::new(d)))
+        let out = Zval::Array(Rc::new(d));
+        self.reflect_method_info_cache.insert(cache_key, out.clone());
+        Ok(out)
     }
     /// `__reflect_invoke($object, $class, $method, $args)` — the engine behind
     /// `ReflectionMethod::invoke`/`invokeArgs`. Resolves `$method` on the *reflected*

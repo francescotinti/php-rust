@@ -75,6 +75,22 @@ pub fn dval_to_lval(d: f64) -> i64 {
     d as i64
 }
 
+/// zend_dval_to_lval_cap: the saturating variant Zend uses for a NUMERIC
+/// STRING source — `(int)'9223372036854775807000'` caps at i64::MAX where a
+/// real float zval would wrap modularly (zval_get_long_func, IS_STRING arm).
+pub fn dval_to_lval_cap(d: f64) -> i64 {
+    if !d.is_finite() {
+        return 0;
+    }
+    if d >= -(i64::MIN as f64) {
+        return i64::MAX;
+    }
+    if d < i64::MIN as f64 {
+        return i64::MIN;
+    }
+    d as i64
+}
+
 /// ZEND_DOUBLE_FITS_LONG.
 pub fn fits_long(d: f64) -> bool {
     !(d >= -(i64::MIN as f64) || d < i64::MIN as f64)
@@ -139,7 +155,9 @@ pub fn to_long_cast(v: &Zval, diags: &mut Diags) -> i64 {
         Zval::Str(s) => match parse_numeric_ex(s.as_bytes(), true) {
             Some(i) => match i.num {
                 Num::Long(l) => l,
-                Num::Double(d) => dval_to_lval(d),
+                // A string source saturates (zend_dval_to_lval_cap), unlike a
+                // real float zval: `(int)'9223372036854775807000'` == i64::MAX.
+                Num::Double(d) => dval_to_lval_cap(d),
             },
             None => 0,
         },

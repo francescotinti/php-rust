@@ -479,6 +479,45 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-17 (sessione WordPress-13): 🏁 **WP CORE SUITE: gruppo RESTAPI
+  sbloccato** (3514 test; prima phpr NON TERMINAVA — >50 min CPU, junit vuoto).
+  Root cause del "hang": **l'assegnamento composto valutava il target PRIMA del
+  RHS** — Zend (ASSIGN_OP/ASSIGN_OBJ_OP) valuta il RHS e POI fa il
+  read-modify-write, quindi un RHS che muta il target contribuisce col valore
+  post-mutazione. `validate_custom_css` di WP itera con
+  `$at += strcspn($css,'<',++$at)`: col valore stantio `$at` oscillava per
+  sempre (`WP_REST_Global_Styles_Controller_Test::
+  test_update_allows_valid_css_with_more_syntax`, il 1173° test: loop VERO,
+  non lentezza). Fix su TUTTE le forme non ancora RHS-first: slot
+  (compile/expr.rs, via Op::Swap), prop `$o->p op= rhs` (Dup/rhs/Swap/PropGet/
+  Swap — __get/__set invariati), `$GLOBALS['x'] op=` e superglobali
+  (compile/assign.rs); i path dim (FieldAssignOp/AssignOpPath) erano già
+  corretti. Probe oracle-pinned: `$x+=++$x`→4, `$y-=$y=3`→0, `$z*=$z+=1`→9,
+  statics→4, `$g+=$g+=3`→16, `$s.=$s.="b"`→"abab". Altri 3 fix engine emersi
+  dai 11F di Tests_REST_API:
+  **(a) i Value-builtin dereferenziano i `Zval::Ref` al choke point**
+  (run_value_builtin; un call-site dinamico — callee ignoto ⇒ prefer-ref —
+  consegnava Ref ai predicati `is_*` che matchano le varianti direttamente:
+  `rest_get_best_type_for_value` con `$checks[$type]($value)` tornava ''
+  o il tipo sbagliato);
+  **(b) `array_unique` onora `__toString`** (gate nel deep-stringify
+  precompute condizionato ai flag SORT_STRING-like + `ctx.to_zstr` nel
+  builtin; PHPUnit deduplica oggetti `ExecutionOrderDependency` con
+  array_unique — prima warning spurio E dipendenze @depends collassate);
+  **(c) cast string→int SATURANTE per overflow** (`zend_dval_to_lval_cap`:
+  `(int)'9223372036854775807000'`→i64::MAX, negativo→i64::MIN, inf/nan→0 —
+  una stringa numerica satura, un float zval vero continua a wrappare;
+  convert.rs, `rest_sanitize_value_from_schema` sui bigint).
+  Perf: **cache VM dei descriptor `__reflect_method_info`** (chiave
+  (ClassId, nome_lc), immutabile per costruzione — la build della suite
+  PHPUnit ricostruisce migliaia di ReflectionMethod sulle stesse coppie:
+  fase build 60s→21s) + compare alloc-free in find_method_reflect + fast-path
+  alloc-free in compute_stringify (pre-scan senza oggetto → mappa vuota).
+  ⚠️ Lezioni: l'oracle restapi oggi = 149s/1E/4W/6S (trunk wpdev cambiato vs
+  memo "~30s"); phpr bufferizza stdout anche su pty (⇒ `script` NON dà
+  progresso live: usare marker file-based in set_up/bootstrap — TESTLOG/
+  TRACELOG/HASHLOG con `getenv`); il triage dell'hang è stato: sample →
+  hashlog → stage-marker → per-test-marker → bisezione del singolo test.
 - 2026-07-17 (sessione WordPress-12): 🏁 **ext/fileinfo NATIVO (§2.7) + WP CORE
   SUITE: gruppi POST/USER/QUERY A PARITÀ ORACLE** (post 906, user 1341, query
   1889 — user era 24E, post 2E/13F, query 2E/7F). Fix engine trasversali:

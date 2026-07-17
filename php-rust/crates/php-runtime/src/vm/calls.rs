@@ -149,8 +149,22 @@ pub(super) fn value_builtin_string_coerces(name: &[u8]) -> bool {
 /// `__toString`, `%d` does not), so an eager precompute there would run
 /// `__toString` spuriously. (`implode`/`join` are host builtins with their own
 /// VM-aware coercion, so they are handled in `ho_implode`, not here.)
-pub(super) fn value_builtin_string_coerces_deep(name: &[u8]) -> bool {
-    matches!(name, b"str_replace" | b"str_ireplace")
+pub(super) fn value_builtin_string_coerces_deep(name: &[u8], args: &[Zval]) -> bool {
+    match name {
+        b"str_replace" | b"str_ireplace" => true,
+        // `array_unique` compares element string representations under its
+        // default SORT_STRING flag (PHPUnit dedupes ExecutionOrderDependency
+        // objects this way), so Stringable elements need the precompute. The
+        // string-coercing flags: SORT_STRING (2), SORT_LOCALE_STRING (5),
+        // either | SORT_FLAG_CASE (8). SORT_REGULAR/SORT_NUMERIC never call
+        // `__toString`, so the eager precompute must not run for them.
+        b"array_unique" => match args.get(1).map(Zval::deref_clone) {
+            None | Some(Zval::Undef) => true,
+            Some(Zval::Long(f)) => matches!(f, 2 | 5 | 10 | 13),
+            Some(_) => true,
+        },
+        _ => false,
+    }
 }
 
 /// The by-ref-first builtins that *unconditionally* string-coerce every element
@@ -962,7 +976,7 @@ impl<'m> Vm<'m> {
                 // Stringable objects.
                 if value_builtin_string_coerces(name) {
                     self.stringify_args = self.compute_stringify(&args, false)?;
-                } else if value_builtin_string_coerces_deep(name) {
+                } else if value_builtin_string_coerces_deep(name, &args) {
                     self.stringify_args = self.compute_stringify(&args, true)?;
                 }
                 let line = self.cur_line(self.frames.len() - 1);

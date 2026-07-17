@@ -1840,7 +1840,7 @@ impl<'m> super::Vm<'m> {
                     // *elements*, so its precompute recurses into array arguments.
                     if value_builtin_string_coerces(&name) {
                         self.stringify_args = self.compute_stringify(&args, false)?;
-                    } else if value_builtin_string_coerces_deep(&name) {
+                    } else if value_builtin_string_coerces_deep(&name, &args) {
                         self.stringify_args = self.compute_stringify(&args, true)?;
                     }
                     let line = self.cur_line(top);

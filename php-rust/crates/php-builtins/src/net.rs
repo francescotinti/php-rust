@@ -111,3 +111,48 @@ pub fn inet_ntop(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         _ => Ok(Zval::Bool(false)),
     }
 }
+
+/// `gethostbyname(string $hostname): string` — the host's IPv4 address, or the
+/// *unmodified* hostname when resolution fails (PHP's failure convention; no
+/// warning). An IPv4 literal resolves to itself without a DNS round-trip.
+/// (WP's `wp_http_validate_url` resolves every external host through this.)
+pub fn gethostbyname(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let host = convert::to_zstr(args.first().unwrap_or(&Zval::Null), ctx.diags);
+    if let Ok(name) = std::str::from_utf8(host.as_bytes()) {
+        if parse_ipv4(name).is_some() {
+            return Ok(Zval::Str(PhpStr::new(host.as_bytes().to_vec())));
+        }
+        use std::net::ToSocketAddrs;
+        if let Ok(addrs) = (name, 0u16).to_socket_addrs() {
+            for a in addrs {
+                if let std::net::SocketAddr::V4(v4) = a {
+                    return Ok(Zval::Str(PhpStr::new(v4.ip().to_string().into_bytes())));
+                }
+            }
+        }
+    }
+    Ok(Zval::Str(PhpStr::new(host.as_bytes().to_vec())))
+}
+
+/// `gethostbynamel(string $hostname): array|false` — every IPv4 address of the
+/// host, or `false` when resolution fails.
+pub fn gethostbynamel(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let host = convert::to_zstr(args.first().unwrap_or(&Zval::Null), ctx.diags);
+    let Ok(name) = std::str::from_utf8(host.as_bytes()) else {
+        return Ok(Zval::Bool(false));
+    };
+    use std::net::ToSocketAddrs;
+    let Ok(addrs) = (name, 0u16).to_socket_addrs() else {
+        return Ok(Zval::Bool(false));
+    };
+    let mut out = php_types::PhpArray::new();
+    for a in addrs {
+        if let std::net::SocketAddr::V4(v4) = a {
+            out.append(Zval::Str(PhpStr::new(v4.ip().to_string().into_bytes())));
+        }
+    }
+    if out.is_empty() {
+        return Ok(Zval::Bool(false));
+    }
+    Ok(Zval::Array(std::rc::Rc::new(out)))
+}
