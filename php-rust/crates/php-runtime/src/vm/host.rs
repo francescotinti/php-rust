@@ -3642,6 +3642,17 @@ impl<'m> super::Vm<'m> {
         Ok((result, Zval::Long(count)))
     }
 
+    /// `preg_last_error(): int` — lo stato registrato da preg_compile /
+    /// subject_text (0 / 1 / 4; phpr non ha backtrack limit, WP-16).
+    pub(super) fn ho_preg_last_error(&mut self) -> Result<Zval, PhpError> {
+        Ok(Zval::Long(crate::preg::last_error()))
+    }
+
+    /// `preg_last_error_msg(): string`.
+    pub(super) fn ho_preg_last_error_msg(&mut self) -> Result<Zval, PhpError> {
+        Ok(Zval::Str(PhpStr::from_str(crate::preg::last_error_msg())))
+    }
+
     /// `preg_match($pattern, $subject, &$matches = null, $flags = 0)`: returns 1 on
     /// a match, 0 on none, `false` on a bad pattern. Yields `(ret, matches_array)`;
     /// `$matches` is written by the VM out-param path. Mirrors `eval::ho_preg_match`.
@@ -4695,7 +4706,9 @@ impl<'m> super::Vm<'m> {
         // Sort row indices by the multi-column comparison, tie-broken by the
         // original position (PHP's stable_sort_fallback).
         let mut order: Vec<usize> = (0..array_size).collect();
-        order.sort_by(|&ra, &rb| {
+        // Confronto loose SORT_REGULAR: non-totale sui tipi misti — merge
+        // sort tollerante come zend_sort (WP-16).
+        php_types::ops::stable_sort_by(&mut order, |&ra, &rb| {
             for (j, a) in arrays.iter().enumerate() {
                 let c = match (&col_keys[j][ra], &col_keys[j][rb]) {
                     (SortKey::Num(x), SortKey::Num(y)) => {

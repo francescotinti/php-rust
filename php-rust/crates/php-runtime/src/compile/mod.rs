@@ -656,6 +656,52 @@ impl<'a> FnCompiler<'a> {
                     // reference so an element REPLACEMENT (`$v = …`) writes through to
                     // the source array (Doctrine QueryBuilder::indexBy rewrites
                     // `$this->dqlParts['from']` elements via `foreach (… as &$f)`).
+                    // A static-property-rooted source (`foreach (self::$ids as
+                    // &$id)` — Tests_Multisite_Site::wpSetUpBeforeClass — or a
+                    // stepped `self::$m['p']`): alias the live storage cell via
+                    // StaticPropRef into a temp, walk any steps through it with
+                    // MakeRef, and iterate by reference so element writes land
+                    // in the property. Dynamic-name (`C::${$n}`) or
+                    // runtime-class sources still degrade to by-value below
+                    // (documented divergence).
+                    if let Some((class, name, steps)) = static_prop_root_place(iter) {
+                        if !self.is_runtime_class(class) {
+                            let target = self.resolve_target(class)?.0;
+                            self.emit(Op::StaticPropRef { target, name: name.into() });
+                            let root = self.alloc_temp();
+                            self.emit(Op::BindRefTo { base: FieldBase::Local(root), steps: [].into() });
+                            self.emit(Op::Pop);
+                            let tmp = if steps.is_empty() {
+                                root
+                            } else {
+                                let place = Place { base: PlaceBase::Local(root), steps };
+                                let (base, fsteps) = self.field_path(&place)?;
+                                self.emit(Op::MakeRef { base, steps: fsteps.into() });
+                                let t = self.alloc_temp();
+                                self.emit(Op::BindRefTo { base: FieldBase::Local(t), steps: [].into() });
+                                self.emit(Op::Pop);
+                                t
+                            };
+                            self.emit(Op::IterInitRef(tmp));
+                            let cont = self.here();
+                            let fetch = self.emit(Op::IterNextRef { value: *value, key: *key, end: Addr::MAX });
+                            self.loops.push(LoopCtx { has_iter: true, ..LoopCtx::default() });
+                            self.block(body)?;
+                            self.emit(Op::Jump(cont));
+                            let exhaust = self.here();
+                            self.patch(fetch, Op::IterNextRef { value: *value, key: *key, end: exhaust });
+                            self.emit(Op::IterPop);
+                            let after = self.here();
+                            if tmp != root {
+                                self.clear_temp_binding(tmp);
+                                self.free_temp();
+                            }
+                            self.clear_temp_binding(root);
+                            self.free_temp();
+                            self.close_loop(cont, after);
+                            return Ok(());
+                        }
+                    }
                     if let Some(place) = expr_field_place(iter) {
                         let (base, steps) = self.field_path(&place)?;
                         self.emit(Op::MakeRef { base, steps: steps.into() });
@@ -1231,6 +1277,26 @@ fn expr_rooted_field_chain(e: &Expr) -> Option<(&Expr, Vec<PlaceStep>)> {
     }
     steps_rev.reverse();
     Some((cur, steps_rev))
+}
+
+/// A foreach-by-ref source rooted at a LITERAL static property: peel
+/// `C::$prop` plus any index/property steps. Dynamic names (`C::${$n}`) are
+/// excluded (no dynamic StaticPropRef op — documented by-value degrade).
+fn static_prop_root_place(e: &Expr) -> Option<(&ClassRef, &[u8], Vec<PlaceStep>)> {
+    match &e.kind {
+        ExprKind::StaticProp { class, name } => Some((class, name, Vec::new())),
+        ExprKind::Index { base, index } => {
+            let (c, n, mut steps) = static_prop_root_place(base)?;
+            steps.push(PlaceStep::Index((**index).clone()));
+            Some((c, n, steps))
+        }
+        ExprKind::PropGet { object, name, nullsafe: false } => {
+            let (c, n, mut steps) = static_prop_root_place(object)?;
+            steps.push(PlaceStep::Prop(name.clone()));
+            Some((c, n, steps))
+        }
+        _ => None,
+    }
 }
 
 fn expr_field_place(e: &Expr) -> Option<Place> {

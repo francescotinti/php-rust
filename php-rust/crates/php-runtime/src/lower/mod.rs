@@ -2498,6 +2498,16 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"JSON_UNESCAPED_UNICODE" => ExprKind::Int(256),
         b"JSON_PARTIAL_OUTPUT_ON_ERROR" => ExprKind::Int(512),
         b"JSON_PRESERVE_ZERO_FRACTION" => ExprKind::Int(1024),
+        b"JSON_UNESCAPED_LINE_TERMINATORS" => ExprKind::Int(2048),
+        // preg_last_error() (WP-16): phpr produce solo 0/1/4, ma le costanti
+        // esistono tutte come in ext/pcre.
+        b"PREG_NO_ERROR" => ExprKind::Int(0),
+        b"PREG_INTERNAL_ERROR" => ExprKind::Int(1),
+        b"PREG_BACKTRACK_LIMIT_ERROR" => ExprKind::Int(2),
+        b"PREG_RECURSION_LIMIT_ERROR" => ExprKind::Int(3),
+        b"PREG_BAD_UTF8_ERROR" => ExprKind::Int(4),
+        b"PREG_BAD_UTF8_OFFSET_ERROR" => ExprKind::Int(5),
+        b"PREG_JIT_STACKLIMIT_ERROR" => ExprKind::Int(6),
         b"JSON_INVALID_UTF8_IGNORE" => ExprKind::Int(1_048_576),
         b"JSON_INVALID_UTF8_SUBSTITUTE" => ExprKind::Int(2_097_152),
         b"JSON_THROW_ON_ERROR" => ExprKind::Int(4_194_304),

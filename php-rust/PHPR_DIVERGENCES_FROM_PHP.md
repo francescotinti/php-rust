@@ -479,6 +479,45 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-17 (sessione WordPress-16): 🏁 **la WP core suite INTERA (default
+  testsuite, 30.480 test / 4,55M assertion) arriva IN FONDO su phpr per la
+  prima volta**: da "muore silenziosamente" a 123E/199F/15S-diff (336 test
+  differenti per nome vs oracle 30.321P/86W/73S/1F; -1 test = dataset tidy,
+  ambientale). Cinque blocker seriali abbattuti: **(1) mysqli senza
+  `__destruct`** — connessioni leakate (una per classe di test via
+  `wpdb::db_connect()`) tenevano transazioni aperte e metadata lock che
+  DEADLOCKAVANO l'install del bootstrap nei figli `@runInSeparateProcess`
+  (catena a 3 processi: padre in stream_get_contents ← figlio isolato ←
+  install.php bloccato su MySQL); ora il prelude chiude alla caduta
+  dell'ultimo riferimento come Zend. **(2) RSS fino al jetsam-kill**: mimalloc
+  (WP-7) trattiene le pagine liberate — `MIMALLOC_PURGE_DELAY=0` nell'harness
+  full-suite le restituisce all'OS (2.3GB→0.5-1GB steady). **(3) panic Rust
+  "not a total order"**: il confronto loose di PHP non è un ordine totale sui
+  tipi misti e la std panica; `sort/rsort/asort family/array_multisort` ora
+  usano un merge sort STABILE tollerante (`php_types::ops::stable_sort_by`).
+  ⚠️ divergenza: su array misti con comparatore INCOERENTE la permutazione
+  può differire da zend_sort (i tie e i comparatori coerenti sono identici).
+  **(4) foreach by-ref su proprietà statiche** (`foreach (self::$ids as &$id)`
+  e stepped `self::$m['p']`) iterava una COPIA: ora alias dello storage vivo
+  via StaticPropRef(+MakeRef); nome dinamico `C::${$n}` resta by-value
+  (documentato). **(5) cluster full-suite**: `mb_substitute_character` (stato
+  onorato in decode/encode: none/long/entity/codepoint, probe byte-id — long/
+  entity valgono solo lato encode, decode-bad → `?`; granularità malformed
+  UTF-8 = WHATWG maximal-subpart) + `mb_scrub` · BIG-5 NATIVO (port verbatim
+  di unicode_table_big5.h + semantica mb_big5_to_wchar in `php_types::big5`,
+  24k celle decode + BMP encode BYTE-ID; encoding_rs WHATWG divergeva su 260
+  celle simbolo, lead HKSCS e sostituto) · `JSON_UNESCAPED_LINE_TERMINATORS`
+  (+ U+2028/29 escapati sotto UNESCAPED_UNICODE senza il flag, json.c 7.1+) ·
+  `preg_last_error`/`_msg` + costanti PREG_* (0/1/4; phpr non ha backtrack
+  limit → 2/3/6 mai prodotti, divergenza documentata) · `chown`/`chgrp`/
+  `lchown`/`lchgrp` su libc (nome→uid/gid via getpwnam/getgrnam, warning
+  oracle-pinned) · ini: access PERDIR|SYSTEM su 6 direttive, `upload_tmp_dir`
+  e `open_basedir` con semantica NULL (e ini_set di open_basedir aggiorna
+  anche global_value); open_basedir NON restringe le operazioni file di phpr
+  (documentato). Residuo full-suite per WP-17: Template 38 · php-ai-client 28
+  · Privacy export 27 (PclZip) · Kses 21 · BackgroundSupport 20 · GetBookmark
+  19 · DB_Charset 16 · Translation 12 · goto-into-block html-api (D-45.1) ·
+  WPDieException 26 · Hooks order 8+8.
 - 2026-07-17 (sessione WordPress-15): 🏁 **gruppi WP taxonomy/comment/xmlrpc/
   multisite a parità oracle** (878/582/316/32 test; multisite lo era già al
   primo colpo). Sette lavori: **(1) bug static-prelude CHIUSO** — il prelude

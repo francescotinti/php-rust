@@ -208,6 +208,10 @@ pub fn registry() -> Registry {
     add(b"set_socket_blocking", file::stream_set_blocking); // legacy alias
     add(b"fputs", file::fwrite);
     add(b"fclose", file::fclose);
+    add(b"chown", file::chown);
+    add(b"chgrp", file::chgrp);
+    add(b"lchown", file::lchown);
+    add(b"lchgrp", file::lchgrp);
     add(b"fgets", file::fgets);
     add(b"fgetc", file::fgetc);
     add(b"feof", file::feof);
@@ -483,6 +487,8 @@ pub fn registry() -> Registry {
     add(b"mb_rtrim", mbstring::mb_rtrim);
     add(b"mb_check_encoding", mbstring::mb_check_encoding);
     add(b"mb_list_encodings", mbstring::mb_list_encodings);
+    add(b"mb_substitute_character", mbstring::mb_substitute_character);
+    add(b"mb_scrub", mbstring::mb_scrub);
     add(b"mb_strwidth", mbstring::mb_strwidth);
     add(b"mb_strimwidth", mbstring::mb_strimwidth);
     add(b"mb_strcut", mbstring::mb_strcut);

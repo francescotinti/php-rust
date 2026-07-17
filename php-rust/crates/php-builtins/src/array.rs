@@ -422,7 +422,9 @@ pub fn settype(var: &mut Zval, args: &[Zval], ctx: &mut Ctx) -> Result<Zval, Php
 pub fn sort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let rc = as_array_mut(arr, "sort")?;
     let mut vals: Vec<Zval> = rc.iter().map(|(_, v)| v.clone()).collect();
-    vals.sort_by(|a, b| ops::compare(a, b).cmp(&0));
+    // ops::compare (loose) NON è un ordine totale sui tipi misti: la std
+    // panica, zend_sort no — merge sort tollerante (WP-16).
+    ops::stable_sort_by(&mut vals, |a, b| ops::compare(a, b).cmp(&0));
     let mut out = PhpArray::new();
     for v in vals {
         let _ = out.append(v);
@@ -456,7 +458,7 @@ pub fn shuffle(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, P
 pub fn rsort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let rc = as_array_mut(arr, "rsort")?;
     let mut vals: Vec<Zval> = rc.iter().map(|(_, v)| v.clone()).collect();
-    vals.sort_by(|a, b| ops::compare(b, a).cmp(&0));
+    ops::stable_sort_by(&mut vals, |a, b| ops::compare(b, a).cmp(&0));
     let mut out = PhpArray::new();
     for v in vals {
         let _ = out.append(v);
@@ -474,7 +476,7 @@ where
 {
     let rc = as_array_mut(arr, fname)?;
     let mut pairs: Vec<(Key, Zval)> = rc.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-    pairs.sort_by(|a, b| cmp(a, b));
+    ops::stable_sort_by(&mut pairs, |a, b| cmp(a, b));
     let mut out = PhpArray::new();
     for (k, v) in pairs {
         out.insert(k, v);

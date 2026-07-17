@@ -497,6 +497,63 @@ fn type_lt_true(v: &Zval) -> bool {
     matches!(v, Zval::Undef | Zval::Null | Zval::Bool(false))
 }
 
+/// Merge sort STABILE che non richiede un ordine totale: zend_sort non ha
+/// quel requisito e il confronto loose di PHP lo viola sui tipi misti — la
+/// std detecta l'incoerenza e panica ("user-provided comparison function does
+/// not correctly implement a total order", full-suite WP-16). O(n log n),
+/// stabile come zend_sort dall'8.0; il comparatore è chiamato cmp(a, b) come
+/// in PHP.
+pub fn stable_sort_by<T: Clone>(
+    v: &mut [T],
+    mut cmp: impl FnMut(&T, &T) -> std::cmp::Ordering,
+) {
+    let n = v.len();
+    if n < 2 {
+        return;
+    }
+    let mut buf: Vec<T> = v.to_vec();
+    let mut width = 1;
+    let mut src_is_v = true;
+    while width < n {
+        {
+            let (src, dst): (&[T], &mut [T]) =
+                if src_is_v { (&*v, &mut buf[..]) } else { (&buf[..], &mut *v) };
+            let mut i = 0;
+            while i < n {
+                let mid = usize::min(i + width, n);
+                let end = usize::min(i + 2 * width, n);
+                let (mut a, mut b, mut o) = (i, mid, i);
+                while a < mid && b < end {
+                    if cmp(&src[a], &src[b]) != std::cmp::Ordering::Greater {
+                        dst[o] = src[a].clone();
+                        a += 1;
+                    } else {
+                        dst[o] = src[b].clone();
+                        b += 1;
+                    }
+                    o += 1;
+                }
+                while a < mid {
+                    dst[o] = src[a].clone();
+                    a += 1;
+                    o += 1;
+                }
+                while b < end {
+                    dst[o] = src[b].clone();
+                    b += 1;
+                    o += 1;
+                }
+                i = end;
+            }
+        }
+        src_is_v = !src_is_v;
+        width *= 2;
+    }
+    if !src_is_v {
+        v.clone_from_slice(&buf);
+    }
+}
+
 /// zend_compare (zend_operators.c:2306-2470), minus objects/resources/refs.
 pub fn compare(a: &Zval, b: &Zval) -> i32 {
     // Follow references up front (D-R11): the rest of the routine, and the

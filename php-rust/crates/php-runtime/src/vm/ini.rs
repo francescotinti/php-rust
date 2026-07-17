@@ -65,6 +65,9 @@ pub(super) struct IniEntry {
     /// `session.sid_length`/`session.sid_bits_per_character`: `ini_set` to any
     /// value other than the default raises a Deprecated.
     deprecated_off_default: bool,
+    /// Directive whose startup value is NULL (`upload_tmp_dir`): `ini_get`
+    /// still reads "", but `ini_get_all` reports NULL for both values.
+    null_value: bool,
 }
 
 impl IniEntry {
@@ -94,6 +97,7 @@ impl IniTable {
                     settable,
                     int_typed,
                     deprecated_off_default: name.starts_with("session.sid_"),
+                    null_value: false,
                 },
             );
         };
@@ -115,9 +119,9 @@ impl IniTable {
         // web values (30 / 60) at request init, see the web_request block in
         // vm/mod.rs. Both report-only: phpr has no execution/input clock.
         add("max_execution_time", "0", INI_ALL, false, false);
-        add("max_input_time", "-1", INI_PERDIR, false, false);
+        add("max_input_time", "-1", INI_PERDIR | INI_SYSTEM, false, false);
         // Superglobal-parsing cap, same value under every SAPI (site-health).
-        add("max_input_vars", "1000", INI_PERDIR, false, false);
+        add("max_input_vars", "1000", INI_PERDIR | INI_SYSTEM, false, false);
         add("default_socket_timeout", "60", INI_ALL, false, false);
         add("precision", "14", INI_ALL, false, false);
         add("serialize_precision", "-1", INI_ALL, false, false);
@@ -135,11 +139,11 @@ impl IniTable {
         // Upload limits (php -n defaults). phpr's CLI never receives uploads,
         // but UploadedFile::getMaxFilesize() computes min(post_max_size,
         // upload_max_filesize) from these.
-        add("upload_max_filesize", "2M", INI_PERDIR, false, false);
-        add("post_max_size", "8M", INI_PERDIR, false, false);
+        add("upload_max_filesize", "2M", INI_PERDIR | INI_SYSTEM, false, false);
+        add("post_max_size", "8M", INI_PERDIR | INI_SYSTEM, false, false);
         // WP site-health's debug tab reads both (WP-10).
         add("file_uploads", "1", INI_SYSTEM, false, false);
-        add("max_file_uploads", "20", INI_SYSTEM, false, false);
+        add("max_file_uploads", "20", INI_PERDIR | INI_SYSTEM, false, false);
         // The default timezone (D-DT3). The CLI oracle reports "UTC" under
         // `-n`; writes propagate to php_types::tz so the date builtins and
         // date_default_timezone_get() see them.
@@ -151,7 +155,7 @@ impl IniTable {
         add("display_errors", "1", INI_ALL, true, false);
         add("log_errors", "1", INI_ALL, true, false);
         add("html_errors", "0", INI_ALL, true, false);
-        add("output_buffering", "0", INI_PERDIR, false, false);
+        add("output_buffering", "0", INI_PERDIR | INI_SYSTEM, false, false);
         add("implicit_flush", "1", INI_ALL, false, false);
         // ext/session (31 directives, defaults from the 8.5.7 CLI oracle).
         add("session.auto_start", "0", INI_PERDIR, false, false);
@@ -196,6 +200,36 @@ impl IniTable {
         // from ini_get_all('session') — see TRANS_SID_EXEMPT.
         add("session.trans_sid_tags", "a=href,area=href,frame=src,form=", INI_ALL, true, false);
         add("session.trans_sid_hosts", "", INI_ALL, true, false);
+        drop(add);
+        // upload_tmp_dir e open_basedir partono NULL (ini_get → "",
+        // ini_get_all → NULL, WP-16 probe). open_basedir è settable —
+        // WP_Automatic_Updater::is_allowed_dir legge ini_get e fa i suoi
+        // check; phpr NON applica la restrizione alle operazioni su file
+        // (divergenza documentata).
+        t.insert(
+            b"upload_tmp_dir".to_vec(),
+            IniEntry {
+                global: Vec::new(),
+                local: Vec::new(),
+                access: INI_SYSTEM,
+                settable: false,
+                int_typed: false,
+                deprecated_off_default: false,
+                null_value: true,
+            },
+        );
+        t.insert(
+            b"open_basedir".to_vec(),
+            IniEntry {
+                global: Vec::new(),
+                local: Vec::new(),
+                access: INI_ALL,
+                settable: true,
+                int_typed: false,
+                deprecated_off_default: false,
+                null_value: true,
+            },
+        );
         IniTable(t)
     }
 
@@ -415,6 +449,12 @@ impl<'m> Vm<'m> {
                 &String::from_utf8_lossy(&value).into_owned(),
             );
         }
+        // Oddity oracle-pinned (WP-16 probe): un ini_set di open_basedir
+        // aggiorna ANCHE global_value (la restrizione non è ripristinabile,
+        // OnUpdateBaseDir non conserva l'orig).
+        if name == b"open_basedir" {
+            entry.global = value.clone();
+        }
         let old = std::mem::replace(&mut entry.local, value);
         Ok(Zval::Str(PhpStr::new(old)))
     }
@@ -492,20 +532,21 @@ impl<'m> Vm<'m> {
                 continue;
             }
             let key = Key::Str(PhpStr::new(name.clone()));
+            let val = |bytes: &Vec<u8>| {
+                if e.null_value && bytes.is_empty() {
+                    Zval::Null
+                } else {
+                    Zval::Str(PhpStr::new(bytes.clone()))
+                }
+            };
             if details {
                 let mut row = PhpArray::new();
-                row.insert(
-                    Key::Str(PhpStr::from_str("global_value")),
-                    Zval::Str(PhpStr::new(e.global.clone())),
-                );
-                row.insert(
-                    Key::Str(PhpStr::from_str("local_value")),
-                    Zval::Str(PhpStr::new(e.local.clone())),
-                );
+                row.insert(Key::Str(PhpStr::from_str("global_value")), val(&e.global));
+                row.insert(Key::Str(PhpStr::from_str("local_value")), val(&e.local));
                 row.insert(Key::Str(PhpStr::from_str("access")), Zval::Long(e.access));
                 out.insert(key, Zval::Array(Rc::new(row)));
             } else {
-                out.insert(key, Zval::Str(PhpStr::new(e.local.clone())));
+                out.insert(key, val(&e.local));
             }
         }
         Ok(Zval::Array(Rc::new(out)))

@@ -2299,6 +2299,72 @@ pub fn chmod(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     }
 }
 
+/// Corpo comune di chown/chgrp/lchown/lchgrp (WP-16, filestat.c): `$user` è
+/// nome o id — un nome ignoto warna "Unable to find uid/gid for X" e torna
+/// false; il fallimento della syscall warna con strerror ("Operation not
+/// permitted", "No such file or directory" — oracle-pinned).
+fn chown_like(
+    argv: &[Zval],
+    ctx: &mut Ctx,
+    func: &str,
+    group: bool,
+    follow: bool,
+) -> Result<Zval, PhpError> {
+    if argv.len() < 2 {
+        return Err(PhpError::ArgumentCountError(format!(
+            "{func}() expects exactly 2 arguments, {} given",
+            argv.len()
+        )));
+    }
+    let p = arg_os_path(argv, ctx);
+    let id: i64 = match &argv[1].deref_clone() {
+        Zval::Str(s) => {
+            let resolved = if group {
+                php_types::fsown::resolve_gid(s.as_bytes())
+            } else {
+                php_types::fsown::resolve_uid(s.as_bytes())
+            };
+            match resolved {
+                Some(id) => i64::from(id),
+                None => {
+                    ctx.diags.push(Diag::Warning(format!(
+                        "{func}(): Unable to find {} for {}",
+                        if group { "gid" } else { "uid" },
+                        String::from_utf8_lossy(s.as_bytes())
+                    )));
+                    return Ok(Zval::Bool(false));
+                }
+            }
+        }
+        v => convert::to_long_cast(v, ctx.diags),
+    };
+    let (uid, gid) = if group { (-1, id) } else { (id, -1) };
+    use std::os::unix::ffi::OsStrExt;
+    match php_types::fsown::change_owner(p.as_os_str().as_bytes(), uid, gid, follow) {
+        Ok(()) => Ok(Zval::Bool(true)),
+        Err(e) => {
+            ctx.diags.push(Diag::Warning(format!("{func}(): {}", strerror(&e))));
+            Ok(Zval::Bool(false))
+        }
+    }
+}
+
+pub fn chown(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    chown_like(argv, ctx, "chown", false, true)
+}
+
+pub fn chgrp(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    chown_like(argv, ctx, "chgrp", true, true)
+}
+
+pub fn lchown(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    chown_like(argv, ctx, "lchown", false, false)
+}
+
+pub fn lchgrp(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    chown_like(argv, ctx, "lchgrp", true, false)
+}
+
 // ---- step 52e: scandir / glob / tempnam ----
 
 /// A `&OsStr` view over raw bytes (unix paths are arbitrary bytes).

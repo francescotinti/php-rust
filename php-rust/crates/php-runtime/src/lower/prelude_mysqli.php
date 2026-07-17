@@ -351,6 +351,18 @@ class mysqli
         return true;
     }
 
+    public function __destruct()
+    {
+        // Zend chiude la connessione alla caduta dell'ultimo riferimento:
+        // wpdb::db_connect() rimpiazza il dbh a ogni classe di test e senza
+        // questo le connessioni leakate tengono transazioni aperte (metadata
+        // lock che deadlocka l'install dei test @runInSeparateProcess, WP-16).
+        if ($this->__h !== null) {
+            __mysqli_close($this->__h);
+            $this->__h = null;
+        }
+    }
+
     public function ping(): bool
     {
         return __mysqli_ping($this->_h());

@@ -2163,11 +2163,17 @@ impl<'m> Vm<'m> {
     /// per-request pattern cache). Returns a shared handle; `None` (also cached)
     /// means the pattern is invalid.
     fn preg_compile(&mut self, pat: &[u8]) -> Option<Rc<crate::preg::Engine>> {
-        if let Some(hit) = self.preg_cache.get(pat) {
-            return hit.clone();
-        }
-        let engine = crate::preg::compile(pat).map(Rc::new);
-        self.preg_cache.insert(pat.to_vec(), engine.clone());
+        // preg_last_error: ogni operazione preg che compila resetta a
+        // NO_ERROR; un pattern invalido (anche da cache) segna
+        // PREG_INTERNAL_ERROR — il BAD_UTF8 lo segna subject_text (WP-16).
+        let engine = if let Some(hit) = self.preg_cache.get(pat) {
+            hit.clone()
+        } else {
+            let engine = crate::preg::compile(pat).map(Rc::new);
+            self.preg_cache.insert(pat.to_vec(), engine.clone());
+            engine
+        };
+        crate::preg::set_last_error(if engine.is_some() { 0 } else { 1 });
         engine
     }
 
@@ -10544,6 +10550,8 @@ host_builtins! {
     b"array_uintersect_uassoc" => vm.ho_array_uintersect_uassoc(args),
     b"header" => vm.ho_header(args),
     b"headers_sent" => vm.ho_headers_sent(args),
+    b"preg_last_error" => vm.ho_preg_last_error(),
+    b"preg_last_error_msg" => vm.ho_preg_last_error_msg(),
     b"ini_get" => vm.ho_ini_get(args),
     b"error_log" => vm.ho_error_log(args),
     b"get_cfg_var" => vm.ho_get_cfg_var(args),

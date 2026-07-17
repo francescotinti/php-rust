@@ -129,9 +129,39 @@ impl SubjectText<'_> {
 /// still matches per byte (`[\x80-\xff]` hits each half of a UTF-8 pair —
 /// WP's esc_url keeps its `\x80-\xff` allowlist working this way), so
 /// anything non-ASCII goes through the 1-byte-per-char Latin1 view.
+thread_local! {
+    /// `preg_last_error`: 0 = PREG_NO_ERROR, 1 = PREG_INTERNAL_ERROR (pattern
+    /// invalido), 4 = PREG_BAD_UTF8_ERROR (subject non-UTF-8 sotto `/u`).
+    /// phpr non ha backtrack/recursion limit (divergenza documentata), quindi
+    /// gli altri codici non occorrono mai.
+    static PREG_LAST_ERROR: std::cell::Cell<i64> = const { std::cell::Cell::new(0) };
+}
+
+pub fn set_last_error(code: i64) {
+    PREG_LAST_ERROR.with(|c| c.set(code));
+}
+
+pub fn last_error() -> i64 {
+    PREG_LAST_ERROR.with(|c| c.get())
+}
+
+/// Il testo di `preg_last_error_msg()` per i codici che phpr produce.
+pub fn last_error_msg() -> &'static str {
+    match last_error() {
+        0 => "No error",
+        1 => "Internal error",
+        4 => "Malformed UTF-8 characters, possibly incorrectly encoded",
+        _ => "Internal error",
+    }
+}
+
 pub fn subject_text(subject: &[u8], unicode: bool) -> Option<SubjectText<'_>> {
     if unicode {
-        return std::str::from_utf8(subject).ok().map(SubjectText::Utf8);
+        let txt = std::str::from_utf8(subject).ok();
+        if txt.is_none() {
+            set_last_error(4);
+        }
+        return txt.map(SubjectText::Utf8);
     }
     match std::str::from_utf8(subject) {
         Ok(s) if s.is_ascii() => Some(SubjectText::Utf8(s)),

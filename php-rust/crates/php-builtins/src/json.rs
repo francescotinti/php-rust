@@ -14,6 +14,7 @@ use php_types::{Key, Object, PhpArray, PhpError, PhpStr, PropVis, Zval};
 const UNESCAPED_SLASHES: i64 = 64;
 const PRETTY_PRINT: i64 = 128;
 const UNESCAPED_UNICODE: i64 = 256;
+const UNESCAPED_LINE_TERMINATORS: i64 = 2048;
 
 const INDENT: &[u8] = b"    ";
 
@@ -348,7 +349,12 @@ fn encode_string(s: &[u8], flags: i64, out: &mut Vec<u8>) -> Result<(), ()> {
             c if (c as u32) < 0x20 => unicode_escape(c as u32, out),
             c if (c as u32) < 0x80 => out.push(c as u8),
             c => {
-                if flags & UNESCAPED_UNICODE != 0 {
+                // U+2028/U+2029 restano escapati anche sotto UNESCAPED_UNICODE
+                // finché non c'è JSON_UNESCAPED_LINE_TERMINATORS (json.c 7.1+).
+                if flags & UNESCAPED_UNICODE != 0
+                    && (!matches!(c, '\u{2028}' | '\u{2029}')
+                        || flags & UNESCAPED_LINE_TERMINATORS != 0)
+                {
                     let mut buf = [0u8; 4];
                     out.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
                 } else {

@@ -927,6 +927,10 @@ enum Codec {
     /// bytes are Latin-1 code points, `&…;` references decode to their
     /// character; encoding entitifies everything ≥ U+0080.
     HtmlEnt,
+    /// mbstring's BIG-5 (mbfilter_cjk.c + unicode_table_big5.h, port verbatim
+    /// in `php_types::big5`): encoding_rs' WHATWG Big5 diverge (lead 0x81-0xA0
+    /// HKSCS, 260 celle simbolo diverse, U+FFFD al posto del sostituto `?`).
+    Big5,
     Rs(&'static RsEncoding),
 }
 
@@ -959,6 +963,8 @@ fn resolve_encoding(name: &[u8]) -> Option<Enc> {
         Some(Enc { codec: Codec::Rs(encoding_rs::SHIFT_JIS), canonical: "SJIS" })
     } else if eq(b"EUC-JP") || eq(b"EUCJP") {
         Some(Enc { codec: Codec::Rs(encoding_rs::EUC_JP), canonical: "EUC-JP" })
+    } else if eq(b"BIG-5") || eq(b"BIG5") || eq(b"CN-BIG5") || eq(b"BIG-FIVE") || eq(b"BIGFIVE") {
+        Some(Enc { codec: Codec::Big5, canonical: "BIG-5" })
     } else if eq(b"Windows-1252") || eq(b"CP1252") {
         Some(Enc { codec: Codec::Rs(encoding_rs::WINDOWS_1252), canonical: "Windows-1252" })
     } else if eq(b"HTML-ENTITIES") || eq(b"HTML") {
@@ -974,6 +980,103 @@ thread_local! {
     /// `mb_internal_encoding()` reports back (frameworks set it to "UTF-8" at
     /// bootstrap — the common, effect-free case).
     static MB_INTERNAL_ENCODING: std::cell::Cell<&'static str> = const { std::cell::Cell::new("UTF-8") };
+}
+
+thread_local! {
+    /// `mb_substitute_character`: come mbstring sostituisce input illegale
+    /// (decode) e caratteri non rappresentabili (encode). >= 0 = codepoint,
+    /// -1 = "none" (drop), -2 = "long" (`U+XXXX` solo lato encode),
+    /// -3 = "entity" (`&#xX;` solo lato encode); lato decode long/entity
+    /// degradano a `?` (probe WP-16). Default 63 (`?`).
+    static MB_SUBST: std::cell::Cell<i64> = const { std::cell::Cell::new(63) };
+}
+
+/// Appende al risultato di un DECODE la sostituzione corrente per una
+/// sequenza malformata.
+fn push_subst_decode(out: &mut String) {
+    match MB_SUBST.with(|c| c.get()) {
+        -1 => {}
+        cp if cp >= 0 => out.push(char::from_u32(cp as u32).unwrap_or('?')),
+        _ => out.push('?'), // long/entity: lato decode il filtro emette '?'
+    }
+}
+
+/// I byte sostitutivi per un CODEPOINT non rappresentabile in encode:
+/// `encode_one` prova a codificare un codepoint nel target (None =
+/// non rappresentabile); il sostituto stesso non codificabile degrada a `?`.
+fn subst_encode_bytes(w: u32, mut encode_one: impl FnMut(u32) -> Option<Vec<u8>>) -> Vec<u8> {
+    match MB_SUBST.with(|c| c.get()) {
+        -1 => Vec::new(),
+        -2 => format!("U+{w:04X}").into_bytes(),
+        -3 => format!("&#x{w:X};").into_bytes(),
+        cp => encode_one(cp as u32).or_else(|| encode_one(63)).unwrap_or_else(|| b"?".to_vec()),
+    }
+}
+
+/// `mb_substitute_character(?string|int|null $substitute_character = null)`:
+/// senza argomento riporta lo stato (int, o "none"/"long"/"entity"); con
+/// argomento lo imposta e torna true. Codepoint fuori range → ValueError
+/// "is not a valid codepoint"; stringa ignota → ValueError con l'unione.
+pub fn mb_substitute_character(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let arg = args.first().map(|v| v.deref_clone());
+    match arg {
+        None | Some(Zval::Null) => Ok(match MB_SUBST.with(|c| c.get()) {
+            -1 => Zval::Str(PhpStr::from_str("none")),
+            -2 => Zval::Str(PhpStr::from_str("long")),
+            -3 => Zval::Str(PhpStr::from_str("entity")),
+            cp => Zval::Long(cp),
+        }),
+        Some(Zval::Str(s)) => {
+            let mode = match s.as_bytes().to_ascii_lowercase().as_slice() {
+                b"none" => -1,
+                b"long" => -2,
+                b"entity" => -3,
+                _ => {
+                    return Err(PhpError::ValueError(
+                        "mb_substitute_character(): Argument #1 ($substitute_character) must be \"none\", \"long\", \"entity\" or a valid codepoint"
+                            .to_string(),
+                    ))
+                }
+            };
+            MB_SUBST.with(|c| c.set(mode));
+            Ok(Zval::Bool(true))
+        }
+        Some(v) => {
+            let cp = convert::to_long_cast(&v, ctx.diags);
+            if !(0..=0x10FFFF).contains(&cp) {
+                return Err(PhpError::ValueError(
+                    "mb_substitute_character(): Argument #1 ($substitute_character) is not a valid codepoint"
+                        .to_string(),
+                ));
+            }
+            MB_SUBST.with(|c| c.set(cp));
+            Ok(Zval::Bool(true))
+        }
+    }
+}
+
+/// `mb_scrub(string $string, ?string $encoding = null): string` — round-trip
+/// decode+encode nello stesso encoding: le sequenze malformate diventano il
+/// sostituto corrente (mb_substitute_character), il resto passa invariato.
+pub fn mb_scrub(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = arg_str(args, "mb_scrub", ctx)?;
+    let enc = match args.get(1).map(|v| v.deref_clone()) {
+        None | Some(Zval::Null) => {
+            let name = MB_INTERNAL_ENCODING.with(|c| c.get());
+            resolve_encoding(name.as_bytes()).expect("internal encoding sempre risolvibile")
+        }
+        Some(v) => {
+            let name = convert::to_zstr(&v, ctx.diags);
+            resolve_encoding_tracked(name.as_bytes(), "mb_scrub", ctx).ok_or_else(|| {
+                PhpError::ValueError(format!(
+                    "mb_scrub(): Argument #2 ($encoding) must be a valid encoding, \"{}\" given",
+                    String::from_utf8_lossy(name.as_bytes())
+                ))
+            })?
+        }
+    };
+    let decoded = decode_bytes(&enc.codec, s.as_bytes());
+    Ok(Zval::Str(PhpStr::new(encode_str(&enc.codec, &decoded))))
 }
 
 /// `mb_internal_encoding(?string $encoding = null): string|bool` — get the current
@@ -1383,17 +1486,139 @@ fn html_ent_encode(s: &str) -> Vec<u8> {
 /// substituting U+FFFD for malformed input.
 fn decode_bytes(codec: &Codec, bytes: &[u8]) -> String {
     match codec {
-        Codec::Utf8 => String::from_utf8_lossy(bytes).into_owned(),
-        Codec::Ascii => bytes
-            .iter()
-            .map(|&b| if b < 0x80 { b as char } else { '\u{FFFD}' })
-            .collect(),
+        // Granularità WHATWG per le sequenze malformate (error_len =
+        // maximal-subpart, la stessa di mbstring 8.1+), sostituto onorato.
+        Codec::Utf8 => {
+            let mut out = String::with_capacity(bytes.len());
+            let mut rest = bytes;
+            loop {
+                match std::str::from_utf8(rest) {
+                    Ok(s) => {
+                        out.push_str(s);
+                        break;
+                    }
+                    Err(e) => {
+                        let (valid, after) = rest.split_at(e.valid_up_to());
+                        // SAFETY: `valid` è il prefisso validato da from_utf8.
+                        out.push_str(unsafe { std::str::from_utf8_unchecked(valid) });
+                        push_subst_decode(&mut out);
+                        let skip = e.error_len().unwrap_or(after.len());
+                        rest = &after[skip..];
+                    }
+                }
+            }
+            out
+        }
+        Codec::Ascii => {
+            let mut out = String::with_capacity(bytes.len());
+            for &b in bytes {
+                if b < 0x80 {
+                    out.push(b as char);
+                } else {
+                    push_subst_decode(&mut out);
+                }
+            }
+            out
+        }
         Codec::Latin1 => bytes.iter().map(|&b| b as char).collect(),
         Codec::Utf16Be => decode_utf16(bytes, true),
         Codec::Utf16Le => decode_utf16(bytes, false),
         Codec::HtmlEnt => html_ent_decode(bytes),
+        Codec::Big5 => big5_decode(bytes),
         Codec::Rs(e) => e.decode_without_bom_handling(bytes).0.into_owned(),
     }
+}
+
+/// BIG-5 → UTF-8 con la semantica esatta di mb_big5_to_wchar: lead 0xA1-0xF9,
+/// trail 0x40-0x7E | 0xA1-0xFE; ogni BAD_INPUT emette il sostituto corrente
+/// (mb_substitute_character, default `?`). Lead 0xC8 su cella vuota: solo il
+/// lead è consumato, il trail si ri-processa come byte successivo (oddity del
+/// filtro C).
+fn big5_decode(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        i += 1;
+        if c <= 0x7F {
+            out.push(c as char);
+        } else if (0xA1..=0xF9).contains(&c) && i < bytes.len() {
+            let c2 = bytes[i];
+            i += 1;
+            if (0x40..=0x7E).contains(&c2) || (0xA1..=0xFE).contains(&c2) {
+                match php_types::big5::big5_pair_to_ucs(c, c2) {
+                    Some(w) => out.push(char::from_u32(w as u32).unwrap_or('?')),
+                    None => {
+                        if c == 0xC8 {
+                            i -= 1;
+                        }
+                        push_subst_decode(&mut out);
+                    }
+                }
+            } else {
+                push_subst_decode(&mut out);
+            }
+        } else {
+            // Lead fuori range, oppure lead valido come ULTIMO byte (il filtro
+            // C processa l'ultimo byte da solo: ASCII o BAD_INPUT).
+            push_subst_decode(&mut out);
+        }
+    }
+    out
+}
+
+
+/// UTF-8 → BIG-5 (mb_wchar_to_big5): NUL passa come byte 0 (la tabella lo
+/// tiene a 0), unmappable → `?`.
+fn big5_encode(s: &str) -> Vec<u8> {
+    let mut out = Vec::with_capacity(s.len());
+    for ch in s.chars() {
+        let w = ch as u32;
+        if w == 0 {
+            out.push(0);
+            continue;
+        }
+        match php_types::big5::ucs_to_big5(w) {
+            Some(code) if code <= 0x80 => out.push(code as u8),
+            Some(code) => {
+                out.push((code >> 8) as u8);
+                out.push((code & 0xFF) as u8);
+            }
+            None => out.extend(subst_encode_bytes(w, |cp| {
+                if cp == 0 {
+                    return Some(vec![0]);
+                }
+                php_types::big5::ucs_to_big5(cp).map(|code| {
+                    if code <= 0x80 { vec![code as u8] } else { vec![(code >> 8) as u8, (code & 0xFF) as u8] }
+                })
+            })),
+        }
+    }
+    out
+}
+
+/// Scan di validità BIG-5 (mb_check_encoding / mb_detect_encoding): ogni
+/// sequenza deve essere ASCII o una coppia valida E mappata.
+fn big5_validates(bytes: &[u8]) -> bool {
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        i += 1;
+        if c <= 0x7F {
+            continue;
+        }
+        if !(0xA1..=0xF9).contains(&c) || i >= bytes.len() {
+            return false;
+        }
+        let c2 = bytes[i];
+        i += 1;
+        if !((0x40..=0x7E).contains(&c2) || (0xA1..=0xFE).contains(&c2))
+            || php_types::big5::big5_pair_to_ucs(c, c2).is_none()
+        {
+            return false;
+        }
+    }
+    true
 }
 
 /// Encode a UTF-8 `String` to `codec`, substituting `?` (0x3F) for any character
@@ -1402,24 +1627,46 @@ fn decode_bytes(codec: &Codec, bytes: &[u8]) -> String {
 fn encode_str(codec: &Codec, s: &str) -> Vec<u8> {
     match codec {
         Codec::Utf8 => s.as_bytes().to_vec(),
-        Codec::Ascii => s
-            .chars()
-            .map(|c| if (c as u32) < 0x80 { c as u8 } else { b'?' })
-            .collect(),
-        Codec::Latin1 => s
-            .chars()
-            .map(|c| if (c as u32) <= 0xFF { c as u8 } else { b'?' })
-            .collect(),
+        Codec::Ascii => {
+            let mut out = Vec::with_capacity(s.len());
+            for c in s.chars() {
+                let w = c as u32;
+                if w < 0x80 {
+                    out.push(w as u8);
+                } else {
+                    out.extend(subst_encode_bytes(w, |cp| (cp < 0x80).then(|| vec![cp as u8])));
+                }
+            }
+            out
+        }
+        Codec::Latin1 => {
+            let mut out = Vec::with_capacity(s.len());
+            for c in s.chars() {
+                let w = c as u32;
+                if w <= 0xFF {
+                    out.push(w as u8);
+                } else {
+                    out.extend(subst_encode_bytes(w, |cp| (cp <= 0xFF).then(|| vec![cp as u8])));
+                }
+            }
+            out
+        }
         Codec::Utf16Be => s.encode_utf16().flat_map(|u| u.to_be_bytes()).collect(),
         Codec::Utf16Le => s.encode_utf16().flat_map(|u| u.to_le_bytes()).collect(),
         Codec::HtmlEnt => html_ent_encode(s),
+        Codec::Big5 => big5_encode(s),
         Codec::Rs(e) => {
             let mut out = Vec::new();
             let mut buf = [0u8; 4];
             for c in s.chars() {
                 let (bytes, _, unmappable) = e.encode(c.encode_utf8(&mut buf));
                 if unmappable {
-                    out.push(b'?');
+                    out.extend(subst_encode_bytes(c as u32, |cp| {
+                        let sc = char::from_u32(cp)?;
+                        let mut b2 = [0u8; 4];
+                        let (sb, _, bad) = e.encode(sc.encode_utf8(&mut b2));
+                        (!bad).then(|| sb.into_owned())
+                    }));
                 } else {
                     out.extend_from_slice(&bytes);
                 }
@@ -1439,6 +1686,7 @@ fn validates(codec: &Codec, bytes: &[u8]) -> bool {
         Codec::Utf16Be | Codec::Utf16Le => bytes.len().is_multiple_of(2),
         // The htmlent decoder never rejects input (bad references flush verbatim).
         Codec::HtmlEnt => true,
+        Codec::Big5 => big5_validates(bytes),
         Codec::Rs(e) => !e.decode_without_bom_handling(bytes).1,
     }
 }
@@ -1541,6 +1789,16 @@ fn iconv_encode(codec: &Codec, s: &str, ignore: bool, translit: bool) -> Option<
             }
             // Unreachable from iconv() (rejected as a charset there); total anyway.
             Codec::HtmlEnt => Some(html_ent_encode(c.encode_utf8(&mut buf))),
+            Codec::Big5 => {
+                let w = c as u32;
+                if w == 0 {
+                    Some(vec![0])
+                } else {
+                    php_types::big5::ucs_to_big5(w).map(|code| {
+                        if code <= 0x80 { vec![code as u8] } else { vec![(code >> 8) as u8, (code & 0xFF) as u8] }
+                    })
+                }
+            }
             Codec::Rs(e) => {
                 let (bytes, _, unmappable) = e.encode(c.encode_utf8(&mut buf));
                 (!unmappable).then(|| bytes.into_owned())
