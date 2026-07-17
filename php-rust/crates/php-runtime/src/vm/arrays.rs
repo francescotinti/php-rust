@@ -687,17 +687,73 @@ impl<'m> Vm<'m> {
         for d in &dropped {
             self.gc_note(d);
         }
-        let result = result?;
-        // Leaf Set/Append that landed on an object (`$arr['x'][] = v` where the
-        // element holds an ArrayAccess): dispatch offsetSet.
-        if let Some(AaWrite { obj, key, value }) = aa {
-            if self.object_implements(&obj, b"arrayaccess") {
-                self.call_method_sync(obj, b"offsetSet", vec![key.unwrap_or(Zval::Null), value])?;
-            } else {
+        let mut result = result?;
+        // Drain the parked ArrayAccess dispatches: offsetSet at the leaf,
+        // offsetGet→op→offsetSet for compound/incdec leaves, offsetGet +
+        // resumed drill mid-path (`$ctx[0][$i] = v` on nested SplFixedArrays).
+        let mut pending = aa;
+        while let Some(op) = pending.take() {
+            let obj_of = |op: &super::PathAa| match op {
+                super::PathAa::Write(w) => w.obj.clone(),
+                super::PathAa::Op { obj, .. }
+                | super::PathAa::IncDec { obj, .. }
+                | super::PathAa::Descend { obj, .. } => obj.clone(),
+            };
+            let obj = obj_of(&op);
+            if !self.object_implements(&obj, b"arrayaccess") {
                 let name = deref_object(&obj)
                     .map(|o| String::from_utf8_lossy(o.borrow().class_name.as_bytes()).into_owned())
                     .unwrap_or_default();
                 return Err(PhpError::Error(format!("Cannot use object of type {name} as array")));
+            }
+            match op {
+                super::PathAa::Write(AaWrite { obj, key, value }) => {
+                    self.call_method_sync(obj, b"offsetSet", vec![key.unwrap_or(Zval::Null), value])?;
+                }
+                super::PathAa::Op { obj, key, op, rhs } => {
+                    let old = self
+                        .call_method_sync(obj.clone(), b"offsetGet", vec![key.clone()])?
+                        .deref_clone();
+                    let new = super::apply_binop(op, &old, &rhs, &mut self.diags)?;
+                    self.call_method_sync(obj, b"offsetSet", vec![key, new.clone()])?;
+                    result = new;
+                }
+                super::PathAa::IncDec { obj, key, inc, pre } => {
+                    let old = self
+                        .call_method_sync(obj.clone(), b"offsetGet", vec![key.clone()])?
+                        .deref_clone();
+                    let mut new = old.clone();
+                    if inc {
+                        super::ops::increment(&mut new, &mut self.diags)?;
+                    } else {
+                        super::ops::decrement(&mut new, &mut self.diags)?;
+                    }
+                    self.call_method_sync(obj, b"offsetSet", vec![key, new.clone()])?;
+                    result = if pre { new } else { old };
+                }
+                super::PathAa::Descend { obj, key, rest, last } => {
+                    let cname = deref_object(&obj)
+                        .map(|o| String::from_utf8_lossy(o.borrow().class_name.as_bytes()).into_owned())
+                        .unwrap_or_default();
+                    let mut val =
+                        self.call_method_sync(obj, b"offsetGet", vec![key])?.deref_clone();
+                    if !matches!(val, Zval::Object(_)) {
+                        // Writing through a by-value offsetGet result mutates a
+                        // temporary — PHP's notice, and no write happens.
+                        self.diags.push(Diag::Notice(format!(
+                            "Indirect modification of overloaded element of {cname} has no effect"
+                        )));
+                        break;
+                    }
+                    let mut dropped2 = Vec::new();
+                    let mut aa2 = None;
+                    let r = path_apply(&mut val, &rest, *last, &mut self.diags, &mut dropped2, &mut aa2);
+                    for d in &dropped2 {
+                        self.gc_note(d);
+                    }
+                    r?;
+                    pending = aa2;
+                }
             }
         }
         Ok(result)

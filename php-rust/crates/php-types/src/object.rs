@@ -182,7 +182,7 @@ impl Object {
 /// and the pure builtins (var_export/print_r/json) so the prelude's hidden
 /// handle prop stays invisible everywhere.
 pub fn is_opaque_handle_class(name: &[u8]) -> bool {
-    name.eq_ignore_ascii_case(b"gdimage")
+    name.eq_ignore_ascii_case(b"gdimage") || name.eq_ignore_ascii_case(b"finfo")
 }
 
 pub fn unmangle_prop_key<'a>(key: &'a [u8], info: &ObjectInfo) -> (&'a [u8], PropVis) {

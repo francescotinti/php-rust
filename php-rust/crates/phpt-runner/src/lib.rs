@@ -109,7 +109,7 @@ const UNSUPPORTED_SECTIONS: &[&str] = &[
 /// corresponding steps (pcre: 31/36/37, json: 26, date: 34/35, mbstring: 41–43).
 /// A test requiring anything else still skips. Names are compared lowercase.
 const SUPPORTED_EXTENSIONS: &[&str] =
-    &["core", "standard", "mbstring", "pcre", "json", "date", "ctype", "hash", "zip", "pdo", "pdo_sqlite", "sqlite3", "bcmath", "gmp", "tokenizer", "zlib", "session", "gd", "exif"];
+    &["core", "standard", "mbstring", "pcre", "json", "date", "ctype", "hash", "zip", "pdo", "pdo_sqlite", "sqlite3", "bcmath", "gmp", "tokenizer", "zlib", "session", "gd", "exif", "fileinfo"];
 
 /// Parse a `--INI--` section into `php -d`-style overrides: one `key=value`
 /// per line, surrounding quotes stripped. run-tests.php's `{PWD}`/`{TMP}`/

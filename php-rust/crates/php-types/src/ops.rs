@@ -513,9 +513,12 @@ pub fn compare(a: &Zval, b: &Zval) -> i32 {
             (Zval::Array(l), Zval::Array(r)) => return compare_arrays(l, r),
             // Zend's date_object_compare: DateTime / DateTimeImmutable compare
             // by absolute instant, cross-class and cross-timezone. The same
-            // instance orders equal (zend_compare's identity fast path). Any
-            // other object pair keeps the generic uncomparable result (1),
-            // exactly what the `_` arm below produced for objects.
+            // instance orders equal (zend_compare's identity fast path).
+            // Same-class pairs then compare their property tables like arrays
+            // (zend_std_compare_objects → zend_hash_compare: count first, then
+            // per-key with a missing key or value mismatch deciding); a
+            // cross-class pair is uncomparable (1). PHPUnit's assertEqualSets
+            // canonicalize (sort of stdClass rows) rides on this ordering.
             (Zval::Object(l), Zval::Object(r)) => {
                 if Rc::ptr_eq(l, r) {
                     return 0;
@@ -527,7 +530,40 @@ pub fn compare(a: &Zval, b: &Zval) -> i32 {
                         std::cmp::Ordering::Greater => 1,
                     };
                 }
-                return 1;
+                let pairs = {
+                    let (lb, rb) = (l.borrow(), r.borrow());
+                    if lb.class_id != rb.class_id {
+                        return 1;
+                    }
+                    // Enum cases are singletons: only identity (handled
+                    // above) orders them equal, never their name/value props
+                    // (Zend/tests/enum/comparison: `<`/`>` all false).
+                    if lb.info.is_enum_case || rb.info.is_enum_case {
+                        return 1;
+                    }
+                    let (nl, nr) = (lb.props.len(), rb.props.len());
+                    if nl != nr {
+                        return if nl > nr { 1 } else { -1 };
+                    }
+                    // Snapshot the value pairs so the recursive compare runs
+                    // without the RefCell borrows held (self-referential
+                    // graphs would otherwise re-borrow).
+                    let mut pairs = Vec::with_capacity(nl);
+                    for (k, lv) in lb.props.iter() {
+                        match rb.props.get(k) {
+                            Some(rv) => pairs.push((lv.clone(), rv.clone())),
+                            None => return 1,
+                        }
+                    }
+                    pairs
+                };
+                for (lv, rv) in &pairs {
+                    let c = compare(lv, rv);
+                    if c != 0 {
+                        return c;
+                    }
+                }
+                return 0;
             }
             // Two resources compare by their numeric id (oracle: `$a < $b` is
             // `id_a < id_b`, step 51).

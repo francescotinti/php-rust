@@ -9951,6 +9951,18 @@ enum Last {
     IncDec { key: Zval, inc: bool, pre: bool },
 }
 
+/// A dim-write step of a *variable-rooted* path (`$a[0][1] = v`) that landed on
+/// an OBJECT: [`Vm::path_op`] drains these through the ArrayAccess protocol —
+/// `offsetSet` at the leaf, `offsetGet` + `offsetSet` for the compound leaves,
+/// `offsetGet` + resumed drill mid-path (sodium_compat's BLAKE2b builds
+/// `SplFixedArray` trees and writes `$ctx[0][$i]`).
+enum PathAa {
+    Write(crate::vm::arrays::AaWrite),
+    Op { obj: Zval, key: Zval, op: BinOp, rhs: Zval },
+    IncDec { obj: Zval, key: Zval, inc: bool, pre: bool },
+    Descend { obj: Zval, key: Zval, rest: Vec<Zval>, last: Box<Last> },
+}
+
 /// If `name` (ASCII-case-insensitive, PHP function names) is an *evaluator-only
 /// host builtin* the VM dispatches itself — a higher-order builtin that invokes a
 /// user callable, class introspection, or the `define` family (Sessions B–D) —
@@ -10245,6 +10257,7 @@ host_builtins! {
     b"__reflect_method_info" => vm.ho_reflect_method_info(args),
     b"__reflect_object_bind" => vm.ho_reflect_object_bind(args),
     b"__reflect_object_dynprops" => vm.ho_reflect_object_dynprops(args),
+    b"__reflect_object_instance" => vm.ho_reflect_object_instance(args),
     b"__reflect_invoke" => vm.ho_reflect_invoke(args),
     b"__reflect_class_modifiers" => vm.ho_reflect_class_modifiers(args),
     b"__reflect_new_no_ctor" => vm.ho_reflect_new_no_ctor(args),
@@ -11152,7 +11165,7 @@ pub(super) fn closure_params(func: &Func) -> Vec<ClosureParam> {
 /// Drill through `keys` from `cell` (following references, auto-vivifying and
 /// copy-on-writing each level), then apply `last` at the leaf. Recursion (not a
 /// reassigned `&mut` in a loop) keeps the nested borrows well-formed.
-fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags, dropped: &mut Vec<Zval>, aa: &mut Option<crate::vm::arrays::AaWrite>) -> Result<Zval, PhpError> {
+fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags, dropped: &mut Vec<Zval>, aa: &mut Option<PathAa>) -> Result<Zval, PhpError> {
     if let Zval::Ref(rc) = cell {
         let mut inner = rc.borrow_mut();
         return path_apply(&mut inner, keys, last, diags, dropped, aa);
@@ -11163,11 +11176,21 @@ fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags, dro
             if matches!(cell, Zval::Str(_)) {
                 return Err(PhpError::Error("Cannot use string offset as an array".to_string()));
             }
-            if let Zval::Object(o) = cell {
-                return Err(PhpError::Error(format!(
-                    "Cannot use object of type {} as array",
-                    String::from_utf8_lossy(o.borrow().class_name.as_bytes())
-                )));
+            if matches!(cell, Zval::Object(_)) {
+                // Mid-path object: park an ArrayAccess descend for the caller.
+                // The expression's provisional value is the assigned one (the
+                // deeper drain overrides it for the compound leaves).
+                let provisional = match &last {
+                    Last::Set { value, .. } | Last::Append { value } => value.clone(),
+                    _ => Zval::Null,
+                };
+                *aa = Some(PathAa::Descend {
+                    obj: cell.clone(),
+                    key: k.clone(),
+                    rest: rest.to_vec(),
+                    last: Box::new(last),
+                });
+                return Ok(provisional);
             }
             ensure_array(cell)?;
             let Zval::Array(rc) = cell else { unreachable!("ensured array") };
@@ -11185,7 +11208,7 @@ fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags, dro
 }
 
 /// Apply the leaf step to the parent cell (which must hold the target array).
-fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Vec<Zval>, aa: &mut Option<crate::vm::arrays::AaWrite>) -> Result<Zval, PhpError> {
+fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Vec<Zval>, aa: &mut Option<PathAa>) -> Result<Zval, PhpError> {
     // A string parent takes the byte-offset write path (`$s[0] = 'X'`), whose
     // expression value is the written byte; the other leaf ops are the PHP
     // errors for string offsets.
@@ -11203,24 +11226,26 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Ve
             )),
         };
     }
-    // A leaf Set/Append on an OBJECT defers to the caller's ArrayAccess
-    // dispatch (offsetSet); the compound leaves stay errors here (PHP needs a
-    // by-ref offsetGet for those).
-    if let Zval::Object(o) = parent {
+    // A leaf on an OBJECT defers to the caller's ArrayAccess dispatch:
+    // offsetSet for Set/Append, offsetGet→op→offsetSet for the compound and
+    // inc/dec leaves (zend runs them without a by-ref offsetGet too).
+    if matches!(parent, Zval::Object(_)) {
         match last {
             Last::Set { key, value } => {
-                *aa = Some(crate::vm::arrays::AaWrite { obj: parent.clone(), key: Some(key), value: value.clone() });
+                *aa = Some(PathAa::Write(crate::vm::arrays::AaWrite { obj: parent.clone(), key: Some(key), value: value.clone() }));
                 return Ok(value);
             }
             Last::Append { value } => {
-                *aa = Some(crate::vm::arrays::AaWrite { obj: parent.clone(), key: None, value: value.clone() });
+                *aa = Some(PathAa::Write(crate::vm::arrays::AaWrite { obj: parent.clone(), key: None, value: value.clone() }));
                 return Ok(value);
             }
-            _ => {
-                return Err(PhpError::Error(format!(
-                    "Cannot use object of type {} as array",
-                    String::from_utf8_lossy(o.borrow().class_name.as_bytes())
-                )))
+            Last::OpSet { key, op, rhs } => {
+                *aa = Some(PathAa::Op { obj: parent.clone(), key, op, rhs });
+                return Ok(Zval::Null);
+            }
+            Last::IncDec { key, inc, pre } => {
+                *aa = Some(PathAa::IncDec { obj: parent.clone(), key, inc, pre });
+                return Ok(Zval::Null);
             }
         }
     }

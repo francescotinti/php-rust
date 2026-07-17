@@ -748,16 +748,40 @@ fn parse_textual(s: &str) -> Option<(i64, Option<StrZone>)> {
             toks.remove(0);
         }
     }
-    // `dd MonthName YYYY` (the month name is what routes here at all).
+    // A day number may carry an ordinal suffix and/or a trailing comma
+    // (timelib datetextual: "May 4th, 2008", "June 12, 2008").
+    let day_number = |tok: &str| -> Option<i64> {
+        let t = tok.trim_end_matches(',');
+        let ndigits = t.bytes().take_while(u8::is_ascii_digit).count();
+        if ndigits == 0 {
+            return None;
+        }
+        let suffix = t[ndigits..].to_ascii_lowercase();
+        if !(suffix.is_empty() || matches!(suffix.as_str(), "st" | "nd" | "rd" | "th")) {
+            return None;
+        }
+        t[..ndigits].parse().ok()
+    };
+    let month_of = |tok: &str| -> Option<i64> {
+        let l = tok.to_ascii_lowercase();
+        MONTHS.iter().position(|m| l == m[..3] || l == **m).map(|p| p as i64 + 1)
+    };
+    // Both timelib orders route here: `dd MonthName YYYY` (HTTP/cookie) and
+    // `MonthName dd[,] YYYY` (US textual).
     if toks.len() < 3 {
         return None;
     }
-    if !toks[0].bytes().all(|b| b.is_ascii_digit()) {
-        return None;
-    }
-    let day: i64 = toks[0].parse().ok()?;
-    let mon_l = toks[1].to_ascii_lowercase();
-    let month = 1 + MONTHS.iter().position(|m| mon_l == m[..3] || mon_l == **m)? as i64;
+    let (day, month) = if let Some(m) = month_of(toks[1]) {
+        (day_number(toks[0])?, m)
+    } else {
+        let m = month_of(toks[0])?;
+        let d = day_number(toks[1])?;
+        // Keep "May 2028" (month + year, no day) for the relative parser.
+        if !(1..=31).contains(&d) {
+            return None;
+        }
+        (d, m)
+    };
     let yraw = toks[2];
     if !yraw.bytes().all(|b| b.is_ascii_digit()) {
         return None;
@@ -892,6 +916,12 @@ fn parse_absolute(s: &str) -> Option<(i64, Option<StrZone>)> {
             if d.next().is_some() {
                 return None;
             }
+            // timelib's date patterns cap the FIELDS (mm 0-12, dd 0-31) but
+            // still normalise overflow inside them ('2020-02-31' → Mar 2);
+            // '2020-12-41' must be a parse error, not a wrap.
+            if !(0..=12).contains(&month) || !(0..=31).contains(&day) {
+                return None;
+            }
             (year, month, day)
         };
     let (mut hour, mut min, mut sec) = (0i64, 0i64, 0i64);
@@ -936,6 +966,10 @@ fn parse_absolute(s: &str) -> Option<(i64, Option<StrZone>)> {
             if tp.next().is_some() {
                 return None;
             }
+        }
+        // timelib hh caps at 24, mm/ss at 59 ('2012-01-01 25:00' errors).
+        if !(0..=24).contains(&hour) || !(0..=59).contains(&min) || !(0..=59).contains(&sec) {
+            return None;
         }
     }
     // A standalone zone token wins over a time-suffix one (parity with the
@@ -997,6 +1031,7 @@ struct RelExpr {
     ds: i64,
     set_year: Option<i64>,
     set_month: Option<i64>,
+    set_day: Option<i64>,
     set_time: Option<(i64, i64, i64)>,
     weekday: Option<(i64, WeekdayMode)>,
     first_day: bool,
@@ -1154,7 +1189,25 @@ fn parse_rel_expr(s: &str) -> Option<RelExpr> {
                 // A month name is an absolute date element: time resets to
                 // midnight (timelib) unless a later token sets it again.
                 r.set_time.get_or_insert((0, 0, 0));
-                // Optional plain year right after ("January 2027").
+                // Optional day right after, with timelib's ordinal suffix —
+                // split_fused has already cut "21st" into "21" + "st", so the
+                // suffix arrives as its own token to swallow.
+                if let Some(d) = toks
+                    .get(i + 1)
+                    .filter(|t| (1..=2).contains(&t.len()) && t.bytes().all(|b| b.is_ascii_digit()))
+                    .and_then(|t| t.parse::<i64>().ok())
+                    .filter(|d| (1..=31).contains(d))
+                {
+                    r.set_day = Some(d);
+                    i += 1;
+                    if toks
+                        .get(i + 1)
+                        .is_some_and(|t| matches!(t.to_ascii_lowercase().as_str(), "st" | "nd" | "rd" | "th"))
+                    {
+                        i += 1;
+                    }
+                }
+                // Optional plain year right after ("January 2027", "June 21 2027").
                 if let Some(y) = toks
                     .get(i + 1)
                     .filter(|y| y.len() == 4 && y.bytes().all(|b| b.is_ascii_digit()))
@@ -1162,6 +1215,9 @@ fn parse_rel_expr(s: &str) -> Option<RelExpr> {
                 {
                     r.set_year = Some(y);
                     i += 1;
+                    // "May 2028" is a dated form: the unspecified day resets
+                    // to 1 (bare "May" instead keeps today's day-of-month).
+                    r.set_day.get_or_insert(1);
                 }
             }
             _ => {
@@ -1218,7 +1274,7 @@ fn parse_relative(s: &str, base: i64) -> Option<i64> {
     } else if r.last_day {
         days_in_civil_month(year, month)?
     } else {
-        dt.day() as i64
+        r.set_day.unwrap_or(dt.day() as i64)
     };
     day += r.dd;
     if let Some((target, mode)) = r.weekday {

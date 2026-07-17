@@ -1394,6 +1394,17 @@ impl<'m> super::Vm<'m> {
         }
         Ok(Zval::Null)
     }
+    /// `__reflect_object_instance($reflectionObject)`: the bound instance
+    /// itself (null when unbound) — lets the prelude route
+    /// `ReflectionObject::getProperty` on a *dynamic* property through the
+    /// instance-taking `ReflectionProperty` constructor.
+    pub(super) fn ho_reflect_object_instance(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let Some(Zval::Object(ro)) = args.into_iter().next().map(|v| v.deref_clone()) else {
+            return Ok(Zval::Null);
+        };
+        let ro_id = ro.borrow().id;
+        Ok(self.reflect_object_bound.get(&ro_id).cloned().unwrap_or(Zval::Null))
+    }
     /// `__reflect_object_dynprops($reflectionObject)`: the names of the bound
     /// instance's *dynamic* (undeclared, unmangled) properties, in instance order.
     /// Reads the property table directly — it does **not** realise a lazy object

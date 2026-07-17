@@ -870,17 +870,23 @@ class DateTime implements DateTimeInterface {
     public function add($interval) { $this->__ts = $this->__apply($interval, 1); return $this; }
     public function sub($interval) { $this->__ts = $this->__apply($interval, -1); return $this; }
     private function __apply($iv, $dir) {
-        // Calendar arithmetic on the instance's WALL clock, re-anchored in
-        // its zone (a +P1D across a DST jump keeps the wall time).
+        // timelib_add: the Y/M/D part is calendar arithmetic on the WALL
+        // clock, re-anchored in the zone (a +P1D across a DST jump keeps the
+        // wall time); the H/I/S part then moves LINEARLY on the epoch
+        // (bug80610: ±PT20800M across a DST edge must round-trip exactly).
         $sign = $dir * ($iv->invert ? -1 : 1);
-        $w = $this->__ts + $this->getOffset();
-        return __tz_wall_ts($this->__tz, gmmktime(
-            (int)gmdate('G', $w) + $sign * $iv->h,
-            (int)gmdate('i', $w) + $sign * $iv->i,
-            (int)gmdate('s', $w) + $sign * $iv->s,
-            (int)gmdate('n', $w) + $sign * $iv->m,
-            (int)gmdate('j', $w) + $sign * $iv->d,
-            (int)gmdate('Y', $w) + $sign * $iv->y));
+        $ts = $this->__ts;
+        if ($iv->y || $iv->m || $iv->d) {
+            $w = $ts + $this->getOffset();
+            $ts = __tz_wall_ts($this->__tz, gmmktime(
+                (int)gmdate('G', $w),
+                (int)gmdate('i', $w),
+                (int)gmdate('s', $w),
+                (int)gmdate('n', $w) + $sign * $iv->m,
+                (int)gmdate('j', $w) + $sign * $iv->d,
+                (int)gmdate('Y', $w) + $sign * $iv->y));
+        }
+        return $ts + $sign * ($iv->h * 3600 + $iv->i * 60 + $iv->s);
     }
     public function diff($other) { return DateTime::__diff($this, $other); }
     // Port of timelib_diff (ext/date/lib/interval.c). Same named zone →
@@ -1070,23 +1076,37 @@ class DateTimeImmutable implements DateTimeInterface {
     public function add($interval) { $c = clone $this; $c->__ts = $this->__apply($interval, 1); return $c; }
     public function sub($interval) { $c = clone $this; $c->__ts = $this->__apply($interval, -1); return $c; }
     private function __apply($iv, $dir) {
-        // Wall-clock calendar arithmetic re-anchored in the instance zone.
+        // timelib_add: Y/M/D wall-calendar re-anchored in the zone, then
+        // H/I/S linear on the epoch (see DateTime::__apply, bug80610).
         $sign = $dir * ($iv->invert ? -1 : 1);
-        $w = $this->__ts + $this->getOffset();
-        return __tz_wall_ts($this->__tz, gmmktime(
-            (int)gmdate('G', $w) + $sign * $iv->h,
-            (int)gmdate('i', $w) + $sign * $iv->i,
-            (int)gmdate('s', $w) + $sign * $iv->s,
-            (int)gmdate('n', $w) + $sign * $iv->m,
-            (int)gmdate('j', $w) + $sign * $iv->d,
-            (int)gmdate('Y', $w) + $sign * $iv->y));
+        $ts = $this->__ts;
+        if ($iv->y || $iv->m || $iv->d) {
+            $w = $ts + $this->getOffset();
+            $ts = __tz_wall_ts($this->__tz, gmmktime(
+                (int)gmdate('G', $w),
+                (int)gmdate('i', $w),
+                (int)gmdate('s', $w),
+                (int)gmdate('n', $w) + $sign * $iv->m,
+                (int)gmdate('j', $w) + $sign * $iv->d,
+                (int)gmdate('Y', $w) + $sign * $iv->y));
+        }
+        return $ts + $sign * ($iv->h * 3600 + $iv->i * 60 + $iv->s);
     }
     public function diff($other) { return DateTime::__diff($this, $other); }
 }
 
 // --- Procedural date API (step 35): thin global-function wrappers over the OOP
 // API above. PHP exposes both styles; these delegate so the two stay identical.
-function date_create($datetime = "now") { return new DateTime($datetime); }
+// date_create returns FALSE where the constructor throws (WP's
+// wp_resolve_post_date feeds it arbitrary user strings), and it must pass
+// the timezone through (get_gmt_from_date anchors wall times with it).
+function date_create($datetime = "now", $timezone = null) {
+    try {
+        return $timezone === null ? new DateTime($datetime) : new DateTime($datetime, $timezone);
+    } catch (Exception $e) {
+        return false;
+    }
+}
 function timezone_identifiers_list($timezoneGroup = DateTimeZone::ALL, $countryCode = null) { return DateTimeZone::listIdentifiers($timezoneGroup, $countryCode); }
 // timezone_open() returns false where the constructor throws (WP's
 // wp_timezone_override_offset probes the option value exactly this way).
@@ -1114,7 +1134,13 @@ function timezone_transitions_get($object, $timestampBegin = PHP_INT_MIN, $times
     }
     return $object->getTransitions($timestampBegin, $timestampEnd);
 }
-function date_create_immutable($datetime = "now") { return new DateTimeImmutable($datetime); }
+function date_create_immutable($datetime = "now", $timezone = null) {
+    try {
+        return $timezone === null ? new DateTimeImmutable($datetime) : new DateTimeImmutable($datetime, $timezone);
+    } catch (Exception $e) {
+        return false;
+    }
+}
 function date_format($object, $format) { return $object->format($format); }
 function date_timestamp_get($object) { return $object->getTimestamp(); }
 function date_diff($base, $target, $absolute = false) {
@@ -1128,8 +1154,8 @@ function date_modify($object, $modifier) { return $object->modify($modifier); }
 function date_date_set($object, $year, $month, $day) { return $object->setDate($year, $month, $day); }
 function date_time_set($object, $hour, $minute, $second = 0) { return $object->setTime($hour, $minute, $second); }
 function date_timestamp_set($object, $timestamp) { return $object->setTimestamp($timestamp); }
-function date_create_from_format($format, $datetime, $timezone = null) { return DateTime::createFromFormat($format, $datetime); }
-function date_create_immutable_from_format($format, $datetime, $timezone = null) { return DateTimeImmutable::createFromFormat($format, $datetime); }
+function date_create_from_format($format, $datetime, $timezone = null) { return DateTime::createFromFormat($format, $datetime, $timezone); }
+function date_create_immutable_from_format($format, $datetime, $timezone = null) { return DateTimeImmutable::createFromFormat($format, $datetime, $timezone); }
 function date_interval_format($object, $format) { return $object->format($format); }
 function date_interval_create_from_date_string($datetime) {
     $p = __interval_from_date_string($datetime);
@@ -2810,6 +2836,7 @@ class SplFixedArray implements ArrayAccess, Countable, Iterator {
         return $this->__storage[$i];
     }
     public function offsetSet($i, $v) {
+        if ($i === null) { throw new Error("[] operator not supported for SplFixedArray"); }
         if ($i < 0 || $i >= $this->__size) { throw new RuntimeException("Index invalid or out of range"); }
         $this->__storage[$i] = $v;
     }
@@ -3482,6 +3509,19 @@ class ReflectionObject extends ReflectionClass {
     // object is NOT initialized (init_trigger_reflection_object_toString).
     public function __toString() {
         return $this->__exportString(true, __reflect_object_dynprops($this));
+    }
+    // Unlike ReflectionClass, the instance's *dynamic* properties are part of
+    // the surface (PHPUnit's assertObjectHasProperty polyfill keys off this).
+    public function hasProperty($name) {
+        return parent::hasProperty($name)
+            || in_array($name, __reflect_object_dynprops($this), true);
+    }
+    public function getProperty($name) {
+        if (!parent::hasProperty($name)
+            && in_array($name, __reflect_object_dynprops($this), true)) {
+            return new ReflectionProperty(__reflect_object_instance($this), $name);
+        }
+        return parent::getProperty($name);
     }
 }
 // A reference an array element holds (7.4). `fromArrayElement` returns null when

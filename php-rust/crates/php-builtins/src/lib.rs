@@ -23,6 +23,7 @@ mod html;
 mod file;
 mod format;
 mod exif;
+mod fileinfo;
 mod gmp;
 mod grapheme;
 mod image;
@@ -203,6 +204,9 @@ pub fn registry() -> Registry {
     add(b"__getimagesizefromstring_info", image::getimagesizefromstring_info);
     add(b"exif_imagetype", exif::exif_imagetype);
     add(b"exif_read_data", exif::exif_read_data);
+    // ext/fileinfo's detector core: the finfo class and the procedural API
+    // live in prelude_fileinfo.php and delegate here (all I/O PHP-side).
+    add(b"__finfo_detect", fileinfo::finfo_detect);
     // VM-internal twins for userland-wrapper URLs (the VM reads the stream
     // and hands the bytes over — see Vm::user_wrapper_path_op).
     add(b"__exif_imagetype_bytes", exif::exif_imagetype_bytes);
@@ -676,6 +680,9 @@ const LOADED_EXTENSIONS: &[&[u8]] = &[
     // ext/gd on the system libgd (vm/gd.rs + prelude_gd.php); ext/exif's
     // reader lives in exif.rs. WP's site-health keys off both names.
     b"gd", b"exif",
+    // ext/fileinfo on the Rust detector (fileinfo.rs + prelude_fileinfo.php);
+    // WP's wp_check_filetype_and_ext keys off extension_loaded('fileinfo').
+    b"fileinfo",
     // ext/mysqli on the native Rust client (vm/mysqli.rs); mysqlnd is what the
     // oracle reports too (WP's utf8mb4 capability check keys off it).
     b"mysqli", b"mysqlnd",
@@ -695,6 +702,7 @@ const LOADED_EXTENSIONS_CASED: &[&[u8]] = &[
     b"zip", b"dom", b"libxml", b"Reflection", b"ctype", b"curl", b"pcntl", b"posix",
     b"PDO", b"pdo_sqlite", b"sqlite3", b"bcmath", b"gmp",
     b"gd", b"exif",
+    b"fileinfo",
     b"mysqli", b"mysqlnd",
     b"filter",
     b"xml", b"xmlwriter", b"tokenizer", b"Phar",

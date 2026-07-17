@@ -287,6 +287,37 @@ da clone/serialize/var_dump/var_export/print_r/json/Reflection): il prop handle
 - `getimagesize`: `&$image_info` popolato solo per JPEG (APP0..APP15,
   first-wins come php_read_APP); segmenti >64KB multi-APP non ricomposti.
 
+### 2.7 fileinfo — detector Rust modellato sulla libmagic BUNDLED 5.46 (sessione WordPress-12)
+
+Classe opaca `finfo` + `finfo_*`/`mime_content_type` nel 7° prelude
+(`lower/prelude_fileinfo.php`), delegati all'host builtin `__finfo_detect`
+(`php-builtins/src/fileinfo.rs`). Niente FFI (macOS non espone una libmagic
+pubblica, e l'oracle brew usa comunque la libmagic **bundled** di PHP con
+database patchato): il detector è un work-alike con `encoding.c` (tabelle
+`looks_*`), `is_json.c`, `is_csv.c` portati verbatim e una tabella firme
+curata sui magic che WordPress e il suo test-corpus esercitano.
+
+**Parità misurata** (ground truth = oracle 8.5.7 sugli 849 file di
+`wordpress-develop/tests/phpunit/data`): MIME_TYPE, MIME e MIME_ENCODING
+**0 diff su 849**; FILEINFO_NONE (descrizioni) 846/849. I/O PHP-side
+(`file_get_contents` cap 7MB = FILE_BYTES_MAX), quindi wrapper userland e
+`open_basedir` valgono come nel php_stream path dell'oracle.
+
+Divergenze note (tutte desc-only o fuori dal profilo WP):
+- `$magic_database` custom di `finfo_open`/`new finfo` **ignorato** (si usa
+  sempre il detector builtin; i phpt che caricano `tests/magic` passano solo
+  dove le entry coincidono col database bundled).
+- FILEINFO_NONE: PICT senza il sotto-print "QuickTime with decompressor";
+  TTF variable-font senza la coda name-strings del Magdir/sfnt 5.46; ELF
+  ridotto a "ELF [32/64-bit] [LSB/MSB]" (niente catena completa e niente
+  mime dedicato → in MIME mode un ELF cade su octet-stream/text come le
+  entry mime-less del mini-db dei phpt).
+- FILEINFO_EXTENSION: mappa minima (jpeg verificata oracle; il resto "???").
+- `ReflectionClass('finfo')` non riporta i metodi (classe opaca engine-level,
+  stesso comportamento di GdImage).
+- phpt `ext/fileinfo/tests`: 29P/25F/8S (fail residui = magic-db custom,
+  formati esotici, dettagli descrizione).
+
 ---
 
 ## 3. Divergenze di engine circoscritte (documentate nei topic-file di memoria)
@@ -448,6 +479,34 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-17 (sessione WordPress-12): 🏁 **ext/fileinfo NATIVO (§2.7) + WP CORE
+  SUITE: gruppi POST/USER/QUERY A PARITÀ ORACLE** (post 906, user 1341, query
+  1889 — user era 24E, post 2E/13F, query 2E/7F). Fix engine trasversali:
+  **(a) ArrayAccess sulla catena di scrittura variable-rooted** (`$a[0][$i]=v`
+  con oggetto intermedio → offsetGet+drill ripreso; leaf compound/incdec via
+  offsetGet→op→offsetSet — PathAa in vm/mod.rs+arrays.rs; sbloccava
+  sodium_compat BLAKE2b, hash **byte-identici**);
+  **(b) confronto oggetti stessa classe property-wise** (zend_std_compare:
+  count poi per-chiave; cross-class resta uncomparable — ops::compare;
+  `assertEqualSets` di PHPUnit canonicalizza con sort di stdClass);
+  **(c) ReflectionObject vede le prop dinamiche dell'istanza**
+  (hasProperty/getProperty via `__reflect_object_instance`; è ciò che usa
+  assertObjectHasProperty);
+  **(d) PCRE non-/u BYTE-ORIENTED**: subject e pattern con byte alti passano
+  alla vista Latin1 1-byte-per-char (preg.rs subject_text/compile) —
+  `[\x80-\xff]` matcha i singoli byte UTF-8 (esc_url), `.` un byte, i
+  letterali multibyte per byte;
+  **(e) grammatica date**: `date_create*`/`*_from_format` propagano
+  `$timezone` e tornano FALSE su parse-error (get_gmt_from_date!);
+  "May 4th, 2008"/"June 12, 2008" (textual month-first, ordinali, virgole);
+  "June 21st +1 year" (mese+giorno ordinale nel parser relativo);
+  "May 2028" → day=1; bound timelib (mese≤12, giorno≤31, ore≤24 —
+  '2020-12-41' è errore, non wrap);
+  **(f) parse_url stile macOS**: iscntrl BSD include C1 0x80–0x9F → `_`
+  (php_replace_controlchars come l'oracle brew);
+  **(g) SplFixedArray**: `$a[] =` → Error "[] operator not supported".
+  Residuo WP-12: gruppo `restapi` (3514 test) — phpr non termina (>37min
+  CPU vs ~30s oracle): triage perf/hang a WP-13.
 - 2026-07-16 (sessione WordPress-11): 🏁 **WP CORE SUITE, GRUPPO MEDIA A PARITÀ
   ORACLE: 762/762 test, 0E/0F** (da 680 test/11F — 82 test non si caricavano
   nemmeno). Fix engine trasversali:

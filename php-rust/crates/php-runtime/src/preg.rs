@@ -125,11 +125,17 @@ impl SubjectText<'_> {
 }
 
 /// See [`SubjectText`]. `None` = invalid UTF-8 under `/u` (PHP: `false`).
+/// Without `/u`, PCRE is BYTE-oriented: a valid-UTF-8 subject with high bytes
+/// still matches per byte (`[\x80-\xff]` hits each half of a UTF-8 pair —
+/// WP's esc_url keeps its `\x80-\xff` allowlist working this way), so
+/// anything non-ASCII goes through the 1-byte-per-char Latin1 view.
 pub fn subject_text(subject: &[u8], unicode: bool) -> Option<SubjectText<'_>> {
+    if unicode {
+        return std::str::from_utf8(subject).ok().map(SubjectText::Utf8);
+    }
     match std::str::from_utf8(subject) {
-        Ok(s) => Some(SubjectText::Utf8(s)),
-        Err(_) if unicode => None,
-        Err(_) => Some(SubjectText::Latin1(latin1_decode(subject))),
+        Ok(s) if s.is_ascii() => Some(SubjectText::Utf8(s)),
+        _ => Some(SubjectText::Latin1(latin1_decode(subject))),
     }
 }
 
@@ -532,8 +538,17 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
     if end == 0 {
         return None;
     }
-    let body = std::str::from_utf8(&pattern[1..end]).ok()?;
     let flags = &pattern[end + 1..];
+    // Without `/u` PCRE is byte-oriented: a body with high bytes gets the
+    // same 1-byte-per-char Latin1 view the subject does (see subject_text),
+    // so multibyte literals and `[\x80-\xff]` classes both match per byte.
+    let body_owned: String;
+    let body: &str = if flags.contains(&b'u') || pattern[1..end].is_ascii() {
+        std::str::from_utf8(&pattern[1..end]).ok()?
+    } else {
+        body_owned = latin1_decode(&pattern[1..end]);
+        &body_owned
+    };
 
     // PCRE's default `$` (no `m`, no `D`) is zero-width and matches at the end of
     // the subject OR just before a single trailing newline. The `regex` crate's

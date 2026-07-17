@@ -21,7 +21,11 @@ pub(crate) struct ParsedUrl {
 
 #[inline]
 fn iscntrl(c: u8) -> bool {
-    c < 0x20 || c == 0x7f
+    // The oracle's libc (macOS/BSD, C locale) counts the C1 range 0x80–0x9F
+    // as control too, so php_replace_controlchars mangles those bytes to `_`
+    // as well (a UTF-8 path through parse_url loses its 0x80–0x9F
+    // continuation bytes — WP's IRI menu matching depends on it).
+    c < 0x20 || (0x7f..=0x9f).contains(&c)
 }
 
 /// `php_replace_controlchars`: any control byte becomes `_`.

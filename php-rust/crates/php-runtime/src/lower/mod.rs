@@ -618,6 +618,11 @@ const PRELUDE_MYSQLI_SRC: &[u8] = include_bytes!("prelude_mysqli.php");
 /// (system-libgd FFI) in vm/gd.rs.
 const PRELUDE_GD_SRC: &[u8] = include_bytes!("prelude_gd.php");
 
+/// ext/fileinfo: the `finfo` opaque class and the finfo_*/mime_content_type
+/// procedural functions, delegating to the `__finfo_detect` builtin
+/// (php-builtins fileinfo.rs).
+const PRELUDE_FILEINFO_SRC: &[u8] = include_bytes!("prelude_fileinfo.php");
+
 /// The four owned products of lowering [`PRELUDE_SRC`]: the class table + its
 /// name→id index (step 20), and the global-function table + its name→index
 /// (step 35). Both are seeded into every real program before user declarations
@@ -745,6 +750,22 @@ fn lower_prelude_uncached() -> LoweredPrelude {
     for s in program_gd.statements.as_slice() {
         if let Statement::Function(func) = s {
             low.hoist_function(func).expect("gd prelude function must lower");
+        }
+    }
+    // ext/fileinfo: global-namespace unit with the finfo class AND functions.
+    let file_fi =
+        File::ephemeral(Cow::Borrowed(b"prelude".as_slice()), Cow::Borrowed(PRELUDE_FILEINFO_SRC));
+    let program_fi = parse_file(&arena, &file_fi);
+    debug_assert!(
+        !program_fi.has_errors(),
+        "fileinfo prelude failed to parse: {:?}",
+        program_fi.errors
+    );
+    low.hoist_classes(program_fi.statements.as_slice())
+        .expect("fileinfo prelude classes must lower");
+    for s in program_fi.statements.as_slice() {
+        if let Statement::Function(func) = s {
+            low.hoist_function(func).expect("fileinfo prelude function must lower");
         }
     }
     (low.classes, low.class_index, low.functions, low.fn_index)
@@ -2578,6 +2599,18 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"IMG_WBMP" => ExprKind::Int(8),
         b"IMG_XPM" => ExprKind::Int(16),
         b"IMG_WEBP" => ExprKind::Int(32),
+        // ext/fileinfo (fileinfo.c REGISTER_LONG_CONSTANT values)
+        b"FILEINFO_NONE" => ExprKind::Int(0),
+        b"FILEINFO_SYMLINK" => ExprKind::Int(2),
+        b"FILEINFO_MIME" => ExprKind::Int(1040),
+        b"FILEINFO_MIME_TYPE" => ExprKind::Int(16),
+        b"FILEINFO_MIME_ENCODING" => ExprKind::Int(1024),
+        b"FILEINFO_DEVICES" => ExprKind::Int(8),
+        b"FILEINFO_CONTINUE" => ExprKind::Int(32),
+        b"FILEINFO_PRESERVE_ATIME" => ExprKind::Int(128),
+        b"FILEINFO_RAW" => ExprKind::Int(256),
+        b"FILEINFO_EXTENSION" => ExprKind::Int(16777216),
+        b"FILEINFO_APPLE" => ExprKind::Int(2048),
         b"IMG_BMP" => ExprKind::Int(64),
         b"IMG_TGA" => ExprKind::Int(128),
         b"IMG_AVIF" => ExprKind::Int(256),
