@@ -479,6 +479,47 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-17 (sessione WordPress-15): 🏁 **gruppi WP taxonomy/comment/xmlrpc/
+  multisite a parità oracle** (878/582/316/32 test; multisite lo era già al
+  primo colpo). Sette lavori: **(1) bug static-prelude CHIUSO** — il prelude
+  lowera con un contatore `static` proprio (da 0) e il main unit ripartiva
+  anch'esso da 0: collisione di id / overflow di `Vm::statics` (il panic
+  index-out-of-bounds run.rs:233 di WP-14); ora `LoweredPrelude` esporta il suo
+  `static_count` e ogni unità (main e seeded, con `max`) semina il contatore
+  oltre il range del prelude; `xml_error_string` è tornato `static`.
+  **(2) `gethostbyaddr`** — FFI `getnameinfo(NI_NAMEREQD)` sulla libc di
+  sistema (`php_types::netio`), ordine inet_pton v6→v4 come dns.c: malformed →
+  warning+false, senza PTR → ip invariato, altrimenti hostname (stesso
+  resolver dell'oracle ⇒ stessi risultati sulla stessa macchina).
+  **(3) deprecation PHP 8.1 "Passing null to parameter #N ($p) of type T is
+  deprecated"** sul trim family (`trim`/`ltrim`/`rtrim`, parametri #1/#2) via
+  helper riusabile `null_arg_deprecation` — era il fail di
+  Tests_WP_Generate_Tag_Cloud (ltrim(null) nei filtri). Le ALTRE funzioni
+  interne NON emettono ancora la deprecation: aggiungerla per-funzione quando
+  emerge dai test. **(4) `DOMNode::C14N`/`C14NFile`** (C14N 1.0 + exclusive,
+  probe oracle 12 casi byte-id: attr sortati per (ns-uri, localname), ns decls
+  prima ordinate per prefisso, rendering inclusive = tutto l'in-scope non già
+  reso / exclusive = solo visibly-utilized, escaping C14N, PI/commenti
+  doc-level con `\n`, nodi testo/attr, empty element espansi) + fix parser XML:
+  normalizzazione fine-riga §2.11 (`\r\n`/`\r`→`\n`) sull'INPUT come libxml.
+  **(5) `DOMNode::normalize` / `DOMDocument::normalizeDocument`** (merge Text
+  adiacenti, drop Text vuoti, CDATA barriera — PHPUnit DOMNodeComparator li
+  chiama in assertXmlStringEqualsXmlString). **(6) strtotime "assoluto poi
+  relativo"** (`"2026-07-17 14:30:00+10 minutes"`, anche senza spazio — il
+  comment-preview di WP): fallback che prova il prefisso assoluto più lungo il
+  cui resto è un'espressione relativa valida; cambiamento monotono (solo input
+  prima `false`). **(7) write-chain su proprietà overloaded/assenti/negate
+  (`AaOp::MagicDescend`)** — chiude il gap documentato in `prop_key_read`
+  (Bug #34893): uno step INTERMEDIO di scrittura con slot raw assente o
+  inaccessibile ora passa dal VM: `__get` guarded e prosecuzione sull'oggetto
+  ritornato; risultato non-oggetto → Notice "Indirect modification of
+  overloaded property C::$p has no effect" + Error "Attempt to assign property
+  on <tipo>" se lo step successivo è una proprietà (silente se è un indice);
+  senza `__get`: Denied → "Cannot access {vis} property", assente + step
+  proprietà → niente autoviv (PHP 8.5) con "Attempt to assign property on
+  null" (e Deprecated dynamic-property sulle classi non-dynamic), assente +
+  step indice → autoviv array e prosegue. Oggetti lazy: percorso legacy
+  invariato. Probe a 3 file tutti byte-id.
 - 2026-07-17 (sessione WordPress-14): 🏁 **RESTAPI A PARITÀ ORACLE: i 19E
   residui → 1E, identico all'oracle** (oEmbed
   `test_proxy_with_classic_embed_provider`, bug upstream del trunk wpdev:

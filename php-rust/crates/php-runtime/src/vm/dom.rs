@@ -292,6 +292,30 @@ impl DomDoc {
     /// error (recorded by the caller for `libxml_get_errors`).
     pub(super) fn parse(xml: &[u8]) -> Result<DomDoc, String> {
         use quick_xml::events::Event;
+        // XML 1.0 §2.11 end-of-line handling, applied to the INPUT like libxml:
+        // `\r\n` and a lone `\r` become `\n` everywhere (text, CDATA, attribute
+        // values), so serializers never see a CR that came from line endings.
+        // A literal `&#xD;` still survives — references resolve after this.
+        let normalized: Vec<u8>;
+        let xml: &[u8] = if xml.contains(&b'\r') {
+            let mut out = Vec::with_capacity(xml.len());
+            let mut i = 0;
+            while i < xml.len() {
+                if xml[i] == b'\r' {
+                    out.push(b'\n');
+                    if xml.get(i + 1) == Some(&b'\n') {
+                        i += 1;
+                    }
+                } else {
+                    out.push(xml[i]);
+                }
+                i += 1;
+            }
+            normalized = out;
+            &normalized
+        } else {
+            xml
+        };
         let mut doc = DomDoc::new();
         let mut reader = quick_xml::Reader::from_reader(xml);
         // PHP's default `preserveWhiteSpace = true` keeps blank text nodes.
@@ -559,6 +583,305 @@ impl DomDoc {
                 }
                 out.extend_from_slice(b">\n");
             }
+        }
+    }
+
+    /// DOM `Node::normalize()` on the subtree rooted at `n`: adjacent Text
+    /// nodes merge into the first one and empty Text nodes are dropped
+    /// (CDATA sections are barriers and are never merged — oracle-pinned).
+    pub(super) fn normalize(&mut self, n: usize) {
+        let kids = self.nodes[n].children.clone();
+        for &c in &kids {
+            self.normalize(c);
+        }
+        let mut out: Vec<usize> = Vec::new();
+        for c in kids {
+            let cur_text: Option<Vec<u8>> = match &self.nodes[c].kind {
+                DomKind::Text(t) => Some(t.clone()),
+                _ => None,
+            };
+            if let Some(t) = cur_text {
+                if t.is_empty() {
+                    self.nodes[c].parent = None;
+                    continue;
+                }
+                if let Some(&prev) = out.last() {
+                    if let DomKind::Text(pt) = &mut self.nodes[prev].kind {
+                        pt.extend_from_slice(&t);
+                        self.nodes[c].parent = None;
+                        continue;
+                    }
+                }
+            }
+            out.push(c);
+        }
+        self.nodes[n].children = out;
+    }
+
+    /// Canonical XML (C14N 1.0, plus the Exclusive variant) of `node` (`None` =
+    /// whole document) — the `DOMNode::C14N()` surface PHPUnit's
+    /// DOMNodeComparator drives for `assertXmlStringEqualsXmlString`. Oracle-
+    /// pinned shape: xml decl/doctype dropped, empty elements expanded to
+    /// start+end tags, namespace declarations first (sorted by prefix) then
+    /// attributes sorted by (namespace URI, local name), C14N escaping for
+    /// text/attribute values, comments dropped unless `with_comments`,
+    /// document-level PIs/comments newline-separated around the root.
+    pub(super) fn c14n(&self, node: Option<usize>, exclusive: bool, with_comments: bool) -> Vec<u8> {
+        let mut out = Vec::new();
+        match node {
+            None => self.c14n_doc(0, exclusive, with_comments, &mut out),
+            Some(n) => match &self.nodes[n].kind {
+                DomKind::Document | DomKind::Fragment => {
+                    self.c14n_doc(n, exclusive, with_comments, &mut out)
+                }
+                _ => {
+                    // Subtree: seed the in-scope namespaces from the ancestor
+                    // chain (the element render merges its own declarations),
+                    // with nothing "already rendered" — inclusive C14N thus
+                    // re-declares inherited namespaces on the subtree root.
+                    let mut scope = std::collections::BTreeMap::new();
+                    let mut chain = Vec::new();
+                    let mut p = self.nodes[n].parent;
+                    while let Some(a) = p {
+                        chain.push(a);
+                        p = self.nodes[a].parent;
+                    }
+                    for &a in chain.iter().rev() {
+                        if let DomKind::Element { attrs, .. } = &self.nodes[a].kind {
+                            c14n_collect_ns(attrs, &mut scope);
+                        }
+                    }
+                    let rendered = std::collections::BTreeMap::new();
+                    self.c14n_node(n, &scope, &rendered, exclusive, with_comments, &mut out);
+                }
+            },
+        }
+        out
+    }
+
+    /// Document-level canonicalization: the root element plus surrounding
+    /// PIs/comments, each `\n`-terminated before the root and `\n`-preceded
+    /// after it (C14N 1.0 §2.2). The doctype never appears.
+    fn c14n_doc(&self, doc: usize, exclusive: bool, with_comments: bool, out: &mut Vec<u8>) {
+        let empty_scope = std::collections::BTreeMap::new();
+        let empty_rendered = std::collections::BTreeMap::new();
+        let mut after_root = false;
+        for &c in &self.nodes[doc].children {
+            match &self.nodes[c].kind {
+                DomKind::Element { .. } => {
+                    self.c14n_node(c, &empty_scope, &empty_rendered, exclusive, with_comments, out);
+                    after_root = true;
+                }
+                DomKind::Pi { .. } => {
+                    if after_root {
+                        out.push(b'\n');
+                    }
+                    self.c14n_node(c, &empty_scope, &empty_rendered, exclusive, with_comments, out);
+                    if !after_root {
+                        out.push(b'\n');
+                    }
+                }
+                DomKind::Comment(_) if with_comments => {
+                    if after_root {
+                        out.push(b'\n');
+                    }
+                    self.c14n_node(c, &empty_scope, &empty_rendered, exclusive, with_comments, out);
+                    if !after_root {
+                        out.push(b'\n');
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn c14n_node(
+        &self,
+        n: usize,
+        scope: &std::collections::BTreeMap<Vec<u8>, Vec<u8>>,
+        rendered: &std::collections::BTreeMap<Vec<u8>, Vec<u8>>,
+        exclusive: bool,
+        with_comments: bool,
+        out: &mut Vec<u8>,
+    ) {
+        match &self.nodes[n].kind {
+            DomKind::Element { name, attrs } => {
+                let mut own_scope = scope.clone();
+                c14n_collect_ns(attrs, &mut own_scope);
+                let rendered_val =
+                    |p: &[u8]| rendered.get(p).map(|v| v.as_slice()).unwrap_or(b"");
+                // Namespace declarations this element must emit (owned pairs:
+                // they also extend the `rendered` context for the children).
+                let mut decls: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
+                if exclusive {
+                    // Exclusive C14N renders only the *visibly utilized*
+                    // prefixes: the element's own and its attributes'.
+                    let mut utilized: std::collections::BTreeSet<&[u8]> =
+                        std::collections::BTreeSet::new();
+                    utilized.insert(c14n_prefix(name));
+                    for (k, _) in attrs {
+                        if !c14n_is_ns_decl(k) {
+                            let p = c14n_prefix(k);
+                            if !p.is_empty() {
+                                utilized.insert(p);
+                            }
+                        }
+                    }
+                    for p in utilized {
+                        if p == b"xml" {
+                            continue;
+                        }
+                        let u = own_scope.get(p).map(|v| v.as_slice()).unwrap_or(b"");
+                        // A prefixed binding can't be undeclared in XML NS 1.0;
+                        // only the default (`xmlns=""`) re-render is legal.
+                        if u != rendered_val(p) && !(u.is_empty() && !p.is_empty()) {
+                            decls.push((p.to_vec(), u.to_vec()));
+                        }
+                    }
+                } else {
+                    // Inclusive C14N renders every in-scope namespace whose
+                    // value differs from the nearest output ancestor's.
+                    for (p, u) in &own_scope {
+                        if p.as_slice() == b"xml"
+                            && u.as_slice() == b"http://www.w3.org/XML/1998/namespace"
+                        {
+                            continue;
+                        }
+                        if u.as_slice() != rendered_val(p) {
+                            decls.push((p.clone(), u.clone()));
+                        }
+                    }
+                }
+                out.push(b'<');
+                out.extend_from_slice(name);
+                for (p, u) in &decls {
+                    if p.is_empty() {
+                        out.extend_from_slice(b" xmlns=\"");
+                    } else {
+                        out.extend_from_slice(b" xmlns:");
+                        out.extend_from_slice(p);
+                        out.extend_from_slice(b"=\"");
+                    }
+                    c14n_attr_escape(u, out);
+                    out.push(b'"');
+                }
+                // Attributes sorted by (namespace URI, local name); the
+                // unprefixed ones carry no namespace and sort first.
+                let mut alist: Vec<(&[u8], &[u8], &[u8])> = attrs
+                    .iter()
+                    .filter(|(k, _)| !c14n_is_ns_decl(k))
+                    .map(|(k, v)| {
+                        let p = c14n_prefix(k);
+                        let uri: &[u8] = if p.is_empty() {
+                            b""
+                        } else {
+                            own_scope.get(p).map(|x| x.as_slice()).unwrap_or(b"")
+                        };
+                        (uri, k.as_slice(), v.as_slice())
+                    })
+                    .collect();
+                alist.sort_by(|a, b| (a.0, c14n_local(a.1)).cmp(&(b.0, c14n_local(b.1))));
+                for (_, k, v) in &alist {
+                    out.push(b' ');
+                    out.extend_from_slice(k);
+                    out.extend_from_slice(b"=\"");
+                    c14n_attr_escape(v, out);
+                    out.push(b'"');
+                }
+                out.push(b'>');
+                let mut child_rendered = rendered.clone();
+                for (p, u) in decls {
+                    child_rendered.insert(p, u);
+                }
+                for &c in &self.nodes[n].children {
+                    self.c14n_node(c, &own_scope, &child_rendered, exclusive, with_comments, out);
+                }
+                out.extend_from_slice(b"</");
+                out.extend_from_slice(name);
+                out.push(b'>');
+            }
+            DomKind::Text(d) | DomKind::Cdata(d) => c14n_text_escape(d, out),
+            DomKind::Comment(d) => {
+                if with_comments {
+                    out.extend_from_slice(b"<!--");
+                    out.extend_from_slice(d);
+                    out.extend_from_slice(b"-->");
+                }
+            }
+            DomKind::Pi { target, data } => {
+                out.extend_from_slice(b"<?");
+                out.extend_from_slice(target);
+                if !data.is_empty() {
+                    out.push(b' ');
+                    out.extend_from_slice(data);
+                }
+                out.extend_from_slice(b"?>");
+            }
+            DomKind::Document | DomKind::Fragment | DomKind::DocType { .. } => {}
+        }
+    }
+}
+
+/// `xmlns` / `xmlns:p` attribute?
+fn c14n_is_ns_decl(k: &[u8]) -> bool {
+    k == b"xmlns" || k.starts_with(b"xmlns:")
+}
+
+/// The prefix of a qualified name (`""` when unprefixed).
+fn c14n_prefix(k: &[u8]) -> &[u8] {
+    match k.iter().position(|&b| b == b':') {
+        Some(i) => &k[..i],
+        None => b"",
+    }
+}
+
+/// The local part of a qualified name.
+fn c14n_local(k: &[u8]) -> &[u8] {
+    match k.iter().position(|&b| b == b':') {
+        Some(i) => &k[i + 1..],
+        None => k,
+    }
+}
+
+/// Fold an element's namespace declarations into `scope` (prefix → URI; the
+/// default namespace uses the empty prefix, `xmlns=""` sets it to empty).
+fn c14n_collect_ns(
+    attrs: &[(Vec<u8>, Vec<u8>)],
+    scope: &mut std::collections::BTreeMap<Vec<u8>, Vec<u8>>,
+) {
+    for (k, v) in attrs {
+        if k.as_slice() == b"xmlns" {
+            scope.insert(Vec::new(), v.clone());
+        } else if let Some(p) = k.strip_prefix(b"xmlns:".as_slice()) {
+            scope.insert(p.to_vec(), v.clone());
+        }
+    }
+}
+
+/// C14N text escaping: `&`, `<`, `>` as entities, CR as `&#xD;`.
+fn c14n_text_escape(d: &[u8], out: &mut Vec<u8>) {
+    for &b in d {
+        match b {
+            b'&' => out.extend_from_slice(b"&amp;"),
+            b'<' => out.extend_from_slice(b"&lt;"),
+            b'>' => out.extend_from_slice(b"&gt;"),
+            b'\r' => out.extend_from_slice(b"&#xD;"),
+            _ => out.push(b),
+        }
+    }
+}
+
+/// C14N attribute-value escaping: `&`, `<`, `"` as entities, TAB/LF/CR numeric.
+fn c14n_attr_escape(d: &[u8], out: &mut Vec<u8>) {
+    for &b in d {
+        match b {
+            b'&' => out.extend_from_slice(b"&amp;"),
+            b'<' => out.extend_from_slice(b"&lt;"),
+            b'"' => out.extend_from_slice(b"&quot;"),
+            b'\t' => out.extend_from_slice(b"&#x9;"),
+            b'\n' => out.extend_from_slice(b"&#xA;"),
+            b'\r' => out.extend_from_slice(b"&#xD;"),
+            _ => out.push(b),
         }
     }
 }
@@ -2632,6 +2955,26 @@ impl<'m> Vm<'m> {
         let (doc, _) = self.dom_doc(&args)?;
         let node = if n < 0 { None } else { Some(n as usize) };
         Ok(Zval::Str(PhpStr::new(doc.save_xml(node))))
+    }
+
+    /// `__dom_normalize(docId, nodeId) -> true`.
+    pub(super) fn ho_dom_normalize(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let n = self.dom_arg(&args, 1);
+        let id = self.dom_arg(&args, 0);
+        if let Some(doc) = self.dom_docs.get_mut(&(id as u32)) {
+            doc.normalize(if n < 0 { 0 } else { n as usize });
+        }
+        Ok(Zval::Bool(true))
+    }
+
+    /// `__dom_c14n(docId, nodeId|-1, exclusive, withComments) -> string`.
+    pub(super) fn ho_dom_c14n(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let n = self.dom_arg(&args, 1);
+        let exclusive = self.dom_arg(&args, 2) != 0;
+        let with_comments = self.dom_arg(&args, 3) != 0;
+        let (doc, _) = self.dom_doc(&args)?;
+        let node = if n < 0 { None } else { Some(n as usize) };
+        Ok(Zval::Str(PhpStr::new(doc.c14n(node, exclusive, with_comments))))
     }
 
     /// `__dom_save_html(docId, nodeId|-1) -> string`.

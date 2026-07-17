@@ -87,6 +87,18 @@ class DOMNode {
         $o->__n = $n;
         return $o;
     }
+    // Canonical XML (C14N 1.0 / Exclusive). $xpath/$nsPrefixes subsetting is
+    // not supported (PHPUnit's DOMNodeComparator never passes them).
+    public function C14N($exclusive = false, $withComments = false, $xpath = null, $nsPrefixes = null) {
+        return __dom_c14n($this->__d, $this->__n, (int)(bool)$exclusive, (int)(bool)$withComments);
+    }
+    public function C14NFile($uri, $exclusive = false, $withComments = false, $xpath = null, $nsPrefixes = null) {
+        return file_put_contents($uri, $this->C14N($exclusive, $withComments, $xpath, $nsPrefixes));
+    }
+    // DOM Node::normalize(): merge adjacent Text nodes, drop empty ones.
+    public function normalize() {
+        __dom_normalize($this->__d, $this->__n);
+    }
     public function __get($name) {
         switch ($name) {
             case 'nodeType': $i = __dom_info($this->__d, $this->__n); return $i[0];
@@ -255,6 +267,9 @@ class DOMDocument extends DOMNode {
     }
     public function saveXML($node = null, $options = 0) {
         return __dom_save_xml($this->__d, $node === null ? -1 : $node->__n);
+    }
+    public function normalizeDocument() {
+        __dom_normalize($this->__d, $this->__n < 0 ? 0 : $this->__n);
     }
     public function save($filename) {
         return file_put_contents($filename, __dom_save_xml($this->__d, -1));
@@ -434,6 +449,15 @@ class DOMAttr extends DOMNode {
         $a = new DOMAttr($name);
         $a->__d = $d;
         return $a;
+    }
+    // C14N of a lone attribute node: leading space + C14N attr escaping.
+    public function C14N($exclusive = false, $withComments = false, $xpath = null, $nsPrefixes = null) {
+        $v = str_replace(
+            array('&', '<', '"', "\t", "\n", "\r"),
+            array('&amp;', '&lt;', '&quot;', '&#x9;', '&#xA;', '&#xD;'),
+            (string)$this->value
+        );
+        return ' ' . $this->name . '="' . $v . '"';
     }
     public function __get($prop) {
         switch ($prop) {
@@ -1047,7 +1071,7 @@ function xml_get_current_column_number($parser) { return $parser->__col; }
 function xml_get_current_byte_index($parser) { return $parser->__byte; }
 function xml_error_string($code) {
     // ext/xml/compat.c error_mapping, verbatim (indexed by libxml errNo).
-    $strings = array(
+    static $strings = array(
         'No error', 'No memory', 'Invalid document start', 'Empty document',
         'Not well-formed (invalid token)', 'Invalid document end',
         'Invalid hexadecimal character reference', 'Invalid decimal character reference',

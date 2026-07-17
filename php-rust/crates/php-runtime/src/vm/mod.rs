@@ -10489,6 +10489,8 @@ host_builtins! {
     b"__dom_load" => vm.ho_dom_load(args),
     b"__dom_load_html" => vm.ho_dom_load_html(args),
     b"__dom_save_xml" => vm.ho_dom_save_xml(args),
+    b"__dom_c14n" => vm.ho_dom_c14n(args),
+    b"__dom_normalize" => vm.ho_dom_normalize(args),
     b"__dom_save_html" => vm.ho_dom_save_html(args),
     b"__xml_tokenize" => vm.ho_xml_tokenize(args),
     b"__dom_info" => vm.ho_dom_info(args),

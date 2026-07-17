@@ -765,13 +765,17 @@ fn trim_mask(chars: &[u8]) -> [bool; 256] {
 
 /// Shared trim driver. `left`/`right` select which ends are stripped.
 fn do_trim(args: &[Zval], ctx: &mut Ctx, fname: &str, left: bool, right: bool) -> Result<Zval, PhpError> {
-    let s = ctx.to_zstr(
-        args.first()
-            .ok_or_else(|| PhpError::Error(format!("{fname}() expects at least 1 argument, 0 given")))?,
-    );
+    let arg0 = args
+        .first()
+        .ok_or_else(|| PhpError::Error(format!("{fname}() expects at least 1 argument, 0 given")))?;
+    crate::null_arg_deprecation(ctx, arg0, fname, 1, "string", "string");
+    let s = ctx.to_zstr(arg0);
     let bytes = s.as_bytes();
     let chars = match args.get(1) {
-        Some(v) => ctx.to_zstr(v).as_bytes().to_vec(),
+        Some(v) => {
+            crate::null_arg_deprecation(ctx, v, fname, 2, "characters", "string");
+            ctx.to_zstr(v).as_bytes().to_vec()
+        }
         None => TRIM_DEFAULT.to_vec(),
     };
     let mask = trim_mask(&chars);

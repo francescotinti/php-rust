@@ -116,12 +116,27 @@ pub(super) struct AaMagicSet {
     pub value: Zval,
 }
 
+/// An intermediate *property* step (`$o->p->…` / `$o->p[…]…`) whose raw slot is
+/// absent or inaccessible: Zend reads the step through the overloaded-property
+/// protocol (`__get`, the lazy-holder pattern) and continues the write on its
+/// result — or, with no magic getter, applies PHP's no-autoviv rules (dynamic
+/// property deprecation, "Attempt to assign property on null", visibility
+/// errors). All of those need the VM, so the walker defers the remaining path.
+pub(super) struct AaMagicDescend {
+    pub obj: Zval,
+    pub name: Vec<u8>,
+    pub rest: Vec<FieldStep>,
+    pub keys: Vec<Zval>,
+    pub value: Zval,
+}
+
 /// The pending ArrayAccess / magic dispatch a field-write walk produced (at
 /// most one — a walk defers exactly one leaf that needs a method call).
 pub(super) enum AaOp {
     Write(AaWrite),
     Descend(AaDescend),
     MagicSet(AaMagicSet),
+    MagicDescend(AaMagicDescend),
 }
 
 pub(super) fn field_write(
@@ -201,6 +216,27 @@ pub(super) fn field_write(
                             value,
                         }));
                         return Ok(());
+                    }
+                    // An intermediate step whose raw slot is absent or
+                    // inaccessible needs the VM (overloaded-property protocol /
+                    // no-autoviv semantics) — defer the remaining path. Lazy
+                    // wrappers keep the legacy raw walk (their realization has
+                    // its own machinery); enum cases fall through to their
+                    // dedicated immutability error below.
+                    if !rest.is_empty() && !is_enum && !is_lazy {
+                        let denied = fs.prop_key_read(cid, name).is_none();
+                        let absent =
+                            !o.borrow().props.contains(fs.prop_key(cid, name).as_ref());
+                        if denied || absent {
+                            *aa = Some(AaOp::MagicDescend(AaMagicDescend {
+                                obj: Zval::Object(o),
+                                name: name.to_vec(),
+                                rest: rest.to_vec(),
+                                keys: keys.collect(),
+                                value,
+                            }));
+                            return Ok(());
+                        }
                     }
                     let mut obj = o.borrow_mut();
                     let key = fs.prop_key(cid, name);
@@ -844,10 +880,131 @@ impl<'m> Vm<'m> {
                 self.prop_set_magic_or_dynamic(obj, &name, value, top)?;
                 continue;
             }
+            if let AaOp::MagicDescend(AaMagicDescend { obj, name, rest, keys, value }) = op {
+                let o = deref_object(&obj).expect("MagicDescend carries an object");
+                let (cid, cname) = {
+                    let b = o.borrow();
+                    (
+                        b.class_id as usize,
+                        String::from_utf8_lossy(b.class_name.as_bytes()).into_owned(),
+                    )
+                };
+                // Everything `fs` answers is captured up front: the scope
+                // borrow may not live across the `&mut self` calls below.
+                let (denied_vis, declared, key_owned) = {
+                    let fs =
+                        FieldScope { classes: &self.classes, scope: self.frames[top].class };
+                    (
+                        fs.prop_denied_vis(cid, &name),
+                        fs.prop_is_declared_slot(cid, &name),
+                        fs.prop_key(cid, &name).into_owned(),
+                    )
+                };
+                let prop = String::from_utf8_lossy(&name).into_owned();
+                // The property name the assignment would fault on when the
+                // step's value is not an object (`$o->p->NEXT = v` on null/…).
+                let next_prop = match rest.first() {
+                    Some(FieldStep::Prop(n)) => Some(n.to_vec()),
+                    Some(FieldStep::PropDyn) => Some(
+                        convert::to_zstr_cast(keys.first().unwrap_or(&Zval::Null), &mut self.diags)
+                            .as_bytes()
+                            .to_vec(),
+                    ),
+                    _ => None,
+                };
+                let cur = self.frames[top].class;
+                if self.magic_applies(&o, &name, cur, MagicKind::Get, b"__get").is_some() {
+                    // Guarded `__get`, then continue the write on its result:
+                    // an object is a handle (the write lands); anything else is
+                    // Zend's indirect-modification notice, then the write faults
+                    // or silently mutates the discarded temporary.
+                    let oid = o.borrow().id;
+                    let gkey = (oid, MagicKind::Get, name.clone());
+                    let ins = self.magic_guard.insert(gkey.clone());
+                    let r = self.call_method_sync(
+                        obj.clone(),
+                        b"__get",
+                        vec![Zval::Str(PhpStr::new(name.clone()))],
+                    );
+                    if ins {
+                        self.magic_guard.remove(&gkey);
+                    }
+                    let mut val = r?.deref_clone();
+                    if !matches!(val, Zval::Object(_)) {
+                        self.diags.push(Diag::Notice(format!(
+                            "Indirect modification of overloaded property {cname}::${prop} has no effect"
+                        )));
+                        // Attribute to the assignment's own line: the drain may
+                        // outlive the op's flush point (mirrors BindRefTo).
+                        let line = self.cur_line(top);
+                        self.flush_diags(line)?;
+                        if let Some(next) = next_prop {
+                            return Err(PhpError::Error(format!(
+                                "Attempt to assign property \"{}\" on {}",
+                                String::from_utf8_lossy(&next),
+                                val.type_name_for_error()
+                            )));
+                        }
+                        break;
+                    }
+                    let mut dropped = Vec::new();
+                    let mut aa2 = None;
+                    let fs2 =
+                        FieldScope { classes: &self.classes, scope: self.frames[top].class };
+                    field_write(&mut val, &rest, &mut keys.into_iter(), fs2, value, &mut self.diags, &mut dropped, &mut aa2, rebind)?;
+                    for d in &dropped {
+                        self.gc_note(d);
+                    }
+                    pending = aa2;
+                    continue;
+                }
+                // No magic getter. An inaccessible declared property is the
+                // visibility error; an absent one follows PHP's no-autoviv
+                // rules — a next *property* step faults on null (the dynamic
+                // creation still deprecates first on a non-dynamic class),
+                // while an index step autovivifies an array and walks on.
+                if let Some(vis) = denied_vis {
+                    return Err(PhpError::Error(format!(
+                        "Cannot access {vis} property {cname}::${prop}"
+                    )));
+                }
+                if !declared && !self.allows_dynamic_props(cid) {
+                    self.diags.push(Diag::Deprecated(format!(
+                        "Creation of dynamic property {cname}::${prop} is deprecated"
+                    )));
+                    let line = self.cur_line(top);
+                    self.flush_diags(line)?;
+                }
+                if let Some(next) = next_prop {
+                    return Err(PhpError::Error(format!(
+                        "Attempt to assign property \"{}\" on null",
+                        String::from_utf8_lossy(&next)
+                    )));
+                }
+                {
+                    let mut b = o.borrow_mut();
+                    if !b.props.contains(&key_owned) {
+                        b.props.set(&key_owned, Zval::Array(Rc::new(PhpArray::new())));
+                    }
+                }
+                let mut steps: Vec<FieldStep> = Vec::with_capacity(rest.len() + 1);
+                steps.push(FieldStep::Prop(name.clone().into_boxed_slice()));
+                steps.extend(rest);
+                let mut objz = Zval::Object(o.clone());
+                let mut dropped = Vec::new();
+                let mut aa2 = None;
+                let fs2 = FieldScope { classes: &self.classes, scope: self.frames[top].class };
+                field_write(&mut objz, &steps, &mut keys.into_iter(), fs2, value, &mut self.diags, &mut dropped, &mut aa2, rebind)?;
+                for d in &dropped {
+                    self.gc_note(d);
+                }
+                pending = aa2;
+                continue;
+            }
             let msg_obj = match &op {
                 AaOp::Write(w) => &w.obj,
                 AaOp::Descend(d) => &d.obj,
-                AaOp::MagicSet(_) => unreachable!("handled above"),
+                AaOp::MagicSet(_) | AaOp::MagicDescend(_) => unreachable!("handled above"),
             };
             if !self.object_implements(msg_obj, b"arrayaccess") {
                 let name = deref_object(msg_obj)
@@ -856,7 +1013,7 @@ impl<'m> Vm<'m> {
                 return Err(PhpError::Error(format!("Cannot use object of type {name} as array")));
             }
             match op {
-                AaOp::MagicSet(_) => unreachable!("handled above"),
+                AaOp::MagicSet(_) | AaOp::MagicDescend(_) => unreachable!("handled above"),
                 AaOp::Write(AaWrite { obj, key, value }) => {
                     self.call_method_sync(obj, b"offsetSet", vec![key.unwrap_or(Zval::Null), value])?;
                 }

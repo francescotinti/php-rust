@@ -208,11 +208,16 @@ fn lower_source_impl(
         // date API) are seeded ahead of the user's too, so user functions get ids
         // contiguous after them. Call sites resolve by name, so no fix-up needed.
         None => {
-            let (pclasses, pindex, pfunctions, pfn_index) = lower_prelude();
+            let (pclasses, pindex, pfunctions, pfn_index, pstatic) = lower_prelude();
             low.classes = pclasses;
             low.class_index = pindex;
             low.functions = pfunctions;
             low.fn_index = pfn_index;
+            // Start the unit's `static $x` ids past the prelude's own bindings:
+            // the prelude bodies keep their 0..pstatic ids in every unit, so a
+            // fresh counter here would alias them onto user cells (or index past
+            // `Vm::statics` when the user program declares fewer statics).
+            low.static_count = pstatic;
         }
         // Compile-against-image: seed the caller's *class* image (which already
         // embeds the prelude's classes), so an eval class can `extend`/`implement`
@@ -268,10 +273,13 @@ fn lower_source_impl(
                     (k.clone(), t)
                 })
                 .collect();
-            let (pfunctions, pfn_index) = prelude_functions();
+            let (pfunctions, pfn_index, pstatic) = prelude_functions();
             low.functions = pfunctions;
             low.fn_index = pfn_index;
-            low.static_count = sstatic;
+            // The caller's total normally already covers the prelude range (main
+            // was seeded past it); `max` keeps the invariant for a caller image
+            // that predates any main unit (e.g. a bare eval host).
+            low.static_count = sstatic.max(pstatic);
         }
     }
     let seeded_trait_keys: HashSet<Vec<u8>> = low.traits.keys().cloned().collect();
@@ -649,6 +657,9 @@ type LoweredPrelude = (
     HashMap<Vec<u8>, usize>,
     Vec<std::rc::Rc<FnDecl>>,
     HashMap<Vec<u8>, usize>,
+    // The prelude's own `static $x` binding count: every unit's counter must
+    // start past it, or a prelude static would alias (or overflow) user cells.
+    usize,
 );
 
 thread_local! {
@@ -671,10 +682,10 @@ fn lower_prelude() -> LoweredPrelude {
 /// The prelude's *functions* only (table + name→index), for the seeded
 /// (`include`/`eval`) lowering path — it takes its classes from the seed image,
 /// so cloning the cached prelude classes there would be pure waste.
-fn prelude_functions() -> (Vec<std::rc::Rc<FnDecl>>, HashMap<Vec<u8>, usize>) {
+fn prelude_functions() -> (Vec<std::rc::Rc<FnDecl>>, HashMap<Vec<u8>, usize>, usize) {
     PRELUDE_CACHE.with(|c| {
         let p = c.get_or_init(lower_prelude_uncached);
-        (p.2.clone(), p.3.clone())
+        (p.2.clone(), p.3.clone(), p.4)
     })
 }
 
@@ -785,7 +796,7 @@ fn lower_prelude_uncached() -> LoweredPrelude {
             low.hoist_function(func).expect("fileinfo prelude function must lower");
         }
     }
-    (low.classes, low.class_index, low.functions, low.fn_index)
+    (low.classes, low.class_index, low.functions, low.fn_index, low.static_count)
 }
 
 /// A name→slot scope: the script globals, or one function's locals. Holds the

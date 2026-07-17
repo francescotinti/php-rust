@@ -2071,6 +2071,30 @@ fn strtotime_in(trimmed: &str, base: i64, zr: &ZoneRef) -> Option<(i64, Option<S
             None => (zone_wall_to_epoch(zr, wall), None),
         });
     }
+    // timelib also accepts an absolute date/time FOLLOWED by relative tokens
+    // ("2026-07-17 14:30:00+10 minutes" — WP's comment-preview window builds
+    // exactly this, with no separating space). The full-string parses above
+    // failed, so try the longest absolute prefix whose remainder is a valid
+    // relative expression and chain the two on the wall clock.
+    for i in (1..trimmed.len()).rev() {
+        let c = trimmed.as_bytes()[i];
+        if c != b'+' && c != b'-' && !c.is_ascii_whitespace() {
+            continue;
+        }
+        let abs = trimmed[..i].trim_end();
+        let rel = lower[i..].trim_start();
+        if abs.is_empty() || rel.is_empty() {
+            continue;
+        }
+        let Some((wall, zone)) = parse_absolute(abs).or_else(|| parse_textual(abs)) else {
+            continue;
+        };
+        let Some(w2) = parse_relative(rel, wall) else { continue };
+        return Some(match zone {
+            Some(z) => (w2 - z.off, Some(z.label)),
+            None => (zone_wall_to_epoch(zr, w2), None),
+        });
+    }
     // Relative expressions do their calendar math on the WALL clock of the
     // zone (a "+1 day" across a DST jump keeps the wall time, spending 23 or
     // 25 real hours — oracle-pinned).

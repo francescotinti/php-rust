@@ -48,6 +48,29 @@ use php_types::{
     PropVis, Zval,
 };
 
+/// PHP 8.1 deprecation for `null` passed to a non-nullable scalar parameter of
+/// an internal function (weak mode; Zend/zend_api.c `zend_null_arg_deprecated`).
+/// Call before coercing the argument; parameters are 1-based like the message.
+pub(crate) fn null_arg_deprecation(
+    ctx: &mut Ctx,
+    v: &Zval,
+    fname: &str,
+    n: usize,
+    pname: &str,
+    ptype: &str,
+) {
+    let is_null = match v {
+        Zval::Null => true,
+        Zval::Ref(c) => matches!(&*c.borrow(), Zval::Null),
+        _ => false,
+    };
+    if is_null {
+        ctx.diags.push(Diag::Deprecated(format!(
+            "{fname}(): Passing null to parameter #{n} (${pname}) of type {ptype} is deprecated"
+        )));
+    }
+}
+
 /// Build the Tier 1 builtin registry.
 pub fn registry() -> Registry {
     let mut r = Registry::new();
@@ -67,6 +90,7 @@ pub fn registry() -> Registry {
     add(b"inet_ntop", net::inet_ntop);
     add(b"gethostbyname", net::gethostbyname);
     add(b"gethostbynamel", net::gethostbynamel);
+    add(b"gethostbyaddr", net::gethostbyaddr);
     add(b"bcadd", bcmath::bcadd);
     add(b"bcsub", bcmath::bcsub);
     add(b"bcmul", bcmath::bcmul);

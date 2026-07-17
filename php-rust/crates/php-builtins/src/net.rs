@@ -156,3 +156,27 @@ pub fn gethostbynamel(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     }
     Ok(Zval::Array(std::rc::Rc::new(out)))
 }
+
+/// `gethostbyaddr(string $ip): string|false` — PTR lookup through the system
+/// resolver (`php_types::netio`, same `getnameinfo` path as ext/standard/dns.c):
+/// a malformed address warns and returns `false`; a valid address with no PTR
+/// record returns the input unchanged.
+pub fn gethostbyaddr(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let ip = convert::to_zstr(args.first().unwrap_or(&Zval::Null), ctx.diags);
+    let malformed = |ctx: &mut Ctx| {
+        ctx.diags.push(php_types::Diag::Warning(
+            "gethostbyaddr(): Address is not a valid IPv4 or IPv6 address".into(),
+        ));
+        Ok(Zval::Bool(false))
+    };
+    let Ok(text) = std::str::from_utf8(ip.as_bytes()) else {
+        return malformed(ctx);
+    };
+    match php_types::netio::reverse_lookup(text) {
+        php_types::netio::Reverse::Malformed => malformed(ctx),
+        php_types::netio::Reverse::NoName => {
+            Ok(Zval::Str(PhpStr::new(ip.as_bytes().to_vec())))
+        }
+        php_types::netio::Reverse::Name(h) => Ok(Zval::Str(PhpStr::new(h))),
+    }
+}

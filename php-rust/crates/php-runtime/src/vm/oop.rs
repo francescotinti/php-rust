@@ -376,6 +376,24 @@ impl FieldScope<'_> {
         matches!(resolve_prop_access(self.classes, ocid, name, self.scope), PropAccess::Slot(_))
     }
 
+    /// For a `Denied` resolution, the visibility word of PHP's "Cannot access
+    /// {vis} property" error; `None` when the property is accessible (or
+    /// dynamic) from this scope.
+    pub(super) fn prop_denied_vis(&self, ocid: ClassId, name: &[u8]) -> Option<&'static str> {
+        match resolve_prop_access(self.classes, ocid, name, self.scope) {
+            PropAccess::Denied { .. } => Some(
+                prop_info(self.classes, ocid, name)
+                    .map(|pi| match pi.visibility {
+                        Visibility::Private => "private",
+                        Visibility::Protected => "protected",
+                        Visibility::Public => "public",
+                    })
+                    .unwrap_or("private"),
+            ),
+            _ => None,
+        }
+    }
+
     /// Whether `name` is a *hooked* property on an instance of `ocid` (PHP 8.4).
     /// A leaf write on one must defer to the VM caller so the set hook (or the
     /// hooked-property write rules) dispatches — the walker itself only writes
