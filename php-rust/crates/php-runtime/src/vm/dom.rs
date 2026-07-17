@@ -22,11 +22,15 @@ use php_types::{Key, PhpArray, PhpStr, Zval};
 /// One parsed document (or an empty one from `new DOMDocument`).
 pub(super) struct DomDoc {
     pub nodes: Vec<DomNode>,
-    pub version: Vec<u8>,
+    /// `xmlVersion` — `None` after an HTML parse (PHP reports null).
+    pub version: Option<Vec<u8>>,
     pub encoding: Option<Vec<u8>>,
     /// The document encoding an HTML parse resolved (override argument, `<meta
     /// charset>` sniff, or the UTF-8 default) — `Dom\Document::$inputEncoding`.
     pub input_encoding: Option<Vec<u8>>,
+    /// Whether this document came from the HTML parser: the document node then
+    /// reports nodeType 13 (XML_HTML_DOCUMENT_NODE) instead of 9.
+    pub is_html: bool,
 }
 
 pub(super) struct DomNode {
@@ -46,8 +50,19 @@ pub(super) enum DomKind {
     Cdata(Vec<u8>),
     Comment(Vec<u8>),
     Pi { target: Vec<u8>, data: Vec<u8> },
-    DocType { name: Vec<u8> },
+    DocType { name: Vec<u8>, public_id: Option<Vec<u8>>, system_id: Option<Vec<u8>> },
     Fragment,
+}
+
+/// One recorded libxml diagnostic (the `LibXMLError` surface).
+#[derive(Clone)]
+pub(super) struct LxErr {
+    pub level: i64,
+    pub code: i64,
+    pub line: i64,
+    pub column: i64,
+    pub message: String,
+    pub file: Vec<u8>,
 }
 
 impl DomKind {
@@ -74,7 +89,7 @@ impl DomKind {
             DomKind::Comment(_) => b"#comment".to_vec(),
             DomKind::Pi { target, .. } => target.clone(),
             DomKind::Document => b"#document".to_vec(),
-            DomKind::DocType { name } => name.clone(),
+            DomKind::DocType { name, .. } => name.clone(),
             DomKind::Fragment => b"#document-fragment".to_vec(),
         }
     }
@@ -93,9 +108,10 @@ impl DomDoc {
     pub(super) fn new() -> DomDoc {
         DomDoc {
             nodes: vec![DomNode { kind: DomKind::Document, parent: None, children: Vec::new() }],
-            version: b"1.0".to_vec(),
+            version: Some(b"1.0".to_vec()),
             encoding: None,
             input_encoding: None,
+            is_html: false,
         }
     }
 
@@ -176,7 +192,11 @@ impl DomDoc {
             DomKind::Pi { target, data } => {
                 DomKind::Pi { target: target.clone(), data: data.clone() }
             }
-            DomKind::DocType { name } => DomKind::DocType { name: name.clone() },
+            DomKind::DocType { name, public_id, system_id } => DomKind::DocType {
+                name: name.clone(),
+                public_id: public_id.clone(),
+                system_id: system_id.clone(),
+            },
         };
         let id = self.push(kind, None);
         if deep {
@@ -287,7 +307,7 @@ impl DomDoc {
                 Ok(Event::Eof) => break,
                 Ok(Event::Decl(d)) => {
                     if let Ok(v) = d.version() {
-                        doc.version = v.to_vec();
+                        doc.version = Some(v.to_vec());
                     }
                     if let Some(Ok(enc)) = d.encoding() {
                         doc.encoding = Some(enc.to_vec());
@@ -365,7 +385,14 @@ impl DomDoc {
                     let raw = d.to_vec();
                     let name_end =
                         raw.iter().position(|b| b.is_ascii_whitespace()).unwrap_or(raw.len());
-                    doc.push(DomKind::DocType { name: raw[..name_end].to_vec() }, Some(0));
+                    doc.push(
+                        DomKind::DocType {
+                            name: raw[..name_end].to_vec(),
+                            public_id: None,
+                            system_id: None,
+                        },
+                        Some(0),
+                    );
                 }
                 Ok(Event::GeneralRef(r)) => {
                     // quick-xml 0.41 reports every `&name;` / `&#NN;` in text as
@@ -446,7 +473,7 @@ impl DomDoc {
         match node {
             None => {
                 out.extend_from_slice(b"<?xml version=\"");
-                out.extend_from_slice(&self.version);
+                out.extend_from_slice(self.version.as_deref().unwrap_or(b"1.0"));
                 out.extend_from_slice(b"\"");
                 if let Some(enc) = &self.encoding {
                     out.extend_from_slice(b" encoding=\"");
@@ -513,10 +540,185 @@ impl DomDoc {
                 }
                 out.extend_from_slice(b"?>");
             }
-            DomKind::DocType { name } => {
+            DomKind::DocType { name, public_id, system_id } => {
                 out.extend_from_slice(b"<!DOCTYPE ");
                 out.extend_from_slice(name);
+                if let Some(p) = public_id {
+                    out.extend_from_slice(b" PUBLIC \"");
+                    out.extend_from_slice(p);
+                    out.push(b'"');
+                    if let Some(s) = system_id {
+                        out.extend_from_slice(b" \"");
+                        out.extend_from_slice(s);
+                        out.push(b'"');
+                    }
+                } else if let Some(s) = system_id {
+                    out.extend_from_slice(b" SYSTEM \"");
+                    out.extend_from_slice(s);
+                    out.push(b'"');
+                }
                 out.extend_from_slice(b">\n");
+            }
+        }
+    }
+}
+
+// ----- libxml2-flavored HTML serializer (`DOMDocument::saveHTML`) -----
+
+/// HTML 4 empty elements (libxml2 `html40ElementTable` EMPTY content model):
+/// serialized as a bare start tag.
+fn html4_save_void(name: &[u8]) -> bool {
+    matches!(
+        name,
+        b"area" | b"base" | b"basefont" | b"br" | b"col" | b"frame" | b"hr" | b"img"
+            | b"input" | b"isindex" | b"link" | b"meta" | b"param"
+    )
+}
+
+/// libxml2 `htmlBooleanAttrs`: serialized minimized (name only).
+fn html4_boolean_attr(name: &[u8]) -> bool {
+    matches!(
+        name,
+        b"checked" | b"compact" | b"declare" | b"defer" | b"disabled" | b"ismap"
+            | b"multiple" | b"nohref" | b"noresize" | b"noshade" | b"nowrap" | b"readonly"
+            | b"selected"
+    )
+}
+
+/// `xmlURIEscapeStr(value, "@/:=?;#%&,+")`: percent-encode every byte outside
+/// RFC 2396 unreserved plus that allow-list (uppercase hex, byte-wise).
+fn html4_uri_escape(value: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(value.len());
+    for &b in value {
+        let keep = b.is_ascii_alphanumeric()
+            || matches!(b, b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')')
+            || matches!(b, b'@' | b'/' | b':' | b'=' | b'?' | b';' | b'#' | b'%' | b'&' | b',' | b'+');
+        if keep {
+            out.push(b);
+        } else {
+            out.extend_from_slice(format!("%{b:02X}").as_bytes());
+        }
+    }
+    out
+}
+
+/// Escape one UTF-8 run the way libxml2's HTML output does: `&<>` (plus `"` in
+/// attributes) to their entities, every non-ASCII character to its HTML 4
+/// named entity or a decimal reference.
+fn html4_escape_into(out: &mut Vec<u8>, value: &[u8], in_attr: bool) {
+    for c in String::from_utf8_lossy(value).chars() {
+        match c {
+            '&' => out.extend_from_slice(b"&amp;"),
+            '<' => out.extend_from_slice(b"&lt;"),
+            '>' => out.extend_from_slice(b"&gt;"),
+            '"' if in_attr => out.extend_from_slice(b"&quot;"),
+            c if (c as u32) < 0x80 => out.push(c as u8),
+            c => match php_types::html4::name_for(c as u32) {
+                Some(name) => {
+                    out.push(b'&');
+                    out.extend_from_slice(name);
+                    out.push(b';');
+                }
+                None => {
+                    out.extend_from_slice(format!("&#{};", c as u32).as_bytes());
+                }
+            },
+        }
+    }
+}
+
+impl DomDoc {
+    /// `DOMDocument::saveHTML()` — libxml2's HTML serializer. Whole-document
+    /// form appends a newline after the doctype and at the very end; a single
+    /// node serializes bare.
+    pub(super) fn save_html(&self, node: Option<usize>) -> Vec<u8> {
+        let mut out = Vec::new();
+        match node {
+            Some(n) => self.html_node_out(n, &mut out),
+            None => {
+                for &c in &self.nodes[0].children {
+                    self.html_node_out(c, &mut out);
+                    if matches!(self.nodes[c].kind, DomKind::DocType { .. }) {
+                        out.push(b'\n');
+                    }
+                }
+                out.push(b'\n');
+            }
+        }
+        out
+    }
+
+    fn html_node_out(&self, n: usize, out: &mut Vec<u8>) {
+        match &self.nodes[n].kind {
+            DomKind::Document | DomKind::Fragment => {
+                for &c in &self.nodes[n].children {
+                    self.html_node_out(c, out);
+                }
+            }
+            DomKind::Element { name, attrs } => {
+                out.push(b'<');
+                out.extend_from_slice(name);
+                for (an, av) in attrs {
+                    out.push(b' ');
+                    out.extend_from_slice(an);
+                    if html4_boolean_attr(an) {
+                        continue;
+                    }
+                    out.extend_from_slice(b"=\"");
+                    let uri_attr = matches!(an.as_slice(), b"href" | b"action" | b"src")
+                        || (an.as_slice() == b"name" && name.as_slice() == b"a");
+                    if uri_attr {
+                        html4_escape_into(out, &html4_uri_escape(av), true);
+                    } else {
+                        html4_escape_into(out, av, true);
+                    }
+                    out.push(b'"');
+                }
+                out.push(b'>');
+                if html4_save_void(name) {
+                    return;
+                }
+                for &c in &self.nodes[n].children {
+                    self.html_node_out(c, out);
+                }
+                out.extend_from_slice(b"</");
+                out.extend_from_slice(name);
+                out.push(b'>');
+            }
+            DomKind::Text(d) => html4_escape_into(out, d, false),
+            DomKind::Cdata(d) => out.extend_from_slice(d),
+            DomKind::Comment(d) => {
+                out.extend_from_slice(b"<!--");
+                out.extend_from_slice(d);
+                out.extend_from_slice(b"-->");
+            }
+            DomKind::Pi { target, data } => {
+                out.extend_from_slice(b"<?");
+                out.extend_from_slice(target);
+                if !data.is_empty() {
+                    out.push(b' ');
+                    out.extend_from_slice(data);
+                }
+                out.push(b'>');
+            }
+            DomKind::DocType { name, public_id, system_id } => {
+                out.extend_from_slice(b"<!DOCTYPE ");
+                out.extend_from_slice(name);
+                if let Some(p) = public_id {
+                    out.extend_from_slice(b" PUBLIC \"");
+                    out.extend_from_slice(p);
+                    out.push(b'"');
+                    if let Some(sy) = system_id {
+                        out.extend_from_slice(b" \"");
+                        out.extend_from_slice(sy);
+                        out.push(b'"');
+                    }
+                } else if let Some(sy) = system_id {
+                    out.extend_from_slice(b" SYSTEM \"");
+                    out.extend_from_slice(sy);
+                    out.push(b'"');
+                }
+                out.push(b'>');
             }
         }
     }
@@ -603,6 +805,14 @@ fn html_to_utf8(bytes: &[u8], canonical: &[u8]) -> Vec<u8> {
         0x017E, 0x0178,
     ];
     match canonical {
+        // True Latin-1 (libxml2's HTML 4 default): every byte is its code point.
+        b"ISO-8859-1" => {
+            let mut out = Vec::with_capacity(bytes.len());
+            for &b in bytes {
+                out.extend_from_slice((b as char).to_string().as_bytes());
+            }
+            out
+        }
         b"windows-1252" | b"ISO-8859-15" => {
             let mut out = Vec::with_capacity(bytes.len());
             for &b in bytes {
@@ -670,6 +880,64 @@ fn html_sniff_meta_charset(html: &[u8]) -> Option<&'static [u8]> {
     None
 }
 
+/// The `<meta charset>` prescan returning the label VERBATIM as written (the
+/// string `DOMDocument::$encoding` reports) — the HTML4 path accepts any label
+/// and resolves it separately.
+fn html_sniff_meta_raw(html: &[u8]) -> Option<Vec<u8>> {
+    let window = &html[..html.len().min(1024)];
+    let lower = window.to_ascii_lowercase();
+    let mut from = 0;
+    while let Some(p) = find_sub(&lower[from..], b"<meta") {
+        let start = from + p;
+        let end = lower[start..].iter().position(|&b| b == b'>').map(|e| start + e)?;
+        let tag = &lower[start..end];
+        if let Some(cp) = find_sub(tag, b"charset") {
+            let mut i = cp + b"charset".len();
+            while tag.get(i).is_some_and(|b| b.is_ascii_whitespace()) { i += 1 }
+            if tag.get(i) == Some(&b'=') {
+                i += 1;
+                while tag.get(i).is_some_and(|b| b.is_ascii_whitespace()) { i += 1 }
+                let quote = match tag.get(i) {
+                    Some(&q @ (b'"' | b'\'')) => { i += 1; Some(q) }
+                    _ => None,
+                };
+                let vs = i;
+                while i < tag.len() {
+                    let b = tag[i];
+                    let stop = match quote {
+                        Some(q) => b == q,
+                        None => {
+                            b.is_ascii_whitespace()
+                                || matches!(b, b';' | b'/' | b'"' | b'\'')
+                        }
+                    };
+                    if stop { break }
+                    i += 1;
+                }
+                if i > vs {
+                    return Some(window[start + vs..start + i].to_vec());
+                }
+            }
+        }
+        from = end + 1;
+    }
+    None
+}
+
+/// Resolve a declared HTML4 charset label to the canonical name
+/// [`html_to_utf8`] understands; anything unknown falls back to the Latin-1
+/// default rather than failing (libxml2 keeps parsing).
+fn html4_charset_canonical(label: &[u8]) -> &'static [u8] {
+    let mut l = label.to_ascii_lowercase();
+    l.retain(|b| !b.is_ascii_whitespace());
+    match l.as_slice() {
+        b"utf-8" | b"utf8" => b"UTF-8",
+        b"windows-1252" | b"cp1252" => b"windows-1252",
+        b"iso-8859-15" | b"iso8859-15" | b"latin9" => b"ISO-8859-15",
+        _ => b"ISO-8859-1",
+    }
+}
+
 /// Naive substring find (ASCII haystacks from the prescan window).
 fn find_sub(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack.windows(needle.len()).position(|w| w == needle)
@@ -679,6 +947,30 @@ fn find_sub(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 /// `&` stays literal, as the HTML5 tokenizer specifies. (The full 2 200-entry
 /// named table is a documented scope-out.)
 fn html_decode_entities(text: &[u8]) -> Vec<u8> {
+    html_decode_entities_err(text, 0, None)
+}
+
+/// Error kinds the HTML4 (libxml2-flavored) parse records, keyed by the byte
+/// offset of the parser cursor when libxml2 would raise them.
+pub(super) enum HtmlErrKind {
+    /// `&` not followed by a name start (code 68, "htmlParseEntityRef: no name").
+    BareAmp,
+    /// Start tag outside the HTML 4 element table (code 801, "Tag %s invalid").
+    TagInvalid(Vec<u8>),
+    /// Repeated attribute (code 42, "Attribute %s redefined").
+    AttrRedef(Vec<u8>),
+    /// Nothing but blanks in the whole input (code 4, "Document is empty").
+    DocEmpty,
+}
+
+/// `html_decode_entities` recording libxml2's bare-`&` diagnostics: when the
+/// byte after `&` cannot start an entity name (and is not `#`), libxml2 raises
+/// "htmlParseEntityRef: no name" with the cursor just past the `&`.
+fn html_decode_entities_err(
+    text: &[u8],
+    base: usize,
+    mut errs: Option<&mut Vec<(usize, HtmlErrKind)>>,
+) -> Vec<u8> {
     let mut out = Vec::with_capacity(text.len());
     let mut i = 0;
     while i < text.len() {
@@ -687,6 +979,14 @@ fn html_decode_entities(text: &[u8]) -> Vec<u8> {
                 out.extend_from_slice(&rep);
                 i += len;
                 continue;
+            }
+            if let Some(errs) = errs.as_deref_mut() {
+                let next = text.get(i + 1);
+                let name_start = next
+                    .is_some_and(|&b| b.is_ascii_alphabetic() || b == b'_' || b == b':' || b == b'#');
+                if !name_start {
+                    errs.push((base + i + 1, HtmlErrKind::BareAmp));
+                }
             }
         }
         out.push(text[i]);
@@ -710,9 +1010,13 @@ fn html_entity_at(s: &[u8]) -> Option<(Vec<u8>, usize)> {
             b"lt" => b"<".to_vec(),
             b"gt" => b">".to_vec(),
             b"quot" => b"\"".to_vec(),
+            // libxml2's html40EntitiesTable carries `apos` on top of HTML 4
+            // proper ("required for XHTML"); it decodes but never encodes.
             b"apos" => b"'".to_vec(),
-            b"nbsp" => "\u{A0}".as_bytes().to_vec(),
-            _ => return None,
+            _ => match php_types::html4::code_for(body) {
+                Some(code) => cp_bytes(code),
+                None => return None,
+            },
         }
     };
     Some((rep, end + 1))
@@ -728,6 +1032,11 @@ struct HtmlTree {
     /// Open elements under body (body itself excluded).
     stack: Vec<usize>,
     in_body: bool,
+    /// libxml2 (HTML 4) mode for `DOMDocument::loadHTML`, as opposed to the
+    /// HTML5 rules `Dom\HTMLDocument` follows: no forced html/head/body
+    /// skeleton, stray body-level text wrapped in an implied `<p>`,
+    /// script/style content as CDATA, valueless attributes valued by name.
+    html4: bool,
 }
 
 impl HtmlTree {
@@ -755,7 +1064,11 @@ impl HtmlTree {
     }
 
     fn ensure_body(&mut self) -> usize {
-        self.ensure_head();
+        // libxml2 never fabricates a <head>; HTML5's before-head insertion
+        // mode does.
+        if !self.html4 {
+            self.ensure_head();
+        }
         let html = self.ensure_html();
         match self.body {
             Some(b) => b,
@@ -867,6 +1180,18 @@ impl HtmlTree {
             let Some(start) = start else { return };
             self.ensure_body();
             self.in_body = true;
+            if self.html4 {
+                // libxml2's htmlParseCharData at the html/head level opens an
+                // implied <p> (HTML 4 body takes block content only); the p
+                // stays open for what follows.
+                let body = self.body.expect("ensure_body ran");
+                let p = self
+                    .doc
+                    .push(DomKind::Element { name: b"p".to_vec(), attrs: Vec::new() }, Some(body));
+                self.stack.push(p);
+                self.doc.push_text(decoded[start..].to_vec(), p);
+                return;
+            }
             let parent = self.insertion();
             self.doc.push_text(decoded[start..].to_vec(), parent);
             return;
@@ -887,12 +1212,82 @@ impl HtmlTree {
         };
         self.doc.push(DomKind::Comment(data), Some(parent));
     }
+
+    /// A processing instruction (HTML4 mode): inserted like a comment — at the
+    /// current insertion point in body, else at the document level.
+    fn pi(&mut self, target: Vec<u8>, data: Vec<u8>) {
+        let parent = if self.in_body || !self.stack.is_empty() {
+            self.insertion()
+        } else if self.html.is_some() {
+            self.html.unwrap()
+        } else {
+            0
+        };
+        self.doc.push(DomKind::Pi { target, data }, Some(parent));
+    }
+}
+
+/// HTML 4 elements libxml2 knows (`html40ElementTable`); a start tag outside
+/// this set raises "Tag %s invalid" (code 801).
+fn html40_tag_known(name: &[u8]) -> bool {
+    matches!(
+        name,
+        b"a" | b"abbr" | b"acronym" | b"address" | b"applet" | b"area" | b"b" | b"base"
+            | b"basefont" | b"bdo" | b"big" | b"blockquote" | b"body" | b"br" | b"button"
+            | b"caption" | b"center" | b"cite" | b"code" | b"col" | b"colgroup" | b"dd"
+            | b"del" | b"dfn" | b"dir" | b"div" | b"dl" | b"dt" | b"em" | b"embed"
+            | b"fieldset" | b"font" | b"form" | b"frame" | b"frameset" | b"h1" | b"h2"
+            | b"h3" | b"h4" | b"h5" | b"h6" | b"head" | b"hr" | b"html" | b"i" | b"iframe"
+            | b"img" | b"input" | b"ins" | b"isindex" | b"kbd" | b"label" | b"legend"
+            | b"li" | b"link" | b"map" | b"menu" | b"meta" | b"noembed" | b"noframes"
+            | b"noscript" | b"object" | b"ol" | b"optgroup" | b"option" | b"p" | b"param"
+            | b"pre" | b"q" | b"s" | b"samp" | b"script" | b"select" | b"small" | b"span"
+            | b"strike" | b"strong" | b"style" | b"sub" | b"sup" | b"table" | b"tbody"
+            | b"td" | b"textarea" | b"tfoot" | b"th" | b"thead" | b"title" | b"tr" | b"tt"
+            | b"u" | b"ul" | b"var"
+    )
+}
+
+/// 1-based (line, column) of byte offset `off` in `s`. libxml2 counts bytes of
+/// its RAW input: when the buffer was transcoded from a single-byte charset,
+/// one input byte became one UTF-8 character, so the column counts characters
+/// (`count_chars`); for identity (UTF-8) input it counts bytes.
+pub(super) fn line_col(s: &[u8], off: usize, count_chars: bool) -> (i64, i64) {
+    let off = off.min(s.len());
+    let line = 1 + s[..off].iter().filter(|&&b| b == b'\n').count() as i64;
+    let line_start = s[..off].iter().rposition(|&b| b == b'\n').map_or(0, |p| p + 1);
+    let col = if count_chars {
+        s[line_start..off].iter().filter(|&&b| (b & 0xC0) != 0x80).count() as i64
+    } else {
+        (off - line_start) as i64
+    };
+    (line, col + 1)
 }
 
 impl DomDoc {
-    /// Parse `html` (already UTF-8) into an implied-structure tree. Lenient:
-    /// never fails (HTML5 defines error recovery for every input).
+    /// Parse `html` (already UTF-8) into an implied-structure tree with the
+    /// HTML5 rules `Dom\HTMLDocument` follows. Lenient: never fails.
     pub(super) fn parse_html(html: &[u8]) -> DomDoc {
+        let mut errs = Vec::new();
+        DomDoc::parse_html_impl(html, false, &mut errs)
+    }
+
+    /// Parse with libxml2's HTML 4 rules (`DOMDocument::loadHTML`), returning
+    /// raw `(byte offset, kind)` diagnostics for the caller to position (the
+    /// offsets are in the transcoded UTF-8 buffer; libxml2 counts the raw
+    /// input's bytes, i.e. characters of a Latin-1-decoded stream).
+    pub(super) fn parse_html4(html: &[u8]) -> (DomDoc, Vec<(usize, HtmlErrKind)>) {
+        let mut errs = Vec::new();
+        let doc = DomDoc::parse_html_impl(html, true, &mut errs);
+        errs.sort_by_key(|(off, _)| *off);
+        (doc, errs)
+    }
+
+    fn parse_html_impl(
+        html: &[u8],
+        html4: bool,
+        errs: &mut Vec<(usize, HtmlErrKind)>,
+    ) -> DomDoc {
         let mut t = HtmlTree {
             doc: DomDoc::new(),
             html: None,
@@ -900,6 +1295,7 @@ impl DomDoc {
             body: None,
             stack: Vec::new(),
             in_body: false,
+            html4,
         };
         let s = html;
         let mut i = 0;
@@ -907,7 +1303,9 @@ impl DomDoc {
         while i < s.len() {
             if s[i] != b'<' {
                 let end = s[i..].iter().position(|&b| b == b'<').map_or(s.len(), |p| i + p);
-                t.text(html_decode_entities(&s[i..end]));
+                let decoded =
+                    html_decode_entities_err(&s[i..end], i, html4.then_some(&mut *errs));
+                t.text(decoded);
                 i = end;
                 continue;
             }
@@ -925,12 +1323,59 @@ impl DomDoc {
                 let body = &rest[1..close.saturating_sub(1).max(1)];
                 if body.len() >= 7 && body[..7].eq_ignore_ascii_case(b"doctype") {
                     if !saw_doctype && t.html.is_none() {
-                        let name = body[7..]
-                            .split(|b| b.is_ascii_whitespace())
-                            .find(|w| !w.is_empty())
-                            .unwrap_or(b"html")
-                            .to_ascii_lowercase();
-                        t.doc.push(DomKind::DocType { name }, Some(0));
+                        let mut words = body[7..].split(|b: &u8| b.is_ascii_whitespace());
+                        let raw_name = words.find(|w| !w.is_empty()).unwrap_or(b"html");
+                        // libxml2 keeps the doctype name as written; HTML5
+                        // lowercases it.
+                        let name = if html4 {
+                            raw_name.to_vec()
+                        } else {
+                            raw_name.to_ascii_lowercase()
+                        };
+                        let mut public_id = None;
+                        let mut system_id = None;
+                        if html4 {
+                            // `PUBLIC "pub" "sys"` / `SYSTEM "sys"` external-id
+                            // forms (quoted with " or ').
+                            let after = &body[7..];
+                            let kw_off = find_sub(&after.to_ascii_uppercase(), b"PUBLIC")
+                                .map(|p| (p + 6, true))
+                                .or_else(|| {
+                                    find_sub(&after.to_ascii_uppercase(), b"SYSTEM")
+                                        .map(|p| (p + 6, false))
+                                });
+                            if let Some((mut k, is_public)) = kw_off {
+                                let mut read_quoted = |k: &mut usize| -> Option<Vec<u8>> {
+                                    while after.get(*k).is_some_and(|b| b.is_ascii_whitespace()) {
+                                        *k += 1;
+                                    }
+                                    let q = match after.get(*k) {
+                                        Some(&q @ (b'"' | b'\'')) => q,
+                                        _ => return None,
+                                    };
+                                    *k += 1;
+                                    let start = *k;
+                                    while after.get(*k).is_some_and(|&b| b != q) {
+                                        *k += 1;
+                                    }
+                                    let v = after[start..(*k).min(after.len())].to_vec();
+                                    if after.get(*k).is_some() {
+                                        *k += 1;
+                                    }
+                                    Some(v)
+                                };
+                                if is_public {
+                                    public_id = read_quoted(&mut k);
+                                    system_id = read_quoted(&mut k);
+                                } else {
+                                    system_id = read_quoted(&mut k);
+                                }
+                            }
+                        }
+                        t.doc.push(
+                            DomKind::DocType { name, public_id, system_id },
+                            Some(0),
+                        );
                         saw_doctype = true;
                     }
                 } else {
@@ -940,9 +1385,32 @@ impl DomDoc {
                 }
                 i += 1 + close;
             } else if rest.first() == Some(&b'?') {
-                // `<?…>` is a bogus comment in HTML (data includes the `?`).
                 let close = rest.iter().position(|&b| b == b'>').map_or(rest.len(), |p| p + 1);
-                t.comment(rest[..close.saturating_sub(1)].to_vec());
+                let content = &rest[1..close.saturating_sub(1).max(1)];
+                let pi_name_len = if html4 && content.first().is_some_and(|b| b.is_ascii_alphabetic())
+                {
+                    content
+                        .iter()
+                        .position(|b| b.is_ascii_whitespace())
+                        .unwrap_or(content.len())
+                } else {
+                    0
+                };
+                if pi_name_len > 0 {
+                    // libxml2's HTML parser keeps SGML processing instructions
+                    // (`<?php … ?>`, the `<?xml encoding=…?>` trick): target up
+                    // to the first blank, data the rest verbatim up to `>`.
+                    let target = content[..pi_name_len].to_vec();
+                    let mut d = pi_name_len;
+                    while content.get(d).is_some_and(|b| b.is_ascii_whitespace()) {
+                        d += 1;
+                    }
+                    let data = content[d..].to_vec();
+                    t.pi(target, data);
+                } else {
+                    // `<?…>` is a bogus comment in HTML5 (data includes `?`).
+                    t.comment(rest[..close.saturating_sub(1)].to_vec());
+                }
                 i += 1 + close;
             } else if rest.first() == Some(&b'/') {
                 match html_tag_name(&rest[1..]) {
@@ -962,12 +1430,17 @@ impl DomDoc {
             } else if rest.first().is_some_and(|b| b.is_ascii_alphabetic()) {
                 let (name, mut j) = html_tag_name(rest).expect("alphabetic start");
                 let mut attrs: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
+                let mut gt_off = s.len();
                 // Attribute list up to `>`.
                 loop {
                     while rest.get(j).is_some_and(|b| b.is_ascii_whitespace()) { j += 1 }
                     match rest.get(j) {
                         None => break,
-                        Some(b'>') => { j += 1; break }
+                        Some(b'>') => {
+                            gt_off = i + 1 + j;
+                            j += 1;
+                            break;
+                        }
                         Some(b'/') => { j += 1; continue }
                         _ => {}
                     }
@@ -987,21 +1460,44 @@ impl DomDoc {
                                 while rest.get(j).is_some_and(|&b| b != q) { j += 1 }
                                 let v = &rest[v_start..j.min(rest.len())];
                                 if rest.get(j).is_some() { j += 1 }
-                                html_decode_entities(v)
+                                html_decode_entities_err(
+                                    v,
+                                    i + 1 + v_start,
+                                    html4.then_some(&mut *errs),
+                                )
                             }
                             _ => {
                                 let v_start = j;
                                 while rest.get(j).is_some_and(|&b| !b.is_ascii_whitespace() && b != b'>') { j += 1 }
-                                html_decode_entities(&rest[v_start..j])
+                                html_decode_entities_err(
+                                    &rest[v_start..j],
+                                    i + 1 + v_start,
+                                    html4.then_some(&mut *errs),
+                                )
                             }
                         }
+                    } else if html4 {
+                        // libxml2 values a bare attribute by its own name
+                        // (`checked` → checked="checked"); HTML5 uses "".
+                        an.clone()
                     } else {
                         Vec::new()
                     };
-                    if !an.is_empty() && !attrs.iter().any(|(n, _)| *n == an) {
-                        attrs.push((an, av));
+                    if !an.is_empty() {
+                        if !attrs.iter().any(|(n, _)| *n == an) {
+                            attrs.push((an, av));
+                        } else if html4 {
+                            errs.push((i + 1 + j, HtmlErrKind::AttrRedef(an)));
+                        }
                     }
-                    if rest.get(j) == Some(&b'>') { j += 1; break }
+                    if rest.get(j) == Some(&b'>') {
+                        gt_off = i + 1 + j;
+                        j += 1;
+                        break;
+                    }
+                }
+                if html4 && !html40_tag_known(&name) {
+                    errs.push((gt_off, HtmlErrKind::TagInvalid(name.clone())));
                 }
                 let el = t.start_tag(&name, attrs);
                 i += 1 + j;
@@ -1019,16 +1515,27 @@ impl DomDoc {
                         None => (s.len(), s.len()),
                     };
                     let mut raw = s[i..raw_end].to_vec();
-                    // `<pre>`/`<textarea>` drop one leading newline (§13.1.2.5
-                    // covers pre; the tree builder covers textarea).
-                    if name == b"textarea" && raw.first() == Some(&b'\n') {
+                    // `<pre>`/`<textarea>` drop one leading newline in HTML5
+                    // (§13.1.2.5 covers pre; the tree builder covers
+                    // textarea); libxml2 keeps it.
+                    if !html4 && name == b"textarea" && raw.first() == Some(&b'\n') {
                         raw.remove(0);
                     }
                     if decode {
-                        raw = html_decode_entities(&raw);
+                        raw = html_decode_entities_err(
+                            &raw,
+                            i,
+                            html4.then_some(&mut *errs),
+                        );
                     }
                     if !raw.is_empty() {
-                        t.doc.push_text(raw, el);
+                        if html4 && !decode {
+                            // libxml2 stores script/style content as a CDATA
+                            // node.
+                            t.doc.push(DomKind::Cdata(raw), Some(el));
+                        } else {
+                            t.doc.push_text(raw, el);
+                        }
                     }
                     // Rawtext elements never join the open stack, but
                     // start_tag pushed non-void names: pop it back off.
@@ -1036,7 +1543,7 @@ impl DomDoc {
                         t.stack.pop();
                     }
                     i = after;
-                } else if name == b"pre" {
+                } else if !html4 && name == b"pre" {
                     if s.get(i) == Some(&b'\n') {
                         i += 1;
                     }
@@ -1047,7 +1554,29 @@ impl DomDoc {
                 i += 1;
             }
         }
-        t.ensure_body();
+        if html4 {
+            // libxml2 fabricates no skeleton at EOF; an all-blank input is
+            // "Document is empty", and a document that never declared a
+            // doctype gets the HTML 4.0 Transitional one, first.
+            if t.html.is_none() && t.doc.nodes.len() == 1 {
+                errs.push((s.len(), HtmlErrKind::DocEmpty));
+            }
+            if !saw_doctype {
+                let id = t.doc.push(
+                    DomKind::DocType {
+                        name: b"html".to_vec(),
+                        public_id: Some(b"-//W3C//DTD HTML 4.0 Transitional//EN".to_vec()),
+                        system_id: Some(b"http://www.w3.org/TR/REC-html40/loose.dtd".to_vec()),
+                    },
+                    Some(0),
+                );
+                let kids = &mut t.doc.nodes[0].children;
+                kids.retain(|&c| c != id);
+                kids.insert(0, id);
+            }
+        } else {
+            t.ensure_body();
+        }
         t.doc
     }
 }
@@ -1896,7 +2425,7 @@ impl<'m> Vm<'m> {
         let mut doc = DomDoc::new();
         let version = self.dom_str(&args, 0);
         if !version.is_empty() {
-            doc.version = version;
+            doc.version = Some(version);
         }
         let enc = self.dom_str(&args, 1);
         if !enc.is_empty() {
@@ -1914,7 +2443,11 @@ impl<'m> Vm<'m> {
     pub(super) fn ho_dom_load(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let (_, id) = self.dom_doc(&args)?;
         let source = self.dom_str(&args, 1);
-        let is_file = self.dom_arg(&args, 2) != 0;
+        let mode = self.dom_arg(&args, 2);
+        if mode >= 2 {
+            return self.dom_load_html4(id, source, mode == 3);
+        }
+        let is_file = mode != 0;
         let (xml, label) = if is_file {
             use std::os::unix::ffi::OsStrExt;
             let path = std::ffi::OsStr::from_bytes(&source);
@@ -1943,7 +2476,14 @@ impl<'m> Vm<'m> {
                 Ok(Zval::Bool(true))
             }
             Err(msg) => {
-                self.libxml_errors.push(msg.clone());
+                self.libxml_errors.push(LxErr {
+                    level: 3, // LIBXML_ERR_FATAL
+                    code: 1,
+                    line: 1,
+                    column: 0,
+                    message: msg.clone(),
+                    file: Vec::new(),
+                });
                 if !self.libxml_internal {
                     self.diags.push(Diag::Warning(format!(
                         "DOMDocument::loadXML(): {msg} in {label}, line: 1"
@@ -1952,6 +2492,110 @@ impl<'m> Vm<'m> {
                 Ok(Zval::Bool(false))
             }
         }
+    }
+
+    /// `DOMDocument::loadHTML`/`loadHTMLFile`: libxml2's HTML 4 parser —
+    /// charset from BOM / leading `<?xml encoding=…?>` / `<meta charset>`,
+    /// defaulting to Latin-1; lenient parse that always succeeds, recording
+    /// libxml diagnostics (warnings unless `libxml_use_internal_errors`).
+    fn dom_load_html4(
+        &mut self,
+        id: u32,
+        source: Vec<u8>,
+        is_file: bool,
+    ) -> Result<Zval, PhpError> {
+        let func = if is_file { "loadHTMLFile" } else { "loadHTML" };
+        if source.is_empty() {
+            let arg = if is_file { "$filename" } else { "$source" };
+            return Err(PhpError::ValueError(format!(
+                "DOMDocument::{func}(): Argument #1 ({arg}) must not be empty"
+            )));
+        }
+        let (raw, label, err_file) = if is_file {
+            use std::os::unix::ffi::OsStrExt;
+            let path = std::ffi::OsStr::from_bytes(&source);
+            match std::fs::read(path) {
+                Ok(d) => (d, String::from_utf8_lossy(&source).into_owned(), source.clone()),
+                Err(_) => {
+                    self.diags.push(Diag::Warning(format!(
+                        "DOMDocument::loadHTMLFile(): I/O warning : failed to load external entity \"{}\"",
+                        String::from_utf8_lossy(&source)
+                    )));
+                    return Ok(Zval::Bool(false));
+                }
+            }
+        } else {
+            (source, "Entity".to_string(), Vec::new())
+        };
+        // Charset: BOM > leading XML-declaration encoding > meta prescan >
+        // the Latin-1 HTML 4 default.
+        let mut enc_label: Option<Vec<u8>> = None;
+        let raw = if raw.starts_with(b"\xEF\xBB\xBF") {
+            enc_label = Some(b"UTF-8".to_vec());
+            raw[3..].to_vec()
+        } else {
+            if raw.starts_with(b"<?xml") {
+                if let Some(close) = raw.iter().position(|&b| b == b'>') {
+                    let head = &raw[..close];
+                    let lower = head.to_ascii_lowercase();
+                    if let Some(p) = find_sub(&lower, b"encoding=") {
+                        let mut k = p + b"encoding=".len();
+                        if let Some(&q @ (b'"' | b'\'')) = head.get(k) {
+                            k += 1;
+                            let start = k;
+                            while head.get(k).is_some_and(|&b| b != q) {
+                                k += 1;
+                            }
+                            enc_label = Some(head[start..k].to_vec());
+                        }
+                    }
+                }
+            }
+            if enc_label.is_none() {
+                enc_label = html_sniff_meta_raw(&raw);
+            }
+            raw
+        };
+        let canonical: &[u8] = match &enc_label {
+            Some(l) => html4_charset_canonical(l),
+            None => b"ISO-8859-1",
+        };
+        let utf8 = html_to_utf8(&raw, canonical);
+        let (mut doc, errs) = DomDoc::parse_html4(&utf8);
+        doc.version = None;
+        doc.encoding = enc_label;
+        doc.is_html = true;
+        let count_chars = canonical != b"UTF-8";
+        for (off, kind) in errs {
+            let (line, column) = line_col(&utf8, off, count_chars);
+            let (code, message) = match kind {
+                HtmlErrKind::BareAmp => (68, "htmlParseEntityRef: no name\n".to_string()),
+                HtmlErrKind::TagInvalid(n) => {
+                    (801, format!("Tag {} invalid\n", String::from_utf8_lossy(&n)))
+                }
+                HtmlErrKind::AttrRedef(n) => {
+                    (42, format!("Attribute {} redefined\n", String::from_utf8_lossy(&n)))
+                }
+                HtmlErrKind::DocEmpty => (4, "Document is empty\n".to_string()),
+            };
+            if self.libxml_internal {
+                self.libxml_errors.push(LxErr {
+                    level: 2, // LIBXML_ERR_ERROR
+                    code,
+                    line,
+                    column,
+                    message,
+                    file: err_file.clone(),
+                });
+            } else {
+                self.diags.push(Diag::Warning(format!(
+                    "DOMDocument::{func}(): {} in {label}, line: {line}",
+                    message.trim_end(),
+                )));
+            }
+        }
+        self.dom_docs.insert(id, doc);
+        Ok(Zval::Bool(true))
     }
 
     /// `__dom_load_html(source, overrideEncoding|null) -> docId`: parse an
@@ -1990,6 +2634,14 @@ impl<'m> Vm<'m> {
         Ok(Zval::Str(PhpStr::new(doc.save_xml(node))))
     }
 
+    /// `__dom_save_html(docId, nodeId|-1) -> string`.
+    pub(super) fn ho_dom_save_html(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let n = self.dom_arg(&args, 1);
+        let (doc, _) = self.dom_doc(&args)?;
+        let node = if n < 0 { None } else { Some(n as usize) };
+        Ok(Zval::Str(PhpStr::new(doc.save_html(node))))
+    }
+
     /// `__dom_info(docId, nodeId) -> [nodeType, nodeName, nodeValue|null]`.
     pub(super) fn ho_dom_info(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let n = self.dom_arg(&args, 1);
@@ -1998,7 +2650,13 @@ impl<'m> Vm<'m> {
         let doc = &self.dom_docs[&id];
         let kind = &doc.nodes[n].kind;
         let mut arr = PhpArray::new();
-        let _ = arr.append(Zval::Long(kind.node_type()));
+        let node_type = match kind {
+            // An HTML parse turns the document node into
+            // XML_HTML_DOCUMENT_NODE (13).
+            DomKind::Document if doc.is_html => 13,
+            _ => kind.node_type(),
+        };
+        let _ = arr.append(Zval::Long(node_type));
         let _ = arr.append(Zval::Str(PhpStr::new(kind.node_name())));
         let _ = arr.append(match kind.node_value() {
             Some(v) => Zval::Str(PhpStr::new(v)),
@@ -2348,7 +3006,10 @@ impl<'m> Vm<'m> {
     pub(super) fn ho_dom_doc_meta(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let (doc, _) = self.dom_doc(&args)?;
         let mut arr = PhpArray::new();
-        let _ = arr.append(Zval::Str(PhpStr::new(doc.version.clone())));
+        let _ = arr.append(match &doc.version {
+            Some(v) => Zval::Str(PhpStr::new(v.clone())),
+            None => Zval::Null,
+        });
         let _ = arr.append(match &doc.encoding {
             Some(e) => Zval::Str(PhpStr::new(e.clone())),
             None => Zval::Null,
@@ -2370,6 +3031,11 @@ impl<'m> Vm<'m> {
         if let Some(a) = args.first() {
             if !matches!(a, Zval::Null) {
                 self.libxml_internal = convert::to_bool(&a.deref_clone(), &mut self.diags);
+                // Turning buffering off discards the stored errors (ext/libxml
+                // frees the buffer on disable).
+                if !self.libxml_internal {
+                    self.libxml_errors.clear();
+                }
             }
         }
         Ok(Zval::Bool(prev))
@@ -2377,20 +3043,20 @@ impl<'m> Vm<'m> {
 
     pub(super) fn ho_libxml_get_errors(&mut self) -> Result<Zval, PhpError> {
         let mut arr = PhpArray::new();
-        for msg in &self.libxml_errors {
+        for err in &self.libxml_errors {
             let mut e = PhpArray::new();
-            e.insert(Key::Str(PhpStr::new(b"level".to_vec())), Zval::Long(3)); // LIBXML_ERR_FATAL
-            e.insert(Key::Str(PhpStr::new(b"code".to_vec())), Zval::Long(1));
-            e.insert(Key::Str(PhpStr::new(b"column".to_vec())), Zval::Long(0));
+            e.insert(Key::Str(PhpStr::new(b"level".to_vec())), Zval::Long(err.level));
+            e.insert(Key::Str(PhpStr::new(b"code".to_vec())), Zval::Long(err.code));
+            e.insert(Key::Str(PhpStr::new(b"column".to_vec())), Zval::Long(err.column));
             e.insert(
                 Key::Str(PhpStr::new(b"message".to_vec())),
-                Zval::Str(PhpStr::new(msg.clone().into_bytes())),
+                Zval::Str(PhpStr::new(err.message.clone().into_bytes())),
             );
             e.insert(
                 Key::Str(PhpStr::new(b"file".to_vec())),
-                Zval::Str(PhpStr::new(Vec::new())),
+                Zval::Str(PhpStr::new(err.file.clone())),
             );
-            e.insert(Key::Str(PhpStr::new(b"line".to_vec())), Zval::Long(1));
+            e.insert(Key::Str(PhpStr::new(b"line".to_vec())), Zval::Long(err.line));
             let _ = arr.append(Zval::Array(Rc::new(e)));
         }
         Ok(Zval::Array(Rc::new(arr)))
@@ -2420,7 +3086,11 @@ impl DomDoc {
                     DomKind::Pi { target, data } => {
                         DomKind::Pi { target: target.clone(), data: data.clone() }
                     }
-                    DomKind::DocType { name } => DomKind::DocType { name: name.clone() },
+                    DomKind::DocType { name, public_id, system_id } => DomKind::DocType {
+                name: name.clone(),
+                public_id: public_id.clone(),
+                system_id: system_id.clone(),
+            },
                     DomKind::Fragment => DomKind::Fragment,
                 },
                 parent: n.parent,

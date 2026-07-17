@@ -1,23 +1,23 @@
-# Rotta WORDPRESS-FIRST — WP-track (restapi SBLOCCATO in WP-13)
+# Rotta WORDPRESS-FIRST — WP-track (restapi A PARITÀ ORACLE in WP-14)
 
-> 🏁 **WP-13 (2026-07-17)**: **gruppo RESTAPI sbloccato — da "NON TERMINA"
-> (>50 min CPU, junit vuoto) a 3514 test in ~6.5 min (2.7x oracle, in linea
-> con gli altri gruppi), 19E residui TUTTI = feature mancanti note.**
-> Root cause dell'hang: **l'assegnamento composto valutava il target PRIMA
-> del RHS** (Zend: RHS prima, poi read-modify-write) — il loop di
-> `validate_custom_css` (`$at += strcspn($css,'<',++$at)`) oscillava per
-> sempre sul valore stantio. Fix su slot/prop/GLOBALS/superglobali
-> (Op::Swap; i path dim erano già corretti). Altri fix: deref dei Ref nei
-> Value-builtin (callee dinamico ⇒ prefer-ref rompeva `is_*` in
-> `rest_get_best_type_for_value`), `array_unique` onora `__toString`
-> (dipendenze PHPUnit `ExecutionOrderDependency` collassate), cast
-> string→int SATURANTE (`zend_dval_to_lval_cap`), `gethostbyname`/
-> `gethostbynamel` (24 fail: `wp_http_validate_url`),
-> `SimpleXMLElement::addChild`/`addAttribute` + `asXML` con dichiarazione
-> XML sull'elemento radice. Perf: cache `__reflect_method_info`
-> (build suite PHPUnit 60s→21s), compare alloc-free, fast-path
-> `compute_stringify`. Dettagli: changelog WordPress-13 in
-> `PHPR_DIVERGENCES_FROM_PHP.md`.
+> 🏁 **WP-14 (2026-07-17)**: **gruppo RESTAPI a parità oracle — 3514 test,
+> 1E phpr = 1E oracle** (oEmbed `test_proxy_with_classic_embed_provider`:
+> bug upstream del trunk wpdev, stesso messaggio e stessa riga su entrambi).
+> I 19E di WP-13 chiusi con 4 feature: **(1) mbstring HTML-ENTITIES**
+> (tabella HTML4 condivisa `php_types::html4`, deprecation con cache
+> last_used à la php_mb_get_encoding, mb_list_encodings, mb_check_encoding
+> allargato); **(2) DOMDocument::loadHTML/loadHTMLFile/saveHTML/saveHTMLFile**
+> (modalità HTML4/libxml2 di parse_html: doctype transitional implicito,
+> `<p>` implicito per testo vagante, script→CDATA, attr valueless=nome,
+> PI SGML + trick `<?xml encoding>`, charset BOM>xmldecl>meta>Latin-1,
+> nodeType 13, errori libxml strutturati con posizioni, serializer fedele
+> con entity HTML4 + URI-escape su href/src/action — **probe 514 righe
+> byte-identiche**); **(3) ext/xml SAX** (`__xml_tokenize` su quick-xml +
+> API xml_parser_* nel prelude, codici errore libxml compat-layer
+> oracle-pinned: 5/76/26/9, SKIP_WHITE no-op, DOCTYPE `<!ENTITY>` risolte,
+> ns con separator — SimplePie/WP_Widget_RSS renderizza il feed reale);
+> **(4) is_callable con AUTOLOAD** (zend_is_callable). Dettagli: changelog
+> WordPress-14 in `PHPR_DIVERGENCES_FROM_PHP.md`.
 
 Riprendiamo phpr (PHP 8.5.7 in Rust). **Roadmap**: obiettivo primario =
 100% compatibilità WordPress; la WP core test suite (PHPUnit) è il GATE PER
@@ -40,29 +40,20 @@ $ORACLE vendor/bin/phpunit --group media   # 762, 52S       → phpr IDENTICO (W
 $ORACLE vendor/bin/phpunit --group post    # 906, 1S        → phpr IDENTICO (WP-12)
 $ORACLE vendor/bin/phpunit --group user    # 1341, 5W+1S    → phpr IDENTICO (WP-12)
 $ORACLE vendor/bin/phpunit --group query   # 1889 OK        → phpr IDENTICO (WP-12)
-$ORACLE vendor/bin/phpunit --group restapi # 3514, oracle ~150s 1E/4W/6S
-#   → phpr ~6.5min, 19E = SOLO feature mancanti (vedi WP-14 sotto) (WP-13)
+$ORACLE vendor/bin/phpunit --group restapi # 3514, 1E/4W/6S → phpr 1E IDENTICO (WP-14)
 # diff per nome: --log-junit + estrazione testcase name/class
 ```
-- ⚠️ **il trunk di wordpress-develop CAMBIA tra un clone e l'altro** (WP-13:
-  oracle restapi 149s/1E vs i ~30s/1E/1F annotati in WP-12): rifare SEMPRE
-  la baseline oracle sul clone fresco, mai fidarsi dei numeri a memoria.
-- **gate13.sh riusabile**: `/Volumes/Extreme Pro/Claude/wp13-harness/gate13.sh`
-  (4 suite phpt per nome vs worktree baseline + ORM + hk + cargo + batterie
-  gd/mysqli/media/http + WP option/media/post/user/query + restapi + misura
-  fileinfo).
-- ⚠️ **WATCHDOG ANTI-HANG OBBLIGATORIO per ogni run PHPUnit lunga** (phpr può
-  appendersi su un bug engine; restapi in WP-13 = 3 run da 40+ min buttate):
-  `/Volumes/Extreme Pro/Claude/wp13-harness/run-with-watchdog.sh
-  [-t total_s] [-s stall_s] [-p progress_file] [-o outdir] -- cmd…`.
-  Già cablato in gate13.sh su TUTTE le invocazioni phpr (ORM/hk 900s,
-  gruppi WP 900-1200s, restapi 1800s). Prima di uccidere salva
-  `sample <pid>` in `outdir/watchdog-sample-<epoch>.txt` (post-mortem
-  pronto); exit 124 su kill. Con `-p` (es. TESTLOG) il criterio diventa
-  "M secondi SENZA progresso", che distingue lento-ma-avanza da fermo.
-  Le suite phpt sono già coperte dal timeout per-test di phpt-runner
-  (10s, `PHPT_TIMEOUT_SECS`). macOS non ha `timeout(1)`: usare SEMPRE
-  questo wrapper, anche per run manuali fuori gate. Baseline worktree: `git worktree add /private/tmp/wpN-base HEAD`
+- ⚠️ **il trunk di wordpress-develop CAMBIA tra un clone e l'altro**: rifare
+  SEMPRE la baseline oracle sul clone fresco, mai fidarsi dei numeri a memoria.
+- **gate14.sh riusabile**: `/Volumes/Extreme Pro/Claude/wp14-harness/gate14.sh`
+  (4 suite phpt per nome vs worktree baseline `/private/tmp/wp14-base` HEAD
+  `9cf4f3b` + ORM + hk + cargo + batterie gd/mysqli/media/http + WP
+  option/media/post/user/query + restapi + misura fileinfo/gd/exif).
+- ⚠️ **WATCHDOG ANTI-HANG OBBLIGATORIO per ogni run PHPUnit lunga**:
+  `/Volumes/Extreme Pro/Claude/wp14-harness/run-with-watchdog.sh
+  [-t total_s] [-s stall_s] [-p progress_file] [-o outdir] -- cmd…`
+  (sample pre-kill, exit 124; macOS non ha timeout(1)). Già cablato in
+  gate14.sh. Baseline worktree: `git worktree add /private/tmp/wpN-base HEAD`
   + copiare crates/php-server (gitignorato!) e Cargo.lock DENTRO php-rust/,
   build con CARGO_TARGET_DIR esterno. Workspace ORM/HK: `/private/tmp/
   wp11-gates/` (tarball sorgente in wp9-harness/gates/).
@@ -71,58 +62,45 @@ $ORACLE vendor/bin/phpunit --group restapi # 3514, oracle ~150s 1E/4W/6S
   --bind-address=127.0.0.1 --socket=/private/tmp/mysql-wp8.sock
   --log-error="/Volumes/Extreme Pro/Claude/mysql-wp8/mysqld.err" &`
 
-## Prossimo passo: SESSIONE WP-14 = i 19E residui di restapi, poi gruppi residui
-1. **`DOMDocument::loadHTML`/`loadHTMLFile`** (16 fail: Widgets 14,
-   Sidebars 1, get_items_edit_context) — serve un parser HTML work-alike
-   libxml2 (wrapping implicito html/body, DOCTYPE, tag-soup). È il pezzo
-   grosso. I test lo usano via assertEqualMarkup/normalize dei markup widget.
-2. **ext/xml (xml_parser_create & C.)** (1 fail: SimplePie via
-   `WP_Widget_RSS`) — parser SAX-style: xml_parser_create,
-   xml_set_element_handler, xml_parse, xml_parser_free…
-3. **mbstring codec `HTML-ENTITIES`** (2 fail: Schema_Validation
-   min/max_length via mb_convert_encoding(…, 'HTML-ENTITIES')).
-4. **oEmbed `test_proxy_with_classic_embed_provider`**: fallisce ANCHE
-   sull'oracle (1E suo, ragione diversa: da phpr "Attempt to read property
-   'queue' on null") — verificare se è flake esterno o divergenza vera.
-5. **Perf restapi** (6.5 min vs 150s oracle = 2.7x): gap ~43s tra fine
-   addTestFile e primo test (fase pre-run PHPUnit) ancora da profilare;
-   il grosso resta il churn generico run_loop/hook (`ho_call_user_func`).
-6. **Gruppi successivi**: taxonomy, comment, xmlrpc, multisite? (stessa
-   ricetta: baseline oracle → phpr → triage per nome sui junit).
-7. **Provider full-suite noti** (ErrorTestCase): `mb_convert_encoding` BIG-5
+## Prossimo passo: SESSIONE WP-15 = gruppi successivi + perf
+1. **Gruppi successivi**: taxonomy, comment, xmlrpc, multisite (stessa
+   ricetta: baseline oracle sul clone fresco → phpr → triage per nome sui
+   junit). Poi verso la SUITE INTERA come gate per nome.
+2. **Perf restapi** (in WP-13 ~6.5 min vs 150s oracle = 2.7x): gap ~43s tra
+   fine addTestFile e primo test (fase pre-run PHPUnit) da profilare; il
+   grosso resta il churn generico run_loop/hook (`ho_call_user_func`).
+3. **Provider full-suite noti** (ErrorTestCase): `mb_convert_encoding` BIG-5
    (Tests_DB_Charset) · throw in data_wp_validate_site_data via current_time
    (Tests_Multisite_Site) · 1 dataset wpIsIniValueChangeable.
-8. La suite INTERA come gate per nome quando i gruppi core sono verdi.
+4. **Bug engine aperto (WP-14)**: `static $x = array(…)` dentro una funzione
+   del PRELUDE panica (index out of bounds run.rs:233); worked around in
+   xml_error_string con array non-static. Da investigare (userland OK).
+5. Divergenze documentate da tenere d'occhio: colonne errori libxml con
+   input high-byte non-UTF-8; mb_strlen &c. batch-1 rifiutano HTML-ENTITIES
+   (ValueError rumoroso); surrogati HTML-ENTITIES → `?`.
 
-## Lezioni operative (nuove WP-13)
-- ⚠️ **phpr bufferizza stdout internamente anche su pty**: `script -q` NON
-  dà output live (log a 0 byte fino all'exit). Per il progresso live usare
-  MARKER FILE-BASED env-gated iniettati nell'harness PHP:
-  `if(getenv("X")) file_put_contents(getenv("X"), ..., FILE_APPEND)` in
-  bootstrap (stage), TestSuite::addTestFile (per-file),
-  abstract-testcase set_up/set_up_before_class (per-test/classe),
-  wp_hash_password (per-hash). Sono la scala di zoom con cui si è trovato
-  il test dell'hang.
-- ⭐ **Metodo hang→test**: sample (Rust, dice il COSA: call_user_func churn)
-  → marker per-test (dice il DOVE: il test che non finisce) → leggere il
-  test → estrarre la primitiva → probe oracle-pinned in 20 righe → il probe
-  del LOOP divergeva mentre le primitive combaciavano ⇒ semantica del
-  costrutto (assign-op), non della funzione.
-- ⚠️ I numeri oracle dei memo invecchiano col trunk wpdev: rifare la
-  baseline a ogni clone.
-- `sample` su `pgrep -f` può agganciare il wrapper `script` invece di phpr:
-  usare `pgrep -x phpr`.
-- I fail "Call to undefined function/method X" nel junit = la mappa esatta
-  delle feature mancanti (correct-or-absent che paga): 49E → 6 cause in
-  una passata di triage.
+## Lezioni operative (nuove WP-14)
+- ⭐ **Metodo spec-first per le feature "work-alike C"**: probe oracle RICCO
+  (tree-walk + serializzazione + errori + edge) PRIMA di implementare = la
+  spec; iterare fino a diff vuoto. loadHTML chiuso con 2 round di probe
+  (514 righe byte-id); ext/xml con 1 round + 4 fix.
+- ⚠️ ext/xml di PHP NON è expat: è la compat-layer libxml (ext/xml/compat.c)
+  — codici errore xmlParserErrors, stringhe da error_mapping[], SKIP_WHITE
+  no-op. Pinnare SEMPRE i codici con un probe oracle, non dai .h di expat.
+- ⚠️ `libxml_use_internal_errors(false)` SVUOTA il buffer errori: senza
+  questo dettaglio gli errori si accumulano tra load successivi.
+- La deprecation mbstring "Handling HTML entities…" warna UNA volta per nome
+  (cache last_used_encoding di php_mb_get_encoding), MAI sul lato FROM.
+- `is_callable(['C','m'])` deve AUTOLOADARE C (SimplePie Registry asserta
+  su classi lazy).
 
-## Invarianti (aggiornati WP-13)
+## Invarianti (aggiornati WP-14)
 - Gate per OGNI commit: corpus/sess/date/refl per NOME (baseline worktree
   HEAD) · ORM 3E/13F per nome · http-kernel 1665 0E/0F · cargo · probe:
   gd 11/11, mysqli 11/11, media-probe byte-id, run-http · **WP suite:
   option 413 = oracle · media 762 (52S = oracle) · post 906 · user 1341 ·
-  query 1889 tutti = oracle · restapi 3514: 19E documentati (loadHTML 16,
-  xml_parser 1, HTML-ENTITIES 2 — più 1E condiviso con l'oracle)** ·
-  misura ext/fileinfo (29P/25F/8S).
-- Commit AND push a ogni step; run pesanti SEQUENZIALI e DETACHED; Serena
-  per Rust, Vexp/Read per il C; Read/Write tool per i .php; log `tr -d '\0'`.
+  query 1889 tutti = oracle · restapi 3514: 1E = 1E oracle (oEmbed
+  upstream condiviso)** · misura ext/fileinfo (29P/25F/8S).
+- Commit AND push a ogni step; run pesanti SEQUENZIALI e DETACHED sotto
+  watchdog; Serena per Rust, Vexp/Read per il C; Read/Write tool per i
+  .php; log `tr -d '\0'`.

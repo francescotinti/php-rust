@@ -458,6 +458,7 @@ pub fn registry() -> Registry {
     add(b"mb_ltrim", mbstring::mb_ltrim);
     add(b"mb_rtrim", mbstring::mb_rtrim);
     add(b"mb_check_encoding", mbstring::mb_check_encoding);
+    add(b"mb_list_encodings", mbstring::mb_list_encodings);
     add(b"mb_strwidth", mbstring::mb_strwidth);
     add(b"mb_strimwidth", mbstring::mb_strimwidth);
     add(b"mb_strcut", mbstring::mb_strcut);

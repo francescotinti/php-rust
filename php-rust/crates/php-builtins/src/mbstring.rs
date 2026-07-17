@@ -675,12 +675,54 @@ pub fn mb_rtrim(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// mb_check_encoding($value = null, $encoding = null): for UTF-8, true iff the
 /// value is well-formed UTF-8 (no value → true).
 pub fn mb_check_encoding(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    require_utf8(args, 1, ctx, "mb_check_encoding", 2, "encoding")?;
+    let codec = match args.get(1) {
+        None | Some(Zval::Null) => Codec::Utf8,
+        Some(v) => {
+            let name = convert::to_zstr(v, ctx.diags);
+            resolve_encoding_tracked(name.as_bytes(), "mb_check_encoding", ctx)
+                .ok_or_else(|| {
+                    PhpError::ValueError(format!(
+                        "mb_check_encoding(): Argument #2 ($encoding) must be a valid encoding, \"{}\" given",
+                        String::from_utf8_lossy(name.as_bytes())
+                    ))
+                })?
+                .codec
+        }
+    };
     let ok = match args.first() {
         None | Some(Zval::Null) => true,
-        Some(v) => std::str::from_utf8(convert::to_zstr(v, ctx.diags).as_bytes()).is_ok(),
+        Some(v) => validates(&codec, convert::to_zstr(v, ctx.diags).as_bytes()),
     };
     Ok(Zval::Bool(ok))
+}
+
+/// `mb_list_encodings(): array` — the mbstring encoding names phpr actually
+/// resolves, in the oracle's ordering (the full mbfl list minus what is out of
+/// scope here: never claim an encoding [`resolve_encoding`] cannot back).
+pub fn mb_list_encodings(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    const ORACLE_ORDER: &[&[u8]] = &[
+        b"BASE64", b"UUENCODE", b"HTML-ENTITIES", b"Quoted-Printable", b"7bit", b"8bit",
+        b"UCS-4", b"UCS-4BE", b"UCS-4LE", b"UCS-2", b"UCS-2BE", b"UCS-2LE", b"UTF-32",
+        b"UTF-32BE", b"UTF-32LE", b"UTF-16", b"UTF-16BE", b"UTF-16LE", b"UTF-8", b"UTF-7",
+        b"UTF7-IMAP", b"ASCII", b"EUC-JP", b"SJIS", b"eucJP-win", b"EUC-JP-2004",
+        b"SJIS-Mobile#DOCOMO", b"SJIS-Mobile#KDDI", b"SJIS-Mobile#SOFTBANK", b"SJIS-mac",
+        b"SJIS-2004", b"UTF-8-Mobile#DOCOMO", b"UTF-8-Mobile#KDDI-A", b"UTF-8-Mobile#KDDI-B",
+        b"UTF-8-Mobile#SOFTBANK", b"CP932", b"SJIS-win", b"CP51932", b"JIS", b"ISO-2022-JP",
+        b"ISO-2022-JP-MS", b"GB18030", b"GB18030-2022", b"Windows-1252", b"Windows-1254",
+        b"ISO-8859-1", b"ISO-8859-2", b"ISO-8859-3", b"ISO-8859-4", b"ISO-8859-5",
+        b"ISO-8859-6", b"ISO-8859-7", b"ISO-8859-8", b"ISO-8859-9", b"ISO-8859-10",
+        b"ISO-8859-13", b"ISO-8859-14", b"ISO-8859-15", b"ISO-8859-16", b"EUC-CN", b"CP936",
+        b"HZ", b"EUC-TW", b"BIG-5", b"CP950", b"EUC-KR", b"UHC", b"ISO-2022-KR",
+        b"Windows-1251", b"CP866", b"KOI8-R", b"KOI8-U", b"ArmSCII-8", b"CP850", b"JIS-ms",
+        b"ISO-2022-JP-2004", b"CP50220", b"CP50221", b"CP50222",
+    ];
+    let mut arr = PhpArray::new();
+    for name in ORACLE_ORDER {
+        if resolve_encoding(name).is_some() {
+            let _ = arr.append(Zval::Str(PhpStr::new(name.to_vec())));
+        }
+    }
+    Ok(Zval::Array(std::rc::Rc::new(arr)))
 }
 
 // --- step 42b: display width (mb_strwidth / mb_strimwidth / mb_strcut) ---
@@ -881,6 +923,10 @@ enum Codec {
     Latin1,
     Utf16Be,
     Utf16Le,
+    /// mbstring's "HTML-ENTITIES" pseudo-encoding (mbfilter_htmlent.c): raw
+    /// bytes are Latin-1 code points, `&…;` references decode to their
+    /// character; encoding entitifies everything ≥ U+0080.
+    HtmlEnt,
     Rs(&'static RsEncoding),
 }
 
@@ -915,6 +961,8 @@ fn resolve_encoding(name: &[u8]) -> Option<Enc> {
         Some(Enc { codec: Codec::Rs(encoding_rs::EUC_JP), canonical: "EUC-JP" })
     } else if eq(b"Windows-1252") || eq(b"CP1252") {
         Some(Enc { codec: Codec::Rs(encoding_rs::WINDOWS_1252), canonical: "Windows-1252" })
+    } else if eq(b"HTML-ENTITIES") || eq(b"HTML") {
+        Some(Enc { codec: Codec::HtmlEnt, canonical: "HTML-ENTITIES" })
     } else {
         RsEncoding::for_label_no_replacement(n).map(|e| Enc { codec: Codec::Rs(e), canonical: e.name() })
     }
@@ -953,6 +1001,33 @@ pub fn mb_internal_encoding(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpErr
     }
 }
 
+thread_local! {
+    /// `MBSTRG(last_used_encoding_name)`: the last explicit `$encoding` name
+    /// resolved through the `php_mb_get_encoding` path. A cache hit (same name,
+    /// case-insensitive) skips the deprecated-encoding check — which is why
+    /// repeated identical calls warn only once on the oracle.
+    static MB_LAST_USED: std::cell::RefCell<Option<Vec<u8>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// `php_mb_get_encoding` for an explicit name: resolve + deprecation on cache
+/// miss (HTML-ENTITIES is the only deprecated pseudo-encoding we support).
+fn resolve_encoding_tracked(name: &[u8], func: &str, ctx: &mut Ctx) -> Option<Enc> {
+    let hit = MB_LAST_USED
+        .with(|c| c.borrow().as_deref().is_some_and(|last| last.eq_ignore_ascii_case(name)));
+    let enc = resolve_encoding(name)?;
+    if !hit {
+        if matches!(enc.codec, Codec::HtmlEnt) {
+            ctx.diags.push(php_types::Diag::Deprecated(format!(
+                "{func}(): Handling HTML entities via mbstring is deprecated; use \
+                 htmlspecialchars, htmlentities, or \
+                 mb_encode_numericentity/mb_decode_numericentity instead"
+            )));
+        }
+        MB_LAST_USED.with(|c| *c.borrow_mut() = Some(name.to_vec()));
+    }
+    Some(enc)
+}
+
 /// Resolve an optional `$encoding` argument at `idx` (reported as argument
 /// `arg_num` on error) to a codec, defaulting to the internal encoding when the
 /// argument is absent or null. Mirrors C `php_mb_get_encoding`.
@@ -970,7 +1045,7 @@ fn enc_arg(
         }
         Some(v) => {
             let name = convert::to_zstr(v, ctx.diags);
-            resolve_encoding(name.as_bytes()).ok_or_else(|| {
+            resolve_encoding_tracked(name.as_bytes(), func, ctx).ok_or_else(|| {
                 PhpError::ValueError(format!(
                     "{func}(): Argument #{arg_num} ($encoding) must be a valid encoding, \"{}\" given",
                     String::from_utf8_lossy(name.as_bytes())
@@ -1197,6 +1272,113 @@ fn decode_utf16(bytes: &[u8], be: bool) -> String {
         .collect()
 }
 
+/// mbstring's HTML entity table (html_entities.c, `mbfl_html_entity_list`) —
+/// the HTML 4 set, NOT the HTML5 one `htmlspecialchars`/`html.rs` use; shared
+/// with the loadHTML parser in [`php_types::html4`]. Order matters for
+/// encoding ties only (first match wins, as in the C linear scan).
+use php_types::html4::HTML4_ENTITIES as MBFL_HTML_ENTITIES;
+
+/// HTML-ENTITIES → chars, a faithful port of `mb_htmlent_to_wchar`: bytes pass
+/// through as Latin-1 code points; `&…;` whose body is `[0-9A-Za-z#]` decodes
+/// numerically (wrapping u32 arithmetic, cap U+10FFFF) or via the HTML 4 table
+/// (case-sensitive); anything else flushes verbatim. A decoded value that is
+/// not a Unicode scalar becomes `?` (the wchar→UTF-8 substitute).
+fn html_ent_decode(bytes: &[u8]) -> String {
+    fn is_ent_char(b: u8) -> bool {
+        b.is_ascii_alphanumeric() || b == b'#'
+    }
+    let mut out = String::new();
+    let push_cp = |out: &mut String, v: u32| out.push(char::from_u32(v).unwrap_or('?'));
+    let e = bytes.len();
+    let mut p = 0;
+    while p < e {
+        let c = bytes[p];
+        p += 1;
+        if c != b'&' {
+            out.push(c as char);
+            continue;
+        }
+        let mut term = p;
+        while term < e && is_ent_char(bytes[term]) {
+            term += 1;
+        }
+        if term < e && bytes[term] == b';' {
+            if bytes.get(p) == Some(&b'#') && e - p >= 2 {
+                // Numeric reference.
+                let mut digits = p + 1;
+                let hex = matches!(bytes.get(digits), Some(b'x') | Some(b'X'));
+                if hex {
+                    digits += 1;
+                }
+                let mut value: u32 = 0;
+                let mut ok = digits < term;
+                for &d in &bytes[digits.min(term)..term] {
+                    let v = match (d, hex) {
+                        (b'0'..=b'9', _) => (d - b'0') as u32,
+                        (b'A'..=b'F', true) => (d - b'A' + 10) as u32,
+                        (b'a'..=b'f', true) => (d - b'a' + 10) as u32,
+                        _ => {
+                            ok = false;
+                            break;
+                        }
+                    };
+                    value = value.wrapping_mul(if hex { 16 } else { 10 }).wrapping_add(v);
+                }
+                if ok && value <= 0x10FFFF {
+                    push_cp(&mut out, value);
+                    p = term + 1;
+                    continue;
+                }
+            } else if term > p {
+                // Named reference.
+                if let Some(&(_, code)) =
+                    MBFL_HTML_ENTITIES.iter().find(|(n, _)| *n == &bytes[p..term])
+                {
+                    push_cp(&mut out, code);
+                    p = term + 1;
+                    continue;
+                }
+            }
+        }
+        // Unterminated or unrecognized: `&` and the scanned run pass through
+        // (the `;` too when present — that is the not-an-entity case).
+        out.push('&');
+        for &b in &bytes[p..term] {
+            out.push(b as char);
+        }
+        p = term;
+        if term < e && bytes[term] == b';' {
+            out.push(';');
+            p = term + 1;
+        }
+    }
+    out
+}
+
+/// chars → HTML-ENTITIES (`mb_wchar_to_htmlent`): everything below U+0080 is
+/// literal (including `&<>`); the rest becomes a named entity from the HTML 4
+/// table or a decimal `&#N;`.
+fn html_ent_encode(s: &str) -> Vec<u8> {
+    let mut out = Vec::with_capacity(s.len());
+    for c in s.chars() {
+        let w = c as u32;
+        if w < 0x80 {
+            out.push(w as u8);
+            continue;
+        }
+        out.push(b'&');
+        match MBFL_HTML_ENTITIES.iter().find(|(_, code)| *code == w) {
+            Some((name, _)) => out.extend_from_slice(name),
+            None => {
+                out.push(b'#');
+                out.extend_from_slice(w.to_string().as_bytes());
+            }
+        }
+        out.push(b';');
+    }
+    out
+}
+
 /// Decode bytes in `codec` to a UTF-8 `String` (the internal representation),
 /// substituting U+FFFD for malformed input.
 fn decode_bytes(codec: &Codec, bytes: &[u8]) -> String {
@@ -1209,6 +1391,7 @@ fn decode_bytes(codec: &Codec, bytes: &[u8]) -> String {
         Codec::Latin1 => bytes.iter().map(|&b| b as char).collect(),
         Codec::Utf16Be => decode_utf16(bytes, true),
         Codec::Utf16Le => decode_utf16(bytes, false),
+        Codec::HtmlEnt => html_ent_decode(bytes),
         Codec::Rs(e) => e.decode_without_bom_handling(bytes).0.into_owned(),
     }
 }
@@ -1229,6 +1412,7 @@ fn encode_str(codec: &Codec, s: &str) -> Vec<u8> {
             .collect(),
         Codec::Utf16Be => s.encode_utf16().flat_map(|u| u.to_be_bytes()).collect(),
         Codec::Utf16Le => s.encode_utf16().flat_map(|u| u.to_le_bytes()).collect(),
+        Codec::HtmlEnt => html_ent_encode(s),
         Codec::Rs(e) => {
             let mut out = Vec::new();
             let mut buf = [0u8; 4];
@@ -1253,6 +1437,8 @@ fn validates(codec: &Codec, bytes: &[u8]) -> bool {
         Codec::Ascii => bytes.iter().all(|&b| b < 0x80),
         Codec::Latin1 => true,
         Codec::Utf16Be | Codec::Utf16Le => bytes.len().is_multiple_of(2),
+        // The htmlent decoder never rejects input (bad references flush verbatim).
+        Codec::HtmlEnt => true,
         Codec::Rs(e) => !e.decode_without_bom_handling(bytes).1,
     }
 }
@@ -1290,7 +1476,7 @@ pub fn mb_convert_encoding(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpErro
         })?,
         ctx.diags,
     );
-    let to = resolve_encoding(to_raw.as_bytes()).ok_or_else(|| {
+    let to = resolve_encoding_tracked(to_raw.as_bytes(), "mb_convert_encoding", ctx).ok_or_else(|| {
         PhpError::ValueError(format!(
             "mb_convert_encoding(): Argument #2 ($to_encoding) must be a valid encoding, \"{}\" given",
             String::from_utf8_lossy(to_raw.as_bytes())
@@ -1353,6 +1539,8 @@ fn iconv_encode(codec: &Codec, s: &str, ignore: bool, translit: bool) -> Option<
                 let mut u = [0u16; 2];
                 Some(c.encode_utf16(&mut u).iter().flat_map(|x| x.to_le_bytes()).collect())
             }
+            // Unreachable from iconv() (rejected as a charset there); total anyway.
+            Codec::HtmlEnt => Some(html_ent_encode(c.encode_utf8(&mut buf))),
             Codec::Rs(e) => {
                 let (bytes, _, unmappable) = e.encode(c.encode_utf8(&mut buf));
                 (!unmappable).then(|| bytes.into_owned())
@@ -1389,8 +1577,10 @@ pub fn iconv(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     };
     let ignore = flags.windows(6).any(|w| w == b"IGNORE");
     let translit = flags.windows(8).any(|w| w == b"TRANSLIT");
-    let from_enc = resolve_encoding(from.as_bytes());
-    let to_enc = resolve_encoding(base);
+    // HTML-ENTITIES is an mbstring-only pseudo-encoding; iconv rejects it.
+    let not_iconv = |e: Option<Enc>| e.filter(|e| !matches!(e.codec, Codec::HtmlEnt));
+    let from_enc = not_iconv(resolve_encoding(from.as_bytes()));
+    let to_enc = not_iconv(resolve_encoding(base));
     let (Some(from_enc), Some(to_enc)) = (from_enc, to_enc) else {
         ctx.diags.push(php_types::Diag::Warning(format!(
             "iconv(): Wrong charset, conversion from \"{}\" to \"{}\" is not allowed",

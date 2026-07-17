@@ -479,6 +479,59 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-17 (sessione WordPress-14): 🏁 **RESTAPI A PARITÀ ORACLE: i 19E
+  residui → 1E, identico all'oracle** (oEmbed
+  `test_proxy_with_classic_embed_provider`, bug upstream del trunk wpdev:
+  stesso messaggio "Attempt to read property \"queue\" on null" e stessa riga
+  su ENTRAMBI). Quattro feature nuove: **(1) mbstring `HTML-ENTITIES`**
+  (porta fedele di `mbfilter_htmlent.c`: tabella HTML4 252 entity condivisa in
+  `php_types::html4`, decode byte-wise Latin-1 con wrapping u32 e bad-entity
+  pass-through, encode <0x80 literal + named/`&#N;`; **deprecation con cache
+  `last_used_encoding`** à la `php_mb_get_encoding` — warn solo al miss, il
+  lato FROM di mb_convert_encoding non warna mai; `mb_check_encoding` allargato
+  a tutti gli encoding risolvibili via `validates`; `mb_list_encodings` =
+  lista oracle filtrata sui nomi che phpr risolve; iconv RIFIUTA
+  HTML-ENTITIES come l'oracle. Divergenze note: decode di `&#xD800;` → `?`
+  invece dei byte WTF-8 ED A0 80 — la pipeline String non può rappresentarli;
+  funzioni batch-1 (mb_strlen &c.) restano UTF-8-only e rifiutano
+  HTML-ENTITIES con ValueError rumoroso). **(2) `DOMDocument::loadHTML` /
+  `loadHTMLFile` / `saveHTML` / `saveHTMLFile`** — modalità HTML4/libxml2 del
+  parser HTML (`parse_html_impl(html4)`): doctype implicito "-//W3C//DTD HTML
+  4.0 Transitional//EN", testo vagante a livello html/head avvolto in `<p>`
+  implicito, NIENTE skeleton forzato (niente head/body impliciti se non
+  richiesti dal contenuto), script/style come CDATA (nodeType 4), attributi
+  senza valore → valore=nome, PI SGML (`<?php …?>`, trick `<?xml
+  encoding=…?>` con charset onorato), doctype con PUBLIC/SYSTEM id
+  case-preserved, charset BOM > xml-decl > meta (label verbatim in
+  `$doc->encoding`) > default ISO-8859-1 VERO, `xmlVersion` null, nodeType
+  documento 13 (XML_HTML_DOCUMENT_NODE); **errori libxml strutturati**
+  (level/code/line/col: Tag invalid 801, Attribute redefined 42,
+  htmlParseEntityRef no name 68, Document empty 4; colonna = posizione
+  cursore in BYTE dell'input raw, char-aware dopo transcodifica latin1) e
+  `libxml_use_internal_errors(false)` che SVUOTA il buffer come ext/libxml;
+  serializer `save_html` fedele (entity named HTML4/`&#N;` per i non-ASCII,
+  void elements HTML4, boolean attrs minimizzati, URI-escape
+  `xmlURIEscapeStr` su href/src/action e name-su-`<a>`, `<!DOCTYPE …>\n` +
+  newline finale). Probe spec-first 2 round: **514 righe byte-identiche
+  all'oracle**. Divergenza nota: colonne errori con input high-byte non
+  UTF-8 esatte solo per input ASCII/UTF-8. **(3) ext/xml SAX expat-style**
+  (SimplePie/WP_Widget_RSS): builtin `__xml_tokenize` su quick-xml (eventi
+  granulari NON coalescati come libxml: un evento per run di testo, per
+  reference risolta, per sezione CDATA; DOCTYPE internal subset con
+  `<!ENTITY>` risolte — SimplePie dichiara le entity HTML così; namespace
+  `xml_parser_create_ns` con separator arbitrario, xmlns strippati, default
+  ns solo sugli elementi) + API `xml_parser_*` nel prelude (create/create_ns/
+  set_option/get_option/set_object/handlers/parse/parse_into_struct/
+  get_error_code/error_string/posizioni; **codici errore = xmlParserErrors
+  libxml della compat-layer** oracle-pinned: empty/truncato 5, mismatch 76,
+  entity non dichiarata 26, charref invalido 9; `xml_error_string` =
+  trascrizione verbatim di `error_mapping[]` di ext/xml/compat.c;
+  XML_OPTION_SKIP_WHITE è un NO-OP sulla compat-layer, oracle-probed).
+  Probe byte-identico. **(4) `is_callable(['C','m'])` AUTOLOADA la classe**
+  come zend_is_callable (l'assert di SimplePie Registry su classi non ancora
+  caricate). ⚠️ bug engine scoperto (aperto): `static $x = array(…)` dentro
+  una funzione del PRELUDE panica (index out of bounds run.rs:233) — worked
+  around con array non-static; userland OK.
 - 2026-07-17 (sessione WordPress-13): 🏁 **WP CORE SUITE: gruppo RESTAPI
   sbloccato** (3514 test; prima phpr NON TERMINAVA — >50 min CPU, junit vuoto).
   Root cause del "hang": **l'assegnamento composto valutava il target PRIMA del

@@ -6918,6 +6918,25 @@ impl<'m> super::Vm<'m> {
             .get(1)
             .map(|a| convert::to_bool(&a.deref_clone(), &mut self.diags))
             .unwrap_or(false);
+        if !syntax_only {
+            // zend_is_callable autoloads a class named by "C::m" or ['C', 'm']
+            // before deciding (SimplePie asserts is_callable on classes its
+            // autoloader has not touched yet).
+            let class_name: Option<Vec<u8>> = match &v {
+                Zval::Str(s) => {
+                    let b = s.as_bytes();
+                    b.windows(2).position(|w| w == b"::").map(|pos| b[..pos].to_vec())
+                }
+                Zval::Array(a) if a.len() == 2 => match a.get(&Key::Int(0)).map(|z| z.deref_clone()) {
+                    Some(Zval::Str(c)) => Some(c.as_bytes().to_vec()),
+                    _ => None,
+                },
+                _ => None,
+            };
+            if let Some(name) = class_name {
+                let _ = self.resolve_class_autoload(&name)?;
+            }
+        }
         let ok = if syntax_only { Self::callable_syntax_only(&v) } else { self.is_value_callable(&v) };
         Ok(Zval::Bool(ok))
     }

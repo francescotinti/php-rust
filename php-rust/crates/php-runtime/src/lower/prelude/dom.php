@@ -240,6 +240,19 @@ class DOMDocument extends DOMNode {
         $this->documentURI = (string)$filename;
         return __dom_load($this->__d, (string)$filename, 1);
     }
+    public function loadHTML($source, $options = 0) {
+        return __dom_load($this->__d, (string)$source, 2);
+    }
+    public function loadHTMLFile($filename, $options = 0) {
+        $this->documentURI = (string)$filename;
+        return __dom_load($this->__d, (string)$filename, 3);
+    }
+    public function saveHTML($node = null) {
+        return __dom_save_html($this->__d, $node === null ? -1 : $node->__n);
+    }
+    public function saveHTMLFile($filename) {
+        return file_put_contents($filename, __dom_save_html($this->__d, -1));
+    }
     public function saveXML($node = null, $options = 0) {
         return __dom_save_xml($this->__d, $node === null ? -1 : $node->__n);
     }
@@ -838,4 +851,249 @@ function simplexml_load_file($filename, $class_name = 'SimpleXMLElement', $optio
 function simplexml_import_dom($node, $class_name = 'SimpleXMLElement') {
     if ($node instanceof DOMDocument) { return SimpleXMLElement::__mk($node->__d, 'e', __dom_doc_element($node->__d)); }
     return SimpleXMLElement::__mk($node->__d, 'e', $node->__n);
+}
+
+// ----- ext/xml (expat-style SAX API) -----
+// State lives on the XMLParser object; the whole input is buffered until the
+// final xml_parse() chunk, tokenized by the __xml_tokenize host builtin, and
+// the events dispatched to the registered handlers from here.
+final class XMLParser {
+    public $__sep = null;
+    public $__buf = '';
+    public $__fold = true;
+    public $__skipwhite = false;
+    public $__tagstart = 0;
+    public $__target_enc = 'UTF-8';
+    public $__obj = null;
+    public $__hstart = null;
+    public $__hend = null;
+    public $__hcdata = null;
+    public $__hpi = null;
+    public $__hdefault = null;
+    public $__err = 0;
+    public $__line = 1;
+    public $__col = 0;
+    public $__byte = 0;
+    public $__done = false;
+}
+function xml_parser_create($encoding = null) {
+    return new XMLParser();
+}
+function xml_parser_create_ns($encoding = null, $separator = ':') {
+    $p = new XMLParser();
+    $p->__sep = (string)$separator;
+    return $p;
+}
+function xml_parser_free($parser) { return true; }
+function xml_parser_set_option($parser, $option, $value) {
+    switch ((int)$option) {
+        case 1: $parser->__fold = (bool)$value; return true;
+        case 2: $parser->__target_enc = (string)$value; return true;
+        case 3: $parser->__tagstart = (int)$value; return true;
+        case 4: $parser->__skipwhite = (bool)$value; return true;
+    }
+    return false;
+}
+function xml_parser_get_option($parser, $option) {
+    switch ((int)$option) {
+        case 1: return (int)$parser->__fold;
+        case 2: return $parser->__target_enc;
+        case 3: return $parser->__tagstart;
+        case 4: return (int)$parser->__skipwhite;
+    }
+    return false;
+}
+function __xml_handler_norm($parser, $h) {
+    if ($h === null || $h === '') { return null; }
+    if (is_string($h) && $parser->__obj !== null) { return array($parser->__obj, $h); }
+    return $h;
+}
+function xml_set_object($parser, $object) { $parser->__obj = $object; return true; }
+function xml_set_element_handler($parser, $start_handler, $end_handler) {
+    $parser->__hstart = __xml_handler_norm($parser, $start_handler);
+    $parser->__hend = __xml_handler_norm($parser, $end_handler);
+    return true;
+}
+function xml_set_character_data_handler($parser, $handler) {
+    $parser->__hcdata = __xml_handler_norm($parser, $handler);
+    return true;
+}
+function xml_set_processing_instruction_handler($parser, $handler) {
+    $parser->__hpi = __xml_handler_norm($parser, $handler);
+    return true;
+}
+function xml_set_default_handler($parser, $handler) {
+    $parser->__hdefault = __xml_handler_norm($parser, $handler);
+    return true;
+}
+function xml_set_start_namespace_decl_handler($parser, $handler) { return true; }
+function xml_set_end_namespace_decl_handler($parser, $handler) { return true; }
+function xml_set_notation_decl_handler($parser, $handler) { return true; }
+function xml_set_external_entity_ref_handler($parser, $handler) { return true; }
+function xml_set_unparsed_entity_decl_handler($parser, $handler) { return true; }
+function __xml_fold_name($parser, $name) {
+    if ($parser->__tagstart > 0) { $name = (string)substr($name, $parser->__tagstart); }
+    return $parser->__fold ? strtoupper($name) : $name;
+}
+function xml_parse($parser, $data, $is_final = false) {
+    $parser->__buf .= (string)$data;
+    if (!$is_final) { return 1; }
+    $parser->__done = true;
+    $events = __xml_tokenize($parser->__buf, $parser->__sep);
+    foreach ($events as $e) {
+        switch ($e[0]) {
+            case 'o':
+                if ($parser->__hstart !== null) {
+                    $name = __xml_fold_name($parser, $e[1]);
+                    $attrs = array();
+                    foreach ($e[2] as $k => $v) {
+                        $attrs[$parser->__fold ? strtoupper($k) : $k] = $v;
+                    }
+                    call_user_func($parser->__hstart, $parser, $name, $attrs);
+                }
+                break;
+            case 'c':
+                if ($parser->__hend !== null) {
+                    call_user_func($parser->__hend, $parser, __xml_fold_name($parser, $e[1]));
+                }
+                break;
+            case 't':
+                // XML_OPTION_SKIP_WHITE is a no-op on the libxml compat layer
+                // (oracle-probed): whitespace runs are delivered.
+                if ($parser->__hcdata !== null) {
+                    call_user_func($parser->__hcdata, $parser, $e[1]);
+                }
+                break;
+            case 'p':
+                if ($parser->__hpi !== null) {
+                    call_user_func($parser->__hpi, $parser, $e[1], $e[2]);
+                }
+                break;
+            case 'x':
+                $parser->__err = $e[1];
+                $parser->__line = $e[2];
+                $parser->__col = $e[3];
+                $parser->__byte = $e[4];
+                break;
+        }
+    }
+    return $parser->__err === 0 ? 1 : 0;
+}
+function xml_parse_into_struct($parser, $data, &$values, &$index = null) {
+    $values = array();
+    $index = array();
+    $events = __xml_tokenize((string)$data, $parser->__sep);
+    $level = 0;
+    $open_idx = array();
+    $tag_at = array();
+    $ret = 1;
+    foreach ($events as $e) {
+        switch ($e[0]) {
+            case 'o':
+                $level++;
+                $name = __xml_fold_name($parser, $e[1]);
+                $tag_at[$level] = $name;
+                $entry = array('tag' => $name, 'type' => 'open', 'level' => $level);
+                $has_attrs = false;
+                $attrs = array();
+                foreach ($e[2] as $k => $v) {
+                    $attrs[$parser->__fold ? strtoupper($k) : $k] = $v;
+                    $has_attrs = true;
+                }
+                if ($has_attrs) { $entry['attributes'] = $attrs; }
+                $values[] = $entry;
+                $i = count($values) - 1;
+                $open_idx[$level] = $i;
+                $index[$name][] = $i;
+                break;
+            case 't':
+                if ($level < 1) { break; }
+                $last = count($values) - 1;
+                if ($last === $open_idx[$level]) {
+                    if (isset($values[$last]['value'])) { $values[$last]['value'] .= $e[1]; }
+                    else { $values[$last]['value'] = $e[1]; }
+                } else {
+                    $name = $tag_at[$level];
+                    $values[] = array('tag' => $name, 'value' => $e[1], 'type' => 'cdata', 'level' => $level);
+                    $index[$name][] = count($values) - 1;
+                }
+                break;
+            case 'c':
+                $name = __xml_fold_name($parser, $e[1]);
+                $last = count($values) - 1;
+                if (isset($open_idx[$level]) && $last === $open_idx[$level]) {
+                    $values[$last]['type'] = 'complete';
+                } else {
+                    $values[] = array('tag' => $name, 'type' => 'close', 'level' => $level);
+                    $index[$name][] = count($values) - 1;
+                }
+                unset($open_idx[$level]);
+                $level--;
+                break;
+            case 'x':
+                $parser->__err = $e[1];
+                $parser->__line = $e[2];
+                $parser->__col = $e[3];
+                $parser->__byte = $e[4];
+                if ($e[1] !== 0) { $ret = 0; }
+                break;
+        }
+    }
+    return $ret;
+}
+function xml_get_error_code($parser) { return $parser->__err; }
+function xml_get_current_line_number($parser) { return $parser->__line; }
+function xml_get_current_column_number($parser) { return $parser->__col; }
+function xml_get_current_byte_index($parser) { return $parser->__byte; }
+function xml_error_string($code) {
+    // ext/xml/compat.c error_mapping, verbatim (indexed by libxml errNo).
+    $strings = array(
+        'No error', 'No memory', 'Invalid document start', 'Empty document',
+        'Not well-formed (invalid token)', 'Invalid document end',
+        'Invalid hexadecimal character reference', 'Invalid decimal character reference',
+        'Invalid character reference', 'Invalid character',
+        'XML_ERR_CHARREF_AT_EOF', 'XML_ERR_CHARREF_IN_PROLOG', 'XML_ERR_CHARREF_IN_EPILOG',
+        'XML_ERR_CHARREF_IN_DTD', 'XML_ERR_ENTITYREF_AT_EOF', 'XML_ERR_ENTITYREF_IN_PROLOG',
+        'XML_ERR_ENTITYREF_IN_EPILOG', 'XML_ERR_ENTITYREF_IN_DTD',
+        'PEReference at end of document', 'PEReference in prolog', 'PEReference in epilog',
+        'PEReference: forbidden within markup decl in internal subset',
+        'XML_ERR_ENTITYREF_NO_NAME', "EntityRef: expecting ';'", 'PEReference: no name',
+        "PEReference: expecting ';'", 'Undeclared entity error', 'Undeclared entity warning',
+        'Unparsed Entity', 'XML_ERR_ENTITY_IS_EXTERNAL', 'XML_ERR_ENTITY_IS_PARAMETER',
+        'Unknown encoding', 'Unsupported encoding', "String not started expecting ' or \"",
+        "String not closed expecting \" or '", 'Namespace declaration error',
+        "EntityValue: \" or ' expected", "EntityValue: \" or ' expected", '< in attribute',
+        'Attribute not started', 'Attribute not finished', 'Attribute without value',
+        'Attribute redefined', "SystemLiteral \" or ' expected",
+        "SystemLiteral \" or ' expected", 'Comment not finished',
+        'Processing Instruction not started', 'Processing Instruction not finished',
+        'NOTATION: Name expected here', "'>' required to close NOTATION declaration",
+        "'(' required to start ATTLIST enumeration",
+        "'(' required to start ATTLIST enumeration",
+        "MixedContentDecl : '|' or ')*' expected", 'XML_ERR_MIXED_NOT_FINISHED',
+        'ELEMENT in DTD not started', 'ELEMENT in DTD not finished',
+        'XML declaration not started', 'XML declaration not finished',
+        'XML_ERR_CONDSEC_NOT_STARTED', 'XML conditional section not closed',
+        'Content error in the external subset', 'DOCTYPE not finished',
+        "Sequence ']]>' not allowed in content", 'CDATA not finished', 'Reserved XML Name',
+        'Space required', 'XML_ERR_SEPARATOR_REQUIRED',
+        'NmToken expected in ATTLIST enumeration', 'XML_ERR_NAME_REQUIRED',
+        "MixedContentDecl : '#PCDATA' expected", 'SYSTEM or PUBLIC, the URI is missing',
+        'PUBLIC, the Public Identifier is missing', '< required', '> required',
+        '</ required', '= required', 'Mismatched tag', 'Tag not finished',
+        "standalone accepts only 'yes' or 'no'", 'Invalid XML encoding name',
+        "Comment must not contain '--' (double-hyphen)", 'Invalid encoding',
+        'external parsed entities cannot be standalone',
+        "XML conditional section '[' expected", 'Entity value required',
+        'chunk is not well balanced', 'extra content at the end of well balanced chunk',
+        'XML_ERR_ENTITY_CHAR_ERROR', 'PEReferences forbidden in internal subset',
+        'Detected an entity reference loop', 'XML_ERR_ENTITY_BOUNDARY', 'Invalid URI',
+        'Fragment not allowed', 'XML_WAR_CATALOG_PI', 'XML_ERR_NO_DTD',
+        'conditional section INCLUDE or IGNORE keyword expected',
+        'Version in XML Declaration missing', 'XML_WAR_UNKNOWN_VERSION',
+        'XML_WAR_LANG_VALUE', 'XML_WAR_NS_URI', 'XML_WAR_NS_URI_RELATIVE',
+        'Missing encoding in text declaration',
+    );
+    $code = (int)$code;
+    return isset($strings[$code]) ? $strings[$code] : 'Unknown';
 }

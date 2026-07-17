@@ -49,6 +49,7 @@ mod calls;
 mod coroutines;
 mod dom;
 mod exceptions;
+mod xmlparser;
 mod host;
 mod ini;
 mod run;
@@ -1488,7 +1489,7 @@ struct Vm<'m> {
     /// ext/libxml error surface: `libxml_use_internal_errors` flag and the
     /// recorded parse errors `libxml_get_errors` reports.
     libxml_internal: bool,
-    libxml_errors: Vec<String>,
+    libxml_errors: Vec<dom::LxErr>,
 }
 
 impl<'m> Vm<'m> {
@@ -10488,6 +10489,8 @@ host_builtins! {
     b"__dom_load" => vm.ho_dom_load(args),
     b"__dom_load_html" => vm.ho_dom_load_html(args),
     b"__dom_save_xml" => vm.ho_dom_save_xml(args),
+    b"__dom_save_html" => vm.ho_dom_save_html(args),
+    b"__xml_tokenize" => vm.ho_xml_tokenize(args),
     b"__dom_info" => vm.ho_dom_info(args),
     b"__dom_nav" => vm.ho_dom_nav(args),
     b"__dom_children" => vm.ho_dom_children(args),
