@@ -589,7 +589,24 @@ fn stmt_variant_name(s: &Statement) -> &'static str {
 /// the accessors, and `instanceof`.
 /// `getTrace`/`getTraceAsString` are stubs (no real stack trace is modelled);
 /// `file`/`line` are filled in by the evaluator at `new` time, not here.
-const PRELUDE_SRC: &[u8] = include_bytes!("prelude.php");
+/// Segmented by domain under `lower/prelude/` (WP-12 follow-up: the old
+/// 5060-line prelude.php split, zero logic changes). `concat!` re-forms the
+/// SINGLE compilation unit at build time, so hoisting/order semantics are
+/// exactly the monolith's; only `core.php` carries the `<?php` opener.
+/// Declaration order within the unit is free (the Lowerer hoists every class
+/// before resolving `extends`/`implements` — the monolith already relied on
+/// forward references, e.g. PhpToken before Stringable).
+const PRELUDE_SRC_STR: &str = concat!(
+    include_str!("prelude/core.php"),
+    include_str!("prelude/spl.php"),
+    include_str!("prelude/reflection.php"),
+    include_str!("prelude/date.php"),
+    include_str!("prelude/pdo.php"),
+    include_str!("prelude/sqlite3.php"),
+    include_str!("prelude/dom.php"),
+    include_str!("prelude/session.php"),
+);
+const PRELUDE_SRC: &[u8] = PRELUDE_SRC_STR.as_bytes();
 
 /// The namespaced prelude tail: PHP forbids `namespace` after global code, so
 /// `Pdo\Sqlite` (PHP 8.4's driver subclass) is its own unit, hoisted into the
