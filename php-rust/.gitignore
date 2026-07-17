@@ -21,3 +21,5 @@ crates/php-server/
 /EmptyFile*.txt
 20270615-gemini.md
 php-8.5.7.code-workspace
+20260716-gemini-feedback.md
+refactor_plan_prelude_claude.md
