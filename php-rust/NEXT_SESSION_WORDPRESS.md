@@ -30,24 +30,22 @@ nohup perl -e 'use POSIX qw(setsid); fork and exit 0; setsid(); exec { $ARGV[0] 
 # ⚠️ archiviare full-out/run<N>/ PRIMA di rilanciare.
 ```
 - Baseline oracle: `full-out/full-oracle.{names,junit.xml}` (trunk `81b2b5b`).
-- Baseline phpr = run8 (WP-17): 56 diff per nome. **run9 (WP-18) lanciata a
-  fine sessione — LEGGERE full-out/ e archiviare come run9/ prima di tutto.**
-- Attesi residui run9 (~5-6 per nome, tutti DICHIARATI): sitemaps 3
-  (XSLTProcessor assente), wpIsIniValueChangeable #4 (ext/Tidy assente),
-  ftp wp_is_stream (divergenza decisa), ±oEmbed/canola ambientali.
+- **Baseline phpr = run9 (WP-18, post-`93fd8af`): 56 → 5 diff per nome —
+  0E/2F/86W/76S su 30.480, ~24 min.** Junit + `diff-names.txt` in
+  `full-out/run9/`. I 5 diff = TUTTI dichiarati: sitemaps 3 (XSLTProcessor
+  assente), wpIsIniValueChangeable #4 (ext/Tidy), ftp wp_is_stream (deciso).
+  Invariante: SOLO miglioramenti per nome vs run9.
 
 ## Prossimo passo: SESSIONE WP-19
-1. **Leggere run9** (`wp16-harness/full-out/`), archiviare, aggiornare le
-   baseline qui e in memoria. Se compaiono regressioni inattese → priorità 1.
-2. **XSLTProcessor via libxslt FFI** (chiude sitemaps 3): macOS ha
+1. **XSLTProcessor via libxslt FFI** (chiude sitemaps 3): macOS ha
    libxml2/libxslt di sistema; pattern php_types::zlibio/gd — parse del DOM
    serializzato + xsltApplyStylesheet + serializzazione. Byte-parity gratis
    (stessa lib C dell'oracle).
-3. **Multisite VERO** (`-c tests/phpunit/multisite.xml`): baseline oracle +
+2. **Multisite VERO** (`-c tests/phpunit/multisite.xml`): baseline oracle +
    phpr MAI fatte (i 32 test gated girano single-site).
-4. Perf: full-suite phpr ~22-24 min vs 8:50 oracle; picco RSS ~2.7GB zona
+3. Perf: full-suite phpr ~22-24 min vs 8:50 oracle; picco RSS ~2.7GB zona
    image/media da capire.
-5. Valutare ext/tidy minimale SOLO se emergono altri consumatori (per ora 1
+4. Valutare ext/tidy minimale SOLO se emergono altri consumatori (per ora 1
    solo data set — non vale la superficie).
 
 ## Lezioni operative (nuove WP-18)
@@ -85,8 +83,7 @@ nohup perl -e 'use POSIX qw(setsid); fork and exit 0; setsid(); exec { $ARGV[0] 
   wpHtmlProcessor 117 · wpCommunityEvents 13 · wpThemeJson 229 ·
   wpUtf8CodePointCount 20 · BlockProcessor 222 · AtomParser 1 ·
   auth argon2 2 · RemoveAccents NFD 1.
-- Full-suite: solo miglioramenti per nome vs baseline corrente (run8; run9
-  quando archiviata).
+- Full-suite: solo miglioramenti per nome vs run9 (5 diff dichiarati).
 - Commit AND push a ogni step; run pesanti SEQUENZIALI e DETACHED sotto
   watchdog/telemetria; Serena per Rust, Vexp/Read per il C; Read/Write tool
   per i .php; log `tr -d '\0'`; probe MAI su wptests durante una run.
