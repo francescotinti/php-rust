@@ -59,6 +59,7 @@ mod oop;
 mod pdo;
 mod mysqli;
 mod gd;
+mod xslt;
 mod tokenizer;
 mod websapi;
 use arrays::*;
@@ -506,6 +507,8 @@ pub(crate) fn run_module_with_hir<'m>(
         next_mysqli: 1,
         gd_images: HashMap::default(),
         next_gd: 1,
+        xslt_sheets: HashMap::default(),
+        next_xslt: 1,
         stream_chunk_sizes: HashMap::default(),
         seed_aliases: Vec::new(),
         umask: 0o22,
@@ -1470,6 +1473,11 @@ struct Vm<'m> {
     gd_images: HashMap<u32, php_types::gdio::GdImg>,
     /// Next gd handle id.
     next_gd: u32,
+    /// `__xslt_*` host builtins the prelude `XSLTProcessor` class delegates to
+    /// (see vm/xslt.rs); freed by XSLTProcessor::__destruct via `__xslt_free`.
+    xslt_sheets: HashMap<u32, php_types::xsltio::XsltSheet>,
+    /// Next xslt stylesheet handle id.
+    next_xslt: u32,
     /// Next mysqli handle id (shared by connections and statements).
     next_mysqli: u32,
     /// Per-stream chunk size set by `stream_set_chunk_size` (resource id → size).
@@ -10330,6 +10338,9 @@ host_builtins! {
     b"__mysqli_stmt_execute" => vm.ho_mysqli_stmt_execute(args),
     b"__mysqli_stmt_close" => vm.ho_mysqli_stmt_close(args),
     b"getopt" => vm.ho_getopt(args),
+    b"__xslt_import" => vm.ho_xslt_import(args),
+    b"__xslt_free" => vm.ho_xslt_free(args),
+    b"__xslt_transform" => vm.ho_xslt_transform(args),
     b"__gd_create" => vm.ho_gd_create(args),
     b"__gd_destroy" => vm.ho_gd_destroy(args),
     b"__gd_decode" => vm.ho_gd_decode(args),

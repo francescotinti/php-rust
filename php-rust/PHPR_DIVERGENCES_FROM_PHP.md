@@ -479,6 +479,30 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-18 (sessione WordPress-19): 🆕 **ext/xsl su libxslt DI SISTEMA via
+  FFI** (`php_types::xsltio` → `/usr/lib/libxslt.1.dylib` + libexslt + libxml2,
+  le STESSE dylib che linka l'oracle brew ⇒ output byte-identico; probe
+  10 sezioni a diff zero). Classe `XSLTProcessor` nel prelude dom
+  (importStylesheet/transformToXml/transformToDoc/transformToUri/set-get-
+  removeParameter clark-notation/hasExsltSupport/set-getSecurityPrefs,
+  proprietà tipizzate doXInclude/cloneDocument/maxTemplateDepth/maxTemplateVars
+  con default 3000/15000 dai globals libxslt), costanti XSL_*/LIBXSLT_*/
+  LIBEXSLT_*, "xsl" in extension_loaded; EXSLT registrato (exsltRegisterAll,
+  hasExsltSupport=true come oracle). L'interscambio è per DOCUMENTO
+  SERIALIZZATO (saveXML → xmlReadMemory): il transform dipende dall'infoset,
+  non dalla forma serializzata. Errori libxslt catturati via open_memstream
+  come contesto del generic-error handler di default (le riscritture
+  "$maxTemplateDepth"/"$maxTemplateVars" di php_xsl applicate alle righe) →
+  Warning al call-site come l'oracle. Sblocca i 3 test sitemaps
+  (assertXMLEquals/normalizeXML di WP_Test_XML_TestCase); gruppo sitemaps 132
+  test IDENTICO per nome. **Divergenze dichiarate ext/xsl**: (a) nei messaggi
+  di errore di compilazione su stylesheet MALFORMATI, l'URL è %-escaped e il
+  numero di riga può differire di +1 (la ri-serializzazione aggiunge la
+  dichiarazione XML) — solo diagnostica; (b) registerPHPFunctions/
+  registerPHPFunctionNS/setProfiling ASSENTI (richiederebbero callback
+  XPath→VM dentro libxslt; undefined-method onesto); (c) `clone $proc` non
+  vietato (oracle: uncloneable) e le prop private `__h`/`__params` visibili a
+  var_dump; (d) doXInclude ignorato (XInclude fuori slice).
 - 2026-07-18 (sessione WordPress-18): 🏁 **chiusura dei 56 diff per nome di
   run8** (tutti i cluster + singleton attaccabili). Fix engine: ⭐ `(object)$x`
   IDENTITARIO su Closure/Generator (WP `_wp_filter_build_unique_id` usa

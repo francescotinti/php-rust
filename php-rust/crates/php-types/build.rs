@@ -6,5 +6,11 @@
 fn main() {
     println!("cargo:rustc-link-search=native=/opt/homebrew/opt/gd/lib");
     println!("cargo:rustc-link-lib=dylib=gd");
+    // ext/xsl (src/xsltio.rs): the **system** libxslt/libexslt/libxml2 — the
+    // same /usr/lib dylibs the PHP oracle links (they live in the dyld shared
+    // cache; the linker resolves them through the SDK .tbd stubs).
+    println!("cargo:rustc-link-lib=dylib=xslt");
+    println!("cargo:rustc-link-lib=dylib=exslt");
+    println!("cargo:rustc-link-lib=dylib=xml2");
     println!("cargo:rerun-if-changed=build.rs");
 }

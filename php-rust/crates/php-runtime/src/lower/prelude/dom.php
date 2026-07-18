@@ -1158,3 +1158,158 @@ function xml_error_string($code) {
     $code = (int)$code;
     return isset($strings[$code]) ? $strings[$code] : 'Unknown';
 }
+
+// ext/xsl: XSLTProcessor over the system libxslt (vm/xslt.rs → php_types::
+// xsltio — the same /usr/lib dylib the oracle links, so transform output is
+// byte-identical). The stylesheet handle lives in a hidden prop; documents
+// travel to the host as their serialized owning document (the transform
+// consumes the parsed infoset, so the round-trip is invisible).
+class XSLTProcessor {
+    public bool $doXInclude = false;
+    public bool $cloneDocument = false;
+    // Defaults are libxslt's xsltMaxDepth/xsltMaxVars globals (1.1.35).
+    public int $maxTemplateDepth = 3000;
+    public int $maxTemplateVars = 15000;
+    private $__h = false;
+    private $__params = array();
+    private $__secprefs = 44; // XSL_SECPREF_DEFAULT
+
+    public function __destruct() {
+        if ($this->__h !== false) { __xslt_free($this->__h); }
+    }
+
+    // php_libxml_import_node + ownerDocument resolution: any DOM-family node
+    // or SimpleXMLElement contributes its OWNING document.
+    private static function __doc_xml($node, $fn, $argname) {
+        if ($node instanceof DOMNode || $node instanceof SimpleXMLElement) {
+            $xml = __dom_save_xml($node->__d, -1);
+            // Base URL for relative xsl:import/document() and diagnostics:
+            // a load()ed document carries its path; a loadXML one gets the
+            // cwd directory, which is what libxml stamps on the oracle.
+            if ($node instanceof DOMDocument && $node->documentURI !== null) {
+                $uri = (string)$node->documentURI;
+            } else {
+                $uri = rtrim((string)getcwd(), '/') . '/';
+            }
+            return array($xml, $uri);
+        }
+        throw new TypeError('XSLTProcessor::' . $fn . '(): Argument #1 ($' . $argname . ') must be a valid XML node');
+    }
+
+    public function importStylesheet(object $stylesheet): bool {
+        $s = self::__doc_xml($stylesheet, 'importStylesheet', 'stylesheet');
+        $r = __xslt_import($s[0], $s[1]);
+        foreach ($r['errs'] as $e) {
+            __warning_from_caller('XSLTProcessor::importStylesheet(): ' . $e);
+        }
+        if ($r['h'] === false) { return false; }
+        if ($this->__h !== false) { __xslt_free($this->__h); }
+        $this->__h = $r['h'];
+        return true;
+    }
+
+    // Shared apply half (php_xsl_apply_stylesheet): returns the serialized
+    // result ('' = empty result → the callers' null case) or false.
+    private function __apply($document, $fn) {
+        if ($this->__h === false) {
+            throw new Error('XSLTProcessor::' . $fn . '() can only be called after a stylesheet has been imported');
+        }
+        $s = self::__doc_xml($document, $fn, 'document');
+        $r = __xslt_transform($this->__h, $s[0], $s[1], $this->__params,
+            $this->maxTemplateDepth, $this->maxTemplateVars, $this->__secprefs);
+        foreach ($r['errs'] as $e) {
+            __warning_from_caller('XSLTProcessor::' . $fn . '(): ' . $e);
+        }
+        return $r['out'];
+    }
+
+    public function transformToXml(object $document) {
+        $out = $this->__apply($document, 'transformToXml');
+        if ($out === false) { return false; }
+        return $out === '' ? null : $out;
+    }
+
+    public function transformToDoc(object $document, $returnClass = null) {
+        $out = $this->__apply($document, 'transformToDoc');
+        if ($out === false) { return false; }
+        $cls = $returnClass === null ? 'DOMDocument' : (string)$returnClass;
+        $doc = new $cls();
+        if ($out !== '') { @$doc->loadXML($out); }
+        return $doc;
+    }
+
+    public function transformToUri(object $document, string $uri): int {
+        $out = $this->__apply($document, 'transformToUri');
+        if ($out === false) { return -1; }
+        $n = @file_put_contents($uri, $out);
+        return $n === false ? -1 : $n;
+    }
+
+    // xsl_create_parameter_key: '' namespace → plain name, otherwise clark
+    // notation `{ns}name` (libxslt's xsltQuoteOneUserParam parses it back).
+    private static function __param_key($ns, $name, $fn) {
+        if ($ns === '') { return $name; }
+        if ($name !== '' && $name[0] === '{') {
+            throw new ValueError('XSLTProcessor::' . $fn . '(): Argument #2 ($name) must not use clark notation when argument #1 ($namespace) is not empty');
+        }
+        if ($name !== '' && $name[0] !== ':' && strpos($name, ':') !== false) {
+            throw new ValueError('XSLTProcessor::' . $fn . '(): Argument #2 ($name) must not be a QName when argument #1 ($namespace) is not empty');
+        }
+        return '{' . $ns . '}' . $name;
+    }
+
+    public function setParameter(string $namespace, $name, $value = null): bool {
+        if (is_array($name)) {
+            if ($value !== null) {
+                throw new ValueError('XSLTProcessor::setParameter(): Argument #3 ($value) must be null when argument #2 ($name) is an array');
+            }
+            foreach ($name as $k => $v) {
+                if (!is_string($k)) {
+                    throw new TypeError('XSLTProcessor::setParameter(): Argument #2 ($name) must contain only string keys');
+                }
+                if (strpos($k, "\0") !== false) {
+                    throw new ValueError('XSLTProcessor::setParameter(): Argument #3 ($value) must not contain keys with any null bytes');
+                }
+                $v = (string)$v;
+                if (strpos($v, "\0") !== false) {
+                    throw new ValueError('XSLTProcessor::setParameter(): Argument #3 ($value) must not contain values with any null bytes');
+                }
+                $this->__params[self::__param_key($namespace, $k, 'setParameter')] = $v;
+            }
+            return true;
+        }
+        $name = (string)$name;
+        if ($value === null) {
+            throw new ValueError('XSLTProcessor::setParameter(): Argument #3 ($value) cannot be null when argument #2 ($name) is a string');
+        }
+        if (strpos($name, "\0") !== false) {
+            throw new ValueError('XSLTProcessor::setParameter(): Argument #2 ($name) must not contain any null bytes');
+        }
+        $this->__params[self::__param_key($namespace, $name, 'setParameter')] = (string)$value;
+        return true;
+    }
+
+    public function getParameter(string $namespace, string $name) {
+        $key = self::__param_key($namespace, $name, 'getParameter');
+        return isset($this->__params[$key]) ? $this->__params[$key] : false;
+    }
+
+    public function removeParameter(string $namespace, string $name): bool {
+        $key = self::__param_key($namespace, $name, 'removeParameter');
+        if (isset($this->__params[$key])) {
+            unset($this->__params[$key]);
+            return true;
+        }
+        return false;
+    }
+
+    public function hasExsltSupport(): bool { return true; }
+
+    public function setSecurityPrefs(int $preferences): int {
+        $old = $this->__secprefs;
+        $this->__secprefs = $preferences;
+        return $old;
+    }
+
+    public function getSecurityPrefs(): int { return $this->__secprefs; }
+}

@@ -2694,6 +2694,23 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"IMG_WBMP" => ExprKind::Int(8),
         b"IMG_XPM" => ExprKind::Int(16),
         b"IMG_WEBP" => ExprKind::Int(32),
+        // ext/xsl (values from the PHP 8.5 oracle probe, WP-19: the version
+        // constants are the SDK-header macros PHP was compiled against — the
+        // same system libxslt/libexslt we FFI to in php_types::xsltio).
+        b"XSL_CLONE_AUTO" => ExprKind::Int(0),
+        b"XSL_CLONE_NEVER" => ExprKind::Int(-1),
+        b"XSL_CLONE_ALWAYS" => ExprKind::Int(1),
+        b"XSL_SECPREF_NONE" => ExprKind::Int(0),
+        b"XSL_SECPREF_READ_FILE" => ExprKind::Int(2),
+        b"XSL_SECPREF_WRITE_FILE" => ExprKind::Int(4),
+        b"XSL_SECPREF_CREATE_DIRECTORY" => ExprKind::Int(8),
+        b"XSL_SECPREF_READ_NETWORK" => ExprKind::Int(16),
+        b"XSL_SECPREF_WRITE_NETWORK" => ExprKind::Int(32),
+        b"XSL_SECPREF_DEFAULT" => ExprKind::Int(44),
+        b"LIBXSLT_VERSION" => ExprKind::Int(10135),
+        b"LIBXSLT_DOTTED_VERSION" => ExprKind::Str(b"1.1.35".to_vec().into()),
+        b"LIBEXSLT_VERSION" => ExprKind::Int(820),
+        b"LIBEXSLT_DOTTED_VERSION" => ExprKind::Str(b"0.8.20".to_vec().into()),
         // ext/fileinfo (fileinfo.c REGISTER_LONG_CONSTANT values)
         b"FILEINFO_NONE" => ExprKind::Int(0),
         b"FILEINFO_SYMLINK" => ExprKind::Int(2),
