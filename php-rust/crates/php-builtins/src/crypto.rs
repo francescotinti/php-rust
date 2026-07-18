@@ -175,8 +175,77 @@ fn bcrypt_cost(hash: &[u8]) -> Option<i64> {
     }
 }
 
+/// The password-hash algorithms phpr models: bcrypt via `unix::crypt`, the
+/// argon2 pair via the pure-Rust `argon2` crate (PHC output, byte-compatible
+/// with ext/sodium's `$argon2i$v=19$m=…,t=…,p=…$salt$hash` format).
+#[derive(PartialEq, Clone, Copy)]
+enum PwAlgo {
+    Bcrypt,
+    Argon2i,
+    Argon2id,
+}
+
+/// Resolve `$algo` (string form, PHP 8; legacy int 1/2/3 kept as in ext) or
+/// `None` for an unknown algorithm.
+fn pw_algo(v: &Zval, ctx: &mut Ctx) -> Option<PwAlgo> {
+    match v {
+        Zval::Null | Zval::Long(1) => Some(PwAlgo::Bcrypt),
+        Zval::Long(2) => Some(PwAlgo::Argon2i),
+        Zval::Long(3) => Some(PwAlgo::Argon2id),
+        v => match ctx.to_zstr(v).as_bytes() {
+            b"2y" => Some(PwAlgo::Bcrypt),
+            b"argon2i" => Some(PwAlgo::Argon2i),
+            b"argon2id" => Some(PwAlgo::Argon2id),
+            _ => None,
+        },
+    }
+}
+
+/// PHP's argon2 defaults (PASSWORD_ARGON2_DEFAULT_*): 64 MiB, 4 passes, 1 lane.
+const ARGON2_DEFAULT_MEMORY_COST: i64 = 65536;
+const ARGON2_DEFAULT_TIME_COST: i64 = 4;
+const ARGON2_DEFAULT_THREADS: i64 = 1;
+
+/// Parse an argon2 PHC hash into (algo-name, memory_cost, time_cost, threads).
+fn argon2_info(hash: &[u8]) -> Option<(&'static str, i64, i64, i64)> {
+    let s = std::str::from_utf8(hash).ok()?;
+    let mut it = s.strip_prefix('$')?.split('$');
+    let name = match it.next()? {
+        "argon2i" => "argon2i",
+        "argon2id" => "argon2id",
+        _ => return None,
+    };
+    it.next()?; // v=19
+    let (mut m, mut t, mut p) = (None, None, None);
+    for kv in it.next()?.split(',') {
+        let (k, v) = kv.split_once('=')?;
+        let n: i64 = v.parse().ok()?;
+        match k {
+            "m" => m = Some(n),
+            "t" => t = Some(n),
+            "p" => p = Some(n),
+            _ => {}
+        }
+    }
+    Some((name, m?, t?, p?))
+}
+
+/// The (memory_cost, time_cost, threads) triple from `$options`, defaulted.
+fn argon2_options(options: Option<&PhpArray>, ctx: &mut Ctx) -> (i64, i64, i64) {
+    let get = |k: &[u8], d: i64, ctx: &mut Ctx| {
+        options
+            .and_then(|a| a.get(&Key::from_bytes(k)).map(|v| convert::to_long_cast(v, ctx.diags)))
+            .unwrap_or(d)
+    };
+    (
+        get(b"memory_cost", ARGON2_DEFAULT_MEMORY_COST, ctx),
+        get(b"time_cost", ARGON2_DEFAULT_TIME_COST, ctx),
+        get(b"threads", ARGON2_DEFAULT_THREADS, ctx),
+    )
+}
+
 /// `password_hash(string $password, string|int|null $algo, array $options = []): string`
-/// — bcrypt only. A non-bcrypt `$algo` is a ValueError; the cost must be 4..=31.
+/// — bcrypt (cost 4..=31) or argon2i/argon2id (PHC string out).
 pub fn password_hash(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     if args.len() < 2 {
         return Err(PhpError::ArgumentCountError(format!(
@@ -209,17 +278,31 @@ pub fn password_hash(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         }
     };
     // Value phase.
-    let is_bcrypt = match &args[1] {
-        Zval::Null | Zval::Long(1) => true,
-        v => ctx.to_zstr(v).as_bytes() == b"2y",
-    };
-    if !is_bcrypt {
+    let Some(algo) = pw_algo(&args[1], ctx) else {
         return Err(PhpError::ValueError(
             "password_hash(): Argument #2 ($algo) must be a valid password hashing algorithm"
                 .to_string(),
         ));
-    }
+    };
     let password = ctx.to_zstr(&args[0]);
+    if algo != PwAlgo::Bcrypt {
+        use argon2::password_hash::{PasswordHasher, SaltString};
+        use argon2::{Algorithm, Argon2, Params, Version};
+        let (m, t, p) = argon2_options(options.as_deref(), ctx);
+        let params = Params::new(m.max(0) as u32, t.max(0) as u32, p.max(0) as u32, Some(32))
+            .map_err(|_| {
+                PhpError::ValueError("Memory cost is outside of allowed memory range".to_string())
+            })?;
+        let alg = if algo == PwAlgo::Argon2i { Algorithm::Argon2i } else { Algorithm::Argon2id };
+        let raw = os_random(16)
+            .ok_or_else(|| PhpError::Error("Cannot open source device".to_string()))?;
+        let salt = SaltString::encode_b64(&raw)
+            .map_err(|_| PhpError::Error("password_hash(): Unexpected failure".to_string()))?;
+        let hashed = Argon2::new(alg, Version::V0x13, params)
+            .hash_password(password.as_bytes(), &salt)
+            .map_err(|_| PhpError::Error("password_hash(): Unexpected failure".to_string()))?;
+        return Ok(Zval::Str(PhpStr::new(hashed.to_string().into_bytes())));
+    }
     if password.as_bytes().contains(&0) {
         return Err(PhpError::ValueError(
             "Bcrypt password must not contain null character".to_string(),
@@ -275,6 +358,18 @@ pub fn password_verify(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     if hash_str.len() < 13 {
         return Ok(Zval::Bool(false));
     }
+    // An argon2 PHC hash verifies with the algorithm/params it declares.
+    if hash_str.starts_with("$argon2") {
+        use argon2::password_hash::{PasswordHash, PasswordVerifier};
+        use argon2::Argon2;
+        let ok = PasswordHash::new(hash_str)
+            .ok()
+            .map(|parsed| {
+                Argon2::default().verify_password(password.as_bytes(), &parsed).is_ok()
+            })
+            .unwrap_or(false);
+        return Ok(Zval::Bool(ok));
+    }
     match unix::crypt(password.as_bytes(), hash_str) {
         Ok(computed) => Ok(Zval::Bool(ct_eq(computed.as_bytes(), hash.as_bytes()))),
         Err(_) => Ok(Zval::Bool(false)),
@@ -293,11 +388,28 @@ pub fn password_get_info(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
             opts.insert(Key::from_bytes(b"cost"), Zval::Long(cost));
             info.insert(Key::from_bytes(b"options"), Zval::Array(Rc::new(opts)));
         }
-        None => {
-            info.insert(Key::from_bytes(b"algo"), Zval::Null);
-            info.insert(Key::from_bytes(b"algoName"), Zval::Str(PhpStr::new(b"unknown".to_vec())));
-            info.insert(Key::from_bytes(b"options"), Zval::Array(Rc::new(PhpArray::new())));
-        }
+        None => match argon2_info(hash.as_bytes()) {
+            Some((name, m, t, p)) => {
+                info.insert(Key::from_bytes(b"algo"), Zval::Str(PhpStr::new(name.as_bytes().to_vec())));
+                info.insert(
+                    Key::from_bytes(b"algoName"),
+                    Zval::Str(PhpStr::new(name.as_bytes().to_vec())),
+                );
+                let mut opts = PhpArray::new();
+                opts.insert(Key::from_bytes(b"memory_cost"), Zval::Long(m));
+                opts.insert(Key::from_bytes(b"time_cost"), Zval::Long(t));
+                opts.insert(Key::from_bytes(b"threads"), Zval::Long(p));
+                info.insert(Key::from_bytes(b"options"), Zval::Array(Rc::new(opts)));
+            }
+            None => {
+                info.insert(Key::from_bytes(b"algo"), Zval::Null);
+                info.insert(
+                    Key::from_bytes(b"algoName"),
+                    Zval::Str(PhpStr::new(b"unknown".to_vec())),
+                );
+                info.insert(Key::from_bytes(b"options"), Zval::Array(Rc::new(PhpArray::new())));
+            }
+        },
     }
     Ok(Zval::Array(Rc::new(info)))
 }
@@ -331,14 +443,14 @@ pub fn password_needs_rehash(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpEr
         }
     }
     let hash = ctx.to_zstr(&args[0]);
-    let want_bcrypt = match args.get(1) {
-        None | Some(Zval::Null) | Some(Zval::Long(1)) => true,
-        Some(v) => ctx.to_zstr(v).as_bytes() == b"2y",
+    let want = match args.get(1) {
+        None => Some(PwAlgo::Bcrypt),
+        Some(v) => pw_algo(v, ctx),
     };
-    match bcrypt_cost(hash.as_bytes()) {
+    match (bcrypt_cost(hash.as_bytes()), want) {
         // A bcrypt hash needs a rehash if a different algorithm is requested or the
         // cost differs from the requested one.
-        Some(cost) if want_bcrypt => {
+        (Some(cost), Some(PwAlgo::Bcrypt)) => {
             let want_cost = match args.get(2) {
                 Some(Zval::Array(a)) => a
                     .get(&Key::from_bytes(b"cost"))
@@ -348,14 +460,30 @@ pub fn password_needs_rehash(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpEr
             };
             Ok(Zval::Bool(cost != want_cost))
         }
+        // An argon2 hash matches when the same variant AND the same cost
+        // triple are requested.
+        (None, Some(want @ (PwAlgo::Argon2i | PwAlgo::Argon2id))) => {
+            let Some((name, m, t, p)) = argon2_info(hash.as_bytes()) else {
+                return Ok(Zval::Bool(true));
+            };
+            let same_alg = (name == "argon2i") == (want == PwAlgo::Argon2i);
+            let opts = match args.get(2) {
+                Some(Zval::Array(a)) => Some(a.clone()),
+                _ => None,
+            };
+            let (wm, wt, wp) = argon2_options(opts.as_deref(), ctx);
+            Ok(Zval::Bool(!(same_alg && m == wm && t == wt && p == wp)))
+        }
         _ => Ok(Zval::Bool(true)),
     }
 }
 
-/// `password_algos(): array` — the identifiers available (bcrypt only here).
+/// `password_algos(): array` — the identifiers available.
 pub fn password_algos(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let mut arr = PhpArray::new();
     let _ = arr.append(Zval::Str(PhpStr::new(b"2y".to_vec())));
+    let _ = arr.append(Zval::Str(PhpStr::new(b"argon2i".to_vec())));
+    let _ = arr.append(Zval::Str(PhpStr::new(b"argon2id".to_vec())));
     Ok(Zval::Array(Rc::new(arr)))
 }
 

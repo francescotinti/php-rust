@@ -7519,7 +7519,7 @@ impl<'m> Vm<'m> {
                     if let Some(recv) = self.as_arrayaccess(&v) {
                         v = self.call_method_sync(recv, b"offsetGet", vec![k.clone()])?;
                     } else {
-                        v = arrays::read_dim_warn(&v, k, &mut self.diags);
+                        v = arrays::read_dim_warn(&v, k, &mut self.diags)?;
                     }
                 }
                 ArgPlaceStep::Prop(n) => {
@@ -12236,18 +12236,12 @@ mod tests {
     }
 
     #[test]
-    fn goto_into_transparent_block_is_runtime_fatal() {
-        // D-45.1: jumping *into* an if/try/plain block is scoped out — a run-time
-        // Error matching the tree-walker (no output, since the goto fires first).
-        let o = vm_outcome(b"<?php goto a; if (true) { a: echo 'x'; }");
-        assert!(o.stdout.is_empty(), "expected no output, got {:?}", o.stdout);
-        match o.fatal {
-            Some(PhpError::Error(m)) => assert!(
-                m.contains("'goto' into a block is not supported") && m.contains("D-45.1"),
-                "message was: {m}"
-            ),
-            other => panic!("expected goto-into-block Error, got {other:?}"),
-        }
+    fn goto_into_transparent_block_jumps() {
+        // WP-18: jumping *into* an if/try/plain block is valid PHP and, on the
+        // flat bytecode, just a patched `Jump` — the label's code runs.
+        // (Entering a loop/switch body stays the LOWERING's compile fatal,
+        // "'goto' into loop or switch statement is disallowed".)
+        assert_eq!(vm_stdout(b"<?php goto a; if (true) { a: echo 'x'; }"), b"x");
     }
 
     #[test]

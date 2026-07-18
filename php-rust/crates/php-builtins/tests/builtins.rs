@@ -3251,16 +3251,12 @@ fn goto_into_finally_is_compile_fatal() {
 }
 
 #[test]
-fn goto_into_transparent_block_is_scoped_out() {
-    // D-45.1: jumping *into* an `if`/`try`/`catch`/plain block is valid PHP
-    // (would print "x") but the tree-walker cannot land mid-block. Lowering
-    // allows it (PHP-faithful: no compile fatal), and the unresolved jump is
-    // surfaced as a deterministic runtime fatal rather than silent wrong output.
-    let r = goto_fatal("<?php goto a; if (true) { a: echo 'x'; }");
-    assert!(
-        r.contains("'goto' into a block is not supported") && r.contains("D-45.1"),
-        "got: {r}"
-    );
+fn goto_into_transparent_block_jumps() {
+    // WP-18: jumping *into* an `if`/`try`/`catch`/plain block is valid PHP and
+    // now lands on the label (flat bytecode: a patched `Jump`); WP's HTML API
+    // processor jumps from a `switch` case into a sibling `if` block.
+    assert_eq!(out("<?php goto a; if (true) { a: echo 'x'; }"), "x");
+    assert_eq!(out("<?php goto a; try { a: echo 't'; } catch (Exception $e) {}"), "t");
 }
 
 #[test]

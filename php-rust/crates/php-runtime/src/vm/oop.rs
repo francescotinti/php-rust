@@ -587,7 +587,11 @@ impl<'m> Vm<'m> {
     /// `eval::object_cast`.
     pub(super) fn object_cast(&mut self, v: Zval) -> Result<Zval, PhpError> {
         match v.deref_clone() {
-            obj @ Zval::Object(_) => Ok(obj),
+            // Any object-flavoured value passes through unchanged: in PHP
+            // `(object)$o` on an object (closures and generators included) is
+            // the SAME instance — WP's `_wp_filter_build_unique_id` relies on
+            // `spl_object_id((object)$closure)` being stable across calls.
+            obj @ (Zval::Object(_) | Zval::Closure(_) | Zval::Generator(_)) => Ok(obj),
             Zval::Array(a) => {
                 let obj = self.alloc_stdclass()?;
                 if let Zval::Object(o) = &obj {

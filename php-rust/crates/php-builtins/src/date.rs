@@ -1082,6 +1082,10 @@ struct RelExpr {
     set_day: Option<i64>,
     set_time: Option<(i64, i64, i64)>,
     weekday: Option<(i64, WeekdayMode)>,
+    /// timelib's special "week" text form (`next|last|this week`): jump to the
+    /// MONDAY of the current week, then `n` weeks over, preserving the time —
+    /// unlike the numeric `+2 weeks`, which is a plain day delta.
+    week_of: Option<i64>,
     first_day: bool,
     last_day: bool,
 }
@@ -1222,11 +1226,58 @@ fn parse_rel_expr(s: &str) -> Option<RelExpr> {
                         "this" => 0,
                         _ => -1,
                     };
-                    if !apply_unit(&mut r, unit, n) {
+                    if unit == "week" {
+                        // Text form: Monday-of-week jump, time preserved.
+                        r.week_of = Some(n);
+                    } else if !apply_unit(&mut r, unit, n) {
                         return None;
                     }
                 }
                 i += 1;
+            }
+            // A time-of-day inside a relative expression ("next Sunday 1pm",
+            // "yesterday 08:15", "next Sunday 13:45:10"): timelib applies
+            // tokens left-to-right, so a time AFTER a weekday overrides its
+            // midnight reset while "3pm tomorrow" still ends at midnight
+            // (oracle-pinned, WP-18 wpCommunityEvents). Meridian arrives as
+            // its own token ("pm") because split_fused cuts digit/letter
+            // boundaries; a meridian hour outside 1..=12 or a 24h hour above
+            // 23 is a parse failure ("next Sunday 27:00" → false).
+            _ if t.contains(':') && t.bytes().all(|b| b.is_ascii_digit() || b == b':') => {
+                let mut parts = t.split(':');
+                let hp = parts.next()?;
+                let mp = parts.next()?;
+                let sp = parts.next();
+                if parts.next().is_some() {
+                    return None;
+                }
+                let num = |p: &str| -> Option<i64> {
+                    ((1..=2).contains(&p.len())).then(|| p.parse().ok())?
+                };
+                let mut h = num(hp)?;
+                let m = num(mp).filter(|&m| m < 60)?;
+                let s = match sp {
+                    Some(p) => num(p).filter(|&s| s < 60)?,
+                    None => 0,
+                };
+                match toks.get(i + 1).map(|x| x.as_str()) {
+                    Some("am") | Some("pm") if !(1..=12).contains(&h) => return None,
+                    Some("am") => {
+                        if h == 12 {
+                            h = 0;
+                        }
+                        i += 1;
+                    }
+                    Some("pm") => {
+                        if h != 12 {
+                            h += 12;
+                        }
+                        i += 1;
+                    }
+                    _ if h > 23 => return None,
+                    _ => {}
+                }
+                r.set_time = Some((h, m, s));
             }
             _ if weekday_index(t).is_some() => {
                 r.weekday = Some((weekday_index(t)?, WeekdayMode::Bare));
@@ -1287,10 +1338,36 @@ fn parse_rel_expr(s: &str) -> Option<RelExpr> {
                 let n: i64 = num_tok.parse().ok()?;
                 let n = if neg { -n } else { n };
                 let unit = toks.get(i + 1 + extra)?.as_str();
-                if !apply_unit(&mut r, unit, n) {
-                    return None;
+                // Unsigned hour + meridian ("next Sunday 1pm", "… 1 pm") is a
+                // time-of-day, not a relnumber+unit pair.
+                if matches!(unit, "am" | "pm") && signs == 0 {
+                    if !(1..=12).contains(&n) {
+                        return None;
+                    }
+                    let h = match unit {
+                        "am" => {
+                            if n == 12 {
+                                0
+                            } else {
+                                n
+                            }
+                        }
+                        _ => {
+                            if n == 12 {
+                                n
+                            } else {
+                                n + 12
+                            }
+                        }
+                    };
+                    r.set_time = Some((h, 0, 0));
+                    i += 1;
+                } else {
+                    if !apply_unit(&mut r, unit, n) {
+                        return None;
+                    }
+                    i += 1 + extra;
                 }
-                i += 1 + extra;
             }
         }
         applied = true;
@@ -1325,6 +1402,14 @@ fn parse_relative(s: &str, base: i64) -> Option<i64> {
         r.set_day.unwrap_or(dt.day() as i64)
     };
     day += r.dd;
+    if let Some(n) = r.week_of {
+        // Applied BEFORE any weekday adjustment: "monday next week" is the
+        // Monday of next week (week jump first, then the — now idle —
+        // weekday search), not two jumps ahead.
+        let midnight = civil_to_epoch(year, month, day, 0, 0, 0)?;
+        let dow = (midnight.div_euclid(86_400) + 4).rem_euclid(7);
+        day += n * 7 - (dow + 6).rem_euclid(7);
+    }
     if let Some((target, mode)) = r.weekday {
         let midnight = civil_to_epoch(year, month, day, 0, 0, 0)?;
         // 1970-01-01 was a Thursday; 0=Sunday.
@@ -2112,6 +2197,26 @@ fn strtotime_in(trimmed: &str, base: i64, zr: &ZoneRef) -> Option<(i64, Option<S
     }
     if lower == "now" {
         return Some((base, None));
+    }
+    // A pure zone-offset string ("-06:00", "+09:30"): PHP keeps "now"'s civil
+    // fields (in the request zone) and swaps the zone for the fixed offset —
+    // `new DateTime($d->format('P'))` round-trips this way (WP-18, dateI18n).
+    if let Some(rest) = trimmed.strip_prefix(['+', '-']) {
+        if rest.len() == 5
+            && rest.as_bytes()[2] == b':'
+            && rest.bytes().enumerate().all(|(i, c)| i == 2 || c.is_ascii_digit())
+        {
+            let h: i64 = rest[..2].parse().unwrap_or(0);
+            let m: i64 = rest[3..5].parse().unwrap_or(0);
+            if m < 60 {
+                let mut off = h * 3600 + m * 60;
+                if trimmed.starts_with('-') {
+                    off = -off;
+                }
+                let wall = base.saturating_add(zone_view(zr, base).off);
+                return Some((wall - off, Some(trimmed.to_string())));
+            }
+        }
     }
     if let Some((wall, zone)) = parse_absolute(trimmed).or_else(|| parse_textual(trimmed)) {
         return Some(match zone {

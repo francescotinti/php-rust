@@ -911,6 +911,8 @@ final class XMLParser {
     public $__hcdata = null;
     public $__hpi = null;
     public $__hdefault = null;
+    public $__hns_start = null;
+    public $__hns_end = null;
     public $__err = 0;
     public $__line = 1;
     public $__col = 0;
@@ -967,8 +969,16 @@ function xml_set_default_handler($parser, $handler) {
     $parser->__hdefault = __xml_handler_norm($parser, $handler);
     return true;
 }
-function xml_set_start_namespace_decl_handler($parser, $handler) { return true; }
-function xml_set_end_namespace_decl_handler($parser, $handler) { return true; }
+function xml_set_start_namespace_decl_handler($parser, $handler) {
+    $parser->__hns_start = __xml_handler_norm($parser, $handler);
+    return true;
+}
+function xml_set_end_namespace_decl_handler($parser, $handler) {
+    // Stored but never dispatched: PHP's libxml-backed ext/xml never fires
+    // the end-namespace handler (oracle-pinned).
+    $parser->__hns_end = __xml_handler_norm($parser, $handler);
+    return true;
+}
 function xml_set_notation_decl_handler($parser, $handler) { return true; }
 function xml_set_external_entity_ref_handler($parser, $handler) { return true; }
 function xml_set_unparsed_entity_decl_handler($parser, $handler) { return true; }
@@ -1008,6 +1018,16 @@ function xml_parse($parser, $data, $is_final = false) {
             case 'p':
                 if ($parser->__hpi !== null) {
                     call_user_func($parser->__hpi, $parser, $e[1], $e[2]);
+                }
+                break;
+            case 'n':
+                if ($parser->__hns_start !== null) {
+                    call_user_func($parser->__hns_start, $parser, $e[1], $e[2]);
+                }
+                break;
+            case 'd':
+                if ($parser->__hdefault !== null) {
+                    call_user_func($parser->__hdefault, $parser, $e[1]);
                 }
                 break;
             case 'x':

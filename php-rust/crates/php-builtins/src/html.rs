@@ -75,21 +75,25 @@ const HTML401_EXT: [(&[u8], u32); 152] = [
     (b"lsaquo", 8249), (b"rsaquo", 8250), (b"euro", 8364),
 ];
 
-fn flags_of(args: &[Zval], idx: usize, ctx: &mut Ctx) -> (bool, bool) {
+fn flags_of(args: &[Zval], idx: usize, ctx: &mut Ctx) -> (bool, bool, bool) {
     let flags = args
         .get(idx)
         .map(|v| convert::to_long_cast(v, ctx.diags))
         .unwrap_or(DEFAULT_FLAGS);
-    (flags & 1 != 0, flags & 2 != 0) // (single, double)
+    // Doctype bits (mask 48): ENT_HTML401=0 renders the apostrophe as the
+    // numeric `&#039;`; ENT_XML1/ENT_XHTML/ENT_HTML5 use the named `&apos;`
+    // (WP's esc_xml, WP-18). (single, double, apos_named).
+    (flags & 1 != 0, flags & 2 != 0, flags & 48 != 0)
 }
 
 /// Encode the five ASCII specials into `out`; returns true if `b` was special.
-fn encode_special(out: &mut Vec<u8>, b: u8, single: bool, double: bool) -> bool {
+fn encode_special(out: &mut Vec<u8>, b: u8, single: bool, double: bool, apos_named: bool) -> bool {
     match b {
         b'&' => out.extend_from_slice(b"&amp;"),
         b'<' => out.extend_from_slice(b"&lt;"),
         b'>' => out.extend_from_slice(b"&gt;"),
         b'"' if double => out.extend_from_slice(b"&quot;"),
+        b'\'' if single && apos_named => out.extend_from_slice(b"&apos;"),
         b'\'' if single => out.extend_from_slice(b"&#039;"),
         _ => return false,
     }
@@ -158,7 +162,7 @@ fn entity_len(s: &[u8]) -> Option<usize> {
 /// encode only the five ASCII specials.
 pub fn htmlspecialchars(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let s = super::string::str_at(args, ctx, 0, "htmlspecialchars", 1)?;
-    let (single, double) = flags_of(args, 1, ctx);
+    let (single, double, apos_named) = flags_of(args, 1, ctx);
     let double_encode = match args.get(3) {
         Some(v) => convert::to_bool(v, ctx.diags),
         None => true,
@@ -174,7 +178,7 @@ pub fn htmlspecialchars(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> 
                 continue;
             }
         }
-        if !encode_special(&mut out, b, single, double) {
+        if !encode_special(&mut out, b, single, double, apos_named) {
             out.push(b);
         }
         i += 1;
@@ -186,12 +190,12 @@ pub fn htmlspecialchars(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> 
 /// Latin-1 supplement named entities.
 pub fn htmlentities(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let s = super::string::str_at(args, ctx, 0, "htmlentities", 1)?;
-    let (single, double) = flags_of(args, 1, ctx);
+    let (single, double, apos_named) = flags_of(args, 1, ctx);
     let mut out = Vec::with_capacity(s.len());
     let mut i = 0;
     while i < s.len() {
         if s[i] < 0x80 {
-            if !encode_special(&mut out, s[i], single, double) {
+            if !encode_special(&mut out, s[i], single, double, apos_named) {
                 out.push(s[i]);
             }
             i += 1;
@@ -270,7 +274,7 @@ fn decode_all(s: &[u8], full: bool, single: bool, double: bool) -> Vec<u8> {
 /// `htmlspecialchars_decode($string, $flags = …)`: reverse the five specials.
 pub fn htmlspecialchars_decode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let s = super::string::str_at(args, ctx, 0, "htmlspecialchars_decode", 1)?;
-    let (single, double) = flags_of(args, 1, ctx);
+    let (single, double, _apos_named) = flags_of(args, 1, ctx);
     Ok(Zval::Str(PhpStr::new(decode_all(&s, false, single, double))))
 }
 
@@ -278,6 +282,6 @@ pub fn htmlspecialchars_decode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, Php
 /// entities as well as the five specials.
 pub fn html_entity_decode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let s = super::string::str_at(args, ctx, 0, "html_entity_decode", 1)?;
-    let (single, double) = flags_of(args, 1, ctx);
+    let (single, double, _apos_named) = flags_of(args, 1, ctx);
     Ok(Zval::Str(PhpStr::new(decode_all(&s, true, single, double))))
 }

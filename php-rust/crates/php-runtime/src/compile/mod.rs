@@ -340,6 +340,14 @@ struct FnCompiler<'a> {
     scope_path: Vec<u32>,
     /// Monotonic block-scope id source for `scope_path`.
     next_scope: u32,
+    /// Per block-scope id: whether a `goto` may NOT jump into it. Loop and
+    /// `switch` bodies (PHP: compile fatal) and `finally` bodies are opaque;
+    /// if/else, plain `{}`, `try` and `catch` bodies are transparent — PHP
+    /// allows jumping into those, and on this flat bytecode the jump is just a
+    /// `Jump` to the label (exception handlers are positional `exc_regions`,
+    /// so landing mid-`try` still finds its handler). WP's HTML API processor
+    /// jumps from a `switch` case into a sibling `if` block (WP-18).
+    scope_opaque: Vec<bool>,
     /// One entry per compiled `try` with a `finally`: the protected op range, the
     /// finally entry address, and the scope depth *outside* the try (its own level).
     /// `resolve_gotos` uses it to route a `goto` that leaves the protected region
@@ -413,6 +421,7 @@ impl<'a> FnCompiler<'a> {
             pending_gotos: Vec::new(),
             scope_path: Vec::new(),
             next_scope: 0,
+            scope_opaque: Vec::new(),
             goto_finally_meta: Vec::new(),
             static_vars: Vec::new(),
         }
@@ -504,12 +513,24 @@ impl<'a> FnCompiler<'a> {
     }
 
     fn block(&mut self, stmts: &[Stmt]) -> R<()> {
+        self.block_of(stmts, false)
+    }
+
+    /// A [`Self::block`] a `goto` may not jump into: loop/`switch`/`finally`
+    /// bodies (see `scope_opaque`).
+    fn opaque_block(&mut self, stmts: &[Stmt]) -> R<()> {
+        self.block_of(stmts, true)
+    }
+
+    fn block_of(&mut self, stmts: &[Stmt], opaque: bool) -> R<()> {
         // Open a fresh block scope so a `goto` *into* this block (from a shallower
         // scope) can be detected at `resolve_gotos` (D-45.1). Every compound body
         // (if/else, try/catch/finally, loops, plain `{ }`) and the function root
         // funnel through here, so sibling statements share one scope.
         let id = self.next_scope;
         self.next_scope += 1;
+        debug_assert_eq!(self.scope_opaque.len(), id as usize);
+        self.scope_opaque.push(opaque);
         self.scope_path.push(id);
         for s in stmts {
             self.stmt(s)?;
@@ -590,7 +611,7 @@ impl<'a> FnCompiler<'a> {
                 self.expr(cond)?;
                 let exit = self.emit(Op::JumpIfFalse(Addr::MAX));
                 self.loops.push(LoopCtx::default());
-                self.block(body)?;
+                self.opaque_block(body)?;
                 self.emit(Op::Jump(top));
                 let end = self.here();
                 self.patch(exit, Op::JumpIfFalse(end));
@@ -599,7 +620,7 @@ impl<'a> FnCompiler<'a> {
             StmtKind::DoWhile { body, cond } => {
                 let top = self.here();
                 self.loops.push(LoopCtx::default());
-                self.block(body)?;
+                self.opaque_block(body)?;
                 let cont = self.here();
                 self.expr(cond)?;
                 self.emit(Op::JumpIfTrue(top));
@@ -615,7 +636,7 @@ impl<'a> FnCompiler<'a> {
                 let top = self.here();
                 let exit = self.cond_list(cond)?;
                 self.loops.push(LoopCtx::default());
-                self.block(body)?;
+                self.opaque_block(body)?;
                 let cont = self.here();
                 for e in step {
                     self.expr(e)?;
@@ -641,7 +662,7 @@ impl<'a> FnCompiler<'a> {
                         let cont = self.here();
                         let fetch = self.emit(Op::IterNextRef { value: *value, key: *key, end: Addr::MAX });
                         self.loops.push(LoopCtx { has_iter: true, ..LoopCtx::default() });
-                        self.block(body)?;
+                        self.opaque_block(body)?;
                         self.emit(Op::Jump(cont));
                         let exhaust = self.here();
                         self.patch(fetch, Op::IterNextRef { value: *value, key: *key, end: exhaust });
@@ -686,7 +707,7 @@ impl<'a> FnCompiler<'a> {
                             let cont = self.here();
                             let fetch = self.emit(Op::IterNextRef { value: *value, key: *key, end: Addr::MAX });
                             self.loops.push(LoopCtx { has_iter: true, ..LoopCtx::default() });
-                            self.block(body)?;
+                            self.opaque_block(body)?;
                             self.emit(Op::Jump(cont));
                             let exhaust = self.here();
                             self.patch(fetch, Op::IterNextRef { value: *value, key: *key, end: exhaust });
@@ -712,7 +733,7 @@ impl<'a> FnCompiler<'a> {
                         let cont = self.here();
                         let fetch = self.emit(Op::IterNextRef { value: *value, key: *key, end: Addr::MAX });
                         self.loops.push(LoopCtx { has_iter: true, ..LoopCtx::default() });
-                        self.block(body)?;
+                        self.opaque_block(body)?;
                         self.emit(Op::Jump(cont));
                         let exhaust = self.here();
                         self.patch(fetch, Op::IterNextRef { value: *value, key: *key, end: exhaust });
@@ -729,7 +750,7 @@ impl<'a> FnCompiler<'a> {
                 let cont = self.here(); // `continue` re-fetches
                 let fetch = self.emit(Op::IterNext { value: *value, key: *key, end: Addr::MAX });
                 self.loops.push(LoopCtx { has_iter: true, ..LoopCtx::default() });
-                self.block(body)?;
+                self.opaque_block(body)?;
                 self.emit(Op::Jump(cont));
                 let exhaust = self.here();
                 self.patch(fetch, Op::IterNext { value: *value, key: *key, end: exhaust });
@@ -914,14 +935,22 @@ impl<'a> FnCompiler<'a> {
                     String::from_utf8_lossy(&name)
                 )));
             };
-            // A `goto` may only target a label in its own block or an enclosing one
-            // (the label scope must be a prefix of the goto scope). A deeper or
-            // divergent target is a jump *into* a transparent block, which the
-            // tree-walker scopes out — match it with the same run-time fatal (D-45.1),
-            // raised in place so output before the goto still flushes.
-            let into_block = label_scope.len() > goto_scope.len()
-                || goto_scope[..label_scope.len()] != label_scope[..];
-            if into_block {
+            // A `goto` may target a label in its own block, an enclosing one, or —
+            // on this flat bytecode — inside any chain of TRANSPARENT blocks
+            // (if/else, plain `{}`, try, catch): PHP allows those jumps and the
+            // patched `Jump` lands correctly (exception handlers are positional).
+            // Entering an OPAQUE block (loop/`switch` body — PHP: compile fatal —
+            // or `finally`) keeps the run-time fatal (D-45.1), raised in place so
+            // output before the goto still flushes.
+            let common = goto_scope
+                .iter()
+                .zip(label_scope.iter())
+                .take_while(|(a, b)| a == b)
+                .count();
+            let enters_opaque = label_scope[common..]
+                .iter()
+                .any(|&id| self.scope_opaque.get(id as usize).copied().unwrap_or(true));
+            if enters_opaque {
                 let k = self.konst(Const::Str(
                     format!(
                         "'goto' into a block is not supported (label '{}', D-45.1)",

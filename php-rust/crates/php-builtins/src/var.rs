@@ -1443,6 +1443,10 @@ pub(crate) fn extension_loaded(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, Php
     let lc = name.as_bytes().to_ascii_lowercase();
     Ok(Zval::Bool(LOADED_EXTENSIONS.contains(&lc.as_slice())))
 }
+/// zend_version(): the Zend Engine version the oracle reports for PHP 8.5.7.
+pub(crate) fn zend_version(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    Ok(Zval::Str(PhpStr::new(b"4.5.7".to_vec())))
+}
 /// phpversion($extension = null): with no argument, the PHP version ("8.5.7");
 /// with an extension name, that extension's version when loaded — phpr reports
 /// the PHP version for its bundled extensions, matching the oracle (e.g.

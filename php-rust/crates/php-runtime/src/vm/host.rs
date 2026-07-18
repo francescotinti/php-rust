@@ -672,10 +672,6 @@ impl<'m> super::Vm<'m> {
             ));
         }
         let json = convert::to_zstr_cast(first, &mut self.diags).as_bytes().to_vec();
-        let assoc = match args.get(1) {
-            Some(v) => convert::to_bool(v, &mut self.diags),
-            None => false,
-        };
         // `$depth` is the nesting limit (default 512); a non-positive one is a
         // ValueError before any parsing (json_decode_error).
         let depth = match args.get(2) {
@@ -691,12 +687,48 @@ impl<'m> super::Vm<'m> {
             .get(3)
             .map(|v| convert::to_long_cast(v, &mut self.diags))
             .unwrap_or(0);
+        // `$associative` is `?bool`: an explicit NULL defers to the
+        // JSON_OBJECT_AS_ARRAY (1) flag — WP's block processor decodes with
+        // `json_decode($s, null, 512, JSON_OBJECT_AS_ARRAY | …)` (WP-18).
+        let assoc = match args.get(1) {
+            Some(v) => match v.deref_clone() {
+                Zval::Null | Zval::Undef => flags & 1 != 0,
+                other => convert::to_bool(&other, &mut self.diags),
+            },
+            None => false,
+        };
         // JSON must be valid UTF-8; malformed input is JSON_ERROR_UTF8 (not a
         // syntax error) and decodes to null — UNLESS JSON_INVALID_UTF8_IGNORE
-        // (0x100000) / JSON_INVALID_UTF8_SUBSTITUTE (0x200000) ask to scrub it
-        // first (that PHP-exact per-byte substitution is not modelled yet, so
-        // those flagged inputs fall through to the parser).
+        // (0x100000) drops the invalid bytes or JSON_INVALID_UTF8_SUBSTITUTE
+        // (0x200000) replaces each invalid BYTE with U+FFFD ("\xF0\x9F" → two
+        // replacement chars, oracle-pinned) before parsing.
         let utf8_scrub = flags & (0x10_0000 | 0x20_0000) != 0;
+        let json = if utf8_scrub && std::str::from_utf8(&json).is_err() {
+            let substitute = flags & 0x20_0000 != 0;
+            let mut out = Vec::with_capacity(json.len());
+            let mut rest = &json[..];
+            loop {
+                match std::str::from_utf8(rest) {
+                    Ok(_) => {
+                        out.extend_from_slice(rest);
+                        break;
+                    }
+                    Err(e) => {
+                        out.extend_from_slice(&rest[..e.valid_up_to()]);
+                        let bad = e.error_len().unwrap_or(rest.len() - e.valid_up_to());
+                        if substitute {
+                            for _ in 0..bad {
+                                out.extend_from_slice("\u{FFFD}".as_bytes());
+                            }
+                        }
+                        rest = &rest[e.valid_up_to() + bad..];
+                    }
+                }
+            }
+            out
+        } else {
+            json
+        };
         if !utf8_scrub && std::str::from_utf8(&json).is_err() {
             self.json_last_error = 5; // JSON_ERROR_UTF8
             if flags & 4_194_304 != 0 {

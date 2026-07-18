@@ -2153,6 +2153,14 @@ pub fn copy(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     }
     let from = arg_os_path(argv, ctx);
     let to = os_path_at(argv, ctx, 1);
+    // Copying a file onto itself is PHP's silent `false` (php_copy_file_ex
+    // compares the resolved paths; WP's WP_Filesystem_Direct::copy relies on
+    // it when source == destination, WP-18).
+    if let (Ok(a), Ok(b)) = (std::fs::canonicalize(&from), std::fs::canonicalize(&to)) {
+        if a == b {
+            return Ok(Zval::Bool(false));
+        }
+    }
     match std::fs::copy(&from, &to) {
         Ok(_) => Ok(Zval::Bool(true)),
         Err(e) => {

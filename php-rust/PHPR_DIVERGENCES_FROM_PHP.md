@@ -479,6 +479,40 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-18 (sessione WordPress-18): 🏁 **chiusura dei 56 diff per nome di
+  run8** (tutti i cluster + singleton attaccabili). Fix engine: ⭐ `(object)$x`
+  IDENTITARIO su Closure/Generator (WP `_wp_filter_build_unique_id` usa
+  `spl_object_id((object)$callback)` — il wrapper nuovo rompeva remove_filter:
+  Tests_Theme 6F) · ⭐ **branch reset group `(?|…)`** emulato con riscrittura
+  `(?:…)` + rinumerazione e `Engine::Remap` fisico→logico (Duotone 6F) ·
+  ⭐ **goto in blocchi trasparenti** (if/try/catch/`{}`) ora salta davvero sul
+  bytecode piatto; loop/switch restano il fatal di lowering, finally il suo
+  (html-api 5E) · ⭐ string-offset: chiave stringa non-integrale → isset false/
+  empty true (WP style-engine) e read = TypeError "Cannot access offset of
+  type string on string" (themeJson 2F) · `static::${$n}` come class-value
+  runtime via Op::ClassNameStatic (themeJson 2E) · ⭐ **flush dei diag di
+  FetchDim al punto di raise** (un handler che LANCIA deve svolgere dallo
+  statement colpevole — PHPUnit expectWarning, Tests_Locale) · __unset magic
+  su path multi-step (`unset($this->a->b)`, WpListTable/TextDiffRenderer) ·
+  strtotime: **orario nelle espressioni relative** ("next Sunday 1pm",
+  "yesterday 08:15", meridian spaziato) + **"next|last|this week" = lunedì
+  della settimana** (tempo conservato) (wpCommunityEvents 5, DateI18n) ·
+  DateTime("−06:00") = campi "now" + zona offset · 'B' (Swatch) zone-independent
+  in DateTime::format · mb_strlen su input invalido = **maximal subpart**
+  WHATWG per-range (wpUtf8CodePointCount 4F) · json_decode: `$associative=null`
+  → decide JSON_OBJECT_AS_ARRAY; INVALID_UTF8_SUBSTITUTE/IGNORE scrub per-byte
+  (BlockProcessor 5F) · regex: **escape ottali nelle classi** `[\200-\377]` →
+  `\x{HH}` (PHPMailer 8-bit, wp_mail) · htmlspecialchars: doctype XML1/XHTML/
+  HTML5 → `&apos;` (esc_xml) · copy(stesso file) = false · zend_version() ·
+  ZipArchive::addEmptyDir · iconv_mime_decode(_headers) RFC 2047 ·
+  ext/xml: eventi **start_ns** (prefix default = false, mai end_ns) e default
+  handler per COMMENTI interi; testo del prologo mai consegnato · **argon2i/
+  argon2id** in password_* (crate argon2, PHC) + costanti PASSWORD_ARGON2* ·
+  **ext/intl subset**: normalizer_normalize/is_normalized (unicode-
+  normalization) + classe Normalizer + "intl" in extension_loaded (RemoveAccents
+  NFD). Divergenze residue DICHIARATE: sitemaps 3 (serve XSLTProcessor —
+  candidato libxslt FFI in WP-19), wpIsIniValueChangeable #4 (serve ext/Tidy),
+  ftp wrapper (deciso), stderr "PHP Xxx:" CLI mai emesso (nota storica).
 - 2026-07-18 (sessione WordPress-17): 🏁 **chiusura di massa dei cluster della
   full-suite**: tutti i cluster maggiori del triage WP-16 sono a parità per
   nome (Template 86 OK · php-ai-client 255 OK · Privacy export 31 OK · Kses

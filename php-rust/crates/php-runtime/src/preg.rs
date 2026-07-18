@@ -245,6 +245,44 @@ pub enum Engine {
     /// positive offset (symfony/expression-language's Lexer tokenises that
     /// way), while lookbehinds must still see the bytes before the offset.
     Anchored(Box<Engine>),
+    /// PCRE branch-reset group `(?|…)` emulation (no backend supports it): the
+    /// inner engine compiled from a body where `(?|` became `(?:` — so every
+    /// alternative's groups got fresh sequential PHYSICAL numbers — and
+    /// `map[phys]` is the LOGICAL group each physical slot feeds (alternatives
+    /// share logical numbers, as PCRE renumbers them). `logical_len` counts the
+    /// logical slots including the whole match; a logical group's value is the
+    /// first participating physical group mapped onto it. WP duotone's
+    /// `(?|var:preset\|duotone\|(\S+)|var\(--wp--preset--duotone--(\S+)\))`
+    /// needs `$matches[1]` filled from either alternative.
+    Remap {
+        inner: Box<Engine>,
+        map: Vec<usize>,
+        logical_len: usize,
+    },
+}
+
+/// Project a physical capture set through a branch-reset `map` (see
+/// [`Engine::Remap`]): logical slot L takes the first participating physical
+/// group with `map[p] == L`; slot 0 is the whole match, unchanged.
+fn remap_caps(c: &Caps, map: &[usize], logical_len: usize) -> Caps {
+    let mut groups: Vec<Option<CapMatch>> = Vec::with_capacity(logical_len);
+    groups.resize_with(logical_len, || None);
+    let copy = |m: &CapMatch| CapMatch {
+        start: m.start,
+        end: m.end,
+        text: m.text.clone(),
+    };
+    if let Some(m) = c.get(0) {
+        groups[0] = Some(copy(m));
+    }
+    for p in 1..c.len() {
+        if let (Some(&l), Some(m)) = (map.get(p), c.get(p)) {
+            if l < logical_len && groups[l].is_none() {
+                groups[l] = Some(copy(m));
+            }
+        }
+    }
+    Caps { groups }
 }
 
 impl Engine {
@@ -257,6 +295,7 @@ impl Engine {
             // other backends include it, so add one for a common convention.
             Engine::Onig(r) => r.captures_len() + 1,
             Engine::Anchored(inner) => inner.captures_len(),
+            Engine::Remap { logical_len, .. } => *logical_len,
         }
     }
 
@@ -295,6 +334,24 @@ impl Engine {
                 names
             }
             Engine::Anchored(inner) => inner.capture_names(),
+            // Physical names project onto their logical slots (first wins);
+            // names inside a branch-reset group are rejected by the rewriter,
+            // so only the symmetric outside-`(?|` names ever land here.
+            Engine::Remap {
+                inner,
+                map,
+                logical_len,
+            } => {
+                let mut names = vec![None; *logical_len];
+                for (p, n) in inner.capture_names().into_iter().enumerate().skip(1) {
+                    if let (Some(&l), Some(name)) = (map.get(p), n) {
+                        if l < *logical_len && names[l].is_none() {
+                            names[l] = Some(name);
+                        }
+                    }
+                }
+                names
+            }
         });
     }
 
@@ -306,6 +363,11 @@ impl Engine {
             Engine::Fancy(r) => r.captures(text).ok().flatten().map(|c| caps_from_fancy(&c)),
             Engine::Onig(r) => r.captures(text).map(|c| caps_from_onig(&c)),
             Engine::Anchored(_) => self.captures_at(text, 0),
+            Engine::Remap {
+                inner,
+                map,
+                logical_len,
+            } => inner.captures(text).map(|c| remap_caps(&c, map, *logical_len)),
         }
     }
 
@@ -346,6 +408,13 @@ impl Engine {
             Engine::Anchored(inner) => inner
                 .captures_at(text, start)
                 .filter(|c| c.get(0).is_some_and(|m| m.start == start)),
+            Engine::Remap {
+                inner,
+                map,
+                logical_len,
+            } => inner
+                .captures_at(text, start)
+                .map(|c| remap_caps(&c, map, *logical_len)),
         }
     }
 
@@ -385,6 +454,15 @@ impl Engine {
                 }
                 out
             }
+            Engine::Remap {
+                inner,
+                map,
+                logical_len,
+            } => inner
+                .captures_iter(text)
+                .iter()
+                .map(|c| remap_caps(c, map, *logical_len))
+                .collect(),
         }
     }
 
@@ -406,9 +484,9 @@ impl Engine {
             // expand `repl` (already normalised to `${n}` / `$$` by
             // `translate_replacement`) by hand against every match.
             Engine::Onig(r) => onig_replace_all(r, text, repl),
-            // Anchored replace: only the contiguous run of matches from each
-            // scan position is replaced (same walk as `captures_iter`).
-            Engine::Anchored(_) => {
+            // Anchored/Remap replace: manual walk over `captures_iter` (which
+            // already filters/remaps), expanding `${n}` against each match.
+            Engine::Anchored(_) | Engine::Remap { .. } => {
                 let mut out = String::new();
                 let mut last = 0usize;
                 for c in self.captures_iter(text) {
@@ -439,7 +517,7 @@ impl Engine {
                 .map(|c| c.into_owned())
                 .unwrap_or_else(|_| text.to_string()),
             // Onig/Anchored: the same manual walk as `replace_all`, capped.
-            Engine::Onig(_) | Engine::Anchored(_) => {
+            Engine::Onig(_) | Engine::Anchored(_) | Engine::Remap { .. } => {
                 let mut out = String::new();
                 let mut last = 0usize;
                 for (n, c) in self.captures_iter(text).into_iter().enumerate() {
@@ -580,6 +658,33 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
         &body_owned
     };
 
+    // Branch-reset groups `(?|…)` (WP duotone) rewrite FIRST — later rewriters
+    // neither add nor remove capturing groups, so the physical→logical map
+    // stays valid; the built engine is wrapped in [`Engine::Remap`] below.
+    let mut br_remap: Option<(Vec<usize>, usize)> = None;
+    let body: std::borrow::Cow<str> = if body.contains("(?|") {
+        match rewrite_branch_reset(body) {
+            Some((rw, map, llen)) => {
+                br_remap = Some((map, llen));
+                std::borrow::Cow::Owned(rw)
+            }
+            None => std::borrow::Cow::Borrowed(body),
+        }
+    } else {
+        std::borrow::Cow::Borrowed(body)
+    };
+
+    // Octal escapes inside character classes normalise to `\x{HH}` before any
+    // other rewriting (they would confuse the class scanners downstream).
+    let body: std::borrow::Cow<str> = if body.contains('\\') && body.contains('[') {
+        match rewrite_octal_class_escapes(&body) {
+            Some(rw) => std::borrow::Cow::Owned(rw),
+            None => body,
+        }
+    } else {
+        body
+    };
+
     // PCRE's default `$` (no `m`, no `D`) is zero-width and matches at the end of
     // the subject OR just before a single trailing newline. The `regex` crate's
     // `$` is `\z`-only (absolute end), so a bare `$` is rewritten to the
@@ -589,12 +694,12 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
     // `D` under `m`) — in both cases the rewrite is skipped.
     let body: std::borrow::Cow<str> =
         if !flags.contains(&b'm') && !flags.contains(&b'D') {
-            match rewrite_dollar_anchor(body) {
+            match rewrite_dollar_anchor(&body) {
                 Some(rw) => std::borrow::Cow::Owned(rw),
-                None => std::borrow::Cow::Borrowed(body),
+                None => body,
             }
         } else {
-            std::borrow::Cow::Borrowed(body)
+            body
         };
 
     // PCRE reads `\<` and `\>` as redundant escapes of the LITERAL `<`/`>`;
@@ -708,7 +813,17 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
     // blind lookbehinds. Instead the compiled engine is wrapped in
     // [`Engine::Anchored`], whose searches filter on `match.start == offset`.
     let anchored = flags.contains(&b'A');
-    let wrap = |e: Engine| if anchored { Engine::Anchored(Box::new(e)) } else { e };
+    let wrap = |e: Engine| {
+        let e = if anchored { Engine::Anchored(Box::new(e)) } else { e };
+        match &br_remap {
+            Some((map, llen)) => Engine::Remap {
+                inner: Box::new(e),
+                map: map.clone(),
+                logical_len: *llen,
+            },
+            None => e,
+        }
+    };
 
     // First attempt: the fast `regex` engine, with flags applied via the builder.
     // The same i/m/s/x flags are accumulated as an inline `(?..)` prefix for the
@@ -1381,6 +1496,219 @@ fn demix_numbered_backrefs(body: &str) -> Option<String> {
         i += 1;
     }
     String::from_utf8(out).ok()
+}
+
+/// Rewrite PCRE branch-reset groups `(?|alt1|alt2)` — unsupported by every
+/// backend — into plain `(?:…)` groups, returning the rewritten body, the
+/// physical→logical capture map and the logical slot count (whole match
+/// included) for [`Engine::Remap`]. Inside `(?|`, PCRE restarts group
+/// numbering at every top-level alternative and continues after the group
+/// from the widest alternative; the rewrite keeps the alternatives' groups as
+/// distinct sequential physical slots and records which logical number each
+/// one carries. Correct-or-absent: `None` (→ compile fails, as before this
+/// rewriter existed) on nested `(?|`, named groups inside `(?|`, conditionals
+/// `(?(`, or numbered/`\g`/`\k` backreferences anywhere in the pattern —
+/// renumbering would silently break those.
+fn rewrite_branch_reset(body: &str) -> Option<(String, Vec<usize>, usize)> {
+    let b = body.as_bytes();
+    // A backref after renumbering would point at the wrong group: bail.
+    {
+        let mut i = 0;
+        while i + 1 < b.len() {
+            if b[i] == b'\\' {
+                match b[i + 1] {
+                    b'1'..=b'9' | b'g' | b'k' => return None,
+                    _ => {}
+                }
+                i += 2;
+            } else {
+                i += 1;
+            }
+        }
+    }
+
+    enum Frame {
+        /// A branch-reset group: (logical base, groups in current alt, max alt width).
+        Br(usize, usize, usize),
+        Plain,
+    }
+    let mut out = String::with_capacity(body.len());
+    let mut stack: Vec<Frame> = Vec::new();
+    let mut in_br = false; // any Br frame on the stack (at most one; nested bails)
+    let mut phys = 0usize; // physical capturing groups emitted so far
+    let mut logical = 0usize; // logical group counter outside/after `(?|`
+    let mut map: Vec<usize> = vec![0]; // map[phys] = logical
+    let mut found = false;
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'\\' if i + 1 < b.len() => {
+                out.push_str(&body[i..][..body[i..].chars().take(2).map(char::len_utf8).sum()]);
+                // Escapes are 1 byte of `\` + one char; copy both verbatim.
+                let step = 1 + body[i + 1..].chars().next().map_or(1, char::len_utf8);
+                i += step;
+                continue;
+            }
+            b'[' => {
+                // Character class: copy verbatim to its unescaped `]` (a `]`
+                // in first position — after optional `^` — is a literal).
+                let start = i;
+                i += 1;
+                if b.get(i) == Some(&b'^') {
+                    i += 1;
+                }
+                if b.get(i) == Some(&b']') {
+                    i += 1;
+                }
+                while i < b.len() && b[i] != b']' {
+                    i += if b[i] == b'\\' { 2 } else { 1 };
+                }
+                i = (i + 1).min(b.len());
+                out.push_str(&body[start..i]);
+                continue;
+            }
+            b'(' => {
+                if b[i + 1..].starts_with(b"?|") {
+                    if in_br {
+                        return None; // nested branch reset: not modelled
+                    }
+                    found = true;
+                    in_br = true;
+                    stack.push(Frame::Br(logical, 0, 0));
+                    out.push_str("(?:");
+                    i += 3;
+                    continue;
+                }
+                if b[i + 1..].starts_with(b"?(") {
+                    return None; // conditional: group numbers would shift
+                }
+                // Determine whether this `(` captures, and whether it is named.
+                let rest = &b[i + 1..];
+                let (capturing, named) = if rest.first() == Some(&b'?') {
+                    match rest.get(1) {
+                        Some(b'<') => match rest.get(2) {
+                            Some(b'=') | Some(b'!') => (false, false), // lookbehind
+                            _ => (true, true),                         // (?<name>
+                        },
+                        Some(b'P') if rest.get(2) == Some(&b'<') => (true, true),
+                        Some(b'\'') => (true, true), // (?'name'
+                        _ => (false, false),         // (?:  (?=  (?!  (?>  (?i…)  (?#
+                    }
+                } else {
+                    (true, false)
+                };
+                if capturing {
+                    phys += 1;
+                    if in_br {
+                        if named {
+                            return None; // names across alternatives: not modelled
+                        }
+                        // Assign via the Br frame: numbering restarts per alt.
+                        let Some(Frame::Br(base, alt, max)) = stack
+                            .iter_mut()
+                            .rev()
+                            .find(|f| matches!(f, Frame::Br(..)))
+                        else {
+                            unreachable!("in_br implies a Br frame");
+                        };
+                        *alt += 1;
+                        map.push(*base + *alt);
+                        *max = (*max).max(*alt);
+                    } else {
+                        logical += 1;
+                        map.push(logical);
+                    }
+                }
+                stack.push(Frame::Plain);
+                out.push('(');
+                i += 1;
+                continue;
+            }
+            b'|' => {
+                // A top-level alternative separator of the branch-reset group
+                // resets its per-alternative counter. (The Br frame sits just
+                // below the Plain frame pushed for its own `(` — so "top
+                // level" means the innermost frame is that Plain marker
+                // replaced here by checking the Br is the LAST frame.)
+                if let Some(Frame::Br(_, alt, _)) = stack.last_mut() {
+                    *alt = 0;
+                }
+                out.push('|');
+                i += 1;
+                continue;
+            }
+            b')' => {
+                match stack.pop() {
+                    Some(Frame::Br(base, _, max)) => {
+                        in_br = false;
+                        logical = base + max;
+                    }
+                    _ => {}
+                }
+                out.push(')');
+                i += 1;
+                continue;
+            }
+            _ => {
+                let ch = body[i..].chars().next()?;
+                out.push(ch);
+                i += ch.len_utf8();
+                continue;
+            }
+        }
+    }
+    if !found {
+        return None;
+    }
+    Some((out, map, logical + 1))
+}
+
+/// PCRE octal escapes inside character classes (`[\200-\377]`, PHPMailer's
+/// 8-bit detector): the Rust engines misread them, so normalise to `\x{HH}`
+/// (valid in `regex`, fancy-regex and — for high values — already in the form
+/// `onigify_hex_escapes` emits). Outside classes `\ddd` may be a
+/// backreference, so those are left untouched. `None` = no octal to rewrite.
+fn rewrite_octal_class_escapes(body: &str) -> Option<String> {
+    let b = body.as_bytes();
+    let mut out = String::with_capacity(body.len() + 8);
+    let mut i = 0;
+    let mut in_class = false;
+    let mut class_start = 0usize; // position just after `[` (and optional `^`)
+    let mut changed = false;
+    while i < b.len() {
+        if b[i] == b'\\' && i + 1 < b.len() {
+            if in_class && (b'0'..=b'7').contains(&b[i + 1]) {
+                let mut j = i + 1;
+                let mut val: u32 = 0;
+                while j < b.len() && j - i <= 3 && (b'0'..=b'7').contains(&b[j]) {
+                    val = val * 8 + (b[j] - b'0') as u32;
+                    j += 1;
+                }
+                out.push_str(&format!("\\x{{{:02X}}}", val & 0xFF));
+                changed = true;
+                i = j;
+                continue;
+            }
+            out.push('\\');
+            let c = body[i + 1..].chars().next()?;
+            out.push(c);
+            i += 1 + c.len_utf8();
+            continue;
+        }
+        match b[i] {
+            b'[' if !in_class => {
+                in_class = true;
+                class_start = i + 1 + usize::from(b.get(i + 1) == Some(&b'^'));
+            }
+            // A `]` in first position (after optional `^`) is a literal.
+            b']' if in_class && i > class_start => in_class = false,
+            _ => {}
+        }
+        let c = body[i..].chars().next()?;
+        out.push(c);
+        i += c.len_utf8();
+    }
+    changed.then_some(out)
 }
 
 /// Rewrite Python-style named-group syntax — `(?P<name>…)`, `(?P=name)`,

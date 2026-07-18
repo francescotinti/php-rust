@@ -119,7 +119,51 @@ pub fn mb_strlen(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         return Ok(Zval::Long(s.as_bytes().len() as i64));
     }
     require_utf8(args, 1, ctx, "mb_strlen", 2, "encoding")?;
-    Ok(Zval::Long(units(s.as_bytes()).len() as i64))
+    Ok(Zval::Long(strict_unit_count(s.as_bytes()) as i64))
+}
+
+/// PHP 8.3+ mbstring code-point counting on invalid input (WHATWG "maximal
+/// subpart", php-src cca4ca6d removed the older fast path): a truncated
+/// sequence whose present bytes all sit in their POSITIONAL valid range is ONE
+/// error unit ("\xF0\x9F" → 1), while a byte outside its range ends the
+/// subpart before it ("\xE0\x80" → 2: `\x80` is not in E0's A0..BF). WP's
+/// `_wp_utf8_codepoint_count` tests pin exactly this (WP-18).
+fn strict_unit_count(bytes: &[u8]) -> usize {
+    let mut n = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        i += strict_scalar_len(bytes, i);
+        n += 1;
+    }
+    n
+}
+
+/// Byte length of the maximal subpart (or valid scalar) starting at `i`:
+/// the lead's sequence length capped at the first out-of-range byte, with
+/// RFC 3629's per-lead first-continuation ranges (no overlongs, no
+/// surrogates, max U+10FFFF). A stray continuation or invalid lead is 1.
+fn strict_scalar_len(bytes: &[u8], i: usize) -> usize {
+    let (n, lo, hi) = match bytes[i] {
+        0x00..=0x7F => return 1,
+        0xC2..=0xDF => (2, 0x80, 0xBF),
+        0xE0 => (3, 0xA0, 0xBF),
+        0xE1..=0xEC | 0xEE..=0xEF => (3, 0x80, 0xBF),
+        0xED => (3, 0x80, 0x9F),
+        0xF0 => (4, 0x90, 0xBF),
+        0xF1..=0xF3 => (4, 0x80, 0xBF),
+        0xF4 => (4, 0x80, 0x8F),
+        _ => return 1, // C0/C1/F5..FF lead or stray continuation
+    };
+    let mut len = 1;
+    for k in 1..n {
+        let Some(&c) = bytes.get(i + k) else { break };
+        let (l, h) = if k == 1 { (lo, hi) } else { (0x80, 0xBF) };
+        if c < l || c > h {
+            break;
+        }
+        len += 1;
+    }
+    len
 }
 
 /// mb_substr($string, $start[, $length[, $encoding]]): substring by code point.

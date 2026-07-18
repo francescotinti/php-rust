@@ -2464,6 +2464,11 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"PASSWORD_DEFAULT" => ExprKind::Str(b"2y".to_vec().into()),
         b"PASSWORD_BCRYPT" => ExprKind::Str(b"2y".to_vec().into()),
         b"PASSWORD_BCRYPT_DEFAULT_COST" => ExprKind::Int(12),
+        b"PASSWORD_ARGON2I" => ExprKind::Str(b"argon2i".to_vec().into()),
+        b"PASSWORD_ARGON2ID" => ExprKind::Str(b"argon2id".to_vec().into()),
+        b"PASSWORD_ARGON2_DEFAULT_MEMORY_COST" => ExprKind::Int(65536),
+        b"PASSWORD_ARGON2_DEFAULT_TIME_COST" => ExprKind::Int(4),
+        b"PASSWORD_ARGON2_DEFAULT_THREADS" => ExprKind::Int(1),
         // extract() strategies.
         b"EXTR_OVERWRITE" => ExprKind::Int(0),
         b"EXTR_SKIP" => ExprKind::Int(1),

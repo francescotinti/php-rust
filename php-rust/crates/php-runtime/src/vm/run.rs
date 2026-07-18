@@ -701,7 +701,19 @@ impl<'m> super::Vm<'m> {
                         self.enter_object_method(recv, b"offsetGet", vec![key], RetMode::Stack)?;
                         continue;
                     }
-                    let v = read_dim_warn(&base, &key, &mut self.diags);
+                    let v = read_dim_warn(&base, &key, &mut self.diags)?;
+                    // Deliver the undefined-key warning AT the faulting read:
+                    // Zend raises it synchronously, and a throwing user error
+                    // handler (PHPUnit's expectWarning) must unwind from THIS
+                    // statement — a deferred flush surfaced it at a later op,
+                    // outside the test's expectation scope (WP-18, Tests_Locale).
+                    if self.diags_rendered < self.diags.len() {
+                        let line = self.cur_line(top);
+                        self.flush_diags(line)?;
+                        let top = self.frames.len() - 1;
+                        self.frames[top].stack.push(v);
+                        continue;
+                    }
                     self.frames[top].stack.push(v);
                 }
                 Op::FetchDimList => {
@@ -4110,21 +4122,44 @@ impl<'m> super::Vm<'m> {
                     // on the initialized-proxy instance, or the uninitialized
                     // wrapper without initializing (gh18038-010).
                     let magic_done: bool = 'magic_unset: {
-                        let name: Vec<u8> = match steps.split_first() {
-                            Some((FieldStep::Prop(n), [])) => n.to_vec(),
-                            Some((FieldStep::PropDyn, [])) => {
-                                let Some(k) = keys.first() else { break 'magic_unset false };
+                        // The magic leaf may sit at the END of a longer path
+                        // (`unset($this->list_table->undeclared)`, WP-18): read
+                        // the prefix like Zend (its `__get`s included), then
+                        // dispatch `__unset` on the leaf name.
+                        let Some((last, prefix)) = steps.split_last() else {
+                            break 'magic_unset false;
+                        };
+                        let prefix_keys: usize = prefix
+                            .iter()
+                            .filter(|s| matches!(s, FieldStep::PropDyn | FieldStep::Index))
+                            .count();
+                        let name: Vec<u8> = match last {
+                            FieldStep::Prop(n) => n.to_vec(),
+                            FieldStep::PropDyn => {
+                                let Some(k) = keys.get(prefix_keys) else {
+                                    break 'magic_unset false;
+                                };
                                 convert::to_zstr_cast(k, &mut self.diags).as_bytes().to_vec()
                             }
                             _ => break 'magic_unset false,
                         };
-                        let base_val = match base {
-                            FieldBase::Local(s) => self.frames[top].slots.get(s as usize),
-                            FieldBase::Global(s) => self.frames[0].slots.get(s as usize),
-                            FieldBase::Superglobal(i) => self.superglobals.get(i as usize),
-                            FieldBase::This => self.frames[top].this.as_ref(),
+                        let base_val = if prefix.is_empty() {
+                            match base {
+                                FieldBase::Local(s) => {
+                                    self.frames[top].slots.get(s as usize).map(|v| v.deref_clone())
+                                }
+                                FieldBase::Global(s) => {
+                                    self.frames[0].slots.get(s as usize).map(|v| v.deref_clone())
+                                }
+                                FieldBase::Superglobal(i) => {
+                                    self.superglobals.get(i as usize).map(|v| v.deref_clone())
+                                }
+                                FieldBase::This => self.frames[top].this.as_ref().map(|v| v.deref_clone()),
+                            }
+                        } else {
+                            self.field_value(base, top, prefix, keys[..prefix_keys].to_vec())
                         };
-                        let Some(mut v) = base_val.map(|v| v.deref_clone()) else {
+                        let Some(mut v) = base_val else {
                             break 'magic_unset false;
                         };
                         for _ in 0..64 {

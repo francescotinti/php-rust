@@ -185,6 +185,8 @@ pub fn registry() -> Registry {
     add(b"md5_file", encoding::md5_file);
     add(b"quoted_printable_encode", encoding::quoted_printable_encode);
     add(b"quoted_printable_decode", encoding::quoted_printable_decode);
+    add(b"iconv_mime_decode", encoding::iconv_mime_decode);
+    add(b"iconv_mime_decode_headers", encoding::iconv_mime_decode_headers);
     add(b"utf8_encode", encoding::utf8_encode);
     add(b"utf8_decode", encoding::utf8_decode);
     add(b"sha1", encoding::sha1);
@@ -431,6 +433,8 @@ pub fn registry() -> Registry {
     add(b"wordwrap", string::wordwrap);
     add(b"htmlspecialchars", html::htmlspecialchars);
     add(b"idn_to_ascii", idn::idn_to_ascii);
+    add(b"normalizer_normalize", idn::normalizer_normalize);
+    add(b"normalizer_is_normalized", idn::normalizer_is_normalized);
     add(b"idn_to_utf8", idn::idn_to_utf8);
     add(b"htmlspecialchars_decode", html::htmlspecialchars_decode);
     add(b"htmlentities", html::htmlentities);
@@ -605,6 +609,7 @@ pub fn registry() -> Registry {
     add(b"setlocale", setlocale);
     add(b"extension_loaded", extension_loaded);
     add(b"phpversion", phpversion);
+    add(b"zend_version", var::zend_version);
     add(b"get_loaded_extensions", get_loaded_extensions);
     add(b"boolval", boolval);
     add(b"filter_var", filter_var);
@@ -720,6 +725,10 @@ const LOADED_EXTENSIONS: &[&[u8]] = &[
     // ext/fileinfo on the Rust detector (fileinfo.rs + prelude_fileinfo.php);
     // WP's wp_check_filetype_and_ext keys off extension_loaded('fileinfo').
     b"fileinfo",
+    // ext/intl subset: idn_to_ascii/idn_to_utf8 (idn.rs, native punycode) +
+    // normalizer_* (unicode-normalization) + prelude Normalizer class. The WP
+    // suite gates remove_accents' NFD test on `@requires extension intl`.
+    b"intl",
     // ext/mysqli on the native Rust client (vm/mysqli.rs); mysqlnd is what the
     // oracle reports too (WP's utf8mb4 capability check keys off it).
     b"mysqli", b"mysqlnd",
@@ -740,6 +749,7 @@ const LOADED_EXTENSIONS_CASED: &[&[u8]] = &[
     b"PDO", b"pdo_sqlite", b"sqlite3", b"bcmath", b"gmp",
     b"gd", b"exif",
     b"fileinfo",
+    b"intl",
     b"mysqli", b"mysqlnd",
     b"filter",
     b"xml", b"xmlwriter", b"tokenizer", b"Phar",

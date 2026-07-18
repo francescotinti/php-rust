@@ -105,7 +105,7 @@ impl<'a> super::FnCompiler<'a> {
             });
             // Record the protected range for `goto`-through-finally routing (EXC-2b).
             self.goto_finally_meta.push((start..finally_entry, finally_entry, outer_scope_len));
-            self.block(finally)?;
+            self.opaque_block(finally)?;
             // On normal completion `EndFinally` jumps to `after` (skipping the
             // trailing `Ret`); for a parked return it pushes the value and falls
             // through to that `Ret`; for a parked break/continue it jumps to the
@@ -231,7 +231,7 @@ impl<'a> super::FnCompiler<'a> {
             if case.test.is_none() {
                 default_addr = Some(at);
             }
-            self.block(&case.body)?;
+            self.opaque_block(&case.body)?;
         }
         let end = self.here();
         for (i, j) in test_jumps {

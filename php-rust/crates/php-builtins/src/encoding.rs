@@ -817,6 +817,222 @@ pub fn convert_uudecode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> 
     }
 }
 
+/// Decode one base64 payload leniently (RFC 2047 `B` encoding) — bad input
+/// yields what decoded so far.
+fn b64_lenient(payload: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut acc: u32 = 0;
+    let mut bits = 0;
+    for &c in payload {
+        let v = match c {
+            b'A'..=b'Z' => (c - b'A') as u32,
+            b'a'..=b'z' => (c - b'a' + 26) as u32,
+            b'0'..=b'9' => (c - b'0' + 52) as u32,
+            b'+' => 62,
+            b'/' => 63,
+            _ => continue,
+        };
+        acc = (acc << 6) | v;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+        }
+    }
+    out
+}
+
+/// RFC 2047 encoded-word decoding (`=?charset?Q|B?text?=`) shared by the
+/// iconv_mime_* pair: `Q` maps `_` to space and `=HH` to a byte, `B` is
+/// base64; UTF-8 payloads pass through, ISO-8859-1/us-ascii re-encode to
+/// UTF-8, anything else passes through as bytes. Whitespace BETWEEN two
+/// encoded words is dropped (the RFC's adjacency rule).
+fn rfc2047_decode(input: &[u8]) -> Vec<u8> {
+    let mut out: Vec<u8> = Vec::with_capacity(input.len());
+    let mut i = 0;
+    let mut pending_ws: Vec<u8> = Vec::new(); // WS after an encoded word
+    let mut last_was_word = false;
+    while i < input.len() {
+        if input[i] == b'=' && input.get(i + 1) == Some(&b'?') {
+            // =?charset?E?payload?=
+            let parse = || -> Option<(usize, Vec<u8>)> {
+                let cs_end = input[i + 2..].iter().position(|&c| c == b'?')? + i + 2;
+                let enc = *input.get(cs_end + 1)?;
+                if input.get(cs_end + 2) != Some(&b'?') {
+                    return None;
+                }
+                let mut j = cs_end + 3;
+                while j + 1 < input.len() && !(input[j] == b'?' && input[j + 1] == b'=') {
+                    j += 1;
+                }
+                if j + 1 >= input.len() {
+                    return None;
+                }
+                let payload = &input[cs_end + 3..j];
+                let raw = match enc {
+                    b'Q' | b'q' => {
+                        let mut d = Vec::with_capacity(payload.len());
+                        let mut k = 0;
+                        while k < payload.len() {
+                            match payload[k] {
+                                b'_' => d.push(b' '),
+                                b'=' if k + 2 < payload.len() + 1 => {
+                                    let hex = |c: u8| (c as char).to_digit(16);
+                                    match (
+                                        payload.get(k + 1).copied().and_then(hex),
+                                        payload.get(k + 2).copied().and_then(hex),
+                                    ) {
+                                        (Some(h), Some(l)) => {
+                                            d.push((h * 16 + l) as u8);
+                                            k += 2;
+                                        }
+                                        _ => d.push(b'='),
+                                    }
+                                }
+                                c => d.push(c),
+                            }
+                            k += 1;
+                        }
+                        d
+                    }
+                    b'B' | b'b' => b64_lenient(payload),
+                    _ => return None,
+                };
+                let charset = input[i + 2..cs_end].to_ascii_lowercase();
+                let text = match charset.as_slice() {
+                    b"iso-8859-1" | b"latin1" => raw
+                        .iter()
+                        .flat_map(|&b| {
+                            let mut buf = [0u8; 2];
+                            let s = (b as char).encode_utf8(&mut buf);
+                            s.as_bytes().to_vec()
+                        })
+                        .collect(),
+                    _ => raw, // utf-8 / us-ascii / unknown: bytes as-is
+                };
+                Some((j + 2, text))
+            };
+            if let Some((next, text)) = parse() {
+                if !last_was_word {
+                    out.extend_from_slice(&pending_ws);
+                }
+                pending_ws.clear();
+                out.extend_from_slice(&text);
+                last_was_word = true;
+                i = next;
+                continue;
+            }
+        }
+        if input[i] == b' ' || input[i] == b'\t' {
+            pending_ws.push(input[i]);
+            i += 1;
+            continue;
+        }
+        out.extend_from_slice(&pending_ws);
+        pending_ws.clear();
+        out.push(input[i]);
+        last_was_word = false;
+        i += 1;
+    }
+    out.extend_from_slice(&pending_ws);
+    out
+}
+
+/// `iconv_mime_decode(string $string, int $mode = 0, ?string $encoding = null)`.
+pub fn iconv_mime_decode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = arg_str(args, ctx, "iconv_mime_decode")?;
+    // Unfold continuations, then decode encoded words.
+    let unfolded: Vec<u8> = unfold_header(s.as_bytes());
+    Ok(Zval::Str(PhpStr::new(rfc2047_decode(&unfolded))))
+}
+
+/// Strip CRLF/LF immediately followed by WS (header folding), keeping one space.
+fn unfold_header(b: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'\r' && b.get(i + 1) == Some(&b'\n') {
+            i += 2;
+        } else if b[i] == b'\n' {
+            i += 1;
+        } else {
+            out.push(b[i]);
+            i += 1;
+            continue;
+        }
+        // Line break consumed: folding if next is WS (keep a single space).
+        if matches!(b.get(i), Some(b' ') | Some(b'\t')) {
+            while matches!(b.get(i), Some(b' ') | Some(b'\t')) {
+                i += 1;
+            }
+            out.push(b' ');
+        }
+    }
+    out
+}
+
+/// `iconv_mime_decode_headers(string $headers, int $mode = 0, ?string $encoding = null)`
+/// — parse a raw header block into name => value (a repeated name collects its
+/// values into a list array, as ext/iconv). Folded lines unfold first; every
+/// value goes through the RFC 2047 decoder.
+pub fn iconv_mime_decode_headers(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let s = arg_str(args, ctx, "iconv_mime_decode_headers")?;
+    // Normalise EOLs, unfold, then split lines.
+    let bytes = s.as_bytes();
+    let mut lines: Vec<Vec<u8>> = Vec::new();
+    for chunk in bytes.split(|&c| c == b'\n') {
+        let chunk = chunk.strip_suffix(b"\r").unwrap_or(chunk);
+        if chunk.is_empty() {
+            continue;
+        }
+        if matches!(chunk.first(), Some(b' ') | Some(b'\t')) {
+            if let Some(prev) = lines.last_mut() {
+                let trimmed: &[u8] = {
+                    let mut t = chunk;
+                    while matches!(t.first(), Some(b' ') | Some(b'\t')) {
+                        t = &t[1..];
+                    }
+                    t
+                };
+                prev.push(b' ');
+                prev.extend_from_slice(trimmed);
+                continue;
+            }
+        }
+        lines.push(chunk.to_vec());
+    }
+    let mut arr = PhpArray::new();
+    for line in &lines {
+        let Some(colon) = line.iter().position(|&c| c == b':') else {
+            continue;
+        };
+        let name = line[..colon].to_vec();
+        let mut val = &line[colon + 1..];
+        if val.first() == Some(&b' ') {
+            val = &val[1..];
+        }
+        let value = Zval::Str(PhpStr::new(rfc2047_decode(val)));
+        let key = php_types::Key::from_bytes(&name);
+        match arr.get(&key).cloned() {
+            None => {
+                arr.insert(key, value);
+            }
+            Some(Zval::Array(list)) => {
+                let mut list = (*list).clone();
+                let _ = list.append(value);
+                arr.insert(key, Zval::Array(Rc::new(list)));
+            }
+            Some(prev) => {
+                let mut list = PhpArray::new();
+                let _ = list.append(prev);
+                let _ = list.append(value);
+                arr.insert(key, Zval::Array(Rc::new(list)));
+            }
+        }
+    }
+    Ok(Zval::Array(Rc::new(arr)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

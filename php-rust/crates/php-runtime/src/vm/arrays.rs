@@ -30,10 +30,20 @@ pub(super) fn silent_get_path(cell: &Zval, keys: &[Zval]) -> Option<Zval> {
 /// The in-bounds byte at a string offset (negatives count from the end), or
 /// `None` if out of range — the existence test behind `isset($s[i])`.
 pub(super) fn string_offset(s: &PhpStr, key: &Zval) -> Option<u8> {
-    if matches!(key, Zval::Array(_) | Zval::Object(_) | Zval::Closure(_) | Zval::Generator(_)) {
+    let kd = key.deref_clone();
+    if matches!(kd, Zval::Array(_) | Zval::Object(_) | Zval::Closure(_) | Zval::Generator(_)) {
         return None;
     }
-    let i = convert::to_long_cast(key, &mut Diags::new());
+    // A STRING key is a valid offset only when it parses as an integer ('01'
+    // and '-2' do, 'url' and '1.5' do not): `isset($s['url'])` is false and
+    // `empty($s['url'])` true — WP's style engine branches on exactly that to
+    // tell an array background from a plain URL string (WP-18, themeJson).
+    let i = match &kd {
+        Zval::Str(k) => std::str::from_utf8(k.as_bytes())
+            .ok()
+            .and_then(|t| t.trim().parse::<i64>().ok())?,
+        _ => convert::to_long_cast(&kd, &mut Diags::new()),
+    };
     let len = s.len() as i64;
     let idx = if i < 0 { len + i } else { i };
     if idx < 0 || idx >= len {
@@ -559,11 +569,11 @@ pub(super) fn read_dim(base: &Zval, key: &Zval) -> Zval {
 /// key is absent (the warning-ful read context — `Op::FetchDim`, e.g. `echo
 /// $a[5]`). String-offset and other bases delegate to the silent [`read_dim`]
 /// (no failing parity case needs the "Uninitialized string offset" warning yet).
-pub(super) fn read_dim_warn(base: &Zval, key: &Zval, diags: &mut Diags) -> Zval {
+pub(super) fn read_dim_warn(base: &Zval, key: &Zval, diags: &mut Diags) -> Result<Zval, PhpError> {
     match base {
         Zval::Array(a) => match coerce_key_diag(key, diags) {
             Some(k) => match a.get(&k) {
-                Some(v) => v.deref_clone(),
+                Some(v) => Ok(v.deref_clone()),
                 None => {
                     let msg = match &k {
                         Key::Int(i) => format!("Undefined array key {i}"),
@@ -572,10 +582,10 @@ pub(super) fn read_dim_warn(base: &Zval, key: &Zval, diags: &mut Diags) -> Zval 
                         }
                     };
                     diags.push(Diag::Warning(msg));
-                    Zval::Null
+                    Ok(Zval::Null)
                 }
             },
-            None => Zval::Null,
+            None => Ok(Zval::Null),
         },
         Zval::Ref(rc) => read_dim_warn(&rc.borrow(), key, diags),
         // `$false[0]` & co.: PHP 7.4+ warns naming the value (false/null/…)
@@ -585,9 +595,33 @@ pub(super) fn read_dim_warn(base: &Zval, key: &Zval, diags: &mut Diags) -> Zval 
                 "Trying to access array offset on {}",
                 base.value_name_for_error()
             )));
-            Zval::Null
+            Ok(Zval::Null)
         }
-        _ => read_dim(base, key),
+        // A warning-ful READ of a string offset with a non-integral string or
+        // container key is PHP 8's TypeError (isset/`??` stay silent-false).
+        Zval::Str(_) => {
+            let kd = key.deref_clone();
+            match &kd {
+                Zval::Str(k)
+                    if std::str::from_utf8(k.as_bytes())
+                        .ok()
+                        .and_then(|t| t.trim().parse::<i64>().ok())
+                        .is_none() =>
+                {
+                    Err(PhpError::TypeError(
+                        "Cannot access offset of type string on string".to_string(),
+                    ))
+                }
+                Zval::Array(_) | Zval::Object(_) | Zval::Closure(_) | Zval::Generator(_) => {
+                    Err(PhpError::TypeError(format!(
+                        "Cannot access offset of type {} on string",
+                        kd.type_name_for_error()
+                    )))
+                }
+                _ => Ok(read_dim(base, key)),
+            }
+        }
+        _ => Ok(read_dim(base, key)),
     }
 }
 
@@ -596,7 +630,7 @@ pub(super) fn read_dim_warn(base: &Zval, key: &Zval, diags: &mut Diags) -> Zval 
 /// path raises no offset-on-scalar warning (`list($a) = null` is quiet).
 pub(super) fn read_dim_warn_list(base: &Zval, key: &Zval, diags: &mut Diags) -> Zval {
     match base {
-        Zval::Array(_) => read_dim_warn(base, key, diags),
+        Zval::Array(_) => read_dim_warn(base, key, diags).unwrap_or(Zval::Null),
         Zval::Ref(rc) => read_dim_warn_list(&rc.borrow(), key, diags),
         _ => read_dim(base, key),
     }

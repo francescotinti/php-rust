@@ -227,6 +227,47 @@ pub fn idn_to_utf8(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     })
 }
 
+/// ext/intl's `normalizer_normalize($string, $form = Normalizer::FORM_C)`,
+/// on the pure-Rust `unicode-normalization` tables. Forms use ICU's values
+/// (FORM_D=4, FORM_KD=8, FORM_C=16, FORM_KC=32); an invalid form is a
+/// ValueError, a non-UTF-8 input yields `false` (as ext/intl). The prelude
+/// `Normalizer` class delegates here (WP's `remove_accents` NFD path, WP-18).
+pub fn normalizer_normalize(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    use unicode_normalization::UnicodeNormalization;
+    let s = ctx.to_zstr(argv.first().unwrap_or(&Zval::Null));
+    let form = argv
+        .get(1)
+        .map(|v| crate::convert::to_long_cast(v, ctx.diags))
+        .unwrap_or(16);
+    let Ok(txt) = std::str::from_utf8(s.as_bytes()) else {
+        return Ok(Zval::Bool(false));
+    };
+    let out: String = match form {
+        4 => txt.nfd().collect(),
+        8 => txt.nfkd().collect(),
+        16 => txt.nfc().collect(),
+        32 => txt.nfkc().collect(),
+        _ => {
+            return Err(PhpError::ValueError(
+                "normalizer_normalize(): Argument #2 ($form) must be a a valid normalization form"
+                    .to_string(),
+            ))
+        }
+    };
+    Ok(Zval::Str(PhpStr::new(out.into_bytes())))
+}
+
+/// ext/intl's `normalizer_is_normalized($string, $form = Normalizer::FORM_C)`.
+pub fn normalizer_is_normalized(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    match normalizer_normalize(argv, ctx)? {
+        Zval::Str(out) => {
+            let s = ctx.to_zstr(argv.first().unwrap_or(&Zval::Null));
+            Ok(Zval::Bool(out.as_bytes() == s.as_bytes()))
+        }
+        other => Ok(other),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

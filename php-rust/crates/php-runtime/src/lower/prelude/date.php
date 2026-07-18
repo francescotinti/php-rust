@@ -189,6 +189,9 @@ class DateTime implements DateTimeInterface {
                 'O' => sprintf('%s%02d%02d', $sign, $oh, $om),
                 'P', 'p' => sprintf('%s%02d:%02d', $sign, $oh, $om),
                 'U' => (string) $ts,
+                // Swatch beats are zone-INDEPENDENT (BMT = UTC+1): computed
+                // from the true instant, not the zone-shifted one (WP-18).
+                'B' => sprintf('%03d', intdiv(((($ts + 3600) % 86400) + 86400) % 86400 * 1000, 86400)),
                 'Z' => (string) $off,
                 'T' => $zi === false ? $tzs : $zi[1],
                 'e' => $tzs,

@@ -2283,11 +2283,12 @@ impl<'a> super::FnCompiler<'a> {
                 self.emit(Op::ClassNameScope { parent: true });
                 Ok(())
             }
-            // No op pushes the late-static-binding class NAME yet; keep the
-            // residue explicit rather than silently wrong.
-            ClassRef::Static => Err(CompileError::Unsupported(
-                "`static::` as a runtime class value".into(),
-            )),
+            // `static::${$n}`: the LSB class name, resolved by the frame at
+            // run time (WP-18, wpThemeJson's `static::${$user_property}`).
+            ClassRef::Static => {
+                self.emit(Op::ClassNameStatic);
+                Ok(())
+            }
         }
     }
 

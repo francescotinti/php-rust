@@ -633,6 +633,13 @@ class ZipArchive implements Countable {
         $this->numFiles++;
         return true;
     }
+    public function addEmptyDir($dirname, $flags = 0) {
+        // A zip directory is an empty entry whose name ends in '/'.
+        if ($this->__h === null || !$this->__w) { return false; }
+        if (!__zip_writer_add($this->__h, rtrim($dirname, '/') . '/', '')) { return false; }
+        $this->numFiles++;
+        return true;
+    }
     public function close() {
         if ($this->__h === null) { return false; }
         $r = $this->__w ? __zip_writer_close($this->__h) : __zip_close($this->__h);
@@ -671,3 +678,22 @@ function preg_replace_callback_array($pattern, $subject, $limit = -1, &$count = 
     return $subject;
 }
 function is_countable($value) { return is_array($value) || $value instanceof Countable; }
+
+// ext/intl's Normalizer (subset): the FORM_* constants use ICU's values and
+// the static methods delegate to the normalizer_* builtins (idn.rs).
+class Normalizer {
+    const FORM_D  = 4;
+    const FORM_KD = 8;
+    const FORM_C  = 16;
+    const FORM_KC = 32;
+    const NFD  = 4;
+    const NFKD = 8;
+    const NFC  = 16;
+    const NFKC = 32;
+    public static function normalize($string, $form = self::FORM_C) {
+        return normalizer_normalize($string, $form);
+    }
+    public static function isNormalized($string, $form = self::FORM_C) {
+        return normalizer_is_normalized($string, $form);
+    }
+}

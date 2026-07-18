@@ -272,6 +272,22 @@ fn xml_tokenize(data: &[u8], separator: Option<&[u8]>) -> Zval {
                                 frame.push((p.to_vec(), av.clone()));
                             }
                         }
+                        // xml_set_start_namespace_decl_handler: one event per
+                        // declaration, BEFORE the element's open event; the
+                        // default namespace's prefix is `false` (oracle-pinned).
+                        // No end event: the libxml compat never fires it.
+                        for (p, uri) in &frame {
+                            let prefix = if p.is_empty() {
+                                Zval::Bool(false)
+                            } else {
+                                zstr(p.clone())
+                            };
+                            let _ = events.append(ev(vec![
+                                zstr(b"n".to_vec()),
+                                prefix,
+                                zstr(uri.clone()),
+                            ]));
+                        }
                         ns.frames.push(frame);
                         let out_name = ns.expand(&name, sep, true);
                         let mut out_attrs = PhpArray::new();
@@ -316,10 +332,20 @@ fn xml_tokenize(data: &[u8], separator: Option<&[u8]>) -> Zval {
             }
             Ok(Event::Empty(_)) => unreachable!("expand_empty_elements is on"),
             Ok(Event::Text(t)) => {
+                // Prolog/epilog character data (outside the root element) is
+                // never delivered — libxml drops it (oracle-pinned, WP-18).
                 let raw = t.into_inner().into_owned();
-                if !raw.is_empty() {
+                if !raw.is_empty() && depth > 0 {
                     text_event!(raw);
                 }
+            }
+            Ok(Event::Comment(c)) => {
+                // A comment goes to the DEFAULT handler as its full raw text,
+                // `<!--…-->` included, in one call (oracle-pinned).
+                let mut raw = b"<!--".to_vec();
+                raw.extend_from_slice(&c.into_inner());
+                raw.extend_from_slice(b"-->");
+                let _ = events.append(ev(vec![zstr(b"d".to_vec()), zstr(raw)]));
             }
             Ok(Event::GeneralRef(r)) => match resolve_ref(&r.into_inner(), &entities) {
                 Ok(resolved) => { text_event!(resolved); }
@@ -331,7 +357,7 @@ fn xml_tokenize(data: &[u8], separator: Option<&[u8]>) -> Zval {
             Ok(Event::CData(c)) => {
                 text_event!(c.into_inner().into_owned());
             }
-            Ok(Event::Comment(_)) => {}
+
             Ok(Event::PI(pi)) => {
                 let raw = pi.to_vec();
                 let split = raw.iter().position(|b| b.is_ascii_whitespace());
