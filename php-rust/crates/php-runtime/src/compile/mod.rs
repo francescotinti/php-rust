@@ -84,6 +84,24 @@ pub fn compile_program(program: &Program, registry: &Registry) -> R<Module> {
     compile_program_stubbed(program, registry, &[])
 }
 
+/// Like [`compile_program_stubbed`], but additionally reuses already-compiled
+/// prelude functions: `prelude[i]` is the canonical (main-module, already
+/// globally-relocated) compiled body for `program.functions[i]`. Every seeded
+/// lowering places the prelude functions at the same leading indices, so a
+/// name-checked index match is a safe identity — mismatches compile fresh.
+/// Reuse skips ~1000 `compile_fndecl` calls AND ~1.5MB of retained bytecode
+/// per included file (WP-20); shared bodies also share their `static $x`
+/// cells with the main module's copies, which is Zend's semantics (one
+/// function, one static set).
+pub fn compile_program_seeded(
+    program: &Program,
+    registry: &Registry,
+    stub_mask: &[bool],
+    prelude: &[std::rc::Rc<Func>],
+) -> R<Module> {
+    compile_program_impl(program, registry, stub_mask, prelude)
+}
+
 
 /// Like [`compile_program`], but a class whose index is marked in `stub_mask`
 /// compiles to an inert stub. An `include`/`eval` unit is lowered against the
@@ -98,6 +116,15 @@ pub fn compile_program_stubbed(
     program: &Program,
     registry: &Registry,
     stub_mask: &[bool],
+) -> R<Module> {
+    compile_program_impl(program, registry, stub_mask, &[])
+}
+
+fn compile_program_impl(
+    program: &Program,
+    registry: &Registry,
+    stub_mask: &[bool],
+    prelude: &[std::rc::Rc<Func>],
 ) -> R<Module> {
     // Case-insensitive name→id index for resolving `ClassRef::Named`; the first
     // declaration of a name wins (PHP forbids redeclaration).
@@ -119,16 +146,27 @@ pub fn compile_program_stubbed(
         class_index: &class_index,
     };
 
-    let mut functions = Vec::with_capacity(program.functions.len());
-    for fd in &program.functions {
+    let mut functions: Vec<std::rc::Rc<Func>> = Vec::with_capacity(program.functions.len());
+    for (idx, fd) in program.functions.iter().enumerate() {
+        // Prelude reuse (WP-20): a seeded unit's leading function indices are
+        // the always-injected prelude, already compiled (and relocated into
+        // the global id space) in the main module — share that body instead
+        // of recompiling it. Name-checked so a layout surprise falls back to
+        // a fresh compile rather than mis-binding.
+        if let Some(pf) = prelude.get(idx) {
+            if pf.name == fd.name && !program.conditional_fns.contains(&idx) {
+                functions.push(std::rc::Rc::clone(pf));
+                continue;
+            }
+        }
         // Function bodies compile *tolerantly*: the always-injected PHP prelude
         // (exception classes, date API) uses not-yet-ported constructs, so a
         // failure becomes a stub that fatals only if the function is called —
         // rather than making every script uncompilable. `main`, below, is not
         // tolerant: if the script body itself is unsupported, the VM can't run it.
         match compile_fndecl(fd, &ctx, false) {
-            Ok(f) => functions.push(f),
-            Err(e) => functions.push(stub_func(fd, &e)),
+            Ok(f) => functions.push(std::rc::Rc::new(f)),
+            Err(e) => functions.push(std::rc::Rc::new(stub_func(fd, &e))),
         }
     }
     // Closure bodies compile tolerantly (like functions): an unsupported body
@@ -148,9 +186,9 @@ pub fn compile_program_stubbed(
         .enumerate()
         .map(|(cid, cd)| {
             if stub_mask.get(cid).copied().unwrap_or(false) {
-                stub_class(cd)
+                stub_class_shared(cd)
             } else {
-                compile_class(cid, cd, &ctx)
+                std::rc::Rc::new(compile_class(cid, cd, &ctx))
             }
         })
         .collect();

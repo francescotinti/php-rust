@@ -1492,8 +1492,13 @@ pub struct Module {
     /// The top-level script body (the implicit `main`).
     pub main: Func,
     /// Top-level user-defined functions, hoisted — same index space as
-    /// [`crate::hir::Program::functions`].
-    pub functions: Vec<Func>,
+    /// [`crate::hir::Program::functions`]. `Rc`-shared so an include/eval unit
+    /// reuses the main module's compiled prelude functions (indices `0..P`)
+    /// instead of recompiling and leaking ~1000 prelude bodies per included
+    /// file (WP-20). A shared entry (`Rc::strong_count > 1`) is already
+    /// relocated into the global id space; `relocate_module_class_ids` skips
+    /// it via `Rc::get_mut`.
+    pub functions: Vec<std::rc::Rc<Func>>,
     /// Indices into `functions` that are **conditional** declarations (a `function`
     /// statement inside a branch/block, possibly nested in another body): not
     /// resolvable by name until their [`Op::DeclareFn`] runs (which registers them
@@ -1516,8 +1521,14 @@ pub struct Module {
     /// [`crate::hir::Program::closures`].
     pub closures: Vec<Func>,
     /// Compiled class metadata — same index space as
-    /// [`crate::hir::Program::classes`] / [`ClassId`].
-    pub classes: Vec<CompiledClass>,
+    /// [`crate::hir::Program::classes`] / [`ClassId`]. `Rc`-shared so the
+    /// seed-stub entries of an include/eval unit (classes the VM already
+    /// links, compiled as inert stubs) are interned per name instead of
+    /// re-allocated per module — the stub prefix grows with the accumulated
+    /// image, i.e. quadratically across a require storm (WP-20). A shared
+    /// entry is skipped by relocation via `Rc::get_mut` (stubs carry no
+    /// relocatable ids anyway).
+    pub classes: Vec<std::rc::Rc<CompiledClass>>,
     /// Source file name, reproduced verbatim in diagnostics (`… in <file> on
     /// line N`), carried over from [`crate::hir::Program::file`].
     pub file: Box<[u8]>,

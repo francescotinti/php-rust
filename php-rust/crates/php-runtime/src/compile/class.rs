@@ -478,6 +478,25 @@ pub(super) fn builtin_iface_for(name: &[u8]) -> Option<BuiltinIface> {
 /// name: `drive_unit`'s remap dedups it to the existing global id, so this
 /// stub's only consumer is that name lookup. `ok: false` makes an accidental
 /// `Op::Alloc` on it fatal (fail-loud) rather than silently misbehaving.
+/// Interned [`stub_class`] per class name (WP-20): a require storm compiles a
+/// stub for EVERY already-linked seed class into EVERY unit module — the same
+/// (name-only) content each time. One shared `Rc` per name bounds that cost by
+/// the number of distinct classes instead of files × classes.
+pub(super) fn stub_class_shared(cd: &crate::hir::ClassDecl) -> std::rc::Rc<CompiledClass> {
+    use std::cell::RefCell;
+    thread_local! {
+        static STUBS: RefCell<rustc_hash::FxHashMap<Box<[u8]>, std::rc::Rc<CompiledClass>>> =
+            RefCell::new(rustc_hash::FxHashMap::default());
+    }
+    STUBS.with(|s| {
+        std::rc::Rc::clone(
+            s.borrow_mut()
+                .entry(cd.name.clone())
+                .or_insert_with(|| std::rc::Rc::new(stub_class(cd))),
+        )
+    })
+}
+
 pub(super) fn stub_class(cd: &crate::hir::ClassDecl) -> CompiledClass {
     CompiledClass {
         name: cd.name.clone(),

@@ -400,7 +400,7 @@ pub(crate) fn run_module_with_hir<'m>(
     php_types::reset_freed_object_ids();
     let mut vm = Vm {
         module,
-        classes: module.classes.iter().collect(),
+        classes: module.classes.iter().map(|c| &**c).collect(),
         class_index: module.class_index.clone(),
         class_module: vec![module; module.classes.len()],
         modules: vec![module],
@@ -511,6 +511,7 @@ pub(crate) fn run_module_with_hir<'m>(
         next_xslt: 1,
         stream_chunk_sizes: HashMap::default(),
         seed_aliases: Vec::new(),
+        prelude_fns: Vec::new(),
         umask: 0o22,
         dom_docs: HashMap::default(),
         next_dom: 1,
@@ -530,6 +531,18 @@ pub(crate) fn run_module_with_hir<'m>(
             vm.linked_functions.insert(f.name.to_ascii_lowercase(), (module, idx));
         }
     }
+    // Capture the main module's compiled prelude for Rc-reuse by every seeded
+    // unit compile (WP-20). The prelude occupies the leading function indices
+    // of every lowering, and its bodies are the only ones stamped with the
+    // synthetic file name "prelude" — take exactly that leading run. Main is
+    // never relocated, so these bodies live in the global id space with their
+    // canonical static cells 0..pstatic.
+    vm.prelude_fns = module
+        .functions
+        .iter()
+        .take_while(|f| f.file.as_ref() == b"prelude")
+        .cloned()
+        .collect();
     // Predefined CLI stream constants `STDIN`/`STDOUT`/`STDERR` (resource ids
     // #1/#2/#3, as the PHP CLI SAPI), so a script can `fwrite(STDERR, …)` (step 57).
     let std_stream = |id: u32, backend: StreamBackend, readable: bool, writable: bool, uri: &[u8], mode: &[u8]| {
@@ -1488,6 +1501,12 @@ struct Vm<'m> {
     /// later unit's lowering so `extends AliasName` resolves to the original
     /// class decl (index-only: no clone, mangling/identity preserved).
     seed_aliases: Vec<(Vec<u8>, Vec<u8>)>,
+    /// The main module's compiled prelude functions (leading indices of
+    /// `main.functions`, one per prelude `FnDecl`), shared into every seeded
+    /// unit compile (WP-20): an include/eval unit `Rc`-reuses these bodies
+    /// instead of recompiling ~1000 prelude functions per file — which leaked
+    /// ~1.5MB per include (2.1GB retained on the WP test-suite bootstrap).
+    prelude_fns: Vec<Rc<Func>>,
     /// The process umask as `umask()` reports it. phpr never changes the real
     /// process umask (no unsafe/libc); the shadow value starts at the
     /// conventional 022 and get/set semantics match PHP (set returns previous).
@@ -2751,7 +2770,12 @@ impl<'m> Vm<'m> {
         };
         self.accumulate_seed(&program);
         let stubs = self.seed_stub_mask(&program);
-        let module = match crate::compile::compile_program_stubbed(&program, self.registry, &stubs) {
+        let module = match crate::compile::compile_program_seeded(
+            &program,
+            self.registry,
+            &stubs,
+            &self.prelude_fns,
+        ) {
             Ok(m) => m,
             Err(_) => return Ok(Zval::Bool(false)),
         };
@@ -3092,8 +3116,12 @@ impl<'m> Vm<'m> {
         };
         self.accumulate_seed(&program);
         let stubs = self.seed_stub_mask(&program);
-        let module = match crate::compile::compile_program_stubbed(&program, self.registry, &stubs)
-        {
+        let module = match crate::compile::compile_program_seeded(
+            &program,
+            self.registry,
+            &stubs,
+            &self.prelude_fns,
+        ) {
             Ok(m) => m,
             Err(e) => {
                 log::warn!(
@@ -3123,26 +3151,48 @@ impl<'m> Vm<'m> {
         if self.main_hir.is_none() {
             return;
         }
+        let delta = self.seed_delta_of(program);
+        self.apply_seed_delta(&delta);
+    }
+
+    /// Extract the seed-image *delta* a freshly-lowered unit contributes: the
+    /// class/slot tails past the current seed and its new traits. Cached in
+    /// [`CachedUnit`] instead of the whole `Rc<Program>` (WP-20): retaining the
+    /// full HIR of every included file was a large share of the per-file
+    /// memory. A cache hit's fingerprint match guarantees the live seed
+    /// lengths equal the ones captured here, so replaying the delta is exactly
+    /// what `accumulate_seed` did with the full program.
+    fn seed_delta_of(&self, program: &Program) -> SeedDelta {
         let l = self.seed_classes.len();
-        if program.classes.len() > l {
-            self.seed_classes.extend_from_slice(&program.classes[l..]);
+        let g = self.seed_globals.len();
+        SeedDelta {
+            new_classes: program.classes.get(l..).unwrap_or(&[]).to_vec(),
+            static_count: program.static_count,
+            new_slots: program.slots.get(g..).unwrap_or(&[]).to_vec(),
+            traits: program.traits.clone(),
         }
-        self.seed_static = program.static_count;
+    }
+
+    fn apply_seed_delta(&mut self, delta: &SeedDelta) {
+        if self.main_hir.is_none() {
+            return;
+        }
+        self.seed_classes.extend_from_slice(&delta.new_classes);
+        self.seed_static = delta.static_count;
         // Fold the unit's new global variable names into the shared registry and
         // grow the bottom (`main`) frame to cover them, so a `$GLOBALS['new']` /
         // `global $new` this unit introduced addresses a real cell rather than
         // overflowing `main`'s original slot count (step 57). The unit was lowered
         // seeded with `seed_globals`, so `program.slots` is `[seed…, new…]`.
-        let g = self.seed_globals.len();
-        if program.slots.len() > g {
-            self.seed_globals.extend_from_slice(&program.slots[g..]);
+        if !delta.new_slots.is_empty() {
+            self.seed_globals.extend_from_slice(&delta.new_slots);
             if let Some(main_frame) = self.frames.first_mut() {
                 main_frame.slots.resize_with(self.seed_globals.len(), || Zval::Undef);
             }
         }
         // Fold the unit's new traits into the cross-unit trait image (a trait file
         // loaded via autoload makes its trait available to the unit that needed it).
-        for (k, t) in &program.traits {
+        for (k, t) in &delta.traits {
             if !self.seed_traits.iter().any(|(ek, _)| ek == k) {
                 self.seed_traits.push((k.clone(), t.clone()));
             }
@@ -3277,7 +3327,7 @@ impl<'m> Vm<'m> {
                         mode,
                         String::from_utf8_lossy(&key)
                     );
-                    self.accumulate_seed(&cu.program);
+                    self.apply_seed_delta(&cu.seed_delta);
                     let caller = self.frames.len() - 1;
                     let ret = self.run_linked(cu.module, &locals, None, Some(caller))?;
                     return Ok(if matches!(ret, Zval::Null) { Zval::Long(1) } else { ret });
@@ -3315,12 +3365,21 @@ impl<'m> Vm<'m> {
             }
         };
         let program = Rc::new(program);
-        self.accumulate_seed(&program);
+        // The seed delta is captured BEFORE it is applied (the tails are
+        // computed against the pre-accumulation seed lengths) — it is what the
+        // unit cache retains in place of the whole program HIR (WP-20).
+        let seed_delta = Rc::new(self.seed_delta_of(&program));
+        self.apply_seed_delta(&seed_delta);
         // Classes the VM already links compile as inert stubs — drive_unit dedups
         // them by name anyway; fully recompiling the whole accumulated seed image
         // per included file is quadratic (PHPUnit's preload() = ~1200 requires).
         let stubs = self.seed_stub_mask(&program);
-        let mut module = match crate::compile::compile_program_stubbed(&program, self.registry, &stubs) {
+        let mut module = match crate::compile::compile_program_seeded(
+            &program,
+            self.registry,
+            &stubs,
+            &self.prelude_fns,
+        ) {
             Ok(m) => m,
             Err(e) => {
                 log::warn!(target: "phpr::include", "compile failed for {}: {:?}", String::from_utf8_lossy(&key), e);
@@ -3342,7 +3401,7 @@ impl<'m> Vm<'m> {
                         static_off,
                         class_remap,
                         new_locals: new_locals.clone(),
-                        program: Rc::clone(&program),
+                        seed_delta: Rc::clone(&seed_delta),
                         module: leaked,
                     },
                 );
@@ -4826,9 +4885,9 @@ impl<'m> Vm<'m> {
     fn find_user_function(&self, name: &[u8]) -> Option<&'m Func> {
         let lc = name.strip_prefix(b"\\").unwrap_or(name).to_ascii_lowercase();
         if let Some(f) = self.module.functions.iter().find(|f| f.name.to_ascii_lowercase() == lc) {
-            return Some(f);
+            return Some(&**f);
         }
-        self.linked_functions.get(&lc).map(|&(m, idx)| &m.functions[idx])
+        self.linked_functions.get(&lc).map(|&(m, idx)| &*m.functions[idx])
     }
 
     /// Resolve a method by walking `cid`'s ancestry; returns the compiled method,
@@ -5120,9 +5179,9 @@ impl<'m> Vm<'m> {
     fn user_function_with_mod(&self, name: &[u8]) -> Option<(&'m Func, &'m Module)> {
         let lc = name.strip_prefix(b"\\").unwrap_or(name).to_ascii_lowercase();
         if let Some(f) = self.module.functions.iter().find(|f| f.name.to_ascii_lowercase() == lc) {
-            return Some((f, self.module));
+            return Some((&**f, self.module));
         }
-        self.linked_functions.get(&lc).map(|&(m, idx)| (&m.functions[idx], m))
+        self.linked_functions.get(&lc).map(|&(m, idx)| (&*m.functions[idx], m))
     }
 
 
@@ -11081,8 +11140,18 @@ struct CachedUnit {
     static_off: usize,
     class_remap: Vec<ClassId>,
     new_locals: Vec<usize>,
-    program: Rc<Program>,
+    seed_delta: Rc<SeedDelta>,
     module: &'static Module,
+}
+
+/// What a unit contributes to the accumulating seed image — the retained
+/// stand-in for the unit's full `Rc<Program>` in the cache (WP-20): class
+/// decls are `Rc`-shared (cheap), slots/traits are the unit's own additions.
+struct SeedDelta {
+    new_classes: Vec<Rc<crate::hir::ClassDecl>>,
+    static_count: usize,
+    new_slots: Vec<Box<[u8]>>,
+    traits: Vec<(Vec<u8>, crate::hir::LoweredTrait)>,
 }
 
 /// File identity for the unit cache: canonical path + mtime + size. An edited
@@ -11158,7 +11227,14 @@ fn relocate_module_class_ids(module: &mut Module, remap: &[ClassId], static_base
     //    thunks / property-hook get & set bodies).
     relocate_func(&mut module.main, remap, static_base);
     for f in &mut module.functions {
-        relocate_func(f, remap, static_base);
+        // A shared entry (`Rc::strong_count > 1`) is a prelude body reused from
+        // the main module (WP-20): it is already in the global id space (main
+        // is never relocated) and MUST keep its static-cell ids 0..pstatic —
+        // `Rc::get_mut` returning `None` skips it for free. Freshly-compiled
+        // bodies are uniquely owned here, so they always relocate.
+        if let Some(f) = std::rc::Rc::get_mut(f) {
+            relocate_func(f, remap, static_base);
+        }
     }
     for f in &mut module.closures {
         relocate_func(f, remap, static_base);
@@ -11168,6 +11244,11 @@ fn relocate_module_class_ids(module: &mut Module, remap: &[ClassId], static_base
         relocate_attrs(attrs, remap, static_base);
     }
     for cc in &mut module.classes {
+        // A shared entry is an interned seed stub (WP-20): no relocatable ids
+        // inside (no parent/methods/thunks), and it must stay untouched —
+        // `Rc::get_mut` returning `None` skips it. Freshly-compiled classes
+        // are uniquely owned here, so they always relocate.
+        let Some(cc) = Rc::get_mut(cc) else { continue };
         // 2. Class metadata: superclass and implemented interfaces.
         if let Some(p) = cc.parent.as_mut() {
             *p = remap[*p];
@@ -11931,7 +12012,7 @@ mod tests {
         let program = lower_source(b"test.php", src).expect("lower");
         let reg = Registry::new();
         let module = compile_program(&program, &reg).expect("compile");
-        let classes: Vec<&super::CompiledClass> = module.classes.iter().collect();
+        let classes: Vec<&super::CompiledClass> = module.classes.iter().map(|c| &**c).collect();
         let cid = |n: &[u8]| classes.iter().position(|c| c.name.as_ref() == n).expect("class");
         let pi = |class: usize, name: &[u8]| super::prop_info(&classes, class, name).expect("prop");
 

@@ -739,7 +739,7 @@ impl<'m> Vm<'m> {
                         .functions
                         .iter()
                         .find(|f| super::name_eq_ignore_case(&f.name, b))
-                        .map(super::closure_params)
+                        .map(|f| super::closure_params(f))
                         .unwrap_or_default();
                     let info = Rc::new(ClosureInfo {
                         kind: ClosureRender::Function(s.clone()),

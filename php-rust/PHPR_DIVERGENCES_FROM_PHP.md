@@ -479,7 +479,27 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
-- 2026-07-18 (sessione WordPress-19): 🆕 **ext/xsl su libxslt DI SISTEMA via
+- 2026-07-18 (sessione WordPress-20): ⚡ **perf memoria del macchinario
+  include** (nessuna divergenza nuova; due note). (1) Le funzioni del PRELUDE
+  compilate ora sono UNA copia condivisa (`Rc`) dal modulo main in ogni unit
+  include/eval — prima ogni include ricompilava e leakkava ~1070 funzioni
+  (~1,5MB/file: bootstrap WP test-suite 5,3GB → ~2,9GB di picco; 300 include
+  sintetici 484MB → 56MB). Effetto semantico: le `static $x` delle funzioni
+  prelude sono ora CONDIVISE tra main e unit (prima ogni unit aveva celle
+  proprie) — è la semantica Zend (una funzione = un set di static), quindi
+  un AVVICINAMENTO all'oracle, non una divergenza. Stessa condivisione per
+  gli stub di classe seed (internati per nome) e la unit-cache ritiene un
+  `SeedDelta` (classi/slot/trait nuovi) al posto dell'INTERO `Rc<Program>`
+  HIR. Gate20 integrale per nome su baseline WP-18.
+  🐛 **Divergenza PRE-esistente scoperta (non introdotta, non fixata)**:
+  ri-`require` dello stesso file che dichiara una funzione non-condizionale
+  NON produce il fatal Zend "Cannot redeclare function f() (previously
+  declared …)" — `run_linked` registra le funzioni con `or_insert` senza
+  check di ridichiarazione (e il probe della unit-cache non c'entra: accade
+  anche a cache fredda). Repro: `one.php` con `function f0(){}`, main con
+  `require` in loop ×2 — oracle fatala, phpr prosegue. Innocuo per WP
+  (require_once ovunque), da fixare con un check in `run_linked` quando la
+  fn è già presente in `linked_functions`/modulo corrente e non-condizionale.
   FFI** (`php_types::xsltio` → `/usr/lib/libxslt.1.dylib` + libexslt + libxml2,
   le STESSE dylib che linka l'oracle brew ⇒ output byte-identico; probe
   10 sezioni a diff zero). Classe `XSLTProcessor` nel prelude dom

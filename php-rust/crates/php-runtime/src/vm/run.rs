@@ -974,7 +974,7 @@ impl<'m> super::Vm<'m> {
                         .functions
                         .iter()
                         .find(|f| name_eq_ignore_case(&f.name, &name))
-                        .map(closure_params)
+                        .map(|f| closure_params(f))
                         .unwrap_or_default();
                     let info = Rc::new(ClosureInfo {
                         kind: ClosureRender::Function(PhpStr::new(name.to_vec())),
