@@ -28,13 +28,17 @@ nohup perl -e 'use POSIX qw(setsid); fork and exit 0; setsid(); exec @ARGV' -- \
 #   `exec { $ARGV[0] } @ARGV`.
 ```
 - Baseline oracle: `full-out/full-oracle.{names,junit.xml}` (trunk `81b2b5b`).
-- Se a fine WP-17 è stata lanciata la run8 phpr: leggerla come nuova baseline
-  (attesa: da 336 diff a ~30-50; verificare per nome, SOLO miglioramenti).
+- **Baseline phpr = run8 (WP-17, post-`231d96f`): 336 → 56 diff per nome —
+  15E/35F/79S su 30.480 test, ~24 min.** Junit + `diff-names.txt` in
+  `full-out/run8/`. Invariante: SOLO miglioramenti per nome vs run8.
 
-## Prossimo passo: SESSIONE WP-18
-1. **Full-suite run8**: rilanciare/leggere la run phpr intera e ricontare i
-   diff per nome (attesi i soli residui sotto + eventuali code non coperte
-   dai run per-classe di WP-17).
+## Prossimo passo: SESSIONE WP-18 (56 diff per nome, run8/diff-names.txt)
+1. Classi residue in ordine di resa: theme 6F · duotone 6F · html-api goto
+   5E · wpCommunityEvents 5 · themeJson 4 · wpUtf8CodePointCount 4 ·
+   BlockProcessor 3+1+1 · **sitemaps P->S=3 e auth P->S=2: phpr SKIPPA test
+   che l'oracle PASSA** (indagare il motivo dello skip) · wpMail 2 ·
+   DateI18n 2 · code singole (~13, tra cui 1 only-oracle
+   wpIsIniValueChangeable).
 2. Residui NOTI (per nome, con diagnosi già fatta):
    - **Tests_Theme 6F** (`test_get_stylesheet_directory_with_filter`): dopo
      `remove_filter` il valore resta quello filtrato — un layer cache lato
