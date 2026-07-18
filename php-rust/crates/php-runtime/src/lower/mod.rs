@@ -1715,7 +1715,9 @@ fn unescape_double_quoted(raw: &[u8], process_quote: bool) -> Vec<u8> {
             b'\\' => { out.push(b'\\'); i += 2; }
             b'$' => { out.push(b'$'); i += 2; }
             b'"' if process_quote => { out.push(b'"'); i += 2; }
-            b'x' => {
+            // Zend's scanner accepts BOTH cases of the hex escape ("\X1C" in
+            // WP's kses ctrl-removal provider decodes to 0x1C, oracle-pinned).
+            b'x' | b'X' => {
                 let mut j = i + 2;
                 let mut val = 0u32;
                 let mut n = 0;
@@ -1726,7 +1728,7 @@ fn unescape_double_quoted(raw: &[u8], process_quote: bool) -> Vec<u8> {
                 }
                 if n == 0 {
                     out.push(b'\\');
-                    out.push(b'x');
+                    out.push(c);
                     i += 2;
                 } else {
                     out.push(val as u8);
@@ -2499,6 +2501,29 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"JSON_PARTIAL_OUTPUT_ON_ERROR" => ExprKind::Int(512),
         b"JSON_PRESERVE_ZERO_FRACTION" => ExprKind::Int(1024),
         b"JSON_UNESCAPED_LINE_TERMINATORS" => ExprKind::Int(2048),
+        // ext/intl IDNA (WP-17): valori dell'oracolo 8.5 (IDNA_DEFAULT = 48 =
+        // NONTRANSITIONAL_TO_ASCII|NONTRANSITIONAL_TO_UNICODE).
+        b"IDNA_DEFAULT" => ExprKind::Int(48),
+        b"IDNA_ALLOW_UNASSIGNED" => ExprKind::Int(1),
+        b"IDNA_USE_STD3_RULES" => ExprKind::Int(2),
+        b"IDNA_CHECK_BIDI" => ExprKind::Int(4),
+        b"IDNA_CHECK_CONTEXTJ" => ExprKind::Int(8),
+        b"IDNA_NONTRANSITIONAL_TO_ASCII" => ExprKind::Int(16),
+        b"IDNA_NONTRANSITIONAL_TO_UNICODE" => ExprKind::Int(32),
+        b"INTL_IDNA_VARIANT_UTS46" => ExprKind::Int(1),
+        b"IDNA_ERROR_EMPTY_LABEL" => ExprKind::Int(1),
+        b"IDNA_ERROR_LABEL_TOO_LONG" => ExprKind::Int(2),
+        b"IDNA_ERROR_DOMAIN_NAME_TOO_LONG" => ExprKind::Int(4),
+        b"IDNA_ERROR_LEADING_HYPHEN" => ExprKind::Int(8),
+        b"IDNA_ERROR_TRAILING_HYPHEN" => ExprKind::Int(16),
+        b"IDNA_ERROR_HYPHEN_3_4" => ExprKind::Int(32),
+        b"IDNA_ERROR_LEADING_COMBINING_MARK" => ExprKind::Int(64),
+        b"IDNA_ERROR_DISALLOWED" => ExprKind::Int(128),
+        b"IDNA_ERROR_PUNYCODE" => ExprKind::Int(256),
+        b"IDNA_ERROR_LABEL_HAS_DOT" => ExprKind::Int(512),
+        b"IDNA_ERROR_INVALID_ACE_LABEL" => ExprKind::Int(1024),
+        b"IDNA_ERROR_BIDI" => ExprKind::Int(2048),
+        b"IDNA_ERROR_CONTEXTJ" => ExprKind::Int(4096),
         // preg_last_error() (WP-16): phpr produce solo 0/1/4, ma le costanti
         // esistono tutte come in ext/pcre.
         b"PREG_NO_ERROR" => ExprKind::Int(0),

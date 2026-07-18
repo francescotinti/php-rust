@@ -1,104 +1,109 @@
-# Rotta WORDPRESS-FIRST — WP-track (la suite INTERA gira: 336 test-diff residui)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-17: cluster maggiori chiusi)
 
-> 🏁 **WP-16 (2026-07-17)**: **la WP core suite INTERA (30.480 test, 4,55M
-> assertion, ~22 min) arriva IN FONDO su phpr per la prima volta** — prima
-> moriva silenziosamente. Percorso: 5 blocker seriali (mysqli senza
-> `__destruct` → deadlock a 3 processi sull'install dei test isolati; RSS →
-> jetsam-kill, fix `MIMALLOC_PURGE_DELAY=0`; panic std-sort su ordine
-> non-totale → merge sort tollerante; foreach by-ref su static prop iterava
-> una copia; catena utf8.php) + cluster: BIG-5 nativo byte-id (port tabella
-> libmbfl), mb_substitute_character/mb_scrub, JSON_UNESCAPED_LINE_TERMINATORS,
-> preg_last_error+costanti, chown family, ini access/NULL/open_basedir.
-> **Da 572E/199F a 123E/198F/15S = 336 test differenti per nome** (oracle:
-> 30.321P/86W/73S/1F upstream wpPostsListTable; -1 test = dataset tidy
-> ambientale). Dettagli: changelog WordPress-16 in
-> `PHPR_DIVERGENCES_FROM_PHP.md`.
+> 🏁 **WP-17 (2026-07-18)**: **chiusura di massa dei cluster della full-suite**
+> individuati dal triage WP-16. Tutti i cluster maggiori sono a parità per
+> nome con l'oracle: Template 86 OK · php-ai-client 255 OK · Privacy export
+> 31 OK · Kses 358 OK · wpTexturize 357 OK · BackgroundSupport 27 OK ·
+> GetBookmark 46 OK · DB_Charset 100 OK · Translation 36 OK · ExportWp 11 OK ·
+> WpEmailAddress 79 OK · hooks order e includesPost a parità W-per-W ·
+> sitemaps a parità · zip-file tests OK. ~23 fix engine/builtin: dettaglio nel
+> changelog WordPress-17 di `PHPR_DIVERGENCES_FROM_PHP.md`. I momenti ⭐:
+> `$a[]` come argomento (PclZip), LSB catturata nelle closure (ai-client),
+> mysqli byte-safe sul wire (DB_Charset), punycode RFC 3492 nativo,
+> ZipArchive in scrittura, `\X1C` maiuscolo nel lexer (kses), classi regex
+> ASCII in byte-mode + `\g` backrefs + conditional-lookbehind.
 
-Riprendiamo phpr (PHP 8.5.7 in Rust). **Roadmap**: obiettivo primario =
-100% compatibilità WordPress; la WP core test suite (PHPUnit) è il GATE PER
-NOME del filone. Laravel dopo.
+Riprendiamo phpr (PHP 8.5.7 in Rust). **Roadmap**: obiettivo primario = 100%
+compatibilità WordPress; la WP core test suite (PHPUnit) è il GATE PER NOME.
 
-## Harness full-suite (WP-16 — ⚠️ USARE QUESTO per le run intere)
+## Harness full-suite (WP-16 — invariato, ⚠️ USARE QUESTO per le run intere)
 ```bash
 H="/Volumes/Extreme Pro/Claude/wp16-harness"
-# run DETACHED (sopravvive alla sessione; il task-manager in background della
-# sessione UCCIDE silenziosamente le run phpr lunghe — visto in WP-15 e WP-16):
 nohup perl -e 'use POSIX qw(setsid); fork and exit 0; setsid(); exec @ARGV' -- \
   "$H/run-full-detached.sh" phpr > /tmp/launch.log 2>&1
-# - crea LUI wptests (drop+create nello stesso processo), esporta
-#   MIMALLOC_PURGE_DELAY=0, scrive full-out/full-phpr.{txt,junit.xml,rss,pid}
-#   e il marker full-phpr.done con "rc=N HH:MM:SS" alla fine.
-# - monitorare: tail full-out/full-phpr.rss (RSS+CPU ogni 20s; CPU ferma =
-#   hang → sample <pid>); attendere il .done.
-# oracle: "$H/run-full-detached.sh" oracle  (8:50, junit 11.6MB)
+# monitorare full-out/full-phpr.rss; attendere full-phpr.done ("rc=N HH:MM:SS")
 # diff per nome: perl "$H/extract-junit.pl" junit | sort > names; diff names
-# ⚠️ archiviare full-out/run<N>/ PRIMA di rilanciare (il launcher fa rm).
+# ⚠️ archiviare full-out/run<N>/ PRIMA di rilanciare. ⚠️ perl exec con UN solo
+#   argomento passa dalla shell e i path con SPAZIO si spezzano: usare
+#   `exec { $ARGV[0] } @ARGV`.
 ```
-- Baseline WP-16 archiviate: `full-out/full-oracle.{names,junit.xml,txt}` +
-  `full-out/run7/` (l'ultima phpr) + run6. Il clone è quello WP-15
-  (`be003709…/scratchpad/wpdev`, trunk `81b2b5b`); se sparisce, riclonare e
-  RIFARE la baseline oracle (il trunk cambia!).
-- gate15.sh (invariante per commit) resta in wp15-harness/ e ora è "gate16":
-  4 suite phpt per nome vs worktree wp14-base + ORM + hk + cargo + batterie +
-  10 gruppi WP + misura fileinfo.
+- Baseline oracle: `full-out/full-oracle.{names,junit.xml}` (trunk `81b2b5b`).
+- Se a fine WP-17 è stata lanciata la run8 phpr: leggerla come nuova baseline
+  (attesa: da 336 diff a ~30-50; verificare per nome, SOLO miglioramenti).
 
-## Prossimo passo: SESSIONE WP-17 = chiudere i 336 test-diff della full-suite
-Triage per nome già fatto (diff dei .names, run7): cluster in ordine di resa:
-1. **Tests_Template 38** — da aprire (junit in run7).
-2. **Tests_AI_Client_PromptBuilder 28** (+ Discovery) — php-ai-client nuovo
-   nel trunk; probabilmente 1-2 feature mancanti condivise.
-3. **Privacy export 27** — `Class "PclZip" not found`: class-pclzip.php non
-   carica (indagare cosa lo rompe; probabilmente feature parser/engine).
-4. **Tests_Kses 21** · **WpRenderBackgroundSupport 20** · **GetBookmark 19**
-   · **DB_Charset 16** (ora che BIG-5 c'è, restano conversioni lato wpdb) ·
-   **Translation_Controller_Convert 12** · **wpTexturize 11** ·
-   **ExportWp 11** · coda lunga (~100 su ~40 classi).
-5. Trasversali noti: **WPDieException 26** (probabile UNA causa comune) ·
-   "Expecting E_*" (16 assertion su Deprecated attese) · **Hooks order 8+8**
-   (ordine callback filter/action) · **goto-into-block** html-api (D-45.1,
-   limite compiler — 5E) · "two variables reference the same object" 15.
-6. **Multisite VERO** (`-c tests/phpunit/multisite.xml`): baseline oracle +
-   phpr MAI fatte (i 32 test gated girano single-site). Il bootstrap
-   multisite phpr FUNZIONA (installa la network — verificato col filtro
-   wp_validate_site_data 11/11 = oracle).
-7. Perf: full-suite phpr ~22 min vs 8:50 oracle (2.5x, in linea col 2.7x di
-   restapi); il picco RSS ~2.7GB nella zona image/media va capito (con
-   PURGE_DELAY=0 regge, ma su 16GB è tanto).
+## Prossimo passo: SESSIONE WP-18
+1. **Full-suite run8**: rilanciare/leggere la run phpr intera e ricontare i
+   diff per nome (attesi i soli residui sotto + eventuali code non coperte
+   dai run per-classe di WP-17).
+2. Residui NOTI (per nome, con diagnosi già fatta):
+   - **Tests_Theme 6F** (`test_get_stylesheet_directory_with_filter`): dopo
+     `remove_filter` il valore resta quello filtrato — un layer cache lato
+     phpr trattiene il valore (closure identity ok, hooks a parità: NON è
+     remove_filter; indagare wp_cache/theme_roots o riferimenti condivisi).
+   - **Tests_Block_Supports_Duotone 6F**: serve il **branch reset group
+     `(?|…)`** nel motore regex (nessun backend lo supporta; va emulato con
+     rinumerazione dei gruppi + REMAP dei capture a livello Engine).
+   - **Tests_Functions::test_wp_is_stream ftp 1F**: DECISO divergenza —
+     stream_get_wrappers elenca solo i wrapper realmente apribili
+     (correct-or-absent); riaprire solo se si implementa il wrapper ftp.
+   - **goto-into-block html-api 5E** (D-45.1, limite compiler).
+   - **refl corpus**: `internal_parameter_default_value/check_all.phpt` era
+     SKIP (mancava get_defined_functions) e ora gira ma FALLISCE (vuole i
+     Deprecated SUNFUNCS_RET_* al reflect dei default interni) — skip→fail
+     DICHIARATO nel fail-set refl; ReflectionFunction sui builtin ora dà uno
+     stub internal con parametri vuoti (residuo: metadata param reali).
+   - Divergenze minori documentate: float-key deprecation non emessa in
+     isset/unset e line-number al flush; display dentro ob-handler non
+     scartato ("Producing output from user output handler"); stderr
+     "PHP Xxx:" del CLI SAPI mai emesso.
+3. **Multisite VERO** (`-c tests/phpunit/multisite.xml`): baseline oracle +
+   phpr MAI fatte (i 32 test gated girano single-site).
+4. Perf: full-suite phpr ~22 min vs 8:50 oracle; picco RSS ~2.7GB zona
+   image/media da capire.
 
-## Lezioni operative (nuove WP-16)
-- ⭐ **Le run phpr lunghe (>15') nel task-manager della sessione muoiono
-  senza traccia** (nemmeno il wrapper stampa; il task resta "running"):
-  SEMPRE detached con perl POSIX::setsid (macOS non ha setsid(1)) + marker
-  done + telemetria RSS. Lo stdout di phpr è bufferizzato: 0B nel log NON
-  significa fermo — guardare la CPU nel .rss (ferma = hang vero → `sample`).
-- ⭐ **Triage full-suite = contare i messaggi distinti PRIMA di tutto**
-  (`grep -A1 "^[0-9]*) " | sort | uniq -c`): 413 dei 572E erano UNA funzione
-  (e il fix ne ha svelata un'altra a catena: utf8.php chiama
-  mb_substitute_character POI mb_scrub — controllare TUTTE le funzioni di un
-  file prima di rilanciare 25 min di suite).
-- ⭐ **I deadlock cross-processo si leggono da MySQL**: performance_schema
-  metadata_locks (PENDING) + information_schema.innodb_trx +
-  events_statements_history del thread incriminato = la storia completa
-  senza indovinare.
-- `sort_by` std con semantiche PHP = bomba a orologeria ("not a total
-  order"): qualunque sort su confronto loose deve passare da
-  `php_types::ops::stable_sort_by`.
-- I probe con `posix_*` non girano su phpr (assenti): usare getenv/`id -un`.
-- macOS `sort`/`uniq` con byte non-UTF8 → "Illegal byte sequence": LC_ALL=C.
-- RTK intercetta grep in pipeline complesse: usare perl per i filtri sui log.
-- Archiviare junit/txt di ogni run PRIMA del rilancio (il launcher fa rm).
+## Lezioni operative (nuove WP-17)
+- ⭐ **PHPUnit per-file esige class==filename**: per classi come
+  `Tests_AI_Client_*` in file `wpAiClient*.php` usare `--filter 'Classe'`
+  (il per-file dà "Class X could not be found", il per-directory
+  "No tests executed!").
+- ⭐ **I probe con WP intero**: `wp9-harness/wp-mo/wp-load.php` (install
+  persistente + DB wp_o) per bisezioni di funzioni WP fuori da PHPUnit —
+  MA i filtri di default possono differire dal trunk wpdev: per riprodurre
+  una deprecation del trunk serve il bootstrap dei TEST
+  (`vendor/autoload.php` + `tests/phpunit/includes/bootstrap.php` con
+  `WP_TESTS_SKIP_INSTALL=1`).
+- ⭐ Il triage dei messaggi junit può MENTIRE sul colpevole: "\X1C" nel
+  provider kses era un escape MAIUSCOLO del lexer, non un bug di kses;
+  "Class PclZip not found" era il compile di `$this->m($list[])`; il
+  "WP_User could not be converted" era array_unique(SORT_REGULAR). Risalire
+  SEMPRE alla riga sorgente del provider/chiamante prima di toccare l'engine.
+- `date_parse` e `strtotime`/`DateTime::__construct` hanno DUE parser
+  distinti in phpr (dateparse.rs vs date.rs strtotime_in): un formato può
+  funzionare in uno e mancare nell'altro — testare entrambi.
+- La vista Latin1 dei subject byte-mode impone lo stesso dominio al PATTERN:
+  per oniguruma tradurre `\xNN`≥80 in `\x{NN}` (onig legge \xNN come BYTE
+  dell'encoding UTF-8, non come code point).
+- mago pre-decodifica i literal: i fix di escape del lexer vanno nel
+  bypass raw di `lower_expr` (`\u{...}`, ora anche `\X`), non solo in
+  `unescape_double_quoted`.
 
-## Invarianti (aggiornati WP-16)
+## Invarianti (aggiornati WP-17)
 - Gate per OGNI commit: corpus/sess/date/refl per NOME (baseline worktree
   wp14-base; WP-15/16 fixano 3 corpus + 7 date: SOLO rimozioni ammesse) ·
   ORM 3E/13F per nome · http-kernel 1665 0E/0F · cargo · probe: gd 11/11,
   mysqli 11/11, media-probe byte-id, run-http (DIFF-set 16 = WP-14) · WP
   suite: option 413 · media 762 (52S) · post 906 · user 1341 · query 1889 ·
-  restapi 3514 (1E oEmbed upstream) · taxonomy 878 (1W) · comment 582 ·
-  xmlrpc 316 · multisite 32 — TUTTI = oracle · misura fileinfo 29P/25F/8S.
-- **Full-suite (nuovo)**: 30.480 test, ≤123E/199F per nome vs run7 (solo
-  miglioramenti; junit di riferimento in wp16-harness/full-out/run7/).
-- Commit AND push a ogni step; run pesanti SEQUENZIALI e DETACHED (vedi
-  harness WP-16) sotto watchdog/telemetria; Serena per Rust, Vexp/Read per
-  il C; Read/Write tool per i .php; log `tr -d '\0'`; probe MAI su wptests
-  durante una run.
+  restapi 3514 (fail-set = oracle, oEmbed+canola ambientali) · taxonomy 878
+  (1W) · comment 582 · xmlrpc 316 · multisite 32 — TUTTI = oracle · misura
+  fileinfo 29P/25F/8S.
+- **Classi WP-17 a parità** (nuovi invarianti veloci, run per-classe):
+  Template 86 OK · Privacy 31 OK · Bookmark 46 OK · ExportWp 11 OK · Kses
+  358 OK · Texturize 357 OK · Background 27 OK · Email 79 OK · Charset 100
+  (1S) · l10n-convert 36 OK · ai-client (`--filter Tests_AI_Client`) 255 OK ·
+  includesPost 51 (6W) · actions 43 (2W) / doAction 25 (2W) /
+  applyFilters 19 (2W) / filters 37 (2W).
+- Full-suite: solo miglioramenti per nome vs baseline corrente
+  (run7 WP-16; run8 WP-17 quando archiviata).
+- Commit AND push a ogni step; run pesanti SEQUENZIALI e DETACHED sotto
+  watchdog/telemetria; Serena per Rust, Vexp/Read per il C; Read/Write tool
+  per i .php; log `tr -d '\0'`; probe MAI su wptests durante una run.

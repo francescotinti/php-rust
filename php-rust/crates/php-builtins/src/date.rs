@@ -851,6 +851,34 @@ fn parse_textual(s: &str) -> Option<(i64, Option<StrZone>)> {
 /// (civil fields packed as if UTC) plus the timezone carried by the string
 /// itself, if any — the caller anchors wall times without one in the
 /// prevailing zone.
+/// A standalone `H:i[:s]` time-of-day token (both fields two digits, hour may
+/// be one). Fractions/am-pm/zone suffixes stay out — those routes go through
+/// parse_absolute with a date.
+fn parse_bare_time(s: &str) -> Option<(i64, i64, i64)> {
+    let parts: Vec<&str> = s.split(':').collect();
+    if !(2..=3).contains(&parts.len())
+        || parts.iter().any(|p| p.is_empty() || !p.bytes().all(|b| b.is_ascii_digit()))
+        || parts[0].len() > 2
+        || parts[1].len() != 2
+    {
+        return None;
+    }
+    let h: i64 = parts[0].parse().ok()?;
+    let mi: i64 = parts[1].parse().ok()?;
+    let s2: i64 = if parts.len() == 3 {
+        if parts[2].len() != 2 {
+            return None;
+        }
+        parts[2].parse().ok()?
+    } else {
+        0
+    };
+    if !(0..=24).contains(&h) || mi > 59 || s2 > 59 {
+        return None;
+    }
+    Some((h, mi, s2))
+}
+
 fn parse_absolute(s: &str) -> Option<(i64, Option<StrZone>)> {
     // The ISO-8601 `T` separator only counts between digits — a blanket
     // replace would shred a trailing timezone NAME ("UTC" → "U C").
@@ -909,13 +937,33 @@ fn parse_absolute(s: &str) -> Option<(i64, Option<StrZone>)> {
             } else {
                 return None;
             };
-            let mut d = date.split(sep);
-            let year: i64 = d.next()?.parse().ok()?;
-            let month: i64 = d.next()?.parse().ok()?;
-            let day: i64 = d.next()?.parse().ok()?;
-            if d.next().is_some() {
+            let groups: Vec<&str> = date.split(sep).collect();
+            if groups.len() != 3
+                || groups.iter().any(|g| g.is_empty() || !g.bytes().all(|b| b.is_ascii_digit()))
+            {
                 return None;
             }
+            // timelib's `-`/`/` disambiguation (WP-17, mysql_to_rfc3339): a
+            // 4-digit FIRST group is Y-m-d; else a 4-digit LAST group is d-m-Y
+            // (dashes) or m/d/Y (slashes, American); else Y-m-d, with a
+            // 2-digit year remapped 00-69 → 2000s, 70-99 → 1900s
+            // (oracle: "69-01-01" → 2069, "70-01-01" → 1970).
+            let (year, month, day): (i64, i64, i64) = if groups[0].len() == 4 {
+                (groups[0].parse().ok()?, groups[1].parse().ok()?, groups[2].parse().ok()?)
+            } else if groups[2].len() == 4 {
+                let y = groups[2].parse().ok()?;
+                if sep == '/' {
+                    (y, groups[0].parse().ok()?, groups[1].parse().ok()?)
+                } else {
+                    (y, groups[1].parse().ok()?, groups[0].parse().ok()?)
+                }
+            } else {
+                let mut y: i64 = groups[0].parse().ok()?;
+                if groups[0].len() <= 2 {
+                    y += if y <= 69 { 2000 } else { 1900 };
+                }
+                (y, groups[1].parse().ok()?, groups[2].parse().ok()?)
+            };
             // timelib's date patterns cap the FIELDS (mm 0-12, dd 0-31) but
             // still normalise overflow inside them ('2020-02-31' → Mar 2);
             // '2020-12-41' must be a parse error, not a wrap.
@@ -2070,6 +2118,14 @@ fn strtotime_in(trimmed: &str, base: i64, zr: &ZoneRef) -> Option<(i64, Option<S
             Some(z) => (wall - z.off, Some(z.label)),
             None => (zone_wall_to_epoch(zr, wall), None),
         });
+    }
+    // A bare time of day ("19:13", "18:54:46" — mysql_to_rfc3339 feeds H:i):
+    // today's date in the zone at that wall-clock time (timelib timeshort/long).
+    if let Some((h, mi, s)) = parse_bare_time(&lower) {
+        let wall_base = base.saturating_add(zone_view(zr, base).off);
+        let day_start = wall_base - wall_base.rem_euclid(86_400);
+        let wall = day_start + h * 3600 + mi * 60 + s;
+        return Some((zone_wall_to_epoch(zr, wall), None));
     }
     // timelib also accepts an absolute date/time FOLLOWED by relative tokens
     // ("2026-07-17 14:30:00+10 minutes" — WP's comment-preview window builds

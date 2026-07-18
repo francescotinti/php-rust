@@ -305,7 +305,7 @@ pub(super) fn field_write(
             ensure_array(target)?;
             let Zval::Array(rc) = target else { unreachable!("ensured array") };
             let arr = Rc::make_mut(rc);
-            let k = coerce_key_silent(&key)
+            let k = coerce_key_diag(&key, diags)
                 .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
             if rest.is_empty() {
                 // Overwrite a plain element, but write *through* an existing
@@ -479,6 +479,29 @@ pub(super) fn read_slot(cell: &Zval) -> Zval {
 /// proof slice reads and writes silently. Mirrors `eval::coerce_key` minus the
 /// deprecation/warning pushes; `None` marks an illegal offset type
 /// (array/object/closure/generator/resource).
+/// [`coerce_key_silent`] plus PHP 8.1's lossy-float offset deprecation:
+/// "Implicit conversion from float %s to int loses precision" fires in every
+/// offset context (write, read, coalesce — oracle-pinned; WP's
+/// `add_action($h, $cb, 9.5)` tests expect it). The isset/unset proof paths
+/// keep the silent funnel (no diags in scope there; residual divergence).
+pub(super) fn coerce_key_diag(v: &Zval, diags: &mut Diags) -> Option<Key> {
+    if let Zval::Ref(c) = v {
+        return coerce_key_diag(&c.borrow(), diags);
+    }
+    if let Zval::Double(d) = v {
+        let l = convert::dval_to_lval(*d);
+        if !convert::is_long_compatible(*d, l) {
+            let rendered = convert::to_zstr(&Zval::Double(*d), diags);
+            diags.push(Diag::Deprecated(format!(
+                "Implicit conversion from float {} to int loses precision",
+                String::from_utf8_lossy(rendered.as_bytes())
+            )));
+        }
+        return Some(Key::Int(l));
+    }
+    coerce_key_silent(v)
+}
+
 pub(super) fn coerce_key_silent(v: &Zval) -> Option<Key> {
     match v {
         Zval::Long(i) => Some(Key::Int(*i)),
@@ -538,7 +561,7 @@ pub(super) fn read_dim(base: &Zval, key: &Zval) -> Zval {
 /// (no failing parity case needs the "Uninitialized string offset" warning yet).
 pub(super) fn read_dim_warn(base: &Zval, key: &Zval, diags: &mut Diags) -> Zval {
     match base {
-        Zval::Array(a) => match coerce_key_silent(key) {
+        Zval::Array(a) => match coerce_key_diag(key, diags) {
             Some(k) => match a.get(&k) {
                 Some(v) => v.deref_clone(),
                 None => {

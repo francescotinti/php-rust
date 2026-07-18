@@ -688,6 +688,23 @@ class SimpleXMLElement implements ArrayAccess, Countable, Iterator, Stringable {
         return $e;
     }
     public static function __local($n) { $p = strrpos($n, ':'); return $p === false ? $n : substr($n, $p + 1); }
+    // xpath(): delegate to the __dom_xpath host (same engine as DOMXPath),
+    // context = this element; element results wrap as element faces, attribute
+    // results as single-attribute faces (WP-17, export_wp's channel/item reads).
+    public function xpath($expression) {
+        $ctx = $this->__node();
+        $r = __dom_xpath($this->__d, $ctx, (string)$expression, array());
+        if (!is_array($r)) { return false; }
+        $out = array();
+        foreach ($r as $it) {
+            if ($it[0] === 'a') {
+                $out[] = SimpleXMLElement::__mk($this->__d, 'a', $it[1], -1, $it[2]);
+            } else {
+                $out[] = SimpleXMLElement::__mk($this->__d, 'e', $it[1]);
+            }
+        }
+        return $out;
+    }
     // The concrete element this face reads from: itself for an element, the
     // FIRST match for a named set, and the PARENT for the children() face
     // ('' set) -- in PHP children() is the same element seen through its

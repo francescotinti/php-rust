@@ -2655,7 +2655,13 @@ pub fn tempnam(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     use std::os::unix::fs::OpenOptionsExt;
     use std::sync::atomic::{AtomicU64, Ordering};
     static CTR: AtomicU64 = AtomicU64::new(0);
-    let dir = arg_os_path(argv, ctx);
+    let mut dir = arg_os_path(argv, ctx);
+    // An empty/false directory (WP's temp_filename passes realpath('TMPDIR')
+    // = false) silently falls back to the system temp dir, like PHP's
+    // php_open_temporary_fd_ex — no diagnostic in 8.5.
+    if dir.as_os_str().is_empty() {
+        dir = std::env::temp_dir().into();
+    }
     let prefix = ctx.to_zstr(&argv[1]);
     for _ in 0..100 {
         let n = CTR.fetch_add(1, Ordering::Relaxed);

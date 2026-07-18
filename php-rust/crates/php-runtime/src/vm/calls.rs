@@ -83,6 +83,15 @@ pub(super) fn value_builtin_string_coerces(name: &[u8]) -> bool {
             | b"substr_count"
             | b"substr_compare"
             | b"substr_replace"
+            // Comparison family: every parameter is a string, PHP's ZPP
+            // coerces a Stringable (they already read via ctx.to_zstr).
+            | b"strcmp"
+            | b"strcasecmp"
+            | b"strncmp"
+            | b"strncasecmp"
+            | b"strnatcmp"
+            | b"strnatcasecmp"
+            | b"similar_text"
             | b"bin2hex"
             | b"hex2bin"
             | b"addslashes"
@@ -585,6 +594,15 @@ impl<'m> Vm<'m> {
         new_scope: Option<Option<usize>>,
     ) -> Zval {
         let id = self.next_id();
+        // Rebinding also moves `static::`: a bound object's class wins, else
+        // an explicit new scope, else the closure's original LSB.
+        let lsb = match &bound_this {
+            Some(Zval::Object(o)) => Some(o.borrow().class_id as usize),
+            _ => match new_scope {
+                Some(s) => s.or(cl.lsb),
+                None => cl.lsb,
+            },
+        };
         Zval::Closure(Rc::new(Closure {
             fn_idx: cl.fn_idx,
             captures: cl.captures.clone(),
@@ -595,6 +613,7 @@ impl<'m> Vm<'m> {
             module_id: cl.module_id,
             scope: new_scope.unwrap_or(cl.scope),
             is_static: cl.is_static,
+            lsb,
         }))
     }
 
@@ -736,6 +755,7 @@ impl<'m> Vm<'m> {
                         module_id: 0,
                         scope: None,
                         is_static: false,
+                        lsb: None,
                     })))
                 }
                 // An invokable object: the callable is its `__invoke` method
@@ -832,6 +852,7 @@ impl<'m> Vm<'m> {
             module_id: 0,
             scope: Some(scope),
             is_static: false,
+            lsb: Some(cid),
         })))
     }
 

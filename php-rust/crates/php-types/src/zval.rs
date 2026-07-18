@@ -102,6 +102,10 @@ pub enum ArgPlaceBase {
 pub enum ArgPlaceStep {
     Index,
     Prop(Box<[u8]>),
+    /// `$a[]` in argument position (always the final step): a by-ref
+    /// parameter appends a fresh element and aliases it; a by-value one is
+    /// PHP's runtime "Cannot use [] for reading" Error (WP-17, PclZip).
+    Append,
 }
 
 /// A lowered-and-captured closure value (step 18). `fn_idx` selects the body
@@ -145,6 +149,12 @@ pub struct Closure {
     /// `bindTo`/`Closure::bind`/`call` with a non-null instance warns and yields
     /// `null` (step 19-6). `false` for an ordinary closure or first-class callable.
     pub is_static: bool,
+    /// The late-static-binding class captured at creation (the creating
+    /// frame's `static::`), or rebound by `bindTo`/`Closure::bind`. Distinct
+    /// from `scope`: a `static function` created inside `Base::getCb()` called
+    /// as `Child::getCb()` has scope Base but `static::` = Child
+    /// (php-ai-client's discovery strategy relies on it, WP-17).
+    pub lsb: Option<usize>,
 }
 
 /// What `var_dump` / `print_r` print for a closure value (step 18-7, D-18.9).

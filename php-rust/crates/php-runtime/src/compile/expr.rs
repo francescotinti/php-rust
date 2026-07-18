@@ -1751,13 +1751,17 @@ impl<'a> super::FnCompiler<'a> {
                             PlaceBase::This => Some(FieldBase::This),
                             _ => None,
                         };
+                        // A trailing `Append` (from `AppendArg`) is a valid
+                        // final step: `f($a[])` defers the append to the
+                        // binder like any other place argument.
                         if let (Some(base), true) = (
                             base,
                             !place.steps.is_empty()
-                                && place
-                                    .steps
-                                    .iter()
-                                    .all(|s| matches!(s, PlaceStep::Index(_) | PlaceStep::Prop(_))),
+                                && place.steps.iter().enumerate().all(|(i, s)| {
+                                    matches!(s, PlaceStep::Index(_) | PlaceStep::Prop(_))
+                                        || (matches!(s, PlaceStep::Append)
+                                            && i + 1 == place.steps.len())
+                                }),
                         ) {
                             let mut steps = Vec::with_capacity(place.steps.len());
                             for step in &place.steps {
@@ -1767,6 +1771,7 @@ impl<'a> super::FnCompiler<'a> {
                                         steps.push(FieldStep::Index);
                                     }
                                     PlaceStep::Prop(n) => steps.push(FieldStep::Prop(n.clone())),
+                                    PlaceStep::Append => steps.push(FieldStep::Append),
                                     _ => unreachable!("filtered above"),
                                 }
                             }

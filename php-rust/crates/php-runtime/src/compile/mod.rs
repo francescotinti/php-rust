@@ -1310,6 +1310,14 @@ fn expr_field_place(e: &Expr) -> Option<Place> {
             place.steps.push(PlaceStep::Index((**index).clone()));
             Some(place)
         }
+        // `$a[]` in argument position (lower_args guarantees a place-shaped
+        // base): a trailing Append step, deferred to the dispatch binder.
+        // (expr_name knows it as "AppendArg" for the Unsupported fallback.)
+        ExprKind::AppendArg(base) => {
+            let mut place = expr_field_place(base)?;
+            place.steps.push(PlaceStep::Append);
+            Some(place)
+        }
         ExprKind::PropGet { object, name, nullsafe: false } => {
             let mut place = expr_field_place(object)?;
             place.steps.push(PlaceStep::Prop(name.clone()));
@@ -1363,6 +1371,7 @@ fn expr_name(k: &ExprKind) -> String {
         ExprKind::Str(_) => "Str",
         ExprKind::Const { .. } => "Const",
         ExprKind::Var(_) => "Var",
+        ExprKind::AppendArg(_) => "AppendArg",
         ExprKind::VarDyn(_) => "VarDyn",
         ExprKind::VarDynAssign { .. } => "VarDynAssign",
         ExprKind::ClassConstDyn { .. } => "ClassConstDyn",

@@ -595,19 +595,48 @@ class ZipArchive implements Countable {
     public $filename = '';
     public $comment = '';
     private $__h = null;
+    private $__w = false;
     public function open($filename, $flags = 0) {
+        // CREATE/OVERWRITE on a missing (or OVERWRITE'd) file opens a fresh
+        // WRITE-mode archive backed by __zip_writer_* (WP privacy export).
+        if (($flags & self::OVERWRITE) || (($flags & self::CREATE) && !file_exists($filename))) {
+            $r = __zip_writer_open($filename);
+            if (is_int($r)) { $this->status = $r; return $r; }
+            $this->__h = $r[0];
+            $this->__w = true;
+            $this->numFiles = 0;
+            $this->filename = $filename;
+            $this->status = 0;
+            return true;
+        }
         $r = __zip_open($filename);
         if (is_int($r)) { $this->status = $r; return $r; }
         $this->__h = $r[0];
+        $this->__w = false;
         $this->numFiles = $r[1];
         $this->filename = $filename;
         $this->status = 0;
         return true;
     }
+    public function addFile($filepath, $entryname = null, $start = 0, $length = 0, $flags = 0) {
+        if ($this->__h === null || !$this->__w) { return false; }
+        $data = @file_get_contents($filepath);
+        if ($data === false) { return false; }
+        $name = ($entryname === null || $entryname === '') ? basename($filepath) : $entryname;
+        if (!__zip_writer_add($this->__h, $name, $data)) { return false; }
+        $this->numFiles++;
+        return true;
+    }
+    public function addFromString($name, $content, $flags = 0) {
+        if ($this->__h === null || !$this->__w) { return false; }
+        if (!__zip_writer_add($this->__h, $name, $content)) { return false; }
+        $this->numFiles++;
+        return true;
+    }
     public function close() {
         if ($this->__h === null) { return false; }
-        $r = __zip_close($this->__h);
-        $this->__h = null; $this->numFiles = 0; $this->filename = '';
+        $r = $this->__w ? __zip_writer_close($this->__h) : __zip_close($this->__h);
+        $this->__h = null; $this->__w = false; $this->numFiles = 0; $this->filename = '';
         return $r;
     }
     public function count(): int { return $this->numFiles; }

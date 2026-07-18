@@ -657,8 +657,43 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
     // never falls back to the other, which is precisely what the mutually
     // exclusive guards encode. WordPress' wp_html_split/wptexturize regexes
     // live on this construct.
-    let body: std::borrow::Cow<str> = if body.contains("(?(?=") || body.contains("(?(?!") {
+    let body: std::borrow::Cow<str> = if body.contains("(?(?=")
+        || body.contains("(?(?!")
+        || body.contains("(?(?<=")
+        || body.contains("(?(?<!")
+    {
         match rewrite_lookahead_conditionals(&body) {
+            Some(rw) => std::borrow::Cow::Owned(rw),
+            None => body,
+        }
+    } else {
+        body
+    };
+
+    // PCRE's `\g` backreference forms: `\g1`/`\g{1}` are absolute numbered
+    // backrefs, `\g{-1}` is relative to the most recently opened group, and
+    // `\g{name}` is a named backref. Neither backend understands them (WP's
+    // safecss_filter_attr matches `url\(\s*([\'\"]?)(.*)(\g1)\s*\)`, WP-17), so
+    // they are normalised to `\N` / `\k<name>` here. `\g<name>`/`\g'name'`
+    // (subroutine calls) are left for the oniguruma path.
+    let body: std::borrow::Cow<str> = if body.contains("\\g") {
+        match normalize_g_backrefs(&body) {
+            Some(rw) => std::borrow::Cow::Owned(rw),
+            None => body,
+        }
+    } else {
+        body
+    };
+
+    // Without `/u`, PCRE's class escapes are BYTE-oriented ASCII (`\s` is
+    // `[ \t\n\x0B\f\r]`, never U+00A0), while the char-domain engines default
+    // to Unicode classes — on the Latin1 subject view byte 0xA0 decoded to
+    // U+00A0 and stopped being `\S`, so wptexturize's `(?<=\S)'` skipped
+    // apostrophes after multibyte text (WP-17). Rewrite the escapes to
+    // explicit ASCII classes; a pattern that resists rewriting (negated
+    // escape inside a class) keeps the Unicode build.
+    let body: std::borrow::Cow<str> = if !flags.contains(&b'u') {
+        match asciify_class_escapes(&body) {
             Some(rw) => std::borrow::Cow::Owned(rw),
             None => body,
         }
@@ -785,9 +820,53 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
         oo |= onig::RegexOptions::REGEX_OPTION_SINGLELINE;
     }
     let body = onigify_python_groups(demixed.as_deref().unwrap_or(&body));
+    // Oniguruma reads `\xNN` as a raw BYTE in the UTF-8 subject encoding,
+    // while the str engines (and the Latin1 subject view) treat it as the
+    // code point U+00NN — so `\xC2\xA0` (wp_spaces_regexp's NBSP) accidentally
+    // matched the UTF-8 ENCODING of view-char U+00A0 (WP-17, wptexturize).
+    // Normalise high `\xNN` escapes to onig's code-point form `\x{NN}`.
+    let body = onigify_hex_escapes(&body);
     onig::Regex::with_options(&body, oo, onig::Syntax::perl_ng())
         .ok()
         .map(|r| wrap(Engine::Onig(r)))
+}
+
+/// `\xNN` with NN ≥ 80 → `\x{NN}` for the oniguruma path (see call site).
+/// ASCII `\xNN` (< 0x80) byte/code point coincide, so they stay untouched.
+fn onigify_hex_escapes(body: &str) -> String {
+    let s = body.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(s.len() + 8);
+    let mut i = 0;
+    while i < s.len() {
+        if s[i] == b'\\' && i + 3 < s.len() && s[i + 1] == b'x' {
+            let (h1, h2) = (s[i + 2], s[i + 3]);
+            if h1.is_ascii_hexdigit() && h2.is_ascii_hexdigit() {
+                let val = u8::from_str_radix(
+                    std::str::from_utf8(&s[i + 2..i + 4]).unwrap_or("0"),
+                    16,
+                )
+                .unwrap_or(0);
+                if val >= 0x80 {
+                    out.extend_from_slice(b"\\x{");
+                    out.extend_from_slice(&s[i + 2..i + 4]);
+                    out.extend_from_slice(b"}");
+                    i += 4;
+                    continue;
+                }
+            }
+            out.extend_from_slice(&s[i..i + 2]);
+            i += 2;
+            continue;
+        }
+        if s[i] == b'\\' && i + 1 < s.len() {
+            out.extend_from_slice(&s[i..i + 2]);
+            i += 2;
+            continue;
+        }
+        out.push(s[i]);
+        i += 1;
+    }
+    String::from_utf8(out).unwrap_or_else(|_| body.to_string())
 }
 
 /// Escape a bare `[` inside a character class (`[([{"\-]` → `[(\[{"\-]`):
@@ -1041,12 +1120,20 @@ fn rewrite_lookahead_conditionals(body: &str) -> Option<String> {
                 i += 1;
                 continue;
             }
-            if s[i..].starts_with(b"(?(?=") || s[i..].starts_with(b"(?(?!") {
+            let look = if s[i..].starts_with(b"(?(?=") || s[i..].starts_with(b"(?(?!") {
+                // Lookahead condition: `(?(?=C)y|n)` / `(?(?!C)y|n)`.
+                Some((false, s[i + 4] == b'!', 3usize))
+            } else if s[i..].starts_with(b"(?(?<=") || s[i..].starts_with(b"(?(?<!") {
+                // Lookbehind condition (wptexturize's `(?(?<=0)…|…)`, WP-17).
+                Some((true, s[i + 5] == b'!', 4usize))
+            } else {
+                None
+            };
+            if let Some((behind, neg, inner_off)) = look {
                 let whole_end = close_paren(s, i)?; // `)` of the conditional
-                let cond_open = i + 2; // `(` of the lookahead condition
+                let cond_open = i + 2; // `(` of the look condition
                 let cond_end = close_paren(s, cond_open)?;
-                let neg = s[i + 4] == b'!';
-                let cond_inner = &s[cond_open + 3..cond_end];
+                let cond_inner = &s[cond_open + inner_off..cond_end];
                 if has_capturing_group(cond_inner) {
                     return None;
                 }
@@ -1078,12 +1165,15 @@ fn rewrite_lookahead_conditionals(body: &str) -> Option<String> {
                 let yes = rw(yes_raw, changed)?;
                 let no = rw(no_raw, changed)?;
                 let (g, ng) = if neg { (b'!', b'=') } else { (b'=', b'!') };
+                let dir: &[u8] = if behind { b"<" } else { b"" };
                 out.extend_from_slice(b"(?:(?");
+                out.extend_from_slice(dir);
                 out.push(g);
                 out.extend_from_slice(&cond);
                 out.push(b')');
                 out.extend_from_slice(&yes);
                 out.extend_from_slice(b"|(?");
+                out.extend_from_slice(dir);
                 out.push(ng);
                 out.extend_from_slice(&cond);
                 out.push(b')');
@@ -1300,6 +1390,182 @@ fn demix_numbered_backrefs(body: &str) -> Option<String> {
 /// translation (Composer's JsonManipulator mixes `(?P<start>` with
 /// `(?(DEFINE))`, which is exactly the combination that lands here). Escaped
 /// characters and character classes are left untouched.
+/// Rewrite `\d`/`\s`/`\w` (and negations, and `\b`/`\B`) to their PCRE
+/// byte-mode ASCII equivalents for a non-`/u` pattern: the str engines
+/// default every class escape to Unicode, but PCRE without UTF-8 is
+/// ASCII-only (byte 0xA0 — U+00A0 in the Latin1 subject view — is `\S`).
+/// `\b`/`\B` use the engines' `(?-u:\b)` ASCII form (valid in str mode since
+/// a boundary matches a position, not bytes). Returns `None` when nothing
+/// needed rewriting, or when a NEGATED escape appears inside a character
+/// class (`[\S]` has no plain expansion — keep the Unicode build).
+fn asciify_class_escapes(body: &str) -> Option<String> {
+    let b = body.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(b.len() + 16);
+    let mut i = 0;
+    let mut in_class = false;
+    let mut changed = false;
+    while i < b.len() {
+        let c = b[i];
+        if c == b'\\' && i + 1 < b.len() {
+            let e = b[i + 1];
+            let rewrite: Option<&[u8]> = if in_class {
+                match e {
+                    b'd' => Some(b"0-9"),
+                    b'w' => Some(b"0-9A-Za-z_"),
+                    // `\x20` instead of a literal space: `/x` mode strips
+                    // whitespace inside classes in the str engines.
+                    b's' => Some(b"\\x20\\t\\n\\x0B\\f\\r"),
+                    b'D' | b'S' | b'W' => return None,
+                    _ => None,
+                }
+            } else {
+                match e {
+                    b'd' => Some(b"[0-9]"),
+                    b'D' => Some(b"[^0-9]"),
+                    b'w' => Some(b"[0-9A-Za-z_]"),
+                    b'W' => Some(b"[^0-9A-Za-z_]"),
+                    b's' => Some(b"[\\x20\\t\\n\\x0B\\f\\r]"),
+                    b'S' => Some(b"[^\\x20\\t\\n\\x0B\\f\\r]"),
+                    // `\b`/`\B` stay Unicode: `(?-u:\b)` is rejected by the
+                    // fancy fallback, and a lookaround expansion would evict
+                    // every `\b` pattern from the fast engine. Pre-existing
+                    // (documented) divergence on Latin1-view word boundaries.
+                    _ => None,
+                }
+            };
+            match rewrite {
+                Some(r) => {
+                    out.extend_from_slice(r);
+                    changed = true;
+                }
+                None => out.extend_from_slice(&b[i..i + 2]),
+            }
+            i += 2;
+            continue;
+        }
+        if in_class {
+            if c == b']' {
+                in_class = false;
+            }
+        } else if c == b'[' {
+            in_class = true;
+        }
+        out.push(c);
+        i += 1;
+    }
+    if !changed {
+        return None;
+    }
+    String::from_utf8(out).ok()
+}
+
+/// Normalise PCRE's `\g` backreference dialect: `\gN`/`\g{N}` → `\N`,
+/// `\g{-N}` (relative to the most recently opened capture group) → the
+/// resolved absolute `\N`, `\g{name}` → `\k<name>`. Subroutine-call forms
+/// (`\g<…>`, `\g'…'`) and anything inside a character class are untouched.
+/// Returns `None` when the pattern contains no rewritable `\g` form.
+fn normalize_g_backrefs(body: &str) -> Option<String> {
+    let b = body.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(b.len());
+    let mut i = 0;
+    let mut in_class = false;
+    let mut groups_opened = 0usize;
+    let mut changed = false;
+    while i < b.len() {
+        let c = b[i];
+        if c == b'\\' && i + 1 < b.len() {
+            if b[i + 1] == b'g' && !in_class {
+                // `\g` followed by digits: absolute numbered backref.
+                let mut j = i + 2;
+                if j < b.len() && b[j].is_ascii_digit() {
+                    while j < b.len() && b[j].is_ascii_digit() {
+                        j += 1;
+                    }
+                    out.push(b'\\');
+                    out.extend_from_slice(&b[i + 2..j]);
+                    i = j;
+                    changed = true;
+                    continue;
+                }
+                // `\g{…}` — number, relative number, or name.
+                if j < b.len() && b[j] == b'{' {
+                    if let Some(end) = b[j + 1..].iter().position(|&x| x == b'}') {
+                        let inner = &b[j + 1..j + 1 + end];
+                        let after = j + 1 + end + 1;
+                        if !inner.is_empty() && inner.iter().all(|x| x.is_ascii_digit()) {
+                            out.push(b'\\');
+                            out.extend_from_slice(inner);
+                            i = after;
+                            changed = true;
+                            continue;
+                        }
+                        if inner.first() == Some(&b'-')
+                            && inner.len() > 1
+                            && inner[1..].iter().all(|x| x.is_ascii_digit())
+                        {
+                            let n: usize =
+                                std::str::from_utf8(&inner[1..]).ok()?.parse().ok()?;
+                            if n == 0 || n > groups_opened {
+                                return None; // invalid relative ref: leave as-is
+                            }
+                            let abs = groups_opened - n + 1;
+                            out.push(b'\\');
+                            out.extend_from_slice(abs.to_string().as_bytes());
+                            i = after;
+                            changed = true;
+                            continue;
+                        }
+                        if !inner.is_empty()
+                            && inner.iter().all(|x| x.is_ascii_alphanumeric() || *x == b'_')
+                        {
+                            out.extend_from_slice(b"\\k<");
+                            out.extend_from_slice(inner);
+                            out.push(b'>');
+                            i = after;
+                            changed = true;
+                            continue;
+                        }
+                    }
+                }
+                // `\g<…>` / `\g'…'` subroutine calls (or malformed): untouched.
+            }
+            out.push(c);
+            out.push(b[i + 1]);
+            i += 2;
+            continue;
+        }
+        if in_class {
+            if c == b']' {
+                in_class = false;
+            }
+            out.push(c);
+            i += 1;
+            continue;
+        }
+        match c {
+            b'[' => in_class = true,
+            b'(' => {
+                // Count capture groups for relative-ref resolution: `(` not
+                // followed by `?`, plus the named forms `(?<n>`/`(?P<n>`/`(?'n'`.
+                let named = b[i..].starts_with(b"(?<")
+                    && b.get(i + 3).is_some_and(|&x| x != b'=' && x != b'!')
+                    || b[i..].starts_with(b"(?P<")
+                    || b[i..].starts_with(b"(?'");
+                if b.get(i + 1) != Some(&b'?') || named {
+                    groups_opened += 1;
+                }
+            }
+            _ => {}
+        }
+        out.push(c);
+        i += 1;
+    }
+    if !changed {
+        return None;
+    }
+    String::from_utf8(out).ok()
+}
+
 fn onigify_python_groups(body: &str) -> String {
     let b = body.as_bytes();
     let mut out: Vec<u8> = Vec::with_capacity(b.len());

@@ -109,6 +109,23 @@ fn error_triple(e: &mysql::Error) -> (i64, String, String) {
     }
 }
 
+/// Wrap raw query bytes for the `mysql` crate's `AsRef<str>` APIs. MySQL
+/// query text is NOT required to be UTF-8 (wpdb's strip_invalid_text sends
+/// `CONVERT(_koi8r'…')` with charset-native bytes); the crate only ever calls
+/// `.as_bytes()` on the string and writes it verbatim into the COM_QUERY /
+/// COM_STMT_PREPARE payload, so the bytes must reach the wire untouched — a
+/// lossy round-trip replaced them with U+FFFD (WP-17, Tests_DB_Charset).
+///
+/// SAFETY: the returned String may hold non-UTF-8 bytes; it is passed
+/// straight to the crate and dropped, never inspected as `str` locally.
+fn raw_sql(sql: Vec<u8>) -> String {
+    match String::from_utf8(sql) {
+        Ok(s) => s,
+        // Invalid UTF-8: the crate treats the text as opaque bytes.
+        Err(e) => unsafe { String::from_utf8_unchecked(e.into_bytes()) },
+    }
+}
+
 fn err_from(e: &mysql::Error) -> Zval {
     let (errno, msg, state) = error_triple(e);
     err_payload(errno, &msg, &state)
@@ -404,7 +421,7 @@ impl<'m> Vm<'m> {
             Err(e) => return Ok(e),
         };
         mc.pending.clear();
-        match mc.conn.query_iter(String::from_utf8_lossy(&sql).into_owned()) {
+        match mc.conn.query_iter(raw_sql(sql)) {
             Ok(qr) => match drain_sets(qr) {
                 Ok((first, rest)) => {
                     mc.pending = rest;
@@ -547,7 +564,7 @@ impl<'m> Vm<'m> {
             Ok(mc) => mc,
             Err(e) => return Ok(e),
         };
-        match mc.conn.prep(String::from_utf8_lossy(&sql).into_owned()) {
+        match mc.conn.prep(raw_sql(sql)) {
             Ok(stmt) => {
                 let sid = self.next_mysqli;
                 self.next_mysqli += 1;

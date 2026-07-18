@@ -339,10 +339,21 @@ impl<'m> super::Vm<'m> {
                         if name.is_empty() {
                             continue;
                         }
-                        let v = read_slot(&self.frames[0].slots[i]);
-                        if matches!(v, Zval::Undef) {
+                        // Undef must be tested on the RAW slot (through a ref
+                        // cell): read_slot maps unset to NULL, so testing its
+                        // result kept every unset global in the snapshot as
+                        // null (GetBookmark's `unset($GLOBALS['link'])`,
+                        // WP-17).
+                        let raw = &self.frames[0].slots[i];
+                        let is_undef = match raw {
+                            Zval::Undef => true,
+                            Zval::Ref(c) => matches!(&*c.borrow(), Zval::Undef),
+                            _ => false,
+                        };
+                        if is_undef {
                             continue;
                         }
+                        let v = read_slot(raw);
                         out.insert(Key::from_bytes(name), v);
                     }
                     for (i, name) in crate::bytecode::SUPERGLOBAL_NAMES.iter().enumerate() {
@@ -512,9 +523,26 @@ impl<'m> super::Vm<'m> {
                         a
                     };
                     // `(object)` needs the object table (stdClass alloc); the rest
-                    // are pure value conversions.
+                    // are pure value conversions — EXCEPT SimpleXML, whose
+                    // cast_object handler converts the node TEXT for (int)/
+                    // (float) where a generic object casts to 1 (WP-17,
+                    // export_wp's `(int) $item->post_id`).
                     let r = if matches!(k, CastKind::Object) {
                         self.object_cast(a)?
+                    } else if matches!(k, CastKind::Int | CastKind::Float)
+                        && deref_object(&a).is_some_and(|o| {
+                            self.class_index.get(&b"simplexmlelement"[..]).is_some_and(|&t| {
+                                is_instance_of(
+                                    &self.classes,
+                                    self.stringable_id,
+                                    o.borrow().class_id as usize,
+                                    t,
+                                )
+                            })
+                        })
+                    {
+                        let s = self.vm_stringify(&a.deref_clone())?;
+                        apply_cast(k, &Zval::Str(s), &mut self.diags)
                     } else {
                         apply_cast(k, &a, &mut self.diags)
                     };
@@ -613,7 +641,7 @@ impl<'m> super::Vm<'m> {
                     let key = self.frames[top].stack.pop().expect("ArrayInsert key");
                     let mut arr = self.frames[top].stack.pop().expect("ArrayInsert array");
                     if let Zval::Array(rc) = &mut arr {
-                        let k = coerce_key_silent(&key)
+                        let k = coerce_key_diag(&key, &mut self.diags)
                             .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
                         Rc::make_mut(rc).insert(k, value);
                     }
@@ -907,6 +935,10 @@ impl<'m> super::Vm<'m> {
                     let id = self.next_id();
                     let module_id = self.module_id(m);
                     let scope = self.frames[top].class;
+                    // `static::` inside the body keeps the CREATING frame's
+                    // late-static-binding class (Child::getCb() returning a
+                    // closure whose `static::` is Child, WP-17).
+                    let lsb = self.frames[top].static_class.or(scope);
                     let cl = Closure {
                         fn_idx: fn_idx as usize,
                         captures: bound,
@@ -917,6 +949,7 @@ impl<'m> super::Vm<'m> {
                         module_id,
                         scope,
                         is_static: !bind_this,
+                        lsb,
                     };
                     self.frames[top].stack.push(Zval::Closure(Rc::new(cl)));
                 }
@@ -946,6 +979,7 @@ impl<'m> super::Vm<'m> {
                         module_id: 0,
                         scope: None,
                         is_static: false,
+                        lsb: None,
                     };
                     self.frames[top].stack.push(Zval::Closure(Rc::new(cl)));
                 }
@@ -1082,6 +1116,7 @@ impl<'m> super::Vm<'m> {
                         .map(|s| match s {
                             FieldStep::Index => ArgPlaceStep::Index,
                             FieldStep::Prop(n) => ArgPlaceStep::Prop(n.clone()),
+                            FieldStep::Append => ArgPlaceStep::Append,
                             _ => unreachable!("PushArgPlace step"),
                         })
                         .collect();

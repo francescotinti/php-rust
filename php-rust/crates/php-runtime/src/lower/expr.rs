@@ -770,9 +770,12 @@ impl<'f> Lowerer<'f> {
                     // literal — PHP raises "Parse error: Invalid UTF-8
                     // codepoint escape sequence", which rides on the general
                     // parse-error rendering (documented divergence).
+                    // Same bypass for UPPERCASE `\X41`: Zend's scanner accepts
+                    // both cases of the hex escape, mago only the lower one
+                    // (WP-17, kses ctrl-removal provider's "\X1C").
                     if s.raw.first() == Some(&b'"')
                         && s.raw.len() >= 2
-                        && s.raw.windows(2).any(|w| w == b"\\u")
+                        && s.raw.windows(2).any(|w| w == b"\\u" || w == b"\\X")
                     {
                         let inner = &s.raw[1..s.raw.len() - 1];
                         ExprKind::Str(unescape_double_quoted(inner, true).into())
@@ -1349,6 +1352,39 @@ impl<'f> Lowerer<'f> {
                         return Err(LowerError::Fatal {
                             message: "Cannot use positional argument after argument unpacking"
                                 .to_string(),
+                            line,
+                        });
+                    }
+                    // `$a[]` as an argument survives lowering as a deferred
+                    // append-place (PclZip's `$this->m($list[], …)`, WP-17):
+                    // the dispatch binder appends+aliases for a by-ref param
+                    // and raises PHP's runtime "Cannot use [] for reading" for
+                    // a by-value one. Only a place-shaped base qualifies —
+                    // any other `[]` read keeps the lower-time fatal.
+                    if let Expression::ArrayAppend(ap) = p.value {
+                        fn placeish(e: &ExprKind) -> bool {
+                            match e {
+                                ExprKind::Var(_)
+                                | ExprKind::GlobalVar(_)
+                                | ExprKind::Superglobal(_)
+                                | ExprKind::This => true,
+                                ExprKind::Index { base, .. } => placeish(&base.kind),
+                                ExprKind::PropGet { object, nullsafe: false, .. } => {
+                                    placeish(&object.kind)
+                                }
+                                ExprKind::PropGetDyn { object, nullsafe: false, .. } => {
+                                    placeish(&object.kind)
+                                }
+                                _ => false,
+                            }
+                        }
+                        let base = self.lower_expr(ap.array)?;
+                        if placeish(&base.kind) {
+                            args.push(Expr { line, kind: ExprKind::AppendArg(Box::new(base)) });
+                            continue;
+                        }
+                        return Err(LowerError::Fatal {
+                            message: "Cannot use [] for reading".to_string(),
                             line,
                         });
                     }

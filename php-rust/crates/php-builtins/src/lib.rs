@@ -20,6 +20,7 @@ mod dateparse;
 mod encoding;
 mod env;
 mod html;
+mod idn;
 mod file;
 mod format;
 mod exif;
@@ -429,6 +430,8 @@ pub fn registry() -> Registry {
     add(b"nl2br", string::nl2br);
     add(b"wordwrap", string::wordwrap);
     add(b"htmlspecialchars", html::htmlspecialchars);
+    add(b"idn_to_ascii", idn::idn_to_ascii);
+    add(b"idn_to_utf8", idn::idn_to_utf8);
     add(b"htmlspecialchars_decode", html::htmlspecialchars_decode);
     add(b"htmlentities", html::htmlentities);
     add(b"html_entity_decode", html::html_entity_decode);
@@ -495,6 +498,7 @@ pub fn registry() -> Registry {
     add(b"mb_convert_encoding", mbstring::mb_convert_encoding);
     add(b"iconv", mbstring::iconv);
     add(b"mb_detect_encoding", mbstring::mb_detect_encoding);
+    add(b"mb_detect_order", mbstring::mb_detect_order);
     add(b"mb_internal_encoding", mbstring::mb_internal_encoding);
     add(b"mb_encode_numericentity", mbstring::mb_encode_numericentity);
     add(b"mb_decode_numericentity", mbstring::mb_decode_numericentity);

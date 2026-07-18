@@ -1966,6 +1966,9 @@ enum NodeTest {
     Text,
     Comment,
     NodeAny,
+    /// `processing-instruction()` / `processing-instruction("target")`
+    /// (WP-17, the sitemap tests count `xml-stylesheet` PIs).
+    Pi(Option<Vec<u8>>),
 }
 
 /// Evaluate `expr` against `ctx` (document node when the PHP side passed none).
@@ -2242,6 +2245,26 @@ impl<'a> Parser<'a> {
             self.skip_ws();
             if self.src.get(self.pos) == Some(&b'(') {
                 self.pos += 1;
+                self.skip_ws();
+                // Only processing-instruction() takes a (string literal) arg.
+                let mut pi_target: Option<Vec<u8>> = None;
+                if name == b"processing-instruction" {
+                    if let Some(&q) = self.src.get(self.pos) {
+                        if q == b'"' || q == b'\'' {
+                            self.pos += 1;
+                            let start = self.pos;
+                            while self.pos < self.src.len() && self.src[self.pos] != q {
+                                self.pos += 1;
+                            }
+                            if self.pos >= self.src.len() {
+                                return Err("unterminated literal".to_string());
+                            }
+                            pi_target = Some(self.src[start..self.pos].to_vec());
+                            self.pos += 1;
+                            self.skip_ws();
+                        }
+                    }
+                }
                 if !self.eat(b")") {
                     return Err("expected )".to_string());
                 }
@@ -2249,6 +2272,7 @@ impl<'a> Parser<'a> {
                     b"text" => NodeTest::Text,
                     b"comment" => NodeTest::Comment,
                     b"node" => NodeTest::NodeAny,
+                    b"processing-instruction" => NodeTest::Pi(pi_target),
                     other => {
                         return Err(format!(
                             "unsupported node test {}",
@@ -2444,6 +2468,9 @@ impl<'a> Parser<'a> {
                 }
                 (DomKind::Text(_) | DomKind::Cdata(_), NodeTest::Text) => true,
                 (DomKind::Comment(_), NodeTest::Comment) => true,
+                (DomKind::Pi { target, .. }, NodeTest::Pi(want)) => {
+                    want.as_ref().is_none_or(|w| w == target)
+                }
                 _ => false,
             },
         }
@@ -2581,6 +2608,38 @@ impl<'a> Parser<'a> {
                     }
                 } else {
                     full
+                };
+                Ok(XVal::Str(out))
+            }
+            // namespace-uri(): the in-scope namespace URI of the (first /
+            // context) node — element prefix (or the default xmlns) resolved
+            // through the ancestor chain; empty for unprefixed-without-default
+            // and for non-element nodes (WP-17, sitemap extra-element counts).
+            b"namespace-uri" => {
+                let it = if args.is_empty() {
+                    ctx.get(pos).cloned()
+                } else {
+                    match arg(0)? {
+                        XVal::Nodes(ns) => ns.first().cloned(),
+                        _ => None,
+                    }
+                };
+                let out = match &it {
+                    Some(XItem::Node(n)) => match &self.doc.nodes[*n].kind {
+                        DomKind::Element { name, .. } => {
+                            let prefix = match name.iter().position(|&b| b == b':') {
+                                Some(i) => &name[..i],
+                                None => &name[..0],
+                            };
+                            self.doc.resolve_ns(*n, prefix).unwrap_or_default()
+                        }
+                        _ => Vec::new(),
+                    },
+                    Some(XItem::Attr(n, a)) => match a.iter().position(|&b| b == b':') {
+                        Some(i) => self.doc.resolve_ns(*n, &a[..i]).unwrap_or_default(),
+                        None => Vec::new(),
+                    },
+                    None => Vec::new(),
                 };
                 Ok(XVal::Str(out))
             }

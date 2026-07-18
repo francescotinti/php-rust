@@ -529,20 +529,56 @@ pub fn arsort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, Ph
     sort_assoc(arr, "arsort", |a, b| ops::compare(&b.1, &a.1).cmp(&0))
 }
 
+/// The `$flags` comparator for key sorts. Keys are only ever int/string, so no
+/// diagnostics can fire: SORT_NUMERIC (1) compares the numeric value (a
+/// non-numeric string is 0 — WP_Hook's `ksort($cb, SORT_NUMERIC)` puts 'test'
+/// before 10, WP-17), SORT_STRING (2) / SORT_LOCALE_STRING (5) compare the
+/// byte string (SORT_FLAG_CASE 8 makes it ASCII-case-insensitive), anything
+/// else is PHP's loose compare. Ties keep insertion order (sort_by is stable).
+fn key_flag_cmp(a: &Key, b: &Key, flags: i64) -> std::cmp::Ordering {
+    fn key_bytes(k: &Key) -> Vec<u8> {
+        match key_to_zval(k) {
+            Zval::Str(s) => s.as_bytes().to_vec(),
+            Zval::Long(l) => l.to_string().into_bytes(),
+            _ => Vec::new(),
+        }
+    }
+    match flags & !8 {
+        1 => {
+            let da = convert::to_double(&key_to_zval(a));
+            let db = convert::to_double(&key_to_zval(b));
+            da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+        }
+        2 | 5 => {
+            let (sa, sb) = (key_bytes(a), key_bytes(b));
+            if flags & 8 != 0 {
+                sa.to_ascii_lowercase().cmp(&sb.to_ascii_lowercase())
+            } else {
+                sa.cmp(&sb)
+            }
+        }
+        _ => ops::compare(&key_to_zval(a), &key_to_zval(b)).cmp(&0),
+    }
+}
+
 /// `ksort(array &$array, int $flags = SORT_REGULAR): true` — sort by key
 /// ascending, preserving the key→value association.
-pub fn ksort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    sort_assoc(arr, "ksort", |a, b| {
-        ops::compare(&key_to_zval(&a.0), &key_to_zval(&b.0)).cmp(&0)
-    })
+pub fn ksort(arr: &mut Zval, args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let flags = match args.first() {
+        Some(v) => convert::to_long_cast(&v.deref_clone(), ctx.diags),
+        None => 0,
+    };
+    sort_assoc(arr, "ksort", |a, b| key_flag_cmp(&a.0, &b.0, flags))
 }
 
 /// `krsort(array &$array, int $flags = SORT_REGULAR): true` — sort by key
 /// descending, preserving the key→value association.
-pub fn krsort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    sort_assoc(arr, "krsort", |a, b| {
-        ops::compare(&key_to_zval(&b.0), &key_to_zval(&a.0)).cmp(&0)
-    })
+pub fn krsort(arr: &mut Zval, args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let flags = match args.first() {
+        Some(v) => convert::to_long_cast(&v.deref_clone(), ctx.diags),
+        None => 0,
+    };
+    sort_assoc(arr, "krsort", |a, b| key_flag_cmp(&b.0, &a.0, flags))
 }
 
 /// `array_pop(array &$array): mixed` — remove and return the last element
@@ -785,19 +821,53 @@ fn push_entry(out: &mut PhpArray, k: Key, v: Zval, preserve: bool) {
 }
 
 /// array_unique($array, $flags = SORT_STRING): keep the first occurrence of each
-/// distinct value (compared as a string), preserving keys and order.
+/// distinct value, preserving keys and order. The comparison follows `$flags`:
+/// SORT_STRING/SORT_LOCALE_STRING dedup on the string repr (ctx.to_zstr honors
+/// the VM-precomputed `__toString` of a Stringable element — PHPUnit's
+/// array_unique over ExecutionOrderDependency), SORT_NUMERIC on the double
+/// value, SORT_REGULAR on loose equality with NO string coercion (objects
+/// compare property-wise — php-ai-client dedups ModalityEnum instances with
+/// `array_unique($mods, SORT_REGULAR)`, WP-17).
 pub fn array_unique(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let arr = arr_arg(args, "array_unique")?;
+    let flags = match args.get(1) {
+        Some(v) => convert::to_long_cast(v, ctx.diags),
+        None => 2, // SORT_STRING
+    };
     let entries: Vec<(Key, Zval)> = arr.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-    let mut seen: Vec<Vec<u8>> = Vec::new();
     let mut out = PhpArray::new();
-    for (k, v) in entries {
-        // ctx.to_zstr honors the VM-precomputed `__toString` of a Stringable
-        // element (PHPUnit's array_unique over ExecutionOrderDependency).
-        let repr = ctx.to_zstr(&v).as_bytes().to_vec();
-        if !seen.contains(&repr) {
-            seen.push(repr);
-            out.insert(k, v);
+    match flags {
+        // SORT_REGULAR: loose comparison, never string-coerced.
+        0 => {
+            let mut seen: Vec<Zval> = Vec::new();
+            for (k, v) in entries {
+                if !seen.iter().any(|s| php_types::ops::loose_eq(s, &v)) {
+                    seen.push(v.clone());
+                    out.insert(k, v);
+                }
+            }
+        }
+        // SORT_NUMERIC: dedup on the numeric value.
+        1 => {
+            let mut seen: Vec<f64> = Vec::new();
+            for (k, v) in entries {
+                let d = convert::to_double(&v.deref_clone());
+                if !seen.iter().any(|s| *s == d) {
+                    seen.push(d);
+                    out.insert(k, v);
+                }
+            }
+        }
+        // SORT_STRING (default) / SORT_LOCALE_STRING / anything else.
+        _ => {
+            let mut seen: Vec<Vec<u8>> = Vec::new();
+            for (k, v) in entries {
+                let repr = ctx.to_zstr(&v).as_bytes().to_vec();
+                if !seen.contains(&repr) {
+                    seen.push(repr);
+                    out.insert(k, v);
+                }
+            }
         }
     }
     Ok(Zval::Array(Rc::new(out)))

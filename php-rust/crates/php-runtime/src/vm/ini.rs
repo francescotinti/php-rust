@@ -136,6 +136,17 @@ impl IniTable {
         // log, stderr under CLI). Settable: Symfony's HttpKernel Logger
         // round-trips it (ini_set to a temp file, log, restore).
         add("error_log", "", INI_ALL, true, false);
+        // Content-type default for the Content-Type header ("text/html" under
+        // every SAPI; `php -n -i` confirms). WP's template-enhancement output
+        // buffer falls back to it when headers_list() shows no Content-Type
+        // (always the case under CLI) to decide HTML-ness (WP-17).
+        add("default_mimetype", "text/html", INI_ALL, true, false);
+        add("default_charset", "UTF-8", INI_ALL, true, false);
+        // Wrapped around every displayed diagnostic by the default render
+        // (main.c php_error_cb); both empty under `php -n`. Settable: WP's
+        // template tests round-trip them (error_prepend_string data sets).
+        add("error_prepend_string", "", INI_ALL, true, false);
+        add("error_append_string", "", INI_ALL, true, false);
         // Upload limits (php -n defaults). phpr's CLI never receives uploads,
         // but UploadedFile::getMaxFilesize() computes min(post_max_size,
         // upload_max_filesize) from these.
@@ -153,6 +164,11 @@ impl IniTable {
         // html_errors/display_errors/log_errors are honoured by the render
         // chokepoints; output_buffering/implicit_flush are report-only.
         add("display_errors", "1", INI_ALL, true, false);
+        // EG(error_reporting) as an INI directive: ini_set/ini_get see the
+        // same mask as the error_reporting() builtin (ho_ini_set and
+        // ho_error_reporting mirror writes into `error_level`). WP's template
+        // tests drive it exclusively through ini_set (WP-17).
+        add("error_reporting", "30719", INI_ALL, true, true);
         add("log_errors", "1", INI_ALL, true, false);
         add("html_errors", "0", INI_ALL, true, false);
         add("output_buffering", "0", INI_PERDIR | INI_SYSTEM, false, false);
@@ -456,6 +472,11 @@ impl<'m> Vm<'m> {
             entry.global = value.clone();
         }
         let old = std::mem::replace(&mut entry.local, value);
+        // `error_reporting` is EG(error_reporting): the write must land in the
+        // live mask consulted by raise_diagnostic/flush_diags too.
+        if name == b"error_reporting" {
+            self.error_level = leading_long(trim_ascii(&entry.local));
+        }
         Ok(Zval::Str(PhpStr::new(old)))
     }
 

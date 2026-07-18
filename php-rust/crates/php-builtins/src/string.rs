@@ -124,11 +124,11 @@ pub fn explode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// Offsets and lengths may be negative (counted from the end). The resulting
 /// window is clamped into `[0, len]`; an empty window yields "".
 pub fn substr(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let s = ctx.to_zstr(
-        args.first().ok_or_else(|| {
-            PhpError::Error("substr() expects at least 2 arguments, 0 given".to_string())
-        })?,
-    );
+    let a0 = args.first().ok_or_else(|| {
+        PhpError::Error("substr() expects at least 2 arguments, 0 given".to_string())
+    })?;
+    crate::null_arg_deprecation(ctx, a0, "substr", 1, "string", "string");
+    let s = ctx.to_zstr(a0);
     let bytes = s.as_bytes();
     let len = bytes.len() as i64;
     let offset = convert::to_long_cast(
@@ -166,16 +166,16 @@ pub fn substr(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// or after `$offset`, or `false`. Negative offset counts from the end; an
 /// offset outside the string is a `ValueError`.
 pub fn strpos(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    let haystack = ctx.to_zstr(
-        args.first().ok_or_else(|| {
-            PhpError::Error("strpos() expects at least 2 arguments, 0 given".to_string())
-        })?,
-    );
-    let needle = ctx.to_zstr(
-        args.get(1).ok_or_else(|| {
-            PhpError::Error("strpos() expects at least 2 arguments, 1 given".to_string())
-        })?,
-    );
+    let h = args.first().ok_or_else(|| {
+        PhpError::Error("strpos() expects at least 2 arguments, 0 given".to_string())
+    })?;
+    crate::null_arg_deprecation(ctx, h, "strpos", 1, "haystack", "string");
+    let haystack = ctx.to_zstr(h);
+    let n = args.get(1).ok_or_else(|| {
+        PhpError::Error("strpos() expects at least 2 arguments, 1 given".to_string())
+    })?;
+    crate::null_arg_deprecation(ctx, n, "strpos", 2, "needle", "string");
+    let needle = ctx.to_zstr(n);
     let hay = haystack.as_bytes();
     let len = hay.len() as i64;
     let offset = match args.get(2) {
@@ -211,6 +211,7 @@ pub fn str_replace(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let subject = args.get(2).ok_or_else(|| {
         PhpError::Error("str_replace() expects at least 3 arguments, 2 given".to_string())
     })?;
+    crate::null_arg_deprecation(ctx, subject, "str_replace", 3, "subject", "array|string");
 
     // Build the (search, replacement) pair list once.
     let pairs = replacement_pairs(search, replace, ctx);
@@ -864,14 +865,46 @@ pub fn str_rot13(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// Goes through `ctx.to_zstr`, so a Stringable object argument is coerced via
 /// its precomputed `__toString()` result (the VM populates that only for the
 /// builtins gated in `value_builtin_string_coerces`; a plain funnel otherwise).
+/// A `null` argument raises PHP 8.1's "Passing null to parameter" deprecation
+/// when the parameter's name is known (WP-17: WP's kses/formatting chains pass
+/// null through str_contains/stripslashes and expect the deprecation).
 pub(crate) fn str_at(args: &[Zval], ctx: &mut Ctx, idx: usize, fname: &str, expected: usize) -> Result<Vec<u8>, PhpError> {
     let v = args.get(idx).ok_or_else(|| {
-        PhpError::Error(format!(
-            "{fname}() expects exactly {expected} arguments, {} given",
-            args.len()
-        ))
+        PhpError::Error(
+            format!("{fname}() expects exactly {expected} arguments, {} given", args.len()),
+        )
     })?;
+    if let Some(pname) = string_param_name(fname, idx) {
+        crate::null_arg_deprecation(ctx, v, fname, idx + 1, pname, "string");
+    }
     Ok(ctx.to_zstr(v).as_bytes().to_vec())
+}
+
+/// The declared parameter name of `fname`'s string arg `idx` (0-based), for
+/// the null-arg deprecation message. `None` = unknown/nullable → no message
+/// (conservative: a missing deprecation is a smaller divergence than a wrong
+/// parameter name).
+fn string_param_name(fname: &str, idx: usize) -> Option<&'static str> {
+    let names: &[&str] = match fname {
+        "str_contains" | "str_starts_with" | "str_ends_with" | "strpos" | "stripos"
+        | "strrpos" | "strripos" | "strstr" | "stristr" | "strrchr" | "substr_count" => {
+            &["haystack", "needle"]
+        }
+        "stripslashes" | "addslashes" | "stripcslashes" | "quotemeta" | "strrev" | "strlen"
+        | "strtolower" | "strtoupper" | "ucfirst" | "lcfirst" | "ucwords" | "substr"
+        | "str_split" | "wordwrap" | "nl2br" | "chunk_split" | "strip_tags"
+        | "htmlspecialchars" | "htmlentities" | "html_entity_decode"
+        | "htmlspecialchars_decode" | "md5" | "sha1" | "crc32" | "bin2hex"
+        | "str_word_count" | "count_chars" | "str_pad" | "str_repeat" | "strtr" => &["string"],
+        "explode" => &["separator", "string"],
+        "urlencode" | "rawurlencode" | "urldecode" | "rawurldecode" => &["string"],
+        "base64_encode" => &["string"],
+        "levenshtein" | "similar_text" | "strcmp" | "strcasecmp" | "strnatcmp"
+        | "strnatcasecmp" => &["string1", "string2"],
+        "strncmp" | "strncasecmp" => &["string1", "string2"],
+        _ => return None,
+    };
+    names.get(idx).copied()
 }
 
 /// str_contains($haystack, $needle): an empty needle is always found.

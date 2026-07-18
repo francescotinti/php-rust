@@ -719,7 +719,9 @@ pub(crate) fn strlen(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
             "strlen(): Argument #1 ($string) must be of type string, array given".to_string(),
         ));
     }
-    let s = convert::to_zstr(v, ctx.diags);
+    // ctx.to_zstr honors the VM-precomputed `__toString` of a Stringable
+    // argument (strlen is in value_builtin_string_coerces).
+    let s = ctx.to_zstr(v);
     Ok(Zval::Long(s.len() as i64))
 }
 pub(crate) fn gettype(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {

@@ -479,6 +479,70 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-18 (sessione WordPress-17): 🏁 **chiusura di massa dei cluster della
+  full-suite**: tutti i cluster maggiori del triage WP-16 sono a parità per
+  nome (Template 86 OK · php-ai-client 255 OK · Privacy export 31 OK · Kses
+  358 OK · wpTexturize 357 OK · BackgroundSupport 27 OK · GetBookmark 46 OK ·
+  DB_Charset 100 OK · Translation 36 OK · ExportWp 11 OK · WpEmailAddress 79
+  OK · hooks order e includesPost a parità W-per-W · sitemaps a parità).
+  Fix engine/builtin: **INI** default_mimetype/default_charset/
+  error_prepend_string/error_append_string + `error_reporting` come direttiva
+  (sync bidirezionale con EG(error_reporting) — ini_set/error_reporting()
+  vedono lo stesso mask); **diagnostica**: i diagnostici vanno nel FILE
+  `error_log` (log_errors, stamp php_log_err) sotto ogni SAPI; il render
+  display avvolge con error_prepend/append_string; file/line passati
+  all'error handler utente = nearest-non-prelude frame (prima: il main
+  script — sotto PHPUnit arrivava `vendor/bin/phpunit`) con nome composito
+  `file(N) : eval()'d code` per le unit eval; **ob_start flags**
+  (CLEANABLE|FLUSHABLE|REMOVABLE): gating per-op con le notice esatte di
+  main/output.c ("Failed to flush/delete/send/discard buffer of %s (%d)"),
+  ob_get_clean/get_flush ritornano comunque il contenuto su non-removable,
+  status['flags'] = richiesti|USER; **`$a[]` come argomento** (ArgPlace
+  Append: by-ref appende+alias, by-value = Error runtime "Cannot use [] for
+  reading") — class-pclzip.php ora compila; **unset($GLOBALS['k'])** rispettato
+  dallo snapshot $GLOBALS (il check Undef leggeva il valore già mappato a
+  null); **LSB nelle closure** (campo `lsb` catturato alla creazione,
+  `static::` dentro `static function` creato via `Child::m()` risolve Child;
+  bindTo/bind lo spostano); **preg**: backref `\g1`/`\g{n}`/`\g{-n}`/`\g{name}`
+  normalizzati, condizionali con lookbehind `(?(?<=…)sì|no)` riscritti come i
+  lookahead, classi `\d\s\w` (e negazioni) in forma ASCII per i pattern
+  non-`/u` (PCRE byte-mode; `\b` resta Unicode — divergenza pre-esistente
+  documentata), `\xNN`≥80 → `\x{NN}` nel path oniguruma (dominio char della
+  vista Latin1, non byte UTF-8); **mysqli byte-safe**: query/prepare passano
+  i byte grezzi sul wire (il round-trip lossy UTF-8 corrompeva i payload
+  charset-nativi di wpdb::strip_invalid_text con U+FFFD); **idn_to_ascii/
+  idn_to_utf8 NATIVE** (punycode RFC 3492 + mapping UTS46-lite lowercase;
+  `$idna_info` out-param non popolato — divergenza doc.) + costanti IDNA_*;
+  **json**: json_encode onora `$depth` (JSON_ERROR_DEPTH), il fallimento con
+  resource nel tree è JSON_ERROR_UNSUPPORTED_TYPE ("Type is not supported"),
+  json_decode(null) depreca; **array_unique flag-aware** (SORT_REGULAR =
+  confronto loose SENZA stringificazione — gli oggetti confrontano
+  property-wise: ModalityEnum/WP_User; SORT_NUMERIC sul double) e
+  **ksort/krsort flag-aware** (SORT_NUMERIC: 'test'→0 prima di 10, tie
+  stabili — WP_Hook); **strlen/strcmp-family** onorano il precompute
+  Stringable; **deprecation float-key** "Implicit conversion from float %s to
+  int loses precision" su write/read/path-write/array-literal (isset/unset
+  e il line-number nel punto esatto restano divergenze minori); **null-arg
+  deprecations** estese (tabella nomi-parametro in str_at + strpos/substr/
+  str_replace/json_decode); **tempnam(""/false)** → temp dir di sistema
+  (WP temp_filename passa realpath('TMPDIR')=false); **ZipArchive in
+  SCRITTURA** (zip::ZipWriter: open CREATE/OVERWRITE su file nuovo, addFile/
+  addFromString deflate, close finalizza — privacy export); **SimpleXML**:
+  `xpath()` (delegato all'engine __dom_xpath) e cast `(int)`/`(float)` via
+  testo del nodo (handler cast_object di SimpleXML; l'oggetto generico resta
+  1); **XPath**: node test `processing-instruction("target")` e funzione
+  `namespace-uri()`; **lexer**: escape esadecimale `\X41` MAIUSCOLO decodifica
+  come `\x41` (Zend accetta entrambi; il provider kses usa "\X1C");
+  **date**: `d-m-Y`/`m/d/Y` col 4-digit finale, anno a 2 cifre rimappato
+  00-69→2000/70-99→1900, time-only `H:i[:s]` = oggi a quell'ora
+  (mysql_to_rfc3339); **mb_detect_order**, **get_defined_functions**
+  (internal = registry+host tables ordinati; prelude→internal). Residui
+  rimandati a WP-18: theme 6F (cache/filtri get_stylesheet_directory),
+  duotone 6F (branch reset `(?|…)` non supportato dai backend regex),
+  wp_is_stream('ftp://') 1F (stream_get_wrappers resta onesto: niente ftp
+  senza supporto reale — correct-or-absent), goto-into-block html-api 5E
+  (D-45.1), display-in-ob-handler ("Producing output from user output
+  handler" con discard) e stderr "PHP Xxx:" del CLI SAPI (mai emesso).
 - 2026-07-17 (sessione WordPress-16): 🏁 **la WP core suite INTERA (default
   testsuite, 30.480 test / 4,55M assertion) arriva IN FONDO su phpr per la
   prima volta**: da "muore silenziosamente" a 123E/199F/15S-diff (336 test

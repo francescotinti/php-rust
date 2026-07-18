@@ -497,6 +497,7 @@ pub(crate) fn run_module_with_hir<'m>(
         reflect_object_bound: HashMap::default(),
         lazy_initializing: HashSet::default(),
         zips: HashMap::default(),
+        zip_writers: HashMap::default(),
         next_zip: 1,
         pdo_conns: HashMap::default(),
         next_pdo: 1,
@@ -1444,6 +1445,10 @@ struct Vm<'m> {
     /// archive, backing the `__zip_*` host builtins the prelude class delegates
     /// to. An id is allocated by `__zip_open` and released by `__zip_close`.
     zips: HashMap<u32, ::zip::ZipArchive<std::fs::File>>,
+    /// Write-mode zip handles (`ZipArchive::open` with CREATE on a missing
+    /// file → prelude `__zip_writer_*`): the archive is streamed out through
+    /// the zip crate's writer and finalized on close (WP-17, privacy export).
+    zip_writers: HashMap<u32, ::zip::ZipWriter<std::fs::File>>,
     /// Next zip handle id (monotonic; ids are never reused within a run).
     next_zip: u32,
     /// Open PDO connections (ext/pdo_sqlite subset): handle id → rusqlite
@@ -2268,45 +2273,46 @@ impl<'m> Vm<'m> {
         // class raising a user-level warning (PDO/SQLite3 ERRMODE_WARNING)
         // reports the USER call site, like the C implementations do.
         if self.error_level & errno != 0 {
-            let (file, rline) = if self.frames.is_empty() {
-                (self.module.file.to_vec(), line)
-            } else {
-                // A prelude frame is detected via its *defining class* — or, for
-                // a free prelude function (fsockopen, ob_gzhandler…), via the
-                // function's own defining file (the prelude lowers into the main
-                // unit, so module.file can't tell).
-                let is_prelude = |f: &Frame| {
-                    f.class
-                        .map(|c| self.classes[c].file.as_ref() == b"prelude")
-                        .unwrap_or(false)
-                        || f.func.file.as_ref() == b"prelude"
-                };
-                let mut fi = self.frames.len() - 1;
-                while fi > 0 && is_prelude(&self.frames[fi]) {
-                    fi -= 1;
-                }
-                let rline = if fi + 1 == self.frames.len() { line } else { self.cur_line(fi) };
-                (self.frames[fi].module.file.to_vec(), rline)
-            };
-            // Web SAPI: the log_errors line the host timestamps onto stderr.
-            if self.web && self.ini.get_bool(b"log_errors") {
-                self.error_log.push(
-                    format!(
-                        "PHP {}:  {} in {} on line {}",
-                        errno_label(errno),
-                        message,
-                        String::from_utf8_lossy(&file),
-                        rline
-                    )
-                    .into_bytes(),
+            let (file, rline) = self.diagnostic_site(line);
+            // log_errors sink: an explicit `error_log` file receives the
+            // php_log_err-stamped line under every SAPI (WP's template tests
+            // read the file back); with no file, the web SAPI collects the
+            // line for the host to timestamp onto stderr, and the CLI SAPI
+            // log stays untouched (phpt baselines pin stdout+stderr).
+            if self.ini.get_bool(b"log_errors") {
+                let logline = format!(
+                    "PHP {}:  {} in {} on line {}",
+                    errno_label(errno),
+                    message,
+                    String::from_utf8_lossy(&file),
+                    rline
                 );
+                let dest = self.ini.get(b"error_log").unwrap_or(b"").to_vec();
+                if !dest.is_empty() {
+                    use std::io::Write;
+                    use std::os::unix::ffi::OsStrExt;
+                    let mut lb = host::error_log_stamp();
+                    lb.extend_from_slice(logline.as_bytes());
+                    lb.push(b'\n');
+                    let _ = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(std::ffi::OsStr::from_bytes(&dest))
+                        .and_then(|mut f| f.write_all(&lb));
+                } else if self.web {
+                    self.error_log.push(logline.into_bytes());
+                }
             }
             // `display_errors=0` suppresses the visible render only (the
             // last_error record above and the log line still happened).
             if !self.ini.get_bool(b"display_errors") {
                 return Ok(());
             }
-            let block = if self.ini.get_bool(b"html_errors") {
+            // error_prepend_string/error_append_string wrap every displayed
+            // diagnostic (main.c php_error_cb "%s<br />\n<b>%s</b>…%s").
+            let prepend = self.ini.get(b"error_prepend_string").unwrap_or(b"").to_vec();
+            let append = self.ini.get(b"error_append_string").unwrap_or(b"").to_vec();
+            let mut block = if self.ini.get_bool(b"html_errors") {
                 // html_errors display form (the web SAPI default; oracle-pinned,
                 // note the double space after the colon).
                 format!(
@@ -2323,6 +2329,12 @@ impl<'m> Vm<'m> {
                 block.extend_from_slice(format!(" on line {rline}\n").as_bytes());
                 block
             };
+            if !prepend.is_empty() {
+                let mut b = prepend;
+                b.extend_from_slice(&block);
+                block = b;
+            }
+            block.extend_from_slice(&append);
             // Diagnostic display is ordinary output in PHP: it flows THROUGH
             // the ob stack (captured, compressed, reordered with echoes) and
             // marks headers-sent only when it reaches the real sink —
@@ -2337,6 +2349,44 @@ impl<'m> Vm<'m> {
             }
         }
         Ok(())
+    }
+
+    /// The `(file, line)` a diagnostic is attributed to: the nearest NON-prelude
+    /// frame — a prelude-authored class raising a user-level warning
+    /// (PDO/SQLite3 ERRMODE_WARNING) reports the USER call site, like the C
+    /// implementations do. Shared by the default render and the file/line
+    /// arguments of a `set_error_handler` callback (WP captures them to
+    /// re-render errors raised inside an output-buffer handler).
+    fn diagnostic_site(&self, line: Line) -> (Vec<u8>, Line) {
+        if self.frames.is_empty() {
+            return (self.module.file.to_vec(), line);
+        }
+        // A prelude frame is detected via its *defining class* — or, for
+        // a free prelude function (fsockopen, ob_gzhandler…), via the
+        // function's own defining file (the prelude lowers into the main
+        // unit, so module.file can't tell).
+        let is_prelude = |f: &Frame| {
+            f.class
+                .map(|c| self.classes[c].file.as_ref() == b"prelude")
+                .unwrap_or(false)
+                || f.func.file.as_ref() == b"prelude"
+        };
+        let mut fi = self.frames.len() - 1;
+        while fi > 0 && is_prelude(&self.frames[fi]) {
+            fi -= 1;
+        }
+        let rline = if fi + 1 == self.frames.len() { line } else { self.cur_line(fi) };
+        // An eval() unit renders as PHP's composite file name,
+        // "<file>(<line>) : eval()'d code" (same as backtraces).
+        let file = match &self.frames[fi].eval_origin {
+            Some((ofile, oline)) => {
+                let mut s = ofile.to_vec();
+                s.extend_from_slice(format!("({oline}) : eval()'d code").as_bytes());
+                s
+            }
+            None => self.frames[fi].module.file.to_vec(),
+        };
+        (file, rline)
     }
 
     /// Offer a diagnostic to the active `set_error_handler` callback. Returns
@@ -2357,11 +2407,15 @@ impl<'m> Vm<'m> {
             None
         };
         let Some(handler) = active else { return Ok(None) };
+        // file/line: same attribution as the default render (nearest
+        // non-prelude frame) — NOT the main module, which is just the entry
+        // script (vendor/bin/phpunit under a test run).
+        let (hfile, hline) = self.diagnostic_site(line);
         let args = vec![
             Zval::Long(errno),
             Zval::Str(PhpStr::new(message.as_bytes().to_vec())),
-            Zval::Str(PhpStr::new(self.module.file.to_vec())),
-            Zval::Long(line as i64),
+            Zval::Str(PhpStr::new(hfile)),
+            Zval::Long(hline as i64),
         ];
         self.in_error_handler = true;
         let r = self.call_callable(handler, args);
@@ -7220,7 +7274,12 @@ impl<'m> Vm<'m> {
         // `self::`/`static::` inside the body (set at creation or by
         // `Closure::bind`'s `$newScope`).
         frame.class = cl.scope;
-        frame.static_class = cl.scope.or_else(|| cl.bound_this.as_ref().and_then(object_class_id));
+        // `static::` resolves to the LSB captured at creation (Child::getCb()'s
+        // closures keep Child), then the bound object's class, then the scope.
+        frame.static_class = cl
+            .lsb
+            .or_else(|| cl.bound_this.as_ref().and_then(object_class_id))
+            .or(cl.scope);
         self.enter_callee(frame)
     }
 
@@ -7403,6 +7462,9 @@ impl<'m> Vm<'m> {
                     .map(|s| match s {
                         ArgPlaceStep::Index => FieldStep::Index,
                         ArgPlaceStep::Prop(n) => FieldStep::Prop(n.clone()),
+                        // `f($a[])` to a by-ref param: field_cell appends a
+                        // fresh element and aliases it (PclZip, WP-17).
+                        ArgPlaceStep::Append => FieldStep::Append,
                     })
                     .collect();
                 let cell = self.make_ref_cell(top, base, &steps, p.keys.clone())?;
@@ -7462,6 +7524,12 @@ impl<'m> Vm<'m> {
                 }
                 ArgPlaceStep::Prop(n) => {
                     v = self.prop_read_sync(top, v, n)?;
+                }
+                // `f($a[])` resolved against a by-VALUE parameter (or an
+                // unknown/builtin callee): PHP's runtime Error, raised at the
+                // call site (oracle: method call with by-value param).
+                ArgPlaceStep::Append => {
+                    return Err(PhpError::Error("Cannot use [] for reading".to_string()));
                 }
             }
         }
@@ -10134,10 +10202,16 @@ fn union_builtin_rank(name: &[u8]) -> i32 {
 /// write makes `content` reach it. `started` records whether the handler has been
 /// invoked at least once, so the phase bitmask passed to it carries
 /// `PHP_OUTPUT_HANDLER_START` (1) on the first call only.
+/// `flags` are the capability bits passed as `ob_start`'s third argument
+/// (CLEANABLE 16 | FLUSHABLE 32 | REMOVABLE 64; default STDFLAGS 112): a
+/// missing bit makes the corresponding `ob_*` operation fail with a notice
+/// (main/output.c php_output_flush/clean/stack_pop). The script-end implicit
+/// flush ignores them (POP_FORCE).
 struct OutputBuffer {
     content: Vec<u8>,
     callback: Option<Zval>,
     chunk_size: usize,
+    flags: i64,
     started: bool,
 }
 
@@ -10157,9 +10231,11 @@ macro_rules! host_builtins {
         $( $( $lit:literal )|+ => $body:expr , )+
     ) => {
         pub(crate) fn host_builtin_canonical(name: &[u8]) -> Option<&'static [u8]> {
-            const HOST: &[&[u8]] = &[ $( $( $lit , )+ )+ ];
-            HOST.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
+            HOST_BUILTIN_NAMES.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
         }
+
+        /// Every host-builtin name, for `get_defined_functions()['internal']`.
+        pub(crate) const HOST_BUILTIN_NAMES: &[&[u8]] = &[ $( $( $lit , )+ )+ ];
 
         impl<'m> Vm<'m> {
             /// Dispatch an evaluator-only *host* builtin emitted as
@@ -10217,6 +10293,9 @@ host_builtins! {
     b"__reflect_closure_uses" => vm.ho_reflect_closure_uses(args),
     b"__reflect_static_prop_set" => vm.ho_reflect_static_prop_set(args),
     b"__zip_open" => vm.ho_zip_open(args),
+    b"__zip_writer_open" => vm.ho_zip_writer_open(args),
+    b"__zip_writer_add" => vm.ho_zip_writer_add(args),
+    b"__zip_writer_close" => vm.ho_zip_writer_close(args),
     b"__zip_close" => vm.ho_zip_close(args),
     b"__zip_stat_index" => vm.ho_zip_stat_index(args),
     b"__zip_get_name_index" => vm.ho_zip_get_name_index(args),
@@ -10352,6 +10431,7 @@ host_builtins! {
     b"func_get_arg" => vm.ho_func_get_arg(args),
     b"sprintf" | b"printf" | b"vsprintf" | b"vprintf" | b"fprintf" | b"vfprintf" => vm.ho_format(name, args),
     b"function_exists" => vm.ho_function_exists(args),
+    b"get_defined_functions" => vm.ho_get_defined_functions(),
     b"class_exists" => vm.ho_class_exists(args),
     b"class_alias" => vm.ho_class_alias(args),
     b"interface_exists" => vm.ho_interface_exists(args),
@@ -10774,7 +10854,10 @@ pub(crate) use php_types::is_opaque_handle_class;
 pub(crate) const WEB_SEND_THRESHOLD: usize = 4096;
 
 pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usize)> {
-    const HOST_OUT: &[(&[u8], usize)] = &[
+    HOST_OUT.iter().copied().find(|(h, _)| name.eq_ignore_ascii_case(h))
+}
+
+pub(crate) const HOST_OUT: &[(&[u8], usize)] = &[
         (b"preg_match", 2),
         (b"preg_match_all", 2),
         // `&$result` receives the parsed query-string array.
@@ -10824,11 +10907,6 @@ pub(crate) fn host_builtin_out_param(name: &[u8]) -> Option<(&'static [u8], usiz
         // entry. Calls without it take the plain host arm.
         (b"getopt", 2),
     ];
-    HOST_OUT
-        .iter()
-        .find(|(h, _)| name.eq_ignore_ascii_case(h))
-        .map(|&(h, i)| (h, i))
-}
 
 /// The *second* by-reference out-param index of a host builtin, when it has two
 /// (only `exec`'s `&$result_code` at index 2). `None` for every single-out
@@ -10848,12 +10926,16 @@ pub(crate) fn host_builtin_out_param_second(name: &[u8]) -> Option<usize> {
 /// [`crate::bytecode::Op::CallHostBuiltinScanf`] for these; [`Vm::dispatch_host_builtin_scanf`]
 /// produces the per-conversion slots and the VM assigns them.
 pub(crate) fn host_builtin_scanf(name: &[u8]) -> Option<&'static [u8]> {
-    const HOST_SCANF: &[&[u8]] = &[b"sscanf", b"fscanf"];
     HOST_SCANF.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
 }
 
+pub(crate) const HOST_SCANF: &[&[u8]] = &[b"sscanf", b"fscanf"];
+
 pub(crate) fn host_builtin_ref_first(name: &[u8]) -> Option<&'static [u8]> {
-    const HOST_REF: &[&[u8]] = &[
+    HOST_REF.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
+}
+
+pub(crate) const HOST_REF: &[&[u8]] = &[
         b"usort",
         b"uasort",
         b"uksort",
@@ -10868,8 +10950,6 @@ pub(crate) fn host_builtin_ref_first(name: &[u8]) -> Option<&'static [u8]> {
         b"current",
         b"key",
     ];
-    HOST_REF.iter().copied().find(|h| name.eq_ignore_ascii_case(h))
-}
 
 /// ASCII-case-insensitive byte-string equality — PHP resolves function names
 /// case-insensitively in ASCII (mirrors the compiler's resolution).
@@ -11253,7 +11333,7 @@ fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags, dro
             ensure_array(cell)?;
             let Zval::Array(rc) = cell else { unreachable!("ensured array") };
             let arr = Rc::make_mut(rc);
-            let key = coerce_key_silent(k)
+            let key = coerce_key_diag(k, diags)
                 .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
             if !arr.contains_key(&key) {
                 arr.insert(key.clone(), Zval::Null);
@@ -11312,7 +11392,7 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Ve
     let arr = Rc::make_mut(rc);
     match last {
         Last::Set { key, value } => {
-            let k = coerce_key_silent(&key)
+            let k = coerce_key_diag(&key, diags)
                 .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
             // Write *through* an existing reference element (REF-4) so an alias
             // sees the update; otherwise overwrite / insert.
@@ -11336,7 +11416,7 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Ve
             Ok(value)
         }
         Last::OpSet { key, op, rhs } => {
-            let k = coerce_key_silent(&key)
+            let k = coerce_key_diag(&key, diags)
                 .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
             let old = arr.get(&k).map(|v| v.deref_clone()).unwrap_or(Zval::Null);
             let result = apply_binop(op, &old, &rhs, diags)?;
@@ -11350,7 +11430,7 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Ve
             Ok(result)
         }
         Last::IncDec { key, inc, pre } => {
-            let k = coerce_key_silent(&key)
+            let k = coerce_key_diag(&key, diags)
                 .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
             if !arr.contains_key(&k) {
                 arr.insert(k.clone(), Zval::Null);

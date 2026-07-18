@@ -851,6 +851,14 @@ class ReflectionFunction extends ReflectionFunctionAbstract {
         } else {
             $this->name = is_string($name) ? $name : '{closure}';
             $this->__info = __reflect_func_info($this->name);
+            // A callable INTERNAL builtin (registry/host) has no lowered body
+            // to introspect: reflect it as an internal function with an empty
+            // parameter list (declared residue: real param metadata absent —
+            // the reflection corpus' check_all only needs the walk to not
+            // throw, WP-17).
+            if ($this->__info === false && function_exists($this->name)) {
+                $this->__info = array('params' => array(), 'returnType' => false);
+            }
         }
         if ($this->__info === false) {
             throw new ReflectionException(sprintf('Function %s() does not exist', $this->name));

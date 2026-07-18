@@ -17,7 +17,7 @@ enum DiffCmp {
 /// N)" suffix so the message matches PHP's.
 /// php_log_err's "[13-Jul-2026 23:10:45 Europe/Rome] " prefix: wall time in
 /// the default timezone, English month abbreviation, then the zone name.
-fn error_log_stamp() -> Vec<u8> {
+pub(super) fn error_log_stamp() -> Vec<u8> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
@@ -240,6 +240,44 @@ impl<'m> super::Vm<'m> {
                 return Err(e);
             }
         };
+        // `$depth` (arg 3, default 512): nesting deeper than the limit is
+        // JSON_ERROR_DEPTH → false / JsonException (wp_json_encode probes the
+        // limit with `json_encode($value, 0, 1)`, WP-17).
+        let depth_limit = match args.get(2) {
+            Some(v) => convert::to_long_cast(v, &mut self.diags),
+            None => 512,
+        };
+        if depth_limit <= 0 {
+            return Err(PhpError::ValueError(
+                "json_encode(): Argument #3 ($depth) must be greater than 0".to_string(),
+            ));
+        }
+        fn fits_depth(v: &Zval, budget: i64) -> bool {
+            match v {
+                Zval::Array(a) => {
+                    budget > 0 && a.iter().all(|(_, c)| fits_depth(&c.deref_clone(), budget - 1))
+                }
+                Zval::Object(o) => {
+                    budget > 0
+                        && o.borrow()
+                            .props
+                            .iter()
+                            .all(|(_, c)| fits_depth(&c.deref_clone(), budget - 1))
+                }
+                Zval::Ref(c) => fits_depth(&c.borrow(), budget),
+                _ => true,
+            }
+        }
+        if !fits_depth(&normalized, depth_limit) {
+            self.json_last_error = 1; // JSON_ERROR_DEPTH
+            if throw {
+                if let Some(cid) = self.class_index.get(&b"jsonexception"[..]).copied() {
+                    let obj = self.synthesize_throwable(cid, "Maximum stack depth exceeded")?;
+                    return Err(PhpError::Thrown(obj));
+                }
+            }
+            return Ok(Zval::Bool(false));
+        }
         let f = match self.registry.get(&b"json_encode"[..]) {
             Some(Builtin::Value(f)) => *f,
             _ => return Err(PhpError::Error("json_encode builtin unavailable".to_string())),
@@ -263,13 +301,33 @@ impl<'m> super::Vm<'m> {
                 _ => false,
             }
         }
+        fn has_resource(v: &Zval) -> bool {
+            match v {
+                Zval::Resource(_) => true,
+                Zval::Array(a) => a.iter().any(|(_, e)| has_resource(e)),
+                Zval::Object(o) => o.borrow().props.iter().any(|(_, e)| has_resource(e)),
+                Zval::Ref(r) => has_resource(&r.borrow()),
+                _ => false,
+            }
+        }
         if matches!(result, Zval::Bool(false)) && self.json_last_error == 0 {
-            // Distinguish the two silent-encoder failures: a non-finite float
-            // is JSON_ERROR_INF_OR_NAN (7), anything else is UTF-8 (5).
+            // Distinguish the silent-encoder failures: a non-finite float is
+            // JSON_ERROR_INF_OR_NAN (7), a resource in the tree is
+            // JSON_ERROR_UNSUPPORTED_TYPE (8, "Type is not supported" — WP's
+            // privacy export tests force it), anything else UTF-8 (5).
             let inf = call_args.first().is_some_and(has_nonfinite);
-            self.json_last_error = if inf { 7 } else { 5 };
+            let res = !inf && call_args.first().is_some_and(has_resource);
+            self.json_last_error = if inf {
+                7
+            } else if res {
+                8
+            } else {
+                5
+            };
             let msg = if inf {
                 "Inf and NaN cannot be JSON encoded"
+            } else if res {
+                "Type is not supported"
             } else {
                 "Malformed UTF-8 characters, possibly incorrectly encoded"
             };
@@ -357,9 +415,27 @@ impl<'m> super::Vm<'m> {
             Some(v) => convert::to_long_cast(v, &mut self.diags).max(0) as usize,
             None => 0,
         };
+        // `flags`: the buffer's capability bits (default STDFLAGS 112 =
+        // CLEANABLE|FLUSHABLE|REMOVABLE); a missing bit gates the matching
+        // ob_* operation below (WP's template-enhancement buffer strips
+        // FLUSHABLE so ob_flush can't hand the handler a partial document).
+        let flags = match args.get(2) {
+            Some(v) => convert::to_long_cast(v, &mut self.diags),
+            None => 112,
+        };
         self.ob_stack
-            .push(OutputBuffer { content: Vec::new(), callback, chunk_size, started: false });
+            .push(OutputBuffer { content: Vec::new(), callback, chunk_size, flags, started: false });
         Ok(Zval::Bool(true))
+    }
+    /// The flag-gate notice of main/output.c (php_output_flush/clean/stack_pop):
+    /// "func(): Failed to <verb> buffer of <name> (<level>)", where `level` is the
+    /// buffer's 0-based stack index. Callers gate on the top buffer's flag bits.
+    fn ob_flag_notice(&mut self, func: &str, verb: &str) -> Result<(), PhpError> {
+        let idx = self.ob_stack.len() - 1;
+        let (name, _) = self.ob_handler_status_name(self.ob_stack[idx].callback.as_ref());
+        let msg =
+            format!("{func}(): Failed to {verb} buffer of {} ({idx})", String::from_utf8_lossy(&name));
+        self.ob_no_buffer_notice(&msg)
     }
     /// `ob_get_status(bool $full_status = false): array` — the top buffer's
     /// status row, or one row per buffer with `$full_status`; `[]` with no
@@ -392,7 +468,10 @@ impl<'m> super::Vm<'m> {
                 row.insert(php_types::Key::from_bytes(b"type"), Zval::Long(user as i64));
                 row.insert(
                     php_types::Key::from_bytes(b"flags"),
-                    Zval::Long(if user { 113 } else { 112 }),
+                    // The requested capability bits | PHP_OUTPUT_HANDLER_USER
+                    // (0x1) for a user callback (oracle: STDFLAGS^FLUSHABLE
+                    // user handler → 81, flags 0 → 1).
+                    Zval::Long(buf.flags | i64::from(user)),
                 );
                 row.insert(php_types::Key::from_bytes(b"level"), Zval::Long(level as i64));
                 row.insert(
@@ -471,24 +550,37 @@ impl<'m> super::Vm<'m> {
     /// buffer (no flush to the parent) — the handler still runs, with
     /// `CLEAN|FINAL`, its return discarded. `false` if no buffer is active.
     pub(super) fn ho_ob_get_clean(&mut self) -> Result<Zval, PhpError> {
-        Ok(match self.ob_stack.pop() {
-            Some(b) => {
-                let content = b.content.clone();
-                self.clean_buffer(b)?;
-                Zval::Str(PhpStr::new(content))
-            }
-            None => Zval::Bool(false),
-        })
+        let Some(last) = self.ob_stack.last() else { return Ok(Zval::Bool(false)) };
+        let content = last.content.clone();
+        // A non-REMOVABLE buffer still returns its contents; the discard fails
+        // with php_output_discard's notice plus ob_get_clean's own (output.c).
+        if last.flags & 64 == 0 {
+            self.ob_flag_notice("ob_get_clean", "discard")?;
+            self.ob_flag_notice("ob_get_clean", "delete")?;
+            return Ok(Zval::Str(PhpStr::new(content)));
+        }
+        let b = self.ob_stack.pop().expect("checked above");
+        self.clean_buffer(b)?;
+        Ok(Zval::Str(PhpStr::new(content)))
     }
     /// `ob_get_flush()`: return the current buffer's content *and* flush it to the
     /// underlying sink, then remove the buffer. `false` (with a notice) if none is
     /// active.
     pub(super) fn ho_ob_get_flush(&mut self) -> Result<Zval, PhpError> {
-        let Some(buf) = self.ob_stack.pop() else {
+        if self.ob_stack.last().is_none() {
             self.ob_no_buffer_notice("ob_get_flush(): Failed to delete and flush buffer. No buffer to delete or flush")?;
             return Ok(Zval::Bool(false));
-        };
-        let content = buf.content.clone();
+        }
+        let last = self.ob_stack.last().expect("checked above");
+        let content = last.content.clone();
+        // Non-REMOVABLE: contents still returned, the pop fails with
+        // php_output_stack_pop's "send" notice plus ob_get_flush's own.
+        if last.flags & 64 == 0 {
+            self.ob_flag_notice("ob_get_flush", "send")?;
+            self.ob_flag_notice("ob_get_flush", "delete")?;
+            return Ok(Zval::Str(PhpStr::new(content)));
+        }
+        let buf = self.ob_stack.pop().expect("checked above");
         self.flush_buffer(buf)?;
         Ok(Zval::Str(PhpStr::new(content)))
     }
@@ -496,7 +588,12 @@ impl<'m> super::Vm<'m> {
     /// still runs with `CLEAN|FINAL`, its return discarded. `true` on success,
     /// `false` (with a notice) if no buffer is active.
     pub(super) fn ho_ob_end_clean(&mut self) -> Result<Zval, PhpError> {
-        if let Some(b) = self.ob_stack.pop() {
+        if let Some(last) = self.ob_stack.last() {
+            if last.flags & 64 == 0 {
+                self.ob_flag_notice("ob_end_clean", "discard")?;
+                return Ok(Zval::Bool(false));
+            }
+            let b = self.ob_stack.pop().expect("checked above");
             self.clean_buffer(b)?;
             Ok(Zval::Bool(true))
         } else {
@@ -507,8 +604,13 @@ impl<'m> super::Vm<'m> {
     /// `ob_end_flush()`: flush the current buffer to the underlying sink and
     /// remove it. `true` on success, `false` (with a notice) if no buffer is active.
     pub(super) fn ho_ob_end_flush(&mut self) -> Result<Zval, PhpError> {
-        match self.ob_stack.pop() {
-            Some(buf) => {
+        match self.ob_stack.last() {
+            Some(last) => {
+                if last.flags & 64 == 0 {
+                    self.ob_flag_notice("ob_end_flush", "send")?;
+                    return Ok(Zval::Bool(false));
+                }
+                let buf = self.ob_stack.pop().expect("checked above");
                 self.flush_buffer(buf)?;
                 Ok(Zval::Bool(true))
             }
@@ -524,7 +626,11 @@ impl<'m> super::Vm<'m> {
     pub(super) fn ho_ob_flush(&mut self) -> Result<Zval, PhpError> {
         // A manual flush runs the handler with `PHP_OUTPUT_HANDLER_FLUSH` (4) (plus
         // START on the first flush) and keeps the buffer active, emptied.
-        if self.ob_stack.last().is_some() {
+        if let Some(last) = self.ob_stack.last() {
+            if last.flags & 32 == 0 {
+                self.ob_flag_notice("ob_flush", "flush")?;
+                return Ok(Zval::Bool(false));
+            }
             self.emit_buffer_op(4)?;
             Ok(Zval::Bool(true))
         } else {
@@ -535,8 +641,12 @@ impl<'m> super::Vm<'m> {
     /// `ob_clean()`: discard the current buffer's content but keep the buffer
     /// active. `true` on success, `false` (with a notice) if no buffer is active.
     pub(super) fn ho_ob_clean(&mut self) -> Result<Zval, PhpError> {
-        if let Some(buf) = self.ob_stack.last_mut() {
-            buf.content.clear();
+        if let Some(last) = self.ob_stack.last() {
+            if last.flags & 16 == 0 {
+                self.ob_flag_notice("ob_clean", "delete")?;
+                return Ok(Zval::Bool(false));
+            }
+            self.ob_stack.last_mut().expect("checked above").content.clear();
             Ok(Zval::Bool(true))
         } else {
             self.ob_no_buffer_notice("ob_clean(): Failed to delete buffer. No buffer to delete")?;
@@ -554,6 +664,13 @@ impl<'m> super::Vm<'m> {
                 "json_decode() expects at least 1 argument, 0 given".to_string(),
             ));
         };
+        // PHP 8.1 null-arg deprecation (WP's kses maybe_json chain, WP-17).
+        if matches!(first.deref_clone(), Zval::Null) {
+            self.diags.push(Diag::Deprecated(
+                "json_decode(): Passing null to parameter #1 ($json) of type string is deprecated"
+                    .to_string(),
+            ));
+        }
         let json = convert::to_zstr_cast(first, &mut self.diags).as_bytes().to_vec();
         let assoc = match args.get(1) {
             Some(v) => convert::to_bool(v, &mut self.diags),
@@ -2046,6 +2163,47 @@ impl<'m> super::Vm<'m> {
             Err(_) => Ok(Zval::Long(5)),
         }
     }
+    /// `__zip_writer_open($path)`: create a NEW archive for writing (the
+    /// prelude ZipArchive::open CREATE path on a missing file). Returns the
+    /// handle id, or the ZipArchive error constant (ER_OPEN = 11) as an int.
+    pub(super) fn ho_zip_writer_open(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let path = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags);
+        let path = String::from_utf8_lossy(path.as_bytes()).into_owned();
+        let file = match std::fs::File::create(&path) {
+            Ok(f) => f,
+            Err(_) => return Ok(Zval::Long(11)),
+        };
+        let id = self.next_zip;
+        self.next_zip += 1;
+        self.zip_writers.insert(id, ::zip::ZipWriter::new(file));
+        let mut out = PhpArray::new();
+        let _ = out.append(Zval::Long(i64::from(id)));
+        Ok(Zval::Array(Rc::new(out)))
+    }
+    /// `__zip_writer_add($id, $entry_name, $bytes)`: append one deflated
+    /// entry. `false` on unknown handle or I/O failure.
+    pub(super) fn ho_zip_writer_add(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        use std::io::Write;
+        let id = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags) as u32;
+        let name = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags);
+        let name = String::from_utf8_lossy(name.as_bytes()).into_owned();
+        let bytes = convert::to_zstr_cast(args.get(2).unwrap_or(&Zval::Null), &mut self.diags)
+            .as_bytes()
+            .to_vec();
+        let Some(w) = self.zip_writers.get_mut(&id) else { return Ok(Zval::Bool(false)) };
+        let ok = w
+            .start_file(name, ::zip::write::SimpleFileOptions::default())
+            .is_ok()
+            && w.write_all(&bytes).is_ok();
+        Ok(Zval::Bool(ok))
+    }
+    /// `__zip_writer_close($id)`: finalize (write the central directory) and
+    /// release. `false` on unknown handle or a failed finish.
+    pub(super) fn ho_zip_writer_close(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let id = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags) as u32;
+        let Some(w) = self.zip_writers.remove(&id) else { return Ok(Zval::Bool(false)) };
+        Ok(Zval::Bool(w.finish().is_ok()))
+    }
     /// `__zip_close($id)`: release the handle. `false` on an unknown/closed one.
     pub(super) fn ho_zip_close(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let id = convert::to_long_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags) as u32;
@@ -2747,6 +2905,74 @@ impl<'m> super::Vm<'m> {
         }
         Ok(Zval::Array(Rc::new(arr)))
     }
+    /// `get_defined_functions()`: `['internal' => […], 'user' => […]]`.
+    /// Internal = the registry plus every host-builtin table, sorted (PHP's
+    /// order is registration order; the real-world use is membership — WP's
+    /// compat tests assertContains 'mb_strlen'). User = non-conditional module
+    /// functions (prelude-authored ones count as internal, like their C
+    /// counterparts) plus linked declarations, lowercased.
+    pub(super) fn ho_get_defined_functions(&mut self) -> Result<Zval, PhpError> {
+        // `_`-prefixed names are phpr-internal plumbing (prelude helpers like
+        // _gmp_bin, host hooks like __zip_open): never exposed in either list
+        // — the reflection corpus walks 'internal' and reflects every entry,
+        // and no PHP-core function starts with an underscore.
+        let hidden = |n: &[u8]| n.starts_with(b"_");
+        let mut internal: Vec<Vec<u8>> =
+            self.registry.keys().filter(|n| !hidden(n)).cloned().collect();
+        internal.extend(
+            super::HOST_BUILTIN_NAMES.iter().filter(|n| !hidden(n)).map(|n| n.to_vec()),
+        );
+        internal.extend(super::HOST_OUT.iter().map(|(n, _)| n.to_vec()));
+        internal.extend(super::HOST_SCANF.iter().map(|n| n.to_vec()));
+        internal.extend(super::HOST_REF.iter().map(|n| n.to_vec()));
+        internal.push(b"array_multisort".to_vec());
+        let mut user: Vec<Vec<u8>> = Vec::new();
+        for (i, f) in self.module.functions.iter().enumerate() {
+            if f.name.is_empty()
+                || hidden(&f.name)
+                || self.module.conditional_fns.contains(&i)
+            {
+                continue;
+            }
+            if f.file.as_ref() == b"prelude" {
+                internal.push(f.name.to_ascii_lowercase());
+            } else {
+                user.push(f.name.to_ascii_lowercase());
+            }
+        }
+        // Linked declarations: the prelude SEGMENTS (curl/gmp/gd/mysqli/xml…)
+        // are linked units whose file is "prelude" — their functions count as
+        // internal, like their C counterparts; everything else is userland.
+        for (name, &(fmod, idx)) in self.linked_functions.iter() {
+            if hidden(name) {
+                continue;
+            }
+            let is_prelude =
+                fmod.functions.get(idx).is_some_and(|f| f.file.as_ref() == b"prelude");
+            if is_prelude {
+                internal.push(name.clone());
+            } else {
+                user.push(name.clone());
+            }
+        }
+        internal.sort();
+        internal.dedup();
+        user.sort();
+        user.dedup();
+        let mut ia = PhpArray::new();
+        for n in internal {
+            let _ = ia.append(Zval::Str(PhpStr::new(n)));
+        }
+        let mut ua = PhpArray::new();
+        for n in user {
+            let _ = ua.append(Zval::Str(PhpStr::new(n)));
+        }
+        let mut out = PhpArray::new();
+        out.insert(php_types::Key::from_bytes(b"internal"), Zval::Array(Rc::new(ia)));
+        out.insert(php_types::Key::from_bytes(b"user"), Zval::Array(Rc::new(ua)));
+        Ok(Zval::Array(Rc::new(out)))
+    }
+
     /// `function_exists($name)` (Session B4): whether `name` is a user function, a
     /// registry builtin, or a host builtin. A leading `\` is stripped.
     pub(super) fn ho_function_exists(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
@@ -3787,6 +4013,12 @@ impl<'m> super::Vm<'m> {
             let v = a.deref_clone();
             if !matches!(v, Zval::Null) {
                 self.error_level = convert::to_long_cast(&v, &mut self.diags);
+                // Mirror into the `error_reporting` INI entry — same storage
+                // as EG(error_reporting) in PHP, so ini_get must follow.
+                let lvl = self.error_level.to_string().into_bytes();
+                if let Some(e) = self.ini.0.get_mut(b"error_reporting".as_slice()) {
+                    e.local = lvl;
+                }
             }
         }
         Ok(Zval::Long(old))

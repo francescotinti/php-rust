@@ -989,6 +989,13 @@ pub enum ExprKind {
     /// Reading `base[index]` (`$a[k]`, also a string offset read).
     Index { base: Box<Expr>, index: Box<Expr> },
 
+    /// `$a[]` in ARGUMENT position only (PclZip's `$this->m($list[], …)`): a
+    /// deferred append-place. A by-ref parameter appends a fresh element and
+    /// aliases it; a by-value parameter is PHP's runtime "Cannot use [] for
+    /// reading" Error. Built exclusively by `lower_args`; every other `$a[]`
+    /// read keeps the lower-time fatal (WP-17).
+    AppendArg(Box<Expr>),
+
     /// `[$a, $b] = rhs` / `list(...) = rhs` array destructuring (step 51).
     /// Desugared by the lowerer: `rhs` is stored once into `temp`, each `assign`
     /// reads `temp[key]` and writes one (possibly nested) sub-target, and the whole

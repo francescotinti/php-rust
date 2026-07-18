@@ -1079,6 +1079,57 @@ pub fn mb_scrub(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(Zval::Str(PhpStr::new(encode_str(&enc.codec, &decoded))))
 }
 
+thread_local! {
+    /// `mb_detect_order`'s current list (canonical names). PHP's default
+    /// under `-n` is ASCII, UTF-8 (oracle-pinned).
+    static MB_DETECT_ORDER: std::cell::RefCell<Vec<&'static str>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// `mb_detect_order(array|string|null $encoding = null): array|bool` — get
+/// the current detect order (default ASCII, UTF-8) or set it; an invalid
+/// name is a ValueError naming the offender (oracle-pinned).
+pub fn mb_detect_order(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    match args.first().map(|v| v.deref_clone()) {
+        None | Some(Zval::Null) => {
+            let cur = MB_DETECT_ORDER.with(|c| c.borrow().clone());
+            let names: Vec<&str> = if cur.is_empty() { vec!["ASCII", "UTF-8"] } else { cur };
+            let mut out = PhpArray::new();
+            for n in names {
+                let _ = out.append(Zval::Str(PhpStr::from_str(n)));
+            }
+            Ok(Zval::Array(std::rc::Rc::new(out)))
+        }
+        Some(v) => {
+            let items: Vec<Vec<u8>> = match &v {
+                Zval::Array(a) => a
+                    .iter()
+                    .map(|(_, e)| convert::to_zstr(&e.deref_clone(), ctx.diags).as_bytes().to_vec())
+                    .collect(),
+                other => convert::to_zstr(other, ctx.diags)
+                    .as_bytes()
+                    .split(|&b| b == b',')
+                    .map(|s| s.iter().copied().filter(|b| *b != b' ').collect())
+                    .collect(),
+            };
+            let mut resolved: Vec<&'static str> = Vec::new();
+            for raw in &items {
+                match resolve_encoding(raw) {
+                    Some(enc) => resolved.push(enc.canonical),
+                    None => {
+                        return Err(PhpError::ValueError(format!(
+                            "mb_detect_order(): Argument #1 ($encoding) contains invalid encoding \"{}\"",
+                            String::from_utf8_lossy(raw)
+                        )))
+                    }
+                }
+            }
+            MB_DETECT_ORDER.with(|c| *c.borrow_mut() = resolved);
+            Ok(Zval::Bool(true))
+        }
+    }
+}
+
 /// `mb_internal_encoding(?string $encoding = null): string|bool` — get the current
 /// internal encoding (canonical name) or set it (returns `true`); an unsupported
 /// name is a `ValueError`.
