@@ -1,34 +1,42 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-23: ext/tidy + xsl trampolino + fix hook-guard)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-24: multisite al minimo teorico + xsl 57/64 + fix engine id-reuse/cast/error-handler)
 
-> 🏁 **WP-23 (2026-07-19, commit gated `90d7ae0`)**: **ext/tidy NATIVA su
-> libtidy 5.8.0 di sistema via FFI** (44/45 phpt runnable; ini
-> tidy.clean_output PHP_INI_USER → chiude `wpIsIniValueChangeable #4`) +
-> **trampolino reale registerPHPFunctions/php:function** per ext/xsl
-> (21→44/64 phpt; re-entry ACTIVE_VM, ritorni DOM come nodeset veri via doc
-> temporanei) + 🔧 FIX ENGINE hook-guard (un hook che LANCIA non rilasciava
-> il guard di ricorsione → hook bypassato in silenzio per sempre; chiude
-> anche property_hooks/parent_superfluous_args nel corpus) + 🔧
-> DOMAttr::$value virtuale write-through + ⚡ Props hash-index lazy e
-> PhpArray::holds_containers (gc salta array scalar-only; A/B interleaved
-> 84,5 vs 84,1s controllo = parità). Gate tutto verde, corpus 1489→1487.
+> 🏁 **WP-24 (2026-07-19)**: **multisite RICONFERMATA a 1 SOLO diff per nome
+> (minimo teorico: resta solo `wp_is_stream #2`, divergenza DECISA;
+> `wpIsIniValueChangeable #4` chiuso da ext/tidy)** su 31.278 test
+> (`wp19-harness/ms-out/`, baseline WP-21 archiviata in `wp21-baseline/`).
+> **ext/xsl 44→57/64 phpt**: transcodifica iso-8859-1↔UTF-8 (load+saveXML,
+> byte-id), `file://` strip + `documentURI` canonica (xmlPathToURI FFI —
+> bug53965 byte-id ANCHE con spazi nel path), doc vuoto → xmlNewDoc
+> (bug71571), shape trampolino (throw_in_autoload con previous chained,
+> TypeError su ritorni non-DOM, registerPHPFunctions validazioni 8.4).
+> 🔧 ENGINE: `set_error_handler(null)` = default handler; `(string)` di
+> Closure/Generator LANCIA (Op::Stringify; funnel echo resta D-19.18);
+> **Drop di Object POSTORDER** (riuso LIFO = id del padre, come Zend) +
+> **`next_id` ripulisce TUTTE le tabelle per-id** (⭐ un Fiber/generator
+> morto non deve rivivere sul riuso dell'id — fibers/destructors_002 era il
+> sintomo). Corpus 1487→**1485** (bug60738, closure_015 chiusi).
 
 Riprendiamo phpr (PHP 8.5.7 in Rust). **Roadmap**: obiettivo primario = 100%
 compatibilità WordPress; la WP core test suite (PHPUnit) è il GATE PER NOME.
 
 ## Stato gate per nome (tutte le superfici)
-- **Full-suite single-site: 1 SOLO diff per nome — IL MINIMO TEORICO**
-  (`wp16-harness/full-out/run16/`, 30.481 test 0E/2F/86W/73S, wall ~22:17,
-  CPU master 16:45 ≈ run15): resta ESCLUSIVAMENTE `wp_is_stream #2`
-  (stream_get_wrappers onesto — divergenza DECISA); `wpIsIniValueChangeable
-  #4` CHIUSO da ext/tidy (il dataset ora esiste anche su phpr e passa).
-- **Full-suite multisite: 2 diff per nome** (`wp19-harness/ms-out/`, baseline
-  WP-19; non rilanciata in WP-22/23 — da riconfermare quando comodo: con
-  tidy anche qui l'atteso scende a 1).
-- Suite phpt estensioni (misura, non gate): **tidy 44/45** (residuo 010 =
-  ordine riuso object-id, cosmetico) · **xsl 44/64** (residui: transcodifica
-  iso-8859-1 nel DOM load → xslt004/007/008; DOMDocument::load con path
-  relativi in sottodir → bug53965; document() su stream wrapper → xslt009;
-  shape warning/errori minori; byref/unset su hooked prop; xsl-phpinfo).
+- **Full-suite single-site: 1 diff per nome — minimo teorico** (run16,
+  `wp16-harness/full-out/run16/`; solo `wp_is_stream #2`). Non rilanciata in
+  WP-24 (i cambi sono xsl/dom/engine-cosmetici, coperti da gate22 + probe);
+  al prossimo cambio sostanzioso rilanciarla e attendersi SOLO il diff
+  dichiarato.
+- **Full-suite multisite: 1 diff per nome — minimo teorico** (WP-24,
+  `wp19-harness/ms-out/`, 31.278 test; solo `wp_is_stream #2`).
+- Suite phpt estensioni (misura, non gate): **xsl 57/64** (residui 7, tutti
+  strutturali: bug49634 trace con frame prelude · bug69168 identity/liveness
+  nodi = divergenza dichiarata · registerPHPFunctionNS (functionURI FFI) ·
+  xsl-phpinfo · xslt008/-mb/009 stream-wrapper dentro l'I/O libxml) ·
+  **tidy 44/45** (010: id-reuse nei grafi trattenuti in gc_roots — lo sweep
+  rilascia in ordine di nota, non di cascata; il Drop postorder ha chiuso la
+  parte in cascata).
+  ⚠️ Misurare le suite phpt con INVOCAZIONE ASSOLUTA del path: con path
+  relativi `__DIR__` diventa "." nel runner e i test file://+__DIR__
+  falliscono per artefatto (xslt007/bug53965 passano SOLO con path assoluto).
 
 ## Harness full-suite (WP-16 — invariato, ⚠️ USARE QUESTO per le run intere)
 ```bash
@@ -41,72 +49,74 @@ nohup perl -e 'use POSIX qw(setsid); fork and exit 0; setsid(); exec { $ARGV[0] 
 # multisite: wp19-harness/run-multisite-detached.sh <oracle|phpr> (ms-out/)
 # ⚠️ MAI probe su wptests durante una run (WP-20 docet).
 # ⚠️⚠️ AZZERARE wpdev/src/wp-content/uploads PRIMA di ogni full run (WP-21).
+# ⚠️ NON ricompilare mentre una run/gate usa il binario (le fasi successive
+#   spawnerebbero il binario nuovo → run mista) e NON lanciare un secondo
+#   gate22 finché il primo non ha scritto gate22.done: due istanze
+#   interleavate mescolano progress.txt/output e il marker done del primo
+#   sveglia i watcher del secondo (successo in WP-24).
 ```
 
-## Prossimo passo: SESSIONE WP-24
-1. **Multisite**: rilanciare la run multisite (attesa 2→1 diff con tidy) e
-   aggiornare la baseline ms-out.
-2. **CPU residua strutturale** (full-suite CPU master 16:45 vs oracle 8:50;
-   opt (a)/(c) WP-23 = neutre sul proxy media):
-   dal profilo, in ordine: run_loop leaf ~2600 (dispatch) · memmove ~600
-   (concat/enter_callee) · Zval drop/clone ~500 · gc note/sweep ~500 ·
-   dispatch_instance_call ~200 · identical ~180 · bind_params ~150.
-   Candidati: (b) frame setup più magro (Frame ~25 campi, box dei campi
-   freddi — valutata in WP-23, ROI incerto); interning stringhe/nomi;
-   memoria dati vivi (footprint per-Zval / arena, backlog WP-7).
-   ⚠️ METODO A/B: SOLO run interleaved nello stesso momento (la deriva
-   ambientale tra giornate è ~2-3%); pkill rust-analyzer prima; ⭐ attenti
-   all'INLINING: aggiungere una path fredda a una fn calda può far saltare
-   l'inline dei call-site (Props::position_ro leaf da 242 tick = +5% — il
-   fix: fast-path piccolo #[inline] pubblico, path grande out-of-line).
-3. **Residui xsl attaccabili** (se si vuole chiudere la suite phpt):
-   (a) transcodifica iso-8859-1→UTF-8 nel loader DOM (chiude 3-4 test);
-   (b) DOMDocument::load con path relativi (bug53965);
-   (c) "Indirect modification of X::$p is not allowed" per byref su hooked
-   prop senza &get + messaggio unset ("Cannot unset" senza "hooked
-   property") — gap engine hooks.
-4. **Gap engine emerso (cosmetico)**: ordine di riuso degli object-id nel
-   teardown ricorsivo (Zend libera i FIGLI prima del padre → LIFO riusa
-   l'id del padre; phpr preorder). Chiuderebbe tidy 010.phpt e potenziali
-   diff futuri su var_dump di grafi.
-5. Poi: rotta post-WP (Laravel-validazione) da [[php-rust-roadmap-wp-first]]
-   o residui trasversali da [[php-rust-todo-master]].
+## Prossimo passo: SESSIONE WP-25
+1. **CPU residua strutturale** (full-suite CPU master 16:45 vs oracle 8:50):
+   dal profilo WP-23 (`wp22-harness/prof-out/`), in ordine: run_loop leaf
+   ~2600 (dispatch) · memmove ~600 (concat/enter_callee) · Zval drop/clone
+   ~500 · gc note/sweep ~500 · dispatch_instance_call ~200 · identical ~180
+   · bind_params ~150. Candidati: interning stringhe/nomi; frame setup più
+   magro (ROI incerto, valutata WP-23); memoria dati vivi (arena, backlog
+   WP-7). ⚠️ METODO A/B: SOLO run interleaved nello stesso momento; pkill
+   rust-analyzer; ⭐ attenzione all'INLINING (fast-path piccolo #[inline],
+   path grande out-of-line — lezione Props::position_ro).
+2. **Residui strutturali xsl/tidy** (se si vogliono chiudere le suite phpt):
+   (a) stream wrapper PHP dentro l'I/O libxml (xmlRegisterInputCallbacks →
+   bridge verso gli stream phpr; chiude xslt008/-mb/009 e apre document()
+   su wrapper arbitrari); (b) registerPHPFunctionNS: leggere function/
+   functionURI dal xmlXPathParserContext via offset ABI e mappa (ns,name)→
+   callable; (c) trace senza frame prelude (bug49634 — nasconderli in
+   backtrace/getTrace quando file=="prelude", impatto largo, gate pesante);
+   (d) sweep release-order per tidy 010 (rischioso: cambia l'ordine dei
+   distruttori — valutare bene).
+3. **Roadmap post-WP** da [[php-rust-roadmap-wp-first]]: validazione Laravel,
+   oppure pescare dai residui trasversali di [[php-rust-todo-master]].
+4. Se si toccano date/prelude DateTime: gate ext/date OBBLIGATORIO (355→351
+   baseline). Se si tocca ref/arg/reflection: gate ORM+hk obbligatorio.
 
-## Lezioni operative (nuove WP-23)
-- ⭐⭐ **Inlining**: v. sopra (punto 2). Il leaf ranking del `sample` mostra
-  subito la fn non-inlined comparsa (era il segnale: `Props::position_ro`).
-- ⭐ **A/B interleaved**: 4 round dello stesso binario nella stessa ora
-  scendono 93→88s (thermal/cache settling). Il controllo va rifatto OGGI,
-  interleaved, mai contro il numero di ieri.
-- ⭐ **FFI libtidy**: TidyBuffer SEMPRE via `tidyBufInit` (installa
-  l'allocator di default; azzerare a mano → allocator NULL → segfault in
-  tidyBufFree per un buffer mai scritto). Ordine di free: buffer PRIMA del
-  doc (tidy_object_free_storage).
-- ⭐ **Niente keeper-object nei prelude binding**: consuma un object-id e i
-  test che var_dumpano confrontano gli #id — il nodo/child tenga un ref
-  all'oggetto proprietario (il refcount fa da PHPTidyDoc::ref_count).
-- ⭐ **Callable dall'esterno (trampolini)**: MAI pre-check is_callable — il
-  path di risoluzione deve innescare l'AUTOLOAD; mappare a posteriori gli
-  errori "Call to undefined function X()" → shape zend_make_callable.
-- Il guard serena-vexp blocca grep/cat anche sui .phpt dentro comandi
-  composti col C; i fixture .phpt restano leggibili con Read/iconv.
-- var_dump/print_r nei prelude binding: __debugInfo per nascondere le prop
-  interne (pattern date.php; ora anche tidy/tidyNode/XSLTProcessor).
+## Lezioni operative (nuove WP-24)
+- ⭐⭐ **Riuso degli object-id**: `next_id` DEVE ripulire OGNI tabella VM
+  keyed per id (fibers, generators, gc marks, cache transienti) — il Drop
+  postorder ha cambiato QUALI id si riusano e ha esposto lo stato stale dei
+  Fiber ("Cannot start a fiber that has already been started"). Quando si
+  aggiunge una nuova mappa per-id, aggiungerla anche lì.
+- ⭐ **Suite phpt con path ASSOLUTO** (v. sopra): `__DIR__`="." è un
+  artefatto del runner con invocazione relativa, non una divergenza phpr.
+- ⭐ **xmlPathToURI/xmlCanonicPath via FFI** per documentURI/base: l'oracle
+  non tiene mai lo scheme file:// nella documentURI e %-escapa gli spazi;
+  con la base canonica gli xsl:include relativi risolvono anche sotto
+  "/Volumes/Extreme Pro" (spazio nel path).
+- ⭐ **ErrCapture (open_memstream) perde i confini di chiamata** di libxslt:
+  il report di ricorsione è UNA chiamata con \n interno → ricucire la riga
+  "You can adjust …" al messaggio precedente (bug71571). Pattern per altri
+  messaggi multi-riga futuri.
+- ⭐ **Serena timeout ≠ edit fallito**: dopo un TimeoutError di
+  replace_content verificare lo stato del file PRIMA di riprovare (il primo
+  "timeout" di WP-24 aveva GIÀ applicato l'edit).
+- Un DOMDocument mai caricato ha serializzazione "solo dichiarazione" —
+  round-trip verso libxslt = xmlNewDoc, non xmlReadMemory (che rifiuta
+  input senza root).
 
-## Invarianti (aggiornati WP-23)
+## Invarianti (aggiornati WP-24)
 - Gate per OGNI commit: corpus/sess/date/refl per NOME — baseline:
-  **corpus 1487 (AGGIORNATA WP-23) · sess 28 · date 351 · refl 290**
+  **corpus 1485 (AGGIORNATA WP-24) · sess 28 · date 351 · refl 290**
   (SOLO rimozioni ammesse; fail-set in `wp18-harness/gate-out/*.fails`) ·
   ORM 3484 3E/13F per nome · http-kernel 1665 0E/0F · cargo (1556) ·
   probe: gd 11/11, mysqli 11/11, media-probe byte-id, run-http (DIFF-set
   16 = WP-14) · WP suite per-classe = oracle (option 413 · media 762 ·
   post 906 · user 1341 · query 1889 · restapi 3514 · taxonomy 878 ·
   comment 582 · xmlrpc 316 · sitemaps 132 · classi WP-17/18). Script:
-  `wp22-harness/gate22.sh` (output in wp22-harness/gate-out; il gate-out
-  di WP-22 è in gate-out-wp22-archived).
+  `wp22-harness/gate22.sh` (gate-out WP-23 in gate-out-wp23-archived).
 - Full-suite single-site: solo miglioramenti per nome vs **run16 (1 diff:
-  wp_is_stream #2)** — il minimo teorico finché la divergenza resta DECISA.
-- Full-suite multisite: solo miglioramenti per nome vs **ms-out (2 diff)**.
+  wp_is_stream #2)**. Full-suite multisite: solo miglioramenti vs **ms-out
+  WP-24 (1 diff: wp_is_stream #2)** — entrambe al minimo teorico finché la
+  divergenza resta DECISA.
 - Commit AND push a ogni step; run pesanti SEQUENZIALI e DETACHED sotto
   watchdog/telemetria; Serena per Rust (se in timeout: perl -ne via Bash,
   ma gli EDIT solo via Serena); Vexp/Read per il C; Read/Write tool per i

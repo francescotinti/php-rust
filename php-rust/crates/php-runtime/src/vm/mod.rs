@@ -1559,6 +1559,19 @@ impl<'m> Vm<'m> {
             self.lazy_options.remove(&id);
             self.lazy_initializing.remove(&id);
             self.gc_roots.remove(&id);
+            // A dead object's per-id VM state must not leak into the reused
+            // handle: a stale FiberState reports "Cannot start a fiber that
+            // has already been started" (fibers/destructors_002 under
+            // postorder handle release); the same holds for a generator's
+            // suspended frame, the GC's per-id classification marks and the
+            // transient per-id caches.
+            self.fibers.remove(&id);
+            self.generators.remove(&id);
+            self.gc_cycle_roots.remove(&id);
+            self.gc_light_demoted.remove(&id);
+            self.var_dump_debug.remove(&id);
+            self.stringify_args.remove(&id);
+            self.reflect_object_bound.remove(&id);
             return id;
         }
         let id = self.next_object_id;
@@ -2495,7 +2508,10 @@ impl<'m> Vm<'m> {
         let active = if !self.final_flush && !self.in_error_handler {
             self.error_handlers
                 .last()
-                .filter(|(_, mask)| errno & *mask != 0)
+                // `set_error_handler(null, …)` pushes a null entry: the engine
+                // default is in effect (PHP 8), but the stack depth is kept so
+                // `restore_error_handler` re-exposes the one below.
+                .filter(|(cb, mask)| !matches!(cb, Zval::Null) && errno & *mask != 0)
                 .map(|(cb, _)| cb.clone())
         } else {
             None
@@ -10806,6 +10822,7 @@ host_builtins! {
     b"umask" => vm.ho_umask(args),
     b"__dom_new_doc" => vm.ho_dom_new_doc(args),
     b"__dom_load" => vm.ho_dom_load(args),
+    b"__dom_canonic_path" => vm.ho_dom_canonic_path(args),
     b"__dom_load_html" => vm.ho_dom_load_html(args),
     b"__dom_save_xml" => vm.ho_dom_save_xml(args),
     b"__dom_c14n" => vm.ho_dom_c14n(args),

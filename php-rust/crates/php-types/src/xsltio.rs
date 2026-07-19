@@ -56,7 +56,10 @@ extern "C" {
     fn xmlReadMemory(
         buf: *const c_char, size: c_int, url: *const c_char, encoding: *const c_char, opts: c_int,
     ) -> XmlDocPtr;
+    fn xmlNewDoc(version: *const c_char) -> XmlDocPtr;
     fn xmlFreeDoc(doc: XmlDocPtr);
+    fn xmlCanonicPath(path: *const c_char) -> *mut c_char;
+    fn xmlPathToURI(path: *const c_char) -> *mut c_char;
     // Global variable of function-pointer type (the allocator table entry the
     // result buffer of xsltSaveResultToString must be released through).
     static xmlFree: unsafe extern "C" fn(*mut c_void);
@@ -150,7 +153,7 @@ impl ErrCapture {
             fflush(self.file);
             fclose(self.file);
         }
-        let mut out = Vec::new();
+        let mut out: Vec<String> = Vec::new();
         if !self.slots.buf.is_null() {
             let bytes =
                 unsafe { std::slice::from_raw_parts(self.slots.buf as *const u8, self.slots.size) };
@@ -161,6 +164,18 @@ impl ErrCapture {
                 let msg = String::from_utf8_lossy(line)
                     .replace("xsltMaxDepth (--maxdepth)", "$maxTemplateDepth")
                     .replace("maxTemplateVars (--maxvars)", "$maxTemplateVars");
+                // The recursion-limit report is ONE xsltTransformError call
+                // with an embedded newline ("… detected.\nYou can adjust …"):
+                // PHP raises it as a single two-line warning, but the FILE*
+                // funnel here loses call boundaries — restitch the known
+                // continuation line onto its opener (bug71571).
+                if msg.starts_with("You can adjust ") {
+                    if let Some(prev) = out.last_mut() {
+                        prev.push('\n');
+                        prev.push_str(&msg);
+                        continue;
+                    }
+                }
                 out.push(msg);
             }
             unsafe { free(self.slots.buf as *mut c_void) };
@@ -179,6 +194,52 @@ impl Drop for XsltSheet {
     fn drop(&mut self) {
         unsafe { xsltFreeStylesheet(self.ptr) };
     }
+}
+
+/// libxml's canonic form of a load path — what the oracle stamps on
+/// `doc->URL` and `DOMDocument::$documentURI`: a local `file://` is reduced
+/// to its plain path and URI-invalid bytes are escaped (`%20` for a space),
+/// so relative `xsl:include`/`document()` resolution against it works even
+/// under paths with spaces (bug53965). Unconvertible input passes through.
+pub fn canonic_path(path: &[u8]) -> Vec<u8> {
+    // A local `file://` URI reduces to its plain path first (the oracle's
+    // documentURI never keeps the scheme), then xmlPathToURI escapes the
+    // URI-invalid bytes exactly as libxml stamped doc->URL.
+    let local: &[u8] = match path.strip_prefix(b"file://".as_slice()) {
+        Some(rest) if rest.first() == Some(&b'/') => rest,
+        Some(rest) if rest.starts_with(b"localhost/") => &rest[b"localhost".len()..],
+        _ => path,
+    };
+    let Ok(c) = CString::new(local.to_vec()) else {
+        return path.to_vec();
+    };
+    let p = unsafe { xmlPathToURI(c.as_ptr()) };
+    if p.is_null() {
+        return local.to_vec();
+    }
+    let out = unsafe { std::ffi::CStr::from_ptr(p).to_bytes().to_vec() };
+    unsafe { free(p as *mut c_void) };
+    out
+}
+
+/// Whether the serialized document is empty beyond an optional XML
+/// declaration — the round-trip shape of a never-loaded `DOMDocument`.
+fn decl_only(xml: &[u8]) -> bool {
+    let mut s = xml;
+    while let [b, rest @ ..] = s {
+        if b.is_ascii_whitespace() {
+            s = rest;
+        } else {
+            break;
+        }
+    }
+    if s.starts_with(b"<?xml") {
+        match s.windows(2).position(|w| w == b"?>") {
+            Some(p) => s = &s[p + 2..],
+            None => return false,
+        }
+    }
+    s.iter().all(|b| b.is_ascii_whitespace())
 }
 
 fn parse_doc(xml: &[u8], url: &[u8], opts: c_int) -> XmlDocPtr {
@@ -472,7 +533,13 @@ pub fn transform(
     let mut errs_pre = Vec::new();
     // Source documents keep their DOM-parse semantics: no entity substitution
     // or DTD defaulting beyond what the serialized form already carries.
-    let doc = parse_doc(doc_xml, doc_url, XML_PARSE_NOERROR | XML_PARSE_NOWARNING);
+    let mut doc = parse_doc(doc_xml, doc_url, XML_PARSE_NOERROR | XML_PARSE_NOWARNING);
+    if doc.is_null() && decl_only(doc_xml) {
+        // A never-loaded DOMDocument: Zend hands libxslt its live (rootless)
+        // xmlDoc, but xmlReadMemory refuses contentless input — rebuild the
+        // empty doc (bug71571's recursion-limit probes transform one).
+        doc = unsafe { xmlNewDoc(c"1.0".as_ptr()) };
+    }
     if doc.is_null() {
         if let Some(c) = cap {
             errs_pre = c.end();

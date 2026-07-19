@@ -625,6 +625,19 @@ impl<'m> super::Vm<'m> {
                                 }
                             }
                         }
+                        // A Closure / Generator has no `__toString`: the explicit
+                        // cast throws like any such object (the infallible
+                        // echo/concat funnel still warns — D-19.18).
+                        Zval::Closure(_) => {
+                            return Err(PhpError::Error(
+                                "Object of class Closure could not be converted to string".into(),
+                            ));
+                        }
+                        Zval::Generator(_) => {
+                            return Err(PhpError::Error(
+                                "Object of class Generator could not be converted to string".into(),
+                            ));
+                        }
                         other => {
                             let s = convert::to_zstr(other, &mut self.diags);
                             self.frames[top].stack.push(Zval::Str(s));
@@ -3160,15 +3173,23 @@ impl<'m> super::Vm<'m> {
                             )));
                         }
                         // A hooked property has no plain backing to unset (step 50).
-                        if self.prop_hook(o.borrow().class_id as usize, &name, false).is_some()
-                            || self.prop_hook(o.borrow().class_id as usize, &name, true).is_some()
+                        // A prelude-declared hook models a native virtual prop
+                        // (XSLTProcessor::$maxTemplateDepth): Zend's internal
+                        // handler omits the "hooked property" wording there.
+                        let hcid = o.borrow().class_id as usize;
+                        if let Some(h) = self
+                            .prop_hook(hcid, &name, false)
+                            .or_else(|| self.prop_hook(hcid, &name, true))
                         {
+                            let native = h.file.as_ref() == b"prelude";
                             let ob = o.borrow();
                             let cls = String::from_utf8_lossy(ob.class_name.as_bytes()).into_owned();
                             let prop = String::from_utf8_lossy(&name).into_owned();
-                            return Err(PhpError::Error(format!(
-                                "Cannot unset hooked property {cls}::${prop}"
-                            )));
+                            return Err(PhpError::Error(if native {
+                                format!("Cannot unset {cls}::${prop}")
+                            } else {
+                                format!("Cannot unset hooked property {cls}::${prop}")
+                            }));
                         }
                         if let Some((defc, midx, oid)) =
                             self.magic_applies(o, &name, cur, MagicKind::Unset, b"__unset")

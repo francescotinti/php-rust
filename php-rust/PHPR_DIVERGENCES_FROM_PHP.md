@@ -479,6 +479,46 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-19 (sessione WordPress-24): ✅ CHIUSE le divergenze xsl/dom residue
+  attaccabili (phpt xsl 44→57/64): (a) transcodifica iso-8859-1/windows-1252/
+  iso-8859-15→UTF-8 nel load XML (la dichiarazione è onorata) + RI-CODIFICA
+  di saveXML whole-doc verso l'encoding dichiarato (char non rappresentabili
+  → `&#N;` come libxml) — probe saveXML byte-id con l'oracle (xslt004/007);
+  (b) `file://` strippato in DOMDocument::load/loadHTMLFile con semantica
+  libxml (host vuoto/localhost; `file://./…` FALLISCE come l'oracle);
+  (c) `documentURI` CANONICA (xmlPathToURI via FFI: file:// locale ridotto
+  al path, byte URI-invalidi %-escaped) → bug53965 byte-id anche con SPAZI
+  nel path (la base canonica fa risolvere xsl:include relativi); (d) un
+  DOMDocument mai caricato entra nel transform come xmlNewDoc (bug71571) e
+  il report di ricorsione libxslt (una chiamata, 2 righe) è ricucito in UN
+  warning; (e) unset di una hooked prop dichiarata nel PRELUDE → shape
+  nativa "Cannot unset C::$p" senza "hooked property" (le hook userland
+  restano "hooked property", verificato oracle anche su sottoclassi);
+  (f) trampolino php:function: zero argomenti → Error "Function name must
+  be passed as the first argument"; ritorno oggetto non-DOM → TypeError
+  parcheggiata (era Warning); autoloader che LANCIA in risoluzione → Error
+  "Invalid callback …, class … not found" con l'eccezione chained come
+  previous (shim prelude `__xsl_call`: is_callable innesca l'autoload, la
+  chiamata resta diretta così le eccezioni del body passano intatte);
+  registerPHPFunctions con le validazioni Zend 8.4 complete (callable-check
+  con reason, nomi vuoti/NUL → ValueError, `get_debug_type` nel messaggio
+  ZPP); hasExsltSupport → ArgumentCountError su argomenti extra.
+  ✅ ENGINE trasversali: `set_error_handler(null, …)` = handler di default
+  con lo stack preservato (prima lanciava "Value of type null is not
+  callable"); il cast ESPLICITO `(string)`/interpolazione (Op::Stringify) di
+  Closure/Generator ora LANCIA Error come Zend (il funnel infallibile di
+  `echo` resta D-19.18, perimetro RIDOTTO); Drop di `Object` POSTORDER —
+  la free-list riceve i FIGLI prima del padre, riuso LIFO = id del padre,
+  come zend_objects_store_del — e `next_id` ora ripulisce TUTTE le tabelle
+  per-id (fibers/generators/marks GC/cache transienti: un Fiber morto non
+  "è già stato avviato" sul riuso dell'id, fibers/destructors_002). Corpus
+  1487→1485 (bug60738 e closures/closure_015 chiusi). tidy 010 AVANZATO
+  (la prima sezione passa) ma NON chiuso: per i grafi trattenuti in
+  gc_roots l'ordine di rilascio dello sweep resta di nota, non di cascata.
+  Residui xsl (7, tutti catalogati): bug49634 (frame prelude nei trace),
+  bug69168 (identity/liveness dei nodi — divergenza DICHIARATA WP-23),
+  registerPHPFunctionNS (serve functionURI dal contesto XPath via FFI),
+  xsl-phpinfo, xslt008/-mb/009 (stream wrapper PHP dentro l'I/O di libxml).
 - 2026-07-19 (sessione WordPress-23): 🟣 **ext/tidy NATIVA su libtidy 5.8.0
   di SISTEMA via FFI** (php_types::tidyio + vm/tidy.rs + prelude/tidy.php,
   pattern gd/xslt: stessa keg Homebrew dell'oracle → output e diagnostica

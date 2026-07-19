@@ -207,6 +207,11 @@ impl<'m> Vm<'m> {
         let mut it = xargs.into_iter();
         let fname = match it.next() {
             Some(XslArg::Str(s)) => s,
+            None => {
+                return park(PhpError::Error(
+                    "Function name must be passed as the first argument".into(),
+                ))
+            }
             _ => return park(PhpError::TypeError("Handler name must be a string".into())),
         };
         let fname_str = String::from_utf8_lossy(&fname).into_owned();
@@ -257,17 +262,31 @@ impl<'m> Vm<'m> {
                 }
             });
         }
-        let ret = match self.call_callable(callable, argv) {
+        // The call goes through the prelude __xsl_call shim: it resolves first
+        // (firing the autoloader — bug33853) so a THROWING autoloader still
+        // produces zend_make_callable's Error with the exception chained as
+        // previous (throw_in_autoload), then invokes the handler — whose own
+        // exception propagates untouched.
+        let mut cargs = PhpArray::new();
+        for a in argv {
+            let _ = cargs.append(a);
+        }
+        let ret = match self.call_callable(
+            Zval::Str(PhpStr::from_str("__xsl_call")),
+            vec![
+                Zval::Str(PhpStr::new(fname.clone())),
+                callable,
+                Zval::Array(std::rc::Rc::new(cargs)),
+            ],
+        ) {
             Ok(v) => v,
             // An unresolvable string callable gets zend_make_callable's shape
-            // ("Invalid callback f, function \"f\" not found…"); resolution
-            // runs through call_callable so AUTOLOAD fires first (bug33853;
-            // an autoloader's own exception propagates untouched).
+            // ("Invalid callback f, function \"f\" not found…").
             Err(e) => return park(self.xsl_map_callable_error(e, &fname_str)),
         };
         // Return conversion (the tail of xsl_ext_function_php), delegated to
         // the prelude helper: [0,string] | [1,float] | [2,bool] | [3,_] (a
-        // non-DOM object → Warning + empty string).
+        // non-DOM object → TypeError).
         match self.call_callable(Zval::Str(PhpStr::from_str("__xsl_ret_convert")), vec![ret]) {
             Ok(Zval::Array(a)) => {
                 let tag = a.get(&Key::Int(0)).map(|v| v.deref_clone()).unwrap_or(Zval::Long(0));
@@ -279,10 +298,12 @@ impl<'m> Vm<'m> {
                         convert::to_zstr_cast(&payload, &mut self.diags).as_bytes().to_vec(),
                     ),
                     3 => {
-                        self.diags.push(php_types::Diag::Warning(
-                            "A PHP Object cannot be converted to a XPath-string".to_string(),
+                        // A non-DOM object return throws (zend_type_error in
+                        // xsl_ext_function_php), parked like every callback error.
+                        return park(PhpError::TypeError(
+                            "Only objects that are instances of DOM nodes can be converted to an XPath expression"
+                                .to_string(),
                         ));
-                        XslRet::Str(Vec::new())
                     }
                     _ => XslRet::Str(
                         convert::to_zstr_cast(&payload, &mut self.diags).as_bytes().to_vec(),

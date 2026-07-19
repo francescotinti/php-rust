@@ -249,14 +249,14 @@ class DOMDocument extends DOMNode {
         return __dom_load($this->__d, (string)$source, 0);
     }
     public function load($filename, $options = 0) {
-        $this->documentURI = (string)$filename;
+        $this->documentURI = __dom_canonic_path((string)$filename);
         return __dom_load($this->__d, (string)$filename, 1);
     }
     public function loadHTML($source, $options = 0) {
         return __dom_load($this->__d, (string)$source, 2);
     }
     public function loadHTMLFile($filename, $options = 0) {
-        $this->documentURI = (string)$filename;
+        $this->documentURI = __dom_canonic_path((string)$filename);
         return __dom_load($this->__d, (string)$filename, 3);
     }
     public function saveHTML($node = null) {
@@ -1344,7 +1344,12 @@ class XSLTProcessor {
         return false;
     }
 
-    public function hasExsltSupport(): bool { return true; }
+    public function hasExsltSupport(): bool {
+        if (func_num_args() > 0) {
+            throw new ArgumentCountError('XSLTProcessor::hasExsltSupport() expects exactly 0 arguments, ' . func_num_args() . ' given');
+        }
+        return true;
+    }
 
     public function setSecurityPrefs(int $preferences): int {
         $old = $this->__secprefs;
@@ -1364,35 +1369,46 @@ class XSLTProcessor {
             return;
         }
         if (is_string($functions)) {
+            if ($functions === '' || strpos($functions, "\0") !== false) {
+                throw new ValueError('XSLTProcessor::registerPHPFunctions(): Argument #1 ($functions) must be a valid callback name');
+            }
+            if (!is_callable($functions)) {
+                throw new TypeError('XSLTProcessor::registerPHPFunctions(): Argument #1 ($functions) must be a callable, function "' . $functions . '" not found or invalid function name');
+            }
             if ($this->__php_funcs === true) { return; }
             if (!is_array($this->__php_funcs)) { $this->__php_funcs = array(); }
             $this->__php_funcs[$functions] = $functions;
             return;
         }
         if (is_array($functions)) {
-            if ($this->__php_funcs !== true && !is_array($this->__php_funcs)) {
-                $this->__php_funcs = array();
-            }
+            $add = array();
             foreach ($functions as $k => $v) {
                 if (is_int($k)) {
-                    if (!is_string($v) && !is_callable($v)) {
-                        throw new TypeError('XSLTProcessor::registerPHPFunctions(): Argument #1 ($functions) must be an array with valid callbacks as values, string, or null');
+                    // A list entry is a callback NAME: zval_try_get_string
+                    // first (a Closure fails with "could not be converted"),
+                    // then the callable check with its reason.
+                    $name = (string)$v;
+                    if (!is_callable($name)) {
+                        throw new TypeError('XSLTProcessor::registerPHPFunctions(): Argument #1 ($functions) must be an array with valid callbacks as values, function "' . $name . '" not found or invalid function name');
                     }
-                    if (is_string($v)) {
-                        if (is_array($this->__php_funcs)) { $this->__php_funcs[$v] = $v; }
-                    } else {
-                        throw new TypeError('XSLTProcessor::registerPHPFunctions(): Argument #1 ($functions) must be an array with valid callbacks as values, string, or null');
-                    }
+                    $add[$name] = $name;
                 } else {
+                    if ($k === '' || strpos($k, "\0") !== false) {
+                        throw new ValueError('XSLTProcessor::registerPHPFunctions(): Argument #1 ($functions) must be an array containing valid callback names');
+                    }
                     if (!is_callable($v)) {
                         throw new TypeError('XSLTProcessor::registerPHPFunctions(): Argument #1 ($functions) must be an array with valid callbacks as values, string, or null');
                     }
-                    if (is_array($this->__php_funcs)) { $this->__php_funcs[$k] = $v; }
+                    $add[$k] = $v;
                 }
+            }
+            if ($this->__php_funcs !== true) {
+                if (!is_array($this->__php_funcs)) { $this->__php_funcs = array(); }
+                foreach ($add as $k => $v) { $this->__php_funcs[$k] = $v; }
             }
             return;
         }
-        throw new TypeError('XSLTProcessor::registerPHPFunctions(): Argument #1 ($functions) must be of type array|string|null, ' . gettype($functions) . ' given');
+        throw new TypeError('XSLTProcessor::registerPHPFunctions(): Argument #1 ($functions) must be of type array|string|null, ' . get_debug_type($functions) . ' given');
     }
 
     // The oracle's XSLTProcessor exposes exactly its four declared props.
@@ -1425,7 +1441,8 @@ function __xsl_node_wrap($kind, $name, $value, $xml) {
 
 // The return half of xsl_ext_function_php: [0,string] | [1,float] | [2,bool]
 // | [4,xml] (a DOM node → real nodeset via a transform-lifetime temp doc) |
-// [3,''] (a non-DOM object cannot become an XPath value → Warning).
+// [3,''] (a non-DOM object cannot become an XPath value → TypeError, raised
+// on the Rust side).
 function __xsl_ret_convert($v) {
     if ($v instanceof DOMDocument) {
         $x = $v->saveXML();
@@ -1446,4 +1463,20 @@ function __xsl_ret_convert($v) {
     if (is_int($v) || is_float($v)) { return array(1, (float)$v); }
     if ($v === null) { return array(0, ''); }
     return array(0, (string)$v);
+}
+
+// The call half of xsl_ext_function_php: resolution first (is_callable fires
+// the autoloader — bug33853); an autoloader that THROWS still yields
+// zend_make_callable's Error shape, with the pending exception chained as
+// previous (throw_in_autoload). A resolved handler's own exception
+// propagates untouched (bug49634).
+function __xsl_call($fname, $callable, $args) {
+    try {
+        is_callable($callable);
+    } catch (Throwable $t) {
+        $cls = strstr((string)$fname, '::', true);
+        if ($cls === false) { $cls = (string)$fname; }
+        throw new Error('Invalid callback ' . $fname . ', class "' . $cls . '" not found', 0, $t);
+    }
+    return $callable(...$args);
 }

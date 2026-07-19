@@ -509,6 +509,14 @@ impl DomDoc {
                     self.serialize(c, &mut out);
                 }
                 out.push(b'\n');
+                // libxml re-encodes the whole-document dump into the declared
+                // charset (the header is ASCII, so the pass is a no-op there);
+                // unrepresentable code points become &#N; references.
+                if let Some(canonical) =
+                    self.encoding.as_deref().and_then(|l| xml_charset_canonical(l))
+                {
+                    out = utf8_to_xml_charset(&out, canonical);
+                }
             }
             Some(n) => self.serialize(n, &mut out),
         }
@@ -1116,6 +1124,126 @@ pub(super) fn html_encoding_canonical(label: &[u8]) -> Option<&'static [u8]> {
         | b"l9" | b"latin9" => b"ISO-8859-15",
         _ => return None,
     })
+}
+
+/// The local filesystem path of a DOM load target: a `file://` URI with an
+/// empty or `localhost` host resolves to its path (libxml's semantics); any
+/// other host — including the relative `file://./…` form — is not local and
+/// yields an unreadable path, so the caller raises its I/O warning (matching
+/// the oracle, which also refuses `file://./…`). Plain paths pass through.
+fn dom_local_path(source: &[u8]) -> &[u8] {
+    match source.strip_prefix(b"file://".as_slice()) {
+        None => source,
+        Some(rest) if rest.first() == Some(&b'/') => rest,
+        Some(rest) if rest.starts_with(b"localhost/") => &rest[b"localhost".len()..],
+        Some(_) => b"",
+    }
+}
+
+/// The `encoding="…"` label of a leading XML declaration, if any.
+fn xml_decl_encoding(raw: &[u8]) -> Option<Vec<u8>> {
+    if !raw.starts_with(b"<?xml") {
+        return None;
+    }
+    let close = raw.iter().position(|&b| b == b'>')?;
+    let head = &raw[..close];
+    let lower = head.to_ascii_lowercase();
+    let p = find_sub(&lower, b"encoding=")?;
+    let mut k = p + b"encoding=".len();
+    if let Some(&q @ (b'"' | b'\'')) = head.get(k) {
+        k += 1;
+        let start = k;
+        while head.get(k).is_some_and(|&b| b != q) {
+            k += 1;
+        }
+        return Some(head[start..k].to_vec());
+    }
+    None
+}
+
+/// The transcoding table an XML declaration label selects. XML treats
+/// iso-8859-1 as true Latin-1 — the windows-1252 promotion is an HTML-only
+/// WHATWG rule; UTF-8 and its ASCII subsets need no transcoding.
+fn xml_charset_canonical(label: &[u8]) -> Option<&'static [u8]> {
+    let lower = label.to_ascii_lowercase();
+    Some(match lower.as_slice() {
+        b"iso-8859-1" | b"iso8859-1" | b"iso88591" | b"iso_8859-1" | b"latin1" => b"ISO-8859-1",
+        b"windows-1252" | b"cp1252" => b"windows-1252",
+        b"iso-8859-15" | b"iso8859-15" | b"latin9" => b"ISO-8859-15",
+        _ => return None,
+    })
+}
+
+/// Re-encode serialized UTF-8 XML into the document's declared single-byte
+/// charset, libxml-style: representable code points become their byte, any
+/// other becomes a decimal character reference. Non-UTF-8 bytes pass through.
+fn utf8_to_xml_charset(utf8: &[u8], canonical: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(utf8.len());
+    let mut i = 0;
+    while i < utf8.len() {
+        let b = utf8[i];
+        if b < 0x80 {
+            out.push(b);
+            i += 1;
+            continue;
+        }
+        let len = if b >= 0xF0 {
+            4
+        } else if b >= 0xE0 {
+            3
+        } else {
+            2
+        };
+        let end = (i + len).min(utf8.len());
+        match std::str::from_utf8(&utf8[i..end]) {
+            Ok(s) => {
+                let cp = s.chars().next().map_or(0, |c| c as u32);
+                match xml_charset_byte(cp, canonical) {
+                    Some(x) => out.push(x),
+                    None => out.extend_from_slice(format!("&#{cp};").as_bytes()),
+                }
+                i = end;
+            }
+            Err(_) => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    out
+}
+
+/// The single byte encoding code point `cp` in `canonical`, if representable
+/// (the exact inverse of [`html_to_utf8`]'s tables).
+fn xml_charset_byte(cp: u32, canonical: &[u8]) -> Option<u8> {
+    const W1252: [u32; 32] = [
+        0x20AC, 0x0081, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, 0x02C6, 0x2030,
+        0x0160, 0x2039, 0x0152, 0x008D, 0x017D, 0x008F, 0x0090, 0x2018, 0x2019, 0x201C,
+        0x201D, 0x2022, 0x2013, 0x2014, 0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0x009D,
+        0x017E, 0x0178,
+    ];
+    match canonical {
+        b"ISO-8859-1" => (cp <= 0xFF).then(|| cp as u8),
+        b"windows-1252" => {
+            if let Some(idx) = W1252.iter().position(|&w| w == cp) {
+                return Some(0x80 + idx as u8);
+            }
+            (cp <= 0xFF && !(0x80..=0x9F).contains(&cp)).then(|| cp as u8)
+        }
+        b"ISO-8859-15" => match cp {
+            0x20AC => Some(0xA4),
+            0x0160 => Some(0xA6),
+            0x0161 => Some(0xA8),
+            0x017D => Some(0xB4),
+            0x017E => Some(0xB8),
+            0x0152 => Some(0xBC),
+            0x0153 => Some(0xBD),
+            0x0178 => Some(0xBE),
+            0xA4 | 0xA6 | 0xA8 | 0xB4 | 0xB8 | 0xBC | 0xBD | 0xBE => None,
+            _ => (cp <= 0xFF).then(|| cp as u8),
+        },
+        _ => None,
+    }
 }
 
 /// Transcode `bytes` in `canonical` encoding to UTF-8 (the tree's encoding).
@@ -2819,6 +2947,15 @@ impl<'m> Vm<'m> {
         Ok(Zval::Long(id as i64))
     }
 
+    /// `__dom_canonic_path(path) -> string`: libxml's canonic form of a load
+    /// path (local `file://` reduced, URI-invalid bytes escaped) — what the
+    /// oracle stamps on `DOMDocument::$documentURI` and resolves relative
+    /// `xsl:include`/`document()` against (bug53965).
+    pub(super) fn ho_dom_canonic_path(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        let path = self.dom_str(&args, 0);
+        Ok(Zval::Str(php_types::PhpStr::new(php_types::xsltio::canonic_path(&path))))
+    }
+
     /// `__dom_load(docId, source, isFile) -> bool`: parse into the existing
     /// handle. A parse failure records a libxml error (and raises the PHP
     /// warning unless `libxml_use_internal_errors(true)`).
@@ -2832,7 +2969,7 @@ impl<'m> Vm<'m> {
         let is_file = mode != 0;
         let (xml, label) = if is_file {
             use std::os::unix::ffi::OsStrExt;
-            let path = std::ffi::OsStr::from_bytes(&source);
+            let path = std::ffi::OsStr::from_bytes(dom_local_path(&source));
             match std::fs::read(path) {
                 Ok(d) => (d, String::from_utf8_lossy(&source).into_owned()),
                 Err(_) => {
@@ -2852,6 +2989,13 @@ impl<'m> Vm<'m> {
                 "DOMDocument::loadXML(): Argument #1 ($source) must not be empty".to_string(),
             ));
         }
+        // libxml transcodes the input to UTF-8 up front (the tree's encoding),
+        // honouring the declaration label; without this, latin-1 bytes reach
+        // the parser as invalid UTF-8 and degrade to U+FFFD (xslt004).
+        let xml = match xml_decl_encoding(&xml).and_then(|l| xml_charset_canonical(&l)) {
+            Some(canonical) => html_to_utf8(&xml, canonical),
+            None => xml,
+        };
         match DomDoc::parse(&xml) {
             Ok(doc) => {
                 self.dom_docs.insert(id, doc);
@@ -2895,7 +3039,7 @@ impl<'m> Vm<'m> {
         }
         let (raw, label, err_file) = if is_file {
             use std::os::unix::ffi::OsStrExt;
-            let path = std::ffi::OsStr::from_bytes(&source);
+            let path = std::ffi::OsStr::from_bytes(dom_local_path(&source));
             match std::fs::read(path) {
                 Ok(d) => (d, String::from_utf8_lossy(&source).into_owned(), source.clone()),
                 Err(_) => {

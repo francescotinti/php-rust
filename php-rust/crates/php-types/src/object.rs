@@ -102,6 +102,15 @@ pub fn reset_freed_object_ids() {
 
 impl Drop for Object {
     fn drop(&mut self) {
+        // Zend's teardown (zend_objects_store_del) runs free_obj — releasing
+        // the properties, so any exclusively-held descendant returns its
+        // handle FIRST — and only then links the object's own handle into the
+        // free list. LIFO reuse therefore hands back the PARENT's id before a
+        // child's (tidy 010's var_dump ids). Rust's default field-drop order
+        // would push self.id first; dropping the value-bearing fields
+        // explicitly restores the postorder.
+        drop(std::mem::take(&mut self.props));
+        self.proxy_instance = None;
         free_object_id(self.id);
     }
 }
