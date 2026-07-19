@@ -6,23 +6,26 @@ as they complete. Deliberate behavioural deviations are catalogued in
 [`PHPR_DIVERGENCES_FROM_PHP.md`](PHPR_DIVERGENCES_FROM_PHP.md); measured
 coverage in [`COVERAGE.md`](COVERAGE.md).
 
-Current state (2026-07-19, post session WP-21): Zend corpus **2567** passing
-(63.3% of runnable; gate baseline 1489 fails by name) · internal functions
-**993/2143, 46%** (core stdlib **539/654, 82%**). **WORDPRESS: the full core
-PHPUnit suite runs at effective oracle parity** — single-site **30,480 tests**
-and multisite **31,277 tests**, each with **2 name-diffs vs the oracle, both
-declared** (honest `stream_get_wrappers`; a dataset generated only under
-ext/tidy). WP 7.0.1 installs and serves on **real MySQL** via native
-`mysqli`; wp-admin/front/REST/permalinks **byte-identical over HTTP**
-(`phpr -S` SAPI); media byte-parity on **system libgd FFI** (+exif +
-fileinfo native); sitemaps' XSLT on **system libxslt**; ext/xml SAX;
-sessions 16–21 took the full suite from 572 errors to those 2 declared
-diffs. Perf so far: include machinery −50% real footprint (shared compiled
-prelude, WP-20) and an **adaptive GC cycle-collection threshold**
-(Zend-like, WP-21); suite CPU still ~2.6× the oracle (~23 min vs ~9) —
-**next front: VM dispatch / Zval traffic / property-table interning, then
-memory of live PHP data** (NEXT_SESSION_WORDPRESS.md). Other stacks at
-parity: **symfony/http-kernel CLOSED 0/0 (1665)**, http-foundation 0
+Current state (2026-07-19, post session WP-23): Zend corpus **2569** passing
+(63.3% of runnable; gate baseline 1487 fails by name) · internal functions
+**1017/2143, 47%** (core stdlib **539/654, 82%**). **WORDPRESS: the full
+single-site core PHPUnit suite (30,481 tests) is down to a SINGLE declared
+name-diff vs the oracle** (honest `stream_get_wrappers`; the second
+historical diff closed when **ext/tidy** landed natively on the system
+libtidy — 24/24 functions, 44/45 upstream phpt); multisite (**31,277
+tests**) holds at 2 pending a re-run. WP 7.0.1 installs and serves on
+**real MySQL** via native `mysqli`; wp-admin/front/REST/permalinks
+**byte-identical over HTTP** (`phpr -S` SAPI); media byte-parity on
+**system libgd FFI** (+exif + fileinfo native); XSLT on **system libxslt**
+now including a real **registerPHPFunctions/php:function trampoline**
+(xsl phpt 44/64); sessions 16–23 took the full suite from 572 errors to
+that single declared diff. Perf so far: include machinery −50% real
+footprint (WP-20), adaptive GC threshold (WP-21), zero-alloc dispatch and
+property ops (WP-22), lazy property hash index + scalar-only GC skips
+(WP-23, CPU-neutral, A/B interleaved); suite CPU ~1.9× the oracle (~17 min
+vs ~9) — **next front: VM dispatch structure / Zval traffic / interning,
+then memory of live PHP data** (NEXT_SESSION_WORDPRESS.md). Other stacks
+at parity: **symfony/http-kernel CLOSED 0/0 (1665)**, http-foundation 0
 errors, Doctrine ORM 3484 (3E/13F declared, stable by name) + DBAL 3769/0/0,
 PHPUnit 9/11/13, Composer, wp-cli, Monolog. Laravel afterwards as
 validation.

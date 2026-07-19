@@ -7,7 +7,7 @@ functions with `function_exists()` inside `phpr` (grouped by
 `ReflectionFunction::getExtensionName()`); the corpus number is the real pass
 count of the upstream Zend test suite under `phpt-runner`.
 
-_Last measured: 2026-07-19 · reference: PHP 8.5.7 (`get_defined_functions()`)._
+_Last measured: 2026-07-19 (WP-23) · reference: PHP 8.5.7 (`get_defined_functions()`)._
 
 ---
 
@@ -15,21 +15,21 @@ _Last measured: 2026-07-19 · reference: PHP 8.5.7 (`get_defined_functions()`)._
 
 | Metric | Value |
 | --- | --- |
-| Internal functions implemented | **993 / 2143** (46%) |
+| Internal functions implemented | **1017 / 2143** (47%) |
 | — of which **core / language stdlib** (standard + Core + date) | **539 / 654** (82%) |
-| Zend test corpus (`Zend/tests/*.phpt`) | **2567 passing** — 63.3% of runnable (2567/4056) |
-| **WordPress core test suite** | **full effective parity** — single-site 30,480 tests and multisite 31,277 tests both at **2 name-diffs vs the oracle, both declared** |
-| Fully-complete areas | ctype, json, SimpleXML, zlib, bcmath, tokenizer, session, **xml**, **fileinfo**, PDO core |
+| Zend test corpus (`Zend/tests/*.phpt`) | **2569 passing** — 63.3% of runnable (2569/4056) |
+| **WordPress core test suite** | **full effective parity** — single-site 30,481 tests at **a single declared name-diff**; multisite 31,277 tests at 2 (pending re-run with ext/tidy) |
+| Fully-complete areas | ctype, json, SimpleXML, zlib, bcmath, tokenizer, session, **xml**, **fileinfo**, **tidy**, PDO core |
 
-Corpus breakdown: 5305 total · **2567 pass** · 1489 fail · 1249 skip (skips are
+Corpus breakdown: 5305 total · **2569 pass** · 1487 fail · 1249 skip (skips are
 mostly tests that need an extension `phpr` hasn't ported, or SAPI-specific
 setup; the runner executes `--INI--` sections as `php -d`-style overrides).
 
 The headline story is now twofold: **82% of the core language stdlib**, and the
-**entire WordPress core test suite running at effective oracle parity** — the
-only 2 divergent test names are deliberate, catalogued decisions (an honest
-`stream_get_wrappers` and a dataset generated only when ext/tidy is loaded).
-The gap to 46%-overall remains **whole database/crypto/network extensions**
+**entire WordPress core test suite at a single divergent test name** — a
+deliberate, catalogued decision (an honest `stream_get_wrappers`); the second
+historical diff closed when **ext/tidy** landed natively on the system libtidy.
+The gap to 47%-overall remains **whole database/crypto/network extensions**
 that are simply not started yet — not holes in the language.
 
 ---
@@ -42,12 +42,14 @@ upstream PHP under `phpr` today:
 - **WordPress 7.0.1** — installed and served on **real MySQL** (native
   `mysqli` on the wire), front pages / login / REST / pretty permalinks /
   wp-admin **byte-identical** over HTTP via the `phpr -S` server SAPI; the
-  official **core PHPUnit suite (30,480 tests single-site, 31,277 multisite)
-  at effective parity** — 2 declared name-diffs each. Media pipeline at byte
-  parity via **system libgd FFI** (+ exif); `ext/xsl` on the **system
-  libxslt** (sitemaps' XSLT byte-identical); fileinfo native (ground truth
-  on 849 files); ext/xml SAX; big-5/HTML-ENTITIES mbstring codecs; argon2
-  password hashing; an intl subset (Normalizer).
+  official **core PHPUnit suite (30,481 tests single-site) at a single
+  declared name-diff** (multisite, 31,277 tests, at 2 pending a re-run).
+  Media pipeline at byte parity via **system libgd FFI** (+ exif);
+  `ext/tidy` complete on the **system libtidy**; `ext/xsl` on the **system
+  libxslt** (sitemaps' XSLT byte-identical, real
+  `registerPHPFunctions`/`php:function` callbacks); fileinfo native (ground
+  truth on 849 files); ext/xml SAX; big-5/HTML-ENTITIES mbstring codecs;
+  argon2 password hashing; an intl subset (Normalizer).
 - **wp-cli** — runs end-to-end from source at oracle parity.
 - **Composer** — `require`, `install`, `diagnose`, `about` (real HTTPS via rustls).
 - **PHPUnit** — 9.6, 11.5, 13.2 and 13.3-dev, byte-identical output, including
@@ -88,6 +90,7 @@ core language stdlib).
 | session | 23 / 23 | **100%** | files + user save handlers, SessionHandler classes, `$_SESSION` |
 | xml | 22 / 22 | **100%** | SAX parser (quick-xml), libxml-compatible error codes, namespace callbacks |
 | fileinfo | 6 / 6 | **100%** | native magic detection — byte-identical on an 849-file ground truth |
+| tidy | 24 / 24 | **100%** | on the **system libtidy via FFI** (same keg as the oracle) — tidy/tidyNode classes, ob_tidyhandler; 44/45 upstream phpt |
 | ctype | 11 / 11 | **100%** | complete |
 | json | 5 / 5 | **100%** | complete (HEX_* flags, NUMERIC_CHECK, THROW_ON_ERROR) |
 | SimpleXML | 3 / 3 | **100%** | complete (+xpath, casts) |
@@ -112,15 +115,16 @@ core language stdlib).
 | intl | 15 / 187 | 8% | grapheme + Normalizer + idn_to_* (native punycode); ICU surface huge |
 | posix | 3 / 40 | 8% | |
 | openssl | 1 / 64 | 2% | TLS handled at stream layer, not fn-level |
-| **not started (0%)** | — | 0% | pgsql (123), sodium (110), ldap (55), odbc (48), xmlwriter (42), sockets (37), ftp (36), snmp (24), tidy (24), calendar (18), dba (15), readline (12), bz2/gettext/zip (10 each), opcache (8), sysv* (18), shmop (6), dom (2 fns — the DOM *classes* are implemented), soap (2) |
+| **not started (0%)** | — | 0% | pgsql (123), sodium (110), ldap (55), odbc (48), xmlwriter (42), sockets (37), ftp (36), snmp (24), calendar (18), dba (15), readline (12), bz2/gettext/zip (10 each), opcache (8), sysv* (18), shmop (6), dom (2 fns — the DOM *classes* are implemented), soap (2) |
 
-1150 functions missing overall; the not-started extensions above account for
-~570 of them. Class-only surfaces don't show in function counts: **DOM,
-XSLTProcessor (system libxslt FFI), ZipArchive (write side), XMLReader-level
-SAX** are implemented as classes. **The WordPress track is at full-suite
-effective parity** — current work is performance (CPU ~2.6× the oracle on the
-suite; memory of live PHP data) before moving on to Laravel validation. See
-NEXT_SESSION_WORDPRESS.md.
+1126 functions missing overall; the not-started extensions above account for
+~550 of them. Class-only surfaces don't show in function counts: **DOM,
+XSLTProcessor (system libxslt FFI, incl. `registerPHPFunctions` callbacks),
+ZipArchive (write side), XMLReader-level SAX** are implemented as classes.
+**The WordPress track is at a single divergent test name on the full
+single-site suite** — current work is performance (CPU ~1.9× the oracle on
+the suite; memory of live PHP data) before moving on to Laravel validation.
+See NEXT_SESSION_WORDPRESS.md.
 
 ---
 

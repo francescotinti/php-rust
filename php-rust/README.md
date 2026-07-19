@@ -6,33 +6,35 @@ in. The goal is to run **real PHP applications** byte-identically to the referen
 interpreter, not to pass a toy subset.
 
 > **Status: the entire WordPress core test suite runs at effective oracle
-> parity.** Single-site (30,480 tests) and multisite (31,277 tests) both
-> differ from the reference interpreter by **2 test names, both deliberate,
-> catalogued divergences**. WordPress 7.0.1 installs and serves on **real
-> MySQL** (native `mysqli` wire protocol) through the built-in `phpr -S`
-> server SAPI — front pages, login, REST, pretty permalinks and wp-admin
-> **byte-identical** over HTTP; the media pipeline reaches byte parity via
-> the **system libgd/libxslt through FFI**. Also at parity: Composer,
-> PHPUnit 9/11/13 (including process isolation), Doctrine ORM/DBAL,
-> PDO/SQLite, Monolog, wp-cli, **symfony/http-kernel CLOSED at 0 errors /
-> 0 failures** (1665 tests) and http-foundation. The runtime has real IANA
-> timezones (system TZif, timelib gap/fold semantics), a cycle-collecting GC
-> with Zend-style adaptive thresholds and Zend-faithful destructor timing,
-> property hooks, lazy objects, fibers, and an opcache-like per-request unit
-> cache. Current front: **performance** (suite CPU ~2.6× the oracle), then
-> Laravel validation.
+> parity.** Single-site (30,481 tests) now differs from the reference
+> interpreter by **a single test name — one deliberate, catalogued
+> divergence** (multisite, 31,277 tests, holds at 2 pending a re-run).
+> WordPress 7.0.1 installs and serves on **real MySQL** (native `mysqli`
+> wire protocol) through the built-in `phpr -S` server SAPI — front pages,
+> login, REST, pretty permalinks and wp-admin **byte-identical** over HTTP;
+> the media pipeline reaches byte parity via the **system
+> libgd/libxslt/libtidy through FFI** (ext/tidy is complete, 24/24
+> functions; ext/xsl has a real `registerPHPFunctions` trampoline). Also at
+> parity: Composer, PHPUnit 9/11/13 (including process isolation), Doctrine
+> ORM/DBAL, PDO/SQLite, Monolog, wp-cli, **symfony/http-kernel CLOSED at 0
+> errors / 0 failures** (1665 tests) and http-foundation. The runtime has
+> real IANA timezones (system TZif, timelib gap/fold semantics), a
+> cycle-collecting GC with Zend-style adaptive thresholds and Zend-faithful
+> destructor timing, property hooks, lazy objects, fibers, and an
+> opcache-like per-request unit cache. Current front: **performance** (suite
+> CPU ~1.9× the oracle), then Laravel validation.
 
 ## Coverage at a glance
 
 | | |
 | --- | --- |
 | Core / language stdlib functions | **539 / 654 (82%)** |
-| All internal functions | 993 / 2143 (46%) |
-| Zend test corpus passing | **2567** (63.3% of runnable) |
-| WordPress core suite (single-site + multisite) | **effective parity** (2 declared name-diffs each) |
+| All internal functions | 1017 / 2143 (47%) |
+| Zend test corpus passing | **2569** (63.3% of runnable) |
+| WordPress core suite | **effective parity** (single-site: **1** declared name-diff; multisite: 2) |
 
 Full, measured breakdown → **[COVERAGE.md](COVERAGE.md)**.
-The 46%→82% spread is the whole story: the *language* is largely done; the
+The 47%→82% spread is the whole story: the *language* is largely done; the
 remaining gap is mostly un-started **database / crypto / network extensions**
 (pgsql, sodium, ldap, sockets, odbc, …), not missing language features.
 
@@ -101,12 +103,13 @@ phpt-runner --isolate /path/to/php-8.5.7/Zend/tests
 Near-term, highest-leverage work (see [COVERAGE.md](COVERAGE.md) for the data,
 [TODO.md](TODO.md) for the full list):
 
-1. **Performance** — the WordPress suite is at parity but costs ~2.6× the
-   oracle's CPU (~23 min vs ~9). The include/compile machinery and the GC
-   are already fixed (shared prelude, adaptive cycle-collection threshold);
-   next: VM dispatch, Zval clone/drop traffic, property-table lookups
-   (interning / hash index), live-data memory footprint. Plan:
-   NEXT_SESSION_WORDPRESS.md.
+1. **Performance** — the WordPress suite is at parity but costs ~1.9× the
+   oracle's CPU (~17 min vs ~9). The include/compile machinery, the GC and
+   the allocation traffic of dispatch/property access are already fixed
+   (shared prelude, adaptive cycle-collection threshold, zero-alloc prop
+   ops, lazy property hash index); next: VM dispatch structure, Zval
+   clone/drop traffic, string/name interning, live-data memory footprint.
+   Plan: NEXT_SESSION_WORDPRESS.md.
 2. **Laravel** as the second framework validation target once the perf
    pass lands.
 3. Remaining extension surfaces on demand — ext/tidy (one WP test dataset),
