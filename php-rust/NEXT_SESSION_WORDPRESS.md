@@ -1,6 +1,6 @@
 # Rotta WORDPRESS-FIRST — WP-track (dopo WP-25: drop a stack limitato + fast-path proprietà + deny asymmetric visibility)
 
-> 🏁 **WP-25 (2026-07-20)**: **REGRESSIONE WP-24 SCOPERTA E CHIUSA** — il
+> 🏁 **WP-25 (2026-07-20, commit gated `b5deac1`)**: **REGRESSIONE WP-24 SCOPERTA E CHIUSA** — il
 > take+drop esplicito in `Object::drop` (postorder WP-24) ha ingrossato il
 > frame per livello e la media-suite SEGFAULTAVA allo shutdown (rc=139 con
 > ~603G instructions = run completa, stdout bufferizzato perso). Root cause:
@@ -62,8 +62,14 @@ nohup perl -e 'use POSIX qw(setsid); fork and exit 0; setsid(); exec { $ARGV[0] 
    fast-path · gc_note 241 · dispatch_instance_call 201 · Zval clone 176 ·
    identical 158): prossimi candidati (a) fast-path analogo per il METHOD
    dispatch (dispatch_instance_call+enter_callee+bind_params ~460 leaf);
-   (b) interning nomi/stringhe; (c) memmove da concat (rope/append-buffer?).
+   (b) interning nomi/stringhe; (c) memmove da concat (rope/append-buffer?);
+   (d) **QUICK WIN**: flag per-classe `has_asym_set` per saltare il lookup
+   prop_info di `asym_write_error` su ogni scrittura slow-path (l'A/B
+   round-2 full-treatment ha reso −0,9% vs il −1,6% GET-only: la deny asym
+   introdotta in WP-25 costa un hash-lookup per write dichiarata).
    ⚠️ METODO A/B: SOLO coppie interleaved, stesso momento, user CPU.
+   Numeri WP-25 (media group, user): GET-only −1,6% (3 coppie); treatment
+   completo (GET/SET/isset + deny asym) −0,9% (2 coppie).
 2. **Residui asymmetric visibility** (10 fail): deny nel FIELD-PATH
    (`$o->arr[] = v`, nomi dinamici — dim_add/variation*/reference*);
    promozione costruttore `private(set)` (cpp_*, lower/class.rs:1595 "not
