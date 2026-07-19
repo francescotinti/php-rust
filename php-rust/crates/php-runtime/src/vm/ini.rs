@@ -216,6 +216,14 @@ impl IniTable {
         // from ini_get_all('session') — see TRANS_SID_EXEMPT.
         add("session.trans_sid_tags", "a=href,area=href,frame=src,form=", INI_ALL, true, false);
         add("session.trans_sid_hosts", "", INI_ALL, true, false);
+        // ext/tidy (tidy.c PHP_INI): clean_output is PHP_INI_USER — the bit
+        // WP's wp_is_ini_value_changeable('tidy.clean_output') keys off.
+        // Settable stores the value; phpr does NOT start the ob_tidyhandler
+        // output handler a runtime enable starts in PHP (documented
+        // divergence). default_config (PHP_INI_SYSTEM) is read by
+        // __tidy_new at doc creation.
+        add("tidy.clean_output", "0", INI_USER, true, false);
+        add("tidy.default_config", "", INI_SYSTEM, false, false);
         drop(add);
         // upload_tmp_dir e open_basedir partono NULL (ini_get → "",
         // ini_get_all → NULL, WP-16 probe). open_basedir è settable —
@@ -532,10 +540,10 @@ impl<'m> Vm<'m> {
             Some(v) => Some(convert::to_zstr(&v, &mut self.diags).as_bytes().to_vec()),
         };
         if let Some(ext) = &ext {
-            // Only ext/session's directives are registered per-extension; any
-            // other name is reported unknown (documented divergence for the
-            // extensions PHP would recognise).
-            if ext != b"session" {
+            // Only ext/session's and ext/tidy's directives are registered
+            // per-extension; any other name is reported unknown (documented
+            // divergence for the extensions PHP would recognise).
+            if ext != b"session" && ext != b"tidy" {
                 self.diags.push(Diag::Warning(format!(
                     "ini_get_all(): Extension \"{}\" cannot be found",
                     String::from_utf8_lossy(ext)
@@ -549,8 +557,15 @@ impl<'m> Vm<'m> {
         };
         let mut out = PhpArray::new();
         for (name, e) in &self.ini.0 {
-            if ext.is_some() && (!name.starts_with(b"session.") || trans_sid_exempt(name)) {
-                continue;
+            if let Some(ext) = &ext {
+                let in_ext = if ext == b"tidy" {
+                    name.starts_with(b"tidy.")
+                } else {
+                    name.starts_with(b"session.") && !trans_sid_exempt(name)
+                };
+                if !in_ext {
+                    continue;
+                }
             }
             let key = Key::Str(PhpStr::new(name.clone()));
             let val = |bytes: &Vec<u8>| {

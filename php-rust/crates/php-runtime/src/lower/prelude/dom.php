@@ -431,18 +431,22 @@ class DOMElement extends DOMNode {
 
 class DOMAttr extends DOMNode {
     public $name = '';
-    public $value = '';
+    // `value` is VIRTUAL (__get/__set): a declared property would swallow
+    // writes before __set's live write-through fires (xslt002: mutating
+    // xsl:output/@method via a DOMXPath result must reach the document).
+    // $__v is the detached-attr store and the stale-owner fallback.
+    public $__v = '';
     public $__e = -1; // owner element node id (-1 = detached)
     public function __construct($name, $value = '') {
         $this->name = (string)$name;
-        $this->value = (string)$value;
+        $this->__v = (string)$value;
     }
     public static function __wrapAttr($d, $elem, $name) {
         $a = new DOMAttr($name);
         $a->__d = $d;
         $a->__e = $elem;
         $v = __dom_attr($d, $elem, 0, $name, '');
-        $a->value = $v === false ? '' : $v;
+        $a->__v = $v === false ? '' : $v;
         return $a;
     }
     public static function __wrapDetached($d, $name) {
@@ -463,12 +467,12 @@ class DOMAttr extends DOMNode {
         switch ($prop) {
             case 'nodeType': return 2;
             case 'nodeName': return $this->name;
-            case 'nodeValue': case 'textContent':
+            case 'value': case 'nodeValue': case 'textContent':
                 if ($this->__e >= 0) {
                     $v = __dom_attr($this->__d, $this->__e, 0, $this->name, '');
                     if ($v !== false) { return $v; }
                 }
-                return $this->value;
+                return $this->__v;
             case 'ownerElement':
                 return $this->__e >= 0 ? DOMNode::__wrap($this->__d, $this->__e) : null;
             case 'specified': return true;
@@ -488,7 +492,7 @@ class DOMAttr extends DOMNode {
     }
     public function __set($prop, $v) {
         if ($prop === 'value' || $prop === 'nodeValue') {
-            $this->value = (string)$v;
+            $this->__v = (string)$v;
             if ($this->__e >= 0) {
                 __dom_attr($this->__d, $this->__e, 1, $this->name, (string)$v);
             }
@@ -1168,11 +1172,43 @@ class XSLTProcessor {
     public bool $doXInclude = false;
     public bool $cloneDocument = false;
     // Defaults are libxslt's xsltMaxDepth/xsltMaxVars globals (1.1.35).
-    public int $maxTemplateDepth = 3000;
-    public int $maxTemplateVars = 15000;
+    // Negative writes are refused with the oracle's ValueError. Coercion is
+    // done by hand (untyped hook): the explicit casts keep the masked
+    // float→int deprecation of the oracle's typed path silent.
+    public $maxTemplateDepth = 3000 {
+        set {
+            if (is_string($value) && is_numeric($value)) { $value = $value + 0; }
+            if (is_float($value)) { $value = (int)$value; }
+            if (is_bool($value)) { $value = (int)$value; }
+            if (!is_int($value)) {
+                throw new TypeError('Cannot assign ' . gettype($value) . ' to property XSLTProcessor::$maxTemplateDepth of type int');
+            }
+            if ($value < 0) {
+                throw new ValueError('XSLTProcessor::$maxTemplateDepth must be greater than or equal to 0');
+            }
+            $this->maxTemplateDepth = $value;
+        }
+    }
+    public $maxTemplateVars = 15000 {
+        set {
+            if (is_string($value) && is_numeric($value)) { $value = $value + 0; }
+            if (is_float($value)) { $value = (int)$value; }
+            if (is_bool($value)) { $value = (int)$value; }
+            if (!is_int($value)) {
+                throw new TypeError('Cannot assign ' . gettype($value) . ' to property XSLTProcessor::$maxTemplateVars of type int');
+            }
+            if ($value < 0) {
+                throw new ValueError('XSLTProcessor::$maxTemplateVars must be greater than or equal to 0');
+            }
+            $this->maxTemplateVars = $value;
+        }
+    }
     private $__h = false;
     private $__params = array();
     private $__secprefs = 44; // XSL_SECPREF_DEFAULT
+    // registerPHPFunctions state: null = never called, true = all functions
+    // allowed, array = restricted name → callable map.
+    private $__php_funcs = null;
 
     public function __destruct() {
         if ($this->__h !== false) { __xslt_free($this->__h); }
@@ -1216,7 +1252,8 @@ class XSLTProcessor {
         }
         $s = self::__doc_xml($document, $fn, 'document');
         $r = __xslt_transform($this->__h, $s[0], $s[1], $this->__params,
-            $this->maxTemplateDepth, $this->maxTemplateVars, $this->__secprefs);
+            $this->maxTemplateDepth, $this->maxTemplateVars, $this->__secprefs,
+            $this->__php_funcs);
         foreach ($r['errs'] as $e) {
             __warning_from_caller('XSLTProcessor::' . $fn . '(): ' . $e);
         }
@@ -1285,7 +1322,11 @@ class XSLTProcessor {
         if (strpos($name, "\0") !== false) {
             throw new ValueError('XSLTProcessor::setParameter(): Argument #2 ($name) must not contain any null bytes');
         }
-        $this->__params[self::__param_key($namespace, $name, 'setParameter')] = (string)$value;
+        $value = (string)$value;
+        if (strpos($value, "\0") !== false) {
+            throw new ValueError('XSLTProcessor::setParameter(): Argument #3 ($value) must not contain any null bytes');
+        }
+        $this->__params[self::__param_key($namespace, $name, 'setParameter')] = $value;
         return true;
     }
 
@@ -1312,4 +1353,97 @@ class XSLTProcessor {
     }
 
     public function getSecurityPrefs(): int { return $this->__secprefs; }
+
+    // registerPHPFunctions (xsl_registerPHPFunctions): null = allow ALL,
+    // string = allow one name, array = allow the given names (int-keyed
+    // string entries) / name → callable pairs (string keys). The C-side
+    // trampoline consults this state per php:function(String) call.
+    public function registerPHPFunctions($functions = null) {
+        if ($functions === null) {
+            $this->__php_funcs = true;
+            return;
+        }
+        if (is_string($functions)) {
+            if ($this->__php_funcs === true) { return; }
+            if (!is_array($this->__php_funcs)) { $this->__php_funcs = array(); }
+            $this->__php_funcs[$functions] = $functions;
+            return;
+        }
+        if (is_array($functions)) {
+            if ($this->__php_funcs !== true && !is_array($this->__php_funcs)) {
+                $this->__php_funcs = array();
+            }
+            foreach ($functions as $k => $v) {
+                if (is_int($k)) {
+                    if (!is_string($v) && !is_callable($v)) {
+                        throw new TypeError('XSLTProcessor::registerPHPFunctions(): Argument #1 ($functions) must be an array with valid callbacks as values, string, or null');
+                    }
+                    if (is_string($v)) {
+                        if (is_array($this->__php_funcs)) { $this->__php_funcs[$v] = $v; }
+                    } else {
+                        throw new TypeError('XSLTProcessor::registerPHPFunctions(): Argument #1 ($functions) must be an array with valid callbacks as values, string, or null');
+                    }
+                } else {
+                    if (!is_callable($v)) {
+                        throw new TypeError('XSLTProcessor::registerPHPFunctions(): Argument #1 ($functions) must be an array with valid callbacks as values, string, or null');
+                    }
+                    if (is_array($this->__php_funcs)) { $this->__php_funcs[$k] = $v; }
+                }
+            }
+            return;
+        }
+        throw new TypeError('XSLTProcessor::registerPHPFunctions(): Argument #1 ($functions) must be of type array|string|null, ' . gettype($functions) . ' given');
+    }
+
+    // The oracle's XSLTProcessor exposes exactly its four declared props.
+    public function __debugInfo() {
+        return array(
+            'doXInclude' => $this->doXInclude,
+            'cloneDocument' => $this->cloneDocument,
+            'maxTemplateDepth' => $this->maxTemplateDepth,
+            'maxTemplateVars' => $this->maxTemplateVars,
+        );
+    }
+}
+
+// php:function object-mode node handoff (vm/xslt.rs xsl_dispatch): each
+// XPath-nodeset node re-materialises as a detached content-preserving DOM
+// value (identity/liveness NOT preserved — documented divergence). Kinds are
+// xmlElementType: 1 element, 2 attribute, 3 text, 4 cdata, 8 comment, 9 doc.
+function __xsl_node_wrap($kind, $name, $value, $xml) {
+    if ($kind === 2) { return new DOMAttr($name, $value); }
+    if ($kind === 3 || $kind === 4) { return new DOMText($value); }
+    if ($kind === 8) { return new DOMComment($value); }
+    if ($kind === 1 || $kind === 9) {
+        $d = new DOMDocument();
+        if ($xml !== '' && @$d->loadXML($xml) && $d->documentElement !== null) {
+            return $d->documentElement;
+        }
+    }
+    return new DOMText($value);
+}
+
+// The return half of xsl_ext_function_php: [0,string] | [1,float] | [2,bool]
+// | [4,xml] (a DOM node → real nodeset via a transform-lifetime temp doc) |
+// [3,''] (a non-DOM object cannot become an XPath value → Warning).
+function __xsl_ret_convert($v) {
+    if ($v instanceof DOMDocument) {
+        $x = $v->saveXML();
+        if (is_string($x) && $x !== '') { return array(4, $x); }
+        return array(0, '');
+    }
+    if ($v instanceof DOMNode) {
+        if ($v instanceof DOMElement && $v->ownerDocument !== null) {
+            $x = $v->ownerDocument->saveXML($v);
+            if (is_string($x) && $x !== '') { return array(4, $x); }
+        }
+        return array(0, (string)$v->textContent);
+    }
+    if (is_object($v)) {
+        return array(3, '');
+    }
+    if (is_bool($v)) { return array(2, $v); }
+    if (is_int($v) || is_float($v)) { return array(1, (float)$v); }
+    if ($v === null) { return array(0, ''); }
+    return array(0, (string)$v);
 }

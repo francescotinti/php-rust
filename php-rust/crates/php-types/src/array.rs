@@ -100,6 +100,12 @@ pub struct PhpArray {
     /// pointer when the pointed bucket is deleted). `foreach` snapshots and does not
     /// touch it (PHP 8). Carried by `Clone`/COW like the rest of the array state.
     cursor: usize,
+    /// Conservative container-content marker: `false` only when every value ever
+    /// stored is a scalar/string AND no `&mut` element handle was ever handed out
+    /// (a caller could promote a scalar in place). Lets the GC's drop-descent and
+    /// cycle classify skip scalar-only arrays without iterating them. Never
+    /// cleared by `remove` — stays pessimistic once set.
+    holds_containers: bool,
 }
 
 impl Clone for PhpArray {
@@ -144,6 +150,7 @@ impl Clone for PhpArray {
             next_free: self.next_free,
             count: self.count,
             cursor: self.cursor,
+            holds_containers: self.holds_containers,
         }
     }
 }
@@ -156,6 +163,7 @@ impl Default for PhpArray {
             next_free: i64::MIN,
             count: 0,
             cursor: 0,
+            holds_containers: false,
         }
     }
 }
@@ -173,8 +181,19 @@ impl PhpArray {
         self.count == 0
     }
 
+    /// Whether this array may (transitively) hold objects / references /
+    /// other containers — see the `holds_containers` field. `false` is a
+    /// guarantee; `true` only means "must be walked".
+    pub fn may_hold_containers(&self) -> bool {
+        self.holds_containers
+    }
+
     /// Insert or update. Updating an existing key keeps its position.
     pub fn insert(&mut self, key: Key, val: Zval) {
+        self.holds_containers |= !matches!(
+            val,
+            Zval::Undef | Zval::Null | Zval::Bool(_) | Zval::Long(_) | Zval::Double(_) | Zval::Str(_)
+        );
         if let Some(&pos) = self.index.get(&key) {
             self.entries[pos as usize] = Some((key, val));
             return;
@@ -234,7 +253,11 @@ impl PhpArray {
 
     pub fn get_mut(&mut self, key: &Key) -> Option<&mut Zval> {
         match self.index.get(key) {
-            Some(&pos) => Some(&mut self.entries[pos as usize].as_mut().unwrap().1),
+            Some(&pos) => {
+                // The caller may write any value through this handle.
+                self.holds_containers = true;
+                Some(&mut self.entries[pos as usize].as_mut().unwrap().1)
+            }
             None => None,
         }
     }
@@ -272,6 +295,8 @@ impl PhpArray {
     }
 
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (&Key, &mut Zval)> {
+        // The caller may write any value through these handles.
+        self.holds_containers = true;
         self.entries
             .iter_mut()
             .filter_map(|e| e.as_mut().map(|(k, v)| (&*k, v)))

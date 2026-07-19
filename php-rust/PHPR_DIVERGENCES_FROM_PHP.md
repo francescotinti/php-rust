@@ -479,6 +479,40 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-19 (sessione WordPress-23): 🟣 **ext/tidy NATIVA su libtidy 5.8.0
+  di SISTEMA via FFI** (php_types::tidyio + vm/tidy.rs + prelude/tidy.php,
+  pattern gd/xslt: stessa keg Homebrew dell'oracle → output e diagnostica
+  byte-identici; phpt 44/45 runnable). Divergenze ext/tidy: (1) l'INI
+  `tidy.clean_output=1` a runtime NON avvia l'output-handler automatico
+  (l'entry è settable e riflette il valore; `ob_start("ob_tidyhandler")`
+  esplicito È implementato); (2) default `tidy.clean_output`="0" (default di
+  sorgente; il php.ini brew lo normalizza a "" via scanner Off→empty — phpr
+  non legge php.ini); (3) 010.phpt: object-id REUSE order su teardown
+  ricorsivo (Zend libera i figli PRIMA del padre → free-list LIFO riusa l'id
+  del padre; phpr rilascia in pre-ordine → riusa l'id dell'ultimo figlio) —
+  gap engine cosmetico trasversale, non tidy-specifico. tidy/tidyNode
+  numeric-cast → 0 (cast handler) cablato in Op::Cast come SimpleXML.
+  🟣 **ext/xsl: registerPHPFunctions/php:function TRAMPOLINO reale**
+  (xsltRegisterExtFunction + valuePop/Push via FFI; re-entry VM col pattern
+  ACTIVE_VM di pdo.rs; suite phpt 21→44/64 runnable). Divergenze xsl:
+  (a) nodeset passati al callback e nodi RESTITUITI sono COPIE
+  content-preserving (serializza→re-parse in doc temporanei con vita =
+  transform), niente identità/liveness col documento d'origine — i passi
+  XPath sul risultato (`php:function(...)/i`) funzionano sulla copia;
+  (b) residui NON implementati: transcodifica iso-8859-1 nel DOM load
+  (xslt004/007/008), DOMDocument::load con path relativi in sottodir
+  (bug53965), document() su stream wrapper (xslt009), shape di
+  warning/errore minori (bug69168, callables_errors, edge cases),
+  byref/unset su hooked prop (maxTemplate*_bypass), xsl-phpinfo.
+  🔧 **FIX ENGINE hook-guard**: un property-hook (o magic) che LANCIA non
+  rilasciava il guard di ricorsione (solo Ret lo faceva) → ogni accesso
+  successivo alla proprietà bypassava l'hook in silenzio. L'unwinder ora
+  rilascia i guard_release dei frame morti. 🔧 DOMAttr::$value ora VIRTUALE
+  (__get/__set live sul documento): prima una scrittura su un attr da
+  DOMXPath finiva solo nel wrapper (xslt002: mutare xsl:output/@method non
+  aveva effetto). ⚡ Props hash-first (indice u64 FxHash oltre 8 entry) e
+  PhpArray::holds_containers (gc_note/gc_classify saltano gli array
+  scalar-only) — pure ottimizzazioni, nessuna divergenza osservabile.
 - 2026-07-19 (sessione WordPress-21): ⚡ **perf GC** (nessuna divergenza nuova;
   un fix). (1) Il collettore di cicli automatico ora ADATTA la soglia come
   Zend `gc_adjust_threshold`: una collezione che libera <100 valori (i root

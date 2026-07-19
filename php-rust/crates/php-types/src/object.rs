@@ -310,6 +310,23 @@ impl ObjectInfo {
 #[derive(Debug, Default, Clone)]
 pub struct Props {
     entries: Vec<(Box<[u8]>, Zval)>,
+    /// FxHash of each key, parallel to `entries` — but LAZY: kept empty while
+    /// the table is small (so cloning a typical object clones an empty Vec —
+    /// no allocation) and built on the first lookup past `HASH_SCAN_MIN`.
+    /// Invariant: either empty, or exactly parallel to `entries`. Lookups on
+    /// large tables compare hashes first, so a miss never touches key bytes.
+    hashes: Vec<u64>,
+}
+
+/// Below this many entries a plain byte scan beats hash-then-scan.
+const HASH_SCAN_MIN: usize = 8;
+
+#[inline]
+fn prop_key_hash(name: &[u8]) -> u64 {
+    use std::hash::Hasher;
+    let mut h = rustc_hash::FxHasher::default();
+    h.write(name);
+    h.finish()
 }
 
 impl Props {
@@ -317,33 +334,83 @@ impl Props {
         Props::default()
     }
 
-    /// The current value of property `name`, if present.
-    pub fn get(&self, name: &[u8]) -> Option<&Zval> {
-        self.entries
+    #[inline]
+    fn position(&mut self, name: &[u8]) -> Option<usize> {
+        if self.entries.len() < HASH_SCAN_MIN {
+            return self.entries.iter().position(|(k, _)| k.as_ref() == name);
+        }
+        if self.hashes.len() != self.entries.len() {
+            self.hashes = self.entries.iter().map(|(k, _)| prop_key_hash(k)).collect();
+        }
+        let h = prop_key_hash(name);
+        self.hashes
             .iter()
-            .find(|(k, _)| k.as_ref() == name)
-            .map(|(_, v)| v)
+            .enumerate()
+            .find_map(|(i, &eh)| (eh == h && self.entries[i].0.as_ref() == name).then_some(i))
+    }
+
+    /// The read-only lookup past `HASH_SCAN_MIN` — out of line so the hot
+    /// small-table scan in [`Props::get`]/[`Props::contains`] stays a tight
+    /// inlined loop at every call site (the WP-23 A/B showed the merged
+    /// function stopped inlining and cost ~4% media CPU as a call leaf).
+    fn position_large(&self, name: &[u8]) -> Option<usize> {
+        if self.hashes.len() == self.entries.len() {
+            let h = prop_key_hash(name);
+            return self
+                .hashes
+                .iter()
+                .enumerate()
+                .find_map(|(i, &eh)| (eh == h && self.entries[i].0.as_ref() == name).then_some(i));
+        }
+        self.entries.iter().position(|(k, _)| k.as_ref() == name)
+    }
+
+    /// The current value of property `name`, if present.
+    #[inline]
+    pub fn get(&self, name: &[u8]) -> Option<&Zval> {
+        if self.entries.len() < HASH_SCAN_MIN {
+            return self.entries.iter().find(|(k, _)| k.as_ref() == name).map(|(_, v)| v);
+        }
+        self.position_large(name).map(|i| &self.entries[i].1)
     }
 
     /// A mutable handle to property `name`, if present.
+    #[inline]
     pub fn get_mut(&mut self, name: &[u8]) -> Option<&mut Zval> {
-        self.entries
-            .iter_mut()
-            .find(|(k, _)| k.as_ref() == name)
-            .map(|(_, v)| v)
+        if self.entries.len() < HASH_SCAN_MIN {
+            return self
+                .entries
+                .iter_mut()
+                .find(|(k, _)| k.as_ref() == name)
+                .map(|(_, v)| v);
+        }
+        self.position(name).map(|i| &mut self.entries[i].1)
     }
 
+    #[inline]
     pub fn contains(&self, name: &[u8]) -> bool {
-        self.entries.iter().any(|(k, _)| k.as_ref() == name)
+        if self.entries.len() < HASH_SCAN_MIN {
+            return self.entries.iter().any(|(k, _)| k.as_ref() == name);
+        }
+        self.position_large(name).is_some()
     }
 
     /// Set property `name`, updating in place (keeping its position) if it already
     /// exists, otherwise appending it at the end.
+    #[inline]
     pub fn set(&mut self, name: &[u8], value: Zval) {
-        if let Some(slot) = self.get_mut(name) {
-            *slot = value;
-        } else {
-            self.entries.push((name.into(), value));
+        // A push may desync `hashes` — the next large lookup detects the
+        // length mismatch and rebuilds (see `position`).
+        if self.entries.len() < HASH_SCAN_MIN {
+            match self.entries.iter_mut().find(|(k, _)| k.as_ref() == name) {
+                Some((_, slot)) => *slot = value,
+                None => self.entries.push((name.into(), value)),
+            }
+            return;
+        }
+        match self.position(name) {
+            Some(i) => self.entries[i].1 = value,
+            None => self.entries.push((name.into(), value)),
         }
     }
 
@@ -351,19 +418,32 @@ impl Props {
     /// returning the value it displaced — or `None` when newly inserted. Used by
     /// the property write path to hand the dropped value to the GC's
     /// possible-roots tracking.
+    #[inline]
     pub fn replace(&mut self, name: &[u8], value: Zval) -> Option<Zval> {
-        if let Some(slot) = self.get_mut(name) {
-            Some(std::mem::replace(slot, value))
-        } else {
-            self.entries.push((name.into(), value));
-            None
+        if self.entries.len() < HASH_SCAN_MIN {
+            match self.entries.iter_mut().find(|(k, _)| k.as_ref() == name) {
+                Some((_, slot)) => return Some(std::mem::replace(slot, value)),
+                None => {
+                    self.entries.push((name.into(), value));
+                    return None;
+                }
+            }
+        }
+        match self.position(name) {
+            Some(i) => Some(std::mem::replace(&mut self.entries[i].1, value)),
+            None => {
+                self.entries.push((name.into(), value));
+                None
+            }
         }
     }
 
     /// Remove property `name`; returns whether it was present.
     pub fn remove(&mut self, name: &[u8]) -> bool {
-        if let Some(pos) = self.entries.iter().position(|(k, _)| k.as_ref() == name) {
+        if let Some(pos) = self.position(name) {
             self.entries.remove(pos);
+            // Desyncs `hashes` (self-healing on the next &mut lookup).
+            self.hashes.clear();
             true
         } else {
             false

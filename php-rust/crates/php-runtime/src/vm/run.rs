@@ -545,6 +545,27 @@ impl<'m> super::Vm<'m> {
                     {
                         let s = self.vm_stringify(&a.deref_clone())?;
                         apply_cast(k, &Zval::Str(s), &mut self.diags)
+                    } else if matches!(k, CastKind::Int | CastKind::Float)
+                        && deref_object(&a).is_some_and(|o| {
+                            let cid = o.borrow().class_id as usize;
+                            [&b"tidy"[..], &b"tidynode"[..]].iter().any(|n| {
+                                self.class_index.get(*n).is_some_and(|&t| {
+                                    is_instance_of(
+                                        &self.classes,
+                                        self.stringable_id,
+                                        cid,
+                                        t,
+                                    )
+                                })
+                            })
+                        })
+                    {
+                        // tidy_doc_cast_handler / tidy_node_cast_handler:
+                        // numeric casts yield 0, silently.
+                        match k {
+                            CastKind::Int => Zval::Long(0),
+                            _ => Zval::Double(0.0),
+                        }
                     } else {
                         apply_cast(k, &a, &mut self.diags)
                     };

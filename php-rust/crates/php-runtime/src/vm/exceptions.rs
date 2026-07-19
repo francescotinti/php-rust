@@ -240,7 +240,13 @@ impl<'m> Vm<'m> {
             }
             // An unwound frame drops its locals/stack/iterators without running
             // `Ret` — note everything it held, exactly like the `Ret` hook does.
+            // Its magic/hook guards release too: a hook that THREW must not
+            // leave its property guarded (later writes would silently bypass
+            // the hook — XSLTProcessor::$maxTemplateDepth validation).
             let dead = self.frames.pop().expect("unwound frame above floor");
+            for key in &dead.guard_release {
+                self.magic_guard.remove(key);
+            }
             self.gc_note_frame(&dead);
         }
     }

@@ -732,6 +732,9 @@ const LOADED_EXTENSIONS: &[&[u8]] = &[
     // ext/xsl on the system libxslt (vm/xslt.rs + XSLTProcessor in the dom
     // prelude); WP_Test_XML_TestCase gates on class_exists('XSLTProcessor').
     b"xsl",
+    // ext/tidy on the system libtidy (vm/tidy.rs + prelude/tidy.php); WP's
+    // wpIsIniValueChangeable dataset gates on extension_loaded('Tidy').
+    b"tidy",
     // ext/mysqli on the native Rust client (vm/mysqli.rs); mysqlnd is what the
     // oracle reports too (WP's utf8mb4 capability check keys off it).
     b"mysqli", b"mysqlnd",
@@ -754,6 +757,7 @@ const LOADED_EXTENSIONS_CASED: &[&[u8]] = &[
     b"fileinfo",
     b"intl",
     b"xsl",
+    b"tidy",
     b"mysqli", b"mysqlnd",
     b"filter",
     b"xml", b"xmlwriter", b"tokenizer", b"Phar",

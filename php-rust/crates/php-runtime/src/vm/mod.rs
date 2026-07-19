@@ -60,6 +60,7 @@ mod oop;
 mod pdo;
 mod mysqli;
 mod gd;
+mod tidy;
 mod xslt;
 mod tokenizer;
 mod websapi;
@@ -511,6 +512,8 @@ pub(crate) fn run_module_with_hir<'m>(
         next_gd: 1,
         xslt_sheets: HashMap::default(),
         next_xslt: 1,
+        tidy_docs: HashMap::default(),
+        next_tidy: 1,
         stream_chunk_sizes: HashMap::default(),
         seed_aliases: Vec::new(),
         prelude_fns: Vec::new(),
@@ -1504,6 +1507,11 @@ struct Vm<'m> {
     xslt_sheets: HashMap<u32, php_types::xsltio::XsltSheet>,
     /// Next xslt stylesheet handle id.
     next_xslt: u32,
+    /// `__tidy_*` host builtins the prelude `tidy`/`tidyNode` classes delegate
+    /// to (see vm/tidy.rs); freed by the prelude keeper's `__destruct`.
+    tidy_docs: HashMap<u32, php_types::tidyio::TidyDocH>,
+    /// Next tidy document handle id.
+    next_tidy: u32,
     /// Next mysqli handle id (shared by connections and statements).
     next_mysqli: u32,
     /// Per-stream chunk size set by `stream_set_chunk_size` (resource id → size).
@@ -1596,7 +1604,9 @@ impl<'m> Vm<'m> {
                 }
             }
             Zval::Array(a) => {
-                if Rc::strong_count(a) == 1 {
+                // A scalar-only array (tracked by its own conservative marker)
+                // cannot release any object — skip walking it entirely.
+                if Rc::strong_count(a) == 1 && a.may_hold_containers() {
                     for (_, ev) in a.iter() {
                         self.gc_note(ev);
                     }
@@ -2017,6 +2027,9 @@ impl<'m> Vm<'m> {
                     }
                     vs
                 }
+                // A scalar-only array has no outgoing edges — nothing to walk
+                // (it can still be counted dead if nothing external holds it).
+                Handle::Arr(a) if !a.may_hold_containers() => Vec::new(),
                 Handle::Arr(a) => a.iter().map(|(_, v)| v.clone()).collect(),
                 Handle::Ref(r) => vec![r.borrow().clone()],
                 Handle::Clo(c) => {
@@ -10532,6 +10545,24 @@ host_builtins! {
     b"__xslt_import" => vm.ho_xslt_import(args),
     b"__xslt_free" => vm.ho_xslt_free(args),
     b"__xslt_transform" => vm.ho_xslt_transform(args),
+    b"__tidy_new" => vm.ho_tidy_new(args),
+    b"__tidy_free" => vm.ho_tidy_free(args),
+    b"__tidy_conf_file" => vm.ho_tidy_conf_file(args),
+    b"__tidy_opt_set" => vm.ho_tidy_opt_set(args),
+    b"__tidy_set_enc" => vm.ho_tidy_set_enc(args),
+    b"__tidy_parse" => vm.ho_tidy_parse(args),
+    b"__tidy_clean_repair" => vm.ho_tidy_clean_repair(args),
+    b"__tidy_diagnose" => vm.ho_tidy_diagnose(args),
+    b"__tidy_output" => vm.ho_tidy_output(args),
+    b"__tidy_errbuf" => vm.ho_tidy_errbuf(args),
+    b"__tidy_stat" => vm.ho_tidy_stat(args),
+    b"__tidy_getopt" => vm.ho_tidy_getopt(args),
+    b"__tidy_get_config" => vm.ho_tidy_get_config(args),
+    b"__tidy_opt_doc" => vm.ho_tidy_opt_doc(args),
+    b"__tidy_release" => vm.ho_tidy_release(args),
+    b"__tidy_node" => vm.ho_tidy_node(args),
+    b"__tidy_node_rel" => vm.ho_tidy_node_rel(args),
+    b"__tidy_node_info" => vm.ho_tidy_node_info(args),
     b"__gd_create" => vm.ho_gd_create(args),
     b"__gd_destroy" => vm.ho_gd_destroy(args),
     b"__gd_decode" => vm.ho_gd_decode(args),

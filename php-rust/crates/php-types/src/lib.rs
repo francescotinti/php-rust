@@ -18,6 +18,7 @@ pub mod big5;
 pub mod fsown;
 pub mod html4;
 pub mod netio;
+pub mod tidyio;
 pub mod xsltio;
 pub mod zlibio;
 mod zstr;

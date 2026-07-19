@@ -229,6 +229,236 @@ pub struct TransformOpts<'a> {
     pub max_vars: i64,
     /// XSL_SECPREF_* bitmask (0 = XSL_SECPREF_NONE skips the prefs entirely).
     pub security_prefs: i64,
+    /// Whether registerPHPFunctions() was called on the processor: registers
+    /// `php:function` / `php:functionString` on the transform context, routed
+    /// through the [`set_php_callback`] trampoline.
+    pub php_functions: bool,
+}
+
+// ---- php:function / php:functionString trampoline (xsl_ext_function_php) --
+
+/// One XPath argument, converted for the PHP side.
+pub enum XslArg {
+    Str(Vec<u8>),
+    Num(f64),
+    Bool(bool),
+    /// The object-mode nodeset: per node (xmlElementType, name, text content,
+    /// serialized XML).
+    NodeSet(Vec<XslNodeInfo>),
+}
+
+pub struct XslNodeInfo {
+    pub kind: i32,
+    pub name: Vec<u8>,
+    pub value: Vec<u8>,
+    pub xml: Vec<u8>,
+}
+
+/// What the PHP callback hands back to be pushed as the XPath result.
+pub enum XslRet {
+    Str(Vec<u8>),
+    Num(f64),
+    Bool(bool),
+    /// A DOM node, serialized: re-parsed into a transform-lifetime temp doc
+    /// and pushed as a real NODESET, so the stylesheet can apply further
+    /// XPath steps to it (xslt011's `php:function('nodeSet',/doc)/i`).
+    Node(Vec<u8>),
+    /// Callback raised: the VM parked the error; an empty string is pushed and
+    /// the transform runs on (PHP's EG(exception) shape).
+    Err,
+}
+
+pub type XslPhpCallback = Box<dyn Fn(bool, Vec<XslArg>) -> XslRet>;
+
+thread_local! {
+    /// The VM's dispatcher for php:function(String) calls, installed around
+    /// [`transform`] (pattern: pdo.rs ACTIVE_VM). First argument: string-mode.
+    static PHP_CB: std::cell::RefCell<Option<XslPhpCallback>> =
+        const { std::cell::RefCell::new(None) };
+    /// Temp documents backing `XslRet::Node` nodesets: they must outlive the
+    /// XPath evaluation that received them, so they are freed only when the
+    /// enclosing [`transform`] finishes.
+    static TMP_DOCS: std::cell::RefCell<Vec<usize>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Install / clear the callback for one transform. Returns the previous one
+/// so nested transforms (a callback running another transform) restore it.
+pub fn set_php_callback(cb: Option<XslPhpCallback>) -> Option<XslPhpCallback> {
+    PHP_CB.with(|c| std::mem::replace(&mut *c.borrow_mut(), cb))
+}
+
+// libxml2 xpath FFI for the handlers. xmlXPathObject's layout is ABI-frozen
+// (public header since forever): type at 0, nodesetval at 8, boolval at 16,
+// floatval at 24, stringval at 32. xmlNodeSet: nodeNr 0, nodeMax 4, nodeTab 8.
+// xmlNode: _private 0, type 8, name 16, children 24, last 32, parent 40,
+// next 48, prev 56, doc 64.
+const XPATH_NODESET: c_int = 1;
+const XPATH_BOOLEAN: c_int = 2;
+const XPATH_NUMBER: c_int = 3;
+const XPATH_STRING: c_int = 4;
+
+extern "C" {
+    fn valuePop(ctxt: *mut c_void) -> *mut c_void;
+    fn valuePush(ctxt: *mut c_void, value: *mut c_void) -> c_int;
+    fn xmlXPathFreeObject(obj: *mut c_void);
+    fn xmlXPathCastToString(obj: *mut c_void) -> *mut c_char;
+    fn xmlXPathCastToNumber(obj: *mut c_void) -> f64;
+    fn xmlXPathNewString(val: *const c_char) -> *mut c_void;
+    fn xmlXPathNewFloat(val: f64) -> *mut c_void;
+    fn xmlXPathNewBoolean(val: c_int) -> *mut c_void;
+    fn xmlNodeGetContent(node: *mut c_void) -> *mut c_char;
+    fn xmlBufferCreate() -> *mut c_void;
+    fn xmlBufferFree(buf: *mut c_void);
+    fn xmlBufferContent(buf: *mut c_void) -> *const c_char;
+    fn xmlNodeDump(
+        buf: *mut c_void, doc: *mut c_void, node: *mut c_void, level: c_int, format: c_int,
+    ) -> c_int;
+    fn xsltRegisterExtFunction(
+        ctxt: XsltCtxtPtr, name: *const c_char, uri: *const c_char, func: *const c_void,
+    ) -> c_int;
+    fn xmlDocGetRootElement(doc: *mut c_void) -> *mut c_void;
+    fn xmlXPathNewNodeSet(node: *mut c_void) -> *mut c_void;
+}
+
+unsafe fn cstr_bytes(p: *const c_char) -> Vec<u8> {
+    if p.is_null() {
+        Vec::new()
+    } else {
+        std::ffi::CStr::from_ptr(p).to_bytes().to_vec()
+    }
+}
+
+/// Cast an xpath object to its string form (caller-owned copy).
+unsafe fn obj_to_string(obj: *mut c_void) -> Vec<u8> {
+    let s = xmlXPathCastToString(obj);
+    let out = cstr_bytes(s);
+    if !s.is_null() {
+        free(s as *mut c_void);
+    }
+    out
+}
+
+unsafe fn obj_type(obj: *mut c_void) -> c_int {
+    *(obj as *const c_int)
+}
+
+/// The object-mode nodeset conversion (xsl_ext_function_php's DOM handoff,
+/// reduced to content: kind + name + text + serialized XML per node).
+unsafe fn nodeset_info(obj: *mut c_void) -> Vec<XslNodeInfo> {
+    let ns = *((obj as *const u8).add(8) as *const *mut c_void);
+    let mut out = Vec::new();
+    if ns.is_null() {
+        return out;
+    }
+    let node_nr = *(ns as *const c_int);
+    let node_tab = *((ns as *const u8).add(8) as *const *mut *mut c_void);
+    if node_tab.is_null() {
+        return out;
+    }
+    for i in 0..node_nr {
+        let node = *node_tab.add(i as usize);
+        if node.is_null() {
+            continue;
+        }
+        let kind = *((node as *const u8).add(8) as *const c_int);
+        let name = cstr_bytes(*((node as *const u8).add(16) as *const *const c_char));
+        let content = xmlNodeGetContent(node);
+        let value = cstr_bytes(content);
+        if !content.is_null() {
+            free(content as *mut c_void);
+        }
+        let doc = *((node as *const u8).add(64) as *const *mut c_void);
+        let buf = xmlBufferCreate();
+        let mut xml = Vec::new();
+        if !buf.is_null() {
+            xmlNodeDump(buf, doc, node, 0, 0);
+            xml = cstr_bytes(xmlBufferContent(buf));
+            xmlBufferFree(buf);
+        }
+        out.push(XslNodeInfo { kind, name, value, xml });
+    }
+    out
+}
+
+unsafe fn xsl_php_handler(ctxt: *mut c_void, nargs: c_int, string_mode: bool) {
+    let mut objs: Vec<*mut c_void> = (0..nargs).map(|_| valuePop(ctxt)).collect();
+    objs.reverse(); // call order: [fname, arg1, arg2, …]
+    let push_empty = |ctxt: *mut c_void| {
+        valuePush(ctxt, xmlXPathNewString(c"".as_ptr()));
+    };
+    let ret = PHP_CB.with(|c| {
+        let cb = c.borrow();
+        let Some(cb) = cb.as_ref() else {
+            return XslRet::Err; // no VM installed: inert empty string
+        };
+        let mut args = Vec::with_capacity(objs.len());
+        for (i, &obj) in objs.iter().enumerate() {
+            if i == 0 || string_mode {
+                // The handler NAME is always taken as a string; string-mode
+                // casts every argument (xsl_ext_function_string_php). A
+                // non-string name is flagged for the VM's diagnostics.
+                if i == 0 && obj_type(obj) != XPATH_STRING {
+                    args.push(XslArg::Bool(false)); // sentinel: name-not-string
+                } else {
+                    args.push(XslArg::Str(obj_to_string(obj)));
+                }
+                continue;
+            }
+            args.push(match obj_type(obj) {
+                XPATH_NODESET => XslArg::NodeSet(nodeset_info(obj)),
+                XPATH_BOOLEAN => XslArg::Bool(xmlXPathCastToNumber(obj) != 0.0),
+                XPATH_NUMBER => XslArg::Num(xmlXPathCastToNumber(obj)),
+                XPATH_STRING => XslArg::Str(obj_to_string(obj)),
+                _ => XslArg::Str(obj_to_string(obj)),
+            });
+        }
+        cb(string_mode, args)
+    });
+    for obj in objs {
+        if !obj.is_null() {
+            xmlXPathFreeObject(obj);
+        }
+    }
+    match ret {
+        XslRet::Str(s) => {
+            let end = s.iter().position(|&b| b == 0).unwrap_or(s.len());
+            match CString::new(&s[..end]) {
+                Ok(c) => {
+                    valuePush(ctxt, xmlXPathNewString(c.as_ptr()));
+                }
+                Err(_) => push_empty(ctxt),
+            }
+        }
+        XslRet::Num(n) => {
+            valuePush(ctxt, xmlXPathNewFloat(n));
+        }
+        XslRet::Bool(b) => {
+            valuePush(ctxt, xmlXPathNewBoolean(b as c_int));
+        }
+        XslRet::Node(xml) => {
+            let doc = parse_doc(&xml, b"", XML_PARSE_NOERROR | XML_PARSE_NOWARNING);
+            let root = if doc.is_null() {
+                std::ptr::null_mut()
+            } else {
+                TMP_DOCS.with(|d| d.borrow_mut().push(doc as usize));
+                xmlDocGetRootElement(doc)
+            };
+            if root.is_null() {
+                push_empty(ctxt);
+            } else {
+                valuePush(ctxt, xmlXPathNewNodeSet(root));
+            }
+        }
+        XslRet::Err => push_empty(ctxt),
+    }
+}
+
+unsafe extern "C" fn xsl_php_handler_string(ctxt: *mut c_void, nargs: c_int) {
+    xsl_php_handler(ctxt, nargs, true);
+}
+
+unsafe extern "C" fn xsl_php_handler_object(ctxt: *mut c_void, nargs: c_int) {
+    xsl_php_handler(ctxt, nargs, false);
 }
 
 /// Apply `sheet` to the serialized source document. `Ok(bytes)` is the
@@ -269,6 +499,25 @@ pub fn transform(
             errs_pre = c.end();
         }
         return (Err(()), errs_pre);
+    }
+
+    // registerPHPFunctions: wire the two php-namespace extension functions
+    // onto THIS context (PHP registers them per-transform the same way).
+    if opts.php_functions {
+        unsafe {
+            xsltRegisterExtFunction(
+                ctxt,
+                c"functionString".as_ptr(),
+                c"http://php.net/xsl".as_ptr(),
+                xsl_php_handler_string as *const c_void,
+            );
+            xsltRegisterExtFunction(
+                ctxt,
+                c"function".as_ptr(),
+                c"http://php.net/xsl".as_ptr(),
+                xsl_php_handler_object as *const c_void,
+            );
+        }
     }
 
     let mut param_failed = false;
@@ -352,6 +601,12 @@ pub fn transform(
         }
         xmlFreeDoc(doc);
     }
+    // Temp docs backing XslRet::Node nodesets die with the transform.
+    TMP_DOCS.with(|d| {
+        for p in d.borrow_mut().drain(..) {
+            unsafe { xmlFreeDoc(p as *mut c_void) };
+        }
+    });
     let errs = cap.map(ErrCapture::end).unwrap_or_default();
     (outcome, errs)
 }
@@ -377,7 +632,13 @@ mod xsltio_smoke {
         let (sheet, errs) = parse_stylesheet(SHEET, b"");
         assert!(errs.is_empty(), "{errs:?}");
         let sheet = sheet.expect("sheet compiles");
-        let opts = TransformOpts { params: &[], max_depth: 3000, max_vars: 15000, security_prefs: 44 };
+        let opts = TransformOpts {
+            params: &[],
+            max_depth: 3000,
+            max_vars: 15000,
+            security_prefs: 44,
+            php_functions: false,
+        };
         let (out, errs) = transform(&sheet, b"<r><x>hi</x></r>", b"", &opts);
         assert!(errs.is_empty(), "{errs:?}");
         let out = out.expect("transform succeeds");
@@ -403,8 +664,13 @@ mod xsltio_smoke {
         let (sheet, _) = parse_stylesheet(psheet, b"");
         let sheet = sheet.expect("sheet compiles");
         let params = vec![(b"who".to_vec(), b"world".to_vec())];
-        let opts =
-            TransformOpts { params: &params, max_depth: 3000, max_vars: 15000, security_prefs: 44 };
+        let opts = TransformOpts {
+            params: &params,
+            max_depth: 3000,
+            max_vars: 15000,
+            security_prefs: 44,
+            php_functions: false,
+        };
         let (out, _) = transform(&sheet, b"<x/>", b"", &opts);
         assert_eq!(String::from_utf8_lossy(&out.unwrap()), "world");
     }
