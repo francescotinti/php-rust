@@ -414,6 +414,14 @@ pub(super) fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> C
         uninit_props,
         ok,
         has_prop_hooks: prop_info.values().any(|pi| pi.hooks.is_some()),
+        all_props_public: prop_info.values().all(|pi| pi.visibility == Visibility::Public),
+        plain_set_props: prop_info.values().all(|pi| {
+            pi.visibility == Visibility::Public
+                && pi.set_visibility.is_none()
+                && !pi.readonly
+                && pi.type_hint.is_none()
+                && pi.hooks.is_none()
+        }),
         prop_info,
     }
 }
@@ -528,5 +536,9 @@ pub(super) fn stub_class(cd: &crate::hir::ClassDecl) -> CompiledClass {
         ok: false,
         prop_info: Default::default(),
         has_prop_hooks: false,
+        // Conservative: a stub is never legitimately instantiated (ok=false),
+        // so keep it off every fast path.
+        all_props_public: false,
+        plain_set_props: false,
     }
 }

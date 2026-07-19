@@ -30,7 +30,16 @@ pub enum GenStatus {
 /// auto-key counter (step 39).
 impl Drop for GenState {
     fn drop(&mut self) {
+        // Handle freed first (the pre-existing observable order); the current
+        // key/value and return value can hold arbitrarily deep object graphs,
+        // so they unwind via the bounded-drop trampoline.
         crate::object::free_object_id(self.id);
+        for v in [&mut self.cur_key, &mut self.cur_val, &mut self.ret] {
+            let v = std::mem::replace(v, Zval::Null);
+            if !matches!(v, Zval::Undef | Zval::Null | Zval::Bool(_) | Zval::Long(_) | Zval::Double(_)) {
+                crate::object::drop_bounded(crate::object::DeepDrop::Val(v));
+            }
+        }
     }
 }
 

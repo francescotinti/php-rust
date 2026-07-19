@@ -100,6 +100,59 @@ pub fn reset_freed_object_ids() {
     FREED_OBJECT_IDS.with(|f| f.borrow_mut().clear());
 }
 
+/// Payloads whose teardown may recurse through further objects — an object's
+/// property table, a closure's captured environment, a bound `$this`. Routed
+/// through [`drop_bounded`] so an arbitrarily deep ownership chain (a 500k
+/// `->next` list, WP-25) unwinds with a bounded native stack: the oracle frees
+/// such chains fine (mid-script and at shutdown), recursive field drop
+/// overflowed at ~45k and killed the whole process with SIGSEGV.
+#[allow(dead_code)] // the payloads exist solely to be *dropped*, never read
+pub(crate) enum DeepDrop {
+    Props(Props),
+    Captures(Vec<(u32, Zval)>),
+    Val(Zval),
+}
+
+/// Strict postorder (children's handles freed before the parent's — Zend's
+/// LIFO id reuse, WP-24) is preserved up to this many nested levels; deeper
+/// tails are deferred to [`DROP_QUEUE`] and unwound iteratively, trading exact
+/// id-reuse order — unobservable at that depth — for a bounded stack. Kept
+/// small enough that debug builds (larger frames, 2 MiB test-thread stacks)
+/// stay safe too.
+const DROP_DEPTH_LIMIT: u32 = 512;
+
+thread_local! {
+    /// Nesting depth of [`drop_bounded`] teardowns currently on the stack.
+    static DROP_DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    /// Payloads deferred past [`DROP_DEPTH_LIMIT`], drained by the outermost
+    /// [`drop_bounded`] call (the trampoline).
+    static DROP_QUEUE: std::cell::RefCell<Vec<DeepDrop>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Drop `payload` with recursion depth bounded to [`DROP_DEPTH_LIMIT`]:
+/// deeper tails are queued and unwound iteratively by the outermost call.
+/// While draining, depth is held at 1 so nested calls never re-enter the
+/// drain loop themselves.
+pub(crate) fn drop_bounded(payload: DeepDrop) {
+    let depth = DROP_DEPTH.with(|d| d.get());
+    if depth >= DROP_DEPTH_LIMIT {
+        DROP_QUEUE.with(|q| q.borrow_mut().push(payload));
+        return;
+    }
+    DROP_DEPTH.with(|d| d.set(depth + 1));
+    drop(payload);
+    DROP_DEPTH.with(|d| d.set(depth));
+    if depth == 0 {
+        loop {
+            let Some(next) = DROP_QUEUE.with(|q| q.borrow_mut().pop()) else { break };
+            DROP_DEPTH.with(|d| d.set(1));
+            drop(next);
+            DROP_DEPTH.with(|d| d.set(0));
+        }
+    }
+}
+
 impl Drop for Object {
     fn drop(&mut self) {
         // Zend's teardown (zend_objects_store_del) runs free_obj — releasing
@@ -108,9 +161,11 @@ impl Drop for Object {
         // free list. LIFO reuse therefore hands back the PARENT's id before a
         // child's (tidy 010's var_dump ids). Rust's default field-drop order
         // would push self.id first; dropping the value-bearing fields
-        // explicitly restores the postorder.
-        drop(std::mem::take(&mut self.props));
-        self.proxy_instance = None;
+        // explicitly restores the postorder (exact up to DROP_DEPTH_LIMIT).
+        drop_bounded(DeepDrop::Props(std::mem::take(&mut self.props)));
+        if let Some(p) = self.proxy_instance.take() {
+            drop_bounded(DeepDrop::Val(*p));
+        }
         free_object_id(self.id);
     }
 }
@@ -497,5 +552,59 @@ impl Props {
 
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::RefCell;
+
+    fn obj(id: u32, props: Props) -> Zval {
+        Zval::Object(Rc::new(RefCell::new(Object {
+            class_id: 0,
+            class_name: PhpStr::from_str("N"),
+            props,
+            id,
+            info: Rc::new(ObjectInfo::default()),
+            readonly_init: Vec::new(),
+            readonly_clone_writable: Vec::new(),
+            typed_unset: Vec::new(),
+            lazy: None,
+            proxy_instance: None,
+        })))
+    }
+
+    fn chain(len: u32) -> Zval {
+        let mut head = Zval::Null;
+        for i in 0..len {
+            let mut p = Props::new();
+            p.set(b"next", std::mem::replace(&mut head, Zval::Null));
+            head = obj(i + 1, p);
+        }
+        head
+    }
+
+    /// A 200k-deep `->next` chain must drop without blowing the native stack
+    /// (WP-25: the oracle frees 1M-deep chains fine; the recursive field drop
+    /// overflowed at ~45k and took the media suite down at shutdown).
+    #[test]
+    fn deep_object_chain_drop_is_stack_bounded() {
+        reset_freed_object_ids();
+        drop(chain(200_000));
+        reset_freed_object_ids();
+    }
+
+    /// Below `DROP_DEPTH_LIMIT` the postorder is exact: children's handles are
+    /// freed before the parent's, so LIFO reuse hands back the head's id first
+    /// (Zend's zend_objects_store_del order, WP-24).
+    #[test]
+    fn shallow_chain_keeps_exact_postorder_id_reuse() {
+        reset_freed_object_ids();
+        drop(chain(3)); // ids 3 (head) -> 2 -> 1
+        assert_eq!(take_freed_object_id(), Some(3));
+        assert_eq!(take_freed_object_id(), Some(2));
+        assert_eq!(take_freed_object_id(), Some(1));
+        assert_eq!(take_freed_object_id(), None);
     }
 }

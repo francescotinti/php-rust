@@ -115,7 +115,17 @@ pub enum ArgPlaceStep {
 /// a `Zval::Ref` to the shared cell (D-18.3).
 impl Drop for Closure {
     fn drop(&mut self) {
+        // Handle freed first (the pre-existing observable order: the id was
+        // released before the implicit field drop); the captured environment
+        // and bound $this can chain through further closures/objects, so they
+        // unwind via the bounded-drop trampoline (see `object::drop_bounded`).
         crate::object::free_object_id(self.id);
+        crate::object::drop_bounded(crate::object::DeepDrop::Captures(std::mem::take(
+            &mut self.captures,
+        )));
+        if let Some(t) = self.bound_this.take() {
+            crate::object::drop_bounded(crate::object::DeepDrop::Val(t));
+        }
     }
 }
 

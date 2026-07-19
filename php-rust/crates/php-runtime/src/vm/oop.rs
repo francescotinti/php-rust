@@ -503,6 +503,56 @@ pub(super) fn method_access_error(
     ))
 }
 
+/// The PHP 8.4 asymmetric-visibility write/unset denial for a NON-readonly
+/// declared property: `Some(fatal)` when `name`'s explicit set visibility
+/// excludes the running scope `cur` (readonly properties return `None` — the
+/// readonly write path owns their message shapes, set visibility included).
+/// `verb` is "modify" for an assignment, "unset" for `unset()`. The
+/// magic-`__set`/`__unset` dispatch for an explicitly-unset slot happens
+/// BEFORE this check (magic_applies), matching Zend's order.
+pub(super) fn asym_write_error(
+    classes: &[&CompiledClass],
+    cur: Option<ClassId>,
+    obj_class: ClassId,
+    name: &[u8],
+    verb: &str,
+) -> Option<PhpError> {
+    let pi = prop_info(classes, obj_class, name)?;
+    let sv = pi.set_visibility?;
+    if pi.readonly {
+        return None;
+    }
+    // `protected(set)` is scoped against the property's PROTOTYPE — the root
+    // declaration up the parent chain — like protected methods (GH-19044: a
+    // sibling subclass may write a slot they both inherit). The error message
+    // still names the most-derived declaration.
+    let mut check_decl = pi.declaring_class;
+    if sv == Visibility::Protected {
+        while let Some(p) = classes.get(check_decl).and_then(|c| c.parent) {
+            match classes.get(p).and_then(|c| c.prop_info.get(name)) {
+                Some(ppi) => check_decl = ppi.declaring_class,
+                None => break,
+            }
+        }
+    }
+    if visible_from(classes, cur, sv, check_decl) {
+        return None;
+    }
+    let kind = match sv {
+        Visibility::Private => "private(set)",
+        _ => "protected(set)",
+    };
+    let scope = match cur {
+        Some(c) => format!("scope {}", String::from_utf8_lossy(&classes[c].name)),
+        None => "global scope".to_string(),
+    };
+    Some(PhpError::Error(format!(
+        "Cannot {verb} {kind} property {}::${} from {scope}",
+        String::from_utf8_lossy(&classes[pi.declaring_class].name),
+        String::from_utf8_lossy(name)
+    )))
+}
+
 /// Decide whether writing readonly property `decl::$name` from scope `cur` is
 /// allowed, given whether the property is already initialised on the instance.
 /// Returns the fatal to raise, or `None` if the write is a permitted first

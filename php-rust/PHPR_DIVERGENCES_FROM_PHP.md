@@ -9,7 +9,7 @@
 > peggio di una funzione assente. Molte voci qui sotto sono "assenze
 > consapevoli" o "divergenze circoscritte", non bug silenziosi.
 >
-> Ultimo aggiornamento: 2026-07-09 (Sessione VII stdlib Tier-A).
+> Ultimo aggiornamento: 2026-07-20 (Sessione WordPress-25).
 
 ---
 
@@ -479,6 +479,24 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-20 (sessione WordPress-25): ✅ CHIUSO il gap (non catalogato)
+  dell'**asymmetric visibility 8.4 in scrittura**: phpr non negava affatto
+  `$o->p = v` / `unset` / compound / `++` su `private(set)`/`protected(set)`
+  da scope escluso. Ora `asym_write_error` (oop.rs) nega nei 4 op-site, con
+  `protected(set)` scopato sul PROTOTYPE come i metodi protetti (gh19044-6)
+  e `__set`/`__unset` che continuano a passare da `magic_applies` PRIMA
+  della deny su slot esplicitamente-unset (ordine Zend). Corpus asym 19→10.
+  RESIDUI dichiarati: deny nel **field-path** (`$o->arr[] = v`, nomi
+  dinamici — dim_add/variation*/reference*), promozione costruttore
+  `private(set)` non modellata (cpp_*), check compile-time "Property with
+  asymmetric visibility C::$p must have type" assente (P7 non fatala),
+  ast_printing/readonly.phpt. ⚠️ Divergenza NUOVA e deliberata (robustezza
+  > parità): il Drop di grafi oggetto è a stack limitato (`drop_bounded`,
+  trampolino oltre 512 livelli) — l'ordine LIFO di riuso id resta esatto
+  fino a 512 livelli e diventa approssimato oltre (inosservabile nei test;
+  l'oracle regge 1M di profondità dove phpr segfaultava a ~45k, e sugli
+  ARRAY puri annidati profondi l'oracle stesso segfaulta ~500k mentre phpr
+  ora regge se la catena passa da oggetti/closure).
 - 2026-07-19 (sessione WordPress-24): ✅ CHIUSE le divergenze xsl/dom residue
   attaccabili (phpt xsl 44→57/64): (a) transcodifica iso-8859-1/windows-1252/
   iso-8859-15→UTF-8 nel load XML (la dichiarazione è onorata) + RI-CODIFICA

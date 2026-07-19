@@ -2649,6 +2649,30 @@ impl<'m> super::Vm<'m> {
                     let obj = self.frames[top].stack.pop().expect("PropGet object");
                     let cur = self.frames[top].class;
                     let target = obj.deref_clone();
+                    // FAST PATH (WP-25): a present, initialized slot on a
+                    // non-lazy instance of a hook-free all-public class reads
+                    // straight off the table. A miss or `Undef` falls through —
+                    // `__get`, the undefined-property warning and the
+                    // typed-uninit fatal all live in the general path below.
+                    if let Zval::Object(o) = &target {
+                        let b = o.borrow();
+                        if b.lazy.is_none() {
+                            let ci = &self.classes[b.class_id as usize];
+                            if ci.all_props_public && !ci.has_prop_hooks {
+                                if let Some(v) = b.props.get(&name) {
+                                    if !matches!(v, Zval::Undef) {
+                                        // deref_clone: a slot holding a Ref
+                                        // reads as its inner value (same as
+                                        // read_property).
+                                        let v = v.deref_clone();
+                                        drop(b);
+                                        self.frames[top].stack.push(v);
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                    }
                     // A read of a lazy object initializes it first (PHP 8.4) —
                     // unless a hook/`__get` serves it; an initialized proxy then
                     // forwards the read to its real instance (transitively).
@@ -2808,6 +2832,33 @@ impl<'m> super::Vm<'m> {
                         self.frames[top].stack.push(value);
                         continue;
                     }
+                    // FAST PATH (WP-25): overwrite of a *present* slot on a
+                    // non-lazy, non-enum instance of a class whose declared
+                    // properties are all plain for writing (public, symmetric,
+                    // untyped, non-readonly, hook-free): no visibility walk,
+                    // no magic probe, no coercion. A miss falls through
+                    // (dynamic-prop creation/deprecation, `__set`); a Ref slot
+                    // with live typed refs falls through (typed_ref_assign).
+                    if let Zval::Object(o) = &target {
+                        let fast = {
+                            let b = o.borrow();
+                            b.lazy.is_none()
+                                && !b.info.is_enum_case
+                                && self.classes[b.class_id as usize].plain_set_props
+                                && match b.props.get(&name) {
+                                    Some(Zval::Ref(_)) => self.typed_refs.is_empty(),
+                                    Some(_) => true,
+                                    None => false,
+                                }
+                        };
+                        if fast {
+                            if let Some(old) = write_property(&target, &name, value.clone())? {
+                                self.gc_note(&old);
+                            }
+                            self.frames[top].stack.push(value);
+                            continue;
+                        }
+                    }
                     // Storage slot to write (plain name for a dynamic/non-object
                     // target; a mangled key for an accessible private — set below).
                     let mut key: Cow<[u8]> = Cow::Borrowed(&name[..]);
@@ -2873,6 +2924,14 @@ impl<'m> super::Vm<'m> {
                             }
                             PropAccess::Dynamic => Cow::Borrowed(&name[..]),
                         };
+                        // PHP 8.4 asymmetric visibility: a declared slot whose set
+                        // visibility excludes this scope cannot be assigned (the
+                        // readonly path below keeps its own message shapes).
+                        if declared_slot {
+                            if let Some(err) = asym_write_error(&self.classes, cur, ocid, &name, "modify") {
+                                return Err(err);
+                            }
+                        }
                         // Readonly write-once enforcement (after the visibility check,
                         // so a private/protected readonly reports the access error
                         // first, matching PHP). A permitted first initialisation is
@@ -2960,6 +3019,13 @@ impl<'m> super::Vm<'m> {
                     if let Some(err) = self.readonly_rmw_error(&obj, &key, &name) {
                         return Err(err);
                     }
+                    // PHP 8.4 asymmetric visibility: a compound assignment is a
+                    // write — denied from a scope the set visibility excludes.
+                    if let Some(ocid) = object_class_id(&obj) {
+                        if let Some(err) = asym_write_error(&self.classes, cur, ocid, &name, "modify") {
+                            return Err(err);
+                        }
+                    }
                     if let Zval::Object(o) = &obj.deref_clone() {
                         if let Some(err) = self.uninit_typed_read(o, &key, &name) {
                             return Err(err);
@@ -3002,6 +3068,13 @@ impl<'m> super::Vm<'m> {
                     };
                     if let Some(err) = self.readonly_rmw_error(&obj, &key, &name) {
                         return Err(err);
+                    }
+                    // PHP 8.4 asymmetric visibility: `++`/`--` is a write —
+                    // denied from a scope the set visibility excludes.
+                    if let Some(ocid) = object_class_id(&obj) {
+                        if let Some(err) = asym_write_error(&self.classes, cur, ocid, &name, "modify") {
+                            return Err(err);
+                        }
                     }
                     if let Zval::Object(o) = &obj.deref_clone() {
                         if let Some(err) = self.uninit_typed_read(o, &key, &name) {
@@ -3115,9 +3188,31 @@ impl<'m> super::Vm<'m> {
                 Op::PropIsset { name } => {
                     let obj = self.frames[top].stack.pop().expect("PropIsset object");
                     let cur = self.frames[top].class;
+                    let recv = obj.deref_clone();
+                    // FAST PATH (WP-25): mirror of the PropGet fast path — a
+                    // present slot on a non-lazy instance of a hook-free
+                    // all-public class answers directly. `Undef` still falls
+                    // through (a typed-unset slot dispatches `__isset`), as
+                    // does a miss.
+                    if let Zval::Object(o) = &recv {
+                        let b = o.borrow();
+                        if b.lazy.is_none() {
+                            let ci = &self.classes[b.class_id as usize];
+                            if ci.all_props_public && !ci.has_prop_hooks {
+                                if let Some(v) = b.props.get(&name) {
+                                    if !matches!(v, Zval::Undef) {
+                                        let set = !matches!(v.deref_clone(), Zval::Null | Zval::Undef);
+                                        drop(b);
+                                        self.frames[top].stack.push(Zval::Bool(set));
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                    }
                     // `isset()` initializes a lazy object (PHP 8.4,
                     // isset_initializes) — unless a get hook/`__isset` serves it.
-                    let target = self.lazy_prop_access(obj.deref_clone(), &name, cur, Some(false), (MagicKind::Isset, b"__isset"))?;
+                    let target = self.lazy_prop_access(recv, &name, cur, Some(false), (MagicKind::Isset, b"__isset"))?;
                     let set = if let Zval::Object(o) = &target {
                         // `isset($o->hooked)` runs the `get` hook and tests its result
                         // for being non-null (step 50). Hooks precede `__isset`.
@@ -3212,6 +3307,12 @@ impl<'m> super::Vm<'m> {
                         // property to the re-assignable uninitialised state (8.3).
                         let ocid = o.borrow().class_id as usize;
                         key = self.prop_storage_key(ocid, &name, cur);
+                        // PHP 8.4 asymmetric visibility: `unset` from a scope the
+                        // set visibility excludes is denied ("Cannot unset ...");
+                        // an explicitly-unset slot dispatched `__unset` above.
+                        if let Some(err) = asym_write_error(&self.classes, cur, ocid, &name, "unset") {
+                            return Err(err);
+                        }
                         if let Some(decl) = prop_readonly_decl(&self.classes, ocid, &name) {
                             if o.borrow().readonly_clone_writable(&key) {
                                 o.borrow_mut().clear_readonly_init(&key);

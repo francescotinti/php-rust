@@ -1433,6 +1433,19 @@ pub struct CompiledClass {
     /// fast paths skip the per-access hook lookups entirely when false
     /// (the overwhelmingly common case).
     pub has_prop_hooks: bool,
+    /// Whether every flattened declared property is `public`. Combined with
+    /// `!has_prop_hooks`, a *present, non-`Undef`* slot on a non-lazy instance
+    /// can then be read straight off the property table — no visibility walk,
+    /// no magic/hook probes (`__get` only ever applies to a miss) — the
+    /// `Op::PropGet` fast path (WP-25). Trivially true for a class with no
+    /// declared properties (stdClass and friends).
+    pub all_props_public: bool,
+    /// Whether every flattened declared property is *plain for writing*:
+    /// public, symmetric (`set_visibility` none), non-readonly, untyped and
+    /// hook-free. An overwrite of a *present* slot on such a class needs no
+    /// visibility walk, no magic probe and no coercion — the `Op::PropSet`
+    /// fast path (WP-25). Trivially true with no declared properties.
+    pub plain_set_props: bool,
 }
 
 /// The compiled `get`/`set` hooks of one property (step 50). Each hook is a
