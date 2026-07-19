@@ -1,27 +1,26 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-21: GC adattivo + redeclare fatal)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-22: perf VM zero-alloc)
 
-> ⚡ **WP-21 (2026-07-19, commit gated `e3d8583`, +`b95b8bf`)**: **GC adattivo
-> Zend-like** (soglia del collettore di cicli che cresce quando una collezione
-> libera <100 valori — sul gruppo media 5 collect da 50k root liberavano 0-1
-> oggetti, pura CPU sul grafo vivo delle fixture) + dedup HashSet di
-> gc_light_demoted + skip della 2ª classify senza distruttori. ⚠️ TENTATA e
-> REVERTITA la classificazione a note-time in gc_note (perdeva la rete dello
-> sweep di fine statement sui drop UNHOOKED — by-design, vedi commento
-> gc_light_demoted). 🔧 FIX divergenza WP-20: "Cannot redeclare function"
-> su re-require ora fatala con la NUOVA `PhpError::FatalAt` (banner piano
-> Zend, uncatchable, no finally, posizione = nuova dichiarazione);
-> gh16509.phpt passa. Perf: media user −6,3%; full-suite CPU −3,6% (17:55 →
-> 17:17) — il "28% GC" del profilo t45 era del binario PRE-WP-20, non
-> rappresentativo. run14: 2 diff per nome = SOLO i dichiarati.
+> ⚡ **WP-22 (2026-07-19, commit gated `47a7c43`)**: **dispatch e accesso
+> proprietà ZERO-ALLOC** — 3 round guidati da profili freschi (`sample` sul
+> binario corrente, gruppo media come proxy): media 105,8 → 86,1s user
+> (**−18,6%**). (1) Op payload `Box<[…]>`→`Rc<[…]>` (il clone per-dispatch di
+> run_loop non alloca più); (2) `PropAccess<'a>` borrowed dalla prop_info di
+> classe (spariti gli `storage_key.to_vec()` — il singolo allocatore più caldo,
+> 1709 tick attribuiti) + chiavi `Cow` + risoluzione UNICA nei prop-op;
+> (3) `Const::Str` = `ZStr` condivisa (PushConst = refcount bump), fast-path
+> non-lazy in `lazy_prop_access`, `magic_guard.is_empty()` early-out,
+> `has_prop_hooks` per classe. run15: 2 diff per nome = SOLO i dichiarati;
+> wall full-suite ~21:50 (da ~23), CPU master 17:17→16:40; hk in ~15s.
 
 Riprendiamo phpr (PHP 8.5.7 in Rust). **Roadmap**: obiettivo primario = 100%
 compatibilità WordPress; la WP core test suite (PHPUnit) è il GATE PER NOME.
 
 ## Stato gate per nome (tutte le superfici)
-- **Full-suite single-site: 2 diff per nome** (`wp16-harness/full-out/run14/`,
+- **Full-suite single-site: 2 diff per nome** (`wp16-harness/full-out/run15/`,
   baseline oracle `full-out/full-oracle.names` trunk `81b2b5b`).
-- **Full-suite multisite: 2 diff per nome** (`wp19-harness/ms-out/`,
-  riconfermata su WP-21; baseline WP-19 in `ms-out/wp19-baseline/`).
+- **Full-suite multisite: 2 diff per nome** (`wp19-harness/ms-out/`, baseline
+  WP-19; non rilanciata in WP-22 — cambi solo perf, single-site a zero
+  regressioni su 30.480).
 - I 2 diff sono ENTRAMBI dichiarati e stabili: `wp_is_stream #2`
   (stream_get_wrappers onesto — divergenza DECISA) · `wpIsIniValueChangeable
   #4` (dataset generato solo con ext/Tidy).
@@ -36,28 +35,26 @@ nohup perl -e 'use POSIX qw(setsid); fork and exit 0; setsid(); exec { $ARGV[0] 
 # ⚠️ archiviare full-out/run<N>/ PRIMA di rilanciare.
 # multisite: wp19-harness/run-multisite-detached.sh <oracle|phpr> (ms-out/)
 # ⚠️ MAI probe su wptests durante una run (WP-20 docet).
-# ⚠️⚠️ AZZERARE wpdev/src/wp-content/uploads PRIMA di ogni full run: i probe
-#   di gruppo (es. --group media) lasciano canola.jpg ORFANO e il test REST
-#   test_sideload_scaled_unique_filename è ORDER-DEPENDENT upstream: con
-#   uploads sporchi fallisce su QUALSIASI motore (oracle incluso, standalone).
-#   Costò 2 full-run (run12/13) prima della diagnosi in WP-21.
+# ⚠️⚠️ AZZERARE wpdev/src/wp-content/uploads PRIMA di ogni full run (WP-21:
+#   canola.jpg orfano → test_sideload_scaled_unique_filename order-dependent).
 ```
 
-## Prossimo passo: SESSIONE WP-22 (perf CPU, coi profili GIUSTI)
-1. **CPU ~2,6× vs oracle** (full-suite ~23 min vs 8:50; CPU phpr 17:17):
-   ⚠️ LEZIONE WP-21: profilare il BINARIO CORRENTE su una run
-   rappresentativa (`sample` sul PID di phpr — `pgrep -x phpr`, NON `-f`
-   che matcha /usr/bin/time!). I sospetti dal t45 (pre-WP-20) al netto del
-   GC ora sistemato: run_loop dispatch, Zval clone/drop, memmove/memcmp
-   (Props linear-scan con Box<[u8]> per chiave — `resolve_prop_access`),
-   invoke_named/enter_callee, hashbrown insert/rehash. Candidati: (a)
-   indice/interning dei nomi di proprietà (Props::get è linear-scan con
-   memcmp); (b) interning stringhe/chiavi; (c) arena per-request.
-   Profilare PRIMA la zona specifica (WP-3), su media/query group (~2 min
-   di iterazione) e confermare sulla full-suite.
-2. **Memoria residua**: dati PHP vivi (fixture + data provider) × footprint
-   per-Zval. Misurare con `vmmap --summary → Physical footprint` (RSS
-   macOS MENTE sotto compressor, lezione WP-20).
+## Prossimo passo: SESSIONE WP-23
+1. **CPU residua** (full-suite CPU master 16:40 vs oracle 8:50): l'allocatore
+   è SPARITO dal profilo (mi_malloc 98+92 tick vs 407+287); il residuo è
+   STRUTTURALE, in ordine dal profilo opt3-t40 (wp22-harness/prof-out/):
+   run_loop leaf ~2566 (dispatch+arm inlined) · memmove 636 (concat 187,
+   enter_callee 107) · memcmp 361 (Props::get linear-scan — indice per
+   chiave interned?) · Zval drop/clone ~510 · gc note/sweep ~520 ·
+   dispatch_instance_call 199 · identical 176 · bind_params 162. Candidati:
+   (a) indice/interning nomi proprietà (Props oltre ~8 entry → mini-indice);
+   (b) frame setup più magro (enter_callee/bind_params); (c) gc_note
+   sampling/filtri. ⚠️ Profilare SEMPRE il binario corrente; attribuire i
+   leaf allocator ai frame phpr col parse del call-tree di sample (il leaf
+   ranking da solo NON basta — lezione WP-22).
+2. **Memoria dati vivi**: full-suite ~5min = 5,2G footprint (picco 5,5G),
+   media-group 4,6G = WP-20 (le CPU-opt non toccano i dati vivi). Bersaglio:
+   footprint per-Zval / interning / arena (backlog WP-7).
 3. **ext/tidy minimale** SOLO se emergono altri consumatori (chiuderebbe
    wpIsIniValueChangeable #4; oggi non vale la superficie).
 4. Valutare misura suite phpt `ext/xsl` (aggiungere "xsl" a
@@ -65,28 +62,27 @@ nohup perl -e 'use POSIX qw(setsid); fork and exit 0; setsid(); exec { $ARGV[0] 
 5. Poi: rotta post-WP (Laravel-validazione) da [[php-rust-roadmap-wp-first]]
    o residui trasversali da [[php-rust-todo-master]].
 
-## Lezioni operative (nuove WP-21)
-- ⭐ **Profilare il binario/epoca corrente**: i sample t15/t45 in
-  wp20-harness/prof-out erano del binario PRE-fix-include (9GB footprint) —
-  il loro "28% in gc_sweep" sovrastimava il GC di run11 di ~7×. Un profilo
-  vecchio di una sessione può indicare il bersaglio SBAGLIATO.
-- ⭐ **Uploads puliti prima delle full run** (vedi harness sopra): il flake
-  sideload è STATO AMBIENTALE, diagnosticato con mtime del file orfano
-  (09:26 = orario del bench A/B media) + repro standalone su ORACLE.
-- ⭐ **Rete unhooked-drop del GC**: gc_note DEVE alimentare sempre il buffer
-  candidati — lo sweep di fine statement ri-verifica il count VIVO e
-  cattura i drop non notati avvenuti dopo la nota nello stesso statement
-  (temp dell'operand stack). Qualunque "classificazione a note-time" rompe
-  quella finestra.
-- `sample <pid>`: usare `pgrep -x phpr`; `pgrep -f "phpr vendor"` matcha
-  anche `/usr/bin/time` e si campiona il processo sbagliato (2 volte...).
-- hk può dare 1F flaky (`testWarmupIsNotRunOnSubsequentBoot`, oltre al noto
-  ResponseCacheStrategy) — riconfermare con una seconda run prima di
-  indagare (WP-19 docet).
-- Il gate va SEMPRE rifatto da capo sul binario definitivo: 2 take di
-  gate21 buttati per edit arrivati a gate in corso.
+## Lezioni operative (nuove WP-22)
+- ⭐ **Le due allocazioni più costose erano invisibili nel sorgente**: il
+  `.clone()` dell'Op nel dispatch (payload Box) e `storage_key.to_vec()` in
+  resolve_prop_access — one-liner che il profilo attribuiva a mi_malloc.
+  Metodo: parse del call-tree di `sample` per attribuire i leaf allocator
+  ai frame phpr chiamanti (script in sessione; il ranking dei leaf non basta).
+- ⭐ **Wall time inquinabile**: la run base è partita con rust-analyzer in
+  indicizzazione (wall 231s vs 118s a parità di lavoro). Confrontare SOLO
+  lo user CPU del processo (`/usr/bin/time`).
+- `cargo fix` NON applica le suggestion E0308: applier custom dei byte-span
+  JSON di rustc (66 edit in un colpo, iterare fino a 0 errori).
+- PhpStr è immutabile by-design (`new`/`as_bytes`) → condividere le ZStr del
+  const pool è safe; le mutazioni stringa ricostruiscono sempre.
+- Rc nei payload Op: ogni mutazione in-place di un payload slice va
+  RICOSTRUITA (`*types = iter().collect()`), mai `iter_mut` — il buffer può
+  essere condiviso tra Func clonate (l'unico sito era relocate CatchMatch).
+- Il guard serena-vexp blocca anche gli edit perl sui .rs: Serena
+  `replace_content` (occasionali timeout: riprovare — l'edit del primo
+  timeout era comunque passato: verificare prima di ripetere).
 
-## Invarianti (aggiornati WP-21)
+## Invarianti (aggiornati WP-22)
 - Gate per OGNI commit: corpus/sess/date/refl per NOME — baseline INVARIATA
   WP-18: **corpus 1489 · sess 28 · date 351 · refl 290** (SOLO rimozioni
   ammesse; fail-set in `wp18-harness/gate-out/*.fails`) · ORM 3484 3E/13F
@@ -94,11 +90,12 @@ nohup perl -e 'use POSIX qw(setsid); fork and exit 0; setsid(); exec { $ARGV[0] 
   mysqli 11/11, media-probe byte-id, run-http (DIFF-set 16 = WP-14) · WP
   suite per-classe = oracle (option 413 · media 762 · post 906 · user 1341 ·
   query 1889 · restapi 3514 · taxonomy 878 · comment 582 · xmlrpc 316 ·
-  sitemaps 132 · classi WP-17/18). Script pronto: `wp21-harness/gate21.sh`
-  (= gate20 con output in wp21-harness/gate-out).
-- Full-suite single-site: solo miglioramenti per nome vs **run14 (2 diff)**.
+  sitemaps 132 · classi WP-17/18). Script pronto: `wp22-harness/gate22.sh`
+  (output in wp22-harness/gate-out).
+- Full-suite single-site: solo miglioramenti per nome vs **run15 (2 diff)**.
 - Full-suite multisite: solo miglioramenti per nome vs **ms-out (2 diff)**.
 - Commit AND push a ogni step; run pesanti SEQUENZIALI e DETACHED sotto
-  watchdog/telemetria; Serena per Rust (se in timeout: perl -ne via Bash),
-  Vexp/Read per il C; Read/Write tool per i .php; log `tr -d '\0'`; probe
-  MAI su wptests durante una run; uploads AZZERATI prima di ogni full run.
+  watchdog/telemetria; Serena per Rust (se in timeout: perl -ne via Bash,
+  ma gli EDIT solo via Serena); Vexp/Read per il C; Read/Write tool per i
+  .php; log `tr -d '\0'`; probe MAI su wptests durante una run; uploads
+  AZZERATI prima di ogni full run.
