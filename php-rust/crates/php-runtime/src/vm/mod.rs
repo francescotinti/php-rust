@@ -1574,29 +1574,17 @@ impl<'m> Vm<'m> {
                 if self.destructed.contains(&id) {
                     return;
                 }
-                // Classify at note time: `v` is about to be dropped, so the
-                // object is refcount-collectable at the next sweep only when
-                // its holders are exactly `created` + this dying handle
-                // (`strong_count == 2`). A higher count means another live
-                // holder survives the drop: that is a possible *cycle* root
-                // (Zend `gc_possible_root`) — file it there directly instead
-                // of round-tripping through the candidate queue only for the
-                // sweep to demote it. The final drop of the last live handle
-                // re-notes with count == 2, so refcount deaths are never
-                // missed. An id already in the candidate buffer keeps its
-                // buffer clone (which inflates the count), so it is skipped,
-                // not re-classified.
-                if self.gc_roots.contains_key(&id) {
-                    return;
-                }
-                if Rc::strong_count(rc) > 2 {
-                    self.gc_cycle_roots.insert(id);
-                    // A later *unhooked* drop is only observable by
-                    // re-checking the count — schedule one re-check at the
-                    // next main sweep.
-                    self.gc_light_demoted.insert(id);
-                } else {
-                    self.gc_roots.insert(id, Rc::clone(rc));
+                // Always buffer (no note-time classification): the sweep at
+                // the END of this statement re-checks the live count, which is
+                // the safety net for *unhooked* drops that happen later in the
+                // same statement (a temp consumed off the operand stack is not
+                // gc_note'd — see `gc_light_demoted`). A note-time `count > 2`
+                // shortcut straight to the cycle-roots buffer loses exactly
+                // that window: a destructor-driven cleanup (e.g. a file
+                // unlink) can slip past the tests that depend on it (WP-21:
+                // REST sideload unique-filename flake).
+                if let std::collections::hash_map::Entry::Vacant(e) = self.gc_roots.entry(id) {
+                    e.insert(Rc::clone(rc));
                     self.gc_queue.push(id);
                 }
             }

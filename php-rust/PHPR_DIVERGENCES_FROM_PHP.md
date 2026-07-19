@@ -486,11 +486,13 @@ l'oracle e vanno preservati:
   di uno step (50k, cap 1e9); una efficace lo riabbassa verso la base. Il
   timing della collezione AUTOMATICA non è osservabile a parità (Zend stesso
   la adatta dinamicamente); `gc_collect_cycles()` esplicito resta immediato.
-  (2) `gc_note` classifica a note-time (equivalente di `gc_possible_root`):
-  un oggetto ancora referenziato dopo il drop va DIRETTO nel buffer dei
-  cycle-root invece di transitare dalla coda candidati; l'ultimo drop vivo
-  ri-nota con count==2, nessuna morte per refcount persa (fail-set gc del
-  corpus identico per nome). (3) 🔧 **FIX della divergenza catalogata in
+  (2) ⚠️ TENTATA e REVERTITA la classificazione a note-time in `gc_note`
+  (count>2 → dritto nei cycle-root): perdeva la rete di sicurezza dello
+  sweep di fine statement sui drop UNHOOKED avvenuti dopo la nota nello
+  stesso statement — un cleanup in `__destruct` (unlink di file) slittava
+  oltre i test dipendenti (flake REST sideload unique-filename in run12).
+  Il buffer candidati resta sempre-alimentato come in WP-20.
+  (3) 🔧 **FIX della divergenza catalogata in
   WP-20**: il re-`require` di un file con funzione non-condizionale ora
   fatala "Cannot redeclare function f() (previously declared in file:line)"
   — check in `run_linked` contro `linked_functions` e il modulo corrente
