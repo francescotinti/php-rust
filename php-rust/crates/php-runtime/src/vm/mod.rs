@@ -454,7 +454,8 @@ pub(crate) fn run_module_with_hir<'m>(
         gc_roots: HashMap::default(),
         gc_queue: BinaryHeap::new(),
         gc_cycle_roots: HashSet::default(),
-        gc_light_demoted: Vec::new(),
+        gc_cycle_threshold: Vm::GC_CYCLE_THRESHOLD,
+        gc_light_demoted: HashSet::default(),
         shutdown_fns: Vec::new(),
         generators: HashMap::default(),
         fibers: HashMap::default(),
@@ -1272,13 +1273,24 @@ struct Vm<'m> {
     /// collector runs a trial-deletion pass over these ids. Ids only —
     /// `created` keeps the objects alive; stale ids are filtered at collection.
     gc_cycle_roots: HashSet<u32>,
+    /// Current automatic-collection trigger for `gc_cycle_roots` (starts at
+    /// [`Self::GC_CYCLE_THRESHOLD`]). Mirrors Zend's `gc_adjust_threshold`: a
+    /// collection that frees (almost) nothing means the buffered roots are
+    /// live data, so the trigger grows by one step — otherwise every
+    /// re-fill re-scans the whole reachable graph for nothing (WP's test
+    /// suite holds >50k live objects in fixtures alone). An effective
+    /// collection steps it back down toward the base.
+    gc_cycle_threshold: usize,
     /// Objects a LIGHT (in-body) sweep demoted to `gc_cycle_roots` since the
     /// last MAIN sweep. A temp consumed off the operand stack mid-statement is
     /// not gc_note'd, so its death is only observable by re-checking the
     /// refcount; the enclosing global statement's main sweep re-seeds exactly
     /// these ids once — the same set the pre-eager-sweep buffer would have
-    /// held for that statement (no asymptotic cost change).
-    gc_light_demoted: Vec<u32>,
+    /// held for that statement (no asymptotic cost change). A set: re-demoting
+    /// an id already pending adds no coverage (the main sweep re-checks each
+    /// id once), and a PHPUnit run executes for minutes between main sweeps —
+    /// duplicates would pile up unboundedly.
+    gc_light_demoted: HashSet<u32>,
     /// Callbacks registered with `register_shutdown_function`, each with its bound
     /// arguments, run in registration order at script end — after the main run (and
     /// any uncaught-fatal banner), before object destructors.
@@ -1562,8 +1574,29 @@ impl<'m> Vm<'m> {
                 if self.destructed.contains(&id) {
                     return;
                 }
-                if let std::collections::hash_map::Entry::Vacant(e) = self.gc_roots.entry(id) {
-                    e.insert(Rc::clone(rc));
+                // Classify at note time: `v` is about to be dropped, so the
+                // object is refcount-collectable at the next sweep only when
+                // its holders are exactly `created` + this dying handle
+                // (`strong_count == 2`). A higher count means another live
+                // holder survives the drop: that is a possible *cycle* root
+                // (Zend `gc_possible_root`) — file it there directly instead
+                // of round-tripping through the candidate queue only for the
+                // sweep to demote it. The final drop of the last live handle
+                // re-notes with count == 2, so refcount deaths are never
+                // missed. An id already in the candidate buffer keeps its
+                // buffer clone (which inflates the count), so it is skipped,
+                // not re-classified.
+                if self.gc_roots.contains_key(&id) {
+                    return;
+                }
+                if Rc::strong_count(rc) > 2 {
+                    self.gc_cycle_roots.insert(id);
+                    // A later *unhooked* drop is only observable by
+                    // re-checking the count — schedule one re-check at the
+                    // next main sweep.
+                    self.gc_light_demoted.insert(id);
+                } else {
+                    self.gc_roots.insert(id, Rc::clone(rc));
                     self.gc_queue.push(id);
                 }
             }
@@ -1649,7 +1682,7 @@ impl<'m> Vm<'m> {
                         // A light sweep's demotion must be re-checked by the
                         // enclosing main sweep (unhooked temp deaths).
                         if !main {
-                            self.gc_light_demoted.push(id);
+                            self.gc_light_demoted.insert(id);
                         }
                     }
                 }
@@ -1698,10 +1731,24 @@ impl<'m> Vm<'m> {
                 // cycle roots piled up, run the cycle collector (mirrors Zend's
                 // automatic gc_collect_cycles at root-buffer pressure): freed
                 // cycle members re-enter the buffers, so take another pass.
-                if self.gc_cycle_roots.len() >= Self::GC_CYCLE_THRESHOLD
-                    && self.collect_cycles()? > 0
-                {
-                    continue;
+                // The trigger adapts like Zend's `gc_adjust_threshold`: an
+                // ineffective collection (the roots were live data — a test
+                // suite's fixtures, not garbage) grows it by one step so the
+                // whole-graph scan is not repeated on every re-fill; an
+                // effective one steps it back toward the base.
+                if self.gc_cycle_roots.len() >= self.gc_cycle_threshold {
+                    let freed = self.collect_cycles()?;
+                    if freed < Self::GC_ADJUST_TRIGGER {
+                        self.gc_cycle_threshold = self
+                            .gc_cycle_threshold
+                            .saturating_add(Self::GC_CYCLE_THRESHOLD)
+                            .min(Self::GC_CYCLE_THRESHOLD_MAX);
+                    } else if self.gc_cycle_threshold > Self::GC_CYCLE_THRESHOLD {
+                        self.gc_cycle_threshold -= Self::GC_CYCLE_THRESHOLD;
+                    }
+                    if freed > 0 {
+                        continue;
+                    }
                 }
                 // Drop the candidate buffer.
                 self.gc_roots.clear();
@@ -1905,6 +1952,16 @@ impl<'m> Vm<'m> {
     /// cycle members) without crossing inside synthetic 10k-tuned tests.
     const GC_CYCLE_THRESHOLD: usize = 50_000;
 
+    /// An automatic collection freeing fewer values than this is "ineffective":
+    /// the buffered roots were overwhelmingly live, and the trigger grows one
+    /// step (Zend's `GC_THRESHOLD_TRIGGER` heuristic).
+    const GC_ADJUST_TRIGGER: i64 = 100;
+
+    /// Upper bound for the adaptive trigger (Zend caps its threshold too);
+    /// far above any workload seen, it only guards against pathological
+    /// saturating growth.
+    const GC_CYCLE_THRESHOLD_MAX: usize = 1_000_000_000;
+
     /// Trial-deletion cycle detection (the mark phase of Zend's
     /// `gc_collect_cycles`, adapted to `Rc`): starting from `roots`, walk the
     /// object graph through props, arrays, references, closure captures and
@@ -2075,7 +2132,7 @@ impl<'m> Vm<'m> {
             if roots.is_empty() {
                 break;
             }
-            let (whites, _) = self.gc_classify(&roots);
+            let (whites, first_dead_containers) = self.gc_classify(&roots);
             log::debug!(
                 target: "phpr::gc",
                 "cycle collect: {} roots, {} garbage objects",
@@ -2088,6 +2145,7 @@ impl<'m> Vm<'m> {
             // Destructor phase, oldest-first (creation order — matches Zend's
             // buffer order). The destructor runs at most once per object
             // (`destructed`), and never for an uninitialized lazy wrapper.
+            let mut ran_destructor = false;
             for &id in whites.iter() {
                 let Some(rc) = self.created.get(&id) else { continue };
                 let rc = Rc::clone(rc);
@@ -2101,13 +2159,20 @@ impl<'m> Vm<'m> {
                 if resolve_method_runtime(&self.classes, cid, b"__destruct").is_some() {
                     log::debug!(target: "phpr::gc", "destruct (cycle): {}#{}", String::from_utf8_lossy(&self.classes[cid].name), id);
                     self.destructed.insert(id);
+                    ran_destructor = true;
                     self.call_method_sync(Zval::Object(rc), b"__destruct", Vec::new())?;
                 }
             }
             // A destructor may have stored parts of the graph somewhere
             // reachable: only what is *still* unreferenced dies. Dead
             // arrays/closures inside the garbage count toward the total.
-            let (whites, dead_containers) = self.gc_classify(&roots);
+            // No destructor ran ⇒ the graph is exactly as the first classify
+            // saw it — reuse that result instead of re-walking it.
+            let (whites, dead_containers) = if ran_destructor {
+                self.gc_classify(&roots)
+            } else {
+                (whites, first_dead_containers)
+            };
             // Detach every white's contents first, then free: a white's
             // properties may hold the last references to other whites.
             let mut taken: Vec<(u32, Props, Option<Box<Zval>>)> = Vec::new();
@@ -2881,10 +2946,61 @@ impl<'m> Vm<'m> {
             if leaked.conditional_fns.contains(&idx) {
                 continue;
             }
-            let already = saved.functions.iter().any(|cf| name_eq_ignore_case(&cf.name, &f.name));
-            if !already {
-                self.linked_functions.entry(f.name.to_ascii_lowercase()).or_insert((leaked, idx));
+            // The prelude's compiled functions ride along in every unit module
+            // (shared from the main image, WP-20): same functions, not
+            // redeclarations — and a *user* function colliding with a prelude
+            // name keeps the historical silent-skip (registry builtins win).
+            if f.file.as_ref() == b"prelude" {
+                // Prelude entries are shared from the main image at the SAME
+                // indices (WP-20), so the includer module almost always has
+                // this very Rc at `idx` — an O(1) check that short-circuits
+                // the O(n) name scan (which summed to O(n²/2) per drive).
+                let already = saved
+                    .functions
+                    .get(idx)
+                    .is_some_and(|cf| Rc::ptr_eq(cf, f) || name_eq_ignore_case(&cf.name, &f.name))
+                    || saved.functions.iter().any(|cf| name_eq_ignore_case(&cf.name, &f.name));
+                if !already {
+                    self.linked_functions
+                        .entry(f.name.to_ascii_lowercase())
+                        .or_insert((leaked, idx));
+                }
+                continue;
             }
+            // Zend fatals when a unit re-declares an existing unconditional
+            // user function — re-`require` of the same file, or an include
+            // colliding with the entry script (zend_bind_function_error). The
+            // previous declaration may live in the linked table (an earlier
+            // unit) or in the current module's own function list.
+            let lower = f.name.to_ascii_lowercase();
+            let prev = self
+                .linked_functions
+                .get(&lower)
+                .map(|(m, i)| &m.functions[*i])
+                .or_else(|| {
+                    saved
+                        .functions
+                        .iter()
+                        .find(|cf| name_eq_ignore_case(&cf.name, &f.name))
+                });
+            if let Some(p) = prev {
+                if p.file.as_ref() != b"prelude" {
+                    // Zend's non-throwable E_ERROR bail-out, located at the
+                    // NEW declaration (zend_bind_function_error).
+                    return Err(PhpError::FatalAt {
+                        msg: format!(
+                            "Cannot redeclare function {}() (previously declared in {}:{})",
+                            String::from_utf8_lossy(&f.name),
+                            String::from_utf8_lossy(&p.file),
+                            p.line
+                        ),
+                        file: f.file.clone(),
+                        line: f.line,
+                    });
+                }
+                continue; // prelude-named user fn: historical silent skip
+            }
+            self.linked_functions.insert(lower, (leaked, idx));
         }
         let baseline = self.frames.len();
         let mut frame = Frame::new(&leaked.main, leaked);

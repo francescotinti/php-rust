@@ -54,6 +54,12 @@ pub enum PhpError {
     /// uncaught fatal. The class name / message come from the object itself, so
     /// the `class_name`/`message` accessors return sentinels for this variant.
     Thrown(crate::Zval),
+    /// A hard engine fatal in Zend's *non-throwable* class (E_ERROR bail-out,
+    /// e.g. "Cannot redeclare function f()"): uncatchable, skips `finally`,
+    /// and renders as a plain "Fatal error: {msg} in {file} on line {line}"
+    /// banner — no `Uncaught`, no stack trace — located at the site it
+    /// carries (the offending declaration), not at the faulting op.
+    FatalAt { msg: String, file: Box<[u8]>, line: u32 },
     /// `exit`/`die` terminating the script (step 46). NOT a throwable: it is
     /// uncatchable (a `catch` never sees it) but `finally` blocks still run, so
     /// it rides the `Err` channel like a throw and unwinds to the top, where
@@ -76,9 +82,10 @@ impl PhpError {
             PhpError::DivisionByZeroError(_) => "DivisionByZeroError",
             PhpError::ArithmeticError(_) => "ArithmeticError",
             PhpError::Thrown(_) => "Exception",
-            // Not a class: `exit` is a termination signal, never matched by a
-            // `catch` (see `handle_thrown`). The sentinel keeps the accessor
-            // total; it is never read as a real class name.
+            // Not classes: `exit` is a termination signal and a hard fatal is
+            // never matched by a `catch` (see `handle_thrown`). The sentinels
+            // keep the accessor total; they are never read as real class names.
+            PhpError::FatalAt { .. } => "Fatal",
             PhpError::Exit(_) => "Exit",
         }
     }
@@ -92,6 +99,7 @@ impl PhpError {
             PhpError::ArgumentCountError(m) => m,
             PhpError::DivisionByZeroError(m) => m,
             PhpError::ArithmeticError(m) => m,
+            PhpError::FatalAt { msg, .. } => msg,
             PhpError::Thrown(_) => "",
             PhpError::Exit(_) => "",
         }

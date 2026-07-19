@@ -7,6 +7,25 @@ impl<'m> Vm<'m> {
     /// line and trace; an engine error uses its variant name and the captured
     /// `fault_line`.
     pub(super) fn render_fatal(&mut self, err: &PhpError, fault_line: Line) {
+        // A hard (non-throwable) fatal renders Zend's plain E_ERROR banner:
+        // no `Uncaught`, no stack trace, located at the site it carries.
+        if let PhpError::FatalAt { msg, file, line } = err {
+            let file = String::from_utf8_lossy(file);
+            if self.web && self.ini.get_bool(b"log_errors") {
+                self.error_log
+                    .push(format!("PHP Fatal error:  {msg} in {file} on line {line}").into_bytes());
+            }
+            if !self.ini.get_bool(b"display_errors") {
+                return;
+            }
+            let block = if self.ini.get_bool(b"html_errors") {
+                format!("<br />\n<b>Fatal error</b>:  {msg} in <b>{file}</b> on line <b>{line}</b><br />\n")
+            } else {
+                format!("\nFatal error: {msg} in {file} on line {line}\n")
+            };
+            self.rendered.extend_from_slice(block.as_bytes());
+            return;
+        }
         // The throwing-site file: taken from the throwable (its `file` prop was
         // stamped at the construct/fault site, so it reports the defining file
         // across includes); the bare-error fallback uses the executing frame.
@@ -142,10 +161,10 @@ impl<'m> Vm<'m> {
         // (EXC-1). An engine error (EXC-3a) is resolved to its prelude class by
         // name and a Throwable is synthesized carrying its message; if the class
         // is absent or can't be instantiated, the original error propagates.
-        // `Exit` and a thrown non-object stay uncatchable.
+        // `Exit`, a hard fatal, and a thrown non-object stay uncatchable.
         let obj = match &e {
             PhpError::Thrown(v) if matches!(v, Zval::Object(_)) => v.clone(),
-            PhpError::Exit(_) | PhpError::Thrown(_) => return Some(e),
+            PhpError::Exit(_) | PhpError::FatalAt { .. } | PhpError::Thrown(_) => return Some(e),
             engine => {
                 let name = engine.class_name().to_ascii_lowercase();
                 let msg = engine.message().to_owned();
@@ -233,7 +252,7 @@ impl<'m> Vm<'m> {
     pub(super) fn error_to_throwable(&mut self, e: &PhpError) -> Option<Zval> {
         match e {
             PhpError::Thrown(v) if matches!(v, Zval::Object(_)) => Some(v.clone()),
-            PhpError::Exit(_) | PhpError::Thrown(_) => None,
+            PhpError::Exit(_) | PhpError::FatalAt { .. } | PhpError::Thrown(_) => None,
             engine => {
                 let name = engine.class_name().to_ascii_lowercase();
                 let msg = engine.message().to_owned();

@@ -479,6 +479,33 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-19 (sessione WordPress-21): ⚡ **perf GC** (nessuna divergenza nuova;
+  un fix). (1) Il collettore di cicli automatico ora ADATTA la soglia come
+  Zend `gc_adjust_threshold`: una collezione che libera <100 valori (i root
+  bufferizzati erano dati vivi, es. fixture di una test-suite) alza il trigger
+  di uno step (50k, cap 1e9); una efficace lo riabbassa verso la base. Il
+  timing della collezione AUTOMATICA non è osservabile a parità (Zend stesso
+  la adatta dinamicamente); `gc_collect_cycles()` esplicito resta immediato.
+  (2) `gc_note` classifica a note-time (equivalente di `gc_possible_root`):
+  un oggetto ancora referenziato dopo il drop va DIRETTO nel buffer dei
+  cycle-root invece di transitare dalla coda candidati; l'ultimo drop vivo
+  ri-nota con count==2, nessuna morte per refcount persa (fail-set gc del
+  corpus identico per nome). (3) 🔧 **FIX della divergenza catalogata in
+  WP-20**: il re-`require` di un file con funzione non-condizionale ora
+  fatala "Cannot redeclare function f() (previously declared in file:line)"
+  — check in `run_linked` contro `linked_functions` e il modulo corrente
+  (prelude esente via marker `file == "prelude"`). Reso con la NUOVA variante
+  `PhpError::FatalAt` (E_ERROR non-throwable): banner piano "Fatal error:
+  {msg} in {file} on line {line}" SENZA "Uncaught", né trace, UNCATCHABLE e
+  senza `finally` (come Exit), posizionato alla NUOVA dichiarazione come
+  `zend_bind_function_error` — il phpt `line_numbers/gh16509.phpt` passa
+  (prima SKIPPAVA come compile-error: il secondo include produceva un bogus
+  "Failed to compile"). Divergenze RESIDUE: (a) niente backtrace del fatal
+  (PHP 8.5 `fatal_error_backtraces=On` in CLI aggiunge "Stack trace:\n#0
+  {main}"; sotto run-tests è spento, quindi i phpt combaciano); (b) per eval
+  il file della dichiarazione precedente è "eval()'d code:N" senza il path
+  del file ospite; (c) il path CONDIZIONALE (`Op::DeclareFn`) resta in forma
+  "Uncaught Error" senza "previously declared" (pre-esistente, invariato).
 - 2026-07-18 (sessione WordPress-20): ⚡ **perf memoria del macchinario
   include** (nessuna divergenza nuova; due note). (1) Le funzioni del PRELUDE
   compilate ora sono UNA copia condivisa (`Rc`) dal modulo main in ogni unit
