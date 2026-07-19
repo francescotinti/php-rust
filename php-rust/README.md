@@ -5,37 +5,36 @@ a lexer, compiler, bytecode VM, and a growing standard library — no C PHP link
 in. The goal is to run **real PHP applications** byte-identically to the reference
 interpreter, not to pass a toy subset.
 
-> **Status:** Composer, PHPUnit 13 (including **process isolation** — child
-> runs spawned via `phpr -d … <stdin>`), Doctrine ORM/DBAL, PDO/SQLite, Monolog
-> and Symfony components already execute under `phpr` with output identical to
-> upstream PHP 8.5.7. **ext/session is complete** (all 23 functions + the
-> SessionHandler class family); symfony/http-foundation runs at **zero errors**
-> without its Session suite (12 failures need a real HTTP server).
-> **symfony/http-kernel is CLOSED**: the full 1663-test suite passes with
-> **0 errors / 0 failures** — parity with the reference interpreter. Along
-> the way phpr gained **real IANA timezone support** (TZif reader over the
-> system zoneinfo database, DST gap/fold semantics pinned to timelib,
-> zone-aware `DateTime` arithmetic), PHP 8.4 `{closure:Scope():line}` names,
-> `eval()` scope sharing, magic-method trampolines for first-class callables,
-> ArrayAccess protocol dispatch in nested `isset`/`??`, real `flock(2)`
-> advisory locks, Zend-faithful destructor timing (eager sweep after
-> every statement), dynamic `global $$name` binding, and SEND_VAR_EX
-> semantics for by-ref parameters of cross-unit / dynamic calls.
-> **wp-cli runs end-to-end from source** (`wp --info` at oracle parity) —
-> the WordPress track is underway (see Roadmap).
+> **Status: the entire WordPress core test suite runs at effective oracle
+> parity.** Single-site (30,480 tests) and multisite (31,277 tests) both
+> differ from the reference interpreter by **2 test names, both deliberate,
+> catalogued divergences**. WordPress 7.0.1 installs and serves on **real
+> MySQL** (native `mysqli` wire protocol) through the built-in `phpr -S`
+> server SAPI — front pages, login, REST, pretty permalinks and wp-admin
+> **byte-identical** over HTTP; the media pipeline reaches byte parity via
+> the **system libgd/libxslt through FFI**. Also at parity: Composer,
+> PHPUnit 9/11/13 (including process isolation), Doctrine ORM/DBAL,
+> PDO/SQLite, Monolog, wp-cli, **symfony/http-kernel CLOSED at 0 errors /
+> 0 failures** (1665 tests) and http-foundation. The runtime has real IANA
+> timezones (system TZif, timelib gap/fold semantics), a cycle-collecting GC
+> with Zend-style adaptive thresholds and Zend-faithful destructor timing,
+> property hooks, lazy objects, fibers, and an opcache-like per-request unit
+> cache. Current front: **performance** (suite CPU ~2.6× the oracle), then
+> Laravel validation.
 
 ## Coverage at a glance
 
 | | |
 | --- | --- |
-| Core / language stdlib functions | **522 / 654 (80%)** |
-| All internal functions | 785 / 2143 (37%) |
-| Zend test corpus passing | **2493** (61.5% of runnable) |
+| Core / language stdlib functions | **539 / 654 (82%)** |
+| All internal functions | 993 / 2143 (46%) |
+| Zend test corpus passing | **2567** (63.3% of runnable) |
+| WordPress core suite (single-site + multisite) | **effective parity** (2 declared name-diffs each) |
 
 Full, measured breakdown → **[COVERAGE.md](COVERAGE.md)**.
-The 37%→80% spread is the whole story: the *language* is largely done; the
+The 46%→82% spread is the whole story: the *language* is largely done; the
 remaining gap is mostly un-started **database / crypto / network extensions**
-(pgsql, mysqli, sodium, ldap, sockets, …), not missing language features.
+(pgsql, sodium, ldap, sockets, odbc, …), not missing language features.
 
 ## What works
 
@@ -51,10 +50,16 @@ remaining gap is mostly un-started **database / crypto / network extensions**
   CLI overrides, phpt `--INI--` sections), **ext/session** on the files
   handler with user save handlers.
 - **Reflection:** framework-grade — types, attributes, enums, union/intersection.
-- **Real apps:** Composer (`install`/`require`/`diagnose`, real HTTPS via rustls),
-  PHPUnit 11.5/13.2/13.3, Doctrine ORM + DBAL (3769/0/0), **symfony
-  http-foundation (full suite, 0 errors)** + String/Console/Process, PDO +
-  `pdo_sqlite` + SQLite3 on `rusqlite`, Monolog.
+- **Real apps:** **WordPress 7.0.1 on real MySQL** (installed, served,
+  full core suite at effective parity — single-site and multisite), wp-cli,
+  Composer (`install`/`require`/`diagnose`, real HTTPS via rustls),
+  PHPUnit 9.6/11.5/13.2/13.3, Doctrine ORM + DBAL (3769/0/0), **symfony
+  http-kernel (1665 tests, 0/0)** and http-foundation + String/Console/
+  Process, PDO + `pdo_sqlite` + SQLite3 on `rusqlite`, Monolog.
+- **Extensions on system libraries via FFI** (byte parity with the oracle's
+  own dylibs): zlib, **gd** (+exif), **libxslt** (XSLTProcessor); native
+  Rust: **mysqli** (wire protocol), fileinfo, ext/xml SAX, DOM
+  loadHTML/saveHTML, session, bcmath, gmp, tokenizer.
 
 ## Design principle: correct-or-absent
 
@@ -96,17 +101,16 @@ phpt-runner --isolate /path/to/php-8.5.7/Zend/tests
 Near-term, highest-leverage work (see [COVERAGE.md](COVERAGE.md) for the data,
 [TODO.md](TODO.md) for the full list):
 
-1. **WordPress** (roadmap reordered: WP before Laravel — it dominates the
-   web). symfony/http-kernel is **closed at 0/0** and **wp-cli from source
-   already runs end-to-end** (`wp --info` / `wp cli version` at oracle
-   parity). Next: `wp core download` + the official SQLite integration
-   plugin (runs on the already-green PDO/SQLite), then a real server SAPI
-   (superglobals, headers, multipart), then `mysqli` and media
-   (gd/exif/zip). Plan: NEXT_SESSION_WORDPRESS.md.
-2. ext/session tail — trans-sid URL rewriting, the `SID` constant, shared-ref
-   (`r:`) unserialize.
-3. Remaining **core stdlib** gaps — stream filters (userland), timezone
-   objects, calendar.
+1. **Performance** — the WordPress suite is at parity but costs ~2.6× the
+   oracle's CPU (~23 min vs ~9). The include/compile machinery and the GC
+   are already fixed (shared prelude, adaptive cycle-collection threshold);
+   next: VM dispatch, Zval clone/drop traffic, property-table lookups
+   (interning / hash index), live-data memory footprint. Plan:
+   NEXT_SESSION_WORDPRESS.md.
+2. **Laravel** as the second framework validation target once the perf
+   pass lands.
+3. Remaining extension surfaces on demand — ext/tidy (one WP test dataset),
+   xmlwriter, calendar, sockets.
 
 Longer-term direction (server SAPI, async, single-binary distribution):
 [ASYNC_AND_DISTRIBUTION_ROADMAP.md](ASYNC_AND_DISTRIBUTION_ROADMAP.md) ·

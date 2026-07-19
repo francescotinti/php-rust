@@ -6,36 +6,26 @@ as they complete. Deliberate behavioural deviations are catalogued in
 [`PHPR_DIVERGENCES_FROM_PHP.md`](PHPR_DIVERGENCES_FROM_PHP.md); measured
 coverage in [`COVERAGE.md`](COVERAGE.md).
 
-Current state (2026-07-14, post session WP-1): Zend corpus **2493** passing · internal functions
-**785/2143, 37%** (core stdlib **522/654, 80%**) · ext/tokenizer **42/49** ·
-ext/zlib **complete** (30/30, suite 114/115) · **ext/session: COMPLETE**
-(23/23 functions, official suite 161/229) · ext/date official suite **215**
-pass. **symfony/http-foundation**: no-session config at **0 errors /
-12 failures** (the 12 spawn a real `php -S` server). **symfony/http-kernel:
-CLOSED** — the full 1663-test suite passes at **0 errors / 0 failures**
-(parity with the oracle). Sessions 5–8 closed 286 errors / 84 failures in
-total; the last mile brought **real IANA timezones** (TZif reader over the
-system zoneinfo, timelib gap/fold DST semantics, zone-aware DateTime
-arithmetic, `date_default_timezone_set` + INI `date.timezone`), constructor
-visibility at `new`, ZPP-faithful `is_callable`/enum `from()`/int-range
-coercion, `DateTime` comparison semantics in the operator table, real
-`flock(2)` advisory locks, `error_log()` with the INI target, and
-**Zend-faithful destructor timing** (eager per-statement sweep with LIFO
-object-id reuse — Symfony DI configurators rely on `__destruct` running
-between statements). Corpus gained +41 across sessions 5–8 with zero
-regressions by name. **Session WP-1 (2026-07-14): wp-cli 2.13.0-alpha runs
-end-to-end from source** (`wp --info` / `wp cli version` at oracle parity);
-the engine gained dynamic `global $$name` binding (`Op::BindGlobalDyn`),
-compound assignment on variable-variables, **SEND_VAR_EX semantics for
-by-ref parameters of compile-time-unresolved / dynamic calls**, Stringable
-coercion in ~30 pure string builtins, `DirectoryIterator::__toString` +
-readdir iteration order, and unconditional `$argv`/`$argc` registration in
-the cross-unit global registry (+7 corpus, zero regressions by name).
-**Next front (NEXT_SESSION_WORDPRESS.md, roadmap in memory
-`php-rust-roadmap-wp-first`): WORDPRESS proper** — `wp core download`
-(expected wall: PharData/zip extraction), the official SQLite integration
-plugin, `wp core install`, then a real server SAPI, then `mysqli` and media
-(gd/exif/zip); Laravel afterwards as validation.
+Current state (2026-07-19, post session WP-21): Zend corpus **2567** passing
+(63.3% of runnable; gate baseline 1489 fails by name) · internal functions
+**993/2143, 46%** (core stdlib **539/654, 82%**). **WORDPRESS: the full core
+PHPUnit suite runs at effective oracle parity** — single-site **30,480 tests**
+and multisite **31,277 tests**, each with **2 name-diffs vs the oracle, both
+declared** (honest `stream_get_wrappers`; a dataset generated only under
+ext/tidy). WP 7.0.1 installs and serves on **real MySQL** via native
+`mysqli`; wp-admin/front/REST/permalinks **byte-identical over HTTP**
+(`phpr -S` SAPI); media byte-parity on **system libgd FFI** (+exif +
+fileinfo native); sitemaps' XSLT on **system libxslt**; ext/xml SAX;
+sessions 16–21 took the full suite from 572 errors to those 2 declared
+diffs. Perf so far: include machinery −50% real footprint (shared compiled
+prelude, WP-20) and an **adaptive GC cycle-collection threshold**
+(Zend-like, WP-21); suite CPU still ~2.6× the oracle (~23 min vs ~9) —
+**next front: VM dispatch / Zval traffic / property-table interning, then
+memory of live PHP data** (NEXT_SESSION_WORDPRESS.md). Other stacks at
+parity: **symfony/http-kernel CLOSED 0/0 (1665)**, http-foundation 0
+errors, Doctrine ORM 3484 (3E/13F declared, stable by name) + DBAL 3769/0/0,
+PHPUnit 9/11/13, Composer, wp-cli, Monolog. Laravel afterwards as
+validation.
 
 ---
 
