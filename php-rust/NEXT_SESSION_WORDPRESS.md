@@ -1,6 +1,6 @@
 # Rotta WORDPRESS-FIRST — WP-track (dopo WP-24: multisite al minimo teorico + xsl 57/64 + fix engine id-reuse/cast/error-handler)
 
-> 🏁 **WP-24 (2026-07-19)**: **multisite RICONFERMATA a 1 SOLO diff per nome
+> 🏁 **WP-24 (2026-07-19, commit gated `d3cf0e3`)**: **multisite RICONFERMATA a 1 SOLO diff per nome
 > (minimo teorico: resta solo `wp_is_stream #2`, divergenza DECISA;
 > `wpIsIniValueChangeable #4` chiuso da ext/tidy)** su 31.278 test
 > (`wp19-harness/ms-out/`, baseline WP-21 archiviata in `wp21-baseline/`).
