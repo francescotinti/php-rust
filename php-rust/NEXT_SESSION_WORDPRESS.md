@@ -16,12 +16,11 @@ Riprendiamo phpr (PHP 8.5.7 in Rust). **Roadmap**: obiettivo primario = 100%
 compatibilità WordPress; la WP core test suite (PHPUnit) è il GATE PER NOME.
 
 ## Stato gate per nome (tutte le superfici)
-- **Full-suite single-site: run16 LANCIATA a fine WP-23** (esito NON ancora
-  letto — PRIMA COSA in WP-24: leggere `wp16-harness/full-out/`, diff per
-  nome vs `full-out/full-oracle.names`; attesa: **2→1 diff** — chiuso
-  `wpIsIniValueChangeable #4` via ext/tidy, resta SOLO `wp_is_stream #2`
-  (stream_get_wrappers onesto — divergenza DECISA). Poi archiviare run16/.
-  ⚠️ Se >1 diff: investigare PRIMA di ogni altra cosa.
+- **Full-suite single-site: 1 SOLO diff per nome — IL MINIMO TEORICO**
+  (`wp16-harness/full-out/run16/`, 30.481 test 0E/2F/86W/73S, wall ~22:17,
+  CPU master 16:45 ≈ run15): resta ESCLUSIVAMENTE `wp_is_stream #2`
+  (stream_get_wrappers onesto — divergenza DECISA); `wpIsIniValueChangeable
+  #4` CHIUSO da ext/tidy (il dataset ora esiste anche su phpr e passa).
 - **Full-suite multisite: 2 diff per nome** (`wp19-harness/ms-out/`, baseline
   WP-19; non rilanciata in WP-22/23 — da riconfermare quando comodo: con
   tidy anche qui l'atteso scende a 1).
@@ -45,9 +44,10 @@ nohup perl -e 'use POSIX qw(setsid); fork and exit 0; setsid(); exec { $ARGV[0] 
 ```
 
 ## Prossimo passo: SESSIONE WP-24
-1. **Leggere run16** (vedi sopra) e aggiornare la baseline dichiarata.
-2. **CPU residua strutturale** (full-suite CPU master vs oracle 8:50 — run16
-   dirà il numero aggiornato; opt (a)/(c) WP-23 = neutre sul proxy media):
+1. **Multisite**: rilanciare la run multisite (attesa 2→1 diff con tidy) e
+   aggiornare la baseline ms-out.
+2. **CPU residua strutturale** (full-suite CPU master 16:45 vs oracle 8:50;
+   opt (a)/(c) WP-23 = neutre sul proxy media):
    dal profilo, in ordine: run_loop leaf ~2600 (dispatch) · memmove ~600
    (concat/enter_callee) · Zval drop/clone ~500 · gc note/sweep ~500 ·
    dispatch_instance_call ~200 · identical ~180 · bind_params ~150.
@@ -104,8 +104,8 @@ nohup perl -e 'use POSIX qw(setsid); fork and exit 0; setsid(); exec { $ARGV[0] 
   comment 582 · xmlrpc 316 · sitemaps 132 · classi WP-17/18). Script:
   `wp22-harness/gate22.sh` (output in wp22-harness/gate-out; il gate-out
   di WP-22 è in gate-out-wp22-archived).
-- Full-suite single-site: solo miglioramenti per nome vs **run16** (da
-  leggere; attesa 1 diff).
+- Full-suite single-site: solo miglioramenti per nome vs **run16 (1 diff:
+  wp_is_stream #2)** — il minimo teorico finché la divergenza resta DECISA.
 - Full-suite multisite: solo miglioramenti per nome vs **ms-out (2 diff)**.
 - Commit AND push a ogni step; run pesanti SEQUENZIALI e DETACHED sotto
   watchdog/telemetria; Serena per Rust (se in timeout: perl -ne via Bash,
