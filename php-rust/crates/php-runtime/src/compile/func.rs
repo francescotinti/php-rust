@@ -156,7 +156,7 @@ pub(super) fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
         doc: fd.doc.clone(),
         ops: vec![Op::Fatal(0)],
         lines: vec![fd.line],
-        consts: vec![Const::Str(msg.into_bytes().into())],
+        consts: vec![Const::Str(php_types::PhpStr::new(msg.into_bytes()))],
         static_vars: Vec::new(),
         slot_names: fd.slots.to_vec().into_boxed_slice(),
         n_slots: fd.slots.len() as u32,
@@ -245,7 +245,7 @@ pub(super) fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, 
     for (name, expr) in items {
         c.emit(Op::This);
         c.expr(expr)?;
-        c.emit(Op::PropSet { name: name.clone() });
+        c.emit(Op::PropSet { name: name.clone().into() });
         c.emit(Op::Pop); // PropSet leaves the assigned value; discard it
     }
     let null = c.konst(Const::Null);
@@ -394,7 +394,7 @@ pub(super) fn const_stub(name: &[u8], err: &CompileError) -> Func {
         doc: None,
         ops: vec![Op::Fatal(0)],
         lines: vec![0],
-        consts: vec![Const::Str(msg.into_bytes().into())],
+        consts: vec![Const::Str(php_types::PhpStr::new(msg.into_bytes()))],
         static_vars: Vec::new(),
         n_slots: 0,
         n_params: 0,

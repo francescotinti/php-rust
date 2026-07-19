@@ -872,7 +872,7 @@ impl<'m> super::Vm<'m> {
         let lc = class.strip_prefix(b"\\").unwrap_or(&class).to_ascii_lowercase();
         let key = match self.class_index.get(&lc).copied() {
             Some(c) => self.prop_decl_storage_key(c, &prop),
-            None => prop.clone(),
+            None => prop.clone().into(),
         };
         // Inspect the raw slot: `Undef` (never initialized) and a removed
         // entry (explicitly unset) both read as NOT initialized — silently
@@ -895,7 +895,7 @@ impl<'m> super::Vm<'m> {
         let cid = self.class_index.get(&lc).copied();
         let key = match cid {
             Some(c) => self.prop_decl_storage_key(c, &prop),
-            None => prop.clone(),
+            None => prop.clone().into(),
         };
         Ok(read_property(&obj, &key, &mut self.diags))
     }
@@ -915,7 +915,7 @@ impl<'m> super::Vm<'m> {
         let cid = self.class_index.get(&lc).copied();
         let key = match cid {
             Some(c) => self.prop_decl_storage_key(c, &prop),
-            None => prop.clone(),
+            None => prop.clone().into(),
         };
         // A setValue on a still-uninitialized lazy wrapper whose target property
         // has already been dropped from the lazy set (skipLazyInitialization) must
@@ -940,7 +940,7 @@ impl<'m> super::Vm<'m> {
                     && !self
                         .lazy_props
                         .get(&b.id)
-                        .is_some_and(|set| set.iter().any(|n| n.as_ref() == key.as_slice()))
+                        .is_some_and(|set| set.iter().any(|n| n.as_ref() == &key[..]))
             })
         };
         if skip_materialized {

@@ -413,6 +413,7 @@ pub(super) fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> C
         uses_traits: cd.uses_traits.clone(),
         uninit_props,
         ok,
+        has_prop_hooks: prop_info.values().any(|pi| pi.hooks.is_some()),
         prop_info,
     }
 }
@@ -526,5 +527,6 @@ pub(super) fn stub_class(cd: &crate::hir::ClassDecl) -> CompiledClass {
         uninit_props: Vec::new(),
         ok: false,
         prop_info: Default::default(),
+        has_prop_hooks: false,
     }
 }

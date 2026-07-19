@@ -106,8 +106,10 @@ pub enum Const {
     Bool(bool),
     Int(i64),
     Float(f64),
-    /// A byte string (PHP strings are byte strings, not UTF-8).
-    Str(Box<[u8]>),
+    /// A byte string (PHP strings are byte strings, not UTF-8). Stored as a
+    /// prebuilt shared `ZStr` so `to_zval` (Op::PushConst — the hottest
+    /// materialization) is a refcount bump instead of a byte copy.
+    Str(php_types::ZStr),
 }
 
 impl Const {
@@ -120,7 +122,7 @@ impl Const {
             Const::Bool(b) => Zval::Bool(*b),
             Const::Int(i) => Zval::Long(*i),
             Const::Float(f) => Zval::Double(*f),
-            Const::Str(b) => Zval::Str(PhpStr::new(b.clone())),
+            Const::Str(b) => Zval::Str(Rc::clone(b)),
         }
     }
 }
@@ -285,7 +287,7 @@ pub enum Op {
     /// With no steps this is the stepped generalisation of [`Op::PushRef`] over a
     /// `FieldBase`. The reference *source* of `$x = &$a[0]` and the value returned
     /// by `return $place;` in a `function &f()`.
-    MakeRef { base: FieldBase, steps: Box<[FieldStep]> },
+    MakeRef { base: FieldBase, steps: Rc<[FieldStep]> },
     /// `[keys…] -> [argplace]` — SEND_VAR_EX for a *place* argument (Zend's
     /// FETCH_DIM/OBJ_FUNC_ARG). Pop one key per `Index` step (pushed in source
     /// order) and push a [`Zval::ArgPlace`] descriptor deferring the fetch of
@@ -295,7 +297,7 @@ pub enum Op {
     /// root variable's bare name, for the R-branch's "Undefined variable"
     /// warning. Emitted only in argument position of a dynamic call — every
     /// dispatch funnel materializes it before use.
-    PushArgPlace { base: FieldBase, steps: Box<[FieldStep]>, name: u32 },
+    PushArgPlace { base: FieldBase, steps: Rc<[FieldStep]>, name: u32 },
     /// `[keys…, ref] -> [v]` — REF-4. Pop a reference value, then bind the place
     /// (base + `Index` steps, keys beneath the ref in source order) to its shared
     /// cell: a step-less base is overwritten directly, a stepped leaf is written
@@ -304,13 +306,13 @@ pub enum Op {
     /// non-reference top-of-stack is wrapped in a fresh cell (the `$y = &f()`
     /// path where `f` is not by-reference). Pushes the aliased value as the
     /// assignment expression's result.
-    BindRefTo { base: FieldBase, steps: Box<[FieldStep]> },
+    BindRefTo { base: FieldBase, steps: Rc<[FieldStep]> },
     /// `[keys… ref] -> [value]` — like [`Op::BindRefTo`] but for `$t = &m()` where
     /// the by-reference-ness of the callee is only known at run time (a method /
     /// static call): when the source is **not** a [`Zval::Ref`] it raises the
     /// "Only variables should be assigned by reference" notice before copying. The
     /// free-function path emits that notice at compile time instead.
-    BindRefToChecked { base: FieldBase, steps: Box<[FieldStep]> },
+    BindRefToChecked { base: FieldBase, steps: Rc<[FieldStep]> },
     /// `[v] -> [v']` — if the top is a [`Zval::Ref`], replace it with a clone of
     /// its referent; otherwise leave it untouched (REF-4b). Emitted after a call
     /// to a `function &f()` used in a *value* context, so the reference it returns
@@ -322,10 +324,10 @@ pub enum Op {
     /// `Capture` is read in the *current* frame at this point: `use($x)` snapshots
     /// the value, `use(&$x)` shares the cell as a `Zval::Ref`. `bind_this` captures
     /// the current `$this` (a non-static closure in a method).
-    MakeClosure { fn_idx: u32, captures: Box<[Capture]>, bind_this: bool },
+    MakeClosure { fn_idx: u32, captures: Rc<[Capture]>, bind_this: bool },
     /// `[] -> [closure]` — a first-class callable `name(...)` (CLO-2): a closure
     /// value wrapping the function *name* (dispatched like a string callable).
-    MakeFcc { name: Box<[u8]> },
+    MakeFcc { name: Rc<[u8]> },
     /// `[callee, args…] -> [result]` — a dynamic call `$f(...)` (CLO). Pop `argc`
     /// arguments (source order) and the callee beneath them, then dispatch on the
     /// callee value: an anonymous closure runs `closures[fn_idx]` (binding captures
@@ -338,7 +340,7 @@ pub enum Op {
     /// `fallback` — exactly PHP's two-step lookup, so a function defined in another
     /// unit (autoloaded / included) still binds. When neither is defined the
     /// catchable "Call to undefined function `name`()" reports the namespaced name.
-    CallNsFallback { name: Box<[u8]>, fallback: Box<[u8]>, argc: u32 },
+    CallNsFallback { name: Rc<[u8]>, fallback: Rc<[u8]>, argc: u32 },
     /// `[callee, argsArray] -> [result]` — a dynamic call with argument unpacking
     /// `$f(...$a)` (CLO). Pop the runtime argument array (its values become the
     /// positional arguments, in order) and the callee beneath it, then dispatch
@@ -348,7 +350,7 @@ pub enum Op {
     /// `[argsArray] -> [ret]` — like [`Op::CallNsFallback`] but the arguments
     /// are the values of a runtime array (spread on a not-yet-loaded function
     /// inside a namespace: ParameterBag's `trigger_deprecation(...$dep)`).
-    CallNsFallbackArgs { name: Box<[u8]>, fallback: Box<[u8]> },
+    CallNsFallbackArgs { name: Rc<[u8]>, fallback: Rc<[u8]> },
 
     // ----- exceptions (EXC) -----
     /// `[exc] -> ` (diverges) — pop the operand and unwind with
@@ -365,7 +367,7 @@ pub enum Op {
     /// next `CatchMatch` / `Rethrow`. `names` carries any caught class *not* known
     /// at compile time (declared later by `eval`/`include`), resolved by name
     /// against the live class table at run time (step 57, Phase 2).
-    CatchMatch { types: Box<[ClassId]>, names: Box<[Box<[u8]>]>, var: Option<Slot>, body: Addr },
+    CatchMatch { types: Rc<[ClassId]>, names: Rc<[Box<[u8]>]>, var: Option<Slot>, body: Addr },
     /// `[] -> []` — the end of a `finally` block (EXC-2). Resolves the finally's
     /// pending action, in order: (1) a parked exception → re-raise it (resume
     /// unwinding to an outer handler); (2) a parked `return` → push its value and
@@ -522,7 +524,7 @@ pub enum Op {
     /// against a `Ctx { out, diags }` borrowed from the VM. Builtins that need the
     /// evaluator (higher-order, class-introspection, `define`/`defined`/`constant`)
     /// are *not* emitted — the compiler rejects them so the VM never sees them.
-    CallBuiltin { name: Box<[u8]>, argc: u32 },
+    CallBuiltin { name: Rc<[u8]>, argc: u32 },
     /// `f(comp…)` into a by-value builtin where at least one component is a spread
     /// `...$src` (step 56b): one value per leading component is on the stack;
     /// `spreads[i]` marks a spread source (expanded via `spread_pairs`) vs a plain
@@ -531,20 +533,20 @@ pub enum Op {
     /// "Cannot use positional argument after named argument during unpacking";
     /// a leftover named argument errors (builtins take no named args) — then runs
     /// the builtin exactly like [`Op::CallBuiltin`].
-    CallBuiltinSpread { name: Box<[u8]>, spreads: Box<[bool]> },
+    CallBuiltinSpread { name: Rc<[u8]>, spreads: Rc<[bool]> },
     /// `[arg0, …, arg{argc-1}] -> [result]` — call an *evaluator-only* host builtin
     /// (Session B/C/D) that needs the VM itself: a higher-order builtin that invokes
     /// a user callable (`call_user_func`, `array_map`, …), class introspection, or
     /// the `define` family. Dispatched by [`crate::vm`]'s `dispatch_host_builtin`
     /// (which can run a nested `run_loop` via `call_callable`), not the stateless
     /// registry. `name` is the canonical lowercased builtin name.
-    CallHostBuiltin { name: Box<[u8]>, argc: u32 },
+    CallHostBuiltin { name: Rc<[u8]>, argc: u32 },
     /// `[rest0, …, rest{argc-1}] -> [result]` — call a by-reference-first *host*
     /// builtin (`usort`, `array_walk`, Session C): like [`Self::CallHostBuiltin`]
     /// but its first argument is the array variable in `slot`, read and written
     /// back in place (the callback may run a nested `run_loop`); `argc` is the
     /// count of the remaining by-value arguments on the stack.
-    CallHostBuiltinRef { name: Box<[u8]>, slot: Slot, argc: u32 },
+    CallHostBuiltinRef { name: Rc<[u8]>, slot: Slot, argc: u32 },
     /// `[arg0, …, arg{argc-1}] -> [result]` — call a host builtin with a
     /// by-reference **output** parameter at `out_index` (`preg_match`/
     /// `preg_match_all`'s `&$matches`). All `argc` arguments are pushed by value
@@ -558,7 +560,7 @@ pub enum Op {
     /// index (`u32::MAX` when there is none) and `out_slot2` to its target; the
     /// builtin then returns `(result, out_value, Some(out_value2))`.
     CallHostBuiltinOut {
-        name: Box<[u8]>,
+        name: Rc<[u8]>,
         out_slot: Option<Slot>,
         out_index: u32,
         out_slot2: Option<Slot>,
@@ -573,33 +575,33 @@ pub enum Op {
     /// `None` for a non-variable target, which is silently skipped, D-54.1). With no
     /// out slots the builtin returns the parsed array; otherwise it assigns each slot
     /// and returns the successful-conversion count (`fscanf` returns `false` at EOF).
-    CallHostBuiltinScanf { name: Box<[u8]>, argc: u32, out_slots: Box<[Option<Slot>]> },
+    CallHostBuiltinScanf { name: Rc<[u8]>, argc: u32, out_slots: Rc<[Option<Slot>]> },
     /// `[arg0, …, arg{argc-1}] -> [result]` — `array_multisort`, whose arguments
     /// are **all by-reference** (arrays sorted in place, interleaved with by-value
     /// sort-order/flag ints). Every argument is pushed by value; `arg_slots[i]` is
     /// the writeback slot for a plain-variable array argument (`None` for a literal
     /// or non-variable), and the VM stores each sorted array back into its slot.
-    CallArrayMultisort { arg_slots: Box<[Option<Slot>]>, argc: u32 },
+    CallArrayMultisort { arg_slots: Rc<[Option<Slot>]>, argc: u32 },
     /// `[] -> [value]` — read a *user-defined* constant `name` (from `define()`),
     /// resolved at run time from the VM's constant table (B3). Engine constants
     /// (`PHP_INT_MAX`, …) are folded at lowering and never reach here; an unknown
     /// name is the catchable `Error` "Undefined constant \"name\"".
-    ConstFetch { name: Box<[u8]>, fallback: Option<Box<[u8]>> },
+    ConstFetch { name: Rc<[u8]>, fallback: Option<Rc<[u8]>> },
     /// `[value] -> []` — declare a user constant `name` (a top-level / namespaced
     /// `const NAME = value`), step 51. Pops the value and registers it in the VM's
     /// constant table; redefining an existing constant warns and keeps the first
     /// value, exactly like `define()`.
-    DefineConst { name: Box<[u8]> },
+    DefineConst { name: Rc<[u8]> },
     /// `[rest0, …, rest{argc-1}] -> [result]` — call a by-reference-first builtin
     /// (`sort`, `array_push`, …): its first argument is the variable in `slot`,
     /// handed to the builtin as `&mut Zval` (write-through), and `argc` is the
     /// count of the remaining by-value arguments on the stack.
-    CallBuiltinRef { name: Box<[u8]>, slot: Slot, argc: u32 },
+    CallBuiltinRef { name: Rc<[u8]>, slot: Slot, argc: u32 },
     /// `[comp0, …, compN] -> [result]` — [`Op::CallBuiltinRef`] whose by-value
     /// *rest* arguments include a spread (`array_push($a, ...$b)`): one stack value
     /// per component, `spreads[i]` marking spread *sources* to flatten at run time
     /// (mirrors [`Op::CallBuiltinSpread`]). The by-ref first argument stays `slot`.
-    CallBuiltinRefSpread { name: Box<[u8]>, slot: Slot, spreads: Box<[bool]> },
+    CallBuiltinRefSpread { name: Rc<[u8]>, slot: Slot, spreads: Rc<[bool]> },
     /// `[ref, rest0, …, rest{argc-1}] -> [result]` — call a by-reference-first
     /// builtin whose first argument is a non-variable place (`array_pop($this->q)`,
     /// `sort($data['list'])`). The by-ref target is a [`Zval::Ref`] cell produced by
@@ -607,7 +609,7 @@ pub enum Op {
     /// builtin mutates the cell in place (write-through to the property / element).
     /// Registry `RefFirst` builtins only — host by-ref builtins (callback-driven)
     /// keep the slot/temp paths.
-    CallBuiltinRefCell { name: Box<[u8]>, argc: u32 },
+    CallBuiltinRefCell { name: Rc<[u8]>, argc: u32 },
     /// `[v] -> ` (frame ends) — pop the return value and unwind the current
     /// frame to the caller, which receives it on *its* operand stack. A function
     /// body with no explicit `return` ends with `PushConst(null); Ret`.
@@ -678,25 +680,25 @@ pub enum Op {
     Include { mode: IncludeMode },
     /// `[obj] -> [value]` — read property `name` (deref-clone); a missing property
     /// (or a non-object receiver) warns and yields NULL, matching the tree-walker.
-    PropGet { name: Box<[u8]> },
+    PropGet { name: Rc<[u8]> },
     /// `[obj, value] -> [value]` — write `value` into property `name` (created if
     /// absent), in place through the shared object cell. Leaves the assigned value.
-    PropSet { name: Box<[u8]> },
+    PropSet { name: Rc<[u8]> },
     /// `[obj, rhs] -> [result]` — compound `$o->p op= rhs`: read the property
     /// (NULL if absent), apply `op`, store and leave the result.
-    PropOpSet { name: Box<[u8]>, op: BinOp },
+    PropOpSet { name: Rc<[u8]>, op: BinOp },
     /// `[obj] -> [result]` — `++`/`--` on property `name`; `pre` selects new vs old
     /// value, semantics delegated to `php_types`.
-    PropIncDec { name: Box<[u8]>, inc: bool, pre: bool },
+    PropIncDec { name: Rc<[u8]>, inc: bool, pre: bool },
     /// `[obj] -> [bool]` — `isset($o->p)`: true iff the property exists and is not
     /// null (silent, no warning).
-    PropIsset { name: Box<[u8]> },
+    PropIsset { name: Rc<[u8]> },
     /// `[obj] -> [bool]` — the fetch gate of `$o->p ?? d` / `$o->p ??= d`
     /// (zend read_property BP_VAR_IS): like [`Op::PropIsset`], EXCEPT that a
     /// class defining `__get` without `__isset` answers `true` for a missing
     /// property — the following `PropGet(Silent)` then routes to `__get`
     /// (oracle-pinned; `isset()`/`empty()` do NOT take this fallback).
-    PropIssetFetchGate { name: Box<[u8]> },
+    PropIssetFetchGate { name: Rc<[u8]> },
     /// `[obj, name] -> [bool]` — `isset($o->{expr})` / `isset($o->$k)`: the
     /// dynamic-name twin of [`Op::PropIsset`] (same hook/`__isset` dispatch).
     PropIssetDyn,
@@ -721,7 +723,7 @@ pub enum Op {
     /// a missing property yields NULL with no "Undefined property" warning and no
     /// visibility error (the read context of `empty()` / `??`). A `__get` accessor
     /// still runs when present.
-    PropGetSilent { name: Box<[u8]> },
+    PropGetSilent { name: Rc<[u8]> },
     /// `[obj, name] -> [value]` — dynamic property read `$o->$n` / `$o->{expr}`:
     /// the property name is popped from the stack (coerced to a string) and read
     /// exactly like [`Op::PropGet`] (warns + NULL if missing; hooks/`__get` apply),
@@ -736,17 +738,17 @@ pub enum Op {
     /// ("Unhandled match case <repr>"). Like [`Op::Fatal`] but value-aware.
     MatchError(Slot),
     /// `[obj] -> []` — `unset($o->p)`: remove the property (no-op if absent).
-    PropUnset { name: Box<[u8]> },
+    PropUnset { name: Rc<[u8]> },
     /// `[obj, arg0, …, arg{argc-1}] -> [result]` — instance method call resolved
     /// at *run time* by walking the receiver's class `parent` chain
     /// (case-insensitive). The callee runs in a pushed frame with `$this` bound to
     /// the receiver; a missing method is a fatal (magic `__call` is OOP-3).
-    MethodCall { method: Box<[u8]>, argc: u32 },
+    MethodCall { method: Rc<[u8]>, argc: u32 },
     /// `[obj, argsArray] -> [ret]` — like [`Op::MethodCall`] but the arguments are
     /// the values of a runtime array (spread call `$obj->m(...$a)`, Session A):
     /// string keys are dropped, values bound positionally. Resolves the method at
     /// run time exactly as [`Op::MethodCall`] (including `Generator`/`Fiber`).
-    MethodCallArgs { method: Box<[u8]> },
+    MethodCallArgs { method: Rc<[u8]> },
     /// `[obj, arg0, …, arg{argc-1}, name] -> [ret]` — dynamic instance method call
     /// `$obj->$m(args)` / `$obj->{expr}(args)`: the method-name string is popped
     /// from the top of the stack, then dispatched exactly like [`Op::MethodCall`]
@@ -764,7 +766,7 @@ pub enum Op {
     /// with gaps left for the default prologue and a trailing `...$rest` collecting
     /// unmatched names (string keys). Mirrors the evaluator's named-binding errors
     /// (`ArgumentCountError`, unknown / overwriting name).
-    MethodCallNamed { method: Box<[u8]>, positional: u32, names: Box<[Box<[u8]>]> },
+    MethodCallNamed { method: Rc<[u8]>, positional: u32, names: Rc<[Box<[u8]>]> },
     /// `[pos…, named…] -> [ret]` — call known user function `func` with named
     /// arguments bound at run time against the callee's `param_names` (the runtime
     /// binder, not the compile-time layout). Used when the compile-time layout
@@ -772,7 +774,7 @@ pub enum Op {
     /// colliding name (both catchable `Error`s in PHP, not compile errors), or a
     /// name routed into `...$rest`. `positional` values are pushed first, then one
     /// value per `names` entry (label order).
-    CallNamed { func: u32, positional: u32, names: Box<[Box<[u8]>]> },
+    CallNamed { func: u32, positional: u32, names: Rc<[Box<[u8]>]> },
     /// `[comp…, named…] -> [ret]` — call known user function `func` whose argument
     /// list contains a spread (`...$src`). Each leading component pushes one value:
     /// a positional value, or (where `spreads[i]`) a spread *source* expanded at
@@ -781,7 +783,7 @@ pub enum Op {
     /// one per `names` entry. The binder enforces PHP's ordering (no positional
     /// after a named, the "during unpacking" error) and a non-iterable spread is a
     /// `TypeError`.
-    CallSpread { func: u32, spreads: Box<[bool]>, names: Box<[Box<[u8]>]> },
+    CallSpread { func: u32, spreads: Rc<[bool]>, names: Rc<[Box<[u8]>]> },
     /// `[obj, arg0, …, arg{argc-1}] -> [ret]` — like [`Op::MethodCall`] but the
     /// target method is resolved at *compile* time (`classes[class].methods[idx]`):
     /// used for the constructor, whose defining class and slot are known statically.
@@ -811,7 +813,7 @@ pub enum Op {
     /// defining class is the resolver's, its LSB class is the caller's when
     /// `forwarding` (self/parent/static) else the start class, and `$this` is
     /// propagated per PHP's forwarding rules.
-    StaticCall { target: ClassTarget, method: Box<[u8]>, forwarding: bool, argc: u32 },
+    StaticCall { target: ClassTarget, method: Rc<[u8]>, forwarding: bool, argc: u32 },
     /// `[arg0, …] -> [ret]` — PHP 8.4 parent property-hook call
     /// `parent::$prop::get()` / `parent::$prop::set($v)` (`self`/`static`/named
     /// classes resolve the same way). Dispatches the `get`/`set` hook of `prop`
@@ -820,26 +822,26 @@ pub enum Op {
     /// directly (validating the argument count). `set`'s single argument is the new
     /// value; a user hook's body return is discarded (the call yields the written
     /// value for the implicit set, otherwise NULL).
-    HookCall { target: ClassTarget, prop: Box<[u8]>, set: bool, argc: u32 },
+    HookCall { target: ClassTarget, prop: Rc<[u8]>, set: bool, argc: u32 },
     /// `[args…] -> [ret]` — a built-in static on the `Closure` class:
     /// `Closure::bind($c, $newThis)` or `Closure::fromCallable($callable)`. The
     /// `Closure` "class" has no compiled entry, so these are dispatched natively
     /// rather than through normal static-method resolution (step 19-6).
-    ClosureStatic { method: Box<[u8]>, argc: u32 },
+    ClosureStatic { method: Rc<[u8]>, argc: u32 },
     /// `[argsArray] -> [ret]` — like [`Op::StaticCall`] but the arguments are the
     /// values of a runtime array (spread call `C::m(...$a)`, Session A): string
     /// keys dropped, values bound positionally.
-    StaticCallArgs { target: ClassTarget, method: Box<[u8]>, forwarding: bool },
+    StaticCallArgs { target: ClassTarget, method: Rc<[u8]>, forwarding: bool },
     /// `[classRef, arg0, …, arg{argc-1}] -> [ret]` — `$cls::m()` (PAR, dynamic
     /// class): the class reference sits beneath the arguments; it is resolved at
     /// run time (name string with leading `\` stripped, or an object's class) and
     /// the call dispatched non-forwarding (LSB = the resolved class), like a
     /// named static call. An unknown class is a catchable `Error`.
-    StaticCallDynamic { method: Box<[u8]>, argc: u32 },
+    StaticCallDynamic { method: Rc<[u8]>, argc: u32 },
     /// `[classRef, argsArray] -> [ret]` — like [`Op::StaticCallDynamic`] but the
     /// arguments are the values of a runtime array (spread call `$cls::m(...$a)`,
     /// Session A): the class reference sits beneath the array.
-    StaticCallDynamicArgs { method: Box<[u8]> },
+    StaticCallDynamicArgs { method: Rc<[u8]> },
     /// `[classRef, arg0, …, arg{argc-1}, method] -> [ret]` — `$cls::$m()` /
     /// `Class::$m()` (step 51): both the class reference (beneath the arguments) and
     /// the method name (on top) are runtime values. Pop the name, then the args, then
@@ -876,13 +878,13 @@ pub enum Op {
     /// `[] -> [value]` — `static::CONST`: like [`Op::ClassConst`] but the constant
     /// is resolved at run time from the frame's LSB class (walking parents and
     /// interfaces).
-    ClassConstDyn { name: Box<[u8]> },
+    ClassConstDyn { name: Rc<[u8]> },
     /// `[classRef] -> [value]` — `$cls::CONST` / `$cls::class` (PAR, dynamic
     /// class): pop the class reference and read its constant at run time. For
     /// `::class`, an object yields its class name and a string is a `TypeError`
     /// (PHP 8). Otherwise the class is resolved (unknown → `Error`) and the
     /// constant looked up (absent → "Undefined constant" `Error`).
-    ClassConstFromValue { name: Box<[u8]> },
+    ClassConstFromValue { name: Rc<[u8]> },
     /// `[] -> [case]` — `E::Case` (Session A): push the interned singleton object
     /// for enum `class`'s `case`-th case (materialised on first use, with its
     /// read-only `name` — and, for a backed enum, `value` — property, then cached
@@ -938,51 +940,51 @@ pub enum Op {
     /// declaring class is resolved by walking the parent chain; the cell is
     /// lazily initialised (const default inline, non-const via its init thunk) and
     /// shared for the run. Visibility is enforced against the running frame's class.
-    StaticPropGet { target: ClassTarget, name: Box<[u8]> },
+    StaticPropGet { target: ClassTarget, name: Rc<[u8]> },
     /// `[value] -> [value]` — write `value` into `target::$name` (through the
     /// shared cell); leaves the assigned value.
-    StaticPropSet { target: ClassTarget, name: Box<[u8]> },
+    StaticPropSet { target: ClassTarget, name: Rc<[u8]> },
     /// `[] -> [ref]` — push the static property's own storage cell as a
     /// reference value (`$x = &Class::$sp`): writes through the binding then
     /// hit the live cell every other static-prop op reads.
-    StaticPropRef { target: ClassTarget, name: Box<[u8]> },
+    StaticPropRef { target: ClassTarget, name: Rc<[u8]> },
     /// `[rhs] -> [result]` — compound `target::$name op= rhs`.
-    StaticPropOpSet { target: ClassTarget, name: Box<[u8]>, op: BinOp },
+    StaticPropOpSet { target: ClassTarget, name: Rc<[u8]>, op: BinOp },
     /// `[] -> [result]` — `++`/`--` on `target::$name`.
-    StaticPropIncDec { target: ClassTarget, name: Box<[u8]>, inc: bool, pre: bool },
+    StaticPropIncDec { target: ClassTarget, name: Rc<[u8]>, inc: bool, pre: bool },
     /// `[classRef] -> [value]` — `$cls::$name` read (PAR, dynamic class): the
     /// class reference sits on top; it is resolved at run time, then the static
     /// property is read like [`Op::StaticPropGet`].
-    StaticPropGetDynamic { name: Box<[u8]> },
+    StaticPropGetDynamic { name: Rc<[u8]> },
     /// `[value, classRef] -> [value]` — `$cls::$name = value` (PAR): the class
     /// reference is on top, the value beneath. Resolved at run time, then written.
-    StaticPropSetDynamic { name: Box<[u8]> },
+    StaticPropSetDynamic { name: Rc<[u8]> },
     /// `[rhs, classRef] -> [result]` — `$cls::$name op= rhs` (PAR).
-    StaticPropOpSetDynamic { name: Box<[u8]>, op: BinOp },
+    StaticPropOpSetDynamic { name: Rc<[u8]>, op: BinOp },
     /// `[classRef] -> [result]` — `$cls::$name++` / `--` (PAR, dynamic class): the
     /// class reference is on top; resolved at run time, then the property is
     /// incremented/decremented like [`Op::StaticPropIncDec`] (`pre` selects new vs
     /// old value).
-    StaticPropIncDecDynamic { name: Box<[u8]>, inc: bool, pre: bool },
+    StaticPropIncDecDynamic { name: Rc<[u8]>, inc: bool, pre: bool },
 
     // ----- OOP-2c: mixed property/index write paths (`$o->a[$k]`, `$o->x->y`) -----
     /// `[keys…, value] -> [value]` — write `value` through `base` then `steps`
     /// (`Index` steps consume the pushed keys in source order). Objects navigate
     /// in place, arrays auto-vivify + copy-on-write (à la `write_into`).
-    FieldAssign { base: FieldBase, steps: Box<[FieldStep]> },
+    FieldAssign { base: FieldBase, steps: Rc<[FieldStep]> },
     /// `[keys…, rhs] -> [result]` — compound `place op= rhs`: read the place (NULL
     /// if absent), apply `op`, write back, leave the result.
-    FieldAssignOp { base: FieldBase, steps: Box<[FieldStep]>, op: BinOp },
+    FieldAssignOp { base: FieldBase, steps: Rc<[FieldStep]>, op: BinOp },
     /// `[keys…] -> [result]` — `++`/`--` on a mixed place (read, apply, write back).
-    FieldIncDec { base: FieldBase, steps: Box<[FieldStep]>, inc: bool, pre: bool },
+    FieldIncDec { base: FieldBase, steps: Rc<[FieldStep]>, inc: bool, pre: bool },
     /// `[keys…] -> [bool]` — `isset()` of a mixed place: true iff every level
     /// exists and the leaf is non-null (silent).
-    FieldIsset { base: FieldBase, steps: Box<[FieldStep]> },
+    FieldIsset { base: FieldBase, steps: Rc<[FieldStep]> },
     /// `[keys…] -> [bool]` — `empty()` of a mixed place: true iff the leaf is
     /// unreachable/null or falsy (silent, like `FieldIsset`).
-    FieldEmpty { base: FieldBase, steps: Box<[FieldStep]> },
+    FieldEmpty { base: FieldBase, steps: Rc<[FieldStep]> },
     /// `[keys…] -> []` — `unset()` of a mixed place's leaf (silent no-op if absent).
-    FieldUnset { base: FieldBase, steps: Box<[FieldStep]> },
+    FieldUnset { base: FieldBase, steps: Rc<[FieldStep]> },
 
     /// Raise a fatal `Error` carrying `consts[idx]` (a string) as its message.
     /// Used for *stub* function bodies: the always-present PHP prelude (exception
@@ -1427,6 +1429,10 @@ pub struct CompiledClass {
     /// `resolve_prop_decl` / `resolve_readonly_decl` / `resolve_prop_type` parent
     /// walks. (`own_prop_vis` is kept solely for ordered per-class enumeration.)
     pub prop_info: HashMap<Box<[u8]>, PropInfo>,
+    /// Whether ANY entry of `prop_info` carries hooks — the VM's property
+    /// fast paths skip the per-access hook lookups entirely when false
+    /// (the overwhelmingly common case).
+    pub has_prop_hooks: bool,
 }
 
 /// The compiled `get`/`set` hooks of one property (step 50). Each hook is a

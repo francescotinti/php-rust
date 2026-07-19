@@ -1668,7 +1668,7 @@ impl DomDoc {
                                         .map(|p| (p + 6, false))
                                 });
                             if let Some((mut k, is_public)) = kw_off {
-                                let mut read_quoted = |k: &mut usize| -> Option<Vec<u8>> {
+                                let read_quoted = |k: &mut usize| -> Option<Vec<u8>> {
                                     while after.get(*k).is_some_and(|b| b.is_ascii_whitespace()) {
                                         *k += 1;
                                     }

@@ -15,6 +15,7 @@
 //! `php_types::convert`, exactly as the tree-walker does — the VM only moves
 //! data and steers control flow.
 
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BinaryHeap};
 use std::rc::Rc;
@@ -3920,7 +3921,7 @@ impl<'m> Vm<'m> {
         check_prop_access(&self.classes, cur, ocid, name)?;
         let key = match resolve_prop_access(&self.classes, ocid, name, cur) {
             PropAccess::Slot(k) => k,
-            _ => name.to_vec(),
+            _ => name,
         };
         if let Zval::Object(o2) = &target {
             self.lazy_ordered_insert(o2, &key);
@@ -7715,7 +7716,7 @@ impl<'m> Vm<'m> {
     fn prop_read_sync(&mut self, top: usize, obj: Zval, name: &[u8]) -> Result<Zval, PhpError> {
         let cur = self.frames[top].class;
         let target = self.lazy_prop_access(obj, name, cur, Some(false), (MagicKind::Get, b"__get"))?;
-        let mut key = name.to_vec();
+        let mut key: Cow<[u8]> = Cow::Borrowed(name);
         if let Zval::Object(o) = &target {
             let (oid, cid) = {
                 let b = o.borrow();
@@ -7741,8 +7742,13 @@ impl<'m> Vm<'m> {
                 self.push_magic_prop(defc, midx, oid, MagicKind::Get, target.clone(), name, None, None, false);
                 return self.drive_to_return(baseline);
             }
-            check_prop_access(&self.classes, cur, o.borrow().class_id as usize, name)?;
-            key = self.prop_storage_key(o.borrow().class_id as usize, name, cur);
+            key = match resolve_prop_access(&self.classes, o.borrow().class_id as usize, name, cur) {
+                PropAccess::Slot(k) => Cow::Borrowed(k),
+                PropAccess::Dynamic => Cow::Borrowed(name),
+                PropAccess::Denied { decl, vis } => {
+                    return Err(prop_access_error(&self.classes, decl, name, vis))
+                }
+            };
             if let Some(err) = self.uninit_typed_read(o, &key, name) {
                 return Err(err);
             }
@@ -8045,10 +8051,13 @@ impl<'m> Vm<'m> {
     /// private once mangling is on. Per-instance state (props, readonly tracking)
     /// is keyed by this; visibility is enforced separately via
     /// [`resolve_prop_access`] / `check_prop_access`.
-    fn prop_storage_key(&self, ocid: ClassId, name: &[u8], scope: Option<ClassId>) -> Vec<u8> {
+    fn prop_storage_key<'n>(&self, ocid: ClassId, name: &'n [u8], scope: Option<ClassId>) -> Cow<'n, [u8]>
+    where
+        'm: 'n,
+    {
         match resolve_prop_access(&self.classes, ocid, name, scope) {
-            PropAccess::Slot(k) => k,
-            PropAccess::Dynamic | PropAccess::Denied { .. } => name.to_vec(),
+            PropAccess::Slot(k) => Cow::Borrowed(k),
+            PropAccess::Dynamic | PropAccess::Denied { .. } => Cow::Borrowed(name),
         }
     }
 
@@ -8056,8 +8065,13 @@ impl<'m> Vm<'m> {
     /// `ocid`, ignoring accessing scope/visibility — for a write that must target
     /// the declared slot regardless of scope (the property-init thunk). Falls back
     /// to the plain name for an undeclared property.
-    fn prop_decl_storage_key(&self, ocid: ClassId, name: &[u8]) -> Vec<u8> {
-        prop_info(&self.classes, ocid, name).map(|pi| pi.storage_key.to_vec()).unwrap_or_else(|| name.to_vec())
+    fn prop_decl_storage_key<'n>(&self, ocid: ClassId, name: &'n [u8]) -> Cow<'n, [u8]>
+    where
+        'm: 'n,
+    {
+        prop_info(&self.classes, ocid, name)
+            .map(|pi| Cow::Borrowed(&pi.storage_key[..]))
+            .unwrap_or(Cow::Borrowed(name))
     }
 
     /// Storage key host (Rust) code uses for a *base-declared* internal property
@@ -8890,6 +8904,12 @@ impl<'m> Vm<'m> {
         let Some(o) = deref_object(&target) else { return Ok(target) };
         let (uninit, init_proxy, oid, cid) = {
             let b = o.borrow();
+            // Fast path: a plain (never-lazy, non-proxy) object needs no
+            // initialization, no forwarding and no guard transfer — the access
+            // lands on `target` itself. This is every ordinary property access.
+            if b.lazy.is_none() && b.proxy_instance.is_none() {
+                return Ok(target);
+            }
             (
                 b.lazy.is_some() && b.proxy_instance.is_none(),
                 b.lazy.is_some() && b.proxy_instance.is_some(),
@@ -8922,7 +8942,7 @@ impl<'m> Vm<'m> {
                     let b = io.borrow();
                     let inst_cid = b.class_id as usize;
                     let (p, a) = match resolve_prop_access(&self.classes, inst_cid, name, scope) {
-                        PropAccess::Slot(k) => (b.props.contains(k.as_slice()), true),
+                        PropAccess::Slot(k) => (b.props.contains(k), true),
                         PropAccess::Dynamic => (b.props.contains(name), true),
                         PropAccess::Denied { .. } => (b.props.contains(name), false),
                     };
@@ -8944,7 +8964,7 @@ impl<'m> Vm<'m> {
         // re-dispatching (gh18038). The transferred key is released by the
         // same frame that releases the wrapper's.
         if let Some(fo) = deref_object(&fwd) {
-            if !Rc::ptr_eq(&o, &fo) {
+            if !Rc::ptr_eq(&o, &fo) && !self.magic_guard.is_empty() {
                 let old_key = (oid, magic.0, name.to_vec());
                 if self.magic_guard.contains(&old_key) {
                     let new_key = (fo.borrow().id, magic.0, name.to_vec());
@@ -8989,7 +9009,7 @@ impl<'m> Vm<'m> {
             // set holds *storage* keys (mangled privates); `name` is source-level.
             if let Some(set) = self.lazy_props.get(&oid) {
                 let key = self.prop_decl_storage_key(cid, name);
-                let still_lazy = set.iter().any(|n| n.as_ref() == key.as_slice());
+                let still_lazy = set.iter().any(|n| n.as_ref() == &key[..]);
                 if !still_lazy && self.is_lazy_eligible_prop(cid, name) {
                     return Ok(());
                 }
@@ -9004,7 +9024,7 @@ impl<'m> Vm<'m> {
     /// are exactly the entries of `prop_defaults`, keyed by *storage* key).
     fn is_lazy_eligible_prop(&self, cid: ClassId, name: &[u8]) -> bool {
         let key = self.prop_decl_storage_key(cid, name);
-        self.classes[cid].prop_defaults.iter().any(|(n, _)| n.as_ref() == key.as_slice())
+        self.classes[cid].prop_defaults.iter().any(|(n, _)| n.as_ref() == &key[..])
     }
 
     /// Return the interned singleton object for enum `class`'s `case`-th case,
@@ -9866,6 +9886,9 @@ impl<'m> Vm<'m> {
     /// most-derived hook is already in `cid`'s entry. The returned ref lives as long
     /// as the module.
     fn prop_hook(&self, cid: usize, name: &[u8], set: bool) -> Option<&'m Func> {
+        if !self.classes[cid].has_prop_hooks {
+            return None;
+        }
         let h = self.classes[cid].prop_info.get(name)?.hooks.as_ref()?;
         if set {
             h.set.as_ref()
@@ -9877,7 +9900,9 @@ impl<'m> Vm<'m> {
     /// Whether a property hook for `(oid, name)` is currently on the stack, so an
     /// access to that property must reach the backing store directly (step 50).
     fn hook_guarded(&self, oid: u32, name: &[u8]) -> bool {
-        self.magic_guard.contains(&(oid, MagicKind::Hook, name.to_vec()))
+        // The guard set is empty except while a hook/magic frame is live — skip
+        // the key allocation on the (hot) common path.
+        !self.magic_guard.is_empty() && self.magic_guard.contains(&(oid, MagicKind::Hook, name.to_vec()))
     }
 
     /// Whether `name` on `cid` is a *virtual* hooked property — it has hooks but
@@ -9886,6 +9911,9 @@ impl<'m> Vm<'m> {
     /// hook (a direct read throws "is write-only"), PHP 8.4. A *backed* hooked
     /// property instead reads/writes its backing store when a hook is absent.
     fn is_virtual_hooked(&self, cid: usize, name: &[u8]) -> bool {
+        if !self.classes[cid].has_prop_hooks {
+            return false;
+        }
         self.classes[cid]
             .prop_info
             .get(name)
@@ -11426,9 +11454,7 @@ fn relocate_func(func: &mut Func, remap: &[ClassId], static_base: usize) {
             | Op::ClassConst { class, .. }
             | Op::EnumCase { class, .. } => *class = remap[*class],
             Op::CatchMatch { types, .. } => {
-                for t in types.iter_mut() {
-                    *t = remap[*t];
-                }
+                *types = types.iter().map(|t| remap[*t]).collect();
             }
             Op::StaticCall { target, .. }
             | Op::HookCall { target, .. }

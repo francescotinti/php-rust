@@ -1,6 +1,8 @@
 //! The bounded VM dispatch loop (run_loop) — the hot Op match. Split from
 //! vm/mod.rs verbatim (structural move only; hot-path unchanged).
 
+use std::borrow::Cow;
+
 use super::*;
 
 /// A file op that a userland stream wrapper (`stream_wrapper_register`) can
@@ -167,7 +169,7 @@ impl<'m> super::Vm<'m> {
                         if let crate::bytecode::Const::Str(b) =
                             &self.frames[top].func.consts[name as usize]
                         {
-                            let msg = format!("Undefined variable ${}", String::from_utf8_lossy(b));
+                            let msg = format!("Undefined variable ${}", String::from_utf8_lossy(b.as_bytes()));
                             self.diags.push(Diag::Warning(msg));
                         }
                     }
@@ -1133,7 +1135,7 @@ impl<'m> super::Vm<'m> {
                         })
                         .collect();
                     let pname: Box<[u8]> = match &self.frames[top].func.consts[name as usize] {
-                        crate::bytecode::Const::Str(b) => b.clone(),
+                        crate::bytecode::Const::Str(b) => Box::from(b.as_bytes()),
                         _ => Box::default(),
                     };
                     self.frames[top].stack.push(Zval::ArgPlace(Rc::new(ArgPlace {
@@ -2619,7 +2621,7 @@ impl<'m> super::Vm<'m> {
                     let target = self.lazy_prop_access(target, &name, cur, Some(false), (MagicKind::Get, b"__get"))?;
                     // Storage slot to read (the plain name for a dynamic/non-object
                     // target; a mangled key for an accessible private — set below).
-                    let mut key = name.to_vec();
+                    let mut key: Cow<[u8]> = Cow::Borrowed(&name[..]);
                     if let Zval::Object(o) = &target {
                         // A `get` hook takes precedence over `__get` and direct read
                         // (step 50). Skip it while a hook for this property is active
@@ -2646,8 +2648,15 @@ impl<'m> super::Vm<'m> {
                             self.push_magic_prop(defc, midx, oid, MagicKind::Get, target.clone(), &name, None, None, false);
                             continue;
                         }
-                        check_prop_access(&self.classes, cur, o.borrow().class_id as usize, &name)?;
-                        key = self.prop_storage_key(o.borrow().class_id as usize, &name, cur);
+                        // Single resolution decides visibility AND the storage key
+                        // (was check_prop_access + prop_storage_key = two walks).
+                        key = match resolve_prop_access(&self.classes, o.borrow().class_id as usize, &name, cur) {
+                            PropAccess::Slot(k) => Cow::Borrowed(k),
+                            PropAccess::Dynamic => Cow::Borrowed(&name[..]),
+                            PropAccess::Denied { decl, vis } => {
+                                return Err(prop_access_error(&self.classes, decl, &name, vis))
+                            }
+                        };
                         if let Some(err) = self.uninit_typed_read(o, &key, &name) {
                             return Err(err);
                         }
@@ -2664,7 +2673,7 @@ impl<'m> super::Vm<'m> {
                     // (PHP 8.4, fetch_coalesce_initializes) — unless a hook/`__get`
                     // serves it; an initialized proxy forwards to its instance.
                     let target = self.lazy_prop_access(obj.deref_clone(), &name, cur, Some(false), (MagicKind::Get, b"__get"))?;
-                    let mut key = name.to_vec();
+                    let mut key: Cow<[u8]> = Cow::Borrowed(&name[..]);
                     if let Zval::Object(o) = &target {
                         if let Some((defc, midx, oid)) =
                             self.magic_applies(o, &name, cur, MagicKind::Get, b"__get")
@@ -2686,7 +2695,7 @@ impl<'m> super::Vm<'m> {
                     let obj = self.frames[top].stack.pop().expect("PropGetDynamic object");
                     let cur = self.frames[top].class;
                     let target = self.lazy_prop_access(obj.deref_clone(), &name, cur, Some(false), (MagicKind::Get, b"__get"))?;
-                    let mut key = name.to_vec();
+                    let mut key: Cow<[u8]> = Cow::Borrowed(&name[..]);
                     if let Zval::Object(o) = &target {
                         let (oid, cid) = { let b = o.borrow(); (b.id, b.class_id as usize) };
                         if !self.hook_guarded(oid, &name) {
@@ -2701,8 +2710,13 @@ impl<'m> super::Vm<'m> {
                             self.push_magic_prop(defc, midx, oid, MagicKind::Get, target.clone(), &name, None, None, false);
                             continue;
                         }
-                        check_prop_access(&self.classes, cur, o.borrow().class_id as usize, &name)?;
-                        key = self.prop_storage_key(o.borrow().class_id as usize, &name, cur);
+                        key = match resolve_prop_access(&self.classes, o.borrow().class_id as usize, &name, cur) {
+                            PropAccess::Slot(k) => Cow::Borrowed(k),
+                            PropAccess::Dynamic => Cow::Borrowed(&name[..]),
+                            PropAccess::Denied { decl, vis } => {
+                                return Err(prop_access_error(&self.classes, decl, &name, vis))
+                            }
+                        };
                         if let Some(err) = self.uninit_typed_read(o, &key, &name) {
                             return Err(err);
                         }
@@ -2717,7 +2731,7 @@ impl<'m> super::Vm<'m> {
                     let obj = self.frames[top].stack.pop().expect("PropGetDynamicSilent object");
                     let cur = self.frames[top].class;
                     let target = self.lazy_prop_access(obj.deref_clone(), &name, cur, Some(false), (MagicKind::Get, b"__get"))?;
-                    let mut key = name.to_vec();
+                    let mut key: Cow<[u8]> = Cow::Borrowed(&name[..]);
                     if let Zval::Object(o) = &target {
                         if let Some((defc, midx, oid)) =
                             self.magic_applies(o, &name, cur, MagicKind::Get, b"__get")
@@ -2752,7 +2766,7 @@ impl<'m> super::Vm<'m> {
                     if self.frames[top].init_props {
                         let key = match object_class_id(&target) {
                             Some(ocid) => self.prop_decl_storage_key(ocid, &name),
-                            None => name.to_vec(),
+                            None => Cow::Borrowed(&name[..]),
                         };
                         if let Some(old) = write_property(&target, &key, value.clone())? {
                             self.gc_note(&old);
@@ -2762,7 +2776,7 @@ impl<'m> super::Vm<'m> {
                     }
                     // Storage slot to write (plain name for a dynamic/non-object
                     // target; a mangled key for an accessible private — set below).
-                    let mut key = name.to_vec();
+                    let mut key: Cow<[u8]> = Cow::Borrowed(&name[..]);
                     if let Zval::Object(o) = &target {
                         // An enum case is immutable: every property is readonly and
                         // no dynamic property may be created (step 23).
@@ -2808,19 +2822,22 @@ impl<'m> super::Vm<'m> {
                             self.push_magic_prop(defc, midx, oid, MagicKind::Set, target.clone(), &name, Some(value), Some(discard), false);
                             continue;
                         }
-                        check_prop_access(&self.classes, cur, o.borrow().class_id as usize, &name)?;
                         let ocid = o.borrow().class_id as usize;
                         // Storage slot (mangled for an accessible private); per-instance
-                        // state (props, readonly tracking) is keyed by it. `Denied`
-                        // already errored above, so the write is either a declared
-                        // slot or a dynamic creation — readonly / typed enforcement
-                        // applies only to the former (a parent's private reached from
-                        // a child scope is a *dynamic* write, untyped and unguarded).
+                        // state (props, readonly tracking) is keyed by it. A single
+                        // resolution decides visibility (`Denied` errors here) and the
+                        // slot: the write is either a declared slot or a dynamic
+                        // creation — readonly / typed enforcement applies only to the
+                        // former (a parent's private reached from a child scope is a
+                        // *dynamic* write, untyped and unguarded).
                         let access = resolve_prop_access(&self.classes, ocid, &name, cur);
                         let declared_slot = matches!(access, PropAccess::Slot(_));
                         key = match access {
-                            PropAccess::Slot(k) => k,
-                            _ => name.to_vec(),
+                            PropAccess::Slot(k) => Cow::Borrowed(k),
+                            PropAccess::Denied { decl, vis } => {
+                                return Err(prop_access_error(&self.classes, decl, &name, vis))
+                            }
+                            PropAccess::Dynamic => Cow::Borrowed(&name[..]),
                         };
                         // Readonly write-once enforcement (after the visibility check,
                         // so a private/protected readonly reports the access error
@@ -2904,7 +2921,7 @@ impl<'m> super::Vm<'m> {
                             check_prop_access(&self.classes, cur, ocid, &name)?;
                             self.prop_storage_key(ocid, &name, cur)
                         }
-                        None => name.to_vec(),
+                        None => Cow::Borrowed(&name[..]),
                     };
                     if let Some(err) = self.readonly_rmw_error(&obj, &key, &name) {
                         return Err(err);
@@ -2947,7 +2964,7 @@ impl<'m> super::Vm<'m> {
                             check_prop_access(&self.classes, cur, ocid, &name)?;
                             self.prop_storage_key(ocid, &name, cur)
                         }
-                        None => name.to_vec(),
+                        None => Cow::Borrowed(&name[..]),
                     };
                     if let Some(err) = self.readonly_rmw_error(&obj, &key, &name) {
                         return Err(err);
@@ -3110,7 +3127,7 @@ impl<'m> super::Vm<'m> {
                     // unset_undefined_initializes) — unless `__unset`/a hook error
                     // serves it (hooked props fatal below without initializing).
                     let target = self.lazy_prop_access(obj.deref_clone(), &name, cur, None, (MagicKind::Unset, b"__unset"))?;
-                    let mut key = name.to_vec();
+                    let mut key: Cow<[u8]> = Cow::Borrowed(&name[..]);
                     if let Zval::Object(o) = &target {
                         // An enum case property is readonly — it cannot be unset.
                         if o.borrow().info.is_enum_case {
@@ -4244,14 +4261,14 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::Fatal(i) => {
                     let msg = match &self.frames[top].func.consts[i as usize] {
-                        crate::bytecode::Const::Str(b) => String::from_utf8_lossy(b).into_owned(),
+                        crate::bytecode::Const::Str(b) => String::from_utf8_lossy(b.as_bytes()).into_owned(),
                         _ => "VM: unsupported construct".to_string(),
                     };
                     return Err(PhpError::Error(msg));
                 }
                 Op::EmitNotice(i) => {
                     if let crate::bytecode::Const::Str(b) = &self.frames[top].func.consts[i as usize] {
-                        let msg = String::from_utf8_lossy(b).into_owned();
+                        let msg = String::from_utf8_lossy(b.as_bytes()).into_owned();
                         self.diags.push(Diag::Notice(msg));
                         // Flush at the emitting op's line — deferring to the next
                         // flush point would stamp a later statement's line on it.

@@ -241,7 +241,7 @@ fn const_eval(e: &Expr) -> Option<Const> {
         ExprKind::Bool(b) => Some(Const::Bool(*b)),
         ExprKind::Int(i) => Some(Const::Int(*i)),
         ExprKind::Float(f) => Some(Const::Float(*f)),
-        ExprKind::Str(s) => Some(Const::Str(s.clone())),
+        ExprKind::Str(s) => Some(Const::Str(php_types::PhpStr::new(s.clone()))),
         _ => None,
     }
 }
@@ -613,14 +613,14 @@ impl<'a> FnCompiler<'a> {
             StmtKind::ConstDecl(items) => {
                 for (name, value) in items {
                     self.expr(value)?;
-                    self.emit(Op::DefineConst { name: name.clone() });
+                    self.emit(Op::DefineConst { name: name.clone().into() });
                 }
             }
             StmtKind::InlineHtml(bytes) => {
                 // Raw text outside `<?php … ?>` (and the newline after a closing
                 // tag): emitted verbatim, like `eval`'s `emit(bytes)`. Reuses the
                 // string-constant + `Echo` path (a `Str` stringifies to itself).
-                let k = self.konst(Const::Str(bytes.clone()));
+                let k = self.konst(Const::Str(php_types::PhpStr::new(bytes.clone())));
                 self.emit(Op::PushConst(k));
                 self.emit(Op::Echo);
             }
@@ -820,9 +820,9 @@ impl<'a> FnCompiler<'a> {
                 // &f()` means the operand is a non-lvalue: PHP raises a notice and
                 // returns by value (D-13.4). The condition is known at compile time.
                 if self.returns_ref {
-                    let k = self.konst(Const::Str(
-                        b"Only variable references should be returned by reference"[..].into(),
-                    ));
+                    let k = self.konst(Const::Str(php_types::PhpStr::new(
+                        &b"Only variable references should be returned by reference"[..],
+                    )));
                     self.emit(Op::EmitNotice(k));
                 }
                 match opt {
@@ -884,7 +884,7 @@ impl<'a> FnCompiler<'a> {
                                 // At true global scope BindGlobalDyn is the
                                 // oracle-verified near-no-op (creates the
                                 // $GLOBALS entry, installs a self-alias).
-                                let k = self.konst(Const::Str(b.name.clone().into()));
+                                let k = self.konst(Const::Str(php_types::PhpStr::new(b.name.clone())));
                                 self.emit(Op::PushConst(k));
                                 self.emit(Op::BindGlobalDyn);
                             }
@@ -989,14 +989,13 @@ impl<'a> FnCompiler<'a> {
                 .iter()
                 .any(|&id| self.scope_opaque.get(id as usize).copied().unwrap_or(true));
             if enters_opaque {
-                let k = self.konst(Const::Str(
+                let k = self.konst(Const::Str(php_types::PhpStr::new(
                     format!(
                         "'goto' into a block is not supported (label '{}', D-45.1)",
                         String::from_utf8_lossy(&name)
                     )
-                    .into_bytes()
-                    .into(),
-                ));
+                    .into_bytes(),
+                )));
                 self.patch(site, Op::Fatal(k));
                 continue;
             }
@@ -1121,9 +1120,9 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::Dup); // [obj, obj]
                 // Fetch gate (BP_VAR_IS): `__get` without `__isset` serves the
                 // base (`WP_Block->attributes['k'] ?? d`).
-                self.emit(Op::PropIssetFetchGate { name: name.clone() }); // [obj, isset]
+                self.emit(Op::PropIssetFetchGate { name: name.clone().into() }); // [obj, isset]
                 let to_null = self.emit(Op::JumpIfFalse(Addr::MAX)); // unset → null; [obj]
-                self.emit(Op::PropGetSilent { name: name.clone() }); // [value]
+                self.emit(Op::PropGetSilent { name: name.clone().into() }); // [value]
                 let to_end = self.emit(Op::Jump(Addr::MAX));
                 let null_at = self.here();
                 self.patch(to_null, Op::JumpIfFalse(null_at));

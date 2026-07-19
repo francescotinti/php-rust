@@ -22,7 +22,7 @@ impl<'a> super::FnCompiler<'a> {
                 self.emit(Op::PushConst(k));
             }
             ExprKind::Str(s) => {
-                let k = self.konst(Const::Str(s.clone()));
+                let k = self.konst(Const::Str(php_types::PhpStr::new(s.clone())));
                 self.emit(Op::PushConst(k));
             }
             ExprKind::Const { name, fallback } => {
@@ -30,8 +30,8 @@ impl<'a> super::FnCompiler<'a> {
                 // it from the VM's constant table at run time (B3). `fallback` is
                 // the global name a namespaced unqualified constant falls back to.
                 self.emit(Op::ConstFetch {
-                    name: name.clone(),
-                    fallback: fallback.clone(),
+                    name: name.clone().into(),
+                    fallback: fallback.clone().map(Into::into),
                 });
             }
             ExprKind::Var(slot) => {
@@ -40,7 +40,7 @@ impl<'a> super::FnCompiler<'a> {
                 // (shouldn't happen for a source var) degrades to a silent load.
                 match self.slot_names.get(*slot as usize) {
                     Some(name) => {
-                        let k = self.konst(Const::Str(name.clone()));
+                        let k = self.konst(Const::Str(php_types::PhpStr::new(name.clone())));
                         self.emit(Op::LoadVar { slot: *slot, name: k });
                     }
                     None => {
@@ -270,12 +270,12 @@ impl<'a> super::FnCompiler<'a> {
                 let idx = (*fn_idx as i64 + self.closure_shift as i64) as u32;
                 self.emit(Op::MakeClosure {
                     fn_idx: idx,
-                    captures: captures.clone().into_boxed_slice(),
+                    captures: captures.clone().into_boxed_slice().into(),
                     bind_this: *bind_this,
                 });
             }
             ExprKind::FirstClassCallable(name) => {
-                self.emit(Op::MakeFcc { name: name.clone() });
+                self.emit(Op::MakeFcc { name: name.clone().into() });
             }
             ExprKind::Throw(e) => {
                 // PHP 8 `throw` is an expression that diverges; evaluate the
@@ -324,9 +324,9 @@ impl<'a> super::FnCompiler<'a> {
                         self.emit(Op::Dup); // [obj, obj]
                         // Fetch gate, not plain isset: `__get` without `__isset`
                         // must serve the value (BP_VAR_IS; WP_Block->attributes).
-                        self.emit(Op::PropIssetFetchGate { name: name.clone() }); // [obj, isset]
+                        self.emit(Op::PropIssetFetchGate { name: name.clone().into() }); // [obj, isset]
                         let to_default = self.emit(Op::JumpIfFalse(Addr::MAX)); // unset → default; [obj]
-                        self.emit(Op::PropGet { name: name.clone() }); // set → [value]
+                        self.emit(Op::PropGet { name: name.clone().into() }); // set → [value]
                         // A `__get` routed through the gate may still return
                         // null — `??` takes the default then (oracle-pinned).
                         let to_end = self.emit(Op::JumpIfNotNull(Addr::MAX));
@@ -425,7 +425,7 @@ impl<'a> super::FnCompiler<'a> {
                     let skip = self.emit(Op::JumpIfNull(Addr::MAX));
                     self.nullsafe_chain.as_mut().expect("chain open").push(skip);
                 }
-                self.emit(Op::PropGet { name: name.clone() });
+                self.emit(Op::PropGet { name: name.clone().into() });
                 self.chain_exit(root);
             }
             ExprKind::MethodCall { object, method, args, named, nullsafe } => {
@@ -503,18 +503,18 @@ impl<'a> super::FnCompiler<'a> {
                         // Named args ride the runtime args array (string keys =
                         // names); the dispatch binder resolves them (PHP 8.1).
                         self.build_args_array_named(args, named)?;
-                        self.emit(Op::StaticCallDynamicArgs { method: method.clone() });
+                        self.emit(Op::StaticCallDynamicArgs { method: method.clone().into() });
                     } else if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
                         // Spread `$cls::m(...$a)` (Session A): args from a runtime array.
                         self.build_args_array(args)?;
-                        self.emit(Op::StaticCallDynamicArgs { method: method.clone() });
+                        self.emit(Op::StaticCallDynamicArgs { method: method.clone().into() });
                     } else {
                         // The class (hence callee) is only known at run time
                         // (`$cls::m()`, an autoloaded class): push by reference for a
                         // plain-variable argument so a run-time by-ref parameter can
                         // bind (SEND_VAR_EX); the binder decays it for by-value.
                         self.push_dyn_args(args)?;
-                        self.emit(Op::StaticCallDynamic { method: method.clone(), argc: args.len() as u32 });
+                        self.emit(Op::StaticCallDynamic { method: method.clone().into(), argc: args.len() as u32 });
                     }
                 } else if matches!(class, ClassRef::Named(n) if n.eq_ignore_ascii_case(b"Closure")) {
                     // `Closure::bind` / `Closure::fromCallable` are built-in statics
@@ -527,14 +527,14 @@ impl<'a> super::FnCompiler<'a> {
                         ));
                     }
                     self.push_value_args(args)?;
-                    self.emit(Op::ClosureStatic { method: method.clone(), argc: args.len() as u32 });
+                    self.emit(Op::ClosureStatic { method: method.clone().into(), argc: args.len() as u32 });
                 } else {
                     let (target, forwarding) = self.resolve_target(class)?;
                     if named.is_empty() {
                         if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {
                             // Spread `C::m(...$a)` (Session A): args from a runtime array.
                             self.build_args_array(args)?;
-                            self.emit(Op::StaticCallArgs { target, method: method.clone(), forwarding });
+                            self.emit(Op::StaticCallArgs { target, method: method.clone().into(), forwarding });
                         } else {
                             let argc = args.len() as u32;
                             // For a statically-known class, honour the method's
@@ -574,7 +574,7 @@ impl<'a> super::FnCompiler<'a> {
                                 }
                                 None => self.push_dyn_args(args)?,
                             }
-                            self.emit(Op::StaticCall { target, method: method.clone(), forwarding, argc });
+                            self.emit(Op::StaticCall { target, method: method.clone().into(), forwarding, argc });
                         }
                     } else {
                         // Named args: lay them into the resolved method's parameter
@@ -601,7 +601,7 @@ impl<'a> super::FnCompiler<'a> {
                                 self.emit_named_layout(method_fd, args, named)?;
                                 self.emit(Op::StaticCall {
                                     target,
-                                    method: method.clone(),
+                                    method: method.clone().into(),
                                     forwarding,
                                     argc: n,
                                 });
@@ -610,7 +610,7 @@ impl<'a> super::FnCompiler<'a> {
                                 self.build_args_array_named(args, named)?;
                                 self.emit(Op::StaticCallArgs {
                                     target,
-                                    method: method.clone(),
+                                    method: method.clone().into(),
                                     forwarding,
                                 });
                             }
@@ -671,7 +671,7 @@ impl<'a> super::FnCompiler<'a> {
                 self.push_value_args(args)?;
                 self.emit(Op::HookCall {
                     target,
-                    prop: prop.clone(),
+                    prop: prop.clone().into(),
                     set: *set,
                     argc: args.len() as u32,
                 });
@@ -698,10 +698,10 @@ impl<'a> super::FnCompiler<'a> {
             ExprKind::StaticProp { class, name } => {
                 if self.is_runtime_class(class) {
                     self.push_class_value(class)?;
-                    self.emit(Op::StaticPropGetDynamic { name: name.clone() });
+                    self.emit(Op::StaticPropGetDynamic { name: name.clone().into() });
                 } else {
                     let (target, _) = self.resolve_target(class)?;
-                    self.emit(Op::StaticPropGet { target, name: name.clone() });
+                    self.emit(Op::StaticPropGet { target, name: name.clone().into() });
                 }
             }
             ExprKind::StaticPropAssign { class, name, op, rhs } => {
@@ -712,12 +712,12 @@ impl<'a> super::FnCompiler<'a> {
                         StaticAssignOp::Plain => {
                             self.expr(rhs)?;
                             self.push_class_value(class)?;
-                            self.emit(Op::StaticPropSetDynamic { name: name.clone() });
+                            self.emit(Op::StaticPropSetDynamic { name: name.clone().into() });
                         }
                         StaticAssignOp::Op(b) => {
                             self.expr(rhs)?;
                             self.push_class_value(class)?;
-                            self.emit(Op::StaticPropOpSetDynamic { name: name.clone(), op: *b });
+                            self.emit(Op::StaticPropOpSetDynamic { name: name.clone().into(), op: *b });
                         }
                         StaticAssignOp::Coalesce => {
                             // `$cls::$p ??= rhs`: the class reference is evaluated
@@ -728,11 +728,11 @@ impl<'a> super::FnCompiler<'a> {
                             self.push_class_value(class)?;
                             self.emit(Op::StoreSlot(t));
                             self.emit(Op::LoadSlot(t));
-                            self.emit(Op::StaticPropGetDynamic { name: name.clone() });
+                            self.emit(Op::StaticPropGetDynamic { name: name.clone().into() });
                             let to_end = self.emit(Op::JumpIfNotNull(Addr::MAX));
                             self.expr(rhs)?;
                             self.emit(Op::LoadSlot(t)); // class ref on top for the set
-                            self.emit(Op::StaticPropSetDynamic { name: name.clone() });
+                            self.emit(Op::StaticPropSetDynamic { name: name.clone().into() });
                             let end = self.here();
                             self.patch(to_end, Op::JumpIfNotNull(end));
                             self.free_temp();
@@ -744,18 +744,18 @@ impl<'a> super::FnCompiler<'a> {
                 match op {
                     StaticAssignOp::Plain => {
                         self.expr(rhs)?;
-                        self.emit(Op::StaticPropSet { target, name: name.clone() });
+                        self.emit(Op::StaticPropSet { target, name: name.clone().into() });
                     }
                     StaticAssignOp::Op(b) => {
                         self.expr(rhs)?;
-                        self.emit(Op::StaticPropOpSet { target, name: name.clone(), op: *b });
+                        self.emit(Op::StaticPropOpSet { target, name: name.clone().into(), op: *b });
                     }
                     StaticAssignOp::Coalesce => {
                         // `C::$p ??= rhs`: read, keep if non-null, else assign.
-                        self.emit(Op::StaticPropGet { target, name: name.clone() });
+                        self.emit(Op::StaticPropGet { target, name: name.clone().into() });
                         let to_end = self.emit(Op::JumpIfNotNull(Addr::MAX));
                         self.expr(rhs)?;
-                        self.emit(Op::StaticPropSet { target, name: name.clone() });
+                        self.emit(Op::StaticPropSet { target, name: name.clone().into() });
                         let end = self.here();
                         self.patch(to_end, Op::JumpIfNotNull(end));
                     }
@@ -765,10 +765,10 @@ impl<'a> super::FnCompiler<'a> {
                 if self.is_runtime_class(class) {
                     // `$cls::$p++` (PAR): the class reference is resolved at run time.
                     self.push_class_value(class)?;
-                    self.emit(Op::StaticPropIncDecDynamic { name: name.clone(), inc: *inc, pre: *pre });
+                    self.emit(Op::StaticPropIncDecDynamic { name: name.clone().into(), inc: *inc, pre: *pre });
                 } else {
                     let (target, _) = self.resolve_target(class)?;
-                    self.emit(Op::StaticPropIncDec { target, name: name.clone(), inc: *inc, pre: *pre });
+                    self.emit(Op::StaticPropIncDec { target, name: name.clone().into(), inc: *inc, pre: *pre });
                 }
             }
             ExprKind::Yield { key, value } => {
@@ -1051,7 +1051,7 @@ impl<'a> super::FnCompiler<'a> {
                 self.expr(a)?;
             }
             self.emit(Op::CallArrayMultisort {
-                arg_slots: slots.into_boxed_slice(),
+                arg_slots: slots.into_boxed_slice().into(),
                 argc: args.len() as u32,
             });
             return Ok(());
@@ -1105,7 +1105,7 @@ impl<'a> super::FnCompiler<'a> {
                         let slot = local_slot(place);
                         c.push_value_args(rest)?;
                         c.emit(Op::CallHostBuiltinRef {
-                            name: canon,
+                            name: canon.into(),
                             slot,
                             argc: rest.len() as u32,
                         });
@@ -1153,7 +1153,7 @@ impl<'a> super::FnCompiler<'a> {
                             self.emit(Op::Pop);
                             self.push_value_args(rest)?;
                             self.emit(Op::CallHostBuiltinRef {
-                                name: canon,
+                                name: canon.into(),
                                 slot: tmp,
                                 argc: rest.len() as u32,
                             });
@@ -1183,7 +1183,7 @@ impl<'a> super::FnCompiler<'a> {
                             self.emit(Op::Pop);
                             self.push_value_args(rest)?;
                             self.emit(Op::CallHostBuiltinRef {
-                                name: canon,
+                                name: canon.into(),
                                 slot: tmp,
                                 argc: rest.len() as u32,
                             });
@@ -1201,7 +1201,7 @@ impl<'a> super::FnCompiler<'a> {
                     self.emit(Op::BindRefTo { base: FieldBase::Local(tmp), steps: [].into() }); // slot:=ref; [value]
                     self.emit(Op::Pop); // drop the aliased value
                     self.push_value_args(rest)?;
-                    self.emit(Op::CallHostBuiltinRef { name: canon, slot: tmp, argc: rest.len() as u32 });
+                    self.emit(Op::CallHostBuiltinRef { name: canon.into(), slot: tmp, argc: rest.len() as u32 });
                     self.clear_temp_binding(tmp);
                     self.free_temp();
                     return Ok(());
@@ -1264,7 +1264,7 @@ impl<'a> super::FnCompiler<'a> {
                             fallback: fb.into(),
                         });
                     } else {
-                        let k = self.konst(Const::Str(name.into()));
+                        let k = self.konst(Const::Str(php_types::PhpStr::new(name)));
                         self.emit(Op::PushConst(k));
                         self.build_args_array(args)?;
                         self.emit(Op::CallValueArgs);
@@ -1288,7 +1288,7 @@ impl<'a> super::FnCompiler<'a> {
                     });
                     return Ok(());
                 }
-                let k = self.konst(Const::Str(name.into()));
+                let k = self.konst(Const::Str(php_types::PhpStr::new(name)));
                 self.emit(Op::PushConst(k));
                 self.push_dyn_args(args)?;
                 self.emit(Op::CallValue { argc: args.len() as u32 });
@@ -1561,7 +1561,7 @@ impl<'a> super::FnCompiler<'a> {
                             i + 1,
                             String::from_utf8_lossy(pname),
                         );
-                        let k = self.konst(Const::Str(msg.into_bytes().into()));
+                        let k = self.konst(Const::Str(php_types::PhpStr::new(msg.into_bytes())));
                         self.emit(Op::Fatal(k));
                         return Ok(());
                     }
@@ -1783,7 +1783,7 @@ impl<'a> super::FnCompiler<'a> {
                                     .unwrap_or_default(),
                                 _ => Box::default(),
                             };
-                            let name = self.konst(Const::Str(name));
+                            let name = self.konst(Const::Str(php_types::PhpStr::new(name)));
                             self.emit(Op::PushArgPlace {
                                 base,
                                 steps: steps.into(),
@@ -1846,7 +1846,7 @@ impl<'a> super::FnCompiler<'a> {
                 self.static_prop_rmw(class, &prop, &[], true, |c, place| {
                     let slot = local_slot(place);
                     c.push_value_args(rest)?;
-                    c.emit(Op::CallBuiltinRef { name: nm, slot, argc: rest.len() as u32 });
+                    c.emit(Op::CallBuiltinRef { name: nm.into(), slot, argc: rest.len() as u32 });
                     Ok(())
                 })
             }
@@ -1888,7 +1888,7 @@ impl<'a> super::FnCompiler<'a> {
                         let (base, psteps) = c.field_path(place)?;
                         c.emit(Op::MakeRef { base, steps: psteps.into() });
                         c.push_value_args(rest)?;
-                        c.emit(Op::CallBuiltinRefCell { name: nm, argc: rest.len() as u32 });
+                        c.emit(Op::CallBuiltinRefCell { name: nm.into(), argc: rest.len() as u32 });
                         Ok(())
                     });
                 }
@@ -1953,7 +1953,7 @@ impl<'a> super::FnCompiler<'a> {
     pub(super) fn build_args_array_named(&mut self, args: &[Expr], named: &[(Box<[u8]>, Expr)]) -> R<()> {
         self.build_args_array(args)?;
         for (name, e) in named {
-            let k = self.konst(Const::Str(name.clone()));
+            let k = self.konst(Const::Str(php_types::PhpStr::new(name.clone())));
             self.emit(Op::PushConst(k));
             self.expr(e)?;
             self.emit(Op::ArrayInsert);
@@ -1974,7 +1974,7 @@ impl<'a> super::FnCompiler<'a> {
                 // truly undefined (it may be declared conditionally or later). Push
                 // the name and allocate dynamically, exactly like `new $cls`.
                 None => {
-                    let k = self.konst(Const::Str(name.clone()));
+                    let k = self.konst(Const::Str(php_types::PhpStr::new(name.clone())));
                     self.emit(Op::PushConst(k));
                     self.emit_dynamic_new(args, named)
                 }
@@ -2127,7 +2127,7 @@ impl<'a> super::FnCompiler<'a> {
                         None => {
                             // Unknown at compile time: push the name and resolve it
                             // against the live class table at run time.
-                            let n = self.konst(Const::Str(name.clone()));
+                            let n = self.konst(Const::Str(php_types::PhpStr::new(name.clone())));
                             self.emit(Op::PushConst(n));
                             self.emit(Op::InstanceOfDynamic)
                         }
@@ -2176,7 +2176,7 @@ impl<'a> super::FnCompiler<'a> {
         if name.eq_ignore_ascii_case(b"class") {
             match class {
                 ClassRef::Named(n) => {
-                    let k = self.konst(Const::Str(n.clone()));
+                    let k = self.konst(Const::Str(php_types::PhpStr::new(n.clone())));
                     self.emit(Op::PushConst(k));
                 }
                 ClassRef::Dynamic(cexpr) => {
@@ -2185,7 +2185,7 @@ impl<'a> super::FnCompiler<'a> {
                 }
                 _ => match self.resolve_target(class)?.0 {
                     ClassTarget::Class(cid) => {
-                        let k = self.konst(Const::Str(self.ctx.classes[cid].name.clone()));
+                        let k = self.konst(Const::Str(php_types::PhpStr::new(self.ctx.classes[cid].name.clone())));
                         self.emit(Op::PushConst(k));
                     }
                     ClassTarget::Static => {
@@ -2271,7 +2271,7 @@ impl<'a> super::FnCompiler<'a> {
         match class {
             ClassRef::Dynamic(e) => self.expr(e),
             ClassRef::Named(n) => {
-                let k = self.konst(Const::Str(n.clone()));
+                let k = self.konst(Const::Str(php_types::PhpStr::new(n.clone())));
                 self.emit(Op::PushConst(k));
                 Ok(())
             }

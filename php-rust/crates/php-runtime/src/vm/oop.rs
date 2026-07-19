@@ -282,10 +282,13 @@ pub(super) fn prop_info<'a>(classes: &[&'a CompiledClass], class: ClassId, name:
 /// Outcome of resolving a property access `obj->name` from a given `scope`
 /// (the property-mangling resolver). Decides both *which storage slot* an access
 /// targets and *whether* it is permitted.
-pub(super) enum PropAccess {
+pub(super) enum PropAccess<'a> {
     /// An accessible declared property: read/write under this storage key (the
     /// plain name today; a mangled `\0Class\0name` for a private once mangling is on).
-    Slot(Vec<u8>),
+    /// Borrowed from the class's immutable `prop_info` table (`'a` = the class
+    /// data's lifetime, independent of any `&Vm` borrow) — a property access
+    /// resolves without allocating.
+    Slot(&'a [u8]),
     /// No accessible declared property of this name — an undeclared (dynamic)
     /// property, or (once mangling lands) a private declared only by an ancestor and
     /// invisible to a related scope. Behaves as a dynamic property under the plain
@@ -309,14 +312,14 @@ pub(super) enum PropAccess {
 ///    table — reads warn "Undefined property", writes create a dynamic one); only
 ///    an invisible private declared by the object's own class (or an invisible
 ///    protected) is `Denied`.
-pub(super) fn resolve_prop_access(classes: &[&CompiledClass], obj_class: ClassId, name: &[u8], scope: Option<ClassId>) -> PropAccess {
+pub(super) fn resolve_prop_access<'a>(classes: &[&'a CompiledClass], obj_class: ClassId, name: &[u8], scope: Option<ClassId>) -> PropAccess<'a> {
     if let Some(s) = scope {
         if let Some(pi) = prop_info(classes, s, name) {
             if pi.visibility == Visibility::Private
                 && pi.declaring_class == s
                 && class_is_a(classes, obj_class, s)
             {
-                return PropAccess::Slot(pi.storage_key.to_vec());
+                return PropAccess::Slot(&pi.storage_key);
             }
         }
     }
@@ -324,7 +327,7 @@ pub(super) fn resolve_prop_access(classes: &[&CompiledClass], obj_class: ClassId
         None => PropAccess::Dynamic,
         Some(pi) => {
             if visible_from(classes, scope, pi.visibility, pi.declaring_class) {
-                PropAccess::Slot(pi.storage_key.to_vec())
+                PropAccess::Slot(&pi.storage_key)
             } else if pi.visibility == Visibility::Private && pi.declaring_class != obj_class {
                 PropAccess::Dynamic
             } else {
@@ -361,7 +364,7 @@ impl FieldScope<'_> {
     /// `$o->private ?? $d` yields `$d`, with no error (mirrors Op::PropIsset).
     pub(super) fn prop_key_read<'n>(&self, ocid: ClassId, name: &'n [u8]) -> Option<std::borrow::Cow<'n, [u8]>> {
         match resolve_prop_access(self.classes, ocid, name, self.scope) {
-            PropAccess::Slot(k) => Some(std::borrow::Cow::Owned(k)),
+            PropAccess::Slot(k) => Some(std::borrow::Cow::Owned(k.to_vec())),
             PropAccess::Dynamic => Some(std::borrow::Cow::Borrowed(name)),
             PropAccess::Denied { .. } => None,
         }
@@ -411,7 +414,7 @@ impl FieldScope<'_> {
 
     pub(super) fn prop_key<'n>(&self, ocid: ClassId, name: &'n [u8]) -> std::borrow::Cow<'n, [u8]> {
         match resolve_prop_access(self.classes, ocid, name, self.scope) {
-            PropAccess::Slot(k) => std::borrow::Cow::Owned(k),
+            PropAccess::Slot(k) => std::borrow::Cow::Owned(k.to_vec()),
             PropAccess::Denied { .. } => match prop_info(self.classes, ocid, name) {
                 Some(pi) => std::borrow::Cow::Owned(pi.storage_key.to_vec()),
                 None => std::borrow::Cow::Borrowed(name),
@@ -694,7 +697,7 @@ impl<'m> Vm<'m> {
                 matches!(obj.props.get(key), Some(Zval::Undef)) && obj.is_typed_unset(key)
             };
             let (present, accessible) = match resolve_prop_access(&self.classes, cid, name, cur_class) {
-                PropAccess::Slot(k) => (obj.props.contains(k.as_slice()) && !undef_unset(&k), true),
+                PropAccess::Slot(k) => (obj.props.contains(k) && !undef_unset(k), true),
                 PropAccess::Dynamic => (obj.props.contains(name) && !undef_unset(name), true),
                 PropAccess::Denied { .. } => (obj.props.contains(name), false),
             };
@@ -703,7 +706,7 @@ impl<'m> Vm<'m> {
         if present && accessible {
             return None;
         }
-        if self.magic_guard.contains(&(oid, kind, name.to_vec())) {
+        if !self.magic_guard.is_empty() && self.magic_guard.contains(&(oid, kind, name.to_vec())) {
             return None;
         }
         let (defc, midx) = resolve_method_runtime(&self.classes, cid, magic_name)?;

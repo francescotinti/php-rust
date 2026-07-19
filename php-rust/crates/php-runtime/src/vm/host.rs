@@ -2622,7 +2622,7 @@ impl<'m> super::Vm<'m> {
             let key = self.prop_decl_storage_key(cid, &prop);
             self.lazy_props
                 .get(&oid)
-                .is_some_and(|set| set.iter().any(|n| n.as_ref() == key.as_slice()))
+                .is_some_and(|set| set.iter().any(|n| n.as_ref() == &key[..]))
         });
         Ok(Zval::Bool(is))
     }
@@ -2697,7 +2697,7 @@ impl<'m> super::Vm<'m> {
                     && self
                         .lazy_props
                         .get(&b.id)
-                        .is_some_and(|set| set.iter().any(|n| n.as_ref() == key.as_slice()))
+                        .is_some_and(|set| set.iter().any(|n| n.as_ref() == &key[..]))
             });
             if !uninit_still_lazy {
                 return Ok(Zval::Null);
@@ -2706,12 +2706,12 @@ impl<'m> super::Vm<'m> {
         // The property's declared default: its const, but a typed property with no
         // default stays uninitialized (`Undef`).
         let cc = self.classes[cid];
-        let default = if cc.uninit_props.iter().any(|n| n.as_ref() == key.as_slice()) {
+        let default = if cc.uninit_props.iter().any(|n| n.as_ref() == &key[..]) {
             Zval::Undef
         } else {
             cc.prop_defaults
                 .iter()
-                .find(|(n, _)| n.as_ref() == key.as_slice())
+                .find(|(n, _)| n.as_ref() == &key[..])
                 .map(|(_, c)| c.to_zval())
                 .unwrap_or(Zval::Null)
         };

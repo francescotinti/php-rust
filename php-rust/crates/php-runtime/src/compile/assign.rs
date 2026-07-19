@@ -329,7 +329,7 @@ impl<'a> super::FnCompiler<'a> {
             if source.steps.is_empty() && !self.is_runtime_class(&class) {
                 let cls_target = self.resolve_target(&class)?.0;
                 let (tbase, tsteps) = self.field_path(target)?;
-                self.emit(Op::StaticPropRef { target: cls_target, name: name.clone() });
+                self.emit(Op::StaticPropRef { target: cls_target, name: name.clone().into() });
                 self.emit(Op::BindRefTo { base: tbase, steps: tsteps.into() });
                 return Ok(());
             }
@@ -421,9 +421,9 @@ impl<'a> super::FnCompiler<'a> {
         // notice (D-13.5). A by-ref callee that returned a non-place already raised
         // its own "returned by reference" notice from inside `f`, so suppress here.
         if !callee_by_ref {
-            let k = self.konst(Const::Str(
-                b"Only variables should be assigned by reference"[..].into(),
-            ));
+            let k = self.konst(Const::Str(php_types::PhpStr::new(
+                &b"Only variables should be assigned by reference"[..],
+            )));
             self.emit(Op::EmitNotice(k));
         }
         self.emit(Op::BindRefTo { base, steps: steps.into() });
@@ -446,7 +446,7 @@ impl<'a> super::FnCompiler<'a> {
         }
         if let Some(name) = self.prop_place(place)? {
             self.expr(rhs)?;
-            self.emit(Op::PropSet { name });
+            self.emit(Op::PropSet { name: name.into() });
             return Ok(());
         }
         // An object-property step, or an *intermediate* `[]` append (`$a[][] = …`),
@@ -500,7 +500,7 @@ impl<'a> super::FnCompiler<'a> {
             });
         }
         if let Some(name) = self.prop_place(place)? {
-            self.emit(Op::PropUnset { name });
+            self.emit(Op::PropUnset { name: name.into() });
         } else if place_has_prop(place) {
             let (base, steps) = self.field_path(place)?;
             self.emit(Op::FieldUnset { base, steps: steps.into() });
@@ -583,7 +583,7 @@ impl<'a> super::FnCompiler<'a> {
         if place.steps.is_empty() && !self.is_runtime_class(&class) {
             if let SpName::Lit(n) = &name {
                 let target = self.resolve_target(&class)?.0;
-                self.emit(Op::StaticPropRef { target, name: n.clone() });
+                self.emit(Op::StaticPropRef { target, name: n.clone().into() });
                 self.emit(Op::Ret);
                 return Ok(true);
             }
@@ -622,11 +622,11 @@ impl<'a> super::FnCompiler<'a> {
     ) -> R<()> {
         match (name, target) {
             (SpName::Lit(nm), Some(t)) => {
-                self.emit(Op::StaticPropGet { target: t, name: nm.clone() });
+                self.emit(Op::StaticPropGet { target: t, name: nm.clone().into() });
             }
             (SpName::Lit(nm), None) => {
                 self.push_class_value(class)?;
-                self.emit(Op::StaticPropGetDynamic { name: nm.clone() });
+                self.emit(Op::StaticPropGetDynamic { name: nm.clone().into() });
             }
             (SpName::Dyn(_), _) => {
                 self.push_class_value(class)?;
@@ -648,11 +648,11 @@ impl<'a> super::FnCompiler<'a> {
     ) -> R<()> {
         match (name, target) {
             (SpName::Lit(nm), Some(t)) => {
-                self.emit(Op::StaticPropSet { target: t, name: nm.clone() });
+                self.emit(Op::StaticPropSet { target: t, name: nm.clone().into() });
             }
             (SpName::Lit(nm), None) => {
                 self.push_class_value(class)?;
-                self.emit(Op::StaticPropSetDynamic { name: nm.clone() });
+                self.emit(Op::StaticPropSetDynamic { name: nm.clone().into() });
             }
             (SpName::Dyn(_), _) => {
                 self.push_class_value(class)?;
@@ -765,15 +765,15 @@ impl<'a> super::FnCompiler<'a> {
             // Fetch gate (BP_VAR_IS): `__get` without `__isset` answers set —
             // a non-null `__get` value is the result and nothing is written; a
             // null one still assigns (oracle-pinned).
-            self.emit(Op::PropIssetFetchGate { name: name.clone() }); // [obj, isset]
+            self.emit(Op::PropIssetFetchGate { name: name.clone().into() }); // [obj, isset]
             let to_set = self.emit(Op::JumpIfFalse(Addr::MAX)); // unset → set; [obj]
             self.emit(Op::Dup); // [obj, obj]
-            self.emit(Op::PropGet { name: name.clone() }); // set: existing value → [obj, value]
+            self.emit(Op::PropGet { name: name.clone().into() }); // set: existing value → [obj, value]
             let to_nn = self.emit(Op::JumpIfNotNull(Addr::MAX)); // null → popped; [obj]
             let set_at = self.here();
             self.patch(to_set, Op::JumpIfFalse(set_at));
             self.expr(rhs)?; // [obj, rhs]
-            self.emit(Op::PropSet { name }); // [value]
+            self.emit(Op::PropSet { name: name.into() }); // [value]
             let to_end = self.emit(Op::Jump(Addr::MAX));
             let nn_at = self.here();
             self.patch(to_nn, Op::JumpIfNotNull(nn_at)); // [obj, value]
@@ -830,7 +830,7 @@ impl<'a> super::FnCompiler<'a> {
             for t in temps.iter().flatten() {
                 self.emit(Op::LoadSlot(*t));
             }
-            self.emit(Op::FieldIsset { base, steps: steps.clone() });
+            self.emit(Op::FieldIsset { base, steps: steps.clone().into() });
             let to_assign = self.emit(Op::JumpIfFalse(Addr::MAX));
             // Set: read the existing leaf (base value, then walk the steps).
             match base {
@@ -844,7 +844,7 @@ impl<'a> super::FnCompiler<'a> {
                 let t = ti.next().expect("temps parallel to steps");
                 match step {
                     FieldStep::Prop(n) => {
-                        self.emit(Op::PropGet { name: n.clone() });
+                        self.emit(Op::PropGet { name: n.clone().into() });
                     }
                     FieldStep::PropDyn => {
                         self.emit(Op::LoadSlot(t.expect("dyn step has temp")));
@@ -864,7 +864,7 @@ impl<'a> super::FnCompiler<'a> {
                 self.emit(Op::LoadSlot(*t));
             }
             self.expr(rhs)?;
-            self.emit(Op::FieldAssign { base, steps });
+            self.emit(Op::FieldAssign { base, steps: steps.into() });
             let end = self.here();
             self.patch(to_end, Op::Jump(end));
             for _ in temps.iter().flatten() {
@@ -942,10 +942,10 @@ impl<'a> super::FnCompiler<'a> {
             self.emit(Op::Dup); // [obj, obj]
             self.expr(rhs)?; // [obj, obj, rhs]
             self.emit(Op::Swap); // [obj, rhs, obj]
-            self.emit(Op::PropGet { name: name.clone() }); // [obj, rhs, val]
+            self.emit(Op::PropGet { name: name.clone().into() }); // [obj, rhs, val]
             self.emit(Op::Swap); // [obj, val, rhs]
             self.emit(Op::Binary(op));
-            self.emit(Op::PropSet { name });
+            self.emit(Op::PropSet { name: name.into() });
             return Ok(());
         }
         if place_has_prop(place) {
@@ -1000,7 +1000,7 @@ impl<'a> super::FnCompiler<'a> {
             });
         }
         if let Some(name) = self.prop_place(place)? {
-            self.emit(Op::PropIncDec { name, inc, pre });
+            self.emit(Op::PropIncDec { name: name.into(), inc, pre });
             return Ok(());
         }
         if place_has_prop(place) {
@@ -1075,7 +1075,7 @@ impl<'a> super::FnCompiler<'a> {
             return self.class_const_read(&class, &name, &place.steps, |s, p| s.isset_one(p));
         }
         if let Some(name) = self.prop_place(place)? {
-            self.emit(Op::PropIsset { name });
+            self.emit(Op::PropIsset { name: name.into() });
         } else if self.prop_place_dyn(place)? {
             self.emit(Op::PropIssetDyn);
         } else if place_has_prop(place) {
@@ -1107,9 +1107,9 @@ impl<'a> super::FnCompiler<'a> {
         if let Some(name) = self.prop_place(place)? {
             // stack: [obj]
             self.emit(Op::Dup); // [obj, obj]
-            self.emit(Op::PropIsset { name: name.clone() }); // [obj, isset]
+            self.emit(Op::PropIsset { name: name.clone().into() }); // [obj, isset]
             let to_true = self.emit(Op::JumpIfFalse(Addr::MAX)); // unset → empty=true; [obj]
-            self.emit(Op::PropGetSilent { name }); // [value]
+            self.emit(Op::PropGetSilent { name: name.into() }); // [value]
             self.emit(Op::Unary(crate::hir::UnOp::Not)); // [empty = !truthy(value)]
             let to_end = self.emit(Op::Jump(Addr::MAX));
             let true_at = self.here();
