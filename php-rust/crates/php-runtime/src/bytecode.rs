@@ -220,6 +220,54 @@ impl Clone for PropIc {
     }
 }
 
+/// Monomorphic per-op-site METHOD cache (WP-30, il gemello di [`PropIc`] per
+/// il dispatch): `(epoch, receiver class_id + 1, defining ClassId, method
+/// idx)` dell'ultima risoluzione cache-abile. Riempita SOLO per esiti
+/// scope-indipendenti: vincitore **public** e — per le chiamate d'istanza —
+/// nessun antenato proprio che dichiari un metodo `private` omonimo
+/// (altrimenti `parent_private_rebind` renderebbe la risoluzione dipendente
+/// dallo scope chiamante, e `Closure::bind` può portare QUALSIASI scope su
+/// questo sito). Stesso contratto di PropIc: cella `Rc`-condivisa tra i
+/// cloni dell'op, stato invisibile all'uguaglianza strutturale, epoch
+/// per-run contro gli id stantii.
+#[derive(Debug)]
+pub struct MethodIc(Rc<std::cell::Cell<(u32, u32, u32, u32)>>);
+
+impl MethodIc {
+    /// The cached `(defining ClassId, method idx)` when filled IN THIS RUN
+    /// for exactly this receiver class.
+    #[inline]
+    pub fn get(&self, cid: usize) -> Option<(usize, usize)> {
+        let (epoch, cid1, defc, midx) = self.0.get();
+        (cid1 as usize == cid + 1 && epoch == ic_epoch())
+            .then_some((defc as usize, midx as usize))
+    }
+
+    #[inline]
+    pub fn fill(&self, cid: usize, defc: usize, midx: usize) {
+        self.0
+            .set((ic_epoch(), cid as u32 + 1, defc as u32, midx as u32));
+    }
+}
+
+impl Default for MethodIc {
+    fn default() -> Self {
+        MethodIc(Rc::new(std::cell::Cell::new((0, 0, 0, 0))))
+    }
+}
+
+impl PartialEq for MethodIc {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl Clone for MethodIc {
+    fn clone(&self) -> Self {
+        MethodIc(Rc::clone(&self.0))
+    }
+}
+
 /// The storable cell a dimension write ([`Op::AssignDim`] / [`Op::AppendDim`])
 /// is rooted at. Reads don't need this — they consume a base *value* off the
 /// stack — but a write must reach back into a real cell to persist (and to
@@ -836,7 +884,7 @@ pub enum Op {
     /// at *run time* by walking the receiver's class `parent` chain
     /// (case-insensitive). The callee runs in a pushed frame with `$this` bound to
     /// the receiver; a missing method is a fatal (magic `__call` is OOP-3).
-    MethodCall { method: Rc<[u8]>, argc: u32 },
+    MethodCall { method: Rc<[u8]>, argc: u32, ic: MethodIc },
     /// `[obj, argsArray] -> [ret]` — like [`Op::MethodCall`] but the arguments are
     /// the values of a runtime array (spread call `$obj->m(...$a)`, Session A):
     /// string keys are dropped, values bound positionally. Resolves the method at

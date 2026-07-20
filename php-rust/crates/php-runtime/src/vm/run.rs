@@ -607,7 +607,8 @@ impl<'m> super::Vm<'m> {
                                 // __toString's (stringified) return flows back via Ret.
                                 Some((defc, midx)) => {
                                     let callee = &self.classes[defc].methods[midx].func;
-                                    let mut frame = Frame::new(callee, self.class_mod(defc));
+                                    let m = self.class_mod(defc);
+                                    let mut frame = self.pooled_frame(callee, m);
                                     frame.this = Some(target.clone());
                                     frame.class = Some(defc);
                                     frame.static_class = Some(cid);
@@ -1758,7 +1759,7 @@ impl<'m> super::Vm<'m> {
                         args.push(self.frames[top].stack.pop().expect("call argument"));
                     }
                     args.reverse();
-                    let mut frame = Frame::new(callee, m);
+                    let mut frame = self.pooled_frame(callee, m);
                     bind_params(&mut frame, args);
                     self.enter_callee(frame)?;
                 }
@@ -1771,7 +1772,7 @@ impl<'m> super::Vm<'m> {
                     let m = self.frames[top].module;
                     let callee = &m.functions[func as usize];
                     let frame = if named.is_empty() {
-                        let mut frame = Frame::new(callee, m);
+                        let mut frame = self.pooled_frame(callee, m);
                         bind_params(&mut frame, args);
                         frame
                     } else {
@@ -2289,7 +2290,7 @@ impl<'m> super::Vm<'m> {
                         // the next sweep reconsiders them (drives destruction of an
                         // object whose last reference was a returning function's local).
                         self.gc_note_frame(&dead);
-                        drop(dead);
+                        self.recycle_frame(dead);
                     }
                     for key in guard {
                         self.magic_guard.remove(&key);
@@ -2635,7 +2636,8 @@ impl<'m> super::Vm<'m> {
                             .collect();
                         clone_rc.borrow_mut().readonly_clone_writable = writable;
                         let callee = &self.classes[defc].methods[midx].func;
-                        let mut frame = Frame::new(callee, self.class_mod(defc));
+                        let m = self.class_mod(defc);
+                        let mut frame = self.pooled_frame(callee, m);
                         frame.this = Some(clone_val);
                         frame.class = Some(defc);
                         frame.static_class = Some(cid);
@@ -3515,11 +3517,11 @@ impl<'m> super::Vm<'m> {
                     }
                     prop_unset(&target, &key);
                 }
-                Op::MethodCall { method, argc } => {
+                Op::MethodCall { method, argc, ic } => {
                     let args = self.pop_keys(top, argc); // source order
                     let recv = self.frames[top].stack.pop().expect("MethodCall receiver");
                     let this = recv.deref_clone();
-                    self.method_call(top, this, &method, args)?;
+                    self.method_call(top, this, &method, args, Some(&ic))?;
                 }
                 Op::MethodCallArgs { method } => {
                     // Spread `$obj->m(...$a)` (Session A): the arguments are the
@@ -3530,7 +3532,7 @@ impl<'m> super::Vm<'m> {
                     let recv = self.frames[top].stack.pop().expect("MethodCallArgs receiver");
                     let this = recv.deref_clone();
                     if named.is_empty() {
-                        self.method_call(top, this, &method, args)?;
+                        self.method_call(top, this, &method, args, None)?;
                     } else {
                         self.dispatch_instance_call_named(top, this, &method, args, named)?;
                     }
@@ -3543,7 +3545,7 @@ impl<'m> super::Vm<'m> {
                     let args = self.pop_keys(top, argc);
                     let recv = self.frames[top].stack.pop().expect("MethodCallDynamic receiver");
                     let this = recv.deref_clone();
-                    self.method_call(top, this, &method, args)?;
+                    self.method_call(top, this, &method, args, None)?;
                 }
                 Op::MethodCallDynamicArgs => {
                     // Spread `$obj->$m(...$a)`: name on top, args array beneath it;
@@ -3555,7 +3557,7 @@ impl<'m> super::Vm<'m> {
                     let recv = self.frames[top].stack.pop().expect("MethodCallDynamicArgs receiver");
                     let this = recv.deref_clone();
                     if named.is_empty() {
-                        self.method_call(top, this, &method, args)?;
+                        self.method_call(top, this, &method, args, None)?;
                     } else {
                         self.dispatch_instance_call_named(top, this, &method, args, named)?;
                     }
@@ -3577,7 +3579,8 @@ impl<'m> super::Vm<'m> {
                     let this = recv.deref_clone();
                     let lsb = object_class_id(&this).unwrap_or(class);
                     let callee = &self.classes[class].methods[method_idx as usize].func;
-                    let mut frame = Frame::new(callee, self.class_mod(class));
+                    let m = self.class_mod(class);
+                    let mut frame = self.pooled_frame(callee, m);
                     bind_params(&mut frame, args);
                     frame.this = Some(this);
                     frame.class = Some(class);

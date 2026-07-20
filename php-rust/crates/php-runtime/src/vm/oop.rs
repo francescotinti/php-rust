@@ -352,6 +352,35 @@ pub(super) fn parent_private_rebind(
     (m.visibility == Visibility::Private).then_some((scope, mi))
 }
 
+/// True if any PROPER ancestor of `cid` declares a private method named
+/// `method` (ci): for such a hierarchy [`parent_private_rebind`] fires when
+/// that ancestor is the calling scope, making the resolution scope-DEPENDENT
+/// — the WP-30 [`crate::bytecode::MethodIc`] must not cache it. Mirrors the
+/// rebind's first-wins `find` (trait aliases can duplicate a name). Protected
+/// ancestors don't matter: the rebind is private-only and the IC only caches
+/// public winners.
+pub(super) fn private_shadow_in_chain(
+    classes: &[&CompiledClass],
+    cid: ClassId,
+    method: &[u8],
+) -> bool {
+    let mut cur = classes.get(cid).and_then(|c| c.parent);
+    while let Some(a) = cur {
+        let Some(class) = classes.get(a) else { break };
+        if let Some(m) = class
+            .methods
+            .iter()
+            .find(|m| m.func.name.eq_ignore_ascii_case(method))
+        {
+            if m.visibility == Visibility::Private {
+                return true;
+            }
+        }
+        cur = class.parent;
+    }
+    false
+}
+
 /// Look up the unified, compile-time-resolved metadata for a declared instance
 /// property — a single hashmap lookup over the parent-flattened `prop_info` table
 /// (the flattening, with all shadowing rules applied, happened in `compile_class`).
@@ -1013,7 +1042,8 @@ impl<'m> Vm<'m> {
             if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, b"__destruct") {
                 self.destructed.insert(id);
                 let callee = &self.classes[defc].methods[midx].func;
-                let mut frame = Frame::new(callee, self.class_mod(defc));
+                let m = self.class_mod(defc);
+                let mut frame = self.pooled_frame(callee, m);
                 frame.this = Some(Zval::Object(Rc::clone(&o)));
                 frame.class = Some(defc);
                 frame.static_class = Some(cid);
@@ -1040,6 +1070,7 @@ impl<'m> Vm<'m> {
         this: Zval,
         method: &[u8],
         mut args: Vec<Zval>,
+        ic: Option<&crate::bytecode::MethodIc>,
     ) -> Result<(), PhpError> {
         // Deferred place arguments (SEND_VAR_EX) resolve against the callee's
         // by-ref mask now that the receiver — hence the callee — is known; a
@@ -1090,7 +1121,7 @@ impl<'m> Vm<'m> {
                 )))
             }
         };
-        self.dispatch_instance_call(top, cid, this, method, args)
+        self.dispatch_instance_call(top, cid, this, method, args, ic)
     }
 
     /// Dispatch an instance method call `$this->method(positional…, named…)` whose

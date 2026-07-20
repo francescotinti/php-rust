@@ -123,6 +123,7 @@ impl<'m> Vm<'m> {
                 // exception at the resumer.
                 let dead = self.frames.pop().expect("dead generator frame");
                 self.gc_note_frame(&dead);
+                self.recycle_frame(dead);
                 let (k, v) = {
                     let mut gs = gs_rc.borrow_mut();
                     gs.status = GenStatus::Done;
@@ -311,6 +312,7 @@ impl<'m> Vm<'m> {
                 while self.frames.len() > baseline {
                     let dead = self.frames.pop().expect("fiber frames above baseline");
                     self.gc_note_frame(&dead);
+                    self.recycle_frame(dead);
                 }
                 if let Some(st) = self.fibers.get_mut(&id) {
                     st.status = FiberStatus::Terminated;
@@ -356,6 +358,7 @@ impl<'m> Vm<'m> {
             while self.frames.len() > baseline {
                 let dead = self.frames.pop().expect("frames above baseline");
                 self.gc_note_frame(&dead);
+                self.recycle_frame(dead);
             }
             self.fibers.remove(&id);
             return Err(PhpError::Error(

@@ -1666,7 +1666,11 @@ impl<'a> super::FnCompiler<'a> {
                 // decays it for a by-value parameter.
                 self.push_dyn_args(args)?;
             }
-            self.emit(Op::MethodCall { method: method.into(), argc: args.len() as u32 });
+            self.emit(Op::MethodCall {
+                method: method.into(),
+                argc: args.len() as u32,
+                ic: MethodIc::default(),
+            });
         }
         Ok(())
     }

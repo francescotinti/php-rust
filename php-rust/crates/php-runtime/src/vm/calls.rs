@@ -504,7 +504,7 @@ impl<'m> Vm<'m> {
                 let cid = o.borrow().class_id as usize;
                 if resolve_method_runtime(&self.classes, cid, b"__invoke").is_some() {
                     let top = self.frames.len() - 1;
-                    self.dispatch_instance_call(top, cid, callee.clone(), b"__invoke", args)
+                    self.dispatch_instance_call(top, cid, callee.clone(), b"__invoke", args, None)
                 } else {
                     Err(PhpError::Error(format!(
                         "Object of type {} is not callable",
@@ -541,7 +541,7 @@ impl<'m> Vm<'m> {
         match &elems[0] {
             Zval::Object(_) => {
                 let cid = object_class_id(&elems[0]).expect("object class id");
-                self.dispatch_instance_call(top, cid, elems[0].clone(), &method, args)
+                self.dispatch_instance_call(top, cid, elems[0].clone(), &method, args, None)
             }
             Zval::Str(_) => {
                 let cid = self.resolve_dynamic_class(&elems[0])?;
@@ -878,7 +878,8 @@ impl<'m> Vm<'m> {
                     let top = self.frames.len() - 1;
                     self.materialize_arg_places(top, &mut args, Some(callee))?;
                 }
-                let mut frame = Frame::new(callee, self.class_mod(defc));
+                let m = self.class_mod(defc);
+                let mut frame = self.pooled_frame(callee, m);
                 bind_params(&mut frame, args);
                 frame.this = this;
                 frame.class = Some(defc);
@@ -900,7 +901,8 @@ impl<'m> Vm<'m> {
                     let margs =
                         vec![Zval::Str(PhpStr::new(method.to_vec())), pack_args(args)];
                     let callee = &self.classes[defc].methods[midx].func;
-                    let mut frame = Frame::new(callee, self.class_mod(defc));
+                    let m = self.class_mod(defc);
+                    let mut frame = self.pooled_frame(callee, m);
                     bind_params(&mut frame, margs);
                     frame.this = this;
                     frame.class = Some(defc);
@@ -936,6 +938,7 @@ impl<'m> Vm<'m> {
                 while self.frames.len() > baseline {
                     let dead = self.frames.pop().expect("frames above baseline");
                     self.gc_note_frame(&dead);
+                    self.recycle_frame(dead);
                 }
                 Err(e)
             }
@@ -963,7 +966,8 @@ impl<'m> Vm<'m> {
                 let top = self.frames.len() - 1;
                 self.materialize_arg_places(top, &mut args, Some(callee))?;
             }
-            let mut frame = Frame::new(callee, self.module);
+            let m = self.module;
+            let mut frame = self.pooled_frame(callee, m);
             bind_params(&mut frame, args);
             self.enter_callee(frame)?;
             return Ok(());
@@ -976,7 +980,7 @@ impl<'m> Vm<'m> {
                 let top = self.frames.len() - 1;
                 self.materialize_arg_places(top, &mut args, Some(callee))?;
             }
-            let mut frame = Frame::new(callee, fmod);
+            let mut frame = self.pooled_frame(callee, fmod);
             bind_params(&mut frame, args);
             self.enter_callee(frame)?;
             return Ok(());

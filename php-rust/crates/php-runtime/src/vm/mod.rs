@@ -448,6 +448,7 @@ pub(crate) fn run_module_with_hir<'m>(
         superglobals: std::array::from_fn(|_| Zval::Undef),
         preg_cache: HashMap::default(),
         frames: Vec::new(),
+        frame_pool: FramePool::default(),
         next_object_id: 1,
         next_resource_id: 5,
         static_props: HashMap::default(),
@@ -900,12 +901,26 @@ struct Frame<'m> {
 
 impl<'m> Frame<'m> {
     fn new(func: &'m Func, module: &'m Module) -> Self {
+        Self::with_buffers(func, module, Vec::new(), Vec::new())
+    }
+
+    /// Build a frame reusing recycled backing buffers (WP-30 frame arena).
+    /// Both buffers must be EMPTY (length 0); their capacity is reused, which
+    /// is the whole point — `slots` is the one mandatory per-call allocation.
+    fn with_buffers(
+        func: &'m Func,
+        module: &'m Module,
+        mut slots_buf: Vec<Zval>,
+        stack_buf: Vec<Zval>,
+    ) -> Self {
+        debug_assert!(slots_buf.is_empty() && stack_buf.is_empty());
+        slots_buf.resize(func.n_slots as usize, Zval::Undef);
         Frame {
             func,
             module,
             ip: 0,
-            slots: vec![Zval::Undef; func.n_slots as usize],
-            stack: Vec::new(),
+            slots: slots_buf,
+            stack: stack_buf,
             dyn_vars: HashMap::default(),
             this: None,
             class: None,
@@ -929,6 +944,38 @@ impl<'m> Frame<'m> {
             in_destructor: false,
             closure_id: None,
             bridge_caller: None,
+        }
+    }
+}
+
+/// WP-30 frame arena: a bounded freelist of frame backing buffers
+/// `(slots, stack)`, recycled at the frame drop sites. Buffers are always
+/// EMPTY (len 0) while pooled; only capacity is retained. Bounded in depth
+/// and per-buffer capacity so a pathological frame can't pin memory.
+#[derive(Default)]
+struct FramePool {
+    bufs: Vec<(Vec<Zval>, Vec<Zval>)>,
+}
+
+/// Max retained buffer pairs.
+const FRAME_POOL_DEPTH: usize = 64;
+/// Buffers grown beyond this capacity are not pooled (8 KiB at 16 B/Zval).
+const FRAME_POOL_MAX_CAP: usize = 512;
+
+impl FramePool {
+    #[inline]
+    fn take(&mut self) -> (Vec<Zval>, Vec<Zval>) {
+        self.bufs.pop().unwrap_or_default()
+    }
+
+    #[inline]
+    fn put(&mut self, slots: Vec<Zval>, stack: Vec<Zval>) {
+        debug_assert!(slots.is_empty() && stack.is_empty());
+        if self.bufs.len() < FRAME_POOL_DEPTH
+            && slots.capacity() <= FRAME_POOL_MAX_CAP
+            && stack.capacity() <= FRAME_POOL_MAX_CAP
+        {
+            self.bufs.push((slots, stack));
         }
     }
 }
@@ -1213,6 +1260,8 @@ struct Vm<'m> {
     /// failed to compile so it isn't retried.
     preg_cache: HashMap<Vec<u8>, Option<Rc<crate::preg::Engine>>>,
     frames: Vec<Frame<'m>>,
+    /// WP-30: recycled frame backing buffers (see [`FramePool`]).
+    frame_pool: FramePool,
     /// Monotonic object-handle counter (`#N` in `var_dump`), starting at 1 like
     /// the tree-walker's `next_object_id`.
     next_object_id: u32,
@@ -2045,6 +2094,33 @@ impl<'m> Vm<'m> {
                 self.gc_note(this);
             }
         }
+    }
+
+    /// WP-30 frame arena: build a frame reusing pooled backing buffers.
+    #[inline]
+    fn pooled_frame(&mut self, func: &'m Func, module: &'m Module) -> Frame<'m> {
+        let (slots, stack) = self.frame_pool.take();
+        Frame::with_buffers(func, module, slots, stack)
+    }
+
+    /// Recycle a dying frame's backing buffers (WP-30). MUST be called only
+    /// after [`Self::gc_note_frame`], and only at true DROP sites — never on
+    /// the park/move paths (generator yield, fiber suspend, `retired_main`).
+    ///
+    /// Element-drop order is preserved exactly: the derived `Drop` for `Frame`
+    /// drops fields in declaration order — `slots` elements front-to-back
+    /// (`Vec`'s drop == `clear()`), then `stack` elements, then the remaining
+    /// fields. The sequence below reproduces that order bit-for-bit, so the
+    /// order of `Rc` decrements — the only PHP-observable effect (handle-id
+    /// LIFO reuse, GC cascades) — is unchanged; deep teardown still routes
+    /// through `drop_bounded`.
+    fn recycle_frame(&mut self, mut frame: Frame<'m>) {
+        let mut slots = std::mem::take(&mut frame.slots);
+        let mut stack = std::mem::take(&mut frame.stack);
+        slots.clear();
+        stack.clear();
+        drop(frame);
+        self.frame_pool.put(slots, stack);
     }
 
     /// Note the objects a dropped `foreach` iterator releases. By-reference
@@ -2911,7 +2987,8 @@ impl<'m> Vm<'m> {
             ))
         })?;
         let callee = &self.classes[defc].methods[midx].func;
-        let mut frame = Frame::new(callee, self.class_mod(defc));
+        let m = self.class_mod(defc);
+        let mut frame = self.pooled_frame(callee, m);
         // A by-reference getter (`&offsetGet`) returns its raw `Ref`; a value
         // consumer (`count($o['k'])`) needs the dereferenced value.
         frame.ret_deref = callee.by_ref && matches!(ret, RetMode::Stack);
@@ -6925,7 +7002,8 @@ impl<'m> Vm<'m> {
                     Some((defc, midx)) => {
                         let callee = &self.classes[defc].methods[midx].func;
                         let baseline = self.frames.len();
-                        let mut frame = Frame::new(callee, self.class_mod(defc));
+                        let m = self.class_mod(defc);
+                        let mut frame = self.pooled_frame(callee, m);
                         frame.this = Some(v.clone());
                         frame.class = Some(defc);
                         frame.static_class = Some(cid);
@@ -7583,7 +7661,7 @@ impl<'m> Vm<'m> {
             let top = self.frames.len() - 1;
             self.materialize_arg_places(top, &mut args, Some(callee))?;
         }
-        let mut frame = Frame::new(callee, m);
+        let mut frame = self.pooled_frame(callee, m);
         // `static $x` in the body persists per this closure *instance* (id).
         frame.closure_id = Some(cl.id);
         for (slot, val) in &cl.captures {
@@ -7619,7 +7697,8 @@ impl<'m> Vm<'m> {
         named: Vec<(Box<[u8]>, Zval)>,
     ) {
         let callee = &self.classes[defc].methods[midx].func;
-        let mut frame = Frame::new(callee, self.class_mod(defc));
+        let m = self.class_mod(defc);
+        let mut frame = self.pooled_frame(callee, m);
         frame.argc = callee.n_params;
         if !frame.slots.is_empty() {
             frame.slots[0] = Zval::Str(PhpStr::new(method.to_vec()));
@@ -7648,7 +7727,26 @@ impl<'m> Vm<'m> {
         this: Zval,
         method: &[u8],
         args: Vec<Zval>,
+        ic: Option<&crate::bytecode::MethodIc>,
     ) -> Result<(), PhpError> {
+        // INLINE CACHE (WP-30): this site's last scope-independent resolution
+        // for exactly this receiver class. Sound to skip resolve + private-
+        // rebind + visibility: the fill predicate below guarantees the
+        // outcome is identical for EVERY calling scope (public winner, no
+        // private same-name method anywhere in the ancestor chain —
+        // `Closure::bind` can bring any scope through this site).
+        if let Some(ic) = ic {
+            if let Some((defc, midx)) = ic.get(cid) {
+                let callee = &self.classes[defc].methods[midx].func;
+                let m = self.class_mod(defc);
+                let mut frame = self.pooled_frame(callee, m);
+                bind_params(&mut frame, args);
+                frame.this = Some(this);
+                frame.class = Some(defc);
+                frame.static_class = Some(cid); // LSB = receiver's actual class
+                return self.enter_callee(frame);
+            }
+        }
         let mut resolved = resolve_method_runtime(&self.classes, cid, method);
         // A caller-scope private with this name wins over the subclass method
         // (Zend non-virtual private dispatch, see `parent_private_rebind`).
@@ -7667,8 +7765,20 @@ impl<'m> Vm<'m> {
         });
         match usable {
             Some((defc, midx)) => {
+                // Fill only when the resolution is scope-INdependent: a public
+                // winner with no private homonym in any proper ancestor (such
+                // a private would make `parent_private_rebind` fire for that
+                // ancestor's scope).
+                if let Some(ic) = ic {
+                    if self.classes[defc].methods[midx].visibility == Visibility::Public
+                        && !private_shadow_in_chain(&self.classes, cid, method)
+                    {
+                        ic.fill(cid, defc, midx);
+                    }
+                }
                 let callee = &self.classes[defc].methods[midx].func;
-                let mut frame = Frame::new(callee, self.class_mod(defc));
+                let m = self.class_mod(defc);
+                let mut frame = self.pooled_frame(callee, m);
                 bind_params(&mut frame, args);
                 frame.this = Some(this);
                 frame.class = Some(defc);
@@ -7992,7 +8102,8 @@ impl<'m> Vm<'m> {
             Some((defc, midx)) => {
                 let callee = &self.classes[defc].methods[midx].func;
                 let mut frame = if named.is_empty() {
-                    let mut frame = Frame::new(callee, self.class_mod(defc));
+                    let m = self.class_mod(defc);
+                    let mut frame = self.pooled_frame(callee, m);
                     bind_params(&mut frame, args);
                     frame
                 } else {
@@ -10005,7 +10116,8 @@ impl<'m> Vm<'m> {
         args: Vec<Zval>,
     ) {
         let callee = &self.classes[defc].methods[midx].func;
-        let mut frame = Frame::new(callee, self.class_mod(defc));
+        let m = self.class_mod(defc);
+        let mut frame = self.pooled_frame(callee, m);
         // A magic accessor is always invoked with exactly its declared
         // parameters, so the arity guard (PAR) sees a full argument count.
         frame.argc = callee.n_params;
@@ -10040,7 +10152,8 @@ impl<'m> Vm<'m> {
     ) {
         let lsb = object_class_id(&recv).unwrap_or(defc);
         let callee = &self.classes[defc].methods[midx].func;
-        let mut frame = Frame::new(callee, self.class_mod(defc));
+        let m = self.class_mod(defc);
+        let mut frame = self.pooled_frame(callee, m);
         // A magic accessor is always invoked with exactly its declared
         // parameters, so the arity guard (PAR) sees a full argument count.
         frame.argc = callee.n_params;
@@ -14926,6 +15039,206 @@ mod tests {
         assert_eq!(a.get(), Some((10, 1)), "clone shares the cell");
         crate::bytecode::bump_ic_epoch();
         assert_eq!(a.get(), None, "epoch bump invalidates");
+    }
+
+    #[test]
+    fn frame_pool_no_value_leak_between_calls() {
+        // A recycled slots buffer must read as fresh Undef locals, and a
+        // zero-arg call after an arg-ful one must see empty func_get_args.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                function f($a) { $b = 42; $c = [1,2,3]; }
+                function g() { echo isset($x) ? 'set' : 'unset'; $args = func_get_args(); echo $args === [] ? '0' : 'n'; }
+                f(1); g();"
+            ),
+            b"unset0"
+        );
+    }
+
+    #[test]
+    fn frame_pool_destructor_order_on_return() {
+        // The recycle sequence (slots.clear() then stack.clear() then the
+        // rest) must preserve the derived-Drop release order: destructors of
+        // a returning function's locals fire in slot order at the sweep.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class D { public $n; function __construct($n){ $this->n=$n; } function __destruct(){ echo 'd', $this->n; } }
+                function f(){ $a = new D(1); $b = new D(2); }
+                f();
+                echo '|';"
+            ),
+            b"d1d2|"
+        );
+    }
+
+    #[test]
+    fn frame_pool_generator_park_survives_recycling() {
+        // A suspended generator's frame is MOVED to the side table, never
+        // recycled: heavy call churn while it is parked must not disturb
+        // its locals.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                function gen(){ $x = 'G'; yield 1; echo $x; }
+                function churn($n){ if($n>0) churn($n-1); $t = 'xxxx'; }
+                $g = gen(); echo $g->current();
+                for($i=0;$i<50;$i++) churn(10);
+                $g->next();
+                echo 'E';"
+            ),
+            b"1GE"
+        );
+    }
+
+    #[test]
+    fn frame_pool_unwind_recycles() {
+        // Frames dying on the unwind path recycle too; the destructor order
+        // of their locals (innermost frame first) is unchanged.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class D{ public $n; function __construct($n){$this->n=$n;} function __destruct(){ echo $this->n; } }
+                function a(){ $d = new D('a'); b(); } function b(){ $d = new D('b'); c(); } function c(){ throw new Exception('e'); }
+                $out='';
+                for($i=0;$i<5;$i++){ try { a(); } catch (Exception $e) { $out .= 'C'; } }
+                echo '|', $out;"
+            ),
+            b"bababababa|CCCCC"
+        );
+    }
+
+    #[test]
+    fn frame_pool_recursion_and_handle_reuse_stable() {
+        // Deep recursion with per-frame object locals: the pool's depth bound
+        // holds under 200 live frames and the second pass (running entirely
+        // on recycled buffers) behaves identically. (LIFO handle-id reuse is
+        // locked by the phpt corpus; var_dump is unavailable in this harness.)
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class D { public $n; function __construct($n){ $this->n = $n; } }
+                function r($n){ $d = new D($n); if($n>0) return r($n-1) + 1; return 0; }
+                echo r(200), '|', r(200);"
+            ),
+            b"200|200"
+        );
+    }
+
+    #[test]
+    fn method_ic_polymorphic_site_revalidates_class() {
+        // One op-site alternating two unrelated receivers: the monomorphic
+        // cache must revalidate on the receiver class id every hit.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class A { public function m(){ return 'a'; } }
+                class B { public function m(){ return 'b'; } }
+                function site($o){ return $o->m(); }
+                echo site(new A), site(new B), site(new A), site(new B);"
+            ),
+            b"abab"
+        );
+    }
+
+    #[test]
+    fn method_ic_respects_parent_private_rebind() {
+        // THE fill-predicate gate: C::m is public, but the ancestor P declares
+        // a PRIVATE m — the site must never cache (a call from scope P gets
+        // the non-virtual private rebind). PHPUnit runBare pattern (WP-10).
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class P { private function m(){ return 'p'; } public function go($o){ return $o->m(); } }
+                class C extends P { public function m(){ return 'c'; } }
+                function site($o){ return $o->m(); }
+                $c = new C;
+                echo site($c), $c->go($c), site($c);
+                class G { private function n(){ return 'g'; } public function go2($o){ return $o->n(); } }
+                class M extends G { }
+                class L extends M { public function n(){ return 'l'; } }
+                function site2($o){ return $o->n(); }
+                $l = new L;
+                echo '|', site2($l), $l->go2($l), site2($l);"
+            ),
+            b"cpc|lgl"
+        );
+    }
+
+    #[test]
+    fn method_ic_never_caches_non_public_visibility() {
+        // A protected winner is never cached: the same closure body (ONE
+        // op-site) re-bound to an in-hierarchy scope succeeds, and re-bound
+        // to the global scope still raises the visibility Error.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class K { protected function m(){ return 'k'; } }
+                $f = function(){ return $this->m(); };
+                $in = Closure::bind($f, new K, K::class);
+                echo $in();
+                $out = Closure::bind($f, new K, null);
+                try { echo $out(); } catch (Error $e) { echo 'E'; }
+                echo $in();"
+            ),
+            b"kEk"
+        );
+    }
+
+    #[test]
+    fn method_ic_call_fallback_after_fill() {
+        // A site filled on a real public method must still route a receiver
+        // WITHOUT that method to `__call` (the hit guard is the class id).
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class A { public function m(){ return 'a'; } }
+                class Q { public function __call($n, $a){ return 'q' . $n; } }
+                function site($o){ return $o->m(); }
+                echo site(new A), site(new Q), site(new A);"
+            ),
+            b"aqma"
+        );
+    }
+
+    #[test]
+    fn method_ic_lsb_and_generator_methods() {
+        // The hit path sets static_class = receiver (LSB) exactly like the
+        // slow path, and a cached generator method still materializes a fresh
+        // generator per call (enter_callee pop-back).
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class S { public function who(){ return static::class; } }
+                class T extends S { }
+                function site($o){ return $o->who(); }
+                echo site(new S), '|', site(new T), '|';
+                class GEN { public function g(){ yield 'y'; } }
+                function siteg($o){ return $o->g(); }
+                $a = siteg(new GEN); $b = siteg(new GEN);
+                echo $a->current(), $b->current();"
+            ),
+            b"S|T|yy"
+        );
+    }
+
+    #[test]
+    fn method_ic_equality_is_structural_only() {
+        // Same contract as PropIc: cache state invisible to PartialEq, clone
+        // shares the cell, epoch bump invalidates.
+        let a = crate::bytecode::MethodIc::default();
+        let b = crate::bytecode::MethodIc::default();
+        assert!(a == b);
+        a.fill(7, 3, 2);
+        assert!(a == b);
+        assert_eq!(a.get(7), Some((3, 2)));
+        assert_eq!(a.get(8), None, "different receiver class misses");
+        let c = a.clone();
+        c.fill(9, 4, 1);
+        assert_eq!(a.get(9), Some((4, 1)), "clone shares the cell");
+        crate::bytecode::bump_ic_epoch();
+        assert_eq!(a.get(9), None, "epoch bump invalidates");
     }
 
     #[test]

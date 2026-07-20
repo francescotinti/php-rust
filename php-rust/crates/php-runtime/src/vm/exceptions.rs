@@ -248,6 +248,7 @@ impl<'m> Vm<'m> {
                 self.magic_guard.remove(key);
             }
             self.gc_note_frame(&dead);
+            self.recycle_frame(dead);
         }
     }
 
