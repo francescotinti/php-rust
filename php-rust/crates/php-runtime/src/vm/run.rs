@@ -2645,10 +2645,31 @@ impl<'m> super::Vm<'m> {
                         continue;
                     }
                 }
-                Op::PropGet { name } => {
+                Op::PropGet { name, ic } => {
                     let obj = self.frames[top].stack.pop().expect("PropGet object");
                     let cur = self.frames[top].class;
                     let target = obj.deref_clone();
+                    // INLINE CACHE (WP-29): the site's last cacheable
+                    // resolution — a PUBLIC hook-free backed slot on this
+                    // class — reads with zero hashing. A present non-`Undef`
+                    // value is the only hit; everything else (absent = unset →
+                    // `__get`, `Undef` = typed-uninit fatal, other class, lazy
+                    // wrapper) falls through to the paths that own it.
+                    if let Zval::Object(o) = &target {
+                        if let Some((cid1, slot)) = ic.get() {
+                            let b = o.borrow();
+                            if b.class_id + 1 == cid1 && b.lazy.is_none() {
+                                if let Some(v) = b.props.get_slot(slot) {
+                                    if !matches!(v, Zval::Undef) {
+                                        let v = v.deref_clone();
+                                        drop(b);
+                                        self.frames[top].stack.push(v);
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                    }
                     // FAST PATH (WP-25): a present, initialized slot on a
                     // non-lazy instance of a hook-free all-public class reads
                     // straight off the table. A miss or `Undef` falls through —
@@ -2709,9 +2730,17 @@ impl<'m> super::Vm<'m> {
                         }
                         // Single resolution decides visibility AND the storage key
                         // (was check_prop_access + prop_storage_key = two walks).
-                        key = match resolve_prop_access(&self.classes, o.borrow().class_id as usize, &name, cur) {
+                        let ocid = o.borrow().class_id as usize;
+                        key = match resolve_prop_access(&self.classes, ocid, &name, cur) {
                             PropAccess::Slot { key: k, slot } => {
                                 slot_idx = slot;
+                                // IC fill: only a scope-independent outcome —
+                                // PUBLIC, hook-free, backed (see PropIc).
+                                if let (Some(i), Some(pi)) = (slot, prop_info(&self.classes, ocid, &name)) {
+                                    if pi.visibility == crate::hir::Visibility::Public && pi.hooks.is_none() {
+                                        ic.fill(ocid as u32, i);
+                                    }
+                                }
                                 Cow::Borrowed(k)
                             }
                             PropAccess::Dynamic => Cow::Borrowed(&name[..]),
@@ -2807,7 +2836,7 @@ impl<'m> super::Vm<'m> {
                     let v = read_property(&target, &key, &mut sink);
                     self.frames[top].stack.push(v);
                 }
-                Op::PropSet { name } => {
+                Op::PropSet { name, ic } => {
                     let mut value = self.frames[top].stack.pop().expect("PropSet value");
                     let obj = self.frames[top].stack.pop().expect("PropSet object");
                     let cur = self.frames[top].class;
@@ -2835,6 +2864,36 @@ impl<'m> super::Vm<'m> {
                         }
                         self.frames[top].stack.push(value);
                         continue;
+                    }
+                    // INLINE CACHE (WP-29): the WP-25 guards below, but
+                    // slot-indexed — zero hashing on a monomorphic site. Only
+                    // fills from a `plain_set_props` class, so a class-id
+                    // match re-implies every per-class guard; the per-object
+                    // ones (lazy, enum, present slot, Ref×typed_refs) are
+                    // re-checked here.
+                    if let Zval::Object(o) = &target {
+                        if let Some((cid1, slot)) = ic.get() {
+                            let hit = {
+                                let b = o.borrow();
+                                b.class_id + 1 == cid1
+                                    && b.lazy.is_none()
+                                    && !b.info.is_enum_case
+                                    && match b.props.get_slot(slot) {
+                                        Some(Zval::Ref(_)) => self.typed_refs.is_empty(),
+                                        Some(_) => true,
+                                        None => false,
+                                    }
+                            };
+                            if hit {
+                                if let Some(old) =
+                                    write_property_at(&target, &name, Some(slot), value.clone())?
+                                {
+                                    self.gc_note(&old);
+                                }
+                                self.frames[top].stack.push(value);
+                                continue;
+                            }
+                        }
                     }
                     // FAST PATH (WP-25): overwrite of a *present* slot on a
                     // non-lazy, non-enum instance of a class whose declared
@@ -2925,6 +2984,14 @@ impl<'m> super::Vm<'m> {
                         key = match access {
                             PropAccess::Slot { key: k, slot } => {
                                 slot_idx = slot;
+                                // IC fill: only from a plain_set_props class
+                                // (public, symmetric, untyped, non-readonly,
+                                // hook-free in blocco — see PropIc).
+                                if let Some(i) = slot {
+                                    if self.classes[ocid].plain_set_props {
+                                        ic.fill(ocid as u32, i);
+                                    }
+                                }
                                 Cow::Borrowed(k)
                             }
                             PropAccess::Denied { decl, vis } => {
@@ -3217,10 +3284,28 @@ impl<'m> super::Vm<'m> {
                     };
                     self.frames[top].stack.push(Zval::Bool(set));
                 }
-                Op::PropIsset { name } => {
+                Op::PropIsset { name, ic } => {
                     let obj = self.frames[top].stack.pop().expect("PropIsset object");
                     let cur = self.frames[top].class;
                     let recv = obj.deref_clone();
+                    // INLINE CACHE (WP-29): mirror of the PropGet IC — a
+                    // present non-`Undef` PUBLIC slot on the cached class
+                    // answers with zero hashing; anything else falls through.
+                    if let Zval::Object(o) = &recv {
+                        if let Some((cid1, slot)) = ic.get() {
+                            let b = o.borrow();
+                            if b.class_id + 1 == cid1 && b.lazy.is_none() {
+                                if let Some(v) = b.props.get_slot(slot) {
+                                    if !matches!(v, Zval::Undef) {
+                                        let set = !matches!(v.deref_clone(), Zval::Null | Zval::Undef);
+                                        drop(b);
+                                        self.frames[top].stack.push(Zval::Bool(set));
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                    }
                     // FAST PATH (WP-25): mirror of the PropGet fast path — a
                     // present slot on a non-lazy instance of a hook-free
                     // all-public class answers directly. `Undef` still falls
@@ -3273,7 +3358,16 @@ impl<'m> super::Vm<'m> {
                         // read the child's slot and answered false).
                         match resolve_prop_access(&self.classes, ocid, &name, cur) {
                             PropAccess::Denied { .. } => false,
-                            PropAccess::Slot { key, slot } => prop_isset_at(&target, &key, slot),
+                            PropAccess::Slot { key, slot } => {
+                                // IC fill: scope-independent outcomes only
+                                // (public, hook-free, backed — see PropIc).
+                                if let (Some(i), Some(pi)) = (slot, prop_info(&self.classes, ocid, &name)) {
+                                    if pi.visibility == crate::hir::Visibility::Public && pi.hooks.is_none() {
+                                        ic.fill(ocid as u32, i);
+                                    }
+                                }
+                                prop_isset_at(&target, &key, slot)
+                            }
                             PropAccess::Dynamic => prop_isset(&target, &name),
                         }
                     } else {

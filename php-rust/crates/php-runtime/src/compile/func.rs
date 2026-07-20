@@ -245,7 +245,7 @@ pub(super) fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, 
     for (name, expr) in items {
         c.emit(Op::This);
         c.expr(expr)?;
-        c.emit(Op::PropSet { name: name.clone().into() });
+        c.emit(Op::PropSet { name: name.clone().into(), ic: PropIc::default() });
         c.emit(Op::Pop); // PropSet leaves the assigned value; discard it
     }
     let null = c.konst(Const::Null);

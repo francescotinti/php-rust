@@ -127,6 +127,78 @@ impl Const {
     }
 }
 
+thread_local! {
+    /// Epoch of validity for the [`PropIc`] inline caches. Class ids are
+    /// GLOBAL per run but modules (and their ops, prelude included) are
+    /// Rc-shared across unit links and — in a resident process — across
+    /// requests, where the same numeric id can name a DIFFERENT class.
+    /// Bumping the epoch at each `Vm` construction invalidates every cache
+    /// in O(1). Starts at 1 and never returns 0 (0 = the empty-cache tag).
+    static IC_EPOCH: std::cell::Cell<u32> = const { std::cell::Cell::new(1) };
+}
+
+/// Invalidate all [`PropIc`] caches (a new run's id space). Called by
+/// `Vm::new`.
+pub fn bump_ic_epoch() {
+    IC_EPOCH.with(|e| {
+        let next = e.get().wrapping_add(1);
+        e.set(if next == 0 { 1 } else { next });
+    });
+}
+
+#[inline]
+fn ic_epoch() -> u32 {
+    IC_EPOCH.with(|e| e.get())
+}
+
+/// Monomorphic per-op-site property cache (WP-29, lo Zend inline cache):
+/// `(epoch, class_id + 1, slot)` dell'ultima risoluzione cache-abile;
+/// `class_id+1 == 0` = vuota, epoch ≠ corrente = stantia (id di un run
+/// precedente). Riempita SOLO per esiti scope-indipendenti (proprietà
+/// public, classe senza hook; per le scritture anche `plain_set_props`),
+/// così un hit è valido per qualunque scope — le closure possono essere
+/// ri-bound.
+///
+/// La cella è `Rc`-condivisa: il dispatch CLONA l'op a ogni esecuzione
+/// (WP-22), quindi il clone deve puntare alla STESSA cache perché i fill
+/// persistano sul sito. Lo stato resta invisibile all'uguaglianza
+/// strutturale (`Func` è `PartialEq` per la unit-cache: due compilazioni
+/// identiche DEVONO confrontare uguali qualunque cosa la VM abbia cachato).
+#[derive(Debug)]
+pub struct PropIc(Rc<std::cell::Cell<(u32, u32, u32)>>);
+
+impl PropIc {
+    /// The cached `(class_id + 1, slot)` when filled IN THIS RUN.
+    #[inline]
+    pub fn get(&self) -> Option<(u32, u32)> {
+        let (epoch, cid1, slot) = self.0.get();
+        (cid1 != 0 && epoch == ic_epoch()).then_some((cid1, slot))
+    }
+
+    #[inline]
+    pub fn fill(&self, class_id: u32, slot: u32) {
+        self.0.set((ic_epoch(), class_id + 1, slot));
+    }
+}
+
+impl Default for PropIc {
+    fn default() -> Self {
+        PropIc(Rc::new(std::cell::Cell::new((0, 0, 0))))
+    }
+}
+
+impl PartialEq for PropIc {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl Clone for PropIc {
+    fn clone(&self) -> Self {
+        PropIc(Rc::clone(&self.0))
+    }
+}
+
 /// The storable cell a dimension write ([`Op::AssignDim`] / [`Op::AppendDim`])
 /// is rooted at. Reads don't need this — they consume a base *value* off the
 /// stack — but a write must reach back into a real cell to persist (and to
@@ -680,10 +752,10 @@ pub enum Op {
     Include { mode: IncludeMode },
     /// `[obj] -> [value]` — read property `name` (deref-clone); a missing property
     /// (or a non-object receiver) warns and yields NULL, matching the tree-walker.
-    PropGet { name: Rc<[u8]> },
+    PropGet { name: Rc<[u8]>, ic: PropIc },
     /// `[obj, value] -> [value]` — write `value` into property `name` (created if
     /// absent), in place through the shared object cell. Leaves the assigned value.
-    PropSet { name: Rc<[u8]> },
+    PropSet { name: Rc<[u8]>, ic: PropIc },
     /// `[obj, rhs] -> [result]` — compound `$o->p op= rhs`: read the property
     /// (NULL if absent), apply `op`, store and leave the result.
     PropOpSet { name: Rc<[u8]>, op: BinOp },
@@ -692,7 +764,7 @@ pub enum Op {
     PropIncDec { name: Rc<[u8]>, inc: bool, pre: bool },
     /// `[obj] -> [bool]` — `isset($o->p)`: true iff the property exists and is not
     /// null (silent, no warning).
-    PropIsset { name: Rc<[u8]> },
+    PropIsset { name: Rc<[u8]>, ic: PropIc },
     /// `[obj] -> [bool]` — the fetch gate of `$o->p ?? d` / `$o->p ??= d`
     /// (zend read_property BP_VAR_IS): like [`Op::PropIsset`], EXCEPT that a
     /// class defining `__get` without `__isset` answers `true` for a missing

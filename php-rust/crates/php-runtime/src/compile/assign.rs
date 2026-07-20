@@ -446,7 +446,7 @@ impl<'a> super::FnCompiler<'a> {
         }
         if let Some(name) = self.prop_place(place)? {
             self.expr(rhs)?;
-            self.emit(Op::PropSet { name: name.into() });
+            self.emit(Op::PropSet { name: name.into(), ic: PropIc::default() });
             return Ok(());
         }
         // An object-property step, or an *intermediate* `[]` append (`$a[][] = …`),
@@ -768,12 +768,12 @@ impl<'a> super::FnCompiler<'a> {
             self.emit(Op::PropIssetFetchGate { name: name.clone().into() }); // [obj, isset]
             let to_set = self.emit(Op::JumpIfFalse(Addr::MAX)); // unset → set; [obj]
             self.emit(Op::Dup); // [obj, obj]
-            self.emit(Op::PropGet { name: name.clone().into() }); // set: existing value → [obj, value]
+            self.emit(Op::PropGet { name: name.clone().into(), ic: PropIc::default() }); // set: existing value → [obj, value]
             let to_nn = self.emit(Op::JumpIfNotNull(Addr::MAX)); // null → popped; [obj]
             let set_at = self.here();
             self.patch(to_set, Op::JumpIfFalse(set_at));
             self.expr(rhs)?; // [obj, rhs]
-            self.emit(Op::PropSet { name: name.into() }); // [value]
+            self.emit(Op::PropSet { name: name.into(), ic: PropIc::default() }); // [value]
             let to_end = self.emit(Op::Jump(Addr::MAX));
             let nn_at = self.here();
             self.patch(to_nn, Op::JumpIfNotNull(nn_at)); // [obj, value]
@@ -844,7 +844,7 @@ impl<'a> super::FnCompiler<'a> {
                 let t = ti.next().expect("temps parallel to steps");
                 match step {
                     FieldStep::Prop(n) => {
-                        self.emit(Op::PropGet { name: n.clone().into() });
+                        self.emit(Op::PropGet { name: n.clone().into(), ic: PropIc::default() });
                     }
                     FieldStep::PropDyn => {
                         self.emit(Op::LoadSlot(t.expect("dyn step has temp")));
@@ -942,10 +942,10 @@ impl<'a> super::FnCompiler<'a> {
             self.emit(Op::Dup); // [obj, obj]
             self.expr(rhs)?; // [obj, obj, rhs]
             self.emit(Op::Swap); // [obj, rhs, obj]
-            self.emit(Op::PropGet { name: name.clone().into() }); // [obj, rhs, val]
+            self.emit(Op::PropGet { name: name.clone().into(), ic: PropIc::default() }); // [obj, rhs, val]
             self.emit(Op::Swap); // [obj, val, rhs]
             self.emit(Op::Binary(op));
-            self.emit(Op::PropSet { name: name.into() });
+            self.emit(Op::PropSet { name: name.into(), ic: PropIc::default() });
             return Ok(());
         }
         if place_has_prop(place) {
@@ -1075,7 +1075,7 @@ impl<'a> super::FnCompiler<'a> {
             return self.class_const_read(&class, &name, &place.steps, |s, p| s.isset_one(p));
         }
         if let Some(name) = self.prop_place(place)? {
-            self.emit(Op::PropIsset { name: name.into() });
+            self.emit(Op::PropIsset { name: name.into(), ic: PropIc::default() });
         } else if self.prop_place_dyn(place)? {
             self.emit(Op::PropIssetDyn);
         } else if place_has_prop(place) {
@@ -1107,7 +1107,7 @@ impl<'a> super::FnCompiler<'a> {
         if let Some(name) = self.prop_place(place)? {
             // stack: [obj]
             self.emit(Op::Dup); // [obj, obj]
-            self.emit(Op::PropIsset { name: name.clone().into() }); // [obj, isset]
+            self.emit(Op::PropIsset { name: name.clone().into(), ic: PropIc::default() }); // [obj, isset]
             let to_true = self.emit(Op::JumpIfFalse(Addr::MAX)); // unset → empty=true; [obj]
             self.emit(Op::PropGetSilent { name: name.into() }); // [value]
             self.emit(Op::Unary(crate::hir::UnOp::Not)); // [empty = !truthy(value)]

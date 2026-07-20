@@ -326,7 +326,7 @@ impl<'a> super::FnCompiler<'a> {
                         // must serve the value (BP_VAR_IS; WP_Block->attributes).
                         self.emit(Op::PropIssetFetchGate { name: name.clone().into() }); // [obj, isset]
                         let to_default = self.emit(Op::JumpIfFalse(Addr::MAX)); // unset → default; [obj]
-                        self.emit(Op::PropGet { name: name.clone().into() }); // set → [value]
+                        self.emit(Op::PropGet { name: name.clone().into(), ic: PropIc::default() }); // set → [value]
                         // A `__get` routed through the gate may still return
                         // null — `??` takes the default then (oracle-pinned).
                         let to_end = self.emit(Op::JumpIfNotNull(Addr::MAX));
@@ -425,7 +425,7 @@ impl<'a> super::FnCompiler<'a> {
                     let skip = self.emit(Op::JumpIfNull(Addr::MAX));
                     self.nullsafe_chain.as_mut().expect("chain open").push(skip);
                 }
-                self.emit(Op::PropGet { name: name.clone().into() });
+                self.emit(Op::PropGet { name: name.clone().into(), ic: PropIc::default() });
                 self.chain_exit(root);
             }
             ExprKind::MethodCall { object, method, args, named, nullsafe } => {

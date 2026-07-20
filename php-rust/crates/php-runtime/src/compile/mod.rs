@@ -27,7 +27,7 @@ use php_types::{ObjectInfo, PhpStr, PropVis};
 use crate::builtin::{Builtin, Registry};
 use crate::bytecode::{
     Addr, BuiltinIface, ClassTarget, CompiledAttribute, CompiledClass, CompiledConst, CompiledEnumCase, CompiledMethod, CompiledStaticProp, Const,
-    ConstIdx, DimBase, ExcRegion, FieldBase, FieldStep, Func, Instantiable, Module, Op, PropHooks, PropInfo, StaticInit,
+    ConstIdx, DimBase, ExcRegion, FieldBase, FieldStep, Func, Instantiable, Module, Op, PropHooks, PropIc, PropInfo, StaticInit,
 };
 use crate::hir::{
     BinOp, Case, CatchClause, ClassDecl, ClassId, ClassRef, Expr, ExprKind, FnDecl, HintKind, Line,

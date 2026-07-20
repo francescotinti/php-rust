@@ -400,6 +400,10 @@ pub(crate) fn run_module_with_hir<'m>(
     // run's teardown (same thread — in-process phpt batches, unit tests)
     // must not leak into this run's `#N` numbering.
     php_types::reset_freed_object_ids();
+    // ... and a fresh class-id space: the shared op payloads' inline caches
+    // (PropIc) must not resurrect (class_id → slot) pairs from a previous
+    // run where the same numeric id named another class (WP-29).
+    crate::bytecode::bump_ic_epoch();
     let mut vm = Vm {
         module,
         classes: module.classes.iter().map(|c| &**c).collect(),
@@ -14774,6 +14778,88 @@ mod tests {
             vm_stdout(b"<?php try { $x = 1 % 0; } catch (DivisionByZeroError $e) { echo $e->getMessage(); }"),
             b"Modulo by zero"
         );
+    }
+
+    #[test]
+    fn prop_ic_polymorphic_site_reads_right_slot() {
+        // WP-29: one PropGet site serving two classes whose same-name public
+        // property lives at DIFFERENT slot indices — the inline cache must
+        // re-validate on class_id and never serve the other class's slot.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class A { public $x = 'ax'; public $y = 'ay'; }
+                class B { public $pad1 = 1; public $pad2 = 2; public $y = 'by'; }
+                function r($o) { return $o->y; }
+                $out = '';
+                foreach ([new A, new B, new A, new B] as $o) { $out .= r($o); }
+                echo $out;"
+            ),
+            b"aybyayby"
+        );
+    }
+
+    #[test]
+    fn prop_ic_never_caches_non_public_visibility() {
+        // A rebindable closure reads a private: the first (in-scope) read must
+        // not poison the site for the out-of-scope read that follows.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class P { private $s = 'sec'; }
+                class Q { public $s = 'pub'; }
+                $r = function () { return $this->s; };
+                $in = Closure::bind($r, new P, P::class);
+                echo $in();
+                $q = Closure::bind($r, new Q, Q::class);
+                echo '|', $q();
+                $out = Closure::bind($r, new P, Q::class);
+                try { echo $out(); } catch (Error $e) { echo '|denied'; }"
+            ),
+            b"sec|pub|denied"
+        );
+    }
+
+    #[test]
+    fn prop_ic_set_write_through_ref_and_unset_revive() {
+        // The SET cache must write THROUGH a Ref slot (aliases observe it) and
+        // an unset()+re-set must revive at the declaration slot, not create a
+        // dynamic twin (iteration order proves it).
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class C { public $a = 1; public $b = 2; }
+                $c = new C;
+                function w($o, $v) { $o->b = $v; }
+                w($c, 10); w($c, 20);
+                $r = &$c->b;
+                w($c, 30);
+                echo $r, '|';
+                unset($c->a);
+                $c->a = 9; w($c, 40);
+                foreach ($c as $k => $v) { echo $k, '=', $v, ';'; }"
+            ),
+            b"30|a=9;b=40;"
+        );
+    }
+
+    #[test]
+    fn prop_ic_equality_is_structural_only() {
+        // The unit-cache compares Funcs structurally: cache state must be
+        // invisible (a filled and an empty IC compare equal), and a CLONE must
+        // share the same cell (the dispatch clones ops per execution — fills
+        // have to persist on the site).
+        let a = crate::bytecode::PropIc::default();
+        let b = crate::bytecode::PropIc::default();
+        assert!(a == b);
+        a.fill(7, 3);
+        assert!(a == b);
+        let c = a.clone();
+        assert_eq!(c.get(), a.get());
+        c.fill(9, 1);
+        assert_eq!(a.get(), Some((10, 1)), "clone shares the cell");
+        crate::bytecode::bump_ic_epoch();
+        assert_eq!(a.get(), None, "epoch bump invalidates");
     }
 
     #[test]
