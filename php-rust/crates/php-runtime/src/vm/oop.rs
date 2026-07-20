@@ -517,6 +517,11 @@ pub(super) fn asym_write_error(
     name: &[u8],
     verb: &str,
 ) -> Option<PhpError> {
+    // Class-level pre-check: no asymmetric property anywhere in the
+    // flattened table → no lookup at all (the overwhelmingly common case).
+    if !classes.get(obj_class)?.has_asym_set {
+        return None;
+    }
     let pi = prop_info(classes, obj_class, name)?;
     let sv = pi.set_visibility?;
     if pi.readonly {

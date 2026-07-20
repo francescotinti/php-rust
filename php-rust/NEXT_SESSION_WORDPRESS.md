@@ -55,7 +55,43 @@ nohup perl -e 'use POSIX qw(setsid); fork and exit 0; setsid(); exec { $ARGV[0] 
 # multisite: wp19-harness/run-multisite-detached.sh <oracle|phpr> (ms-out/)
 ```
 
-## Prossimo passo: SESSIONE WP-26
+## ✅ WP-26 ESEGUITA (2026-07-20, stessa sessione): attribuzione memoria + quick-win
+
+**Gap misurato (peak footprint, `/usr/bin/time -l`, delta vs base, 100k
+unità, probe `memcost.php/.sh` nello scratchpad WP-25/26)**:
+| struttura | oracle | phpr | gap |
+|---|---|---|---|
+| oggetto dichiarato 25 prop int | 480 B | 1.852 B | **3,9×** |
+| stdClass 25 prop dinamiche | 2.414 B | 1.695 B | 0,7× (phpr MEGLIO) |
+| array packed 25 int | 713 B (28,5/el) | 2.015 B (81/el) | 2,8× |
+| array assoc 26 chiavi str | 1.360 B | 2.814 B | 2,1× |
+| UN array packed 2,5M int | 16,4 B/el | **121 B/el** | **7,4×** |
+
+Contesto: media-group 5,0GB vs 0,4GB oracle (12,7×); CPU media 85,8s vs
+21,0s user (4,1×); full-suite CPU ~1,9×. Anatomia: `Props` =
+`Vec<(Box<[u8]>, Zval)>` → ~800B/istanza di SOLE chiavi duplicate + 400B
+di fat-pointer (25 prop); `PhpArray` = `Vec<Option<(Key, Zval)>>` (32B/el)
++ **`HashMap<Key,u32>` SEMPRE costruita** (~28B/el) anche per packed —
+Zend packed = 16B/el senza hash. `Zval` in sé è 16B come Zend: ok.
+
+**⚖️ VERDETTO WP-27 (entrambe giustificate, in quest'ordine)**:
+1. **PhpArray DUAL-REPR packed/hashed** (Zend-like: chiavi dense 0..n →
+   `Vec<Zval>` senza Key né index; escalation a hashed al primo string-key/
+   buco). Array ovunque in WP; vince anche CPU (hashbrown insert 79 +
+   reserve_rehash 38 nel profilo leaf; locality; niente hash-maintenance
+   su append). Gap peggiore misurato (7,4×).
+2. **Props SLOT-BASED** (layout per-classe condiviso + `Vec<Zval>` slots +
+   overflow per dynamic): da 1.852→~650B/oggetto stimati; sussume interning
+   e micro-fast-path CPU (accesso per indice di slot alla Zend).
+Laravel DOPO il layout nuovo. ⚠️ MIMALLOC_SHOW_STATS=1 si propaga ai
+SOTTOPROCESSI e ne inquina lo stdout (15 falsi Errors nei test subproc
+della media suite): usarlo solo su run senza subprocessi.
+
+**Quick-win `has_asym_set` FATTO** (flag per-classe, bail in testa a
+`asym_write_error` prima del lookup prop_info; probe byte-id; gate22
+rilanciato per il commit).
+
+## Candidati CPU precedenti (in coda dopo la rotta memoria)
 1. **CPU residua strutturale** (profilo fresco `wp22-harness/prof-out/
    wp25-base-t40.sample`, leaf: run_loop 2690 · memmove 563 · drop Zval 357
    · gc_sweep 311 · memcmp 300 · resolve_prop_access 263→ridotto dal

@@ -422,6 +422,7 @@ pub(super) fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> C
                 && pi.type_hint.is_none()
                 && pi.hooks.is_none()
         }),
+        has_asym_set: prop_info.values().any(|pi| pi.set_visibility.is_some()),
         prop_info,
     }
 }
@@ -540,5 +541,6 @@ pub(super) fn stub_class(cd: &crate::hir::ClassDecl) -> CompiledClass {
         // so keep it off every fast path.
         all_props_public: false,
         plain_set_props: false,
+        has_asym_set: false,
     }
 }

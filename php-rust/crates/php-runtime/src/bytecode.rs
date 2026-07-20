@@ -1446,6 +1446,12 @@ pub struct CompiledClass {
     /// visibility walk, no magic probe and no coercion — the `Op::PropSet`
     /// fast path (WP-25). Trivially true with no declared properties.
     pub plain_set_props: bool,
+    /// Whether ANY flattened declared property carries asymmetric set
+    /// visibility (`private(set)`/`protected(set)`, PHP 8.4). `false` for
+    /// virtually every class, letting `asym_write_error` bail before its
+    /// per-write prop_info lookup (WP-26 quick win: the WP-25 deny cost
+    /// showed up as an unconditional hash lookup per declared write).
+    pub has_asym_set: bool,
 }
 
 /// The compiled `get`/`set` hooks of one property (step 50). Each hook is a
