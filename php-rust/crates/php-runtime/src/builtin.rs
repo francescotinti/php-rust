@@ -8,7 +8,6 @@
 //! (php-builtins → php-runtime) while still letting builtins write to stdout and
 //! raise diagnostics.
 
-use std::collections::HashMap;
 use std::rc::Rc;
 
 use php_types::{convert, Diags, PhpError, Zval, ZStr};
@@ -86,4 +85,6 @@ pub enum Builtin {
 }
 
 /// Maps a function name (bytes, as written in source) to its implementation.
-pub type Registry = HashMap<Vec<u8>, Builtin>;
+/// FxHash (WP-29 B2): `Op::CallBuiltin` pays this lookup on every builtin
+/// call — the std SipHash default was measurable on the media-group profile.
+pub type Registry = rustc_hash::FxHashMap<Vec<u8>, Builtin>;

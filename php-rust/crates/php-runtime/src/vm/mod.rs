@@ -283,7 +283,7 @@ pub fn run_source_with_argv(
 /// Lower `source`, compile it, and run it on the VM with no builtins registered.
 /// Convenience wrapper over [`run_source_with`] with an empty [`Registry`].
 pub fn run_source(name: &[u8], source: &[u8]) -> Result<VmOutcome, VmRunError> {
-    run_source_with(name, source, &Registry::new())
+    run_source_with(name, source, &Registry::default())
 }
 
 /// Build the [`VmOutcome`] for a compile-time PHP `Fatal error:` (E2; mirrors
@@ -4692,7 +4692,7 @@ impl<'m> Vm<'m> {
         let cls = &name[..pos];
         let rest = &name[pos + 2..];
         let cls = cls.strip_prefix(b"\\").unwrap_or(cls);
-        let cid = *self.class_index.get(&cls.to_ascii_lowercase())?;
+        let cid = *self.class_index.get(LcKey::new(cls).as_slice())?;
         find_const_runtime(&self.classes, cid, rest)
     }
 
@@ -4721,7 +4721,7 @@ impl<'m> Vm<'m> {
         let pos = name.windows(2).position(|w| w == b"::")?;
         let cls = name[..pos].strip_prefix(b"\\").unwrap_or(&name[..pos]);
         let rest = &name[pos + 2..];
-        let cid = *self.class_index.get(&cls.to_ascii_lowercase())?;
+        let cid = *self.class_index.get(LcKey::new(cls).as_slice())?;
         self.enum_case_idx(cid, rest).map(|i| (cid, i))
     }
 
@@ -4761,7 +4761,7 @@ impl<'m> Vm<'m> {
                 let b = s.as_bytes();
                 if let Some(pos) = b.windows(2).position(|w| w == b"::") {
                     let cls = &b[..pos];
-                    let cid = self.class_index.get(&cls.to_ascii_lowercase()).copied()?;
+                    let cid = self.class_index.get(LcKey::new(cls).as_slice()).copied()?;
                     method_sig(cid, &b[pos + 2..], &self.classes[cid].name)
                 } else {
                     self.named_byref_sig(b)
@@ -4792,7 +4792,7 @@ impl<'m> Vm<'m> {
                         method_sig(cid, &method, &cname)
                     }
                     Zval::Str(s) => {
-                        let cid = self.class_index.get(&s.as_bytes().to_ascii_lowercase()).copied()?;
+                        let cid = self.class_index.get(LcKey::new(s.as_bytes()).as_slice()).copied()?;
                         method_sig(cid, &method, &self.classes[cid].name.clone())
                     }
                     _ => None,
@@ -4827,7 +4827,7 @@ impl<'m> Vm<'m> {
         {
             return Some(pack(f));
         }
-        let &(fmod, idx) = self.linked_functions.get(&name.to_ascii_lowercase())?;
+        let &(fmod, idx) = self.linked_functions.get(LcKey::new(name).as_slice())?;
         Some(pack(&fmod.functions[idx]))
     }
 
@@ -5028,7 +5028,7 @@ impl<'m> Vm<'m> {
         let target = args.get(1).cloned().unwrap_or(Zval::Null);
         let tbytes = convert::to_zstr_cast(&target, &mut self.diags).as_bytes().to_vec();
         let tname = tbytes.strip_prefix(b"\\").unwrap_or(&tbytes);
-        let Some(&tgt_cid) = self.class_index.get(&tname.to_ascii_lowercase()) else {
+        let Some(&tgt_cid) = self.class_index.get(LcKey::new(tname).as_slice()) else {
             return Ok(Zval::Bool(false));
         };
         if !allow_self && subj_cid == tgt_cid {
@@ -5903,7 +5903,7 @@ impl<'m> Vm<'m> {
         if autoload {
             self.resolve_class_autoload(&name)
         } else {
-            Ok(self.class_index.get(&name.to_ascii_lowercase()).copied())
+            Ok(self.class_index.get(LcKey::new(&name).as_slice()).copied())
         }
     }
 
@@ -7543,13 +7543,12 @@ impl<'m> Vm<'m> {
         // dynamic path) resolves like the bare name.
         let name = name.strip_prefix(b"\\").unwrap_or(name);
         // Conditional declarations are callable only once registered in
-        // `linked_functions` by their `Op::DeclareFn`.
-        self.module
-            .functions
-            .iter()
-            .enumerate()
-            .any(|(i, f)| !self.module.conditional_fns.contains(&i) && name_eq_ignore_case(&f.name, name))
-            || self.linked_functions.contains_key(&name.to_ascii_lowercase())
+        // `linked_functions` by their `Op::DeclareFn`. (WP-29 B2: ci-table
+        // binary search instead of the whole-table scan.)
+        self.module.find_fn_ci(name).is_some()
+            || self
+                .linked_functions
+                .contains_key(LcKey::new(name).as_slice())
             || self.registry.get(name).is_some()
             || host_builtin_canonical(name).is_some()
             || host_builtin_ref_first(name).is_some()
@@ -11394,6 +11393,38 @@ fn name_eq_ignore_case(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.eq_ignore_ascii_case(y))
 }
 
+/// Lowercased key view for the ci-keyed indexes (`class_index`,
+/// `linked_functions`) — WP-29 B3: the old `to_ascii_lowercase()` allocated a
+/// `Vec` on EVERY lookup. Short names (the norm for identifiers) stay on the
+/// stack; longer ones take the one allocation.
+pub(super) enum LcKey {
+    Stack([u8; 64], usize),
+    Heap(Vec<u8>),
+}
+
+impl LcKey {
+    #[inline]
+    pub(super) fn new(name: &[u8]) -> Self {
+        if name.len() <= 64 {
+            let mut buf = [0u8; 64];
+            for (d, s) in buf.iter_mut().zip(name) {
+                *d = s.to_ascii_lowercase();
+            }
+            LcKey::Stack(buf, name.len())
+        } else {
+            LcKey::Heap(name.to_ascii_lowercase())
+        }
+    }
+
+    #[inline]
+    pub(super) fn as_slice(&self) -> &[u8] {
+        match self {
+            LcKey::Stack(b, n) => &b[..*n],
+            LcKey::Heap(v) => v,
+        }
+    }
+}
+
 
 /// The method name for a dynamic call (`$obj->$m()`, `$cls::$m()`): PHP requires a
 /// *string* — a non-string (object, array, int, …) raises the catchable
@@ -12362,7 +12393,7 @@ mod tests {
     /// Compile and run a PHP snippet through the bytecode VM (no builtins),
     /// returning stdout. The bulk of the suite is builtin-free control flow.
     fn vm_stdout(src: &[u8]) -> Vec<u8> {
-        vm_run(src, &Registry::new()).stdout
+        vm_run(src, &Registry::default()).stdout
     }
 
     /// Compile and run with a given registry, asserting no fatal; full outcome.
@@ -12402,7 +12433,7 @@ mod tests {
         }
         "#;
         let program = lower_source(b"test.php", src).expect("lower");
-        let reg = Registry::new();
+        let reg = Registry::default();
         let module = compile_program(&program, &reg).expect("compile");
         let classes: Vec<&super::CompiledClass> = module.classes.iter().map(|c| &**c).collect();
         let cid = |n: &[u8]| classes.iter().position(|c| c.name.as_ref() == n).expect("class");
@@ -12587,7 +12618,7 @@ mod tests {
     }
 
     fn fake_registry() -> Registry {
-        let mut r = Registry::new();
+        let mut r = Registry::default();
         r.insert(b"t_double".to_vec(), Builtin::Value(t_double));
         r.insert(b"t_emit".to_vec(), Builtin::Value(t_emit));
         r.insert(b"t_warn".to_vec(), Builtin::Value(t_warn));
@@ -13200,7 +13231,7 @@ mod tests {
     #[test]
     fn match_unhandled_is_fatal() {
         let program = lower_source(b"test.php", b"<?php echo match (9) { 1 => 'a' };").expect("lower");
-        let reg = Registry::new();
+        let reg = Registry::default();
         let module = compile_program(&program, &reg).expect("compile");
         let out = run_module(&module, &reg);
         assert!(out.fatal.is_some());
@@ -13212,7 +13243,7 @@ mod tests {
     /// for the fatal-path OOP tests.
     fn vm_outcome(src: &[u8]) -> super::VmOutcome {
         let program = lower_source(b"test.php", src).expect("lower");
-        let reg = Registry::new();
+        let reg = Registry::default();
         let module = compile_program(&program, &reg).expect("compile");
         run_module(&module, &reg)
     }
@@ -13401,7 +13432,7 @@ mod tests {
 
     #[test]
     fn run_source_with_runs_plain_code() {
-        let reg = Registry::new();
+        let reg = Registry::default();
         let out = super::run_source_with(b"test.php", b"<?php echo 'ok';", &reg).expect("ok");
         assert_eq!(out.rendered, b"ok");
     }
@@ -13411,7 +13442,7 @@ mod tests {
         // Named arguments on a (non-user) builtin call are still a compile-time gap,
         // surfaced as `VmRunError::Unsupported`, not a fatal. (An *unknown* function
         // name is no longer rejected — it defers to a run-time Error.)
-        let reg = Registry::new();
+        let reg = Registry::default();
         let err = super::run_source_with(b"test.php", b"<?php array_map(callback: 'x', array: []);", &reg)
             .expect_err("vm should reject named-arg builtin call");
         assert!(matches!(err, super::VmRunError::Unsupported(_)));
@@ -14672,8 +14703,8 @@ mod tests {
     fn uncaught_exception_is_fatal() {
         // No matching clause anywhere: the run reports a fatal (not a panic).
         let program = lower_source(b"test.php", b"<?php throw new Exception('nope');").expect("lower");
-        let module = compile_program(&program, &Registry::new()).expect("compile");
-        let out = run_module(&module, &Registry::new());
+        let module = compile_program(&program, &Registry::default()).expect("compile");
+        let out = run_module(&module, &Registry::default());
         assert!(out.fatal.is_some(), "expected an uncaught-exception fatal");
     }
 
@@ -14955,16 +14986,16 @@ mod tests {
         // A clause for an unrelated type does not catch the engine error: it
         // keeps unwinding and the run reports a fatal (not a panic).
         let program = lower_source(b"test.php", b"<?php try { $x = 1 % 0; } catch (ValueError $e) { echo 'no'; }").expect("lower");
-        let module = compile_program(&program, &Registry::new()).expect("compile");
-        let out = run_module(&module, &Registry::new());
+        let module = compile_program(&program, &Registry::default()).expect("compile");
+        let out = run_module(&module, &Registry::default());
         assert!(out.fatal.is_some(), "expected an uncaught engine-error fatal");
     }
 
     #[test]
     fn uncaught_engine_error_is_fatal() {
         let program = lower_source(b"test.php", b"<?php $x = 1 % 0;").expect("lower");
-        let module = compile_program(&program, &Registry::new()).expect("compile");
-        let out = run_module(&module, &Registry::new());
+        let module = compile_program(&program, &Registry::default()).expect("compile");
+        let out = run_module(&module, &Registry::default());
         assert!(out.fatal.is_some(), "expected an uncaught engine-error fatal");
     }
 
@@ -17580,8 +17611,8 @@ mod tests {
         // oversized worker stack.
         let program =
             lower_source(b"t.php", b"<?php function r($n){ return r($n + 1); } r(0);").expect("lower");
-        let module = compile_program(&program, &Registry::new()).expect("compile");
-        let out = run_module(&module, &Registry::new());
+        let module = compile_program(&program, &Registry::default()).expect("compile");
+        let out = run_module(&module, &Registry::default());
         match out.fatal {
             Some(PhpError::Error(m)) => {
                 assert!(m.contains("call stack depth"), "unexpected message: {m}")
@@ -17794,8 +17825,8 @@ mod tests {
     fn match_unhandled_includes_subject_and_stringable_instanceof() {
         // UnhandledMatchError carries the subject value in its message.
         let program = lower_source(b"t.php", b"<?php echo match (5) { 1 => 'a' };").expect("lower");
-        let module = compile_program(&program, &Registry::new()).expect("compile");
-        let out = run_module(&module, &Registry::new());
+        let module = compile_program(&program, &Registry::default()).expect("compile");
+        let out = run_module(&module, &Registry::default());
         match out.fatal {
             Some(PhpError::Error(m)) => assert_eq!(m, "Unhandled match case 5"),
             other => panic!("expected UnhandledMatchError, got {other:?}"),

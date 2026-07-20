@@ -201,9 +201,19 @@ fn compile_program_impl(
         .map(|(name, attrs)| (name.clone(), compile_attrs(attrs, &ctx, None)))
         .collect();
 
+    // WP-29 B2: case-insensitive function index (see `Module::fn_ci`).
+    let mut fn_ci: Vec<(u64, u32)> = functions
+        .iter()
+        .enumerate()
+        .map(|(i, f)| (crate::bytecode::ci_hash(&f.name), i as u32))
+        .collect();
+    fn_ci.sort_unstable();
+    let fn_ci = fn_ci.into_boxed_slice();
+
     Ok(Module {
         main,
         functions,
+        fn_ci,
         conditional_fns: program.conditional_fns.clone(),
         conditional_classes: program.conditional_classes.clone(),
         conditional_traits: program.conditional_traits.clone(),

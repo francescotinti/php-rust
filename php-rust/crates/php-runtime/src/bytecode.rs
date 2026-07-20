@@ -1632,6 +1632,13 @@ pub struct Module {
     /// resolvable by name until their [`Op::DeclareFn`] runs (which registers them
     /// in the VM's runtime function table), so name resolution skips these indices.
     pub conditional_fns: std::collections::HashSet<usize>,
+    /// Case-insensitive function index (WP-29 B2): `(ci_hash(name), index
+    /// into functions)`, sorted by hash. `invoke_named`/`is_name_callable`
+    /// binary-search it instead of scanning every function (prelude
+    /// included) with a per-entry case-compare. ALL functions are listed —
+    /// conditional ones are filtered after the lookup, exactly like the
+    /// legacy scan; same-name duplicates keep index order (the tuple sort).
+    pub fn_ci: Box<[(u64, u32)]>,
     /// Indices into `classes` that are **conditional** declarations (a class /
     /// interface / enum statement inside a branch/block or a function/method body):
     /// not resolvable by name until their [`Op::DeclareClass`] runs (which registers
@@ -1665,6 +1672,7 @@ pub struct Module {
     /// error's prelude class (`TypeError`, `DivisionByZeroError`, …) so the
     /// matching Throwable can be synthesized and offered to a `catch` (EXC-3a).
     pub class_index: HashMap<Vec<u8>, ClassId>,
+    // (fn_ci lookup: see `Module::find_fn_ci` below.)
     /// Number of `static $x` bindings in the whole program (`id` space), used to
     /// size the VM's persistent `statics` storage. Carried from
     /// [`crate::hir::Program::static_count`].
@@ -1676,4 +1684,36 @@ pub struct Module {
     /// `#[Attr]` attributes on top-level `const` declarations, keyed by FQN —
     /// read by `ReflectionConstant::getAttributes()`. Empty for the common case.
     pub const_attributes: std::collections::HashMap<Box<[u8]>, Vec<CompiledAttribute>>,
+}
+
+impl Module {
+    /// Resolve `name` (ASCII-case-insensitive) to an unconditionally-callable
+    /// function index (WP-29 B2): binary search on the sorted `fn_ci` table +
+    /// name verify, skipping conditional declarations exactly like the legacy
+    /// whole-table scan (which remains as the fallback for a table-less
+    /// module). Same-name duplicates resolve to the lowest eligible index —
+    /// the tuple sort keeps index order within one hash.
+    pub fn find_fn_ci(&self, name: &[u8]) -> Option<usize> {
+        if self.fn_ci.is_empty() {
+            return self.functions.iter().enumerate().find_map(|(i, f)| {
+                (!self.conditional_fns.contains(&i) && f.name.eq_ignore_ascii_case(name))
+                    .then_some(i)
+            });
+        }
+        let h = ci_hash(name);
+        let mut i = self.fn_ci.partition_point(|e| e.0 < h);
+        while let Some(&(eh, idx)) = self.fn_ci.get(i) {
+            if eh != h {
+                break;
+            }
+            let idx = idx as usize;
+            if !self.conditional_fns.contains(&idx)
+                && self.functions.get(idx).is_some_and(|f| f.name.eq_ignore_ascii_case(name))
+            {
+                return Some(idx);
+            }
+            i += 1;
+        }
+        None
+    }
 }

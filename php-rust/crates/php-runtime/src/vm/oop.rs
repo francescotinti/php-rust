@@ -882,7 +882,7 @@ impl<'m> Vm<'m> {
             Zval::Str(s) => {
                 let raw = s.as_bytes();
                 let name = raw.strip_prefix(b"\\").unwrap_or(raw);
-                self.class_index.get(&name.to_ascii_lowercase()).copied()
+                self.class_index.get(LcKey::new(name).as_slice()).copied()
             }
             Zval::Ref(r) => self.class_id_from_value(&r.borrow()),
             _ => None,

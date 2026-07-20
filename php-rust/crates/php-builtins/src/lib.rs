@@ -74,7 +74,7 @@ pub(crate) fn null_arg_deprecation(
 
 /// Build the Tier 1 builtin registry.
 pub fn registry() -> Registry {
-    let mut r = Registry::new();
+    let mut r = Registry::default();
     let mut add = |name: &[u8], f: php_runtime::BuiltinFn| {
         r.insert(name.to_vec(), Builtin::Value(f));
     };

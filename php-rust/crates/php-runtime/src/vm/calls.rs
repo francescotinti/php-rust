@@ -952,11 +952,10 @@ impl<'m> Vm<'m> {
         let name = name.strip_prefix(b"\\").unwrap_or(name);
         // Only unconditionally-hoisted functions resolve by name eagerly;
         // conditional declarations become callable through `linked_functions`
-        // once their `Op::DeclareFn` has run.
-        if let Some(idx) = self.module.functions.iter().enumerate().find_map(|(i, f)| {
-            (!self.module.conditional_fns.contains(&i) && name_eq_ignore_case(&f.name, name))
-                .then_some(i)
-        }) {
+        // once their `Op::DeclareFn` has run. (WP-29 B2: binary search on the
+        // module's ci table — the old whole-table scan case-compared every
+        // function, prelude included, per dynamic call.)
+        if let Some(idx) = self.module.find_fn_ci(name) {
             let callee = &self.module.functions[idx];
             // Deferred place arguments (SEND_VAR_EX) resolve against the
             // callee's by-ref mask now that it is known.
@@ -971,7 +970,7 @@ impl<'m> Vm<'m> {
         }
         // A function declared by a linked eval/include unit (step 57): resolve it
         // and run its frame in the module that defined it.
-        if let Some(&(fmod, idx)) = self.linked_functions.get(&name.to_ascii_lowercase()) {
+        if let Some(&(fmod, idx)) = self.linked_functions.get(LcKey::new(name).as_slice()) {
             let callee = &fmod.functions[idx];
             if args.iter().any(|a| matches!(a, Zval::ArgPlace(_))) {
                 let top = self.frames.len() - 1;
