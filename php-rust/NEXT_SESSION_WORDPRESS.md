@@ -90,6 +90,28 @@ H="/Volumes/Extreme Pro/Claude/wp16-harness"
 5. **Roadmap post-WP**: validazione Laravel dopo il layout memoria nuovo.
 6. Se si toccano date/prelude DateTime: gate ext/date OBBLIGATORIO (351).
 
+## 📊 REPORT GAP PERF ORACLE↔PHPR — ATTIVITÀ RICORRENTE DI FINE SESSIONE (richiesta utente 2026-07-20)
+A OGNI chiusura di sessione, prima del commit finale di memoria/handoff,
+misurare e riportare all'utente il gap aggiornato, e aggiornare la tabella
+qui sotto (storico = trend tra sessioni; ⚠️ confrontare RAPPORTI, mai i
+tempi assoluti di giornate diverse):
+1. **Media group**: oracle 1 run `/usr/bin/time -l` (DB reset + uploads
+   azzerati) vs phpr (riusare la media `new` dell'A/B di sessione se c'è,
+   altrimenti 1 run identica) → rapporto **user CPU** e **peak footprint**.
+2. **Full-suite**: CPU del processo master phpr dall'ultima riga del
+   telemetria `.rss` della runN di sessione vs full-suite oracle (già
+   baseline; rimisurarla solo se si sospetta drift ambientale) → rapporto.
+
+Metrica full-suite (definita WP-27, stesso giorno per entrambi): CPU del
+processo MASTER dal tail del `.rss` (⚠️ esclude i figli isolati, undercount
+per entrambi) + wall; RSS di telemetria solo indicativo (mente sotto
+compressor — vmmap per i footprint veri).
+
+| sessione | media CPU (phpr/oracle) | media footprint | full-suite master-CPU | full-suite wall |
+|---|---|---|---|---|
+| WP-26 (baseline) | 85,8/21,0 = **4,1×** | 5,0/0,4GB = **12,7×** | (metrica non comparabile: "~1,9×" era il wall) | ~1,9× |
+| WP-27 | 82,7/21,1 = **3,9×** | 4,78/0,40GB = **12,0×** | 16:11/5:39 = **2,9×** | ~22/11,5 min = **1,9×** |
+
 ## Lezioni operative (nuove WP-27)
 - ⭐⭐ **Semantica packed di Zend, oracle-pinned**: NIENTE revive in-place dei
   tombstone (re-insert dopo unset va in CODA all'ordine di iterazione, sia
