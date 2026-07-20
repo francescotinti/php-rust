@@ -1,4 +1,29 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-28: gap estensioni chiusi + GC free-order Zend)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-29: slot-index/IC proprietà + dispatch ci)
+
+> ⚡ **WP-29 (2026-07-20 sera, gated `4297fe5`→`f375bc9`, 6 commit)**: punti 1+2
+> del piano perf. **(A) Proprietà**: `PropInfo.slot` precalcolato (allineato a
+> `PropsLayout`; virtual-hooked = None) + `Props::get_slot/replace_slot` +
+> `PropAccess::Slot { key, slot }` + gemelli slot-aware `read/write_property_at`
+> (write-through-Ref identico) + de-dup PropOpSet/PropIncDec (era 2 resolve +
+> 2 slot_of) + Cow::Borrowed nei FieldScope (via i to_vec per Prop-step) +
+> **PropIc**: inline-cache monomorfica per-op-site su PropGet/PropSet/PropIsset
+> (`Rc<Cell<(epoch, class_id+1, slot)>>` — il dispatch CLONA l'op ⇒ cella
+> condivisa; PartialEq sempre-true per la unit-cache; epoch per-run perché gli
+> id classe cambiano tra run sui moduli riusati). Fill SOLO scope-indipendente
+> (public hook-free; SET solo plain_set_props — le closure sono ri-bindabili)
+> e ⭐ ANCHE dai fast-path WP-25 (senza, la cache resta fredda per sempre sulle
+> classi all-public). **(B) Dispatch**: `methods_ci` per classe (ci-hash
+> ordinata, binary search in resolve_method_runtime, ⚠️ soglia ≥12 metodi —
+> sotto, lo scan early-exit vince; ⭐ PRIMO-vince dentro la stessa classe:
+> alias di trait duplicano i nomi, bug61998) + `Module.fn_ci` (via lo scan
+> O(n) di invoke_named col prelude) + registry builtin SipHash→FxHash + LcKey
+> stack-buffer (via il to_ascii_lowercase allocante da class_index/linked) +
+> Hash di PhpStr = zhash cached (zend_string->h). **Esito misurato**: media
+> group **−0,4% (rumore)** — è dominato da gd/webp/mysql; **full-suite
+> master-CPU 16:43→15:27 = −7,6%** (run20; il carico dispatch-heavy
+> beneficia). run20 = run19 per nome; gate22 TUTTO verde.
+
+# (storia WP-28)
 
 > 🏁 **WP-28 (2026-07-20, gated `b72d14f` + `29bbb4e`)**: chiusura dei gap
 > estensioni del handoff WP-27. **(1) asymmetric visibility 29→38/39**:
@@ -30,13 +55,13 @@ Riprendiamo phpr (PHP 8.5.7 in Rust). **Roadmap**: obiettivo primario = 100%
 compatibilità WordPress; la WP core test suite (PHPUnit) è il GATE PER NOME.
 
 ## Stato gate per nome (tutte le superfici)
-- Gate22 WP-28 verde (wp22-harness/gate-out): corpus **1455** · sess 28 ·
+- Gate22 WP-29 verde (wp22-harness/gate-out): corpus **1455** · sess 28 ·
   date 351 · refl 290 IDENTICI · ORM 3E/13F identico per nome · hk 1665 0E/0F ·
-  cargo **1567**/0 · probe gd/mysqli/media byte-id · http battery DIFF-set = 16
+  cargo **1573**/0 · probe gd/mysqli/media byte-id · http battery DIFF-set = 16
   (WP-14) · option 413 e restapi 3514 identici per nome.
-- **Full-suite single-site run19: IDENTICA a run17/run16 per nome (30.481
-  test, 0E/2F/86W/73S) = minimo teorico**. Archiviata in
-  `wp16-harness/full-out/run19/`.
+- **Full-suite single-site run20: IDENTICA a run19/run17/run16 per nome
+  (30.481 test, 0E/2F/86W/73S) = minimo teorico**, master-CPU 15:27.
+  Archiviata in `wp16-harness/full-out/run20/`.
 - **Full-suite multisite RICONFERMATA (WP-28): 1 diff per nome — minimo
   teorico** (31.278 test, 0E/2F; solo `wp_is_stream #2`;
   `wp19-harness/ms-out/diff-names-wp28.txt`).
@@ -61,9 +86,18 @@ H="/Volumes/Extreme Pro/Claude/wp16-harness"
 1. **Validazione Laravel** ([[php-rust-roadmap-wp-first]]): WP-track satura
    (full-suite e multisite al minimo teorico; estensioni citate chiuse salvo
    3 residui strutturali sotto).
-2. **Slot-index fast path** (CPU, facoltativo, da WP-27): `resolve_prop_access`
-   conosce la classe → restituire l'INDICE di slot precalcolato in `PropInfo`
-   e saltare `PropsLayout::slot_of`; aggancio ai flag per-classe esistenti.
+2. **Perf, prossima leva (dal profilo POST-WP-29,
+   `wp29-harness/ab-out/new-t45.sample`)**: il tetto misurato di
+   slot-index+interning sul MEDIA group è ~1% (dominato da gd/webp/mysql);
+   sulla FULL-suite vale −7,6%. I colli residui phpr-only, in ordine:
+   run_loop/dispatch (1188 campioni — opcode specialization/quickening),
+   memmove 328 + drop/clone Zval ~250 (value churn → la mossa grossa è la
+   value-representation), call machinery bind_params+enter_callee+Frame::drop
+   ~165 (**frame arena**: il candidato col miglior ROI/rischio), GC
+   note/sweep ~180, PhpArray::insert+hashbrown ~130, is_instance_of+iface
+   ~75 (cache per (class,target)). Estensioni facili del lavoro WP-29:
+   PropIc anche su PropOpSet/PropIncDec e IC (class→(defc,midx)) sui siti
+   MethodCall.
 3. **Residui strutturali** (se si vuole il 100% delle suite estensioni):
    - `ast_printing.phpt`: serve un vero zend_ast_export sull'HIR (il dedent
      del sorgente non basta: manca la riga vuota dopo le class decl).
@@ -99,8 +133,29 @@ misurare e riportare all'utente il gap aggiornato e aggiornare la tabella
 | WP-26 (baseline) | 85,8/21,0 = **4,1×** | 5,0/0,4GB = **12,7×** | (wall, non comparabile) | ~1,9× |
 | WP-27 | 82,7/21,1 = **3,9×** | 4,78/0,40GB = **12,0×** | 16:11/5:39 = **2,9×** | ~22/11,5 min = **1,9×** |
 | WP-28 | 87,6/23,0 = **3,8×** | 4,83/0,40GB = **12,2×** | 16:43/5:39 = **3,0×** | ~22/11,5 min = **1,9×** |
+| WP-29 | 82,4/23,0 = **3,6×** | 4,84/0,40GB = **12,1×** | 15:27/5:39 = **2,7×** | ~22/11,5 min = **1,9×** |
 
-## Lezioni operative (nuove WP-28)
+## Lezioni operative (nuove WP-29)
+- ⭐⭐ **Le inline-cache vanno riempite da OGNI percorso che risolve** — se un
+  fast-path esistente intercetta il traffico prima del percorso generale (il
+  solo che riempiva), la cache resta fredda per sempre e paghi solo il guard.
+- ⭐⭐ **Il media group NON misura il dispatch**: è dominato da gd/webp/mysql
+  (le stesse C lib dell'oracle). Le ottimizzazioni VM si vedono sulla
+  FULL-suite (−7,6% qui) — scegliere il benchmark in base a cosa si ottimizza.
+- ⭐ **hash-then-bsearch perde contro lo scan early-exit sotto ~12 voci**
+  (stessa soglia di HASH_SCAN_MIN); e FxHasher `write_u8` per byte = un round
+  per byte, SEMPRE lowercase su stack buffer + un `write(slice)`.
+- ⭐ **Op payload con stato runtime**: il dispatch CLONA l'op → la cella va
+  `Rc`-condivisa; `PartialEq` sempre-true per non rompere la unit-cache;
+  epoch per-run perché gli id classe non sono stabili tra run sui moduli
+  riusati.
+- ⭐ Le closure sono ri-bindabili (`Closure::bind`): MAI cachare per-sito un
+  esito di visibilità non-public.
+- Il worktree per il binario old: se l'HD interno è pieno, `rm -rf` del
+  profilo debug di php-rust-output (2,2GB ricreabili) prima di cambiare
+  target dir.
+
+## Lezioni operative (WP-28)
 - ⭐⭐ **Ordine free/destructor Zend = ordine delle RELEASE**: la coda dei
   candidati GC deve essere FIFO in ordine di nota; le entry di gc_track alla
   nascita (e i re-seed light-demoted) NON sono release — vanno marcate
@@ -127,15 +182,15 @@ misurare e riportare all'utente il gap aggiornato e aggiornare la tabella
 - Gate per OGNI commit: corpus/sess/date/refl per NOME — baseline:
   **corpus 1455** · sess 28 · date 351 · refl 290 (SOLO rimozioni ammesse;
   fail-set in `wp18-harness/gate-out/*.fails`) · ORM 3484 3E/13F per nome ·
-  http-kernel 1665 0E/0F · cargo (**1567**) · probe: gd 11/11, mysqli 11/11,
+  http-kernel 1665 0E/0F · cargo (**1573**) · probe: gd 11/11, mysqli 11/11,
   media-probe byte-id, run-http (DIFF-set 16 = WP-14) · WP suite per-classe =
   oracle (option 413 · media 762 · post 906 · user 1341 · query 1889 ·
   restapi 3514 · taxonomy 878 · comment 582 · xmlrpc 316 · sitemaps 132 ·
   classi WP-17/18). Script: `wp22-harness/gate22.sh` (lanciarlo col
   daemonizer; ~22 min).
-- Full-suite single-site: solo miglioramenti per nome vs **run19 (= run17 =
-  run16; 1 diff: wp_is_stream #2)**. Multisite: vs **ms-out WP-28 (1 diff
-  idem)**.
+- Full-suite single-site: solo miglioramenti per nome vs **run20 (= run19 =
+  run17 = run16; 1 diff: wp_is_stream #2)**. Multisite: vs **ms-out WP-28
+  (1 diff idem)**.
 - Commit AND push a ogni step; run pesanti SEQUENZIALI, sotto watchdog o
   daemonizer, marker .done su disco; Serena per Rust (in timeout: verificare
   lo stato del file prima di riprovare); Vexp/Read per il C; Read/Write tool
