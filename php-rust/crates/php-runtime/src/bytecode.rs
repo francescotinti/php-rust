@@ -1506,6 +1506,12 @@ pub struct PropInfo {
     /// name today; reserved as the future target for private-property name mangling
     /// (so a subclass's `private $x` can shadow a parent's without colliding).
     pub storage_key: Box<[u8]>,
+    /// The slot index of `storage_key` in the class's `props_layout` (WP-29):
+    /// stamped once at class compile so the runtime reaches the storage slot
+    /// without re-hashing the name (`Props::get_slot`). `None` for a VIRTUAL
+    /// hooked property (no backing slot). Class-local index — needs no
+    /// relocation across unit linking.
+    pub slot: Option<u32>,
     /// The `/** … */` doc comment of the most-derived declaration, for
     /// `ReflectionProperty::getDocComment()` and the class export. `None` if absent.
     pub doc: Option<Box<[u8]>>,

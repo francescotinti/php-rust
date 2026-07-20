@@ -62,6 +62,57 @@ pub(super) fn write_property(recv: &Zval, name: &[u8], value: Zval) -> Result<Op
     }
 }
 
+/// Slot-aware twin of [`read_property`] (WP-29): a resolved slot index reads
+/// the declared storage directly — no name hash, no dyn-entry scan. `None`
+/// slot, a `Ref` receiver, or an absent slot (unset → the undefined-property
+/// warning path) fall back to the by-name read, which owns every diagnostic.
+#[inline]
+pub(super) fn read_property_at(recv: &Zval, name: &[u8], slot: Option<u32>, diags: &mut Diags) -> Zval {
+    if let (Some(i), Zval::Object(o)) = (slot, recv) {
+        if let Some(v) = o.borrow().props.get_slot(i) {
+            return v.deref_clone();
+        }
+    }
+    read_property(recv, name, diags)
+}
+
+/// Slot-aware twin of [`write_property`] (WP-29): same write-through-`Ref`
+/// discipline, same displaced-value return for GC noting. A stale index
+/// (`Err` from `replace_slot`) or a `None` slot falls back to the name path —
+/// a write is never lost.
+#[inline]
+pub(super) fn write_property_at(recv: &Zval, name: &[u8], slot: Option<u32>, value: Zval) -> Result<Option<Zval>, PhpError> {
+    if let (Some(i), Zval::Object(o)) = (slot, recv) {
+        // A slot holding a reference is written THROUGH (aliases keep seeing
+        // the update) — mirror `write_property` exactly.
+        let cell = match o.borrow().props.get_slot(i) {
+            Some(Zval::Ref(cell)) => Some(Rc::clone(cell)),
+            _ => None,
+        };
+        if let Some(cell) = cell {
+            let old = std::mem::replace(&mut *cell.borrow_mut(), value);
+            return Ok(Some(old));
+        }
+        return match o.borrow_mut().props.replace_slot(i, value) {
+            Ok(old) => Ok(old),
+            Err(v) => write_property(recv, name, v),
+        };
+    }
+    write_property(recv, name, value)
+}
+
+/// Slot-aware twin of [`prop_isset`] (WP-29).
+#[inline]
+pub(super) fn prop_isset_at(recv: &Zval, name: &[u8], slot: Option<u32>) -> bool {
+    if let (Some(i), Zval::Object(o)) = (slot, recv) {
+        return match o.borrow().props.get_slot(i) {
+            Some(v) => !matches!(v.deref_clone(), Zval::Null | Zval::Undef),
+            None => false,
+        };
+    }
+    prop_isset(recv, name)
+}
+
 /// The shared storage cell for object property `name`, promoting it to a
 /// `Zval::Ref` in place if it is a plain value (so a `foreach ($o as &$v)` binds
 /// `$v` to the property and writes through it). The property must already exist.
@@ -287,8 +338,11 @@ pub(super) enum PropAccess<'a> {
     /// plain name today; a mangled `\0Class\0name` for a private once mangling is on).
     /// Borrowed from the class's immutable `prop_info` table (`'a` = the class
     /// data's lifetime, independent of any `&Vm` borrow) — a property access
-    /// resolves without allocating.
-    Slot(&'a [u8]),
+    /// resolves without allocating. `slot` is the storage slot's index in the
+    /// OBJECT class's layout when known (WP-29: `Props::get_slot` skips the
+    /// name hash); `None` = virtual hooked, or an index that cannot be
+    /// trusted for this instance — use the key path.
+    Slot { key: &'a [u8], slot: Option<u32> },
     /// No accessible declared property of this name — an undeclared (dynamic)
     /// property, or (once mangling lands) a private declared only by an ancestor and
     /// invisible to a related scope. Behaves as a dynamic property under the plain
@@ -319,7 +373,15 @@ pub(super) fn resolve_prop_access<'a>(classes: &[&'a CompiledClass], obj_class: 
                 && pi.declaring_class == s
                 && class_is_a(classes, obj_class, s)
             {
-                return PropAccess::Slot(&pi.storage_key);
+                // The slot index is stamped against the SCOPE class's layout.
+                // A subclass instance shares the parent's leading indices
+                // UNLESS a virtual redeclaration removed storage entries
+                // (index shift), so only trust it when the object IS the
+                // scope class; otherwise fall back to the key path.
+                return PropAccess::Slot {
+                    key: &pi.storage_key,
+                    slot: if obj_class == s { pi.slot } else { None },
+                };
             }
         }
     }
@@ -327,7 +389,10 @@ pub(super) fn resolve_prop_access<'a>(classes: &[&'a CompiledClass], obj_class: 
         None => PropAccess::Dynamic,
         Some(pi) => {
             if visible_from(classes, scope, pi.visibility, pi.declaring_class) {
-                PropAccess::Slot(&pi.storage_key)
+                // `pi` comes from the OBJECT class's own flattened table, so
+                // its stamped slot indexes that class's layout — always valid
+                // for this instance.
+                PropAccess::Slot { key: &pi.storage_key, slot: pi.slot }
             } else if pi.visibility == Visibility::Private && pi.declaring_class != obj_class {
                 PropAccess::Dynamic
             } else {
@@ -350,7 +415,7 @@ pub(super) struct FieldScope<'a> {
     pub(super) scope: Option<ClassId>,
 }
 
-impl FieldScope<'_> {
+impl<'a> FieldScope<'a> {
     /// The storage key a `Prop` step addresses on an instance of `ocid`: the
     /// resolved slot key for an accessible declared property, the plain name for
     /// a dynamic one. A `Denied` step keeps addressing the *declared* slot — the
@@ -362,9 +427,15 @@ impl FieldScope<'_> {
     /// backing isset/empty/`??`): an inaccessible declared property reads as
     /// absent (`None`) — PHP's `isset($o->private)` from outside is false and
     /// `$o->private ?? $d` yields `$d`, with no error (mirrors Op::PropIsset).
-    pub(super) fn prop_key_read<'n>(&self, ocid: ClassId, name: &'n [u8]) -> Option<std::borrow::Cow<'n, [u8]>> {
+    pub(super) fn prop_key_read<'n>(&self, ocid: ClassId, name: &'n [u8]) -> Option<std::borrow::Cow<'n, [u8]>>
+    where
+        'a: 'n,
+    {
         match resolve_prop_access(self.classes, ocid, name, self.scope) {
-            PropAccess::Slot(k) => Some(std::borrow::Cow::Owned(k.to_vec())),
+            // Borrowed straight from the class table (WP-29): the resolved
+            // key used to be copied per Prop step — a per-access allocation
+            // on every mixed-path walk.
+            PropAccess::Slot { key: k, .. } => Some(std::borrow::Cow::Borrowed(k)),
             PropAccess::Dynamic => Some(std::borrow::Cow::Borrowed(name)),
             PropAccess::Denied { .. } => None,
         }
@@ -376,7 +447,7 @@ impl FieldScope<'_> {
     /// (magic/undeclared) property is left to the plain walker (bug40833:
     /// `unset($o->magicProp[0])` must not skip `__get`).
     pub(super) fn prop_is_declared_slot(&self, ocid: ClassId, name: &[u8]) -> bool {
-        matches!(resolve_prop_access(self.classes, ocid, name, self.scope), PropAccess::Slot(_))
+        matches!(resolve_prop_access(self.classes, ocid, name, self.scope), PropAccess::Slot { .. })
     }
 
     /// For a `Denied` resolution, the visibility word of PHP's "Cannot access
@@ -412,11 +483,14 @@ impl FieldScope<'_> {
         prop_info(self.classes, ocid, name).is_some_and(|pi| pi.type_hint.is_some())
     }
 
-    pub(super) fn prop_key<'n>(&self, ocid: ClassId, name: &'n [u8]) -> std::borrow::Cow<'n, [u8]> {
+    pub(super) fn prop_key<'n>(&self, ocid: ClassId, name: &'n [u8]) -> std::borrow::Cow<'n, [u8]>
+    where
+        'a: 'n,
+    {
         match resolve_prop_access(self.classes, ocid, name, self.scope) {
-            PropAccess::Slot(k) => std::borrow::Cow::Owned(k.to_vec()),
+            PropAccess::Slot { key: k, .. } => std::borrow::Cow::Borrowed(k),
             PropAccess::Denied { .. } => match prop_info(self.classes, ocid, name) {
-                Some(pi) => std::borrow::Cow::Owned(pi.storage_key.to_vec()),
+                Some(pi) => std::borrow::Cow::Borrowed(pi.storage_key.as_ref()),
                 None => std::borrow::Cow::Borrowed(name),
             },
             PropAccess::Dynamic => std::borrow::Cow::Borrowed(name),
@@ -608,7 +682,7 @@ pub(super) fn prop_indirect_guard(
     unset: bool,
 ) -> Result<(), PhpError> {
     let Some(pi) = prop_info(classes, obj_class, name) else { return Ok(()) };
-    if !matches!(resolve_prop_access(classes, obj_class, name, cur), PropAccess::Slot(_)) {
+    if !matches!(resolve_prop_access(classes, obj_class, name, cur), PropAccess::Slot { .. }) {
         return Ok(());
     }
     if rw && state == PropSlotState::Uninit && pi.type_hint.is_some() {
@@ -836,7 +910,7 @@ impl<'m> Vm<'m> {
                 matches!(obj.props.get(key), Some(Zval::Undef)) && obj.is_typed_unset(key)
             };
             let (present, accessible) = match resolve_prop_access(&self.classes, cid, name, cur_class) {
-                PropAccess::Slot(k) => (obj.props.contains(k) && !undef_unset(k), true),
+                PropAccess::Slot { key: k, .. } => (obj.props.contains(k) && !undef_unset(k), true),
                 PropAccess::Dynamic => (obj.props.contains(name) && !undef_unset(name), true),
                 PropAccess::Denied { .. } => (obj.props.contains(name), false),
             };

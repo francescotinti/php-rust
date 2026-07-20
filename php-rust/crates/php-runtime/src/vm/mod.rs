@@ -17,7 +17,7 @@
 
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BinaryHeap};
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 /// Fx-hashed engine maps (class/function/constant tables, caches, GC sets):
@@ -4066,7 +4066,7 @@ impl<'m> Vm<'m> {
         let ocid = o.borrow().class_id as usize;
         check_prop_access(&self.classes, cur, ocid, name)?;
         let key = match resolve_prop_access(&self.classes, ocid, name, cur) {
-            PropAccess::Slot(k) => k,
+            PropAccess::Slot { key: k, .. } => k,
             _ => name,
         };
         if let Zval::Object(o2) = &target {
@@ -5723,7 +5723,7 @@ impl<'m> Vm<'m> {
             // The scope's view of the declared name (see `resolve_prop_access`):
             // the resolved storage key, a plain dynamic slot, or skipped.
             let key: Box<[u8]> = match resolve_prop_access(&self.classes, cid, name, scope) {
-                PropAccess::Slot(k) => k.into(),
+                PropAccess::Slot { key: k, .. } => k.into(),
                 PropAccess::Dynamic => name.clone(),
                 PropAccess::Denied { .. } => continue,
             };
@@ -5838,7 +5838,7 @@ impl<'m> Vm<'m> {
             // The scope's view of the declared name: its resolved slot, a plain
             // dynamic slot (a parent's private is invisible here), or denied.
             let slot = match resolve_prop_access(&self.classes, cid, name, cur) {
-                PropAccess::Slot(k) => Some(k),
+                PropAccess::Slot { key: k, .. } => Some(k),
                 PropAccess::Dynamic => None,
                 PropAccess::Denied { .. } => continue,
             };
@@ -7889,7 +7889,7 @@ impl<'m> Vm<'m> {
                 return self.drive_to_return(baseline);
             }
             key = match resolve_prop_access(&self.classes, o.borrow().class_id as usize, name, cur) {
-                PropAccess::Slot(k) => Cow::Borrowed(k),
+                PropAccess::Slot { key: k, .. } => Cow::Borrowed(k),
                 PropAccess::Dynamic => Cow::Borrowed(name),
                 PropAccess::Denied { decl, vis } => {
                     return Err(prop_access_error(&self.classes, decl, name, vis))
@@ -8161,8 +8161,21 @@ impl<'m> Vm<'m> {
     /// typed property, or `None` if it is set. `key` is the storage slot (mangled
     /// for a private); `name` is the plain name used for the type lookup and message.
     fn uninit_typed_read(&self, o: &Rc<RefCell<Object>>, key: &[u8], name: &[u8]) -> Option<PhpError> {
+        self.uninit_typed_read_at(o, key, None, name)
+    }
+
+    /// Slot-aware twin (WP-29): a resolved slot index checks the declared
+    /// storage without re-hashing `key`. NOTE: `get_slot` cannot distinguish
+    /// "absent slot" from "no such declared property", but every caller sits
+    /// on a resolved DECLARED slot when `slot` is `Some`, so `None` here is
+    /// exactly the explicit-`unset()` case of the by-name path.
+    fn uninit_typed_read_at(&self, o: &Rc<RefCell<Object>>, key: &[u8], slot: Option<u32>, name: &[u8]) -> Option<PhpError> {
         let b = o.borrow();
-        match b.props.get(key) {
+        let cur = match slot {
+            Some(i) => b.props.get_slot(i),
+            None => b.props.get(key),
+        };
+        match cur {
             // Never initialized: the slot still holds `Undef`.
             Some(Zval::Undef) => {}
             Some(_) => return None,
@@ -8202,7 +8215,7 @@ impl<'m> Vm<'m> {
         'm: 'n,
     {
         match resolve_prop_access(&self.classes, ocid, name, scope) {
-            PropAccess::Slot(k) => Cow::Borrowed(k),
+            PropAccess::Slot { key: k, .. } => Cow::Borrowed(k),
             PropAccess::Dynamic | PropAccess::Denied { .. } => Cow::Borrowed(name),
         }
     }
@@ -9088,7 +9101,7 @@ impl<'m> Vm<'m> {
                     let b = io.borrow();
                     let inst_cid = b.class_id as usize;
                     let (p, a) = match resolve_prop_access(&self.classes, inst_cid, name, scope) {
-                        PropAccess::Slot(k) => (b.props.contains(k), true),
+                        PropAccess::Slot { key: k, .. } => (b.props.contains(k), true),
                         PropAccess::Dynamic => (b.props.contains(name), true),
                         PropAccess::Denied { .. } => (b.props.contains(name), false),
                     };
@@ -10369,7 +10382,7 @@ impl<'m> Vm<'m> {
         // instead — same exemption as `prop_indirect_guard`.
         if !matches!(
             oop::resolve_prop_access(&self.classes, cid, name, self.frames[top].class),
-            oop::PropAccess::Slot(_)
+            oop::PropAccess::Slot { .. }
         ) {
             return Ok(None);
         }

@@ -381,6 +381,7 @@ pub(super) fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> C
                     } else {
                         p.name.clone()
                     },
+                    slot: None, // stamped below, once the layout exists
                     doc: p.doc.clone(),
                 },
             );
@@ -390,6 +391,18 @@ pub(super) fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> C
         if let Some(pi) = prop_info.get_mut(name) {
             pi.hooks = Some(hooks.clone());
         }
+    }
+
+    // WP-29 slot-index: the layout and `prop_info` are flattened from the
+    // SAME chain with the same storage keys, so each backed property's slot
+    // index is a compile-time constant — stamp it so the runtime reaches the
+    // slot without re-hashing the name. Virtual hooked properties (no
+    // backing) stay `None`.
+    let props_layout = Rc::new(php_types::PropsLayout::new(
+        prop_defaults.iter().map(|(k, _)| k.clone()).collect(),
+    ));
+    for pi in prop_info.values_mut() {
+        pi.slot = props_layout.slot_of_key(&pi.storage_key);
     }
 
     CompiledClass {
@@ -404,9 +417,7 @@ pub(super) fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> C
         instantiable,
         is_final: cd.is_final,
         is_abstract: cd.is_abstract,
-        props_layout: Rc::new(php_types::PropsLayout::new(
-            prop_defaults.iter().map(|(k, _)| k.clone()).collect(),
-        )),
+        props_layout,
         prop_defaults,
         info: Rc::new(ObjectInfo::from_entries_typed(vis_entries, prop_type_displays)),
         methods,

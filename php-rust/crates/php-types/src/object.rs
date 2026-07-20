@@ -404,6 +404,13 @@ impl PropsLayout {
             .find_map(|(i, &eh)| (eh == h && self.keys[i].as_ref() == name).then_some(i))
     }
 
+    /// The slot index of storage key `key`, for COMPILE-TIME use: the class
+    /// compiler stamps it into `PropInfo.slot` once, so the runtime can reach
+    /// the slot without re-hashing the name (WP-29 slot-index fast path).
+    pub fn slot_of_key(&self, key: &[u8]) -> Option<u32> {
+        self.slot_of(key).map(|i| i as u32)
+    }
+
     pub fn keys(&self) -> impl Iterator<Item = &[u8]> {
         self.keys.iter().map(|k| k.as_ref())
     }
@@ -484,6 +491,40 @@ impl Props {
             live: 0,
             dyn_entries: Vec::new(),
         }
+    }
+
+    /// Direct slot read (WP-29): the value of declared slot `i`, if live.
+    /// `i` comes from `PropInfo.slot` (compile-time aligned with this
+    /// table's layout) — no name hash, no dyn-entry scan. Bounds-checked so
+    /// a layout-less table (stdClass `Props::new()`) safely answers `None`.
+    #[inline]
+    pub fn get_slot(&self, i: u32) -> Option<&Zval> {
+        self.slots.get(i as usize)?.as_ref()
+    }
+
+    /// Mutable twin of [`Self::get_slot`].
+    #[inline]
+    pub fn get_slot_mut(&mut self, i: u32) -> Option<&mut Zval> {
+        self.slots.get_mut(i as usize)?.as_mut()
+    }
+
+    /// Direct slot write (WP-29): store `value` in declared slot `i`,
+    /// returning the displaced value ([`Self::replace`] semantics — the
+    /// caller GC-notes it). An absent slot revives in place, exactly like
+    /// the by-name path (declaration-position reuse). `Err(value)` hands the
+    /// value back when `i` is outside this table's layout (a stale index
+    /// against the wrong class) so the caller can fall back to the name path
+    /// — the write must never be silently lost.
+    #[inline]
+    pub fn replace_slot(&mut self, i: u32, value: Zval) -> Result<Option<Zval>, Zval> {
+        let Some(cell) = self.slots.get_mut(i as usize) else {
+            return Err(value);
+        };
+        let old = cell.replace(value);
+        if old.is_none() {
+            self.live += 1;
+        }
+        Ok(old)
     }
 
     /// The current value of property `name`, if present.

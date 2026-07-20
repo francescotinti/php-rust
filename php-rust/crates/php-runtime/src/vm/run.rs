@@ -2680,6 +2680,7 @@ impl<'m> super::Vm<'m> {
                     // Storage slot to read (the plain name for a dynamic/non-object
                     // target; a mangled key for an accessible private — set below).
                     let mut key: Cow<[u8]> = Cow::Borrowed(&name[..]);
+                    let mut slot_idx: Option<u32> = None;
                     if let Zval::Object(o) = &target {
                         // A `get` hook takes precedence over `__get` and direct read
                         // (step 50). Skip it while a hook for this property is active
@@ -2709,17 +2710,20 @@ impl<'m> super::Vm<'m> {
                         // Single resolution decides visibility AND the storage key
                         // (was check_prop_access + prop_storage_key = two walks).
                         key = match resolve_prop_access(&self.classes, o.borrow().class_id as usize, &name, cur) {
-                            PropAccess::Slot(k) => Cow::Borrowed(k),
+                            PropAccess::Slot { key: k, slot } => {
+                                slot_idx = slot;
+                                Cow::Borrowed(k)
+                            }
                             PropAccess::Dynamic => Cow::Borrowed(&name[..]),
                             PropAccess::Denied { decl, vis } => {
                                 return Err(prop_access_error(&self.classes, decl, &name, vis))
                             }
                         };
-                        if let Some(err) = self.uninit_typed_read(o, &key, &name) {
+                        if let Some(err) = self.uninit_typed_read_at(o, &key, slot_idx, &name) {
                             return Err(err);
                         }
                     }
-                    let v = read_property(&target, &key, &mut self.diags);
+                    let v = read_property_at(&target, &key, slot_idx, &mut self.diags);
                     self.frames[top].stack.push(v);
                 }
                 Op::PropGetSilent { name } => {
@@ -2769,7 +2773,7 @@ impl<'m> super::Vm<'m> {
                             continue;
                         }
                         key = match resolve_prop_access(&self.classes, o.borrow().class_id as usize, &name, cur) {
-                            PropAccess::Slot(k) => Cow::Borrowed(k),
+                            PropAccess::Slot { key: k, .. } => Cow::Borrowed(k),
                             PropAccess::Dynamic => Cow::Borrowed(&name[..]),
                             PropAccess::Denied { decl, vis } => {
                                 return Err(prop_access_error(&self.classes, decl, &name, vis))
@@ -2862,6 +2866,7 @@ impl<'m> super::Vm<'m> {
                     // Storage slot to write (plain name for a dynamic/non-object
                     // target; a mangled key for an accessible private — set below).
                     let mut key: Cow<[u8]> = Cow::Borrowed(&name[..]);
+                    let mut slot_idx: Option<u32> = None;
                     if let Zval::Object(o) = &target {
                         // An enum case is immutable: every property is readonly and
                         // no dynamic property may be created (step 23).
@@ -2916,9 +2921,12 @@ impl<'m> super::Vm<'m> {
                         // former (a parent's private reached from a child scope is a
                         // *dynamic* write, untyped and unguarded).
                         let access = resolve_prop_access(&self.classes, ocid, &name, cur);
-                        let declared_slot = matches!(access, PropAccess::Slot(_));
+                        let declared_slot = matches!(access, PropAccess::Slot { .. });
                         key = match access {
-                            PropAccess::Slot(k) => Cow::Borrowed(k),
+                            PropAccess::Slot { key: k, slot } => {
+                                slot_idx = slot;
+                                Cow::Borrowed(k)
+                            }
                             PropAccess::Denied { decl, vis } => {
                                 return Err(prop_access_error(&self.classes, decl, &name, vis))
                             }
@@ -2987,17 +2995,23 @@ impl<'m> super::Vm<'m> {
                     // typed_properties_002).
                     if !self.typed_refs.is_empty() {
                         if let Zval::Object(o) = &target {
-                            let cell = match o.borrow().props.get(&key) {
+                            let b = o.borrow();
+                            let cur_val = match slot_idx {
+                                Some(i) => b.props.get_slot(i),
+                                None => b.props.get(&key),
+                            };
+                            let cell = match cur_val {
                                 Some(Zval::Ref(c)) => Some(Rc::clone(c)),
                                 _ => None,
                             };
+                            drop(b);
                             if let Some(cell) = cell {
                                 let strict = self.frames[top].module.strict;
                                 value = self.typed_ref_assign(&cell, value, strict)?;
                             }
                         }
                     }
-                    if let Some(old) = write_property(&target, &key, value.clone())? {
+                    if let Some(old) = write_property_at(&target, &key, slot_idx, value.clone())? {
                         self.gc_note(&old);
                     }
                     self.frames[top].stack.push(value);
@@ -3009,11 +3023,21 @@ impl<'m> super::Vm<'m> {
                     // A compound read-modify-write initializes a lazy object (PHP
                     // 8.4, fetch_op_initializes) — unless a hook serves it.
                     let obj = self.lazy_prop_access(obj.deref_clone(), &name, cur, None, (MagicKind::Get, b"__get"))?;
-                    let key = match object_class_id(&obj) {
-                        Some(ocid) => {
-                            check_prop_access(&self.classes, cur, ocid, &name)?;
-                            self.prop_storage_key(ocid, &name, cur)
-                        }
+                    // ONE resolution decides visibility, storage key AND slot
+                    // (was check_prop_access + prop_storage_key = two walks,
+                    // then two more name-hashes in read/write_property).
+                    let mut slot_idx: Option<u32> = None;
+                    let key: Cow<[u8]> = match object_class_id(&obj) {
+                        Some(ocid) => match resolve_prop_access(&self.classes, ocid, &name, cur) {
+                            PropAccess::Slot { key: k, slot } => {
+                                slot_idx = slot;
+                                Cow::Borrowed(k)
+                            }
+                            PropAccess::Dynamic => Cow::Borrowed(&name[..]),
+                            PropAccess::Denied { decl, vis } => {
+                                return Err(prop_access_error(&self.classes, decl, &name, vis))
+                            }
+                        },
                         None => Cow::Borrowed(&name[..]),
                     };
                     if let Some(err) = self.readonly_rmw_error(&obj, &key, &name) {
@@ -3027,11 +3051,11 @@ impl<'m> super::Vm<'m> {
                         }
                     }
                     if let Zval::Object(o) = &obj.deref_clone() {
-                        if let Some(err) = self.uninit_typed_read(o, &key, &name) {
+                        if let Some(err) = self.uninit_typed_read_at(o, &key, slot_idx, &name) {
                             return Err(err);
                         }
                     }
-                    let old = read_property(&obj, &key, &mut self.diags);
+                    let old = read_property_at(&obj, &key, slot_idx, &mut self.diags);
                     let mut result = self.apply_binop_ovl(op, &old, &rhs)?;
                     // A `set` hook with no `get` hook (the backing read above is then
                     // the property's own value) handles the write: dispatch it like
@@ -3049,7 +3073,7 @@ impl<'m> super::Vm<'m> {
                     if let Some(ocid) = object_class_id(&obj) {
                         result = self.coerce_typed_prop_write(ocid, &name, result)?;
                     }
-                    if let Some(dropped) = write_property(&obj, &key, result.clone())? {
+                    if let Some(dropped) = write_property_at(&obj, &key, slot_idx, result.clone())? {
                         self.gc_note(&dropped);
                     }
                     self.frames[top].stack.push(result);
@@ -3059,11 +3083,19 @@ impl<'m> super::Vm<'m> {
                     let cur = self.frames[top].class;
                     // `++`/`--` initializes a lazy object like a compound assign.
                     let obj = self.lazy_prop_access(obj.deref_clone(), &name, cur, None, (MagicKind::Get, b"__get"))?;
-                    let key = match object_class_id(&obj) {
-                        Some(ocid) => {
-                            check_prop_access(&self.classes, cur, ocid, &name)?;
-                            self.prop_storage_key(ocid, &name, cur)
-                        }
+                    // ONE resolution (see PropOpSet above).
+                    let mut slot_idx: Option<u32> = None;
+                    let key: Cow<[u8]> = match object_class_id(&obj) {
+                        Some(ocid) => match resolve_prop_access(&self.classes, ocid, &name, cur) {
+                            PropAccess::Slot { key: k, slot } => {
+                                slot_idx = slot;
+                                Cow::Borrowed(k)
+                            }
+                            PropAccess::Dynamic => Cow::Borrowed(&name[..]),
+                            PropAccess::Denied { decl, vis } => {
+                                return Err(prop_access_error(&self.classes, decl, &name, vis))
+                            }
+                        },
                         None => Cow::Borrowed(&name[..]),
                     };
                     if let Some(err) = self.readonly_rmw_error(&obj, &key, &name) {
@@ -3077,11 +3109,11 @@ impl<'m> super::Vm<'m> {
                         }
                     }
                     if let Zval::Object(o) = &obj.deref_clone() {
-                        if let Some(err) = self.uninit_typed_read(o, &key, &name) {
+                        if let Some(err) = self.uninit_typed_read_at(o, &key, slot_idx, &name) {
                             return Err(err);
                         }
                     }
-                    let old = read_property(&obj, &key, &mut self.diags);
+                    let old = read_property_at(&obj, &key, slot_idx, &mut self.diags);
                     let mut newv = old.clone();
                     if inc {
                         ops::increment(&mut newv, &mut self.diags)?;
@@ -3103,7 +3135,7 @@ impl<'m> super::Vm<'m> {
                     if let Some(ocid) = object_class_id(&obj) {
                         newv = self.coerce_typed_prop_write(ocid, &name, newv)?;
                     }
-                    if let Some(dropped) = write_property(&obj, &key, newv.clone())? {
+                    if let Some(dropped) = write_property_at(&obj, &key, slot_idx, newv.clone())? {
                         self.gc_note(&dropped);
                     }
                     self.frames[top].stack.push(if pre { newv } else { old });
@@ -3140,7 +3172,7 @@ impl<'m> super::Vm<'m> {
                         // read the child's slot and answered false).
                         match resolve_prop_access(&self.classes, ocid, &name, cur) {
                             PropAccess::Denied { .. } => false,
-                            PropAccess::Slot(key) => prop_isset(&target, &key),
+                            PropAccess::Slot { key, slot } => prop_isset_at(&target, &key, slot),
                             PropAccess::Dynamic => prop_isset(&target, &name),
                         }
                     } else {
@@ -3173,7 +3205,7 @@ impl<'m> super::Vm<'m> {
                         let ocid = o.borrow().class_id as usize;
                         let declared = match resolve_prop_access(&self.classes, ocid, &name, cur) {
                             PropAccess::Denied { .. } => false,
-                            PropAccess::Slot(key) => prop_isset(&target, &key),
+                            PropAccess::Slot { key, slot } => prop_isset_at(&target, &key, slot),
                             PropAccess::Dynamic => prop_isset(&target, &name),
                         };
                         declared
@@ -3241,7 +3273,7 @@ impl<'m> super::Vm<'m> {
                         // read the child's slot and answered false).
                         match resolve_prop_access(&self.classes, ocid, &name, cur) {
                             PropAccess::Denied { .. } => false,
-                            PropAccess::Slot(key) => prop_isset(&target, &key),
+                            PropAccess::Slot { key, slot } => prop_isset_at(&target, &key, slot),
                             PropAccess::Dynamic => prop_isset(&target, &name),
                         }
                     } else {
