@@ -127,6 +127,20 @@ impl Const {
     }
 }
 
+/// Case-insensitive symbol hash (WP-29 B1): FxHash over the ASCII-lowercased
+/// bytes, computed byte-at-a-time so a LOOKUP never allocates a lowercased
+/// copy. PHP function/method names are ASCII-case-insensitive. Build and
+/// lookup must both use this exact procedure (per-byte writes hash differently
+/// from a single slice write).
+pub fn ci_hash(name: &[u8]) -> u64 {
+    use std::hash::Hasher;
+    let mut h = rustc_hash::FxHasher::default();
+    for &b in name {
+        h.write_u8(b.to_ascii_lowercase());
+    }
+    h.finish()
+}
+
 thread_local! {
     /// Epoch of validity for the [`PropIc`] inline caches. Class ids are
     /// GLOBAL per run but modules (and their ops, prelude included) are
@@ -1448,6 +1462,14 @@ pub struct CompiledClass {
     pub props_layout: Rc<php_types::PropsLayout>,
     /// Methods declared *on this class* (resolution walks `parent` at run time).
     pub methods: Vec<CompiledMethod>,
+    /// Flattened case-insensitive method table (WP-29 B1): `(ci_hash(name),
+    /// defining ClassId, index into that class's `methods`)`, sorted by hash,
+    /// parent chain baked in leaf-wins. `resolve_method_runtime` binary-
+    /// searches it instead of scanning the chain with eq_ignore_ascii_case on
+    /// every call. Empty on seed stubs (the walking scan remains as
+    /// fallback). ⚠️ carries ClassIds — relocated at unit link like
+    /// `prop_info.declaring_class` (the remap keeps the hash order intact).
+    pub methods_ci: Box<[(u64, u32, u32)]>,
     /// Names of abstract methods this class carries unimplemented (own,
     /// interface- or trait-required) — `get_class_methods` reports them.
     pub abstract_methods: Vec<Box<[u8]>>,

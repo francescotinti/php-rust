@@ -11653,6 +11653,11 @@ fn relocate_module_class_ids(module: &mut Module, remap: &[ClassId], static_base
         // The unified per-property metadata carries the declaring class id and the
         // property's hook funcs — both must be relocated into the global id space,
         // exactly like `parent` / `interfaces`.
+        // The flattened method table's defining-class ids relocate too (WP-29
+        // B1); only the id column changes, so the hash ordering is intact.
+        for e in cc.methods_ci.iter_mut() {
+            e.1 = remap[e.1 as usize] as u32;
+        }
         for pi in cc.prop_info.values_mut() {
             pi.declaring_class = remap[pi.declaring_class];
             if let Some(hooks) = pi.hooks.as_mut() {
@@ -14777,6 +14782,36 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php try { $x = 1 % 0; } catch (DivisionByZeroError $e) { echo $e->getMessage(); }"),
             b"Modulo by zero"
+        );
+    }
+
+    #[test]
+    fn methods_ci_table_matches_walking_scan() {
+        // WP-29 B1: mixed-case dispatch, leaf override, inherited method and
+        // trait-flattened method all resolve through the ci table exactly as
+        // the legacy chain scan did.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                trait T { public function tm() { return 't'; } }
+                class Base { use T; public function Greet() { return 'base'; } public function only() { return 'p'; } }
+                class Kid extends Base { public function greet() { return 'kid'; } }
+                $k = new Kid;
+                echo $k->GREET(), '|', $k->ONLY(), '|', $k->TM(), '|', (new Base)->greet();"
+            ),
+            b"kid|p|t|base"
+        );
+    }
+
+    #[test]
+    fn methods_ci_undefined_method_still_fatal() {
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class C { public function a() {} }
+                try { (new C)->nope(); } catch (Error $e) { echo $e->getMessage(); }"
+            ),
+            b"Call to undefined method C::nope()"
         );
     }
 

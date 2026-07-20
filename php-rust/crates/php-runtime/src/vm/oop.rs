@@ -155,6 +155,33 @@ pub(super) fn prop_unset(recv: &Zval, name: &[u8]) {
 /// chain child→ancestor (case-insensitive). Returns the *defining* class id and
 /// the method's index in [`crate::bytecode::CompiledClass::methods`].
 pub(super) fn resolve_method_runtime(classes: &[&CompiledClass], start: ClassId, name: &[u8]) -> Option<(ClassId, usize)> {
+    // WP-29 B1: the class's flattened case-insensitive table answers with a
+    // binary search (no chain walk, no per-method case-compare). Collisions
+    // sit adjacent (sorted by hash) and verify against the defining class's
+    // real method name. A miss — or an empty table (seed stub) — falls
+    // through to the walking scan below: cold (undefined-method paths), and
+    // the safety net should a linked chain ever exceed what the compiling
+    // unit saw.
+    if let Some(class) = classes.get(start) {
+        let tbl = &class.methods_ci;
+        if !tbl.is_empty() {
+            let h = crate::bytecode::ci_hash(name);
+            let mut i = tbl.partition_point(|e| e.0 < h);
+            while let Some(&(eh, cid, midx)) = tbl.get(i) {
+                if eh != h {
+                    break;
+                }
+                if classes
+                    .get(cid as usize)
+                    .and_then(|c| c.methods.get(midx as usize))
+                    .is_some_and(|m| m.name.eq_ignore_ascii_case(name))
+                {
+                    return Some((cid as usize, midx as usize));
+                }
+                i += 1;
+            }
+        }
+    }
     let mut cid = Some(start);
     while let Some(c) = cid {
         // `.get` rather than `[c]`: defensive against a stale id; the global class

@@ -405,6 +405,37 @@ pub(super) fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> C
         pi.slot = props_layout.slot_of_key(&pi.storage_key);
     }
 
+    // WP-29 B1: flattened case-insensitive method table. Same chain
+    // (root→leaf) as `prop_info`, insertion overwrites so the most-derived
+    // declaration wins — exactly `resolve_method_runtime`'s first-match-from-
+    // the-child semantics. Indices are into the DEFINING class's `methods`,
+    // which compile 1:1 from its decl (abstract signatures live apart in
+    // `abstract_sigs`), so they are valid against the runtime class table.
+    let mut mtab: rustc_hash::FxHashMap<Vec<u8>, (u64, u32, u32)> = rustc_hash::FxHashMap::default();
+    for &x in &chain {
+        for (i, m) in ctx.classes[x].methods.iter().enumerate() {
+            let lc = m.decl.name.to_ascii_lowercase();
+            let h = crate::bytecode::ci_hash(&m.decl.name);
+            match mtab.entry(lc) {
+                std::collections::hash_map::Entry::Occupied(mut e) => {
+                    // WITHIN a class, duplicates exist (a trait alias next to
+                    // the class's own same-name method — bug61998): the FIRST
+                    // occurrence wins, like the legacy scan's `position()`.
+                    // ACROSS classes the more-derived (later in chain) wins.
+                    if e.get().1 != x as u32 {
+                        e.insert((h, x as u32, i as u32));
+                    }
+                }
+                std::collections::hash_map::Entry::Vacant(e) => {
+                    e.insert((h, x as u32, i as u32));
+                }
+            }
+        }
+    }
+    let mut methods_ci: Vec<(u64, u32, u32)> = mtab.into_values().collect();
+    methods_ci.sort_unstable();
+    let methods_ci = methods_ci.into_boxed_slice();
+
     CompiledClass {
         name: cd.name.clone(),
         file: cd.file.clone(),
@@ -421,6 +452,7 @@ pub(super) fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> C
         prop_defaults,
         info: Rc::new(ObjectInfo::from_entries_typed(vis_entries, prop_type_displays)),
         methods,
+        methods_ci,
         abstract_methods: cd.abstract_methods.clone(),
         abstract_sigs,
         own_prop_vis,
@@ -544,6 +576,7 @@ pub(super) fn stub_class(cd: &crate::hir::ClassDecl) -> CompiledClass {
         props_layout: Rc::new(php_types::PropsLayout::default()),
         info: Rc::new(ObjectInfo::from_entries(Vec::new())),
         methods: Vec::new(),
+        methods_ci: Box::new([]),
         abstract_methods: Vec::new(),
         abstract_sigs: Vec::new(),
         own_prop_vis: Vec::new(),
