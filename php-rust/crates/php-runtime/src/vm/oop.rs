@@ -558,6 +558,88 @@ pub(super) fn asym_write_error(
     )))
 }
 
+/// What a W/RW/UNSET container fetch found in a property slot, for
+/// [`prop_indirect_guard`].
+#[derive(Clone, Copy, PartialEq)]
+pub(super) enum PropSlotState {
+    /// Holds an object — indirection through the handle never writes the slot.
+    Object,
+    /// Absent or typed-uninitialized (`Undef`).
+    Uninit,
+    /// Any other value (array / scalar / string).
+    Value,
+}
+
+/// Classify a raw property slot for [`prop_indirect_guard`] (references are
+/// looked through, like Zend's DEREF before the type check).
+pub(super) fn prop_slot_state(slot: Option<&Zval>) -> PropSlotState {
+    match slot {
+        None | Some(Zval::Undef) => PropSlotState::Uninit,
+        Some(Zval::Ref(c)) => prop_slot_state(Some(&c.borrow())),
+        Some(Zval::Object(_)) => PropSlotState::Object,
+        Some(_) => PropSlotState::Value,
+    }
+}
+
+/// The PHP 8.4 guard for fetching a *declared* property as a WRITE container
+/// (`$o->p[…] = v`, `$o->p->x = v`, `&$o->p`, `unset($o->p[…])`) — Zend's
+/// `zend_std_get_property_ptr_ptr` + `zend_std_read_property` pair for
+/// BP_VAR_W/RW/UNSET on a readonly or set-visibility-restricted slot:
+/// - a compound (`rw`) fetch of an uninitialized TYPED slot is the "Typed
+///   property C::$p must not be accessed before initialization" fatal, BEFORE
+///   any readonly/aviz consideration (ptr_ptr's BP_VAR_RW branch — fires for
+///   plain typed properties too);
+/// - an object value passes (Zend hands back a handle copy — writes through it
+///   cannot modify the slot);
+/// - readonly is "Cannot indirectly modify readonly property C::$p"
+///   (unconditional — Zend denies even the declaring scope);
+/// - a denied set visibility is "Cannot indirectly modify {kind} property
+///   C::$p from {scope}" (prototype-scoped like [`asym_write_error`]);
+/// - an UNSET fetch of an uninitialized slot is a silent no-op.
+/// A slot that is not get-accessible from `cur` is exempt: Zend falls to the
+/// magic (`__get`) protocol there, which the walkers' deferral already serves.
+pub(super) fn prop_indirect_guard(
+    classes: &[&CompiledClass],
+    cur: Option<ClassId>,
+    obj_class: ClassId,
+    name: &[u8],
+    state: PropSlotState,
+    rw: bool,
+    unset: bool,
+) -> Result<(), PhpError> {
+    let Some(pi) = prop_info(classes, obj_class, name) else { return Ok(()) };
+    if !matches!(resolve_prop_access(classes, obj_class, name, cur), PropAccess::Slot(_)) {
+        return Ok(());
+    }
+    if rw && state == PropSlotState::Uninit && pi.type_hint.is_some() {
+        return Err(PhpError::Error(format!(
+            "Typed property {}::${} must not be accessed before initialization",
+            String::from_utf8_lossy(&classes[pi.declaring_class].name),
+            String::from_utf8_lossy(name)
+        )));
+    }
+    if state == PropSlotState::Object {
+        return Ok(());
+    }
+    if pi.readonly {
+        if unset && state == PropSlotState::Uninit {
+            return Ok(());
+        }
+        return Err(PhpError::Error(format!(
+            "Cannot indirectly modify readonly property {}::${}",
+            String::from_utf8_lossy(&classes[pi.declaring_class].name),
+            String::from_utf8_lossy(name)
+        )));
+    }
+    if let Some(err) = asym_write_error(classes, cur, obj_class, name, "indirectly modify") {
+        if unset && state == PropSlotState::Uninit {
+            return Ok(());
+        }
+        return Err(err);
+    }
+    Ok(())
+}
+
 /// Decide whether writing readonly property `decl::$name` from scope `cur` is
 /// allowed, given whether the property is already initialised on the instance.
 /// Returns the fatal to raise, or `None` if the write is a permitted first
@@ -587,10 +669,12 @@ pub(super) fn readonly_write_error(
     if visible_from(classes, cur, vis, decl) {
         return None;
     }
+    // Zend drops the "readonly" word only for an explicit private(set)
+    // (the aviz error path owns that shape); an explicit — or implicit —
+    // protected(set) readonly keeps it (asymmetric_visibility/readonly.phpt).
     let kind = match (set_vis, vis) {
         (Some(_), Visibility::Private) => "private(set) property",
-        (Some(_), _) => "protected(set) property",
-        (None, _) => "protected(set) readonly property",
+        _ => "protected(set) readonly property",
     };
     let scope = match cur {
         Some(c) => format!("scope {}", String::from_utf8_lossy(&classes[c].name)),

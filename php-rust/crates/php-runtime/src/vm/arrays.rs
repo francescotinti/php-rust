@@ -159,6 +159,7 @@ pub(super) fn field_write(
     dropped: &mut Vec<Zval>,
     aa: &mut Option<AaOp>,
     rebind: bool,
+    rw: bool,
 ) -> Result<(), PhpError> {
     if let Zval::Ref(cell) = target {
         // A reference-BIND (`$arr['k'] =& $x`) REPLACES a leaf slot that
@@ -170,7 +171,7 @@ pub(super) fn field_write(
             return Ok(());
         }
         let inner = &mut *cell.borrow_mut();
-        return field_write(inner, steps, keys, fs, value, diags, dropped, aa, rebind);
+        return field_write(inner, steps, keys, fs, value, diags, dropped, aa, rebind, rw);
     }
     let Some((first, rest)) = steps.split_first() else {
         // Leaf overwrite: hand the displaced value back for GC noting.
@@ -196,6 +197,20 @@ pub(super) fn field_write(
                         let b = o.borrow();
                         (b.class_id as usize, b.info.is_enum_case, b.lazy.is_some())
                     };
+                    // PHP 8.4 container-fetch guard: drilling INTO a readonly
+                    // or set-visibility-denied property whose value is not an
+                    // object is "Cannot indirectly modify …" (and a compound
+                    // fetch of an uninitialized TYPED slot is the uninit
+                    // fatal), BEFORE any magic-descend deferral — the slot is
+                    // declared and get-visible here, so Zend never reaches
+                    // `__get` for it.
+                    if !rest.is_empty() && !is_enum && !is_lazy {
+                        let state = {
+                            let b = o.borrow();
+                            prop_slot_state(b.props.get(fs.prop_key(cid, name).as_ref()))
+                        };
+                        prop_indirect_guard(fs.classes, fs.scope, cid, name, state, rw, false)?;
+                    }
                     // A leaf write on a property that is not a declared, accessible
                     // slot defers to the VM caller (`prop_set_magic_or_dynamic`),
                     // which dispatches `__set` (guarded against re-entrant recursion)
@@ -269,12 +284,18 @@ pub(super) fn field_write(
                             obj.props.set(key, Zval::Array(Rc::new(PhpArray::new())));
                         }
                         let child = obj.props.get_mut(key).expect("property just inserted");
-                        field_write(child, rest, keys, fs, value, diags, dropped, aa, rebind)?;
+                        field_write(child, rest, keys, fs, value, diags, dropped, aa, rebind, rw)?;
                     }
                 }
                 other => {
-                    diags.push(Diag::Warning(format!(
-                        "Attempt to assign property \"{}\" on {}",
+                    // PHP 8: writing a property of a non-object is an Error —
+                    // a LEAF write is "assign", drilling further is "modify"
+                    // (zend_throw_non_object_error's verb split). The incdec
+                    // funnel shares this arm and PHP's dedicated
+                    // "increment/decrement" verb is a residual divergence.
+                    return Err(PhpError::Error(format!(
+                        "Attempt to {} property \"{}\" on {}",
+                        if rest.is_empty() { "assign" } else { "modify" },
                         String::from_utf8_lossy(name),
                         other.type_name_for_error()
                     )));
@@ -321,7 +342,7 @@ pub(super) fn field_write(
                 // Overwrite a plain element, but write *through* an existing
                 // reference element (the recursive call derefs at its top).
                 match arr.get_mut(&k) {
-                    Some(child) => field_write(child, rest, keys, fs, value, diags, dropped, aa, rebind)?,
+                    Some(child) => field_write(child, rest, keys, fs, value, diags, dropped, aa, rebind, rw)?,
                     None => arr.insert(k, value),
                 }
             } else {
@@ -329,7 +350,7 @@ pub(super) fn field_write(
                     arr.insert(k.clone(), Zval::Array(Rc::new(PhpArray::new())));
                 }
                 let child = arr.get_mut(&k).expect("key just inserted");
-                field_write(child, rest, keys, fs, value, diags, dropped, aa, rebind)?;
+                field_write(child, rest, keys, fs, value, diags, dropped, aa, rebind, rw)?;
             }
             Ok(())
         }
@@ -361,7 +382,7 @@ pub(super) fn field_write(
                 arr.append(value).map_err(|_| occupied())?;
             } else {
                 let mut child = Zval::Array(Rc::new(PhpArray::new()));
-                field_write(&mut child, rest, keys, fs, value, diags, dropped, aa, rebind)?;
+                field_write(&mut child, rest, keys, fs, value, diags, dropped, aa, rebind, rw)?;
                 arr.append(child).map_err(|_| occupied())?;
             }
             Ok(())
@@ -420,13 +441,12 @@ pub(super) fn field_get(cell: &Zval, steps: &[FieldStep], keys: &mut std::vec::I
     }
 }
 
-pub(super) fn field_unset(target: &mut Zval, steps: &[FieldStep], keys: &mut std::vec::IntoIter<Zval>, fs: FieldScope) {
+pub(super) fn field_unset(target: &mut Zval, steps: &[FieldStep], keys: &mut std::vec::IntoIter<Zval>, fs: FieldScope) -> Result<(), PhpError> {
     if let Zval::Ref(rc) = target {
-        field_unset(&mut rc.borrow_mut(), steps, keys, fs);
-        return;
+        return field_unset(&mut rc.borrow_mut(), steps, keys, fs);
     }
     let Some((first, rest)) = steps.split_first() else {
-        return;
+        return Ok(());
     };
     match first {
         FieldStep::Prop(_) | FieldStep::PropDyn => {
@@ -439,7 +459,19 @@ pub(super) fn field_unset(target: &mut Zval, steps: &[FieldStep], keys: &mut std
                 }
             };
             if let Zval::Object(o) = target {
-                let key = fs.prop_key(o.borrow().class_id as usize, name);
+                let cid = o.borrow().class_id as usize;
+                // PHP 8.4 container-fetch guard, UNSET flavour: drilling into
+                // a readonly / set-denied property errors on a non-object
+                // value; an uninitialized slot is a silent no-op (Zend's
+                // BP_VAR_UNSET read of an UNDEF slot).
+                if !rest.is_empty() {
+                    let state = {
+                        let b = o.borrow();
+                        prop_slot_state(b.props.get(fs.prop_key(cid, name).as_ref()))
+                    };
+                    prop_indirect_guard(fs.classes, fs.scope, cid, name, state, false, true)?;
+                }
+                let key = fs.prop_key(cid, name);
                 if rest.is_empty() {
                     // A declared TYPED property returns to *uninitialized* on
                     // unset (mirrors Op::PropUnset; doctrine unsets via a
@@ -454,25 +486,26 @@ pub(super) fn field_unset(target: &mut Zval, steps: &[FieldStep], keys: &mut std
                         o.borrow_mut().props.remove(key.as_ref());
                     }
                 } else if let Some(child) = o.borrow_mut().props.get_mut(key.as_ref()) {
-                    field_unset(child, rest, keys, fs);
+                    field_unset(child, rest, keys, fs)?;
                 }
             }
         }
         FieldStep::Index => {
-            let Some(key) = keys.next() else { return };
+            let Some(key) = keys.next() else { return Ok(()) };
             if let Zval::Array(rc) = target {
                 if let Some(k) = coerce_key_silent(&key) {
                     let arr = Rc::make_mut(rc);
                     if rest.is_empty() {
                         arr.remove(&k);
                     } else if let Some(child) = arr.get_mut(&k) {
-                        field_unset(child, rest, keys, fs);
+                        field_unset(child, rest, keys, fs)?;
                     }
                 }
             }
         }
         FieldStep::Append => {}
     }
+    Ok(())
 }
 
 /// Read a local cell's value, following a reference and mapping an unset slot to
@@ -860,7 +893,21 @@ impl<'m> Vm<'m> {
         keys: Vec<Zval>,
         value: Zval,
     ) -> Result<(), PhpError> {
-        self.field_set_mode(base, top, steps, keys, value, false)
+        self.field_set_mode(base, top, steps, keys, value, false, false)
+    }
+
+    /// [`Self::field_set`] for a COMPOUND write (`+=`, `++`): the container
+    /// fetch is Zend's BP_VAR_RW, so an uninitialized typed property along the
+    /// path is the uninit fatal (see `prop_indirect_guard`).
+    pub(super) fn field_set_op(
+        &mut self,
+        base: FieldBase,
+        top: usize,
+        steps: &[FieldStep],
+        keys: Vec<Zval>,
+        value: Zval,
+    ) -> Result<(), PhpError> {
+        self.field_set_mode(base, top, steps, keys, value, false, true)
     }
 
     /// [`Self::field_set`] with `rebind` (reference-bind leaf semantics: a
@@ -873,6 +920,7 @@ impl<'m> Vm<'m> {
         keys: Vec<Zval>,
         value: Zval,
         rebind: bool,
+        rw: bool,
     ) -> Result<(), PhpError> {
         let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
         let cell = match base {
@@ -885,12 +933,12 @@ impl<'m> Vm<'m> {
         };
         let mut dropped = Vec::new();
         let mut aa = None;
-        let r = field_write(cell, steps, &mut keys.into_iter(), fs, value, &mut self.diags, &mut dropped, &mut aa, rebind);
+        let r = field_write(cell, steps, &mut keys.into_iter(), fs, value, &mut self.diags, &mut dropped, &mut aa, rebind, rw);
         for d in &dropped {
             self.gc_note(d);
         }
         r?;
-        self.drain_aa_pending(aa, top, rebind)
+        self.drain_aa_pending(aa, top, rebind, rw)
     }
 
     /// Write `value` at `steps` inside `root` — an already-resolved path root,
@@ -906,17 +954,18 @@ impl<'m> Vm<'m> {
         keys: Vec<Zval>,
         value: Zval,
         rebind: bool,
+        rw: bool,
     ) -> Result<(), PhpError> {
         let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
         let mut root_val = Zval::Ref(root);
         let mut dropped = Vec::new();
         let mut aa = None;
-        let r = field_write(&mut root_val, steps, &mut keys.into_iter(), fs, value, &mut self.diags, &mut dropped, &mut aa, rebind);
+        let r = field_write(&mut root_val, steps, &mut keys.into_iter(), fs, value, &mut self.diags, &mut dropped, &mut aa, rebind, rw);
         for d in &dropped {
             self.gc_note(d);
         }
         r?;
-        self.drain_aa_pending(aa, top, rebind)
+        self.drain_aa_pending(aa, top, rebind, rw)
     }
 
     /// Run the pending ArrayAccess / magic-set dispatches a [`field_write`]
@@ -928,6 +977,7 @@ impl<'m> Vm<'m> {
         aa: Option<AaOp>,
         top: usize,
         rebind: bool,
+        rw: bool,
     ) -> Result<(), PhpError> {
         let mut pending = aa;
         while let Some(op) = pending.take() {
@@ -997,7 +1047,8 @@ impl<'m> Vm<'m> {
                         self.flush_diags(line)?;
                         if let Some(next) = next_prop {
                             return Err(PhpError::Error(format!(
-                                "Attempt to assign property \"{}\" on {}",
+                                "Attempt to {} property \"{}\" on {}",
+                                if rest.len() > 1 { "modify" } else { "assign" },
                                 String::from_utf8_lossy(&next),
                                 val.type_name_for_error()
                             )));
@@ -1008,7 +1059,7 @@ impl<'m> Vm<'m> {
                     let mut aa2 = None;
                     let fs2 =
                         FieldScope { classes: &self.classes, scope: self.frames[top].class };
-                    field_write(&mut val, &rest, &mut keys.into_iter(), fs2, value, &mut self.diags, &mut dropped, &mut aa2, rebind)?;
+                    field_write(&mut val, &rest, &mut keys.into_iter(), fs2, value, &mut self.diags, &mut dropped, &mut aa2, rebind, rw)?;
                     for d in &dropped {
                         self.gc_note(d);
                     }
@@ -1034,7 +1085,8 @@ impl<'m> Vm<'m> {
                 }
                 if let Some(next) = next_prop {
                     return Err(PhpError::Error(format!(
-                        "Attempt to assign property \"{}\" on null",
+                        "Attempt to {} property \"{}\" on null",
+                        if rest.len() > 1 { "modify" } else { "assign" },
                         String::from_utf8_lossy(&next)
                     )));
                 }
@@ -1051,7 +1103,7 @@ impl<'m> Vm<'m> {
                 let mut dropped = Vec::new();
                 let mut aa2 = None;
                 let fs2 = FieldScope { classes: &self.classes, scope: self.frames[top].class };
-                field_write(&mut objz, &steps, &mut keys.into_iter(), fs2, value, &mut self.diags, &mut dropped, &mut aa2, rebind)?;
+                field_write(&mut objz, &steps, &mut keys.into_iter(), fs2, value, &mut self.diags, &mut dropped, &mut aa2, rebind, rw)?;
                 for d in &dropped {
                     self.gc_note(d);
                 }
@@ -1090,7 +1142,7 @@ impl<'m> Vm<'m> {
                     let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
                     let mut dropped = Vec::new();
                     let mut aa2 = None;
-                    field_write(&mut val, &rest, &mut keys.into_iter(), fs, value, &mut self.diags, &mut dropped, &mut aa2, rebind)?;
+                    field_write(&mut val, &rest, &mut keys.into_iter(), fs, value, &mut self.diags, &mut dropped, &mut aa2, rebind, rw)?;
                     for d in &dropped {
                         self.gc_note(d);
                     }

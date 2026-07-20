@@ -9824,7 +9824,7 @@ impl<'m> Vm<'m> {
         }
     }
 
-    fn field_remove(&mut self, base: FieldBase, top: usize, steps: &[FieldStep], keys: Vec<Zval>) {
+    fn field_remove(&mut self, base: FieldBase, top: usize, steps: &[FieldStep], keys: Vec<Zval>) -> Result<(), PhpError> {
         let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
         let cell = match base {
             FieldBase::Local(s) => &mut self.frames[top].slots[s as usize],
@@ -9832,10 +9832,10 @@ impl<'m> Vm<'m> {
             FieldBase::Superglobal(i) => &mut self.superglobals[i as usize],
             FieldBase::This => match self.frames[top].this.as_mut() {
                 Some(c) => c,
-                None => return,
+                None => return Ok(()),
             },
         };
-        field_unset(cell, steps, &mut keys.into_iter(), fs);
+        field_unset(cell, steps, &mut keys.into_iter(), fs)
     }
 
     /// Push a `__call` / `__callStatic` magic-dispatch frame (OOP-3a): the magic
@@ -10198,34 +10198,60 @@ impl<'m> Vm<'m> {
     }
 
     /// `$r = &$o->prop` on a property whose asymmetric *set* visibility
-    /// (`public private(set)`, PHP 8.4) excludes the current scope binds a
-    /// reference to a **copy** — the storage must not become writable through
-    /// the alias (`Zend/tests/asymmetric_visibility/object_reference.phpt`).
-    /// Returns the detached cell, or `None` when the path is not a single
-    /// property step or the scope may write the property.
+    /// (`public private(set)`, PHP 8.4) excludes the current scope — or that
+    /// is `readonly` — binds a reference to a **copy** when the value is an
+    /// OBJECT (the storage must not become writable through the alias,
+    /// `Zend/tests/asymmetric_visibility/object_reference.phpt`), and is the
+    /// "Cannot indirectly modify …" fatal for any other value (Zend's
+    /// BP_VAR_W read_property fallback). `Ok(None)` when the path is not a
+    /// single property step or the property is freely writable here.
     fn asym_set_ref_copy(
         &self,
         base: FieldBase,
         top: usize,
         steps: &[FieldStep],
-    ) -> Option<Rc<RefCell<Zval>>> {
-        let [FieldStep::Prop(name)] = steps else { return None };
+    ) -> Result<Option<Rc<RefCell<Zval>>>, PhpError> {
+        let [FieldStep::Prop(name)] = steps else { return Ok(None) };
         let base_val = match base {
             FieldBase::Local(s) => self.frames[top].slots.get(s as usize),
             FieldBase::Global(s) => self.frames[0].slots.get(s as usize),
             FieldBase::Superglobal(i) => self.superglobals.get(i as usize),
             FieldBase::This => self.frames[top].this.as_ref(),
         };
-        let o = base_val.and_then(deref_object)?;
+        let Some(o) = base_val.and_then(deref_object) else { return Ok(None) };
         let cid = o.borrow().class_id as usize;
-        let pi = prop_info(&self.classes, cid, name)?;
-        let sv = pi.set_visibility?;
-        if visible_from(&self.classes, self.frames[top].class, sv, pi.declaring_class) {
-            return None;
+        let Some(pi) = prop_info(&self.classes, cid, name) else { return Ok(None) };
+        let denied = pi.readonly
+            || pi.set_visibility.is_some_and(|sv| {
+                !visible_from(&self.classes, self.frames[top].class, sv, pi.declaring_class)
+            });
+        if !denied {
+            return Ok(None);
+        }
+        // A get-inaccessible slot goes through the magic (`__get`) protocol
+        // instead — same exemption as `prop_indirect_guard`.
+        if !matches!(
+            oop::resolve_prop_access(&self.classes, cid, name, self.frames[top].class),
+            oop::PropAccess::Slot(_)
+        ) {
+            return Ok(None);
         }
         let key = self.prop_storage_key(cid, name, self.frames[top].class);
+        let state = {
+            let b = o.borrow();
+            oop::prop_slot_state(b.props.get(&key))
+        };
+        oop::prop_indirect_guard(
+            &self.classes,
+            self.frames[top].class,
+            cid,
+            name,
+            state,
+            false,
+            false,
+        )?;
         let val = o.borrow().props.get(&key).map(|v| v.deref_clone()).unwrap_or(Zval::Null);
-        Some(Rc::new(RefCell::new(val)))
+        Ok(Some(Rc::new(RefCell::new(val))))
     }
 
     /// If a write/ref path starts at a property whose get hook returns **by
@@ -11830,9 +11856,9 @@ fn field_cell(
     steps: &[FieldStep],
     keys: &mut std::vec::IntoIter<Zval>,
     fs: FieldScope,
-) -> Rc<RefCell<Zval>> {
+) -> Result<Rc<RefCell<Zval>>, PhpError> {
     let Some((first, rest)) = steps.split_first() else {
-        return make_cell(target);
+        return Ok(make_cell(target));
     };
     if let Zval::Ref(rc) = target {
         let inner = &mut *rc.borrow_mut();
@@ -11851,11 +11877,33 @@ fn field_cell(
                 }
             };
             let Zval::Object(o) = target else {
-                return Rc::new(RefCell::new(Zval::Null));
+                return Ok(Rc::new(RefCell::new(Zval::Null)));
             };
             let mut obj = o.borrow_mut();
-            let key = fs.prop_key(obj.class_id as usize, name);
+            let cid = obj.class_id as usize;
+            // PHP 8.4 container-fetch guard (W+REF): a readonly / set-denied
+            // property errs on a non-object value; an OBJECT value at the
+            // LEAF hands back a detached copy of the handle (Zend's ZVAL_COPY
+            // — the alias must not make the slot itself writable,
+            // object_reference.phpt), while an intermediate object step
+            // continues into the same handle.
+            let key = fs.prop_key(cid, name);
             let key = key.as_ref();
+            let state = oop::prop_slot_state(obj.props.get(key));
+            oop::prop_indirect_guard(fs.classes, fs.scope, cid, name, state, false, false)?;
+            if state == oop::PropSlotState::Object
+                && oop::prop_info(fs.classes, cid, name)
+                    .is_some_and(|pi| pi.readonly || pi.set_visibility.is_some_and(|sv| {
+                        !oop::visible_from(fs.classes, fs.scope, sv, pi.declaring_class)
+                    }))
+            {
+                if rest.is_empty() {
+                    let copy = obj.props.get(key).map(|v| v.deref_clone()).unwrap_or(Zval::Null);
+                    return Ok(Rc::new(RefCell::new(copy)));
+                }
+                let child = obj.props.get_mut(key).expect("object slot present");
+                return field_cell(child, rest, keys, fs);
+            }
             if !obj.props.contains(key) {
                 obj.props.set(key, Zval::Null);
             }
@@ -11866,27 +11914,27 @@ fn field_cell(
             // `&$a[]` (Session A): append a fresh element and reference it. Append
             // is always the final step (the compiler enforces it).
             if ensure_array(target).is_err() {
-                return Rc::new(RefCell::new(Zval::Null));
+                return Ok(Rc::new(RefCell::new(Zval::Null)));
             }
             let Zval::Array(rc) = target else {
-                return Rc::new(RefCell::new(Zval::Null));
+                return Ok(Rc::new(RefCell::new(Zval::Null)));
             };
             let arr = Rc::make_mut(rc);
             match arr.append_default() {
                 Some(child) => field_cell(child, rest, keys, fs),
-                None => Rc::new(RefCell::new(Zval::Null)),
+                None => Ok(Rc::new(RefCell::new(Zval::Null))),
             }
         }
         FieldStep::Index => {
             let key = keys.next().expect("ref index key");
             let Some(k) = coerce_key_silent(&key) else {
-                return Rc::new(RefCell::new(Zval::Null));
+                return Ok(Rc::new(RefCell::new(Zval::Null)));
             };
             if ensure_array(target).is_err() {
-                return Rc::new(RefCell::new(Zval::Null));
+                return Ok(Rc::new(RefCell::new(Zval::Null)));
             }
             let Zval::Array(rc) = target else {
-                return Rc::new(RefCell::new(Zval::Null));
+                return Ok(Rc::new(RefCell::new(Zval::Null)));
             };
             let arr = Rc::make_mut(rc);
             if !arr.contains_key(&k) {

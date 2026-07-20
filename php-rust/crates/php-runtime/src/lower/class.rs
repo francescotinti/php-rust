@@ -1595,9 +1595,7 @@ impl<'f> Lowerer<'f> {
                 doc: p.doc,
                 name: p.name,
                 visibility: p.visibility,
-                // Promoted params do not carry asymmetric set visibility here
-                // (a `private(set)` promotion is not modelled yet).
-                set_visibility: None,
+                set_visibility: p.set_visibility,
                 default: None,
                 get_hook: p.get_hook,
                 set_hook: p.set_hook,
@@ -1791,6 +1789,7 @@ impl<'f> Lowerer<'f> {
                 self.promoted.push(PromotedParam {
                     name: pname,
                     visibility: visibility_of(p.modifiers.iter()),
+                    set_visibility: set_visibility_of(p.modifiers.iter()),
                     slot,
                     get_hook,
                     set_hook,

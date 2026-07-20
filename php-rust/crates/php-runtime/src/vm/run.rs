@@ -1195,7 +1195,7 @@ impl<'m> super::Vm<'m> {
                                 };
                                 let value = cell.borrow().clone();
                                 let keys = self.pop_field_keys(top, &steps);
-                                self.field_set_in_root(root, top, &steps[1..], keys, Zval::Ref(cell), true)?;
+                                self.field_set_in_root(root, top, &steps[1..], keys, Zval::Ref(cell), true, false)?;
                                 self.frames[top].stack.push(value);
                                 continue;
                             }
@@ -1233,14 +1233,14 @@ impl<'m> super::Vm<'m> {
                     }
                     let value = cell.borrow().clone();
                     if let Some(root) = lazy_root {
-                        self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, Zval::Ref(cell), true)?;
+                        self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, Zval::Ref(cell), true, false)?;
                     } else if steps.is_empty() {
                         // A step-less base is rebound directly (not written
                         // through), matching `eval::bind_ref_target`.
                         let base_cell = field_base_mut(&mut self.frames, &mut self.superglobals, top, base)?;
                         *base_cell = Zval::Ref(cell);
                     } else {
-                        self.field_set_mode(base, top, &steps, keys, Zval::Ref(cell), true)?;
+                        self.field_set_mode(base, top, &steps, keys, Zval::Ref(cell), true, false)?;
                     }
                     self.frames[top].stack.push(value);
                 }
@@ -1268,7 +1268,7 @@ impl<'m> super::Vm<'m> {
                             };
                             let value = cell.borrow().clone();
                             let keys = self.pop_field_keys(top, &steps);
-                            self.field_set_in_root(root, top, &steps[1..], keys, Zval::Ref(cell), true)?;
+                            self.field_set_in_root(root, top, &steps[1..], keys, Zval::Ref(cell), true, false)?;
                             self.frames[top].stack.push(value);
                             continue;
                         }
@@ -1294,7 +1294,7 @@ impl<'m> super::Vm<'m> {
                         let base_cell = field_base_mut(&mut self.frames, &mut self.superglobals, top, base)?;
                         *base_cell = Zval::Ref(cell);
                     } else {
-                        self.field_set_mode(base, top, &steps, keys, Zval::Ref(cell), true)?;
+                        self.field_set_mode(base, top, &steps, keys, Zval::Ref(cell), true, false)?;
                     }
                     self.frames[top].stack.push(value);
                 }
@@ -4073,7 +4073,7 @@ impl<'m> super::Vm<'m> {
                     // A path starting at a `&get` hooked property writes through
                     // the reference the hook returns (one hook run, no set hook).
                     if let Some(root) = self.byref_hook_root(base, top, &steps)? {
-                        self.field_set_in_root(root, top, &steps[1..], keys, value.clone(), false)?;
+                        self.field_set_in_root(root, top, &steps[1..], keys, value.clone(), false, false)?;
                         self.frames[top].stack.push(value);
                         continue;
                     }
@@ -4081,7 +4081,7 @@ impl<'m> super::Vm<'m> {
                     // A lazy base initializes/forwards first; the walk then roots
                     // at the realized object (PHP 8.4).
                     if let Some(root) = self.field_lazy_root(base, top, &steps, &keys, true)? {
-                        self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, value.clone(), false)?;
+                        self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, value.clone(), false, false)?;
                         self.frames[top].stack.push(value);
                         continue;
                     }
@@ -4098,7 +4098,7 @@ impl<'m> super::Vm<'m> {
                                 .unwrap_or(Zval::Null)
                         };
                         let result = self.apply_binop_ovl(op, &old, &rhs)?;
-                        self.field_set_in_root(root, top, &steps[1..], keys, result.clone(), false)?;
+                        self.field_set_in_root(root, top, &steps[1..], keys, result.clone(), false, true)?;
                         self.frames[top].stack.push(result);
                         continue;
                     }
@@ -4109,13 +4109,13 @@ impl<'m> super::Vm<'m> {
                             field_get(&root, &steps, &mut keys.clone().into_iter(), fs).unwrap_or(Zval::Null)
                         };
                         let result = self.apply_binop_ovl(op, &old, &rhs)?;
-                        self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, result.clone(), false)?;
+                        self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, result.clone(), false, true)?;
                         self.frames[top].stack.push(result);
                         continue;
                     }
                     let old = self.field_value(base, top, &steps, keys.clone()).unwrap_or(Zval::Null);
                     let result = self.apply_binop_ovl(op, &old, &rhs)?;
-                    self.field_set(base, top, &steps, keys, result.clone())?;
+                    self.field_set_op(base, top, &steps, keys, result.clone())?;
                     self.frames[top].stack.push(result);
                 }
                 Op::FieldIncDec { base, steps, inc, pre } => {
@@ -4132,7 +4132,7 @@ impl<'m> super::Vm<'m> {
                         } else {
                             ops::decrement(&mut newv, &mut self.diags)?;
                         }
-                        self.field_set_in_root(root, top, &steps[1..], keys, newv.clone(), false)?;
+                        self.field_set_in_root(root, top, &steps[1..], keys, newv.clone(), false, true)?;
                         self.frames[top].stack.push(if pre { newv } else { old });
                         continue;
                     }
@@ -4148,7 +4148,7 @@ impl<'m> super::Vm<'m> {
                         } else {
                             ops::decrement(&mut newv, &mut self.diags)?;
                         }
-                        self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, newv.clone(), false)?;
+                        self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, newv.clone(), false, true)?;
                         self.frames[top].stack.push(if pre { newv } else { old });
                         continue;
                     }
@@ -4159,7 +4159,7 @@ impl<'m> super::Vm<'m> {
                     } else {
                         ops::decrement(&mut newv, &mut self.diags)?;
                     }
-                    self.field_set(base, top, &steps, keys, newv.clone())?;
+                    self.field_set_op(base, top, &steps, keys, newv.clone())?;
                     self.frames[top].stack.push(if pre { newv } else { old });
                 }
                 Op::FieldIsset { base, steps } => {
@@ -4397,10 +4397,10 @@ impl<'m> super::Vm<'m> {
                     // object (a guarded `unset($this->$name)` inside `__unset`).
                     if let Some(mut root) = self.field_lazy_root(base, top, &steps, &keys, false)? {
                         let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
-                        field_unset(&mut root, &steps, &mut keys.into_iter(), fs);
+                        field_unset(&mut root, &steps, &mut keys.into_iter(), fs)?;
                         continue;
                     }
-                    self.field_remove(base, top, &steps, keys);
+                    self.field_remove(base, top, &steps, keys)?;
                 }
                 Op::Fatal(i) => {
                     let msg = match &self.frames[top].func.consts[i as usize] {
@@ -4540,14 +4540,14 @@ impl<'m> super::Vm<'m> {
                     } else {
                         let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
                         let mut root_val = Zval::Ref(root);
-                        field_cell(&mut root_val, &steps[1..], &mut keys.into_iter(), fs)
+                        field_cell(&mut root_val, &steps[1..], &mut keys.into_iter(), fs)?
                     };
                     return Ok(cell);
                 }
             }
             // A property whose set visibility excludes this scope hands
             // out a reference to a *copy* (PHP 8.4 asymmetric visibility).
-            if let Some(cell) = self.asym_set_ref_copy(base, top, &steps) {
+            if let Some(cell) = self.asym_set_ref_copy(base, top, &steps)? {
                 return Ok(cell);
             }
             // Taking a reference *to* a hooked property is indirect modification.
@@ -4709,13 +4709,13 @@ impl<'m> super::Vm<'m> {
             let cell = {
                 let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
                 if let Some(mut root) = lazy_root {
-                    field_cell(&mut root, &steps, &mut keys.into_iter(), fs)
+                    field_cell(&mut root, &steps, &mut keys.into_iter(), fs)?
                 } else {
                     let base_cell = field_base_mut(&mut self.frames, &mut self.superglobals, top, base)?;
                     if steps.is_empty() {
                         make_cell(base_cell)
                     } else {
-                        field_cell(base_cell, &steps, &mut keys.into_iter(), fs)
+                        field_cell(base_cell, &steps, &mut keys.into_iter(), fs)?
                     }
                 }
             };

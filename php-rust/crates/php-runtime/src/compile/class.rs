@@ -73,8 +73,14 @@ pub(super) fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> C
                     entry.set = Some(compile_hook(s, ctx, x));
                 }
             } else {
-                // A plain (re)declaration shadows any inherited hook and is backed.
-                prop_hooks.remove(p.name.as_ref());
+                // A plain (re)declaration is BACKED, but any inherited hooks
+                // REMAIN — Zend inherits hooks like methods (GH-19044: a
+                // child's `public protected(set) mixed $foo = 1;` under a
+                // hooked parent still reads through the parent's get hook);
+                // the redeclaration only adds backing storage and a default.
+                if let Some(entry) = prop_hooks.get_mut(p.name.as_ref()) {
+                    entry.backed = true;
+                }
                 backed_seen.insert(p.name.clone());
             }
             // A virtual hooked property has no backing storage: keep it out of the

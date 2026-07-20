@@ -999,6 +999,9 @@ pub enum DeferPolicy<'a> {
 struct PromotedParam {
     name: Box<[u8]>,
     visibility: Visibility,
+    /// `public private(set) string $x` in a constructor: the promoted
+    /// property carries the asymmetric write visibility (PHP 8.4).
+    set_visibility: Option<Visibility>,
     slot: Slot,
     get_hook: Option<FnDecl>,
     set_hook: Option<FnDecl>,
