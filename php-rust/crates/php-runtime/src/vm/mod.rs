@@ -454,7 +454,8 @@ pub(crate) fn run_module_with_hir<'m>(
         created: BTreeMap::new(),
         destructed: HashSet::default(),
         gc_roots: HashMap::default(),
-        gc_queue: BinaryHeap::new(),
+        gc_birth: HashSet::default(),
+        gc_queue: std::collections::VecDeque::new(),
         gc_cycle_roots: HashSet::default(),
         gc_cycle_threshold: Vm::GC_CYCLE_THRESHOLD,
         gc_light_demoted: HashSet::default(),
@@ -1262,12 +1263,21 @@ struct Vm<'m> {
     /// Drained at each sweep (objects still referenced get re-noted the next
     /// time they lose a reference), keeping the buffer small.
     gc_roots: HashMap<u32, Rc<RefCell<Object>>>,
-    /// Max-heap over the ids in `gc_roots`, pushed as each id enters the map.
-    /// The sweep pops it to visit candidates newest-first instead of
-    /// re-filtering the whole buffer after every freed object (which went
-    /// quadratic once thousands of never-collectable cyclic candidates piled
-    /// up). Entries whose id is no longer in the map are stale and skipped.
-    gc_queue: BinaryHeap<u32>,
+    /// Ids whose `gc_roots` entry is BIRTH tracking ([`Vm::gc_track`]'s seed
+    /// for unhooked temp deaths) rather than a release note. Zend has no such
+    /// note: a parent's free cascade consumes it and frees the child in place
+    /// (tidy 010's node tree dying as a `var_dump` temp), whereas a release
+    /// note marks a holder that dies on its own, AFTER the parent
+    /// (object_reference.phpt's `&$foo->bar` copy cell).
+    gc_birth: HashSet<u32>,
+    /// FIFO over the ids in `gc_roots`, pushed as each id enters the map.
+    /// The sweep pops candidates in NOTE ORDER — the order their holders were
+    /// released — which is Zend's free/destructor order (a `&$o->prop` copy
+    /// cell releases after the local that held `$o`: object_reference.phpt;
+    /// tidy 010's dump temps release before the tree root). Still O(1) per
+    /// candidate (the queue replaced a quadratic whole-buffer re-filter);
+    /// entries whose id is no longer in the map are stale and skipped.
+    gc_queue: std::collections::VecDeque<u32>,
     /// Possible roots of *cyclic* garbage (mirrors Zend's root buffer feeding
     /// `gc_collect_cycles`): a candidate the sweep popped that was not
     /// collectable lost a reference but still has holders — if those holders
@@ -1559,6 +1569,7 @@ impl<'m> Vm<'m> {
             self.lazy_options.remove(&id);
             self.lazy_initializing.remove(&id);
             self.gc_roots.remove(&id);
+            self.gc_birth.remove(&id);
             // A dead object's per-id VM state must not leak into the reused
             // handle: a stale FiberState reports "Cannot start a fiber that
             // has already been started" (fibers/destructors_002 under
@@ -1607,7 +1618,7 @@ impl<'m> Vm<'m> {
                 // REST sideload unique-filename flake).
                 if let std::collections::hash_map::Entry::Vacant(e) = self.gc_roots.entry(id) {
                     e.insert(Rc::clone(rc));
-                    self.gc_queue.push(id);
+                    self.gc_queue.push_back(id);
                 }
             }
             Zval::Ref(r) => {
@@ -1659,8 +1670,12 @@ impl<'m> Vm<'m> {
                 if let Some(o) = self.created.get(&id) {
                     if let std::collections::hash_map::Entry::Vacant(e) = self.gc_roots.entry(id) {
                         e.insert(Rc::clone(o));
-                        self.gc_queue.push(id);
+                        self.gc_queue.push_back(id);
                         self.gc_cycle_roots.remove(&id);
+                        // A re-seed is phpr's own safety net (like birth
+                        // tracking), not a real holder's release: a parent's
+                        // free cascade may consume it (gc_release_child).
+                        self.gc_birth.insert(id);
                     }
                 }
             }
@@ -1684,12 +1699,13 @@ impl<'m> Vm<'m> {
             // re-queued) like any candidate, and if its remaining holders are a
             // dead cycle the cycle collector picks it up from there.
             let cand_id = loop {
-                let Some(id) = self.gc_queue.pop() else { break None };
+                let Some(id) = self.gc_queue.pop_front() else { break None };
                 match self.gc_roots.get(&id) {
                     None => continue,
                     Some(o) if Rc::strong_count(o) == 2 => break Some(id),
                     Some(_) => {
                         self.gc_roots.remove(&id);
+                        self.gc_birth.remove(&id);
                         self.gc_cycle_roots.insert(id);
                         // A light sweep's demotion must be re-checked by the
                         // enclosing main sweep (unhooked temp deaths).
@@ -1765,6 +1781,7 @@ impl<'m> Vm<'m> {
                 // Drop the candidate buffer.
                 self.gc_roots.clear();
                 self.gc_queue.clear();
+                self.gc_birth.clear();
                 break;
             };
 
@@ -1781,9 +1798,10 @@ impl<'m> Vm<'m> {
             let cid = o.borrow().class_id as usize;
 
             if self.destructed.contains(&id) {
-                // Already destructed: it just drops here. Note what it held so
-                // those objects' falling refcounts are reconsidered next pass.
-                self.gc_cascade(&o);
+                // Already destructed: it just drops here. Exclusively-held
+                // destructor-less descendants are released with it (Zend's
+                // cascade order); the rest is noted for the next pass.
+                self.gc_release_cascade(&o);
                 continue;
             }
             // A lazy *wrapper* (an uninitialized ghost, or a proxy whether or not
@@ -1837,10 +1855,106 @@ impl<'m> Vm<'m> {
                     }
                 }
             }
-            // Destructor-less object: note what it held, then drop it.
-            self.gc_cascade(&o);
+            // Destructor-less object: release its exclusive subtree with it
+            // (child handles enter the free list first, Zend's cascade), note
+            // the rest, then drop it.
+            self.gc_release_cascade(&o);
         }
         Ok(())
+    }
+
+    /// The sweep's release step for a dead object (destructor absent or already
+    /// run): Zend frees an exclusively-held, destructor-less subtree in ONE
+    /// refcount cascade, so every descendant's handle enters the free list
+    /// BEFORE its parent's and LIFO reuse hands back the PARENT's id first
+    /// (tidy 010's var_dump ids — the WP-25 "sweep release-order" residual).
+    /// Un-track such descendants here (drop their `created` handle while the
+    /// parent's props still hold them): dropping `o` afterwards replays Zend's
+    /// order through `Object::drop`'s postorder. Anything with a pending
+    /// destructor, extra holders, buffer presence, or lazy state keeps the
+    /// buffered path (`gc_note` → next sweep pass), exactly as [`Self::gc_cascade`]
+    /// did for everything.
+    fn gc_release_cascade(&mut self, o: &Rc<RefCell<Object>>) {
+        // Per-id transient caches (a var_dump's memoized `__debugInfo` array
+        // clones the object's own containers — tidy 010's `child` list) die
+        // with the object, not at id reuse: they would otherwise hold the
+        // subtree's containers shared and defeat the exclusivity checks below.
+        let oid = o.borrow().id;
+        self.var_dump_debug.remove(&oid);
+        self.stringify_args.remove(&oid);
+        let mut work: Vec<RelItem> = vec![RelItem::Obj(Rc::clone(o))];
+        while let Some(item) = work.pop() {
+            match item {
+                RelItem::Obj(p) => {
+                    let b = p.borrow();
+                    for (_, v) in b.props.iter() {
+                        self.gc_release_child(v, &mut work);
+                    }
+                }
+                RelItem::Arr(a) => {
+                    for (_, v) in a.iter() {
+                        self.gc_release_child(v, &mut work);
+                    }
+                }
+            }
+        }
+    }
+
+    /// One value of a released container ([`Self::gc_release_cascade`]): an
+    /// exclusively-held, destructor-less object is un-tracked (its handle will
+    /// return via the parent's drop cascade, child-first like Zend); an
+    /// exclusively-held array/reference is walked in place (a tidyNode's
+    /// `child` list holds the nodes through an array); everything else keeps
+    /// the buffered path, exactly as `gc_cascade` noted it.
+    fn gc_release_child(&mut self, v: &Zval, work: &mut Vec<RelItem>) {
+        match v {
+            Zval::Object(rc) => {
+                let (id, cid, lazy) = {
+                    let b = rc.borrow();
+                    (b.id, b.class_id as usize, b.lazy.is_some())
+                };
+                // Holders of an exclusively-held child: `created` + the owning
+                // slot/cell. More means shared (another prop, a live variable,
+                // a buffer clone) — buffered path.
+                // A pending BIRTH entry is phpr's own temp-death seed, not a
+                // real holder's pending release — consume it (drop the buffer
+                // clone; the queue entry goes stale) so the child frees inside
+                // this cascade, like Zend (tidy 010's tree dying as a temp).
+                if self.gc_birth.contains(&id) && self.gc_roots.contains_key(&id) {
+                    self.gc_roots.remove(&id);
+                    self.gc_birth.remove(&id);
+                }
+                // A child still QUEUED with a RELEASE note (its own holder
+                // released after the parent's — note order is release order
+                // under the FIFO queue) dies through that later release in
+                // Zend, AFTER the parent: keep it buffered
+                // (object_reference.phpt's `&$foo->bar` copy cell).
+                let exclusive = Rc::strong_count(rc) == 2
+                    && !lazy
+                    && !self.gc_roots.contains_key(&id)
+                    && self.created.get(&id).is_some_and(|c| Rc::ptr_eq(c, rc))
+                    && (self.destructed.contains(&id)
+                        || resolve_method_runtime(&self.classes, cid, b"__destruct").is_none());
+                if exclusive {
+                    self.created.remove(&id);
+                    self.gc_cycle_roots.remove(&id);
+                    self.gc_light_demoted.remove(&id);
+                    self.var_dump_debug.remove(&id);
+                    self.stringify_args.remove(&id);
+                    work.push(RelItem::Obj(Rc::clone(rc)));
+                } else {
+                    self.gc_note(v);
+                }
+            }
+            Zval::Array(a) if Rc::strong_count(a) == 1 => {
+                work.push(RelItem::Arr(Rc::clone(a)));
+            }
+            Zval::Ref(r) if Rc::strong_count(r) == 1 => {
+                let inner = r.borrow();
+                self.gc_release_child(&inner, work);
+            }
+            other => self.gc_note(other),
+        }
     }
 
     /// Note every object held one level down in `o`'s properties as a possible
@@ -1865,6 +1979,7 @@ impl<'m> Vm<'m> {
     /// takes ownership of an object it is about to free.
     fn gc_unnote(&mut self, id: u32) {
         self.gc_roots.remove(&id);
+        self.gc_birth.remove(&id);
     }
 
     /// Track a freshly created object as a possible root. A temporary that is
@@ -1878,7 +1993,8 @@ impl<'m> Vm<'m> {
         let id = rc.borrow().id;
         if let std::collections::hash_map::Entry::Vacant(e) = self.gc_roots.entry(id) {
             e.insert(Rc::clone(rc));
-            self.gc_queue.push(id);
+            self.gc_queue.push_back(id);
+            self.gc_birth.insert(id);
         }
     }
 
@@ -2136,6 +2252,7 @@ impl<'m> Vm<'m> {
             let leftover: Vec<u32> = self.gc_roots.keys().copied().collect();
             self.gc_roots.clear();
             self.gc_queue.clear();
+            self.gc_birth.clear();
             self.gc_cycle_roots.extend(leftover);
             let roots: Vec<u32> = self
                 .gc_cycle_roots
@@ -9310,7 +9427,8 @@ impl<'m> Vm<'m> {
         let mut arr = PhpArray::new();
         let mut s: Vec<u8> = Vec::new();
         let n = self.frames.len();
-        for (i, k) in (1..n).rev().enumerate() {
+        let mut i = 0usize;
+        for k in (1..n).rev() {
             let frame = &self.frames[k];
             let line = self.cur_line(k - 1) as i64;
             // The file/line are the *call site* in the caller (frame `k-1`): the
@@ -9324,6 +9442,18 @@ impl<'m> Vm<'m> {
             } else {
                 caller_file
             };
+            // Prelude functions stand in for PHP *internals* (C code): a
+            // prelude helper called FROM the prelude is machinery Zend has no
+            // frame for — drop it (bug49634: the xsl trampoline's __xsl_call/
+            // __apply hops). A USER function invoked by the prelude (an xsl
+            // php:function callback, a usort comparator) keeps its frame but
+            // its call site renders as "[internal function]" with no
+            // file/line, exactly like a Zend internal caller.
+            let callee_prelude = frame.func.file.as_ref() == b"prelude";
+            let callsite_prelude = file == b"prelude";
+            if callee_prelude && callsite_prelude {
+                continue;
+            }
             // The class shown is the late-static-binding (called) class, like the
             // tree-walker; absent for a free-function frame. The id is resolved in
             // the frame's own module (an eval'd/included frame may differ from the
@@ -9334,8 +9464,12 @@ impl<'m> Vm<'m> {
             let is_static = frame.this.is_none();
 
             s.extend_from_slice(format!("#{i} ").as_bytes());
-            s.extend_from_slice(file);
-            s.extend_from_slice(format!("({line}): ").as_bytes());
+            if callsite_prelude {
+                s.extend_from_slice(b"[internal function]: ");
+            } else {
+                s.extend_from_slice(file);
+                s.extend_from_slice(format!("({line}): ").as_bytes());
+            }
             if let Some(c) = class {
                 s.extend_from_slice(c);
                 s.extend_from_slice(if is_static { b"::" } else { b"->" });
@@ -9351,8 +9485,10 @@ impl<'m> Vm<'m> {
             s.extend_from_slice(b")\n");
 
             let mut fr = PhpArray::new();
-            fr.insert(Key::from_bytes(b"file"), Zval::Str(PhpStr::new(file.to_vec())));
-            fr.insert(Key::from_bytes(b"line"), Zval::Long(line));
+            if !callsite_prelude {
+                fr.insert(Key::from_bytes(b"file"), Zval::Str(PhpStr::new(file.to_vec())));
+                fr.insert(Key::from_bytes(b"line"), Zval::Long(line));
+            }
             fr.insert(
                 Key::from_bytes(b"function"),
                 Zval::Str(PhpStr::new(frame.func.name.to_vec())),
@@ -9368,8 +9504,9 @@ impl<'m> Vm<'m> {
             }
             fr.insert(Key::from_bytes(b"args"), Zval::Array(Rc::new(argsarr)));
             let _ = arr.append(Zval::Array(Rc::new(fr)));
+            i += 1;
         }
-        s.extend_from_slice(format!("#{} {{main}}", n - 1).as_bytes());
+        s.extend_from_slice(format!("#{i} {{main}}").as_bytes());
         (Zval::Array(Rc::new(arr)), s)
     }
 
@@ -10984,6 +11121,13 @@ host_builtins! {
 /// compiler emits [`crate::bytecode::Op::CallHostBuiltinRef`] (with the variable's
 /// slot) for these; [`Vm::dispatch_host_builtin_ref`] matches the same canonical
 /// name. The two lists are disjoint.
+/// A container whose contents [`Vm::gc_release_cascade`] walks in place — a
+/// released (un-tracked) dead object, or an exclusively-held array inside one.
+enum RelItem {
+    Obj(Rc<RefCell<Object>>),
+    Arr(Rc<PhpArray>),
+}
+
 /// One reconstructed call-stack entry (see [`Vm::collect_backtrace`]).
 struct BtFrame {
     function: Vec<u8>,

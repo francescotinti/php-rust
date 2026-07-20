@@ -134,7 +134,15 @@ pub fn phpinfo(_args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
           PHP SAPI => cli\n\
           Zend Engine => 4.5.7\n\
           Thread Safety => disabled\n\
-          Debug Build => no\n",
+          Debug Build => no\n\
+          \n\
+          xsl\n\
+          \n\
+          XSL => enabled\n\
+          libxslt Version => 1.1.35\n\
+          libxslt compiled against libxml Version => 2.9.13\n\
+          EXSLT => enabled\n\
+          libexslt Version => 0.8.20\n",
     );
     Ok(Zval::Bool(true))
 }

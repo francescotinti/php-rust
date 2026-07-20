@@ -1209,6 +1209,8 @@ class XSLTProcessor {
     // registerPHPFunctions state: null = never called, true = all functions
     // allowed, array = restricted name → callable map.
     private $__php_funcs = null;
+    // registerPHPFunctionNS state: ns → name → callable (custom namespaces).
+    private $__php_funcs_ns = null;
 
     public function __destruct() {
         if ($this->__h !== false) { __xslt_free($this->__h); }
@@ -1409,6 +1411,30 @@ class XSLTProcessor {
             return;
         }
         throw new TypeError('XSLTProcessor::registerPHPFunctions(): Argument #1 ($functions) must be of type array|string|null, ' . get_debug_type($functions) . ' given');
+    }
+
+    // registerPHPFunctionNS (PHP 8.4): callbacks under a CUSTOM namespace.
+    // Validation shapes are oracle-pinned (registerPHPFunctionNS_errors):
+    // null bytes first per argument, the reserved-namespace check, then the
+    // NCName validity of the local name. The functional dispatch is gated
+    // upstream (skip_upstream_issue113), so registration only records state.
+    public function registerPHPFunctionNS(string $namespaceURI, string $name, callable $callable): void {
+        if (strpos($namespaceURI, "\0") !== false) {
+            throw new ValueError('XSLTProcessor::registerPHPFunctionNS(): Argument #1 ($namespaceURI) must not contain any null bytes');
+        }
+        if ($namespaceURI === 'http://php.net/xsl') {
+            throw new ValueError('XSLTProcessor::registerPHPFunctionNS(): Argument #1 ($namespaceURI) must not be "http://php.net/xsl" because it is reserved by PHP');
+        }
+        if (strpos($name, "\0") !== false) {
+            throw new ValueError('XSLTProcessor::registerPHPFunctionNS(): Argument #2 ($name) must not contain any null bytes');
+        }
+        // xmlValidateNCName: leading letter/underscore, then letters, digits,
+        // '.', '-', '_' — no colon (a QName prefix is not a callback name).
+        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9._\-]*$/', $name)) {
+            throw new ValueError('XSLTProcessor::registerPHPFunctionNS(): Argument #2 ($name) must be a valid callback name');
+        }
+        if (!is_array($this->__php_funcs_ns)) { $this->__php_funcs_ns = array(); }
+        $this->__php_funcs_ns[$namespaceURI][$name] = $callable;
     }
 
     // The oracle's XSLTProcessor exposes exactly its four declared props.

@@ -60,6 +60,13 @@ extern "C" {
     fn xmlFreeDoc(doc: XmlDocPtr);
     fn xmlCanonicPath(path: *const c_char) -> *mut c_char;
     fn xmlPathToURI(path: *const c_char) -> *mut c_char;
+    fn xmlRegisterDefaultInputCallbacks();
+    fn xmlRegisterInputCallbacks(
+        match_func: unsafe extern "C" fn(*const c_char) -> c_int,
+        open_func: unsafe extern "C" fn(*const c_char) -> *mut c_void,
+        read_func: unsafe extern "C" fn(*mut c_void, *mut c_char, c_int) -> c_int,
+        close_func: unsafe extern "C" fn(*mut c_void) -> c_int,
+    ) -> c_int;
     // Global variable of function-pointer type (the allocator table entry the
     // result buffer of xsltSaveResultToString must be released through).
     static xmlFree: unsafe extern "C" fn(*mut c_void);
@@ -107,14 +114,86 @@ thread_local! {
 }
 
 /// Register the EXSLT extension functions once (PHP does this at MINIT when
-/// HAVE_XSL_EXSLT — hasExsltSupport() is true on the oracle).
+/// HAVE_XSL_EXSLT — hasExsltSupport() is true on the oracle), plus the
+/// `compress.zlib://` input callback (see below).
 fn ensure_exslt() {
     EXSLT_READY.with(|r| {
         if !r.get() {
-            unsafe { exsltRegisterAll() };
+            unsafe {
+                exsltRegisterAll();
+                // PHP routes ALL libxml I/O through its stream wrappers
+                // (php_libxml_streams_IO_*); phpr serves the one native
+                // wrapper the xsl tests exercise inside xsl:include /
+                // document() — `compress.zlib://` (xslt008/009). Defaults
+                // first: callbacks are matched newest-first, so ours wins
+                // for its scheme and everything else keeps file semantics.
+                xmlRegisterDefaultInputCallbacks();
+                xmlRegisterInputCallbacks(gz_match, gz_open, gz_read, gz_close);
+            }
             r.set(true);
         }
     });
+}
+
+/// The `compress.zlib://` scheme served to libxml (gzopen semantics: a gzip
+/// member stream, or the raw bytes when the file is not gzip-compressed).
+/// The path after the scheme resolves like PHP's wrapper — against the
+/// process CWD for a relative one.
+const ZLIB_SCHEME: &[u8] = b"compress.zlib://";
+
+/// Fully-buffered read context handed back from [`gz_open`].
+struct GzIoCtx {
+    data: Vec<u8>,
+    pos: usize,
+}
+
+unsafe extern "C" fn gz_match(uri: *const c_char) -> c_int {
+    if uri.is_null() {
+        return 0;
+    }
+    let s = unsafe { std::ffi::CStr::from_ptr(uri) }.to_bytes();
+    s.starts_with(ZLIB_SCHEME) as c_int
+}
+
+unsafe extern "C" fn gz_open(uri: *const c_char) -> *mut c_void {
+    if uri.is_null() {
+        return std::ptr::null_mut();
+    }
+    let s = unsafe { std::ffi::CStr::from_ptr(uri) }.to_bytes();
+    let Some(path) = s.strip_prefix(ZLIB_SCHEME) else {
+        return std::ptr::null_mut();
+    };
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(raw) = std::fs::read(std::ffi::OsStr::from_bytes(path)) else {
+        return std::ptr::null_mut();
+    };
+    let data = if raw.starts_with(&[0x1f, 0x8b]) {
+        match crate::zlibio::gzip_decode_members(&raw) {
+            Some(d) => d,
+            None => return std::ptr::null_mut(),
+        }
+    } else {
+        raw
+    };
+    Box::into_raw(Box::new(GzIoCtx { data, pos: 0 })) as *mut c_void
+}
+
+unsafe extern "C" fn gz_read(ctx: *mut c_void, buf: *mut c_char, len: c_int) -> c_int {
+    if ctx.is_null() || buf.is_null() || len < 0 {
+        return -1;
+    }
+    let c = unsafe { &mut *(ctx as *mut GzIoCtx) };
+    let n = (c.data.len() - c.pos).min(len as usize);
+    unsafe { std::ptr::copy_nonoverlapping(c.data.as_ptr().add(c.pos), buf as *mut u8, n) };
+    c.pos += n;
+    n as c_int
+}
+
+unsafe extern "C" fn gz_close(ctx: *mut c_void) -> c_int {
+    if !ctx.is_null() {
+        drop(unsafe { Box::from_raw(ctx as *mut GzIoCtx) });
+    }
+    0
 }
 
 /// Scoped capture of everything libxslt prints through `xsltGenericError`:
