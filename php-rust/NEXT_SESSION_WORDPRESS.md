@@ -140,6 +140,49 @@ H="/Volumes/Extreme Pro/Claude/wp16-harness"
    binding/coercion — riducibile solo con call-site specialization),
    mi_malloc/free ~180 (STRETCH 1d: pooling del Vec args di pop_keys,
    valutato e rinviato — invasivo per ~1%).
+
+2-bis. **Valutazione suggerimenti Gemini (`20260721-gemini.md`, verificati
+   sul codice il 2026-07-21)**:
+   - **✅ Punto 1 (op-clone nel run_loop) — VALIDO, è la prossima leva
+     consigliata.** `run.rs:92` clona l'op a ogni istruzione. Correzione al
+     meccanismo proposto: NON serve alcun `Rc::clone` del func —
+     `Frame.func` è GIÀ `&'m Func` (Copy): `let func = self.frames[top].func;
+     let op = &func.ops[ip];` dà un `&'m Op` che NON borrowa `self` (il
+     lifetime 'm del modulo sopravvive a tutto), quindi il match può girare
+     per reference mentre i handler mutano i frame. Costo del refactor:
+     ~tutte le arm del match legano i payload BY VALUE (muovono dal clone) →
+     vanno riscritte a reference con clone SOLO nei punti d'uso che
+     possiedono davvero (name.clone() dove serve un owned). Grande ma
+     meccanico; il payload Rc (WP-22) e le IC Rc-condivise (WP-29/30)
+     restano corretti (una cella raggiunta per reference è la stessa cella).
+     Nota: le lezioni "il dispatch CLONA l'op" diventano storiche dopo
+     questo cambio — aggiornare i commenti di PropIc/MethodIc.
+   - **⚠️ Punto 2 (value churn / size Zval) — GIÀ NOTO, in parte superato.**
+     `size_of::<Zval>()` è GIÀ 16 B (static assert in array.rs, WP-27);
+     "misurarlo" non serve. Il NaN-boxing a 8 B = la leva
+     value-representation già in roadmap (grossa: tagga puntatori Rc,
+     tocca tutto). Il "passare &Zval nelle utility" è generico: i clone
+     restanti sono in gran parte semantica PHP (deref_clone, read_slot).
+   - **🟡 Punto 3 (string interning / Symbol u32) — CANDIDATO valido ma
+     medio-termine.** Da valutare DOPO op-clone e quickening: i memcmp 245
+     includono confronti PHP-level legittimi (chiavi array runtime) che
+     l'interning delle stringhe STATICHE non elimina; i nomi
+     metodo/proprietà sono già hash-cached (zhash WP-29) e i siti caldi
+     sono già IC-ati (WP-29/30). ROI ridotto rispetto a quando fu scritto.
+   - **❌ Punto 4 (fast-path scalari in gc_note) — GIÀ IMPLEMENTATO.**
+     gc_note è un match sull'enum: scalari cadono in `_ => {}` (no-op
+     immediato, mod.rs:1705); Array scalar-only già saltati via
+     `may_hold_containers`. I 231 campioni sono lavoro VERO (hash-entry su
+     gc_roots per gli Object). Niente da fare.
+   - **🟡 Punto 5 (call-site specialization di bind_params su firma cachata
+     nella IC) — plausibile ma speculativo/rischioso**: enter_callee+
+     bind_params (~316) contengono lavoro non skippabile (i move degli
+     argomenti); la coercion loop gira già solo se
+     `param_hints.iter().any(is_some)` — micro-idea concreta e SICURA:
+     precomputare `has_hints: bool` su Func a compile-time invece dello
+     scan per-call. La specializzazione completa richiede guardie di firma
+     con parità delicata (coercion/TypeError order) — solo dopo le leve
+     sopra.
 3. **Residui strutturali** (se si vuole il 100% delle suite estensioni):
    - `ast_printing.phpt`: serve un vero zend_ast_export sull'HIR (il dedent
      del sorgente non basta: manca la riga vuota dopo le class decl).
