@@ -89,14 +89,20 @@ impl<'m> super::Vm<'m> {
             }
             let top = self.frames.len() - 1;
             let ip = self.frames[top].ip;
-            let op = self.frames[top].func.ops[ip].clone();
+            // WP-31: `func` is `&'m Func` (Copy) — copying the reference out
+            // unties the op from `self`, so the match runs on `&'m Op` with
+            // ZERO per-instruction clone (the old `.clone()` copied the Op
+            // struct plus an Rc bump per payload on every VM tick). Handlers
+            // clone payloads only where they genuinely take ownership.
+            let func = self.frames[top].func;
+            let op = &func.ops[ip];
             // Default fall-through advance. Jumps overwrite `ip`; `Call` advances
             // the *caller* before pushing the callee; `Ret` discards this frame.
             self.frames[top].ip = ip + 1;
 
             match op {
                 Op::PushConst(i) => {
-                    let v = self.frames[top].func.consts[i as usize].to_zval();
+                    let v = self.frames[top].func.consts[*i as usize].to_zval();
                     self.frames[top].stack.push(v);
                 }
                 Op::ConstFetch { name, fallback } => {
@@ -158,22 +164,22 @@ impl<'m> super::Vm<'m> {
                     // An unset local reads as NULL (silent — used for compiler
                     // temporaries and PHP's warning-free contexts). A reference
                     // slot is followed. Source-level `$x` reads use `LoadVar`.
-                    let v = read_slot(&self.frames[top].slots[s as usize]);
+                    let v = read_slot(&self.frames[top].slots[*s as usize]);
                     self.frames[top].stack.push(v);
                 }
                 Op::LoadVar { slot, name } => {
                     // A source-level `$x` read: an `Undef` slot raises the PHP 8
                     // "Undefined variable" warning (queued; flushed at the next
                     // emit point with the reading op's line) and yields NULL.
-                    if matches!(self.frames[top].slots[slot as usize], Zval::Undef) {
+                    if matches!(self.frames[top].slots[*slot as usize], Zval::Undef) {
                         if let crate::bytecode::Const::Str(b) =
-                            &self.frames[top].func.consts[name as usize]
+                            &self.frames[top].func.consts[*name as usize]
                         {
                             let msg = format!("Undefined variable ${}", String::from_utf8_lossy(b.as_bytes()));
                             self.diags.push(Diag::Warning(msg));
                         }
                     }
-                    let v = read_slot(&self.frames[top].slots[slot as usize]);
+                    let v = read_slot(&self.frames[top].slots[*slot as usize]);
                     self.frames[top].stack.push(v);
                 }
                 Op::StoreSlot(s) => {
@@ -182,7 +188,7 @@ impl<'m> super::Vm<'m> {
                     // assignment: "Cannot assign string to reference held by
                     // property C::$p of type int").
                     if !self.typed_refs.is_empty() {
-                        if let Zval::Ref(cell) = &self.frames[top].slots[s as usize] {
+                        if let Zval::Ref(cell) = &self.frames[top].slots[*s as usize] {
                             let cell = Rc::clone(cell);
                             let strict = self.frames[top].module.strict;
                             let v = self.frames[top].stack.pop().expect("StoreSlot value");
@@ -191,7 +197,7 @@ impl<'m> super::Vm<'m> {
                         }
                     }
                     let v = self.frames[top].stack.pop().expect("StoreSlot on empty stack");
-                    let old = store_slot(&mut self.frames[top].slots[s as usize], v);
+                    let old = store_slot(&mut self.frames[top].slots[*s as usize], v);
                     self.gc_note(&old);
                 }
                 Op::LoadVarDyn => {
@@ -231,19 +237,19 @@ impl<'m> super::Vm<'m> {
                     // closure keys its own per-instance storage (fresh statics per
                     // closure object); everything else the program-global `statics`.
                     let exists = match self.frames[top].closure_id {
-                        Some(cid) => self.closure_statics.contains_key(&(cid, id)),
-                        None => self.statics[id as usize].is_some(),
+                        Some(cid) => self.closure_statics.contains_key(&(cid, *id)),
+                        None => self.statics[*id as usize].is_some(),
                     };
                     if exists {
-                        self.frames[top].ip = skip as usize;
+                        self.frames[top].ip = *skip as usize;
                     }
                 }
                 Op::StaticStore { id } => {
                     let v = self.frames[top].stack.pop().expect("StaticStore on empty stack");
                     let cell = Rc::new(RefCell::new(v));
                     let old = match self.frames[top].closure_id {
-                        Some(cid) => self.closure_statics.insert((cid, id), cell),
-                        None => self.statics[id as usize].replace(cell),
+                        Some(cid) => self.closure_statics.insert((cid, *id), cell),
+                        None => self.statics[*id as usize].replace(cell),
                     };
                     if let Some(cell) = old {
                         if Rc::strong_count(&cell) == 1 {
@@ -259,58 +265,58 @@ impl<'m> super::Vm<'m> {
                     let cell = match self.frames[top].closure_id {
                         Some(cid) => Rc::clone(
                             self.closure_statics
-                                .get(&(cid, id))
+                                .get(&(cid, *id))
                                 .expect("StaticAlias reached before its StaticStore"),
                         ),
                         None => Rc::clone(
-                            self.statics[id as usize]
+                            self.statics[*id as usize]
                                 .as_ref()
                                 .expect("StaticAlias reached before its StaticStore"),
                         ),
                     };
                     // Rebinding the slot to the static cell drops whatever it held
                     // (`$x = new T; static $x;` discards the temporary T here).
-                    let old = std::mem::replace(&mut self.frames[top].slots[slot as usize], Zval::Ref(cell));
+                    let old = std::mem::replace(&mut self.frames[top].slots[*slot as usize], Zval::Ref(cell));
                     self.gc_note(&old);
                 }
                 Op::LoadGlobal(s) => {
                     // `$GLOBALS['x']` read: the global lives in the script frame.
-                    let v = read_slot(&self.frames[0].slots[s as usize]);
+                    let v = read_slot(&self.frames[0].slots[*s as usize]);
                     self.frames[top].stack.push(v);
                 }
                 Op::StoreGlobal(s) => {
                     // `$GLOBALS['x'] = …`: write/create the global in the script frame.
                     let v = self.frames[top].stack.pop().expect("StoreGlobal on empty stack");
-                    let old = store_slot(&mut self.frames[0].slots[s as usize], v);
+                    let old = store_slot(&mut self.frames[0].slots[*s as usize], v);
                     self.gc_note(&old);
                 }
                 Op::IncDecGlobal { slot, inc, pre } => {
-                    let i = slot as usize;
+                    let i = *slot as usize;
                     if matches!(self.frames[0].slots[i], Zval::Undef) {
                         self.frames[0].slots[i] = Zval::Null;
                     }
                     // Value snapshot + write-through (see IncDecSlot: a reference
                     // slot must yield the pre-increment VALUE and keep aliases).
                     let old = self.frames[0].slots[i].deref_clone();
-                    let (newv, diags) = self.compute_incdec(old.clone(), inc)?;
+                    let (newv, diags) = self.compute_incdec(old.clone(), *inc)?;
                     // PHP raises the diagnostic *before* writing the result back, so a
                     // `set_error_handler` runs here (it may throw, unwinding this op, or
                     // mutate the variable — which the write-back below then overwrites).
                     self.raise_diags(diags, self.cur_line(top))?;
                     let _ = store_slot(&mut self.frames[0].slots[i], newv.clone());
-                    let pushed = if pre { newv } else { old };
+                    let pushed = if *pre { newv } else { old };
                     self.frames[top].stack.push(pushed);
                 }
                 Op::LoadSuperglobal(idx) => {
                     // `$_SERVER` (&c.) read: the value lives in the VM-level store,
                     // resolved by name — correct from any unit/frame. Silent like
                     // `LoadGlobal`.
-                    let v = read_slot(&self.superglobals[idx as usize]);
+                    let v = read_slot(&self.superglobals[*idx as usize]);
                     self.frames[top].stack.push(v);
                 }
                 Op::StoreSuperglobal(idx) => {
                     let v = self.frames[top].stack.pop().expect("StoreSuperglobal on empty stack");
-                    let old = store_slot(&mut self.superglobals[idx as usize], v);
+                    let old = store_slot(&mut self.superglobals[*idx as usize], v);
                     self.gc_note(&old);
                 }
                 Op::GlobalsDynAssign => {
@@ -368,16 +374,16 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(Zval::Array(Rc::new(out)));
                 }
                 Op::IncDecSuperglobal { idx, inc, pre } => {
-                    let i = idx as usize;
+                    let i = *idx as usize;
                     if matches!(self.superglobals[i], Zval::Undef) {
                         self.superglobals[i] = Zval::Null;
                     }
                     // Value snapshot + write-through (see IncDecSlot).
                     let old = self.superglobals[i].deref_clone();
-                    let (newv, diags) = self.compute_incdec(old.clone(), inc)?;
+                    let (newv, diags) = self.compute_incdec(old.clone(), *inc)?;
                     self.raise_diags(diags, self.cur_line(top))?;
                     let _ = store_slot(&mut self.superglobals[i], newv.clone());
-                    let pushed = if pre { newv } else { old };
+                    let pushed = if *pre { newv } else { old };
                     self.frames[top].stack.push(pushed);
                 }
                 Op::PushUndef => {
@@ -386,21 +392,21 @@ impl<'m> super::Vm<'m> {
                 Op::FillDefault { slot, skip } => {
                     // Default-parameter prologue (PAR): skip the default if the
                     // argument was supplied (the slot is not `Undef`).
-                    if !matches!(self.frames[top].slots[slot as usize], Zval::Undef) {
-                        self.frames[top].ip = skip as usize;
+                    if !matches!(self.frames[top].slots[*slot as usize], Zval::Undef) {
+                        self.frames[top].ip = *skip as usize;
                     }
                 }
                 Op::CoerceParam { slot, hint } => {
                     // Coerce a just-filled scalar-hinted default (step 14). A valid
                     // constant default always coerces; keep the value otherwise.
-                    let v = self.frames[top].slots[slot as usize].clone();
+                    let v = self.frames[top].slots[*slot as usize].clone();
                     if let Ok(c) = coerce_to_hint(v, &hint, &mut self.diags, self.frames[top].module.strict) {
-                        self.frames[top].slots[slot as usize] = c;
+                        self.frames[top].slots[*slot as usize] = c;
                     }
                 }
                 Op::CheckArity { required, exactly } => {
                     let argc = self.frames[top].argc;
-                    if argc < required {
+                    if argc < *required {
                         // `Class::method` for a method, bare name for a function.
                         let func_name = self.frames[top].func.name.clone();
                         let name = match self.frames[top].class {
@@ -418,7 +424,7 @@ impl<'m> super::Vm<'m> {
                         } else {
                             self.cur_line(top)
                         };
-                        let qualifier = if exactly { "exactly" } else { "at least" };
+                        let qualifier = if *exactly { "exactly" } else { "at least" };
                         let msg = format!(
                             "Too few arguments to function {name}(), {argc} passed in {} on line {line} and {qualifier} {required} expected",
                             String::from_utf8_lossy(&self.module.file)
@@ -427,7 +433,7 @@ impl<'m> super::Vm<'m> {
                     }
                 }
                 Op::IncDecSlot { slot, inc, pre } => {
-                    let i = slot as usize;
+                    let i = *slot as usize;
                     if matches!(self.frames[top].slots[i], Zval::Undef) {
                         self.frames[top].slots[i] = Zval::Null;
                     }
@@ -437,11 +443,11 @@ impl<'m> super::Vm<'m> {
                     // already-incremented cell. The write-back goes *through*
                     // the reference so aliases keep seeing the update.
                     let old = self.frames[top].slots[i].deref_clone();
-                    let (newv, diags) = self.compute_incdec(old.clone(), inc)?;
+                    let (newv, diags) = self.compute_incdec(old.clone(), *inc)?;
                     // Raise before write-back (see IncDecGlobal).
                     self.raise_diags(diags, self.cur_line(top))?;
                     let _ = store_slot(&mut self.frames[top].slots[i], newv.clone());
-                    let pushed = if pre { newv } else { old };
+                    let pushed = if *pre { newv } else { old };
                     self.frames[top].stack.push(pushed);
                 }
                 Op::Binary(b) => {
@@ -505,12 +511,12 @@ impl<'m> super::Vm<'m> {
                     } else {
                         (lhs, rhs)
                     };
-                    let r = self.apply_binop_ovl(b, &lhs, &rhs)?;
+                    let r = self.apply_binop_ovl(*b, &lhs, &rhs)?;
                     self.frames[top].stack.push(r);
                 }
                 Op::Unary(u) => {
                     let a = self.frames[top].stack.pop().expect("Unary operand");
-                    let r = self.apply_unop_ovl(u, &a)?;
+                    let r = self.apply_unop_ovl(*u, &a)?;
                     self.frames[top].stack.push(r);
                 }
                 Op::Cast(k) => {
@@ -544,7 +550,7 @@ impl<'m> super::Vm<'m> {
                         })
                     {
                         let s = self.vm_stringify(&a.deref_clone())?;
-                        apply_cast(k, &Zval::Str(s), &mut self.diags)
+                        apply_cast(*k, &Zval::Str(s), &mut self.diags)
                     } else if matches!(k, CastKind::Int | CastKind::Float)
                         && deref_object(&a).is_some_and(|o| {
                             let cid = o.borrow().class_id as usize;
@@ -567,23 +573,23 @@ impl<'m> super::Vm<'m> {
                             _ => Zval::Double(0.0),
                         }
                     } else {
-                        apply_cast(k, &a, &mut self.diags)
+                        apply_cast(*k, &a, &mut self.diags)
                     };
                     self.frames[top].stack.push(r);
                 }
                 Op::Jump(addr) => {
-                    self.frames[top].ip = addr as usize;
+                    self.frames[top].ip = *addr as usize;
                 }
                 Op::JumpIfFalse(addr) => {
                     let c = self.frames[top].stack.pop().expect("JumpIfFalse cond");
                     if !convert::to_bool(&c, &mut self.diags) {
-                        self.frames[top].ip = addr as usize;
+                        self.frames[top].ip = *addr as usize;
                     }
                 }
                 Op::JumpIfTrue(addr) => {
                     let c = self.frames[top].stack.pop().expect("JumpIfTrue cond");
                     if convert::to_bool(&c, &mut self.diags) {
-                        self.frames[top].ip = addr as usize;
+                        self.frames[top].ip = *addr as usize;
                     }
                 }
                 Op::Echo => {
@@ -651,7 +657,7 @@ impl<'m> super::Vm<'m> {
                         Some(Zval::Null | Zval::Undef)
                     );
                     if keep {
-                        self.frames[top].ip = addr as usize;
+                        self.frames[top].ip = *addr as usize;
                     } else {
                         self.frames[top].stack.pop();
                     }
@@ -659,7 +665,7 @@ impl<'m> super::Vm<'m> {
                 Op::JumpIfNull(addr) => {
                     // Peek; the value is kept either way (nullsafe `?->`).
                     if matches!(self.frames[top].stack.last(), Some(Zval::Null | Zval::Undef)) {
-                        self.frames[top].ip = addr as usize;
+                        self.frames[top].ip = *addr as usize;
                     }
                 }
                 Op::ArrayInit => {
@@ -787,44 +793,44 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::AssignPath { base, nkeys, append } => {
                     let value = self.frames[top].stack.pop().expect("AssignPath value");
-                    let mut keys = self.pop_keys(top, nkeys);
+                    let mut keys = self.pop_keys(top, *nkeys);
                     // `$o[$k] = v` / `$o[] = v` on an ArrayAccess object dispatches
                     // `offsetSet` (a single step only); the expression yields `v`.
-                    if nkeys + append as u32 == 1 {
-                        if let Some(recv) = self.as_arrayaccess(self.base_cell(base, top)) {
-                            let key = if append { Zval::Null } else { keys.pop().expect("set key") };
+                    if nkeys + *append as u32 == 1 {
+                        if let Some(recv) = self.as_arrayaccess(self.base_cell(*base, top)) {
+                            let key = if *append { Zval::Null } else { keys.pop().expect("set key") };
                             self.frames[top].stack.push(value.clone());
                             self.enter_object_method(recv, b"offsetSet", vec![key, value], RetMode::Discard)?;
                             continue;
                         }
                     }
-                    let last = if append {
+                    let last = if *append {
                         Last::Append { value }
                     } else {
                         Last::Set { key: keys.pop().expect("AssignPath key"), value }
                     };
-                    let result = self.path_op(base, top, keys, last)?;
+                    let result = self.path_op(*base, top, keys, last)?;
                     self.frames[top].stack.push(result);
                 }
                 Op::AssignOpPath { base, nkeys, op } => {
                     let rhs = self.frames[top].stack.pop().expect("AssignOpPath rhs");
-                    let mut keys = self.pop_keys(top, nkeys);
+                    let mut keys = self.pop_keys(top, *nkeys);
                     let key = keys.pop().expect("AssignOpPath key");
-                    let result = self.path_op(base, top, keys, Last::OpSet { key, op, rhs })?;
+                    let result = self.path_op(*base, top, keys, Last::OpSet { key, op: *op, rhs })?;
                     self.frames[top].stack.push(result);
                 }
                 Op::IncDecPath { base, nkeys, inc, pre } => {
-                    let mut keys = self.pop_keys(top, nkeys);
+                    let mut keys = self.pop_keys(top, *nkeys);
                     let key = keys.pop().expect("IncDecPath key");
-                    let result = self.path_op(base, top, keys, Last::IncDec { key, inc, pre })?;
+                    let result = self.path_op(*base, top, keys, Last::IncDec { key, inc: *inc, pre: *pre })?;
                     self.frames[top].stack.push(result);
                 }
                 Op::IssetPath { base, nkeys } => {
-                    let keys = self.pop_keys(top, nkeys);
+                    let keys = self.pop_keys(top, *nkeys);
                     // `isset($o[$k])` on an ArrayAccess object is `offsetExists($k)`
                     // (a single step only; it does not call `offsetGet`).
-                    if nkeys == 1 {
-                        if let Some(recv) = self.as_arrayaccess(self.base_cell(base, top)) {
+                    if *nkeys == 1 {
+                        if let Some(recv) = self.as_arrayaccess(self.base_cell(*base, top)) {
                             let key = keys.into_iter().next().expect("isset key");
                             self.enter_object_method(recv, b"offsetExists", vec![key], RetMode::Stack)?;
                             continue;
@@ -833,7 +839,7 @@ impl<'m> super::Vm<'m> {
                     // Nested form: BP_VAR_IS walk (an intermediate ArrayAccess
                     // dispatches offsetExists/offsetGet; the protocol runs on
                     // an ArrayAccess leaf).
-                    let set = match self.dim_is_walk(base, top, &keys)? {
+                    let set = match self.dim_is_walk(*base, top, &keys)? {
                         super::DimIsLeaf::Missing => false,
                         super::DimIsLeaf::Aa(recv, key) => {
                             let r = self.call_method_sync(recv, b"offsetExists", vec![key])?;
@@ -846,13 +852,13 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(Zval::Bool(set));
                 }
                 Op::EmptyPath { base, nkeys } => {
-                    let keys = self.pop_keys(top, nkeys);
+                    let keys = self.pop_keys(top, *nkeys);
                     // `empty($o[$k])` on an ArrayAccess object: `!offsetExists($k)`
                     // short-circuits to empty (so `offsetGet` — which may throw for
                     // an absent key, e.g. WeakMap — is skipped); otherwise
                     // `!truthy(offsetGet($k))`. A single step only.
-                    if nkeys == 1 {
-                        if let Some(recv) = self.as_arrayaccess(self.base_cell(base, top)) {
+                    if *nkeys == 1 {
+                        if let Some(recv) = self.as_arrayaccess(self.base_cell(*base, top)) {
                             let key = keys.into_iter().next().expect("empty key");
                             let exists =
                                 self.call_method_sync(recv.clone(), b"offsetExists", vec![key.clone()])?;
@@ -867,7 +873,7 @@ impl<'m> super::Vm<'m> {
                         }
                     }
                     // Nested form: same BP_VAR_IS walk as `isset` above.
-                    let empty = match self.dim_is_walk(base, top, &keys)? {
+                    let empty = match self.dim_is_walk(*base, top, &keys)? {
                         super::DimIsLeaf::Missing => true,
                         super::DimIsLeaf::Aa(recv, key) => {
                             let exists = self
@@ -887,17 +893,17 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(Zval::Bool(empty));
                 }
                 Op::UnsetPath { base, nkeys } => {
-                    let keys = self.pop_keys(top, nkeys);
+                    let keys = self.pop_keys(top, *nkeys);
                     // `unset($o[$k])` on an ArrayAccess object is `offsetUnset($k)`
                     // (a single step only).
-                    if nkeys == 1 {
-                        if let Some(recv) = self.as_arrayaccess(self.base_cell(base, top)) {
+                    if *nkeys == 1 {
+                        if let Some(recv) = self.as_arrayaccess(self.base_cell(*base, top)) {
                             let key = keys.into_iter().next().expect("unset key");
                             self.enter_object_method(recv, b"offsetUnset", vec![key], RetMode::Discard)?;
                             continue;
                         }
                     }
-                    if let Some((recv, key)) = self.dim_aa_leaf(base, top, &keys) {
+                    if let Some((recv, key)) = self.dim_aa_leaf(*base, top, &keys) {
                         self.call_method_sync(recv, b"offsetUnset", vec![key])?;
                         continue;
                     }
@@ -908,15 +914,15 @@ impl<'m> super::Vm<'m> {
                     // / full scan.
                     let dropped = if keys.is_empty() {
                         Some(match base {
-                            DimBase::Local(s) => std::mem::replace(&mut self.frames[top].slots[s as usize], Zval::Undef),
-                            DimBase::Global(s) => std::mem::replace(&mut self.frames[0].slots[s as usize], Zval::Undef),
-                            DimBase::Superglobal(i) => std::mem::replace(&mut self.superglobals[i as usize], Zval::Undef),
+                            DimBase::Local(s) => std::mem::replace(&mut self.frames[top].slots[*s as usize], Zval::Undef),
+                            DimBase::Global(s) => std::mem::replace(&mut self.frames[0].slots[*s as usize], Zval::Undef),
+                            DimBase::Superglobal(i) => std::mem::replace(&mut self.superglobals[*i as usize], Zval::Undef),
                         })
                     } else {
                         let cell = match base {
-                            DimBase::Local(s) => &mut self.frames[top].slots[s as usize],
-                            DimBase::Global(s) => &mut self.frames[0].slots[s as usize],
-                            DimBase::Superglobal(i) => &mut self.superglobals[i as usize],
+                            DimBase::Local(s) => &mut self.frames[top].slots[*s as usize],
+                            DimBase::Global(s) => &mut self.frames[0].slots[*s as usize],
+                            DimBase::Superglobal(i) => &mut self.superglobals[*i as usize],
                         };
                         unset_into(cell, &keys);
                         None
@@ -934,17 +940,17 @@ impl<'m> super::Vm<'m> {
                         &mut self.frames,
                         &mut self.superglobals,
                         top,
-                        source,
+                        *source,
                     ));
                     let value = cell.borrow().clone();
-                    *ref_base_mut(&mut self.frames, &mut self.superglobals, top, target) =
+                    *ref_base_mut(&mut self.frames, &mut self.superglobals, top, *target) =
                         Zval::Ref(cell);
                     self.frames[top].stack.push(value);
                 }
                 Op::PushRef(slot) => {
                     // REF-2: promote the local to a shared cell and push the ref;
                     // the next `Op::Call` binds it into the by-ref callee slot.
-                    let cell = make_cell(&mut self.frames[top].slots[slot as usize]);
+                    let cell = make_cell(&mut self.frames[top].slots[*slot as usize]);
                     self.frames[top].stack.push(Zval::Ref(cell));
                 }
                 Op::MakeClosure { fn_idx, captures, bind_this } => {
@@ -957,14 +963,14 @@ impl<'m> super::Vm<'m> {
                         };
                         bound.push((cap.dst, val));
                     }
-                    let bound_this = if bind_this { self.frames[top].this.clone() } else { None };
+                    let bound_this = if *bind_this { self.frames[top].this.clone() } else { None };
                     let m = self.frames[top].module;
                     // A closure index always resolves in the unit that compiled the
                     // body — except a trait method flattened into a class from
                     // *another* unit: its closure indices point at the trait's unit,
                     // not the consumer's (cross-unit trait-closure relocation is not
                     // yet implemented). Surface a catchable error rather than panic.
-                    let Some(func) = m.closures.get(fn_idx as usize) else {
+                    let Some(func) = m.closures.get(*fn_idx as usize) else {
                         return Err(PhpError::Error(format!(
                             "closure from a trait used across files is not yet supported \
                              (closure #{fn_idx} of {} in unit '{}' [{} closures])",
@@ -989,7 +995,7 @@ impl<'m> super::Vm<'m> {
                     // closure whose `static::` is Child, WP-17).
                     let lsb = self.frames[top].static_class.or(scope);
                     let cl = Closure {
-                        fn_idx: fn_idx as usize,
+                        fn_idx: *fn_idx as usize,
                         captures: bound,
                         named: None,
                         bound_this,
@@ -1033,7 +1039,7 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(Zval::Closure(Rc::new(cl)));
                 }
                 Op::CallValue { argc } => {
-                    let n = argc as usize;
+                    let n = *argc as usize;
                     let mut args = Vec::with_capacity(n);
                     for _ in 0..n {
                         args.push(self.frames[top].stack.pop().expect("CallValue argument"));
@@ -1043,7 +1049,7 @@ impl<'m> super::Vm<'m> {
                     self.invoke_value(callee, args)?;
                 }
                 Op::CallNsFallback { name, fallback, argc } => {
-                    let n = argc as usize;
+                    let n = *argc as usize;
                     let mut args = Vec::with_capacity(n);
                     for _ in 0..n {
                         args.push(self.frames[top].stack.pop().expect("CallNsFallback argument"));
@@ -1095,13 +1101,13 @@ impl<'m> super::Vm<'m> {
                         self.frames[top].stack.pop();
                         if let Some(slot) = var {
                             let displaced =
-                                store_slot(&mut self.frames[top].slots[slot as usize], exc);
+                                store_slot(&mut self.frames[top].slots[*slot as usize], exc);
                             self.gc_note(&displaced);
                         } else {
                             // A capture-less catch drops the throwable right here.
                             self.gc_note(&exc);
                         }
-                        self.frames[top].ip = body as usize;
+                        self.frames[top].ip = *body as usize;
                     }
                     // else: fall through to the next CatchMatch / Rethrow.
                 }
@@ -1122,7 +1128,7 @@ impl<'m> super::Vm<'m> {
                             self.frames[top].ip = addr as usize;
                         }
                         None => {
-                            self.frames[top].ip = after as usize;
+                            self.frames[top].ip = *after as usize;
                         }
                     }
                 }
@@ -1131,7 +1137,7 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].pending_transfer = Some(Transfer::Return(v));
                 }
                 Op::ParkJump(addr) => {
-                    self.frames[top].pending_transfer = Some(Transfer::Jump(addr));
+                    self.frames[top].pending_transfer = Some(Transfer::Jump(*addr));
                 }
                 Op::DerefTop => {
                     // REF-4b: copy a by-ref return used in value context.
@@ -1145,7 +1151,7 @@ impl<'m> super::Vm<'m> {
                     // cell, and push a reference to it. Keys (for `Index` steps)
                     // were pushed in source order and sit on top of the stack.
                     let keys = self.pop_field_keys(top, &steps);
-                    let cell = self.make_ref_cell(top, base, &steps, keys)?;
+                    let cell = self.make_ref_cell(top, *base, &steps, keys)?;
                     self.frames[top].stack.push(Zval::Ref(cell));
                 }
                 Op::PushArgPlace { base, steps, name } => {
@@ -1155,9 +1161,9 @@ impl<'m> super::Vm<'m> {
                     // R-fetches.
                     let keys = self.pop_field_keys(top, &steps);
                     let pbase = match base {
-                        FieldBase::Local(s) => ArgPlaceBase::Local(s),
-                        FieldBase::Global(s) => ArgPlaceBase::Global(s),
-                        FieldBase::Superglobal(i) => ArgPlaceBase::Superglobal(i),
+                        FieldBase::Local(s) => ArgPlaceBase::Local(*s),
+                        FieldBase::Global(s) => ArgPlaceBase::Global(*s),
+                        FieldBase::Superglobal(i) => ArgPlaceBase::Superglobal(*i),
                         FieldBase::This => ArgPlaceBase::This,
                     };
                     let psteps: Box<[ArgPlaceStep]> = steps
@@ -1169,7 +1175,7 @@ impl<'m> super::Vm<'m> {
                             _ => unreachable!("PushArgPlace step"),
                         })
                         .collect();
-                    let pname: Box<[u8]> = match &self.frames[top].func.consts[name as usize] {
+                    let pname: Box<[u8]> = match &self.frames[top].func.consts[*name as usize] {
                         crate::bytecode::Const::Str(b) => Box::from(b.as_bytes()),
                         _ => Box::default(),
                     };
@@ -1184,11 +1190,11 @@ impl<'m> super::Vm<'m> {
                     // REF-4: pop the reference, bind the target place to its cell,
                     // and push the aliased value (the assignment's result).
                     // Binding a reference *into* a hooked property is forbidden.
-                    if self.field_starts_at_hook(base, top, &steps) {
+                    if self.field_starts_at_hook(*base, top, &steps) {
                         if steps.len() > 1 {
                             // Navigating *into* the property: a `&get` hook's cell
                             // is an addressable root — bind the leaf inside it.
-                            if let Some(root) = self.byref_hook_root(base, top, &steps)? {
+                            if let Some(root) = self.byref_hook_root(*base, top, &steps)? {
                                 let top_val = self.frames[top].stack.pop().expect("BindRefTo value");
                                 let cell = match top_val {
                                     Zval::Ref(rc) => rc,
@@ -1204,7 +1210,7 @@ impl<'m> super::Vm<'m> {
                             // The write fetch of the rebind target runs a `&get`
                             // hook first (observable side effects, bug007) — then
                             // PHP still rejects rebinding the property slot.
-                            let _ = self.byref_hook_root(base, top, &steps)?;
+                            let _ = self.byref_hook_root(*base, top, &steps)?;
                         }
                         return Err(PhpError::Error(
                             "Cannot assign by reference to overloaded object".to_string(),
@@ -1219,14 +1225,14 @@ impl<'m> super::Vm<'m> {
                     // A lazy base initializes/forwards; binding into a typed
                     // property validates the reference's value at bind time and
                     // registers the typed source (typed_properties_001).
-                    let lazy_root = self.field_lazy_root(base, top, &steps, &keys, true)?;
+                    let lazy_root = self.field_lazy_root(*base, top, &steps, &keys, true)?;
                     {
                         let target = match &lazy_root {
                             Some(r) => Some(r.clone()),
                             None => match base {
-                                FieldBase::Local(s) => self.frames[top].slots.get(s as usize).map(|v| v.deref_clone()),
-                                FieldBase::Global(s) => self.frames[0].slots.get(s as usize).map(|v| v.deref_clone()),
-                                FieldBase::Superglobal(i) => self.superglobals.get(i as usize).map(|v| v.deref_clone()),
+                                FieldBase::Local(s) => self.frames[top].slots.get(*s as usize).map(|v| v.deref_clone()),
+                                FieldBase::Global(s) => self.frames[0].slots.get(*s as usize).map(|v| v.deref_clone()),
+                                FieldBase::Superglobal(i) => self.superglobals.get(*i as usize).map(|v| v.deref_clone()),
                                 FieldBase::This => self.frames[top].this.as_ref().map(|v| v.deref_clone()),
                             },
                         };
@@ -1238,10 +1244,10 @@ impl<'m> super::Vm<'m> {
                     } else if steps.is_empty() {
                         // A step-less base is rebound directly (not written
                         // through), matching `eval::bind_ref_target`.
-                        let base_cell = field_base_mut(&mut self.frames, &mut self.superglobals, top, base)?;
+                        let base_cell = field_base_mut(&mut self.frames, &mut self.superglobals, top, *base)?;
                         *base_cell = Zval::Ref(cell);
                     } else {
-                        self.field_set_mode(base, top, &steps, keys, Zval::Ref(cell), true, false)?;
+                        self.field_set_mode(*base, top, &steps, keys, Zval::Ref(cell), true, false)?;
                     }
                     self.frames[top].stack.push(value);
                 }
@@ -1249,12 +1255,12 @@ impl<'m> super::Vm<'m> {
                     // `$t = &m()` for a method/static call: the callee's by-ref-ness
                     // is only known now. A non-`Ref` source means the callee did not
                     // return by reference — raise the notice, then bind a copy.
-                    if self.field_starts_at_hook(base, top, &steps) {
+                    if self.field_starts_at_hook(*base, top, &steps) {
                         if steps.len() == 1 {
                             // Run a `&get` hook's observable side effects before
                             // rejecting the rebind (mirrors `Op::BindRefTo`).
-                            let _ = self.byref_hook_root(base, top, &steps)?;
-                        } else if let Some(root) = self.byref_hook_root(base, top, &steps)? {
+                            let _ = self.byref_hook_root(*base, top, &steps)?;
+                        } else if let Some(root) = self.byref_hook_root(*base, top, &steps)? {
                             let top_val = self.frames[top].stack.pop().expect("BindRefToChecked value");
                             let cell = match top_val {
                                 Zval::Ref(rc) => rc,
@@ -1292,10 +1298,10 @@ impl<'m> super::Vm<'m> {
                     let value = cell.borrow().clone();
                     let keys = self.pop_field_keys(top, &steps);
                     if steps.is_empty() {
-                        let base_cell = field_base_mut(&mut self.frames, &mut self.superglobals, top, base)?;
+                        let base_cell = field_base_mut(&mut self.frames, &mut self.superglobals, top, *base)?;
                         *base_cell = Zval::Ref(cell);
                     } else {
-                        self.field_set_mode(base, top, &steps, keys, Zval::Ref(cell), true, false)?;
+                        self.field_set_mode(*base, top, &steps, keys, Zval::Ref(cell), true, false)?;
                     }
                     self.frames[top].stack.push(value);
                 }
@@ -1358,11 +1364,11 @@ impl<'m> super::Vm<'m> {
                             (gs.cur_key.clone(), gs.cur_val.clone(), matches!(gs.status, GenStatus::Done))
                         };
                         if done {
-                            self.frames[top].ip = end as usize;
+                            self.frames[top].ip = *end as usize;
                         } else {
-                            store_slot(&mut self.frames[top].slots[value as usize], v.deref_clone());
+                            store_slot(&mut self.frames[top].slots[*value as usize], v.deref_clone());
                             if let Some(ks) = key {
-                                store_slot(&mut self.frames[top].slots[ks as usize], k);
+                                store_slot(&mut self.frames[top].slots[*ks as usize], k);
                             }
                         }
                         continue;
@@ -1415,11 +1421,11 @@ impl<'m> super::Vm<'m> {
                             }
                         };
                         match pair {
-                            None => self.frames[top].ip = end as usize,
+                            None => self.frames[top].ip = *end as usize,
                             Some((k, v)) => {
-                                store_slot(&mut self.frames[top].slots[value as usize], v);
+                                store_slot(&mut self.frames[top].slots[*value as usize], v);
                                 if let Some(ks) = key {
-                                    store_slot(&mut self.frames[top].slots[ks as usize], k);
+                                    store_slot(&mut self.frames[top].slots[*ks as usize], k);
                                 }
                             }
                         }
@@ -1479,7 +1485,7 @@ impl<'m> super::Vm<'m> {
                                     self.set_obj_stage(top, ObjStage::NeedCurrent);
                                     self.frames[top].ip = ip;
                                 } else {
-                                    self.frames[top].ip = end as usize;
+                                    self.frames[top].ip = *end as usize;
                                 }
                                 continue;
                             }
@@ -1509,9 +1515,9 @@ impl<'m> super::Vm<'m> {
                                     }
                                     _ => Zval::Null,
                                 };
-                                store_slot(&mut self.frames[top].slots[value as usize], v.deref_clone());
+                                store_slot(&mut self.frames[top].slots[*value as usize], v.deref_clone());
                                 if let Some(ks) = key {
-                                    store_slot(&mut self.frames[top].slots[ks as usize], k.deref_clone());
+                                    store_slot(&mut self.frames[top].slots[*ks as usize], k.deref_clone());
                                 }
                                 continue; // ip is already past IterNext: run the body
                             }
@@ -1537,15 +1543,15 @@ impl<'m> super::Vm<'m> {
                         }
                     };
                     match pair {
-                        None => self.frames[top].ip = end as usize,
+                        None => self.frames[top].ip = *end as usize,
                         Some((k, v)) => {
                             // Deref at bind time: a reference element snapshots its
                             // cell and is read live here. `store_slot` writes
                             // *through* a value slot that is itself a reference (the
                             // lingering-ref gotcha), matching the tree-walker.
-                            store_slot(&mut self.frames[top].slots[value as usize], v.deref_clone());
+                            store_slot(&mut self.frames[top].slots[*value as usize], v.deref_clone());
                             if let Some(ks) = key {
-                                store_slot(&mut self.frames[top].slots[ks as usize], k);
+                                store_slot(&mut self.frames[top].slots[*ks as usize], k);
                             }
                         }
                     }
@@ -1554,7 +1560,7 @@ impl<'m> super::Vm<'m> {
                     // REF-3: snapshot the source's keys once; each step rebinds the
                     // live element/property by reference. A plain object binds each
                     // visible property by reference (ObjRefs); an array uses ByRef.
-                    let src = self.frames[top].slots[source as usize].deref_clone();
+                    let src = self.frames[top].slots[*source as usize].deref_clone();
                     // A by-ref foreach over a lazy object initializes it first
                     // (PHP 8.4); a proxy then iterates its real instance.
                     let src = if deref_object(&src).is_some_and(|o| o.borrow().lazy.is_some()) {
@@ -1569,8 +1575,8 @@ impl<'m> super::Vm<'m> {
                             continue;
                         }
                     }
-                    let keys = ref_array_keys(&self.frames[top].slots[source as usize]);
-                    self.frames[top].iters.push(IterState::ByRef { source, keys, pos: 0 });
+                    let keys = ref_array_keys(&self.frames[top].slots[*source as usize]);
+                    self.frames[top].iters.push(IterState::ByRef { source: *source, keys, pos: 0 });
                 }
                 Op::IterNextRef { value, key, end } => {
                     // A plain-object by-ref foreach: bind `$v` to the property's
@@ -1641,12 +1647,12 @@ impl<'m> super::Vm<'m> {
                             }
                         };
                         match bound {
-                            None => self.frames[top].ip = end as usize,
+                            None => self.frames[top].ip = *end as usize,
                             Some((cell, keyname)) => {
                                 if let Some(ks) = key {
-                                    store_slot(&mut self.frames[top].slots[ks as usize], Zval::Str(PhpStr::new(keyname.to_vec())));
+                                    store_slot(&mut self.frames[top].slots[*ks as usize], Zval::Str(PhpStr::new(keyname.to_vec())));
                                 }
-                                self.frames[top].slots[value as usize] = Zval::Ref(cell);
+                                self.frames[top].slots[*value as usize] = Zval::Ref(cell);
                             }
                         }
                         continue;
@@ -1666,17 +1672,17 @@ impl<'m> super::Vm<'m> {
                         }
                     };
                     match next {
-                        None => self.frames[top].ip = end as usize,
+                        None => self.frames[top].ip = *end as usize,
                         Some((src, k)) => {
                             let cell = elem_cell(&mut self.frames[top].slots[src as usize], &k);
                             if let Some(ks) = key {
-                                store_slot(&mut self.frames[top].slots[ks as usize], key_to_zval(&k));
+                                store_slot(&mut self.frames[top].slots[*ks as usize], key_to_zval(&k));
                             }
                             // Direct overwrite, *not* `store_slot`: on later
                             // iterations the value slot is itself a `Zval::Ref` to
                             // the previous element, and writing through it would
                             // corrupt that element (D-R13).
-                            self.frames[top].slots[value as usize] = Zval::Ref(cell);
+                            self.frames[top].slots[*value as usize] = Zval::Ref(cell);
                         }
                     }
                 }
@@ -1691,7 +1697,7 @@ impl<'m> super::Vm<'m> {
                     // A conditional `function` statement was reached: register it in
                     // the runtime table so it is callable by name from here on.
                     let m = self.frames[top].module;
-                    let idx = func as usize;
+                    let idx = *func as usize;
                     let name = m.functions[idx].name.clone();
                     if self.is_name_callable(&name) {
                         return Err(PhpError::Error(format!(
@@ -1706,7 +1712,7 @@ impl<'m> super::Vm<'m> {
                     // lowered trait into the seed image so later units can
                     // `use` it (only the branch that RAN registers its variant).
                     let module = self.frames[top].module;
-                    if let Some((key, lt)) = module.conditional_traits.get(idx as usize) {
+                    if let Some((key, lt)) = module.conditional_traits.get(*idx as usize) {
                         if !self.seed_traits.iter().any(|(k, _)| k == key) {
                             self.seed_traits.push((key.clone(), lt.clone()));
                         }
@@ -1719,7 +1725,7 @@ impl<'m> super::Vm<'m> {
                     // was already relocated to the global table, so it indexes
                     // `self.classes` directly. A name already in use is the PHP fatal.
                     let cid = class;
-                    let cc = self.classes[cid];
+                    let cc = self.classes[*cid];
                     let key = cc.name.to_ascii_lowercase();
                     if self.class_index.contains_key(&key) {
                         let kind = if cc.enum_cases.is_empty() { "class" } else { "enum" };
@@ -1729,31 +1735,31 @@ impl<'m> super::Vm<'m> {
                             String::from_utf8_lossy(&cc.name)
                         )));
                     }
-                    self.class_index.insert(key, cid);
-                    self.serializable_link_check(cid)?;
+                    self.class_index.insert(key, *cid);
+                    self.serializable_link_check(*cid)?;
                 }
                 Op::DeclareDeferred { idx } => {
                     // A late-bound declaration statement was reached (its
                     // supertype was unresolvable when the unit was lowered):
                     // bind it now — re-lower the snippet against the current
                     // class image, or throw PHP's `… "X" not found` Error.
-                    self.run_deferred(idx as usize, false)?;
+                    self.run_deferred(*idx as usize, false)?;
                 }
                 Op::NewAnonDeferred { idx } => {
                     // Late-bound anonymous class: bind and instantiate at the
                     // expression's execution point, constructor arguments
                     // re-evaluated in this frame's bridged scope.
-                    let v = self.run_deferred(idx as usize, true)?;
+                    let v = self.run_deferred(*idx as usize, true)?;
                     let top = self.frames.len() - 1;
                     self.frames[top].stack.push(v);
                 }
                 Op::Call { func, argc } => {
                     let m = self.frames[top].module;
-                    let callee = &m.functions[func as usize];
+                    let callee = &m.functions[*func as usize];
                     // Pop argc args (pushed left-to-right) and bind them to the
                     // callee's leading slots. The caller's `ip` is already past
                     // the Call, so it resumes correctly once the callee returns.
-                    let n = argc as usize;
+                    let n = *argc as usize;
                     let mut args = Vec::with_capacity(n);
                     for _ in 0..n {
                         args.push(self.frames[top].stack.pop().expect("call argument"));
@@ -1770,7 +1776,7 @@ impl<'m> super::Vm<'m> {
                     let argsval = self.frames[top].stack.pop().expect("CallArgs array");
                     let (args, named) = split_args_from_array_value(argsval);
                     let m = self.frames[top].module;
-                    let callee = &m.functions[func as usize];
+                    let callee = &m.functions[*func as usize];
                     let frame = if named.is_empty() {
                         let mut frame = self.pooled_frame(callee, m);
                         bind_params(&mut frame, args);
@@ -1788,9 +1794,9 @@ impl<'m> super::Vm<'m> {
                     let named_vals = self.pop_keys(top, names.len() as u32);
                     let named: Vec<(Box<[u8]>, Zval)> =
                         names.iter().cloned().zip(named_vals).collect();
-                    let pos = self.pop_keys(top, positional);
+                    let pos = self.pop_keys(top, *positional);
                     let m = self.frames[top].module;
-                    let callee = &m.functions[func as usize];
+                    let callee = &m.functions[*func as usize];
                     let qn = String::from_utf8_lossy(&callee.name).into_owned();
                     let frame = build_named_frame(callee, m, &qn, pos, named)?;
                     self.enter_callee(frame)?;
@@ -1835,7 +1841,7 @@ impl<'m> super::Vm<'m> {
                         named.push((label, v));
                     }
                     let m = self.frames[top].module;
-                    let callee = &m.functions[func as usize];
+                    let callee = &m.functions[*func as usize];
                     let qn = String::from_utf8_lossy(&callee.name).into_owned();
                     let frame = build_named_frame(callee, m, &qn, positional, named)?;
                     self.enter_callee(frame)?;
@@ -1846,7 +1852,7 @@ impl<'m> super::Vm<'m> {
                         // The compiler only emits CallBuiltin for value builtins.
                         _ => return Err(undefined_builtin(&name)),
                     };
-                    let mut args = self.pop_keys(top, argc); // pops argc, source order
+                    let mut args = self.pop_keys(top, *argc); // pops argc, source order
                     // A whole-object exporter initializes a lazy argument first
                     // (PHP 8.4, init_trigger_var_export); the pure builtin then
                     // formats the realized instance.
@@ -1869,7 +1875,7 @@ impl<'m> super::Vm<'m> {
                     // user `count()` method (step 56); the builtin only handles
                     // arrays. A non-Countable object still TypeErrors in the
                     // builtin below, matching PHP.
-                    if argc == 1
+                    if *argc == 1
                         && (name[..] == *b"count" || name[..] == *b"sizeof")
                     {
                         if let Some(obj) = self.as_countable(&args[0]) {
@@ -1883,7 +1889,7 @@ impl<'m> super::Vm<'m> {
                     // wrapper object's stream_* methods (VM re-entrant), never the
                     // pure value builtin. Only fires for UserStream resources, so
                     // ordinary file I/O is untouched.
-                    if argc >= 1 && is_user_stream_op(&name) {
+                    if *argc >= 1 && is_user_stream_op(&name) {
                         if let Some(rc) = user_stream_rc(&args[0]) {
                             let line = self.cur_line(top);
                             self.flush_diags(line)?;
@@ -1894,7 +1900,7 @@ impl<'m> super::Vm<'m> {
                         }
                     }
                     // `file_get_contents("scheme://…")` on a registered wrapper.
-                    if argc >= 1 && name[..] == *b"file_get_contents" {
+                    if *argc >= 1 && name[..] == *b"file_get_contents" {
                         if let Some(path) = user_wrapper_url(&args[0], &self.stream_wrappers) {
                             let line = self.cur_line(top);
                             self.flush_diags(line)?;
@@ -1906,7 +1912,7 @@ impl<'m> super::Vm<'m> {
                     }
                     // Stat-family / image / exif builtins on a wrapper URL:
                     // url_stat or read-to-EOF through the wrapper object.
-                    if argc >= 1 && is_user_wrapper_path_op(&name) {
+                    if *argc >= 1 && is_user_wrapper_path_op(&name) {
                         if let Some(path) = user_wrapper_url(&args[0], &self.stream_wrappers) {
                             let line = self.cur_line(top);
                             self.flush_diags(line)?;
@@ -1984,7 +1990,7 @@ impl<'m> super::Vm<'m> {
                 Op::CallHostBuiltin { name, argc } => {
                     // An evaluator-only host builtin (Session B): it may invoke a
                     // user callable via `call_callable` (a nested `run_loop`).
-                    let args = self.pop_keys(top, argc);
+                    let args = self.pop_keys(top, *argc);
                     // Flush this builtin's own diagnostics at its call line, like
                     // `run_value_builtin` does for registry builtins — otherwise a
                     // warning it pushes (e.g. header()'s "headers already sent")
@@ -2008,8 +2014,8 @@ impl<'m> super::Vm<'m> {
                     // A by-reference-first host builtin (`usort`, Session C): its
                     // array argument lives in `slot` of the caller frame and is
                     // written back in place; the callback may run a nested `run_loop`.
-                    let rest = self.pop_keys(top, argc);
-                    let result = self.dispatch_host_builtin_ref(&name, slot, rest)?;
+                    let rest = self.pop_keys(top, *argc);
+                    let result = self.dispatch_host_builtin_ref(&name, *slot, rest)?;
                     let top = self.frames.len() - 1;
                     self.frames[top].stack.push(result);
                 }
@@ -2019,7 +2025,7 @@ impl<'m> super::Vm<'m> {
                     // args by value, then write the produced out-value into `out_slot`.
                     // `exec` additionally writes `&$result_code` into `out_slot2`.
                     let _ = out_index2;
-                    let mut args = self.pop_keys(top, argc);
+                    let mut args = self.pop_keys(top, *argc);
                     // `exec` *appends* to a pre-existing `&$output` array, so it
                     // needs that argument's current value (the compiler pushed a
                     // placeholder `null` there). Read it straight from the slot —
@@ -2027,8 +2033,8 @@ impl<'m> super::Vm<'m> {
                     // out-param builtins ignore this argument.
                     if name[..] == *b"exec" {
                         if let Some(slot) = out_slot {
-                            if let Some(a) = args.get_mut(out_index as usize) {
-                                *a = self.frames[top].slots[slot as usize].deref_clone();
+                            if let Some(a) = args.get_mut(*out_index as usize) {
+                                *a = self.frames[top].slots[*slot as usize].deref_clone();
                             }
                         }
                     }
@@ -2038,17 +2044,17 @@ impl<'m> super::Vm<'m> {
                     let line = self.cur_line(top);
                     self.flush_diags(line)?;
                     let (result, out_val, out_val2) =
-                        self.dispatch_host_builtin_out(&name, args, out_index as usize)?;
+                        self.dispatch_host_builtin_out(&name, args, *out_index as usize)?;
                     self.flush_diags(line)?;
                     let top = self.frames.len() - 1;
                     if let Some(slot) = out_slot {
-                        match &mut self.frames[top].slots[slot as usize] {
+                        match &mut self.frames[top].slots[*slot as usize] {
                             Zval::Ref(rc) => *rc.borrow_mut() = out_val,
                             cell => *cell = out_val,
                         }
                     }
                     if let (Some(slot), Some(v2)) = (out_slot2, out_val2) {
-                        match &mut self.frames[top].slots[slot as usize] {
+                        match &mut self.frames[top].slots[*slot as usize] {
                             Zval::Ref(rc) => *rc.borrow_mut() = v2,
                             cell => *cell = v2,
                         }
@@ -2059,7 +2065,7 @@ impl<'m> super::Vm<'m> {
                     // `sscanf`/`fscanf` with variadic by-reference out-params: dispatch
                     // the two fixed value args, then assign each conversion into its
                     // slot. With no out slots the parsed array is returned instead.
-                    let args = self.pop_keys(top, argc);
+                    let args = self.pop_keys(top, *argc);
                     let scanned = self.dispatch_host_builtin_scanf(&name, args)?;
                     let top = self.frames.len() - 1;
                     let result = match scanned {
@@ -2100,7 +2106,7 @@ impl<'m> super::Vm<'m> {
                 Op::CallArrayMultisort { arg_slots, argc } => {
                     // All arguments by value; the sorted arrays are written back
                     // into their captured variable slots.
-                    let args = self.pop_keys(top, argc);
+                    let args = self.pop_keys(top, *argc);
                     let line = self.cur_line(top);
                     self.flush_diags(line)?;
                     let (result, sorted) = self.ho_array_multisort(args)?;
@@ -2122,7 +2128,7 @@ impl<'m> super::Vm<'m> {
                         Some(Builtin::RefFirst(f)) => *f,
                         _ => return Err(undefined_builtin(&name)),
                     };
-                    let rest = self.pop_keys(top, argc);
+                    let rest = self.pop_keys(top, *argc);
                     // Mirror `eval`'s ref-builtin rendering (E1): flush, run, append
                     // the builtin's output, then flush its own warnings.
                     // A by-value object argument reads through an initialized
@@ -2138,13 +2144,13 @@ impl<'m> super::Vm<'m> {
                     // elements so the pure comparator can order them (empty for
                     // every other ref builtin).
                     let stringify = if ref_builtin_string_coerces(&name) {
-                        let roots = ref_stringify_roots(&self.frames[top].slots[slot as usize].clone());
+                        let roots = ref_stringify_roots(&self.frames[top].slots[*slot as usize].clone());
                         self.compute_stringify(&roots, false)?
                     } else {
                         std::collections::HashMap::new()
                     };
                     let mut produced = Vec::new();
-                    let result = builtin_ref_call(f, &mut self.frames[top].slots[slot as usize], &rest, &mut produced, &mut self.diags, &stringify);
+                    let result = builtin_ref_call(f, &mut self.frames[top].slots[*slot as usize], &rest, &mut produced, &mut self.diags, &stringify);
                     self.write_output(&produced)?;
                     self.flush_diags(line)?;
                     let result = result?;
@@ -2188,13 +2194,13 @@ impl<'m> super::Vm<'m> {
                     let line = self.cur_line(top);
                     self.flush_diags(line)?;
                     let stringify = if ref_builtin_string_coerces(&name) {
-                        let roots = ref_stringify_roots(&self.frames[top].slots[slot as usize].clone());
+                        let roots = ref_stringify_roots(&self.frames[top].slots[*slot as usize].clone());
                         self.compute_stringify(&roots, false)?
                     } else {
                         std::collections::HashMap::new()
                     };
                     let mut produced = Vec::new();
-                    let result = builtin_ref_call(f, &mut self.frames[top].slots[slot as usize], &rest, &mut produced, &mut self.diags, &stringify);
+                    let result = builtin_ref_call(f, &mut self.frames[top].slots[*slot as usize], &rest, &mut produced, &mut self.diags, &stringify);
                     self.write_output(&produced)?;
                     self.flush_diags(line)?;
                     let result = result?;
@@ -2209,7 +2215,7 @@ impl<'m> super::Vm<'m> {
                         Some(Builtin::RefFirst(f)) => *f,
                         _ => return Err(undefined_builtin(&name)),
                     };
-                    let rest = self.pop_keys(top, argc);
+                    let rest = self.pop_keys(top, *argc);
                     let cell = match self.frames[top].stack.pop().expect("CallBuiltinRefCell ref") {
                         Zval::Ref(rc) => rc,
                         other => Rc::new(RefCell::new(other)),
@@ -2330,7 +2336,7 @@ impl<'m> super::Vm<'m> {
                     // hand the key/value to `resume_generator`. `ip` is already
                     // past this op, so the resume continues after the `yield`.
                     let value = self.frames[top].stack.pop().expect("Yield value");
-                    let key = if has_key {
+                    let key = if *has_key {
                         GenKey::Keyed(self.frames[top].stack.pop().expect("Yield key"))
                     } else {
                         GenKey::Auto
@@ -2449,8 +2455,8 @@ impl<'m> super::Vm<'m> {
                     }
                 }
                 Op::Alloc { class } => {
-                    self.check_new_ctor_access(self.frames[top].class, class)?;
-                    let obj = self.alloc_object(class)?;
+                    self.check_new_ctor_access(self.frames[top].class, *class)?;
+                    let obj = self.alloc_object(*class)?;
                     self.frames[top].stack.push(obj);
                 }
                 Op::AllocStatic => {
@@ -2499,7 +2505,7 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::Include { mode } => {
                     let path_val = self.frames[top].stack.pop().expect("include path");
-                    let result = self.run_include(path_val, mode)?;
+                    let result = self.run_include(path_val, *mode)?;
                     let top = self.frames.len() - 1;
                     self.frames[top].stack.push(result);
                 }
@@ -3146,7 +3152,7 @@ impl<'m> super::Vm<'m> {
                         }
                     }
                     let old = read_property_at(&obj, &key, slot_idx, &mut self.diags);
-                    let mut result = self.apply_binop_ovl(op, &old, &rhs)?;
+                    let mut result = self.apply_binop_ovl(*op, &old, &rhs)?;
                     // A `set` hook with no `get` hook (the backing read above is then
                     // the property's own value) handles the write: dispatch it like
                     // `$o->prop = result`, the compound's value being `result`.
@@ -3196,7 +3202,7 @@ impl<'m> super::Vm<'m> {
                             if hit {
                                 let old = read_property_at(&obj_d, &name, Some(slot), &mut self.diags);
                                 let mut newv = old.clone();
-                                if inc {
+                                if *inc {
                                     ops::increment(&mut newv, &mut self.diags)?;
                                 } else {
                                     ops::decrement(&mut newv, &mut self.diags)?;
@@ -3206,7 +3212,7 @@ impl<'m> super::Vm<'m> {
                                 {
                                     self.gc_note(&dropped);
                                 }
-                                self.frames[top].stack.push(if pre { newv } else { old });
+                                self.frames[top].stack.push(if *pre { newv } else { old });
                                 continue;
                             }
                         }
@@ -3258,7 +3264,7 @@ impl<'m> super::Vm<'m> {
                     }
                     let old = read_property_at(&obj, &key, slot_idx, &mut self.diags);
                     let mut newv = old.clone();
-                    if inc {
+                    if *inc {
                         ops::increment(&mut newv, &mut self.diags)?;
                     } else {
                         ops::decrement(&mut newv, &mut self.diags)?;
@@ -3269,7 +3275,7 @@ impl<'m> super::Vm<'m> {
                         let (oid, cid) = { let b = o.borrow(); (b.id, b.class_id as usize) };
                         if !self.hook_guarded(oid, &name) && self.prop_hook(cid, &name, false).is_none() {
                             if let Some(func) = self.prop_hook(cid, &name, true) {
-                                self.frames[top].stack.push(if pre { newv.clone() } else { old });
+                                self.frames[top].stack.push(if *pre { newv.clone() } else { old });
                                 self.push_hook(func, obj.deref_clone(), oid, &name, Some(newv));
                                 continue;
                             }
@@ -3281,7 +3287,7 @@ impl<'m> super::Vm<'m> {
                     if let Some(dropped) = write_property_at(&obj, &key, slot_idx, newv.clone())? {
                         self.gc_note(&dropped);
                     }
-                    self.frames[top].stack.push(if pre { newv } else { old });
+                    self.frames[top].stack.push(if *pre { newv } else { old });
                 }
                 Op::PropIssetDyn => {
                     // Dynamic-name twin of `PropIsset`: pop the name, then fall
@@ -3571,7 +3577,7 @@ impl<'m> super::Vm<'m> {
                     prop_unset(&target, &key);
                 }
                 Op::MethodCall { method, argc, ic } => {
-                    let args = self.pop_keys(top, argc); // source order
+                    let args = self.pop_keys(top, *argc); // source order
                     let recv = self.frames[top].stack.pop().expect("MethodCall receiver");
                     let this = recv.deref_clone();
                     self.method_call(top, this, &method, args, Some(&ic))?;
@@ -3595,7 +3601,7 @@ impl<'m> super::Vm<'m> {
                     // args beneath it, the receiver at the bottom (step 51).
                     let nameval = self.frames[top].stack.pop().expect("MethodCallDynamic name");
                     let method = convert::to_zstr(&nameval, &mut self.diags).as_bytes().to_vec();
-                    let args = self.pop_keys(top, argc);
+                    let args = self.pop_keys(top, *argc);
                     let recv = self.frames[top].stack.pop().expect("MethodCallDynamic receiver");
                     let this = recv.deref_clone();
                     self.method_call(top, this, &method, args, None)?;
@@ -3621,22 +3627,22 @@ impl<'m> super::Vm<'m> {
                     let named_vals = self.pop_keys(top, names.len() as u32);
                     let named: Vec<(Box<[u8]>, Zval)> =
                         names.iter().cloned().zip(named_vals).collect();
-                    let pos = self.pop_keys(top, positional);
+                    let pos = self.pop_keys(top, *positional);
                     let recv = self.frames[top].stack.pop().expect("MethodCallNamed receiver");
                     let this = recv.deref_clone();
                     self.dispatch_instance_call_named(top, this, &method, pos, named)?;
                 }
                 Op::InvokeMethod { class, method_idx, argc } => {
-                    let args = self.pop_keys(top, argc);
+                    let args = self.pop_keys(top, *argc);
                     let recv = self.frames[top].stack.pop().expect("InvokeMethod receiver");
                     let this = recv.deref_clone();
-                    let lsb = object_class_id(&this).unwrap_or(class);
-                    let callee = &self.classes[class].methods[method_idx as usize].func;
-                    let m = self.class_mod(class);
+                    let lsb = object_class_id(&this).unwrap_or(*class);
+                    let callee = &self.classes[*class].methods[*method_idx as usize].func;
+                    let m = self.class_mod(*class);
                     let mut frame = self.pooled_frame(callee, m);
                     bind_params(&mut frame, args);
                     frame.this = Some(this);
-                    frame.class = Some(class);
+                    frame.class = Some(*class);
                     frame.static_class = Some(lsb);
                     self.enter_callee(frame)?;
                 }
@@ -3644,13 +3650,13 @@ impl<'m> super::Vm<'m> {
                     let v = self.frames[top].stack.pop().expect("InstanceOf operand");
                     let result = match v.deref_clone() {
                         Zval::Object(o) => {
-                            is_instance_of(&self.classes, self.stringable_id, o.borrow().class_id as usize, class)
+                            is_instance_of(&self.classes, self.stringable_id, o.borrow().class_id as usize, *class)
                         }
                         // A generator has no ClassId but is-a Iterator/Traversable
                         // (now real prelude interfaces); nothing else among the
                         // value types satisfies these.
                         Zval::Generator(_) => {
-                            let n = &self.classes[class].name;
+                            let n = &self.classes[*class].name;
                             n.eq_ignore_ascii_case(b"Iterator")
                                 || n.eq_ignore_ascii_case(b"Traversable")
                         }
@@ -3708,8 +3714,8 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(Zval::Bool(result));
                 }
                 Op::StaticCall { target, method, forwarding, argc, ic } => {
-                    let mut args = self.pop_keys(top, argc);
-                    let start = self.target_class_id(target, top)?;
+                    let mut args = self.pop_keys(top, *argc);
+                    let start = self.target_class_id(*target, top)?;
                     // `Fiber::suspend` / `Fiber::getCurrent` are native static
                     // dispatch (GEN-4), handled before normal method resolution.
                     if self.fiber_class_id == Some(start) {
@@ -3743,26 +3749,26 @@ impl<'m> super::Vm<'m> {
                             continue;
                         }
                     }
-                    self.dispatch_static_call(top, start, &method, forwarding, args, Vec::new(), Some(&ic))?;
+                    self.dispatch_static_call(top, start, &method, *forwarding, args, Vec::new(), Some(&ic))?;
                 }
                 Op::HookCall { target, prop, set, argc } => {
                     // PHP 8.4 `parent::$prop::get()` / `parent::$prop::set($v)`.
-                    let args = self.pop_keys(top, argc);
+                    let args = self.pop_keys(top, *argc);
                     let recv = self.frames[top].this.clone().ok_or_else(|| {
                         PhpError::Error(format!(
                             "Cannot call ::${}::{} outside object context",
                             String::from_utf8_lossy(&prop),
-                            if set { "set" } else { "get" },
+                            if *set { "set" } else { "get" },
                         ))
                     })?;
                     let oid = object_id(&recv);
-                    let start = self.target_class_id(target, top)?;
+                    let start = self.target_class_id(*target, top)?;
                     // A user `get`/`set` hook on the named class runs as a frame.
                     // Extra arguments are ignored — it is an ordinary user function.
-                    if let Some(func) = self.prop_hook(start, &prop, set) {
+                    if let Some(func) = self.prop_hook(start, &prop, *set) {
                         let set_value =
-                            if set { Some(args.into_iter().next().unwrap_or(Zval::Null)) } else { None };
-                        if set {
+                            if *set { Some(args.into_iter().next().unwrap_or(Zval::Null)) } else { None };
+                        if *set {
                             // A user set hook discards its body return; the call yields NULL.
                             self.frames[top].stack.push(Zval::Null);
                         }
@@ -3779,13 +3785,13 @@ impl<'m> super::Vm<'m> {
                         )));
                     }
                     // The implicit hook is an internal function with fixed arity.
-                    let expected = if set { 1usize } else { 0 };
+                    let expected = if *set { 1usize } else { 0 };
                     if args.len() != expected {
                         return Err(PhpError::Error(format!(
                             "{}::${}::{}() expects exactly {} argument{}, {} given",
                             String::from_utf8_lossy(&self.classes[start].name),
                             String::from_utf8_lossy(&prop),
-                            if set { "set" } else { "get" },
+                            if *set { "set" } else { "get" },
                             expected,
                             if expected == 1 { "" } else { "s" },
                             args.len(),
@@ -3793,7 +3799,7 @@ impl<'m> super::Vm<'m> {
                     }
                     let ocid = object_class_id(&recv).unwrap_or(start);
                     let key = self.prop_storage_key(ocid, &prop, Some(start));
-                    if set {
+                    if *set {
                         let v = args.into_iter().next().unwrap_or(Zval::Null);
                         write_property(&recv, &key, v.clone())?;
                         self.frames[top].stack.push(v);
@@ -3809,7 +3815,7 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::ClosureStatic { method, argc } => {
                     // `Closure::bind(...)` / `Closure::fromCallable(...)` (step 19-6).
-                    let args = self.pop_keys(top, argc); // source order
+                    let args = self.pop_keys(top, *argc); // source order
                     let result = self.closure_static_method(&method, args)?;
                     self.frames[top].stack.push(result);
                 }
@@ -3818,12 +3824,12 @@ impl<'m> super::Vm<'m> {
                     // runtime array — integer keys positional, string keys named.
                     let argsval = self.frames[top].stack.pop().expect("StaticCallArgs array");
                     let (args, named) = split_args_from_array_value(argsval);
-                    let start = self.target_class_id(target, top)?;
-                    self.dispatch_static_call(top, start, &method, forwarding, args, named, None)?;
+                    let start = self.target_class_id(*target, top)?;
+                    self.dispatch_static_call(top, start, &method, *forwarding, args, named, None)?;
                 }
                 Op::StaticCallDynamic { method, argc } => {
                     // `$cls::m()` (PAR): args are on top, the class reference beneath.
-                    let args = self.pop_keys(top, argc);
+                    let args = self.pop_keys(top, *argc);
                     let classval =
                         self.frames[top].stack.pop().expect("StaticCallDynamic class");
                     let start = self.resolve_dynamic_class(&classval)?;
@@ -3843,7 +3849,7 @@ impl<'m> super::Vm<'m> {
                 Op::StaticCallDynamicMethod { argc } => {
                     // `$cls::$m()`: method name on top, then args, then the class ref.
                     let mval = self.frames[top].stack.pop().expect("StaticCallDynamicMethod name");
-                    let args = self.pop_keys(top, argc);
+                    let args = self.pop_keys(top, *argc);
                     let classval =
                         self.frames[top].stack.pop().expect("StaticCallDynamicMethod class");
                     // PHP validates the class before the method name: `$a::$b()` with
@@ -3880,8 +3886,8 @@ impl<'m> super::Vm<'m> {
                         .pop()
                         .expect("StaticCallTargetDynamicMethodArgs array");
                     let (args, named) = split_args_from_array_value(argsval);
-                    let start = self.target_class_id(target, top)?;
-                    self.dispatch_static_call(top, start, &method, forwarding, args, named, None)?;
+                    let start = self.target_class_id(*target, top)?;
+                    self.dispatch_static_call(top, start, &method, *forwarding, args, named, None)?;
                 }
                 Op::StaticCallTargetDynamicMethod { target, forwarding, argc } => {
                     // `self::$m()` / `Class::$m()`: method name on top, then args; the
@@ -3891,9 +3897,9 @@ impl<'m> super::Vm<'m> {
                         .pop()
                         .expect("StaticCallTargetDynamicMethod name");
                     let method = dyn_method_name(&mval)?;
-                    let args = self.pop_keys(top, argc);
-                    let start = self.target_class_id(target, top)?;
-                    self.dispatch_static_call(top, start, &method, forwarding, args, Vec::new(), None)?;
+                    let args = self.pop_keys(top, *argc);
+                    let start = self.target_class_id(*target, top)?;
+                    self.dispatch_static_call(top, start, &method, *forwarding, args, Vec::new(), None)?;
                 }
                 Op::ClassConstDynamic => {
                     // `C::{$expr}`: class beneath, runtime constant name on top.
@@ -3923,21 +3929,21 @@ impl<'m> super::Vm<'m> {
                     // Run the constant's value thunk as a frame in its declaring
                     // class's context; its `Ret` leaves the value on the caller's
                     // stack.
-                    if self.classes[class].consts.get(idx as usize).is_none() {
+                    if self.classes[*class].consts.get(*idx as usize).is_none() {
                         return Err(PhpError::Error(format!(
                             "VM: ClassConst out of range: {}::consts[{}] (len {}) in {} ({}) line {}",
-                            String::from_utf8_lossy(&self.classes[class].name),
+                            String::from_utf8_lossy(&self.classes[*class].name),
                             idx,
-                            self.classes[class].consts.len(),
+                            self.classes[*class].consts.len(),
                             String::from_utf8_lossy(&self.frames[top].func.name),
                             String::from_utf8_lossy(&self.frames[top].func.file),
                             self.cur_line(top)
                         )));
                     }
-                    let thunk = &self.classes[class].consts[idx as usize].func;
-                    let mut frame = Frame::new(thunk, self.class_mod(class));
-                    frame.class = Some(class);
-                    frame.static_class = Some(class);
+                    let thunk = &self.classes[*class].consts[*idx as usize].func;
+                    let mut frame = Frame::new(thunk, self.class_mod(*class));
+                    frame.class = Some(*class);
+                    frame.static_class = Some(*class);
                     self.frames.push(frame);
                 }
                 Op::ClassConstDyn { name } => {
@@ -4034,17 +4040,17 @@ impl<'m> super::Vm<'m> {
                     // `self::class` / `parent::class` in a closure body: the scope
                     // class follows any `Closure::bind` rebinding.
                     let target =
-                        if parent { ClassTarget::ParentScope } else { ClassTarget::SelfScope };
+                        if *parent { ClassTarget::ParentScope } else { ClassTarget::SelfScope };
                     let cid = self.target_class_id(target, top)?;
                     let name = self.classes[cid].name.to_vec();
                     self.frames[top].stack.push(Zval::Str(PhpStr::new(name)));
                 }
                 Op::EnumCase { class, case } => {
-                    let obj = self.enum_case(class, case);
+                    let obj = self.enum_case(*class, *case);
                     self.frames[top].stack.push(Zval::Object(obj));
                 }
                 Op::InvokeCtor { argc } => {
-                    let mut args = self.pop_keys(top, argc);
+                    let mut args = self.pop_keys(top, *argc);
                     let recv = self.frames[top].stack.pop().expect("InvokeCtor receiver");
                     let this = recv.deref_clone();
                     let cid = object_class_id(&this).expect("InvokeCtor on a non-object");
@@ -4132,7 +4138,7 @@ impl<'m> super::Vm<'m> {
                     }
                 }
                 Op::StaticPropGet { target, name } => {
-                    let cell = match self.ensure_static(target, &name, top, ip)? {
+                    let cell = match self.ensure_static(*target, &name, top, ip)? {
                         Some(c) => c,
                         None => continue, // init thunk scheduled; re-run after it
                     };
@@ -4140,7 +4146,7 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(v);
                 }
                 Op::StaticPropSet { target, name } => {
-                    let cell = match self.ensure_static(target, &name, top, ip)? {
+                    let cell = match self.ensure_static(*target, &name, top, ip)? {
                         Some(c) => c,
                         None => continue,
                     };
@@ -4151,37 +4157,37 @@ impl<'m> super::Vm<'m> {
                 Op::StaticPropRef { target, name } => {
                     // `$x = &Class::$sp`: the property's storage cell itself,
                     // wrapped as a reference value — the alias is live both ways.
-                    let cell = match self.ensure_static(target, &name, top, ip)? {
+                    let cell = match self.ensure_static(*target, &name, top, ip)? {
                         Some(c) => c,
                         None => continue,
                     };
                     self.frames[top].stack.push(Zval::Ref(cell));
                 }
                 Op::StaticPropOpSet { target, name, op } => {
-                    let cell = match self.ensure_static(target, &name, top, ip)? {
+                    let cell = match self.ensure_static(*target, &name, top, ip)? {
                         Some(c) => c,
                         None => continue,
                     };
                     let rhs = self.frames[top].stack.pop().expect("StaticPropOpSet rhs");
                     let old = cell.borrow().deref_clone();
-                    let result = self.apply_binop_ovl(op, &old, &rhs)?;
+                    let result = self.apply_binop_ovl(*op, &old, &rhs)?;
                     *cell.borrow_mut() = result.clone();
                     self.frames[top].stack.push(result);
                 }
                 Op::StaticPropIncDec { target, name, inc, pre } => {
-                    let cell = match self.ensure_static(target, &name, top, ip)? {
+                    let cell = match self.ensure_static(*target, &name, top, ip)? {
                         Some(c) => c,
                         None => continue,
                     };
                     let old = cell.borrow().deref_clone();
                     let mut newv = old.clone();
-                    if inc {
+                    if *inc {
                         ops::increment(&mut newv, &mut self.diags)?;
                     } else {
                         ops::decrement(&mut newv, &mut self.diags)?;
                     }
                     *cell.borrow_mut() = newv.clone();
-                    self.frames[top].stack.push(if pre { newv } else { old });
+                    self.frames[top].stack.push(if *pre { newv } else { old });
                 }
                 Op::StaticPropGetDynName => {
                     // [classRef, name]: peek both so a scheduled init thunk can
@@ -4253,7 +4259,7 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.pop(); // class
                     let rhs = self.frames[top].stack.pop().expect("StaticPropOpSetDynamic rhs");
                     let old = cell.borrow().deref_clone();
-                    let result = self.apply_binop_ovl(op, &old, &rhs)?;
+                    let result = self.apply_binop_ovl(*op, &old, &rhs)?;
                     *cell.borrow_mut() = result.clone();
                     self.frames[top].stack.push(result);
                 }
@@ -4269,108 +4275,108 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.pop(); // class
                     let old = cell.borrow().deref_clone();
                     let mut newv = old.clone();
-                    if inc {
+                    if *inc {
                         ops::increment(&mut newv, &mut self.diags)?;
                     } else {
                         ops::decrement(&mut newv, &mut self.diags)?;
                     }
                     *cell.borrow_mut() = newv.clone();
-                    self.frames[top].stack.push(if pre { newv } else { old });
+                    self.frames[top].stack.push(if *pre { newv } else { old });
                 }
                 Op::FieldAssign { base, steps } => {
                     let value = self.frames[top].stack.pop().expect("FieldAssign value");
                     let keys = self.pop_field_keys(top, &steps);
                     // A path starting at a `&get` hooked property writes through
                     // the reference the hook returns (one hook run, no set hook).
-                    if let Some(root) = self.byref_hook_root(base, top, &steps)? {
+                    if let Some(root) = self.byref_hook_root(*base, top, &steps)? {
                         self.field_set_in_root(root, top, &steps[1..], keys, value.clone(), false, false)?;
                         self.frames[top].stack.push(value);
                         continue;
                     }
-                    self.reject_indirect_hook(base, top, &steps)?;
+                    self.reject_indirect_hook(*base, top, &steps)?;
                     // A lazy base initializes/forwards first; the walk then roots
                     // at the realized object (PHP 8.4).
-                    if let Some(root) = self.field_lazy_root(base, top, &steps, &keys, true)? {
+                    if let Some(root) = self.field_lazy_root(*base, top, &steps, &keys, true)? {
                         self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, value.clone(), false, false)?;
                         self.frames[top].stack.push(value);
                         continue;
                     }
-                    self.field_set(base, top, &steps, keys, value.clone())?;
+                    self.field_set(*base, top, &steps, keys, value.clone())?;
                     self.frames[top].stack.push(value);
                 }
                 Op::FieldAssignOp { base, steps, op } => {
                     let rhs = self.frames[top].stack.pop().expect("FieldAssignOp rhs");
                     let keys = self.pop_field_keys(top, &steps);
-                    if let Some(root) = self.byref_hook_root(base, top, &steps)? {
+                    if let Some(root) = self.byref_hook_root(*base, top, &steps)? {
                         let old = {
                             let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
                             field_get(&Zval::Ref(Rc::clone(&root)), &steps[1..], &mut keys.clone().into_iter(), fs)
                                 .unwrap_or(Zval::Null)
                         };
-                        let result = self.apply_binop_ovl(op, &old, &rhs)?;
+                        let result = self.apply_binop_ovl(*op, &old, &rhs)?;
                         self.field_set_in_root(root, top, &steps[1..], keys, result.clone(), false, true)?;
                         self.frames[top].stack.push(result);
                         continue;
                     }
-                    self.reject_indirect_hook(base, top, &steps)?;
-                    if let Some(root) = self.field_lazy_root(base, top, &steps, &keys, true)? {
+                    self.reject_indirect_hook(*base, top, &steps)?;
+                    if let Some(root) = self.field_lazy_root(*base, top, &steps, &keys, true)? {
                         let old = {
                             let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
                             field_get(&root, &steps, &mut keys.clone().into_iter(), fs).unwrap_or(Zval::Null)
                         };
-                        let result = self.apply_binop_ovl(op, &old, &rhs)?;
+                        let result = self.apply_binop_ovl(*op, &old, &rhs)?;
                         self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, result.clone(), false, true)?;
                         self.frames[top].stack.push(result);
                         continue;
                     }
-                    let old = self.field_value(base, top, &steps, keys.clone()).unwrap_or(Zval::Null);
-                    let result = self.apply_binop_ovl(op, &old, &rhs)?;
-                    self.field_set_op(base, top, &steps, keys, result.clone())?;
+                    let old = self.field_value(*base, top, &steps, keys.clone()).unwrap_or(Zval::Null);
+                    let result = self.apply_binop_ovl(*op, &old, &rhs)?;
+                    self.field_set_op(*base, top, &steps, keys, result.clone())?;
                     self.frames[top].stack.push(result);
                 }
                 Op::FieldIncDec { base, steps, inc, pre } => {
                     let keys = self.pop_field_keys(top, &steps);
-                    if let Some(root) = self.byref_hook_root(base, top, &steps)? {
+                    if let Some(root) = self.byref_hook_root(*base, top, &steps)? {
                         let old = {
                             let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
                             field_get(&Zval::Ref(Rc::clone(&root)), &steps[1..], &mut keys.clone().into_iter(), fs)
                                 .unwrap_or(Zval::Null)
                         };
                         let mut newv = old.clone();
-                        if inc {
+                        if *inc {
                             ops::increment(&mut newv, &mut self.diags)?;
                         } else {
                             ops::decrement(&mut newv, &mut self.diags)?;
                         }
                         self.field_set_in_root(root, top, &steps[1..], keys, newv.clone(), false, true)?;
-                        self.frames[top].stack.push(if pre { newv } else { old });
+                        self.frames[top].stack.push(if *pre { newv } else { old });
                         continue;
                     }
-                    self.reject_indirect_hook(base, top, &steps)?;
-                    if let Some(root) = self.field_lazy_root(base, top, &steps, &keys, true)? {
+                    self.reject_indirect_hook(*base, top, &steps)?;
+                    if let Some(root) = self.field_lazy_root(*base, top, &steps, &keys, true)? {
                         let old = {
                             let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
                             field_get(&root, &steps, &mut keys.clone().into_iter(), fs).unwrap_or(Zval::Null)
                         };
                         let mut newv = old.clone();
-                        if inc {
+                        if *inc {
                             ops::increment(&mut newv, &mut self.diags)?;
                         } else {
                             ops::decrement(&mut newv, &mut self.diags)?;
                         }
                         self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, newv.clone(), false, true)?;
-                        self.frames[top].stack.push(if pre { newv } else { old });
+                        self.frames[top].stack.push(if *pre { newv } else { old });
                         continue;
                     }
-                    let old = self.field_value(base, top, &steps, keys.clone()).unwrap_or(Zval::Null);
+                    let old = self.field_value(*base, top, &steps, keys.clone()).unwrap_or(Zval::Null);
                     let mut newv = old.clone();
-                    if inc {
+                    if *inc {
                         ops::increment(&mut newv, &mut self.diags)?;
                     } else {
                         ops::decrement(&mut newv, &mut self.diags)?;
                     }
-                    self.field_set_op(base, top, &steps, keys, newv.clone())?;
-                    self.frames[top].stack.push(if pre { newv } else { old });
+                    self.field_set_op(*base, top, &steps, keys, newv.clone())?;
+                    self.frames[top].stack.push(if *pre { newv } else { old });
                 }
                 Op::FieldIsset { base, steps } => {
                     let keys = self.pop_field_keys(top, &steps);
@@ -4378,14 +4384,14 @@ impl<'m> super::Vm<'m> {
                     // (`isset($o->magic['k'])`, gh18038 / bug40833; and a magic
                     // leaf one hop in: `isset($block->block_type->uses_context)`,
                     // WP_Block_Type) — see field_magic_probe.
-                    if let Some(set) = self.field_magic_probe(base, top, &steps, &keys, false)? {
+                    if let Some(set) = self.field_magic_probe(*base, top, &steps, &keys, false)? {
                         self.frames[top].stack.push(Zval::Bool(set));
                         continue;
                     }
                     // A final Index on an ArrayAccess object is the protocol:
                     // `isset($this->coll[0])` = offsetExists (no offsetGet),
                     // mirroring Op::IssetPath's single-step arm.
-                    if let Some((recv, key)) = self.field_aa_leaf(base, top, &steps, &keys) {
+                    if let Some((recv, key)) = self.field_aa_leaf(*base, top, &steps, &keys) {
                         let r = self.call_method_sync(recv, b"offsetExists", vec![key])?;
                         let set = convert::is_true_silent(&r.deref_clone());
                         self.frames[top].stack.push(Zval::Bool(set));
@@ -4393,7 +4399,7 @@ impl<'m> super::Vm<'m> {
                     }
                     // Nested Index run on an ArrayAccess property
                     // (`isset($this->data['a']['b'])`): BP_VAR_IS walk.
-                    if let Some(res) = self.field_aa_walk(base, top, &steps, &keys)? {
+                    if let Some(res) = self.field_aa_walk(*base, top, &steps, &keys)? {
                         let set = match res {
                             super::DimIsLeaf::Missing => false,
                             super::DimIsLeaf::Aa(recv, key) => {
@@ -4410,7 +4416,7 @@ impl<'m> super::Vm<'m> {
                     }
                     // A lazy base initializes and the walk roots at the realized
                     // object (isset through a wrapper reads the instance).
-                    if let Some(root) = self.field_lazy_root(base, top, &steps, &keys, false)? {
+                    if let Some(root) = self.field_lazy_root(*base, top, &steps, &keys, false)? {
                         let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
                         let set = matches!(
                             field_get(&root, &steps, &mut keys.into_iter(), fs),
@@ -4420,7 +4426,7 @@ impl<'m> super::Vm<'m> {
                         continue;
                     }
                     let set = matches!(
-                        self.field_value(base, top, &steps, keys),
+                        self.field_value(*base, top, &steps, keys),
                         Some(v) if !matches!(v, Zval::Null | Zval::Undef)
                     );
                     self.frames[top].stack.push(Zval::Bool(set));
@@ -4430,13 +4436,13 @@ impl<'m> super::Vm<'m> {
                     // Magic protocol at any property step (the empty() twin of
                     // FieldIsset's probe): `__isset` gates, `__get` supplies the
                     // value whose truthiness decides.
-                    if let Some(empty) = self.field_magic_probe(base, top, &steps, &keys, true)? {
+                    if let Some(empty) = self.field_magic_probe(*base, top, &steps, &keys, true)? {
                         self.frames[top].stack.push(Zval::Bool(empty));
                         continue;
                     }
                     // ArrayAccess leaf: !offsetExists short-circuits to empty,
                     // else !truthy(offsetGet) — mirrors Op::EmptyPath.
-                    if let Some((recv, key)) = self.field_aa_leaf(base, top, &steps, &keys) {
+                    if let Some((recv, key)) = self.field_aa_leaf(*base, top, &steps, &keys) {
                         let exists =
                             self.call_method_sync(recv.clone(), b"offsetExists", vec![key.clone()])?;
                         let empty = if convert::is_true_silent(&exists.deref_clone()) {
@@ -4450,7 +4456,7 @@ impl<'m> super::Vm<'m> {
                     }
                     // Nested Index run on an ArrayAccess property: same
                     // BP_VAR_IS walk as Op::FieldIsset above.
-                    if let Some(res) = self.field_aa_walk(base, top, &steps, &keys)? {
+                    if let Some(res) = self.field_aa_walk(*base, top, &steps, &keys)? {
                         let empty = match res {
                             super::DimIsLeaf::Missing => true,
                             super::DimIsLeaf::Aa(recv, key) => {
@@ -4477,7 +4483,7 @@ impl<'m> super::Vm<'m> {
                     }
                     // empty == !isset || !truthy(value): an unreachable/null leaf is
                     // empty; otherwise test the value's boolean.
-                    let empty = match self.field_value(base, top, &steps, keys) {
+                    let empty = match self.field_value(*base, top, &steps, keys) {
                         Some(v) if !matches!(v, Zval::Null | Zval::Undef) => {
                             !convert::to_bool(&v, &mut self.diags)
                         }
@@ -4516,18 +4522,18 @@ impl<'m> super::Vm<'m> {
                         let base_val = if prefix.is_empty() {
                             match base {
                                 FieldBase::Local(s) => {
-                                    self.frames[top].slots.get(s as usize).map(|v| v.deref_clone())
+                                    self.frames[top].slots.get(*s as usize).map(|v| v.deref_clone())
                                 }
                                 FieldBase::Global(s) => {
-                                    self.frames[0].slots.get(s as usize).map(|v| v.deref_clone())
+                                    self.frames[0].slots.get(*s as usize).map(|v| v.deref_clone())
                                 }
                                 FieldBase::Superglobal(i) => {
-                                    self.superglobals.get(i as usize).map(|v| v.deref_clone())
+                                    self.superglobals.get(*i as usize).map(|v| v.deref_clone())
                                 }
                                 FieldBase::This => self.frames[top].this.as_ref().map(|v| v.deref_clone()),
                             }
                         } else {
-                            self.field_value(base, top, prefix, keys[..prefix_keys].to_vec())
+                            self.field_value(*base, top, prefix, keys[..prefix_keys].to_vec())
                         };
                         let Some(mut v) = base_val else {
                             break 'magic_unset false;
@@ -4562,7 +4568,7 @@ impl<'m> super::Vm<'m> {
                         continue;
                     }
                     // ArrayAccess leaf: `unset($this->coll[0])` = offsetUnset.
-                    if let Some((recv, key)) = self.field_aa_leaf(base, top, &steps, &keys) {
+                    if let Some((recv, key)) = self.field_aa_leaf(*base, top, &steps, &keys) {
                         self.call_method_sync(recv, b"offsetUnset", vec![key])?;
                         continue;
                     }
@@ -4580,9 +4586,9 @@ impl<'m> super::Vm<'m> {
                     };
                     if let Some(n) = single_name {
                         let target = match base {
-                            FieldBase::Local(s) => self.frames[top].slots.get(s as usize).map(|v| v.deref_clone()),
-                            FieldBase::Global(s) => self.frames[0].slots.get(s as usize).map(|v| v.deref_clone()),
-                            FieldBase::Superglobal(i) => self.superglobals.get(i as usize).map(|v| v.deref_clone()),
+                            FieldBase::Local(s) => self.frames[top].slots.get(*s as usize).map(|v| v.deref_clone()),
+                            FieldBase::Global(s) => self.frames[0].slots.get(*s as usize).map(|v| v.deref_clone()),
+                            FieldBase::Superglobal(i) => self.superglobals.get(*i as usize).map(|v| v.deref_clone()),
                             FieldBase::This => self.frames[top].this.as_ref().map(|v| v.deref_clone()),
                         };
                         let target = target.map(|v| self.proxy_view(v));
@@ -4605,22 +4611,22 @@ impl<'m> super::Vm<'m> {
                     }
                     // A lazy base initializes; the removal runs on the realized
                     // object (a guarded `unset($this->$name)` inside `__unset`).
-                    if let Some(mut root) = self.field_lazy_root(base, top, &steps, &keys, false)? {
+                    if let Some(mut root) = self.field_lazy_root(*base, top, &steps, &keys, false)? {
                         let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
                         field_unset(&mut root, &steps, &mut keys.into_iter(), fs)?;
                         continue;
                     }
-                    self.field_remove(base, top, &steps, keys)?;
+                    self.field_remove(*base, top, &steps, keys)?;
                 }
                 Op::Fatal(i) => {
-                    let msg = match &self.frames[top].func.consts[i as usize] {
+                    let msg = match &self.frames[top].func.consts[*i as usize] {
                         crate::bytecode::Const::Str(b) => String::from_utf8_lossy(b.as_bytes()).into_owned(),
                         _ => "VM: unsupported construct".to_string(),
                     };
                     return Err(PhpError::Error(msg));
                 }
                 Op::EmitNotice(i) => {
-                    if let crate::bytecode::Const::Str(b) = &self.frames[top].func.consts[i as usize] {
+                    if let crate::bytecode::Const::Str(b) = &self.frames[top].func.consts[*i as usize] {
                         let msg = String::from_utf8_lossy(b.as_bytes()).into_owned();
                         self.diags.push(Diag::Notice(msg));
                         // Flush at the emitting op's line — deferring to the next
@@ -4630,7 +4636,7 @@ impl<'m> super::Vm<'m> {
                     }
                 }
                 Op::Exit { has_arg } => {
-                    let code = if has_arg {
+                    let code = if *has_arg {
                         let v = self.frames[top].stack.pop().expect("Exit status");
                         self.exit_status(v, top)?
                     } else {
@@ -4680,7 +4686,7 @@ impl<'m> super::Vm<'m> {
                     }
                 }
                 Op::MatchError(slot) => {
-                    let subj = read_slot(&self.frames[top].slots[slot as usize]);
+                    let subj = read_slot(&self.frames[top].slots[*slot as usize]);
                     return Err(PhpError::Error(format!(
                         "Unhandled match case {}",
                         match_case_repr(&subj)
@@ -4690,7 +4696,7 @@ impl<'m> super::Vm<'m> {
                     // A destructor body's statement sweeps no-op — see
                     // Frame::in_destructor (handle-id release order).
                     if !self.frames[top].in_destructor {
-                        self.gc_sweep(top, ip, main)?;
+                        self.gc_sweep(top, ip, *main)?;
                     }
                 }
                 Op::Nop => {}
