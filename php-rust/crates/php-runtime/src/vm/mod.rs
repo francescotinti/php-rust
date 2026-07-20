@@ -15325,6 +15325,87 @@ mod tests {
     }
 
     #[test]
+    fn prop_incdec_ic_polymorphic_ref_pre_post() {
+        // One `$o->n++` site alternating two classes with DIFFERENT slot
+        // indices for `n`, a by-ref alias observing the cached write-through,
+        // and pre vs post value through the cached path.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class N { public $n = 5; }
+                class M { public $a = 0; public $n = 50; }
+                function inc($o){ return $o->n++; }
+                $o = new N; $m = new M;
+                echo inc($o), inc($m), inc($o), inc($m), '|', $o->n, $m->n, '|';
+                $r = &$o->n; inc($o); echo $r, '|';
+                echo ++$o->n, $o->n;"
+            ),
+            b"550651|752|8|99"
+        );
+    }
+
+    #[test]
+    fn prop_incdec_ic_unset_revive_at_declared_slot() {
+        // unset() empties the slot (a filled site MISSES and falls through),
+        // re-set revives at the declaration slot: iteration order proves it.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class V { public $a = 1; public $b = 2; }
+                function inc($o){ $o->b++; }
+                $v = new V; inc($v); inc($v);
+                unset($v->b);
+                $v->b = 10; inc($v);
+                echo $v->b, '|';
+                foreach ($v as $k => $x) { echo $k, '=', $x, ';'; }"
+            ),
+            b"11|a=1;b=11;"
+        );
+    }
+
+    #[test]
+    fn prop_incdec_ic_typed_prop_never_fills() {
+        // A typed prop's class is not plain_set_props: the site works via the
+        // slow path (coercion intact) and never caches; interleaving with a
+        // plain class must not cross-pollinate.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class D { public $n = 5; }
+                function dec($o){ return --$o->n; }
+                $d = new D; echo dec($d), dec($d), $d->n;
+                class U { public $n = 1; }
+                class T { public int $n = 1; }
+                function inc($o){ return $o->n++; }
+                echo '|', inc(new U), '|';
+                $t = new T; inc($t); inc($t); echo $t->n, '|';
+                $u = new U; inc($u); inc($u); echo $u->n;"
+            ),
+            b"433|1|3|3"
+        );
+    }
+
+    #[test]
+    fn prop_incdec_ic_hooks_and_readonly_not_cached() {
+        // A set-hooked prop routes every ++ through the hook (never cached:
+        // hooks break plain_set_props), and a readonly prop still raises the
+        // modify Error.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class HK { public $log = ''; public int $n = 1 { set { $this->log .= 's'; $this->n = $value * 2; } } }
+                function inc($o){ $o->n++; }
+                $h = new HK; inc($h); inc($h);
+                echo $h->n, $h->log, '|';
+                class RO { public function __construct(public readonly int $n) {} }
+                $r = new RO(5);
+                try { inc($r); } catch (Error $e) { echo 'E'; }"
+            ),
+            b"10ss|E"
+        );
+    }
+
+    #[test]
     fn divide_by_zero_error_catchable() {
         assert_eq!(
             vm_stdout(b"<?php try { $x = 1 / 0; } catch (DivisionByZeroError $e) { echo $e->getMessage(); }"),

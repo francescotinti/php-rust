@@ -1000,7 +1000,7 @@ impl<'a> super::FnCompiler<'a> {
             });
         }
         if let Some(name) = self.prop_place(place)? {
-            self.emit(Op::PropIncDec { name: name.into(), inc, pre });
+            self.emit(Op::PropIncDec { name: name.into(), inc, pre, ic: PropIc::default() });
             return Ok(());
         }
         if place_has_prop(place) {

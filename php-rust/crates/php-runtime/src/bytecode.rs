@@ -827,10 +827,13 @@ pub enum Op {
     PropSet { name: Rc<[u8]>, ic: PropIc },
     /// `[obj, rhs] -> [result]` — compound `$o->p op= rhs`: read the property
     /// (NULL if absent), apply `op`, store and leave the result.
+    /// UNREACHED (WP-30 audit): compound prop assigns lower to
+    /// `PropGet`+`PropSet` (compile/assign.rs `assign_op_place`), which carry
+    /// the WP-29 ICs; no emit site constructs this variant.
     PropOpSet { name: Rc<[u8]>, op: BinOp },
     /// `[obj] -> [result]` — `++`/`--` on property `name`; `pre` selects new vs old
     /// value, semantics delegated to `php_types`.
-    PropIncDec { name: Rc<[u8]>, inc: bool, pre: bool },
+    PropIncDec { name: Rc<[u8]>, inc: bool, pre: bool, ic: PropIc },
     /// `[obj] -> [bool]` — `isset($o->p)`: true iff the property exists and is not
     /// null (silent, no warning).
     PropIsset { name: Rc<[u8]>, ic: PropIc },

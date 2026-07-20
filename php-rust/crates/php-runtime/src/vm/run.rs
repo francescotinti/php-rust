@@ -3168,17 +3168,70 @@ impl<'m> super::Vm<'m> {
                     }
                     self.frames[top].stack.push(result);
                 }
-                Op::PropIncDec { name, inc, pre } => {
+                Op::PropIncDec { name, inc, pre, ic } => {
                     let obj = self.frames[top].stack.pop().expect("PropIncDec object");
                     let cur = self.frames[top].class;
+                    let obj_d = obj.deref_clone();
+                    // INLINE CACHE (WP-30): the RMW twin of the PropSet hit.
+                    // Fills only from a `plain_set_props` class (below), so a
+                    // class-id match re-implies every per-class check the slow
+                    // path performs (readonly-RMW, asym write, typed-uninit,
+                    // both hook probes, write coercion); the per-object state
+                    // (lazy, enum case, present non-Undef slot, Ref×typed_refs)
+                    // is re-checked here. An absent/Undef slot falls through
+                    // (undefined-prop warning, dynamic creation, `__get`).
+                    if let Zval::Object(o) = &obj_d {
+                        if let Some((cid1, slot)) = ic.get() {
+                            let hit = {
+                                let b = o.borrow();
+                                b.class_id + 1 == cid1
+                                    && b.lazy.is_none()
+                                    && !b.info.is_enum_case
+                                    && match b.props.get_slot(slot) {
+                                        None | Some(Zval::Undef) => false,
+                                        Some(Zval::Ref(_)) => self.typed_refs.is_empty(),
+                                        Some(_) => true,
+                                    }
+                            };
+                            if hit {
+                                let old = read_property_at(&obj_d, &name, Some(slot), &mut self.diags);
+                                let mut newv = old.clone();
+                                if inc {
+                                    ops::increment(&mut newv, &mut self.diags)?;
+                                } else {
+                                    ops::decrement(&mut newv, &mut self.diags)?;
+                                }
+                                if let Some(dropped) =
+                                    write_property_at(&obj_d, &name, Some(slot), newv.clone())?
+                                {
+                                    self.gc_note(&dropped);
+                                }
+                                self.frames[top].stack.push(if pre { newv } else { old });
+                                continue;
+                            }
+                        }
+                    }
                     // `++`/`--` initializes a lazy object like a compound assign.
-                    let obj = self.lazy_prop_access(obj.deref_clone(), &name, cur, None, (MagicKind::Get, b"__get"))?;
+                    let obj = self.lazy_prop_access(obj_d, &name, cur, None, (MagicKind::Get, b"__get"))?;
                     // ONE resolution (see PropOpSet above).
                     let mut slot_idx: Option<u32> = None;
                     let key: Cow<[u8]> = match object_class_id(&obj) {
                         Some(ocid) => match resolve_prop_access(&self.classes, ocid, &name, cur) {
                             PropAccess::Slot { key: k, slot } => {
                                 slot_idx = slot;
+                                // Fill (WP-30): only a plain_set_props class —
+                                // scope-independent by construction (all props
+                                // public, symmetric, untyped, non-readonly,
+                                // hook-free); the slot proves it is declared.
+                                if let (Some(i), Zval::Object(o)) = (slot, &obj) {
+                                    let b = o.borrow();
+                                    if b.lazy.is_none()
+                                        && !b.info.is_enum_case
+                                        && self.classes[b.class_id as usize].plain_set_props
+                                    {
+                                        ic.fill(b.class_id, i);
+                                    }
+                                }
                                 Cow::Borrowed(k)
                             }
                             PropAccess::Dynamic => Cow::Borrowed(&name[..]),
