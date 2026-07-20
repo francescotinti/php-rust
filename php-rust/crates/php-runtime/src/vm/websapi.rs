@@ -96,7 +96,7 @@ fn descend(arr: &mut PhpArray, path: &[Option<Vec<u8>>], val: Zval, overwrite: b
             let mut next = 0i64;
             for (k, _) in arr.iter() {
                 if let Key::Int(i) = k {
-                    if *i >= next {
+                    if i >= next {
                         next = i + 1;
                     }
                 }

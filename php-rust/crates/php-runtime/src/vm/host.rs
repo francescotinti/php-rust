@@ -120,14 +120,14 @@ fn ctx_set_one(rc: &Rc<RefCell<php_types::Resource>>, wrapper: &[u8], option: &[
 /// the context's params store.
 fn ctx_apply_params(rc: &Rc<RefCell<php_types::Resource>>, map: &PhpArray) {
     for (k, v) in map.iter() {
-        let key = key_bytes(k);
+        let key = key_bytes(&k);
         if key == b"options" {
             if let Zval::Array(sub) = v.deref_clone() {
                 for (wk, wv) in sub.iter() {
                     let Zval::Array(osub) = wv.deref_clone() else { continue };
-                    let wrapper = key_bytes(wk);
+                    let wrapper = key_bytes(&wk);
                     for (ok, ov) in osub.iter() {
-                        ctx_set_one(rc, &wrapper, &key_bytes(ok), ov.deref_clone());
+                        ctx_set_one(rc, &wrapper, &key_bytes(&ok), ov.deref_clone());
                     }
                 }
             }
@@ -3780,7 +3780,7 @@ impl<'m> super::Vm<'m> {
                         let mut next = 0i64;
                         for (k, _) in arr.iter() {
                             if let Key::Int(i) = k {
-                                if *i >= next {
+                                if i >= next {
                                     next = i + 1;
                                 }
                             }
@@ -4481,9 +4481,9 @@ impl<'m> super::Vm<'m> {
                 // wrapper => [option => value]
                 for (wk, wv) in map.iter() {
                     let Zval::Array(sub) = wv.deref_clone() else { continue };
-                    let wrapper = key_bytes(wk);
+                    let wrapper = key_bytes(&wk);
                     for (ok, ov) in sub.iter() {
-                        ctx_set_one(&rc, &wrapper, &key_bytes(ok), ov.deref_clone());
+                        ctx_set_one(&rc, &wrapper, &key_bytes(&ok), ov.deref_clone());
                     }
                 }
                 Ok(Zval::Bool(true))
@@ -7153,7 +7153,7 @@ impl<'m> super::Vm<'m> {
             match self.frames[top].slots[slot as usize].deref_clone() {
                 Zval::Array(a) => a
                     .iter()
-                    .map(|(k, v)| (key_to_zval(k), k.clone(), v.deref_clone()))
+                    .map(|(k, v)| (key_to_zval(&k), k, v.deref_clone()))
                     .collect(),
                 other => {
                     return Err(PhpError::TypeError(format!(

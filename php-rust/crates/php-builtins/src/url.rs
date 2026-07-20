@@ -488,7 +488,7 @@ fn hbq_walk(
         Zval::Array(a) => a
             .iter()
             .map(|(k, v)| match k {
-                Key::Int(i) => (None, *i, v.deref_clone()),
+                Key::Int(i) => (None, i, v.deref_clone()),
                 Key::Str(s) => (Some(s.as_bytes().to_vec()), 0, v.deref_clone()),
             })
             .collect(),

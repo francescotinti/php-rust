@@ -733,7 +733,7 @@ mod tests {
         match arr {
             Zval::Array(a) => {
                 let (k, v) = a.iter().next().unwrap();
-                assert_eq!(k, &Key::from_bytes(b"len"));
+                assert_eq!(k, Key::from_bytes(b"len"));
                 assert!(matches!(v, Zval::Long(65534)));
             }
             _ => panic!(),

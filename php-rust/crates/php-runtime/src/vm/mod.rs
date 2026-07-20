@@ -5886,7 +5886,7 @@ impl<'m> Vm<'m> {
                 Zval::Generator(rc) => return Ok(TraversableSource::Gen(rc)),
                 other @ Zval::Object(_) => it = other,
                 Zval::Array(a) => {
-                    let entries = a.iter().map(|(k, v)| (key_to_zval(k), v.deref_clone())).collect();
+                    let entries = a.iter().map(|(k, v)| (key_to_zval(&k), v.deref_clone())).collect();
                     return Ok(TraversableSource::Entries(entries));
                 }
                 other => {

@@ -536,7 +536,7 @@ pub(super) fn coerce_key_silent(v: &Zval) -> Option<Key> {
 /// mirrors the tree-walker (`eval::exec_foreach`).
 pub(super) fn snapshot_entries(iterable: &Zval) -> Vec<(Zval, Zval)> {
     match iterable {
-        Zval::Array(a) => a.iter().map(|(k, v)| (key_to_zval(k), v.clone())).collect(),
+        Zval::Array(a) => a.iter().map(|(k, v)| (key_to_zval(&k), v.clone())).collect(),
         Zval::Ref(rc) => snapshot_entries(&rc.borrow()),
         _ => Vec::new(),
     }

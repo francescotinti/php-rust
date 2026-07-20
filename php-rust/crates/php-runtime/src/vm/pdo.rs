@@ -358,7 +358,7 @@ fn run_prepared(
             // paths.
             for (k, v) in params.iter() {
                 let pos = match k {
-                    Key::Int(i) => *i,
+                    Key::Int(i) => i,
                     Key::Str(name) => {
                         let mut n = Vec::with_capacity(name.as_bytes().len() + 1);
                         if !name.as_bytes().starts_with(b":") {

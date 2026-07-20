@@ -78,27 +78,52 @@ fn canonical_int_key(bytes: &[u8]) -> Option<i64> {
 #[derive(Debug, PartialEq, Eq)]
 pub struct ArrayAppendError;
 
+// The packed representation stores one `Option<Zval>` per slot; the enum
+// niche must keep that at zval size (16B, like Zend's packed Bucket payload).
+const _: () = assert!(
+    std::mem::size_of::<Option<Zval>>() == std::mem::size_of::<Zval>()
+);
+
+/// Storage representation, mirroring Zend's packed/mixed hash split
+/// (invisible to programs; the split only changes memory/CPU costs).
+///
+/// `Packed`: live keys are exactly the slot positions (`entries[i]` holds key
+/// `i`); tombstones (`None`) only ever come from `unset` and are never
+/// re-filled in place — the oracle appends re-inserted keys at the END of the
+/// iteration order (packed_probe: `unset($a[1]); $a[1]=99` iterates 0,2,1),
+/// so writing into a tombstone or past the end escalates to `Hashed` first.
+/// One-way: an array never goes back to `Packed` (rebuilt arrays start fresh).
+#[derive(Debug)]
+enum Repr {
+    Packed(Vec<Option<Zval>>),
+    Hashed {
+        entries: Vec<Option<(Key, Zval)>>,
+        index: HashMap<Key, u32>,
+    },
+}
+
 /// A PHP array: an insertion-ordered hash with int|string keys.
 ///
 /// Mirrors the observable semantics of `zend_array` (Zend/zend_types.h:408-432):
 /// iteration order is insertion order (survives unset), tombstones like Zend's
-/// IS_UNDEF buckets, `next_free` never decreases on unset. The internal
-/// packed/mixed distinction of Zend is invisible and not reproduced.
+/// IS_UNDEF buckets, `next_free` never decreases on unset. Like Zend, a
+/// dense 0..n int-keyed array is stored packed (values only, no key/index —
+/// see [`Repr`]); the distinction is invisible to programs.
 #[derive(Debug)]
 pub struct PhpArray {
-    entries: Vec<Option<(Key, Zval)>>,
-    index: HashMap<Key, u32>,
+    repr: Repr,
     /// Mirrors nNextFreeElement: starts at i64::MIN (zend_hash.c:257),
     /// "MIN means empty-append uses 0" (zend_hash.c:1099), saturates at
     /// i64::MAX (zend_hash.c:1183), never decreases on unset.
     next_free: i64,
     count: u32,
-    /// The internal pointer (`reset`/`next`/`prev`/`end`/`current`/`key`), as an
-    /// index into `entries`. `>= entries.len()` (or pointing only at tombstones to
-    /// its right) means "past the end" / invalid — `current` is then `false`. Reads
-    /// skip forward over tombstones from this index (mirrors Zend advancing the
-    /// pointer when the pointed bucket is deleted). `foreach` snapshots and does not
-    /// touch it (PHP 8). Carried by `Clone`/COW like the rest of the array state.
+    /// The internal pointer (`reset`/`next`/`prev`/`end`/`current`/`key`), as a
+    /// slot position. `>= slots` (or pointing only at tombstones to its right)
+    /// means "past the end" / invalid — `current` is then `false`. Reads skip
+    /// forward over tombstones from this index (mirrors Zend advancing the
+    /// pointer when the pointed bucket is deleted). `foreach` snapshots and does
+    /// not touch it (PHP 8). Carried by `Clone`/COW like the rest of the array
+    /// state. Escalation preserves slot positions, so the cursor survives it.
     cursor: usize,
     /// Conservative container-content marker: `false` only when every value ever
     /// stored is a scalar/string AND no `&mut` element handle was ever handed out
@@ -108,45 +133,55 @@ pub struct PhpArray {
     holds_containers: bool,
 }
 
+/// The element-duplication rule of `zend_array_dup` (Zend/zend_hash.c): an
+/// element that is a REFERENCE this array is the only holder of (refcount 1 —
+/// typically `foreach (… as &$v)` residue after the alias variable died)
+/// is SPLIT into a plain value in the duplicate; a reference someone else
+/// still aliases stays shared. Without the split, a by-ref foreach over a
+/// COW copy writes through the surviving cells into every other holder
+/// (WP_REST_Server::get_routes corrupted `$this->endpoints` this way).
+/// …UNLESS the referent is this very array (a `$a[] =& $a` self-cycle):
+/// zend_array_dup keeps that reference shared (bug69376).
+fn dup_element(v: &Zval, owner: *const PhpArray) -> Zval {
+    match v {
+        Zval::Ref(cell) if Rc::strong_count(cell) == 1 => {
+            let self_ref = matches!(
+                &*cell.borrow(),
+                Zval::Array(rc) if std::ptr::eq(Rc::as_ptr(rc), owner)
+            );
+            if self_ref {
+                Zval::Ref(Rc::clone(cell))
+            } else {
+                cell.borrow().clone()
+            }
+        }
+        other => other.clone(),
+    }
+}
+
 impl Clone for PhpArray {
-    /// Duplicate the array like `zend_array_dup` (Zend/zend_hash.c): an element
-    /// that is a REFERENCE this array is the only holder of (refcount 1 —
-    /// typically `foreach (… as &$v)` residue after the alias variable died)
-    /// is SPLIT into a plain value in the duplicate; a reference someone else
-    /// still aliases stays shared. Without the split, a by-ref foreach over a
-    /// COW copy writes through the surviving cells into every other holder
-    /// (WP_REST_Server::get_routes corrupted `$this->endpoints` this way).
     fn clone(&self) -> Self {
-        let entries = self
-            .entries
-            .iter()
-            .map(|e| {
-                e.as_ref().map(|(k, v)| {
-                    let v = match v {
-                        Zval::Ref(cell) if Rc::strong_count(cell) == 1 => {
-                            // …UNLESS the referent is this very array (a
-                            // `$a[] =& $a` self-cycle): zend_array_dup keeps
-                            // that reference shared (bug69376) —
-                            // `Z_ARRVAL_P(Z_REFVAL_P(data)) != source`.
-                            let self_ref = matches!(
-                                &*cell.borrow(),
-                                Zval::Array(rc) if std::ptr::eq(Rc::as_ptr(rc), self as *const PhpArray)
-                            );
-                            if self_ref {
-                                Zval::Ref(Rc::clone(cell))
-                            } else {
-                                cell.borrow().clone()
-                            }
-                        }
-                        other => other.clone(),
-                    };
-                    (k.clone(), v)
-                })
-            })
-            .collect();
+        let owner = self as *const PhpArray;
+        let repr = match &self.repr {
+            Repr::Packed(slots) => Repr::Packed(
+                slots
+                    .iter()
+                    .map(|e| e.as_ref().map(|v| dup_element(v, owner)))
+                    .collect(),
+            ),
+            Repr::Hashed { entries, index } => Repr::Hashed {
+                entries: entries
+                    .iter()
+                    .map(|e| {
+                        e.as_ref()
+                            .map(|(k, v)| (k.clone(), dup_element(v, owner)))
+                    })
+                    .collect(),
+                index: index.clone(),
+            },
+        };
         PhpArray {
-            entries,
-            index: self.index.clone(),
+            repr,
             next_free: self.next_free,
             count: self.count,
             cursor: self.cursor,
@@ -158,8 +193,7 @@ impl Clone for PhpArray {
 impl Default for PhpArray {
     fn default() -> Self {
         PhpArray {
-            entries: Vec::new(),
-            index: HashMap::default(),
+            repr: Repr::Packed(Vec::new()),
             next_free: i64::MIN,
             count: 0,
             cursor: 0,
@@ -173,10 +207,12 @@ impl PhpArray {
         PhpArray::default()
     }
 
+    #[inline]
     pub fn len(&self) -> usize {
         self.count as usize
     }
 
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.count == 0
     }
@@ -184,8 +220,30 @@ impl PhpArray {
     /// Whether this array may (transitively) hold objects / references /
     /// other containers — see the `holds_containers` field. `false` is a
     /// guarantee; `true` only means "must be walked".
+    #[inline]
     pub fn may_hold_containers(&self) -> bool {
         self.holds_containers
+    }
+
+    /// Convert a packed array to the hashed representation. Slot positions
+    /// (and therefore the cursor) and tombstones are preserved exactly.
+    fn to_hashed(&mut self) {
+        let Repr::Packed(slots) = &mut self.repr else {
+            return;
+        };
+        let entries: Vec<Option<(Key, Zval)>> = std::mem::take(slots)
+            .into_iter()
+            .enumerate()
+            .map(|(i, e)| e.map(|v| (Key::Int(i as i64), v)))
+            .collect();
+        let mut index = HashMap::default();
+        index.reserve(entries.len());
+        for (pos, entry) in entries.iter().enumerate() {
+            if let Some((key, _)) = entry {
+                index.insert(key.clone(), pos as u32);
+            }
+        }
+        self.repr = Repr::Hashed { entries, index };
     }
 
     /// Insert or update. Updating an existing key keeps its position.
@@ -194,8 +252,35 @@ impl PhpArray {
             val,
             Zval::Undef | Zval::Null | Zval::Bool(_) | Zval::Long(_) | Zval::Double(_) | Zval::Str(_)
         );
-        if let Some(&pos) = self.index.get(&key) {
-            self.entries[pos as usize] = Some((key, val));
+        if let Repr::Packed(slots) = &mut self.repr {
+            match key {
+                Key::Int(i) if (i as usize) < slots.len() && i >= 0 => {
+                    if let Some(slot) = &mut slots[i as usize] {
+                        // Update keeps its position (and next_free untouched:
+                        // an existing key is always < next_free).
+                        *slot = val;
+                        return;
+                    }
+                    // Tombstone: a re-inserted key goes to the END of the
+                    // iteration order (oracle-pinned) — escalate.
+                }
+                Key::Int(i) if i == slots.len() as i64 => {
+                    if i >= self.next_free {
+                        self.next_free = i.saturating_add(1);
+                    }
+                    slots.push(Some(val));
+                    self.count += 1;
+                    return;
+                }
+                _ => {}
+            }
+            self.to_hashed();
+        }
+        let Repr::Hashed { entries, index } = &mut self.repr else {
+            unreachable!()
+        };
+        if let Some(&pos) = index.get(&key) {
+            entries[pos as usize] = Some((key, val));
             return;
         }
         if let Key::Int(i) = key {
@@ -203,9 +288,9 @@ impl PhpArray {
                 self.next_free = i.saturating_add(1);
             }
         }
-        let pos = self.entries.len() as u32;
-        self.index.insert(key.clone(), pos);
-        self.entries.push(Some((key, val)));
+        let pos = entries.len() as u32;
+        index.insert(key.clone(), pos);
+        entries.push(Some((key, val)));
         self.count += 1;
     }
 
@@ -245,99 +330,181 @@ impl PhpArray {
         self.get_mut(&Key::Int(h))
     }
 
+    #[inline]
     pub fn get(&self, key: &Key) -> Option<&Zval> {
-        self.index
-            .get(key)
-            .map(|&pos| &self.entries[pos as usize].as_ref().unwrap().1)
-    }
-
-    pub fn get_mut(&mut self, key: &Key) -> Option<&mut Zval> {
-        match self.index.get(key) {
-            Some(&pos) => {
-                // The caller may write any value through this handle.
-                self.holds_containers = true;
-                Some(&mut self.entries[pos as usize].as_mut().unwrap().1)
-            }
-            None => None,
+        match &self.repr {
+            Repr::Packed(slots) => match key {
+                Key::Int(i) if (*i as usize) < slots.len() && *i >= 0 => {
+                    slots[*i as usize].as_ref()
+                }
+                _ => None,
+            },
+            Repr::Hashed { entries, index } => index
+                .get(key)
+                .map(|&pos| &entries[pos as usize].as_ref().unwrap().1),
         }
     }
 
+    #[inline]
+    pub fn get_mut(&mut self, key: &Key) -> Option<&mut Zval> {
+        match &mut self.repr {
+            Repr::Packed(slots) => match key {
+                Key::Int(i) if (*i as usize) < slots.len() && *i >= 0 => {
+                    match &mut slots[*i as usize] {
+                        Some(v) => {
+                            // The caller may write any value through this handle.
+                            self.holds_containers = true;
+                            Some(v)
+                        }
+                        None => None,
+                    }
+                }
+                _ => None,
+            },
+            Repr::Hashed { entries, index } => match index.get(key) {
+                Some(&pos) => {
+                    self.holds_containers = true;
+                    Some(&mut entries[pos as usize].as_mut().unwrap().1)
+                }
+                None => None,
+            },
+        }
+    }
+
+    #[inline]
     pub fn contains_key(&self, key: &Key) -> bool {
-        self.index.contains_key(key)
+        match &self.repr {
+            Repr::Packed(slots) => matches!(
+                key,
+                Key::Int(i) if (*i as usize) < slots.len() && *i >= 0
+                    && slots[*i as usize].is_some()
+            ),
+            Repr::Hashed { index, .. } => index.contains_key(key),
+        }
     }
 
     /// `unset($a[k])`: leaves a tombstone so iteration order is preserved.
     /// `next_free` intentionally not touched (Zend semantics).
     pub fn remove(&mut self, key: &Key) -> Option<Zval> {
-        let pos = self.index.remove(key)?;
-        let (_, val) = self.entries[pos as usize].take().unwrap();
-        self.count -= 1;
-        if self.entries.len() >= 8 && (self.count as usize) < self.entries.len() / 2 {
-            self.compact();
+        match &mut self.repr {
+            Repr::Packed(slots) => {
+                let i = match key {
+                    Key::Int(i) if (*i as usize) < slots.len() && *i >= 0 => *i as usize,
+                    _ => return None,
+                };
+                let val = slots[i].take()?;
+                self.count -= 1;
+                // Trailing tombstones are dropped so that pop-then-append
+                // (array_pop adjusts next_free back) re-pushes in place and
+                // the array stays packed. Interior tombstones stay — they
+                // cost one slot each, like Zend's IS_UNDEF buckets.
+                if i + 1 == slots.len() {
+                    while matches!(slots.last(), Some(None)) {
+                        slots.pop();
+                    }
+                }
+                Some(val)
+            }
+            Repr::Hashed { entries, index } => {
+                let pos = index.remove(key)?;
+                let (_, val) = entries[pos as usize].take().unwrap();
+                self.count -= 1;
+                if entries.len() >= 8 && (self.count as usize) < entries.len() / 2 {
+                    self.compact();
+                }
+                Some(val)
+            }
         }
-        Some(val)
     }
 
     fn compact(&mut self) {
-        self.entries.retain(Option::is_some);
-        self.index.clear();
-        for (pos, entry) in self.entries.iter().enumerate() {
+        let Repr::Hashed { entries, index } = &mut self.repr else {
+            return;
+        };
+        entries.retain(Option::is_some);
+        index.clear();
+        for (pos, entry) in entries.iter().enumerate() {
             let (key, _) = entry.as_ref().unwrap();
-            self.index.insert(key.clone(), pos as u32);
+            index.insert(key.clone(), pos as u32);
         }
     }
 
-    /// Iterate in insertion order, skipping tombstones.
-    pub fn iter(&self) -> impl Iterator<Item = (&Key, &Zval)> {
-        self.entries
-            .iter()
-            .filter_map(|e| e.as_ref().map(|(k, v)| (k, v)))
+    /// Iterate in insertion order, skipping tombstones. Keys are yielded by
+    /// value: packed slots don't store them (`Int` is a copy, `Str` an Rc bump).
+    #[inline]
+    pub fn iter(&self) -> Iter<'_> {
+        match &self.repr {
+            Repr::Packed(slots) => Iter::Packed(slots.iter().enumerate()),
+            Repr::Hashed { entries, .. } => Iter::Hashed(entries.iter()),
+        }
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&Key, &mut Zval)> {
+    #[inline]
+    pub fn iter_mut(&mut self) -> IterMut<'_> {
         // The caller may write any value through these handles.
         self.holds_containers = true;
-        self.entries
-            .iter_mut()
-            .filter_map(|e| e.as_mut().map(|(k, v)| (&*k, v)))
+        match &mut self.repr {
+            Repr::Packed(slots) => IterMut::Packed(slots.iter_mut().enumerate()),
+            Repr::Hashed { entries, .. } => IterMut::Hashed(entries.iter_mut()),
+        }
     }
 
     // --- Internal pointer (`reset`/`next`/`prev`/`end`/`current`/`key`) ---
+
+    /// Total slot count (live + tombstones) — the domain of cursor positions.
+    fn slots_len(&self) -> usize {
+        match &self.repr {
+            Repr::Packed(slots) => slots.len(),
+            Repr::Hashed { entries, .. } => entries.len(),
+        }
+    }
+
+    /// Whether the slot at `i` is live (not a tombstone).
+    fn live_at(&self, i: usize) -> bool {
+        match &self.repr {
+            Repr::Packed(slots) => slots[i].is_some(),
+            Repr::Hashed { entries, .. } => entries[i].is_some(),
+        }
+    }
 
     /// The effective position of the internal pointer: the first live entry at or
     /// after `cursor` (skipping tombstones), or `None` when the pointer is past the
     /// end. A read never moves `cursor`; it skips forward lazily, so deleting the
     /// pointed bucket makes the next live one current (matches Zend).
     fn cursor_pos(&self) -> Option<usize> {
-        (self.cursor..self.entries.len()).find(|&i| self.entries[i].is_some())
+        (self.cursor..self.slots_len()).find(|&i| self.live_at(i))
     }
 
     /// `current($a)`: the value at the internal pointer, or `None` (PHP `false`).
     pub fn ptr_current(&self) -> Option<Zval> {
-        self.cursor_pos()
-            .and_then(|i| self.entries[i].as_ref().map(|(_, v)| v.clone()))
+        self.cursor_pos().map(|i| match &self.repr {
+            Repr::Packed(slots) => slots[i].as_ref().unwrap().clone(),
+            Repr::Hashed { entries, .. } => entries[i].as_ref().unwrap().1.clone(),
+        })
     }
 
     /// `key($a)`: the key at the internal pointer, or `None` (PHP `null`).
     pub fn ptr_key(&self) -> Option<Key> {
-        self.cursor_pos()
-            .and_then(|i| self.entries[i].as_ref().map(|(k, _)| k.clone()))
+        self.cursor_pos().map(|i| match &self.repr {
+            Repr::Packed(_) => Key::Int(i as i64),
+            Repr::Hashed { entries, .. } => entries[i].as_ref().unwrap().0.clone(),
+        })
     }
 
     /// `reset($a)`: move the pointer to the first live entry; return its value.
     pub fn ptr_reset(&mut self) -> Option<Zval> {
-        self.cursor = (0..self.entries.len())
-            .find(|&i| self.entries[i].is_some())
-            .unwrap_or(self.entries.len());
+        self.cursor = (0..self.slots_len())
+            .find(|&i| self.live_at(i))
+            .unwrap_or(self.slots_len());
         self.ptr_current()
     }
 
     /// `end($a)`: move the pointer to the last live entry; return its value.
     pub fn ptr_end(&mut self) -> Option<Zval> {
-        self.cursor = (0..self.entries.len())
+        self.cursor = (0..self.slots_len())
             .rev()
-            .find(|&i| self.entries[i].is_some())
-            .unwrap_or(self.entries.len());
+            .find(|&i| self.live_at(i))
+            .unwrap_or(self.slots_len());
         self.ptr_current()
     }
 
@@ -346,23 +513,121 @@ impl PhpArray {
     pub fn ptr_next(&mut self) -> Option<Zval> {
         let start = match self.cursor_pos() {
             Some(i) => i + 1,
-            None => self.entries.len(),
+            None => self.slots_len(),
         };
-        self.cursor = (start..self.entries.len())
-            .find(|&i| self.entries[i].is_some())
-            .unwrap_or(self.entries.len());
+        self.cursor = (start..self.slots_len())
+            .find(|&i| self.live_at(i))
+            .unwrap_or(self.slots_len());
         self.ptr_current()
     }
 
     /// `prev($a)`: retreat the pointer to the previous live entry; return its value.
     /// Stepping before the first entry invalidates the pointer (`false`).
     pub fn ptr_prev(&mut self) -> Option<Zval> {
-        let end = self.cursor_pos().unwrap_or(self.entries.len());
+        let end = self.cursor_pos().unwrap_or(self.slots_len());
         self.cursor = (0..end)
             .rev()
-            .find(|&i| self.entries[i].is_some())
-            .unwrap_or(self.entries.len());
+            .find(|&i| self.live_at(i))
+            .unwrap_or(self.slots_len());
         self.ptr_current()
+    }
+}
+
+/// Borrowing iterator over live entries — see [`PhpArray::iter`].
+pub enum Iter<'a> {
+    Packed(std::iter::Enumerate<std::slice::Iter<'a, Option<Zval>>>),
+    Hashed(std::slice::Iter<'a, Option<(Key, Zval)>>),
+}
+
+impl<'a> Iterator for Iter<'a> {
+    type Item = (Key, &'a Zval);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Iter::Packed(it) => it.find_map(|(i, e)| {
+                e.as_ref().map(|v| (Key::Int(i as i64), v))
+            }),
+            Iter::Hashed(it) => it.find_map(|e| {
+                e.as_ref().map(|(k, v)| (k.clone(), v))
+            }),
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let upper = match self {
+            Iter::Packed(it) => it.len(),
+            Iter::Hashed(it) => it.len(),
+        };
+        (0, Some(upper))
+    }
+}
+
+impl DoubleEndedIterator for Iter<'_> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        match self {
+            Iter::Packed(it) => loop {
+                let (i, e) = it.next_back()?;
+                if let Some(v) = e.as_ref() {
+                    return Some((Key::Int(i as i64), v));
+                }
+            },
+            Iter::Hashed(it) => loop {
+                let e = it.next_back()?;
+                if let Some((k, v)) = e.as_ref() {
+                    return Some((k.clone(), v));
+                }
+            },
+        }
+    }
+}
+
+/// Mutably borrowing iterator over live entries — see [`PhpArray::iter_mut`].
+pub enum IterMut<'a> {
+    Packed(std::iter::Enumerate<std::slice::IterMut<'a, Option<Zval>>>),
+    Hashed(std::slice::IterMut<'a, Option<(Key, Zval)>>),
+}
+
+impl<'a> Iterator for IterMut<'a> {
+    type Item = (Key, &'a mut Zval);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            IterMut::Packed(it) => it.find_map(|(i, e)| {
+                e.as_mut().map(|v| (Key::Int(i as i64), v))
+            }),
+            IterMut::Hashed(it) => it.find_map(|e| {
+                e.as_mut().map(|(k, v)| (k.clone(), v))
+            }),
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let upper = match self {
+            IterMut::Packed(it) => it.len(),
+            IterMut::Hashed(it) => it.len(),
+        };
+        (0, Some(upper))
+    }
+}
+
+impl DoubleEndedIterator for IterMut<'_> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        match self {
+            IterMut::Packed(it) => loop {
+                let (i, e) = it.next_back()?;
+                if let Some(v) = e.as_mut() {
+                    return Some((Key::Int(i as i64), v));
+                }
+            },
+            IterMut::Hashed(it) => loop {
+                let e = it.next_back()?;
+                if let Some((k, v)) = e.as_mut() {
+                    return Some((k.clone(), v));
+                }
+            },
+        }
     }
 }
 
@@ -372,6 +637,10 @@ mod tests {
 
     fn k(s: &str) -> Key {
         Key::from_bytes(s.as_bytes())
+    }
+
+    fn is_packed(a: &PhpArray) -> bool {
+        matches!(a.repr, Repr::Packed(_))
     }
 
     #[test]
@@ -407,7 +676,7 @@ mod tests {
         a.insert(Key::Int(1), Zval::Long(30));
         a.insert(Key::Int(0), Zval::Long(99)); // update keeps position
         a.remove(&k("x"));
-        let keys: Vec<_> = a.iter().map(|(key, _)| key.clone()).collect();
+        let keys: Vec<_> = a.iter().map(|(key, _)| key).collect();
         assert_eq!(keys, vec![Key::Int(0), Key::Int(1)]);
         match a.get(&Key::Int(0)) {
             Some(Zval::Long(99)) => {}
@@ -454,17 +723,148 @@ mod tests {
     #[test]
     fn compaction_preserves_order_and_lookups() {
         let mut a = PhpArray::new();
+        a.insert(k("s"), Zval::Long(-1)); // force hashed repr
+        a.remove(&k("s"));
         for i in 0..20 {
             a.insert(Key::Int(i), Zval::Long(i));
         }
         for i in 0..15 {
             a.remove(&Key::Int(i));
         }
-        let keys: Vec<_> = a.iter().map(|(key, _)| key.clone()).collect();
+        let keys: Vec<_> = a.iter().map(|(key, _)| key).collect();
         assert_eq!(
             keys,
             (15..20).map(Key::Int).collect::<Vec<_>>()
         );
         assert!(matches!(a.get(&Key::Int(17)), Some(Zval::Long(17))));
+    }
+
+    // --- Dual-representation (packed/hashed) behavior ---
+
+    #[test]
+    fn dense_int_arrays_stay_packed() {
+        let mut a = PhpArray::new();
+        for i in 0..100 {
+            a.append(Zval::Long(i)).unwrap();
+        }
+        assert!(is_packed(&a));
+        a.insert(Key::Int(50), Zval::Long(-50)); // in-place update
+        assert!(is_packed(&a));
+        assert!(matches!(a.get(&Key::Int(50)), Some(Zval::Long(-50))));
+        // Explicit dense writes also stay packed:
+        let mut b = PhpArray::new();
+        for i in 0..10 {
+            b.insert(Key::Int(i), Zval::Long(i));
+        }
+        assert!(is_packed(&b));
+    }
+
+    #[test]
+    fn string_key_escalates_preserving_order() {
+        let mut a = PhpArray::new();
+        for i in 0..3 {
+            a.append(Zval::Long(i)).unwrap();
+        }
+        a.insert(k("x"), Zval::Long(99));
+        assert!(!is_packed(&a));
+        let keys: Vec<_> = a.iter().map(|(key, _)| key).collect();
+        assert_eq!(keys, vec![Key::Int(0), Key::Int(1), Key::Int(2), k("x")]);
+        assert!(matches!(a.get(&Key::Int(1)), Some(Zval::Long(1))));
+    }
+
+    #[test]
+    fn tombstone_reinsert_goes_to_end_like_oracle() {
+        // unset($a[1]); $a[1] = 99  =>  iteration order 0, 2, 1 (oracle-pinned).
+        let mut a = PhpArray::new();
+        for i in 10..13 {
+            a.append(Zval::Long(i)).unwrap();
+        }
+        a.remove(&Key::Int(1));
+        assert!(is_packed(&a)); // interior tombstone keeps packed
+        a.insert(Key::Int(1), Zval::Long(99));
+        assert!(!is_packed(&a)); // re-insert into tombstone escalates
+        let keys: Vec<_> = a.iter().map(|(key, _)| key).collect();
+        assert_eq!(keys, vec![Key::Int(0), Key::Int(2), Key::Int(1)]);
+    }
+
+    #[test]
+    fn hole_escalates() {
+        let mut a = PhpArray::new();
+        a.append(Zval::Long(0)).unwrap();
+        a.insert(Key::Int(5), Zval::Long(5)); // hole 1..4
+        assert!(!is_packed(&a));
+        let keys: Vec<_> = a.iter().map(|(key, _)| key).collect();
+        assert_eq!(keys, vec![Key::Int(0), Key::Int(5)]);
+        a.append(Zval::Long(6)).unwrap();
+        assert!(a.contains_key(&Key::Int(6)));
+    }
+
+    #[test]
+    fn negative_key_escalates() {
+        let mut a = PhpArray::new();
+        a.append(Zval::Long(0)).unwrap();
+        a.insert(Key::Int(-1), Zval::Long(-1));
+        assert!(!is_packed(&a));
+        assert!(matches!(a.get(&Key::Int(-1)), Some(Zval::Long(-1))));
+    }
+
+    #[test]
+    fn pop_then_append_stays_packed_and_reuses_key() {
+        // array_pop + [] reuses the key and the array stays packed.
+        let mut a = PhpArray::new();
+        for i in 0..3 {
+            a.append(Zval::Long(i)).unwrap();
+        }
+        let popped = a.remove(&Key::Int(2)).unwrap();
+        assert!(matches!(popped, Zval::Long(2)));
+        a.pop_adjust_next_free(&Key::Int(2));
+        a.append(Zval::Long(40)).unwrap();
+        assert!(is_packed(&a));
+        assert!(matches!(a.get(&Key::Int(2)), Some(Zval::Long(40))));
+        let keys: Vec<_> = a.iter().map(|(key, _)| key).collect();
+        assert_eq!(keys, vec![Key::Int(0), Key::Int(1), Key::Int(2)]);
+    }
+
+    #[test]
+    fn unset_last_without_adjust_appends_next_key() {
+        // unset($a[2]); $a[] = v  =>  key 3 (next_free never decreases).
+        let mut a = PhpArray::new();
+        for i in 0..3 {
+            a.append(Zval::Long(i)).unwrap();
+        }
+        a.remove(&Key::Int(2));
+        a.append(Zval::Long(4)).unwrap();
+        assert!(a.contains_key(&Key::Int(3)));
+        assert!(!a.contains_key(&Key::Int(2)));
+        let keys: Vec<_> = a.iter().map(|(key, _)| key).collect();
+        assert_eq!(keys, vec![Key::Int(0), Key::Int(1), Key::Int(3)]);
+    }
+
+    #[test]
+    fn cursor_survives_escalation() {
+        let mut a = PhpArray::new();
+        for i in 0..4 {
+            a.append(Zval::Long(i)).unwrap();
+        }
+        a.ptr_next(); // cursor at position 1
+        assert_eq!(a.ptr_key(), Some(Key::Int(1)));
+        a.insert(k("s"), Zval::Long(9)); // escalates
+        assert!(!is_packed(&a));
+        assert_eq!(a.ptr_key(), Some(Key::Int(1)));
+        assert!(matches!(a.ptr_next(), Some(Zval::Long(2))));
+    }
+
+    #[test]
+    fn packed_iter_rev_and_ptr_ops() {
+        let mut a = PhpArray::new();
+        for i in 0..5 {
+            a.append(Zval::Long(i)).unwrap();
+        }
+        a.remove(&Key::Int(1));
+        let back: Vec<_> = a.iter().rev().map(|(key, _)| key).collect();
+        assert_eq!(back, vec![Key::Int(4), Key::Int(3), Key::Int(2), Key::Int(0)]);
+        assert!(matches!(a.ptr_end(), Some(Zval::Long(4))));
+        assert!(matches!(a.ptr_prev(), Some(Zval::Long(3))));
+        assert_eq!(a.ptr_key(), Some(Key::Int(3)));
     }
 }

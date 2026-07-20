@@ -192,7 +192,7 @@ fn encode(
 fn is_list(a: &PhpArray) -> bool {
     a.iter()
         .enumerate()
-        .all(|(i, (k, _))| matches!(k, Key::Int(n) if *n == i as i64))
+        .all(|(i, (k, _))| matches!(k, Key::Int(n) if n == i as i64))
 }
 
 fn encode_array(
@@ -216,7 +216,7 @@ fn encode_array(
     } else {
         let entries: Vec<(Vec<u8>, &Zval)> = a
             .iter()
-            .map(|(k, v)| (key_bytes(k), v))
+            .map(|(k, v)| (key_bytes(&k), v))
             .collect();
         encode_seq(b'{', b'}', flags, depth, entries.len(), out, |i, flags, depth, out| {
             encode_string(&entries[i].0, flags, out)?;

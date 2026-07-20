@@ -158,7 +158,7 @@ fn arr_arg<'a>(args: &'a [Zval], fname: &str) -> Result<&'a PhpArray, PhpError> 
 pub fn array_keys(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let arr = arr_arg(args, "array_keys")?;
     match args.get(1) {
-        None => Ok(into_list(arr.iter().map(|(k, _)| key_to_zval(k)))),
+        None => Ok(into_list(arr.iter().map(|(k, _)| key_to_zval(&k)))),
         Some(search) => {
             let strict = matches!(args.get(2), Some(v) if convert::is_true_silent(v));
             let matches = arr.iter().filter(|(_, v)| {
@@ -168,7 +168,7 @@ pub fn array_keys(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
                     ops::loose_eq(v, search)
                 }
             });
-            Ok(into_list(matches.map(|(k, _)| key_to_zval(k))))
+            Ok(into_list(matches.map(|(k, _)| key_to_zval(&k))))
         }
     }
 }
@@ -258,7 +258,7 @@ pub fn array_merge_recursive(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpE
                 Key::Int(_) => {
                     let _ = out.append(v.clone());
                 }
-                Key::Str(_) => match out.get(k) {
+                Key::Str(_) => match out.get(&k) {
                     Some(existing) => {
                         let mut merged = to_arr(existing);
                         merge_into(&mut merged, &to_arr(v));
@@ -348,7 +348,7 @@ pub fn array_replace_recursive(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, Ph
 /// arrays and the oracle keeps the deep merge).
 fn replace_recursive_into(base: &mut PhpArray, repl: &PhpArray) {
     for (k, v) in repl.iter() {
-        let new_val = match (base.get(k).map(Zval::deref_clone), v.deref_clone()) {
+        let new_val = match (base.get(&k).map(Zval::deref_clone), v.deref_clone()) {
             (Some(Zval::Array(existing)), Zval::Array(incoming)) => {
                 let mut merged = (*existing).clone();
                 replace_recursive_into(&mut merged, &incoming);
@@ -1040,7 +1040,7 @@ pub fn array_search(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
             ops::loose_eq(v, needle)
         };
         if hit {
-            return Ok(key_to_zval(k));
+            return Ok(key_to_zval(&k));
         }
     }
     Ok(Zval::Bool(false))
@@ -1231,7 +1231,7 @@ pub fn array_flip(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
             Zval::Str(s) => Key::from_zstr(s),
             _ => continue,
         };
-        out.insert(new_key, key_to_zval(k));
+        out.insert(new_key, key_to_zval(&k));
     }
     Ok(Zval::Array(Rc::new(out)))
 }
@@ -1317,7 +1317,7 @@ pub fn array_is_list(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let mut expect: i64 = 0;
     for (k, _) in arr.iter() {
         match k {
-            Key::Int(i) if *i == expect => expect += 1,
+            Key::Int(i) if i == expect => expect += 1,
             _ => return Ok(Zval::Bool(false)),
         }
     }
@@ -1328,7 +1328,7 @@ pub fn array_is_list(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
 /// null for an empty array.
 pub fn array_key_first(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let arr = arr_arg(args, "array_key_first")?;
-    Ok(arr.iter().next().map(|(k, _)| key_to_zval(k)).unwrap_or(Zval::Null))
+    Ok(arr.iter().next().map(|(k, _)| key_to_zval(&k)).unwrap_or(Zval::Null))
 }
 
 
@@ -1347,7 +1347,7 @@ pub fn array_last(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
 
 pub fn array_key_last(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let arr = arr_arg(args, "array_key_last")?;
-    Ok(arr.iter().last().map(|(k, _)| key_to_zval(k)).unwrap_or(Zval::Null))
+    Ok(arr.iter().last().map(|(k, _)| key_to_zval(&k)).unwrap_or(Zval::Null))
 }
 
 /// array_diff($array, ...$excludes): elements of $array (keys preserved) whose
@@ -1461,8 +1461,8 @@ pub fn array_diff_key(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let others = other_arrays(&args[1..], "array_diff_key")?;
     let mut out = PhpArray::new();
     for (k, v) in base.iter() {
-        if !others.iter().any(|o| o.contains_key(k)) {
-            out.insert(k.clone(), v.clone());
+        if !others.iter().any(|o| o.contains_key(&k)) {
+            out.insert(k, v.clone());
         }
     }
     Ok(Zval::Array(Rc::new(out)))
@@ -1475,8 +1475,8 @@ pub fn array_intersect_key(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpErr
     let others = other_arrays(&args[1..], "array_intersect_key")?;
     let mut out = PhpArray::new();
     for (k, v) in base.iter() {
-        if others.iter().all(|o| o.contains_key(k)) {
-            out.insert(k.clone(), v.clone());
+        if others.iter().all(|o| o.contains_key(&k)) {
+            out.insert(k, v.clone());
         }
     }
     Ok(Zval::Array(Rc::new(out)))
@@ -1497,8 +1497,8 @@ pub fn array_diff_assoc(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> 
     let mut out = PhpArray::new();
     for (k, v) in base.iter() {
         let vs = convert::to_zstr(v, ctx.diags).as_bytes().to_vec();
-        if !others.iter().any(|o| assoc_match(o, k, &vs, ctx)) {
-            out.insert(k.clone(), v.clone());
+        if !others.iter().any(|o| assoc_match(o, &k, &vs, ctx)) {
+            out.insert(k, v.clone());
         }
     }
     Ok(Zval::Array(Rc::new(out)))
@@ -1512,8 +1512,8 @@ pub fn array_intersect_assoc(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpEr
     let mut out = PhpArray::new();
     for (k, v) in base.iter() {
         let vs = convert::to_zstr(v, ctx.diags).as_bytes().to_vec();
-        if others.iter().all(|o| assoc_match(o, k, &vs, ctx)) {
-            out.insert(k.clone(), v.clone());
+        if others.iter().all(|o| assoc_match(o, &k, &vs, ctx)) {
+            out.insert(k, v.clone());
         }
     }
     Ok(Zval::Array(Rc::new(out)))

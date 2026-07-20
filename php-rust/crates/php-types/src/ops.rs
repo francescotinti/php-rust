@@ -133,8 +133,8 @@ pub fn add(a: &Zval, b: &Zval, diags: &mut Diags) -> OpResult {
         // Array union: left keys win (add_function_slow).
         let mut out = (**x).clone();
         for (k, v) in y.iter() {
-            if !out.contains_key(k) {
-                out.insert(k.clone(), v.clone());
+            if !out.contains_key(&k) {
+                out.insert(k, v.clone());
             }
         }
         return Ok(Zval::Array(Rc::new(out)));
@@ -881,7 +881,7 @@ fn compare_arrays(a: &PhpArray, b: &PhpArray) -> i32 {
         return if a.len() < b.len() { -1 } else { 1 };
     }
     for (k, v1) in a.iter() {
-        match b.get(k) {
+        match b.get(&k) {
             None => return 1,
             Some(v2) => {
                 let c = compare(v1, v2);
@@ -915,7 +915,7 @@ pub fn loose_eq(a: &Zval, b: &Zval) -> bool {
             if l.len() != r.len() {
                 return false;
             }
-            l.iter().all(|(k, v1)| r.get(k).is_some_and(|v2| loose_eq(v1, v2)))
+            l.iter().all(|(k, v1)| r.get(&k).is_some_and(|v2| loose_eq(v1, v2)))
         }
         // Two objects are loosely equal iff they are the same instance, or share
         // the same class and every property is loosely equal (PHP object `==`).
@@ -984,7 +984,7 @@ pub fn identical(a: &Zval, b: &Zval) -> bool {
             // Ordered: same key sequence, identical values.
             l.iter()
                 .zip(r.iter())
-                .all(|((k1, v1), (k2, v2))| keys_identical(k1, k2) && identical(v1, v2))
+                .all(|((k1, v1), (k2, v2))| keys_identical(&k1, &k2) && identical(v1, v2))
         }
         // Objects have handle identity: `$a === $b` iff they are the same
         // instance (object assignment shares the `Rc`). Enum cases are interned
