@@ -1,4 +1,22 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-27 fase 1: PhpArray dual-repr packed/hashed)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-27 COMPLETA: PhpArray dual-repr + Props slot-based)
+
+> 🏁 **WP-27 fase 2 (2026-07-20)**: **Props SLOT-BASED** (punto 2 del verdetto
+> WP-26). `PropsLayout` per classe (chiavi storage di `prop_defaults` in
+> ordine di dichiarazione + FxHash precalcolati, `Rc` in `CompiledClass`
+> accanto a `info`); `Props` = `slots: Vec<Option<Zval>>` allineato al layout
+> (`Some(Undef)` = typed-uninit presente, `None` = mai-settata/unset) +
+> `dyn_entries` (dynamic in ordine di assegnazione) + contatore `live`.
+> API per-chiave INVARIATA ⇒ VM intatto salvo ~7 siti di costruzione
+> (`Props::with_layout`). ⭐ FIX di divergenza reale: unset+re-set di prop
+> DICHIARATA torna allo SLOT DI DICHIARAZIONE (Zend fixed offsets) — prima
+> phpr appendeva in coda e serialize/json_encode/var_dump/(array)/foreach
+> divergevano (props_probe.php 12 sezioni ora byte-id). + FIX
+> `#[AllowDynamicProperties]` su classi ANONIME (lower_anonymous_class
+> scartava gli attributi → deprecation spuria). **Memoria: oggetto 25-prop
+> 1.852 → 503 B/istanza (oracle 480 — quasi parità); stdClass 1.249 vs
+> oracle 1.337 (phpr MEGLIO)**. A/B media: CPU neutra (82,71 vs 82,80 user),
+> footprint −3,4%. Gate22 fase 2 tutto verde; **run18 = run17 = run16 per
+> nome (minimo teorico)**.
 
 > 🏁 **WP-27 fase 1 (2026-07-20)**: **PhpArray DUAL-REPR packed/hashed Zend-like**
 > (php-types/array.rs, punto 1 del verdetto WP-26). `Repr::Packed(Vec<Option<Zval>>)`
@@ -45,22 +63,20 @@ H="/Volumes/Extreme Pro/Claude/wp16-harness"
 # multisite: wp19-harness/run-multisite-detached.sh <oracle|phpr> (ms-out/)
 ```
 
-## 🎯 PROSSIMO LAVORO: WP-27 fase 2 — Props SLOT-BASED (punto 2 del verdetto WP-26)
-Layout per-classe condiviso + `Vec<Zval>` slots + overflow map per le dynamic:
-da 1.852 → ~650 B/oggetto stimati (oggi `Props` = `Vec<(Box<[u8]>, Zval)>`:
-~800B/istanza di sole chiavi duplicate + 400B di fat-pointer su 25 prop).
-Sussume l'interning dei nomi e dà accesso per indice di slot alla Zend.
-- Punti di attacco: `php-types/object.rs` (Props), `bytecode.rs` (per-class
-  flags già esistenti: all_props_public/plain_set_props/has_asym_set — il
-  layout slot si aggancia lì), `resolve_prop_access`/`PropAccess<'a>` di WP-22.
-- ⚠️ Il fast-path WP-25 (PropGet/PropSet) e la lazy-hash WP-23 di Props
-  vengono ASSORBITI dal layout nuovo: rifare l'A/B dopo.
-- ⚠️ Se si tocca ref/arg/reflection: gate ORM+hk obbligatorio (già nel gate22).
-- Probe memoria: riusare `memcost_arr.php` pattern (scratchpad WP-27) con
-  oggetto 25-prop; target ≤650B/istanza, stdClass invariata (già meglio).
-- Dopo la fase 2: A/B media + full-suite run18 + multisite.
+## 🎯 PROSSIMO LAVORO (il verdetto WP-26 è COMPLETO: entrambi i punti chiusi)
+1. **Multisite riconferma** (non rilanciata in WP-27: single-site run17/run18
+   identiche; al prossimo cambio sostanzioso o subito se si vuole chiudere il
+   cerchio: `wp19-harness/run-multisite-detached.sh phpr`, atteso 1 diff
+   `wp_is_stream #2`).
+2. **Slot-index fast path** (CPU, facoltativo): `resolve_prop_access` conosce
+   la classe → può restituire l'INDICE di slot (precalcolato in `PropInfo`)
+   e saltare `PropsLayout::slot_of` per accesso O(1) diretto; aggancio ai
+   flag per-classe esistenti (all_props_public/plain_set_props). L'A/B WP-27
+   fase 2 era CPU-neutro: il guadagno va cercato lì.
+3. **Validazione Laravel** ([[php-rust-roadmap-wp-first]]): il layout memoria
+   nuovo è a posto (oggetti ~parità oracle, array packed meglio/quasi-parità).
 
-## Candidati successivi (in coda dopo Props slot-based)
+## Candidati successivi
 1. **Memoria packed residua** (se mai servisse): la realloc-copy di Vec tocca
    le pagine (39 vs 16,4 B/el di peak sul 2,5M); mimalloc in-place realloc o
    reserve esplicita nei costruttori bulk (array_fill, range, unserialize).

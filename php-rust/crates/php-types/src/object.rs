@@ -367,19 +367,94 @@ impl ObjectInfo {
     }
 }
 
-/// An insertion-ordered, string-keyed property map. Objects typically have only
-/// a handful of properties, so a linear-scan vector is simpler than a hash index
-/// and preserves declaration/assignment order exactly — which `var_dump` and
-/// `print_r` reproduce (D-19.2).
-#[derive(Debug, Default, Clone)]
-pub struct Props {
-    entries: Vec<(Box<[u8]>, Zval)>,
-    /// FxHash of each key, parallel to `entries` — but LAZY: kept empty while
-    /// the table is small (so cloning a typical object clones an empty Vec —
-    /// no allocation) and built on the first lookup past `HASH_SCAN_MIN`.
-    /// Invariant: either empty, or exactly parallel to `entries`. Lookups on
-    /// large tables compare hashes first, so a miss never touches key bytes.
+/// The per-class declared-property layout: the storage keys of every declared
+/// property in DECLARATION order (parent first, then own — exactly
+/// `CompiledClass::prop_defaults`' key sequence), with their FxHashes
+/// precomputed once per class. Shared `Rc` by every instance: a [`Props`]
+/// table stores only the VALUES (one 16-byte slot per declared property),
+/// like Zend's `zend_object.properties_table` against the class's
+/// `properties_info` — WP-26 measured ~800B/instance of duplicated key bytes
+/// plus 400B of fat pointers on a 25-property object under the old
+/// per-instance `Vec<(Box<[u8]>, Zval)>`.
+#[derive(Debug, Default, PartialEq)]
+pub struct PropsLayout {
+    keys: Vec<Box<[u8]>>,
+    /// FxHash of each key, parallel to `keys`. Built once per class, so
+    /// lookups on large layouts compare hashes first without any
+    /// per-instance state.
     hashes: Vec<u64>,
+}
+
+impl PropsLayout {
+    pub fn new(keys: Vec<Box<[u8]>>) -> Self {
+        let hashes = keys.iter().map(|k| prop_key_hash(k)).collect();
+        PropsLayout { keys, hashes }
+    }
+
+    /// The slot index of storage key `name`, if it is a declared property.
+    #[inline]
+    fn slot_of(&self, name: &[u8]) -> Option<usize> {
+        if self.keys.len() < HASH_SCAN_MIN {
+            return self.keys.iter().position(|k| k.as_ref() == name);
+        }
+        let h = prop_key_hash(name);
+        self.hashes
+            .iter()
+            .enumerate()
+            .find_map(|(i, &eh)| (eh == h && self.keys[i].as_ref() == name).then_some(i))
+    }
+
+    pub fn keys(&self) -> impl Iterator<Item = &[u8]> {
+        self.keys.iter().map(|k| k.as_ref())
+    }
+
+    pub fn len(&self) -> usize {
+        self.keys.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.keys.is_empty()
+    }
+}
+
+thread_local! {
+    /// The shared empty layout for objects with no declared properties
+    /// (stdClass, enum-case carriers, `(object)` casts): `Props::new()` must
+    /// stay allocation-free like the old empty-Vec representation.
+    static EMPTY_LAYOUT: Rc<PropsLayout> = Rc::new(PropsLayout::default());
+}
+
+/// A slot-based property table (Zend `properties_table` semantics):
+/// declared properties live in `slots`, aligned index-for-index with the
+/// class's shared [`PropsLayout`]; dynamic properties follow in assignment
+/// order. Iteration yields declared (declaration order, skipping absent
+/// slots) then dynamic — so an `unset()` declared property that is
+/// re-assigned reappears at its DECLARATION position, matching Zend's fixed
+/// property offsets (the old insertion-ordered table re-appended it, which
+/// diverged in serialize/json_encode/var_dump order).
+///
+/// Slot states: `None` = absent (never seeded, or `unset()`); `Some(Undef)`
+/// = present-but-uninitialized (a typed property without default — rendered
+/// `uninitialized(T)`, still iterated like the old explicit `Undef` entry).
+#[derive(Debug, Clone)]
+pub struct Props {
+    layout: Rc<PropsLayout>,
+    slots: Vec<Option<Zval>>,
+    /// Live (`Some`) slot count, so `len()` stays O(1).
+    live: u32,
+    /// Dynamic (undeclared) properties, in assignment order.
+    dyn_entries: Vec<(Box<[u8]>, Zval)>,
+}
+
+impl Default for Props {
+    fn default() -> Self {
+        Props {
+            layout: EMPTY_LAYOUT.with(Rc::clone),
+            slots: Vec::new(),
+            live: 0,
+            dyn_entries: Vec::new(),
+        }
+    }
 }
 
 /// Below this many entries a plain byte scan beats hash-then-scan.
@@ -398,116 +473,100 @@ impl Props {
         Props::default()
     }
 
-    #[inline]
-    fn position(&mut self, name: &[u8]) -> Option<usize> {
-        if self.entries.len() < HASH_SCAN_MIN {
-            return self.entries.iter().position(|(k, _)| k.as_ref() == name);
+    /// A table for an instance of the class whose declared-property layout is
+    /// `layout`: every declared slot starts absent, ready to be seeded from
+    /// `prop_defaults` (the layout's own key order).
+    pub fn with_layout(layout: Rc<PropsLayout>) -> Self {
+        let n = layout.keys.len();
+        Props {
+            layout,
+            slots: vec![None; n],
+            live: 0,
+            dyn_entries: Vec::new(),
         }
-        if self.hashes.len() != self.entries.len() {
-            self.hashes = self.entries.iter().map(|(k, _)| prop_key_hash(k)).collect();
-        }
-        let h = prop_key_hash(name);
-        self.hashes
-            .iter()
-            .enumerate()
-            .find_map(|(i, &eh)| (eh == h && self.entries[i].0.as_ref() == name).then_some(i))
-    }
-
-    /// The read-only lookup past `HASH_SCAN_MIN` — out of line so the hot
-    /// small-table scan in [`Props::get`]/[`Props::contains`] stays a tight
-    /// inlined loop at every call site (the WP-23 A/B showed the merged
-    /// function stopped inlining and cost ~4% media CPU as a call leaf).
-    fn position_large(&self, name: &[u8]) -> Option<usize> {
-        if self.hashes.len() == self.entries.len() {
-            let h = prop_key_hash(name);
-            return self
-                .hashes
-                .iter()
-                .enumerate()
-                .find_map(|(i, &eh)| (eh == h && self.entries[i].0.as_ref() == name).then_some(i));
-        }
-        self.entries.iter().position(|(k, _)| k.as_ref() == name)
     }
 
     /// The current value of property `name`, if present.
     #[inline]
     pub fn get(&self, name: &[u8]) -> Option<&Zval> {
-        if self.entries.len() < HASH_SCAN_MIN {
-            return self.entries.iter().find(|(k, _)| k.as_ref() == name).map(|(_, v)| v);
+        if let Some(i) = self.layout.slot_of(name) {
+            return self.slots[i].as_ref();
         }
-        self.position_large(name).map(|i| &self.entries[i].1)
+        self.dyn_entries.iter().find(|(k, _)| k.as_ref() == name).map(|(_, v)| v)
     }
 
     /// A mutable handle to property `name`, if present.
     #[inline]
     pub fn get_mut(&mut self, name: &[u8]) -> Option<&mut Zval> {
-        if self.entries.len() < HASH_SCAN_MIN {
-            return self
-                .entries
-                .iter_mut()
-                .find(|(k, _)| k.as_ref() == name)
-                .map(|(_, v)| v);
+        if let Some(i) = self.layout.slot_of(name) {
+            return self.slots[i].as_mut();
         }
-        self.position(name).map(|i| &mut self.entries[i].1)
+        self.dyn_entries
+            .iter_mut()
+            .find(|(k, _)| k.as_ref() == name)
+            .map(|(_, v)| v)
     }
 
     #[inline]
     pub fn contains(&self, name: &[u8]) -> bool {
-        if self.entries.len() < HASH_SCAN_MIN {
-            return self.entries.iter().any(|(k, _)| k.as_ref() == name);
+        if let Some(i) = self.layout.slot_of(name) {
+            return self.slots[i].is_some();
         }
-        self.position_large(name).is_some()
+        self.dyn_entries.iter().any(|(k, _)| k.as_ref() == name)
     }
 
-    /// Set property `name`, updating in place (keeping its position) if it already
-    /// exists, otherwise appending it at the end.
+    /// Set property `name`: a declared property writes its slot (an absent
+    /// one revives AT ITS DECLARATION POSITION, like Zend's fixed offsets);
+    /// a dynamic one updates in place or appends at the end.
     #[inline]
     pub fn set(&mut self, name: &[u8], value: Zval) {
-        // A push may desync `hashes` — the next large lookup detects the
-        // length mismatch and rebuilds (see `position`).
-        if self.entries.len() < HASH_SCAN_MIN {
-            match self.entries.iter_mut().find(|(k, _)| k.as_ref() == name) {
-                Some((_, slot)) => *slot = value,
-                None => self.entries.push((name.into(), value)),
+        if let Some(i) = self.layout.slot_of(name) {
+            if self.slots[i].is_none() {
+                self.live += 1;
             }
+            self.slots[i] = Some(value);
             return;
         }
-        match self.position(name) {
-            Some(i) => self.entries[i].1 = value,
-            None => self.entries.push((name.into(), value)),
+        match self.dyn_entries.iter_mut().find(|(k, _)| k.as_ref() == name) {
+            Some((_, slot)) => *slot = value,
+            None => self.dyn_entries.push((name.into(), value)),
         }
     }
 
-    /// Set property `name` (updating in place / appending, like [`Props::set`]),
-    /// returning the value it displaced — or `None` when newly inserted. Used by
-    /// the property write path to hand the dropped value to the GC's
-    /// possible-roots tracking.
+    /// Set property `name` (like [`Props::set`]), returning the value it
+    /// displaced — or `None` when newly inserted. Used by the property write
+    /// path to hand the dropped value to the GC's possible-roots tracking.
     #[inline]
     pub fn replace(&mut self, name: &[u8], value: Zval) -> Option<Zval> {
-        if self.entries.len() < HASH_SCAN_MIN {
-            match self.entries.iter_mut().find(|(k, _)| k.as_ref() == name) {
-                Some((_, slot)) => return Some(std::mem::replace(slot, value)),
-                None => {
-                    self.entries.push((name.into(), value));
-                    return None;
-                }
+        if let Some(i) = self.layout.slot_of(name) {
+            let old = self.slots[i].replace(value);
+            if old.is_none() {
+                self.live += 1;
             }
+            return old;
         }
-        match self.position(name) {
-            Some(i) => Some(std::mem::replace(&mut self.entries[i].1, value)),
+        match self.dyn_entries.iter_mut().find(|(k, _)| k.as_ref() == name) {
+            Some((_, slot)) => Some(std::mem::replace(slot, value)),
             None => {
-                self.entries.push((name.into(), value));
+                self.dyn_entries.push((name.into(), value));
                 None
             }
         }
     }
 
-    /// Remove property `name`; returns whether it was present.
+    /// Remove property `name`; returns whether it was present. A declared
+    /// property's slot goes absent (its declaration position is kept for a
+    /// possible re-assignment); a dynamic one is spliced out.
     pub fn remove(&mut self, name: &[u8]) -> bool {
-        if let Some(pos) = self.position(name) {
-            self.entries.remove(pos);
-            // Desyncs `hashes` (self-healing on the next &mut lookup).
-            self.hashes.clear();
+        if let Some(i) = self.layout.slot_of(name) {
+            if self.slots[i].take().is_some() {
+                self.live -= 1;
+                return true;
+            }
+            return false;
+        }
+        if let Some(pos) = self.dyn_entries.iter().position(|(k, _)| k.as_ref() == name) {
+            self.dyn_entries.remove(pos);
             true
         } else {
             false
@@ -531,7 +590,12 @@ impl Props {
     /// alias, or an intra-object alias shared by several properties) are left
     /// untouched.
     pub fn separate_cloned_internal_refs(&mut self) {
-        for (_, v) in self.entries.iter_mut() {
+        let values = self
+            .slots
+            .iter_mut()
+            .filter_map(Option::as_mut)
+            .chain(self.dyn_entries.iter_mut().map(|(_, v)| v));
+        for v in values {
             if let Zval::Ref(cell) = v {
                 if Rc::strong_count(cell) == 2 {
                     let inner = cell.borrow().clone();
@@ -541,17 +605,22 @@ impl Props {
         }
     }
 
-    /// Iterate properties in insertion order.
+    /// Iterate properties: declared first (declaration order, skipping absent
+    /// slots), then dynamic in assignment order.
     pub fn iter(&self) -> impl Iterator<Item = (&[u8], &Zval)> {
-        self.entries.iter().map(|(k, v)| (k.as_ref(), v))
+        self.slots
+            .iter()
+            .enumerate()
+            .filter_map(|(i, s)| s.as_ref().map(|v| (self.layout.keys[i].as_ref(), v)))
+            .chain(self.dyn_entries.iter().map(|(k, v)| (k.as_ref(), v)))
     }
 
     pub fn len(&self) -> usize {
-        self.entries.len()
+        self.live as usize + self.dyn_entries.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
+        self.live == 0 && self.dyn_entries.is_empty()
     }
 }
 

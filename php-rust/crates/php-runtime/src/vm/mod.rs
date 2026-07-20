@@ -6393,7 +6393,7 @@ impl<'m> Vm<'m> {
         // unserialize builds the object from the class's default-properties
         // table and only then applies the serialized fields (doctrine's
         // Instantiator relies on `O:N:"C":0:{}` yielding a defaulted instance).
-        let mut props = Props::new();
+        let mut props = Props::with_layout(Rc::clone(&cc.props_layout));
         for (name, c) in &cc.prop_defaults {
             props.set(name, c.to_zval());
         }
@@ -8213,7 +8213,7 @@ impl<'m> Vm<'m> {
                 String::from_utf8_lossy(&cc.name)
             )));
         }
-        let mut props = Props::new();
+        let mut props = Props::with_layout(Rc::clone(&cc.props_layout));
         for (name, c) in &cc.prop_defaults {
             props.set(name, c.to_zval());
         }
@@ -8325,7 +8325,7 @@ impl<'m> Vm<'m> {
             // value is captured so its references can be released as possible
             // GC roots — resetting a live object runs the destructors of what
             // it held, matching PHP); a preserved slot keeps its value.
-            let mut props = Props::new();
+            let mut props = Props::with_layout(Rc::clone(&self.classes[ocid].props_layout));
             let mut dropped: Vec<Zval> = Vec::new();
             let mut declared: HashSet<&[u8]> = HashSet::default();
             for (key, _) in &self.classes[ocid].prop_defaults {
@@ -8450,7 +8450,7 @@ impl<'m> Vm<'m> {
                         .map(|v| v.iter().cloned().collect())
                         .unwrap_or_default();
                     let mut b = rc.borrow_mut();
-                    let mut props = Props::new();
+                    let mut props = Props::with_layout(Rc::clone(&cc.props_layout));
                     let mut declared: HashSet<&[u8]> = HashSet::default();
                     for (name, c) in &cc.prop_defaults {
                         declared.insert(name.as_ref());
@@ -8651,7 +8651,7 @@ impl<'m> Vm<'m> {
         // behind `$b`/`$c` in the dump). Rebuild against the class layout.
         let old = {
             let mut b = rc.borrow_mut();
-            let mut props = Props::new();
+            let mut props = Props::with_layout(Rc::clone(&self.classes[cid].props_layout));
             let mut old = None;
             let mut value = Some(value);
             for (key, _) in &self.classes[cid].prop_defaults {
@@ -8780,7 +8780,7 @@ impl<'m> Vm<'m> {
             return; // dynamic properties append as usual
         }
         let mut b = o.borrow_mut();
-        let mut props = Props::new();
+        let mut props = Props::with_layout(Rc::clone(&self.classes[cid].props_layout));
         let mut declared: HashSet<&[u8]> = HashSet::default();
         for (k, _) in &self.classes[cid].prop_defaults {
             declared.insert(k.as_ref());

@@ -994,6 +994,9 @@ impl<'f> Lowerer<'f> {
                 p.readonly = true;
             }
         }
+        // `new #[AllowDynamicProperties] class { … }`: class-target attributes
+        // apply to anonymous classes too (the deprecation gate reads them).
+        decl.attributes = self.lower_attributes(&anon.attribute_lists, line)?;
         decl.is_final = anon.modifiers.iter().any(|m| m.is_final());
         self.anon_classes.push(decl);
         let (args, named) = match &anon.argument_list {

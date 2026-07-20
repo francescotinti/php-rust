@@ -1371,6 +1371,9 @@ pub struct CompiledClass {
     pub prop_defaults: Vec<(Box<[u8]>, Const)>,
     /// Declared-property visibility shape (for `var_dump`), shared by all instances.
     pub info: Rc<ObjectInfo>,
+    /// Slot layout for instance property tables (`prop_defaults`' storage keys
+    /// in declaration order), shared by every instance's [`Props`].
+    pub props_layout: Rc<php_types::PropsLayout>,
     /// Methods declared *on this class* (resolution walks `parent` at run time).
     pub methods: Vec<CompiledMethod>,
     /// Names of abstract methods this class carries unimplemented (own,

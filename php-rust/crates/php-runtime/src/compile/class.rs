@@ -398,6 +398,9 @@ pub(super) fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> C
         instantiable,
         is_final: cd.is_final,
         is_abstract: cd.is_abstract,
+        props_layout: Rc::new(php_types::PropsLayout::new(
+            prop_defaults.iter().map(|(k, _)| k.clone()).collect(),
+        )),
         prop_defaults,
         info: Rc::new(ObjectInfo::from_entries_typed(vis_entries, prop_type_displays)),
         methods,
@@ -521,6 +524,7 @@ pub(super) fn stub_class(cd: &crate::hir::ClassDecl) -> CompiledClass {
         is_final: false,
         is_abstract: false,
         prop_defaults: Vec::new(),
+        props_layout: Rc::new(php_types::PropsLayout::default()),
         info: Rc::new(ObjectInfo::from_entries(Vec::new())),
         methods: Vec::new(),
         abstract_methods: Vec::new(),

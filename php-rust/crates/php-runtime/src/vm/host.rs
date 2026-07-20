@@ -2640,7 +2640,7 @@ impl<'m> super::Vm<'m> {
             };
             if uninit {
                 let cc = self.classes[cid];
-                let mut props = Props::new();
+                let mut props = Props::with_layout(Rc::clone(&cc.props_layout));
                 for (name, c) in &cc.prop_defaults {
                     props.set(name, c.to_zval());
                 }
