@@ -1239,6 +1239,10 @@ pub struct Func {
     /// weak typing (raising `TypeError` on failure), or checks it under
     /// `declare(strict_types=1)` (step 14 / 16).
     pub param_hints: Box<[Option<TypeHint>]>,
+    /// Precomputed `param_hints.iter().any(is_some)` (WP-31): `enter_callee`
+    /// consults it on every call — the per-call scan was pure waste for the
+    /// overwhelmingly common hint-free function.
+    pub has_hints: bool,
     /// The declared scalar return type hint (step 14), enforced on the returned
     /// value at [`Op::Ret`]. `None` for an absent / non-scalar return type, and
     /// left unenforced for a by-reference function (which returns an alias).

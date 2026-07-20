@@ -1106,7 +1106,7 @@ impl<'m> Vm<'m> {
                 self.frames.len()
             );
         }
-        if func.param_hints.iter().any(Option::is_some) {
+        if func.has_hints {
             let strict = caller_strict;
             for i in 0..func.n_params as usize {
                 if Some(i as Slot) == func.variadic_slot {
