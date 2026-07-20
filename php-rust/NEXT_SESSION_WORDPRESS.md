@@ -142,7 +142,21 @@ H="/Volumes/Extreme Pro/Claude/wp16-harness"
    valutato e rinviato — invasivo per ~1%).
 
 2-bis. **Valutazione suggerimenti Gemini (`20260721-gemini.md`, verificati
-   sul codice il 2026-07-21)**:
+   sul codice il 2026-07-21)**. ⚠️ il documento è stato POI aggiornato da
+   Gemini recependo questa revisione (ora 3 sezioni allineate ai verdetti:
+   op-clone = bersaglio primario col meccanismo &'m corretto, has_hints =
+   micro-task immediato, NaN-boxing/interning = medio termine; il punto
+   gc_note è stato rimosso perché già implementato). La numerazione
+   Punto 1–5 qui sotto si riferisce alla versione ORIGINALE ed è tenuta
+   come record della verifica. Unica precisazione residua sul doc
+   aggiornato: l'op-clone NON alloca (payload Rc dal WP-22) — copia la
+   struct Op + refcount bump per istruzione; il guadagno è togliere QUELLO,
+   non "allocazioni".
+
+   **→ Raccomandazione operativa WP-31**: (a) match del run_loop su
+   `&'m Op` (refactor grande ma meccanico, run.rs:92 + tutte le arm), (b)
+   `has_hints: bool` precomputato su Func (micro, sicuro), con A/B
+   interleaved + full-suite come al solito.
    - **✅ Punto 1 (op-clone nel run_loop) — VALIDO, è la prossima leva
      consigliata.** `run.rs:92` clona l'op a ogni istruzione. Correzione al
      meccanismo proposto: NON serve alcun `Rc::clone` del func —
