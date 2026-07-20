@@ -1,4 +1,39 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-29: slot-index/IC proprietà + dispatch ci)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-30: frame arena + MethodIc + PropIncDec IC)
+
+> ⚡ **WP-30 (2026-07-21 notte, gated `fb5e9c2`→`06a3c5b`, 3 commit)**: frame
+> arena + IC sul dispatch metodi + IC su `$o->n++`. **(1) Frame arena**:
+> `FramePool` bounded (64 coppie, cap 512 slot) di buffer `(slots, stack)`;
+> `Frame::with_buffers` riusa la capacity (l'unica alloc obbligatoria per
+> chiamata era `vec![Undef; n_slots]`); pull nei ~17 siti caldi, riciclo nei 6
+> siti di DROP (Ret/unwind/drive_to_return/coroutines×3) sempre DOPO
+> gc_note_frame — ⭐ l'ordine di clear (slots→stack→resto) riproduce ESATTO il
+> Drop derivato: id-reuse LIFO invariato (probe #201 su ricorsione 200 =
+> oracle); i siti che MUOVONO il frame (park generatori/fiber, retired_main)
+> NON riciclano. **(2) MethodIc** su MethodCall+StaticCall (gemello di PropIc:
+> `Rc<Cell<(epoch, cid+1, defc, midx)>>`): hit dentro dispatch_instance_call a
+> valle degli shunt Generator/Fiber/Closure; ⭐⭐ fill SOLO scope-indipendente =
+> vincitore public **E nessun antenato proprio con un metodo `private`
+> omonimo** (`private_shadow_in_chain`, primo-vince come parent_private_rebind
+> — con Closure::bind qualsiasi scope passa dal sito; test runBare-pattern);
+> static: keyed su `start`, hit DOPO il blocco builtin enum, fill = solo
+> public (niente rebind su quel path). **(3) PropIc su PropIncDec**: gemello
+> RMW del hit PropSet (fill solo classi plain_set_props ⇒ readonly/asym/typed/
+> hook vacui sul hit; slot Undef/assente → fall-through); ⭐ audit:
+> `Op::PropOpSet` è CODICE MORTO (i compound prop assign abbassano a
+> PropGet+PropSet già IC-ati — annotato). **Esito misurato**: microbench
+> call-heavy −4,4% user; full-suite master-CPU 15:27→**15:12** (−1,6%,
+> run21 = run20 per nome); media group phpr 82,4→80,7s (−2%; il rapporto
+> 3,8× sale solo perché l'oracle OGGI gira −9%: 21,0 vs 23,0 — rumore
+> giornaliero, confrontare i rapporti con cautela). Riprofilo
+> (`wp30-harness/ab-out/new-wp30.sample`): **resolve_method_runtime SPARITO
+> dalla top-30** (era 4° con 117), resolve_prop_access 9%→3% del run_loop,
+> from_elem/finish_grow spariti; recycle_frame costa ~2%. gate22 TUTTO verde
+> (⚠️ /private/tmp/wp11-gates PERSO vendor/ per pulizia di /tmp: ri-estratti
+> i tarball wp9-harness/gates/ e ri-runnati ORM 3E/13F + hk 0E/0F identici).
+> cargo **1592** (+19 test: frame_pool_×5, method_ic_×6, static_ic_×4,
+> prop_incdec_ic_×4).
+
+# (storia WP-29)
 
 > ⚡ **WP-29 (2026-07-20 sera, gated `4297fe5`→`f375bc9`, 6 commit)**: punti 1+2
 > del piano perf. **(A) Proprietà**: `PropInfo.slot` precalcolato (allineato a
@@ -55,13 +90,16 @@ Riprendiamo phpr (PHP 8.5.7 in Rust). **Roadmap**: obiettivo primario = 100%
 compatibilità WordPress; la WP core test suite (PHPUnit) è il GATE PER NOME.
 
 ## Stato gate per nome (tutte le superfici)
-- Gate22 WP-29 verde (wp22-harness/gate-out): corpus **1455** · sess 28 ·
+- Gate22 WP-30 verde (wp22-harness/gate-out): corpus **1455** · sess 28 ·
   date 351 · refl 290 IDENTICI · ORM 3E/13F identico per nome · hk 1665 0E/0F ·
-  cargo **1573**/0 · probe gd/mysqli/media byte-id · http battery DIFF-set = 16
-  (WP-14) · option 413 e restapi 3514 identici per nome.
-- **Full-suite single-site run20: IDENTICA a run19/run17/run16 per nome
-  (30.481 test, 0E/2F/86W/73S) = minimo teorico**, master-CPU 15:27.
-  Archiviata in `wp16-harness/full-out/run20/`.
+  cargo **1592**/0 · probe gd/mysqli/media byte-id · http battery DIFF-set = 16
+  (WP-14) · option 413 e restapi 3514 identici per nome. ⚠️ i work-tree
+  ORM/hk in /private/tmp/wp11-gates possono sparire (pulizia /tmp): se
+  "Could not open input file: vendor/bin/phpunit", ri-estrarre i tarball da
+  wp9-harness/gates/ e ri-runnare.
+- **Full-suite single-site run21: IDENTICA a run20/run19/run17/run16 per nome
+  (30.481 test, 0E/2F/86W/73S) = minimo teorico**, master-CPU 15:12.
+  Archiviata in `wp16-harness/full-out/run21/`.
 - **Full-suite multisite RICONFERMATA (WP-28): 1 diff per nome — minimo
   teorico** (31.278 test, 0E/2F; solo `wp_is_stream #2`;
   `wp19-harness/ms-out/diff-names-wp28.txt`).
@@ -86,18 +124,22 @@ H="/Volumes/Extreme Pro/Claude/wp16-harness"
 1. **Validazione Laravel** ([[php-rust-roadmap-wp-first]]): WP-track satura
    (full-suite e multisite al minimo teorico; estensioni citate chiuse salvo
    3 residui strutturali sotto).
-2. **Perf, prossima leva (dal profilo POST-WP-29,
-   `wp29-harness/ab-out/new-t45.sample`)**: il tetto misurato di
-   slot-index+interning sul MEDIA group è ~1% (dominato da gd/webp/mysql);
-   sulla FULL-suite vale −7,6%. I colli residui phpr-only, in ordine:
-   run_loop/dispatch (1188 campioni — opcode specialization/quickening),
-   memmove 328 + drop/clone Zval ~250 (value churn → la mossa grossa è la
-   value-representation), call machinery bind_params+enter_callee+Frame::drop
-   ~165 (**frame arena**: il candidato col miglior ROI/rischio), GC
-   note/sweep ~180, PhpArray::insert+hashbrown ~130, is_instance_of+iface
-   ~75 (cache per (class,target)). Estensioni facili del lavoro WP-29:
-   PropIc anche su PropOpSet/PropIncDec e IC (class→(defc,midx)) sui siti
-   MethodCall.
+2. **Perf, prossima leva (dal profilo POST-WP-30,
+   `wp30-harness/ab-out/new-wp30.sample`)**: frame arena + MethodIc +
+   PropIncDec IC hanno chiuso il filone dispatch/call-alloc (WP-30: micro
+   −4,4%, full −1,6%; resolve_method_runtime sparito dal profilo). I colli
+   residui phpr-only, normalizzati sul run_loop: **run_loop stesso** (il
+   collo dominante — opcode specialization/quickening, op-clone per
+   iterazione), **memmove + drop/clone Zval** (value churn → la mossa grossa
+   resta la value-representation), gc_note 231 + gc_sweep 156 (bookkeeping),
+   memcmp 245 (confronti chiavi/stringhe), slot_of 166 RESIDUO (i
+   field-walker di vm/arrays.rs — il punto A2.5 del piano WP-29 coperto solo
+   in parte: ResolvedProp con slot nei walker), hashbrown get 241,
+   PhpArray::insert 105, deref_object 108, is_instance_of+iface ~90 (cache
+   per (class,target)), enter_callee/bind_params ~316 (lavoro VERO di
+   binding/coercion — riducibile solo con call-site specialization),
+   mi_malloc/free ~180 (STRETCH 1d: pooling del Vec args di pop_keys,
+   valutato e rinviato — invasivo per ~1%).
 3. **Residui strutturali** (se si vuole il 100% delle suite estensioni):
    - `ast_printing.phpt`: serve un vero zend_ast_export sull'HIR (il dedent
      del sorgente non basta: manca la riga vuota dopo le class decl).
@@ -134,8 +176,35 @@ misurare e riportare all'utente il gap aggiornato e aggiornare la tabella
 | WP-27 | 82,7/21,1 = **3,9×** | 4,78/0,40GB = **12,0×** | 16:11/5:39 = **2,9×** | ~22/11,5 min = **1,9×** |
 | WP-28 | 87,6/23,0 = **3,8×** | 4,83/0,40GB = **12,2×** | 16:43/5:39 = **3,0×** | ~22/11,5 min = **1,9×** |
 | WP-29 | 82,4/23,0 = **3,6×** | 4,84/0,40GB = **12,1×** | 15:27/5:39 = **2,7×** | ~22/11,5 min = **1,9×** |
+| WP-30 | 80,7/21,0 = **3,8×** ⚠️ | 4,80/0,40GB = **12,1×** | 15:12/5:39 = **2,7×** | ~20/11,5 min = **1,7×** |
 
-## Lezioni operative (nuove WP-29)
+⚠️ riga WP-30: phpr media in calo ASSOLUTO (82,4→80,7) ma l'oracle del giorno
+gira −9% (23,0→21,0) → il rapporto sale per rumore dell'oracle, non per una
+regressione phpr (2 coppie consistenti: 80,42/21,03 e 80,97/21,02).
+
+## Lezioni operative (nuove WP-30)
+- ⭐⭐ **Una method-IC keyed solo sulla classe receiver è UNSOUND anche per
+  vincitori public** se un antenato dichiara un `private` omonimo: il
+  parent_private_rebind dipende dallo scope chiamante e `Closure::bind`
+  porta qualsiasi scope su qualsiasi sito. Fill = public + scan
+  `private_shadow_in_chain` (freddo, a fill-time).
+- ⭐⭐ **Riciclare buffer di frame è sicuro solo se l'ordine dei decrementi Rc
+  resta bit-identico al Drop derivato** (slots.clear() → stack.clear() →
+  drop(resto), stesso ordine di dichiarazione dei campi) e solo nei siti di
+  DROP post-gc_note_frame — mai nei siti che MUOVONO il frame (park
+  generatori/fiber, retired_main).
+- ⭐ I by-ref args aliasano via `Rc<RefCell<Zval>>`, MAI dentro il buffer
+  slots ⇒ il riciclo del backing store non può creare dangling.
+- ⭐ Prima di aggiungere una IC a un op, verificare che l'op sia EMESSO:
+  `Op::PropOpSet` era codice morto (compound → PropGet+PropSet).
+- ⭐ /private/tmp può perdere i work-tree dei gate (vendor/ sparito a metà
+  gate22): l'errore "Could not open input file" NON è una regressione —
+  ri-estrarre i tarball wp9-harness/gates/ e ri-runnare solo ORM/hk.
+- Il rapporto oracle↔phpr del media group balla col giorno (oracle ±9%):
+  per le OTTIMIZZAZIONI fidarsi di A/B interleaved new/old e full-suite;
+  la tabella gap va letta coi rapporti MA annotando gli assoluti.
+
+## Lezioni operative (WP-29)
 - ⭐⭐ **Le inline-cache vanno riempite da OGNI percorso che risolve** — se un
   fast-path esistente intercetta il traffico prima del percorso generale (il
   solo che riempiva), la cache resta fredda per sempre e paghi solo il guard.
