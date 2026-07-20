@@ -128,15 +128,22 @@ impl Const {
 }
 
 /// Case-insensitive symbol hash (WP-29 B1): FxHash over the ASCII-lowercased
-/// bytes, computed byte-at-a-time so a LOOKUP never allocates a lowercased
-/// copy. PHP function/method names are ASCII-case-insensitive. Build and
-/// lookup must both use this exact procedure (per-byte writes hash differently
-/// from a single slice write).
+/// bytes. The lowercased copy lives on the stack (identifiers are short) so a
+/// LOOKUP never allocates, and the hasher sees one slice write — per-byte
+/// `write_u8` ran a full Fx round per byte and profiled SLOWER than the
+/// legacy scan on small method tables. Build and lookup share this exact
+/// procedure.
 pub fn ci_hash(name: &[u8]) -> u64 {
     use std::hash::Hasher;
     let mut h = rustc_hash::FxHasher::default();
-    for &b in name {
-        h.write_u8(b.to_ascii_lowercase());
+    if name.len() <= 64 {
+        let mut buf = [0u8; 64];
+        for (d, s) in buf.iter_mut().zip(name) {
+            *d = s.to_ascii_lowercase();
+        }
+        h.write(&buf[..name.len()]);
+    } else {
+        h.write(&name.to_ascii_lowercase());
     }
     h.finish()
 }

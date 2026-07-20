@@ -2682,6 +2682,16 @@ impl<'m> super::Vm<'m> {
                             if ci.all_props_public && !ci.has_prop_hooks {
                                 if let Some(v) = b.props.get(&name) {
                                     if !matches!(v, Zval::Undef) {
+                                        // IC fill from the fast path too —
+                                        // all-public classes NEVER reach the
+                                        // general resolve, and without this
+                                        // the site's cache stays cold forever
+                                        // (every access re-pays slot_of).
+                                        if let Some(pi) = ci.prop_info.get(&name[..]) {
+                                            if let Some(i) = pi.slot {
+                                                ic.fill(b.class_id, i);
+                                            }
+                                        }
                                         // deref_clone: a slot holding a Ref
                                         // reads as its inner value (same as
                                         // read_property).
@@ -2903,19 +2913,30 @@ impl<'m> super::Vm<'m> {
                     // (dynamic-prop creation/deprecation, `__set`); a Ref slot
                     // with live typed refs falls through (typed_ref_assign).
                     if let Zval::Object(o) = &target {
-                        let fast = {
+                        let (fast, fcid) = {
                             let b = o.borrow();
-                            b.lazy.is_none()
+                            let ok = b.lazy.is_none()
                                 && !b.info.is_enum_case
                                 && self.classes[b.class_id as usize].plain_set_props
                                 && match b.props.get(&name) {
                                     Some(Zval::Ref(_)) => self.typed_refs.is_empty(),
                                     Some(_) => true,
                                     None => false,
-                                }
+                                };
+                            (ok, b.class_id)
                         };
                         if fast {
-                            if let Some(old) = write_property(&target, &name, value.clone())? {
+                            // IC fill from the fast path too (see PropGet):
+                            // plain_set_props classes never reach the general
+                            // resolve, so without this the cache stays cold.
+                            let slot = self.classes[fcid as usize]
+                                .prop_info
+                                .get(&name[..])
+                                .and_then(|pi| pi.slot);
+                            if let Some(i) = slot {
+                                ic.fill(fcid, i);
+                            }
+                            if let Some(old) = write_property_at(&target, &name, slot, value.clone())? {
                                 self.gc_note(&old);
                             }
                             self.frames[top].stack.push(value);
@@ -3318,6 +3339,13 @@ impl<'m> super::Vm<'m> {
                             if ci.all_props_public && !ci.has_prop_hooks {
                                 if let Some(v) = b.props.get(&name) {
                                     if !matches!(v, Zval::Undef) {
+                                        // IC fill from the fast path too (see
+                                        // PropGet).
+                                        if let Some(pi) = ci.prop_info.get(&name[..]) {
+                                            if let Some(i) = pi.slot {
+                                                ic.fill(b.class_id, i);
+                                            }
+                                        }
                                         let set = !matches!(v.deref_clone(), Zval::Null | Zval::Undef);
                                         drop(b);
                                         self.frames[top].stack.push(Zval::Bool(set));

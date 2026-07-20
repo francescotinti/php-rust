@@ -164,7 +164,11 @@ pub(super) fn resolve_method_runtime(classes: &[&CompiledClass], start: ClassId,
     // unit saw.
     if let Some(class) = classes.get(start) {
         let tbl = &class.methods_ci;
-        if !tbl.is_empty() {
+        // Below this size the direct chain scan (early-exit byte compare)
+        // beats hash+bsearch — same trade as PropsLayout's HASH_SCAN_MIN.
+        // The table still matters for the WP-style god classes (wpdb,
+        // WP_Query, PHPUnit TestCase chains: 50-300 methods).
+        if tbl.len() >= 12 {
             let h = crate::bytecode::ci_hash(name);
             let mut i = tbl.partition_point(|e| e.0 < h);
             while let Some(&(eh, cid, midx)) = tbl.get(i) {
