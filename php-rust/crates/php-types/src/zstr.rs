@@ -70,7 +70,12 @@ impl Eq for PhpStr {}
 
 impl std::hash::Hash for PhpStr {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.bytes.hash(state);
+        // WP-29 B4: feed the CACHED per-string hash (zend_string->h
+        // semantics) instead of re-hashing the bytes — an array-key string
+        // hashes once in its lifetime, not on every PhpArray/HashMap
+        // insert/lookup. Eq stays byte-based, and equal bytes yield equal
+        // zhash, so the Hash/Eq contract holds.
+        state.write_u64(self.zhash());
     }
 }
 
