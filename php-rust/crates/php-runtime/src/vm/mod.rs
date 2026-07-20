@@ -8032,6 +8032,7 @@ impl<'m> Vm<'m> {
         forwarding: bool,
         mut args: Vec<Zval>,
         named: Vec<(Box<[u8]>, Zval)>,
+        ic: Option<&crate::bytecode::MethodIc>,
     ) -> Result<(), PhpError> {
         // Deferred place arguments (SEND_VAR_EX) resolve against the callee's
         // by-ref mask now that it is known; an unresolved/invisible target
@@ -8074,10 +8075,28 @@ impl<'m> Vm<'m> {
                 }
             }
         }
-        let resolved = resolve_method_runtime(&self.classes, start, method);
-        let usable = resolved.filter(|&(defc, midx)| {
-            method_visible_from(&self.classes, self.frames[top].class, self.classes[defc].methods[midx].visibility, defc, method)
-        });
+        // INLINE CACHE (WP-30): keyed on the resolved `start` (self/parent/
+        // static targets revalidate naturally). Placed AFTER the enum-builtin
+        // shadowing above — `cases`/`from`/`tryFrom` return before resolution
+        // and can never fill. No private-rebind exists on this path, so the
+        // fill predicate is just "public winner" (visibility is the only
+        // scope-dependent step). LSB/forwarding/$this run identically below.
+        let mut resolved = None;
+        let usable = match ic.and_then(|ic| ic.get(start)) {
+            Some(hit) => Some(hit),
+            None => {
+                resolved = resolve_method_runtime(&self.classes, start, method);
+                let usable = resolved.filter(|&(defc, midx)| {
+                    method_visible_from(&self.classes, self.frames[top].class, self.classes[defc].methods[midx].visibility, defc, method)
+                });
+                if let (Some(ic), Some((defc, midx))) = (ic, usable) {
+                    if self.classes[defc].methods[midx].visibility == Visibility::Public {
+                        ic.fill(start, defc, midx);
+                    }
+                }
+                usable
+            }
+        };
         // LSB: a forwarding call keeps the caller's; a named/dynamic call rebinds.
         let static_class = if forwarding {
             self.frames[top].static_class.unwrap_or(start)
@@ -15239,6 +15258,70 @@ mod tests {
         assert_eq!(a.get(9), Some((4, 1)), "clone shares the cell");
         crate::bytecode::bump_ic_epoch();
         assert_eq!(a.get(9), None, "epoch bump invalidates");
+    }
+
+    #[test]
+    fn static_ic_polymorphic_static_target() {
+        // One `static::f()` site executed with two different LSB starts:
+        // keyed on the resolved start class, it must revalidate per call.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class S1 { public static function f(){ return 'A'; } public static function call(){ return static::f(); } }
+                class S2 extends S1 { public static function f(){ return 'B'; } }
+                echo S1::call(), S2::call(), S1::call();"
+            ),
+            b"ABA"
+        );
+    }
+
+    #[test]
+    fn static_ic_forwarding_keeps_lsb() {
+        // A forwarding `parent::go()` keeps the caller's LSB after the site
+        // fills — the LSB computation runs on the hit path too.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class F1 { public static function who(){ return static::class; } public static function go(){ return static::who(); } }
+                class F2 extends F1 { public static function go2(){ return parent::go(); } }
+                echo F1::go(), '|', F2::go2(), '|', F1::go();"
+            ),
+            b"F1|F2|F1"
+        );
+    }
+
+    #[test]
+    fn static_ic_enum_builtin_never_cached() {
+        // One dynamic-class site alternating a user `from` and the enum
+        // builtin `from`: the builtin returns before resolution, never fills,
+        // and a filled user target must not shadow the builtin either (the
+        // enum block runs ahead of the hit).
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                enum E: int { case X = 1; }
+                class W { public static function from(int $v){ return 'w' . $v; } }
+                function site(string $c, int $v){ return $c::from($v); }
+                echo site(W::class, 3), '|', site(E::class, 1)->name, '|', site(W::class, 4);"
+            ),
+            b"w3|X|w4"
+        );
+    }
+
+    #[test]
+    fn static_ic_protected_not_cached() {
+        // A protected static winner never fills: the in-hierarchy call keeps
+        // working and the out-of-hierarchy call still raises the Error.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class PS { protected static function p(){ return 'p'; } public static function go(){ return static::p(); } }
+                echo PS::go();
+                try { echo PS::p(); } catch (Error $e) { echo 'E'; }
+                echo PS::go();"
+            ),
+            b"pEp"
+        );
     }
 
     #[test]

@@ -492,7 +492,7 @@ impl<'m> Vm<'m> {
                     let method = bytes[pos + 2..].to_vec();
                     let cid = self.resolve_dynamic_class(&cls)?;
                     let top = self.frames.len() - 1;
-                    self.dispatch_static_call(top, cid, &method, false, args, Vec::new())
+                    self.dispatch_static_call(top, cid, &method, false, args, Vec::new(), None)
                 } else {
                     let name = bytes.to_vec();
                     self.invoke_named(&name, args)
@@ -545,7 +545,7 @@ impl<'m> Vm<'m> {
             }
             Zval::Str(_) => {
                 let cid = self.resolve_dynamic_class(&elems[0])?;
-                self.dispatch_static_call(top, cid, &method, false, args, Vec::new())
+                self.dispatch_static_call(top, cid, &method, false, args, Vec::new(), None)
             }
             _ => Err(not_callable()),
         }

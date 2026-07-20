@@ -574,7 +574,13 @@ impl<'a> super::FnCompiler<'a> {
                                 }
                                 None => self.push_dyn_args(args)?,
                             }
-                            self.emit(Op::StaticCall { target, method: method.clone().into(), forwarding, argc });
+                            self.emit(Op::StaticCall {
+                                target,
+                                method: method.clone().into(),
+                                forwarding,
+                                argc,
+                                ic: MethodIc::default(),
+                            });
                         }
                     } else {
                         // Named args: lay them into the resolved method's parameter
@@ -604,6 +610,7 @@ impl<'a> super::FnCompiler<'a> {
                                     method: method.clone().into(),
                                     forwarding,
                                     argc: n,
+                                    ic: MethodIc::default(),
                                 });
                             }
                             None => {

@@ -3654,7 +3654,7 @@ impl<'m> super::Vm<'m> {
                     let result = matches!(v.deref_clone(), Zval::Generator(_));
                     self.frames[top].stack.push(Zval::Bool(result));
                 }
-                Op::StaticCall { target, method, forwarding, argc } => {
+                Op::StaticCall { target, method, forwarding, argc, ic } => {
                     let mut args = self.pop_keys(top, argc);
                     let start = self.target_class_id(target, top)?;
                     // `Fiber::suspend` / `Fiber::getCurrent` are native static
@@ -3690,7 +3690,7 @@ impl<'m> super::Vm<'m> {
                             continue;
                         }
                     }
-                    self.dispatch_static_call(top, start, &method, forwarding, args, Vec::new())?;
+                    self.dispatch_static_call(top, start, &method, forwarding, args, Vec::new(), Some(&ic))?;
                 }
                 Op::HookCall { target, prop, set, argc } => {
                     // PHP 8.4 `parent::$prop::get()` / `parent::$prop::set($v)`.
@@ -3766,7 +3766,7 @@ impl<'m> super::Vm<'m> {
                     let argsval = self.frames[top].stack.pop().expect("StaticCallArgs array");
                     let (args, named) = split_args_from_array_value(argsval);
                     let start = self.target_class_id(target, top)?;
-                    self.dispatch_static_call(top, start, &method, forwarding, args, named)?;
+                    self.dispatch_static_call(top, start, &method, forwarding, args, named, None)?;
                 }
                 Op::StaticCallDynamic { method, argc } => {
                     // `$cls::m()` (PAR): args are on top, the class reference beneath.
@@ -3775,7 +3775,7 @@ impl<'m> super::Vm<'m> {
                         self.frames[top].stack.pop().expect("StaticCallDynamic class");
                     let start = self.resolve_dynamic_class(&classval)?;
                     // A dynamic class is non-forwarding, like a named class.
-                    self.dispatch_static_call(top, start, &method, false, args, Vec::new())?;
+                    self.dispatch_static_call(top, start, &method, false, args, Vec::new(), None)?;
                 }
                 Op::StaticCallDynamicArgs { method } => {
                     // Spread `$cls::m(...$a)` (Session A): args array on top, the
@@ -3785,7 +3785,7 @@ impl<'m> super::Vm<'m> {
                     let classval =
                         self.frames[top].stack.pop().expect("StaticCallDynamicArgs class");
                     let start = self.resolve_dynamic_class(&classval)?;
-                    self.dispatch_static_call(top, start, &method, false, args, named)?;
+                    self.dispatch_static_call(top, start, &method, false, args, named, None)?;
                 }
                 Op::StaticCallDynamicMethod { argc } => {
                     // `$cls::$m()`: method name on top, then args, then the class ref.
@@ -3798,7 +3798,7 @@ impl<'m> super::Vm<'m> {
                     let start = self.resolve_dynamic_class(&classval)?;
                     let method = dyn_method_name(&mval)?;
                     // A dynamic class is non-forwarding, like a named static call.
-                    self.dispatch_static_call(top, start, &method, false, args, Vec::new())?;
+                    self.dispatch_static_call(top, start, &method, false, args, Vec::new(), None)?;
                 }
                 Op::StaticCallDynamicMethodArgs => {
                     // `$cls::$m(...)` with named/spread args: method name on top,
@@ -3813,7 +3813,7 @@ impl<'m> super::Vm<'m> {
                     // PHP validates the class before the method name.
                     let start = self.resolve_dynamic_class(&classval)?;
                     let method = dyn_method_name(&mval)?;
-                    self.dispatch_static_call(top, start, &method, false, args, named)?;
+                    self.dispatch_static_call(top, start, &method, false, args, named, None)?;
                 }
                 Op::StaticCallTargetDynamicMethodArgs { target, forwarding } => {
                     // `self::$m(...)` / `Class::$m(...)` with named/spread args.
@@ -3828,7 +3828,7 @@ impl<'m> super::Vm<'m> {
                         .expect("StaticCallTargetDynamicMethodArgs array");
                     let (args, named) = split_args_from_array_value(argsval);
                     let start = self.target_class_id(target, top)?;
-                    self.dispatch_static_call(top, start, &method, forwarding, args, named)?;
+                    self.dispatch_static_call(top, start, &method, forwarding, args, named, None)?;
                 }
                 Op::StaticCallTargetDynamicMethod { target, forwarding, argc } => {
                     // `self::$m()` / `Class::$m()`: method name on top, then args; the
@@ -3840,7 +3840,7 @@ impl<'m> super::Vm<'m> {
                     let method = dyn_method_name(&mval)?;
                     let args = self.pop_keys(top, argc);
                     let start = self.target_class_id(target, top)?;
-                    self.dispatch_static_call(top, start, &method, forwarding, args, Vec::new())?;
+                    self.dispatch_static_call(top, start, &method, forwarding, args, Vec::new(), None)?;
                 }
                 Op::ClassConstDynamic => {
                     // `C::{$expr}`: class beneath, runtime constant name on top.

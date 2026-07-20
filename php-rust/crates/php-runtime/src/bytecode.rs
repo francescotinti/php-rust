@@ -954,7 +954,7 @@ pub enum Op {
     /// defining class is the resolver's, its LSB class is the caller's when
     /// `forwarding` (self/parent/static) else the start class, and `$this` is
     /// propagated per PHP's forwarding rules.
-    StaticCall { target: ClassTarget, method: Rc<[u8]>, forwarding: bool, argc: u32 },
+    StaticCall { target: ClassTarget, method: Rc<[u8]>, forwarding: bool, argc: u32, ic: MethodIc },
     /// `[arg0, …] -> [ret]` — PHP 8.4 parent property-hook call
     /// `parent::$prop::get()` / `parent::$prop::set($v)` (`self`/`static`/named
     /// classes resolve the same way). Dispatches the `get`/`set` hook of `prop`
