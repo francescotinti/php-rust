@@ -207,13 +207,15 @@ impl<'m> Vm<'m> {
                     self.gc_note(v);
                 }
                 if r.is_finally {
-                    if let Some(old) = self.frames[top].pending_throw.replace(obj) {
+                    if let Some(old) = self.frames[top].ext_mut().pending_throw.replace(obj) {
                         self.gc_note(&old);
                     }
                 } else {
                     // A new in-flight exception supersedes any exception parked by
                     // an earlier finally in this frame (e.g. a finally that threw).
-                    if let Some(old) = self.frames[top].pending_throw.take() {
+                    if let Some(old) =
+                        self.frames[top].ext_opt_mut().and_then(|e| e.pending_throw.take())
+                    {
                         self.gc_note(&old);
                     }
                     self.frames[top].stack.push(obj);
@@ -244,8 +246,10 @@ impl<'m> Vm<'m> {
             // leave its property guarded (later writes would silently bypass
             // the hook — XSLTProcessor::$maxTemplateDepth validation).
             let dead = self.frames.pop().expect("unwound frame above floor");
-            for key in &dead.guard_release {
-                self.magic_guard.remove(key);
+            if let Some(e) = dead.ext() {
+                for key in &e.guard_release {
+                    self.magic_guard.remove(key);
+                }
             }
             self.gc_note_frame(&dead);
             self.recycle_frame(dead);

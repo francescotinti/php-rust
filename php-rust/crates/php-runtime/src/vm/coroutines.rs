@@ -9,7 +9,7 @@ impl<'m> Vm<'m> {
     /// — no coroutine, no `unsafe`, unlike the tree-walker's `corosensei` driver.
     pub(super) fn make_generator(&mut self, mut frame: Frame<'m>) -> Zval {
         let id = self.next_id();
-        frame.gen_id = Some(id);
+        frame.ext_mut().gen_id = Some(id);
         let func_name = frame.func.name.to_vec().into_boxed_slice();
         self.generators.insert(id, frame);
         Zval::Generator(Rc::new(RefCell::new(GenState {

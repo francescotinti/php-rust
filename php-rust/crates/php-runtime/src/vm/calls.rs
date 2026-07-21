@@ -322,7 +322,7 @@ pub(super) fn bind_params(frame: &mut Frame, args: Vec<Zval>) {
             // so `func_get_args` (D1) could not otherwise recover them. Surplus
             // arguments are always by-value, so a reference is decayed here.
             if args.len() > n {
-                frame.extra_args = args[n..].iter().map(|a| a.deref_clone()).collect();
+                frame.ext_mut().extra_args = args[n..].iter().map(|a| a.deref_clone()).collect();
             }
             for (i, a) in args.into_iter().enumerate() {
                 if i < n {

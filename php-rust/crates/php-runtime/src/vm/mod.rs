@@ -795,8 +795,10 @@ struct Frame<'m> {
     stack: Vec<Zval>,
     /// Variables created by NAME at run time (`$$x = v` with a name outside
     /// the function's static slot set). Read/written only by the variable
-    /// variable ops; empty (no allocation) for ordinary frames.
-    dyn_vars: HashMap<Vec<u8>, Zval>,
+    /// variable ops; `None` (8 bytes) for ordinary frames (WP-32 C3 — boxed
+    /// IN PLACE: this field's declaration position is load-bearing for the
+    /// Rc-release order of dying frames, so it slims without moving).
+    dyn_vars: Option<Box<HashMap<Vec<u8>, Zval>>>,
     /// The object bound to `$this` while running a method, or `None` for the
     /// script body and free functions. Read by [`Op::This`]; set when a
     /// [`Op::MethodCall`] / [`Op::InvokeMethod`] pushes a method frame.
@@ -823,14 +825,38 @@ struct Frame<'m> {
     /// (sweep suppression). Bools have no Drop: packing them is
     /// drop-order-neutral.
     flags: FrameFlags,
+    /// Active `foreach` iterators, innermost last. Lives in the frame (not the
+    /// operand stack) so it survives across the loop body; freed by `IterPop`,
+    /// and discarded wholesale when the frame unwinds (a `return` out of a loop).
+    /// Kept INLINE (WP-32 C3): foreach is the most common cold trigger — a
+    /// Box per foreach-frame would be a WP-30-style allocation regression.
+    iters: Vec<IterState>,
+    /// The number of arguments actually passed to this call (PAR), recorded by
+    /// the binder on EVERY call. Read by `Op::CheckArity`.
+    argc: u32,
+    /// Cold frame state (WP-32 C3), boxed lazily on first use — `None` for
+    /// the overwhelming majority of frames. DECLARATION POSITION IS
+    /// LOAD-BEARING: `ext` sits after `iters`, and every Rc-bearing field
+    /// inside [`FrameExt`] (pending_throw, pending_transfer, yield_from,
+    /// extra_args) already lived AFTER `iters` in the pre-C3 declaration
+    /// order and keeps its relative order — so a dying frame's Rc-release
+    /// sequence is bit-identical to the old derived Drop. (guard_release /
+    /// gen_id / eval_origin / closure_id / bridge_caller hold no Zvals:
+    /// their positions are unobservable. `dyn_vars` and `ret_cell` stay
+    /// inline at their old positions for the same reason.)
+    ext: Option<Box<FrameExt>>,
+}
+
+/// The cold fields of a [`Frame`] (WP-32 C3): present only on frames that
+/// used a cold feature (magic guards, finally, generators, func_get_args
+/// surplus, eval, closure statics, scope bridging). FIELD ORDER IS
+/// LOAD-BEARING — see the `ext` field doc.
+#[derive(Default)]
+struct FrameExt {
     /// Magic-accessor recursion-guard keys to remove from [`Vm::magic_guard`]
     /// when this frame returns (OOP-3b). Usually zero or one; a guard
     /// transferred across proxy forwarding (gh18038) appends here too.
     guard_release: Vec<(u32, MagicKind, Vec<u8>)>,
-    /// Active `foreach` iterators, innermost last. Lives in the frame (not the
-    /// operand stack) so it survives across the loop body; freed by `IterPop`,
-    /// and discarded wholesale when the frame unwinds (a `return` out of a loop).
-    iters: Vec<IterState>,
     /// An exception parked while a `finally` block runs (EXC-2): set when an
     /// exception propagates into a finally region, re-raised at [`Op::EndFinally`].
     pending_throw: Option<Zval>,
@@ -846,9 +872,6 @@ struct Frame<'m> {
     /// An in-progress `yield from` delegation (GEN-3), `None` outside one. Lives
     /// on the frame so it is preserved across the generator's suspensions.
     yield_from: Option<YieldFromState>,
-    /// The number of arguments actually passed to this call (PAR), recorded by
-    /// the binder. Read by `Op::CheckArity` for the `ArgumentCountError` message.
-    argc: u32,
     /// Arguments passed *beyond* the declared (non-variadic) parameters, snapshotted
     /// at bind time for `func_get_args` / `func_get_arg` (Session D1). Empty for a
     /// variadic callee (the surplus lands in the variadic array) or a call with no
@@ -927,24 +950,62 @@ impl<'m> Frame<'m> {
             ip: 0,
             slots: slots_buf,
             stack: stack_buf,
-            dyn_vars: HashMap::default(),
+            dyn_vars: None,
             this: None,
             class: None,
             static_class: None,
             ret_cell: None,
             flags: FrameFlags::default(),
-            guard_release: Vec::new(),
             iters: Vec::new(),
-            pending_throw: None,
-            pending_transfer: None,
-            gen_id: None,
-            yield_from: None,
             argc: 0,
-            extra_args: Vec::new(),
-                        eval_origin: None,
-                                    closure_id: None,
-            bridge_caller: None,
+            ext: None,
         }
+    }
+
+    /// Read-only view of the cold extension. NEVER allocates.
+    #[inline]
+    fn ext(&self) -> Option<&FrameExt> {
+        self.ext.as_deref()
+    }
+
+    /// Mutable view WITHOUT allocation — for take/replace on paths where
+    /// absence means "nothing to do".
+    #[inline]
+    fn ext_opt_mut(&mut self) -> Option<&mut FrameExt> {
+        self.ext.as_deref_mut()
+    }
+
+    /// Write access, boxing on first use. ONLY for genuine setters — a
+    /// read-ish path calling this would allocate a box per frame.
+    #[inline]
+    fn ext_mut(&mut self) -> &mut FrameExt {
+        self.ext.get_or_insert_with(Box::default)
+    }
+
+    #[inline]
+    fn gen_id(&self) -> Option<u32> {
+        self.ext().and_then(|e| e.gen_id)
+    }
+
+    #[inline]
+    fn closure_id(&self) -> Option<u32> {
+        self.ext().and_then(|e| e.closure_id)
+    }
+
+    #[inline]
+    fn bridge_caller(&self) -> Option<usize> {
+        self.ext().and_then(|e| e.bridge_caller)
+    }
+
+    #[inline]
+    fn eval_origin(&self) -> Option<&(Box<[u8]>, Line)> {
+        self.ext().and_then(|e| e.eval_origin.as_ref())
+    }
+
+    /// The `$$x` dynamic-variable table, boxing on first write.
+    #[inline]
+    fn dyn_vars_mut(&mut self) -> &mut HashMap<Vec<u8>, Zval> {
+        self.dyn_vars.get_or_insert_with(Box::default)
     }
 }
 
@@ -2063,13 +2124,15 @@ impl<'m> Vm<'m> {
         for v in &frame.stack {
             self.gc_note(v);
         }
-        for v in &frame.extra_args {
-            self.gc_note(v);
+        if let Some(e) = frame.ext() {
+            for v in &e.extra_args {
+                self.gc_note(v);
+            }
         }
         for it in &frame.iters {
             self.gc_note_iter(it);
         }
-        if let Some(exc) = &frame.pending_throw {
+        if let Some(exc) = frame.ext().and_then(|e| e.pending_throw.as_ref()) {
             self.gc_note(exc);
         }
         if let Some(this) = &frame.this {
@@ -2682,7 +2745,7 @@ impl<'m> Vm<'m> {
         let rline = if fi + 1 == self.frames.len() { line } else { self.cur_line(fi) };
         // An eval() unit renders as PHP's composite file name,
         // "<file>(<line>) : eval()'d code" (same as backtraces).
-        let file = match &self.frames[fi].eval_origin {
+        let file = match self.frames[fi].eval_origin() {
             Some((ofile, oline)) => {
                 let mut s = ofile.to_vec();
                 s.extend_from_slice(format!("({oline}) : eval()'d code").as_bytes());
@@ -3220,7 +3283,9 @@ impl<'m> Vm<'m> {
         }
         let baseline = self.frames.len();
         let mut frame = Frame::new(&leaked.main, leaked);
-        frame.eval_origin = eval_origin;
+        if eval_origin.is_some() {
+            frame.ext_mut().eval_origin = eval_origin;
+        }
         // PHP's include shares the *including* scope's variable table. Alias the
         // unit frame's named slots to the includer's cells (promoting the
         // includer slot to a shared `Zval::Ref` via `make_cell`): reads see the
@@ -3250,7 +3315,7 @@ impl<'m> Vm<'m> {
             let global_scope = {
                 let mut root = caller;
                 while root != 0 {
-                    match self.frames[root].bridge_caller {
+                    match self.frames[root].bridge_caller() {
                         Some(up) => root = up,
                         None => break,
                     }
@@ -3271,8 +3336,10 @@ impl<'m> Vm<'m> {
                         if let Some(slot) = self.frames[caller].slots.get_mut(cs) {
                             frame.slots[i] = Zval::Ref(make_cell(slot));
                         }
-                    } else if let Some(dyn_slot) =
-                        self.frames[caller].dyn_vars.get_mut(&name[..])
+                    } else if let Some(dyn_slot) = self.frames[caller]
+                        .dyn_vars
+                        .as_deref_mut()
+                        .and_then(|d| d.get_mut(&name[..]))
                     {
                         // A variable the includer created by NAME at run time
                         // (extract() in HtmlErrorRenderer::include feeds its
@@ -3301,7 +3368,7 @@ impl<'m> Vm<'m> {
             frame.static_class = self.frames[caller].static_class;
             // A `global` statement in this unit rebinds the SHARED symbol —
             // record the includer so bind_global_dyn can walk the chain.
-            frame.bridge_caller = Some(caller);
+            frame.ext_mut().bridge_caller = Some(caller);
         }
         self.frames.push(frame);
         let outcome = self.drive_to_return(baseline);
@@ -3312,7 +3379,7 @@ impl<'m> Vm<'m> {
             if caller != 0 && caller < self.frames.len() {
                 for (name, cell) in fresh_bridged {
                     if !matches!(&*cell.borrow(), Zval::Undef) {
-                        self.frames[caller].dyn_vars.insert(name, Zval::Ref(cell));
+                        self.frames[caller].dyn_vars_mut().insert(name, Zval::Ref(cell));
                     }
                 }
             }
@@ -6661,7 +6728,7 @@ impl<'m> Vm<'m> {
             let f = &self.frames[i];
             // An `eval()` unit's frame renders as `eval`; an anonymous frame as
             // `{closure}`; otherwise its own name.
-            let function = if f.eval_origin.is_some() {
+            let function = if f.eval_origin().is_some() {
                 b"eval".to_vec()
             } else if f.func.name.is_empty() {
                 b"{closure}".to_vec()
@@ -6672,7 +6739,7 @@ impl<'m> Vm<'m> {
             // caller is itself an eval unit, in which case PHP names it
             // `<file>(<line>) : eval()'d code`.
             let caller = &self.frames[i - 1];
-            let file = match &caller.eval_origin {
+            let file = match caller.eval_origin() {
                 Some((ofile, oline)) => {
                     let mut s = ofile.to_vec();
                     s.extend_from_slice(format!("({oline}) : eval()'d code").as_bytes());
@@ -6695,7 +6762,7 @@ impl<'m> Vm<'m> {
                 is_static: f.class.is_some() && f.this.is_none(),
                 object,
                 args: self.current_frame_args(i),
-                is_eval: f.eval_origin.is_some(),
+                is_eval: f.eval_origin().is_some(),
             });
         }
         out
@@ -6896,11 +6963,12 @@ impl<'m> Vm<'m> {
         let mut out = Vec::with_capacity(a);
         match frame.func.variadic_slot {
             None => {
+                let extra: &[Zval] = frame.ext().map_or(&[], |e| &e.extra_args);
                 for i in 0..a {
                     if i < p {
                         out.push(frame.slots[i].deref_clone());
                     } else {
-                        out.push(frame.extra_args[i - p].deref_clone());
+                        out.push(extra[i - p].deref_clone());
                     }
                 }
             }
@@ -7044,7 +7112,7 @@ impl<'m> Vm<'m> {
             }
             return read_slot(&self.frames[top].slots[s]);
         }
-        if let Some(v) = self.frames[top].dyn_vars.get(name) {
+        if let Some(v) = self.frames[top].dyn_vars.as_deref().and_then(|d| d.get(name)) {
             return read_slot(v);
         }
         self.diags.push(Diag::Warning(format!(
@@ -7072,12 +7140,12 @@ impl<'m> Vm<'m> {
             self.gc_note(&old);
             return Ok(());
         }
-        if let Some(cell) = self.frames[top].dyn_vars.get_mut(name) {
+        if let Some(cell) = self.frames[top].dyn_vars.as_deref_mut().and_then(|d| d.get_mut(name)) {
             let old = store_slot(cell, v);
             self.gc_note(&old);
             return Ok(());
         }
-        self.frames[top].dyn_vars.insert(name.to_vec(), v);
+        self.frames[top].dyn_vars_mut().insert(name.to_vec(), v);
         Ok(())
     }
 
@@ -7109,9 +7177,9 @@ impl<'m> Vm<'m> {
             if let Some(s) = named {
                 self.frames[f].slots[s] = Zval::Ref(cell.clone());
             } else {
-                self.frames[f].dyn_vars.insert(name.to_vec(), Zval::Ref(cell.clone()));
+                self.frames[f].dyn_vars_mut().insert(name.to_vec(), Zval::Ref(cell.clone()));
             }
-            match self.frames[f].bridge_caller {
+            match self.frames[f].bridge_caller() {
                 Some(caller) if caller != 0 => f = caller,
                 _ => break,
             }
@@ -7663,7 +7731,7 @@ impl<'m> Vm<'m> {
         }
         let mut frame = self.pooled_frame(callee, m);
         // `static $x` in the body persists per this closure *instance* (id).
-        frame.closure_id = Some(cl.id);
+        frame.ext_mut().closure_id = Some(cl.id);
         for (slot, val) in &cl.captures {
             frame.slots[*slot as usize] = val.clone();
         }
@@ -9265,12 +9333,13 @@ impl<'m> Vm<'m> {
                             .frames
                             .iter_mut()
                             .rev()
-                            .find(|f| f.guard_release.iter().any(|k| *k == old_key))
-                        {
-                            Some(f) => f.guard_release.push(new_key),
+                            .find(|f| {
+                                f.ext().is_some_and(|e| e.guard_release.iter().any(|k| *k == old_key))
+                            }) {
+                            Some(f) => f.ext_mut().guard_release.push(new_key),
                             None => {
                                 if let Some(f) = self.frames.last_mut() {
-                                    f.guard_release.push(new_key);
+                                    f.ext_mut().guard_release.push(new_key);
                                 }
                             }
                         }
@@ -10191,7 +10260,7 @@ impl<'m> Vm<'m> {
         frame.flags.set(FrameFlags::RET_BOOL, ret_bool);
         let key = (oid, kind, name.to_vec());
         self.magic_guard.insert(key.clone());
-        frame.guard_release.push(key);
+        frame.ext_mut().guard_release.push(key);
         self.frames.push(frame);
     }
 
@@ -10275,7 +10344,7 @@ impl<'m> Vm<'m> {
         // nested explicit hook call re-entering the same property (a parent hook
         // calling its own parent) must not release the outer hook's guard early.
         if self.magic_guard.insert(key.clone()) {
-            frame.guard_release.push(key);
+            frame.ext_mut().guard_release.push(key);
         }
         self.frames.push(frame);
     }
@@ -10319,7 +10388,7 @@ impl<'m> Vm<'m> {
         frame.flags.set(FrameFlags::RET_DEREF, func.by_ref && !is_set);
         let key = (oid, MagicKind::Hook, name.to_vec());
         if self.magic_guard.insert(key.clone()) {
-            frame.guard_release.push(key);
+            frame.ext_mut().guard_release.push(key);
         }
         self.frames.push(frame);
     }
@@ -11072,7 +11141,9 @@ host_builtins! {
         // wp-config.php's $table_prefix this way), as do $$name writes.
         let dyn_pairs: Vec<(Vec<u8>, Zval)> = vm.frames[top]
             .dyn_vars
-            .iter()
+            .as_deref()
+            .into_iter()
+            .flatten()
             .map(|(k, v)| (k.clone(), v.deref_clone()))
             .collect();
         for (k, v) in dyn_pairs {
@@ -15328,6 +15399,25 @@ mod tests {
     // into the per-name fail-set baselines — the invariant that matters is
     // that C3 does not CHANGE phpr's own order).
     // ------------------------------------------------------------------
+
+    #[test]
+    fn frame_is_slim() {
+        // WP-32 C3: the hot Frame struct must stay small — it is MOVED whole
+        // on every frames.push/pop (the #1 memmove bucket pre-C3 at ~400B).
+        use crate::vm::FrameFlags;
+        assert!(
+            std::mem::size_of::<crate::vm::Frame<'static>>() <= 176,
+            "Frame grew to {} bytes",
+            std::mem::size_of::<crate::vm::Frame<'static>>()
+        );
+        let mut fl = FrameFlags::default();
+        assert!(!fl.get(FrameFlags::RET_DEREF));
+        fl.set(FrameFlags::RET_DEREF, true);
+        fl.set(FrameFlags::IN_DESTRUCTOR, true);
+        assert!(fl.get(FrameFlags::RET_DEREF) && fl.get(FrameFlags::IN_DESTRUCTOR));
+        fl.set(FrameFlags::RET_DEREF, false);
+        assert!(!fl.get(FrameFlags::RET_DEREF) && fl.get(FrameFlags::IN_DESTRUCTOR));
+    }
 
     #[test]
     fn frame_drop_order_sentinel_iters_this_dynvars() {

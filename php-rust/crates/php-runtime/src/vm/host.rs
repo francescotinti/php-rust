@@ -854,7 +854,7 @@ impl<'m> super::Vm<'m> {
                 return Some(v);
             }
         }
-        self.frames[top].dyn_vars.get(name).map(|v| v.deref_clone())
+        self.frames[top].dyn_vars.as_ref().and_then(|d| d.get(name)).map(|v| v.deref_clone())
     }
 
     /// One `compact()` argument: a variable name (added to `out` if set, else a

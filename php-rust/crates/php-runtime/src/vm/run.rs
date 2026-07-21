@@ -316,7 +316,7 @@ impl<'m> super::Vm<'m> {
                     // run the initialiser; every later one skips to the alias. A
                     // closure keys its own per-instance storage (fresh statics per
                     // closure object); everything else the program-global `statics`.
-                    let exists = match self.frames[top].closure_id {
+                    let exists = match self.frames[top].closure_id() {
                         Some(cid) => self.closure_statics.contains_key(&(cid, *id)),
                         None => self.statics[*id as usize].is_some(),
                     };
@@ -327,7 +327,7 @@ impl<'m> super::Vm<'m> {
                 Op::StaticStore { id } => {
                     let v = self.frames[top].stack.pop().expect("StaticStore on empty stack");
                     let cell = Rc::new(RefCell::new(v));
-                    let old = match self.frames[top].closure_id {
+                    let old = match self.frames[top].closure_id() {
                         Some(cid) => self.closure_statics.insert((cid, *id), cell),
                         None => self.statics[*id as usize].replace(cell),
                     };
@@ -342,7 +342,7 @@ impl<'m> super::Vm<'m> {
                     // Alias the local slot to the persistent cell: reads/writes of
                     // the variable now go through it (the slot holds a `Zval::Ref`,
                     // followed by `read_slot`/`store_slot` like any reference).
-                    let cell = match self.frames[top].closure_id {
+                    let cell = match self.frames[top].closure_id() {
                         Some(cid) => Rc::clone(
                             self.closure_statics
                                 .get(&(cid, *id))
@@ -1146,10 +1146,12 @@ impl<'m> super::Vm<'m> {
                     // exception wins; then a parked return (push the value and fall
                     // through to the trailing `Ret`); then a parked break/continue
                     // (jump to its loop target); otherwise skip past the `try`.
-                    if let Some(v) = self.frames[top].pending_throw.take() {
+                    if let Some(v) =
+                        self.frames[top].ext_opt_mut().and_then(|e| e.pending_throw.take())
+                    {
                         return Err(PhpError::Thrown(v));
                     }
-                    match self.frames[top].pending_transfer.take() {
+                    match self.frames[top].ext_opt_mut().and_then(|e| e.pending_transfer.take()) {
                         Some(Transfer::Return(val)) => {
                             self.frames[top].stack.push(val);
                             // fall through to the `Ret` emitted right after this op
@@ -1164,10 +1166,10 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::ParkReturn => {
                     let v = self.frames[top].stack.pop().unwrap_or(Zval::Null);
-                    self.frames[top].pending_transfer = Some(Transfer::Return(v));
+                    self.frames[top].ext_mut().pending_transfer = Some(Transfer::Return(v));
                 }
                 Op::ParkJump(addr) => {
-                    self.frames[top].pending_transfer = Some(Transfer::Jump(*addr));
+                    self.frames[top].ext_mut().pending_transfer = Some(Transfer::Jump(*addr));
                 }
                 Op::DerefTop => {
                     // REF-4b: copy a by-ref return used in value context.
@@ -2303,7 +2305,11 @@ impl<'m> super::Vm<'m> {
                     let ret_isset = self.frames[top].flags.get(FrameFlags::RET_ISSET);
                     let ret_stringify = self.frames[top].flags.get(FrameFlags::RET_STRINGIFY);
                     let ret_deref = self.frames[top].flags.get(FrameFlags::RET_DEREF);
-                    let guard = std::mem::take(&mut self.frames[top].guard_release);
+                    let guard = self
+                        .frames[top]
+                        .ext_opt_mut()
+                        .map(|e| std::mem::take(&mut e.guard_release))
+                        .unwrap_or_default();
                     // A `clone`-driven `__clone` is finishing: revoke any remaining
                     // readonly re-init permission on the copy (PHP 8.3), so writes
                     // after the clone — or via a manual `__clone()` — fatal again.
@@ -2371,9 +2377,7 @@ impl<'m> super::Vm<'m> {
                     } else {
                         GenKey::Auto
                     };
-                    let gid = self.frames[top]
-                        .gen_id
-                        .expect("Yield outside a generator frame");
+                    let gid = self.frames[top].gen_id().expect("Yield outside a generator frame");
                     debug_assert_eq!(top, baseline, "a generator yields at its own baseline");
                     let frame = self.frames.pop().expect("generator frame to park");
                     self.generators.insert(gid, frame);
@@ -2384,16 +2388,16 @@ impl<'m> super::Vm<'m> {
                     // one delegated step per visit. First visit sets up the cursor
                     // from the delegate on the stack; a re-visit pops the resume's
                     // sent value (forwarded into a sub-generator, ignored by arrays).
-                    if self.frames[top].yield_from.is_none() {
+                    if self.frames[top].ext().is_none_or(|e| e.yield_from.is_none()) {
                         let delegate = self.frames[top].stack.pop().expect("YieldFrom delegate");
                         match delegate.deref_clone() {
                             Zval::Array(_) => {
                                 let entries = snapshot_entries(&delegate);
-                                self.frames[top].yield_from =
+                                self.frames[top].ext_mut().yield_from =
                                     Some(YieldFromState::Array { entries, pos: 0 });
                             }
                             Zval::Generator(rc) => {
-                                self.frames[top].yield_from =
+                                self.frames[top].ext_mut().yield_from =
                                     Some(YieldFromState::Gen { rc: Rc::clone(&rc), opaque: false });
                                 self.ensure_started(&rc)?; // prime to its first yield
                             }
@@ -2409,12 +2413,12 @@ impl<'m> super::Vm<'m> {
                                 // here instead of streaming).
                                 match self.traversable_entries(delegate.clone())? {
                                     TraversableSource::Gen(rc) => {
-                                        self.frames[top].yield_from =
+                                        self.frames[top].ext_mut().yield_from =
                                             Some(YieldFromState::Gen { rc: Rc::clone(&rc), opaque: true });
                                         self.ensure_started(&rc)?;
                                     }
                                     TraversableSource::Entries(entries) => {
-                                        self.frames[top].yield_from =
+                                        self.frames[top].ext_mut().yield_from =
                                             Some(YieldFromState::Array { entries, pos: 0 });
                                     }
                                 }
@@ -2429,7 +2433,7 @@ impl<'m> super::Vm<'m> {
                     } else {
                         // Re-entry from a resume: the sent value is on the stack.
                         let sent = self.frames[top].stack.pop().expect("YieldFrom sent");
-                        let sub = match &self.frames[top].yield_from {
+                        let sub = match self.frames[top].ext().and_then(|e| e.yield_from.as_ref()) {
                             Some(YieldFromState::Gen { rc, .. }) => Some(Rc::clone(rc)),
                             _ => None,
                         };
@@ -2438,7 +2442,7 @@ impl<'m> super::Vm<'m> {
                         }
                     }
                     // Take the next delegated `(key, value)`, or finish.
-                    let step = match self.frames[top].yield_from.as_mut().unwrap() {
+                    let step = match self.frames[top].ext_mut().yield_from.as_mut().unwrap() {
                         YieldFromState::Array { entries, pos } => {
                             if *pos < entries.len() {
                                 let pair = entries[*pos].clone();
@@ -2463,7 +2467,7 @@ impl<'m> super::Vm<'m> {
                             // verbatim (the outer auto-key counter is untouched).
                             self.frames[top].ip -= 1;
                             let gid =
-                                self.frames[top].gen_id.expect("YieldFrom outside a generator");
+                                self.frames[top].gen_id().expect("YieldFrom outside a generator");
                             let frame = self.frames.pop().expect("generator frame to park");
                             self.generators.insert(gid, frame);
                             return Ok(RunExit::Yielded { key: GenKey::Verbatim(k), value: v });
@@ -2472,7 +2476,7 @@ impl<'m> super::Vm<'m> {
                             // Delegation done: leave the delegate's return value (NULL
                             // for an array, the sub-generator's getReturn()) on the
                             // stack as the `yield from` expression's value.
-                            let value = match self.frames[top].yield_from.take().unwrap() {
+                            let value = match self.frames[top].ext_mut().yield_from.take().unwrap() {
                                 YieldFromState::Array { .. } => Zval::Null,
                                 // An aggregate-wrapped generator's return stays
                                 // opaque (PHP: only a DIRECT generator delegate
