@@ -76,6 +76,86 @@ impl<'m> super::Vm<'m> {
     /// ([`RunExit::Yielded`]), or an op raises a `PhpError` (which the caller
     /// routes through [`Self::unwind`]). Frames above `baseline` (ordinary
     /// callees) return normally to their callers within this same loop.
+    /// Pop rhs/lhs and evaluate a binary operator exactly as [`Op::Binary`]
+    /// does — lazy-operand realization (init_trigger_compare), the
+    /// string-vs-object `__toString` comparison rule, and the GMP/BcMath
+    /// overloads of `apply_binop_ovl` — returning the result value. Extracted
+    /// (WP-32) so [`Op::CmpJmp`] shares the identical semantics (diag order,
+    /// TypeError paths) by construction instead of by duplication.
+    fn binary_value(&mut self, top: usize, b: BinOp) -> Result<Zval, PhpError> {
+        let rhs = self.frames[top].stack.pop().expect("Binary rhs");
+        let lhs = self.frames[top].stack.pop().expect("Binary lhs");
+        // A *loose* comparison reads the whole property table, so it
+        // initializes a lazy operand (PHP 8.4, init_trigger_compare)
+        // and compares a proxy's real instance; `===`/`!==` compare
+        // handles and never initialize — and neither does comparing
+        // an object with itself (same handle short-circuits).
+        // Only an object-vs-object comparison reads property tables:
+        // a lazy operand initializes then (init_trigger_compare) —
+        // never for object-vs-scalar (the object simply compares
+        // greater), `===`, or a same-handle compare.
+        let cmp_op = matches!(
+            b,
+            BinOp::Eq | BinOp::NotEq | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Spaceship
+        );
+        let both_objects = match (deref_object(&lhs), deref_object(&rhs)) {
+            (Some(a), Some(b)) => Some(Rc::ptr_eq(&a, &b)),
+            _ => None,
+        };
+        let (lhs, rhs) = if matches!(both_objects, Some(false))
+            && cmp_op
+            && (self.is_lazy_value(&lhs) || self.is_lazy_value(&rhs))
+        {
+            (self.realize_full(&lhs)?, self.realize_full(&rhs)?)
+        } else {
+            (lhs, rhs)
+        };
+        // A string-vs-object comparison converts the object through
+        // its `__toString` when it has one (PHP semantics; a lazy
+        // wrapper is NOT initialized by this — the hook is a method
+        // call on the wrapper).
+        let (lhs, rhs) = if cmp_op && both_objects.is_none() {
+            // Tag peek only — no value clone (WP-32): the old
+            // deref_clone here cloned (and dropped) both operands
+            // on EVERY executed comparison just to read the tag.
+            fn is_str_operand(v: &Zval) -> bool {
+                match v {
+                    Zval::Str(_) => true,
+                    Zval::Ref(c) => matches!(&*c.borrow(), Zval::Str(_)),
+                    _ => false,
+                }
+            }
+            let l_str = is_str_operand(&lhs);
+            let r_str = is_str_operand(&rhs);
+            let to_str = |vm: &mut Self, v: Zval, other_is_str: bool| -> Result<Zval, PhpError> {
+                if !other_is_str {
+                    return Ok(v);
+                }
+                if let Some(o) = deref_object(&v) {
+                    // `BcMath\Number` / `GMP` overload comparison
+                    // themselves (their compare handler runs in
+                    // `apply_binop_ovl`); they must NOT be pre-coerced
+                    // to their `__toString` for a string comparison.
+                    let cn = o.borrow().class_name.as_bytes().to_vec();
+                    if cn == b"BcMath\\Number" || cn == b"GMP" {
+                        return Ok(v);
+                    }
+                    let cid = o.borrow().class_id as usize;
+                    if resolve_method_runtime(&vm.classes, cid, b"__toString").is_some() {
+                        return vm.call_method_sync(v, b"__toString", Vec::new());
+                    }
+                }
+                Ok(v)
+            };
+            let lhs = to_str(self, lhs, r_str)?;
+            let rhs = to_str(self, rhs, l_str)?;
+            (lhs, rhs)
+        } else {
+            (lhs, rhs)
+        };
+        self.apply_binop_ovl(b, &lhs, &rhs)
+    }
+
     pub(super) fn run_loop(&mut self, baseline: usize) -> Result<RunExit, PhpError> {
         loop {
             // Defensive call-stack depth guard (mirrors `eval::guard_call_depth`):
@@ -451,67 +531,7 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(pushed);
                 }
                 Op::Binary(b) => {
-                    let rhs = self.frames[top].stack.pop().expect("Binary rhs");
-                    let lhs = self.frames[top].stack.pop().expect("Binary lhs");
-                    // A *loose* comparison reads the whole property table, so it
-                    // initializes a lazy operand (PHP 8.4, init_trigger_compare)
-                    // and compares a proxy's real instance; `===`/`!==` compare
-                    // handles and never initialize — and neither does comparing
-                    // an object with itself (same handle short-circuits).
-                    // Only an object-vs-object comparison reads property tables:
-                    // a lazy operand initializes then (init_trigger_compare) —
-                    // never for object-vs-scalar (the object simply compares
-                    // greater), `===`, or a same-handle compare.
-                    let cmp_op = matches!(
-                        b,
-                        BinOp::Eq | BinOp::NotEq | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Spaceship
-                    );
-                    let both_objects = match (deref_object(&lhs), deref_object(&rhs)) {
-                        (Some(a), Some(b)) => Some(Rc::ptr_eq(&a, &b)),
-                        _ => None,
-                    };
-                    let (lhs, rhs) = if matches!(both_objects, Some(false))
-                        && cmp_op
-                        && (self.is_lazy_value(&lhs) || self.is_lazy_value(&rhs))
-                    {
-                        (self.realize_full(&lhs)?, self.realize_full(&rhs)?)
-                    } else {
-                        (lhs, rhs)
-                    };
-                    // A string-vs-object comparison converts the object through
-                    // its `__toString` when it has one (PHP semantics; a lazy
-                    // wrapper is NOT initialized by this — the hook is a method
-                    // call on the wrapper).
-                    let (lhs, rhs) = if cmp_op && both_objects.is_none() {
-                        let l_str = matches!(lhs.deref_clone(), Zval::Str(_));
-                        let r_str = matches!(rhs.deref_clone(), Zval::Str(_));
-                        let to_str = |vm: &mut Self, v: Zval, other_is_str: bool| -> Result<Zval, PhpError> {
-                            if !other_is_str {
-                                return Ok(v);
-                            }
-                            if let Some(o) = deref_object(&v) {
-                                // `BcMath\Number` / `GMP` overload comparison
-                                // themselves (their compare handler runs in
-                                // `apply_binop_ovl`); they must NOT be pre-coerced
-                                // to their `__toString` for a string comparison.
-                                let cn = o.borrow().class_name.as_bytes().to_vec();
-                                if cn == b"BcMath\\Number" || cn == b"GMP" {
-                                    return Ok(v);
-                                }
-                                let cid = o.borrow().class_id as usize;
-                                if resolve_method_runtime(&vm.classes, cid, b"__toString").is_some() {
-                                    return vm.call_method_sync(v, b"__toString", Vec::new());
-                                }
-                            }
-                            Ok(v)
-                        };
-                        let lhs = to_str(self, lhs, r_str)?;
-                        let rhs = to_str(self, rhs, l_str)?;
-                        (lhs, rhs)
-                    } else {
-                        (lhs, rhs)
-                    };
-                    let r = self.apply_binop_ovl(*b, &lhs, &rhs)?;
+                    let r = self.binary_value(top, *b)?;
                     self.frames[top].stack.push(r);
                 }
                 Op::Unary(u) => {
