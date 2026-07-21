@@ -1,4 +1,45 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-31: dispatch su &'m Op + has_hints)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-32: CmpJmp + path_apply + Frame slimming)
+
+> ⚡ **WP-32 (2026-07-21/22, gated `43fc0c4`→`f020a33`, 7 commit)** — la leva
+> "value-representation" RIDEFINITA dai dati (❌ **NaN-boxing BOCCIATO e da
+> non riproporre**: Long(i64) a 64 bit pieni non entra nei 48 del payload
+> NaN; ~9 impl unsafe su un value-core a zero unsafe; romperebbe la niche
+> Option<Zval> degli array packed; ~5.000 siti; e il churn misurato NON
+> viene dalla taglia — la zval di Zend è anch'essa 16B). Tre cluster:
+> **(A) CmpJmp** — confronto+branch fusi a emit-time via cond_jump
+> (root-match AST, mai peephole), handler = binary_value condiviso
+> (refactor puro da Op::Binary ⇒ semantiche identiche per costruzione);
+> cablati while/do-while/if/for/switch(Eq)/match(Identical)/&&/||/ternario;
+> + peek zero-clone al posto dei 2 deref_clone per-confronto.
+> **(B) path_apply** — PhpArray::slot_or_vivify e set_returning_displaced
+> (UN lookup vs 2-4 + key clone per livello; semantica del composito ESATTA:
+> no-revive WP-27, next_free, holds_containers — unit test di equivalenza a
+> matrice); dropped Vec→Option e pop_keys via split_off (via 2 malloc/free
+> per path op). **(C) Frame slimming ~400→≤176B** — FrameFlags(u8) per i 7
+> bool + FrameExt boxed lazy per i campi freddi con ordine di drop
+> conservato PER COSTRUZIONE (ext dopo iters; ogni campo Rc-bearing di
+> FrameExt viveva già dopo iters; dyn_vars → Option<Box> IN PLACE; ret_cell
+> resta inline) + 3 SENTINELLE drop-order committate PRIMA del layout
+> (pinnano l'ordine phpr corrente — passate INVARIATE dopo).
+> **Esito: microbench esteso −8,7%** (6,09 vs 6,67s, 5 coppie interleaved
+> vs cb82691); **media group 72,4→69,0s (−4,7%), rapporto 3,3×**;
+> full-suite 12:54 (−1% — ormai dominata da IO/mysql/C-libs); riprofilo
+> (`wp30-harness/ab-out/new-wp32.sample`): **memmove 629→301 (−52%),
+> path_apply SPARITO dalla top-20**. gate22 TUTTO verde; cargo 1600;
+> **run23 = run22 nel fail-set per nome** (2F identici; 9 diff P-only da
+> test-set upstream — vedi incidente wpdev sotto).
+> ⚠️ **INCIDENTE WPDEV RISOLTO**: lo scratchpad della vecchia sessione
+> (be003709) è stato RIPULITO a metà nottata — wpdev ha perso vendor/,
+> composer.json e quasi tutto (65MB residui). Ricostruito PERMANENTE in
+> **`~/Claude/wpdev`** = wordpress-develop **trunk@5e3fced** (2026-07-15,
+> la revision del setup originale — il tag 7.0.1 NON basta: mancano le
+> classi 7.1 e i data-provider differiscono) + composer install + 
+> wp-tests-config.php con **DB_PASSWORD 'wp-secret-Pass1'** (recuperata dai
+> probe mysqli wp8). Tutti gli script aggiornati (run-full-detached,
+> gate22, media-pair, run-multisite, gate19). Validazione: option 413
+> IDENTICO per nome al tree vecchio; full-suite 2F identici.
+
+# (storia WP-31)
 
 > ⚡ **WP-31 (2026-07-21 notte, gated `8adba4b`+`7ee4bcb`, 2 commit)** — il
 > punto 1 del doc Gemini validato, eseguito: **(a) il run_loop matcha su
@@ -114,16 +155,19 @@ Riprendiamo phpr (PHP 8.5.7 in Rust). **Roadmap**: obiettivo primario = 100%
 compatibilità WordPress; la WP core test suite (PHPUnit) è il GATE PER NOME.
 
 ## Stato gate per nome (tutte le superfici)
-- Gate22 WP-31 verde (wp22-harness/gate-out): corpus **1455** · sess 28 ·
+- Gate22 WP-32 verde (wp22-harness/gate-out): corpus **1455** · sess 28 ·
   date 351 · refl 290 IDENTICI · ORM 3E/13F identico per nome · hk 1665 0E/0F ·
-  cargo **1592**/0 · probe gd/mysqli/media byte-id · http battery DIFF-set = 16
+  cargo **1600**/0 · probe gd/mysqli/media byte-id · http battery DIFF-set = 16
   (WP-14) · option 413 e restapi 3514 identici per nome. ⚠️ i work-tree
   ORM/hk in /private/tmp/wp11-gates possono sparire (pulizia /tmp): se
   "Could not open input file: vendor/bin/phpunit", ri-estrarre i tarball da
   wp9-harness/gates/ e ri-runnare.
-- **Full-suite single-site run22: IDENTICA a run21/run20/run19/run17/run16
-  per nome (30.481 test, 0E/2F/86W/73S) = minimo teorico**, master-CPU
-  13:02. Archiviata in `wp16-harness/full-out/run22/`.
+- **Full-suite single-site run23 (tree NUOVO ~/Claude/wpdev, trunk@5e3fced):
+  30.472 test, 0E/2F/86W/73S — fail-set IDENTICO per nome a run22** (stessi
+  2F: wpPostsListTable search_hierarchical + wp_is_stream #2 = minimo
+  teorico); le 9 differenze di nome sono TUTTE test P-only del delta di
+  test-set upstream (documentate). master-CPU 12:54. Archiviata in
+  `wp16-harness/full-out/run23/`. Le run future si confrontano con run23.
 - **Full-suite multisite RICONFERMATA (WP-28): 1 diff per nome — minimo
   teorico** (31.278 test, 0E/2F; solo `wp_is_stream #2`;
   `wp19-harness/ms-out/diff-names-wp28.txt`).
@@ -177,14 +221,18 @@ H="/Volumes/Extreme Pro/Claude/wp16-harness"
    struct Op + refcount bump per istruzione; il guadagno è togliere QUELLO,
    non "allocazioni".
 
-   **→ ✅ ESEGUITO in WP-31** (`8adba4b`+`7ee4bcb`): −29,8% microbench,
-   −14,3% full-suite, −10,3% media. **Prossima leva (WP-32+), dal profilo
-   post-WP-31**: la mossa grossa è la **value-representation** (memmove +
-   drop/clone Zval ≈ 1.260 campioni, il blocco phpr-only dominante); leve
-   minori prima/insieme: slot_of nei field-walker (A2.5 del piano WP-29,
-   ~157), cache is_instance_of per (class,target), GC note/sweep. Le idee
-   Gemini restanti (interning, call-site specialization) restano
-   medio-termine.
+   **→ ✅ ESEGUITO in WP-31** (−29,8% micro, −14,3% full) **e WP-32**
+   (`43fc0c4`→`f020a33`: CmpJmp + path_apply + Frame slimming; −8,7% micro,
+   −4,7% media, memmove −52%, NaN-boxing BOCCIATO con motivazione — vedi
+   sezione in testa). **Prossime leve (WP-33+), dal profilo post-WP-32
+   (`new-wp32.sample`)**: GC inlined è ora il blocco phpr-only più grosso
+   (gc_note 206 + gc_sweep 156 + gc_note_frame — rivedere il costo dello
+   sweep per-statement / gc_note write-barrier); slot_of 159 nei
+   field-walker (A2.5 WP-29, mai completato); enter_callee 194 +
+   bind_params 109 (call-site specialization, Gemini §5, con guardie di
+   firma); hashbrown get 209 (chiavi stringa runtime); drop/clone Zval
+   404+323 = churn semantico residuo; SSO su PhpStr (localizzato in
+   zstr.rs, taglia mi_malloc). Oppure: validazione Laravel.
    - **✅ Punto 1 (op-clone nel run_loop) — VALIDO, è la prossima leva
      consigliata.** `run.rs:92` clona l'op a ogni istruzione. Correzione al
      meccanismo proposto: NON serve alcun `Rc::clone` del func —
@@ -263,10 +311,40 @@ misurare e riportare all'utente il gap aggiornato e aggiornare la tabella
 | WP-29 | 82,4/23,0 = **3,6×** | 4,84/0,40GB = **12,1×** | 15:27/5:39 = **2,7×** | ~22/11,5 min = **1,9×** |
 | WP-30 | 80,7/21,0 = **3,8×** ⚠️ | 4,80/0,40GB = **12,1×** | 15:12/5:39 = **2,7×** | ~20/11,5 min = **1,7×** |
 | WP-31 | 72,4/20,95 = **3,5×** | 4,82/0,40GB = **12,1×** | 13:02/5:39 = **2,3×** | ~17,5/11,5 min = **1,5×** |
+| WP-32 | 69,0/20,91 = **3,3×** | 4,75/0,39GB = **12,0×** | 12:54/5:39 = **2,3×** | ~19,5/11,5 min = **1,7×** |
 
 ⚠️ riga WP-30: phpr media in calo ASSOLUTO (82,4→80,7) ma l'oracle del giorno
 gira −9% (23,0→21,0) → il rapporto sale per rumore dell'oracle, non per una
 regressione phpr (2 coppie consistenti: 80,42/21,03 e 80,97/21,02).
+
+## Lezioni operative (nuove WP-32)
+- ⭐⭐ **Il timing di distruzione phpr (sweep-driven) diverge GIÀ da Zend**:
+  le sentinelle drop-order NON possono essere oracle-diff — vanno pinnate
+  sull'output phpr CORRENTE, committate PRIMA del cambio layout (metodo
+  C2→C3: 3 sentinelle rosse-se-cambia, passate invariate).
+- ⭐⭐ **Boxare campi freddi senza riordini osservabili**: mettere il Box
+  DOPO l'ultimo campo hot Rc-bearing e ordinare i campi interni come nel
+  layout pre-esistente; i campi che romperebbero l'ordine si boxano IN
+  PLACE (dyn_vars → Option<Box> alla stessa posizione) o restano inline
+  (ret_cell). MAI un Drop manuale su Frame (romperebbe mem::take del pool).
+- ⭐ Fusione op a EMIT-TIME, mai peephole (rimuovere op sposta gli
+  indirizzi); fondere solo quando la RADICE AST è il pattern (il bool
+  interno consumato come valore non è mai fondibile per costruzione).
+- ⭐ API composite di PhpArray: replicare il composito ESATTO (contains+
+  insert+get_mut) con unit test di equivalenza a matrice su tutte le forme
+  repr — mai "quasi uguale" (holds_containers/next_free/ordine sono parità).
+- ⭐⭐ **Gli scratchpad delle vecchie sessioni in /private/tmp VENGONO
+  RIPULITI**: wpdev ci ha vissuto per 9 sessioni ed è stato sventrato a
+  metà run. Gli asset di lunga vita vanno in **~/Claude/** (ora:
+  ~/Claude/wpdev). Se una suite dice "Could not open input file" dopo ore
+  di sleep del Mac, è il reaper, non una regressione.
+- ⭐ Ricostruire wpdev: trunk alla DATA del setup (il tag release non
+  basta: test-set diverso), composer install, wp-tests-config con la
+  password del probe wp8 ('wp-secret-Pass1'); validare con option 413 per
+  nome + fail-set full identico; le differenze P-only upstream si
+  documentano e si ribasa il confronto (run23 è la nuova base).
+- Il Mac in sleep congela le run detached per ore: guardare i timestamp
+  del .done prima di diagnosticare un hang.
 
 ## Lezioni operative (nuove WP-31)
 - ⭐⭐ **L'op-clone per-istruzione era il singolo costo più grosso del
