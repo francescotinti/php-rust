@@ -15320,6 +15320,69 @@ mod tests {
         );
     }
 
+    // ------------------------------------------------------------------
+    // WP-32 C2 — drop-order SENTINELS, committed BEFORE the FrameExt layout
+    // change (C3). They pin the CURRENT phpr destructor order for frames
+    // dying with cold-field content (phpr's sweep-driven timing already
+    // diverges from Zend's immediate refcount destruction in ways priced
+    // into the per-name fail-set baselines — the invariant that matters is
+    // that C3 does not CHANGE phpr's own order).
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn frame_drop_order_sentinel_iters_this_dynvars() {
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class D { public $t; function __construct($t){ $this->t = $t; } function __destruct(){ echo '[', $this->t, ']'; } }
+                function f1() { foreach ([new D('a1'), new D('a2')] as $i => $v) { if ($i === 1) { return 'r'; } } return 'x'; }
+                echo f1(); $n = new D('a3'); unset($n); echo '.';
+                class M { function go() { foreach ([new D('b1')] as $v) { return 'm'; } } function __destruct(){ echo '[this]'; } }
+                echo (new M)->go(); $n = new D('b2'); unset($n); echo '.';
+                function f3() { $name = 'dyn'; $$name = new D('c1'); $local = new D('c2'); return 'q'; }
+                echo f3(); $n = new D('c3'); unset($n); echo '.';
+                function fx() { $name='dd'; $$name = new D('x1'); $local = new D('x3'); foreach ([new D('x2')] as $v) { return 'z'; } }
+                echo fx(); $n = new D('x4'); unset($n); echo '.';"
+            ),
+            b"r[a2][a1][a3].m[b1][this][b2].q[c2][c1][c3].z[x2][x3][x1][x4]."
+        );
+    }
+
+    #[test]
+    fn frame_drop_order_sentinel_generator_and_extras() {
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class D { public $t; function __construct($t){ $this->t = $t; } function __destruct(){ echo '[', $this->t, ']'; } }
+                function inner() { yield new D('d1'); }
+                function outer() { foreach ([new D('d2')] as $v) { yield from inner(); } }
+                $g = outer(); $g->current(); unset($g); echo 'G'; $n = new D('d3'); unset($n); echo '.';
+                function f5($a) { $args = func_get_args(); return 'f'; }
+                echo f5(1, new D('e1'), new D('e2')); $n = new D('e3'); unset($n); echo '.';"
+            ),
+            b"G[d3].f[e1][e2][e3].[d1][d2]"
+        );
+    }
+
+    #[test]
+    fn frame_drop_order_sentinel_ret_shaping_and_finally() {
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class D { public $t; function __construct($t){ $this->t = $t; } function __destruct(){ echo '[', $this->t, ']'; } }
+                class S6 { function __toString() { $tmp = new D('s1'); return 'str'; } }
+                echo 'pre' . new S6 . 'post'; $n = new D('s2'); unset($n); echo '.';
+                class H7 { private $data = []; function __isset($k){ $t = new D('h1'); return true; } function __set($k, $v){ $t = new D('h2'); } }
+                $h = new H7; echo isset($h->x) ? 'Y' : 'N'; $h->y = 5; $n = new D('h3'); unset($n); echo '.';
+                function f8() { try { return new D('t1'); } finally { $x = new D('t2'); } }
+                $r = f8(); unset($r); $n = new D('t3'); unset($n); echo '.';
+                function f9() { try { throw new Exception('e'); } finally { $y = new D('u1'); } }
+                try { f9(); } catch (Exception $e) { echo 'C'; } $n = new D('u2'); unset($n); echo '.';"
+            ),
+            b"prestrpost[s1][s2].Y[h1][h2][h3].[t2][t1][t3].C[u1][u2]."
+        );
+    }
+
     #[test]
     fn cmp_jmp_fused_conditions_semantics() {
         // Conditions with a comparison ROOT compile to the fused CmpJmp
