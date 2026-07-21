@@ -1,4 +1,28 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-30: frame arena + MethodIc + PropIncDec IC)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-31: dispatch su &'m Op + has_hints)
+
+> ⚡ **WP-31 (2026-07-21 notte, gated `8adba4b`+`7ee4bcb`, 2 commit)** — il
+> punto 1 del doc Gemini validato, eseguito: **(a) il run_loop matcha su
+> `&'m Op` — ZERO clone per istruzione**. `Frame.func` è `&'m Func` (Copy):
+> copiata la reference fuori dalla catena di accessi, l'op si slega da
+> `self` e il match gira per reference; 171 fix meccanici (puri deref di
+> scalari Copy, guidati dalle suggestion del compilatore via script con
+> whitelist sulla forma — vedi lezione) + 4 shorthand; ZERO clone aggiunti
+> (coercion `&&T→&T`, `&Rc<[u8]>→&[u8]` coprono i siti d'uso); le celle IC
+> sono ora raggiunte direttamente nell'op del Func (stessa cella condivisa
+> di prima: fill persistono per costruzione). **(b) has_hints precomputato
+> su Func** (la scan di param_hints per-chiamata in enter_callee → bool a
+> compile time, 6 costruttori). **Esito: microbench call-heavy −29,8%**
+> (5,16 vs 7,35s, A/B interleaved 5 coppie vs 06a3c5b, output identici);
+> **full-suite master-CPU 15:12→13:02 = −14,3%** (run22 = run21 per nome);
+> **media group phpr 80,7→72,4s = −10,3%** (oracle 20,95 → **3,5×**);
+> gap full-suite **2,7×→2,3×**. gate22 TUTTO verde; cargo 1592. Riprofilo
+> (`wp30-harness/ab-out/new-wp31.sample`): run_loop self 3041→1761; colli
+> residui = value churn (memmove 629 + drop/clone Zval ~630 → la mossa
+> grossa resta la **value-representation**), gc_note 206 + gc_sweep 155,
+> memcmp 263, hashbrown get 189, slot_of 157 (i field-walker, A2.5
+> parziale), enter_callee 135 + bind_params 101, mi_malloc/free ~176.
+
+# (storia WP-30)
 
 > ⚡ **WP-30 (2026-07-21 notte, gated `fb5e9c2`→`06a3c5b`, 3 commit)**: frame
 > arena + IC sul dispatch metodi + IC su `$o->n++`. **(1) Frame arena**:
@@ -90,16 +114,16 @@ Riprendiamo phpr (PHP 8.5.7 in Rust). **Roadmap**: obiettivo primario = 100%
 compatibilità WordPress; la WP core test suite (PHPUnit) è il GATE PER NOME.
 
 ## Stato gate per nome (tutte le superfici)
-- Gate22 WP-30 verde (wp22-harness/gate-out): corpus **1455** · sess 28 ·
+- Gate22 WP-31 verde (wp22-harness/gate-out): corpus **1455** · sess 28 ·
   date 351 · refl 290 IDENTICI · ORM 3E/13F identico per nome · hk 1665 0E/0F ·
   cargo **1592**/0 · probe gd/mysqli/media byte-id · http battery DIFF-set = 16
   (WP-14) · option 413 e restapi 3514 identici per nome. ⚠️ i work-tree
   ORM/hk in /private/tmp/wp11-gates possono sparire (pulizia /tmp): se
   "Could not open input file: vendor/bin/phpunit", ri-estrarre i tarball da
   wp9-harness/gates/ e ri-runnare.
-- **Full-suite single-site run21: IDENTICA a run20/run19/run17/run16 per nome
-  (30.481 test, 0E/2F/86W/73S) = minimo teorico**, master-CPU 15:12.
-  Archiviata in `wp16-harness/full-out/run21/`.
+- **Full-suite single-site run22: IDENTICA a run21/run20/run19/run17/run16
+  per nome (30.481 test, 0E/2F/86W/73S) = minimo teorico**, master-CPU
+  13:02. Archiviata in `wp16-harness/full-out/run22/`.
 - **Full-suite multisite RICONFERMATA (WP-28): 1 diff per nome — minimo
   teorico** (31.278 test, 0E/2F; solo `wp_is_stream #2`;
   `wp19-harness/ms-out/diff-names-wp28.txt`).
@@ -153,10 +177,14 @@ H="/Volumes/Extreme Pro/Claude/wp16-harness"
    struct Op + refcount bump per istruzione; il guadagno è togliere QUELLO,
    non "allocazioni".
 
-   **→ Raccomandazione operativa WP-31**: (a) match del run_loop su
-   `&'m Op` (refactor grande ma meccanico, run.rs:92 + tutte le arm), (b)
-   `has_hints: bool` precomputato su Func (micro, sicuro), con A/B
-   interleaved + full-suite come al solito.
+   **→ ✅ ESEGUITO in WP-31** (`8adba4b`+`7ee4bcb`): −29,8% microbench,
+   −14,3% full-suite, −10,3% media. **Prossima leva (WP-32+), dal profilo
+   post-WP-31**: la mossa grossa è la **value-representation** (memmove +
+   drop/clone Zval ≈ 1.260 campioni, il blocco phpr-only dominante); leve
+   minori prima/insieme: slot_of nei field-walker (A2.5 del piano WP-29,
+   ~157), cache is_instance_of per (class,target), GC note/sweep. Le idee
+   Gemini restanti (interning, call-site specialization) restano
+   medio-termine.
    - **✅ Punto 1 (op-clone nel run_loop) — VALIDO, è la prossima leva
      consigliata.** `run.rs:92` clona l'op a ogni istruzione. Correzione al
      meccanismo proposto: NON serve alcun `Rc::clone` del func —
@@ -234,10 +262,30 @@ misurare e riportare all'utente il gap aggiornato e aggiornare la tabella
 | WP-28 | 87,6/23,0 = **3,8×** | 4,83/0,40GB = **12,2×** | 16:43/5:39 = **3,0×** | ~22/11,5 min = **1,9×** |
 | WP-29 | 82,4/23,0 = **3,6×** | 4,84/0,40GB = **12,1×** | 15:27/5:39 = **2,7×** | ~22/11,5 min = **1,9×** |
 | WP-30 | 80,7/21,0 = **3,8×** ⚠️ | 4,80/0,40GB = **12,1×** | 15:12/5:39 = **2,7×** | ~20/11,5 min = **1,7×** |
+| WP-31 | 72,4/20,95 = **3,5×** | 4,82/0,40GB = **12,1×** | 13:02/5:39 = **2,3×** | ~17,5/11,5 min = **1,5×** |
 
 ⚠️ riga WP-30: phpr media in calo ASSOLUTO (82,4→80,7) ma l'oracle del giorno
 gira −9% (23,0→21,0) → il rapporto sale per rumore dell'oracle, non per una
 regressione phpr (2 coppie consistenti: 80,42/21,03 e 80,97/21,02).
+
+## Lezioni operative (nuove WP-31)
+- ⭐⭐ **L'op-clone per-istruzione era il singolo costo più grosso del
+  run_loop** (−30% sul carico call-heavy, −14% full-suite): `Frame.func` è
+  `&'m Func` Copy ⇒ `let func = self.frames[top].func; let op =
+  &func.ops[ip];` NON borrowa self e il match gira su `&'m Op`. Le lezioni
+  WP-29/30 "il dispatch CLONA l'op" sono STORICHE: ora le op sono
+  raggiunte per reference (le celle IC Rc restano condivise — a maggior
+  ragione, si tocca la cella originale).
+- ⭐ **Refactor da centinaia di type-error = script sulle suggestion JSON
+  del compilatore** (`--message-format=json`, applicare solo replacement
+  con forma in whitelist: `*x`, rimozione di `&`, `x.clone()`): 171/175
+  fix automatici in una passata, il resto a mano. MAI regex alla cieca sul
+  sorgente.
+- ⭐ Le coercion `&&T→&T` e `&Rc<[u8]>→&[u8]` coprono quasi tutti i siti
+  d'uso di un match passato a reference: ZERO clone aggiunti — se un
+  refactor del genere richiede molti .clone(), qualcosa è storto.
+- ⚠️ `git diff` via RTK è riformattato (prefisso 2 spazi, header
+  "Changes:"): i grep su `^[+-]` non matchano — usare `^\s+[+-]`.
 
 ## Lezioni operative (nuove WP-30)
 - ⭐⭐ **Una method-IC keyed solo sulla classe receiver è UNSOUND anche per
