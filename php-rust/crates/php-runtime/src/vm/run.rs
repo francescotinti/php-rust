@@ -648,7 +648,7 @@ impl<'m> super::Vm<'m> {
                                     frame.this = Some(target.clone());
                                     frame.class = Some(defc);
                                     frame.static_class = Some(cid);
-                                    frame.ret_stringify = true;
+                                    frame.flags.set(FrameFlags::RET_STRINGIFY, true);
                                     self.frames.push(frame);
                                 }
                                 None => {
@@ -2299,15 +2299,15 @@ impl<'m> super::Vm<'m> {
                         ret = Zval::Ref(Rc::new(RefCell::new(ret)));
                     }
                     let ret_cell = self.frames[top].ret_cell.take();
-                    let ret_bool = self.frames[top].ret_bool;
-                    let ret_isset = self.frames[top].ret_isset;
-                    let ret_stringify = self.frames[top].ret_stringify;
-                    let ret_deref = self.frames[top].ret_deref;
+                    let ret_bool = self.frames[top].flags.get(FrameFlags::RET_BOOL);
+                    let ret_isset = self.frames[top].flags.get(FrameFlags::RET_ISSET);
+                    let ret_stringify = self.frames[top].flags.get(FrameFlags::RET_STRINGIFY);
+                    let ret_deref = self.frames[top].flags.get(FrameFlags::RET_DEREF);
                     let guard = std::mem::take(&mut self.frames[top].guard_release);
                     // A `clone`-driven `__clone` is finishing: revoke any remaining
                     // readonly re-init permission on the copy (PHP 8.3), so writes
                     // after the clone — or via a manual `__clone()` — fatal again.
-                    if self.frames[top].clone_init {
+                    if self.frames[top].flags.get(FrameFlags::CLONE_INIT) {
                         if let Some(Zval::Object(o)) = self.frames[top].this.clone() {
                             o.borrow_mut().readonly_clone_writable.clear();
                         }
@@ -2678,7 +2678,7 @@ impl<'m> super::Vm<'m> {
                         frame.class = Some(defc);
                         frame.static_class = Some(cid);
                         frame.ret_cell = Some(Rc::new(RefCell::new(Zval::Null)));
-                        frame.clone_init = true;
+                        frame.flags.set(FrameFlags::CLONE_INIT, true);
                         self.frames.push(frame);
                         continue;
                     }
@@ -2893,7 +2893,7 @@ impl<'m> super::Vm<'m> {
                     // unless a set hook/`__set` serves it; a no-op during the
                     // object's own construction (it is no longer lazy then).
                     // Proxy forwarding is transitive (a reset instance re-triggers).
-                    let target = if !self.frames[top].init_props {
+                    let target = if !self.frames[top].flags.get(FrameFlags::INIT_PROPS) {
                         self.lazy_prop_access(target, &name, cur, Some(true), (MagicKind::Set, b"__set"))?
                     } else {
                         target
@@ -2902,7 +2902,7 @@ impl<'m> super::Vm<'m> {
                     // visibility check (so a subclass can set an inherited private).
                     // The slot is the declared one (unconditional, mangled for a
                     // private) regardless of the running scope.
-                    if self.frames[top].init_props {
+                    if self.frames[top].flags.get(FrameFlags::INIT_PROPS) {
                         let key = match object_class_id(&target) {
                             Some(ocid) => self.prop_decl_storage_key(ocid, &name),
                             None => Cow::Borrowed(&name[..]),
@@ -3333,7 +3333,7 @@ impl<'m> super::Vm<'m> {
                         if !self.hook_guarded(oid, &name) {
                             if let Some(func) = self.prop_hook(cid, &name, false) {
                                 self.push_hook(func, target.clone(), oid, &name, None);
-                                self.frames.last_mut().unwrap().ret_isset = true;
+                                self.frames.last_mut().unwrap().flags.set(FrameFlags::RET_ISSET, true);
                                 continue;
                             }
                         }
@@ -3371,7 +3371,7 @@ impl<'m> super::Vm<'m> {
                         if !self.hook_guarded(oid, &name) {
                             if let Some(func) = self.prop_hook(cid, &name, false) {
                                 self.push_hook(func, target.clone(), oid, &name, None);
-                                self.frames.last_mut().unwrap().ret_isset = true;
+                                self.frames.last_mut().unwrap().flags.set(FrameFlags::RET_ISSET, true);
                                 continue;
                             }
                         }
@@ -3456,7 +3456,7 @@ impl<'m> super::Vm<'m> {
                         if !self.hook_guarded(oid, &name) {
                             if let Some(func) = self.prop_hook(cid, &name, false) {
                                 self.push_hook(func, target.clone(), oid, &name, None);
-                                self.frames.last_mut().unwrap().ret_isset = true;
+                                self.frames.last_mut().unwrap().flags.set(FrameFlags::RET_ISSET, true);
                                 continue;
                             }
                         }
@@ -4160,7 +4160,7 @@ impl<'m> super::Vm<'m> {
                             frame.this = Some(recv.deref_clone());
                             frame.class = Some(cid);
                             frame.static_class = Some(cid);
-                            frame.init_props = true; // privileged default writes
+                            frame.flags.set(FrameFlags::INIT_PROPS, true); // privileged default writes
                             self.frames.push(frame);
                         }
                         // No non-constant defaults: nothing to do, balance the stack.
@@ -4725,7 +4725,7 @@ impl<'m> super::Vm<'m> {
                 Op::Sweep { main } => {
                     // A destructor body's statement sweeps no-op — see
                     // Frame::in_destructor (handle-id release order).
-                    if !self.frames[top].in_destructor {
+                    if !self.frames[top].flags.get(FrameFlags::IN_DESTRUCTOR) {
                         self.gc_sweep(top, ip, *main)?;
                     }
                 }

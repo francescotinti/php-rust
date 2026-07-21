@@ -2797,7 +2797,7 @@ impl<'m> super::Vm<'m> {
             frame.this = Some(temp.clone());
             frame.class = Some(cid);
             frame.static_class = Some(cid);
-            frame.init_props = true;
+            frame.flags.set(FrameFlags::INIT_PROPS, true);
             // No `ret_cell`: the thunk's `Ret` must hit the `frames.len() == baseline`
             // check so `drive_to_return` stops here instead of resuming the caller.
             self.frames.push(frame);
@@ -6427,7 +6427,7 @@ impl<'m> super::Vm<'m> {
             frame.this = Some(obj.clone());
             frame.class = Some(cid);
             frame.static_class = Some(cid);
-            frame.init_props = true;
+            frame.flags.set(FrameFlags::INIT_PROPS, true);
             self.frames.push(frame);
             self.drive_to_return(baseline)?;
         }

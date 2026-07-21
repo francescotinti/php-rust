@@ -815,20 +815,14 @@ struct Frame<'m> {
     /// (whose return is discarded — a throwaway cell — while the expression's own
     /// result was pre-pushed).
     ret_cell: Option<Rc<RefCell<Zval>>>,
-    /// When true, this frame's `Ret` value is cast to bool before being pushed to
-    /// the caller — for `__isset`, whose return PHP coerces to bool.
-    ret_bool: bool,
-    /// When true, this frame's `Ret` value is replaced by `result !== null` —
-    /// `isset($obj->hookedProp)` runs the `get` hook and tests its result for
-    /// being set (step 50), distinct from `ret_bool`'s truthiness coercion.
-    ret_isset: bool,
-    /// When true, this frame's `Ret` value is converted to a string before being
-    /// pushed — for a `__toString` call scheduled by [`Op::Stringify`].
-    ret_stringify: bool,
-    /// When true, this frame's `Ret` value is dereferenced before being pushed
-    /// — a by-reference protocol getter (`&offsetGet`, monolog's LogRecord)
-    /// consumed in value context (`count($o['k'])`).
-    ret_deref: bool,
+    /// The frame's boolean flags packed into one byte (WP-32 C1) — the four
+    /// Ret-shaping bits (RET_BOOL `__isset` coercion, RET_ISSET hooked-isset
+    /// `!== null`, RET_STRINGIFY `__toString`, RET_DEREF by-ref protocol
+    /// getter in value context) plus INIT_PROPS (prop_init thunk privilege),
+    /// CLONE_INIT (readonly-writable window of `__clone`) and IN_DESTRUCTOR
+    /// (sweep suppression). Bools have no Drop: packing them is
+    /// drop-order-neutral.
+    flags: FrameFlags,
     /// Magic-accessor recursion-guard keys to remove from [`Vm::magic_guard`]
     /// when this frame returns (OOP-3b). Usually zero or one; a guard
     /// transferred across proxy forwarding (gh18038) appends here too.
@@ -861,29 +855,12 @@ struct Frame<'m> {
     /// extra arguments. Declared-parameter values are read live from the slots, so
     /// `func_get_args` reflects in-body reassignment, matching PHP.
     extra_args: Vec<Zval>,
-    /// Set on the `prop_init` thunk frame (`Op::InitProps`): its `$this->prop =`
-    /// writes are privileged initialization, so `Op::PropSet` skips the visibility
-    /// check and `__set` — a subclass thunk initialises an inherited *private*
-    /// default (e.g. `Exception::$trace = []`) without a "cannot access" fatal.
-    init_props: bool,
     /// Set on an `eval()` unit's top (`main`) frame to its *call site* — the file
     /// and line where `eval()` was invoked (step 57, Phase 1c-2c). A backtrace
     /// renders this frame's function as `eval` and presents code called from
     /// within it under the composite `<file>(<line>) : eval()'d code` file name,
     /// matching PHP. `None` for an ordinary frame.
     eval_origin: Option<(Box<[u8]>, Line)>,
-    /// Set on the `__clone` frame that the `clone` operator pushes (PHP 8.3
-    /// readonly-clone amendment): while it runs, `$this`'s readonly properties may
-    /// each be re-initialised once. On this frame's `Ret` the per-object
-    /// permission (`Object::readonly_clone_writable`) is revoked, so a *manual*
-    /// `$o->__clone()` call (no permission) still fatals on a readonly write.
-    clone_init: bool,
-    /// True for a frame running `__destruct` via the GC sweep. Its body's
-    /// per-statement `Op::Sweep`s no-op: objects the destructor displaces are
-    /// collected by the OUTER sweep that resumes after this frame returns, so
-    /// the dying receiver releases its handle id FIRST — Zend's LIFO reuse
-    /// order (gh10168: the receiver's id is reused before its displacees').
-    in_destructor: bool,
     /// The instance id of the closure this frame is running, if any. `static $x`
     /// inside a closure persists **per closure instance** (PHP binds the static to
     /// the Closure object, not the op-array): a fresh closure from the same literal
@@ -897,6 +874,35 @@ struct Frame<'m> {
     /// installs the alias in every bridged ancestor too (wp-settings.php /
     /// plugin.php require'd from inside WP_CLI's Runner::load_wordpress()).
     bridge_caller: Option<usize>,
+}
+
+/// [`Frame`]'s packed boolean flags (WP-32 C1). Doc for each bit lives on
+/// the `flags` field.
+#[derive(Clone, Copy, Default, Debug)]
+struct FrameFlags(u8);
+
+impl FrameFlags {
+    const RET_BOOL: u8 = 1 << 0;
+    const RET_ISSET: u8 = 1 << 1;
+    const RET_STRINGIFY: u8 = 1 << 2;
+    const RET_DEREF: u8 = 1 << 3;
+    const INIT_PROPS: u8 = 1 << 4;
+    const CLONE_INIT: u8 = 1 << 5;
+    const IN_DESTRUCTOR: u8 = 1 << 6;
+
+    #[inline]
+    fn get(self, mask: u8) -> bool {
+        self.0 & mask != 0
+    }
+
+    #[inline]
+    fn set(&mut self, mask: u8, v: bool) {
+        if v {
+            self.0 |= mask;
+        } else {
+            self.0 &= !mask;
+        }
+    }
 }
 
 impl<'m> Frame<'m> {
@@ -926,10 +932,7 @@ impl<'m> Frame<'m> {
             class: None,
             static_class: None,
             ret_cell: None,
-            ret_bool: false,
-            ret_isset: false,
-            ret_deref: false,
-            ret_stringify: false,
+            flags: FrameFlags::default(),
             guard_release: Vec::new(),
             iters: Vec::new(),
             pending_throw: None,
@@ -938,11 +941,8 @@ impl<'m> Frame<'m> {
             yield_from: None,
             argc: 0,
             extra_args: Vec::new(),
-            init_props: false,
-            eval_origin: None,
-            clone_init: false,
-            in_destructor: false,
-            closure_id: None,
+                        eval_origin: None,
+                                    closure_id: None,
             bridge_caller: None,
         }
     }
@@ -1881,7 +1881,7 @@ impl<'m> Vm<'m> {
                 frame.this = Some(Zval::Object(Rc::clone(&o)));
                 frame.class = Some(defc);
                 frame.static_class = Some(cid);
-                frame.in_destructor = true;
+                frame.flags.set(FrameFlags::IN_DESTRUCTOR, true);
                 // Discard the destructor's return (don't disturb the caller's
                 // operand stack).
                 frame.ret_cell = Some(Rc::new(RefCell::new(Zval::Null)));
@@ -2991,7 +2991,7 @@ impl<'m> Vm<'m> {
         let mut frame = self.pooled_frame(callee, m);
         // A by-reference getter (`&offsetGet`) returns its raw `Ref`; a value
         // consumer (`count($o['k'])`) needs the dereferenced value.
-        frame.ret_deref = callee.by_ref && matches!(ret, RetMode::Stack);
+        frame.flags.set(FrameFlags::RET_DEREF, callee.by_ref && matches!(ret, RetMode::Stack));
         bind_params(&mut frame, args);
         frame.this = Some(recv);
         frame.class = Some(defc);
@@ -5876,7 +5876,7 @@ impl<'m> Vm<'m> {
         let baseline = self.frames.len();
         self.push_hook(func, obj.clone(), oid, name, None);
         if !deref {
-            self.frames.last_mut().expect("hook frame just pushed").ret_deref = false;
+            self.frames.last_mut().expect("hook frame just pushed").flags.set(FrameFlags::RET_DEREF, false);
         }
         self.drive_to_return(baseline)
     }
@@ -6648,7 +6648,7 @@ impl<'m> Vm<'m> {
             frame.this = Some(Zval::Object(Rc::clone(rc)));
             frame.class = Some(cid);
             frame.static_class = Some(cid);
-            frame.init_props = true; // privileged default writes
+            frame.flags.set(FrameFlags::INIT_PROPS, true); // privileged default writes
             self.frames.push(frame);
             let _ = self.drive_to_return(baseline);
         }
@@ -7007,7 +7007,7 @@ impl<'m> Vm<'m> {
                         frame.this = Some(v.clone());
                         frame.class = Some(defc);
                         frame.static_class = Some(cid);
-                        frame.ret_stringify = true;
+                        frame.flags.set(FrameFlags::RET_STRINGIFY, true);
                         self.frames.push(frame);
                         let result = self.drive_to_return(baseline)?;
                         Ok(convert::to_zstr(&result, &mut self.diags))
@@ -10188,7 +10188,7 @@ impl<'m> Vm<'m> {
         frame.class = Some(defc);
         frame.static_class = Some(lsb);
         frame.ret_cell = ret_cell;
-        frame.ret_bool = ret_bool;
+        frame.flags.set(FrameFlags::RET_BOOL, ret_bool);
         let key = (oid, kind, name.to_vec());
         self.magic_guard.insert(key.clone());
         frame.guard_release.push(key);
@@ -10269,7 +10269,7 @@ impl<'m> Vm<'m> {
         // dereferenced value, not the cell. Place contexts (`&$o->prop`,
         // `$o->prop[] = v`) run the hook via `byref_hook_root`, which clears
         // the flag to keep the cell.
-        frame.ret_deref = func.by_ref && !is_set;
+        frame.flags.set(FrameFlags::RET_DEREF, func.by_ref && !is_set);
         let key = (oid, MagicKind::Hook, name.to_vec());
         // Only the frame that first guards `(oid, name)` releases it on `Ret`. A
         // nested explicit hook call re-entering the same property (a parent hook
@@ -10316,7 +10316,7 @@ impl<'m> Vm<'m> {
         }
         // Explicit `parent::$name::get()` is a value context: deref a `&get`
         // hook's returned cell (mirrors `push_hook`).
-        frame.ret_deref = func.by_ref && !is_set;
+        frame.flags.set(FrameFlags::RET_DEREF, func.by_ref && !is_set);
         let key = (oid, MagicKind::Hook, name.to_vec());
         if self.magic_guard.insert(key.clone()) {
             frame.guard_release.push(key);
@@ -10592,7 +10592,7 @@ impl<'m> Vm<'m> {
         };
         let baseline = self.frames.len();
         self.push_hook(func, target, oid, &name, None);
-        self.frames.last_mut().expect("hook frame just pushed").ret_deref = false;
+        self.frames.last_mut().expect("hook frame just pushed").flags.set(FrameFlags::RET_DEREF, false);
         let v = self.drive_to_return(baseline)?;
         Ok(Some(match v {
             Zval::Ref(rc) => rc,
