@@ -534,6 +534,16 @@ impl<'m> super::Vm<'m> {
                     let r = self.binary_value(top, *b)?;
                     self.frames[top].stack.push(r);
                 }
+                Op::CmpJmp { op, addr, when } => {
+                    // Fused compare+branch (WP-32): identical semantics to
+                    // Binary+JumpIfX by construction (shared binary_value;
+                    // to_bool on a Bool is free and emits no diag) — minus
+                    // the Zval::Bool stack round-trip and one dispatch.
+                    let r = self.binary_value(top, *op)?;
+                    if convert::to_bool(&r, &mut self.diags) == *when {
+                        self.frames[top].ip = *addr as usize;
+                    }
+                }
                 Op::Unary(u) => {
                     let a = self.frames[top].stack.pop().expect("Unary operand");
                     let r = self.apply_unop_ovl(*u, &a)?;

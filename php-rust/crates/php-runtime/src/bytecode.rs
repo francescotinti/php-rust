@@ -542,6 +542,13 @@ pub enum Op {
     JumpIfFalse(Addr),
     /// `[cond] -> []` — pop; jump to `addr` if the value is truthy.
     JumpIfTrue(Addr),
+    /// `[lhs, rhs] -> []` — fused compare+branch (WP-32): evaluate the
+    /// comparison `op` exactly as [`Op::Binary`] (same lazy-init, same
+    /// string-vs-object `__toString` rule, same overloads/diags), then jump
+    /// to `addr` when the boolean result equals `when`. Emitted ONLY when a
+    /// condition's AST root is a comparison (compiler `cond_jump`), so the
+    /// boolean is never observed as a value — no `Zval::Bool` round-trip.
+    CmpJmp { op: BinOp, addr: Addr, when: bool },
     /// `[v] -> [v]` if `v` is *not* null/undefined (jump to `addr`, value kept);
     /// `[v] -> []` otherwise (fall through, value discarded). The primitive
     /// behind `??` and `??=`: the left operand is read silently, and the right is

@@ -520,6 +520,55 @@ impl<'a> FnCompiler<'a> {
         self.ops[at as usize] = op;
     }
 
+    /// Back-patch the TARGET of the jump-family op at `at` in place (WP-32):
+    /// unlike [`Self::patch`], the caller doesn't need to know which jump
+    /// variant sits there — `cond_jump` may have emitted either a plain
+    /// conditional jump or a fused [`Op::CmpJmp`].
+    fn patch_target(&mut self, at: Addr, target: Addr) {
+        match &mut self.ops[at as usize] {
+            Op::Jump(a)
+            | Op::JumpIfFalse(a)
+            | Op::JumpIfTrue(a)
+            | Op::JumpIfNotNull(a)
+            | Op::JumpIfNull(a) => *a = target,
+            Op::CmpJmp { addr, .. } => *addr = target,
+            other => unreachable!("patch_target on non-jump op {other:?}"),
+        }
+    }
+
+    /// Compile a branch on `cond` (WP-32): when the condition's AST ROOT is a
+    /// comparison, emit the operands followed by a fused [`Op::CmpJmp`]
+    /// (jump taken when the comparison result == `when`); otherwise compile
+    /// the whole expression and emit a plain `JumpIfTrue`/`JumpIfFalse`.
+    /// Root-matching only: an inner comparison whose boolean is consumed as a
+    /// VALUE (ternary arms, assignments) is never fused. Returns the emitted
+    /// jump's address for `patch_target`.
+    fn cond_jump(&mut self, cond: &Expr, when: bool) -> R<Addr> {
+        if let ExprKind::Binary(
+            op @ (BinOp::Lt
+            | BinOp::Le
+            | BinOp::Gt
+            | BinOp::Ge
+            | BinOp::Eq
+            | BinOp::NotEq
+            | BinOp::Identical
+            | BinOp::NotIdentical),
+            a,
+            b,
+        ) = &cond.kind
+        {
+            self.expr(a)?;
+            self.expr(b)?;
+            return Ok(self.emit(Op::CmpJmp { op: *op, addr: Addr::MAX, when }));
+        }
+        self.expr(cond)?;
+        Ok(self.emit(if when {
+            Op::JumpIfTrue(Addr::MAX)
+        } else {
+            Op::JumpIfFalse(Addr::MAX)
+        }))
+    }
+
     /// Intern a literal into the constant pool, returning its index.
     fn konst(&mut self, c: Const) -> ConstIdx {
         if let Some(i) = self.consts.iter().position(|e| *e == c) {
@@ -656,13 +705,12 @@ impl<'a> FnCompiler<'a> {
             }
             StmtKind::While { cond, body } => {
                 let top = self.here();
-                self.expr(cond)?;
-                let exit = self.emit(Op::JumpIfFalse(Addr::MAX));
+                let exit = self.cond_jump(cond, false)?;
                 self.loops.push(LoopCtx::default());
                 self.opaque_block(body)?;
                 self.emit(Op::Jump(top));
                 let end = self.here();
-                self.patch(exit, Op::JumpIfFalse(end));
+                self.patch_target(exit, end);
                 self.close_loop(top, end);
             }
             StmtKind::DoWhile { body, cond } => {
@@ -670,8 +718,8 @@ impl<'a> FnCompiler<'a> {
                 self.loops.push(LoopCtx::default());
                 self.opaque_block(body)?;
                 let cont = self.here();
-                self.expr(cond)?;
-                self.emit(Op::JumpIfTrue(top));
+                let back = self.cond_jump(cond, true)?;
+                self.patch_target(back, top);
                 let end = self.here();
                 // `continue` in a do-while re-tests the condition.
                 self.close_loop(cont, end);
@@ -693,7 +741,7 @@ impl<'a> FnCompiler<'a> {
                 self.emit(Op::Jump(top));
                 let end = self.here();
                 if let Some(exit) = exit {
-                    self.patch(exit, Op::JumpIfFalse(end));
+                    self.patch_target(exit, end);
                 }
                 self.close_loop(cont, end);
             }
@@ -946,12 +994,11 @@ impl<'a> FnCompiler<'a> {
     /// Emit one `if`/`elseif` arm: `cond`, a `JumpIfFalse` past the body, the
     /// body, and a `Jump` to the chain end (recorded for back-patching).
     fn cond_chain(&mut self, cond: &Expr, body: &[Stmt], end_jumps: &mut Vec<Addr>) -> R<()> {
-        self.expr(cond)?;
-        let skip = self.emit(Op::JumpIfFalse(Addr::MAX));
+        let skip = self.cond_jump(cond, false)?;
         self.block(body)?;
         end_jumps.push(self.emit(Op::Jump(Addr::MAX)));
         let after = self.here();
-        self.patch(skip, Op::JumpIfFalse(after));
+        self.patch_target(skip, after);
         Ok(())
     }
 
@@ -967,8 +1014,7 @@ impl<'a> FnCompiler<'a> {
             self.expr(e)?;
             self.emit(Op::Pop);
         }
-        self.expr(last)?;
-        Ok(Some(self.emit(Op::JumpIfFalse(Addr::MAX))))
+        Ok(Some(self.cond_jump(last, false)?))
     }
 
     /// Patch every `goto` jump site to its label position, once the whole body is

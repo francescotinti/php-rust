@@ -15325,6 +15325,30 @@ mod tests {
     }
 
     #[test]
+    fn cmp_jmp_fused_conditions_semantics() {
+        // Conditions with a comparison ROOT compile to the fused CmpJmp
+        // (WP-32): loose/strict semantics, __toString rule, loop back-edges
+        // and the no-fuse guard (ternary root) must all match the oracle.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                if ('10' == '1e1') { echo 'a'; }
+                if ('abc' == 0) { echo 'b'; } else { echo 'c'; }
+                if (0 == '') { echo 'd'; } else { echo 'e'; }
+                $out = ''; for ($i = 0; $i < 4; $i++) { if ($i == 2) { continue; } $out .= $i; }
+                $j = 3; do { $out .= 'x'; $j--; } while ($j > 1);
+                $k = 0; while ($k !== 3) { $k++; }
+                echo $out, $k;
+                class W { public function __toString(){ return '3'; } }
+                if (new W == '3') { echo 'T'; }
+                $a = false; $c = 1; $d = 2;
+                if ($a ? true : $c < $d) { echo 'G'; }"
+            ),
+            b"ace013xx3TG"
+        );
+    }
+
+    #[test]
     fn prop_incdec_ic_polymorphic_ref_pre_post() {
         // One `$o->n++` site alternating two classes with DIFFERENT slot
         // indices for `n`, a by-ref alias observing the cached write-through,
