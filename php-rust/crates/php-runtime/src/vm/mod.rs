@@ -11960,10 +11960,9 @@ fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags, dro
             let arr = Rc::make_mut(rc);
             let key = coerce_key_diag(k, diags)
                 .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
-            if !arr.contains_key(&key) {
-                arr.insert(key.clone(), Zval::Null);
-            }
-            let child = arr.get_mut(&key).expect("just inserted");
+            // ONE lookup, no key clone (WP-32 B2) — semantics identical to
+            // the old contains_key + insert(Null) + get_mut composite.
+            let child = arr.slot_or_vivify(key);
             path_apply(child, rest, last, diags, dropped, aa)
         }
         None => apply_last(cell, last, diags, dropped, aa),
@@ -12023,15 +12022,13 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Op
             let k = coerce_key_diag(&key, diags)
                 .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
             // Write *through* an existing reference element (REF-4) so an alias
-            // sees the update; otherwise overwrite / insert.
-            match arr.get_mut(&k) {
-                Some(slot) => {
-                    // The displaced element is handed back via `dropped` so the
-                    // caller can note it (an object it held may now be unreachable).
-                    debug_assert!(dropped.is_none());
-                    *dropped = Some(store_slot(slot, value.clone()));
-                }
-                None => arr.insert(k, value.clone()),
+            // sees the update; otherwise overwrite / insert — ONE lookup on
+            // the hit path (WP-32 B3). The displaced element is handed back
+            // via `dropped` so the caller can note it (an object it held may
+            // now be unreachable).
+            if let Some(d) = arr.set_returning_displaced(k, value.clone()) {
+                debug_assert!(dropped.is_none());
+                *dropped = Some(d);
             }
             Ok(value)
         }
@@ -12049,24 +12046,20 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Op
                 .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
             let old = arr.get(&k).map(|v| v.deref_clone()).unwrap_or(Zval::Null);
             let result = apply_binop(op, &old, &rhs, diags)?;
-            // Write through an existing reference element (REF-4).
-            match arr.get_mut(&k) {
-                Some(slot) => {
-                    debug_assert!(dropped.is_none());
-                    *dropped = Some(store_slot(slot, result.clone()));
-                }
-                None => arr.insert(k, result.clone()),
+            // Write through an existing reference element (REF-4) — ONE
+            // lookup on the hit path (WP-32 B3).
+            if let Some(d) = arr.set_returning_displaced(k, result.clone()) {
+                debug_assert!(dropped.is_none());
+                *dropped = Some(d);
             }
             Ok(result)
         }
         Last::IncDec { key, inc, pre } => {
             let k = coerce_key_diag(&key, diags)
                 .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
-            if !arr.contains_key(&k) {
-                arr.insert(k.clone(), Zval::Null);
-            }
-            // Operate through a reference element (REF-4) so an alias updates too.
-            let slot = arr.get_mut(&k).expect("just inserted");
+            // Operate through a reference element (REF-4) so an alias updates
+            // too — ONE lookup, no key clone (WP-32 B2).
+            let slot = arr.slot_or_vivify(k);
             let cell = if let Zval::Ref(rc) = slot {
                 Rc::clone(rc)
             } else {
@@ -12157,10 +12150,8 @@ fn elem_cell(cell: &mut Zval, key: &Key) -> Rc<RefCell<Zval>> {
     }
     if let Zval::Array(rc) = cell {
         let arr = Rc::make_mut(rc);
-        if !arr.contains_key(key) {
-            arr.insert(key.clone(), Zval::Null);
-        }
-        let child = arr.get_mut(key).expect("key present after insert");
+        // ONE lookup (WP-32 B2); the Key clone is an Rc bump / int copy.
+        let child = arr.slot_or_vivify(key.clone());
         return make_cell(child);
     }
     Rc::new(RefCell::new(Zval::Null))

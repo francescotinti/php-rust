@@ -294,6 +294,121 @@ impl PhpArray {
         self.count += 1;
     }
 
+    /// Get-or-insert-`Null` in ONE lookup (WP-32): the exact semantics of the
+    /// `contains_key` + `insert(key, Null)` + `get_mut` composite the nested
+    /// array-write drill used to run (2-4 hash lookups + a key clone per
+    /// level). Tombstone/hole/negative/string keys on a packed array escalate
+    /// first, and a vivified key lands at the END of the iteration order —
+    /// the WP-27 no-revive rule, oracle-pinned. `holds_containers` is set on
+    /// return exactly like the composite's `get_mut` did (the caller may
+    /// write any value through the handle).
+    pub fn slot_or_vivify(&mut self, key: Key) -> &mut Zval {
+        enum Plan {
+            Hit(usize),
+            Append(i64),
+            Escalate,
+        }
+        if let Repr::Packed(slots) = &mut self.repr {
+            let plan = match key {
+                Key::Int(i) if (i as usize) < slots.len() && i >= 0 => {
+                    if slots[i as usize].is_some() {
+                        Plan::Hit(i as usize)
+                    } else {
+                        // Tombstone: re-inserted keys go to the END — escalate.
+                        Plan::Escalate
+                    }
+                }
+                Key::Int(i) if i == slots.len() as i64 => Plan::Append(i),
+                _ => Plan::Escalate,
+            };
+            match plan {
+                Plan::Hit(i) => {
+                    self.holds_containers = true;
+                    let Repr::Packed(slots) = &mut self.repr else { unreachable!() };
+                    return slots[i].as_mut().unwrap();
+                }
+                Plan::Append(i) => {
+                    if i >= self.next_free {
+                        self.next_free = i.saturating_add(1);
+                    }
+                    self.count += 1;
+                    self.holds_containers = true;
+                    let Repr::Packed(slots) = &mut self.repr else { unreachable!() };
+                    slots.push(Some(Zval::Null));
+                    return slots.last_mut().unwrap().as_mut().unwrap();
+                }
+                Plan::Escalate => self.to_hashed(),
+            }
+        }
+        self.holds_containers = true;
+        let hit = {
+            let Repr::Hashed { index, .. } = &self.repr else { unreachable!() };
+            index.get(&key).copied()
+        };
+        if hit.is_none() {
+            if let Key::Int(i) = key {
+                if i >= self.next_free {
+                    self.next_free = i.saturating_add(1);
+                }
+            }
+            self.count += 1;
+        }
+        let Repr::Hashed { entries, index } = &mut self.repr else { unreachable!() };
+        let pos = match hit {
+            Some(pos) => pos,
+            None => {
+                let pos = entries.len() as u32;
+                index.insert(key.clone(), pos);
+                entries.push(Some((key, Zval::Null)));
+                pos
+            }
+        };
+        &mut entries[pos as usize].as_mut().unwrap().1
+    }
+
+    /// Single-lookup leaf write (WP-32): the exact semantics of the
+    /// `get_mut` + write-through-Ref (REF-4) + fallback-`insert` composite of
+    /// the array path-write leaf. A hit writes THROUGH an existing `Ref` slot
+    /// (aliases observe the update) or overwrites in place, returning the
+    /// displaced value for GC noting, and sets `holds_containers` exactly
+    /// like `get_mut` did; a miss delegates to [`Self::insert`] (new-key
+    /// logic byte-identical, `holds_containers` from the VALUE — never
+    /// vivify-Null-then-overwrite, which would mis-flag scalar-only arrays
+    /// and feed a spurious Null to gc_note) and returns `None`.
+    pub fn set_returning_displaced(&mut self, key: Key, val: Zval) -> Option<Zval> {
+        fn write_slot(slot: &mut Zval, val: Zval) -> Zval {
+            match slot {
+                Zval::Ref(cell) => std::mem::replace(&mut *cell.borrow_mut(), val),
+                _ => std::mem::replace(slot, val),
+            }
+        }
+        let hit = match &self.repr {
+            Repr::Packed(slots) => match &key {
+                Key::Int(i) if (*i as usize) < slots.len() && *i >= 0 && slots[*i as usize].is_some() => {
+                    Some(*i as usize)
+                }
+                _ => None,
+            },
+            Repr::Hashed { index, .. } => index.get(&key).map(|&pos| pos as usize),
+        };
+        match hit {
+            Some(pos) => {
+                self.holds_containers = true;
+                let displaced = match &mut self.repr {
+                    Repr::Packed(slots) => write_slot(slots[pos].as_mut().unwrap(), val),
+                    Repr::Hashed { entries, .. } => {
+                        write_slot(&mut entries[pos].as_mut().unwrap().1, val)
+                    }
+                };
+                Some(displaced)
+            }
+            None => {
+                self.insert(key, val);
+                None
+            }
+        }
+    }
+
     /// Zend's `array_pop` adjustment (ext/standard/array.c:3579): popping the
     /// element whose int key was the latest auto-index (`next_free - 1`)
     /// frees that index again, so pop-then-append reuses the same key.
@@ -634,6 +749,106 @@ impl DoubleEndedIterator for IterMut<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// slot_or_vivify must be indistinguishable from the composite it
+    /// replaces (`contains_key` + `insert(key, Null)` + `get_mut`) across
+    /// every repr shape — including count/next_free/holds_containers and
+    /// the resulting iteration order (WP-27 no-revive).
+    #[test]
+    fn slot_or_vivify_equals_composite() {
+        let shapes: Vec<(&str, Box<dyn Fn() -> PhpArray>)> = vec![
+            ("packed", Box::new(|| {
+                let mut a = PhpArray::new();
+                for i in 0..3 {
+                    let _ = a.append(Zval::Long(i));
+                }
+                a
+            })),
+            ("packed-tombstone", Box::new(|| {
+                let mut a = PhpArray::new();
+                for i in 0..3 {
+                    let _ = a.append(Zval::Long(i));
+                }
+                a.remove(&Key::Int(1));
+                a
+            })),
+            ("hashed", Box::new(|| {
+                let mut a = PhpArray::new();
+                a.insert(Key::from_bytes(b"x"), Zval::Long(7));
+                a.insert(Key::Int(4), Zval::Long(8));
+                a
+            })),
+            ("empty", Box::new(PhpArray::new)),
+        ];
+        let keys = [
+            Key::Int(0),          // packed in-range hit
+            Key::Int(1),          // tombstone on the tombstone shape
+            Key::Int(3),          // packed append position
+            Key::Int(9),          // hole → escalate
+            Key::Int(-2),         // negative → escalate
+            Key::from_bytes(b"x"),// string hit on hashed
+            Key::from_bytes(b"nu"),// string miss
+        ];
+        for (name, mk) in &shapes {
+            for key in &keys {
+                let mut a = mk();
+                let mut b = mk();
+                // composite (the old drill)
+                if !a.contains_key(key) {
+                    a.insert(key.clone(), Zval::Null);
+                }
+                *a.get_mut(key).expect("composite slot") = Zval::Long(99);
+                // fused
+                *b.slot_or_vivify(key.clone()) = Zval::Long(99);
+                assert_eq!(a.len(), b.len(), "{name}/{key:?} count");
+                assert_eq!(a.next_free, b.next_free, "{name}/{key:?} next_free");
+                assert_eq!(a.may_hold_containers(), b.may_hold_containers(), "{name}/{key:?} holds");
+                let av: Vec<_> = a.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                let bv: Vec<_> = b.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                assert_eq!(format!("{av:?}"), format!("{bv:?}"), "{name}/{key:?} order");
+            }
+        }
+    }
+
+    /// set_returning_displaced must match the leaf-write composite
+    /// (`get_mut` hit → write-through-Ref, miss → `insert`) on every shape.
+    #[test]
+    fn set_returning_displaced_equals_composite() {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+        // Ref write-through: the alias cell observes the new value and the
+        // displaced INNER value comes back.
+        let cell = Rc::new(RefCell::new(Zval::Long(5)));
+        let mut a = PhpArray::new();
+        a.insert(Key::from_bytes(b"r"), Zval::Ref(Rc::clone(&cell)));
+        let d = a.set_returning_displaced(Key::from_bytes(b"r"), Zval::Long(9));
+        assert!(matches!(d, Some(Zval::Long(5))));
+        assert!(matches!(&*cell.borrow(), Zval::Long(9)));
+        assert!(matches!(a.get(&Key::from_bytes(b"r")), Some(Zval::Ref(_))));
+        // Plain hit: displaced returned, holds_containers set like get_mut.
+        let mut b = PhpArray::new();
+        let _ = b.append(Zval::Long(1));
+        let d = b.set_returning_displaced(Key::Int(0), Zval::Long(2));
+        assert!(matches!(d, Some(Zval::Long(1))));
+        assert!(b.may_hold_containers(), "hit mirrors get_mut's flag");
+        // Miss with a scalar value: holds_containers stays FALSE (insert
+        // semantics — no spurious Null vivify).
+        let mut c = PhpArray::new();
+        let d = c.set_returning_displaced(Key::from_bytes(b"x"), Zval::Long(3));
+        assert!(d.is_none());
+        assert!(!c.may_hold_containers(), "miss keeps scalar-only flag");
+        assert_eq!(c.len(), 1);
+        // Miss on a packed tombstone escalates and appends at the END.
+        let mut e = PhpArray::new();
+        for i in 0..3 {
+            let _ = e.append(Zval::Long(i));
+        }
+        e.remove(&Key::Int(1));
+        let d = e.set_returning_displaced(Key::Int(1), Zval::Long(7));
+        assert!(d.is_none());
+        let order: Vec<_> = e.iter().map(|(k, _)| k.clone()).collect();
+        assert_eq!(format!("{order:?}"), format!("{:?}", [Key::Int(0), Key::Int(2), Key::Int(1)]));
+    }
 
     fn k(s: &str) -> Key {
         Key::from_bytes(s.as_bytes())
