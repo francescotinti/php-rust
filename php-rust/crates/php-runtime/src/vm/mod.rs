@@ -15349,6 +15349,30 @@ mod tests {
     }
 
     #[test]
+    fn cmp_jmp_fused_switch_match_shortcircuit() {
+        // A4 surfaces: switch loose-Eq arms, match strict arms (multi-cond),
+        // &&/|| operands with comparison roots, full ternary condition, and
+        // the UNFUSED elvis (its value is Dup'd, never fusable).
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                switch ('2') { case 1: echo 'a'; break; case 2: echo 'b'; break; default: echo 'c'; }
+                switch (0) { case 'banana': echo 'X'; break; case '0': echo 'Y'; break; default: echo 'Z'; }
+                echo match(3) { 1, 2 => 'lo', 3, 4 => 'mid', default => 'hi' };
+                echo match(true) { 1 === 2 => 'x', '3' === 3 => 'w', 3 === 3 => 'y', default => 'z' };
+                $a = 2; $b = 3;
+                echo ($a < $b && $b < 10) ? 'P' : 'Q';
+                echo ($a > $b || $b >= 3) ? 'R' : 'S';
+                echo (5 == '5' ? 'eq' : 'ne');
+                $n = null;
+                echo $n ?: 'elv';
+                for ($i = 0; $i < 3 && $i !== 2; $i++) { echo $i; }"
+            ),
+            b"bYmidyPReqelv01"
+        );
+    }
+
+    #[test]
     fn prop_incdec_ic_polymorphic_ref_pre_post() {
         // One `$o->n++` site alternating two classes with DIFFERENT slot
         // indices for `n`, a by-ref alias observing the cached write-through,

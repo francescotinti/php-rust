@@ -215,8 +215,9 @@ impl<'a> super::FnCompiler<'a> {
             if let Some(test) = &case.test {
                 self.emit(Op::LoadSlot(t));
                 self.expr(test)?;
-                self.emit(Op::Binary(BinOp::Eq));
-                test_jumps.push((i, self.emit(Op::JumpIfTrue(Addr::MAX))));
+                // Fused loose-Eq dispatch (WP-32): the bool was consumed
+                // solely by the following JumpIfTrue.
+                test_jumps.push((i, self.emit(Op::CmpJmp { op: BinOp::Eq, addr: Addr::MAX, when: true })));
             }
         }
         // No case matched -> default (if any) or past the end.
@@ -235,7 +236,7 @@ impl<'a> super::FnCompiler<'a> {
         }
         let end = self.here();
         for (i, j) in test_jumps {
-            self.patch(j, Op::JumpIfTrue(body_addrs[i]));
+            self.patch_target(j, body_addrs[i]);
         }
         self.patch(no_match, Op::Jump(default_addr.unwrap_or(end)));
         self.free_temp();
@@ -263,8 +264,8 @@ impl<'a> super::FnCompiler<'a> {
             for cond in &arm.conditions {
                 self.emit(Op::LoadSlot(t));
                 self.expr(cond)?;
-                self.emit(Op::Binary(BinOp::Identical));
-                to_body.push((i, self.emit(Op::JumpIfTrue(Addr::MAX))));
+                // Fused strict-=== arm test (WP-32).
+                to_body.push((i, self.emit(Op::CmpJmp { op: BinOp::Identical, addr: Addr::MAX, when: true })));
             }
         }
         let no_match = self.emit(Op::Jump(Addr::MAX));
@@ -280,7 +281,7 @@ impl<'a> super::FnCompiler<'a> {
         self.emit(Op::MatchError(t));
         let end = self.here();
         for (i, j) in to_body {
-            self.patch(j, Op::JumpIfTrue(body_addrs[i]));
+            self.patch_target(j, body_addrs[i]);
         }
         let nm_target = default_arm.map(|i| body_addrs[i]).unwrap_or(unhandled);
         self.patch(no_match, Op::Jump(nm_target));

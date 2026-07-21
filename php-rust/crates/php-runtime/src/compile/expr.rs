@@ -176,13 +176,13 @@ impl<'a> super::FnCompiler<'a> {
             ExprKind::Ternary { cond, then, otherwise } => {
                 match then {
                     Some(then) => {
-                        // cond ? then : otherwise
-                        self.expr(cond)?;
-                        let to_else = self.emit(Op::JumpIfFalse(Addr::MAX));
+                        // cond ? then : otherwise — the condition branch fuses
+                        // when its root is a comparison (WP-32).
+                        let to_else = self.cond_jump(cond, false)?;
                         self.expr(then)?;
                         let to_end = self.emit(Op::Jump(Addr::MAX));
                         let else_at = self.here();
-                        self.patch(to_else, Op::JumpIfFalse(else_at));
+                        self.patch_target(to_else, else_at);
                         self.expr(otherwise)?;
                         let end = self.here();
                         self.patch(to_end, Op::Jump(end));
@@ -811,24 +811,17 @@ impl<'a> super::FnCompiler<'a> {
     pub(super) fn short_circuit(&mut self, a: &Expr, b: &Expr, want_true: bool) -> R<()> {
         // For `&&`: if either operand is falsy, result is false (jump to L_short).
         // For `||`: if either operand is truthy, result is true.
-        let short = |s: &mut Self| {
-            if want_true {
-                s.emit(Op::JumpIfTrue(Addr::MAX))
-            } else {
-                s.emit(Op::JumpIfFalse(Addr::MAX))
-            }
-        };
-        self.expr(a)?;
-        let j1 = short(self);
-        self.expr(b)?;
-        let j2 = short(self);
+        // Each operand's boolean is consumed solely by its jump, so a
+        // comparison-rooted operand fuses to CmpJmp (WP-32).
+        let j1 = self.cond_jump(a, want_true)?;
+        let j2 = self.cond_jump(b, want_true)?;
         // Fell through: `&&` → true, `||` → false.
         let fallthrough = self.konst(Const::Bool(!want_true));
         self.emit(Op::PushConst(fallthrough));
         let to_end = self.emit(Op::Jump(Addr::MAX));
         let short_at = self.here();
-        self.patch(j1, if want_true { Op::JumpIfTrue(short_at) } else { Op::JumpIfFalse(short_at) });
-        self.patch(j2, if want_true { Op::JumpIfTrue(short_at) } else { Op::JumpIfFalse(short_at) });
+        self.patch_target(j1, short_at);
+        self.patch_target(j2, short_at);
         let shorted = self.konst(Const::Bool(want_true));
         self.emit(Op::PushConst(shorted));
         let end = self.here();
