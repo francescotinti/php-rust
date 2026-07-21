@@ -804,13 +804,13 @@ impl<'m> Vm<'m> {
             DimBase::Global(s) => &mut self.frames[0].slots[s as usize],
             DimBase::Superglobal(i) => &mut self.superglobals[i as usize],
         };
-        // Elements displaced by the write (e.g. `$a[0] = new X` overwriting the
-        // old `$a[0]`) are collected here, then noted as possible GC roots once
-        // the borrow of the base cell ends.
-        let mut dropped = Vec::new();
+        // The element displaced by the write (e.g. `$a[0] = new X` overwriting
+        // the old `$a[0]`) lands here — at most one per path op — then is
+        // noted as a possible GC root once the borrow of the base cell ends.
+        let mut dropped = None;
         let mut aa = None;
         let result = path_apply(cell, &keys, last, &mut self.diags, &mut dropped, &mut aa);
-        for d in &dropped {
+        if let Some(d) = &dropped {
             self.gc_note(d);
         }
         let mut result = result?;
@@ -871,10 +871,10 @@ impl<'m> Vm<'m> {
                         )));
                         break;
                     }
-                    let mut dropped2 = Vec::new();
+                    let mut dropped2 = None;
                     let mut aa2 = None;
                     let r = path_apply(&mut val, &rest, *last, &mut self.diags, &mut dropped2, &mut aa2);
-                    for d in &dropped2 {
+                    if let Some(d) = &dropped2 {
                         self.gc_note(d);
                     }
                     r?;

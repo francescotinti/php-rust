@@ -4497,12 +4497,12 @@ impl<'m> Vm<'m> {
     }
 
     /// Pop `n` index values off the current frame, restoring source order.
+    /// The keys were pushed left-to-right, so the stack TAIL is already in
+    /// source order — one `split_off` instead of n pops + reverse (WP-32).
     fn pop_keys(&mut self, top: usize, n: u32) -> Vec<Zval> {
-        let mut keys: Vec<Zval> = (0..n)
-            .map(|_| self.frames[top].stack.pop().expect("path index key"))
-            .collect();
-        keys.reverse();
-        keys
+        let stack = &mut self.frames[top].stack;
+        let at = stack.len().checked_sub(n as usize).expect("path index keys");
+        stack.split_off(at)
     }
 
     // `dispatch_host_builtin` is generated, together with `host_builtin_canonical`,
@@ -11928,7 +11928,7 @@ pub(super) fn closure_params(func: &Func) -> Vec<ClosureParam> {
 /// Drill through `keys` from `cell` (following references, auto-vivifying and
 /// copy-on-writing each level), then apply `last` at the leaf. Recursion (not a
 /// reassigned `&mut` in a loop) keeps the nested borrows well-formed.
-fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags, dropped: &mut Vec<Zval>, aa: &mut Option<PathAa>) -> Result<Zval, PhpError> {
+fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags, dropped: &mut Option<Zval>, aa: &mut Option<PathAa>) -> Result<Zval, PhpError> {
     if let Zval::Ref(rc) = cell {
         let mut inner = rc.borrow_mut();
         return path_apply(&mut inner, keys, last, diags, dropped, aa);
@@ -11971,7 +11971,10 @@ fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags, dro
 }
 
 /// Apply the leaf step to the parent cell (which must hold the target array).
-fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Vec<Zval>, aa: &mut Option<PathAa>) -> Result<Zval, PhpError> {
+/// `dropped` receives the single value a displacing leaf write replaced (at
+/// most ONE per path op — the `Set`/`OpSet` arms — WP-32: was a Vec that
+/// allocated on every displacing write just to hold it).
+fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Option<Zval>, aa: &mut Option<PathAa>) -> Result<Zval, PhpError> {
     // A string parent takes the byte-offset write path (`$s[0] = 'X'`), whose
     // expression value is the written byte; the other leaf ops are the PHP
     // errors for string offsets.
@@ -12025,7 +12028,8 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Ve
                 Some(slot) => {
                     // The displaced element is handed back via `dropped` so the
                     // caller can note it (an object it held may now be unreachable).
-                    dropped.push(store_slot(slot, value.clone()));
+                    debug_assert!(dropped.is_none());
+                    *dropped = Some(store_slot(slot, value.clone()));
                 }
                 None => arr.insert(k, value.clone()),
             }
@@ -12048,7 +12052,8 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Ve
             // Write through an existing reference element (REF-4).
             match arr.get_mut(&k) {
                 Some(slot) => {
-                    dropped.push(store_slot(slot, result.clone()));
+                    debug_assert!(dropped.is_none());
+                    *dropped = Some(store_slot(slot, result.clone()));
                 }
                 None => arr.insert(k, result.clone()),
             }
