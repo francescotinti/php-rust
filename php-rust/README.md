@@ -6,9 +6,10 @@ in. The goal is to run **real PHP applications** byte-identically to the referen
 interpreter, not to pass a toy subset.
 
 > **Status: the entire WordPress core test suite runs at effective oracle
-> parity.** Single-site (30,481 tests) now differs from the reference
-> interpreter by **a single test name — one deliberate, catalogued
-> divergence** (multisite, 31,277 tests, holds at 2 pending a re-run).
+> parity.** Single-site (30,472 tests, wordpress-develop trunk) differs from
+> the reference interpreter by **a single test name — one deliberate,
+> catalogued divergence** — and multisite (31,278 tests) confirms the same
+> **single divergence**, both stable by name across runs.
 > WordPress 7.0.1 installs and serves on **real MySQL** (native `mysqli`
 > wire protocol) through the built-in `phpr -S` server SAPI — front pages,
 > login, REST, pretty permalinks and wp-admin **byte-identical** over HTTP;
@@ -21,8 +22,10 @@ interpreter, not to pass a toy subset.
 > real IANA timezones (system TZif, timelib gap/fold semantics), a
 > cycle-collecting GC with Zend-style adaptive thresholds and Zend-faithful
 > destructor timing, property hooks, lazy objects, fibers, and an
-> opcache-like per-request unit cache. Current front: **performance** (suite
-> CPU ~1.9× the oracle), then Laravel validation.
+> opcache-like per-request unit cache. Current front: **performance** — a
+> measured arc of specializing-interpreter work has brought the WordPress
+> media benchmark from 4.1× to **2.71×** the oracle's CPU and the full-suite
+> master CPU to **2.11×** — then Laravel validation.
 
 ## Coverage at a glance
 
@@ -30,8 +33,8 @@ interpreter, not to pass a toy subset.
 | --- | --- |
 | Core / language stdlib functions | **539 / 654 (82%)** |
 | All internal functions | 1017 / 2143 (47%) |
-| Zend test corpus passing | **2569** (63.3% of runnable) |
-| WordPress core suite | **effective parity** (single-site: **1** declared name-diff; multisite: 2) |
+| Zend test corpus passing | **2609** (64.3% of runnable) |
+| WordPress core suite | **effective parity** (single-site AND multisite: **1** declared name-diff each) |
 
 Full, measured breakdown → **[COVERAGE.md](COVERAGE.md)**.
 The 47%→82% spread is the whole story: the *language* is largely done; the
@@ -103,13 +106,13 @@ phpt-runner --isolate /path/to/php-8.5.7/Zend/tests
 Near-term, highest-leverage work (see [COVERAGE.md](COVERAGE.md) for the data,
 [TODO.md](TODO.md) for the full list):
 
-1. **Performance** — the WordPress suite is at parity but costs ~1.9× the
-   oracle's CPU (~17 min vs ~9). The include/compile machinery, the GC and
-   the allocation traffic of dispatch/property access are already fixed
-   (shared prelude, adaptive cycle-collection threshold, zero-alloc prop
-   ops, lazy property hash index); next: VM dispatch structure, Zval
-   clone/drop traffic, string/name interning, live-data memory footprint.
-   Plan: NEXT_SESSION_WORDPRESS.md.
+1. **Performance** — the WordPress suite is at parity; a data-driven
+   specializing-interpreter arc (typed fast paths, bigram-fused opcodes,
+   scope-aware inline caches, call-site specialization, Zend-style fast
+   shutdown) has taken the media benchmark from 4.1× to **2.71×** the
+   oracle's CPU and the full-suite master CPU to **2.11×** (12 min vs 5:39).
+   Next: the GC note/demote churn (in-object buffer flag) and live-data
+   memory footprint. Plan: NEXT_SESSION_WORDPRESS.md.
 2. **Laravel** as the second framework validation target once the perf
    pass lands.
 3. Remaining extension surfaces on demand — ext/tidy (one WP test dataset),

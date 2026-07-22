@@ -6,29 +6,28 @@ as they complete. Deliberate behavioural deviations are catalogued in
 [`PHPR_DIVERGENCES_FROM_PHP.md`](PHPR_DIVERGENCES_FROM_PHP.md); measured
 coverage in [`COVERAGE.md`](COVERAGE.md).
 
-Current state (2026-07-19, post session WP-23): Zend corpus **2569** passing
-(63.3% of runnable; gate baseline 1487 fails by name) · internal functions
+Current state (2026-07-23, post session WP-39): Zend corpus **2609** passing
+(64.3% of runnable; gate baseline **1447** fails by name) · internal functions
 **1017/2143, 47%** (core stdlib **539/654, 82%**). **WORDPRESS: the full
-single-site core PHPUnit suite (30,481 tests) is down to a SINGLE declared
-name-diff vs the oracle** (honest `stream_get_wrappers`; the second
-historical diff closed when **ext/tidy** landed natively on the system
-libtidy — 24/24 functions, 44/45 upstream phpt); multisite (**31,277
-tests**) holds at 2 pending a re-run. WP 7.0.1 installs and serves on
-**real MySQL** via native `mysqli`; wp-admin/front/REST/permalinks
-**byte-identical over HTTP** (`phpr -S` SAPI); media byte-parity on
-**system libgd FFI** (+exif + fileinfo native); XSLT on **system libxslt**
-now including a real **registerPHPFunctions/php:function trampoline**
-(xsl phpt 44/64); sessions 16–23 took the full suite from 572 errors to
-that single declared diff. Perf so far: include machinery −50% real
-footprint (WP-20), adaptive GC threshold (WP-21), zero-alloc dispatch and
-property ops (WP-22), lazy property hash index + scalar-only GC skips
-(WP-23, CPU-neutral, A/B interleaved); suite CPU ~1.9× the oracle (~17 min
-vs ~9) — **next front: VM dispatch structure / Zval traffic / interning,
-then memory of live PHP data** (NEXT_SESSION_WORDPRESS.md). Other stacks
-at parity: **symfony/http-kernel CLOSED 0/0 (1665)**, http-foundation 0
-errors, Doctrine ORM 3484 (3E/13F declared, stable by name) + DBAL 3769/0/0,
-PHPUnit 9/11/13, Composer, wp-cli, Monolog. Laravel afterwards as
-validation.
+single-site core PHPUnit suite (30,472 tests, wordpress-develop trunk) AND
+multisite (31,278 tests) are each at a SINGLE declared name-diff vs the
+oracle** (honest `stream_get_wrappers`), stable by name across runs. WP
+installs and serves on **real MySQL** via native `mysqli`;
+wp-admin/front/REST/permalinks **byte-identical over HTTP** (`phpr -S`
+SAPI); media byte-parity on **system libgd FFI** (+exif + fileinfo native);
+XSLT on **system libxslt** with the real **registerPHPFunctions/php:function
+trampoline** (xsl phpt 63/64). Perf: the specializing-interpreter arc
+(WP-29..39 — `&'m`-op dispatch, typed fast paths, bigram-fused opcodes,
+scope-aware PropIc/MethodIc, call-site specialization, packed arrays +
+slot-based props, frame arena/slimming, Zend-style **fast shutdown** +
+sweep empty fast-path) has taken the media benchmark from 4.1× to **2.71×**
+the oracle's CPU and the full-suite master CPU to **2.11×** (11:56 vs 5:39)
+— **next front: the GC note/demote churn (in-object buffer flag; drop-order
+sentinels already pinned), then live-data memory footprint**
+(NEXT_SESSION_WORDPRESS.md). Other stacks at parity: **symfony/http-kernel
+CLOSED 0/0 (1665)**, http-foundation 0 errors, Doctrine ORM 3484 (3E/13F
+declared, stable by name) + DBAL 3769/0/0, PHPUnit 9/11/13, Composer,
+wp-cli, Monolog. Laravel afterwards as validation.
 
 ---
 

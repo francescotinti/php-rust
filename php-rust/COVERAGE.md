@@ -7,7 +7,7 @@ functions with `function_exists()` inside `phpr` (grouped by
 `ReflectionFunction::getExtensionName()`); the corpus number is the real pass
 count of the upstream Zend test suite under `phpt-runner`.
 
-_Last measured: 2026-07-19 (WP-23) · reference: PHP 8.5.7 (`get_defined_functions()`)._
+_Last measured: 2026-07-23 (WP-39) · reference: PHP 8.5.7 (`get_defined_functions()`)._
 
 ---
 
@@ -17,11 +17,11 @@ _Last measured: 2026-07-19 (WP-23) · reference: PHP 8.5.7 (`get_defined_functio
 | --- | --- |
 | Internal functions implemented | **1017 / 2143** (47%) |
 | — of which **core / language stdlib** (standard + Core + date) | **539 / 654** (82%) |
-| Zend test corpus (`Zend/tests/*.phpt`) | **2569 passing** — 63.3% of runnable (2569/4056) |
-| **WordPress core test suite** | **full effective parity** — single-site 30,481 tests at **a single declared name-diff**; multisite 31,277 tests at 2 (pending re-run with ext/tidy) |
+| Zend test corpus (`Zend/tests/*.phpt`) | **2609 passing** — 64.3% of runnable (2609/4056) |
+| **WordPress core test suite** | **full effective parity** — single-site 30,472 tests AND multisite 31,278 tests each at **a single declared name-diff**, stable by name across runs |
 | Fully-complete areas | ctype, json, SimpleXML, zlib, bcmath, tokenizer, session, **xml**, **fileinfo**, **tidy**, PDO core |
 
-Corpus breakdown: 5305 total · **2569 pass** · 1487 fail · 1249 skip (skips are
+Corpus breakdown: 5305 total · **2609 pass** · 1447 fail · 1249 skip (skips are
 mostly tests that need an extension `phpr` hasn't ported, or SAPI-specific
 setup; the runner executes `--INI--` sections as `php -d`-style overrides).
 
@@ -39,11 +39,11 @@ that are simply not started yet — not holes in the language.
 Beyond raw function counts, these real-world stacks execute byte-identically to
 upstream PHP under `phpr` today:
 
-- **WordPress 7.0.1** — installed and served on **real MySQL** (native
-  `mysqli` on the wire), front pages / login / REST / pretty permalinks /
-  wp-admin **byte-identical** over HTTP via the `phpr -S` server SAPI; the
-  official **core PHPUnit suite (30,481 tests single-site) at a single
-  declared name-diff** (multisite, 31,277 tests, at 2 pending a re-run).
+- **WordPress** (wordpress-develop trunk) — installed and served on **real
+  MySQL** (native `mysqli` on the wire), front pages / login / REST / pretty
+  permalinks / wp-admin **byte-identical** over HTTP via the `phpr -S`
+  server SAPI; the official **core PHPUnit suite (30,472 tests single-site)
+  at a single declared name-diff** (multisite, 31,278 tests, also at 1).
   Media pipeline at byte parity via **system libgd FFI** (+ exif);
   `ext/tidy` complete on the **system libtidy**; `ext/xsl` on the **system
   libxslt** (sitemaps' XSLT byte-identical, real
@@ -121,10 +121,12 @@ core language stdlib).
 ~550 of them. Class-only surfaces don't show in function counts: **DOM,
 XSLTProcessor (system libxslt FFI, incl. `registerPHPFunctions` callbacks),
 ZipArchive (write side), XMLReader-level SAX** are implemented as classes.
-**The WordPress track is at a single divergent test name on the full
-single-site suite** — current work is performance (CPU ~1.9× the oracle on
-the suite; memory of live PHP data) before moving on to Laravel validation.
-See NEXT_SESSION_WORDPRESS.md.
+**The WordPress track is at a single divergent test name on both the full
+single-site and multisite suites** — current work is performance: the
+specializing-interpreter arc has brought the media benchmark to **2.71×**
+the oracle's CPU (from 4.1×) and the full-suite master CPU to **2.11×**;
+next is the GC note/demote churn and the live-data memory footprint, then
+Laravel validation. See NEXT_SESSION_WORDPRESS.md.
 
 ---
 
