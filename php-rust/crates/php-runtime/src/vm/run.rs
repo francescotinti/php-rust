@@ -897,10 +897,7 @@ impl<'m> super::Vm<'m> {
                     } else if matches!(k, CastKind::Int | CastKind::Float)
                         && deref_object(&a).is_some_and(|o| {
                             self.class_index.get(&b"simplexmlelement"[..]).is_some_and(|&t| {
-                                is_instance_of(
-                                    &self.classes,
-                                    self.stringable_id,
-                                    o.borrow().class_id as usize,
+                                self.instance_of(o.borrow().class_id as usize,
                                     t,
                                 )
                             })
@@ -913,10 +910,7 @@ impl<'m> super::Vm<'m> {
                             let cid = o.borrow().class_id as usize;
                             [&b"tidy"[..], &b"tidynode"[..]].iter().any(|n| {
                                 self.class_index.get(*n).is_some_and(|&t| {
-                                    is_instance_of(
-                                        &self.classes,
-                                        self.stringable_id,
-                                        cid,
+                                    self.instance_of(cid,
                                         t,
                                     )
                                 })
@@ -1494,14 +1488,14 @@ impl<'m> super::Vm<'m> {
                     let caught = object_class_id(&exc).is_some_and(|ec| {
                         types
                             .iter()
-                            .any(|&t| is_instance_of(&self.classes, self.stringable_id, ec, t))
+                            .any(|&t| self.instance_of(ec, t))
                             // Classes declared after compile time (by eval/include) are
                             // resolved by name against the live class table (Phase 2).
                             || names.iter().any(|n| {
                                 self.class_index
                                     .get(&n.to_ascii_lowercase())
                                     .is_some_and(|&t| {
-                                        is_instance_of(&self.classes, self.stringable_id, ec, t)
+                                        self.instance_of(ec, t)
                                     })
                             })
                     });
@@ -3944,6 +3938,47 @@ impl<'m> super::Vm<'m> {
                     let this = recv.deref_clone();
                     self.method_call(top, this, &method, args, Some(&ic))?;
                 }
+                Op::ThisMethodCall { method, ic } => {
+                    // Fused zero-argument `$this->m()` (WP-36): the IC hit
+                    // reads the receiver in place and enters the callee like
+                    // the hit inside `dispatch_instance_call`, line for line.
+                    // Skipping the `method_call` shunts on the hit is sound:
+                    // an Object receiver is never a Generator/Closure zval,
+                    // the ArgPlace scan is vacuous at argc 0, and a Fiber
+                    // subclass can never be IN this cache (`method_call`
+                    // diverts Fiber receivers before the fill site, and this
+                    // op is the cell's only writer). Everything else clones
+                    // the receiver once and takes the shared funnel, so the
+                    // fused op stays semantically identical to
+                    // This+MethodCall by construction.
+                    let mut hit = None;
+                    if let Some(Zval::Object(o)) = &self.frames[top].this {
+                        let cid = o.borrow().class_id as usize;
+                        if let Some((defc, midx)) = ic.get(cid) {
+                            hit = Some((defc, midx, cid, Zval::Object(Rc::clone(o))));
+                        }
+                    }
+                    if let Some((defc, midx, cid, this)) = hit {
+                        let callee = &self.classes[defc].methods[midx].func;
+                        let m = self.class_mod(defc);
+                        let mut frame = self.pooled_frame(callee, m);
+                        bind_params(&mut frame, Vec::new());
+                        frame.this = Some(this);
+                        frame.class = Some(defc);
+                        frame.static_class = Some(cid); // LSB = receiver's class
+                        self.enter_callee(frame)?;
+                        continue;
+                    }
+                    let this = match &self.frames[top].this {
+                        Some(t) => t.deref_clone(),
+                        None => {
+                            return Err(PhpError::Error(
+                                "Using $this when not in object context".to_string(),
+                            ))
+                        }
+                    };
+                    self.method_call(top, this, &method, Vec::new(), Some(&ic))?;
+                }
                 Op::MethodCallArgs { method } => {
                     // Spread `$obj->m(...$a)` (Session A): the arguments are the
                     // values of a runtime array (the receiver sits beneath it);
@@ -4012,7 +4047,7 @@ impl<'m> super::Vm<'m> {
                     let v = self.frames[top].stack.pop().expect("InstanceOf operand");
                     let result = match v.deref_clone() {
                         Zval::Object(o) => {
-                            is_instance_of(&self.classes, self.stringable_id, o.borrow().class_id as usize, *class)
+                            self.instance_of(o.borrow().class_id as usize, *class)
                         }
                         // A generator has no ClassId but is-a Iterator/Traversable
                         // (now real prelude interfaces); nothing else among the
@@ -4033,7 +4068,7 @@ impl<'m> super::Vm<'m> {
                     })?;
                     let result = match v.deref_clone() {
                         Zval::Object(o) => {
-                            is_instance_of(&self.classes, self.stringable_id, o.borrow().class_id as usize, target)
+                            self.instance_of(o.borrow().class_id as usize, target)
                         }
                         _ => false,
                     };
@@ -4046,7 +4081,7 @@ impl<'m> super::Vm<'m> {
                     let operand = self.frames[top].stack.pop().expect("InstanceOfDynamic operand");
                     let result = match (object_class_id(&operand), self.class_id_from_value(&classval))
                     {
-                        (Some(ocid), Some(tcid)) => is_instance_of(&self.classes, self.stringable_id, ocid, tcid),
+                        (Some(ocid), Some(tcid)) => self.instance_of(ocid, tcid),
                         // `Closure`/`Generator` have no `ClassId`; match by the
                         // operand's value type against the (string) class name
                         // (`$c instanceof Closure`, `$g instanceof Iterator`).

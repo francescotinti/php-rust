@@ -480,6 +480,7 @@ pub(crate) fn run_module_with_hir<'m>(
         iteratoraggregate_id: module.class_index.get(&b"iteratoraggregate"[..]).copied(),
         countable_id: module.class_index.get(&b"countable"[..]).copied(),
         stringable_id: module.class_index.get(&b"stringable"[..]).copied(),
+        iof_cache: Default::default(),
         jsonserializable_id: module.class_index.get(&b"jsonserializable"[..]).copied(),
         json_last_error: 0,
         output_started: false,
@@ -1471,6 +1472,12 @@ struct Vm<'m> {
     /// auto-implementation (a class with `__toString` is `Stringable`) without a
     /// `class_index` lookup (step 57).
     stringable_id: Option<ClassId>,
+    /// Memoized `is_instance_of` results, keyed `(class_id, target_id)`
+    /// (WP-36). Sound for the life of the Vm — one run — because the class
+    /// table is append-only and a declared class's ancestry (parent chain,
+    /// interfaces, methods, hence the `Stringable` auto-implementation) is
+    /// immutable; a fresh Vm starts empty, so no epoch is needed.
+    iof_cache: std::cell::RefCell<HashMap<(ClassId, ClassId), bool>>,
     /// The `JsonSerializable` interface id, so `json_encode()` calls a value's
     /// `jsonSerialize()` method instead of encoding its properties (step 56c).
     jsonserializable_id: Option<ClassId>,
@@ -2519,7 +2526,7 @@ impl<'m> Vm<'m> {
         if matches!(cc.instantiable, Instantiable::Interface | Instantiable::Abstract) {
             return Ok(());
         }
-        if !is_instance_of(&self.classes, self.stringable_id, cid, ser) {
+        if !self.instance_of(cid, ser) {
             return Ok(());
         }
         if resolve_method_runtime(&self.classes, cid, b"__serialize").is_none()
@@ -3002,14 +3009,14 @@ impl<'m> Vm<'m> {
     /// Whether class `cid` implements `Iterator` or `IteratorAggregate` (i.e. a
     /// `foreach` over it drives the iterator protocol), step 51.
     fn is_traversable(&self, cid: usize) -> bool {
-        self.iterator_id.is_some_and(|i| is_instance_of(&self.classes, self.stringable_id, cid, i))
-            || self.iteratoraggregate_id.is_some_and(|i| is_instance_of(&self.classes, self.stringable_id, cid, i))
+        self.iterator_id.is_some_and(|i| self.instance_of(cid, i))
+            || self.iteratoraggregate_id.is_some_and(|i| self.instance_of(cid, i))
     }
 
     /// Whether class `cid` implements `IteratorAggregate` (foreach calls
     /// `getIterator()` first), step 51.
     fn is_aggregate(&self, cid: usize) -> bool {
-        self.iteratoraggregate_id.is_some_and(|i| is_instance_of(&self.classes, self.stringable_id, cid, i))
+        self.iteratoraggregate_id.is_some_and(|i| self.instance_of(cid, i))
     }
 
     /// If `v` (deref'd) is an object implementing `ArrayAccess`, return it as a
@@ -3018,7 +3025,7 @@ impl<'m> Vm<'m> {
         let aa = self.arrayaccess_id?;
         match v.deref_clone() {
             Zval::Object(o)
-                if is_instance_of(&self.classes, self.stringable_id, o.borrow().class_id as usize, aa) =>
+                if self.instance_of(o.borrow().class_id as usize, aa) =>
             {
                 Some(Zval::Object(o))
             }
@@ -3032,7 +3039,7 @@ impl<'m> Vm<'m> {
         let c = self.countable_id?;
         match v.deref_clone() {
             Zval::Object(o)
-                if is_instance_of(&self.classes, self.stringable_id, o.borrow().class_id as usize, c) =>
+                if self.instance_of(o.borrow().class_id as usize, c) =>
             {
                 Some(Zval::Object(o))
             }
@@ -4345,7 +4352,7 @@ impl<'m> Vm<'m> {
                         return self.alloc_object(std_cid);
                     }
                 }
-                if self.jsonserializable_id.is_some_and(|j| is_instance_of(&self.classes, self.stringable_id, cid, j)) {
+                if self.jsonserializable_id.is_some_and(|j| self.instance_of(cid, j)) {
                     // A jsonSerialize() that returns the SAME object (directly or
                     // deeper) is encoded by its plain public properties — NOT by
                     // calling jsonSerialize() again, which would never terminate
@@ -4371,7 +4378,7 @@ impl<'m> Vm<'m> {
                 } else if self
                     .class_index
                     .get(&b"arrayobject"[..])
-                    .is_some_and(|&ao| is_instance_of(&self.classes, self.stringable_id, cid, ao))
+                    .is_some_and(|&ao| self.instance_of(cid, ao))
                 {
                     // json_encode(ArrayObject) reads the get_properties handler,
                     // i.e. the backing storage — always as a JSON *object* (a
@@ -5190,7 +5197,7 @@ impl<'m> Vm<'m> {
         if !allow_self && subj_cid == tgt_cid {
             return Ok(Zval::Bool(false));
         }
-        Ok(Zval::Bool(is_instance_of(&self.classes, self.stringable_id, subj_cid, tgt_cid)))
+        Ok(Zval::Bool(self.instance_of(subj_cid, tgt_cid)))
     }
 
 
@@ -6134,7 +6141,7 @@ impl<'m> Vm<'m> {
         let Some(cid) = object_class_id(v) else { return false };
         self.class_index
             .get(iface_lc)
-            .is_some_and(|&t| is_instance_of(&self.classes, self.stringable_id, cid, t))
+            .is_some_and(|&t| self.instance_of(cid, t))
     }
 
     /// Whether an object implements Traversable (directly or via its
@@ -6154,7 +6161,7 @@ impl<'m> Vm<'m> {
             let is_agg = self
                 .class_index
                 .get(&b"iteratoraggregate"[..])
-                .is_some_and(|&a| is_instance_of(&self.classes, self.stringable_id, cid, a));
+                .is_some_and(|&a| self.instance_of(cid, a));
             if !is_agg {
                 break;
             }
@@ -6221,7 +6228,7 @@ impl<'m> Vm<'m> {
                     if resolve_method_runtime(&self.classes, cid, b"__serialize").is_some()
                         || resolve_method_runtime(&self.classes, cid, b"__sleep").is_some()
                         || self.class_index.get(&b"serializable"[..]).is_some_and(|&ser| {
-                            is_instance_of(&self.classes, self.stringable_id, cid, ser)
+                            self.instance_of(cid, ser)
                         })
                     {
                         return true;
@@ -6295,7 +6302,7 @@ impl<'m> Vm<'m> {
                 if let Some(c) = cid.filter(|&c| {
                     resolve_method_runtime(&self.classes, c, b"__serialize").is_none()
                         && self.class_index.get(&b"serializable"[..]).is_some_and(|&ser| {
-                            is_instance_of(&self.classes, self.stringable_id, c, ser)
+                            self.instance_of(c, ser)
                         })
                 }) {
                     let ret = self
@@ -7388,7 +7395,7 @@ impl<'m> Vm<'m> {
                 .last()
                 .and_then(|f| f.this.as_ref())
                 .and_then(object_class_id)
-                .is_some_and(|tc| is_instance_of(&self.classes, self.stringable_id, tc, cid))
+                .is_some_and(|tc| self.instance_of(tc, cid))
         };
         let method_callable = |cid: ClassId, m: &[u8], magic: &[u8], static_style: bool| -> bool {
             match resolve_method_runtime(&self.classes, cid, m) {
@@ -7687,7 +7694,7 @@ impl<'m> Vm<'m> {
                 // type — including implemented interfaces (transitively), not just
                 // the parent chain. Mirrors `instanceof` (`is_instance_of`).
                 matches!(self.class_index.get(&lc[..]),
-                    Some(&target) if is_instance_of(&self.classes, self.stringable_id, o.borrow().class_id as usize, target))
+                    Some(&target) if self.instance_of(o.borrow().class_id as usize, target))
             }
             Zval::Ref(r) => self.value_satisfies_class(&r.borrow(), name),
             _ => false,
@@ -8890,7 +8897,7 @@ impl<'m> Vm<'m> {
                             resolve_method_runtime(&self.classes, c, m).map(|(d, _)| d)
                         };
                         let ok = icid == cid
-                            || (is_instance_of(&self.classes, self.stringable_id, cid, icid)
+                            || (self.instance_of(cid, icid)
                                 && self.classes[cid].prop_defaults.len()
                                     == self.classes[icid].prop_defaults.len()
                                 && decl_of(cid, b"__destruct") == decl_of(icid, b"__destruct")
@@ -9614,7 +9621,7 @@ impl<'m> Vm<'m> {
         let Some(throwable_id) = self.throwable_id else { return };
         let Zval::Object(o) = obj else { return };
         let cid = o.borrow().class_id as ClassId;
-        if !is_instance_of(&self.classes, self.stringable_id, cid, throwable_id) {
+        if !self.instance_of(cid, throwable_id) {
             return;
         }
         let top = self.frames.len() - 1;
@@ -15598,6 +15605,92 @@ mod tests {
                 for ($i = 0; $i < 3 && $i !== 2; $i++) { echo $i; }"
             ),
             b"bYmidyPReqelv01"
+        );
+    }
+
+    #[test]
+    fn this_method_call_fused_dispatch() {
+        // WP-36: the fused zero-arg `$this->m()` site — virtual dispatch
+        // through inheritance, a polymorphic receiver on ONE site (trait
+        // method), `__call` routing, and the parent-private non-virtual
+        // rebind must all match the unfused semantics.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class P { public function m() { return 'P'; }
+                          private function s() { return 'ps'; }
+                          public function viaParent() { return $this->s(); } }
+                class C extends P { public function m() { return 'C'; }
+                                    public function s() { return 'cs'; }
+                                    public function go() { return $this->m() . $this->s(); } }
+                $c = new C(); echo $c->go(), $c->viaParent(), ';';
+                trait T { public function who() { return $this->name(); } }
+                class A { use T; public function name() { return 'a'; } }
+                class B { use T; public function name() { return 'b'; } }
+                foreach ([new A, new B, new A] as $o) { echo $o->who(); }
+                echo ';';
+                class M { public function __call($n, $a) { return $n . '.'; }
+                          public function go() { return $this->nope(); } }
+                echo (new M)->go();"
+            ),
+            b"Ccsps;aba;nope."
+        );
+    }
+
+    #[test]
+    fn this_method_call_unbound_this_and_byref_return() {
+        // WP-36: unbound `$this` at a fused site keeps the exact Error (a
+        // static method body compiles `$this->m()` legally); a by-reference
+        // return through the fused op is COPIED in value context (DerefTop),
+        // while `$x =& $this->m()` takes the unfused assign_ref_call path.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class S { public static function st() { return $this->m(); } }
+                try { S::st(); } catch (Error $e) { echo $e->getMessage(), ';'; }
+                class R { public $a = [1,2];
+                          public function &g() { return $this->a; }
+                          public function copy() { $c = $this->g(); $c[] = 9;
+                              return (isset($this->a[2]) ? 'y' : 'n') . '/' . (isset($c[2]) ? 'y' : 'n'); }
+                          public function alias() { $r =& $this->g(); $r[] = 9;
+                              return isset($this->a[2]) ? 'y' : 'n'; } }
+                $r = new R; echo $r->copy(), ';', $r->alias();"
+            ),
+            b"Using $this when not in object context;n/y;y"
+        );
+    }
+
+    #[test]
+    fn instance_of_cache_repeats_and_late_class() {
+        // WP-36 memo: repeated queries on the same (class, target) pairs stay
+        // correct — positive, interface and negative outcomes — and a class
+        // declared AFTER earlier queries on the same hierarchy (append-only
+        // table) resolves fresh; catch matching walks through cached pairs.
+        // (Prelude-bound surfaces — Stringable auto-impl, eval-declared
+        // classes, Fiber — are covered by the CLI probe vs the oracle.)
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                interface I {} interface J extends I {}
+                class X implements J {} class Y extends X {}
+                class Other {}
+                $y = new Y;
+                for ($i = 0; $i < 3; $i++) {
+                    echo (int)($y instanceof Y), (int)($y instanceof I), (int)($y instanceof Other);
+                }
+                echo ';';
+                if (true) { class Late extends Y {} }
+                $l = new Late;
+                echo (int)($l instanceof I), (int)($y instanceof Late), ';';
+                class ExA extends Exception {} class ExB extends Exception {}
+                class MyEx extends ExA {}
+                for ($i = 0; $i < 2; $i++) {
+                    try { throw new MyEx('x'); }
+                    catch (ExB $e) { echo 'B'; }
+                    catch (ExA $e) { echo 'A'; }
+                }"
+            ),
+            b"110110110;10;AA"
         );
     }
 

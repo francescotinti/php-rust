@@ -928,6 +928,14 @@ pub enum Op {
     /// (case-insensitive). The callee runs in a pushed frame with `$this` bound to
     /// the receiver; a missing method is a fatal (magic `__call` is OOP-3).
     MethodCall { method: Rc<[u8]>, argc: u32, ic: MethodIc },
+    /// `[] -> [result]` — fused zero-argument `$this->m()` (WP-36, bigram
+    /// This→MethodCall): same semantics as `This` + `MethodCall{argc: 0}` by
+    /// construction (the handler feeds the shared `method_call` funnel), minus
+    /// one dispatch and the receiver clone/push/pop round-trip. Emitted only
+    /// for a non-nullsafe call with no arguments whose base is `$this` — with
+    /// no argument ops between the two, the unbound-`$this` error keeps its
+    /// position in the side-effect order.
+    ThisMethodCall { method: Rc<[u8]>, ic: MethodIc },
     /// `[obj, argsArray] -> [ret]` — like [`Op::MethodCall`] but the arguments are
     /// the values of a runtime array (spread call `$obj->m(...$a)`, Session A):
     /// string keys are dropped, values bound positionally. Resolves the method at

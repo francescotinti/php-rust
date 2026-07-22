@@ -615,7 +615,7 @@ impl<'m> super::Vm<'m> {
             )));
         };
         let ocid = rc.borrow().class_id as usize;
-        if !is_instance_of(&self.classes, self.stringable_id, ocid, cid) {
+        if !self.instance_of(ocid, cid) {
             return Err(PhpError::TypeError(format!(
                 "ReflectionClass::{op}(): Argument #1 ($object) must be of type {}, {} given",
                 String::from_utf8_lossy(&self.classes[cid].name),

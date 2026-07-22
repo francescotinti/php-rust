@@ -13,7 +13,7 @@ use crate::bytecode::Op;
 use crate::hir::BinOp;
 use php_types::Zval;
 
-pub const N_OPS: usize = 176;
+pub const N_OPS: usize = 177;
 
 pub const OP_NAMES: [&str; N_OPS] = [
     "PushConst", "Pop", "Dup", "LoadSlot", "LoadVar", "PushUndef", "StoreSlot", "Swap",
@@ -37,7 +37,8 @@ pub const OP_NAMES: [&str; N_OPS] = [
     "ClassNameScope", "AllocStatic", "AllocDynamic", "InvokeCtor", "InvokeCtorArgs", "InitProps", "StampThrowable", "StaticPropGet",
     "StaticPropSet", "StaticPropRef", "StaticPropOpSet", "StaticPropIncDec", "StaticPropGetDynamic", "StaticPropSetDynamic", "StaticPropOpSetDynamic", "StaticPropIncDecDynamic",
     "FieldAssign", "FieldAssignOp", "FieldIncDec", "FieldIsset", "FieldEmpty", "FieldUnset", "Fatal", "EmitNotice",
-    "Exit", "SuppressBegin", "SuppressEnd", "Sweep", "ThisPropGet", "CmpJmpConst", "ConcatN", "Nop",
+    "Exit", "SuppressBegin", "SuppressEnd", "Sweep", "ThisPropGet", "CmpJmpConst", "ConcatN",
+    "ThisMethodCall", "Nop",
 ];
 
 pub fn op_index(op: &Op) -> usize {
@@ -220,7 +221,8 @@ pub fn op_index(op: &Op) -> usize {
         // matrix — the stack peek would misattribute the pair.
         Op::CmpJmpConst { .. } => 173,
         Op::ConcatN(..) => 174,
-        Op::Nop => 175,
+        Op::ThisMethodCall { .. } => 175,
+        Op::Nop => 176,
     }
 }
 

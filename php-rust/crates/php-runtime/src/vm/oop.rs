@@ -880,6 +880,20 @@ pub(super) fn iface_is_a(classes: &[&CompiledClass], i: ClassId, target: ClassId
 }
 
 impl<'m> Vm<'m> {
+    /// Memoized [`is_instance_of`] (WP-36): the first walk's answer for a
+    /// `(class, target)` pair is final for the life of the run (append-only
+    /// class table, immutable ancestry — see `iof_cache`), so the hot callers
+    /// — the `Fiber` shunt on every instance call, `instanceof`, catch
+    /// matching — pay one hash lookup instead of the chain walk.
+    pub(super) fn instance_of(&self, class_id: ClassId, target: ClassId) -> bool {
+        if let Some(&b) = self.iof_cache.borrow().get(&(class_id, target)) {
+            return b;
+        }
+        let b = is_instance_of(&self.classes, self.stringable_id, class_id, target);
+        self.iof_cache.borrow_mut().insert((class_id, target), b);
+        b
+    }
+
     /// `(object)` cast (PAR): an object passes through; an array becomes a
     /// stdClass with one property per element (int keys stringified); null/unset
     /// is an empty stdClass; a scalar becomes `stdClass { scalar: v }`. Mirrors
@@ -1120,7 +1134,7 @@ impl<'m> Vm<'m> {
         // natively, except `__construct` which runs the prelude body (GEN-4).
         if let (Zval::Object(o), Some(fcid)) = (&this, self.fiber_class_id) {
             let cid = o.borrow().class_id as usize;
-            if is_instance_of(&self.classes, self.stringable_id, cid, fcid) {
+            if self.instance_of(cid, fcid) {
                 let result = self.fiber_method(&this, method, decay_args(args))?;
                 self.frames[top].stack.push(result);
                 return Ok(());
@@ -1176,7 +1190,7 @@ impl<'m> Vm<'m> {
             }
         };
         if let Some(fcid) = self.fiber_class_id {
-            if is_instance_of(&self.classes, self.stringable_id, cid, fcid) {
+            if self.instance_of(cid, fcid) {
                 return Err(unknown_named_param(&named));
             }
         }

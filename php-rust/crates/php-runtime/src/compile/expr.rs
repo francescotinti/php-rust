@@ -479,6 +479,26 @@ impl<'a> super::FnCompiler<'a> {
             }
             ExprKind::MethodCall { object, method, args, named, nullsafe } => {
                 let root = self.chain_enter();
+                // Fused zero-argument `$this->m()` (WP-36): with no argument
+                // ops between `This` and the call, eliding the receiver push
+                // keeps every effect — including the unbound-`$this` error —
+                // in the same order; any argument would move that error after
+                // the argument's side effects, so calls with args stay unfused.
+                if !*nullsafe
+                    && args.is_empty()
+                    && named.is_empty()
+                    && matches!(object.kind, ExprKind::This)
+                {
+                    self.emit(Op::ThisMethodCall {
+                        method: method.clone().into(),
+                        ic: MethodIc::default(),
+                    });
+                    // Value context: copy a by-reference return (REF-4b), a
+                    // no-op for a plain result — same tail as the generic arm.
+                    self.emit(Op::DerefTop);
+                    self.chain_exit(root);
+                    return Ok(());
+                }
                 self.expr(object)?;
                 // A `$this->m(...)` receiver has a statically-known class, so the
                 // method's by-reference parameters can be honoured (REF-2); any other

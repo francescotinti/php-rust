@@ -1480,7 +1480,7 @@ impl<'m> Vm<'m> {
             let implements = |vm: &Self, iface: &[u8]| {
                 vm.class_index
                     .get(iface)
-                    .is_some_and(|&t| is_instance_of(&vm.classes, vm.stringable_id, cid, t as usize))
+                    .is_some_and(|&t| vm.instance_of(cid, t as usize))
             };
             if !implements(self, b"sessionhandlerinterface") {
                 return Err(PhpError::TypeError(format!(

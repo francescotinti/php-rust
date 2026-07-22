@@ -7430,7 +7430,7 @@ impl<'m> super::Vm<'m> {
                 let cid = o.borrow().class_id as usize;
                 self.is_traversable(cid)
                     || self.iteratoraggregate_id.is_some_and(|i| {
-                        is_instance_of(&self.classes, self.stringable_id, cid, i)
+                        self.instance_of(cid, i)
                     })
             }
             _ => false,
